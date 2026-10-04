@@ -599,8 +599,12 @@ export async function prepareConfiguredRuntimeFactsBatch(params: {
 }> {
   const catalogs = new Map<PreparedModelRuntimeInput, PreparedModelRuntimeCatalogFacts>();
   let registryCount = 0;
-  const staticProviderConfigs = resolvePreparedProviderStaticConfigs(
-    params.pluginGeneration.preparedStaticProviderCatalog,
+  // Static seed rows are not picker membership; provider request settings still
+  // register so configured models stay invocable before live discovery runs.
+  const staticProviderConfigs = Object.fromEntries(
+    Object.entries(
+      resolvePreparedProviderStaticConfigs(params.pluginGeneration.preparedStaticProviderCatalog),
+    ).map(([provider, config]) => [provider, { ...config, models: [] }]),
   );
   const { pluginMetadataSnapshot } = params.pluginGeneration;
   const registries: PreparedConfiguredModelRegistries = params.registries ?? new Map();

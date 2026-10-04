@@ -55,7 +55,10 @@ The `models` root also owns global model-catalog behavior.
 }
 ```
 
-- `models.mode`: provider catalog behavior (`merge` or `replace`).
+- `models.mode`: provider catalog behavior (`merge` or `replace`). Both modes
+  compose the invocable model list from provider discovery results and authored
+  `models.providers.*.models` rows only; `replace` additionally excludes
+  discovery results, leaving authored rows alone.
 - `models.providers`: custom provider map keyed by provider id.
 - `models.providers.*.localService`: optional on-demand process manager for
   local model servers. OpenClaw probes the configured health endpoint, starts

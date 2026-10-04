@@ -31,15 +31,16 @@ describe("live discovery unknown-model gate", () => {
     expect(ids).toContain("brand-new-model");
   });
 
-  it("drops only the ids the manifest does not publish when the gate rejects", () => {
+  it("sends every endpoint-listed id through the gate when the gate rejects", () => {
     const seen: string[] = [];
     const models = buildOpenAICompatibleLiveModels(rows, fallback, ({ id }) => {
       seen.push(id);
       return false;
     });
-    // The manifest-published row bypasses the gate entirely and survives.
-    expect(models).toEqual([fallback.models[0]]);
-    expect(seen).toEqual(["brand-new-model"]);
+    // Seed membership no longer bypasses the gate: the endpoint's list and the
+    // plugin's admission policy decide what is published.
+    expect(models).toEqual([]);
+    expect(seen).toEqual(["known-model", "brand-new-model"]);
   });
 
   it("admits unknown ids the gate accepts", () => {

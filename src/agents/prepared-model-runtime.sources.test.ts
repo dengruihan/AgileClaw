@@ -397,8 +397,9 @@ describe("prepared catalog source composition", () => {
       expect(second.registryCount).toBe(difference === "same" ? 0 : 1);
       const firstRegistry = first.catalogs.get(facts.input)!.templateModelRegistry;
       const secondRegistry = second.catalogs.get(sibling.input)!.templateModelRegistry;
-      const firstModel = firstRegistry.find(providerId, "curated-only")!;
-      const secondModel = secondRegistry.find(providerId, "curated-only")!;
+      // Static seed rows no longer register; models.json rows still do.
+      const firstModel = firstRegistry.find(providerId, "shared")!;
+      const secondModel = secondRegistry.find(providerId, "shared")!;
       expect(firstModel.baseUrl).toBe(endpoint);
       expect(secondModel.baseUrl).toBe(endpoint);
       expect(firstRegistry.hasConfiguredAuth(firstModel)).toBe(false);

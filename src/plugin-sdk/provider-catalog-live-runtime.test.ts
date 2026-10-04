@@ -792,7 +792,7 @@ describe("provider-catalog-live-runtime", () => {
     expect((headers as Headers).get("authorization")).toBe("Bearer provider-key");
   });
 
-  it("keeps authored static metadata for live ids already in the provider seed", async () => {
+  it("projects live ids already in the provider seed from endpoint metadata only", async () => {
     const { fetchGuard } = buildFetchGuard({
       data: [{ id: "chat-v1", object: "model", context_window: 1 }],
     });
@@ -808,7 +808,19 @@ describe("provider-catalog-live-runtime", () => {
       fetchGuard,
     });
 
-    expect(provider.models).toEqual([seed]);
+    // Seed metadata is not donated under metadata isolation; the projected row
+    // carries only what the endpoint returned.
+    expect(provider.models).toEqual([
+      {
+        id: "chat-v1",
+        name: "chat-v1",
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 1,
+        maxTokens: 1,
+      },
+    ]);
   });
 
   it("supports provider-specific model-list paths and headers", async () => {

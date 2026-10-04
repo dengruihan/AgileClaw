@@ -186,32 +186,6 @@ function rowAdvertisesChatModel(
   return undefined;
 }
 
-function commonPrefixLength(left: string, right: string): number {
-  const limit = Math.min(left.length, right.length);
-  let index = 0;
-  while (index < limit && left[index] === right[index]) {
-    index += 1;
-  }
-  return index;
-}
-
-function findLiveModelTemplate(
-  modelId: string,
-  models: readonly ModelDefinitionConfig[],
-): ModelDefinitionConfig | undefined {
-  const normalizedId = modelId.toLowerCase();
-  let best: ModelDefinitionConfig | undefined;
-  let bestScore = 0;
-  for (const model of models) {
-    const score = commonPrefixLength(normalizedId, model.id.toLowerCase());
-    if (score > bestScore) {
-      best = model;
-      bestScore = score;
-    }
-  }
-  return bestScore >= 4 ? best : undefined;
-}
-
 function inferLiveModelReasoning(modelId: string): boolean {
   return /(?:^|[/_:.-])(?:reason(?:er|ing)?|thinking|deepseek-r1|o[134](?:-mini)?|gpt-5)(?:$|[/_:.-])/i.test(
     modelId,
@@ -240,7 +214,6 @@ function readLiveModelContextWindow(
 
 function buildOpenAICompatibleLiveModel(
   row: unknown,
-  fallback: ModelProviderConfig,
   acceptUnknownModel?: (params: { id: string; record: Record<string, unknown> }) => boolean,
 ): ModelDefinitionConfig | undefined {
   const record = readLiveModelCatalogRecord(row);
@@ -268,24 +241,17 @@ function buildOpenAICompatibleLiveModel(
     return undefined;
   }
 
-  const exact = fallback.models.find((model) => model.id === id);
-  if (exact) {
-    const liveContextWindow = readLiveModelContextWindow([record, ...nestedRecords]);
-    return exact.contextWindow === undefined && liveContextWindow !== undefined
-      ? { ...exact, contextWindow: liveContextWindow }
-      : exact;
-  }
-  // Only unknown ids need the provider's request-shaping gate.
+  // Metadata isolation: a row carries only what the endpoint returned. Manifest
+  // definitions and templates never donate capabilities, limits, or pricing, so
+  // every id goes through the same request-shaping gate and record projection.
   if (acceptUnknownModel && !acceptUnknownModel({ id, record })) {
     return undefined;
   }
-  const template = findLiveModelTemplate(id, fallback.models);
   const inputModalities = readLiveModelStringArray(
     [record, architecture, capabilities, modelInfo],
     ["input_modalities", "inputModalities", "input"],
   );
-  const contextWindow =
-    readLiveModelContextWindow([record, ...nestedRecords]) ?? template?.contextWindow ?? 128_000;
+  const contextWindow = readLiveModelContextWindow([record, ...nestedRecords]) ?? 128_000;
   const maxTokens =
     readLiveModelPositiveIntegerFromRecords(
       [record, topProvider, capabilities, modelInfo],
@@ -302,10 +268,7 @@ function buildOpenAICompatibleLiveModel(
         "max_tokens",
         "maxTokens",
       ],
-    ) ??
-    fallback.maxTokens ??
-    template?.maxTokens ??
-    Math.min(contextWindow, 8192);
+    ) ?? Math.min(contextWindow, 8192);
   const explicitReasoning = readLiveModelCatalogBooleanField(record, [
     "reasoning",
     "supports_reasoning",
@@ -318,34 +281,31 @@ function buildOpenAICompatibleLiveModel(
   );
   const reasoning =
     explicitReasoning ??
-    (featureNames.some((feature) => /reason|think/.test(feature)) ||
-      template?.reasoning === true ||
-      inferLiveModelReasoning(id));
+    (featureNames.some((feature) => /reason|think/.test(feature)) || inferLiveModelReasoning(id));
   const input: ModelDefinitionConfig["input"] = inputModalities.includes("image")
     ? ["text", "image"]
-    : (template?.input ?? ["text"]);
+    : ["text"];
 
   return {
     id,
     name: readLiveModelCatalogStringField(record, ["display_name", "displayName", "name"]) ?? id,
-    ...(template?.api ? { api: template.api } : {}),
     reasoning,
     input,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow,
     maxTokens,
-    ...(template?.compat ? { compat: template.compat } : {}),
-    ...(template?.thinkingLevelMap ? { thinkingLevelMap: template.thinkingLevelMap } : {}),
   };
 }
 
 export function buildOpenAICompatibleLiveModels(
   rows: readonly unknown[],
-  fallback: ModelProviderConfig,
+  // Retained for the shared projectRows signature; record projection is
+  // self-contained under metadata isolation and never reads provider seeds.
+  _fallback: ModelProviderConfig,
   acceptUnknownModel?: (params: { id: string; record: Record<string, unknown> }) => boolean,
 ): ModelDefinitionConfig[] {
   const models = rows
-    .map((row) => buildOpenAICompatibleLiveModel(row, fallback, acceptUnknownModel))
+    .map((row) => buildOpenAICompatibleLiveModel(row, acceptUnknownModel))
     .filter((model): model is ModelDefinitionConfig => Boolean(model));
   return [...new Map(models.map((model) => [model.id, model])).values()].toSorted((a, b) =>
     a.id.localeCompare(b.id),

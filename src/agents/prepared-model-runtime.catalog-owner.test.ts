@@ -394,16 +394,18 @@ describe("legacy provider catalog retention", () => {
 
   it.each([
     { name: "nonempty legacy inventory", empty: false, expected: [learned] },
-    { name: "empty legacy inventory", empty: true, expected: [starter] },
+    // Static starters are no longer promoted on failure: without retention
+    // (legacy rows or matching auth origins) the provider waits empty.
+    { name: "empty legacy inventory", empty: true, expected: [] },
     {
       name: "profile-specific failure",
       empty: false,
       profileId: "custom:account",
-      expected: [starter],
+      expected: [],
     },
-    { name: "changed credentials", empty: false, changedKey: true, expected: [starter] },
+    { name: "changed credentials", empty: false, changedKey: true, expected: [] },
     { name: "explicit successful empty inventory", empty: true, ready: true, expected: [] },
-    { name: "previous failed acquisition", empty: false, failed: true, expected: [starter] },
+    { name: "previous failed acquisition", empty: false, failed: true, expected: [] },
   ])("preserves the shipped retention boundary for $name", async (scenario) => {
     const previous: ModelCatalogSnapshot = {
       entries: scenario.empty ? [] : [learned],
@@ -529,7 +531,10 @@ describe("legacy provider catalog retention", () => {
       providerOutcomes: [{ provider: "custom", status: "unavailable" }],
     });
     const result = await owner.loadFullModelCatalog!({ refresh: true });
-    expect(result.entries).toContainEqual(expect.objectContaining(starter));
+    // The failed refresh keeps the provider's configured and native rows but
+    // no longer promotes static starters into the gap.
+    expect(result.entries.map(({ id }) => id).toSorted()).toEqual(["configured", "native"]);
+    expect(result.entries).not.toContainEqual(expect.objectContaining(starter));
     expect(result.authoritative).toBe(false);
   });
 });
