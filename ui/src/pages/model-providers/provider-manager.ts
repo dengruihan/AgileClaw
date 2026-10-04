@@ -12,7 +12,6 @@ import "../../components/modal-dialog.ts";
 import { t } from "../../i18n/index.ts";
 import { registerSettingsEnglish } from "../../i18n/locales/en-settings.ts";
 import "../../styles/config.css";
-registerSettingsEnglish();
 import { setPathValue, removePathValue } from "../../lib/config-form-utils.ts";
 import { currentConfigObject } from "../../lib/config/config-state-model.ts";
 import { formatUiError } from "../../lib/format-error.ts";
@@ -22,6 +21,7 @@ import {
   modelProviderConfigMutationBlockedReason,
 } from "./config-mutation.ts";
 import type { ModelProviderCard } from "./data.ts";
+import { providerConnectionFields } from "./provider-manager-connection.ts";
 import {
   configuredProvider,
   providerConnectionPatch,
@@ -31,6 +31,8 @@ import {
   providerModels,
   type ProviderModelsPatch,
 } from "./provider-model-config.ts";
+
+registerSettingsEnglish();
 
 export type ProviderManagerIntent = { provider: string; view: "settings" | "models" | "create" };
 type CredentialResult = { ok: false; error?: string } | { ok: true; warning: string | null };
@@ -121,7 +123,8 @@ export class ProviderManager extends OpenClawLightDomElement {
   }
 
   private get disabled() {
-    return this.busy || this.loading || !!this.blocked || modelProviderConfigBusy(this.context);
+    const blocked = Boolean(this.blocked) || modelProviderConfigBusy(this.context);
+    return this.busy || this.loading || blocked;
   }
 
   private get dirty() {
@@ -210,8 +213,13 @@ export class ProviderManager extends OpenClawLightDomElement {
     }
   }
 
-  private field(schema: JsonSchema, key: string, value: Record<string, unknown>, model = false) {
-    const fieldSchema = objectPropertySchema(schema, key);
+  private field(
+    schema: JsonSchema,
+    fieldKey: string,
+    value: Record<string, unknown>,
+    model = false,
+  ) {
+    const fieldSchema = objectPropertySchema(schema, fieldKey);
     if (!fieldSchema) {
       return nothing;
     }
@@ -230,17 +238,17 @@ export class ProviderManager extends OpenClawLightDomElement {
         this.modelDraft = candidate;
       } else {
         this.draft = candidate;
-        this.touched.add(key);
+        this.touched.add(fieldKey);
       }
     };
     return renderNode({
       schema: fieldSchema,
-      value: value[key],
-      path: [...prefix, key],
+      value: value[fieldKey],
+      path: [...prefix, fieldKey],
       hints: this.context.runtimeConfig.state.configUiHints,
       unsupported: this.schema().unsupported,
-      disabled: this.disabled || (model && key === "id" && this.originalModelId !== undefined),
-      isRequired: schema.required?.includes(key),
+      disabled: this.disabled || (model && fieldKey === "id" && this.originalModelId !== undefined),
+      isRequired: schema.required?.includes(fieldKey),
       compact: true,
       maskSensitive: true,
       isSensitivePathRevealed: (path) => this.revealedPaths.has(JSON.stringify(path)),
@@ -448,11 +456,10 @@ export class ProviderManager extends OpenClawLightDomElement {
     if (!this.modelDraft || !this.querySelector<HTMLFormElement>("form")?.reportValidity()) {
       return;
     }
-    const model = {
-      ...this.modelDraft,
-      id: String(this.modelDraft.id ?? "").trim(),
-      name: String(this.modelDraft.name ?? "").trim(),
-    };
+    const draftId = this.modelDraft.id;
+    const draftName = this.modelDraft.name;
+    const text = (value: unknown) => (typeof value === "string" ? value : "").trim();
+    const model = { ...this.modelDraft, id: text(draftId), name: text(draftName) };
     if (
       !model.id ||
       !model.name ||
@@ -505,6 +512,22 @@ export class ProviderManager extends OpenClawLightDomElement {
       })
     ) {
       await this.load();
+    }
+  }
+
+  private async removeCredential() {
+    const generation = this.generation;
+    this.busy = true;
+    try {
+      const result = await this.onCredential(this.providerId, null);
+      if (generation === this.generation) {
+        this.error = result?.ok ? null : t("modelProviders.requestFailed");
+        this.notice = result?.ok ? t("modelProviders.apiKey.removed") : null;
+      }
+    } finally {
+      if (generation === this.generation) {
+        this.busy = false;
+      }
     }
   }
 
@@ -575,7 +598,7 @@ export class ProviderManager extends OpenClawLightDomElement {
     }
     const creating = this.intent.view === "create";
     const models = this.intent.view === "models";
-    const schema = this.schema().provider;
+    const providerSchema = this.schema().provider;
     const title = creating
       ? t("modelProviders.manager.customProvider")
       : `${this.card?.displayName ?? this.providerId} — ${t(models ? (this.modelDraft ? "modelProviders.manager.editModel" : "modelProviders.manager.models") : "modelProviders.manager.settings")}`;
@@ -614,113 +637,38 @@ export class ProviderManager extends OpenClawLightDomElement {
           ${
             models
               ? this.renderModels()
-              : html` <p class="muted">
-                    ${t("modelProviders.manager.connectionScope", { agent: this.agentId })}
-                  </p>
-                  ${
-                    creating
-                      ? html`<label class="field"
-                          ><span>${t("modelProviders.manager.providerId")}</span
-                          ><input
-                            name="providerId"
-                            required
-                            pattern="[a-z0-9][a-z0-9._-]*"
-                            .value=${this.providerId}
-                            ?disabled=${this.disabled || this.providerCreated}
-                            @input=${(event: Event) => {
-                              this.providerId = (event.target as HTMLInputElement).value;
-                            }}
-                        /></label>`
-                      : nothing
-                  }
-                  ${schema ? this.fields(schema, this.draft, providerBasics) : nothing}
-                  ${
-                    this.card?.apiKeySupported === false && !creating
-                      ? html`<button
-                          type="button"
-                          class="btn"
-                          ?disabled=${this.disabled}
-                          @click=${this.onConnect}
-                        >
-                          ${t("modelProviders.login.action")}
-                        </button>`
-                      : html`<label class="field"
-                          ><span>${t("modelProviders.apiKey.label")}</span>
-                          <div class="provider-manager__key">
-                            <input
-                              name="apiKey"
-                              type=${this.revealKey ? "text" : "password"}
-                              autocomplete="new-password"
-                              placeholder=${t("modelProviders.manager.keepKey")}
-                              .value=${this.keyDraft}
-                              ?disabled=${this.disabled}
-                              @input=${(event: Event) => {
-                                this.keyDraft = (event.target as HTMLInputElement).value;
-                              }}
-                            /><button
-                              type="button"
-                              class="btn btn--sm"
-                              aria-pressed=${this.revealKey}
-                              @click=${() => {
-                                this.revealKey = !this.revealKey;
-                              }}
-                            >
-                              ${t(this.revealKey ? "modelProviders.manager.hideKey" : "modelProviders.manager.showKey")}
-                            </button>
-                          </div></label
-                        >`
-                  }
-                  ${
-                    !creating
-                      ? html`<p class="muted">${t("modelProviders.manager.saveBeforeTest")}</p>
-                          <div class="provider-manager__actions">
-                            <button
-                              type="button"
-                              class="btn"
-                              ?disabled=${this.disabled || this.dirty || !this.card}
-                              @click=${this.onProbe}
-                            >
-                              ${t("modelProviders.probe.test")}</button
-                            >${
-                              this.card?.hasConfigApiKey ||
-                              this.card?.profiles.some(
-                                (profile) => profile.type === "api_key" && profile.logoutSupported,
-                              )
-                                ? html`<button
-                                    type="button"
-                                    class="btn danger"
-                                    ?disabled=${this.disabled}
-                                    @click=${async () => {
-                                      const generation = this.generation;
-                                      this.busy = true;
-                                      try {
-                                        const result = await this.onCredential(
-                                          this.providerId,
-                                          null,
-                                        );
-                                        if (generation === this.generation) {
-                                          this.error = result?.ok
-                                            ? null
-                                            : t("modelProviders.requestFailed");
-                                          this.notice = result?.ok
-                                            ? t("modelProviders.apiKey.removed")
-                                            : null;
-                                        }
-                                      } finally {
-                                        if (generation === this.generation) {
-                                          this.busy = false;
-                                        }
-                                      }
-                                    }}
-                                  >
-                                    ${t("modelProviders.apiKey.remove")}
-                                  </button>`
-                                : nothing
-                            }
-                          </div>
-                          ${this.probe ? html`<p role="status" class="callout ${this.probe.status === "ok" ? "success" : "danger"}">${t(`modelProviders.probe.status.${this.probe.status}`)} ${this.probe.error ?? ""}</p>` : nothing}`
-                      : html`<p class="muted">${t("modelProviders.manager.addModelsAfterSave")}</p>`
-                  }`
+              : providerConnectionFields({
+                  actions: {
+                    onConnect: this.onConnect,
+                    onProbe: this.onProbe,
+                    onRemoveCredential: () => this.removeCredential(),
+                    onProviderIdInput: (value) => {
+                      this.providerId = value;
+                    },
+                    onKeyInput: (value) => {
+                      this.keyDraft = value;
+                    },
+                    onToggleRevealKey: () => {
+                      this.revealKey = !this.revealKey;
+                    },
+                  },
+                  renderFields: (schema, draft) => this.fields(schema, draft, providerBasics),
+                  state: {
+                    agentId: this.agentId,
+                    busy: this.busy,
+                    card: this.card,
+                    creating,
+                    dirty: this.dirty,
+                    disabled: this.disabled,
+                    draft: this.draft,
+                    keyDraft: this.keyDraft,
+                    probe: this.probe,
+                    providerCreated: this.providerCreated,
+                    providerId: this.providerId,
+                    revealKey: this.revealKey,
+                    schema: providerSchema,
+                  },
+                })
           }
           ${this.error ? html`<div class="callout danger" role="alert">${this.error}</div>` : nothing}
           ${this.notice ? html`<div class="callout" role="status">${this.notice}</div>` : nothing}

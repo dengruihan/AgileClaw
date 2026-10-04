@@ -1,3 +1,4 @@
+/* oxlint-disable max-lines -- TODO: split the view-params assembly into a host module. */
 import { consume } from "@lit/context";
 import { redactSensitiveUrlLikeString } from "@openclaw/net-policy/redact-sensitive-url";
 import { asNullableRecord as asConfigRecord } from "@openclaw/normalization-core/record-coerce";
@@ -525,7 +526,7 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
     const client = this.gateway.client;
     const key = action === "add" ? "add" : `key:${provider}`;
     if (!client || !this.canMutate() || this.busy[key] || apiKey === "") {
-      return;
+      return undefined;
     }
     const clientEpoch = this.gateway.epoch;
     const agentEpoch = this.agentEpoch;
@@ -565,7 +566,7 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
       },
     );
     if (!result.ok || !isCurrent()) {
-      return;
+      return undefined;
     }
     if (action === "add") {
       if (this.addProviderId === provider && this.addProviderKey.trim() === apiKey) {
@@ -817,7 +818,7 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
           }}
           .onProbe=${() => {
             const card = cards.find(
-              (card) => (card.configKey ?? card.id) === this.managerIntent?.provider,
+              (entry) => (entry.configKey ?? entry.id) === this.managerIntent?.provider,
             );
             if (card) {
               void this.profileActions.probe(
@@ -828,7 +829,7 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
           }}
           .onConnect=${() => {
             const card = cards.find(
-              (card) => (card.configKey ?? card.id) === this.managerIntent?.provider,
+              (entry) => (entry.configKey ?? entry.id) === this.managerIntent?.provider,
             );
             this.managerIntent = null;
             if (card) {
