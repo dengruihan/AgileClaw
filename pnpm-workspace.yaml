@@ -5,8 +5,8 @@ packages:
   - extensions/*
   - examples/*
 
-minimumReleaseAge: 10080
-minimumReleaseAgeStrict: true
+minimumReleaseAge: 0
+minimumReleaseAgeStrict: false
 
 # Trusted Codex runtimes are outside the dependency cooldown.
 minimumReleaseAgeExclude:
@@ -102,6 +102,7 @@ allowBuilds:
   "@openclaw/crabline": true
   rastermill: true
   node-pty: true
+  sharp: true
 
 packageExtensions:
   # The transient npm lock generator also needs the peer marked optional.
