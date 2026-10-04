@@ -8,6 +8,85 @@ afterEach(async () => {
 });
 
 describe("findSettingsSearchBlocks", () => {
+  it("opens custom provider fields on Models rather than Advanced", () => {
+    expect(
+      findSettingsSearchBlocks({
+        query: "baseUrl",
+        schema: {
+          type: "object",
+          properties: {
+            models: {
+              type: "object",
+              properties: {
+                providers: {
+                  type: "object",
+                  additionalProperties: {
+                    type: "object",
+                    properties: { baseUrl: { type: "string" } },
+                  },
+                },
+              },
+            },
+          },
+        },
+        value: { models: { providers: { local: { baseUrl: "http://localhost:11434/v1" } } } },
+        uiHints: { "models.providers.*.baseUrl": { advanced: true } },
+      }),
+    ).toContainEqual({
+      routeId: "model-providers",
+      // "Models" equals the route title and is filtered as a redundant block; the
+      // provider section label is what the sidebar can actually show.
+      label: "Provider access",
+      search: "?section=models&subsection=providers",
+      hash: "#settings-model-providers",
+    });
+  });
+  it.each([
+    ["local", "settings"],
+    ["models.providers.local.baseUrl", "settings"],
+    ["models.providers.local.models.contextWindow", "models"],
+  ])("opens %s in the matching provider dialog", (query, view) => {
+    const matches = findSettingsSearchBlocks({
+      query,
+      schema: {
+        type: "object",
+        properties: {
+          models: {
+            type: "object",
+            properties: {
+              mode: { type: "string" },
+              providers: {
+                type: "object",
+                additionalProperties: {
+                  type: "object",
+                  properties: {
+                    baseUrl: { type: "string" },
+                    models: {
+                      type: "array",
+                      items: { type: "object", properties: { contextWindow: { type: "number" } } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      value: {
+        models: { providers: { local: { baseUrl: "http://localhost:11434/v1", models: [{}] } } },
+      },
+      uiHints: {},
+    });
+    // Loose queries like "local" also match static blocks ("locale"); the
+    // protected contract is that the provider hit opens the matching dialog view.
+    expect(matches).toContainEqual({
+      routeId: "model-providers",
+      label: "Provider access · local",
+      search: `?section=models&subsection=providers&provider=local&view=${view}`,
+      hash: "#settings-model-providers",
+    });
+  });
+
   it("finds the meeting library separately from its Communications capture settings", () => {
     const search = (query: string) =>
       findSettingsSearchBlocks({ query, schema: null, value: {}, uiHints: {} });

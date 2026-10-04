@@ -13,6 +13,8 @@ import type {
 import { SECTION_META } from "../../components/config-form.meta.ts";
 import {
   matchesConfigSectionSearch,
+  matchesNodeSearch,
+  matchesNodeSelf,
   parseConfigSearchQuery,
 } from "../../components/config-form.search.ts";
 import { splitConfigSchemaByTier } from "../../components/config-form.tiers.ts";
@@ -77,6 +79,10 @@ const preparedSectionsBySchema = new WeakMap<
 >();
 
 function visibleSectionSchema(routeId: string, sectionSchema: JsonSchema): JsonSchema {
+  if (routeId === "model-providers" && sectionSchema.properties) {
+    const { providers: _providers, ...properties } = sectionSchema.properties;
+    return { ...sectionSchema, properties };
+  }
   const visibleKeys = CURATED_ROUTE_VISIBLE_KEYS[routeId];
   const properties = sectionSchema.properties;
   if (!visibleKeys || !properties) {
@@ -89,6 +95,83 @@ function visibleSectionSchema(routeId: string, sectionSchema: JsonSchema): JsonS
       Object.entries(properties).filter(([child]) => visible.has(child)),
     ),
   };
+}
+
+function findProviderSearchBlocks(params: {
+  schema: JsonSchema;
+  value: unknown;
+  uiHints: ConfigUiHints;
+  query: string;
+}): SettingsSearchBlock[] {
+  const providersSchema = params.schema.properties?.providers;
+  if (!providersSchema) {
+    return [];
+  }
+  const criteria = parseConfigSearchQuery(params.query);
+  const shared = { hints: params.uiHints, criteria, textMatcher: settingsSearchTextMatches };
+  if (matchesNodeSelf({ ...shared, schema: params.schema, path: ["models"] })) {
+    return [];
+  }
+  const matchesProviders = (value: unknown) =>
+    matchesNodeSearch({
+      ...shared,
+      schema: providersSchema,
+      path: ["models", "providers"],
+      value,
+    });
+  const target = { routeId: "model-providers", hash: "#settings-model-providers" } as const;
+  // A field shared by all providers leads to the cards, not an arbitrary account.
+  if (matchesProviders({})) {
+    return [
+      {
+        ...target,
+        label: t("modelProviders.accessTitle"),
+        search: "?section=models&subsection=providers",
+      },
+    ];
+  }
+  const value =
+    isRecord(params.value) && isRecord(params.value.providers) ? params.value.providers : {};
+  const matches = Object.entries(value).flatMap(([provider, providerValue]) => {
+    if (!matchesProviders({ [provider]: providerValue })) {
+      return [];
+    }
+    const path = ["models", "providers", provider];
+    const modelPath = [...path, "models"];
+    const modelMatch =
+      criteria.text &&
+      settingsSearchTextMatches(modelPath.join("."), criteria.text) &&
+      !settingsSearchTextMatches(path.join("."), criteria.text);
+    const additional = providersSchema.additionalProperties;
+    const providerSchema =
+      providersSchema.properties?.[provider] ??
+      (additional && typeof additional === "object" ? additional : null);
+    const modelSchema = providerSchema?.properties?.models;
+    const connectionSchema = providerSchema && {
+      ...providerSchema,
+      properties: Object.fromEntries(
+        Object.entries(providerSchema.properties ?? {}).filter(([key]) => key !== "models"),
+      ),
+    };
+    const modelOnly =
+      modelSchema &&
+      matchesNodeSearch({
+        ...shared,
+        schema: modelSchema,
+        path: modelPath,
+        value: isRecord(providerValue) ? providerValue.models : undefined,
+      }) &&
+      connectionSchema &&
+      !matchesNodeSearch({ ...shared, schema: connectionSchema, path, value: providerValue });
+    return [
+      {
+        ...target,
+        label: `${t("modelProviders.accessTitle")} · ${provider}`,
+        search: `?section=models&subsection=providers&provider=${encodeURIComponent(provider)}&view=${modelMatch || modelOnly ? "models" : "settings"}`,
+      },
+    ];
+  });
+  return matches;
 }
 
 export function findSettingsSearchBlocks(params: {
@@ -146,6 +229,16 @@ export function findSettingsSearchBlocks(params: {
       )
     ) {
       continue;
+    }
+    if (key === "models") {
+      matches.push(
+        ...findProviderSearchBlocks({
+          schema: rawSectionSchema,
+          value: value[key],
+          uiHints: params.uiHints,
+          query: params.query,
+        }),
+      );
     }
     let section = prepared.sections.get(key);
     if (!section) {

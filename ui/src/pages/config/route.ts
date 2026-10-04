@@ -25,6 +25,7 @@ const MOVED_SECTION_ROUTES: Record<
   "communications:talk": { routeId: "talk", keepSection: true },
   "appearance:wizard": { routeId: "advanced", keepSection: true },
   "advanced:transcripts": { routeId: "communications", keepSection: true, advanced: true },
+  "advanced:models": { routeId: "model-providers", keepSection: true },
   "automation:approvals": { routeId: "security", keepSection: true },
   "automation:plugins": {
     routeId: "plugin-settings",

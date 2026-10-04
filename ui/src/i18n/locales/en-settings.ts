@@ -658,10 +658,75 @@ const enSettings = {
       sessionExpired:
         "This sign-in session ended. Close this dialog and refresh Models to check the result.",
     },
-    subtitle: "Global model defaults and provider access for your agents.",
+    subtitle:
+      "Manage model defaults, provider access, and custom model configuration in one place.",
     accessTitle: "Provider access",
     accessDescription:
       "Manage connections for the selected agent. Global defaults above apply to all agents.",
+    manager: {
+      cloud: "Cloud providers",
+      custom: "Local & custom",
+      configured: "Configured providers",
+      available: "Available providers",
+      models: "Models",
+      settings: "Settings",
+      details: "Accounts & usage",
+      endpoint: "Endpoint",
+      defaultEndpoint: "Provider default",
+      customProvider: "Custom provider",
+      advanced: "Advanced configuration",
+      providerId: "Provider ID",
+      keepKey: "Leave blank to keep the current key",
+      showKey: "Show",
+      hideKey: "Hide",
+      connectionScope:
+        "Connection settings apply to the whole Gateway. Accounts follow the existing credential scope for agent {agent}.",
+      modelScope:
+        "Model definitions apply to the whole Gateway. Editing a built-in model creates an override.",
+      saveBeforeTest: "Save changes before testing the connection.",
+      credentialsFailed:
+        "Connection settings were saved, but the API key was not saved. Check the credential error and retry.",
+      saved: "Configuration saved",
+      conflict:
+        "This provider configuration changed while you were editing. Close and reopen the editor to review the current settings, then retry.",
+      duplicateProvider: "Choose a unique provider ID.",
+      urlRequired: "Enter a base URL for the custom provider.",
+      duplicateModel:
+        "Enter a model ID and name. New model IDs must be unique within this provider.",
+      referenced:
+        "This model is referenced by {references}. Update these settings before removing it.",
+      builtIn: "Catalog",
+      override: "Configured",
+      userAdded: "User added",
+      inherited: "Provider default",
+      editModel: "Edit model",
+      addModel: "Add model",
+      reset: "Restore default",
+      noModels: "No models yet. Add a model ID supplied by your provider.",
+      refreshModels: "Refresh model list",
+      discoveryHelp:
+        "Refresh uses the provider’s existing catalog discovery. If your endpoint does not expose models, add them manually.",
+      refreshed: "Model catalog refreshed",
+      refreshFailed:
+        "Model discovery failed. Check the connection and retry, or add models manually.",
+      addModelsAfterSave:
+        "Save the connection, then open Models on its card to add model definitions.",
+    },
+    catalogSettings: {
+      title: "Global model catalog settings",
+      description:
+        "Choose catalog merge behavior and automatic catalog updates. Manage connections and model definitions on the provider cards above.",
+      scope:
+        "These settings apply to the whole Gateway. Choose the model agents use in Defaults for all agents above.",
+      providers:
+        "Providers: set the API address, protocol, authentication, and optional request headers.",
+      models:
+        "Model definitions: add model IDs and describe their input types, context limits, output limits, and costs.",
+      catalog:
+        'Catalog mode: "merge" keeps built-in models and adds your definitions; "replace" uses only your configured catalog. Also control automatic catalog updates.',
+      modeHelp:
+        'Choose "merge" to keep built-in providers and add or customize your own. Choose "replace" to use only the providers and models defined here.',
+    },
     search: "Search providers…",
     noMatches: "No providers match your search.",
     updated: "Updated {time}",

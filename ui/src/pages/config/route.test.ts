@@ -157,6 +157,7 @@ describe("moved Settings sections", () => {
     ["communications", "talk", "talk", "?section=talk"],
     ["appearance", "wizard", "advanced", "?section=wizard"],
     ["advanced", "transcripts", "communications", "?section=transcripts&advanced=1"],
+    ["advanced", "models", "model-providers", "?section=models"],
     ["automation", "approvals", "security", "?section=approvals"],
     ["automation", "plugins", "plugin-settings", "?tab=advanced"],
     ["ai-agents", "memory", "memory", "?section=memory"],

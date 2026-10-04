@@ -35,6 +35,7 @@ type LoginControllerOptions = {
   canContinue: () => boolean;
   refresh: () => Promise<unknown>;
   onDiscover?: () => void;
+  onCustom?: () => void;
   onApiKey?: (provider: string) => void;
   getManualProviders?: () => SystemAgentSetupDetectResult["manualProviders"];
   onManualProvider?: (authChoice: string) => void;
@@ -571,6 +572,23 @@ export class ModelProviderLoginController implements ReactiveController {
                         </button>
                       `
                     : nothing
+              }
+              ${
+                !provider && this.options.onCustom
+                  ? html`<button
+                      class="btn"
+                      data-models-login-custom
+                      ?disabled=${!picker.isCurrent()}
+                      @click=${() => {
+                        if (picker.isCurrent()) {
+                          this.reset();
+                          this.options.onCustom?.();
+                        }
+                      }}
+                    >
+                      ${t("modelProviders.manager.customProvider")}
+                    </button>`
+                  : nothing
               }
               <button class="btn" @click=${() => this.reset()}>${t("common.cancel")}</button>
             </div>

@@ -1,4 +1,5 @@
 import { consume } from "@lit/context";
+import { redactSensitiveUrlLikeString } from "@openclaw/net-policy/redact-sensitive-url";
 import { asNullableRecord as asConfigRecord } from "@openclaw/normalization-core/record-coerce";
 import { html, type PropertyValues } from "lit";
 import { property, state } from "lit/decorators.js";
@@ -17,6 +18,7 @@ import { normalizeAgentId } from "../../lib/sessions/session-key.ts";
 import { GatewayPageController } from "../../lit/gateway-page-controller.ts";
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
 import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
+import type { ConfigRouteData } from "../config/route-data.ts";
 import { UsageRefreshPolicy } from "../usage/refresh-policy.ts";
 import type { ModelAccountUsage } from "./account-usage.ts";
 import { createCatalogDiscoveryController } from "./catalog-discovery.ts";
@@ -44,6 +46,8 @@ import {
   type ModelProviderPendingLogout,
 } from "./data.ts";
 import { ModelProviderDiscoveryController } from "./discovery-controller.ts";
+import "./model-catalog-settings.ts";
+import "./provider-manager.ts";
 import { InstalledAgentsController } from "./installed-agents.ts";
 import {
   EMPTY_MODEL_PROVIDERS_DATA,
@@ -53,6 +57,9 @@ import {
 import { ModelProviderLoginController } from "./login-controller.ts";
 import { ModelProviderProfileActionsController } from "./profile-actions-controller.ts";
 import { showProfileActionError, showProfileLogoutSuccess } from "./profiles-view.ts";
+import type { ProviderManagerIntent } from "./provider-manager.ts";
+import { localOrCustomProvider, providerEndpoint } from "./provider-model-config.ts";
+import { providerRouteIntent } from "./provider-route-intent.ts";
 import { updateRecordEntry } from "./record-state.ts";
 import type { ModelProvidersRouteData } from "./route.ts";
 import { ModelProviderSupplementalLoader } from "./supplemental-load.ts";
@@ -86,6 +93,8 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
   @state() private providerQuery = "";
   private pendingConnection = false;
   @state() private addProviderOpen = false;
+  @state() private providerCategory: "cloud" | "custom" = "cloud";
+  @state() private managerIntent: ProviderManagerIntent | null = null;
   @state() private addProviderId = "";
   @state() private addProviderKey = "";
   @state() private defaultsDraft: DefaultsDraft | null = null;
@@ -93,6 +102,8 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
   /** Client the current data was loaded from; a new client means stale data. */
   private dataClient: GatewayBrowserClient | null = null;
   private routeDataObserved = false;
+  private managerRouteLocation: string | null = null;
+  private pendingManagerRoute: ConfigRouteData | null = null;
   // Global config writes survive agent switches; their card state does not.
   private agentEpoch = 0;
   private coreCatalogGeneration = 0;
@@ -238,6 +249,9 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
       this.addProviderOpen = true;
       this.setMessage("add", null);
     },
+    onCustom: () => {
+      this.managerIntent = { provider: "", view: "create" };
+    },
     canContinue: () => this.mutationBlockedReason() === null,
     refresh: () => this.refresh("replacement"),
   });
@@ -308,6 +322,14 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
         this.dataClient = null;
         this.refreshPolicy.resetPayload();
       }
+      if (changed.has("routeData")) {
+        const route = data.catalogConfig;
+        const location = route ? `${route.search}\u0000${route.hash}` : null;
+        if (location !== this.managerRouteLocation) {
+          this.managerRouteLocation = location;
+          this.pendingManagerRoute = route ?? null;
+        }
+      }
       this.ensureInitialData();
     }
   }
@@ -315,6 +337,32 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
   override updated() {
     if (!this.isConnected) {
       return;
+    }
+    const route = this.pendingManagerRoute;
+    const config = currentConfigObject(this.context.runtimeConfig.state);
+    if (route && config && !this.loaderPending) {
+      this.pendingManagerRoute = null;
+      const intent = providerRouteIntent(route, readModelProviderConfig(config).providerIds);
+      if (
+        intent?.provider &&
+        this.routeData?.agentId === this.selectedAgentId &&
+        this.routeData.selectionIntentRevision ===
+          this.context.settingsAgentSelection.intentRevision
+      ) {
+        this.managerIntent = { provider: intent.provider, view: intent.view };
+        this.providerQuery = intent.provider;
+        this.providerCategory = localOrCustomProvider(
+          config,
+          intent.provider,
+          new Set(
+            this.data?.authStatus?.providerCapabilities?.map((entry) => entry.provider) ?? [],
+          ),
+          modelCatalog.readAgentModelCatalog(this.gateway.client, this.selectedAgentId)?.models ??
+            [],
+        )
+          ? "custom"
+          : "cloud";
+      }
     }
     if (this.pendingConnection && this.data && this.canMutate() && !this.core.loading) {
       this.pendingConnection = false;
@@ -371,6 +419,7 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
   }
 
   private resetAgentScopeState() {
+    this.managerIntent = null;
     this.login.reset();
     this.busy = {};
     this.messages = {};
@@ -529,6 +578,7 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
     } else if (this.keyEditorProvider === provider && this.keyDraft.trim() === apiKey) {
       this.closeKeyEditor();
     }
+    return result;
   }
 
   private async requestLogout(pending: ModelProviderPendingLogout) {
@@ -625,16 +675,46 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
         .filter((provider) => Boolean(provider.apiKey) || provider.profiles.length > 0)
         .map((provider) => provider.provider) ?? []),
     ]);
-    const advertised = isGatewayMethodAdvertised(gatewaySnapshot, "models.probe");
+    const knownProviderIds = new Set(
+      data.authStatus?.providerCapabilities?.map((entry) => entry.provider) ?? [],
+    );
+    const isLocalOrCustom = (id: string) =>
+      localOrCustomProvider(configObject, id, knownProviderIds, catalog?.models ?? []);
     const usageAvailable = isGatewayMethodAdvertised(gatewaySnapshot, "codex.accountUsage");
     const login = this.login.pageActions;
     const body = renderModelProviders({
       accountRecovery: this.login.renderRecovery(),
+      catalogSettings: html`<openclaw-model-catalog-settings
+        .routeData=${this.routeData?.catalogConfig ?? null}
+        .runtimeConfig=${this.context.runtimeConfig}
+      ></openclaw-model-catalog-settings>`,
       providerScope: renderModelProviderScope({
         agentLabel: selected ? normalizeAgentLabel(selected) : this.selectedAgentId,
         ...login,
         connectDisabled: login.connectDisabled || this.discovery.busy || this.addProviderOpen,
       }),
+      providerCategory: this.providerCategory,
+      onProviderCategoryChange: (value) => {
+        this.providerCategory = value;
+      },
+      isLocalOrCustom: (card) => isLocalOrCustom(card.configKey ?? card.id),
+      isLocalOrCustomProvider: isLocalOrCustom,
+      providerEndpoint: (card) => {
+        const endpoint = providerEndpoint(configObject, card.configKey ?? card.id);
+        return endpoint ? redactSensitiveUrlLikeString(endpoint) : undefined;
+      },
+      onProviderSettings: (card) => {
+        this.managerIntent = { provider: card.configKey ?? card.id, view: "settings" };
+      },
+      onProviderModels: (card) => {
+        this.managerIntent = { provider: card.configKey ?? card.id, view: "models" };
+      },
+      onCustomProvider: () => {
+        this.managerIntent = { provider: "", view: "create" };
+      },
+      onAvailableProvider: (provider) => {
+        this.managerIntent = { provider, view: "settings" };
+      },
       providerQuery: this.providerQuery,
       onProviderQueryChange: (value) => (this.providerQuery = value),
       onConnectProvider: () => void this.login.open(),
@@ -681,7 +761,7 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
       mutationBlockedReason: this.mutationBlockedReason(),
       defaultsMutationBlockedReason: modelProviderConfigMutationBlockedReason(this.context),
       providerUsageStalled: this.refreshPolicy.incompleteUsageExhausted,
-      probeAvailable: advertised !== false,
+      probeAvailable: isGatewayMethodAdvertised(gatewaySnapshot, "models.probe") !== false,
       busy: this.busy,
       messages: this.messages,
       probeResults: this.probeResults,
@@ -723,13 +803,49 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
     return renderModelProvidersPageShell({
       body,
       loginMessage: this.messages.connection ?? login.loginMessage,
-      login: html`${login.login}${this.discovery.render({
-        agentLabel: selected ? normalizeAgentLabel(selected) : this.selectedAgentId,
-        credentialChoices:
-          data.authStatus?.providerCapabilities?.flatMap(
-            (provider) => provider.loginOptions?.map((option) => option.id) ?? [],
-          ) ?? [],
-      })}`,
+      login: html`<openclaw-provider-manager
+          .context=${this.context}
+          .agentId=${this.selectedAgentId}
+          .intent=${this.managerIntent}
+          .card=${cards.find((card) => (card.configKey ?? card.id) === this.managerIntent?.provider) ?? null}
+          .probe=${this.probeResults[cards.find((card) => (card.configKey ?? card.id) === this.managerIntent?.provider)?.id ?? ""]}
+          .onClose=${() => {
+            this.managerIntent = null;
+          }}
+          .onRefresh=${() => {
+            void this.refresh("replacement");
+          }}
+          .onProbe=${() => {
+            const card = cards.find(
+              (card) => (card.configKey ?? card.id) === this.managerIntent?.provider,
+            );
+            if (card) {
+              void this.profileActions.probe(
+                card.id,
+                card.credentialProviderIds.length ? card.credentialProviderIds : [card.id],
+              );
+            }
+          }}
+          .onConnect=${() => {
+            const card = cards.find(
+              (card) => (card.configKey ?? card.id) === this.managerIntent?.provider,
+            );
+            this.managerIntent = null;
+            if (card) {
+              void this.login.providerActions.onConnect(card);
+            } else {
+              void this.login.open();
+            }
+          }}
+          .onCredential=${(provider: string, key: string | null) => this.mutateApiKey(provider, provider, key)}
+        ></openclaw-provider-manager
+        >${login.login}${this.discovery.render({
+          agentLabel: selected ? normalizeAgentLabel(selected) : this.selectedAgentId,
+          credentialChoices:
+            data.authStatus?.providerCapabilities?.flatMap(
+              (provider) => provider.loginOptions?.map((option) => option.id) ?? [],
+            ) ?? [],
+        })}`,
     });
   }
 }

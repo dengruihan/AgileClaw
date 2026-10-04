@@ -73,7 +73,8 @@ describe("ModelProvidersPage installed agents", () => {
     expect(agentRow(page, "pi")?.textContent).toContain("Not verified");
     expect(agentRow(page, "qwen")?.textContent).toContain("Use Qwen Code");
     expect(agentRow(page, "kilo")?.textContent).toContain("Use Kilo");
-    expect(page.querySelector(".model-providers__provider-list")).toBeNull();
+    // No configured cards, but connectable capabilities still surface their entry.
+    expect(page.querySelector('[data-available-provider="anthropic"]')).not.toBeNull();
 
     settingsAgentSelection.state.selectedId = "writer";
     notifySelection();

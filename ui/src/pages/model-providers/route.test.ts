@@ -121,6 +121,23 @@ describe("Models route admission", () => {
     vi.restoreAllMocks();
   });
 
+  it("refreshes catalog intent on hash-only navigation within Models", async () => {
+    const harness = createModelsRouter();
+    await harness.router.navigate("model-providers", harness.context);
+    expect(harness.router.getState().matches[0]?.data?.catalogConfig?.targetBlockId).toBeNull();
+    await harness.router.navigateLocation(
+      {
+        pathname: "/settings/model-providers",
+        search: "",
+        hash: "#config-section-models",
+      },
+      harness.context,
+    );
+    expect(harness.router.getState().matches[0]?.data?.catalogConfig?.targetBlockId).toBe(
+      "config-section-models",
+    );
+  });
+
   it.each([true, false])("preserves provider deep links when connected=%s", async (connected) => {
     const harness = createModelsRouter();
     if (!connected) {
