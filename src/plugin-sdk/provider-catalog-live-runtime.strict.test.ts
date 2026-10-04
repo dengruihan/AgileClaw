@@ -241,7 +241,19 @@ describe("strict catalog acquisition", () => {
         if (mode === "capacity") {
           reply.end('{"id":"known"}]}');
           const expected = {
-            provider: { models: seed.models },
+            provider: {
+              models: [
+                {
+                  id: "known",
+                  name: "known",
+                  reasoning: false,
+                  input: ["text"],
+                  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                  contextWindow: 128_000,
+                  maxTokens: 8_192,
+                },
+              ],
+            },
             outcomes: [{ provider: "demo", status: "ready" }],
           };
           await expect(pending[0]).resolves.toMatchObject(expected);
@@ -381,6 +393,22 @@ describe("strict catalog acquisition", () => {
                 ? { projectRows: (rows: readonly unknown[]) => (rows.length ? seed.models : []) }
                 : {}),
             });
+      // The openai-compatible projection is record-driven under metadata
+      // isolation; it no longer echoes the seed definition for known ids.
+      const liveModels =
+        projection === "openai-compatible"
+          ? [
+              {
+                id: "known",
+                name: "known",
+                reasoning: false,
+                input: ["text"],
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 128_000,
+                maxTokens: 8_192,
+              },
+            ]
+          : seed.models;
       await expect(acquire()).rejects.toBe(failure);
       expect(fetchGuard).toHaveBeenCalledTimes(1);
       await expect(acquire()).resolves.toMatchObject({ models: [] });
@@ -389,12 +417,12 @@ describe("strict catalog acquisition", () => {
       vi.setSystemTime(999);
       await expect(acquire()).resolves.toMatchObject({ models: [] });
       expect(fetchGuard).toHaveBeenCalledTimes(2);
-      await expect(acquire(0)).resolves.toMatchObject({ models: seed.models });
+      await expect(acquire(0)).resolves.toMatchObject({ models: liveModels });
       await expect(acquire()).resolves.toMatchObject({ models: [] });
       expect(fetchGuard).toHaveBeenCalledTimes(3);
       vi.setSystemTime(1_000);
-      await expect(acquire()).resolves.toMatchObject({ models: seed.models });
-      await expect(acquire()).resolves.toMatchObject({ models: seed.models });
+      await expect(acquire()).resolves.toMatchObject({ models: liveModels });
+      await expect(acquire()).resolves.toMatchObject({ models: liveModels });
       expect(fetchGuard).toHaveBeenCalledTimes(4);
       expect(release).toHaveBeenCalledTimes(3);
     },
@@ -571,7 +599,21 @@ describe("strict catalog acquisition", () => {
       await expect(
         family.catalog.run({ config: {}, env: {}, resolveProviderApiKey, resolveProviderAuth }),
       ).resolves.toMatchObject({
-        providers: { healthy: { models: seed.models } },
+        providers: {
+          healthy: {
+            models: [
+              {
+                id: "known",
+                name: "known",
+                reasoning: false,
+                input: ["text"],
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 128_000,
+                maxTokens: 8_192,
+              },
+            ],
+          },
+        },
         outcomes: [
           {
             provider: "unavailable",

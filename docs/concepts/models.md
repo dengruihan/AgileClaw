@@ -92,8 +92,9 @@ The same `provider/model` behaves differently depending on where it came from:
 Other selection rules:
 
 - Changing `agents.defaults.model.primary` does not rewrite existing session pins. If status reports `This session is pinned to X; config primary Y will apply to new/unpinned sessions.`, run `/model default` to clear the pin.
-- CLI default-model and allowlist pickers respect `models.mode: "replace"` by listing only `models.providers.*.models` instead of the full built-in catalog.
-- The Control UI starts from the Gateway's prepared configured model view, so opening chat does not start provider discovery. Opening the chat model picker reads published rows, including rows matched by a trailing `provider/*` policy entry. Use its explicit Refresh action to request immediate provider discovery. Default and configured picker views hide catalog rows marked `deprecated` or `disabled`. There is one exception: a row stays visible when that exact model is configured as a primary, fallback, utility or tool model, alias or settings key, or exact policy entry. Hidden rows remain selectable by exact `provider/model` ref. The full built-in catalog, including hidden rows, is reserved for explicit browse views (`models.list` with `view: "all"`, or `openclaw models list --all`).
+- The invocable model list is composed only of provider discovery results (the provider's model-list endpoint, including the persisted last successful result) and authored `models.providers.*.models` rows. Plugin manifest catalogs, hosted catalog downloads, and static seed rows do not join picker membership, and they do not donate display metadata such as context windows, prices, or capability flags to listed rows. A provider whose endpoint does not expose a model list therefore lists only configured rows; a failed refresh keeps the last successful discovery result while it stays visible with a refresh-failure warning.
+- CLI default-model and allowlist pickers respect `models.mode: "replace"` by listing only `models.providers.*.models` instead of adding discovery results.
+- The Control UI starts from the Gateway's prepared configured model view, so opening chat does not start provider discovery. Opening the chat model picker reads published rows, including rows matched by a trailing `provider/*` policy entry. Use its explicit Refresh action to request immediate provider discovery. Default and configured picker views hide catalog rows marked `deprecated` or `disabled`. There is one exception: a row stays visible when that exact model is configured as a primary, fallback, utility or tool model, alias or settings key, or exact policy entry. Hidden rows remain selectable by exact `provider/model` ref. The discovered and configured rows, including hidden ones, remain available to explicit browse views (`models.list` with `view: "all"`, or `openclaw models list --all`).
 - Provider inventory UIs use `models.list` with `view: "provider-config"` to show source-authored `models.providers.*.models` rows without applying picker allowlists.
 - Chat and New Session keep the Default reset choice pinned in its provider group, then put the selected model before the remaining catalog choices. Models settings puts the selected model first. Other rows keep the Gateway's catalog order, including provider-curated recommendations where supplied. Text `/models <provider>` pages also put the current model first instead of alphabetizing the catalog. Picker search checks the full list, not just the visible rows.
 - Signing in to a provider keeps existing choices visible in open Control UI and terminal model pickers while discovery refreshes in the background. Changes to model restrictions, operator roles, or catalog mode still retire the old choices until the replacement catalog is ready.
@@ -454,7 +455,9 @@ Remote data can update or add models only for providers declared by installed
 plugin manifests. It cannot supply API base URLs or request headers, and a
 catalog older than the installed release's build stamp is ignored. Hosted
 metadata does not override a provider's account-discovery or model-admission
-rules.
+rules. Hosted rows do not join the invocable model list: downloads feed pricing
+schedules and metadata for rows that already exist through provider discovery or
+authored config, while list membership stays limited to those two sources.
 
 The background check also notices bundles downloaded by another process.
 An explicit Gateway model-list refresh triggers adoption after returning the

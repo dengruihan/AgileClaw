@@ -18,7 +18,6 @@ import {
   resolveNativeModelPrimary,
   resolveAgentWorkspaceDir,
 } from "./agent-scope.js";
-import { DEFAULT_PROVIDER } from "./defaults.js";
 import { resolveAgentHarnessPolicy } from "./harness/policy.js";
 import type { ModelAuthAvailabilityEvaluation } from "./model-auth-availability.js";
 import { resolveSelectedModelCredential } from "./model-auth-selected-credential.js";
@@ -35,11 +34,6 @@ import {
 import type { ModelCatalogEntry, ModelCatalogSnapshot } from "./model-catalog.types.js";
 import { hasAuthoredProviderRequestParams } from "./model-extra-params.js";
 import { splitTrailingAuthProfile } from "./model-ref-profile.js";
-import type { ModelRef } from "./model-ref-shared.js";
-import {
-  createModelVisibilityPolicy,
-  RUNTIME_MODEL_VISIBILITY_NORMALIZATION,
-} from "./model-visibility-policy.js";
 import {
   createModelCatalogIdentityKeyResolver,
   openAIModelCatalogRoutePolicy,
@@ -184,47 +178,15 @@ export type ModelCatalogViewFacts = {
   pinnedProfileId?: string;
   profileProvider?: string;
   view?: ModelCatalogBrowseView;
-  retainedModel?: ModelRef;
 };
 
 /** Projects captured catalog facts while keeping native observations revocable. */
 export function prepareModelCatalogView(params: ModelCatalogViewFacts) {
   const defaultModel = resolveNativeModelPrimary(params.cfg, params.agentId);
   const agentDir = params.agentDir ?? resolveAgentDir(params.cfg, params.agentId);
+  // Membership is live discovery and authored config only. Snapshot static rows
+  // stay internal (route donors, capability fallbacks) and never join the view.
   const catalog = [...params.snapshot.entries];
-  if (
-    (params.view === "configured" || params.view === "default") &&
-    params.snapshot.staticEntries?.length
-  ) {
-    const policy = createModelVisibilityPolicy({
-      cfg: params.cfg,
-      catalog,
-      defaultProvider: DEFAULT_PROVIDER,
-      defaultModel,
-      agentId: params.agentId,
-      ...RUNTIME_MODEL_VISIBILITY_NORMALIZATION,
-      manifestPlugins: params.metadataSnapshot,
-    });
-    const keyOf = createModelCatalogIdentityKeyResolver();
-    const seen = new Set(catalog.map(keyOf));
-    const retainedKey = params.retainedModel
-      ? keyOf({
-          provider: params.retainedModel.provider,
-          id: params.retainedModel.model,
-        })
-      : undefined;
-    for (const entry of params.snapshot.staticEntries) {
-      const key = keyOf(entry);
-      const include =
-        params.view === "configured"
-          ? policy.configuredKeys.has(key) || key === retainedKey
-          : policy.allows({ provider: entry.provider, model: entry.id });
-      if (!seen.has(key) && include) {
-        seen.add(key);
-        catalog.push(entry);
-      }
-    }
-  }
   const isCurrent = () => params.isCurrent?.() ?? params.observationConfig === undefined;
   const routes = createModelCatalogView({
     cfg: params.cfg,
@@ -655,7 +617,10 @@ async function acquirePickerModelCatalogView(
         }
       }
     }
-    if (!params.preferLiveProviderCatalog || params.allowStaticFallbackCatalog !== false) {
+    // Static manifest seeds serve setup surfaces that explicitly opt in while
+    // credentials prevent discovery; runtime picker views compose membership
+    // from live discovery and authored config only.
+    if (params.allowStaticFallbackCatalog === true) {
       const { loadStaticManifestCatalogRowsForList } =
         await import("../commands/models/list.manifest-catalog.js");
       const rows = loadStaticManifestCatalogRowsForList({

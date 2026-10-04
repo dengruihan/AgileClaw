@@ -695,7 +695,7 @@ describe("prepared model catalog builder", () => {
   });
 
   it.each(["static", "refreshable"] as const)(
-    "keeps %s manifest models available without runtime account discovery",
+    "keeps %s manifest rows out of membership without runtime account discovery",
     async (discovery) => {
       const snapshot = await build({
         includeProviderPluginAugmentation: false,
@@ -706,9 +706,10 @@ describe("prepared model catalog builder", () => {
         }),
       });
 
-      expect(snapshot.entries).toMatchObject([
-        { provider: "manifest-provider", id: "manifest-model" },
-      ]);
+      // Manifest rows never join membership; a provider without live discovery
+      // serves only authored config rows.
+      expect(snapshot.entries).toEqual([]);
+      expect(snapshot.routeVariants).toEqual([]);
     },
   );
 
@@ -726,8 +727,9 @@ describe("prepared model catalog builder", () => {
       readOnly: false,
     });
 
+    // Plugin augmentation rows join membership; the manifest row behind the
+    // same provider does not.
     expect(snapshot.entries.map((entry) => `${entry.provider}/${entry.id}`)).toEqual([
-      "manifest-provider/manifest-model",
       "manifest-provider/synthetic-model",
     ]);
   });

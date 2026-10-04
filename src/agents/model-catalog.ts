@@ -389,13 +389,6 @@ export async function buildPreparedModelCatalogSnapshot(
     });
     models.splice(0, models.length, ...orderedRegistryModels);
     mergeCatalogRouteVariants(routeVariants, orderedRegistryModels);
-    const dynamicManifestKeys = new Set(
-      manifestPlan.entries.flatMap((entry) =>
-        entry.discovery === "runtime" || entry.discovery === "refreshable"
-          ? entry.rows.map((row) => buildModelCatalogMergeKey(row.provider, row.id))
-          : [],
-      ),
-    );
     const runtimeDiscoveryProviders = new Set([
       ...observedProviders,
       ...manifestPlan.entries.flatMap((entry) =>
@@ -404,19 +397,30 @@ export async function buildPreparedModelCatalogSnapshot(
           : [],
       ),
     ]);
-    // Runtime declarations describe possible models, not account entitlement.
-    // Only live registry or refreshed rows may publish those provider models.
-    const manifestKeyOf = createModelCatalogIdentityKeyResolver();
-    const discoveredKeys = new Set(models.map(manifestKeyOf));
-    const manifestModels = declaredManifestModels.filter(
-      (entry) =>
-        (params.includeProviderPluginAugmentation === false ||
-          !dynamicManifestKeys.has(buildModelCatalogMergeKey(entry.provider, entry.id))) &&
-        (!observedProviders.has(entry.provider) || discoveredKeys.has(manifestKeyOf(entry))),
+    // Manifest and hosted rows seed provider ranks and route metadata only.
+    // Picker membership comes from live discovery results and authored config:
+    // built-in catalogs do not track what an endpoint actually serves, so their
+    // rows never join entries. Static-provider rows donate routes only where a
+    // discovered or authored row with the same identity exists; discovery-mode
+    // providers own their routes entirely through their live rows.
+    const membershipKeyOf = createModelCatalogIdentityKeyResolver();
+    const membershipKeys = new Set(models.map(membershipKeyOf));
+    const manifestDiscoveryProviders = new Set(
+      manifestPlan.entries.flatMap((entry) =>
+        entry.discovery === "runtime" || entry.discovery === "refreshable"
+          ? [normalizeProviderId(entry.provider)]
+          : [],
+      ),
     );
-    mergeCatalogRouteVariants(routeVariants, manifestModels);
-    mergeCatalogEntries(models, manifestModels);
-    logStage("manifest-models-merged", `entries=${models.length}`);
+    mergeCatalogRouteVariants(
+      routeVariants,
+      declaredManifestModels.filter(
+        (entry) =>
+          !manifestDiscoveryProviders.has(normalizeProviderId(entry.provider)) &&
+          membershipKeys.has(membershipKeyOf(entry)),
+      ),
+    );
+    logStage("manifest-models-ranked", `entries=${models.length}`);
     const configuredCatalogParams = {
       cfg,
       catalog: orderedRegistryModels,

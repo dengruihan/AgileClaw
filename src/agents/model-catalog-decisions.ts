@@ -31,9 +31,7 @@ import {
   type ModelAuthAvailabilityEvaluation,
 } from "./model-auth-availability.js";
 import { prepareModelCatalogView } from "./model-catalog-view.js";
-import { loadManifestModelCatalog } from "./model-catalog.js";
 import type { ModelCatalogEntry, ModelCatalogSnapshot } from "./model-catalog.types.js";
-import { dedupeModelCatalogEntries } from "./model-selection-shared.js";
 import {
   createOpenAIModelRoutesResolver,
   openAIModelCatalogRoutePolicy,
@@ -173,7 +171,6 @@ export function createModelCatalogDecisions(params: ModelCatalogDecisionParams) 
     resolveDefaultAgentWorkspaceDir();
   let authStore = params.preparedAuthStore;
   const preferredProfilesByProvider = new Map<string, string>();
-  const personalProviders = new Set<string>();
   if (
     !params.preferredProfileId &&
     params.requesterProfileId &&
@@ -194,10 +191,6 @@ export function createModelCatalogDecisions(params: ModelCatalogDecisionParams) 
   // explicit selections enter this private projection, never its shared owner.
   if (params.preferredProfileId && isUserModelAuthProfileId(params.preferredProfileId)) {
     authStore = materializePersonalAuthProfile(authStore, params.preferredProfileId);
-    const provider = authStore.profiles[params.preferredProfileId]?.provider;
-    if (provider) {
-      personalProviders.add(normalizeProviderId(provider));
-    }
   } else if (!params.preferredProfileId && params.requesterProfileId) {
     for (const link of listUserProfileAuthLinks(params.requesterProfileId)) {
       const selected = isUserModelAuthProfileId(link.authProfileId)
@@ -211,29 +204,11 @@ export function createModelCatalogDecisions(params: ModelCatalogDecisionParams) 
       }
       authStore = selected;
       preferredProfilesByProvider.set(link.provider, link.authProfileId);
-      if (isUserModelAuthProfileId(link.authProfileId)) {
-        personalProviders.add(link.provider);
-      }
     }
   }
-  const personalStaticEntries = personalProviders.size
-    ? [
-        ...(params.snapshot.staticEntries ?? []),
-        ...loadManifestModelCatalog({ config: params.cfg, metadataSnapshot }),
-      ].filter((entry) => personalProviders.has(normalizeProviderId(entry.provider)))
-    : [];
-  let snapshot = personalStaticEntries.length
-    ? {
-        ...params.snapshot,
-        entries: dedupeModelCatalogEntries([...params.snapshot.entries, ...personalStaticEntries]),
-        routeVariants: [
-          ...(params.snapshot.routeVariants.length
-            ? params.snapshot.routeVariants
-            : params.snapshot.entries),
-          ...personalStaticEntries,
-        ],
-      }
-    : params.snapshot;
+  // Personal projections project the shared captured catalog; static and
+  // manifest rows never join membership for a selected account either.
+  let snapshot = params.snapshot;
   const selectedProfileId = params.preferredProfileId ?? params.pinnedProfileId;
   const profileProvider =
     params.profileProvider ??

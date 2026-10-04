@@ -617,6 +617,9 @@ export async function promptDefaultModel(
         preferredProvider: providerScopedCatalog ? preferredProvider : undefined,
         preferLiveProviderCatalog: providerScopedCatalog,
         providerScoped: providerScopedCatalog,
+        // Setup browses catalogs before credentials exist, so static seeds
+        // stay available to the wizard even though runtime lists omit them.
+        allowStaticFallbackCatalog: true,
         agentDir: pickerAgentDir,
         ...(params.workspaceDir !== undefined ? { workspaceDir: params.workspaceDir } : {}),
         ...(params.env !== undefined ? { env: params.env } : {}),

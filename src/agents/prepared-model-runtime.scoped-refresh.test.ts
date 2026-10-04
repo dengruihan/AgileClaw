@@ -286,9 +286,11 @@ describe("prepared model runtime scoped refresh", () => {
       }),
     ];
     const owner = await prepareCatalogOwner(config, snapshots[0]!);
+    // A failed provider no longer promotes static starters; it waits with an
+    // empty inventory until an authoritative refresh lands.
     expect(await owner.loadFullModelCatalog!()).toMatchObject({
-      entries: [fallback],
-      routeVariants: [fallback],
+      entries: [],
+      routeVariants: [],
       authoritative: false,
       providerOutcomes: snapshots[0]!.providerOutcomes,
     });
@@ -372,9 +374,11 @@ describe("prepared model runtime scoped refresh", () => {
       );
       const owner = await prepareCatalogOwner(config, previous);
       serveCatalog(failed);
+      // Without the auth match there is no retention, and static starters are
+      // no longer promoted to fill the gap.
       expect(await owner.loadFullModelCatalog!({ refresh: true })).toMatchObject({
-        entries: [starter],
-        routeVariants: [starter],
+        entries: [],
+        routeVariants: [],
         authoritative: false,
       });
     },

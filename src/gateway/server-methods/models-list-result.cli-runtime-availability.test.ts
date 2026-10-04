@@ -40,8 +40,7 @@ async function listClaudeCliModel(
   } = {},
 ) {
   return await listModels({
-    catalog: [],
-    staticEntries: [providerCatalogEntry("anthropic", "claude-opus-5")],
+    catalog: [providerCatalogEntry("anthropic", "claude-opus-5")],
     cfg:
       params.cfg ??
       (params.pluginDisabled

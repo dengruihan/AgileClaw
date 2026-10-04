@@ -369,6 +369,8 @@ export async function prepareModelsListResult(
   const selectedModel = resolveSessionModelRef(cfg, scope?.sessionEntry, agentId, {
     allowPluginNormalization: false,
   });
+  // Visibility-layer retention keeps a session's selected model selectable; the
+  // catalog view itself no longer admits static rows for it.
   const retainedModel =
     params.includeManualSelection && view === "configured" && scope?.sessionEntry
       ? selectedModel
@@ -380,7 +382,6 @@ export async function prepareModelsListResult(
     workspaceDir,
     snapshot,
     view,
-    retainedModel,
     metadataSnapshot,
     pluginRegistry: preparedPluginRegistry,
     isCurrent,

@@ -115,7 +115,9 @@ describe("prepared catalog planning and declaration cache", () => {
       await expect(build(params)).rejects.toBe(planningError);
       expect(loadManifestModelCatalog({ config, metadataSnapshot: initial })).toBe(originalRows);
       const snapshot = await build(params);
-      expect(snapshot.entries.map((row) => row.id)).toEqual(["replacement"]);
+      // Manifest planning still caches rows for ranking and route donors, but
+      // they no longer join snapshot membership.
+      expect(snapshot.entries.map((row) => row.id)).toEqual([]);
       const replacementRows = loadManifestModelCatalog(params);
       expect(replacementRows.map((row) => row.id)).toEqual(["replacement"]);
       expect(replacementRows).not.toBe(originalRows);

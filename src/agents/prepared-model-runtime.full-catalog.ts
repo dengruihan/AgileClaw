@@ -136,9 +136,11 @@ export async function prepareFullCatalogFacts(
       modelsJsonContents: catalogSource.modelsJsonContents,
       pluginCatalogs: catalogSource.pluginCatalogs,
       staticProviderConfigs: Object.fromEntries(
-        Object.entries(resolvePreparedProviderStaticConfigs(preparedStaticProviderCatalog)).filter(
-          ([provider]) => !observedProviders.has(normalizeProviderId(provider)),
-        ),
+        Object.entries(resolvePreparedProviderStaticConfigs(preparedStaticProviderCatalog))
+          .filter(([provider]) => !observedProviders.has(normalizeProviderId(provider)))
+          // Static seed rows are not picker membership; provider request settings
+          // still register so configured models stay invocable before discovery.
+          .map(([provider, config]) => [provider, { ...config, models: [] }]),
       ),
     });
     const modelCatalog = await buildPreparedPluginModelCatalog({
@@ -384,14 +386,6 @@ export function prepareModelCatalogPublication(
       previousLegacyRows.set(provider, keys);
     }
   }
-  const starterProviders = new Set(
-    failed
-      .map(({ provider }) => normalizeProvider(provider))
-      .filter((provider) => !discoveryOrigins.some((origin) => origin.provider === provider)),
-  );
-  const starters = (catalog.staticEntries ?? []).filter(
-    (entry) => !entry.nativeRuntime && starterProviders.has(normalizeProvider(entry.provider)),
-  );
   const retainedProviders = new Set(
     failed.flatMap((outcome) => {
       const provider = normalizeProvider(outcome.provider);
@@ -448,7 +442,6 @@ export function prepareModelCatalogPublication(
               legacyRows.get(normalizeProvider(entry.provider))?.has(rowKey(entry))
             ),
         ),
-        ...starters.filter((entry) => !retainedProviders.has(normalizeProvider(entry.provider))),
         ...retained.filter(
           (entry) =>
             !entry.nativeRuntime &&

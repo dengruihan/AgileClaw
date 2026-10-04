@@ -348,12 +348,11 @@ describe("models.list configured static entries", () => {
           assertCurrent() {},
         });
 
+        // A linked account projects the shared captured catalog only. Static
+        // account rows are no longer injected into the personal projection, so
+        // account isolation is visible through accountSelection alone.
         const connected = await read(alice.id);
-        expect(connected).toMatchObject({
-          models: expect.arrayContaining([
-            expect.objectContaining({ id: "gpt-5.6-luna", available: true }),
-          ]),
-        });
+        expect(connected).toEqual(unconfiguredPersonal);
         expect(await read(bob.id)).toEqual(unconfiguredPersonal);
         expect(await read()).toEqual(shared);
 
@@ -416,7 +415,7 @@ describe("models.list configured static entries", () => {
     },
   );
 
-  it("projects a configured runtime model from prepared static facts", async () => {
+  it("keeps prepared static facts out of configured membership", async () => {
     const config = {
       agents: {
         defaults: { model: { primary: "openai/gpt-5.6-sol" } },
@@ -428,6 +427,8 @@ describe("models.list configured static entries", () => {
       },
     } as OpenClawConfig;
 
+    // A default ref alone no longer pulls its static catalog row into the
+    // configured view; membership is live discovery and authored providers.
     await expect(
       listModels({
         catalog: [],
@@ -442,18 +443,7 @@ describe("models.list configured static entries", () => {
       defaultModels: {
         automaticUtilityModel: "openai/gpt-5.6-luna",
       },
-      models: [
-        expect.objectContaining({
-          id: "gpt-5.6-sol",
-          provider: "openai",
-          agentRuntime: {
-            id: "codex",
-            cloudPlacementSupported: false,
-            devicePlacementSupported: false,
-            source: "model",
-          },
-        }),
-      ],
+      models: [],
     });
   });
 
