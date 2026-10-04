@@ -323,19 +323,23 @@ export async function stageSavedAuthCandidate(
     }
     const modelRef = saved?.modelRef ?? loaded?.method.starterModel;
     const { validateConfigObjectRaw } = await import("../config/validation-core.js");
-    const storedPatch = JSON.parse(saved.configJson) as {
-      models?: { providers?: Record<string, { models?: unknown }> };
-    };
-    // Patches authored by connection-only presets carry `models: []`; merge
-    // patch replaces arrays, so replaying them erased configured catalogs.
-    // Empty arrays carry no catalog opinion and stay absent.
-    for (const provider of Object.values(storedPatch.models?.providers ?? {})) {
-      if (Array.isArray(provider.models) && provider.models.length === 0) {
-        delete provider.models;
-      }
-    }
+    // Only a saved setup carries a stored patch; a loaded-only candidate has
+    // nothing to replay and falls through to the loaded config below.
     const storedConfig = saved
-      ? validateConfigObjectRaw(applyMergePatch(ctx.cfg, storedPatch))
+      ? (() => {
+          const storedPatch = JSON.parse(saved.configJson) as {
+            models?: { providers?: Record<string, { models?: unknown }> };
+          };
+          // Patches authored by connection-only presets carry `models: []`; merge
+          // patch replaces arrays, so replaying them erased configured catalogs.
+          // Empty arrays carry no catalog opinion and stay absent.
+          for (const provider of Object.values(storedPatch.models?.providers ?? {})) {
+            if (Array.isArray(provider.models) && provider.models.length === 0) {
+              delete provider.models;
+            }
+          }
+          return validateConfigObjectRaw(applyMergePatch(ctx.cfg, storedPatch));
+        })()
       : undefined;
     if (storedConfig && !storedConfig.ok) {
       return {
