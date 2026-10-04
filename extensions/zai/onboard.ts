@@ -1,6 +1,5 @@
 import {
   applyProviderConfigWithModelCatalogPreset,
-  applyProviderConnectionConfig,
   type OpenClawConfig,
 } from "openclaw/plugin-sdk/provider-onboard";
 import { normalizeOptionalString } from "openclaw/plugin-sdk/string-coerce-runtime";
@@ -69,18 +68,4 @@ export function applyZaiConfig(
   params?: { endpoint?: string; modelId?: string },
 ): OpenClawConfig {
   return applyZaiPreset(cfg, params, true);
-}
-
-export function applyZaiProviderConnectionConfig(
-  cfg: OpenClawConfig,
-  params?: { endpoint?: string; modelId?: string },
-): OpenClawConfig {
-  return applyZaiPreset(cfg, params, false, applyProviderConnectionConfig);
-}
-
-export function applyZaiConnectionConfig(
-  cfg: OpenClawConfig,
-  params?: { endpoint?: string; modelId?: string },
-): OpenClawConfig {
-  return applyZaiPreset(cfg, params, true, applyProviderConnectionConfig);
 }
