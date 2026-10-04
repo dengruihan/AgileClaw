@@ -1,0 +1,116 @@
+import Foundation
+
+enum ExecCommandToken {
+    static func basenameLower(_ token: String) -> String {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        let normalized = trimmed.replacingOccurrences(of: "\\", with: "/")
+        return normalized.split(separator: "/").last.map { String($0).lowercased() } ?? normalized.lowercased()
+    }
+}
+
+enum ExecEnvInvocationUnwrapper {
+    static let maxWrapperDepth = 4
+
+    struct UnwrapResult {
+        let command: [String]
+        let usesModifiers: Bool
+    }
+
+    private static func isEnvAssignment(_ token: String) -> Bool {
+        let pattern = #"^[A-Za-z_][A-Za-z0-9_]*=.*"#
+        return token.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    static func unwrap(_ command: [String]) -> [String]? {
+        self.unwrapWithMetadata(command)?.command
+    }
+
+    static func unwrapWithMetadata(
+        _ command: [String],
+        skippingEmptyArguments: Bool = false) -> UnwrapResult?
+    {
+        var idx = 1
+        var expectsOptionValue = false
+        var usesModifiers = false
+        while idx < command.count {
+            let token = command[idx].trimmingCharacters(in: .whitespacesAndNewlines)
+            if token.isEmpty {
+                guard skippingEmptyArguments else { return nil }
+                idx += 1
+                continue
+            }
+            if expectsOptionValue {
+                expectsOptionValue = false
+                usesModifiers = true
+                idx += 1
+                continue
+            }
+            if token == "--" {
+                idx += 1
+                break
+            }
+            if token == "-" {
+                usesModifiers = true
+                idx += 1
+                break
+            }
+            if self.isEnvAssignment(token) {
+                usesModifiers = true
+                idx += 1
+                continue
+            }
+            if token.hasPrefix("-") {
+                let lower = token.lowercased()
+                let flag = lower.split(separator: "=", maxSplits: 1).first.map(String.init) ?? lower
+                if ExecEnvOptions.flagOnly.contains(flag) {
+                    usesModifiers = true
+                    idx += 1
+                    continue
+                }
+                if ExecEnvOptions.withValue.contains(flag) {
+                    usesModifiers = true
+                    if !lower.contains("=") {
+                        expectsOptionValue = true
+                    }
+                    idx += 1
+                    continue
+                }
+                if ExecEnvOptions.inlineValuePrefixes.contains(where: { lower.hasPrefix($0) }) {
+                    usesModifiers = true
+                    idx += 1
+                    continue
+                }
+                return nil
+            }
+            break
+        }
+        guard !expectsOptionValue,
+              idx < command.count,
+              skippingEmptyArguments || !command[idx].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        return UnwrapResult(command: Array(command[idx...]), usesModifiers: usesModifiers)
+    }
+
+    static func unwrapDispatchWrappersForResolution(_ command: [String]) -> [String] {
+        var current = command
+        var depth = 0
+        while depth < self.maxWrapperDepth {
+            guard let token = current.first?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty else {
+                break
+            }
+            guard ExecCommandToken.basenameLower(token) == "env" else {
+                break
+            }
+            guard let unwrapped = unwrapWithMetadata(current) else {
+                break
+            }
+            if unwrapped.usesModifiers {
+                break
+            }
+            current = unwrapped.command
+            depth += 1
+        }
+        return current
+    }
+}

@@ -1,0 +1,142 @@
+package ai.openclaw.app.node
+
+import ai.openclaw.app.gateway.GatewaySession
+import ai.openclaw.app.nonBlankString
+import android.content.Context
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+
+/**
+ * Injectable notification listener facade so command parsing can be tested without Android service state.
+ */
+internal interface NotificationsStateProvider {
+  fun readSnapshot(context: Context): DeviceNotificationSnapshot
+
+  fun requestServiceRebind(context: Context)
+
+  fun executeAction(
+    context: Context,
+    request: NotificationActionRequest,
+  ): NotificationActionResult
+}
+
+private object SystemNotificationsStateProvider : NotificationsStateProvider {
+  /** Reads listener state through Android APIs and returns a disabled snapshot when access is missing. */
+  override fun readSnapshot(context: Context): DeviceNotificationSnapshot {
+    val enabled = DeviceNotificationListenerService.isAccessEnabled(context)
+    if (!enabled) {
+      return DeviceNotificationSnapshot(
+        enabled = false,
+        connected = false,
+        notifications = emptyList(),
+      )
+    }
+    return DeviceNotificationListenerService.snapshot(context, enabled = true)
+  }
+
+  override fun requestServiceRebind(context: Context) {
+    DeviceNotificationListenerService.requestServiceRebind(context)
+  }
+
+  override fun executeAction(
+    context: Context,
+    request: NotificationActionRequest,
+  ): NotificationActionResult = DeviceNotificationListenerService.executeAction(context, request)
+}
+
+class NotificationsHandler internal constructor(
+  private val appContext: Context,
+  private val stateProvider: NotificationsStateProvider = SystemNotificationsStateProvider,
+) {
+  /** Lists the current listener snapshot after nudging Android to reconnect if needed. */
+  suspend fun handleNotificationsList(_paramsJson: String?): GatewaySession.InvokeResult {
+    val snapshot = readSnapshotWithRebind()
+    return GatewaySession.InvokeResult.ok(snapshotPayloadJson(snapshot))
+  }
+
+  suspend fun handleNotificationsActions(paramsJson: String?): GatewaySession.InvokeResult {
+    readSnapshotWithRebind()
+
+    val params =
+      parseJsonParamsObject(paramsJson)
+        ?: return nodeInvokeError("INVALID_REQUEST", "expected JSON object")
+    val key =
+      params.nonBlankString("key")
+        ?: return nodeInvokeError("INVALID_REQUEST", "key required")
+    val actionRaw =
+      params.nonBlankString("action")?.lowercase()
+        ?: return nodeInvokeError("INVALID_REQUEST", "action required (open|dismiss|reply)")
+    // Keep accepted action names aligned with the cross-platform notification
+    // command contract rather than Android-specific PendingIntent labels.
+    val action =
+      when (actionRaw) {
+        "open" -> {
+          NotificationActionKind.Open
+        }
+
+        "dismiss" -> {
+          NotificationActionKind.Dismiss
+        }
+
+        "reply" -> {
+          NotificationActionKind.Reply
+        }
+
+        else -> {
+          return nodeInvokeError("INVALID_REQUEST", "action must be open|dismiss|reply")
+        }
+      }
+    val replyText = params.nonBlankString("replyText")
+    if (action == NotificationActionKind.Reply && replyText.isNullOrBlank()) {
+      return nodeInvokeError("INVALID_REQUEST", "replyText required for reply action")
+    }
+
+    val result =
+      stateProvider.executeAction(
+        appContext,
+        NotificationActionRequest(
+          key = key,
+          kind = action,
+          replyText = replyText,
+        ),
+      )
+    if (!result.ok) {
+      return GatewaySession.InvokeResult.error(
+        code = result.code ?: "UNAVAILABLE",
+        message = result.message ?: "notification action failed",
+      )
+    }
+
+    val payload =
+      buildJsonObject {
+        put("ok", JsonPrimitive(true))
+        put("key", JsonPrimitive(key))
+        put("action", JsonPrimitive(actionRaw))
+      }.toString()
+    return GatewaySession.InvokeResult.ok(payload)
+  }
+
+  private fun readSnapshotWithRebind(): DeviceNotificationSnapshot {
+    val snapshot = stateProvider.readSnapshot(appContext)
+    if (snapshot.enabled && !snapshot.connected) {
+      // Access can be granted while Android has not rebound the listener yet.
+      stateProvider.requestServiceRebind(appContext)
+    }
+    return snapshot
+  }
+
+  private fun snapshotPayloadJson(snapshot: DeviceNotificationSnapshot): String =
+    buildJsonObject {
+      put("enabled", JsonPrimitive(snapshot.enabled))
+      put("connected", JsonPrimitive(snapshot.connected))
+      put("count", JsonPrimitive(snapshot.notifications.size))
+      put(
+        "notifications",
+        JsonArray(
+          snapshot.notifications.map { entry -> entry.toJsonObject() },
+        ),
+      )
+    }.toString()
+}
