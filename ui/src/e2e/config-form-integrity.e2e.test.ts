@@ -389,7 +389,7 @@ suite.define(() => {
               [providerId]: {
                 ...initial.models.providers[providerId],
                 models: models.map((row, index) =>
-                  index === 3 ? { ...row, name: "Fourth updated" } : row,
+                  index === 3 ? Object.assign({}, row, { name: "Fourth updated" }) : row,
                 ),
               },
             },
