@@ -13,6 +13,7 @@ const CONFIG_SECTION_KEYS_BY_PAGE = {
   infrastructure: ["gateway", "browser", "nodeHost", "discovery", "acp"],
   updates: ["update"],
   "ai-agents": ["agents", "skills", "tools", "session"],
+  "model-providers": ["models"],
   advanced: undefined,
 } as const satisfies Record<string, readonly string[] | undefined>;
 

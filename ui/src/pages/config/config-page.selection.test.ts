@@ -63,7 +63,7 @@ describe("ConfigPage advanced selection guard", () => {
       activeSubsection: null,
     });
     expect(configSelectionFromSearch("advanced", "?section=models")).toEqual({
-      activeSection: "models",
+      activeSection: null,
       activeSubsection: null,
     });
   });

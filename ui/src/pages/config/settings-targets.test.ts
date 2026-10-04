@@ -161,6 +161,7 @@ describe("settings config section ownership", () => {
     "infrastructure",
     "updates",
     "ai-agents",
+    "model-providers",
   ];
 
   it("assigns each curated section to exactly one page", () => {
@@ -174,7 +175,7 @@ describe("settings config section ownership", () => {
     expect(configPageForSection("wizard")).toBe("advanced");
     expect(configPageForSection("secrets")).toBe("advanced");
     expect(configPageForSection("broadcast")).toBe("advanced");
-    expect(configPageForSection("models")).toBe("advanced");
+    expect(configPageForSection("models")).toBe("model-providers");
   });
 
   it("routes plugin policy to the dedicated plugin settings page", () => {

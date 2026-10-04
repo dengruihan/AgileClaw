@@ -281,7 +281,29 @@ suite.define(() => {
     );
   });
 
-  it("explains rejected Settings-save errors and discards the draft", async () => {
+  it("keeps rejected provider model edits recoverable and discards unsaved changes", async () => {
+    const { buildConfigSchemaCore } = await import("../../../src/config/schema.ts");
+    const providerId = "custom-lab";
+    const models = ["First", "Second", "Third", "Fourth"].map((name, index) => ({
+      id: `model-${index + 1}`,
+      name,
+      input: ["text"],
+      metadataSource: "models-add",
+    }));
+    const initial = {
+      models: {
+        providers: { [providerId]: { baseUrl: "https://models.example.test/v1", models } },
+      },
+    };
+    const snapshot = (config: typeof initial, hash: string) => ({
+      appliedConfigHash: hash,
+      config,
+      configRevisionHash: hash,
+      hash,
+      issues: [],
+      raw: JSON.stringify(config),
+      valid: true,
+    });
     await suite.withPage(
       {
         colorScheme: "dark",
@@ -290,130 +312,298 @@ suite.define(() => {
         viewport: { height: 1000, width: 1440 },
       },
       async ({ page }) => {
-        const providerId = "z.ai";
-        const config = {
+        const gateway = await installMockGateway(page, {
+          models: [],
+          methodResponses: {
+            "config.get": snapshot(initial, "model-row-e2e"),
+            "config.schema": buildConfigSchemaCore(),
+          },
+        });
+        await page.goto(`${suite.server.baseUrl}settings/advanced?section=models`);
+        await expect.poll(() => new URL(page.url()).pathname).toBe("/settings/model-providers");
+        await page.locator('[data-provider-category="custom"]').click();
+        await page.locator(`[data-provider-models="${providerId}"]`).click();
+        const manager = page.locator("openclaw-provider-manager form.provider-manager");
+        const fourth = manager.locator('[data-model-id="model-4"]');
+        await fourth.getByRole("button", { name: "Edit model", exact: true }).click();
+        const name = manager.getByRole("textbox", { name: /^name$/i });
+        await expect.poll(() => name.inputValue()).toBe("Fourth");
+        await name.fill("Broken");
+        await gateway.deferNext("config.patch");
+        await manager.getByRole("button", { name: "Save", exact: true }).click();
+        const rejected = await gateway.waitForRequest("config.patch");
+        const params = rejected.params as {
+          baseHash?: string;
+          raw?: string;
+          replacePaths?: string[];
+        };
+        expect(JSON.parse(String(params.raw))).toEqual({
           models: {
             providers: {
               [providerId]: {
-                models: [{ name: "First" }, { name: "Second" }, { name: "Third" }, {}],
+                models: models.map((row, index) =>
+                  index === 3 ? { ...row, name: "Broken" } : row,
+                ),
               },
-            },
-          },
-        };
-        const issue = {
-          path: `models.providers.${providerId}.models.3.name`,
-          message: "Invalid model name",
-        };
-        const gateway = await installMockGateway(page, {
-          methodResponses: {
-            "config.get": {
-              appliedConfigHash: "model-row-e2e",
-              config,
-              configRevisionHash: "model-row-e2e",
-              hash: "model-row-e2e",
-              issues: [],
-              raw: JSON.stringify(config),
-              valid: true,
-            },
-            "config.schema": {
-              generatedAt: "2026-08-01T00:00:00.000Z",
-              schema: {
-                type: "object",
-                properties: {
-                  models: {
-                    type: "object",
-                    title: "Models",
-                    properties: {
-                      providers: {
-                        type: "object",
-                        title: "Providers",
-                        additionalProperties: {
-                          type: "object",
-                          properties: {
-                            models: {
-                              type: "array",
-                              title: "Configured models",
-                              items: {
-                                type: "object",
-                                properties: {
-                                  name: { type: "string", title: "Model name" },
-                                },
-                              },
-                            },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-              uiHints: {},
-              version: "e2e",
             },
           },
         });
-
-        const response = await page.goto(`${suite.server.baseUrl}settings/advanced?section=models`);
-        expect(response?.status()).toBe(200);
-        const panel = page.locator("#config-section-panel");
-        const fourthRow = panel.locator(".settings-row__title").getByText("#4", { exact: true });
-        await expect.poll(() => fourthRow.isVisible()).toBe(true);
-
-        await gateway.deferNext("config.set");
-        await panel.getByRole("textbox", { name: "Model name" }).nth(3).fill("Broken");
-        const request = await gateway.waitForRequest("config.set");
-        const params = request.params as { baseHash?: string; raw?: string };
-        const submitted = JSON.parse(String(params.raw)) as {
-          models: { providers: Record<string, { models: Array<{ name: string }> }> };
-        };
-        expect(submitted.models.providers[providerId]?.models[3]?.name).toBe("Broken");
         expect(params.baseHash).toBe("model-row-e2e");
-
-        const rejection = {
+        expect(params.replacePaths).toHaveLength(1);
+        await gateway.rejectDeferred("config.patch", {
           code: "INVALID_REQUEST",
-          message: `invalid config: ${issue.path}: ${issue.message}`,
-          details: { issues: [issue] },
-        };
-        await gateway.rejectDeferred("config.set", rejection);
-
-        const status = page.locator("openclaw-settings-save-indicator").getByRole("status");
-        await expect.poll(() => status.textContent()).toContain("Settings not applied");
-        // Opening the reason blurs the edited field without resubmitting its rejected value.
-        await status.getByText("Show reason", { exact: true }).click();
-        await status
-          .getByText(
-            `invalid config: models.providers.${providerId}.models.#4.name: Invalid model name`,
-            { exact: true },
-          )
-          .waitFor();
-        expect(await gateway.getRequests("config.set")).toHaveLength(1);
-        expect(await status.ariaSnapshot()).toContain(
-          `models.providers.${providerId}.models.#4.name`,
-        );
-        expect(issue.path).toBe(`models.providers.${providerId}.models.3.name`);
-        expect(rejection.message).toContain(".3.name");
-
+          message: "Invalid model name: use another name",
+          details: {
+            issues: [
+              {
+                path: `models.providers.${providerId}.models.3.name`,
+                message: "Invalid model name",
+              },
+            ],
+          },
+        });
+        await manager.getByRole("alert").filter({ hasText: "Invalid model name" }).waitFor();
+        expect(await name.inputValue()).toBe("Broken");
+        expect(await gateway.getRequests("config.patch")).toHaveLength(1);
         if (captureUiProofEnabled) {
           await page.screenshot({
             animations: "disabled",
-            fullPage: true,
             path: path.join(uiProofArtifactDir, "03-model-row-rejection.png"),
           });
           await writeFile(
             path.join(uiProofArtifactDir, "03-model-row-rejection-accessibility.yml"),
-            await status.ariaSnapshot(),
+            await manager.ariaSnapshot(),
           );
         }
+        await manager.getByRole("button", { name: "Back", exact: true }).click();
+        await fourth.getByRole("button", { name: "Edit model", exact: true }).click();
+        expect(await name.inputValue()).toBe("Fourth");
+        expect(await gateway.getRequests("config.patch")).toHaveLength(1);
+        await name.fill("Fourth updated");
+        await gateway.deferNext("config.patch");
+        await manager.getByRole("button", { name: "Save", exact: true }).click();
+        await gateway.waitForRequest("config.patch", { after: 1 });
+        const saved = {
+          models: {
+            providers: {
+              [providerId]: {
+                ...initial.models.providers[providerId],
+                models: models.map((row, index) =>
+                  index === 3 ? { ...row, name: "Fourth updated" } : row,
+                ),
+              },
+            },
+          },
+        };
+        await gateway.setMethodResponse("config.get", snapshot(saved, "model-row-saved"));
+        await gateway.resolveDeferred("config.patch", { config: saved, hash: "model-row-saved" });
+        await fourth.getByText("Fourth updated", { exact: true }).waitFor();
+        await manager.getByRole("button", { name: "Cancel", exact: true }).click();
+        await manager.waitFor({ state: "hidden" });
+        await page.locator(`[data-provider-models="${providerId}"]`).click();
+        await fourth.getByRole("button", { name: "Edit model", exact: true }).click();
+        await expect.poll(() => name.inputValue()).toBe("Fourth updated");
+        await name.fill("Cancelled change");
+        await manager.getByRole("button", { name: "Close", exact: true }).click();
+        await manager.waitFor({ state: "hidden" });
+        expect(await gateway.getRequests("config.patch")).toHaveLength(2);
+        expect(await gateway.getRequests("config.set")).toHaveLength(0);
+        if (captureUiProofEnabled) {
+          await page
+            .getByRole("heading", { name: "Models", exact: true, level: 1 })
+            .scrollIntoViewIfNeeded();
+          await page.screenshot({
+            animations: "disabled",
+            path: path.join(uiProofArtifactDir, "04-model-page-overview.png"),
+          });
+        }
+      },
+    );
+  });
 
-        await status.getByRole("button", { name: "Discard draft and reload", exact: true }).click();
-        await status.waitFor({ state: "hidden" });
-        expect(await panel.getByRole("textbox", { name: "Model name" }).nth(3).inputValue()).toBe(
-          "",
+  it("retries failed custom provider credentials without recreating its saved connection", async () => {
+    const { buildConfigSchemaCore } = await import("../../../src/config/schema.ts");
+    const initial = { models: { providers: {} } };
+    const snapshot = (config: Record<string, unknown>, hash: string) => ({
+      appliedConfigHash: hash,
+      config,
+      configRevisionHash: hash,
+      hash,
+      issues: [],
+      raw: JSON.stringify(config),
+      valid: true,
+    });
+    await suite.withPage(
+      {
+        colorScheme: "dark",
+        locale: "en-US",
+        serviceWorkers: "block",
+        viewport: { height: 1000, width: 1440 },
+      },
+      async ({ page }) => {
+        const gateway = await installMockGateway(page, {
+          models: [],
+          methodResponses: {
+            "config.get": snapshot(initial, "custom-provider-initial"),
+            "config.schema": buildConfigSchemaCore(),
+            "models.authSetApiKey": {},
+          },
+        });
+        await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+        const manager = page.locator("openclaw-provider-manager form.provider-manager");
+        const openCustom = async () => {
+          // The readiness banner and provider section both say "Connect provider";
+          // target the section entry that opens the provider picker.
+          await page.locator("[data-models-connect]").click();
+          await page.locator("[data-models-login-custom]").click();
+          await manager.locator('input[name="providerId"]').waitFor();
+        };
+        await openCustom();
+        await manager.locator('input[name="providerId"]').fill("cancelled-provider");
+        await manager
+          .getByRole("textbox", { name: "Model Provider Base URL", exact: true })
+          .fill("https://cancelled.example.test/v1");
+        await manager.getByRole("button", { name: "Cancel", exact: true }).click();
+        await manager.waitFor({ state: "hidden" });
+        expect(await gateway.getRequests("config.patch")).toHaveLength(0);
+        expect(await gateway.getRequests("models.authSetApiKey")).toHaveLength(0);
+
+        await openCustom();
+        const providerId = "custom-lab";
+        await manager.locator('input[name="providerId"]').fill(providerId);
+        const url = manager.getByRole("textbox", { name: "Model Provider Base URL", exact: true });
+        await url.fill("https://models.example.test/v1");
+        await manager.locator('input[name="apiKey"]').fill("synthetic-provider-key");
+        expect(await manager.locator('input[name="apiKey"]').getAttribute("type")).toBe("password");
+        if (captureUiProofEnabled) {
+          await page.screenshot({
+            animations: "disabled",
+            path: path.join(uiProofArtifactDir, "05-custom-provider-connection.png"),
+          });
+        }
+        await gateway.deferNext("config.patch");
+        await gateway.deferNext("models.authSetApiKey");
+        await manager.getByRole("button", { name: "Save", exact: true }).click();
+        const created = await gateway.waitForRequest("config.patch");
+        expect(JSON.parse(String((created.params as { raw?: string }).raw))).toEqual({
+          models: {
+            providers: {
+              [providerId]: {
+                baseUrl: "https://models.example.test/v1",
+                api: "openai-completions",
+                models: [],
+              },
+            },
+          },
+        });
+        expect(await gateway.getRequests("models.authSetApiKey")).toHaveLength(0);
+        const saved = {
+          models: {
+            providers: {
+              [providerId]: {
+                baseUrl: "https://models.example.test/v1",
+                api: "openai-completions",
+                models: [],
+              },
+            },
+          },
+        };
+        await gateway.setMethodResponse("config.get", snapshot(saved, "custom-provider-created"));
+        await gateway.resolveDeferred("config.patch", {
+          config: saved,
+          hash: "custom-provider-created",
+        });
+        const credential = await gateway.waitForRequest("models.authSetApiKey");
+        expect(credential.params).toMatchObject({
+          provider: providerId,
+          agentId: "main",
+          apiKey: "synthetic-provider-key",
+        });
+        await gateway.rejectDeferred("models.authSetApiKey", {
+          message: "Synthetic credential save failure",
+        });
+        await expect
+          .poll(() => manager.getByRole("alert").textContent())
+          .toContain("Connection settings were saved, but the API key was not saved");
+        expect(await manager.locator('input[name="apiKey"]').inputValue()).toBe(
+          "synthetic-provider-key",
         );
-        await page.getByRole("button", { name: "Raw", exact: true }).click();
-        const restored = await page.locator(".config-raw-field textarea").inputValue();
-        expect(JSON.parse(restored)).toEqual(config);
-        expect(await gateway.getRequests("config.set")).toHaveLength(1);
+        expect(await manager.locator('input[name="providerId"]').isDisabled()).toBe(true);
+        expect(await gateway.getRequests("config.patch")).toHaveLength(1);
+        await gateway.deferNext("models.authSetApiKey");
+        await manager.getByRole("button", { name: "Save", exact: true }).click();
+        const retriedCredential = await gateway.waitForRequest("models.authSetApiKey", {
+          after: 1,
+        });
+        expect(retriedCredential.params).toMatchObject({
+          provider: providerId,
+          agentId: "main",
+          apiKey: "synthetic-provider-key",
+        });
+        expect(await gateway.getRequests("config.patch")).toHaveLength(1);
+        await gateway.resolveDeferred("models.authSetApiKey", {});
+        await manager.waitFor({ state: "hidden" });
+        await page.locator('[data-provider-category="custom"]').click();
+        await page.locator(`[data-provider-settings="${providerId}"]`).click();
+        await expect.poll(() => url.inputValue()).toBe("https://models.example.test/v1");
+        expect(await manager.locator('input[name="apiKey"]').inputValue()).toBe("");
+        await url.fill("https://changed.example.test/v1");
+        expect(
+          await manager.getByRole("button", { name: "Test connection", exact: true }).isDisabled(),
+        ).toBe(true);
+        await gateway.deferNext("config.patch");
+        await manager.getByRole("button", { name: "Save", exact: true }).click();
+        const changed = await gateway.waitForRequest("config.patch", { after: 1 });
+        expect(JSON.parse(String((changed.params as { raw?: string }).raw))).toEqual({
+          models: { providers: { [providerId]: { baseUrl: "https://changed.example.test/v1" } } },
+        });
+        const updated = {
+          models: {
+            providers: {
+              [providerId]: {
+                ...saved.models.providers[providerId],
+                baseUrl: "https://changed.example.test/v1",
+              },
+            },
+          },
+        };
+        await gateway.setMethodResponse("config.get", snapshot(updated, "custom-provider-updated"));
+        await gateway.resolveDeferred("config.patch", {
+          config: updated,
+          hash: "custom-provider-updated",
+        });
+        await expect
+          .poll(() => manager.getByRole("button", { name: "Save", exact: true }).isDisabled())
+          .toBe(true);
+        expect(await gateway.getRequests("models.authSetApiKey")).toHaveLength(2);
+        await gateway.deferNext("models.probe");
+        await manager.getByRole("button", { name: "Test connection", exact: true }).click();
+        const probe = await gateway.waitForRequest("models.probe");
+        expect(probe.params).toMatchObject({ provider: providerId, agentId: "main" });
+        await gateway.resolveDeferred("models.probe", {
+          provider: providerId,
+          status: "ok",
+          results: [],
+        });
+        await expect
+          .poll(() => manager.getByRole("status").allTextContents())
+          .toContainEqual(expect.stringMatching(/^Connected\s*$/));
+        await manager.getByRole("button", { name: "Cancel", exact: true }).click();
+        await manager.waitFor({ state: "hidden" });
+        expect(await gateway.getRequests("config.patch")).toHaveLength(2);
+        if (captureUiProofEnabled) {
+          await page.screenshot({
+            animations: "disabled",
+            fullPage: true,
+            path: path.join(uiProofArtifactDir, "06-custom-provider-card.png"),
+          });
+          await page.setViewportSize({ width: 390, height: 844 });
+          await page.screenshot({
+            animations: "disabled",
+            fullPage: true,
+            path: path.join(uiProofArtifactDir, "07-custom-provider-mobile.png"),
+          });
+        }
       },
     );
   });

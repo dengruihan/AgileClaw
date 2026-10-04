@@ -1152,6 +1152,34 @@ export class ConfigPage extends OpenClawLightDomElement {
         editor: renderSectionEditor("mcp", "MCP"),
       });
     }
+    if (this.pageId === "model-providers") {
+      return renderConfig({
+        ...props,
+        embeddedEditor: true,
+        forceShowAdvanced: true,
+        schema: (() => {
+          const root = asConfigRecord(props.schema);
+          const properties = asConfigRecord(root?.properties);
+          const models = asConfigRecord(properties?.models);
+          const fields = asConfigRecord(models?.properties);
+          if (!root || !properties || !models || !fields) {
+            return props.schema;
+          }
+          const { providers: _providers, ...globalFields } = fields;
+          return {
+            ...root,
+            properties: { ...properties, models: { ...models, properties: globalFields } },
+          };
+        })(),
+        uiHints: {
+          ...props.uiHints,
+          "models.mode": {
+            ...props.uiHints["models.mode"],
+            help: t("modelProviders.catalogSettings.modeHelp"),
+          },
+        },
+      });
+    }
     if (this.pageId === "memory") {
       return html`<openclaw-memory-settings
         .configObject=${configObject}
@@ -1201,6 +1229,9 @@ export class ConfigPage extends OpenClawLightDomElement {
     const configObject =
       asConfigRecord(configState.configForm ?? configState.configSnapshot?.config) ?? {};
     const body = this.renderAdvancedConfig(configObject);
+    if (this.pageId === "model-providers") {
+      return body;
+    }
     return html`
       ${
         this.pageId === "memory"

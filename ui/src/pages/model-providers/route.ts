@@ -2,6 +2,7 @@ import { definePage, type RouteLoaderOptions } from "@openclaw/uirouter";
 import { html } from "lit";
 import { routePageSpec } from "../../app-route-paths.ts";
 import type { ApplicationContext } from "../../app/context.ts";
+import { configRouteData, type ConfigRouteData } from "../config/route-data.ts";
 import type { ModelProvidersData } from "./load.ts";
 
 export type ModelProvidersRouteData = {
@@ -18,6 +19,7 @@ export type ModelProvidersRouteData = {
   /** An explicit connection entry from a saved setup link. */
   connect?: boolean;
   provider?: string;
+  catalogConfig?: ConfigRouteData;
 };
 
 async function loadModelProvidersRouteData(
@@ -31,7 +33,14 @@ async function loadModelProvidersRouteData(
   const gatewaySnapshot = gateway.snapshot;
   const selection = context.settingsAgentSelection;
   const selectionIntentRevision = selection.intentRevision;
-  const owner = { gateway, gatewaySnapshot, selectionIntentRevision, connect, provider };
+  const owner = {
+    gateway,
+    gatewaySnapshot,
+    selectionIntentRevision,
+    connect,
+    provider,
+    catalogConfig: configRouteData(options.location),
+  };
   let agentId = selection.state.selectedId;
   const { EMPTY_MODEL_PROVIDERS_DATA, loadModelProvidersData } = await import("./load.ts");
   const client = gatewaySnapshot.phase === "connected" ? gatewaySnapshot.client : null;
@@ -73,7 +82,7 @@ async function loadModelProvidersRouteData(
 
 export const page = definePage({
   ...routePageSpec("model-providers"),
-  loaderDeps: (_context, location) => location.search,
+  loaderDeps: (_context, location) => `${location.search}\u0000${location.hash}`,
   loader: loadModelProvidersRouteData,
   component: () =>
     import("./model-providers-page.ts").then(() => ({
