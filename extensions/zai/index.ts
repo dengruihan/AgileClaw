@@ -28,11 +28,7 @@ import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coer
 import { detectZaiEndpoint, type ZaiEndpointId } from "./detect.js";
 import { zaiMediaUnderstandingProvider } from "./media-understanding-provider.js";
 import { buildZaiModelDefinition, resolveZaiBaseUrl } from "./model-definitions.js";
-import {
-  applyZaiConnectionConfig,
-  applyZaiProviderConnectionConfig,
-  resolveZaiModelId,
-} from "./onboard.js";
+import { applyZaiConfig, applyZaiProviderConfig, resolveZaiModelId } from "./onboard.js";
 import manifest from "./openclaw.plugin.json" with { type: "json" };
 import { resolveThinkingProfile, resolveZaiReasoningEffort } from "./provider-policy-api.js";
 import { buildZaiVideoGenerationProvider } from "./video-generation-provider.js";
@@ -159,7 +155,7 @@ async function runZaiApiKeyAuth(
         ),
       },
     ],
-    configPatch: applyZaiProviderConnectionConfig(ctx.config, preset),
+    configPatch: applyZaiProviderConfig(ctx.config, preset),
     defaultModel: `zai/${resolveZaiModelId(preset)}`,
     ...(detected?.note ? { notes: [detected.note] } : {}),
   };
@@ -199,7 +195,7 @@ async function runZaiApiKeyAuthNonInteractive(
     provider: PROVIDER_ID,
     mode: "api_key",
   });
-  return applyZaiConnectionConfig(next, {
+  return applyZaiConfig(next, {
     ...(nextEndpoint ? { endpoint: nextEndpoint } : {}),
     ...(modelIdOverride ? { modelId: modelIdOverride } : {}),
   });
