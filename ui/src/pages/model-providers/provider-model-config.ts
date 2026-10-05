@@ -158,33 +158,48 @@ export function modelEntryWithoutHidden(entry: Record<string, unknown>): Record<
   return Object.fromEntries(Object.entries(entry).filter(([field]) => field !== "hidden"));
 }
 
-/** Hides or unhides one model: overlay entry for hide, cleanup or removal for show. */
-export function modelVisibilityPatch(
+/**
+ * Deletes one model from the dialog list: drop any authored entry, and keep
+ * endpoint-discovered rows excluded with a bare hide marker.
+ */
+export function modelDeletePatch(
   config: Record<string, unknown> | null,
   key: string,
   id: string,
-  hidden: boolean,
+  catalog: { listed: boolean; name?: string },
+): ProviderModelsPatch {
+  const models = providerModels(config, key);
+  const rest = models.filter((model) => model.id !== id);
+  if (catalog.listed) {
+    const marker = { id, name: catalog.name ?? id, hidden: true };
+    const index = models.findIndex((model) => model.id === id);
+    if (index < 0) {
+      rest.push(marker);
+    } else {
+      rest.splice(index, 0, marker);
+    }
+  }
+  return modelsPatch(key, rest);
+}
+
+/** Restores a deleted model: bare hide markers drop, authored entries keep their fields. */
+export function modelRestorePatch(
+  config: Record<string, unknown> | null,
+  key: string,
+  id: string,
   catalogName: string | undefined,
 ): ProviderModelsPatch {
   const current = providerModels(config, key).find((entry) => entry.id === id);
-  if (!hidden) {
-    const rest = current ? modelEntryWithoutHidden(current) : undefined;
-    const renamed = typeof rest?.name === "string" && rest.name !== catalogName;
-    if (
-      rest &&
-      (modelEntryHasAuthorFields(rest) || renamed || rest.metadataSource === "models-add")
-    ) {
-      return modelWritePatch(config, key, rest, id);
-    }
-    // The entry existed only to hide the model; drop it entirely.
-    return modelRemovePatch(config, key, id);
+  const rest = current ? modelEntryWithoutHidden(current) : undefined;
+  const renamed = typeof rest?.name === "string" && rest.name !== catalogName;
+  if (
+    rest &&
+    (modelEntryHasAuthorFields(rest) || renamed || rest.metadataSource === "models-add")
+  ) {
+    return modelWritePatch(config, key, rest, id);
   }
-  return modelWritePatch(
-    config,
-    key,
-    { ...(current ?? { id, name: catalogName ?? id }), hidden: true },
-    id,
-  );
+  // The entry existed only to hide the model; drop it entirely.
+  return modelRemovePatch(config, key, id);
 }
 
 function referencePath(parent: string, key: string | number): string {

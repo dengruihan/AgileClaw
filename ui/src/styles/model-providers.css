@@ -888,6 +888,24 @@ openclaw-model-account-usage,
   margin-block: 20px;
 }
 
+.provider-manager__hidden {
+  margin-block: 4px 12px;
+}
+
+.provider-manager__hidden summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.provider-manager__hidden-list {
+  margin-block: 12px;
+}
+
+.provider-manager__hidden-list .provider-manager__model {
+  opacity: 0.75;
+}
+
 .provider-manager__model {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
