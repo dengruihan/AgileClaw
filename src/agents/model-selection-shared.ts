@@ -1226,6 +1226,9 @@ export function buildConfiguredModelCatalog(params: {
         reasoning,
         ...(typeof model?.reasoning === "boolean" ? { configuredReasoning: model.reasoning } : {}),
         ...(model.thinkingLevelMap ? { thinkingLevelMap: model.thinkingLevelMap } : {}),
+        // Authoritative user hide: the overlay lets configured status win over
+        // the discovered row, and the picker drops disabled rows.
+        ...(model?.hidden === true ? { status: "disabled" as const } : {}),
         input,
         ...(modelParams ? { params: modelParams } : {}),
         compat,
@@ -1444,7 +1447,14 @@ export function createModelVisibilityPolicyWithFallbacks(
   const wildcardModelKeys = visibility.wildcardModelKeys;
   const allowed = buildAllowedModelSetFromPrepared(params, prepared);
   const resolveModelCatalogIdentityKey = createModelCatalogIdentityKeyResolver();
-  const configuredKeys = new Set(configuredCatalog.map(resolveModelCatalogIdentityKey));
+  // Hidden rows are authored config, but their author asked for them to be
+  // hidden: they must not self-exempt from the disabled-row drop. Referenced
+  // rows re-enter through addConfiguredRef below.
+  const configuredKeys = new Set(
+    configuredCatalog
+      .filter((entry) => entry.status !== "disabled")
+      .map(resolveModelCatalogIdentityKey),
+  );
   const retainedKeys = new Set<string>();
   const addConfiguredRef = (
     input: string | ModelRef | null | undefined,

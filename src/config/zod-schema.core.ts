@@ -250,6 +250,8 @@ const ModelDefinitionSchema = z.strictObject({
   id: z.string().min(1),
   /** Human-readable display name. */
   name: z.string().min(1),
+  /** Hide this model from the invocable model list. */
+  hidden: z.boolean().optional(),
   /** Optional API adapter override for this model. */
   api: ModelApiSchema.optional(),
   /** Optional base URL override for this model. */
