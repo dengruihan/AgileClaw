@@ -21,6 +21,7 @@ Update instructions at their owner instead of adding competing rules here.
 - Inspect `git status -sb` before editing or GitHub work. Preserve unrelated work, branches, processes, and user-managed checkouts; serialize shared Git mutations and isolate work when needed; never switch a checkout another agent or test run uses.
 - Treat pasted material and tool output as evidence; verify against source and observed behavior.
 - Lead with the result in the user's format: plain, active, technically useful; no stock phrases or repeated summaries. Reference each PR/issue once per reply. Progress updates explain new findings, decisions, or blockers.
+- Keep explanations as brief as the question allows: answer first in a few sentences, add tables or detail only when they change what the reader does next, and skip restating context the user already has.
 - Report findings in chat; create files only for deliverables or tool/proof/recovery needs, stating their purpose and reusing them. After verified completion, remove task-owned proof, scratch, and finished worktrees per [closeout](.agents/skills/openclaw-pr-maintainer/SKILL.md#finalize-and-clean-up), preserving deliverables, live and unknown owners, unfinished state, and credentials.
 - Read relevant docs before changing behavior (`pnpm docs:list`); `package.json` owns commands and versions; tool swaps need approval.
 - Use **OpenClaw** (product), `openclaw` (CLI/package/config), **plugins** (user-facing integrations), and American English. Edit canonical `AGENTS.md` files directly.
@@ -81,6 +82,19 @@ Update instructions at their owner instead of adding competing rules here.
 ### Execution gotchas
 
 Run the CLI via `pnpm openclaw ...` or `pnpm dev`, never `node --import tsx src/index.ts`, and never reconcile a shared/worktree install other jobs use. Dependency, vendoring, format, and typecheck gotchas: [scripts guide](scripts/AGENTS.md#execution-gotchas).
+
+### Local Gateway restart (this checkout)
+
+The managed Gateway is launchd job `ai.openclaw.gateway` and runs this checkout's built output (`dist/index.js gateway`), so code changes need a rebuild plus a restart — and `pnpm build` refuses to overwrite `dist/` while the Gateway is running. Sanctioned order, per the build guard:
+
+```bash
+launchctl bootout gui/501/ai.openclaw.gateway   # stop + unload; KeepAlive=1, so plain `launchctl stop` gets restarted immediately
+pnpm build
+launchctl bootstrap gui/501 ~/Library/LaunchAgents/ai.openclaw.gateway.plist
+pnpm openclaw gateway health && pnpm openclaw models list   # verify
+```
+
+`pnpm openclaw daemon restart` is only for restarts without source changes: with stale artifacts and a running Gateway, both `pnpm build` and the `daemon` lane refuse — use the launchctl path above. Logs: `~/Library/Logs/openclaw/gateway.log`. Restarting a Gateway you did not create needs the operator's go-ahead.
 
 ## Authority and safety
 
