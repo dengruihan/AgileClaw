@@ -790,7 +790,9 @@ describe("prepared model catalog builder", () => {
           findModelCatalogEntry(snapshot.entries, { provider: "custom", modelId: model.id }),
         ).toMatchObject({
           ...expected,
-          name: discovered ? `Discovered ${model.id}` : model.name,
+          // An authored name is an explicit rename and wins over the
+          // discovered row's name.
+          name: model.name,
         });
         expect(snapshot.routeVariants).toEqual(
           expect.arrayContaining([expect.objectContaining({ ...expected, name: model.name })]),
@@ -931,7 +933,9 @@ describe("prepared model catalog builder", () => {
       });
 
       const selectedRoute = {
-        name: retarget ? "Earlier Route A" : "Route A",
+        // The configured name wins over whichever discovered route row the
+        // overlay lands on.
+        name: "Configured Demo",
         api: "openai-responses",
         baseUrl: "https://route-a.example.test/v1",
         thinkingLevelMap: retarget ? { xhigh: "high", max: "max" } : { xhigh: null, max: null },
@@ -939,9 +943,21 @@ describe("prepared model catalog builder", () => {
       };
       expect(
         snapshot.entries.filter((entry) => entry.provider === "custom" && entry.id === "demo"),
-      ).toEqual(
-        Array.from({ length: retarget ? 2 : 1 }, () => expect.objectContaining(selectedRoute)),
-      );
+      ).toEqual([
+        expect.objectContaining(selectedRoute),
+        // The borrowed sibling route row keeps its own discovered identity.
+        ...(retarget
+          ? [
+              expect.objectContaining({
+                name: "Earlier Route A",
+                api: "openai-responses",
+                baseUrl: "https://route-a.example.test/v1",
+                thinkingLevelMap: { xhigh: "high", max: "max" },
+                compat: { supportsTools: false },
+              }),
+            ]
+          : []),
+      ]);
       expect(
         snapshot.routeVariants.filter(
           (entry) => entry.id === "demo" && entry.api === "openai-responses",

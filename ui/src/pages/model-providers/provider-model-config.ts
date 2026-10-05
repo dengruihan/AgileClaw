@@ -22,6 +22,25 @@ export function providerModels(
   return Array.isArray(models) ? models.filter(isRecord) : [];
 }
 
+/** Merges discovery rows with authored config rows; authored fields win. */
+export function mergeProviderModelRows(
+  catalog: readonly { id: unknown }[],
+  configRows: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  const rows = new Map<string, Record<string, unknown>>();
+  for (const row of catalog) {
+    if (typeof row.id === "string") {
+      rows.set(row.id, row as Record<string, unknown>);
+    }
+  }
+  for (const row of configRows) {
+    if (typeof row.id === "string") {
+      rows.set(row.id, { ...rows.get(row.id), ...row });
+    }
+  }
+  return [...rows.values()];
+}
+
 export type ProviderModelsPatch = {
   raw: Record<string, unknown>;
   replacePaths: string[];
@@ -119,6 +138,52 @@ export function modelRemovePatch(
   return modelsPatch(
     key,
     providerModels(config, key).filter((model) => model.id !== id),
+  );
+}
+
+const ENTRY_BOOKKEEPING_FIELDS = new Set(["id", "name", "hidden"]);
+
+/** Whether a config entry carries user-authored fields beyond the hide marker. */
+export function modelEntryHasAuthorFields(entry: Record<string, unknown>): boolean {
+  return Object.keys(entry).some((field) => !ENTRY_BOOKKEEPING_FIELDS.has(field));
+}
+
+/** Whether a config entry hides its model from the invocable list. */
+export function modelEntryHidden(entry: Record<string, unknown> | undefined): boolean {
+  return entry?.hidden === true;
+}
+
+/** The config entry without its hide marker, for toggling visibility back on. */
+export function modelEntryWithoutHidden(entry: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(entry).filter(([field]) => field !== "hidden"));
+}
+
+/** Hides or unhides one model: overlay entry for hide, cleanup or removal for show. */
+export function modelVisibilityPatch(
+  config: Record<string, unknown> | null,
+  key: string,
+  id: string,
+  hidden: boolean,
+  catalogName: string | undefined,
+): ProviderModelsPatch {
+  const current = providerModels(config, key).find((entry) => entry.id === id);
+  if (!hidden) {
+    const rest = current ? modelEntryWithoutHidden(current) : undefined;
+    const renamed = typeof rest?.name === "string" && rest.name !== catalogName;
+    if (
+      rest &&
+      (modelEntryHasAuthorFields(rest) || renamed || rest.metadataSource === "models-add")
+    ) {
+      return modelWritePatch(config, key, rest, id);
+    }
+    // The entry existed only to hide the model; drop it entirely.
+    return modelRemovePatch(config, key, id);
+  }
+  return modelWritePatch(
+    config,
+    key,
+    { ...(current ?? { id, name: catalogName ?? id }), hidden: true },
+    id,
   );
 }
 

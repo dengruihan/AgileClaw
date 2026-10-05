@@ -103,7 +103,9 @@ export function overlayCatalogMetadata(
   return {
     ...selectionNeutralBase,
     ...contextWindowSelection,
-    ...(routeChanged ? { name: overlay.name } : {}),
+    // An authored name is an explicit user choice; it renames even a row whose
+    // route was not changed by the same config entry.
+    ...(overlay.name !== undefined ? { name: overlay.name } : {}),
     ...(applyRoute && overlay.api !== undefined ? { api: overlay.api } : {}),
     ...(applyRoute && overlay.baseUrl !== undefined ? { baseUrl: overlay.baseUrl } : {}),
     ...(overlay.contextWindow !== undefined ? { contextWindow: overlay.contextWindow } : {}),

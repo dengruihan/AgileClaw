@@ -2,6 +2,9 @@
 import { describe, expect, it } from "vitest";
 import { applyMergePatch } from "../../../../src/config/merge-patch.js";
 import {
+  modelEntryHasAuthorFields,
+  modelEntryHidden,
+  modelEntryWithoutHidden,
   modelReferences,
   modelRemovePatch,
   modelWritePatch,
@@ -9,6 +12,49 @@ import {
 } from "./provider-model-config.ts";
 
 describe("provider model edits", () => {
+  describe("provider model hide markers", () => {
+    it("detects hidden entries and authored fields beyond the hide marker", () => {
+      expect(modelEntryHidden({ id: "a", name: "A", hidden: true })).toBe(true);
+      expect(modelEntryHidden({ id: "a", name: "A" })).toBe(false);
+      expect(modelEntryHidden(undefined)).toBe(false);
+      expect(modelEntryHasAuthorFields({ id: "a", name: "A", hidden: true })).toBe(false);
+      expect(modelEntryHasAuthorFields({ id: "a", name: "A", hidden: true, reasoning: true })).toBe(
+        true,
+      );
+      expect(modelEntryHasAuthorFields({ id: "a", name: "A", metadataSource: "models-add" })).toBe(
+        true,
+      );
+    });
+
+    it("strips the hide marker while keeping the rest of the entry", () => {
+      expect(modelEntryWithoutHidden({ id: "a", name: "A", hidden: true })).toEqual({
+        id: "a",
+        name: "A",
+      });
+    });
+
+    it("writes a hide override without the user-added marker", () => {
+      const config = {
+        models: {
+          providers: {
+            zai: { models: [{ id: "glm-5.3", name: "GLM-5.3" }] },
+          },
+        },
+      };
+      const patch = modelWritePatch(
+        config,
+        "zai",
+        { id: "glm-5.3", name: "GLM-5.3", hidden: true },
+        "glm-5.3",
+      );
+      const next = applyMergePatch(config, patch.raw, {
+        replacePaths: patch.replacePaths,
+      });
+      const entry = next.models.providers.zai.models.find((row) => row.id === "glm-5.3");
+      expect(entry).toEqual({ id: "glm-5.3", name: "GLM-5.3", hidden: true });
+    });
+  });
+
   const config = {
     models: {
       mode: "merge",

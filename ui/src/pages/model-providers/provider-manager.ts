@@ -22,11 +22,14 @@ import {
 } from "./config-mutation.ts";
 import type { ModelProviderCard } from "./data.ts";
 import { providerConnectionFields } from "./provider-manager-connection.ts";
+import { providerModelsList } from "./provider-manager-models.ts";
 import {
   configuredProvider,
   providerConnectionPatch,
+  mergeProviderModelRows,
   modelReferences,
   modelRemovePatch,
+  modelVisibilityPatch,
   modelWritePatch,
   providerModels,
   type ProviderModelsPatch,
@@ -185,7 +188,9 @@ export class ProviderManager extends OpenClawLightDomElement {
         const result = await client.request<ModelCatalogResult>("models.list", {
           agentId: this.agentId,
           provider: this.providerId,
-          view: "provider-config",
+          // The dialog manages the same merged list the picker serves:
+          // discovery results plus authored config, including hidden rows.
+          view: "all",
           includeDetails: true,
           ...(refresh ? { refresh: true } : { preparedOnly: true }),
         });
@@ -515,6 +520,28 @@ export class ProviderManager extends OpenClawLightDomElement {
     }
   }
 
+  private async setModelHidden(id: string, hidden: boolean) {
+    const original = providerModels(this.config, this.providerId).find((entry) => entry.id === id);
+    const catalogName = this.catalog.find((row) => row.id === id)?.name;
+    if (
+      await this.write((config) => {
+        const current = providerModels(config, this.providerId).find((entry) => entry.id === id);
+        if (JSON.stringify(current) !== JSON.stringify(original)) {
+          return { error: t("modelProviders.manager.conflict") };
+        }
+        return modelVisibilityPatch(config, this.providerId, id, hidden, catalogName);
+      })
+    ) {
+      const references = modelReferences(this.config, this.providerId, id);
+      if (hidden && references.length) {
+        this.notice = t("modelProviders.manager.referenced", {
+          references: references.join(", "),
+        });
+      }
+      await this.load();
+    }
+  }
+
   private async removeCredential() {
     const generation = this.generation;
     this.busy = true;
@@ -538,58 +565,32 @@ export class ProviderManager extends OpenClawLightDomElement {
         ? this.fields(schema, this.modelDraft, modelBasics, true)
         : html`<p>${t("modelProviders.configUnavailable")}</p>`;
     }
-    return html` <p class="muted">${t("modelProviders.manager.modelScope")}</p>
-      <div class="provider-manager__model-list">
-        ${this.rows().map((row) => {
-          const id = String(row.id);
-          const configured = providerModels(this.config, this.providerId).find(
-            (entry) => entry.id === id,
-          );
-          const added = this.customProvider || configured?.metadataSource === "models-add";
-          return html`<article class="provider-manager__model" data-model-id=${id}>
-            <div>
-              <strong>${row.name ?? id}</strong>
-              <div class="muted provider-manager__model-id">${id}</div>
-              <small
-                >${Array.isArray(row.input) ? row.input.join(" · ") : t("modelProviders.manager.inherited")}</small
-              >
-            </div>
-            <span class="provider-manager__badge"
-              >${t(added ? "modelProviders.manager.userAdded" : configured ? "modelProviders.manager.override" : "modelProviders.manager.builtIn")}</span
-            >
-            <div class="provider-manager__actions">
-              <button
-                type="button"
-                class="btn btn--sm"
-                ?disabled=${this.disabled}
-                @click=${() => this.editModel(row)}
-              >
-                ${t("modelProviders.manager.editModel")}
-              </button>
-              ${configured ? html`<button type="button" class="btn btn--sm ${added ? "danger" : ""}" ?disabled=${this.disabled} @click=${() => this.removeModel(id, added)}>${t(added ? "common.delete" : "modelProviders.manager.reset")}</button>` : nothing}
-            </div>
-          </article>`;
-        })}
-      </div>
-      ${!this.rows().length && !this.loading ? html`<p>${t("modelProviders.manager.noModels")}</p>` : nothing}
-      <p class="muted">${t("modelProviders.manager.discoveryHelp")}</p>
-      <div class="provider-manager__actions">
-        <button
-          type="button"
-          class="btn"
-          ?disabled=${this.disabled}
-          @click=${() => this.load(true)}
-        >
-          ${t("modelProviders.manager.refreshModels")}</button
-        ><button
-          type="button"
-          class="btn primary"
-          ?disabled=${this.disabled}
-          @click=${() => this.editModel()}
-        >
-          ${t("modelProviders.manager.addModel")}
-        </button>
-      </div>`;
+    const configRows = providerModels(this.config, this.providerId);
+    return providerModelsList({
+      actions: {
+        onAdd: () => this.editModel(),
+        onEdit: (row) => this.editModel(row),
+        onRefresh: () => void this.load(true),
+        onRemove: (id, added) => void this.removeModel(id, added),
+        onToggleHidden: (id, hidden) => void this.setModelHidden(id, hidden),
+      },
+      state: {
+        addedRows: new Set(
+          this.customProvider
+            ? configRows.map((entry) => String(entry.id))
+            : configRows
+                .filter((entry) => entry.metadataSource === "models-add")
+                .map((entry) => String(entry.id)),
+        ),
+        configuredRows: new Set(configRows.map((entry) => String(entry.id))),
+        disabled: this.disabled,
+        hiddenRows: new Set(
+          configRows.filter((entry) => entry.hidden === true).map((entry) => String(entry.id)),
+        ),
+        loading: this.loading,
+        rows: mergeProviderModelRows(this.catalog, configRows),
+      },
+    });
   }
 
   override render() {

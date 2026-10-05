@@ -365,6 +365,41 @@ describe("models.list configured static entries", () => {
     );
   });
 
+  it("keeps hidden config models out of the default view but in the all view", async () => {
+    const config = {
+      agents: { defaults: { model: { primary: "custom/shown" } } },
+      models: {
+        providers: {
+          custom: {
+            baseUrl: "https://custom.example/v1",
+            api: "openai-completions",
+            models: [
+              { id: "shown", name: "Shown" },
+              { id: "secret", name: "Secret", hidden: true },
+            ],
+          },
+        },
+      },
+    } as OpenClawConfig;
+    const catalog = [
+      { ...providerCatalogEntry("custom", "shown"), name: "Discovered Shown" },
+      { ...providerCatalogEntry("custom", "secret"), name: "Discovered Secret" },
+    ];
+
+    const defaultView = await listModels({ catalog, cfg: config, view: "default" });
+    expect(defaultView.models.map(({ id }) => id)).toEqual(["shown"]);
+
+    const allView = await listModels({ catalog, cfg: config, view: "all" });
+    expect(
+      allView.models
+        .map(({ id, name }) => ({ id, name }))
+        .toSorted((a, b) => a.id.localeCompare(b.id)),
+    ).toEqual([
+      { id: "secret", name: "Secret" },
+      { id: "shown", name: "Shown" },
+    ]);
+  });
+
   it.each([true, false])(
     "uses the correct configured catalog past the browse deadline (refresh=%s)",
     async (refresh) => {

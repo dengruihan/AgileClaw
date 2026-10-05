@@ -27,6 +27,30 @@ describe("ModelsConfigSchema", () => {
     ).toBe(true);
   });
 
+  it("accepts a per-model hidden flag and rejects non-boolean values", () => {
+    const parsed = ModelsConfigSchema.parse({
+      providers: {
+        custom: {
+          api: "openai-completions",
+          baseUrl: "https://custom.example/v1",
+          models: [{ id: "model-a", name: "Model A", hidden: true }],
+        },
+      },
+    });
+    expect(parsed?.providers?.custom?.models?.[0]?.hidden).toBe(true);
+    expect(
+      ModelsConfigSchema.safeParse({
+        providers: {
+          custom: {
+            api: "openai-completions",
+            baseUrl: "https://custom.example/v1",
+            models: [{ id: "model-a", name: "Model A", hidden: "yes" }],
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts and preserves declared model compatibility settings", () => {
     const compat = {
       thinkingFormat: "deepseek",
