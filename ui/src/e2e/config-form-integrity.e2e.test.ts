@@ -421,6 +421,135 @@ suite.define(() => {
     );
   });
 
+  it("deletes seeded provider model rows from the list and guards references", async () => {
+    const { buildConfigSchemaCore } = await import("../../../src/config/schema.ts");
+    const providerId = "seeded-lab";
+    // Onboarding-seeded rows carry no metadataSource marker; deleting one drops
+    // the authored entry and keeps endpoint-listed rows restorable in the
+    // collapsed Hidden models section.
+    const models = [
+      { id: "model-1", name: "One", input: ["text"] },
+      { id: "model-2", name: "Two", input: ["text"], hidden: true },
+      { id: "model-3", name: "Three", input: ["text"] },
+    ];
+    const initial = {
+      agents: { defaults: { model: { primary: `${providerId}/model-1` } } },
+      models: {
+        providers: { [providerId]: { baseUrl: "https://seeded.example.test/v1", models } },
+      },
+    };
+    const snapshot = (config: typeof initial, hash: string) => ({
+      appliedConfigHash: hash,
+      config,
+      configRevisionHash: hash,
+      hash,
+      issues: [],
+      raw: JSON.stringify(config),
+      valid: true,
+    });
+    await suite.withPage(
+      {
+        colorScheme: "dark",
+        locale: "en-US",
+        serviceWorkers: "block",
+        viewport: { height: 1000, width: 1440 },
+      },
+      async ({ page }) => {
+        const gateway = await installMockGateway(page, {
+          models: models.map((row) => ({ id: row.id, name: row.name, provider: providerId })),
+          methodResponses: {
+            "config.get": snapshot(initial, "seeded-row-e2e"),
+            "config.schema": buildConfigSchemaCore(),
+            "models.authStatus": {
+              ts: Date.now(),
+              providers: [],
+              providerCapabilities: [
+                { provider: providerId, apiKeySupported: true, quickApiKeySetup: true },
+              ],
+            },
+          },
+        });
+        await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+        await page.locator(`[data-provider-models="${providerId}"]`).click();
+        const manager = page.locator("openclaw-provider-manager form.provider-manager");
+        const first = manager.locator('[data-model-id="model-1"]');
+        const third = manager.locator('[data-model-id="model-3"]');
+        await first.getByRole("button", { name: "Delete", exact: true }).waitFor();
+        expect(await manager.getByRole("button", { name: "Hide", exact: true }).count()).toBe(0);
+        expect(
+          await manager.getByRole("button", { name: "Restore default", exact: true }).count(),
+        ).toBe(0);
+        const hiddenSection = manager.locator("details.provider-manager__hidden");
+        await hiddenSection.getByText("Hidden models (1)", { exact: true }).waitFor();
+        const mainList = manager.locator(".provider-manager__model-list").first();
+        expect(await mainList.locator('[data-model-id="model-2"]').count()).toBe(0);
+        await hiddenSection.locator("summary").click();
+        await hiddenSection
+          .locator('[data-model-id="model-2"]')
+          .getByRole("button", { name: "Show", exact: true })
+          .waitFor();
+        if (captureUiProofEnabled) {
+          await page.screenshot({
+            animations: "disabled",
+            path: path.join(uiProofArtifactDir, "05-seeded-model-rows.png"),
+          });
+          await writeFile(
+            path.join(uiProofArtifactDir, "05-seeded-model-rows-accessibility.yml"),
+            await manager.ariaSnapshot(),
+          );
+        }
+        // The primary reference refuses deletion instead of silently breaking it.
+        await first.getByRole("button", { name: "Delete", exact: true }).click();
+        await manager
+          .getByRole("alert")
+          .filter({ hasText: "This model is referenced by" })
+          .waitFor();
+        expect(await gateway.getRequests("config.patch")).toHaveLength(0);
+        if (captureUiProofEnabled) {
+          await page.screenshot({
+            animations: "disabled",
+            path: path.join(uiProofArtifactDir, "06-seeded-model-reference-guard.png"),
+          });
+        }
+        // Deleting an unreferenced endpoint-listed row swaps its authored entry
+        // for a bare hide marker so it stays out of the invocable list.
+        await gateway.deferNext("config.patch");
+        await third.getByRole("button", { name: "Delete", exact: true }).click();
+        const rejected = await gateway.waitForRequest("config.patch");
+        expect(JSON.parse(String(rejected.params.raw))).toEqual({
+          models: {
+            providers: {
+              [providerId]: {
+                models: [models[0], models[1], { id: "model-3", name: "Three", hidden: true }],
+              },
+            },
+          },
+        });
+        expect(rejected.params.baseHash).toBe("seeded-row-e2e");
+        expect(rejected.params.replacePaths).toHaveLength(1);
+        const afterDelete = {
+          agents: initial.agents,
+          models: {
+            providers: {
+              [providerId]: {
+                baseUrl: "https://seeded.example.test/v1",
+                models: [models[0], models[1], { id: "model-3", name: "Three", hidden: true }],
+              },
+            },
+          },
+        };
+        await gateway.setMethodResponse("config.get", snapshot(afterDelete, "seeded-row-deleted"));
+        await gateway.resolveDeferred("config.patch", {
+          config: afterDelete,
+          hash: "seeded-row-deleted",
+        });
+        await hiddenSection.getByText("Hidden models (2)", { exact: true }).waitFor();
+        expect(await mainList.locator('[data-model-id="model-3"]').count()).toBe(0);
+        expect(await gateway.getRequests("config.set")).toHaveLength(0);
+      },
+    );
+  });
+
   it("retries failed custom provider credentials without recreating its saved connection", async () => {
     const { buildConfigSchemaCore } = await import("../../../src/config/schema.ts");
     const initial = { models: { providers: {} } };

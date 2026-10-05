@@ -27,9 +27,10 @@ import {
   configuredProvider,
   providerConnectionPatch,
   mergeProviderModelRows,
+  modelDeletePatch,
+  modelEntryHidden,
   modelReferences,
-  modelRemovePatch,
-  modelVisibilityPatch,
+  modelRestorePatch,
   modelWritePatch,
   providerModels,
   type ProviderModelsPatch,
@@ -499,28 +500,34 @@ export class ProviderManager extends OpenClawLightDomElement {
     return [...rows.values()];
   }
 
-  private async removeModel(id: string, added: boolean) {
+  private async deleteModel(id: string) {
     const original = providerModels(this.config, this.providerId).find((entry) => entry.id === id);
+    const catalogRow = this.catalog.find((row) => row.id === id);
     if (
       await this.write((config) => {
         const current = providerModels(config, this.providerId).find((entry) => entry.id === id);
         if (JSON.stringify(current) !== JSON.stringify(original)) {
           return { error: t("modelProviders.manager.conflict") };
         }
-        const references = added ? modelReferences(config, this.providerId, id) : [];
+        // Deleting keeps endpoint-discovered rows out of the invocable list;
+        // a primary, fallback, or alias must not silently lose its target.
+        const references = modelReferences(config, this.providerId, id);
         if (references.length) {
           return {
             error: t("modelProviders.manager.referenced", { references: references.join(", ") }),
           };
         }
-        return modelRemovePatch(config, this.providerId, id);
+        return modelDeletePatch(config, this.providerId, id, {
+          listed: Boolean(catalogRow),
+          name: catalogRow?.name,
+        });
       })
     ) {
       await this.load();
     }
   }
 
-  private async setModelHidden(id: string, hidden: boolean) {
+  private async restoreModel(id: string) {
     const original = providerModels(this.config, this.providerId).find((entry) => entry.id === id);
     const catalogName = this.catalog.find((row) => row.id === id)?.name;
     if (
@@ -529,15 +536,9 @@ export class ProviderManager extends OpenClawLightDomElement {
         if (JSON.stringify(current) !== JSON.stringify(original)) {
           return { error: t("modelProviders.manager.conflict") };
         }
-        return modelVisibilityPatch(config, this.providerId, id, hidden, catalogName);
+        return modelRestorePatch(config, this.providerId, id, catalogName);
       })
     ) {
-      const references = modelReferences(this.config, this.providerId, id);
-      if (hidden && references.length) {
-        this.notice = t("modelProviders.manager.referenced", {
-          references: references.join(", "),
-        });
-      }
       await this.load();
     }
   }
@@ -566,13 +567,17 @@ export class ProviderManager extends OpenClawLightDomElement {
         : html`<p>${t("modelProviders.configUnavailable")}</p>`;
     }
     const configRows = providerModels(this.config, this.providerId);
+    const merged = mergeProviderModelRows(this.catalog, configRows);
+    const hiddenIds = new Set(
+      configRows.filter((entry) => modelEntryHidden(entry)).map((entry) => String(entry.id)),
+    );
     return providerModelsList({
       actions: {
         onAdd: () => this.editModel(),
+        onDelete: (id) => void this.deleteModel(id),
         onEdit: (row) => this.editModel(row),
         onRefresh: () => void this.load(true),
-        onRemove: (id, added) => void this.removeModel(id, added),
-        onToggleHidden: (id, hidden) => void this.setModelHidden(id, hidden),
+        onRestore: (id) => void this.restoreModel(id),
       },
       state: {
         addedRows: new Set(
@@ -584,11 +589,9 @@ export class ProviderManager extends OpenClawLightDomElement {
         ),
         configuredRows: new Set(configRows.map((entry) => String(entry.id))),
         disabled: this.disabled,
-        hiddenRows: new Set(
-          configRows.filter((entry) => entry.hidden === true).map((entry) => String(entry.id)),
-        ),
+        hiddenRows: merged.filter((row) => hiddenIds.has(String(row.id))),
         loading: this.loading,
-        rows: mergeProviderModelRows(this.catalog, configRows),
+        rows: merged.filter((row) => !hiddenIds.has(String(row.id))),
       },
     });
   }
