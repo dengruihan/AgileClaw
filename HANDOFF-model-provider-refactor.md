@@ -19,6 +19,7 @@
    - `13-{desktop,narrow}-dense-models.png`：24 行模型列表在折叠线下只露出 1 行。修法：截图前 `manager.locator(".provider-manager__model").nth(12).scrollIntoViewIfNeeded()`。
 4. **UI 单测修复**：`ui/src/pages/model-providers/` 14 套件 229 用例全绿。要点：3 个 stale catalog 测试改为「config 夹具带 `models.providers` 保存行」（新契约：`model-providers-page.ts:546` 只渲染已保存 provider）并剥离已删的内联 Set-API-key 编辑器路径；受限访问页身份隐藏断言改 api_key 世界；probe 夹具补必填 `results`；Edit provider 按钮补 `configMutationDisabled` busy 锁；probe 按钮恢复 `probe.unavailable` title；删除死 i18n 键 `credentials.oauth/tokenProfiles`。
 5. **扩展 typecheck 109→0**（子代理完成并新缓存复核两次）。**但扩展运行时测试仍有 4–5 条失败 lane 待修**（子代理逐一如实验证为重构附带损伤、非其造成）：github-copilot index.test ~40 例（`provider.auth` 现为空）、anthropic index.test setup-token/Claude CLI native auth 10 例、telegram /login 流（源码不再调 `runModelsAuthLoginFlow`）、xai OAuth 发现类用例、lmstudio `/api/v1` 端点规范化 1 例。
+   5b. **codex 批（转移时停止，状态如下）**：codex typecheck 0（清缓存全量重建复核）。已落地且验证全绿：settled-turn-finalizer 21/21、isolated-completion 8/8、run-attempt-client-prewarm 5/5、auth-binding 3/3、command-plugins-runtime 15/15（fixture oauth→api_key；删除 chatgpt-login/token-partition 用例）、command-rpc 删 subscription-routing 用例。**已落地但未复跑**：shared-client websocket 启动组 6 例（`shared-client-websocket-startup.test-support.ts` 已改 `authProfileId: null` → api-key `preparedAuth`，接手后先复跑）。**未修**：`shared-client.test.ts` "reports the real shared acquisition boundary *" 7 例全部 120s 挂起（诊断点 `shared-client-acquisition-diagnostics.test-support.ts:46`，疑似需给 `withCodexAppServerJsonClient` 选项加 `preparedAuth`）。**保留上报的预存在失败**：command-rpc.test.ts "resumes with the prepared environment API key"——src 侧路由规划对空存储 + 环境 `OPENAI_API_KEY` 不成路由，需 src 所有者处理。
 6. **真实生产 bug 修复**：`src/agents/model-auth-availability.ts` `modeAllowed` 现同时接受 "api-key"/"api_key" 两种拼写。
 7. **文档一致性**：~10 页修复（`models auth paste-api-key` 话术）、links 0-broken、format 已跑。`codex-harness.md` + `codex-harness-reference/` 两页**有意保留**待 codex 相关批落地后补。
 8. `models.list` 其余套件此前已由另一子代理修至全绿（49/49）。
@@ -26,7 +27,7 @@
 ### 未完成（按优先级）
 
 1. E2E 04/13 修复 + 重拍 + **before/after 对比**（before 侧：HEAD worktree 跑旧 UI 截图，或找 `.artifacts/control-ui-e2e/provider-refactor-7qhhUn` 旧目录）。
-2. 扩展运行时测试 4–5 条 lane 修复（见上清单；修不了就按测试失败政策记录证据）。
+2. 扩展运行时测试 4–5 条 lane 修复（见上清单及 5b codex 批状态；修不了就按测试失败政策记录证据）。
 3. `tsgo:scripts`、`tsgo:test:root`、`tsgo:extensions:test` 三个未跑 legs。
 4. **build 门**：运行中 launchd Gateway（跑本 checkout dist）使 `pnpm build` 拒绝覆盖 dist——用隔离 worktree build，或与操作者确认停机窗口走 AGENTS.md 的 launchctl 路径；至少捕获 fence 拒绝证据。
 5. **执行通道验证（第 5 节步骤 3）大体未做**：直接模型调用（本地 HTTP）+ 外部运行器显式 API Key + 非 API 凭据（旧 OAuth/token）不能登录/刷新/调用的证明。
