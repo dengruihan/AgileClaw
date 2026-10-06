@@ -201,3 +201,31 @@
 - ZCode 子代理最终报告全文：`/Users/raymond/.zcode/cli/agents/sess_7e48e0ec-955d-408d-abdc-1c5e177a0064/agent_b2f46f1e-d86a-4965-8a84-57dcc4b14b0f/output.txt`（codex 批）与 `.../agent_1a260f63-b45d-4a53-8263-a15524d4e1a0/output.txt`（其余扩展批）。
 - E2E 证据包：旧机器 `/tmp/e2e-evidence.tgz`（5.2MB、130 个文件，含 before/after 成对截图 `provider-refactor-7qhhUn/before-*` 与 `after-*`，及 12 张 after 证据）。
 - 前序 Codex 会话 JSONL（取证用、低优先级，勿改 `~/.codex` 其他内容）：`~/.codex/sessions/2026/10/05/rollout-2026-10-05T14-42-48-01a10acc-fd62-7a61-8fa3-c79240906ab4.jsonl`。
+
+---
+
+## 9. 决策回退（2026-10-06，本分支就此封存）
+
+**本分支标记为：决策失误（decision reverted）。**
+
+产品决策：一次性「API-key-only + 统一供应商配置」重构的范围/代价判断失误。
+主线已恢复到重构开始前的基线 **31b397984**（含其前全部正常提交）；
+本分支保留全部实现与验证工作，不再继续收尾。
+
+### 若将来重启该方向，可 salvage 的部分
+
+- 主体实现完整可用：模板库（`models.providerTemplates`，自定义首位）、
+  无副作用 `models.discover`、统一供应商编辑器、保存即普通配置。
+- 已验证：typecheck 全 legs 清零；copilot lane 182/182；codex websocket
+  启动组与 7 例挂起全绿；UI 单测 229 例；E2E 主流程 2 用例；证据截图
+  在 `.artifacts/control-ui-e2e/`（不入库，随机器保存）。
+- 遗留未完成：anthropic/telegram/xai lane（部分改动已含在本分支）、
+  codex shared-client 全量复跑、E2E 04/13 截图、执行通道验证、
+  docs `models.mode` 话术清理（~25 页）、最终审查。
+
+### 教训
+
+- 删除 OAuth/订阅接入的连带面（65k 行、数百测试、25+ 页文档）远超预期，
+  且原始用户需求并未要求删除 OAuth——范围是被实施计划放大的。
+- 大型删除型重构应先量化测试/文档连带面，并把「删除鉴权方式」与
+  「理顺配置流程」拆成独立可回退的决策。
