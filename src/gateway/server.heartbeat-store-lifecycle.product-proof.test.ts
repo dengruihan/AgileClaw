@@ -165,7 +165,6 @@ describe("heartbeat notification store ownership through the Gateway", () => {
               },
             },
             models: {
-              mode: "replace",
               providers: {
                 proof: {
                   baseUrl: provider.baseUrl,

@@ -125,9 +125,7 @@ function hasConfiguredLocalProviderSignal(params: {
   provider: string | undefined;
 }): boolean {
   const providerConfig = findConfiguredProviderConfig(params.cfg, params.provider);
-  return Boolean(
-    providerConfig?.localService || hasLocalProviderAuthMarker(providerConfig?.apiKey),
-  );
+  return hasLocalProviderAuthMarker(providerConfig?.apiKey);
 }
 
 type LlmTimeoutParams = {

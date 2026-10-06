@@ -90,12 +90,12 @@ describe("legacy Codex provider config migrate", () => {
 
     expect(res.config?.models?.providers?.openai).toEqual({
       baseUrl: "https://chatgpt.com/backend-api/codex",
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       models: [
         {
           id: "gpt-5.5",
           name: "GPT-5.5",
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
         },
       ],
     });
@@ -156,8 +156,8 @@ describe("legacy Codex provider config migrate", () => {
     expect(res.config?.models?.providers?.codex).toEqual({
       auth: "oauth",
       headers: { Authorization: "Bearer synthetic" },
-      api: "openai-chatgpt-responses",
-      models: [{ id: "gpt-5.6-sol", api: "openai-chatgpt-responses" }],
+      api: "openai-responses",
+      models: [{ id: "gpt-5.6-sol", api: "openai-responses" }],
     });
     expect(res.config?.models?.providers?.openai).toEqual({
       models: [{ id: "text-embedding-3-small" }],
@@ -196,7 +196,7 @@ describe("legacy Codex provider config migrate", () => {
     });
 
     expect(res.config?.models?.providers?.codex).toEqual({
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api",
       models: [{ id: "gpt-5.6-sol" }, { id: "gpt-5.4-mini" }],
     });
@@ -227,14 +227,14 @@ describe("legacy Codex provider config migrate", () => {
         models: [
           {
             id: "gpt-5.6-sol",
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
             baseUrl: "https://chatgpt.com/backend-api",
             agentRuntime: { id: "codex" },
           },
         ],
       },
       codex: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api",
         models: [{ id: "gpt-5.6-sol" }],
       },
@@ -244,7 +244,7 @@ describe("legacy Codex provider config migrate", () => {
     expect(res.config?.models?.providers?.openai?.models).toEqual([
       {
         id: "gpt-5.6-sol",
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api",
         agentRuntime: { id: "codex" },
       },
@@ -281,14 +281,14 @@ describe("legacy Codex provider config migrate", () => {
     });
     expect(res.config?.models?.providers).not.toHaveProperty("openai-codex");
     expect(res.config?.models?.providers?.openai).toEqual({
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://api.openai.com/v1",
       models: [
-        { id: "text-embedding-3-small", name: "Chat", api: "openai-chatgpt-responses" },
+        { id: "text-embedding-3-small", name: "Chat", api: "openai-responses" },
         {
           id: "gpt-5.5",
           name: "Chat",
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: "https://chatgpt.com/backend-api",
           contextWindow: 200000,
           contextTokens: 180000,
@@ -298,7 +298,7 @@ describe("legacy Codex provider config migrate", () => {
         },
         {
           id: "gpt-5.4",
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: "https://chatgpt.com/backend-api",
           contextWindow: 200000,
           contextTokens: 180000,
@@ -313,17 +313,17 @@ describe("legacy Codex provider config migrate", () => {
   it("preserves legacy models-add metadata marker when merging codex models", () => {
     const res = migrateProviderConfig({
       openai: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://api.openai.com/v1",
         models: [{ id: "text-embedding-3-small" }],
       },
       "openai-codex": {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api",
         models: [
           {
             id: "gpt-5.5",
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
             reasoning: true,
             input: ["text", "image"],
             cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 0 },
@@ -340,7 +340,7 @@ describe("legacy Codex provider config migrate", () => {
       { id: "text-embedding-3-small" },
       {
         id: "gpt-5.5",
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         reasoning: true,
         input: ["text", "image"],
         cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 0 },
@@ -359,7 +359,7 @@ describe("legacy Codex provider config migrate", () => {
       models: {
         providers: {
           openai: {
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
             baseUrl: "https://api.openai.com/v1",
             apiKey: "placeholder",
             params: { store: true },
@@ -367,9 +367,9 @@ describe("legacy Codex provider config migrate", () => {
             models: [{ id: "text-embedding-3-small" }],
           },
           "openai-codex": {
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
             baseUrl: "https://chatgpt.com/backend-api",
-            models: [{ id: "gpt-5.5", api: "openai-chatgpt-responses" }],
+            models: [{ id: "gpt-5.5", api: "openai-responses" }],
           },
         },
       },

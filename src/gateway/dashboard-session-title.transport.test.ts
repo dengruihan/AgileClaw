@@ -73,7 +73,6 @@ async function withTitleProvider(
             },
           },
           models: {
-            mode: "replace",
             providers: {
               [provider]: {
                 baseUrl: `${baseUrl}/v1`,

@@ -660,7 +660,7 @@ describe("resolveEffectiveToolInventory", () => {
         normalizeToolsMock,
       });
     effectiveInventoryState.normalizeTransportMock.mockReturnValue({
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
     });
 
@@ -701,14 +701,14 @@ describe("resolveEffectiveToolInventory", () => {
     );
     expect(effectiveInventoryState.createToolsMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        modelApi: "openai-chatgpt-responses",
+        modelApi: "openai-responses",
       }),
     );
     expect(normalizeToolsMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        modelApi: "openai-chatgpt-responses",
+        modelApi: "openai-responses",
         model: expect.objectContaining({
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: "https://chatgpt.com/backend-api/codex",
         }),
       }),

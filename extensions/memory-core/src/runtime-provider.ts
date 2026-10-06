@@ -21,7 +21,6 @@ export function createMemoryRuntime(host: MemoryCoreRuntimeHost = {}) {
     async getMemorySearchManager(params) {
       const { manager, debug, error } = await getMemorySearchManager({
         ...params,
-        ...(host.acquireLocalService ? { acquireLocalService: host.acquireLocalService } : {}),
       });
       return {
         manager,

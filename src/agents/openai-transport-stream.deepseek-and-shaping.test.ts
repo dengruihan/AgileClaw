@@ -119,7 +119,7 @@ describe("openai transport stream", () => {
       makeResponsesModel({
         id: "gpt-5.5",
         name: "GPT-5.5",
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api/codex",
         contextWindow: 400000,
         maxTokens: 128000,
@@ -147,7 +147,7 @@ describe("openai transport stream", () => {
         makeResponsesModel({
           id: "gpt-5.6-sol",
           name: "GPT-5.6 Sol",
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: "https://chatgpt.com/backend-api",
         }),
         {
@@ -258,7 +258,7 @@ describe("openai transport stream", () => {
       makeResponsesModel({
         id: "gpt-5.4",
         name: "GPT-5.4",
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api",
       }),
       payload,
@@ -280,7 +280,7 @@ describe("openai transport stream", () => {
       makeResponsesModel({
         id: "gpt-5.4",
         name: "GPT-5.4",
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://proxy.example.com/v1",
         // Unrecognized custom base URL: instructions default off unless
         // verified. This fixture is specifically testing param preservation

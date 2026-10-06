@@ -163,7 +163,6 @@ describe("registered chat.send recovered output over Responses HTTP", () => {
         entries: { openai: { enabled: true } },
       },
       models: {
-        mode: "replace",
         providers: {
           openai: {
             baseUrl: `http://127.0.0.1:${address.port}/v1`,

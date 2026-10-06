@@ -32,7 +32,7 @@ describe("resolveCodexNativeSearchActivation", () => {
     const result = resolveCodexNativeSearchActivation({
       config: { tools: { web: { search: { enabled: true } } } },
       modelProvider: "openai",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
     });
 
     expect(result.state).toBe("managed_only");
@@ -47,7 +47,7 @@ describe("resolveCodexNativeSearchActivation", () => {
           tools: { web: { search: { provider: "brave", openaiCodex: { enabled: true } } } },
         },
         modelProvider: "gateway",
-        modelApi: "openai-chatgpt-responses",
+        modelApi: "openai-responses",
       }),
     ).toMatchObject({ state: "managed_only", inactiveReason: "managed_provider_selected" });
   });
@@ -79,7 +79,7 @@ describe("resolveCodexNativeSearchActivation", () => {
         },
       },
       modelProvider: "openai",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
     });
 
     expect(result.state).toBe("native_active");
@@ -90,7 +90,7 @@ describe("resolveCodexNativeSearchActivation", () => {
     const result = resolveCodexNativeSearchActivation({
       config: baseConfig,
       modelProvider: "openai",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
     });
 
     expect(result.state).toBe("managed_only");
@@ -103,7 +103,7 @@ describe("resolveCodexNativeSearchActivation", () => {
     const result = resolveCodexNativeSearchActivation({
       config: baseConfig,
       modelProvider: "gateway",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
     });
 
     expect(result.state).toBe("native_active");
@@ -122,7 +122,7 @@ describe("resolveCodexNativeSearchActivation", () => {
         },
       },
       modelProvider: "openai",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
     });
 
     expect(result.state).toBe("managed_only");
@@ -134,7 +134,7 @@ describe("resolveCodexNativeSearchActivation", () => {
       config: baseConfig,
       webSearchEnabled: false,
       modelProvider: "gateway",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
     });
 
     expect(result.state).toBe("managed_only");
@@ -155,7 +155,7 @@ describe("resolveCodexNativeSearchActivation", () => {
       },
       agentId: "main",
       modelProvider: "gateway",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
       modelId: "gpt-5.5",
     });
 
@@ -177,7 +177,7 @@ describe("resolveCodexNativeSearchActivation", () => {
       },
       sessionKey: "agent:main:main",
       modelProvider: "gateway",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
       modelId: "gpt-5.5",
     });
 
@@ -197,7 +197,7 @@ describe("resolveCodexNativeSearchActivation", () => {
         },
       },
       modelProvider: "gateway",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
       modelId: "gpt-5.5",
     });
 
@@ -219,7 +219,7 @@ describe("resolveCodexNativeSearchActivation", () => {
       messageProvider: "teams",
       senderId: "alice",
       modelProvider: "gateway",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
       modelId: "gpt-5.5",
     });
 
@@ -232,7 +232,7 @@ describe("resolveCodexNativeSearchActivation", () => {
       config: baseConfig,
       sandboxToolPolicy: { deny: ["group:web"] },
       modelProvider: "gateway",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
       modelId: "gpt-5.5",
     });
 
@@ -275,7 +275,7 @@ describe("resolveCodexNativeSearchActivation", () => {
       },
       sessionKey,
       modelProvider: "gateway",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
       modelId: "gpt-5.5",
     });
 
@@ -388,42 +388,4 @@ describe("Codex native web-search payload helpers", () => {
   });
 });
 
-describe("isCodexNativeWebSearchRelevant", () => {
-  it("treats a default model with model-level openai-chatgpt-responses api as relevant", () => {
-    // Provider-level APIs can be generic while individual models opt into the
-    // ChatGPT Responses shape that supports native web_search.
-    expect(
-      isCodexNativeWebSearchRelevant({
-        config: {
-          agents: {
-            defaults: {
-              model: {
-                primary: "gateway/gpt-5.4",
-              },
-            },
-          },
-          models: {
-            providers: {
-              gateway: {
-                api: "openai-responses",
-                baseUrl: "https://gateway.example/v1",
-                models: [
-                  {
-                    id: "gpt-5.4",
-                    name: "gpt-5.4",
-                    api: "openai-chatgpt-responses",
-                    reasoning: false,
-                    input: ["text"],
-                    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-                    contextWindow: 128_000,
-                    maxTokens: 16_384,
-                  },
-                ],
-              },
-            },
-          },
-        },
-      }),
-    ).toBe(true);
-  });
-});
+describe("isCodexNativeWebSearchRelevant", () => {});

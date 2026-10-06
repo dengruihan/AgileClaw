@@ -25,17 +25,12 @@ export async function runCodexIsolatedCompletion(
   }
   const pluginConfig = readCodexPluginConfig(options.pluginConfig);
   const homeScope = resolveCodexAppServerHomeScope({ appServer: pluginConfig.appServer });
-  const authRequirement = authorization.plan.modelRoute?.authRequirement;
   const authHandoff = await resolveCodexAppServerPreparedAuthHandoff({
-    authRequirement,
     authProfileId: authorization.plan.forwardedAuthProfileId,
     authProfileStore: authorization.authProfileStore,
     agentDir: params.agentDir,
     homeScope,
     config: params.config,
-    subscriptionProfileRequiredError:
-      "Prepared Codex subscription route requires a scoped native OAuth or token profile.",
-    subscriptionProfileUnusableError: `Prepared Codex auth profile "${authorization.plan.forwardedAuthProfileId}" is unusable.`,
   });
   params.assertCurrent?.();
   const authSelection = authHandoff.preparedAuth
@@ -48,7 +43,6 @@ export async function runCodexIsolatedCompletion(
       id: params.modelId,
     },
     ...authSelection,
-    authRequirement,
     timeoutMs: params.timeoutMs,
     thinkLevel: params.thinkLevel,
     signal: params.abortSignal,

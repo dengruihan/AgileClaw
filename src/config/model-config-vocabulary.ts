@@ -10,6 +10,25 @@ export const MODEL_APIS = [...MODEL_DATA_APIS] as const;
 
 export type ModelApi = (typeof MODEL_APIS)[number];
 
+/** Model APIs supported without native-account or cloud-identity authentication. */
+export const API_KEY_MODEL_APIS = [
+  "openai-completions",
+  "openai-responses",
+  "anthropic-messages",
+  "google-generative-ai",
+  "google-interactions",
+  "ollama",
+  "pi-messages",
+  "azure-openai-responses",
+] as const satisfies readonly ModelApi[];
+
+export type ApiKeyModelApi = (typeof API_KEY_MODEL_APIS)[number];
+
+/** Runtime guard shared by config validation and API-family discovery. */
+export function isApiKeyModelApi(value: string): value is ApiKeyModelApi {
+  return isStringOption(value, API_KEY_MODEL_APIS);
+}
+
 export type SupportedThinkingFormat =
   | NonNullable<OpenAICompletionsCompat["thinkingFormat"]>
   | "deepseek"

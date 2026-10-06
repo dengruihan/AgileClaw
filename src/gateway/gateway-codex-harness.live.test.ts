@@ -563,7 +563,6 @@ async function writeLiveGatewayConfig(params: {
       ? {
           secrets: { providers: { default: { source: "env" } } },
           models: {
-            mode: "merge",
             providers: {
               openai: {
                 api: "openai-responses",

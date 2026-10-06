@@ -550,7 +550,7 @@ export function describeOpenAIProviderRuntimeContract(
   describe("openai provider runtime contract", { timeout: CONTRACT_SETUP_TIMEOUT_MS }, () => {
     const createManifestModel = createManifestModelFactory("openai", manifestCatalog);
     const codexProviderConfig = {
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
     } as const;
     const requireProviderContractProvider = installRuntimeHooks([

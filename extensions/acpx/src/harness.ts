@@ -128,16 +128,26 @@ export function createAcpAgentHarness(params: {
       if (modelProvider?.endpointOverrides === undefined) {
         return { supported: false, reason: "Update OpenClaw to use this native runtime." };
       }
+      const preparedAuth = modelProvider?.preparedAuth;
+      const explicitlyPreparedApiKey =
+        preparedAuth?.source !== undefined &&
+        preparedAuth.source !== "none" &&
+        preparedAuth.source !== "harness" &&
+        (preparedAuth.mode === "api-key" || preparedAuth.mode === "api_key");
+      if (!explicitlyPreparedApiKey) {
+        return {
+          supported: false,
+          reason: `${params.label} requires an explicitly prepared API key in Models settings`,
+        };
+      }
       if (
         modelProvider?.requestTransportOverrides === "present" ||
         modelProvider?.endpointOverrides === "present" ||
-        modelProvider?.preparedAuth?.source === "profile" ||
-        modelProvider?.preparedAuth?.source === "direct" ||
         (modelProvider?.runtimePolicy && !modelProvider.runtimePolicy.compatibleIds.includes(id))
       ) {
         return {
           supported: false,
-          reason: `${params.label} owns its login and cannot use an OpenClaw credential or custom provider transport`,
+          reason: `${params.label} cannot reproduce authored provider transport overrides`,
         };
       }
       return { supported: true, priority: 100 };

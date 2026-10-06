@@ -562,13 +562,7 @@ describe("provider API-key readiness", () => {
     ).toBe(true);
   });
 
-  it.each([
-    ["oauth", ["api_key"], false],
-    ["token", ["api_key"], false],
-    ["oauth", ["oauth"], true],
-    ["token", ["token"], true],
-    ["api-key", ["api_key"], true],
-  ] as const)(
+  it.each([["api-key", ["api_key"], true]] as const)(
     "honors configured %s credential mode for allowed profile types %j",
     (auth, profileTypes, expected) => {
       const cfg = configuredProvider("media-api-key");
@@ -594,8 +588,8 @@ describe("provider API-key readiness", () => {
     if (!sourceProvider || !runtimeProvider) {
       throw new Error("missing managed media provider configuration");
     }
-    sourceProvider.auth = "oauth";
-    runtimeProvider.auth = "oauth";
+    sourceProvider.auth = "api-key";
+    runtimeProvider.auth = "api-key";
     setRuntimeConfigSnapshot(runtimeConfig, sourceConfig);
 
     expect(

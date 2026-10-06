@@ -70,7 +70,7 @@ Select `bidi` mode for GPT-Live speech. `agent` mode continues to use realtime
 transcription and regular OpenClaw TTS; changing the realtime voice model does
 not change that mode's voice.
 
-Sign in on the Gateway host with `openclaw models auth login --provider openai`,
+Save an OpenAI API key on the Gateway host with `openclaw models auth paste-api-key --provider openai`,
 then configure the existing model and provider fields:
 
 ```json5

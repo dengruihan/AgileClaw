@@ -259,7 +259,7 @@ describe("warnIfModelConfigLooksOff", () => {
       models: {
         providers: {
           openai: {
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
             baseUrl: "https://chatgpt.com/backend-api/codex",
             models: [],
           },
@@ -293,7 +293,7 @@ describe("warnIfModelConfigLooksOff", () => {
     }) satisfies AuthProfileStore;
     ensureAuthProfileStore.mockReturnValue(store);
     const observedRoute = {
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
     } satisfies Pick<ModelCatalogEntry, "api" | "baseUrl">;
     const catalog = [
@@ -351,7 +351,7 @@ describe("warnIfModelConfigLooksOff", () => {
       baseUrl: "https://api.openai.com/v1",
     } satisfies Pick<ModelCatalogEntry, "api" | "baseUrl">;
     const chatGPTRoute = {
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
     } satisfies Pick<ModelCatalogEntry, "api" | "baseUrl">;
     const platform = {

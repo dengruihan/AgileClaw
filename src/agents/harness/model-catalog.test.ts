@@ -48,7 +48,7 @@ const snapshot: ModelCatalogSnapshot = {
       id: "gpt-5.6-sol",
       name: "GPT-5.6 Sol",
       contextWindow: 1_050_000,
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
       reasoning: true,
       params: { providerFact: "kept", codexAppServerRuntimeModel: "stale-runtime" },
@@ -62,7 +62,7 @@ const snapshot: ModelCatalogSnapshot = {
       provider: "openai",
       id: "gpt-5.6-terra",
       name: "GPT-5.6 Terra",
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
       reasoning: true,
       compat: {
@@ -408,7 +408,7 @@ describe("agent harness model catalog", () => {
     expect(result.entries[1]).toMatchObject({
       id: "gpt-5.6-terra",
       name: "Host model",
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
       reasoning: true,
     });
@@ -419,7 +419,7 @@ describe("agent harness model catalog", () => {
         provider: "openai",
         id: "gpt-5.6-terra",
         name: "GPT-5.6 Terra",
-        api: "openai-chatgpt-responses" as const,
+        api: "openai-responses" as const,
         baseUrl: "https://chatgpt.com/backend-api/codex",
         reasoning: false,
         compat: { supportedReasoningEfforts: [] },
@@ -428,7 +428,7 @@ describe("agent harness model catalog", () => {
         provider: "openai",
         id: "gpt-5.6-sol",
         name: "GPT-5.6 Sol (account)",
-        api: "openai-chatgpt-responses" as const,
+        api: "openai-responses" as const,
         baseUrl: "https://chatgpt.com/backend-api/codex",
         reasoning: true,
         params: { codexAppServerRuntimeModel: "gpt-5.6-sol-runtime" },
@@ -486,7 +486,7 @@ describe("agent harness model catalog", () => {
     expect(result.entries[3]?.compat?.supportedReasoningEfforts).toEqual(["high"]);
     expect(result.routeVariants).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "gpt-5.6-sol", api: "openai-chatgpt-responses" }),
+        expect.objectContaining({ id: "gpt-5.6-sol", api: "openai-responses" }),
         expect.objectContaining({ id: "gpt-5.6-sol", api: "openai-responses" }),
       ]),
     );

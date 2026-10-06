@@ -9,24 +9,50 @@ title: "Control UI and API keys"
 
 ## Configure providers in the Control UI
 
-Open **Settings → Models** in the Control UI to add, replace, or remove provider
-API keys. The page and `openclaw models auth paste-api-key` use the same credential
-writer: key material stays in the auth store, and configured providers reference
-the saved profile. Environment-provided keys remain managed by the Gateway
-process environment. The page shows credential sources without revealing keys.
+Open **Settings → Models**, then **Add provider**. Search the template library or
+choose **Custom provider**, which stays first. A template can initialize multiple
+providers. Each provider has a stable internal ID and an editable display name;
+names must be unique after trimming spaces and ignoring letter case.
 
-Saving a key and refreshing the catalog are separate outcomes. If refresh fails,
-the saved key remains; follow the reported recovery step. Removing a stored key
-keeps model defaults and provider connection settings. See
-[Auth profiles](/cli/models#auth-profiles) for the matching CLI commands.
+Confirming a template opens one editor with the name, Base URL, API format, API
+key, and model list. Templates only prefill ordinary configuration. After saving,
+the runtime reads the saved `models.providers` entry and its complete model list.
+A deleted model stays deleted until you explicitly fetch it again.
 
-Provider controls appear as soon as credentials, the model catalog, and configuration are ready. Usage and local costs load independently afterward, so a slow usage response does not block provider settings.
+All changes stay in the draft until **Save**. **Fetch models** uses the current
+unsaved URL, API format, key, and request settings. Providers that need a key wait
+until you enter one; no-key HTTP endpoints can fetch immediately. Discovery
+reports unsupported model-list endpoints, rejected credentials, timeouts, and
+empty results so you can correct the settings or add models manually.
 
-After an account's quota recovers, model availability reflects the recovered account even if a catalog refresh began while it was blocked.
+You can add, edit, and delete every model in the same list. Editing a discovered
+model makes it manually maintained. A later fetch replaces the untouched
+discovered part and preserves manual rows; manual rows win duplicates at the same
+effective Base URL and model ID. A failed fetch preserves the draft list. Changing
+or deleting an ID referenced by defaults, fallbacks, or other settings is blocked
+and lists the reference locations to update first.
 
-Open **Model Setup** from the page header to inspect detected AI access. When available, it shows the authentication method (API key or account sign-in) and the actual email address reported by the provider or local runtime. API keys and tokens stay hidden.
+Keys are hidden by default. A blank key field keeps the current key; the explicit
+**Clear the saved API key when saving** action removes it. No-key HTTP endpoints
+may leave the field empty. The page and `openclaw models auth paste-api-key` use
+the same credential writer: key material stays in the auth store, and configured
+providers reference the saved profile. Environment-provided keys remain managed
+by the Gateway process environment.
 
-Use **Test connection** to run a live provider probe and see latency or a categorized authentication, rate-limit, billing, timeout, or response error. A probe makes a real provider request and may consume a small number of tokens. OAuth and token profiles can also be logged out from the provider card.
+Configuration and credential saves report separate outcomes. If settings save
+but the key save fails, the editor keeps the key draft for retry. Canceling the
+editor does not write configuration or credentials. Concurrent changes are
+reported for review before retrying.
+
+Model access supports API keys and no-key HTTP endpoints. External CLI/app-server
+runners also require an explicitly prepared API key. Model subscription login,
+OAuth, device codes, and native account fallback are unavailable. Channel and MCP
+authentication follow their own contracts.
+
+Provider controls load independently of usage and local costs. **Test
+connection** sends a real inference request and reports latency or an
+authentication, rate-limit, billing, timeout, or response error. A probe may
+consume a small number of tokens.
 
 The **Defaults** card manages the primary model, utility model, first fallback, thinking level, and Fast mode from the configured model catalog. Changes save automatically to the existing `agents.defaults` settings. For the utility model, **Auto** leaves the setting unset and **Disabled** stores an empty string to turn utility routing off.
 
@@ -34,7 +60,7 @@ The fallback selector edits the first model in the ordered fallback chain. Repla
 
 ## Plugin-owned provider behavior
 
-Most provider-specific logic lives in provider plugins (`registerProvider(...)`) while OpenClaw keeps the generic inference loop. Plugins own onboarding, model catalogs, auth env-var mapping, transport/config normalization, tool-schema cleanup, failover classification, OAuth refresh, usage reporting, thinking/reasoning profiles, and more.
+Most provider-specific logic lives in provider plugins (`registerProvider(...)`) while OpenClaw keeps the generic inference loop. Plugins own onboarding, model catalogs, auth env-var mapping, transport/config normalization, tool-schema cleanup, failover classification, API key selection, usage reporting, thinking/reasoning profiles, and more.
 
 The full list of provider-SDK hooks and bundled-plugin examples lives in [Provider plugins](/plugins/sdk-provider-plugins). A provider that needs a totally custom request executor is a separate, deeper extension surface.
 

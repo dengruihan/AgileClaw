@@ -389,7 +389,6 @@ async function loadScopedReadOnlyModelCatalog(
   }
   return prepareScopedReadOnlyModelCatalog(
     activationExact,
-    params.providerDiscoveryProviderIds ?? [],
     params.scopedLiveProviderDiscovery === true ? "live" : "static",
   );
 }

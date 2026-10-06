@@ -1,5 +1,4 @@
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
-import { attachModelProviderLocalServiceReconciler } from "../agents/provider-local-service-reconcile.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { PluginMetadataRegistryView } from "./plugin-metadata-snapshot.types.js";
 import {
@@ -63,12 +62,7 @@ export function createProviderHookRuntime(
     model: TModel,
     runtimeHandle: ProviderRuntimePluginHandle,
   ): TModel {
-    // Replacement must clear the previous owner's reconciler when the new provider has none.
-    const preparedModel = attachModelProviderLocalServiceReconciler(
-      model,
-      runtimeHandle.plugin?.reconcileLocalService,
-    );
-    return { ...preparedModel, [MODEL_PROVIDER_RUNTIME_PLUGIN_HANDLE_SYMBOL]: runtimeHandle };
+    return { ...model, [MODEL_PROVIDER_RUNTIME_PLUGIN_HANDLE_SYMBOL]: runtimeHandle };
   }
 
   /** Reads the provider plugin handle attached to a prepared attempt model. */

@@ -13,8 +13,6 @@ vi.mock("./model-auth.js", () => ({
   resolveUsableCustomProviderApiKey: () => null,
 }));
 vi.mock("./auth-profiles.js", async () => ({
-  isConfiguredAwsSdkAuthProfileForProvider: (await import("./auth-profiles/order.js"))
-    .isConfiguredAwsSdkAuthProfileForProvider,
   isProfileInCooldown: (await import("./auth-profiles/usage-state.js")).isProfileInCooldown,
   resolveAuthProfileDisplayLabel: (await import("./auth-profiles/display.js"))
     .resolveAuthProfileDisplayLabel,

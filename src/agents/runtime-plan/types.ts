@@ -4,8 +4,9 @@
  * observability decisions shared across embedded-agent hot paths.
  */
 import type { TSchema } from "typebox";
+import type { ApiKeyModelApi } from "../../config/types.models.js";
 import type {
-  ModelApi,
+  ProviderModelRouteAuthRequirement,
   ProviderModelRouteRuntimePolicy,
   ProviderRouteOverridePresence,
 } from "../../plugin-sdk/provider-model-types.js";
@@ -124,9 +125,9 @@ type AgentRuntimeResolvedRef = {
 export type AgentRuntimeAuthModelRoute = {
   provider: string;
   modelId: string;
-  api: ModelApi;
+  api: ApiKeyModelApi;
   baseUrl: string;
-  authRequirement: "api-key" | "subscription";
+  authRequirement: ProviderModelRouteAuthRequirement;
   /** Secret-free request behavior that the selected runtime must reproduce. */
   requestTransportOverrides: ProviderRouteOverridePresence;
   /** Provider-owned native-runtime compatibility for this concrete route. */

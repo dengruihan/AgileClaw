@@ -411,7 +411,6 @@ export async function prepareAppGuidedLmstudioSetup(
     defaultModel: `${PROVIDER_ID}/${selectedModelId}`,
     configPatch: {
       models: {
-        mode: ctx.config.models?.mode ?? "merge",
         providers: {
           [PROVIDER_ID]: buildLmstudioSetupProviderConfig({
             existingProvider,
@@ -653,7 +652,6 @@ export async function promptAndConfigureLmstudioInteractive(params: {
         },
       },
       models: {
-        mode: params.config.models?.mode ?? "merge",
         providers: {
           [PROVIDER_ID]: buildLmstudioSetupProviderConfig({
             existingProvider,
@@ -810,7 +808,6 @@ export async function configureLmstudioNonInteractive(
         ...configWithoutStoredLmstudioAuth,
         models: {
           ...configWithoutStoredLmstudioAuth.models,
-          mode: configWithoutStoredLmstudioAuth.models?.mode ?? "merge",
           providers: {
             ...configWithoutStoredLmstudioAuth.models?.providers,
             [PROVIDER_ID]: buildLmstudioSetupProviderConfig({

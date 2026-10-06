@@ -130,7 +130,7 @@ describe("Responses server compaction host/transport parity", () => {
     {
       name: "ChatGPT OAuth route",
       provider: "openai",
-      api: "openai-chatgpt-responses" as const,
+      api: "openai-responses" as const,
       baseUrl: "https://chatgpt.com/backend-api/codex",
       resolvedBaseUrl: "https://chatgpt.com/backend-api/codex",
       extraParams: { responsesCompactThreshold: 150_000 },

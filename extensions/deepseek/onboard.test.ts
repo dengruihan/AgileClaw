@@ -8,7 +8,7 @@ const DEEPSEEK_DEFAULT_MODEL_REF = `deepseek/${manifest.modelCatalog.providers.d
 
 describe("DeepSeek onboarding", () => {
   it("applies the manifest catalog, default, and alias", () => {
-    const config = applyDeepSeekConfig({ models: { mode: "replace" } });
+    const config = applyDeepSeekConfig({});
 
     expect(config.models?.providers?.deepseek?.models.map((model) => model.id)).toEqual(
       manifest.modelCatalog.providers.deepseek.models.map((model) => model.id),

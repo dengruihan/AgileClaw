@@ -6,14 +6,13 @@ import { getSharedCodexAppServerClient } from "./shared-client.js";
 afterEach(() => vi.restoreAllMocks());
 
 describe("Codex auth profile recovery", () => {
-  it("reports a missing subscription profile without attempting provider auth or an API key", async () => {
+  it("reports a missing selected profile without attempting provider auth or an API key", async () => {
     const request = vi.fn();
     const rejection = await applyCodexAppServerAuthProfile({
       client: { request } as never,
       agentDir: "/tmp/openclaw-agent",
       authProfileId: "openai:work",
       authProfileStore: { version: 1, profiles: {} },
-      authRequirement: "subscription",
       startOptions: {
         transport: "stdio",
         command: "codex",

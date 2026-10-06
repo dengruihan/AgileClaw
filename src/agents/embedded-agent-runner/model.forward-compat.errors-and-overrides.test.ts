@@ -344,7 +344,7 @@ describe("resolveModel forward-compat errors and overrides", () => {
     expectResolvedForwardCompatFallbackResult({
       result,
       expectedModel: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://custom.example.com",
         id: "gpt-5.4",
         provider: "openai",

@@ -514,7 +514,6 @@ export type CodexModelListResponse = {
 export type CodexGetAccountResponse = {
   account?:
     | { type: "apiKey" }
-    | { type: "chatgpt"; email: string | null; planType: string }
     | { type: "amazonBedrock"; usesCodexManagedCredentials?: boolean }
     | null;
   requiresOpenaiAuth: boolean;
@@ -526,18 +525,7 @@ type CodexModelProviderCapabilitiesReadResponse = {
   webSearch: boolean;
 };
 
-export type CodexChatgptAuthTokensRefreshResponse = {
-  accessToken: string;
-  chatgptAccountId: string;
-  chatgptPlanType: string | null;
-};
-
-export type CodexLoginAccountParams =
-  | {
-      type: "apiKey";
-      apiKey: string;
-    }
-  | (CodexChatgptAuthTokensRefreshResponse & { type: "chatgptAuthTokens" });
+export type CodexLoginAccountParams = { type: "apiKey"; apiKey: string };
 
 export type CodexRequestObject = Record<string, unknown>;
 

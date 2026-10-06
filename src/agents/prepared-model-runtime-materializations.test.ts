@@ -46,7 +46,7 @@ function createOwner(params: {
 const materialization = {
   provider: "openai",
   modelId: "gpt-5.4",
-  modelApi: "openai-chatgpt-responses",
+  modelApi: "openai-responses",
   modelBaseUrl: "https://chatgpt.com/backend-api/codex",
   requestTransportOverrides: "none" as const,
   authMode: "oauth",

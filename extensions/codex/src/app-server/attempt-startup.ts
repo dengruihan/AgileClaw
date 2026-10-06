@@ -49,7 +49,6 @@ import {
   mergeCodexThreadConfigs,
 } from "./plugin-thread-config.js";
 import type { CodexDynamicToolSpec, JsonObject } from "./protocol.js";
-import { isCodexResponsesOAuth } from "./responses-oauth.js";
 import {
   ensureCodexSandboxExecServerEnvironment,
   releaseCodexSandboxExecServerEnvironment,
@@ -98,7 +97,6 @@ export async function startCodexAttemptThread(params: {
   pluginConfig: CodexPluginConfig;
   computerUseConfig: ResolvedCodexComputerUseConfig;
   startupAuthProfileId: string | null | undefined;
-  startupAuthRequirement?: CodexAppServerClientOptions["authRequirement"];
   startupAuthBindingFingerprint: string | undefined;
   runtimeArtifactRequest?: Readonly<{
     expected?: AgentHarnessRuntimeArtifactBinding;
@@ -178,7 +176,7 @@ export async function startCodexAttemptThread(params: {
         const pluginStartupPolicy = resolveCodexPluginThreadConfigStartupPolicy({
           pluginConfig: params.pluginConfig,
           nativeToolSurfaceEnabled: params.nativeToolSurfaceEnabled,
-          hostedAppsSupported: !isCodexResponsesOAuth(params.startupPreparedAuth),
+          hostedAppsSupported: true,
           scheduledRuntimeAuthority: params.buildAttemptParams().scheduledRuntimeAuthority,
         });
         const {
@@ -228,7 +226,6 @@ export async function startCodexAttemptThread(params: {
               ...(params.startupPreparedAuth
                 ? { preparedAuth: params.startupPreparedAuth }
                 : { authProfileId: params.startupAuthProfileId }),
-              authRequirement: params.startupAuthRequirement,
               authProfileStore: attemptParams.authProfileStore,
               authBindingFingerprint: params.startupAuthBindingFingerprint,
               ...(params.runtimeArtifactRequest
@@ -282,11 +279,7 @@ export async function startCodexAttemptThread(params: {
             ensureCodexAppServerClientRuntime(activeStartupClient, {
               agentDir: params.agentDir,
               authProfileId: startupRuntimeAuthProfileId,
-              authMode:
-                params.startupPreparedAuth?.kind === "api-key" ||
-                isCodexResponsesOAuth(params.startupPreparedAuth)
-                  ? "prepared-api-key"
-                  : "profile",
+              authMode: "prepared-api-key",
               authProfileStore: startupRuntimeAuthProfileStore ?? attemptParams.authProfileStore,
               config: params.config,
             });

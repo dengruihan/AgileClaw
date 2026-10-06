@@ -103,7 +103,7 @@ async function resolveLiveModel(
       2,
     )}\n`,
   );
-  const modelRegistry = ModelRegistry.create(authStorage, modelsPath);
+  const modelRegistry = ModelRegistry.create(authStorage);
   const model = modelRegistry.find("anthropic", requestedModelId);
   if (!model) {
     throw new Error(`No Anthropic Haiku model found for ${requestedModelId}`);

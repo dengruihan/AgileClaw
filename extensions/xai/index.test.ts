@@ -20,7 +20,7 @@ vi.mock("openclaw/plugin-sdk/provider-auth-runtime", () => providerAuthRuntimeMo
 
 import plugin from "./index.js";
 import manifest from "./openclaw.plugin.json" with { type: "json" };
-import { buildLiveXaiOAuthProvider, buildLiveXaiProvider } from "./provider-catalog.js";
+import { buildLiveXaiProvider } from "./provider-catalog.js";
 import setupPlugin from "./setup-api.js";
 import {
   createXaiPayloadCaptureStream,
@@ -287,86 +287,6 @@ describe("xai provider plugin", () => {
     expect(release).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    ["Grok proxy", "https://cli-chat-proxy.grok.com/v1", true, undefined, undefined],
-    [
-      "equivalent Grok proxy URL",
-      "https://CLI-CHAT-PROXY.GROK.COM:443/v1/",
-      true,
-      undefined,
-      undefined,
-    ],
-    ["native API", "https://api.x.ai/v1", false, undefined, undefined],
-    ["default API", undefined, false, undefined, undefined],
-    ["unavailable Grok token", "https://cli-chat-proxy.grok.com/v1", true, false, false],
-    ["cold prepared Grok token", "https://cli-chat-proxy.grok.com/v1", true, false, undefined],
-    [
-      "runtime-materialized Grok token",
-      "https://cli-chat-proxy.grok.com/v1",
-      true,
-      undefined,
-      false,
-    ],
-  ])(
-    "keeps token catalog discovery on the $0",
-    async (_route, baseUrl, subscription, resolves = true, prepared = true) => {
-      const apiKey = "selected-xai-token";
-      const profileId = "xai:selected-token";
-      providerAuthRuntimeMocks.resolveApiKeyForProvider.mockResolvedValue({
-        apiKey,
-        mode: "token",
-        profileId,
-        source: `profile:${profileId}`,
-      });
-      if (!resolves) {
-        providerAuthRuntimeMocks.resolveApiKeyForProvider.mockRejectedValue(
-          new Error("Token unavailable"),
-        );
-      }
-      const fetchMock = stubXaiFetch(() =>
-        Response.json({ data: [{ id: "grok-4.3", api_backend: "responses" }] }),
-      );
-      const provider = await registerSingleProviderPlugin(plugin);
-      const result = await provider.catalog?.run({
-        config: baseUrl
-          ? { models: { providers: { xai: { baseUrl, auth: "token", models: [] } } } }
-          : {},
-        env: {},
-        resolveProviderAuth: () => ({
-          apiKey: prepared ? apiKey : "MISSING_GROK_TOKEN",
-          discoveryApiKey: prepared ? apiKey : undefined,
-          mode: "token",
-          profileId,
-          source: "profile",
-        }),
-        resolveProviderApiKey: () => ({ apiKey: "unselected-api-key" }),
-      });
-      if (!resolves && !prepared) {
-        expect(result).toEqual({
-          providers: {},
-          outcomes: [{ provider: "xai", profileId, status: "unavailable" }],
-        });
-        expect(fetchMock).not.toHaveBeenCalled();
-        return;
-      }
-      if (!result || !("provider" in result)) {
-        throw new Error("expected xAI token catalog");
-      }
-      const expectedBaseUrl = subscription
-        ? "https://cli-chat-proxy.grok.com/v1"
-        : "https://api.x.ai/v1";
-      expect(result.provider.baseUrl).toBe(expectedBaseUrl);
-      expect(result.provider.auth).toBe(subscription ? "token" : undefined);
-      const requestedUrls = fetchMock.mock.calls.map(([input]) =>
-        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
-      );
-      expect(requestedUrls).toEqual([`${expectedBaseUrl}/models`]);
-      for (const [, init] of fetchMock.mock.calls) {
-        expect(new Headers(init?.headers).get("Authorization")).toBe(`Bearer ${apiKey}`);
-      }
-    },
-  );
-
   it("uses the Grok OAuth proxy catalog for xAI OAuth discovery", async () => {
     mockXaiRuntimeOAuth();
     const fetchMock = stubXaiFetch(() => {
@@ -444,31 +364,6 @@ describe("xai provider plugin", () => {
       "Bearer xai-oauth-token",
     );
     expect(fetchMock).toHaveBeenCalledOnce();
-  });
-
-  it("publishes concrete OAuth rows without reading remote defaults or inventing prices", async () => {
-    const urls: string[] = [];
-    const fetchGuard: LiveModelCatalogFetchGuard = async ({ url }) => {
-      urls.push(url);
-      return {
-        response: Response.json({
-          data: [
-            { id: "grok-4.6", api_backend: "responses" },
-            { id: "grok-fixture-next", api_backend: "responses" },
-          ],
-        }),
-        finalUrl: url,
-        release: async () => undefined,
-      };
-    };
-    const provider = await buildLiveXaiOAuthProvider({
-      discoveryApiKey: "xai-oauth-token",
-      fetchGuard,
-    });
-
-    expect(urls).toEqual(["https://cli-chat-proxy.grok.com/v1/models"]);
-    expect(provider.models.map((model) => model.id)).toEqual(["grok-4.6", "grok-fixture-next"]);
-    expect(provider.models[1]?.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
   });
 
   it("uses runtime OAuth profiles when xAI catalog auth resolution is empty", async () => {

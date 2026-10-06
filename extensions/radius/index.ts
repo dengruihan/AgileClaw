@@ -1,15 +1,10 @@
 import { createLazyRuntimeModule } from "openclaw/plugin-sdk/lazy-runtime";
-import {
-  buildOauthProviderAuthResult,
-  resolveOAuthApiKeyMarker,
-} from "openclaw/plugin-sdk/provider-auth";
 import { runLiveProviderCatalog } from "openclaw/plugin-sdk/provider-catalog-live-runtime";
 import { defineSingleProviderPluginEntry } from "openclaw/plugin-sdk/provider-entry";
 import type { ModelProviderConfig } from "openclaw/plugin-sdk/provider-model-shared";
 import manifest from "./openclaw.plugin.json" with { type: "json" };
 
 const loadCatalog = createLazyRuntimeModule(() => import("./catalog.js"));
-const loadOAuth = createLazyRuntimeModule(() => import("./oauth.js"));
 const loadStream = createLazyRuntimeModule(() => import("./stream.js"));
 
 function defaultModel(catalog: ModelProviderConfig): string {
@@ -35,57 +30,10 @@ export default defineSingleProviderPluginEntry({
       resolveDefaultModel: async ({ apiKey, signal }) =>
         defaultModel(await (await loadCatalog()).fetchRadiusCatalog(apiKey, signal)),
     },
-    extraAuth: [
-      {
-        id: "oauth",
-        label: "Radius browser sign-in",
-        hint: "Pair your browser and choose a Radius organization",
-        kind: "device_code",
-        wizard: {
-          choiceId: "radius",
-          choiceLabel: "Radius (browser sign-in)",
-          groupId: "radius",
-          groupLabel: "Radius",
-          groupHint: "Browser sign-in or API key",
-        },
-        run: async (ctx) => {
-          const credentials = await (await loadOAuth()).loginRadiusOAuth(ctx);
-          const notes = [
-            "Radius access is scoped to the organization selected in your browser. Tokens refresh automatically.",
-          ];
-          if (ctx.credentialOnly) {
-            ctx.assertCurrent?.();
-            return {
-              profiles: [
-                {
-                  profileId: "radius:default",
-                  credential: { type: "oauth", provider: "radius", ...credentials },
-                },
-              ],
-              notes,
-            };
-          }
-          const catalog = await (
-            await loadCatalog()
-          ).fetchRadiusCatalog(credentials.access, ctx.signal);
-          ctx.assertCurrent?.();
-          return buildOauthProviderAuthResult({
-            providerId: "radius",
-            defaultModel: defaultModel(catalog),
-            access: credentials.access,
-            refresh: credentials.refresh,
-            expires: credentials.expires,
-            notes,
-          });
-        },
-      },
-    ],
     catalog: {
       order: "profile",
       run: async (ctx) => {
-        const { apiKey, discoveryApiKey, profileId } = ctx.resolveProviderAuth("radius", {
-          oauthMarker: resolveOAuthApiKeyMarker("radius"),
-        });
+        const { apiKey, discoveryApiKey, profileId } = ctx.resolveProviderAuth("radius");
         if (!discoveryApiKey) {
           return null;
         }
@@ -143,7 +91,5 @@ export default defineSingleProviderPluginEntry({
       dropThinkingBlocks: false,
       dropReasoningFromHistory: false,
     }),
-    refreshOAuth: async (credential) =>
-      (await loadOAuth()).refreshRadiusOAuthCredential(credential),
   },
 });

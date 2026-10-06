@@ -142,7 +142,7 @@ describe("captured model decisions", () => {
       { identityKey: "profile:openai:other" },
       { modelId: "other-model" },
       { runtimeId: "codex" },
-      { api: "openai-chatgpt-responses" },
+      { api: "openai-responses" },
       { baseUrl: "https://other.example/v1" },
     ]) {
       expect(owner.readServiceTiers({ ...route, ...mismatch })).toBeUndefined();

@@ -182,12 +182,6 @@ function supportsPreparedOpenAIAuth(ctx: Parameters<AgentHarness["supports"]>[0]
     return { supported: false as const, reason: "Codex only supports OpenAI providers" };
   }
   const preparedAuth = ctx.modelProvider?.preparedAuth;
-  if (preparedAuth?.requirement === "subscription") {
-    return preparedAuth.source === "profile" &&
-      (preparedAuth.mode === "oauth" || preparedAuth.mode === "token")
-      ? { supported: true as const, priority: 100 }
-      : { supported: false as const, reason: "subscription auth is not reproducible" };
-  }
   if (preparedAuth?.requirement === "api-key") {
     return preparedAuth.source !== "none" &&
       preparedAuth.source !== "harness" &&

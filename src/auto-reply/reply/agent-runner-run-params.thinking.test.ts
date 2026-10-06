@@ -10,7 +10,7 @@ const loadProviderScopedThinkingCatalog = vi.hoisted(() =>
             provider: "openai",
             id: "gpt-5.6-luna",
             name: "GPT-5.6 Luna",
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
             baseUrl: "https://chatgpt.com/backend-api/codex",
             compat: {
               supportedReasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
@@ -49,7 +49,7 @@ describe("reply-path model thinking capability", () => {
           {
             provider: "openai",
             id: "gpt-5.6-luna",
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
             baseUrl: "https://chatgpt.com/backend-api/codex",
             compat: { supportedReasoningEfforts },
           },

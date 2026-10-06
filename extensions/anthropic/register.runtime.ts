@@ -1,7 +1,6 @@
 import { createLazyRuntimeMethod, createLazyRuntimeModule } from "openclaw/plugin-sdk/lazy-runtime";
 import type {
   OpenClawPluginApi,
-  ProviderAuthContext,
   ProviderResolveDynamicModelContext,
   ProviderNormalizeResolvedModelContext,
   ProviderRuntimeModel,
@@ -33,9 +32,7 @@ import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coer
 import { buildAnthropicCliBackend } from "./cli-backend.js";
 import {
   CLAUDE_CLI_BACKEND_ID,
-  CLAUDE_CLI_CANONICAL_ALLOWLIST_REFS,
   CLAUDE_CLI_CANONICAL_DEFAULT_MODEL_REF,
-  CLAUDE_CLI_PROFILE_ID,
   CLAUDE_MODEL_ID_ALIASES,
 } from "./cli-constants.js";
 import { createClaudeCodeVersionProbe } from "./cli-version.js";
@@ -48,7 +45,6 @@ import { acceptsAnthropicLiveModelContract } from "./live-model-contract-gate.js
 import { anthropicMediaUnderstandingProvider } from "./media-understanding-provider.js";
 import manifest from "./openclaw.plugin.json" with { type: "json" };
 import { createAnthropicAuthMethods, createAnthropicProvider } from "./provider-contract-api.js";
-import anthropicProviderDiscovery from "./provider-discovery.js";
 import { resolveThinkingProfile } from "./provider-policy-api.js";
 import {
   createClaudeSessionNodeInvokePolicies,
@@ -61,7 +57,6 @@ import {
 import { fetchAnthropicUsage, resolveAnthropicUsageAuth } from "./usage.js";
 
 // Registration needs descriptors, not auth persistence or external credential discovery.
-const loadAuthRuntime = createLazyRuntimeModule(() => import("./auth.runtime.js"));
 // Static registration must not initialize live catalog transport and policy.
 const buildOpenAICompatibleProviderCatalog = createLazyRuntimeMethod(
   createLazyRuntimeModule(() => import("openclaw/plugin-sdk/provider-catalog-live-runtime")),
@@ -523,51 +518,10 @@ function normalizeAnthropicResolvedModel(
 export function buildAnthropicProvider(): ProviderPlugin {
   const providerId = "anthropic";
   const defaultAnthropicModel = CLAUDE_CLI_CANONICAL_DEFAULT_MODEL_REF;
-  const { cli, setupToken, apiKey: apiKeyMethod } = createAnthropicAuthMethods();
+  const { apiKey: apiKeyMethod } = createAnthropicAuthMethods();
   return {
     ...createAnthropicProvider(),
-    deprecatedProfileIds: [CLAUDE_CLI_PROFILE_ID],
-    oauthProfileIdRepairs: [
-      {
-        legacyProfileId: "anthropic:default",
-        promptLabel: "Anthropic",
-      },
-    ],
     auth: [
-      {
-        ...cli,
-        wizard: {
-          ...cli.wizard,
-          assistantPriority: -20,
-          modelAllowlist: {
-            allowedKeys: [...CLAUDE_CLI_CANONICAL_ALLOWLIST_REFS],
-            initialSelections: [CLAUDE_CLI_CANONICAL_DEFAULT_MODEL_REF],
-            message: "Claude CLI models",
-          },
-        },
-        run: async (ctx: ProviderAuthContext) =>
-          await (await loadAuthRuntime()).runAnthropicCliMigration(ctx),
-        runNonInteractive: async (ctx) =>
-          await (
-            await loadAuthRuntime()
-          ).runAnthropicCliMigrationNonInteractive({
-            config: ctx.config,
-            runtime: ctx.runtime,
-            agentDir: ctx.agentDir,
-          }),
-      },
-      {
-        ...setupToken,
-        wizard: { ...setupToken.wizard, assistantPriority: 40 },
-        run: async (ctx: ProviderAuthContext) =>
-          await (await loadAuthRuntime()).runAnthropicSetupTokenAuth(ctx, defaultAnthropicModel),
-        validateNonInteractive: async (ctx) =>
-          Boolean((await loadAuthRuntime()).validateAnthropicSetupTokenNonInteractive(ctx)),
-        runNonInteractive: async (ctx) =>
-          await (
-            await loadAuthRuntime()
-          ).runAnthropicSetupTokenNonInteractive(ctx, defaultAnthropicModel),
-      },
       createProviderApiKeyAuthMethod({
         providerId,
         methodId: apiKeyMethod.id,
@@ -624,7 +578,6 @@ export function buildAnthropicProvider(): ProviderPlugin {
       );
     },
     normalizeResolvedModel: normalizeAnthropicResolvedModel,
-    prepareSyntheticAuth: anthropicProviderDiscovery.prepareSyntheticAuth,
     ...buildProviderReplayFamilyHooks({ family: "native-anthropic-by-model" }),
     isModernModelRef: ({ provider, modelId }) =>
       matchesAnthropicModernModel(modelId) &&
@@ -639,12 +592,6 @@ export function buildAnthropicProvider(): ProviderPlugin {
     resolveUsageAuth: resolveAnthropicUsageAuth,
     fetchUsageSnapshot: fetchAnthropicUsage,
     isCacheTtlEligible: () => true,
-    buildAuthDoctorHint: async (ctx) =>
-      (await loadAuthRuntime()).buildAnthropicAuthDoctorHint({
-        config: ctx.config,
-        store: ctx.store,
-        profileId: ctx.profileId,
-      }),
   };
 }
 

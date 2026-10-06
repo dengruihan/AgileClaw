@@ -734,8 +734,8 @@ describe("prepared model support admission", () => {
       models: {
         providers: {
           openai: {
-            api: "openai-chatgpt-responses",
-            baseUrl: "https://chatgpt.com/backend-api/codex",
+            api: "openai-responses",
+            baseUrl: "https://openai-eu.example/v1",
             models: [],
           },
         },

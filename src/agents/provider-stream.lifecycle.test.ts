@@ -3,27 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bindModelLlmRuntime } from "../llm/model-runtime-binding.js";
 import { createAssistantMessageEventStream } from "../llm/utils/event-stream.js";
 import { resolveProviderStreamFn } from "../plugins/provider-runtime.js";
-import { getModelProviderLocalServiceReconciler } from "./provider-local-service-reconcile.js";
-import {
-  attachModelProviderLocalService,
-  stopManagedProviderLocalServices,
-} from "./provider-local-service.js";
 import { registerProviderStreamForModel } from "./provider-stream.js";
-import { buildGuardedModelFetch } from "./provider-transport-fetch.js";
 
-const { fetchWithSsrFGuard, prepare, providerStream, reconcile, runtimeHandle } = vi.hoisted(() => {
+const { fetchWithSsrFGuard, prepare, providerStream, runtimeHandle } = vi.hoisted(() => {
   const prepareMock = vi.fn(async (_auth?: { mode: string; authFlow?: string }) => undefined);
-  const reconcileMock = vi.fn(async () => undefined);
   return {
     fetchWithSsrFGuard: vi.fn(),
     prepare: prepareMock,
     providerStream: vi.fn(),
-    reconcile: reconcileMock,
     runtimeHandle: {
       provider: "test-provider",
       modelId: "test-model",
       plugin: {
-        reconcileLocalService: reconcileMock,
         wrapStreamFn: ({
           streamFn,
           auth,
@@ -70,16 +61,14 @@ describe("provider stream lifecycle registration", () => {
     prepare.mockClear();
     providerStream.mockReset();
     vi.mocked(resolveProviderStreamFn).mockClear();
-    reconcile.mockReset().mockResolvedValue(undefined);
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("{}", { status: 200 })),
     );
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     vi.unstubAllGlobals();
-    await stopManagedProviderLocalServices();
   });
 
   it("registers provider streams with the resolved runtime lifecycle handle", async () => {
@@ -102,14 +91,11 @@ describe("provider stream lifecycle registration", () => {
       llmRuntime,
     );
 
-    const auth = { mode: "oauth", authFlow: "test-subscription" };
+    const auth = { mode: "api-key", authFlow: undefined };
     const streamFn = registerProviderStreamForModel({ model, wrapProviderStream: true, auth });
     expect(streamFn).toBeTypeOf("function");
     expect(apiRegistry.getApiProvider("test-lifecycle-provider")).toBeDefined();
     await streamFn?.(model, {} as never, {});
-    expect(getModelProviderLocalServiceReconciler(providerStream.mock.calls[0]![0])).toBe(
-      reconcile,
-    );
     expect(prepare).toHaveBeenCalledOnce();
     expect(prepare).toHaveBeenCalledWith(auth);
     expect(prepare.mock.invocationCallOrder[0]).toBeLessThan(
@@ -117,56 +103,23 @@ describe("provider stream lifecycle registration", () => {
     );
   });
 
-  it.each([
-    { label: "reloads before", reconcileError: undefined },
-    { label: "fails closed before", reconcileError: new Error("preset reload failed") },
-  ])("$label the first direct-compaction provider request", async ({ reconcileError }) => {
-    const events: string[] = [];
-    reconcile.mockImplementation(async () => {
-      events.push("reload");
-      if (reconcileError) {
-        throw reconcileError;
-      }
-    });
-    fetchWithSsrFGuard.mockImplementation(async () => {
-      events.push("provider-request");
-      return {
-        response: new Response("ok"),
-        finalUrl: "http://127.0.0.1:19432/v1/responses",
-        release: vi.fn(async () => undefined),
-      };
-    });
-    providerStream.mockImplementation(async (requestModel) => {
-      const response = await buildGuardedModelFetch(requestModel)(
-        "http://127.0.0.1:19432/v1/responses",
-        { method: "POST", body: "{}" },
-      );
-      await response.text();
-      return createAssistantMessageEventStream();
-    });
+  it("passes agent and workspace context to the provider stream resolver", async () => {
     const apiRegistry = createApiRegistry();
     const llmRuntime = createLlmRuntime(apiRegistry);
-    const model = attachModelProviderLocalService(
-      bindModelLlmRuntime(
-        {
-          api: "ollama",
-          provider: "ollama",
-          id: "qwen3:8b",
-          name: "Test Model",
-          baseUrl: "http://127.0.0.1:19432/v1",
-          reasoning: false,
-          input: ["text"],
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          contextWindow: 1024,
-          maxTokens: 512,
-        },
-        llmRuntime,
-      ),
+    const model = bindModelLlmRuntime(
       {
-        command: process.execPath,
-        args: ["-e", "setInterval(() => {}, 1000)"],
-        healthUrl: "http://127.0.0.1:19432/health",
+        api: "ollama",
+        provider: "ollama",
+        id: "qwen3:8b",
+        name: "Test Model",
+        baseUrl: "http://127.0.0.1:19432/v1",
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 1024,
+        maxTokens: 512,
       },
+      llmRuntime,
     );
     expect(apiRegistry.getApiProvider("ollama")).toBeUndefined();
     const streamFn = registerProviderStreamForModel({
@@ -185,12 +138,5 @@ describe("provider stream lifecycle registration", () => {
     });
     expect(streamFn).toBeTypeOf("function");
     expect(apiRegistry.getApiProvider("ollama")).toBeDefined();
-
-    if (reconcileError) {
-      await expect(streamFn?.(model, {} as never, {})).rejects.toThrow(reconcileError.message);
-    } else {
-      await streamFn?.(model, {} as never, {});
-    }
-    expect(events).toEqual(reconcileError ? ["reload"] : ["reload", "provider-request"]);
   });
 });

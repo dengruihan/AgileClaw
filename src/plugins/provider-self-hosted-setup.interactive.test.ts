@@ -26,7 +26,6 @@ describe("promptAndConfigureOpenAICompatibleSelfHostedProviderAuth", () => {
     const cfg = {
       agents: { defaults: { model: "existing/model" } },
       models: {
-        mode: "replace",
         providers: { existing: { baseUrl: "https://existing.example.invalid/v1", models: [] } },
       },
     } satisfies OpenClawConfig;

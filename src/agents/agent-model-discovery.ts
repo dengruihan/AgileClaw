@@ -1,6 +1,4 @@
 /** Discovers agent models and auth storage with provider/plugin normalization hooks. */
-import path from "node:path";
-import type { ModelProviderConfig } from "../config/types.models.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { Model } from "../llm/types.js";
 import {
@@ -9,37 +7,19 @@ import {
 } from "./agent-auth-discovery.js";
 import { resolveModelPluginMetadataSnapshot } from "./model-discovery-context.js";
 import { normalizeDiscoveredAgentModel } from "./model-discovery-normalize.js";
-import type {
-  PluginModelCatalogMetadataSnapshot,
-  PersistedPluginModelCatalog,
-} from "./plugin-model-catalog.js";
+import type { PluginModelCatalogMetadataSnapshot } from "./plugin-model-catalog.js";
 import { AuthStorage } from "./sessions/auth-storage.js";
 import { ModelRegistry } from "./sessions/model-registry.js";
 
-const CAPTURED_MODELS_JSON_SOURCE_PATH = "captured:models.json";
-
 type DiscoverModelsOptions = {
   config?: OpenClawConfig;
-  includePluginCatalogs?: boolean;
-  modelsJsonContents?: string | null;
-  pluginCatalogs?: readonly PersistedPluginModelCatalog[];
-  staticProviderConfigs?: Readonly<Record<string, ModelProviderConfig>>;
   pluginMetadataSnapshot?: PluginModelCatalogMetadataSnapshot;
   workspaceDir?: string;
   normalizeModels?: boolean;
 };
 
-type DiscoverCapturedModelsOptions = Omit<
-  DiscoverModelsOptions,
-  "modelsJsonContents" | "normalizeModels" | "pluginCatalogs"
-> & {
-  modelsJsonContents: string | null;
-  pluginCatalogs: readonly PersistedPluginModelCatalog[];
-};
-
 function createOpenClawModelRegistry(
   authStorage: AuthStorage,
-  modelsJsonPath: string,
   agentDir: string | undefined,
   options?: DiscoverModelsOptions,
 ): ModelRegistry {
@@ -55,16 +35,8 @@ function createOpenClawModelRegistry(
   const registryOptions = {
     config: options?.config,
     ...(pluginMetadataSnapshot ? { pluginMetadataSnapshot } : {}),
-    ...(options?.includePluginCatalogs !== undefined
-      ? { includePluginCatalogs: options.includePluginCatalogs }
-      : {}),
-    ...(options?.modelsJsonContents !== undefined
-      ? { modelsJsonContents: options.modelsJsonContents }
-      : {}),
-    ...(options?.pluginCatalogs !== undefined ? { pluginCatalogs: options.pluginCatalogs } : {}),
-    staticProviderConfigs: options?.staticProviderConfigs,
   };
-  const registry = ModelRegistry.create(authStorage, modelsJsonPath, registryOptions);
+  const registry = ModelRegistry.create(authStorage, registryOptions);
   const getAll = registry.getAll.bind(registry);
   const getAvailable = registry.getAvailable.bind(registry);
   const find = registry.find.bind(registry);
@@ -128,12 +100,7 @@ export function discoverModels(
   agentDir: string,
   options?: DiscoverModelsOptions,
 ): ModelRegistry {
-  return createOpenClawModelRegistry(
-    authStorage,
-    path.join(agentDir, "models.json"),
-    agentDir,
-    options,
-  );
+  return createOpenClawModelRegistry(authStorage, agentDir, options);
 }
 
 /**
@@ -142,9 +109,9 @@ export function discoverModels(
  */
 export function discoverModelsFromCapturedSources(
   authStorage: AuthStorage,
-  options: DiscoverCapturedModelsOptions,
+  options: DiscoverModelsOptions,
 ): ModelRegistry {
-  return createOpenClawModelRegistry(authStorage, CAPTURED_MODELS_JSON_SOURCE_PATH, undefined, {
+  return createOpenClawModelRegistry(authStorage, undefined, {
     ...options,
     normalizeModels: false,
   });

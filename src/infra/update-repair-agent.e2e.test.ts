@@ -334,7 +334,6 @@ describe("update repair with a local model provider", () => {
                   entries: { operator: {} },
                 },
                 models: {
-                  mode: "replace",
                   providers: {
                     "repair-test": {
                       baseUrl: `${baseUrl}/v1`,

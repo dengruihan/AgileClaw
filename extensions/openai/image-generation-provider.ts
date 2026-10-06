@@ -381,16 +381,12 @@ function hasExplicitDirectOpenAIImageConfig(cfg: OpenClawConfig | undefined): bo
     providerConfig.headers !== undefined ||
     providerConfig.authHeader !== undefined ||
     providerConfig.request !== undefined ||
-    (providerConfig.api !== undefined && providerConfig.api !== "openai-chatgpt-responses")
+    providerConfig.api !== undefined
   );
 }
 
 function hasChatGPTImageRouteConfig(cfg: OpenClawConfig | undefined): boolean {
-  const providerConfig = cfg?.models?.providers?.openai;
-  return (
-    isOpenAICodexBaseUrl(resolveConfiguredOpenAIBaseUrl(cfg)) ||
-    providerConfig?.api === "openai-chatgpt-responses"
-  );
+  return isOpenAICodexBaseUrl(resolveConfiguredOpenAIBaseUrl(cfg));
 }
 
 function forceOpenAIImageApiKeyAuth(cfg: OpenClawConfig | undefined): OpenClawConfig | undefined {
@@ -532,8 +528,10 @@ async function generateOpenAICodexImage(params: {
   const { req, apiKey } = params;
   const inputImages = req.inputImages ?? [];
   const openAIProviderConfig = req.cfg?.models?.providers?.openai;
-  const codexProviderConfig =
-    openAIProviderConfig?.api === "openai-chatgpt-responses" ? openAIProviderConfig : undefined;
+  // The config-level api stays API-key-shaped; a codex base URL marks the route.
+  const codexProviderConfig = isOpenAICodexBaseUrl(openAIProviderConfig?.baseUrl)
+    ? openAIProviderConfig
+    : undefined;
   const { baseUrl, allowPrivateNetwork, headers, dispatcherPolicy } =
     resolveProviderHttpRequestConfig({
       baseUrl: canonicalizeCodexResponsesBaseUrl(codexProviderConfig?.baseUrl),
@@ -714,8 +712,9 @@ export function buildOpenAIImageGenerationProvider(
       const rawBaseUrl = resolveConfiguredOpenAIImageBaseUrl(req.cfg, req.model);
       const publicOpenAIBaseUrl = isPublicOpenAIImageBaseUrl(rawBaseUrl);
       const chatGPTBaseUrl = isOpenAICodexBaseUrl(rawBaseUrl);
-      const codexResponsesConfigured =
-        req.cfg?.models?.providers?.openai?.api === "openai-chatgpt-responses";
+      const codexResponsesConfigured = isOpenAICodexBaseUrl(
+        req.cfg?.models?.providers?.openai?.baseUrl,
+      );
       const explicitOpenAIApiKeyConfig = hasExplicitOpenAIImageApiKeyConfig(req.cfg);
       const explicitDirectOpenAIConfig =
         !chatGPTBaseUrl && !codexResponsesConfigured && hasExplicitDirectOpenAIImageConfig(req.cfg);

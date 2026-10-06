@@ -184,7 +184,7 @@ describe("Gateway captured thinking defaults", () => {
 
 describe.each([
   { agentRuntime: "openclaw", api: "openai-responses" as const },
-  { agentRuntime: "codex", api: "openai-chatgpt-responses" as const },
+  { agentRuntime: "codex", api: "openai-responses" as const },
 ])("Gateway model thinking defaults on $agentRuntime", ({ agentRuntime, api }) => {
   it.each<{ name: string; cfg: OpenClawConfig; expected: string }>([
     { name: "provider default", cfg: {}, expected: "medium" },

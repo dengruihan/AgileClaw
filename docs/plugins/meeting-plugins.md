@@ -110,7 +110,7 @@ For Slack, use `"slack-huddles"`, enable the plugin explicitly, and follow its
 For GPT-Live with Cove, set `defaultMode: "bidi"`,
 `realtime.voiceProvider: "openai"`, `realtime.model: "gpt-live-1-codex"`, and
 `realtime.providers.openai.voice: "cove"`. Sign in with
-`openclaw models auth login --provider openai` on the Gateway host. The
+`openclaw models auth paste-api-key --provider openai` on the Gateway host. The
 [Google Meet configuration example](/plugins/google-meet/config#gpt-live-with-cove)
 uses the same fields; substitute `teams-meetings`, `slack-huddles`, or `zoom-meetings` for the
 plugin entry. Unpinned configurations keep their provider's default model.

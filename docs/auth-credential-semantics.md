@@ -212,7 +212,7 @@ Do not write `type: "aws-sdk"` into the credential store; stored credentials are
 
 When a selected stored profile is removed, credential-scoped model discovery reports `selected_auth_profile_unavailable` before consulting dynamic model metadata. Restore the credential or select another configured profile; registering the model does not repair missing authentication. Config-only AWS SDK profiles remain valid without a stored credential. Chat admission and agent commands retain an explicit same-provider selection when its credential disappears so authentication can report recovery. Stale automatic selections and selections for incompatible providers are still cleared.
 
-OAuth re-authentication preserves an existing profile id only when the provider's account-identity matcher proves that the new credential belongs to the same account. A different or ambiguous account keeps the provider's new profile id, so explicit session pins do not cross account boundaries. Unavailable pins remain strict and emit a session-scoped warning. For a credential already removed before re-login, deliberately select a configured account with `model@profile`, or reconnect the intended account with `openclaw models auth login --provider <provider> --profile-id <selected-profile-id>`. No session rows or stored credentials are rewritten during upgrade.
+OAuth re-authentication preserves an existing profile id only when the provider's account-identity matcher proves that the new credential belongs to the same account. A different or ambiguous account keeps the provider's new profile id, so explicit session pins do not cross account boundaries. Unavailable pins remain strict and emit a session-scoped warning. For a credential already removed before re-login, deliberately select a configured account with `model@profile`, or reconnect the intended account from the Control UI Models page. No session rows or stored credentials are rewritten during upgrade.
 
 ## Explicit auth order filtering
 
@@ -264,31 +264,12 @@ they do not change message-execution profile rotation or session pins.
 - Read-only/status paths pass `allowKeychainPrompt: false`; they use file-backed external CLI credentials only and do not read or reuse macOS Keychain results.
 - `/models` reuses external login evidence already prepared with its catalog, so those providers remain visible without a second OpenClaw login. Opening the default menu does not repeat external CLI discovery; explicit auth order and route compatibility still apply.
 
-Codex owns its native login. Ordinary status and model reads do not import its
-credentials into OpenClaw profiles. To retain a configured CLI-backed
-`openai:default` profile, explicitly import the current Codex login with
-`openclaw models auth login --provider openai --method device-code`. When that
-OAuth profile is declared in `auth.profiles`, the source is the current native
-Codex home, and no other managed OpenAI OAuth profile exists, import preserves
-the profile ID and its existing model and session pins. The configured model
-and native credential file stay unchanged. An explicitly isolated agent home
-continues to use the imported OpenClaw profile through its isolated runtime.
-
-Since 2026.9.5, native Codex login no longer supplies the runtime-only
-`openai:default` profile. If that OAuth profile is still declared but absent from
-an agent's canonical credential store, `openclaw doctor --fix`, Doctor lint, and
-Gateway startup warn with the import command above. The warning does not copy
-credentials or block the update. Missing-profile errors identify local store
-absence without reporting a provider HTTP 401; the error records a local lookup
-failure, not a provider rejection.
-For multiple agents, add `--agent <id>` to the login command to select the
-affected agent.
-
-Fresh imports keep account-scoped profile IDs. A matching existing account and
-user reuse their stored profile. Import from another home, missing account/user
-identity, or an existing managed account does not claim the legacy pin. Use the
-reported imported profile explicitly in those cases. Source changes and
-conflicting profiles detected before persistence stop only the selected import.
+Codex-backed execution runs on an explicit OpenAI API key. Native Codex
+account login is no longer imported into OpenClaw profiles; save the key with
+`openclaw models auth paste-api-key --provider openai` (or set
+`models.providers.openai.apiKey`) and the Codex app-server channel uses it
+directly. Configured model selections and session pins keep their profile ids;
+only the credential source changes.
 
 ## OAuth SecretRef Policy Guard
 

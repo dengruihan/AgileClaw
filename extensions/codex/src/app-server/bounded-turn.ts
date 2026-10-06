@@ -10,7 +10,7 @@ import {
   closeCodexStartupClientBestEffort,
   interruptCodexTurnAndWaitBestEffort,
 } from "./attempt-client-cleanup.js";
-import type { CodexAppServerAuthRequirement, CodexAppServerPreparedAuth } from "./auth-types.js";
+import type { CodexAppServerPreparedAuth } from "./auth-types.js";
 import { assertCodexPrivateHookIsolation } from "./bounded-hook-policy.js";
 import type { CodexAppServerClient } from "./client.js";
 import { resolveCodexAppServerRuntimeOptions } from "./config.js";
@@ -100,7 +100,6 @@ type CodexBoundedTurnParams = {
   modelProvider?: string;
   profile?: string;
   preparedAuth?: CodexAppServerPreparedAuth;
-  authRequirement?: CodexAppServerAuthRequirement;
   timeoutMs: number;
   thinkLevel?: Parameters<typeof resolveCodexAppServerReasoningEffort>[0]["thinkLevel"];
   signal?: AbortSignal;
@@ -188,7 +187,6 @@ async function runBoundedCodexAppServerTurnInWorkspace(
   const clientOptions = {
     startOptions,
     ...authSelection,
-    authRequirement: params.authRequirement,
     agentDir,
     config: params.config,
     timeoutMs,

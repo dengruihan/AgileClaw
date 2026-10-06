@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModelProviderConfig } from "../../config/types.models.js";
 import type { PluginMetadataSnapshot } from "../../plugins/plugin-metadata-snapshot.types.js";
-import { getModelProviderLocalService } from "../provider-local-service.js";
 import {
   getModelProviderRequestRouteFacts,
   getModelProviderRequestTransport,
@@ -169,7 +168,6 @@ describe("prepared bundled provider static catalogs", () => {
         authHeader: false,
         maxTokens: 4096,
         request: { headers: { "X-Catalog": "prepared" } },
-        localService: { command: "fixture-service" },
         models: [
           {
             id: "gemini-3.1-pro-preview",
@@ -263,7 +261,6 @@ describe("prepared bundled provider static catalogs", () => {
       expect(getModelProviderRequestTransport(model)).toEqual({
         headers: { "X-Catalog": "prepared" },
       });
-      expect(getModelProviderLocalService(model)).toEqual({ command: "fixture-service" });
     }
     expect(mocks.resolveRuntimePluginDiscoveryProviders).toHaveBeenCalledOnce();
     expect(mocks.runProviderStaticCatalog).not.toHaveBeenCalled();

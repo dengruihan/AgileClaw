@@ -83,7 +83,6 @@ describeLive("cron tool allowlists through live harnesses", () => {
             tools: { exec: { host: "gateway", security: "full", ask: "off" } },
             secrets: { providers: { default: { source: "env" } } },
             models: {
-              mode: "merge",
               providers: {
                 openai: {
                   api: "openai-responses",

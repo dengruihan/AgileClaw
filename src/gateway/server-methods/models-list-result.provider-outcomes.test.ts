@@ -244,7 +244,7 @@ describe("models.list provider catalog outcomes", () => {
       id: "gpt-5.6-sol",
       name: "GPT-5.6 Sol",
       provider: "openai",
-      api: "openai-chatgpt-responses" as const,
+      api: "openai-responses" as const,
       baseUrl: "https://chatgpt.com/backend-api/codex",
     };
     const snapshot = {

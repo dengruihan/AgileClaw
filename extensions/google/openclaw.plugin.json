@@ -71,6 +71,10 @@
       "google": {
         "api": "google-generative-ai",
         "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+        "discovery": {
+          "endpointPath": "models",
+          "requiresApiKey": true
+        },
         "models": [
           {
             "id": "gemini-2.5-pro",

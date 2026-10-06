@@ -123,13 +123,6 @@ describe("minimax onboard", () => {
     ]);
   });
 
-  it("preserves existing models mode", () => {
-    const cfg = applyMinimaxApiConfig({
-      models: { mode: "replace", providers: {} },
-    });
-    expect(cfg.models?.mode).toBe("replace");
-  });
-
   it("does not overwrite existing primary model in provider-only mode", () => {
     expectProviderOnboardPreservesPrimary({
       applyProviderConfig: applyMinimaxApiProviderConfig,

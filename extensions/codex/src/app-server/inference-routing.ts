@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from "node:util";
 import { defineCodexBuildState } from "../build-state.js";
 import type { CodexAppServerClient } from "./client.js";
 import type { CodexAppServerStartOptions } from "./config-contracts.js";
@@ -20,7 +19,6 @@ import {
 import type { CodexInferenceProxy } from "./inference-proxy.js";
 import type { CodexInferenceThreadQualification } from "./inference-qualification.js";
 import { isJsonObject, type CodexConfigReadResponse, type JsonObject } from "./protocol.js";
-import { CODEX_RESPONSES_OAUTH_PROVIDER, type CodexResponsesOAuth } from "./responses-oauth.js";
 import type { CodexBindingAuthority, CodexAppServerThreadBinding } from "./session-binding.js";
 import { resolveCodexAppServerSpawnEnv } from "./transport-stdio.js";
 
@@ -40,8 +38,7 @@ type Owner = {
     CodexInferenceProxy,
     { provider: string; kind: ProviderKind; modelPolicyEnforced: boolean }
   >;
-  authRoute?: "apiKey" | "chatgpt";
-  oauth?: CodexResponsesOAuth;
+  authRoute?: "apiKey";
 };
 // Shared clients survive duplicate module loads; their inference ownership must too.
 const owners = defineCodexBuildState(
@@ -55,7 +52,6 @@ const MAX_THREADS = 256;
 export function ownCodexInferenceClient(
   client: CodexAppServerClient,
   startOptions: Pick<CodexAppServerStartOptions, "env" | "clearEnv"> = {},
-  oauth?: CodexResponsesOAuth,
 ): void {
   if (owners.has(client)) {
     return;
@@ -63,11 +59,6 @@ export function ownCodexInferenceClient(
   // The native transport owns custom trust roots and per-process proxy choices.
   // Leave those profiles native until the relay can preserve the same transport.
   if (!supportsInferenceEnvironment(resolveCodexAppServerSpawnEnv(startOptions))) {
-    if (oauth) {
-      throw new Error(
-        "ChatGPT subscription sharing requires the managed public Responses inference route with a compatible proxy and trust configuration.",
-      );
-    }
     return;
   }
   const owner: Owner = {
@@ -76,7 +67,6 @@ export function ownCodexInferenceClient(
     routes: new Map(),
     threads: new Map(),
     handles: new Map(),
-    oauth,
   };
   owners.set(client, owner);
   const close = () => {
@@ -104,12 +94,7 @@ export function ownCodexInferenceClient(
       return;
     }
     const mode = isJsonObject(notification.params) ? notification.params.authMode : undefined;
-    const route =
-      mode === "apiKey"
-        ? "apiKey"
-        : mode === "chatgpt" || mode === "chatgptAuthTokens"
-          ? "chatgpt"
-          : undefined;
+    const route = mode === "apiKey" ? "apiKey" : undefined;
     // Token rotation on the same native route is transparent. Account-mode changes are not.
     if (route !== owner.authRoute) {
       close();
@@ -153,39 +138,21 @@ async function prepareCodexInferenceRoute(params: {
       ...(params.authority ? { withCurrent: params.authority.withCurrent } : {}),
     }));
   assertCurrent();
-  const unsupported = () => {
-    if (owner.oauth) {
-      throw new Error(
-        "ChatGPT subscription sharing requires the managed public Responses inference route.",
-      );
-    }
-    return undefined;
-  };
+  const unsupported = () => undefined;
   const selectedProvider =
     params.modelProvider ??
     params.config?.model_provider ??
     snapshot.config.model_provider ??
     "openai";
-  if (
-    owner.oauth &&
-    ((snapshot.config.model_provider != null && snapshot.config.model_provider !== "openai") ||
-      (selectedProvider !== "openai" && selectedProvider !== CODEX_RESPONSES_OAUTH_PROVIDER))
-  ) {
-    return unsupported();
-  }
-  const provider = owner.oauth ? CODEX_RESPONSES_OAUTH_PROVIDER : selectedProvider;
+  const provider = selectedProvider;
   if (typeof provider !== "string" || !provider.trim()) {
     return unsupported();
   }
-  const customProvider = !owner.oauth && provider !== "openai";
+  const customProvider = provider !== "openai";
   const providerField = (field: string) =>
     readProviderField(params.config, provider, field) ??
     readProviderField(snapshot.config, provider, field);
-  const nativeProviderName = owner.oauth
-    ? "OpenClaw subscription sharing"
-    : customProvider
-      ? providerField("name")
-      : "OpenAI";
+  const nativeProviderName = customProvider ? providerField("name") : "OpenAI";
   const kind = providerKind(nativeProviderName);
   const wireApi = customProvider ? providerField("wire_api") : "responses";
   if (
@@ -238,8 +205,7 @@ async function prepareCodexInferenceRoute(params: {
       target.username ||
       target.password ||
       target.hash ||
-      target.search ||
-      (owner.oauth && target.href.replace(/\/$/, "") !== "https://api.openai.com/v1")
+      target.search
     ) {
       return unsupported();
     }
@@ -273,18 +239,12 @@ async function prepareCodexInferenceRoute(params: {
       );
   assertCurrent();
   const type = account?.account?.type;
-  if (owner.oauth && type !== "apiKey") {
-    return unsupported();
-  }
-  if (!customProvider && type !== "apiKey" && type !== "chatgpt") {
+  if (!customProvider && type !== "apiKey") {
     return unsupported();
   }
   // Pinned native ModelProviderInfo::to_api_provider uses these defaults only without an override.
   // chatgpt_base_url owns other native services; it is not the model-provider base URL.
-  const target = new URL(
-    configured ||
-      (type === "apiKey" ? "https://api.openai.com/v1" : "https://chatgpt.com/backend-api/codex"),
-  );
+  const target = new URL(configured || "https://api.openai.com/v1");
   const { isBlockedHostnameOrIp } = await import("openclaw/plugin-sdk/ssrf-runtime");
   assertCurrent();
   if (isBlockedHostnameOrIp(target.hostname)) {
@@ -320,11 +280,11 @@ async function prepareCodexInferenceRoute(params: {
   ]);
   const prepareRoute = () => {
     assertCurrent();
-    if (!customProvider && owner.authRoute && owner.authRoute !== type) {
+    if (!customProvider && owner.authRoute && owner.authRoute !== "apiKey") {
       throw new Error("Codex native account route changed; reconnect before retrying");
     }
-    if (type === "apiKey" || type === "chatgpt") {
-      owner.authRoute = type;
+    if (type === "apiKey") {
+      owner.authRoute = "apiKey";
     }
     // A configured native startup service may outlive the foreground that created its thread.
     // generate_memories controls new thread recording, not processing of eligible prior history.
@@ -348,7 +308,6 @@ async function prepareCodexInferenceRoute(params: {
         return createCodexInferenceProxy({
           upstream: target,
           assertCurrent: assertClient,
-          oauth: owner.oauth,
           preserveAzureUrlFeatures,
           preserveCodexBackendRoutes,
           bindModelExecution: createCodexInferenceModelBinding({
@@ -422,9 +381,6 @@ export async function prepareCodexInferenceThreadConfig(params: {
       ? owner.threads.get(binding.threadId)
       : undefined;
   if (preserved) {
-    if (owner.oauth) {
-      throw new Error("ChatGPT subscription sharing cannot attach to a native Codex thread.");
-    }
     // An attachment cannot confer ownership; an already-owned route can remain in use.
     if (!retained) {
       return undefined;
@@ -484,16 +440,6 @@ export async function prepareCodexInferenceThreadConfig(params: {
   if (!provider) {
     throw new Error("Codex inference provider ownership changed");
   }
-  if (owner.oauth) {
-    return {
-      route,
-      config: {
-        ...params.config,
-        model_provider: CODEX_RESPONSES_OAUTH_PROVIDER,
-        model_providers: { [CODEX_RESPONSES_OAUTH_PROVIDER]: responsesOAuthProvider(route) },
-      },
-    };
-  }
   if (!params.operatorBacked) {
     return { route, config: withProviderBaseUrl(params.config, provider, route.baseUrl) };
   }
@@ -515,16 +461,6 @@ export async function prepareCodexInferenceThreadConfig(params: {
     }
   }
   return { route, config: projectProviderRoutes(params.config, providers), providers };
-}
-
-function responsesOAuthProvider(route: CodexInferenceProxy): JsonObject {
-  return {
-    name: "OpenClaw subscription sharing",
-    base_url: route.baseUrl,
-    wire_api: "responses",
-    requires_openai_auth: true,
-    supports_websockets: false,
-  };
 }
 
 /** Validate the exact private handle and unchanged upstream, not a localhost string exception. */
@@ -552,20 +488,6 @@ export function assertCodexInferenceRouteConfig(
     selectedProvider !== provider ||
     systemProxy === true ||
     readProviderBaseUrl(config, provider) !== route.baseUrl
-  ) {
-    throw new Error("Codex parent-local inference route was overridden; no turn was sent");
-  }
-  if (
-    owner.oauth &&
-    (config?.model_provider !== CODEX_RESPONSES_OAUTH_PROVIDER ||
-      !isJsonObject(config?.model_providers) ||
-      !isDeepStrictEqual(
-        config.model_providers[CODEX_RESPONSES_OAUTH_PROVIDER],
-        responsesOAuthProvider(route),
-      ) ||
-      Object.keys(config).some((key) =>
-        key.startsWith(`model_providers.${CODEX_RESPONSES_OAUTH_PROVIDER}`),
-      ))
   ) {
     throw new Error("Codex parent-local inference route was overridden; no turn was sent");
   }

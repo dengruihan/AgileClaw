@@ -181,7 +181,7 @@ describe("provider public artifacts", () => {
           runtimePolicy: { compatibleIds: ["openclaw", "codex", "agentsapi"] },
         },
         {
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: "https://chatgpt.com/backend-api/codex",
           authRequirement: "subscription",
           requestTransportOverrides: "none",

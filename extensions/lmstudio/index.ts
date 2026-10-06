@@ -25,7 +25,7 @@ import {
   normalizeLmstudioProviderConfig,
 } from "./src/models.js";
 import { shouldUseLmstudioSyntheticAuth } from "./src/provider-auth.js";
-import { wrapLmstudioInferencePreload } from "./src/stream.js";
+import { wrapLmstudioInference } from "./src/stream.js";
 
 const PROVIDER_ID = "lmstudio";
 const loadSetup = createLazyRuntimeModule(() => import("./src/setup.js"));
@@ -126,7 +126,7 @@ export default definePluginEntry({
       normalizeConfig: ({ providerConfig }) => normalizeLmstudioProviderConfig(providerConfig),
       prepareDynamicModel: setupMethod((setup) => setup.prepareLmstudioDynamicModel),
       augmentModelCatalog: (ctx) => resolveLmstudioAugmentedCatalogEntries(ctx.config),
-      wrapStreamFn: wrapLmstudioInferencePreload,
+      wrapStreamFn: wrapLmstudioInference,
       ...buildProviderToolCompatFamilyHooks("llamacpp-gbnf"),
       wizard: {
         setup: {

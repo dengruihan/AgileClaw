@@ -5,7 +5,6 @@ import type {
 } from "openclaw/plugin-sdk/provider-model-shared";
 import manifest from "./openclaw.plugin.json" with { type: "json" };
 
-const GOOGLE_VERTEX_BASE_URL = "https://{location}-aiplatform.googleapis.com";
 export const GOOGLE_GEMINI_MANIFEST_PROVIDER = buildManifestModelProviderConfig({
   providerId: "google",
   catalog: manifest.modelCatalog.providers.google,
@@ -35,13 +34,5 @@ export function buildGoogleStaticCatalogProvider(): ModelProviderConfig {
       ...model,
       input: [...model.input, "video"],
     })),
-  };
-}
-
-export function buildGoogleVertexStaticCatalogProvider(): ModelProviderConfig {
-  return {
-    baseUrl: GOOGLE_VERTEX_BASE_URL,
-    api: "google-vertex",
-    models: GOOGLE_GEMINI_TEXT_MODELS,
   };
 }

@@ -9,7 +9,7 @@ import { applyMigrationItemSelection } from "../migrate/item-selection.js";
 type ImportedProviderCredential = {
   profileId: string;
   provider: string;
-  mode: "api_key" | "oauth" | "token";
+  mode: "api_key";
   configUpdated: boolean;
 };
 

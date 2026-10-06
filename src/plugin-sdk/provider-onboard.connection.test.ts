@@ -39,35 +39,31 @@ describe.each([
   ["catalog", createProviderConnectionPresetAppliers<[]>],
   ["default models", createDefaultModelsConnectionPresetAppliers<[]>],
 ] as const)("connection-only %s setup", (_name, create) => {
-  it.each([undefined, "merge"] as const)(
-    "writes a connection without needing catalog data in %s mode",
-    (mode) => {
-      const appliers = create(
-        preset(() => {
-          throw new Error("Catalog data is unavailable");
-        }),
-      );
+  it("writes a connection without needing catalog data", () => {
+    const appliers = create(
+      preset(() => {
+        throw new Error("Catalog data is unavailable");
+      }),
+    );
 
-      const result = appliers.applyConfig(mode ? { models: { mode } } : {});
+    const result = appliers.applyConfig({});
 
-      expect(result.models?.providers?.fixture).toEqual({
-        api: "openai-completions",
-        baseUrl: "https://fixture.invalid/v1",
-        models: [],
-      });
-      expect(result.agents?.defaults?.model).toEqual({ primary: "fixture/default" });
-      expect(result.agents?.defaults?.models).toEqual({
-        "fixture/default": { alias: "Default" },
-      });
-    },
-  );
+    expect(result.models?.providers?.fixture).toEqual({
+      api: "openai-completions",
+      baseUrl: "https://fixture.invalid/v1",
+      models: [],
+    });
+    expect(result.agents?.defaults?.model).toEqual({ primary: "fixture/default" });
+    expect(result.agents?.defaults?.models).toEqual({
+      "fixture/default": { alias: "Default" },
+    });
+  });
 
   it("keeps authored native-named and unique rows, defaults, fallbacks and aliases", () => {
     const authoredDefault = { ...model("default"), name: "Authored", contextWindow: 32768 };
     const authoredUnique = model("private-choice");
     const config: OpenClawConfig = {
       models: {
-        mode: "merge",
         providers: {
           fixture: {
             baseUrl: "https://fixture.invalid/v1",
@@ -101,12 +97,12 @@ describe.each([
   it("owns generated replace rows independently from the catalog and other setup calls", () => {
     const catalog = [model("default")];
     const appliers = create(preset(() => catalog));
-    const first = appliers.applyConfig({ models: { mode: "replace" } });
+    const first = appliers.applyConfig({});
     const firstModel = first.models!.providers!.fixture!.models[0]!;
     firstModel.cost.input = 91;
     firstModel.input.push("image");
 
-    const second = appliers.applyConfig({ models: { mode: "replace" } });
+    const second = appliers.applyConfig({});
 
     expect(catalog[0]!.cost.input).toBe(1);
     expect(catalog[0]!.input).toEqual(["text"]);
@@ -129,7 +125,6 @@ it("keeps catalog and default-model membership rules distinct in replace mode", 
   const authored = { ...model("default"), name: "Authored" };
   const config: OpenClawConfig = {
     models: {
-      mode: "replace",
       providers: { fixture: { baseUrl: "https://fixture.invalid/v1", models: [authored] } },
     },
   };
@@ -148,7 +143,6 @@ it("still adds required defaults in replace mode when the authored rows omit the
     preset(() => [model("default"), model("extra")]),
   ).applyConfig({
     models: {
-      mode: "replace",
       providers: { fixture: { baseUrl: "https://fixture.invalid/v1", models: [authored] } },
     },
   });

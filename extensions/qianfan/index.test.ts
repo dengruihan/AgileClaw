@@ -37,27 +37,18 @@ describe("qianfan provider plugin", () => {
     });
   });
 
-  it.each([
-    { mode: undefined, modelIds: [] },
-    {
-      mode: "replace" as const,
-      modelIds: [
-        "deepseek-v4-pro",
-        "ernie-5.1",
-        "ernie-5.0",
-        "deepseek-v3.2",
-        "ernie-5.0-thinking-preview",
-      ],
-    },
-  ])(
-    "sets Qianfan's default without persisting ordinary $mode catalog rows",
-    ({ mode, modelIds }) => {
-      const cfg = applyQianfanConfig({ models: { mode } });
+  it("sets Qianfan's default while persisting the catalog rows", () => {
+    const cfg = applyQianfanConfig({});
 
-      const agentsConfig = expectRecord(cfg.agents, "agents config");
-      const agentDefaults = expectRecord(agentsConfig.defaults, "agent defaults");
-      expect(resolveAgentModelPrimaryValue(agentDefaults.model)).toBe(QIANFAN_DEFAULT_MODEL_REF);
-      expect(cfg.models?.providers?.qianfan?.models.map((model) => model.id)).toEqual(modelIds);
-    },
-  );
+    const agentsConfig = expectRecord(cfg.agents, "agents config");
+    const agentDefaults = expectRecord(agentsConfig.defaults, "agent defaults");
+    expect(resolveAgentModelPrimaryValue(agentDefaults.model)).toBe(QIANFAN_DEFAULT_MODEL_REF);
+    expect(cfg.models?.providers?.qianfan?.models.map((model) => model.id)).toEqual([
+      "deepseek-v4-pro",
+      "ernie-5.1",
+      "ernie-5.0",
+      "deepseek-v3.2",
+      "ernie-5.0-thinking-preview",
+    ]);
+  });
 });

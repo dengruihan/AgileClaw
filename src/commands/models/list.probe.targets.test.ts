@@ -451,7 +451,7 @@ describe("buildProbeTargets", () => {
         cfg: providerConfig(undefined, "zai", {
           baseUrl: "https://api.z.ai/v1",
           api: "openai-responses",
-          auth: "token",
+          auth: "api-key",
         }),
         providers: ["zai"],
         modelCandidates: ["zai/glm-4.7"],

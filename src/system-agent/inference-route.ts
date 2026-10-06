@@ -330,7 +330,6 @@ export async function projectInferenceRoute(
       order: authOrder,
     },
     models: {
-      mode: config.models?.mode,
       providers: modelProviders,
     },
     defaults: {

@@ -27,7 +27,6 @@ import {
   normalizeOpenRouterModelFamilyId,
 } from "./models.js";
 import { buildOpenRouterMusicGenerationProvider } from "./music-generation-provider.js";
-import { createOpenRouterOAuthAuthMethod } from "./oauth.js";
 import { applyOpenrouterConfig, OPENROUTER_DEFAULT_MODEL_REF } from "./onboard.js";
 import manifest from "./openclaw.plugin.json" with { type: "json" };
 import {
@@ -279,7 +278,6 @@ export default defineSingleProviderPluginEntry({
         defaultModel: OPENROUTER_DEFAULT_MODEL_REF,
         applyConfig: applyOpenrouterConfig,
       },
-      extraAuth: [createOpenRouterOAuthAuthMethod()],
       catalog: {
         order: "simple",
         run: async (ctx) => {

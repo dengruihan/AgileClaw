@@ -20,7 +20,6 @@ import {
   isNonSecretApiKeyMarker,
   resolveOAuthApiKeyMarker,
 } from "./model-auth-markers.js";
-import { resolveDirectProviderCredentialMode } from "./model-auth-runtime-shared.js";
 import {
   resolveApiKeyFromCredential,
   resolveApiKeyFromProfiles,
@@ -67,18 +66,6 @@ function resolveCatalogAuthProfileOrder(params: {
     cooldownScope: "all-models",
     readinessMode: "read-only",
   });
-}
-
-function resolveCatalogDirectAuthMode(
-  config: OpenClawConfig | undefined,
-  provider: string,
-): NonNullable<ReturnType<ProviderApiKeyResolver>["mode"]> {
-  const mode = resolveDirectProviderCredentialMode({
-    cfg: config,
-    provider,
-    inferredMode: "api-key",
-  });
-  return mode === "oauth" || mode === "token" ? mode : "api_key";
 }
 
 /** Create a resolver over the credential map already selected for one lifecycle generation. */
@@ -294,7 +281,7 @@ function resolveDirectCatalogAuth(
     ? {
         apiKey: envVar,
         discoveryApiKey: toDiscoveryApiKey(params.env[envVar]),
-        mode: resolveCatalogDirectAuthMode(params.config, params.provider),
+        mode: "api_key" as const,
       }
     : resolveConfigBackedProviderAuth(params);
   return auth
@@ -318,11 +305,11 @@ function resolveConfigBackedProviderAuth(params: {
   | {
       apiKey: string;
       discoveryApiKey?: string;
-      mode: ReturnType<typeof resolveCatalogDirectAuthMode>;
+      mode: "api_key";
     }
   | undefined {
   const authProvider = params.provider;
-  const mode = resolveCatalogDirectAuthMode(params.config, authProvider);
+  const mode = "api_key" as const;
   const apiKeyPath = `${appendConfigPathSegment("models.providers", authProvider)}.apiKey`;
   const sourceRef = resolveConfigSecretRef({
     config: params.sourceConfigForSecrets,

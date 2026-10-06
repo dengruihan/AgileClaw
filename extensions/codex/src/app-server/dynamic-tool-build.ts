@@ -47,7 +47,6 @@ import {
 } from "./native-execution-policy.js";
 import type { CodexSandboxPolicy, CodexTurnEnvironmentParams } from "./protocol.js";
 import { mapCodexAppServerRemoteWorkspacePath } from "./remote-workspace-path.js";
-import { isCodexResponsesOAuthRun } from "./responses-oauth.js";
 import type { CodexSandboxExecEnvironment } from "./sandbox-exec-server.js";
 import type { CodexEffectiveSessionPermissionPolicy } from "./session-permission-policy.js";
 import {
@@ -193,7 +192,7 @@ export async function buildDynamicTools(
   const webSearchPlan = resolveCodexWebSearchPlan({
     config: params.config,
     disableTools: params.disableTools,
-    nativeToolSurfaceEnabled: isCodexResponsesOAuthRun(params) || input.nativeToolSurfaceEnabled,
+    nativeToolSurfaceEnabled: input.nativeToolSurfaceEnabled,
     nativeProviderWebSearchSupport: input.nativeProviderWebSearchSupport,
   });
   const messageToolProvider = resolveCodexMessageToolProvider(params);
@@ -484,7 +483,6 @@ export function shouldEnableCodexAppServerNativeToolSurface(
   } = {},
 ): boolean {
   if (
-    isCodexResponsesOAuthRun(params) ||
     params.requireWorkspaceOnly === true ||
     params.pluginHarnessToolPolicyRestricted === true ||
     isCodexMemoryFlushRun(params) ||

@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { StreamFn } from "openclaw/plugin-sdk/agent-core";
-import { buildTimeoutAbortSignal } from "openclaw/plugin-sdk/extension-shared";
 import {
   parseJsonObjectPreservingUnsafeIntegers,
   parseJsonPreservingUnsafeIntegers,
@@ -63,7 +62,6 @@ import {
 } from "./stream-compat.js";
 import { OLLAMA_INCOMPLETE_STREAM_ERROR } from "./stream-contract.js";
 import { checkNdjsonRecordCap } from "./stream-ndjson-cap.js";
-import type { OllamaLocalService } from "./stream-registration.js";
 import { normalizeOllamaToolSchema } from "./tool-schema.runtime.js";
 
 export { createConfiguredOllamaCompatStreamWrapper } from "./stream-compat.js";
@@ -810,7 +808,6 @@ type OllamaStreamOptions = NonNullable<Parameters<StreamFn>[2]> & {
 function createRawOllamaStreamFn(
   baseUrl: string,
   defaultHeaders?: Record<string, string>,
-  localService?: OllamaLocalService,
 ): StreamFn {
   const chatUrl = resolveOllamaChatUrl(baseUrl);
   const ssrfPolicy = buildOllamaBaseUrlSsrFPolicy(chatUrl);
@@ -897,21 +894,6 @@ function createRawOllamaStreamFn(
           options as { requestTimeoutMs?: unknown; timeoutMs?: unknown } | undefined,
         );
 
-        // Acquire after request composition and release after guarded cleanup;
-        // reversing either boundary can leak the lease or stop inference mid-stream.
-        const acquisitionDeadline = localService
-          ? buildTimeoutAbortSignal({
-              timeoutMs: requestTimeoutMs,
-              signal: options?.signal,
-              operation: "ollama-stream.local-service",
-            })
-          : undefined;
-        const localServiceLease = await localService
-          ?.acquire(
-            { providerId: localService.providerId, baseUrl, headers },
-            acquisitionDeadline?.signal,
-          )
-          .finally(acquisitionDeadline?.cleanup);
         const guardedFetch = await fetchWithSsrFGuard({
           url: chatUrl,
           init: {
@@ -924,9 +906,6 @@ function createRawOllamaStreamFn(
           ...(options?.signal ? { signal: options.signal } : {}),
           timeoutMs: requestTimeoutMs,
           auditContext: "ollama-stream.chat",
-        }).catch((error: unknown) => {
-          localServiceLease?.release();
-          throw error;
         });
         const { response, release, refreshTimeout } = guardedFetch;
 
@@ -1208,7 +1187,6 @@ function createRawOllamaStreamFn(
           try {
             await release();
           } finally {
-            localServiceLease?.release();
           }
         }
       } catch (err) {
@@ -1243,7 +1221,6 @@ export function createOllamaStreamFn(
 
 export function createConfiguredOllamaStreamFn(params: {
   model: { baseUrl?: string; headers?: unknown };
-  localService?: OllamaLocalService;
   providerBaseUrl?: string;
 }): StreamFn {
   const modelBaseUrl = readStringValue(params.model.baseUrl)?.trim();
@@ -1252,11 +1229,7 @@ export function createConfiguredOllamaStreamFn(params: {
     providerBaseUrl: params.providerBaseUrl,
   });
   return createPlainTextToolCallCompatWrapper(
-    createRawOllamaStreamFn(
-      baseUrl,
-      resolveOllamaModelHeaders(params.model),
-      params.providerBaseUrl?.trim() || !modelBaseUrl ? params.localService : undefined,
-    ),
+    createRawOllamaStreamFn(baseUrl, resolveOllamaModelHeaders(params.model)),
   );
 }
 /* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

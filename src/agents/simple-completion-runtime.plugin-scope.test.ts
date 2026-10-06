@@ -19,8 +19,6 @@ import {
   type PreparedModelRuntimeSnapshot,
 } from "./prepared-model-runtime.js";
 import { resetPreparedModelRuntimeSnapshotsForTest } from "./prepared-model-runtime.test-support.js";
-import { getModelProviderLocalServiceReconciler } from "./provider-local-service-reconcile.js";
-import { getModelProviderLocalService } from "./provider-local-service.js";
 import { AuthStorage, ModelRegistry } from "./sessions/index.js";
 import {
   completeWithPreparedSimpleCompletionModel,
@@ -500,12 +498,6 @@ module.exports = {
               api: "openai-completions",
               apiKey: "fixture-auth-source",
               baseUrl: `${origin}/v1`,
-              localService: {
-                command: process.execPath,
-                args: ["--version"],
-                healthUrl: `${origin}/health`,
-                idleStopMs: 1,
-              },
               models: [
                 {
                   id: "selected-model",
@@ -546,10 +538,6 @@ module.exports = {
         if (!completionTransport) {
           throw new Error("Managed completion transport was not prepared");
         }
-        expect(getModelProviderLocalService(prepared.model)).toBeDefined();
-        expect(getModelProviderLocalService(completionTransport)).toBeDefined();
-        expect(getModelProviderLocalServiceReconciler(prepared.model)).toBeTypeOf("function");
-        expect(getModelProviderLocalServiceReconciler(completionTransport)).toBeTypeOf("function");
         if (failReconciliation) {
           fs.writeFileSync(selected.reconcileFailureMarker, "fail", "utf8");
           await expect(

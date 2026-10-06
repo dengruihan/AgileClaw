@@ -16,14 +16,8 @@ import type {
   ProviderResolveModelRoutesContext,
 } from "openclaw/plugin-sdk/provider-model-types";
 import { normalizeOptionalString } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { classifyOpenAIBaseUrl, isOpenAICodexBaseUrl, OPENAI_API_BASE_URL } from "./base-url.js";
 import {
-  classifyOpenAIBaseUrl,
-  isOpenAICodexBaseUrl,
-  OPENAI_API_BASE_URL,
-  OPENAI_CODEX_RESPONSES_BASE_URL,
-} from "./base-url.js";
-import {
-  isOpenAIDualRouteModelId,
   isOpenAIPlatformOnlyRouteModelId,
   isOpenAISubscriptionOnlyRouteModelId,
   normalizeOpenAIModelRouteId,
@@ -47,12 +41,9 @@ export function resolveFastModeSupport(ctx: ProviderFastModePolicyContext): bool
 
 const OPENAI_RESPONSES_API = "openai-responses";
 const OPENAI_COMPLETIONS_API = "openai-completions";
-const OPENAI_CHATGPT_RESPONSES_API = "openai-chatgpt-responses";
 const OPENAI_PROVIDER_ID = "openai";
 const OPENAI_AGENT_RUNTIME_ID = "openclaw";
 const CODEX_AGENT_RUNTIME_ID = "codex";
-const OPENCLAW_RUNTIME_COMPATIBLE_IDS = [OPENAI_AGENT_RUNTIME_ID] as const;
-const CODEX_RUNTIME_COMPATIBLE_IDS = [OPENAI_AGENT_RUNTIME_ID, CODEX_AGENT_RUNTIME_ID] as const;
 
 type OpenAIResolveSingleModelRouteContext = Omit<
   ProviderResolveModelRoutesContext,
@@ -210,10 +201,9 @@ function codexCanReproduceRoute(
   if (isHttpBaseUrl(sourceBaseUrl) || candidate.requestTransportOverrides === "present") {
     return false;
   }
-  const endpointKind = classifyOpenAIBaseUrl(candidate.baseUrl);
   return (
-    (candidate.api === OPENAI_RESPONSES_API && endpointKind === "platform") ||
-    (candidate.api === OPENAI_CHATGPT_RESPONSES_API && endpointKind === "chatgpt")
+    candidate.api === OPENAI_RESPONSES_API &&
+    classifyOpenAIBaseUrl(candidate.baseUrl) === "platform"
   );
 }
 
@@ -225,10 +215,8 @@ function withRuntimePolicy(
     ...candidate,
     runtimePolicy: {
       compatibleIds: codexCanReproduceRoute(candidate, sourceBaseUrl)
-        ? candidate.authRequirement === "api-key"
-          ? [...CODEX_RUNTIME_COMPATIBLE_IDS, "agentsapi"]
-          : CODEX_RUNTIME_COMPATIBLE_IDS
-        : OPENCLAW_RUNTIME_COMPATIBLE_IDS,
+        ? [OPENAI_AGENT_RUNTIME_ID, CODEX_AGENT_RUNTIME_ID, "agentsapi"]
+        : [OPENAI_AGENT_RUNTIME_ID],
     },
   };
 }
@@ -328,48 +316,34 @@ function resolveSingleObservedModelRoute(
       message: "OpenAI model route baseUrl must be a non-empty URL string.",
     };
   }
-  const chatGPTApi = effectiveApi?.toLowerCase() === OPENAI_CHATGPT_RESPONSES_API;
-  const authoredChatGPTApi =
-    modelApi?.toLowerCase() === OPENAI_CHATGPT_RESPONSES_API ||
-    providerApi?.toLowerCase() === OPENAI_CHATGPT_RESPONSES_API;
+  if (endpointKind === "chatgpt") {
+    return {
+      kind: "incompatible",
+      code: "unsupported-openai-auth-mode",
+      message: "OpenAI model routes require API-key authentication.",
+    };
+  }
 
-  // A custom endpoint owns its protocol contract. Subscription egress always
-  // requires authored ChatGPT intent; observed Platform adapters remain safe
-  // API-key fallbacks for otherwise unspecified custom routes.
+  // A custom endpoint owns its protocol contract; only Platform adapters
+  // that accept API keys can be selected for OpenAI model inference.
   if (endpointKind === "custom") {
-    if (chatGPTApi && !authoredChatGPTApi) {
-      return {
-        kind: "incompatible",
-        code: "custom-chatgpt-relay-requires-configuration",
-        message: "Custom ChatGPT relays require an explicitly configured ChatGPT adapter.",
-      };
-    }
-    // An independently authored custom endpoint may reuse only observed
-    // Platform adapters. Requiring authored ChatGPT intent prevents a stale
-    // catalog row from redirecting a subscription bearer to that endpoint.
     const observedPlatformApi =
       observedApi === OPENAI_RESPONSES_API || observedApi === OPENAI_COMPLETIONS_API
         ? observedApi
         : undefined;
     const customApi = effectiveApi ?? observedPlatformApi ?? customDefaultApi;
-    if (
-      customApi !== OPENAI_RESPONSES_API &&
-      customApi !== OPENAI_COMPLETIONS_API &&
-      customApi !== OPENAI_CHATGPT_RESPONSES_API
-    ) {
+    if (customApi !== OPENAI_RESPONSES_API && customApi !== OPENAI_COMPLETIONS_API) {
       return {
         kind: "incompatible",
         code: "unsupported-custom-openai-api",
         message: `${customApi} is not an OpenAI-compatible model adapter.`,
       };
     }
-    const customAuthRequirement =
-      customApi.toLowerCase() === OPENAI_CHATGPT_RESPONSES_API ? "subscription" : "api-key";
     return route(
       {
         api: customApi,
         baseUrl: concreteBaseUrl(effectiveBaseUrl, OPENAI_API_BASE_URL),
-        authRequirement: customAuthRequirement,
+        authRequirement: "api-key",
         requestTransportOverrides,
       },
       effectiveBaseUrl,
@@ -377,21 +351,9 @@ function resolveSingleObservedModelRoute(
   }
 
   if (
-    (endpointKind === "platform" && chatGPTApi) ||
-    (endpointKind === "chatgpt" && effectiveApi !== undefined && !chatGPTApi)
-  ) {
-    return {
-      kind: "incompatible",
-      code: "conflicting-official-openai-route",
-      message: "OpenAI model API and baseUrl select different official transports.",
-    };
-  }
-
-  if (
     effectiveApi !== undefined &&
     effectiveApi !== OPENAI_RESPONSES_API &&
-    effectiveApi !== OPENAI_COMPLETIONS_API &&
-    effectiveApi !== OPENAI_CHATGPT_RESPONSES_API
+    effectiveApi !== OPENAI_COMPLETIONS_API
   ) {
     return {
       kind: "incompatible",
@@ -402,8 +364,7 @@ function resolveSingleObservedModelRoute(
 
   const modelId = normalizeOpenAIModelRouteId(context.modelId);
   const sourceBaseUrl = effectiveBaseUrl;
-  // Retain Completions for API-key callers; older configs also used this
-  // adapter while Codex selected subscription credentials independently.
+  // Retain Completions for API-key callers.
   const platformApi =
     configuredRoute && effectiveApi === OPENAI_COMPLETIONS_API
       ? OPENAI_COMPLETIONS_API
@@ -420,64 +381,36 @@ function resolveSingleObservedModelRoute(
     },
     sourceBaseUrl,
   );
-  const chatGPTRoute = withRuntimePolicy(
-    {
-      api: OPENAI_CHATGPT_RESPONSES_API,
-      baseUrl: OPENAI_CODEX_RESPONSES_BASE_URL,
-      authRequirement: "subscription",
-      requestTransportOverrides,
-    },
-    sourceBaseUrl,
-  );
   const platformOnly = isOpenAIPlatformOnlyRouteModelId(modelId);
   const subscriptionOnly = isOpenAISubscriptionOnlyRouteModelId(modelId);
-  const dualRoute = isOpenAIDualRouteModelId(modelId);
-
-  const legacyCompletionsDefault =
-    effectiveApi === OPENAI_COMPLETIONS_API && requestTransportOverrides === "none";
-  if (dualRoute && (!configuredRoute || legacyCompletionsDefault)) {
-    return {
-      kind: "routes",
-      defaultRuntimeId: defaultRuntimeIdForRoute(platformRoute, sourceBaseUrl),
-      routes: [platformRoute, chatGPTRoute],
-    };
-  }
 
   // Observed catalog transport is not authored route intent. Known model
   // contracts stay stable regardless of which official sibling row was seen.
   if (!configuredRoute) {
     if (subscriptionOnly) {
-      return route(chatGPTRoute, sourceBaseUrl);
+      return {
+        kind: "incompatible",
+        code: "unsupported-openai-auth-mode",
+        message: `${modelId} requires a non-API-key OpenAI account, which is not supported for model inference.`,
+      };
     }
     if (platformOnly) {
       return route(platformRoute, sourceBaseUrl);
     }
   }
 
-  if (endpointKind === "chatgpt" || chatGPTApi) {
-    if (platformOnly) {
-      return {
-        kind: "incompatible",
-        code: "platform-only-model-on-chatgpt",
-        message: `${modelId} is available only through OpenAI Platform API-key authentication.`,
-      };
-    }
-    return route(chatGPTRoute, sourceBaseUrl);
-  }
-
   if (subscriptionOnly) {
     return {
       kind: "incompatible",
-      code: "subscription-only-model-on-platform",
-      message: `${modelId} is available only through ChatGPT subscription authentication.`,
+      code: "unsupported-openai-auth-mode",
+      message: `${modelId} requires a non-API-key OpenAI account, which is not supported for model inference.`,
     };
   }
 
   if (!configuredRoute && !hasObservedRoute) {
     return {
       kind: "indeterminate",
-      defaultRuntimeId:
-        requestTransportOverrides === "present" ? OPENAI_AGENT_RUNTIME_ID : CODEX_AGENT_RUNTIME_ID,
+      defaultRuntimeId: OPENAI_AGENT_RUNTIME_ID,
     };
   }
   return route(platformRoute, sourceBaseUrl);
@@ -560,7 +493,7 @@ function resolveAuthoredObservedFallback(observedRoutes: readonly ProviderModelR
   const platformApis = new Set<ModelApi>();
   for (const observed of observedRoutes) {
     const api = normalizeOptionalRouteApi(observed.api);
-    if (!api || api === OPENAI_CHATGPT_RESPONSES_API) {
+    if (!api) {
       continue;
     }
     if (api !== OPENAI_RESPONSES_API && api !== OPENAI_COMPLETIONS_API) {
@@ -686,8 +619,7 @@ export function resolveModelRoutes(
       };
     }
   }
-  const preferredAuthRequirement =
-    requirement ?? (intent?.runtimeId === OPENAI_AGENT_RUNTIME_ID ? "api-key" : "subscription");
+  const preferredAuthRequirement = requirement ?? "api-key";
   return {
     ...resolution,
     preferredAuthRequirement,

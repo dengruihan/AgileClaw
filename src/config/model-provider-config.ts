@@ -1,9 +1,72 @@
 import { normalizeProviderId } from "@openclaw/model-catalog-core/provider-id";
 import { stripSelfProviderModelPrefix } from "@openclaw/model-catalog-core/provider-model-id-normalization";
-import { asOptionalRecord as readRecord } from "@openclaw/normalization-core/record-coerce";
+import {
+  asOptionalRecord as readRecord,
+  isRecord,
+} from "@openclaw/normalization-core/record-coerce";
+import { splitTrailingAuthProfile } from "../agents/model-ref-profile.js";
 import type { ProviderRouteOverridePresence } from "../plugin-sdk/provider-model-types.js";
+import { buildProviderModelDedupKey } from "./model-provider-normalization.js";
 import type { ModelDefinitionConfig, ModelProviderConfig } from "./types.models.js";
 import type { OpenClawConfig } from "./types.openclaw.js";
+
+export { normalizeModelProviderName } from "./model-provider-normalization.js";
+
+/** Returns the de-duplication key for one provider/model entry. */
+export function modelProviderModelKey(
+  providerBaseUrl: string,
+  model: { id?: unknown; baseUrl?: unknown },
+): string {
+  const modelBaseUrl = typeof model.baseUrl === "string" ? model.baseUrl.trim() : "";
+  const modelId = typeof model.id === "string" ? model.id : "";
+  return buildProviderModelDedupKey(modelBaseUrl || providerBaseUrl, modelId);
+}
+
+function referencePath(parent: string, key: string | number): string {
+  if (typeof key === "number") {
+    return `${parent}[${key}]`;
+  }
+  if (/^[a-zA-Z_$][\w$]*$/.test(key)) {
+    return parent ? `${parent}.${key}` : key;
+  }
+  return `${parent}[${JSON.stringify(key)}]`;
+}
+
+/** Finds model references across config while excluding the provider model declarations. */
+export function modelReferences(config: unknown, key: string, id: string): string[] {
+  const target = `${key}/${id}`;
+  const references = new Set<string>();
+  const matches = (value: string) => splitTrailingAuthProfile(value).model === target;
+  function visit(value: unknown, path: string): void {
+    if (typeof value === "string") {
+      if (matches(value)) {
+        references.add(path);
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => visit(entry, referencePath(path, index)));
+      return;
+    }
+    if (!isRecord(value)) {
+      return;
+    }
+    for (const [entryKey, entry] of Object.entries(value)) {
+      const childPath = referencePath(path, entryKey);
+      if (path === "models" && entryKey === "providers") {
+        continue;
+      }
+      if (matches(entryKey)) {
+        references.add(childPath);
+      }
+      visit(entry, childPath);
+    }
+  }
+  if (isRecord(config)) {
+    visit(config, "");
+  }
+  return [...references];
+}
 
 type MergedModelProviderEntry = {
   providerKey: string;
@@ -149,7 +212,6 @@ export function createModelProviderRouteOverrideResolver(params: {
     return () => "none";
   }
   if (
-    readRecord(providerConfig.localService) !== undefined ||
     hasNonEmptyRecord(providerConfig.headers) ||
     hasNonEmptyRecord(providerConfig.request) ||
     hasNonEmptyRecord(providerConfig.params) ||

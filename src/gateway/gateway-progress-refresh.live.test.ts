@@ -185,7 +185,6 @@ describeLive("progress refresh through the live embedded runtime", () => {
             },
             secrets: { providers: { default: { source: "env" } } },
             models: {
-              mode: "merge",
               providers: {
                 openai: {
                   api: "openai-responses",

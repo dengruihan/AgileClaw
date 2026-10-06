@@ -629,7 +629,7 @@ const enSettings = {
     title: "Configured providers",
     configureModels: "Model setup",
     login: {
-      action: "Connect provider",
+      action: "Add provider",
       title: "Connect a provider",
       noOptions: "No account connection methods are available.",
       accounts: "Accounts available to this agent",
@@ -664,6 +664,21 @@ const enSettings = {
     accessDescription:
       "Manage connections for the selected agent. Global defaults above apply to all agents.",
     manager: {
+      addProvider: "Add provider",
+      editProvider: "Edit provider",
+      templateHelp:
+        "Choose a template to prefill an editable configuration. Templates can be used more than once.",
+      searchTemplates: "Search provider templates",
+      providerName: "Provider name",
+      draftHelp:
+        "Changes stay in this draft until you save. Model discovery uses the values entered below.",
+      clearKey: "Clear the saved API key when saving",
+      modelRequired: "Enter a model ID and display name.",
+      emptyDiscovery:
+        "The endpoint returned no models. Check its URL and API format, or add models manually.",
+      pullingModels: "Fetching models…",
+      discovered: "Discovered",
+      applyModel: "Apply to draft",
       cloud: "Cloud providers",
       custom: "Local & custom",
       configured: "Configured providers",
@@ -689,25 +704,26 @@ const enSettings = {
       saved: "Configuration saved",
       conflict:
         "This provider configuration changed while you were editing. Close and reopen the editor to review the current settings, then retry.",
-      duplicateProvider: "Choose a unique provider ID.",
-      urlRequired: "Enter a base URL for the custom provider.",
+      duplicateProvider:
+        "Enter a unique provider name. Names ignore letter case and surrounding spaces.",
+      urlRequired: "Enter the provider’s base URL.",
       duplicateModel:
-        "Enter a model ID and name. New model IDs must be unique within this provider.",
+        "This model already exists at this base URL. Edit the existing entry instead.",
       referenced:
-        "This model is referenced by {references}. Update these settings before removing it.",
+        "This model is referenced by {references}. Update those settings before changing its ID or removing it.",
       builtIn: "Catalog",
       override: "Configured",
-      userAdded: "User added",
+      userAdded: "Manually maintained",
       showModel: "Show",
       inherited: "Provider default",
       editModel: "Edit model",
       addModel: "Add model",
       hiddenModels: "Hidden models ({count})",
       noModels: "No models yet. Add a model ID supplied by your provider.",
-      refreshModels: "Refresh model list",
+      refreshModels: "Fetch models",
       discoveryHelp:
-        "Refresh uses the provider’s existing catalog discovery. If your endpoint does not expose models, add them manually.",
-      refreshed: "Model catalog refreshed",
+        "Fetch using the current URL, API format, and key. Refresh replaces discovered models and keeps manually maintained entries.",
+      refreshed: "Fetched {count} models. Review the list and save to apply.",
       refreshFailed:
         "Model discovery failed. Check the connection and retry, or add models manually.",
       addModelsAfterSave:
@@ -734,7 +750,7 @@ const enSettings = {
     refreshing: "Refreshing…",
     disconnected: "Connect to the gateway to see configured model providers.",
     emptyTitle: "No model providers configured",
-    emptySubtitle: "Sign in to a provider or add an API key, then refresh.",
+    emptySubtitle: "Add a provider, fetch its models, or enter model definitions manually.",
     status: {
       ok: "Signed in",
       ready: "Ready",
@@ -759,8 +775,6 @@ const enSettings = {
     configUnavailable: "Configuration is unavailable. Refresh and try again.",
     credentials: {
       label: "Credentials for {agent}",
-      oauth: "OAuth profiles: {count}",
-      tokenProfiles: "Token profiles: {count}",
       configKey: "API key set in config",
       envKey: "API key from environment",
       envKeyNamed: "API key from environment ({name})",

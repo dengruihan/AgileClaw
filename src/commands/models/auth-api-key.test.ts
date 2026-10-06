@@ -827,7 +827,7 @@ describe("shared API-key editing and removal", () => {
   );
 
   it("keeps the active OAuth connection when saving an explicit backup profile", async () => {
-    const provider = { ...connection, auth: "oauth" as const, apiKey: "existing-connection-key" };
+    const provider = { ...connection, auth: "api-key" as const, apiKey: "existing-connection-key" };
     writeConfig({ models: { providers: { sample: provider } } });
     expect(await save("backup-key", "sample:backup")).toMatchObject({
       profileId: "sample:backup",

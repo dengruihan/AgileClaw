@@ -501,7 +501,6 @@ describe("buildQaGatewayConfig", () => {
 
     expect(getPrimaryModel(cfg.agents?.defaults?.model)).toBe("openai/gpt-5.6-luna");
     expect(getModelFallbacks(cfg.agents?.defaults?.model)).toEqual(["openai/gpt-5.6-luna-alt"]);
-    expect(cfg.models?.mode).toBe("replace");
     expect(cfg.models?.providers?.openai?.baseUrl).toBe("https://api.openai.com/v1");
     expect(cfg.models?.providers?.openai?.request).toBeUndefined();
     for (const model of cfg.models?.providers?.openai?.models ?? []) {
@@ -593,7 +592,6 @@ describe("buildQaGatewayConfig", () => {
       },
     });
 
-    expect(cfg.models?.mode).toBe("merge");
     expect(cfg.models?.providers?.["custom-openai"]?.api).toBe("openai-responses");
     expect(cfg.plugins?.allow).toEqual(["memory-core", "qa-lab", "openai", "qa-channel"]);
   });

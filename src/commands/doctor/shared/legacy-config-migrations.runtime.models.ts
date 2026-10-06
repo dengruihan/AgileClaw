@@ -143,7 +143,7 @@ export const LEGACY_CONFIG_MIGRATIONS_RUNTIME_MODELS = [
       {
         path: ["models", "providers"],
         message:
-          'openai-codex-responses is legacy; run "openclaw doctor --fix" to use openai-chatgpt-responses.',
+          'openai-codex-responses is legacy; run "openclaw doctor --fix" to use openai-responses with an OpenAI API key.',
         match: (value) => {
           const providers = getRecord(value);
           return providers

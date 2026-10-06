@@ -85,7 +85,6 @@ async function withStaleResourceFixture(
         },
       },
       models: {
-        mode: "replace",
         providers: Object.fromEntries(
           ["base", providerId].map((id) => [
             id,

@@ -18,7 +18,9 @@ import { isLegacyModelsAddCodexMetadataModel } from "./legacy-models-add-metadat
 
 export const LEGACY_OPENAI_CODEX_RESPONSES_API = "openai-codex-responses";
 const OPENAI_PROVIDER_ID = "openai";
-const OPENAI_CHATGPT_RESPONSES_API = "openai-chatgpt-responses";
+// ChatGPT-backend responses access was removed with non-API-key sign-in; the
+// config-valid replacement is the API-key OpenAI responses endpoint.
+const OPENAI_API_KEY_RESPONSES_API = "openai-responses";
 const MODEL_UNSCOPED_PROVIDER_DEFAULT_KEYS = [
   "apiKey",
   "auth",
@@ -61,9 +63,9 @@ function normalizeLegacyOpenAIResponsesApi(
   let changed = false;
   const next: Record<string, unknown> = { ...provider };
   if (next.api === LEGACY_OPENAI_CODEX_RESPONSES_API) {
-    next.api = OPENAI_CHATGPT_RESPONSES_API;
+    next.api = OPENAI_API_KEY_RESPONSES_API;
     changes.push(
-      `Moved models.providers.${providerId}.api "${LEGACY_OPENAI_CODEX_RESPONSES_API}" → "${OPENAI_CHATGPT_RESPONSES_API}".`,
+      `Moved models.providers.${providerId}.api "${LEGACY_OPENAI_CODEX_RESPONSES_API}" → "${OPENAI_API_KEY_RESPONSES_API}" (ChatGPT-backend access was removed; use an OpenAI API key).`,
     );
     changed = true;
   }
@@ -76,11 +78,11 @@ function normalizeLegacyOpenAIResponsesApi(
       }
       modelsChanged = true;
       changes.push(
-        `Moved models.providers.${providerId}.models[${index}].api "${LEGACY_OPENAI_CODEX_RESPONSES_API}" → "${OPENAI_CHATGPT_RESPONSES_API}".`,
+        `Moved models.providers.${providerId}.models[${index}].api "${LEGACY_OPENAI_CODEX_RESPONSES_API}" → "${OPENAI_API_KEY_RESPONSES_API}" (ChatGPT-backend access was removed; use an OpenAI API key).`,
       );
       return {
         ...modelRecord,
-        api: OPENAI_CHATGPT_RESPONSES_API,
+        api: OPENAI_API_KEY_RESPONSES_API,
       };
     });
     if (modelsChanged) {

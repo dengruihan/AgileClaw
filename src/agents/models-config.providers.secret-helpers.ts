@@ -14,7 +14,6 @@ import {
   isNonSecretApiKeyMarker,
   resolveEnvSecretRefHeaderValueMarker,
 } from "./model-auth-markers.js";
-import { resolveAwsSdkEnvVarName } from "./model-auth-runtime-shared.js";
 
 /**
  * Secret-aware provider config helpers.
@@ -295,8 +294,7 @@ export function resolveMissingProviderApiKey(params: {
     return params.provider;
   }
 
-  const authMode = params.provider.auth;
-  if (params.providerApiKeyResolver && (!authMode || authMode === "aws-sdk")) {
+  if (params.providerApiKeyResolver && !params.provider.auth) {
     const resolvedApiKey = params.providerApiKeyResolver(params.env);
     if (resolvedApiKey) {
       return {
@@ -304,16 +302,6 @@ export function resolveMissingProviderApiKey(params: {
         apiKey: resolvedApiKey,
       };
     }
-  }
-  if (authMode === "aws-sdk") {
-    const awsEnvVar = resolveAwsSdkEnvVarName(params.env);
-    if (!awsEnvVar) {
-      return params.provider;
-    }
-    return {
-      ...params.provider,
-      apiKey: awsEnvVar,
-    };
   }
 
   const fromEnv = resolveEnvApiKeyVarName(params.providerKey, params.env);

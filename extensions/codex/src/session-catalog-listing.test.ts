@@ -283,7 +283,6 @@ describe("Codex supervision catalog", () => {
       }) => {
         const start = await bridgeCodexAppServerStartOptions({
           ...options,
-          authProfileStore: { version: 1, profiles: {} },
         });
         expect(start.env?.CODEX_HOME).toBe(codexHome);
       };

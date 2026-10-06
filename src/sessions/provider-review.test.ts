@@ -37,7 +37,7 @@ const refusal: SessionProviderReview = {
   provider: "openai",
   model: "gpt-5.6-sol",
   runtimeId: "codex",
-  api: "openai-chatgpt-responses",
+  api: "openai-responses",
   nativeThreadId: "native-thread",
   nativeTurnId: "native-failed-turn",
   review: {

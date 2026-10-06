@@ -117,7 +117,7 @@ export function configureProviderRoutes(params: {
   requirements: ProviderModelRouteAuthRequirement[];
 }): void {
   const routes = params.requirements.map<ProviderModelRouteCandidate>((authRequirement, index) => ({
-    api: authRequirement === "api-key" ? "openai-responses" : "openai-chatgpt-responses",
+    api: "openai-responses",
     baseUrl: `https://route-${index}.example.test`,
     authRequirement,
     requestTransportOverrides: "none",

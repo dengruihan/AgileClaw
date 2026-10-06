@@ -489,28 +489,18 @@ describe("ollama embedding provider", () => {
   );
 
   it("uses custom Ollama provider config and strips that provider prefix", async () => {
-    const release = vi.fn();
-    const acquireLocalService = vi.fn(async (_target: unknown) => ({ release }));
-    const service = {
-      command: "/usr/bin/ollama-spark",
-      args: ["serve"],
-      idleStopMs: 10,
-    };
-
     const { fetchMock, provider } = await embedTestQuery({
       config: createProviderConfig(
         {
           baseUrl: "http://spark.local:11434/v1",
           apiKey: "spark-key",
           headers: { "X-Custom-Ollama": "spark" },
-          localService: service,
           models: [],
         },
         "ollama-spark",
       ),
       provider: "ollama-spark",
       model: "ollama-spark/qwen3-embedding:4b",
-      acquireLocalService,
     });
 
     expect(provider.model).toBe("qwen3-embedding:4b");
@@ -524,41 +514,6 @@ describe("ollama embedding provider", () => {
         Authorization: "Bearer spark-key",
       },
     });
-    expect(acquireLocalService).toHaveBeenCalledWith(
-      {
-        providerId: "ollama-spark",
-        baseUrl: "http://spark.local:11434/v1",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Custom-Ollama": "spark",
-          Authorization: "Bearer spark-key",
-        },
-      },
-      undefined,
-    );
-    expect(release).toHaveBeenCalledOnce();
-  });
-
-  it("does not lease a configured local service for a remote endpoint override", async () => {
-    const fetchMock = mockEmbeddingFetch([1, 0]);
-    const acquireLocalService = vi.fn(async () => ({ release: vi.fn() }));
-    const { provider } = await createEmbeddingProvider({
-      config: createProviderConfig(
-        {
-          baseUrl: "http://spark.local:11434/v1",
-          localService: { command: process.execPath },
-          models: [],
-        },
-        "ollama-spark",
-      ),
-      provider: "ollama-spark",
-      remote: { baseUrl: "http://memory.local:11434" },
-      acquireLocalService,
-    });
-
-    await expect(provider.embed("hello", { inputType: "query" })).resolves.toEqual([1, 0]);
-    expect(fetchMock).toHaveBeenCalledOnce();
-    expect(acquireLocalService).not.toHaveBeenCalled();
   });
 
   it("does not attach pure env OLLAMA_API_KEY to a local host", async () => {

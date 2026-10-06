@@ -182,45 +182,18 @@
       "choiceLabel": "xAI API key",
       "groupId": "xai",
       "groupLabel": "xAI (Grok)",
-      "groupHint": "API key or OAuth",
+      "groupHint": "API key",
       "onboardingFeatured": true,
       "optionKey": "xaiApiKey",
       "cliFlag": "--xai-api-key",
       "cliOption": "--xai-api-key <key>",
       "cliDescription": "xAI API key"
-    },
-    {
-      "provider": "xai",
-      "method": "oauth",
-      "personalAccount": true,
-      "choiceId": "xai-oauth",
-      "appGuidedAuth": "device-code",
-      "credentialOnly": true,
-      "channelLogin": {},
-      "choiceLabel": "xAI OAuth",
-      "choiceHint": "Remote-friendly browser sign-in without a localhost callback",
-      "groupId": "xai",
-      "groupLabel": "xAI (Grok)",
-      "groupHint": "API key or OAuth",
-      "onboardingFeatured": true
-    },
-    {
-      "provider": "xai",
-      "method": "device-code",
-      "choiceId": "xai-device-code",
-      "appGuidedAuth": "device-code",
-      "choiceLabel": "xAI device code",
-      "choiceHint": "Compatibility alias for xAI OAuth device-code sign-in",
-      "assistantVisibility": "manual-only",
-      "groupId": "xai",
-      "groupLabel": "xAI (Grok)",
-      "groupHint": "API key or OAuth"
     }
   ],
   "uiHints": {
     "webSearch.apiKey": {
       "label": "Grok Search API Key",
-      "help": "Optional xAI API key for Grok web search; xAI OAuth or XAI_API_KEY can satisfy it.",
+      "help": "Optional xAI API key for Grok web search; XAI_API_KEY can also supply it.",
       "sensitive": true
     },
     "webSearch.model": {

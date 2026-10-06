@@ -73,16 +73,13 @@ describe("captured startup inventory refresh", () => {
       baseUrl: "https://custom.example.test/v1",
     };
     mocks.modelRegistry.getAll.mockReturnValue([captured]);
-    const owner = await prepareCatalogOwner(
-      { models: { mode: "merge" }, agents: { entries: { pro: {} } } },
-      [
-        {
-          entries: [],
-          routeVariants: [],
-          providerOutcomes: [{ provider: "custom", status: "ready" }],
-        },
-      ],
-    );
+    const owner = await prepareCatalogOwner({ models: {}, agents: { entries: { pro: {} } } }, [
+      {
+        entries: [],
+        routeVariants: [],
+        providerOutcomes: [{ provider: "custom", status: "ready" }],
+      },
+    ]);
     expect(owner.modelCatalog.entries).toContainEqual(expect.objectContaining({ id: "removed" }));
 
     const refreshed = await owner.loadFullModelCatalog!({ refresh: true });

@@ -114,7 +114,7 @@ it(
                 auth: { mode: "token", token },
                 controlUi: { allowedOrigins: ["http://localhost"] },
               },
-              models: { mode: "replace", providers: { [provider.providerId]: provider.config } },
+              models: { providers: { [provider.providerId]: provider.config } },
               plugins: { slots: { memory: "none" } },
               tools: { profile: "minimal" },
               logging: { audit: { executionIdentity: true } },

@@ -15,6 +15,7 @@ import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalString,
 } from "@openclaw/normalization-core/string-coerce";
+import { isApiKeyModelApi, type ApiKeyModelApi } from "../config/model-config-vocabulary.js";
 import type { ModelDefinitionConfig, ModelProviderConfig } from "../config/types.models.js";
 import { copyRecordEntries } from "../shared/safe-record.js";
 import type { ProviderCatalogContext, ProviderCatalogResult, ProviderPlugin } from "./types.js";
@@ -173,10 +174,26 @@ function buildManifestCatalogModelInput(
   return model.input?.filter((item): item is "text" | "image" => item !== "document") ?? ["text"];
 }
 
+function resolveConfigCatalogApi(
+  modelApi: ModelCatalogModel["api"],
+  subject: string,
+): ApiKeyModelApi | undefined {
+  if (modelApi === undefined) {
+    return undefined;
+  }
+  if (!isApiKeyModelApi(modelApi)) {
+    throw new Error(
+      `${subject} declares api "${modelApi}", which plugin transports own; configured providers only accept API-key model APIs`,
+    );
+  }
+  return modelApi;
+}
+
 function buildManifestCatalogModel(
   model: ModelCatalogModel,
   options: { providerId?: string; filterDocument?: boolean } = {},
 ): ModelDefinitionConfig & Pick<ModelCatalogModel, "contextWindows" | "contextWindowDefault"> {
+  const configApi = resolveConfigCatalogApi(model.api, `Manifest modelCatalog row ${model.id}`);
   if (model.contextWindow === undefined) {
     throw new Error(`Manifest modelCatalog row ${model.id} is missing contextWindow`);
   }
@@ -189,7 +206,7 @@ function buildManifestCatalogModel(
   return {
     id,
     name: model.name ?? id,
-    ...(model.api ? { api: model.api } : {}),
+    ...(configApi ? { api: configApi } : {}),
     ...(model.baseUrl ? { baseUrl: model.baseUrl } : {}),
     reasoning: model.reasoning ?? false,
     input: buildManifestCatalogModelInput(model, options.filterDocument),
@@ -231,13 +248,17 @@ export function buildManifestModelProviderConfig(params: {
   if (!catalog.baseUrl) {
     throw new Error(`Missing modelCatalog.providers.${params.providerId}.baseUrl`);
   }
+  const providerApi = resolveConfigCatalogApi(
+    catalog.api,
+    `Manifest modelCatalog provider ${params.providerId}`,
+  );
   const rawModelCount = countRawManifestCatalogModels(params.catalog);
   if (rawModelCount !== undefined && rawModelCount !== catalog.models.length) {
     throw new Error(`Invalid modelCatalog.providers.${params.providerId}.models`);
   }
   return {
     baseUrl: catalog.baseUrl,
-    ...(catalog.api ? { api: catalog.api } : {}),
+    ...(providerApi ? { api: providerApi } : {}),
     ...(catalog.headers ? { headers: { ...catalog.headers } } : {}),
     models: catalog.models.map((model) =>
       buildManifestCatalogModel(model, { providerId: params.providerId }),
@@ -250,7 +271,14 @@ export function buildEffectiveManifestProviderConfig(
   rows: readonly NormalizedModelCatalogRow[],
 ): ModelProviderConfig | undefined {
   const firstRow = rows[0];
-  if (!firstRow?.baseUrl || !firstRow.api) {
+  if (!firstRow?.baseUrl) {
+    return undefined;
+  }
+  const providerApi = resolveConfigCatalogApi(
+    firstRow.api,
+    `Manifest modelCatalog family ${firstRow.id}`,
+  );
+  if (!providerApi) {
     return undefined;
   }
   const models = rows.flatMap((row) =>
@@ -258,7 +286,7 @@ export function buildEffectiveManifestProviderConfig(
       ? []
       : [buildManifestCatalogModel(row, { filterDocument: true })],
   );
-  return models.length > 0 ? { baseUrl: firstRow.baseUrl, api: firstRow.api, models } : undefined;
+  return models.length > 0 ? { baseUrl: firstRow.baseUrl, api: providerApi, models } : undefined;
 }
 
 export type ManifestProviderCatalogSurface = {

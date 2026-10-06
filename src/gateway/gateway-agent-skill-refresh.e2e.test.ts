@@ -224,7 +224,7 @@ describe("Gateway agent skill refresh", () => {
               },
             },
             gateway: { auth: { mode: "token", token } },
-            models: { mode: "replace", providers: { [provider.providerId]: provider.config } },
+            models: { providers: { [provider.providerId]: provider.config } },
             plugins: { slots: { memory: "none" } },
             tools: { profile: "coding" },
           } satisfies OpenClawConfig;

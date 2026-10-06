@@ -69,7 +69,7 @@ function requirePayload(payload: Record<string, unknown> | undefined): Record<st
 }
 
 type OpenAIResponsesTestModel = {
-  api: "openai-responses" | "openai-chatgpt-responses";
+  api: "openai-responses" | "openai-responses";
   provider: "openai";
   baseUrl: string;
   id: string;
@@ -91,7 +91,7 @@ const openAIResponsesServiceTierEndpoints = [
   {
     name: "ChatGPT Responses",
     model: {
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       provider: "openai",
       baseUrl: "https://chatgpt.com/backend-api/codex",
       id: "gpt-5.6-sol",

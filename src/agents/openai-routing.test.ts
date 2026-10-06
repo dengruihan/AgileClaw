@@ -117,7 +117,7 @@ describe("OpenAI runtime routing policy", () => {
     expect(
       resolveOpenAIImplicitAgentRuntime({
         provider: "openai",
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api/codex/responses",
         env: {},
       }),

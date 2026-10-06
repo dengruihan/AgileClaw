@@ -351,7 +351,6 @@ export abstract class MemoryProviderLifecycle extends MemoryManagerEmbeddingOps 
           createProvider: this.createProvider,
           config: this.cfg,
           agentDir: resolveAgentDir(this.cfg, this.agentId),
-          ...(this.acquireLocalService ? { acquireLocalService: this.acquireLocalService } : {}),
           ...resolveMemoryPrimaryProviderRequest({ settings: this.settings }),
           fallback: "none",
         });
@@ -436,7 +435,6 @@ export abstract class MemoryProviderLifecycle extends MemoryManagerEmbeddingOps 
           createProvider: this.createProvider,
           config: this.cfg,
           agentDir: resolveAgentDir(this.cfg, this.agentId),
-          ...(this.acquireLocalService ? { acquireLocalService: this.acquireLocalService } : {}),
           ...resolveMemoryPrimaryProviderRequest({ settings: this.settings }),
         });
         this.applyProviderResult(providerResult);

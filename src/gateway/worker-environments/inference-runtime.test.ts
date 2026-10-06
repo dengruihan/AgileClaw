@@ -306,63 +306,34 @@ describe("worker inference provider runtime", () => {
     expect(runtime.releaseRuntime).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    {
+  it("pins the user profile to its api-key route", async () => {
+    const routeRequirement = "api-key";
+    const auth = "api-key";
+    const api = "openai-responses";
+    const baseUrl = "https://api.openai.com/v1";
+    const runtime = setup(sessionEntry);
+    runtime.resolveAuthSelection.mockResolvedValue({
+      profileId: PROFILE,
       source: "user",
-      routeRequirement: "subscription",
-      auth: "oauth",
-      api: "openai-chatgpt-responses",
-      baseUrl: "https://chatgpt.com/backend-api/codex",
-    },
-    {
-      source: "user",
-      routeRequirement: "api-key",
-      auth: "api-key",
-      api: "openai-responses",
-      baseUrl: "https://api.openai.com/v1",
-    },
-    {
-      source: "auto",
-      routeRequirement: "subscription",
-      auth: "oauth",
-      api: "openai-chatgpt-responses",
-      baseUrl: "https://chatgpt.com/backend-api/codex",
-    },
-  ] as const)(
-    "pins the $source profile to its $routeRequirement route",
-    async ({ source, routeRequirement, auth, api, baseUrl }) => {
-      const runtime = setup(
-        source === "auto"
-          ? {
-              ...sessionEntry,
-              authProfileOverrideSource: "auto",
-              authProfileOverrideCompactionCount: 1,
-            }
-          : sessionEntry,
-      );
-      runtime.resolveAuthSelection.mockResolvedValue({
-        profileId: PROFILE,
-        source,
-        routeRequirement,
-      });
+      routeRequirement,
+    });
 
-      await expect(runtime.executor(params(request(), vi.fn()))).resolves.toMatchObject({
-        type: "done",
-      });
-      expect(runtime.prepareModel.mock.calls[0]?.[0].cfg?.models?.providers?.openai).toMatchObject({
-        auth,
-        api,
-        baseUrl,
-      });
-      expect(runtime.prepareModel).toHaveBeenCalledWith(
-        expect.objectContaining({
-          profileId: PROFILE,
-          preferredProfile: PROFILE,
-          bindAuthOwner: true,
-        }),
-      );
-    },
-  );
+    await expect(runtime.executor(params(request(), vi.fn()))).resolves.toMatchObject({
+      type: "done",
+    });
+    expect(runtime.prepareModel.mock.calls[0]?.[0].cfg?.models?.providers?.openai).toMatchObject({
+      auth,
+      api,
+      baseUrl,
+    });
+    expect(runtime.prepareModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profileId: PROFILE,
+        preferredProfile: PROFILE,
+        bindAuthOwner: true,
+      }),
+    );
+  });
 
   it("keeps approved alias routing, endpoint, headers, and auth gateway-owned", async () => {
     const runtime = setup();

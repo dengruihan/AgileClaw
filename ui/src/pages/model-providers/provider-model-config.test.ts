@@ -2,227 +2,37 @@
 import { describe, expect, it } from "vitest";
 import { applyMergePatch } from "../../../../src/config/merge-patch.js";
 import {
-  modelDeletePatch,
-  modelEntryHasAuthorFields,
-  modelEntryHidden,
-  modelEntryWithoutHidden,
   modelReferences,
-  modelRemovePatch,
-  modelRestorePatch,
-  modelWritePatch,
   providerConnectionPatch,
+  refreshProviderModels,
 } from "./provider-model-config.ts";
 
-describe("provider model edits", () => {
-  describe("provider model hide markers", () => {
-    it("detects hidden entries and authored fields beyond the hide marker", () => {
-      expect(modelEntryHidden({ id: "a", name: "A", hidden: true })).toBe(true);
-      expect(modelEntryHidden({ id: "a", name: "A" })).toBe(false);
-      expect(modelEntryHidden(undefined)).toBe(false);
-      expect(modelEntryHasAuthorFields({ id: "a", name: "A", hidden: true })).toBe(false);
-      expect(modelEntryHasAuthorFields({ id: "a", name: "A", hidden: true, reasoning: true })).toBe(
-        true,
-      );
-      expect(modelEntryHasAuthorFields({ id: "a", name: "A", metadataSource: "models-add" })).toBe(
-        true,
-      );
-    });
-
-    it("strips the hide marker while keeping the rest of the entry", () => {
-      expect(modelEntryWithoutHidden({ id: "a", name: "A", hidden: true })).toEqual({
-        id: "a",
-        name: "A",
-      });
-    });
-
-    it("writes a hide override without the user-added marker", () => {
-      const config = {
-        models: {
-          providers: {
-            zai: { models: [{ id: "glm-5.3", name: "GLM-5.3" }] },
-          },
-        },
-      };
-      const patch = modelWritePatch(
-        config,
-        "zai",
-        { id: "glm-5.3", name: "GLM-5.3", hidden: true },
-        "glm-5.3",
-      );
-      const next = applyMergePatch(config, patch.raw, {
-        replacePaths: patch.replacePaths,
-      });
-      const entry = next.models.providers.zai.models.find((row) => row.id === "glm-5.3");
-      expect(entry).toEqual({ id: "glm-5.3", name: "GLM-5.3", hidden: true });
-    });
+describe("provider draft model refresh", () => {
+  it("replaces discovered rows while manual rows win collisions at the same effective URL", () => {
+    const current = [
+      { id: "removed", name: "Old discovery", metadataSource: "provider-discovery" },
+      { id: "same", name: "My edit", metadataSource: "models-add" },
+      { id: "local", name: "Manual model" },
+      { id: "same", name: "Other endpoint", baseUrl: "https://other.example.test/v1" },
+    ];
+    expect(
+      refreshProviderModels(
+        current,
+        [
+          { id: "same", name: "Remote default" },
+          { id: "new", name: "New model" },
+          { id: "new", name: "New model" },
+        ],
+        "https://models.example.test/v1/",
+      ),
+    ).toEqual([
+      current[1],
+      { id: "new", name: "New model", metadataSource: "provider-discovery" },
+      current[2],
+      current[3],
+    ]);
+    expect(current[0]?.id).toBe("removed");
   });
-
-  const config = {
-    models: {
-      mode: "merge",
-      providers: {
-        "custom.proxy": {
-          baseUrl: "https://models.example.test/v1",
-          headers: { "X-Trace": "keep" },
-          models: [
-            { id: "first", name: "First", compat: { supportsStore: false } },
-            { id: "second", name: "Second", metadataSource: "models-add" },
-          ],
-        },
-        other: { models: [{ id: "sibling", name: "Sibling" }] },
-      },
-    },
-  };
-
-  it("renames one model in place while limiting array replacement to its provider", () => {
-    const patch = modelWritePatch(
-      config,
-      "custom.proxy",
-      { id: "renamed", name: "Renamed" },
-      "first",
-    );
-    expect(patch).toEqual({
-      raw: {
-        models: {
-          providers: {
-            "custom.proxy": {
-              models: [
-                { id: "renamed", name: "Renamed" },
-                { id: "second", name: "Second", metadataSource: "models-add" },
-              ],
-            },
-          },
-        },
-      },
-      replacePaths: ["models.providers.custom.proxy.models"],
-    });
-    expect(config.models.providers["custom.proxy"].models[0]?.id).toBe("first");
-  });
-
-  it("marks new additions separately from built-in overrides and preserves siblings on removal", () => {
-    const added = modelWritePatch(config, "custom.proxy", { id: "third", name: "Third" });
-    expect(added.raw).toMatchObject({
-      models: {
-        providers: {
-          "custom.proxy": {
-            models: expect.arrayContaining([
-              { id: "third", name: "Third", metadataSource: "models-add" },
-            ]),
-          },
-        },
-      },
-    });
-    const overridden = modelWritePatch(
-      config,
-      "custom.proxy",
-      { id: "built-in", name: "Override" },
-      "built-in",
-    );
-    expect(overridden.raw).toMatchObject({
-      models: {
-        providers: {
-          "custom.proxy": {
-            models: expect.arrayContaining([{ id: "built-in", name: "Override" }]),
-          },
-        },
-      },
-    });
-    expect(modelRemovePatch(config, "custom.proxy", "first")).toEqual({
-      raw: {
-        models: {
-          providers: {
-            "custom.proxy": {
-              models: [{ id: "second", name: "Second", metadataSource: "models-add" }],
-            },
-          },
-        },
-      },
-      replacePaths: ["models.providers.custom.proxy.models"],
-    });
-  });
-
-  it("deletes a listed model to a bare hide marker, dropping authored fields", () => {
-    const patch = modelDeletePatch(config, "custom.proxy", "first", {
-      listed: true,
-      name: "First",
-    });
-    expect(patch).toEqual({
-      raw: {
-        models: {
-          providers: {
-            "custom.proxy": {
-              models: [
-                { id: "first", name: "First", hidden: true },
-                { id: "second", name: "Second", metadataSource: "models-add" },
-              ],
-            },
-          },
-        },
-      },
-      replacePaths: ["models.providers.custom.proxy.models"],
-    });
-  });
-
-  it("deletes an unlisted model by removing its entry entirely", () => {
-    const patch = modelDeletePatch(config, "custom.proxy", "second", { listed: false });
-    expect(patch).toEqual({
-      raw: {
-        models: {
-          providers: {
-            "custom.proxy": {
-              models: [{ id: "first", name: "First", compat: { supportsStore: false } }],
-            },
-          },
-        },
-      },
-      replacePaths: ["models.providers.custom.proxy.models"],
-    });
-  });
-
-  it("restores a deleted model by dropping the bare hide marker", () => {
-    const patch = modelRestorePatch(
-      {
-        models: {
-          providers: { zai: { models: [{ id: "glm-5.3", name: "GLM-5.3", hidden: true }] } },
-        },
-      },
-      "zai",
-      "glm-5.3",
-      "GLM-5.3",
-    );
-    expect(patch).toEqual({
-      raw: { models: { providers: { zai: { models: [] } } } },
-      replacePaths: ["models.providers.zai.models"],
-    });
-  });
-
-  it("restores a legacy hidden override while keeping its authored fields", () => {
-    const patch = modelRestorePatch(
-      {
-        models: {
-          providers: {
-            zai: {
-              models: [{ id: "glm-5.3", name: "Renamed", hidden: true, contextWindow: 200000 }],
-            },
-          },
-        },
-      },
-      "zai",
-      "glm-5.3",
-      "GLM-5.3",
-    );
-    expect(patch).toEqual({
-      raw: {
-        models: {
-          providers: {
-            zai: { models: [{ id: "glm-5.3", name: "Renamed", contextWindow: 200000 }] },
-          },
-        },
-      },
-      replacePaths: ["models.providers.zai.models"],
-    });
-  });
-
   it("finds selected and allowlisted references without confusing profile or version suffixes", () => {
     expect(
       modelReferences(
@@ -255,16 +65,16 @@ describe("provider connection edits", () => {
     const original = {
       baseUrl: "http://localhost:11434",
       headers: { "X-Remove": "old", "X-Keep": "keep" },
-      localService: { args: ["serve", "--verbose"], env: { MODE: "original" } },
+      request: { retries: { statuses: [429, 503] }, timeoutMs: 5000 },
     };
     const patch = providerConnectionPatch(
       original,
       {
         ...original,
         headers: { "X-Keep": "keep" },
-        localService: { ...original.localService, args: ["serve"] },
+        request: { ...original.request, retries: { statuses: [429] } },
       },
-      new Set(["headers", "localService"]),
+      new Set(["headers", "request"]),
       "custom.proxy",
     );
     expect(patch).toEqual({
@@ -273,12 +83,12 @@ describe("provider connection edits", () => {
           providers: {
             "custom.proxy": {
               headers: { "X-Remove": null },
-              localService: { args: ["serve"] },
+              request: { retries: { statuses: [429] } },
             },
           },
         },
       },
-      replacePaths: ["models.providers.custom.proxy.localService.args"],
+      replacePaths: ["models.providers.custom.proxy.request.retries.statuses"],
     });
     expect(
       applyMergePatch(
@@ -288,7 +98,7 @@ describe("provider connection edits", () => {
               "custom.proxy": {
                 ...original,
                 headers: { ...original.headers, "X-Keep": "updated elsewhere" },
-                localService: { ...original.localService, env: { MODE: "updated elsewhere" } },
+                request: { ...original.request, timeoutMs: 10000 },
               },
             },
           },
@@ -302,7 +112,7 @@ describe("provider connection edits", () => {
           "custom.proxy": {
             baseUrl: original.baseUrl,
             headers: { "X-Keep": "updated elsewhere" },
-            localService: { args: ["serve"], env: { MODE: "updated elsewhere" } },
+            request: { retries: { statuses: [429] }, timeoutMs: 10000 },
           },
         },
       },

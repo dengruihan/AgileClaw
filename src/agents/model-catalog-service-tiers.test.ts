@@ -12,7 +12,7 @@ const entry = { provider: "fixture", id: "opaque-model" };
 const route = {
   api: "openai-responses",
   baseUrl: "https://fixture.example/v1",
-  authRequirement: "subscription",
+  authRequirement: "api-key",
   requestTransportOverrides: "none",
 } as const;
 const capability = {
@@ -37,7 +37,7 @@ const evaluation: ModelAuthAvailabilityEvaluation = {
     source: "profile",
     profileId: "fixture:account-a",
     identityKey: "profile:fixture:account-a",
-    requirement: "subscription",
+    requirement: "api-key",
   },
 };
 function resolve(overrides: Partial<Parameters<typeof resolveModelCatalogServiceTiers>[0]> = {}) {
@@ -217,7 +217,7 @@ describe("account-bound catalog service tiers", () => {
           ...apiEvaluation,
           selectedCredential: {
             ...apiEvaluation.selectedCredential,
-            requirement: "subscription" as const,
+            requirement: "api-key" as const,
           },
         },
       },

@@ -19,11 +19,7 @@ import {
   resolveClaudeCliThinkingEnv,
 } from "./cli-shared.js";
 
-type ClaudeCliAuthCredential =
-  | { type: "oauth"; access: string; expires: number }
-  | { type: "token"; token: string }
-  | { type: "api_key"; key: string }
-  | { type: string };
+type ClaudeCliAuthCredential = { type: "api_key"; key: string } | { type: string };
 
 type ClaudeCliPreparedExecution = CliBackendPreparedExecution & {
   isolatedCompletionEnforced?: true;
@@ -74,7 +70,7 @@ function projectClaudeNativeToolAuthority(nativeTools: readonly string[]): reado
 }
 
 function createClaudeCliAuthInput(params: {
-  envName: "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR" | "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR";
+  envName: "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR";
   value: string;
 }): ClaudeCliPreparedExecution | undefined {
   const trimmed = params.value.trim();
@@ -108,42 +104,18 @@ function createClaudeCliAuthInput(params: {
 function resolveClaudeCliAuthInput(
   credential: ClaudeCliAuthCredential | undefined,
 ): ClaudeCliPreparedExecution | undefined {
-  // Forwarded OAuth here is OpenClaw-managed material (its refresh path is
-  // OpenClaw-owned). Native `claude` logins are never forwarded; the current
-  // Claude process reads its own config directory. An expired token here is
-  // therefore OpenClaw-managed state that must fail loudly.
-  if (credential?.type === "oauth" && "access" in credential) {
-    const expires = "expires" in credential ? credential.expires : undefined;
-    if (typeof expires !== "number" || !Number.isFinite(expires) || expires <= Date.now()) {
-      throw new Error(
-        "Selected Claude CLI OAuth credential is expired or invalid. Re-authenticate the selected profile and retry. OpenClaw did not start the run.",
-      );
-    }
-    if (typeof credential.access !== "string") {
-      return undefined;
-    }
-    return createClaudeCliAuthInput({
-      envName: "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
-      value: credential.access,
-    });
-  }
-  if (
-    credential?.type === "token" &&
-    "token" in credential &&
-    typeof credential.token === "string"
-  ) {
-    return createClaudeCliAuthInput({
-      envName: "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
-      value: credential.token,
-    });
-  }
   if (credential?.type === "api_key" && "key" in credential && typeof credential.key === "string") {
-    return createClaudeCliAuthInput({
+    const authInput = createClaudeCliAuthInput({
       envName: "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
       value: credential.key,
     });
+    if (authInput) {
+      return authInput;
+    }
   }
-  return undefined;
+  throw new Error(
+    "Claude CLI execution requires an explicitly selected Anthropic API-key profile. Connect Anthropic with an API key in Models settings, then select that profile. OpenClaw did not start the run.",
+  );
 }
 
 export function buildAnthropicCliBackend(
@@ -213,11 +185,6 @@ export function buildAnthropicCliBackend(
         };
       },
     },
-    // Anthropic routes direct anthropic-messages calls on subscription OAuth
-    // tokens to metered extra-usage billing (or rejects them without balance);
-    // opted-in embedded runs on subscription credentials execute through this
-    // backend on plan limits instead.
-    subscriptionAuthDispatch: true,
     config: {
       command: "claude",
       args: [...CLAUDE_CLI_DEFAULT_ARGS],

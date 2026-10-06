@@ -167,7 +167,6 @@ describe("session delivery clock-jump integration", () => {
             entries: { main: {} },
           },
           models: {
-            mode: "replace",
             providers: {
               [provider.providerId]: {
                 ...provider.config,

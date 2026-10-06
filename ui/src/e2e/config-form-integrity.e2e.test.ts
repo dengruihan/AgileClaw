@@ -516,7 +516,12 @@ suite.define(() => {
         await gateway.deferNext("config.patch");
         await third.getByRole("button", { name: "Delete", exact: true }).click();
         const rejected = await gateway.waitForRequest("config.patch");
-        expect(JSON.parse(String(rejected.params.raw))).toEqual({
+        const rejectedParams = rejected.params as {
+          raw: string;
+          baseHash: string;
+          replacePaths: unknown[];
+        };
+        expect(JSON.parse(String(rejectedParams.raw))).toEqual({
           models: {
             providers: {
               [providerId]: {
@@ -525,15 +530,19 @@ suite.define(() => {
             },
           },
         });
-        expect(rejected.params.baseHash).toBe("seeded-row-e2e");
-        expect(rejected.params.replacePaths).toHaveLength(1);
+        expect(rejectedParams.baseHash).toBe("seeded-row-e2e");
+        expect(rejectedParams.replacePaths).toHaveLength(1);
         const afterDelete = {
           agents: initial.agents,
           models: {
             providers: {
               [providerId]: {
                 baseUrl: "https://seeded.example.test/v1",
-                models: [models[0], models[1], { id: "model-3", name: "Three", hidden: true }],
+                models: [
+                  models[0]!,
+                  models[1]!,
+                  { id: "model-3", name: "Three", input: ["text"], hidden: true },
+                ],
               },
             },
           },

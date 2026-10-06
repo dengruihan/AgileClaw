@@ -3,7 +3,6 @@ import {
   normalizeUniqueTrimmedStringList,
 } from "openclaw/plugin-sdk/string-coerce-runtime";
 import type { resolveCodexAppServerAuthProfileIdForAgent } from "./auth-profile.js";
-import type { CodexAppServerAuthRequirement } from "./auth-types.js";
 import type { CodexAppServerStartOptions } from "./config.js";
 import { assertCodexModelListResponse } from "./protocol-validators.js";
 import type { CodexModel } from "./protocol.js";
@@ -42,7 +41,6 @@ type CodexAppServerListModelsOptions = {
   timeoutMs?: number;
   startOptions?: CodexAppServerStartOptions;
   authProfileId?: string;
-  authRequirement?: CodexAppServerAuthRequirement;
   agentDir?: string;
   config?: Parameters<typeof resolveCodexAppServerAuthProfileIdForAgent>[0]["config"];
   sharedClient?: boolean;
@@ -104,7 +102,6 @@ async function withCodexAppServerModelRequest<T>(
     startOptions: options.startOptions,
     timeoutMs,
     authProfileId: options.authProfileId,
-    authRequirement: options.authRequirement,
     agentDir: options.agentDir,
     config: options.config,
   });

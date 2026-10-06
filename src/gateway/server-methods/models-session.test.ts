@@ -62,13 +62,7 @@ function fixture() {
       },
     },
   } satisfies OpenClawConfig;
-  const owner = createChatMetadataOwner(
-    config,
-    "gpt-5.6-luna",
-    {},
-    "openai",
-    "openai-chatgpt-responses",
-  );
+  const owner = createChatMetadataOwner(config, "gpt-5.6-luna", {}, "openai", "openai-responses");
   const authStore = expectDefined(getPreparedModelRuntimeAuthStore(owner), "prepared auth store");
   let snapshotCurrent = true;
   const snapshot: PreparedGatewayModelCatalogSnapshot = {

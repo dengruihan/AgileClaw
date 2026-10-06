@@ -8,13 +8,10 @@ import {
   findCodexMarketplacePluginSummary,
   pluginReadParams,
 } from "./app-server/plugin-inventory.js";
-import type {
-  CodexAppsReadResponse,
-  CodexExperimentalFeatureListResponse,
-} from "./app-server/protocol-control-plane.js";
+import type { CodexAppsReadResponse } from "./app-server/protocol-control-plane.js";
 import { isJsonObject, type CodexAppServerRequestResult, type v2 } from "./app-server/protocol.js";
 import { CodexAppServerRpcError } from "./app-server/rpc-error.js";
-import { formatCodexAccountLine, formatCodexDisplayText } from "./command-formatters.js";
+import { formatCodexDisplayText } from "./command-formatters.js";
 import {
   buildCodexPluginAppLinks,
   buildCodexPluginStatusButtons,
@@ -59,45 +56,11 @@ export type CodexPluginReadiness = {
 
 /** Runtime support is not account-wide permission to browse, connect or invoke apps. */
 export async function readCodexHostedAppsSupport(
-  context: Pick<CodexPluginCommandContext, "request" | "threadId">,
+  _context: Pick<CodexPluginCommandContext, "request" | "threadId">,
   account: CodexPluginReadiness["account"],
 ): Promise<CodexHostedAppsSupport> {
-  if (account.status !== "known") {
-    return "unknown";
-  }
-  if (!isJsonObject(account.value.account) || account.value.account.type !== "chatgpt") {
-    return "sign_in_required";
-  }
-  const features = await readEvidence(async () => {
-    let cursor: string | undefined;
-    const visited = new Set<string>();
-    do {
-      const response = await context.request<CodexExperimentalFeatureListResponse>(
-        "experimentalFeature/list",
-        {
-          ...(context.threadId ? { threadId: context.threadId } : {}),
-          ...(cursor ? { cursor } : {}),
-          limit: 100,
-        },
-      );
-      const apps = response.data.find((feature) => feature.name === "apps");
-      if (apps) {
-        return apps.enabled;
-      }
-      cursor = response.nextCursor ?? undefined;
-      if (cursor && visited.has(cursor)) {
-        return undefined;
-      }
-      if (cursor) {
-        visited.add(cursor);
-      }
-    } while (cursor);
-    return undefined;
-  });
-  if (features.status !== "known") {
-    return features.reason === "unsupported" ? "unsupported" : "unknown";
-  }
-  return features.value === undefined ? "unknown" : features.value ? "supported" : "disabled";
+  // Hosted apps require the removed native Codex account; API-key execution cannot use them.
+  return account.status === "known" ? "sign_in_required" : "unknown";
 }
 
 export function describeCodexHostedAppsSupport(support: CodexHostedAppsSupport): string {
@@ -445,11 +408,6 @@ function display(value: string): string {
 
 export function formatBoundAccount(evidence: CodexPluginReadiness["account"]): string {
   const account = evidence.status === "known" ? evidence.value.account : undefined;
-  if (isJsonObject(account) && account.type === "chatgpt") {
-    const email = typeof account.email === "string" ? account.email : "email unknown";
-    const plan = typeof account.planType === "string" ? account.planType : "plan unknown";
-    return `ChatGPT account: ${formatCodexAccountLine(email.slice(0, 120))} (${display(plan)}).`;
-  }
   if (isJsonObject(account) && typeof account.type === "string") {
     return `Account type: ${display(account.type)}; ChatGPT account identity is not available.`;
   }

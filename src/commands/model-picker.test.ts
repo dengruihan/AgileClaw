@@ -79,10 +79,6 @@ const hasRuntimeAvailableProviderAuth = vi.hoisted(() =>
       workspaceDir?: string;
       env?: NodeJS.ProcessEnv;
     }) => {
-      if (provider === "amazon-bedrock") {
-        const auth = cfg?.models?.providers?.["amazon-bedrock"]?.auth;
-        return auth === undefined || auth === "aws-sdk";
-      }
       if (resolveEnvApiKey(provider, env)?.apiKey) {
         return true;
       }
@@ -119,7 +115,7 @@ vi.mock("../agents/model-auth.js", () => ({
 const providerAuthRoute = vi.hoisted(() => ({
   value: undefined as
     | {
-        api: "openai-responses" | "openai-chatgpt-responses";
+        api: "openai-responses" | "openai-responses";
         baseUrl: string;
         authRequirement: "api-key" | "subscription";
         requestTransportOverrides: "none" | "present";
@@ -152,8 +148,7 @@ const createProviderAuthChecker = vi.hoisted(() =>
             cfg: params.cfg,
             workspaceDir: params.workspaceDir,
             env: params.env,
-          }) &&
-          !(ref?.api === "openai-chatgpt-responses" && ref.baseUrl === "https://api.openai.com/v1")
+          }) && !(ref?.api === "openai-responses" && ref.baseUrl === "https://api.openai.com/v1")
         );
       },
     );
@@ -384,7 +379,7 @@ afterEach(() => {
 describe("promptDefaultModel", () => {
   it("uses selected ChatGPT capabilities regardless of physical row order", async () => {
     providerAuthRoute.value = {
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
       authRequirement: "subscription",
       requestTransportOverrides: "none",
@@ -402,7 +397,7 @@ describe("promptDefaultModel", () => {
     const chatGPT: ModelCatalogEntry = {
       ...platform,
       name: "ChatGPT GPT-5.5",
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
       contextWindow: 400_000,
       reasoning: false,

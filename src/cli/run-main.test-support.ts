@@ -300,10 +300,6 @@ vi.mock("../agents/provider-runtime-lifecycle.js", () => ({
   hasProviderTransportDispatcherPool: hasProviderTransportDispatcherPoolMock,
 }));
 
-vi.mock("../agents/provider-local-service.js", () => {
-  return { stopManagedProviderLocalServices: stopManagedProviderLocalServicesMock };
-});
-
 vi.mock("../agents/provider-transport-dispatcher-pool.js", () => {
   return { closeProviderTransportDispatcherPool: closeProviderTransportDispatcherPoolMock };
 });

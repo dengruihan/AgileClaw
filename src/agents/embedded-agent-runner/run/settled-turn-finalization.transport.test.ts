@@ -191,7 +191,7 @@ it.each(["HTTP", "WebSocket", "terminated"])("finalizes after %s failure", async
     });
     const model: Model = {
       ...resolved.model,
-      api: websocket ? "openai-chatgpt-responses" : "openai-responses",
+      api: websocket ? "openai-responses" : "openai-responses",
       provider: websocket ? "openai" : "loopback-provider",
       input: ["text"],
       contextWindow: 8192,
@@ -221,7 +221,6 @@ it.each(["HTTP", "WebSocket", "terminated"])("finalizes after %s failure", async
     const stream: StreamFn = websocket
       ? (requestModel, context, options) =>
           streamOpenAICodexResponses(
-            // Responses-specific compat settings do not belong to the ChatGPT API.
             { ...requestModel, api: "openai-chatgpt-responses", compat: undefined },
             context,
             { ...options, transport: "websocket" },

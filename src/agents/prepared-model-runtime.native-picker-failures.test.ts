@@ -361,7 +361,7 @@ it("keeps observed untagged models without restoring API rows deleted during nat
     provider: b.provider,
     id: b.id,
     name: "Account route",
-    api: "openai-chatgpt-responses" as const,
+    api: "openai-responses" as const,
     baseUrl: "https://account.synthetic.test/v1",
     contextWindow: 48_000,
     params: { accountModel: "account-route-model" },

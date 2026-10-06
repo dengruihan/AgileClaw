@@ -477,7 +477,7 @@ describe("resolveImplicitProviders startup discovery scope", () => {
     "prepares configured native auth within the discovery scope (scoped: $scoped, api: $api)",
     async ({ scoped, api }) => {
       const prepareNative = vi.fn<NonNullable<ProviderPlugin["prepareSyntheticAuth"]>>(
-        async () => ({ apiKey: "native-auth-ready", source: "native fixture", mode: "oauth" }),
+        async () => ({ apiKey: "native-auth-ready", source: "native fixture", mode: "api-key" }),
       );
       const provider: ProviderPlugin = {
         ...createProvider("openai-completions"),

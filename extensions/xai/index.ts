@@ -24,12 +24,7 @@ import {
 } from "./lazy-capability-providers.js";
 import { normalizeNativeXaiModelId } from "./model-compat.js";
 import { applyXaiConfig, XAI_DEFAULT_MODEL_REF } from "./onboard.js";
-import {
-  buildLiveXaiOAuthProvider,
-  buildLiveXaiProvider,
-  buildXaiProvider,
-  isXaiGrokProxyBaseUrl,
-} from "./provider-catalog.js";
+import { buildLiveXaiProvider, buildXaiProvider } from "./provider-catalog.js";
 import { isXaiProviderId } from "./provider-id.js";
 import { isModernXaiModel, resolveXaiForwardCompatModel } from "./provider-models.js";
 import { resolveThinkingProfile } from "./provider-policy-api.js";
@@ -52,11 +47,6 @@ import {
   buildMissingXSearchApiKeyPayload,
   createXSearchToolDefinition,
 } from "./x-search-tool-shared.js";
-import {
-  createXaiDeviceCodeAuthMethod,
-  createXaiOAuthAuthMethod,
-  refreshXaiOAuthCredential,
-} from "./xai-oauth-entry.js";
 
 const PROVIDER_ID = "xai";
 
@@ -191,7 +181,7 @@ export default defineSingleProviderPluginEntry({
   id: "xai",
   name: "xAI Plugin",
   description: "Bundled xAI plugin",
-  provider: (pluginApi) => ({
+  provider: () => ({
     label: "xAI",
     aliases: ["x-ai"],
     docsPath: "/providers/xai",
@@ -212,7 +202,6 @@ export default defineSingleProviderPluginEntry({
         },
       },
     ],
-    extraAuth: [createXaiOAuthAuthMethod(), createXaiDeviceCodeAuthMethod()],
     catalog: {
       order: "simple",
       run: async (ctx) => {
@@ -222,72 +211,34 @@ export default defineSingleProviderPluginEntry({
         }
         const { resolveApiKeyForProvider } =
           await import("openclaw/plugin-sdk/provider-auth-runtime");
-        const grokProxy = isXaiGrokProxyBaseUrl(
-          ctx.config.models?.providers?.[PROVIDER_ID]?.baseUrl,
-        );
-        // Static token material can already be ready in a cold command or worker.
-        const resolvedAuth =
-          auth.mode === "token" && grokProxy && auth.discoveryApiKey
-            ? { ...auth, apiKey: auth.discoveryApiKey }
-            : await resolveApiKeyForProvider({
-                provider: PROVIDER_ID,
-                cfg: ctx.config,
-                ...(ctx.agentDir ? { agentDir: ctx.agentDir } : {}),
-                ...(ctx.workspaceDir ? { workspaceDir: ctx.workspaceDir } : {}),
-                ...(auth.profileId ? { profileId: auth.profileId, lockedProfile: true } : {}),
-                // Prepared direct auth must not reopen failed profile candidates.
-                ...(!auth.profileId && auth.mode !== "none"
-                  ? { allowAuthProfileFallback: false }
-                  : {}),
-              }).catch(() => undefined);
-        // Static token storage does not distinguish subscription tokens from Console API tokens.
-        const subscriptionToken =
-          (resolvedAuth?.mode === "token" || auth.mode === "token") && grokProxy;
-        if (subscriptionToken && (!resolvedAuth?.apiKey || resolvedAuth.mode !== "token")) {
-          return {
-            providers: {},
-            outcomes: [{ provider: PROVIDER_ID, profileId: auth.profileId, status: "unavailable" }],
-          };
-        }
-        const selectedAuth =
-          resolvedAuth?.apiKey && (resolvedAuth.mode === "oauth" || subscriptionToken)
-            ? { ...resolvedAuth, oauth: true }
-            : { ...(auth.apiKey ? auth : ctx.resolveProviderApiKey(PROVIDER_ID)), oauth: false };
-        if (!selectedAuth.apiKey) {
+        const resolvedAuth = await resolveApiKeyForProvider({
+          provider: PROVIDER_ID,
+          cfg: ctx.config,
+          ...(ctx.agentDir ? { agentDir: ctx.agentDir } : {}),
+          ...(ctx.workspaceDir ? { workspaceDir: ctx.workspaceDir } : {}),
+          ...(auth.profileId ? { profileId: auth.profileId, lockedProfile: true } : {}),
+          ...(!auth.profileId && auth.mode !== "none" ? { allowAuthProfileFallback: false } : {}),
+        }).catch(() => undefined);
+        const apiKey = resolvedAuth?.mode === "api-key" ? resolvedAuth.apiKey : auth.apiKey;
+        if (!apiKey) {
           return null;
         }
-        const apiKey = selectedAuth.apiKey;
         return await runLiveProviderCatalog({
           providerId: PROVIDER_ID,
-          profileId: selectedAuth.profileId,
+          profileId: resolvedAuth?.profileId ?? auth.profileId,
           run: async () => ({
-            provider: selectedAuth.oauth
-              ? await buildLiveXaiOAuthProvider({
-                  discoveryApiKey: apiKey,
-                  authMode: selectedAuth.mode === "token" ? "token" : "oauth",
-                })
-              : await buildLiveXaiProvider(selectedAuth),
+            provider: await buildLiveXaiProvider({ apiKey }),
           }),
         });
       },
       staticRun: async (ctx) => {
-        const auth = ctx.resolveProviderAuth(PROVIDER_ID);
-        const authMode =
-          auth.mode === "oauth"
-            ? "oauth"
-            : auth.mode === "token" &&
-                isXaiGrokProxyBaseUrl(ctx.config.models?.providers?.[PROVIDER_ID]?.baseUrl)
-              ? "token"
-              : undefined;
-        return { provider: buildXaiProvider("openai-responses", authMode) };
+        ctx.resolveProviderAuth(PROVIDER_ID);
+        return { provider: buildXaiProvider("openai-responses") };
       },
     },
     ...buildProviderReplayFamilyHooks({ family: "openai-compatible" }),
     prepareExtraParams: (ctx) => defaultToolStreamExtraParams(ctx.extraParams),
-    wrapStreamFn: (ctx) =>
-      wrapXaiProviderStream(ctx, {
-        clientVersion: pluginApi.runtime.version,
-      }),
+    wrapStreamFn: (ctx) => wrapXaiProviderStream(ctx),
     // Provider-specific fallback auth stays owned by the xAI plugin so core
     // auth/discovery code can consume it generically without parsing xAI's
     // private config layout. Callers may receive a real key from the active
@@ -308,11 +259,6 @@ export default defineSingleProviderPluginEntry({
       resolveXaiTransport({ provider, api, baseUrl }),
     normalizeModelId: ({ modelId }) => normalizeNativeXaiModelId(modelId),
     resolveDynamicModel: (ctx) => resolveXaiForwardCompatModel({ providerId: PROVIDER_ID, ctx }),
-    refreshOAuth: refreshXaiOAuthCredential,
-    resolveUsageAuth: async (ctx) => {
-      const oauth = await ctx.resolveOAuthToken();
-      return oauth ? oauth : { handled: true };
-    },
     fetchUsageSnapshot: async (ctx) => await fetchXaiUsage(ctx.token, ctx.timeoutMs, ctx.fetchFn),
     resolveThinkingProfile,
     isModernModelRef: ({ modelId }) => isModernXaiModel(modelId),

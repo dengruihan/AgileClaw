@@ -909,7 +909,7 @@ describe("modelsStatusCommand auth overview", () => {
       id: "openai/gpt-5.4-nano",
       name: "ChatGPT Nano",
       provider: "openai",
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
     };
     configureStatus({

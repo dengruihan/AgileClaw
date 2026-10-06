@@ -505,7 +505,6 @@ function buildLocalModeConfig(params: {
       profile: params.toolsProfile ?? "minimal",
     },
     models: {
-      mode: "replace",
       providers: {
         "tui-pty-mock": buildMockModelProvider(params.providerBaseUrl, ["gpt-5.5"]),
       },
@@ -714,7 +713,6 @@ function buildGatewayModeConfig(params: { tempDir: string; providerBaseUrl: stri
     },
     talk: { agentId: defaultScenario.agentId },
     models: {
-      mode: "replace",
       providers: {
         "tui-pty-mock": buildMockModelProvider(
           params.providerBaseUrl,

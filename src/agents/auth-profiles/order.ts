@@ -3,10 +3,7 @@
  * Resolves configured/stored auth order, provider aliases, cooldowns, and
  * profile compatibility for provider auth selection.
  */
-import {
-  findNormalizedProviderValue,
-  normalizeProviderId,
-} from "@openclaw/model-catalog-core/provider-id";
+import { normalizeProviderId } from "@openclaw/model-catalog-core/provider-id";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import {
   type ProviderAuthAliasLookupParams,
@@ -107,35 +104,6 @@ function listProfilesCompatibleWithAuthProvider(params: {
     .map(([profileId]) => profileId);
 }
 
-/** Returns true when config declares an aws-sdk auth profile for a provider. */
-export function isConfiguredAwsSdkAuthProfileForProvider(params: {
-  cfg?: OpenClawConfig;
-  authAliasLookupParams?: ProviderAuthAliasLookupParams;
-  provider: string;
-  profileId: string;
-}): boolean {
-  const profileConfig = params.cfg?.auth?.profiles?.[params.profileId];
-  if (!profileConfig || profileConfig.mode !== "aws-sdk") {
-    return false;
-  }
-  const providerAuthKey = resolveProviderIdForAuth(params.provider, {
-    config: params.cfg,
-    ...params.authAliasLookupParams,
-  });
-  if (
-    resolveProviderIdForAuth(profileConfig.provider, {
-      config: params.cfg,
-      ...params.authAliasLookupParams,
-      storedCredential: true,
-    }) !== providerAuthKey
-  ) {
-    return false;
-  }
-  return (
-    findNormalizedProviderValue(params.cfg?.models?.providers, providerAuthKey)?.auth === "aws-sdk"
-  );
-}
-
 /** Resolves whether a profile can be used for a provider right now. */
 export function resolveAuthProfileEligibility(params: {
   cfg?: OpenClawConfig;
@@ -153,16 +121,6 @@ export function resolveAuthProfileEligibility(params: {
   });
   const cred = params.store.profiles[params.profileId];
   if (!cred) {
-    if (
-      isConfiguredAwsSdkAuthProfileForProvider({
-        cfg: params.cfg,
-        authAliasLookupParams: params.authAliasLookupParams,
-        provider: params.provider,
-        profileId: params.profileId,
-      })
-    ) {
-      return { eligible: true, reasonCode: "ok" };
-    }
     return { eligible: false, reasonCode: "profile_missing" };
   }
   if (!isSetupCredentialAccessible({ profileId: params.profileId, credential: cred })) {

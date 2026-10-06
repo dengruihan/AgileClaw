@@ -1,4 +1,3 @@
-import { raceWithTimeout } from "openclaw/plugin-sdk/time-runtime";
 import type { CodexCatalogPreviewCache } from "../session-catalog-native-projection.js";
 import type { resolveCodexAppServerAuthProfileIdForAgent } from "./auth-profile.js";
 import type { CodexAppServerClient } from "./client.js";
@@ -6,7 +5,6 @@ import type {
   CodexAppServerRequestMethod,
   CodexAppServerRequestParams,
   CodexAppServerRequestResult,
-  CodexGetAccountResponse,
   JsonValue,
 } from "./protocol.js";
 import { createCodexRequestTimeoutDiagnostics } from "./request-diagnostics.js";
@@ -123,7 +121,6 @@ type CodexAppServerJsonClientOptions = Pick<
   | "authProfileStore"
   | "authBindingFingerprint"
   | "preparedAuth"
-  | "authRequirement"
   | "agentDir"
   | "config"
 > & {
@@ -203,27 +200,14 @@ function assertRequestOwnerCurrent(assertCurrent?: () => void): void {
 }
 
 const CODEX_USAGE_ISOLATED_SHUTDOWN = { forceKillDelayMs: 200, exitTimeoutMs: 300 } as const;
-const CODEX_ACCOUNT_READ_MAX_TIMEOUT_MS = 4_000;
-const CODEX_ACCOUNT_READ_DEADLINE_MARGIN_MS = 250;
-const CODEX_USAGE_DEADLINE_RESERVE_MS =
-  CODEX_USAGE_ISOLATED_SHUTDOWN.forceKillDelayMs +
-  CODEX_USAGE_ISOLATED_SHUTDOWN.exitTimeoutMs +
-  CODEX_ACCOUNT_READ_DEADLINE_MARGIN_MS;
 
-/** Reads rate limits and best-effort account identity from one isolated app-server session. */
+/** Reads rate limits from one isolated app-server session. */
 export async function readCodexAppServerUsage(
   options: Pick<
     CodexAppServerJsonClientOptions,
-    | "signal"
-    | "agentDir"
-    | "config"
-    | "startOptions"
-    | "preparedAuth"
-    | "authRequirement"
-    | "assertCurrent"
+    "signal" | "agentDir" | "config" | "startOptions" | "preparedAuth" | "assertCurrent"
   > & { timeoutMs: number; authProfileId?: string },
-): Promise<{ rateLimits: JsonValue; accountEmail?: string }> {
-  const deadline = performance.now() + options.timeoutMs;
+): Promise<{ rateLimits: JsonValue }> {
   return await withCodexAppServerJsonClient(
     {
       timeoutMs: options.timeoutMs,
@@ -234,7 +218,6 @@ export async function readCodexAppServerUsage(
       config: options.config,
       startOptions: options.startOptions,
       preparedAuth: options.preparedAuth,
-      authRequirement: options.authRequirement,
       assertCurrent: options.assertCurrent,
       isolated: true,
       // A throwaway read-only child: bound shutdown inside the outer usage deadline.
@@ -242,28 +225,9 @@ export async function readCodexAppServerUsage(
     },
     async (request) => {
       const rateLimits = await request<JsonValue>({ method: "account/rateLimits/read" });
-      const accountEmail = await readCodexAccountEmailBestEffort(request, deadline);
-      return { rateLimits, ...(accountEmail ? { accountEmail } : {}) };
+      return { rateLimits };
     },
   );
-}
-
-async function readCodexAccountEmailBestEffort(
-  request: CodexAppServerScopedRequest,
-  deadline: number,
-): Promise<string | undefined> {
-  const boundMs = Math.min(
-    CODEX_ACCOUNT_READ_MAX_TIMEOUT_MS,
-    deadline - performance.now() - CODEX_USAGE_DEADLINE_RESERVE_MS,
-  );
-  if (boundMs <= 0) {
-    return undefined;
-  }
-  const read = request<CodexGetAccountResponse>({ method: "account/read", requestParams: {} }).then(
-    ({ account }) => (account?.type === "chatgpt" ? account.email?.trim() || undefined : undefined),
-    () => undefined,
-  );
-  return await raceWithTimeout(read, boundMs, () => undefined, { ref: false });
 }
 
 /**
@@ -349,7 +313,6 @@ export async function withCodexAppServerJsonClient<T>(
             authProfileStore: params.authProfileStore,
             authBindingFingerprint: params.authBindingFingerprint,
             preparedAuth: params.preparedAuth,
-            authRequirement: params.authRequirement,
             agentDir: params.agentDir,
             config: params.config,
             abandonSignal: timeoutController.signal,

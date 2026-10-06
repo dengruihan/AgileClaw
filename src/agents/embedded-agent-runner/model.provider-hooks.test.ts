@@ -135,7 +135,6 @@ describe("resolved model Tool Search policy", () => {
               baseUrl: "http://managed.example:8080/v1",
               api,
               models: [],
-              localService: { command: "/fixture/server" },
             },
           },
         },

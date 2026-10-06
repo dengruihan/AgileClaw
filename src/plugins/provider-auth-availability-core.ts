@@ -14,7 +14,6 @@ import {
   resolveUsableCustomProviderApiKey,
 } from "../agents/model-auth-provider-config.js";
 import { resolveManagedSecretRefRuntimeProviderAuth } from "../agents/model-auth-runtime-config.js";
-import { resolveDirectProviderCredentialMode } from "../agents/model-auth-runtime-shared.js";
 import { resolveMergedModelProviderConfig } from "../config/model-provider-config.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 
@@ -162,13 +161,7 @@ export function createProviderAuthAvailability(
       if (
         configured?.apiKey &&
         !isNonSecretApiKeyMarker(configured.apiKey) &&
-        allowsCredentialMode(
-          resolveDirectProviderCredentialMode({
-            cfg: params.cfg,
-            provider: params.provider,
-            inferredMode: "api-key",
-          }),
-        )
+        allowsCredentialMode("api-key")
       ) {
         return true;
       }

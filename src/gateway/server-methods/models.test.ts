@@ -14,7 +14,6 @@ import {
 import { testing as cliBackendsTesting } from "../../agents/cli-backends.test-support.js";
 import type { ModelCatalogEntry } from "../../agents/model-catalog.types.js";
 import type { PreparedModelRuntimeAuth } from "../../agents/prepared-model-runtime-auth.js";
-import { materializePreparedModelCatalog } from "../../agents/prepared-model-runtime.full-catalog.js";
 import { clearRuntimeConfigSnapshot, setRuntimeConfigSnapshot } from "../../config/config.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { loadManifestMetadataSnapshot } from "../../plugins/manifest-contract-eligibility.js";
@@ -150,6 +149,15 @@ function createDemoOAuthStore(params: { access: string; expires: number }) {
   };
 }
 
+/** Saved provider rows are the only runtime catalog membership source. */
+const demoProviderCatalog = {
+  models: {
+    providers: {
+      "demo-provider": { models: [{ id: "demo-model", name: "Demo Model" }] },
+    },
+  },
+} as unknown as OpenClawConfig;
+
 function catalogLoader(entries: Array<Record<string, unknown>>) {
   return vi.fn(async () => entries);
 }
@@ -278,6 +286,16 @@ describe("models.list", () => {
     async (id) => {
       const { request, respond } = requestModelsList({
         view: "all",
+        runtimeConfig: {
+          models: {
+            providers: {
+              proxy: {
+                api: "anthropic-messages",
+                models: [{ id, name: "Pooled Fable", reasoning: true }],
+              },
+            },
+          },
+        } as unknown as OpenClawConfig,
         loadGatewayModelCatalog: vi.fn(async () => [
           {
             id,
@@ -369,6 +387,16 @@ describe("models.list", () => {
     const { request, respond } = requestModelsList({
       view: "all",
       includeProviderCapabilities: true,
+      runtimeConfig: {
+        models: {
+          providers: {
+            anthropic: { models: [{ id: "claude-test", name: "Claude Test" }] },
+            "github-copilot": { models: [{ id: "copilot-test", name: "Copilot Test" }] },
+            "byteplus-plan": { models: [{ id: "byteplus-test", name: "BytePlus Plan Test" }] },
+            "custom-cloud": { models: [{ id: "custom-test", name: "Custom Test" }] },
+          },
+        },
+      } as unknown as OpenClawConfig,
       loadGatewayModelCatalog: catalogLoader([
         { id: "claude-test", name: "Claude Test", provider: "anthropic" },
         { id: "copilot-test", name: "Copilot Test", provider: "github-copilot" },
@@ -416,6 +444,21 @@ describe("models.list", () => {
               { agentRuntime: { id: "claude-cli" } },
             ]),
           ),
+        },
+      },
+      models: {
+        providers: {
+          anthropic: {
+            baseUrl: "https://api.anthropic.com",
+            models: modelIds.map((modelId) => ({
+              id: modelId,
+              name: modelId,
+              maxTokens: 8192,
+              input: ["text"],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              reasoning: true,
+            })),
+          },
         },
       },
     };
@@ -506,7 +549,7 @@ describe("models.list", () => {
     });
   });
 
-  it("preserves mandatory Claude CLI thinking despite a configured reasoning opt-out", async () => {
+  it("preserves mandatory Claude thinking despite a configured reasoning opt-out", async () => {
     const modelId = "claude-fable-5";
     const runtimeConfig = {
       agents: {
@@ -519,33 +562,18 @@ describe("models.list", () => {
       models: {
         providers: {
           anthropic: {
+            api: "anthropic-messages",
             models: [{ id: modelId, name: modelId, reasoning: false }],
           },
         },
       },
     } as unknown as OpenClawConfig;
-    const materializedCatalog = materializePreparedModelCatalog(
-      {
-        entries: [{ id: modelId, name: modelId, provider: "anthropic", reasoning: false }],
-        routeVariants: [],
-      },
-      [
-        {
-          provider: "anthropic",
-          modelId,
-          model: {
-            id: modelId,
-            name: `${modelId} (Claude CLI)`,
-            provider: "claude-cli",
-            reasoning: true,
-          } as never,
-        },
-      ],
-    ).entries;
     const { request, respond } = requestModelsList({
       view: "configured",
       runtimeConfig,
-      loadGatewayModelCatalog: catalogLoader(materializedCatalog),
+      loadGatewayModelCatalog: catalogLoader([
+        { id: modelId, name: modelId, provider: "anthropic", reasoning: false },
+      ]),
     });
 
     await request;
@@ -559,16 +587,14 @@ describe("models.list", () => {
       reasoning: false,
       agentRuntime: { id: "claude-cli" },
       thinkingLevels: [
-        { id: "minimal", label: "minimal" },
         { id: "low", label: "low" },
         { id: "medium", label: "medium" },
-        { id: "adaptive", label: "adaptive" },
         { id: "high", label: "high" },
         { id: "xhigh", label: "xhigh" },
         { id: "max", label: "max" },
         { id: "ultra", label: "ultra" },
       ],
-      thinkingDefault: "high",
+      thinkingDefault: "medium",
     });
   });
 
@@ -588,7 +614,9 @@ describe("models.list", () => {
       },
       models: {
         providers: {
-          anthropic: { models: modelIds.map((id) => ({ id, name: id })) },
+          anthropic: {
+            models: modelIds.map((id) => ({ id, name: id, reasoning: true })),
+          },
         },
       },
     } as unknown as OpenClawConfig;
@@ -622,7 +650,7 @@ describe("models.list", () => {
     }
   });
 
-  it("publishes the concrete Claude CLI thinking policy for a configured logical model", async () => {
+  it("publishes the concrete Claude thinking policy for a configured logical model", async () => {
     const modelId = "claude-mythos-5";
     const runtimeConfig = {
       agents: {
@@ -635,32 +663,19 @@ describe("models.list", () => {
       },
       models: {
         providers: {
-          anthropic: { models: [{ id: modelId, name: "Claude Mythos 5" }] },
+          anthropic: {
+            api: "anthropic-messages",
+            models: [{ id: modelId, name: "Claude Mythos 5", reasoning: true }],
+          },
         },
       },
     } as unknown as OpenClawConfig;
-    const materializedCatalog = materializePreparedModelCatalog(
-      {
-        entries: [{ id: modelId, name: "Claude Mythos 5", provider: "anthropic" }],
-        routeVariants: [],
-      },
-      [
-        {
-          provider: "anthropic",
-          modelId,
-          model: {
-            id: modelId,
-            name: "Claude Mythos 5 (Claude CLI)",
-            provider: "claude-cli",
-            reasoning: true,
-          } as never,
-        },
-      ],
-    ).entries;
     const { request, respond } = requestModelsList({
       view: "configured",
       runtimeConfig,
-      loadGatewayModelCatalog: catalogLoader(materializedCatalog),
+      loadGatewayModelCatalog: catalogLoader([
+        { id: modelId, name: "Claude Mythos 5", provider: "anthropic", reasoning: true },
+      ]),
     });
 
     await request;
@@ -676,10 +691,14 @@ describe("models.list", () => {
       reasoning: true,
       agentRuntime: { id: "claude-cli" },
       thinkingLevels: [
-        { id: "off", label: "off" },
+        { id: "low", label: "low" },
+        { id: "medium", label: "medium" },
+        { id: "high", label: "high" },
+        { id: "xhigh", label: "xhigh" },
+        { id: "max", label: "max" },
         { id: "ultra", label: "ultra" },
       ],
-      thinkingDefault: "off",
+      thinkingDefault: "high",
     });
     expect(model).not.toHaveProperty("thinkingPolicyProvider");
   });
@@ -779,7 +798,9 @@ describe("models.list", () => {
                 { id: "high", label: "high" },
                 { id: "ultra", label: "ultra" },
               ],
-              thinkingDefault: "medium",
+              // The runtime catalog owns thinking defaults; a source-authored row
+              // absent from it resolves no configured default.
+              thinkingDefault: "off",
             },
           ],
         },
@@ -895,6 +916,7 @@ describe("models.list", () => {
               },
               available: false,
               unavailableReason: "missing-auth",
+              supportsFastMode: false,
               tags: ["default"],
             },
           ],
@@ -949,6 +971,7 @@ describe("models.list", () => {
               },
               available: false,
               unavailableReason: "missing-auth",
+              supportsFastMode: false,
               tags: ["default"],
             },
           ],
@@ -1111,6 +1134,16 @@ describe("models.list", () => {
       try {
         const { request, respond } = requestModelsList({
           view: "all",
+          runtimeConfig: {
+            models: {
+              providers: {
+                openai: {
+                  baseUrl: "https://openai.example.com",
+                  models: [{ id: "gpt-test", name: "GPT Test" }],
+                },
+              },
+            },
+          } as unknown as OpenClawConfig,
           loadGatewayModelCatalog,
         });
 
@@ -1121,6 +1154,8 @@ describe("models.list", () => {
         await vi.runAllTimersAsync();
         await request;
 
+        // The saved provider row carries its custom baseUrl, so the openclaw
+        // runtime serves the row instead of the default Codex API route.
         expect(respond).toHaveBeenCalledWith(
           true,
           {
@@ -1130,12 +1165,17 @@ describe("models.list", () => {
                 name: "GPT Test",
                 provider: "openai",
                 agentRuntime: {
-                  id: "codex",
-                  cloudPlacementSupported: false,
-                  devicePlacementSupported: false,
+                  id: "openclaw",
+                  cloudPlacementSupported: true,
+                  cloudPlacementExecutionMode: "worker-turn",
+                  devicePlacement: OPENCLAW_DEVICE_PLACEMENT,
+                  devicePlacementSupported: true,
                   source: "implicit",
                 },
                 available: false,
+                unavailableReason: "missing-auth",
+                supportsFastMode: false,
+                tags: ["default"],
               },
             ],
           },
@@ -1170,12 +1210,23 @@ describe("models.list", () => {
         },
         models: {
           providers: {
+            anthropic: { models: [{ id: "claude-test", name: "Claude Test" }] },
             openai: {
               api: "openai-responses",
               apiKey: "test-key",
               baseUrl: "https://api.openai.com/v1",
+              models: [
+                { id: "gpt-5.4-codex", name: "GPT-5.4 Codex" },
+                { id: "gpt-codex-test", name: "GPT Codex Test" },
+              ],
             },
-            vllm: { apiKey: "test-key" },
+            vllm: {
+              apiKey: "test-key",
+              models: [
+                { id: "llama-local", name: "Llama Local" },
+                { id: "qwen-local", name: "Qwen Local" },
+              ],
+            },
           },
         },
       } as unknown as OpenClawConfig;
@@ -1244,6 +1295,8 @@ describe("models.list", () => {
               provider: "anthropic",
               available: false,
               unavailableReason: "missing-auth",
+              // First saved provider row is the resolved default primary.
+              tags: ["default"],
             },
             {
               id: "gpt-5.4",
@@ -1308,7 +1361,14 @@ describe("models.list", () => {
                 vllm: {
                   api: "openai-completions",
                   baseUrl: "http://127.0.0.1:8000/v1",
-                  models: [{ id: "llama-configured", name: "Llama Configured" }],
+                  models: [
+                    { id: "llama-configured", name: "Llama Configured" },
+                    {
+                      id: "llama-discovered",
+                      name: "Llama Discovered",
+                      metadataSource: "provider-discovery",
+                    },
+                  ],
                 },
               },
             },
@@ -1346,60 +1406,6 @@ describe("models.list", () => {
     });
   });
 
-  it("marks legacy OpenAI Codex aliases available through ChatGPT OAuth", async () => {
-    await withoutOpenAIEnvAuth(async () => {
-      await withModelsTestState({}, async (state) => {
-        await state.writeAuthProfiles({
-          version: 1,
-          profiles: {
-            "openai:chatgpt": {
-              type: "oauth",
-              provider: "openai",
-              access: "chatgpt-access",
-              refresh: "chatgpt-refresh",
-              expires: Date.now() + 30 * 60_000,
-            },
-          },
-        });
-
-        const { request, respond } = requestModelsList({
-          view: "all",
-          loadGatewayModelCatalog: catalogLoader([
-            {
-              id: "gpt-5.4-codex",
-              name: "GPT-5.4 Codex",
-              provider: "openai",
-              api: "openai-responses",
-              baseUrl: "https://api.openai.com/v1",
-            },
-          ]),
-        });
-        await request;
-
-        expect(respond).toHaveBeenCalledWith(
-          true,
-          {
-            models: [
-              {
-                id: "gpt-5.4",
-                name: "GPT-5.4 Codex",
-                provider: "openai",
-                agentRuntime: {
-                  id: "codex",
-                  cloudPlacementSupported: false,
-                  devicePlacementSupported: false,
-                  source: "implicit",
-                },
-                available: true,
-              },
-            ],
-          },
-          undefined,
-        );
-      });
-    });
-  });
-
   it.each([
     { authenticated: true, available: true, catalogComplete: false },
     { authenticated: false, available: false, catalogComplete: false },
@@ -1421,6 +1427,13 @@ describe("models.list", () => {
                     "anthropic/claude-opus-4-8": {
                       agentRuntime: { id: "claude-cli" },
                     },
+                  },
+                },
+              },
+              models: {
+                providers: {
+                  anthropic: {
+                    models: [{ id: "claude-opus-4-8", name: "Claude Opus 4.8" }],
                   },
                 },
               },
@@ -1455,7 +1468,7 @@ describe("models.list", () => {
                       source: "model",
                     },
                     available,
-                    tags: ["configured"],
+                    tags: ["default", "configured"],
                     ...(!authenticated && catalogComplete
                       ? { unavailableReason: "missing-auth" }
                       : {}),
@@ -1499,6 +1512,7 @@ describe("models.list", () => {
               provider: "mounted-json",
               id: "/providers/vllm/apiKey",
             },
+            models: [{ id: "llama-secure", name: "Llama Secure" }],
           },
         },
       },
@@ -1514,7 +1528,15 @@ describe("models.list", () => {
     expect(respond).toHaveBeenCalledWith(
       true,
       {
-        models: [{ id: "llama-secure", name: "Llama Secure", provider: "vllm", available: false }],
+        models: [
+          {
+            id: "llama-secure",
+            name: "Llama Secure",
+            provider: "vllm",
+            available: false,
+            tags: ["default"],
+          },
+        ],
       },
       undefined,
     );
@@ -1534,6 +1556,7 @@ describe("models.list", () => {
         providers: {
           vllm: {
             apiKey: "secretref-managed",
+            models: [{ id: "llama-managed", name: "Llama Managed" }],
           },
         },
       },
@@ -1550,7 +1573,13 @@ describe("models.list", () => {
       true,
       {
         models: [
-          { id: "llama-managed", name: "Llama Managed", provider: "vllm", available: false },
+          {
+            id: "llama-managed",
+            name: "Llama Managed",
+            provider: "vllm",
+            available: false,
+            tags: ["default"],
+          },
         ],
       },
       undefined,
@@ -1586,7 +1615,16 @@ describe("models.list", () => {
               provider: "mounted-json",
               id: "/providers/vllm/apiKey",
             },
-            models: [],
+            models: [
+              {
+                id: "llama-secure",
+                name: "Llama Secure",
+                maxTokens: 8192,
+                input: ["text"],
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                reasoning: false,
+              },
+            ],
           },
         },
       },
@@ -1622,7 +1660,19 @@ describe("models.list", () => {
           true,
           {
             models: [
-              { id: "llama-secure", name: "Llama Secure", provider: "vllm", available: true },
+              {
+                id: "llama-secure",
+                name: "Llama Secure",
+                provider: "vllm",
+                available: true,
+                reasoning: false,
+                tags: ["default"],
+                thinkingDefault: "off",
+                thinkingLevels: [
+                  { id: "off", label: "off" },
+                  { id: "ultra", label: "ultra" },
+                ],
+              },
             ],
           },
           undefined,
@@ -1644,6 +1694,7 @@ describe("models.list", () => {
 
       const { request, respond } = requestModelsList({
         view: "all",
+        runtimeConfig: demoProviderCatalog,
         loadGatewayModelCatalog: catalogLoader([
           { id: "demo-model", name: "Demo Model", provider: "demo-provider" },
         ]),
@@ -1659,6 +1710,8 @@ describe("models.list", () => {
               name: "Demo Model",
               provider: "demo-provider",
               available: false,
+              unavailableReason: "auth-failed",
+              tags: ["default"],
             },
           ],
         },
@@ -1689,6 +1742,7 @@ describe("models.list", () => {
       try {
         const { request, respond } = requestModelsList({
           view: "all",
+          runtimeConfig: demoProviderCatalog,
           loadGatewayModelCatalog: catalogLoader([
             { id: "demo-model", name: "Demo Model", provider: "demo-provider" },
           ]),
@@ -1704,6 +1758,8 @@ describe("models.list", () => {
                 name: "Demo Model",
                 provider: "demo-provider",
                 available: false,
+                unavailableReason: "auth-failed",
+                tags: ["default"],
               },
             ],
           },
@@ -1715,7 +1771,7 @@ describe("models.list", () => {
     });
   });
 
-  it("marks env SecretRef-backed auth profiles available", async () => {
+  it("does not mark models available from env SecretRef token profiles", async () => {
     await withModelsTestState(
       {
         env: {
@@ -1741,12 +1797,14 @@ describe("models.list", () => {
 
         const { request, respond } = requestModelsList({
           view: "all",
+          runtimeConfig: demoProviderCatalog,
           loadGatewayModelCatalog: catalogLoader([
             { id: "demo-model", name: "Demo Model", provider: "demo-provider" },
           ]),
         });
         await request;
 
+        // Model inference only accepts API keys; a resolved token stays unusable.
         expect(respond).toHaveBeenCalledWith(
           true,
           {
@@ -1755,7 +1813,9 @@ describe("models.list", () => {
                 id: "demo-model",
                 name: "Demo Model",
                 provider: "demo-provider",
-                available: true,
+                available: false,
+                unavailableReason: "auth-failed",
+                tags: ["default"],
               },
             ],
           },
@@ -1765,7 +1825,7 @@ describe("models.list", () => {
     );
   });
 
-  it("keeps non-env SecretRef-backed auth profile availability unknown", async () => {
+  it("does not mark models available from file SecretRef token profiles", async () => {
     await withModelsTestState({}, async (state) => {
       await state.writeAuthProfiles({
         version: 1,
@@ -1795,7 +1855,12 @@ describe("models.list", () => {
               },
             },
           },
-        } as OpenClawConfig,
+          models: {
+            providers: {
+              "demo-provider": { models: [{ id: "demo-model", name: "Demo Model" }] },
+            },
+          },
+        } as unknown as OpenClawConfig,
         loadGatewayModelCatalog: catalogLoader([
           { id: "demo-model", name: "Demo Model", provider: "demo-provider" },
         ]),
@@ -1811,6 +1876,8 @@ describe("models.list", () => {
               name: "Demo Model",
               provider: "demo-provider",
               available: false,
+              unavailableReason: "auth-failed",
+              tags: ["default"],
             },
           ],
         },
@@ -1831,7 +1898,7 @@ describe("models.list", () => {
               api: "openai-responses",
               baseUrl: "https://cliproxy.example/v1",
               apiKey: "sk-inline-cooldown", // pragma: allowlist secret
-              models: [],
+              models: [{ id: "qwen-remote", name: "Qwen Remote" }],
             },
           },
         },
@@ -1868,6 +1935,7 @@ describe("models.list", () => {
               available: false,
               unavailableReason: "cooldown",
               unavailableUntil: billingCooldownUntil,
+              tags: ["default"],
             },
           ],
         },
@@ -1887,84 +1955,17 @@ describe("models.list", () => {
         true,
         {
           models: [
-            { id: "qwen-remote", name: "Qwen Remote", provider: "cliproxyapi", available: true },
+            {
+              id: "qwen-remote",
+              name: "Qwen Remote",
+              provider: "cliproxyapi",
+              available: true,
+              tags: ["default"],
+            },
           ],
         },
         undefined,
       );
-    });
-  });
-
-  it("uses an exact hydrated runtime profile SecretRef as read-only proof", async () => {
-    await withModelsTestState({}, async (state) => {
-      const tokenRef = {
-        source: "file" as const,
-        provider: "mounted-json",
-        id: "/providers/demo/token",
-      };
-      const persisted = {
-        version: 1 as const,
-        profiles: {
-          "demo-provider:file": {
-            type: "token" as const,
-            provider: "demo-provider",
-            tokenRef,
-            expires: Date.now() + 10 * 60_000,
-          },
-        },
-      };
-      await state.writeAuthProfiles(persisted);
-      replaceRuntimeAuthProfileStoreSnapshots([
-        {
-          agentDir: state.agentDir(),
-          store: {
-            ...persisted,
-            profiles: {
-              "demo-provider:file": {
-                ...persisted.profiles["demo-provider:file"],
-                token: "resolved-runtime-token",
-              },
-            },
-          },
-        },
-      ]);
-      try {
-        const { request, respond } = requestModelsList({
-          view: "all",
-          runtimeConfig: {
-            secrets: {
-              providers: {
-                "mounted-json": {
-                  source: "file",
-                  path: "/tmp/openclaw-test-secrets.json",
-                  mode: "json",
-                },
-              },
-            },
-          } as OpenClawConfig,
-          loadGatewayModelCatalog: catalogLoader([
-            { id: "demo-model", name: "Demo Model", provider: "demo-provider" },
-          ]),
-        });
-        await request;
-
-        expect(respond).toHaveBeenCalledWith(
-          true,
-          {
-            models: [
-              {
-                id: "demo-model",
-                name: "Demo Model",
-                provider: "demo-provider",
-                available: true,
-              },
-            ],
-          },
-          undefined,
-        );
-      } finally {
-        clearRuntimeAuthProfileStoreSnapshots();
-      }
     });
   });
 
@@ -2034,6 +2035,7 @@ describe("models.list", () => {
             providers: {
               vllm: {
                 apiKey: fixture.apiKey,
+                models: [{ id: "llama-secure", name: "Llama Secure" }],
               },
             },
           },
@@ -2061,6 +2063,7 @@ describe("models.list", () => {
                 ...(fixture.unavailableReason
                   ? { unavailableReason: fixture.unavailableReason }
                   : {}),
+                tags: ["default"],
               },
             ],
           },
@@ -2073,6 +2076,7 @@ describe("models.list", () => {
   it("projects only public model fields", async () => {
     const { request, respond } = requestModelsList({
       view: "all",
+      runtimeConfig: demoProviderCatalog,
       loadGatewayModelCatalog: catalogLoader([
         {
           id: "demo-model",
@@ -2100,6 +2104,7 @@ describe("models.list", () => {
             provider: "demo-provider",
             available: false,
             unavailableReason: "missing-auth",
+            tags: ["default"],
           },
         ],
       },
@@ -2110,6 +2115,25 @@ describe("models.list", () => {
   it("projects ordered thinking profiles without exposing raw compatibility metadata", async () => {
     const { request, respond } = requestModelsList({
       view: "all",
+      runtimeConfig: {
+        models: {
+          providers: {
+            "demo-provider": {
+              models: [
+                {
+                  id: "reasoning-model",
+                  name: "Reasoning Model",
+                  reasoning: true,
+                  compat: {
+                    supportedReasoningEfforts: ["max", "xhigh"],
+                    privateRouteHint: "do-not-publish",
+                  },
+                },
+              ],
+            },
+          },
+        },
+      } as unknown as OpenClawConfig,
       loadGatewayModelCatalog: catalogLoader([
         {
           id: "reasoning-model",
@@ -2168,7 +2192,12 @@ describe("models.list", () => {
             main: agentDefault === undefined ? {} : { fastModeDefault: agentDefault },
           },
         },
-      },
+        models: {
+          providers: {
+            openai: { models: [{ id: "gpt-5.6-luna", name: "GPT-5.6 Luna" }] },
+          },
+        },
+      } as unknown as OpenClawConfig,
       loadGatewayModelCatalog: catalogLoader([
         { id: "gpt-5.6-luna", name: "GPT-5.6 Luna", provider: "openai" },
       ]),
@@ -2182,6 +2211,22 @@ describe("models.list", () => {
   it("does not reinterpret context tokens or expose model input metadata", async () => {
     const { request, respond } = requestModelsList({
       view: "all",
+      runtimeConfig: {
+        models: {
+          providers: {
+            "demo-provider": {
+              models: [
+                {
+                  id: "vision-model",
+                  name: "Vision Model",
+                  contextWindow: 128_000,
+                  input: ["text", "image", "private-runtime-capability", "image"],
+                },
+              ],
+            },
+          },
+        },
+      } as unknown as OpenClawConfig,
       loadGatewayModelCatalog: catalogLoader([
         {
           id: "vision-model",
@@ -2206,6 +2251,7 @@ describe("models.list", () => {
             available: false,
             unavailableReason: "missing-auth",
             contextWindow: 128_000,
+            tags: ["default"],
           },
         ],
       },

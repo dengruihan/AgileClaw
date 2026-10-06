@@ -28,7 +28,6 @@ export function createMockQaProviderDefinition(
     }),
     resolveTurnTimeoutMs: ({ fallbackMs }) => fallbackMs,
     buildGatewayModels: ({ providerBaseUrl, primaryModel, alternateModel }) => ({
-      mode: "replace",
       providers: createMockProviderMap(params.mode, providerBaseUrl, [
         primaryModel,
         alternateModel,

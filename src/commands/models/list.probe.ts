@@ -230,7 +230,6 @@ function withDirectCredential(
   cfg: OpenClawConfig,
   provider: string,
   value: string,
-  mode: string | undefined,
 ): OpenClawConfig {
   const providers = cfg.models?.providers ?? {};
   const configuredEntry = resolveMergedModelProviderEntry(cfg, provider);
@@ -239,7 +238,7 @@ function withDirectCredential(
   if (!configured) {
     return withoutProfileFallback(cfg, provider);
   }
-  const auth = mode === "oauth" || mode === "token" ? mode : "api-key";
+  const auth = "api-key";
   const next: OpenClawConfig = {
     ...cfg,
     models: {
@@ -447,10 +446,7 @@ export async function buildProbeTargets(params: {
               cache: refResolveCache,
             })
         : null;
-    const configuredMode =
-      configuredProvider?.auth === "oauth" || configuredProvider?.auth === "token"
-        ? configuredProvider.auth
-        : "api_key";
+    const configuredMode = "api_key";
     const resolvedEnvironmentValue =
       includeDirectKeys && !hasConfiguredProviderSecretRef
         ? resolveEnvApiKey(authProviderKey, process.env, {
@@ -535,16 +531,10 @@ export async function buildProbeTargets(params: {
         }
       }
       if (environmentValue) {
-        // Honor an explicit provider auth override (token/oauth) the way normal
-        // dispatch does; only fall back to the env-name heuristic when the
-        // provider does not pin a mode, so a token-auth provider fed by a
-        // *_API_KEY var is not misprobed as api-key and falsely failed.
-        const mode =
-          configuredProvider?.auth === "oauth" || configuredProvider?.auth === "token"
-            ? configuredProvider.auth
-            : environmentValue.source.includes("OAUTH_TOKEN")
-              ? "oauth"
-              : "api_key";
+        // Only the env-name heuristic distinguishes credential modes now that the
+        // provider auth slot is API-key only, so a token-fed *_API_KEY var is
+        // not misprobed as api-key and falsely failed.
+        const mode = environmentValue.source.includes("OAUTH_TOKEN") ? "oauth" : "api_key";
         appendTarget({
           provider: providerKey,
           model,
@@ -709,7 +699,7 @@ async function probeTarget(params: {
     ? withoutProfileFallback(cfg, target.provider)
     : !target.boundValue
       ? cfg
-      : withDirectCredential(cfg, target.provider, target.boundValue, target.mode);
+      : withDirectCredential(cfg, target.provider, target.boundValue);
   if (!target.model) {
     return buildNoModelProbeResult(target);
   }

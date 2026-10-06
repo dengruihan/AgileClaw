@@ -41,25 +41,16 @@ For local execution, use [`exec`](/tools/exec) instead.
 
 <Steps>
   <Step title="Provide xAI credentials">
-    OAuth requires an eligible SuperGrok or X Premium subscription
-    (device-code verification, so it works from remote hosts without a
-    localhost callback):
+    Use an xAI API key, either in the Gateway environment:
 
     ```bash
-    openclaw models auth login --provider xai --method oauth
-    ```
-
-    During a fresh install, the same choice is available in onboarding:
-
-    ```bash
-    openclaw onboard --install-daemon --auth-choice xai-oauth
-    ```
-
-    Or an API key:
-
-    ```bash
-    openclaw models auth login --provider xai --method api-key
     export XAI_API_KEY=xai-...
+    ```
+
+    Or saved for the selected agent:
+
+    ```bash
+    openclaw models auth paste-api-key --provider xai
     ```
 
     Or via config:
@@ -80,7 +71,7 @@ For local execution, use [`exec`](/tools/exec) instead.
     }
     ```
 
-    Any of these three also power `x_search` and Grok `web_search`.
+    Any of these three also powers `x_search` and Grok `web_search`.
 
   </Step>
 

@@ -1,11 +1,11 @@
 import { findNormalizedProviderValue } from "@openclaw/model-catalog-core/provider-id";
 // Resolves model suppression metadata declared by plugin manifests.
 import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
+import type { ModelApi } from "../config/model-config-vocabulary.js";
 import {
   findConfiguredProviderModel,
   projectModelProviderConfig,
 } from "../config/model-provider-config.js";
-import type { ModelProviderConfig } from "../config/types.models.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import {
   planManifestModelCatalogSuppressions,
@@ -109,7 +109,7 @@ function manifestSuppressionMatchesConditions(params: {
   suppression: PreparedManifestSuppression;
   provider: string;
   baseUrl?: string | null;
-  api?: ModelProviderConfig["api"];
+  api?: ModelApi;
   config?: OpenClawConfig;
 }): boolean {
   const { entry, allowedApis, allowedHosts } = params.suppression;
@@ -219,7 +219,7 @@ export function buildManifestBuiltInModelSuppressionResolver(params: {
     id: string,
     baseUrl: string | null | undefined,
     config: OpenClawConfig | undefined,
-    api?: ModelProviderConfig["api"],
+    api?: ModelApi,
   ) => {
     if (!baseUrl || declaredProviders.has(provider)) {
       return undefined;

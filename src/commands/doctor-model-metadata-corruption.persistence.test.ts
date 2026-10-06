@@ -32,7 +32,7 @@ describe("Doctor model metadata corruption persistence", () => {
             models: {
               providers: {
                 openai: {
-                  api: "openai-chatgpt-responses",
+                  api: "openai-responses",
                   baseUrl: "https://chatgpt.com/backend-api/codex",
                   models: [
                     {
@@ -44,7 +44,7 @@ describe("Doctor model metadata corruption persistence", () => {
                       input: ["text"],
                       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
                       maxTokens: 8192,
-                      api: "openai-chatgpt-responses",
+                      api: "openai-responses",
                     },
                   ],
                 },
@@ -107,7 +107,7 @@ describe("Doctor model metadata corruption persistence", () => {
           expect(saved.models.providers.openai.models[0]).toMatchObject({
             id: "gpt-5.6-sol",
             name: "gpt-5.6-sol",
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
             contextWindow: 272_000,
             contextTokens: 272_000,
           });

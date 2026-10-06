@@ -33,8 +33,6 @@ import {
   readResponseTextLimited,
   summarizeProviderTransportError,
 } from "./provider-http-errors.js";
-import type { ProviderLocalServiceLease } from "./provider-local-service-target.js";
-import { ensureModelProviderLocalService } from "./provider-local-service.js";
 import {
   buildProviderRequestDispatcherPolicy,
   getModelProviderRequestRouteFacts,
@@ -359,7 +357,6 @@ async function normalizeOpenAISdkStreamContentType(params: {
   response: Response;
   model: Model;
   release: () => Promise<void>;
-  localServiceLease?: ProviderLocalServiceLease;
 }): Promise<Response> {
   const contentType = params.response.headers.get("content-type") ?? "";
   if (!params.response.ok || !params.response.body) {
@@ -387,7 +384,6 @@ async function normalizeOpenAISdkStreamContentType(params: {
   }
   const body = await readResponseTextLimited(params.response).catch(() => "");
   await params.release().catch(() => undefined);
-  params.localServiceLease?.release();
   const hint =
     "OpenAI-compatible streamed responses must be text/event-stream or JSON; got " +
     `${contentType || "missing content-type"}. Check the provider baseUrl; ` +
@@ -446,25 +442,15 @@ function buildManagedResponse(
   response: Response,
   release: () => Promise<void>,
   refreshTimeout?: () => void,
-  localServiceLease?: ProviderLocalServiceLease,
 ): Response {
-  const finalizeLocalServiceLease = () => {
-    localServiceLease?.release();
-  };
   if (!response.body) {
-    void release().finally(finalizeLocalServiceLease);
+    void release();
     return response;
   }
   const wrappedBody = wrapGuardedBodyStream({
     body: response.body,
     // Lease release must survive a failed guard release so local services do not leak.
-    cleanup: async () => {
-      try {
-        await release().catch(() => undefined);
-      } finally {
-        finalizeLocalServiceLease();
-      }
-    },
+    cleanup: () => release().catch(() => undefined),
     refreshTimeout,
   });
   return new Response(wrappedBody, response);
@@ -505,20 +491,6 @@ export function resolveModelRequestTimeoutMs(
       ? (model as { requestTimeoutMs?: unknown }).requestTimeoutMs
       : timeoutMs,
   );
-}
-
-function buildModelRequestSignal(
-  baseSignal: AbortSignal | undefined,
-  timeoutMs: number | undefined,
-): AbortSignal | undefined {
-  if (timeoutMs === undefined) {
-    return baseSignal;
-  }
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  if (!baseSignal) {
-    return timeoutSignal;
-  }
-  return AbortSignal.any([baseSignal, timeoutSignal]);
 }
 
 function resolveHttpOrigin(value: unknown): string | undefined {
@@ -643,7 +615,6 @@ export function buildGuardedModelFetch(
   const dispatcherPolicy = buildProviderRequestDispatcherPolicy(requestConfig);
   const requestTimeoutMs = resolveModelRequestTimeoutMs(model, timeoutMs);
   return async (input, init) => {
-    let localServiceLease: ProviderLocalServiceLease | undefined;
     const request = input instanceof Request ? new Request(input, init) : undefined;
     const rawUrl =
       request?.url ??
@@ -682,7 +653,6 @@ export function buildGuardedModelFetch(
       requestInit ??
       (swappedEgress.headers && init ? { ...init, headers: swappedEgress.headers } : init);
     const baseSignal = baseInit?.signal ?? undefined;
-    const localServiceSignal = buildModelRequestSignal(baseSignal, requestTimeoutMs);
     const guardedFetchOptions = {
       url,
       init: baseInit,
@@ -714,11 +684,6 @@ export function buildGuardedModelFetch(
         `policy=${policy ? "custom" : "default"}`,
     );
     try {
-      localServiceLease = await ensureModelProviderLocalService(
-        model,
-        rawHeaders,
-        localServiceSignal,
-      );
       result = await fetchWithSsrFGuard(
         useEnvProxy
           ? withTrustedEnvProxyGuardedFetchMode(guardedFetchOptions)
@@ -734,7 +699,6 @@ export function buildGuardedModelFetch(
         `[model-fetch] error provider=${model.provider} api=${model.api} model=${model.id} ` +
           `elapsedMs=${Date.now() - fetchStartedAt} ${summarizeProviderTransportError(remediatedError)}`,
       );
-      localServiceLease?.release();
       throw remediatedError;
     }
     let response = result.response;
@@ -767,15 +731,9 @@ export function buildGuardedModelFetch(
         response,
         model,
         release: result.release,
-        localServiceLease,
       });
     }
-    response = buildManagedResponse(
-      response,
-      result.release,
-      result.refreshTimeout,
-      localServiceLease,
-    );
+    response = buildManagedResponse(response, result.release, result.refreshTimeout);
     return options?.sanitizeSse === false || !shouldSanitizeOpenAISdkSseResponse(model)
       ? response
       : sanitizeOpenAISdkSseResponse(response, { synthesizeJsonAsSse });

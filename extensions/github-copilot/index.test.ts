@@ -8,7 +8,7 @@ import {
   ensureAuthProfileStore,
   saveAuthProfileStore,
 } from "openclaw/plugin-sdk/agent-runtime";
-import { MAX_DATE_TIMESTAMP_MS, MAX_TIMER_TIMEOUT_MS } from "openclaw/plugin-sdk/number-runtime";
+import { MAX_DATE_TIMESTAMP_MS } from "openclaw/plugin-sdk/number-runtime";
 import type {
   OpenClawConfig,
   OpenClawPluginApi,
@@ -18,7 +18,6 @@ import { createTestPluginApi } from "openclaw/plugin-sdk/plugin-test-api";
 import type { fetchWithSsrFGuard } from "openclaw/plugin-sdk/ssrf-runtime";
 import { markdownToIR } from "openclaw/plugin-sdk/text-chunking";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
-import { runGitHubCopilotDeviceFlow } from "./login.js";
 import manifest from "./openclaw.plugin.json" with { type: "json" };
 import { CopilotRuntimeAuthError } from "./runtime-auth-error.js";
 
@@ -1429,150 +1428,6 @@ describe("github-copilot plugin", () => {
     expect(result?.configPatch?.models?.providers?.["github-copilot"]?.params?.githubDomain).toBe(
       "acme.ghe.com",
     );
-  });
-
-  it("rejects unsafe GitHub device code lifetimes before polling", async () => {
-    const release = vi.fn(async () => {});
-    mocks.fetchWithSsrFGuard.mockImplementation(async () => ({
-      response: new Response(
-        '{"device_code":"device-code-stub","user_code":"ABCD-1234","verification_uri":"https://github.com/login/device","expires_in":1e309,"interval":0}',
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-      finalUrl: "https://github.com/login/device/code",
-      release,
-    }));
-
-    const showCode = vi.fn();
-    await expect(runGitHubCopilotDeviceFlow({ showCode })).rejects.toThrow(
-      "GitHub device code response missing fields",
-    );
-    expect(showCode).not.toHaveBeenCalled();
-    expect(release).toHaveBeenCalledTimes(1);
-  });
-
-  it("rejects GitHub device code expiries outside the Date timestamp range before polling", async () => {
-    const release = vi.fn(async () => {});
-    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(MAX_DATE_TIMESTAMP_MS);
-    mocks.fetchWithSsrFGuard.mockImplementation(async () => ({
-      response: new Response(
-        '{"device_code":"device-code-stub","user_code":"ABCD-1234","verification_uri":"https://github.com/login/device","expires_in":1,"interval":0}',
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-      finalUrl: "https://github.com/login/device/code",
-      release,
-    }));
-
-    const showCode = vi.fn();
-    try {
-      await expect(runGitHubCopilotDeviceFlow({ showCode })).rejects.toThrow(
-        "GitHub device code response missing fields",
-      );
-    } finally {
-      nowSpy.mockRestore();
-    }
-    expect(showCode).not.toHaveBeenCalled();
-    expect(release).toHaveBeenCalledTimes(1);
-  });
-
-  it("bounds oversized GitHub device polling intervals before waiting", async () => {
-    vi.useFakeTimers();
-    try {
-      const release = vi.fn(async () => {});
-      const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
-      let accessTokenPolls = 0;
-      mocks.fetchWithSsrFGuard.mockImplementation(async (params) => {
-        if (params.url === "https://github.com/login/device/code") {
-          return {
-            response: new Response(
-              '{"device_code":"device-code-stub","user_code":"ABCD-1234","verification_uri":"https://github.com/login/device","expires_in":3000010,"interval":3000000}',
-              { status: 200, headers: { "Content-Type": "application/json" } },
-            ),
-            finalUrl: params.url,
-            release,
-          };
-        }
-        accessTokenPolls += 1;
-        return {
-          response: Response.json({ access_token: "refreshed-token", token_type: "bearer" }),
-          finalUrl: params.url,
-          release,
-        };
-      });
-
-      const flow = runGitHubCopilotDeviceFlow({ showCode: vi.fn(async () => {}) });
-      await vi.waitFor(() =>
-        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), MAX_TIMER_TIMEOUT_MS),
-      );
-      await vi.advanceTimersByTimeAsync(MAX_TIMER_TIMEOUT_MS);
-      expect(accessTokenPolls).toBe(0);
-
-      await vi.advanceTimersByTimeAsync(3_000_000_000 - MAX_TIMER_TIMEOUT_MS);
-      await expect(flow).resolves.toEqual({
-        status: "authorized",
-        accessToken: "refreshed-token",
-      });
-      expect(accessTokenPolls).toBe(1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("stores GitHub Copilot token from non-interactive onboarding", async () => {
-    const provider = registerProviderWithPluginConfig({});
-    const method = requireAuthMethod(provider.auth, 0);
-    const choice = expectDefined(
-      manifest.providerAuthChoices.find((entry) => entry.choiceId === "github-copilot"),
-      "GitHub Copilot manifest auth choice",
-    );
-    const optionKey = expectDefined(choice.optionKey, "GitHub Copilot option key");
-    const setupProvider = expectDefined(
-      manifest.setup.providers.find((entry) => entry.id === choice.provider),
-      "GitHub Copilot setup provider",
-    );
-    const envVar = expectDefined(setupProvider.envVars[0], "GitHub Copilot setup env var");
-    const agentDir = await createAgentDir();
-    const runtime = { error: vi.fn(), exit: vi.fn() };
-    const resolveApiKey = vi.fn(async () => ({
-      key: "ghu_test123",
-      source: "flag" as const,
-    }));
-
-    const result = await method.runNonInteractive({
-      ...nonInteractiveContext(agentDir),
-      authChoice: choice.choiceId,
-      opts: { [optionKey]: "ghu_test\r\n123" },
-      runtime,
-      resolveApiKey,
-    });
-
-    expect(provider.id).toBe(choice.provider);
-    expect(method.id).toBe(choice.method);
-    expect(provider.envVars).toEqual(setupProvider.envVars);
-    expect(resolveApiKey).toHaveBeenCalledWith({
-      provider: choice.provider,
-      flagValue: "ghu_test123",
-      flagName: choice.cliFlag,
-      envVar,
-      envVarName: envVar,
-      allowProfile: false,
-      required: false,
-    });
-    expect(runtime.error).not.toHaveBeenCalled();
-    expect(result?.auth?.profiles?.["github-copilot:github"]).toEqual({
-      provider: "github-copilot",
-      mode: "token",
-    });
-    expect(result?.agents?.defaults?.model).toEqual({
-      primary: "github-copilot/claude-sonnet-5",
-    });
-    expect(result?.agents?.defaults?.models?.["github-copilot/claude-sonnet-5"]).toStrictEqual({});
-
-    const profile = ensureAuthProfileStore(agentDir).profiles["github-copilot:github"];
-    expect(profile).toEqual({
-      type: "token",
-      provider: "github-copilot",
-      token: "ghu_test123",
-    });
   });
 
   it("does not persist a new token when non-interactive starter-model discovery fails", async () => {

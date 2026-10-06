@@ -184,7 +184,8 @@ export type ProviderAuthMethod = {
   credentialImport?: {
     migrationProviderId: string;
     itemId: string;
-    credentialKind: "oauth" | "api_key" | "token";
+    /** Model sign-in only accepts API keys; imports cannot migrate other credential kinds. */
+    credentialKind: "api_key";
   };
   /**
    * Optional wizard/onboarding metadata for this specific auth method.

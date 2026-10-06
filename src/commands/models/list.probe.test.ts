@@ -286,7 +286,7 @@ describe("runAuthProbes", () => {
         baseUrl: "https://api.openai.com/v1",
         api: "openai-responses" as const,
         apiKey: "test",
-        auth: "oauth" as const,
+        auth: "api-key" as const,
         models: [],
       };
       await probe.runAuthProbes(

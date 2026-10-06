@@ -40,7 +40,6 @@ export const ENUM_EXPECTATIONS: Record<string, string[]> = {
   "bindings[].session.groupScope": ['"main"', '"per-group"'],
   "skills.workshop.autonomous.mode": ['"off"', '"propose"', '"auto"'],
   "memory.citations": ['"auto"', '"on"', '"off"'],
-  "models.mode": ['"merge"', '"replace"'],
   "models.providers.*.auth": ['"api-key"', '"token"', '"oauth"', '"aws-sdk"'],
   "gateway.reload.mode": ['"off"', '"hybrid"'],
   "nodeHost.workerRuns.isolation": ['"none"', '"container"'],

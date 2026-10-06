@@ -696,7 +696,7 @@ describe("finalizeSetupWizard", () => {
     ];
     const observedRoutes = [
       {
-        api: "openai-chatgpt-responses" as const,
+        api: "openai-responses" as const,
         baseUrl: "https://chatgpt.com/backend-api/codex",
       },
       { api: "openai-responses" as const, baseUrl: "https://api.openai.com/v1" },

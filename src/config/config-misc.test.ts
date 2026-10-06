@@ -45,7 +45,7 @@ describe("MCP disabled config", () => {
   );
 });
 
-describe("model provider localService config", () => {
+describe("model provider config", () => {
   it("revalidates materialized bundled provider overlays", () => {
     const first = validateConfigObjectRaw({
       models: {
@@ -68,22 +68,13 @@ describe("model provider localService config", () => {
     expect(second.ok).toBe(true);
   });
 
-  it("accepts on-demand local provider service settings", () => {
+  it("supports ordinary local HTTP providers and rejects managed process settings", () => {
     const result = OpenClawSchema.safeParse({
       models: {
         providers: {
           ds4: {
             baseUrl: "http://127.0.0.1:18000/v1",
             api: "openai-completions",
-            localService: {
-              command: "/Users/me/ds4-server",
-              args: ["--port", "18000"],
-              cwd: "/Users/me/ds4",
-              env: { METAL_DEVICE_WRAPPER_TYPE: "1" },
-              healthUrl: "http://127.0.0.1:18000/v1/models",
-              readyTimeoutMs: 180_000,
-              idleStopMs: 0,
-            },
             models: [],
           },
         },
@@ -91,6 +82,19 @@ describe("model provider localService config", () => {
     });
 
     expect(result.success).toBe(true);
+    expect(
+      OpenClawSchema.safeParse({
+        models: {
+          providers: {
+            managed: {
+              baseUrl: "http://127.0.0.1:18000/v1",
+              models: [],
+              localService: { command: "/Users/me/ds4-server" },
+            },
+          },
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it("still requires baseUrl and models for custom provider declarations", () => {

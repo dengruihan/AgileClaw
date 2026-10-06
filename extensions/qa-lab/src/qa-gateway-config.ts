@@ -197,7 +197,6 @@ export function buildQaGatewayConfig(params: {
     usesCodexMockAppServer && codexMockOpenAiCatalog
       ? {
           // Synthetic credentials must not enter live provider catalog discovery.
-          mode: "replace" as const,
           providers: {
             openai: {
               ...codexMockOpenAiCatalog,
@@ -329,7 +328,6 @@ export function buildQaGatewayConfig(params: {
     ...(gatewayModels
       ? {
           models: {
-            mode: gatewayModels.mode,
             providers: gatewayModels.providers,
           },
         }

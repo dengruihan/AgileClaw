@@ -209,7 +209,6 @@ it.for(cases)(
           },
         },
         models: {
-          mode: "replace",
           providers: {
             [provider.providerId]: {
               ...provider.config,

@@ -16,7 +16,6 @@ import {
   type MemorySyncParams,
   type MemorySyncProgressUpdate,
 } from "openclaw/plugin-sdk/memory-core-host-engine-storage";
-import type { MemoryCoreAcquireLocalService } from "./embedding-local-service.js";
 import {
   resolveEmbeddingProviderIndexIdentity,
   type EmbeddingProvider,
@@ -90,7 +89,6 @@ export abstract class MemoryManagerSyncBase extends MemoryManagerDatabaseContext
   protected closing = false;
   protected activeManagerOperations = 0;
   protected managerIdleWaiters = new Set<() => void>();
-  protected readonly acquireLocalService?: MemoryCoreAcquireLocalService;
   protected abstract readonly cfg: OpenClawConfig;
   protected abstract readonly agentId: string;
   protected abstract readonly workspaceDir: string;

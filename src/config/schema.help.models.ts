@@ -1,8 +1,6 @@
 export const MODEL_FIELD_HELP: Record<string, string> = {
   models:
-    "Model catalog root for provider definitions, merge/replace behavior, and optional Bedrock discovery integration. Keep provider definitions explicit and validated before relying on production failover paths.",
-  "models.mode":
-    'Controls provider catalog behavior: "merge" keeps built-ins and overlays your custom providers, while "replace" uses only your configured providers. In "merge", matching provider IDs preserve non-empty agent models.json baseUrl values, while apiKey values are preserved only when the provider is not SecretRef-managed in current config/auth-profile context; SecretRef-managed providers refresh apiKey from current source markers, and matching model contextWindow/maxTokens use the higher value between explicit and implicit entries.',
+    "Provider and model definitions. The models.providers map is the saved inventory used by runtime and model selection.",
   "models.providers":
     "Provider map keyed by provider ID containing connection/auth settings and concrete model definitions. Built-in providers may be tuned with provider-level overlays; custom providers must include baseUrl and models. Use stable provider keys so references from agents and tooling remain portable across environments.",
   "models.catalogRefresh":
@@ -29,6 +27,8 @@ export const MODEL_FIELD_HELP: Record<string, string> = {
     "Controls whether OpenClaw injects `options.num_ctx` for Ollama providers configured with the OpenAI-compatible adapter (`openai-completions`). Default is true. Set false only if your proxy/upstream rejects unknown `options` payload fields.",
   "models.providers.*.params":
     "Provider-specific runtime parameters interpreted by provider plugins. Keep keys documented by the provider, and prefer explicit provider docs over ad hoc shared assumptions.",
+  "models.providers.*.name":
+    "User-visible provider name. Names must be unique across providers, ignoring case and surrounding whitespace.",
   "models.providers.*.headers":
     "Static HTTP headers merged into provider requests for tenant routing, proxy auth, or custom gateway requirements. Use this sparingly and keep sensitive header values in secrets.",
   "models.providers.*.authHeader":
@@ -37,23 +37,16 @@ export const MODEL_FIELD_HELP: Record<string, string> = {
     "Optional low-level agent runtime policy for this provider. Use provider/model runtime policy instead of agent-wide runtime pins; omitted/default lets OpenClaw choose the runtime for the selected provider.",
   "models.providers.*.agentRuntime.id":
     'Provider agent runtime id: "openclaw", "auto", a registered plugin harness id such as "codex", or a supported CLI backend alias such as "claude-cli". OpenAI on the official endpoint defaults to the Codex harness when omitted.',
-  "models.providers.*.localService":
-    "Optional on-demand local model server process for this provider. OpenClaw probes healthUrl, starts the command when needed, waits for readiness, and then sends the model request.",
-  "models.providers.*.localService.command":
-    "Absolute executable path for the local model server process. Keep this path explicit so provider startup is deterministic and does not depend on shell PATH lookup.",
-  "models.providers.*.localService.args":
-    "Argument list passed to the local model server command without shell expansion.",
-  "models.providers.*.localService.cwd": "Working directory for the local model server process.",
-  "models.providers.*.localService.env":
-    "Additional environment variables for the local model server process. Values that look secret are redacted from config snapshots.",
-  "models.providers.*.localService.healthUrl":
-    "Readiness URL probed before model requests. If omitted, OpenClaw uses the provider baseUrl with /models appended.",
-  "models.providers.*.localService.readyTimeoutMs":
-    "Maximum milliseconds to wait for the local model server readiness probe after starting the process.",
-  "models.providers.*.localService.idleStopMs":
-    "Milliseconds to keep an OpenClaw-started local model server alive after the last request finishes. Set 0 to keep it alive until OpenClaw exits.",
   "models.providers.*.request":
     "Optional request overrides for model-provider requests, including extra headers, auth overrides, proxy routing, TLS client settings, and optional allowPrivateNetwork for trusted self-hosted endpoints. Use these only when your upstream or enterprise network path requires transport customization.",
+  "models.providers.*.discovery":
+    "Editable settings used when explicitly pulling models from this provider.",
+  "models.providers.*.discovery.endpointPath":
+    "Relative model-list endpoint appended to the provider Base URL.",
+  "models.providers.*.discovery.headers":
+    "Additional headers sent only for model discovery. Keep sensitive values in secrets.",
+  "models.providers.*.discovery.request":
+    "Transport and proxy settings used only when pulling models.",
   "models.providers.*.request.headers":
     "Extra headers merged into provider requests after default attribution and auth resolution.",
   "models.providers.*.request.auth":

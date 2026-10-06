@@ -601,7 +601,6 @@ export function applyCustomApiConfig(params: ApplyCustomApiConfigParams): Custom
     ...params.config,
     models: {
       ...params.config.models,
-      mode: params.config.models?.mode ?? "merge",
       providers: {
         ...providers,
         [providerId]: {

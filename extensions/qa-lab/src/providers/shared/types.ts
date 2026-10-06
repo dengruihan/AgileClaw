@@ -73,7 +73,6 @@ export type QaProviderDefinition = {
   resolveModelParams(input: QaProviderModelParamsInput): Record<string, unknown>;
   resolveTurnTimeoutMs(input: QaProviderTurnTimeoutInput): number;
   buildGatewayModels(input: QaProviderGatewayModelsInput): {
-    mode: "replace" | "merge";
     providers: Record<string, ModelProviderConfig>;
   } | null;
   mockAuthProviders?: readonly string[];

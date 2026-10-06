@@ -207,7 +207,7 @@ it.each([
     models: {
       providers: {
         codex: {
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           models: [{ id: "gpt-5.6-sol", name: "GPT 5.6 Sol" }],
         },
       },

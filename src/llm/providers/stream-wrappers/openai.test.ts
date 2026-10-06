@@ -38,10 +38,10 @@ function createPayloadCapture(opts?: {
 }
 
 const codexModel = {
-  api: "openai-chatgpt-responses",
+  api: "openai-responses",
   provider: "openai",
   id: "gpt-5.1-codex",
-} as Model<"openai-chatgpt-responses">;
+} as Model<"openai-responses">;
 
 const openaiModel = {
   api: "openai-responses",
@@ -194,10 +194,10 @@ describe("createCodexNativeWebSearchWrapper", () => {
 
     void wrapped(
       {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "gateway",
         id: "gpt-5.5",
-      } as Model<"openai-chatgpt-responses">,
+      } as Model<"openai-responses">,
       codeModeContext(),
       {
         onPayload: (payload) => {
@@ -316,10 +316,10 @@ describe("createCodexNativeWebSearchWrapper", () => {
       config: nativeSearchConfig,
     });
     const model = {
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       provider: "gateway",
       id: "gpt-5.5",
-    } as Model<"openai-chatgpt-responses">;
+    } as Model<"openai-responses">;
 
     void wrapped(model, codeModeContext("sessions_yield", "structured_output"), {
       onPayload: async () => ({
@@ -413,10 +413,10 @@ describe("createCodexNativeWebSearchWrapper", () => {
 
     void wrapped(
       {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "gateway",
         id: "gpt-5.5",
-      } as Model<"openai-chatgpt-responses">,
+      } as Model<"openai-responses">,
       { messages: [] },
       {},
     );
@@ -453,10 +453,10 @@ describe("createCodexNativeWebSearchWrapper", () => {
 
     void wrapped(
       {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "gateway",
         id: "gpt-5.5",
-      } as Model<"openai-chatgpt-responses">,
+      } as Model<"openai-responses">,
       codeModeContext("sessions_yield", "structured_output"),
       {},
     );
@@ -553,10 +553,10 @@ describe("createCodexNativeWebSearchWrapper", () => {
 
     void wrapped(
       {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "gateway",
         id: "gpt-5.5",
-      } as Model<"openai-chatgpt-responses">,
+      } as Model<"openai-responses">,
       { messages: [] },
       {},
     );
@@ -590,10 +590,10 @@ describe("createCodexNativeWebSearchWrapper", () => {
 
     void wrapped(
       {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "gateway",
         id: "gpt-5.5",
-      } as Model<"openai-chatgpt-responses">,
+      } as Model<"openai-responses">,
       { messages: [] },
       {},
     );
@@ -716,7 +716,7 @@ describe("createOpenAIThinkingLevelWrapper", () => {
       id: "gpt-5.5",
     },
     {
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       provider: "openai",
       id: "gpt-5.5",
     },
@@ -793,7 +793,7 @@ describe("createOpenAIAttributionHeadersWrapper", () => {
       {
         ...codexModel,
         baseUrl: "https://chatgpt.com/backend-api",
-      } as Model<"openai-chatgpt-responses">,
+      } as Model<"openai-responses">,
       { messages: [] },
       {
         headers: {
@@ -834,7 +834,7 @@ describe("createOpenAIAttributionHeadersWrapper", () => {
       {
         ...codexModel,
         baseUrl: "https://chatgpt.com/backend-api",
-      } as Model<"openai-chatgpt-responses">,
+      } as Model<"openai-responses">,
       { messages: [] },
       {
         apiKey: "oauth-bearer-token",

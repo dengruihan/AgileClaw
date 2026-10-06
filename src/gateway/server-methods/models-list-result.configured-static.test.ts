@@ -189,7 +189,7 @@ describe("models.list configured static entries", () => {
             preparedOnly: true,
             pluginRegistry,
             preparedAuthStore: authStore,
-            catalog: [catalogEntry("gpt-5.5", "openai-chatgpt-responses")],
+            catalog: [catalogEntry("gpt-5.5", "openai-responses")],
           });
           expect(projected.defaultModels, name).toEqual({
             automaticUtilityModel: "openai/gpt-5.6-luna",
@@ -293,7 +293,7 @@ describe("models.list configured static entries", () => {
           agentDir: state.agentDir(),
           workspaceDir: state.workspaceDir,
           catalog: [],
-          staticEntries: [catalogEntry("gpt-5.6-luna", "openai-chatgpt-responses")],
+          staticEntries: [catalogEntry("gpt-5.6-luna", "openai-responses")],
         });
         const read = async (profileId?: string) => {
           const params = {
@@ -374,8 +374,23 @@ describe("models.list configured static entries", () => {
             baseUrl: "https://custom.example/v1",
             api: "openai-completions",
             models: [
-              { id: "shown", name: "Shown" },
-              { id: "secret", name: "Secret", hidden: true },
+              {
+                id: "shown",
+                name: "Shown",
+                reasoning: false,
+                input: ["text"],
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                maxTokens: 4096,
+              },
+              {
+                id: "secret",
+                name: "Secret",
+                hidden: true,
+                reasoning: false,
+                input: ["text"],
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                maxTokens: 4096,
+              },
             ],
           },
         },

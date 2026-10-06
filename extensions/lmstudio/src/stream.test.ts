@@ -1,36 +1,13 @@
 import type { StreamFn } from "openclaw/plugin-sdk/agent-core";
-import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
 import { createAssistantMessageEventStream, type AssistantMessage } from "openclaw/plugin-sdk/llm";
 // Lmstudio tests cover stream plugin behavior.
 import { createRequireRecord, createZeroUsageFixture } from "openclaw/plugin-sdk/test-fixtures";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createModelProviderConfig } from "../../test-support/model-provider-config.test-support.js";
+import { wrapLmstudioInference } from "./stream.js";
 
-let wrapLmstudioInferencePreload: typeof import("./stream.js").wrapLmstudioInferencePreload;
 let defaultBaseUrl: string;
 let defaultBaseUrlSequence = 0;
-
-const prepareLmstudioModelForInferenceMock = vi.hoisted(() => vi.fn());
-const resolveLmstudioProviderHeadersMock = vi.hoisted(() =>
-  vi.fn(async (_params?: unknown) => undefined),
-);
-const resolveLmstudioRuntimeApiKeyMock = vi.hoisted(() =>
-  vi.fn(async (_params?: unknown) => undefined),
-);
-
-vi.mock("./models.fetch.js", () => ({
-  prepareLmstudioModelForInference: (params: unknown) =>
-    prepareLmstudioModelForInferenceMock(params),
-}));
-
-vi.mock("./runtime.js", () => ({
-  resolveLmstudioProviderHeaders: (params: unknown) => resolveLmstudioProviderHeadersMock(params),
-  resolveLmstudioRuntimeApiKey: (params: unknown) => resolveLmstudioRuntimeApiKeyMock(params),
-}));
-
-beforeAll(async () => {
-  ({ wrapLmstudioInferencePreload } = await import("./stream.js"));
-});
 
 type StreamEvent = { type: string } & Record<string, unknown>;
 
@@ -68,24 +45,6 @@ function requireMockCallArg(mock: { mock: { calls: unknown[][] } }, label: strin
   return call;
 }
 
-function expectEnsureLoadedFields(fields: Record<string, unknown>) {
-  const [params] = requireMockCallArg(
-    prepareLmstudioModelForInferenceMock,
-    "ensureLmstudioModelLoaded",
-  );
-  const record = requireRecord(params, "ensureLmstudioModelLoaded params");
-  for (const [key, value] of Object.entries(fields)) {
-    if (key === "ssrfPolicy") {
-      expectRecordFields(
-        requireRecord(record.ssrfPolicy, "ssrfPolicy"),
-        value as Record<string, unknown>,
-      );
-    } else {
-      expect(record[key]).toEqual(value);
-    }
-  }
-}
-
 function expectBaseStreamModelFields(baseStream: StreamFn, fields: Record<string, unknown>) {
   const call = requireMockCallArg(
     baseStream as unknown as { mock: { calls: unknown[][] } },
@@ -96,18 +55,6 @@ function expectBaseStreamModelFields(baseStream: StreamFn, fields: Record<string
     throw new Error("Expected base stream context");
   }
   expect(call[2]).toBeUndefined();
-}
-
-function expectBaseStreamCallModelFields(
-  baseStream: StreamFn,
-  callIndex: number,
-  fields: Record<string, unknown>,
-) {
-  const call = (baseStream as unknown as { mock: { calls: unknown[][] } }).mock.calls[callIndex];
-  if (!call) {
-    throw new Error(`expected base stream call ${callIndex}`);
-  }
-  expectRecordFields(requireRecord(call[0], "base stream model"), fields);
 }
 
 async function collectEvents(stream: ReturnType<StreamFn>): Promise<StreamEvent[]> {
@@ -145,15 +92,14 @@ function buildEventStreamFn(events: unknown[]): StreamFn {
 
 function createWrappedLmstudioStream(
   baseStream: StreamFn,
-  params?: { baseUrl?: string; thinkingLevel?: string; preload?: false },
+  params?: { baseUrl?: string; thinkingLevel?: string },
 ): StreamFn {
-  return wrapLmstudioInferencePreload({
+  return wrapLmstudioInference({
     provider: "lmstudio",
     modelId: "qwen3-8b-instruct",
     config: createModelProviderConfig({
       lmstudio: {
         baseUrl: params?.baseUrl ?? defaultBaseUrl,
-        ...(params?.preload === false ? { params: { preload: false } } : {}),
         models: [],
       },
     }),
@@ -197,333 +143,9 @@ function runWrappedLmstudioStream(
   );
 }
 
-type HeldPreloadScenario = {
-  baseStream: StreamFn;
-  first: Promise<StreamEvent[]>;
-  second: Promise<StreamEvent[]>;
-  release: () => void;
-  waitFor: <T>(promise: Promise<T>) => Promise<T>;
-  assertActive: () => void;
-};
-
-let finishHeldPreloadScenario: (() => Promise<void>) | undefined;
-
-function runHeldPreloadScenario(
-  run: (held: HeldPreloadScenario) => Promise<void>,
-  firstSignal?: AbortSignal,
-): Promise<void> {
-  const entered = createDeferred<void>();
-  const release = createDeferred<void>();
-  const cancelled = createDeferred<never>();
-  const stopped = new Error("LM Studio preload scenario ended");
-  let active = true;
-  const pending: Promise<unknown>[] = [Promise.allSettled([cancelled.promise])];
-  const assertActive = () => {
-    if (!active) {
-      throw stopped;
-    }
-  };
-  const waitFor = <T>(promise: Promise<T>): Promise<T> => {
-    assertActive();
-    const controlled = Promise.race([promise, cancelled.promise]);
-    pending.push(Promise.allSettled([controlled]));
-    return controlled;
-  };
-
-  prepareLmstudioModelForInferenceMock.mockImplementationOnce(() => {
-    entered.resolve();
-    return release.promise;
-  });
-  const baseStream = buildDoneStreamFn();
-  const wrapped = createWrappedLmstudioStream(baseStream);
-  const first = Promise.resolve().then(() =>
-    collectEvents(
-      runWrappedLmstudioStream(
-        wrapped,
-        { contextWindow: 32_768 },
-        firstSignal ? { signal: firstSignal } : undefined,
-      ),
-    ),
-  );
-  // This signal-free collector drains the real shared preload, including its
-  // in-flight cleanup, even when the scenario or the first caller is cancelled.
-  const second = Promise.resolve().then(() =>
-    collectEvents(runWrappedLmstudioStream(wrapped, { contextWindow: 32_768 })),
-  );
-  pending.push(Promise.allSettled([first, second]));
-  const prematureCompletion = () => {
-    throw new Error("LM Studio inference completed before preload entry");
-  };
-  const admission = waitFor(
-    Promise.race([
-      entered.promise,
-      first.then(prematureCompletion),
-      second.then(prematureCompletion),
-    ]),
-  );
-  let cleanupPromise: Promise<void> | undefined;
-  const cleanup = () => {
-    cleanupPromise ??= (async () => {
-      active = false;
-      cancelled.reject(stopped);
-      release.resolve();
-      await Promise.all(pending);
-    })();
-    return cleanupPromise;
-  };
-  const scenario = Promise.resolve().then(async () => {
-    try {
-      await admission;
-      assertActive();
-      await run({ baseStream, first, second, release: release.resolve, waitFor, assertActive });
-    } finally {
-      await cleanup();
-    }
-  });
-  const settled = Promise.allSettled([scenario]);
-  // Vitest can time out before this body settles. Keep its join separate from
-  // resource cleanup so the body's finally never waits for itself.
-  finishHeldPreloadScenario = async () => {
-    await cleanup();
-    await settled;
-  };
-  return scenario;
-}
-
 describe("lmstudio stream wrapper", () => {
   beforeEach(() => {
-    // Production preload state is keyed by base URL, model, and context length.
-    // Give each test a real cache namespace while preserving within-test reuse.
     defaultBaseUrl = `http://lmstudio-test-${defaultBaseUrlSequence++}.localhost:1234`;
-  });
-
-  afterEach(async () => {
-    await finishHeldPreloadScenario?.();
-    finishHeldPreloadScenario = undefined;
-    vi.restoreAllMocks();
-    prepareLmstudioModelForInferenceMock.mockReset();
-    resolveLmstudioProviderHeadersMock.mockReset();
-    resolveLmstudioRuntimeApiKeyMock.mockReset();
-    resolveLmstudioProviderHeadersMock.mockResolvedValue(undefined);
-    resolveLmstudioRuntimeApiKeyMock.mockResolvedValue(undefined);
-  });
-
-  it("preloads LM Studio model before inference using model context window", async () => {
-    const baseStream = buildDoneStreamFn();
-    const wrapped = createWrappedLmstudioStream(baseStream, {
-      baseUrl: "http://lmstudio.internal:1234/v1",
-    });
-    const stream = runWrappedLmstudioStream(
-      wrapped,
-      { contextWindow: 131072 },
-      { apiKey: "lmstudio-token" },
-    );
-    const events = await collectEvents(stream);
-
-    expectSingleDoneEvent(events);
-    expect(prepareLmstudioModelForInferenceMock).toHaveBeenCalledTimes(1);
-    expectEnsureLoadedFields({
-      baseUrl: "http://lmstudio.internal:1234/v1",
-      modelKey: "qwen3-8b-instruct",
-      requestedContextLength: 131072,
-      apiKey: "lmstudio-token",
-      ssrfPolicy: { allowedHostnames: ["lmstudio.internal"] },
-    });
-  });
-
-  it("streams with the canonical model key returned by preload", async () => {
-    prepareLmstudioModelForInferenceMock.mockResolvedValueOnce({
-      modelKey: "gemma-4-e4b-it-ultra-uncensored-heretic",
-    });
-    const baseStream = buildDoneStreamFn();
-    const wrapped = createWrappedLmstudioStream(baseStream);
-    const variantKey = "gemma-4-e4b-it-ultra-uncensored-heretic@q4_k_m";
-    const stream = runWrappedLmstudioStream(wrapped, { id: `lmstudio/${variantKey}` });
-    const events = await collectEvents(stream);
-
-    expectSingleDoneEvent(events);
-    expectEnsureLoadedFields({
-      modelKey: variantKey,
-      baseUrl: `${defaultBaseUrl}/v1`,
-    });
-    expectBaseStreamModelFields(baseStream, {
-      provider: "lmstudio",
-      id: "gemma-4-e4b-it-ultra-uncensored-heretic",
-    });
-  });
-
-  it("omits malformed preload context lengths", async () => {
-    const baseStream = buildDoneStreamFn();
-    const wrapped = createWrappedLmstudioStream(baseStream, {
-      baseUrl: "http://lmstudio.internal:1234/v1",
-    });
-    const stream = runWrappedLmstudioStream(
-      wrapped,
-      {
-        contextTokens: 64000.5,
-        contextWindow: Number.POSITIVE_INFINITY,
-      },
-      { apiKey: "lmstudio-token" },
-    );
-    const events = await collectEvents(stream);
-
-    expectSingleDoneEvent(events);
-    expect(prepareLmstudioModelForInferenceMock).toHaveBeenCalledTimes(1);
-    expectEnsureLoadedFields({
-      baseUrl: "http://lmstudio.internal:1234/v1",
-      modelKey: "qwen3-8b-instruct",
-      requestedContextLength: undefined,
-      apiKey: "lmstudio-token",
-      ssrfPolicy: { allowedHostnames: ["lmstudio.internal"] },
-    });
-  });
-
-  it("reuses the canonical model key while preload failure cooldown is active", async () => {
-    const canonicalKey = "gemma-4-e4b-it-ultra-uncensored-heretic";
-    const variantModel = {
-      id: `lmstudio/${canonicalKey}@q4_k_m`,
-    };
-    prepareLmstudioModelForInferenceMock.mockRejectedValueOnce(
-      Object.assign(new Error("load failed"), {
-        resolvedModelKey: canonicalKey,
-      }),
-    );
-    const baseStream = buildDoneStreamFn();
-    const wrapped = createWrappedLmstudioStream(baseStream);
-
-    const firstEvents = await collectEvents(runWrappedLmstudioStream(wrapped, variantModel));
-    const secondEvents = await collectEvents(runWrappedLmstudioStream(wrapped, variantModel));
-
-    expectSingleDoneEvent(firstEvents);
-    expectSingleDoneEvent(secondEvents);
-    expect(prepareLmstudioModelForInferenceMock).toHaveBeenCalledTimes(1);
-    expect(baseStream).toHaveBeenCalledTimes(2);
-    expectBaseStreamCallModelFields(baseStream, 0, {
-      provider: "lmstudio",
-      id: canonicalKey,
-    });
-    expectBaseStreamCallModelFields(baseStream, 1, {
-      provider: "lmstudio",
-      id: canonicalKey,
-    });
-  });
-
-  it("dedupes concurrent preload requests for the same model and context", async () => {
-    await runHeldPreloadScenario(async (held) => {
-      expect(prepareLmstudioModelForInferenceMock).toHaveBeenCalledTimes(1);
-      expect(held.baseStream).not.toHaveBeenCalled();
-
-      held.release();
-      const [firstEvents, secondEvents] = await held.waitFor(
-        Promise.all([held.first, held.second]),
-      );
-      held.assertActive();
-
-      expectSingleDoneEvent(firstEvents);
-      expectSingleDoneEvent(secondEvents);
-      expect(prepareLmstudioModelForInferenceMock).toHaveBeenCalledTimes(1);
-      expect(held.baseStream).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  it("does not start model preload for an already-aborted inference", async () => {
-    const baseStream = buildDoneStreamFn();
-    const wrapped = createWrappedLmstudioStream(baseStream);
-    const controller = new AbortController();
-    const abortReason = new Error("inference already cancelled");
-    controller.abort(abortReason);
-    const options = { signal: controller.signal };
-    const stream = Promise.resolve().then(() =>
-      runWrappedLmstudioStream(wrapped, { contextWindow: 32_768 }, options),
-    );
-
-    await expect(stream).rejects.toBe(abortReason);
-    expect(prepareLmstudioModelForInferenceMock).not.toHaveBeenCalled();
-    expect(baseStream).not.toHaveBeenCalled();
-  });
-
-  it("cancels one shared preload waiter without cancelling another inference", async () => {
-    const controller = new AbortController();
-    const abortReason = new DOMException("inference cancelled", "AbortError");
-
-    await runHeldPreloadScenario(async (held) => {
-      controller.abort(abortReason);
-      const firstOutcome = await held.waitFor(
-        held.first.then(
-          () => undefined,
-          (error: unknown) => error,
-        ),
-      );
-      held.assertActive();
-
-      expect(firstOutcome).toBe(abortReason);
-      expect(held.baseStream).not.toHaveBeenCalled();
-      expect(prepareLmstudioModelForInferenceMock).toHaveBeenCalledTimes(1);
-
-      held.release();
-      const secondEvents = await held.waitFor(held.second);
-      held.assertActive();
-
-      expectSingleDoneEvent(secondEvents);
-      expect(held.baseStream).toHaveBeenCalledTimes(1);
-    }, controller.signal);
-  });
-
-  it("preserves all 29 agent tools while preload failure backoff remains active", async () => {
-    prepareLmstudioModelForInferenceMock.mockRejectedValueOnce(new Error("out of memory"));
-    const baseStream = buildDoneStreamFn();
-    const wrapped = createWrappedLmstudioStream(baseStream);
-    const tools = Array.from({ length: 29 }, (_, index) => ({
-      name: `agent_tool_${index}`,
-      description: `Agent tool ${index}`,
-      parameters: { type: "object" },
-    }));
-
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const events = await collectEvents(
-        runWrappedLmstudioStream(wrapped, {}, undefined, { tools }),
-      );
-
-      expectSingleDoneEvent(events);
-      expect(prepareLmstudioModelForInferenceMock).toHaveBeenCalledTimes(1);
-      const call = (baseStream as unknown as { mock: { calls: unknown[][] } }).mock.calls[attempt];
-      expect(call).toBeDefined();
-      expect(requireRecord(call?.[1], "base stream context").tools).toEqual(tools);
-    }
-
-    expect(baseStream).toHaveBeenCalledTimes(2);
-  });
-
-  it("keeps increasing preload backoff across expired consecutive failures", async () => {
-    prepareLmstudioModelForInferenceMock.mockRejectedValue(new Error("out of memory"));
-    const baseStream = buildDoneStreamFn();
-    const wrapped = createWrappedLmstudioStream(baseStream);
-    const baseTime = 1_000_000;
-    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(baseTime);
-
-    await collectEvents(runWrappedLmstudioStream(wrapped, {}));
-    expect(prepareLmstudioModelForInferenceMock).toHaveBeenCalledTimes(1);
-
-    nowSpy.mockReturnValue(baseTime + 5_001);
-    await collectEvents(runWrappedLmstudioStream(wrapped, {}));
-    expect(prepareLmstudioModelForInferenceMock).toHaveBeenCalledTimes(2);
-
-    nowSpy.mockReturnValue(baseTime + 10_001);
-    await collectEvents(runWrappedLmstudioStream(wrapped, {}));
-    expect(prepareLmstudioModelForInferenceMock).toHaveBeenCalledTimes(2);
-
-    nowSpy.mockReturnValue(baseTime + 15_002);
-    await collectEvents(runWrappedLmstudioStream(wrapped, {}));
-    expect(prepareLmstudioModelForInferenceMock).toHaveBeenCalledTimes(3);
-
-    nowSpy.mockReturnValue(baseTime + 30_002);
-    await collectEvents(runWrappedLmstudioStream(wrapped, {}));
-    expect(prepareLmstudioModelForInferenceMock).toHaveBeenCalledTimes(3);
-
-    nowSpy.mockReturnValue(baseTime + 35_003);
-    await collectEvents(runWrappedLmstudioStream(wrapped, {}));
-    expect(prepareLmstudioModelForInferenceMock).toHaveBeenCalledTimes(4);
-    expect(baseStream).toHaveBeenCalledTimes(6);
   });
 
   it("marks regex tool patterns as unsupported before LM Studio inference", async () => {
@@ -569,9 +191,9 @@ describe("lmstudio stream wrapper", () => {
     });
   });
 
-  it("applies regex tool-schema compatibility when LM Studio preload is disabled", async () => {
+  it("applies regex tool-schema compatibility alongside configured keywords", async () => {
     const baseStream = buildDoneStreamFn();
-    const wrapped = createWrappedLmstudioStream(baseStream, { preload: false });
+    const wrapped = createWrappedLmstudioStream(baseStream);
 
     expectSingleDoneEvent(
       await collectEvents(
@@ -582,7 +204,6 @@ describe("lmstudio stream wrapper", () => {
       ),
     );
 
-    expect(prepareLmstudioModelForInferenceMock).not.toHaveBeenCalled();
     expect(baseStream).toHaveBeenCalledTimes(1);
     const [model] = requireMockCallArg(
       baseStream as unknown as { mock: { calls: unknown[][] } },

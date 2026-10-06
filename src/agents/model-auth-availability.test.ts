@@ -169,7 +169,7 @@ describe("createModelAuthAvailabilityResolver", () => {
       const materialization = {
         provider: "openai",
         modelId,
-        modelApi: "openai-chatgpt-responses",
+        modelApi: "openai-responses",
         modelBaseUrl: "https://chatgpt.com/backend-api/codex",
         requestTransportOverrides: "none",
         authMode: "oauth",
@@ -662,25 +662,14 @@ describe("createModelAuthAvailabilityResolver", () => {
       route: platformRoute,
       mode: "api-key",
     },
-    {
-      label: "OAuth environment after unavailable Platform auth",
-      cfg: {
-        models: { providers: { openai: { auth: "oauth", baseUrl: "", models: [] } } },
-      } as OpenClawConfig,
-      env: { OPENAI_API_KEY: "environment-token" },
-      profileId: "openai:platform-missing",
-      profile: { type: "api_key" as const, provider: "openai", key: "" },
-      route: subscriptionRoute,
-      mode: "oauth",
-    },
     // An environment credential named nowhere in config is not authorized to
     // stand in for a declared profile, including a declared profile that turned
     // out to be unusable. Availability mirrors the runtime rule here so status
     // does not advertise a credential the run would refuse to use.
   ])(
     "reports $label unavailable rather than substituting an ambient credential",
-    ({ cfg, env, profile, profileId }) => {
-      expect(evaluate({ cfg, env, store: authStore({ [profileId]: profile }) })).toMatchObject({
+    ({ env, profile, profileId }) => {
+      expect(evaluate({ env, store: authStore({ [profileId]: profile }) })).toMatchObject({
         availability: false,
       });
     },
@@ -841,7 +830,7 @@ describe("createModelAuthAvailabilityResolver", () => {
       routeResolverFactory: (() => resolveRoutes) as typeof createOpenAIModelRoutesResolver,
     });
     const observedRoutes = [
-      { api: "openai-chatgpt-responses" as const, baseUrl: subscriptionRoute.baseUrl },
+      { api: "openai-responses" as const, baseUrl: subscriptionRoute.baseUrl },
       { api: "openai-responses" as const, baseUrl: platformRoute.baseUrl },
     ];
 
@@ -914,38 +903,6 @@ describe("createModelAuthAvailabilityResolver", () => {
     ).toMatchObject({
       availability: false,
       selectedRoute: openClawOnlyRoute,
-    });
-  });
-
-  it.each([
-    {
-      label: "explicit",
-      cfg: {
-        models: {
-          providers: {
-            "amazon-bedrock": {
-              api: "bedrock-converse-stream",
-              auth: "aws-sdk",
-              baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
-              models: [],
-            },
-          },
-        },
-      } as OpenClawConfig,
-    },
-    { label: "implicit", cfg: {} },
-  ])("keeps an $label Bedrock AWS SDK route ready", ({ cfg }) => {
-    const result = createModelAuthAvailabilityResolver({
-      cfg,
-      authStore: authStore(),
-      env: {},
-    }).evaluateModelAuth("amazon-bedrock", { api: "bedrock-converse-stream" });
-
-    expect(result).toMatchObject({
-      availability: true,
-      evidence: "aws-sdk",
-      routeResolution: null,
-      selectedAuthMode: "aws-sdk",
     });
   });
 

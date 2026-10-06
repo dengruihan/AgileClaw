@@ -87,8 +87,6 @@ describe("isSensitiveConfigPath", () => {
     expect(isSensitiveConfigPath("models.providers.openai.apiKey")).toBe(true);
     expect(isSensitiveConfigPath("channels.irc.nickserv.password")).toBe(true);
     expect(isSensitiveConfigPath("channels.feishu.encryptKey")).toBe(true);
-    expect(isSensitiveConfigPath("models.providers.local.localService.env.HF_HOME")).toBe(true);
-    expect(isSensitiveConfigPath("models.providers.local.localService.env.MAX_TOKENS")).toBe(true);
   });
 });
 
@@ -218,7 +216,7 @@ describe("mapSensitivePaths", () => {
     expect(hints["agents.entries.*.memory.search.remote.apiKey"]?.sensitive).toBe(true);
     expect(hints["gateway.auth.token"]?.sensitive).toBe(true);
     expect(hints["models.providers.*.headers.*"]?.sensitive).toBe(true);
-    expect(hints["models.providers.*.localService.env.*"]?.sensitive).toBe(true);
+    expect(hints["models.providers.*.discovery.headers.*"]?.sensitive).toBe(true);
     expect(hints["models.providers.*.request.headers.*"]?.sensitive).toBe(true);
     expect(hints["models.providers.*.request.proxy.tls.cert"]?.sensitive).toBe(true);
     expect(hints["proxy.proxyUrl"]?.sensitive).toBe(true);

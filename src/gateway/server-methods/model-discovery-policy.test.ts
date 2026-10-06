@@ -50,7 +50,6 @@ function createFixture(
       entries: { main: {} },
     },
     models: {
-      mode: "replace",
       providers: {
         example: {
           baseUrl: "https://example.invalid",

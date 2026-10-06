@@ -88,7 +88,7 @@ describe("registered Control UI chat redaction", () => {
           models: { [model.modelRef]: { params: { transport: "sse", openaiWsWarmup: false } } },
         },
       },
-      models: { mode: "replace", providers: { [model.providerId]: model.config } },
+      models: { providers: { [model.providerId]: model.config } },
       gateway: { auth: { mode: "token", token } },
       hooks: { enabled: false },
     } satisfies OpenClawConfig;

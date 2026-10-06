@@ -137,15 +137,14 @@ describe("renderModelProviders", () => {
     expect(retry?.disabled).toBe(false);
   });
 
-  it("hides quick API-key setup when provider capabilities are unavailable", () => {
+  it("keeps the template entry available without provider capabilities", () => {
     const container = mount(
       props({
         configuredModels: [],
-        unconfiguredProviders: [],
       }),
     );
 
-    expect(text(container)).not.toContain("Add provider");
+    expect(text(container)).toContain("Add provider");
     expect(container.querySelector('[data-model-readiness="model-required"]')).not.toBeNull();
   });
 
@@ -303,11 +302,6 @@ describe("renderModelProviders", () => {
             logoutTargets: [{ provider: "openai", profileIds: ["openai:one"] }],
           }),
         ],
-        keyEditorProvider: "openai",
-        keyDraft: "replacement",
-        addProviderOpen: true,
-        addProviderId: "anthropic",
-        addProviderKey: "new-provider-key",
       }),
     );
 
@@ -332,89 +326,10 @@ describe("renderModelProviders", () => {
     expect(button(defaults!, "Save")).toBeUndefined();
 
     const provider = container.querySelector('[data-provider-id="openai"]');
-    expect(
-      provider?.querySelector<HTMLInputElement>(".model-providers__inline-form input")?.disabled,
-    ).toBe(true);
-    expect(button(provider!, "Set API key")?.disabled).toBe(true);
-    expect(button(provider!, "Remove key")?.disabled).toBe(true);
+    expect(button(provider!, "Edit provider")?.disabled).toBe(true);
     expect(
       provider?.querySelector<HTMLButtonElement>(".model-providers__profile-logout")?.disabled,
     ).toBe(true);
-
-    const addForm = container.querySelector("[data-models-key-dialog]");
-    expect(
-      [
-        ...(addForm?.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>(
-          "select, input, button",
-        ) ?? []),
-      ].map((control) => control.disabled),
-    ).toEqual([true, false, true]);
-  });
-
-  it("locks an already-open provider form after mutation access is revoked", async () => {
-    const onAddProvider = vi.fn();
-    const onAddProviderToggle = vi.fn();
-    const container = mount(
-      props({
-        addProviderOpen: true,
-        addProviderId: "anthropic",
-        addProviderKey: "new-provider-key",
-        canMutate: false,
-        mutationBlockedReason: "Operator admin access required",
-        defaultsMutationBlockedReason: "Operator admin access required",
-        messages: {
-          defaults: {
-            kind: "error",
-            text: "Configuration changes require operator.admin access.",
-          },
-        },
-        onAddProvider,
-        onAddProviderToggle,
-      }),
-    );
-    const addForm = container.querySelector("[data-models-key-dialog]");
-    const controls = [
-      ...(addForm?.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>(
-        "select, input, button",
-      ) ?? []),
-    ];
-
-    expect(controls.map((control) => control.disabled)).toEqual([true, false, true]);
-    const defaults = container.querySelector(".model-providers__defaults");
-    await updatePickers(container);
-    const primary = settingsRow(defaults!, "Model").querySelector<HTMLButtonElement>("button")!;
-    expect(primary.disabled).toBe(false);
-    expect(
-      [...settingsRow(defaults!, "Model").querySelectorAll('[role="option"]')].every(
-        (option) => option.getAttribute("aria-disabled") === "true",
-      ),
-    ).toBe(true);
-    expect(text(defaults)).not.toContain("operator.admin access");
-    button(addForm!, "Save provider")?.click();
-    expect(onAddProvider).not.toHaveBeenCalled();
-
-    const cancel = button(addForm!, "Cancel");
-    expect(cancel?.disabled).toBe(false);
-    cancel?.click();
-    expect(onAddProviderToggle).toHaveBeenCalledOnce();
-  });
-
-  it("freezes provider and credential fields while adding a provider", () => {
-    const container = mount(
-      props({
-        addProviderOpen: true,
-        addProviderId: "anthropic",
-        addProviderKey: "new-provider-key",
-        busy: { add: true },
-      }),
-    );
-    const addForm = container.querySelector("[data-models-key-dialog]");
-
-    expect(
-      [
-        ...(addForm?.querySelectorAll<HTMLInputElement | HTMLSelectElement>("select, input") ?? []),
-      ].map((control) => control.disabled),
-    ).toEqual([true]);
   });
 
   it("keeps committed default-model success visible beside its refresh warning", () => {
@@ -529,7 +444,7 @@ describe("renderModelProviders", () => {
       "Credentials configured",
     );
 
-    button(readiness!, "Connect provider")?.click();
+    button(readiness!, "Add provider")?.click();
     expect(onConnectProvider).toHaveBeenCalledOnce();
   });
 
@@ -852,42 +767,16 @@ describe("renderModelProviders", () => {
     expect(onProbe).not.toHaveBeenCalled();
   });
 
-  it("uses every credential owner id for connection probes", () => {
+  it("probes the provider's saved config key when one exists", () => {
     const onProbe = vi.fn();
     const container = mount(
       props({
-        cards: [card({ credentialProviderIds: ["anthropic", "claude-cli"] })],
+        cards: [card({ configKey: "openai-work" })],
         onProbe,
       }),
     );
     button(container, "Test connection")?.click();
-    expect(onProbe).toHaveBeenCalledWith("openai", ["anthropic", "claude-cli"]);
-  });
-
-  it("uses the original config key for credential mutations", () => {
-    const onSaveKey = vi.fn();
-    const onRemoveKey = vi.fn();
-    const container = mount(
-      props({
-        cards: [
-          card({
-            configKey: "OpenAI",
-            apiKey: { source: "config" },
-            hasConfigApiKey: true,
-          }),
-        ],
-        keyEditorProvider: "openai",
-        keyDraft: "replacement",
-        onSaveKey,
-        onRemoveKey,
-      }),
-    );
-    const provider = container.querySelector('[data-provider-id="openai"]');
-    expect(provider).not.toBeNull();
-    button(provider!, "Save")?.click();
-    button(provider!, "Remove key")?.click();
-    expect(onSaveKey).toHaveBeenCalledWith("openai", "OpenAI");
-    expect(onRemoveKey).toHaveBeenCalledWith("openai", "OpenAI");
+    expect(onProbe).toHaveBeenCalledWith("openai", ["openai-work"]);
   });
 
   it("shows the current key-operation failure over an older card success", () => {
@@ -902,26 +791,6 @@ describe("renderModelProviders", () => {
     expect(text(container.querySelector('[data-provider-id="openai"] .callout'))).toBe(
       "Current failure",
     );
-  });
-
-  it("disables API-key mutations for explicit non-API-key auth modes", () => {
-    const container = mount(
-      props({
-        cards: [card({ configAuthMode: "oauth" })],
-      }),
-    );
-    const setKey = button(container, "Set API key");
-    expect(setKey?.disabled).toBe(true);
-    expect(setKey?.title).toContain('auth mode is "oauth"');
-  });
-
-  it("hides API-key setup for providers that explicitly do not support it", () => {
-    const container = mount(
-      props({
-        cards: [card({ apiKeySupported: false })],
-      }),
-    );
-    expect(button(container, "Set API key")).toBeUndefined();
   });
 });
 

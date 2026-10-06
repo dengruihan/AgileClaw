@@ -188,7 +188,7 @@ describe("Completed child results on a real parent-agent turn", () => {
           },
           gateway: { auth: { mode: "token", token } },
           hooks: { enabled: false },
-          models: { mode: "replace", providers: { [provider.providerId]: provider.config } },
+          models: { providers: { [provider.providerId]: provider.config } },
           plugins: { slots: { memory: "none" } },
           tools: {
             profile: "coding",

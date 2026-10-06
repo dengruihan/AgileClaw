@@ -84,7 +84,7 @@ it("chat.send recovers failed and statusless work for new messages and retained 
         entries: { main: {} },
       },
       messages: { queue: { mode: "followup", debounceMsByChannel: { webchat: 0 } } },
-      models: { mode: "replace", providers: { [provider.providerId]: provider.config } },
+      models: { providers: { [provider.providerId]: provider.config } },
       gateway: {
         auth: { mode: "token", token },
         controlUi: { allowedOrigins: ["http://localhost:18789"] },

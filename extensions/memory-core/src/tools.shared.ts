@@ -9,7 +9,6 @@ import {
   type MemoryToolContract,
   type MemoryToolOptions,
 } from "./memory-tool-contract.js";
-import type { MemoryCoreAcquireLocalService } from "./memory/embedding-local-service.js";
 import { DEFAULT_MEMORY_SEARCH_TIMEOUT_MS } from "./memory/search-deadline.js";
 
 // Core owns this session-store error; Memory Core must preserve its exact code
@@ -29,7 +28,6 @@ export async function getMemoryManagerContextWithPurpose(params: {
   cfg: OpenClawConfig;
   agentId: string;
   purpose?: "default" | "status" | "cli";
-  acquireLocalService?: MemoryCoreAcquireLocalService;
 }): Promise<
   | {
       manager: NonNullable<MemorySearchManagerResult["manager"]>;
@@ -45,7 +43,6 @@ export async function getMemoryManagerContextWithPurpose(params: {
     cfg: params.cfg,
     agentId: params.agentId,
     purpose: params.purpose,
-    ...(params.acquireLocalService ? { acquireLocalService: params.acquireLocalService } : {}),
   });
   return manager
     ? {

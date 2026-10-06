@@ -4,8 +4,8 @@ import { applyFireworksConfig } from "./onboard.js";
 import { FIREWORKS_DEFAULT_MODEL_REF, buildFireworksCatalogModels } from "./provider-catalog.js";
 
 describe("Fireworks onboarding", () => {
-  it("applies the manifest catalog, default, and alias in replace mode", () => {
-    const config = applyFireworksConfig({ models: { mode: "replace" } });
+  it("applies the manifest catalog, default, and alias", () => {
+    const config = applyFireworksConfig({});
 
     expect(config.models?.providers?.fireworks?.models).toEqual(buildFireworksCatalogModels());
     expect(resolveAgentModelPrimaryValue(config.agents?.defaults?.model)).toBe(

@@ -201,7 +201,7 @@ describe("runCronIsolatedAgentTurn toolsAllow", () => {
   it("does not warn when native web_search supplies the tool", options, async () => {
     resolveConfiguredModelRefMock.mockReturnValue({ provider: "gateway", model: "gpt-5.5" });
     loadModelCatalogMock.mockResolvedValue([
-      { id: "gpt-5.5", name: "GPT-5.5", provider: "gateway", api: "openai-chatgpt-responses" },
+      { id: "gpt-5.5", name: "GPT-5.5", provider: "gateway", api: "openai-responses" },
     ]);
     const result = await runCronIsolatedAgentTurn({
       ...makeParams(["web_search"]),

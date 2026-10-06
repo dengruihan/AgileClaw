@@ -40,7 +40,7 @@ function configForRoute(baseUrl: string, models: ModelDefinitionConfig[] = []): 
       entries: { main: {} },
     },
     auth: { profiles: { "xai:fixture": { provider: "xai", mode: "token" } } },
-    models: { providers: { xai: { baseUrl, api: "openai-responses", auth: "token", models } } },
+    models: { providers: { xai: { baseUrl, api: "openai-responses", auth: "api-key", models } } },
     plugins: { allow: ["xai"], entries: { xai: { enabled: true } } },
   };
 }

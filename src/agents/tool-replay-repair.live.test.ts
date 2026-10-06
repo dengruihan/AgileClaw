@@ -88,9 +88,7 @@ const logProgress = logLiveProgress;
 
 function isOpenAIResponsesFamily(api: string): boolean {
   return (
-    api === "openai-responses" ||
-    api === "openai-chatgpt-responses" ||
-    api === "azure-openai-responses"
+    api === "openai-responses" || api === "openai-responses" || api === "azure-openai-responses"
   );
 }
 

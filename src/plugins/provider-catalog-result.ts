@@ -23,7 +23,6 @@ const MODEL_PROVIDER_CONFIG_KEYS = [
   "injectNumCtxForOpenAICompat",
   "params",
   "agentRuntime",
-  "localService",
   "headers",
   "authHeader",
   "request",

@@ -28,7 +28,7 @@ const subscriptionModel: Model = {
   id: "gpt-5.6-luna",
   name: "Auth pin model",
   provider: "openai",
-  api: "openai-chatgpt-responses",
+  api: "openai-responses",
   baseUrl: "https://chatgpt.com/backend-api/codex",
   reasoning: false,
   input: ["text"],

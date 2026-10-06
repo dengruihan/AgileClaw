@@ -300,8 +300,8 @@ it.each(["bedrock-converse-stream", "openai-completions"])(
               providers: {
                 "amazon-bedrock": {
                   baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
-                  auth: "aws-sdk",
-                  api: "bedrock-converse-stream",
+                  auth: "api-key",
+                  api: "anthropic-messages",
                   models: [
                     {
                       id: "vision-1",
@@ -346,7 +346,7 @@ it("preserves password whitespace during extraction", async () => {
 });
 
 it("reports omitted images for a text-only model and supplies Codex instructions", async () => {
-  const { pdf, extract } = await extraction("openai-chatgpt-responses", pdfConfig(FALLBACK));
+  const { pdf, extract } = await extraction("openai-responses", pdfConfig(FALLBACK));
   extract.mockResolvedValue({
     text: "Extracted content",
     images: [{ type: "image", data: "base64img", mimeType: "image/png" }],

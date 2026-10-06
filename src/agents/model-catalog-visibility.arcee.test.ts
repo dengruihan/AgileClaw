@@ -30,7 +30,6 @@ describe("provider-owned catalog identity", () => {
       },
     },
     models: {
-      mode: "replace",
       providers: {
         arcee: {
           baseUrl: "https://openrouter.ai/api/v1",

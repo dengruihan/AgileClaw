@@ -701,7 +701,7 @@ export async function createQuotaResetFixture(
                   ? {
                       openai: {
                         baseUrl: "https://chatgpt.com/backend-api/codex",
-                        api: "openai-chatgpt-responses" as const,
+                        api: "openai-responses" as const,
                         auth: "oauth" as const,
                         models: ["gpt-5.5", UTILITY_MODEL_ID].map((id) => ({
                           id,

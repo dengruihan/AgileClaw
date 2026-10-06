@@ -330,18 +330,6 @@ export function registerModelsCli(program: Command) {
     });
 
   auth
-    .command("add")
-    .description("Interactive auth helper (provider auth or paste token)")
-    .option("--agent <id>", "Agent id (default: configured default agent)")
-    .action(async (opts, command) => {
-      await withModelsRuntime(async ({ defaultRuntime, resolveModelAgentOption }) => {
-        const agent = resolveModelAgentOption(command, opts);
-        const { modelsAuthAddCommand } = await import("../commands/models/auth.js");
-        await modelsAuthAddCommand({ agent }, defaultRuntime);
-      });
-    });
-
-  auth
     .command("activate")
     .description("Test a saved sign-in and use it for this agent")
     .argument("<profileId>", "Saved sign-in id from models auth list")
@@ -376,112 +364,19 @@ export function registerModelsCli(program: Command) {
     });
 
   auth
-    .command("login")
-    .description("Sign in for system/agent use on this machine (OAuth/API key)")
+    .command("paste-api-key")
+    .description("Save an API key in an auth profile and update config")
     .option("--agent <id>", "Agent id (default: configured default agent)")
-    .option("--provider <id>", "Provider id registered by a plugin")
-    .option("--method <id>", "Provider auth method id")
-    .option("--device-code", "Use the provider device-code auth method", false)
-    .option("--profile-id <id>", "Auth profile id override for single-profile login methods")
-    .option("--set-default", "Apply the provider's default model recommendation", false)
-    .option(
-      "--force",
-      "Remove existing profiles for the provider before logging in (use when a cached OAuth profile is stuck or you want to switch accounts)",
-      false,
-    )
-    .action(async (opts, command) => {
-      if (opts.deviceCode && typeof opts.method === "string" && opts.method !== "device-code") {
-        throw new Error(
-          "--device-code cannot be combined with --method unless method is device-code.",
-        );
-      }
-      await withModelsRuntime(async ({ defaultRuntime, resolveModelAgentOption }) => {
-        const agent = resolveModelAgentOption(command);
-        const { modelsAuthLoginCommand } = await import("../commands/models/auth.js");
-        await modelsAuthLoginCommand(
-          {
-            provider: opts.provider as string | undefined,
-            method: opts.deviceCode ? "device-code" : (opts.method as string | undefined),
-            profileId: opts.profileId as string | undefined,
-            setDefault: Boolean(opts.setDefault),
-            force: Boolean(opts.force),
-            agent,
-          },
-          defaultRuntime,
-        );
-      });
-    });
-
-  auth
-    .command("setup-token")
-    .description("Run a provider CLI to create/sync a token (TTY required)")
-    .option("--agent <id>", "Agent id (default: configured default agent)")
-    .option("--provider <name>", "Provider id")
-    .option("--yes", "Skip confirmation", false)
+    .requiredOption("--provider <name>", "Provider id (e.g. openai)")
+    .option("--profile-id <id>", "Auth profile id (default: <provider>:manual)")
     .action(async (opts, command) => {
       await withModelsRuntime(async ({ defaultRuntime, resolveModelAgentOption }) => {
         const agent = resolveModelAgentOption(command);
-        const { modelsAuthSetupTokenCommand } = await import("../commands/models/auth.js");
-        await modelsAuthSetupTokenCommand(
-          {
-            provider: opts.provider as string | undefined,
-            yes: Boolean(opts.yes),
-            agent,
-          },
-          defaultRuntime,
-        );
-      });
-    });
-
-  for (const [name, noun, exampleProvider, handler] of [
-    ["paste-token", "token", "anthropic", "modelsAuthPasteTokenCommand"],
-    ["paste-api-key", "API key", "openai", "modelsAuthPasteApiKeyCommand"],
-  ] as const) {
-    const paste = auth
-      .command(name)
-      .description(
-        `Save ${name === "paste-token" ? "a" : "an"} ${noun} in an auth profile and update config`,
-      )
-      .option("--agent <id>", "Agent id (default: configured default agent)")
-      .requiredOption("--provider <name>", `Provider id (e.g. ${exampleProvider})`)
-      .option("--profile-id <id>", "Auth profile id (default: <provider>:manual)");
-    if (name === "paste-token") {
-      paste.option(
-        "--expires-in <duration>",
-        "Optional expiry duration (e.g. 365d, 12h). Stored as absolute expiresAt.",
-      );
-    }
-    paste.action(async (opts, command) => {
-      await withModelsRuntime(async ({ defaultRuntime, resolveModelAgentOption }) => {
-        const agent = resolveModelAgentOption(command);
-        const commands = await import("../commands/models/auth.js");
-        await commands[handler](
+        const { modelsAuthPasteApiKeyCommand } = await import("../commands/models/auth.js");
+        await modelsAuthPasteApiKeyCommand(
           {
             provider: opts.provider as string | undefined,
             profileId: opts.profileId as string | undefined,
-            ...(name === "paste-token" ? { expiresIn: opts.expiresIn as string | undefined } : {}),
-            agent,
-          },
-          defaultRuntime,
-        );
-      });
-    });
-  }
-
-  auth
-    .command("login-github-copilot")
-    .description("Login to GitHub Copilot via GitHub device flow (TTY required)")
-    .option("--agent <id>", "Agent id (default: configured default agent)")
-    .option("--yes", "Overwrite existing profile without prompting", false)
-    .action(async (opts, command) => {
-      await withModelsRuntime(async ({ defaultRuntime, resolveModelAgentOption }) => {
-        const agent = resolveModelAgentOption(command);
-        const { modelsAuthLoginCommand } = await import("../commands/models/auth.js");
-        await modelsAuthLoginCommand(
-          {
-            provider: "github-copilot",
-            method: "device",
-            yes: Boolean(opts.yes),
             agent,
           },
           defaultRuntime,

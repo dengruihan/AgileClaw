@@ -71,7 +71,7 @@ beforeEach(() => {
     }),
   ]);
   mocks.catalog.mockImplementation(async () => ({
-    entries: [{ provider: "openai", id: "model", api: "openai-chatgpt-responses" }],
+    entries: [{ provider: "openai", id: "model", api: "openai-responses" }],
     routeVariants: [],
     metadataSnapshot: {},
     isCurrent: () => true,

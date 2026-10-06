@@ -17,7 +17,6 @@ import { cancelUnreadResponseBody } from "../../infra/http-body.js";
 import { sqlitePrimaryResultCode } from "../../infra/sqlite-error-diagnostics.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { isUserModelAuthProfileId } from "../../state/user-model-account-id.js";
-import { resolveProviderModelAuthPolicy } from "../model-auth-policy.js";
 import { readProviderJsonResponse } from "../provider-http-errors.js";
 import { resolveProviderRequestHeaders } from "../provider-request-config.js";
 import { persistInlineAuthFailure } from "./inline-usage.js";
@@ -161,16 +160,11 @@ const whamUsageSchema = z.object({
 function isWhamOAuthProfile(
   profile: AuthProfileCredential | undefined,
 ): profile is OAuthCredential {
-  return (
-    profile?.type === "oauth" &&
-    Boolean(profile.access) &&
-    normalizeProviderId(profile.provider) === "openai" &&
-    resolveProviderModelAuthPolicy({
-      provider: profile.provider,
-      mode: profile.type,
-      authFlow: profile.authFlow,
-    }).authRequirement === "subscription"
-  );
+  // Subscription sign-in was removed, so no stored profile can satisfy WHAM
+  // probing anymore; legacy OAuth rows must stay inert instead of probing the
+  // retired ChatGPT usage backend.
+  void profile;
+  return false;
 }
 
 function shouldProbeWhamForFailure(

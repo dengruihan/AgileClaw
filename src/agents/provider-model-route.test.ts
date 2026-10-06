@@ -45,7 +45,7 @@ describe("provider model route consumers", () => {
         models: {
           providers: {
             openai: {
-              auth: "oauth",
+              auth: "api-key",
               baseUrl: "https://api.openai.com/v1",
               models: [],
             },

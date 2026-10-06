@@ -335,7 +335,7 @@ describe("models.list OpenAI routes", () => {
       models: {
         providers: {
           openai: {
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
             baseUrl: "https://chatgpt.com/backend-api/codex",
             models: [{ id: "gpt-5.6", name: "GPT-5.6" }],
           },
@@ -344,13 +344,13 @@ describe("models.list OpenAI routes", () => {
     } as unknown as OpenClawConfig;
 
     const incompatibleRow = {
-      ...catalogEntry("chat-latest", "openai-chatgpt-responses"),
+      ...catalogEntry("chat-latest", "openai-responses"),
       reasoning: true,
     } as ModelCatalogEntry;
 
     const all = await listModels({
       cfg,
-      catalog: [catalogEntry("gpt-5.6", "openai-chatgpt-responses"), incompatibleRow],
+      catalog: [catalogEntry("gpt-5.6", "openai-responses"), incompatibleRow],
     });
     expect(all.models).toHaveLength(2);
     expect(all).toEqual({
@@ -377,7 +377,7 @@ describe("models.list OpenAI routes", () => {
       listModels({
         cfg,
         view: "default",
-        catalog: [catalogEntry("gpt-5.6", "openai-chatgpt-responses"), incompatibleRow],
+        catalog: [catalogEntry("gpt-5.6", "openai-responses"), incompatibleRow],
       }),
     ).resolves.toEqual({
       models: [
@@ -441,7 +441,7 @@ describe("models.list OpenAI routes", () => {
           });
 
           const chatGPTRow = {
-            ...catalogEntry("gpt-5.5", "openai-chatgpt-responses"),
+            ...catalogEntry("gpt-5.5", "openai-responses"),
             baseUrl: "https://chatgpt.com/backend-api/codex",
             contextWindow: 400_000,
             params: { apiKey: "private" },
@@ -533,7 +533,7 @@ describe("models.list OpenAI routes", () => {
         models: {
           providers: {
             openai: {
-              api: "openai-chatgpt-responses",
+              api: "openai-responses",
               baseUrl: "https://chatgpt.com/backend-api/codex",
               models: [{ id: "gpt-5.6", name: "GPT-5.6" }],
             },
@@ -546,7 +546,7 @@ describe("models.list OpenAI routes", () => {
           cfg,
           view: "configured",
           includeDefaultModels: false,
-          catalog: [catalogEntry("gpt-5.6", "openai-chatgpt-responses")],
+          catalog: [catalogEntry("gpt-5.6", "openai-responses")],
         }),
       ).resolves.toEqual({
         models: [
@@ -640,7 +640,7 @@ describe("models.list OpenAI routes", () => {
             models: {
               providers: {
                 openai: {
-                  api: "openai-chatgpt-responses",
+                  api: "openai-responses",
                   baseUrl: "https://chatgpt.com/backend-api/codex",
                   models: [],
                 },
@@ -650,7 +650,7 @@ describe("models.list OpenAI routes", () => {
           const result = await listModels({
             cfg,
             view: "configured",
-            catalog: [catalogEntry("chat-latest", "openai-chatgpt-responses")],
+            catalog: [catalogEntry("chat-latest", "openai-responses")],
           });
 
           expect(result.models).toContainEqual({
@@ -683,7 +683,7 @@ describe("models.list OpenAI routes", () => {
         models: {
           providers: {
             openai: {
-              api: "openai-chatgpt-responses",
+              api: "openai-responses",
               baseUrl: "https://chatgpt.com/backend-api/codex",
               models: [],
             },
@@ -696,7 +696,7 @@ describe("models.list OpenAI routes", () => {
           cfg,
           view: "configured",
           includeDefaultModels: false,
-          catalog: [catalogEntry("chat-latest", "openai-chatgpt-responses")],
+          catalog: [catalogEntry("chat-latest", "openai-responses")],
         }),
       ).resolves.toEqual({
         models: [

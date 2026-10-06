@@ -347,7 +347,7 @@ describe("doctor session transcript health", () => {
         message: {
           role: "assistant",
           provider: "codex",
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           content: [{ type: "text", text: "hello" }],
         },
       },

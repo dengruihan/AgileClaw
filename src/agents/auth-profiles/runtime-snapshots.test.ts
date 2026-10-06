@@ -106,7 +106,7 @@ describe("runtime auth profile snapshots", () => {
       recordRuntimeAuthMaterialization({
         provider: "openai",
         modelId: "gpt-5.4",
-        modelApi: "openai-chatgpt-responses",
+        modelApi: "openai-responses",
         modelBaseUrl: "https://chatgpt.com/backend-api/codex",
         requestTransportOverrides: "none",
         authMode: "oauth",
@@ -137,7 +137,7 @@ describe("runtime auth profile snapshots", () => {
           agentDir,
           provider: "openai",
           modelId,
-          modelApi: "openai-chatgpt-responses",
+          modelApi: "openai-responses",
           modelBaseUrl: "https://chatgpt.com/backend-api/codex",
           requestTransportOverrides: "none",
           authMode: "oauth",
@@ -150,7 +150,7 @@ describe("runtime auth profile snapshots", () => {
           {
             provider: "openai",
             modelId,
-            modelApi: "openai-chatgpt-responses",
+            modelApi: "openai-responses",
             modelBaseUrl: "https://chatgpt.com/backend-api/codex",
             requestTransportOverrides: "none",
             authMode: "oauth",

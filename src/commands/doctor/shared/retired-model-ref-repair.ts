@@ -11,6 +11,7 @@ import {
   canonicalizeProviderModelId,
   projectProviderModelRouteConfig,
 } from "../../../agents/provider-model-route.js";
+import { isApiKeyModelApi } from "../../../config/model-config-vocabulary.js";
 import { mergeAgentModelEntryForConfig } from "../../../config/model-input.js";
 import {
   findConfiguredProviderModel,
@@ -167,7 +168,9 @@ export function createRetiredModelRefRepairResolver(params: {
             route: auth.selectedRoute,
           })
         : projectModelProviderConfig(params.cfg, provider, {
-            api: configuredRoute?.api,
+            ...(configuredRoute?.api !== undefined && isApiKeyModelApi(configuredRoute.api)
+              ? { api: configuredRoute.api }
+              : {}),
             baseUrl,
           });
       rule = owner.suppression(routeConfig)({ provider, id, baseUrl });
@@ -185,7 +188,13 @@ export function createRetiredModelRefRepairResolver(params: {
           routes.length > 0 &&
           routes.every((route) => {
             const retirement = owner.suppression(
-              projectModelProviderConfig(params.cfg, provider, route),
+              // Route candidates may carry runtime-only APIs that cannot enter config.
+              projectModelProviderConfig(params.cfg, provider, {
+                ...(route.api !== undefined && isApiKeyModelApi(route.api)
+                  ? { api: route.api }
+                  : {}),
+                baseUrl: route.baseUrl,
+              }),
             )({
               provider,
               id,

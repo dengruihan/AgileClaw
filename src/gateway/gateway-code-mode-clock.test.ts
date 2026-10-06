@@ -257,7 +257,6 @@ describe("Gateway Code Mode clock rollback", () => {
             alsoAllow: ["code_mode_clock_approval"],
           },
           models: {
-            mode: "replace",
             providers: { [mockProvider.providerId]: mockProvider.config },
           },
           gateway: { auth: { mode: "token", token } },

@@ -382,7 +382,7 @@ describe("sessions_send across prepared runtime reload", () => {
         },
         gateway: { auth: { mode: "token", token } },
         hooks: { enabled: false },
-        models: { mode: "replace", providers: { "reload-proof": providerConfig } },
+        models: { providers: { "reload-proof": providerConfig } },
         plugins: { slots: { memory: "none" } },
         tools: {
           profile: "full",

@@ -57,7 +57,7 @@ const openAIPlatformAuthFixture = {
 
 const openAIChatGptAuthFixture = {
   ...openAIAuthFixture,
-  modelApi: "openai-chatgpt-responses",
+  modelApi: "openai-responses",
   modelBaseUrl: "https://chatgpt.com/backend-api/codex",
 } as const;
 
@@ -490,7 +490,7 @@ describe("prepareAgentRuntimeAuthPlan", () => {
         ...openAIChatGptAuthFixture,
         env: {},
         config: openAIConfig({
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: "https://chatgpt.com/backend-api/codex",
         }),
         sessionAuthProfileId: "openai:platform",
@@ -616,7 +616,7 @@ describe("prepareAgentRuntimeAuthPlan", () => {
       forwardedAuthProfileCandidateIds: ["openai:bound"],
       selectedAuthMode: "token",
       modelRoute: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         authRequirement: "subscription",
       },
     });
@@ -1063,7 +1063,7 @@ describe("prepareAgentRuntimeAuthPlan", () => {
     expect(prepared.plan).toMatchObject({
       selectedAuthMode: "oauth",
       modelRoute: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         authRequirement: "subscription",
       },
     });
@@ -1111,7 +1111,7 @@ describe("prepareAgentRuntimeAuthPlan", () => {
     expect(plan.forwardedAuthProfileId).toBeUndefined();
     expect(plan.selectedAuthMode).toBe("token");
     expect(plan.modelRoute).toMatchObject({
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
       authRequirement: "subscription",
     });

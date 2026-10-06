@@ -211,7 +211,7 @@ describe("runtime-context replay at prompt submission", () => {
 
   it.each([
     "openai-responses",
-    "openai-chatgpt-responses",
+    "openai-responses",
     "azure-openai-responses",
     "openai-completions",
   ] as const)("retains the previous tool turn's prefix only for Responses (%s)", async (api) => {

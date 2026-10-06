@@ -36,9 +36,6 @@ vi.mock("./src/runtime-provider.js", () => ({
 import plugin from "./index.js";
 
 const hostRuntime = {
-  llm: {
-    acquireLocalService: async () => undefined,
-  },
   state: {
     openKeyedStore: vi.fn(() => ({
       lookup: vi.fn(),
@@ -421,15 +418,12 @@ describe("memory-core plugin runtime registration", () => {
     expect(closeMemorySearchManagerMock).toHaveBeenCalledWith({ cfg, agentId: "main" });
   });
 
-  it("defers nested host runtime access until the injected operation runs", async () => {
-    const acquireLocalService = vi.fn(async () => undefined);
+  it("defers nested host state access until the injected operation runs", async () => {
     const openKeyedStore = vi.fn(() => ({}));
-    const llmGetter = vi.fn(() => ({ acquireLocalService }));
     const stateGetter = vi.fn(() => ({ openKeyedStore }));
     const host = Object.defineProperties(
       {},
       {
-        llm: { configurable: true, enumerable: true, get: llmGetter },
         state: { configurable: true, enumerable: true, get: stateGetter },
       },
     ) as OpenClawPluginApi["runtime"];
@@ -444,21 +438,16 @@ describe("memory-core plugin runtime registration", () => {
       }),
     );
 
-    expect(llmGetter).not.toHaveBeenCalled();
     expect(stateGetter).not.toHaveBeenCalled();
     await runtime?.getMemorySearchManager({ cfg: {}, agentId: "main" });
     const injectedHost = createMemoryRuntimeMock.mock.calls.at(-1)?.[0];
-    if (!injectedHost?.acquireLocalService || !injectedHost.openKeyedStore) {
+    if (!injectedHost?.openKeyedStore) {
       throw new Error("expected memory-core host operations");
     }
 
-    const target = { providerId: "local", baseUrl: "http://127.0.0.1:11434" };
-    await injectedHost.acquireLocalService(target);
     const storeOptions = { namespace: "lazy-host", maxEntries: 1 };
     injectedHost.openKeyedStore(storeOptions);
 
-    expect(llmGetter).toHaveBeenCalledOnce();
-    expect(acquireLocalService).toHaveBeenCalledWith(target);
     expect(stateGetter).toHaveBeenCalledOnce();
     expect(openKeyedStore).toHaveBeenCalledWith(storeOptions);
   });
@@ -494,7 +483,6 @@ describe("memory-core plugin runtime registration", () => {
       hits,
     });
     expect(createMemoryRuntimeMock).toHaveBeenCalledWith({
-      acquireLocalService: expect.any(Function),
       openKeyedStore: expect.any(Function),
     });
   });

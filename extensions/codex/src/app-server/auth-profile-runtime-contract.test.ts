@@ -73,16 +73,8 @@ function createParams(sessionFile: string, workspaceDir: string): EmbeddedRunAtt
   return params;
 }
 
-function createChatgptAccessToken(accountId: string): string {
-  const payload = Buffer.from(
-    JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: accountId } }),
-  ).toString("base64url");
-  return `e30.${payload}.test-signature`;
-}
-
 function setPreparedOpenAIRoute(
   params: EmbeddedRunAttemptParams,
-  authRequirement: "api-key" | "subscription",
   forwardedAuthProfileId?: string,
 ): void {
   const runtimePlan = createCodexRuntimePlanFixture();
@@ -92,17 +84,14 @@ function setPreparedOpenAIRoute(
       ...runtimePlan.auth,
       providerForAuth: "openai",
       authProfileProviderForAuth: "openai",
-      selectedAuthMode: authRequirement,
+      selectedAuthMode: "api-key",
       ...(forwardedAuthProfileId ? { forwardedAuthProfileId } : {}),
       modelRoute: {
         provider: "openai",
         modelId: "gpt-5.4-codex",
-        api: authRequirement === "api-key" ? "openai-responses" : "openai-chatgpt-responses",
-        baseUrl:
-          authRequirement === "api-key"
-            ? "https://api.openai.com/v1"
-            : "https://chatgpt.com/backend-api/codex",
-        authRequirement,
+        api: "openai-responses",
+        baseUrl: "https://api.openai.com/v1",
+        authRequirement: "api-key",
         requestTransportOverrides: "none",
       },
     },
@@ -309,7 +298,7 @@ describe("Auth profile runtime contract - Codex app-server adapter", () => {
       },
       order: { openai: ["openai:chatgpt"] },
     };
-    setPreparedOpenAIRoute(params, "api-key");
+    setPreparedOpenAIRoute(params);
 
     const run = runCodexAppServerAttempt(params);
     await vi.waitFor(
@@ -331,129 +320,6 @@ describe("Auth profile runtime contract - Codex app-server adapter", () => {
     expect(binding?.authProfileId).toBeUndefined();
   });
 
-  it("locks a prepared subscription route to its forwarded OAuth profile", async () => {
-    const harness = createCodexAuthProfileHarness({ startMethod: "thread/start" });
-    const sessionFile = path.join(tmpDir, "session.jsonl");
-    const params = createParams(sessionFile, tmpDir);
-    const authProfileStore = {
-      version: 1 as const,
-      profiles: {
-        "openai:chatgpt": {
-          type: "oauth" as const,
-          provider: "openai",
-          access: createChatgptAccessToken("account-oauth"),
-          refresh: "refresh-token",
-          expires: Date.now() + 60 * 60_000,
-          accountId: "account-oauth",
-        },
-      },
-    };
-    params.authProfileStore = authProfileStore;
-    setPreparedOpenAIRoute(params, "subscription", "openai:chatgpt");
-
-    const run = runCodexAppServerAttempt(params);
-    await vi.waitFor(
-      () => expect(harness.seenClientOptions).toHaveLength(1),
-      APP_SERVER_START_WAIT,
-    );
-    expect(harness.seenClientOptions[0]).toMatchObject({
-      preparedAuth: {
-        kind: "profile",
-        profileId: "openai:chatgpt",
-        store: authProfileStore,
-        snapshot: {
-          loginParams: {
-            type: "chatgptAuthTokens",
-            chatgptAccountId: "account-oauth",
-          },
-        },
-      },
-    });
-    expect(harness.seenClientOptions[0]).not.toHaveProperty("authProfileId");
-    await harness.waitForMethod("turn/start");
-    await harness.completeTurn();
-    await run;
-  });
-
-  it("accepts a prepared subscription route with a real token profile", async () => {
-    const harness = createCodexAuthProfileHarness({ startMethod: "thread/start" });
-    const sessionFile = path.join(tmpDir, "session.jsonl");
-    const params = createParams(sessionFile, tmpDir);
-    const authProfileStore = {
-      version: 1 as const,
-      profiles: {
-        "openai:token": {
-          type: "token" as const,
-          provider: "openai",
-          token: createChatgptAccessToken("account-token"),
-        },
-      },
-    };
-    params.authProfileStore = authProfileStore;
-    setPreparedOpenAIRoute(params, "subscription", "openai:token");
-
-    const run = runCodexAppServerAttempt(params);
-    await vi.waitFor(
-      () => expect(harness.seenClientOptions).toHaveLength(1),
-      APP_SERVER_START_WAIT,
-    );
-    expect(harness.seenClientOptions[0]).toMatchObject({
-      preparedAuth: {
-        kind: "profile",
-        profileId: "openai:token",
-        store: authProfileStore,
-        snapshot: {
-          loginParams: {
-            type: "chatgptAuthTokens",
-            chatgptAccountId: "account-token",
-          },
-        },
-      },
-    });
-    await harness.waitForMethod("turn/start");
-    await harness.completeTurn();
-    await run;
-  });
-
-  it("keeps a user-home app-server on native auth despite a prepared Platform route", async () => {
-    const harness = createCodexAuthProfileHarness({ startMethod: "thread/start" });
-    const sessionFile = path.join(tmpDir, "session.jsonl");
-    const params = createParams(sessionFile, tmpDir);
-    params.agentDir = tmpDir;
-    params.authProfileStore = {
-      version: 1,
-      profiles: {
-        "openai:chatgpt": {
-          type: "oauth",
-          provider: "openai",
-          access: "subscription-token",
-          refresh: "refresh-token",
-          expires: Date.now() + 60 * 60_000,
-        },
-      },
-      order: { openai: ["openai:chatgpt"] },
-    };
-    setPreparedOpenAIRoute(params, "api-key", "openai:chatgpt");
-
-    const run = runCodexAppServerAttempt(params, {
-      pluginConfig: {
-        appServer: { homeScope: "user" },
-        supervision: { enabled: true },
-      },
-    });
-    await vi.waitFor(
-      () => expect(harness.seenClientOptions).toHaveLength(1),
-      APP_SERVER_START_WAIT,
-    );
-    expect(harness.seenClientOptions[0]).not.toHaveProperty("preparedAuth");
-    expect(harness.seenClientOptions[0]).toMatchObject({
-      startOptions: expect.objectContaining({ homeScope: "user" }),
-    });
-    await harness.waitForMethod("turn/start");
-    await harness.completeTurn();
-    await run;
-  });
-
   it("fails before profile selection when a prepared Platform route has no key", async () => {
     const harness = createCodexAuthProfileHarness({ startMethod: "thread/start" });
     const sessionFile = path.join(tmpDir, "session.jsonl");
@@ -471,10 +337,10 @@ describe("Auth profile runtime contract - Codex app-server adapter", () => {
       },
       order: { openai: ["openai:chatgpt"] },
     };
-    setPreparedOpenAIRoute(params, "api-key");
+    setPreparedOpenAIRoute(params);
 
     await expect(runCodexAppServerAttempt(params)).rejects.toThrow(
-      "Prepared Codex API-key route is missing its resolved API key.",
+      "Codex model execution requires a prepared API-key profile.",
     );
     expect(harness.seenClientOptions).toHaveLength(0);
   });
@@ -492,61 +358,8 @@ describe("Auth profile runtime contract - Codex app-server adapter", () => {
     } as NonNullable<typeof params.sandbox> & { placementExecutionMode: "remote-exec" };
 
     await expect(runCodexAppServerAttempt(params)).rejects.toThrow(
-      "Codex remote-exec cloud placement requires prepared OpenAI auth",
+      "Codex model execution requires a prepared API-key profile.",
     );
     expect(harness.seenClientOptions).toHaveLength(0);
-  });
-
-  it.each([
-    { label: "no forwarded profile", forwardedProfileId: undefined, profileType: "oauth" as const },
-    {
-      label: "an API-key profile",
-      forwardedProfileId: "openai:platform",
-      profileType: "api_key" as const,
-    },
-  ])("rejects a subscription route with $label", async (testCase) => {
-    const harness = createCodexAuthProfileHarness({ startMethod: "thread/start" });
-    const sessionFile = path.join(tmpDir, "session.jsonl");
-    const params = createParams(sessionFile, tmpDir);
-    vi.stubEnv("OPENAI_API_KEY", "ambient-platform-key");
-    vi.stubEnv("CODEX_ACCESS_TOKEN", "ambient-subscription-token");
-    params.authProfileStore = {
-      version: 1,
-      profiles:
-        testCase.profileType === "api_key"
-          ? {
-              "openai:platform": {
-                type: "api_key",
-                provider: "openai",
-                key: "platform-profile-key",
-              },
-              "openai:decoy": {
-                type: "oauth",
-                provider: "openai",
-                access: "decoy-subscription-token",
-                refresh: "decoy-refresh-token",
-                expires: Date.now() + 60_000,
-              },
-            }
-          : {
-              "openai:decoy": {
-                type: "oauth",
-                provider: "openai",
-                access: "decoy-subscription-token",
-                refresh: "decoy-refresh-token",
-                expires: Date.now() + 60_000,
-              },
-            },
-    };
-    setPreparedOpenAIRoute(params, "subscription", testCase.forwardedProfileId);
-
-    try {
-      await expect(runCodexAppServerAttempt(params)).rejects.toThrow(
-        "Prepared Codex subscription route requires a forwarded OpenAI OAuth or token profile.",
-      );
-      expect(harness.seenClientOptions).toHaveLength(0);
-    } finally {
-      vi.unstubAllEnvs();
-    }
   });
 });

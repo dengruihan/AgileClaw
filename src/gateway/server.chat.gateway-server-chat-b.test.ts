@@ -1789,7 +1789,7 @@ describe("gateway server chat", () => {
               };
               const subscriptionRoute = {
                 ...platformRoute,
-                api: "openai-chatgpt-responses" as const,
+                api: "openai-responses" as const,
                 baseUrl: "https://chatgpt.com/backend-api/codex",
                 contextWindow: 400_000,
                 reasoning: false,

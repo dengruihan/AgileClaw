@@ -67,11 +67,9 @@ function matchesLiteralCredential(
   if (credential.provider !== existing.provider) {
     return false;
   }
-  return credential.type === "api_key" && existing.type === "api_key"
-    ? credential.key === existing.key
-    : credential.type === "token" &&
-        existing.type === "token" &&
-        credential.token === existing.token;
+  return (
+    credential.type === "api_key" && existing.type === "api_key" && credential.key === existing.key
+  );
 }
 
 function resolveOwnedAccountProvider(owner: string, authProfileId: string): string {
@@ -85,19 +83,18 @@ function resolveOwnedAccountProvider(owner: string, authProfileId: string): stri
 }
 
 function resolveLinkableAuthProfileProvider(
-  cfg: OpenClawConfig,
   owner: string,
   authProfileId: string,
 ): string | undefined {
   if (isUserModelAuthProfileId(authProfileId)) {
     return resolveOwnedAccountProvider(owner, authProfileId);
   }
-  // Stored credentials and config-only routes (e.g. aws-sdk) remain linkable;
-  // the caller cannot claim a provider the selected profile does not satisfy.
+  // Only a stored API-key profile can be linked as a model account.
   const store = ensureAuthProfileStoreWithoutExternalProfiles(resolveSharedMainAuthAgentDir(), {
     readOnly: true,
   });
-  return store.profiles[authProfileId]?.provider ?? cfg.auth?.profiles?.[authProfileId]?.provider;
+  const credential = store.profiles[authProfileId];
+  return credential?.type === "api_key" ? credential.provider : undefined;
 }
 
 /** One Gateway lifetime owns sign-in steps and authority; provider methods only stage credentials. */
@@ -192,14 +189,10 @@ export function createModelAccountConnectService(options: {
     },
     link(action: ModelAccountConnectAction, authProfileId: string): UsersLinkAuthProfileResult {
       assertRunning(action);
-      const provider = resolveLinkableAuthProfileProvider(
-        options.getConfig(),
-        action.owner,
-        authProfileId,
-      );
+      const provider = resolveLinkableAuthProfileProvider(action.owner, authProfileId);
       if (!provider) {
         throw new ModelAccountConnectInputError(
-          `unknown auth profile "${authProfileId}"; sign the account in first with "openclaw models auth login --provider <id> --profile-id ${authProfileId}", then link it`,
+          `unknown auth profile "${authProfileId}"; add an API key account first with "openclaw models accounts connect <provider>"`,
         );
       }
       return setLink(action, provider, authProfileId);
@@ -304,6 +297,11 @@ export function createModelAccountConnectService(options: {
         if (!resolvedMethod) {
           throw new ModelAccountConnectInputError(
             "This sign-in method is unavailable for personal accounts. Choose a method from Connected accounts.",
+          );
+        }
+        if (resolvedMethod.kind !== "api_key") {
+          throw new ModelAccountConnectInputError(
+            "Personal model accounts only support API keys. Choose an API-key method.",
           );
         }
       } catch (error) {

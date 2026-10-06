@@ -21,9 +21,9 @@ export const platformRoute = {
 } satisfies ProviderModelRouteCandidate;
 
 export const subscriptionRoute = {
-  api: "openai-chatgpt-responses",
+  api: "openai-responses",
   baseUrl: "https://chatgpt.com/backend-api/codex",
-  authRequirement: "subscription",
+  authRequirement: "api-key",
   requestTransportOverrides: "none",
   runtimePolicy: { compatibleIds: ["openclaw", "codex"] },
 } satisfies ProviderModelRouteCandidate;

@@ -44,8 +44,8 @@ const platformModel = {
 
 const subscriptionModel = {
   ...platformModel,
-  api: "openai-chatgpt-responses",
-  baseUrl: "https://chatgpt.com/backend-api/codex",
+  api: "openai-responses",
+  baseUrl: "https://openai-eu.example/v1",
 } as Model;
 
 const platformRoute = {
@@ -59,9 +59,9 @@ const platformRoute = {
 
 const subscriptionRoute = {
   ...platformRoute,
-  api: "openai-chatgpt-responses",
-  baseUrl: "https://chatgpt.com/backend-api/codex",
-  authRequirement: "subscription",
+  api: "openai-responses",
+  baseUrl: "https://openai-eu.example/v1",
+  authRequirement: "api-key",
 } as const;
 
 function authStore(profiles: AuthProfileStore["profiles"]): AuthProfileStore {
@@ -329,7 +329,7 @@ describe("resolvePreparedRuntimeModelAuth", () => {
         plan: {
           providerForAuth: "openai",
           authProfileProviderForAuth: "openai",
-          selectedAuthMode: "oauth",
+          selectedAuthMode: "api-key",
           modelRoute: subscriptionRoute,
         },
         model: subscriptionModel,
@@ -337,9 +337,9 @@ describe("resolvePreparedRuntimeModelAuth", () => {
           models: {
             providers: {
               openai: {
-                auth: "oauth",
+                auth: "api-key",
                 apiKey: "configured-subscription-credential",
-                baseUrl: "https://chatgpt.com/backend-api/codex",
+                baseUrl: "https://openai-eu.example/v1",
                 models: [],
               },
             },
@@ -356,7 +356,7 @@ describe("resolvePreparedRuntimeModelAuth", () => {
       },
       plan: {
         selectedAuthMode: "oauth",
-        modelRoute: { authRequirement: "subscription" },
+        modelRoute: { authRequirement: "api-key" },
       },
     });
   });

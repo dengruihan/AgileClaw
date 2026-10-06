@@ -168,7 +168,6 @@ it(
       const factory: CodexAppServerClientFactory = async (options) => {
         options?.assertCurrent?.();
         expect(options?.preparedAuth).toBeUndefined();
-        expect(options?.authRequirement).toBeUndefined();
         expect(options?.authProfileId ?? null).toBeNull();
         const startOptions = options?.startOptions;
         assert(startOptions);

@@ -19,7 +19,6 @@ export function prewarmCodexAttemptClient(params: {
     options,
     pluginConfig,
     runtimeArtifactRequest,
-    startupAuthRequirement,
     startupClientAuthProfileId,
     startupPreparedAuth,
     agentDir,
@@ -43,7 +42,6 @@ export function prewarmCodexAttemptClient(params: {
     ...(startupPreparedAuth
       ? { preparedAuth: startupPreparedAuth }
       : { authProfileId: startupClientAuthProfileId }),
-    authRequirement: startupAuthRequirement,
     authProfileStore,
     authBindingFingerprint,
     agentDir,

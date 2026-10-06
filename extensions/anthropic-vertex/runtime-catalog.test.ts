@@ -77,17 +77,28 @@ describe("Anthropic Vertex registered runtime model resolution", () => {
   ])("preserves authored $modelId during configured completion", async (authored) => {
     vi.stubEnv("GOOGLE_CLOUD_LOCATION", "us-central1");
     const provider = await registerSingleProviderPlugin(anthropicVertexPlugin);
-    const registry = ModelRegistry.create(AuthStorage.inMemory(), "/fixture/agent/models.json", {
-      includePluginCatalogs: false,
-      modelsJsonContents: JSON.stringify({
-        providers: {
-          "anthropic-vertex": {
-            api: "anthropic-messages",
-            baseUrl: authored.baseUrl,
-            models: [{ id: authored.modelId, params: authored.params }],
+    const registry = ModelRegistry.create(AuthStorage.inMemory(), {
+      config: {
+        models: {
+          providers: {
+            "anthropic-vertex": {
+              api: "anthropic-messages",
+              baseUrl: authored.baseUrl,
+              models: [
+                {
+                  id: authored.modelId,
+                  name: authored.modelId,
+                  reasoning: false,
+                  input: ["text"],
+                  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                  maxTokens: 1024,
+                  ...(authored.params ? { params: authored.params } : {}),
+                },
+              ],
+            },
           },
         },
-      }),
+      },
     });
     const model = provider.resolveDynamicModel?.({
       provider: "anthropic-vertex",

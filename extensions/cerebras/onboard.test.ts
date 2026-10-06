@@ -79,23 +79,17 @@ afterEach(() => {
 });
 
 describe("Cerebras onboarding", () => {
-  it.each(["default", "merge", "replace"] as const)(
-    "keeps generated prices replace-only while selecting the default and alias in %s mode",
-    (mode) => {
-      const config = applyCerebrasConfig(mode === "default" ? {} : { models: { mode } });
+  it("seeds the catalog prices while selecting the default and alias", () => {
+    const config = applyCerebrasConfig({});
 
-      expect(config.models?.mode).toBe(mode === "replace" ? "replace" : "merge");
-      expect(config.models?.providers?.cerebras?.models).toEqual(
-        mode === "replace" ? buildCerebrasCatalogModels() : [],
-      );
-      expect(resolveAgentModelPrimaryValue(config.agents?.defaults?.model)).toBe(
-        CEREBRAS_DEFAULT_MODEL_REF,
-      );
-      expect(config.agents?.defaults?.models).toEqual({
-        [CEREBRAS_DEFAULT_MODEL_REF]: { alias: "Cerebras Gemma 4 31B" },
-      });
-    },
-  );
+    expect(config.models?.providers?.cerebras?.models).toEqual(buildCerebrasCatalogModels());
+    expect(resolveAgentModelPrimaryValue(config.agents?.defaults?.model)).toBe(
+      CEREBRAS_DEFAULT_MODEL_REF,
+    );
+    expect(config.agents?.defaults?.models).toEqual({
+      [CEREBRAS_DEFAULT_MODEL_REF]: { alias: "Cerebras Gemma 4 31B" },
+    });
+  });
 
   it("preserves an existing primary during non-interactive auth setup", async () => {
     const provider = await registerSingleProviderPlugin(plugin);

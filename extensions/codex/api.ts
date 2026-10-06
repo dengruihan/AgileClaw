@@ -2,7 +2,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { coerceErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import type { HealthCheck, OpenClawConfig } from "openclaw/plugin-sdk/health";
-import { codexNativeProfileRecoveryHealthCheck } from "./src/auth-profile-health.js";
 import {
   CODEX_MANAGED_APP_SERVER_CHECK_ID,
   registerCodexManagedAppServerDoctorChecks as registerChecks,
@@ -32,7 +31,4 @@ export function registerCodexManagedAppServerDoctorChecks(host: {
   registerHealthCheck(check: HealthCheck): void;
 }): void {
   registerChecks({ ...host, pluginRoot: CODEX_PLUGIN_ROOT });
-  if (!host.getHealthCheck(codexNativeProfileRecoveryHealthCheck.id)) {
-    host.registerHealthCheck(codexNativeProfileRecoveryHealthCheck);
-  }
 }

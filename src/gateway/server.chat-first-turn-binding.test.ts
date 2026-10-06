@@ -86,7 +86,6 @@ it("binds a first native chat.send before streaming and persists its stopped par
         },
       },
       models: {
-        mode: "replace",
         providers: {
           [provider.providerId]: { ...provider.config, request: { allowPrivateNetwork: true } },
         },

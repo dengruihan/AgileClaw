@@ -8,7 +8,6 @@ import { createProviderModelCatalogIdNormalizer } from "../../plugins/provider-m
 import type { ProviderRuntimeModel } from "../../plugins/provider-runtime-model.types.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../defaults.js";
 import { resolveCatalogOwnedModelCompat } from "../model-compat-catalog.js";
-import { attachModelProviderLocalService } from "../provider-local-service.js";
 import {
   attachModelProviderRequestRouteFacts,
   attachModelProviderRequestTransport,
@@ -159,52 +158,49 @@ export function buildConfiguredFallbackModel(params: {
   return normalizeResolvedModel({
     ...params,
     model: attachModelProviderRequestRouteFacts(
-      attachModelProviderLocalService(
-        attachModelProviderRequestTransport(
-          {
-            id: modelId,
-            name: metadataModel?.name ?? modelId,
-            api: requestConfig.api ?? "openai-responses",
+      attachModelProviderRequestTransport(
+        {
+          id: modelId,
+          name: metadataModel?.name ?? modelId,
+          api: requestConfig.api ?? "openai-responses",
+          provider,
+          baseUrl: requestConfig.baseUrl,
+          reasoning: fallbackReasoning,
+          input: resolveProviderModelInput({
             provider,
-            baseUrl: requestConfig.baseUrl,
-            reasoning: fallbackReasoning,
-            input: resolveProviderModelInput({
-              provider,
-              modelId,
-              modelName: metadataModel?.name ?? modelId,
-              input: metadataModel?.input,
-            }),
-            ...(configuredModel?.thinkingLevelMap !== undefined
-              ? { thinkingLevelMap: configuredModel.thinkingLevelMap }
-              : {}),
-            cost: mergeConfiguredModelCost({
-              ...params,
-              configuredModel,
-              catalogCost: staticCatalogModel?.cost,
-            }),
-            contextWindow: resolvedFallbackContextWindow,
-            contextTokens: configuredModel?.contextTokens ?? staticCatalogModel?.contextTokens,
-            // maxTokens is a wire-level output cap, not a context-budget fallback.
-            // Omit an unknown cap so strict providers can apply their own limit.
-            ...(normalizedResolvedFallbackMaxTokens !== undefined
-              ? {
-                  maxTokens: normalizedResolvedFallbackMaxTokens,
-                  maxTokensSource:
-                    configuredFallbackMaxTokens !== undefined ? "configured" : "discovered",
-                }
-              : {}),
-            ...(resolvedParams ? { params: resolvedParams } : {}),
-            ...(requestTimeoutMs !== undefined ? { requestTimeoutMs } : {}),
-            headers: requestConfig.headers,
-            ...(providerConfig?.authHeader !== undefined
-              ? { authHeader: providerConfig.authHeader }
-              : {}),
-            compat: fallbackCompat,
-            mediaInput: fallbackMediaInput,
-          } as Model,
-          providerRequest,
-        ),
-        providerConfig?.localService,
+            modelId,
+            modelName: metadataModel?.name ?? modelId,
+            input: metadataModel?.input,
+          }),
+          ...(configuredModel?.thinkingLevelMap !== undefined
+            ? { thinkingLevelMap: configuredModel.thinkingLevelMap }
+            : {}),
+          cost: mergeConfiguredModelCost({
+            ...params,
+            configuredModel,
+            catalogCost: staticCatalogModel?.cost,
+          }),
+          contextWindow: resolvedFallbackContextWindow,
+          contextTokens: configuredModel?.contextTokens ?? staticCatalogModel?.contextTokens,
+          // maxTokens is a wire-level output cap, not a context-budget fallback.
+          // Omit an unknown cap so strict providers can apply their own limit.
+          ...(normalizedResolvedFallbackMaxTokens !== undefined
+            ? {
+                maxTokens: normalizedResolvedFallbackMaxTokens,
+                maxTokensSource:
+                  configuredFallbackMaxTokens !== undefined ? "configured" : "discovered",
+              }
+            : {}),
+          ...(resolvedParams ? { params: resolvedParams } : {}),
+          ...(requestTimeoutMs !== undefined ? { requestTimeoutMs } : {}),
+          headers: requestConfig.headers,
+          ...(providerConfig?.authHeader !== undefined
+            ? { authHeader: providerConfig.authHeader }
+            : {}),
+          compat: fallbackCompat,
+          mediaInput: fallbackMediaInput,
+        } as Model,
+        providerRequest,
       ),
       params.providerMetadataOwners,
     ),

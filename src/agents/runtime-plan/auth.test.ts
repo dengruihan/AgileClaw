@@ -104,9 +104,9 @@ describe("buildAgentRuntimeAuthPlan", () => {
       modelRoute: {
         provider: "openai",
         modelId: "gpt-5.5",
-        api: "openai-chatgpt-responses",
-        baseUrl: "https://chatgpt.com/backend-api/codex",
-        authRequirement: "subscription",
+        api: "openai-responses",
+        baseUrl: "https://openai-eu.example/v1",
+        authRequirement: "api-key",
         requestTransportOverrides: "none",
       },
       config: {},
@@ -119,8 +119,8 @@ describe("buildAgentRuntimeAuthPlan", () => {
       modelRoute: {
         provider: "openai",
         modelId: "gpt-5.5",
-        api: "openai-chatgpt-responses",
-        authRequirement: "subscription",
+        api: "openai-responses",
+        authRequirement: "api-key",
       },
     });
   });

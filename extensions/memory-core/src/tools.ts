@@ -276,7 +276,6 @@ export function createMemorySearchTool(options: MemoryToolOptions) {
             cfg,
             agentId,
             purpose: memoryManagerPurpose,
-            acquireLocalService: options.acquireLocalService,
           });
           if (memoryManagerPurpose === "cli" && "manager" in context) {
             if (cleanupStarted) {

@@ -491,8 +491,10 @@ function parseModelsAuthLoginFlowResult(value: unknown): ModelsAuthLoginFlowResu
     const profileId = parseRequiredString(record.profileId, "profile id");
     const provider = parseRequiredString(record.provider, "profile provider");
     const mode = parseRequiredString(record.mode, "profile mode");
-    if (mode !== "api_key" && mode !== "oauth" && mode !== "token") {
-      throw new Error("Provider login returned an invalid profile.");
+    if (mode !== "api_key") {
+      throw new Error(
+        `Provider login returned a ${mode} credential; model providers only accept API keys.`,
+      );
     }
     return {
       profileId,

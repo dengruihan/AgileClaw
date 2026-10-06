@@ -109,7 +109,6 @@ function createConfig(url: string): OpenClawConfig {
       exec: { host: "gateway", security: "full", ask: "off" },
     },
     models: {
-      mode: "replace",
       providers: {
         "egress-proof": {
           baseUrl: `${url}/v1`,

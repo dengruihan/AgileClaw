@@ -48,7 +48,7 @@ describe("runIsolatedCompletion native authorization", () => {
         modelRoute: {
           provider: "openai",
           modelId: "gpt-test",
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: "https://chatgpt.com/backend-api/codex",
           authRequirement: "subscription",
           requestTransportOverrides: "none",
@@ -75,7 +75,7 @@ describe("runIsolatedCompletion native authorization", () => {
         model: {
           provider: "openai",
           id: "gpt-test",
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: subscriptionPlan.modelRoute.baseUrl,
         },
       });
@@ -181,7 +181,7 @@ describe("runIsolatedCompletion native authorization", () => {
       model: {
         provider: "openai",
         id: "gpt-test",
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: nativeAuthPlan.modelRoute.baseUrl,
         maxTokens: 1_024,
       },
@@ -422,7 +422,7 @@ describe("runIsolatedCompletion native authorization", () => {
     {
       mode: "subscription",
       owner: "harness",
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
     },
   ] as const)("dispatches the real prepared $mode route to $owner authorization", async (route) => {

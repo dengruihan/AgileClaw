@@ -69,7 +69,6 @@ export function createAgentsApiHarness(runtime: PluginRuntime): AgentHarnessV2 {
         return { supported: false, reason: "Agents API requires the OpenAI provider" };
       }
       if (
-        ctx.modelProvider?.preparedAuth?.requirement === "subscription" ||
         (ctx.modelProvider?.api && ctx.modelProvider.api !== "openai-responses") ||
         ctx.modelProvider?.requestTransportOverrides === "present" ||
         (ctx.modelProvider?.baseUrl && ctx.modelProvider.baseUrl !== "https://api.openai.com/v1")

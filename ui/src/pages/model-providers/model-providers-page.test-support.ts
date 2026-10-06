@@ -48,13 +48,7 @@ export type ModelProvidersPageTestElement = HTMLElement & {
   updateComplete: Promise<boolean>;
   busy: Record<string, boolean>;
   data: ModelProvidersData | null;
-  addProvider: () => Promise<void>;
-  addProviderId: string;
-  addProviderKey: string;
-  addProviderOpen: boolean;
   defaultsDraft: (DefaultModelSelection & Partial<ModelBehaviorConfig>) | null;
-  keyDraft: string;
-  keyEditorProvider: string | null;
   profileActions: Pick<ModelProviderProfileActionsController, "logout" | "setOrder" | "probe">;
   messages: Record<string, { kind: "success" | "error"; text: string; warning?: string }>;
   profileOrders: Record<string, string[]>;
@@ -145,36 +139,12 @@ export function createAuthStatus(
       displayName: "OpenAI",
       status: "ok",
       profiles: [
-        { profileId: "openai:one", type: "oauth", status: "ok" },
-        { profileId: "openai:two", type: "oauth", status: "ok" },
+        { profileId: "openai:one", type: "api_key", status: "static" },
+        { profileId: "openai:two", type: "api_key", status: "static" },
       ],
       ...overrides,
     })),
   };
-}
-
-export function createApiKeyProviderData(): ModelProvidersData {
-  return {
-    ...EMPTY_MODEL_PROVIDERS_DATA,
-    authStatus: {
-      ...createAuthStatus([
-        {
-          profiles: [
-            { profileId: "openai:key", type: "api_key", status: "static", logoutSupported: true },
-          ],
-        },
-      ]),
-      providerCapabilities: [{ provider: "openai", apiKeySupported: true, quickApiKeySetup: true }],
-    },
-  };
-}
-
-export async function saveKey(page: ModelProvidersPageTestElement, value: string) {
-  page.data = createApiKeyProviderData();
-  page.keyEditorProvider = "openai";
-  page.keyDraft = value;
-  await page.updateComplete;
-  page.querySelector<HTMLButtonElement>(".model-providers__inline-form button")!.click();
 }
 
 export function createHarness(initialScopeId: string) {
@@ -206,9 +176,29 @@ export function createHarness(initialScopeId: string) {
       }
       case "models.list":
         return { models: [] };
+      case "models.probe":
+        return { provider: "openai", status: "ok", results: [] };
       case "config.get":
         return {
-          config: { agents: { defaults: { thinkingDefault: "low", fastModeDefault: "auto" } } },
+          config: {
+            agents: { defaults: { thinkingDefault: "low", fastModeDefault: "auto" } },
+            models: {
+              providers: {
+                openai: {
+                  name: "OpenAI",
+                  baseUrl: "https://example.test/v1",
+                  api: "openai-completions",
+                  models: [],
+                },
+                anthropic: {
+                  name: "Anthropic",
+                  baseUrl: "https://anthropic.example.test",
+                  api: "anthropic-messages",
+                  models: [],
+                },
+              },
+            },
+          },
           hash: "hash",
           valid: true,
         };
@@ -244,7 +234,8 @@ export function createHarness(initialScopeId: string) {
           "models.authSetApiKey",
           "models.authLogout",
           "models.authOrderSet",
-          "models.authLogin",
+          "models.providerTemplates",
+          "models.discover",
           "usage.status",
           "sessions.usage",
           "wizard.start",
@@ -443,37 +434,4 @@ export function appendPage(context: ApplicationContext) {
   page.routeData = createEmptyModelProvidersRouteData(context);
   document.body.append(page);
   return page;
-}
-
-export function clickLoginChoice(page: ModelProvidersPageTestElement, choice: string) {
-  const option = page.data?.authStatus?.providerCapabilities
-    ?.flatMap((provider) => provider.loginOptions ?? [])
-    .find((candidate) => candidate.id === choice);
-  expect(option).toBeDefined();
-  const button = [
-    ...page.querySelectorAll<HTMLButtonElement>("[data-models-login-choice] button"),
-  ].find((candidate) => candidate.querySelector("strong")?.textContent === option!.label);
-  expect(button).toBeDefined();
-  button!.click();
-}
-
-export async function startSelectedLogin(page: ModelProvidersPageTestElement, choice: string) {
-  clickLoginChoice(page, choice);
-  await waitForFast(() =>
-    expect(page.querySelector<HTMLInputElement>('input[name="wizard-text"]')?.disabled).toBe(false),
-  );
-}
-
-export async function submitCredential(page: ModelProvidersPageTestElement) {
-  const manual = page.querySelector<HTMLDetailsElement>(".wizard-step__manual-entry");
-  if (manual && !manual.open) {
-    manual.querySelector<HTMLElement>("summary")!.click();
-    expect(manual.open).toBe(true);
-  }
-  const input = page.querySelector<HTMLInputElement>('input[name="wizard-text"]')!;
-  input.value = "synthetic-test-credential";
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-  await page.updateComplete;
-  page.querySelector<HTMLButtonElement>('.wizard-step__form button[type="submit"]')!.click();
-  await waitForFast(() => expect(input.disabled).toBe(true));
 }

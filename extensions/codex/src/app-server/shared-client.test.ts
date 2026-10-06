@@ -8,7 +8,7 @@ import { SemVer } from "semver";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebSocketServer, type RawData } from "ws";
 import { createCodexAppServerAgentHarness } from "../../harness.js";
-import type { CodexAppServerAuthHandoff, CodexAppServerPreparedAuth } from "./auth-types.js";
+import type { CodexAppServerPreparedAuth } from "./auth-types.js";
 import { CodexAppServerClient } from "./client.js";
 import type { CodexAppServerStartOptions } from "./config.js";
 import { acquireCodexNativeConfigFence } from "./native-config-fence.js";
@@ -43,7 +43,7 @@ const mocks = vi.hoisted(() => ({
       agentDir?: string;
       authProfileId?: string;
       config?: unknown;
-    }): Promise<CodexAppServerAuthHandoff | undefined> => undefined,
+    }): Promise<void> => undefined,
   ),
   resolveCodexAppServerAuthProfileIdForAgent: vi.fn(
     (params?: { authProfileId?: string }) => params?.authProfileId,
@@ -1658,61 +1658,43 @@ describe("shared Codex app-server client", () => {
     expect(mocks.resolveCodexAppServerPreparedApiKeyCacheKey).toHaveBeenCalledWith("platform-key");
   });
 
-  it.each(["api-key", "subscription"] as const)(
-    "reuses a turn's %s physical client for a control resume",
-    async (authRequirement) => {
-      const harness = createClientHarness();
-      const start = vi
-        .spyOn(CodexAppServerClient, "start")
-        .mockResolvedValueOnce(harness.client)
-        .mockImplementation(async () => {
-          throw new Error("control resume opened a second physical client");
+  it("reuses a turn's prepared API-key physical client for a control resume", async () => {
+    const harness = createClientHarness();
+    const start = vi
+      .spyOn(CodexAppServerClient, "start")
+      .mockResolvedValueOnce(harness.client)
+      .mockImplementation(async () => {
+        throw new Error("control resume opened a second physical client");
+      });
+    const preparedAuth: CodexAppServerPreparedAuth = { kind: "api-key", apiKey: "platform-key" };
+    const options = {
+      timeoutMs: 1000,
+      agentDir: "/tmp/openclaw-agent",
+      preparedAuth,
+    };
+    const producer = getSharedCodexAppServerClient(options);
+    await sendInitializeResult(harness, "openclaw/0.149.0 (macOS; test)");
+    await expect(producer).resolves.toBe(harness.client);
+    const response = { thread: { id: "thread-resume" } };
+    const request = vi.spyOn(harness.client, "request").mockResolvedValue(response as never);
+
+    await expect(
+      withCodexAppServerJsonClient(options, async (send, client) => {
+        expect(client).toBe(harness.client);
+        return await send({
+          method: "thread/resume",
+          requestParams: { threadId: "thread-resume" },
         });
-      const preparedAuth: CodexAppServerPreparedAuth =
-        authRequirement === "api-key"
-          ? { kind: "api-key", apiKey: "platform-key" }
-          : {
-              kind: "profile",
-              profileId: "openai:scoped",
-              store: {
-                version: 1,
-                profiles: {
-                  "openai:scoped": { type: "token", provider: "openai", token: "prepared-token" },
-                },
-              },
-            };
-      const options = {
-        timeoutMs: 1000,
-        agentDir: "/tmp/openclaw-agent",
-        preparedAuth,
-        authRequirement,
-        authBindingFingerprint:
-          authRequirement === "subscription" ? "profile-credential-fingerprint" : undefined,
-      };
-      const producer = getSharedCodexAppServerClient(options);
-      await sendInitializeResult(harness, "openclaw/0.149.0 (macOS; test)");
-      await expect(producer).resolves.toBe(harness.client);
-      const response = { thread: { id: "thread-resume" } };
-      const request = vi.spyOn(harness.client, "request").mockResolvedValue(response as never);
+      }),
+    ).resolves.toEqual(response);
 
-      await expect(
-        withCodexAppServerJsonClient(options, async (send, client) => {
-          expect(client).toBe(harness.client);
-          return await send({
-            method: "thread/resume",
-            requestParams: { threadId: "thread-resume" },
-          });
-        }),
-      ).resolves.toEqual(response);
-
-      expect(start).toHaveBeenCalledOnce();
-      expect(request).toHaveBeenCalledExactlyOnceWith(
-        "thread/resume",
-        { threadId: "thread-resume" },
-        expect.objectContaining({ signal: expect.any(AbortSignal) }),
-      );
-    },
-  );
+    expect(start).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledExactlyOnceWith(
+      "thread/resume",
+      { threadId: "thread-resume" },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
 
   it("rejects ambiguous prepared and legacy auth before starting a client", async () => {
     const startSpy = vi.spyOn(CodexAppServerClient, "start");
@@ -1771,53 +1753,6 @@ describe("shared Codex app-server client", () => {
         preparedAuth: { kind: "api-key", apiKey: "second-platform-key" },
       }),
     );
-  });
-
-  it("registers persisted profile refresh for isolated app-server startup", async () => {
-    const harness = createClientHarness();
-    vi.spyOn(CodexAppServerClient, "start").mockResolvedValue(harness.client);
-    const authHandoff = {
-      accessFingerprint: "token:startup-access",
-      chatgptAccountId: "persisted-account",
-    };
-    mocks.applyCodexAppServerAuthProfile.mockResolvedValueOnce(authHandoff);
-
-    const clientPromise = createIsolatedCodexAppServerClient({
-      timeoutMs: 1000,
-      authProfileId: "openai:persisted",
-      agentDir: "/tmp/openclaw-persisted-agent",
-    });
-    await sendInitializeResult(harness, "openclaw/0.149.0 (macOS; test)");
-
-    await expect(clientPromise).resolves.toBe(harness.client);
-    mocks.refreshCodexAppServerAuthTokens.mockResolvedValueOnce({
-      accessToken: "refreshed-access",
-      chatgptAccountId: "persisted-account",
-      chatgptPlanType: null,
-    });
-    const priorWriteCount = harness.writes.length;
-    harness.send({
-      id: "refresh-persisted",
-      method: "account/chatgptAuthTokens/refresh",
-      params: { reason: "unauthorized", previousAccountId: "persisted-account" },
-    });
-    await vi.waitFor(() => expect(harness.writes.length).toBeGreaterThan(priorWriteCount));
-
-    expect(mocks.refreshCodexAppServerAuthTokens).toHaveBeenCalledWith({
-      agentDir: "/tmp/openclaw-persisted-agent",
-      authProfileId: "openai:persisted",
-      authHandoff,
-      previousAccountId: "persisted-account",
-      config: undefined,
-    });
-    expect(JSON.parse(harness.writes.at(-1) ?? "{}")).toEqual({
-      id: "refresh-persisted",
-      result: {
-        accessToken: "refreshed-access",
-        chatgptAccountId: "persisted-account",
-        chatgptPlanType: null,
-      },
-    });
   });
 
   it("skips target auth resolution when native source auth is requested", async () => {
@@ -1981,7 +1916,6 @@ describe("shared Codex app-server client", () => {
 
     const firstList = listCodexAppServerModels({
       timeoutMs: 1000,
-      authRequirement: "api-key",
     });
     await sendInitializeResult(first, "openclaw/0.149.0 (macOS; test)");
     await sendEmptyModelList(first);
@@ -1989,7 +1923,6 @@ describe("shared Codex app-server client", () => {
 
     const secondList = listCodexAppServerModels({
       timeoutMs: 1000,
-      authRequirement: "api-key",
     });
     await sendInitializeResult(second, "openclaw/0.149.0 (macOS; test)");
     await sendEmptyModelList(second);
@@ -1998,49 +1931,6 @@ describe("shared Codex app-server client", () => {
     expect(startSpy).toHaveBeenCalledTimes(2);
     expect(first.process.stdin.destroyed).toBe(false);
     expect(second.process.stdin.destroyed).toBe(false);
-  });
-
-  it("does not share a client across auth requirements", async () => {
-    const first = createClientHarness();
-    const second = createClientHarness();
-    const startSpy = vi
-      .spyOn(CodexAppServerClient, "start")
-      .mockResolvedValueOnce(first.client)
-      .mockResolvedValueOnce(second.client);
-
-    const firstList = listCodexAppServerModels({
-      timeoutMs: 1000,
-      authProfileId: "openai:work",
-      authRequirement: "api-key",
-    });
-    await sendInitializeResult(first, "openclaw/0.149.0 (macOS; test)");
-    await sendEmptyModelList(first);
-    await expect(firstList).resolves.toEqual({ models: [] });
-
-    const secondList = listCodexAppServerModels({
-      timeoutMs: 1000,
-      authProfileId: "openai:work",
-      authRequirement: "subscription",
-    });
-    await sendInitializeResult(second, "openclaw/0.149.0 (macOS; test)");
-    await sendEmptyModelList(second);
-    await expect(secondList).resolves.toEqual({ models: [] });
-
-    expect(startSpy).toHaveBeenCalledTimes(2);
-    expect(first.process.stdin.destroyed).toBe(false);
-    expect(second.process.stdin.destroyed).toBe(false);
-  });
-
-  it("rejects prepared auth that conflicts with the auth requirement", async () => {
-    const startSpy = vi.spyOn(CodexAppServerClient, "start");
-
-    await expect(
-      getSharedCodexAppServerClient({
-        authRequirement: "subscription",
-        preparedAuth: { kind: "api-key", apiKey: "placeholder" },
-      }),
-    ).rejects.toThrow("Prepared Codex auth does not satisfy the requested auth requirement.");
-    expect(startSpy).not.toHaveBeenCalled();
   });
 
   it("does not let one shared-client failure tear down another keyed client", async () => {

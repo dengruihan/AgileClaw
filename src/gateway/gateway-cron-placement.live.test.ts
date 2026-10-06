@@ -123,7 +123,6 @@ describeLive("cron placement identity through production Gateway routing", () =>
             tools: { allow: [] },
             secrets: { providers: { default: { source: "env" } } },
             models: {
-              mode: "merge",
               providers: {
                 openai: {
                   api: "openai-responses",

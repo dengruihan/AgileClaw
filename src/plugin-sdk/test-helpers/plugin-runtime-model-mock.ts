@@ -40,7 +40,6 @@ export function createPluginModelRuntimeMock(
       resolveApiKeyForProvider: vi.fn<PluginRuntime["modelAuth"]["resolveApiKeyForProvider"]>(),
     },
     llm: {
-      acquireLocalService: vi.fn(),
       complete: vi.fn().mockResolvedValue({
         text: "{}",
         provider: defaults.provider,

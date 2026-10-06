@@ -291,7 +291,6 @@ describe("Codex command RPC helpers", () => {
 
     expect(acquiredOptions()).toMatchObject({
       preparedAuth: { kind: "api-key", apiKey: "control-platform-key" },
-      authRequirement: "api-key",
       agentDir,
     });
     expect(acquiredOptions().authProfileId).toBeUndefined();
@@ -304,63 +303,6 @@ describe("Codex command RPC helpers", () => {
       },
     );
   });
-
-  it.each(["oauth", "token"] as const)(
-    "keeps %s subscription routing and rotates an automatic profile past cooldown",
-    async (type) => {
-      vi.stubEnv("OPENAI_API_KEY", "unrelated-platform-key");
-      const token = `e30.${Buffer.from(
-        JSON.stringify({
-          "https://api.openai.com/auth": { chatgpt_account_id: "control-account" },
-        }),
-      ).toString("base64url")}.test-signature`;
-      const credential =
-        type === "oauth"
-          ? {
-              type,
-              provider: "openai",
-              access: token,
-              refresh: "control-refresh",
-              expires: Date.now() + 3_600_000,
-              accountId: "control-account",
-            }
-          : { type, provider: "openai", token };
-      setAuthStore({
-        version: 1,
-        profiles: { "openai:old": credential, "openai:ready": credential },
-        order: { openai: ["openai:old", "openai:ready"] },
-        usageStats: { "openai:old": { cooldownUntil: Date.now() + 60_000 } },
-      });
-      await upsertSessionEntry({
-        agentId: "main",
-        sessionKey,
-        entry: {
-          sessionId: "session-1",
-          updatedAt: Date.now(),
-          authProfileOverride: "openai:old",
-          authProfileOverrideSource: "auto",
-        },
-      });
-      const onResponse = vi.fn();
-
-      await resume({ authProfileId: "openai:old", onResponse });
-
-      expect(acquiredOptions()).toMatchObject({
-        authRequirement: "subscription",
-        preparedAuth: {
-          kind: "profile",
-          profileId: "openai:ready",
-          snapshot: { loginParams: { type: "chatgptAuthTokens", accessToken: token } },
-        },
-      });
-      expect(acquiredOptions().authProfileId).toBeUndefined();
-      expect(acquiredOptions().authBindingFingerprint).toMatch(/^[a-f0-9]{64}$/);
-      expect(onResponse).toHaveBeenCalledWith(expect.anything(), harness.client, {
-        authProfileId: "openai:ready",
-        assertCurrent: expect.any(Function),
-      });
-    },
-  );
 
   it("honors the user-pinned API profile from the admitted explicit store", async () => {
     vi.stubEnv("OPENAI_API_KEY", "unrelated-platform-key");
@@ -396,7 +338,6 @@ describe("Codex command RPC helpers", () => {
     await resume({ storePath: explicitStorePath, authProfileId: "openai:first" });
 
     expect(acquiredOptions()).toMatchObject({
-      authRequirement: "api-key",
       preparedAuth: { kind: "api-key", apiKey: "pinned-key" },
     });
   });
@@ -472,7 +413,6 @@ describe("Codex command RPC helpers", () => {
       );
 
       expect(acquiredOptions().preparedAuth).toBeUndefined();
-      expect(acquiredOptions().authRequirement).toBeUndefined();
     },
   );
 

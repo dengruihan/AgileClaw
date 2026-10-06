@@ -383,7 +383,7 @@ describe("embedded model resolution consistency", () => {
         provider: PROVIDER,
         id: STATIC_MODEL_ID,
         name: STATIC_MODEL_ID,
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.example/codex",
         compat,
       },

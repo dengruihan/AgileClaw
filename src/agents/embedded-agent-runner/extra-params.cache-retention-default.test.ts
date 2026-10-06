@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 describe("cacheRetention default behavior", () => {
-  it.each(["openai-responses", "openai-chatgpt-responses", "openai-completions"] as const)(
+  it.each(["openai-responses", "openai-responses", "openai-completions"] as const)(
     "forwards configured native OpenAI retention to %s stream options",
     (api) => {
       for (const cacheRetention of ["none", "short", "long"] as const) {

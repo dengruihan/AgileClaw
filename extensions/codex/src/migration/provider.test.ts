@@ -28,7 +28,7 @@ import {
   pluginDetail,
   appInfo as inventoryAppInfo,
 } from "../app-server/plugin-inventory.test-helpers.js";
-import type { CodexGetAccountResponse, v2 } from "../app-server/protocol.js";
+import type { v2 } from "../app-server/protocol.js";
 import { buildCodexMigrationProvider } from "./provider.js";
 import { discoverCodexSource } from "./source.js";
 
@@ -734,7 +734,6 @@ describe("buildCodexMigrationProvider", () => {
   );
 
   it.each([
-    { name: "ChatGPT subscription", account: chatGptAccount(), verify: false, reason: undefined },
     {
       name: "API key",
       account: { account: { type: "apiKey" }, requiresOpenaiAuth: true },
@@ -1654,9 +1653,11 @@ function appInfo(id: string, overrides: Partial<v2.AppInfo> = {}): v2.AppInfo {
   return { ...inventoryAppInfo(id, true), ...overrides };
 }
 
-function chatGptAccount(): CodexGetAccountResponse {
+// Simulates a legacy source Codex home reporting a native account type the
+// API-key reader cannot classify; migration treats it as an unknown account.
+function chatGptAccount() {
   return {
-    account: { type: "chatgpt", email: "codex@example.test", planType: "plus" },
+    account: { type: "chatgpt" as const, email: "codex@example.test", planType: "plus" as const },
     requiresOpenaiAuth: false,
   };
 }

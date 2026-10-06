@@ -18,12 +18,10 @@ import { fetchWithSsrFGuard } from "openclaw/plugin-sdk/ssrf-runtime";
 import {
   OLLAMA_CLOUD_BASE_URL,
   OLLAMA_CLOUD_DEFAULT_MODELS,
-  OLLAMA_DEFAULT_BASE_URL,
   OLLAMA_DEFAULT_MODEL,
   resolveOllamaSetupDefaultBaseUrl,
 } from "./defaults.js";
 import { OLLAMA_DEFAULT_API_KEY } from "./discovery-shared.js";
-import { readProviderBaseUrl } from "./provider-base-url.js";
 import {
   buildOllamaBaseUrlSsrFPolicy,
   buildOllamaProvider,
@@ -40,12 +38,10 @@ import {
   buildOllamaModelsConfig,
   discoverOllamaModelsForSetup,
   findAvailableOllamaModelName,
-  inspectOllamaModelsForSetup,
   mergeUniqueModelNames,
   normalizeOllamaModelName,
   selectAppGuidedOllamaModelFromDiscovery,
 } from "./setup-model-selection.js";
-import { pullOllamaModel, pullOllamaModelNonInteractive } from "./setup-pull.js";
 
 export { buildOllamaProvider, resolveOllamaSetupDefaultBaseUrl };
 
@@ -55,8 +51,6 @@ const OLLAMA_SUGGESTED_MODELS_LOCAL_CLOUD = OLLAMA_CLOUD_DEFAULT_MODELS.map(
   (model) => `${model.id}:cloud`,
 );
 const OLLAMA_CLOUD_MODEL_CAP = 500;
-const OLLAMA_RECOMMENDED_TOOLS_MODEL = "gemma4:e4b";
-const OLLAMA_RECOMMENDED_TOOLS_MODEL_SIZE = "about 9.6 GB";
 
 type OllamaCloudDefaultModel = (typeof OLLAMA_CLOUD_DEFAULT_MODELS)[number];
 
@@ -206,7 +200,6 @@ function applyOllamaProviderConfig(
     ...cfg,
     models: {
       ...cfg.models,
-      mode: cfg.models?.mode ?? "merge",
       providers: {
         ...cfg.models?.providers,
         ollama: capLocalOllamaProviderContext({
@@ -296,13 +289,7 @@ async function promptAndConfigureHostBackedOllama(params: {
     throw new WizardCancelledError(`Ollama is still not reachable at ${baseUrl}`);
   }
 
-  const {
-    models,
-    inspectedModels,
-    discoveredModelsByName,
-    inspectionFailures,
-    hasToolsCapableModel,
-  } = discovery;
+  const { models, discoveredModelsByName, inspectionFailures } = discovery;
 
   if (inspectionFailures.length > 0) {
     await params.prompter.note(
@@ -314,51 +301,7 @@ async function promptAndConfigureHostBackedOllama(params: {
       "Ollama",
     );
   }
-  let discoveredModelNames = models.map((model) => model.name);
-  // A pull offer is only meaningful when inspection actually worked: if every
-  // scan failed we cannot know what is installed, so recommending a multi-GB
-  // download would be guesswork against a misbehaving server.
-  const inspectionUsable =
-    inspectedModels.length === 0 || inspectionFailures.length < inspectedModels.length;
-  if (!hasToolsCapableModel && inspectionUsable) {
-    const shouldPullRecommended = await params.prompter.confirm({
-      message: `No tools-capable Ollama model is installed. Pull ${OLLAMA_RECOMMENDED_TOOLS_MODEL} (${OLLAMA_RECOMMENDED_TOOLS_MODEL_SIZE})?`,
-      initialValue: false,
-    });
-    if (shouldPullRecommended) {
-      if (
-        !(await pullOllamaModel(
-          baseUrl,
-          OLLAMA_RECOMMENDED_TOOLS_MODEL,
-          params.prompter,
-          params.signal,
-        ))
-      ) {
-        throw new WizardCancelledError("Failed to download recommended Ollama model");
-      }
-      params.signal?.throwIfAborted();
-      const recommendedScan = await inspectOllamaModelsForSetup(
-        baseUrl,
-        [{ name: OLLAMA_RECOMMENDED_TOOLS_MODEL }],
-        params.signal,
-      );
-      // Unlike the pre-existing-model scan, a just-pulled model that cannot be
-      // verified is a hard failure: configuring it unenriched would silently
-      // drop the tools capability the pull was for.
-      if (recommendedScan.inspectionFailures.length > 0) {
-        throw new WizardCancelledError(
-          `Failed to verify pulled Ollama model: ${recommendedScan.inspectionFailures[0]}`,
-        );
-      }
-      const [recommendedModel] = recommendedScan.inspected;
-      if (recommendedModel) {
-        discoveredModelsByName.set(recommendedModel.name, recommendedModel);
-      }
-      discoveredModelNames = mergeUniqueModelNames(discoveredModelNames, [
-        OLLAMA_RECOMMENDED_TOOLS_MODEL,
-      ]);
-    }
-  }
+  const discoveredModelNames = models.map((model) => model.name);
   const suggestedModelNames = await resolveHostBackedSuggestedModelNames({
     mode: params.mode,
     baseUrl,
@@ -552,27 +495,13 @@ export async function configureOllamaNonInteractive(params: {
     availableModelNames,
   );
   const requestedCloudModel = isOllamaCloudModel(requestedDefaultModelId);
-  let pulledRequestedModel = false;
-
   if (requestedCloudModel) {
     availableModelNames.add(requestedDefaultModelId);
-  } else if (!availableDefaultModelId) {
-    pulledRequestedModel = await pullOllamaModelNonInteractive(
-      baseUrl,
-      requestedDefaultModelId,
-      params.runtime,
-    );
-    if (pulledRequestedModel) {
-      availableModelNames.add(requestedDefaultModelId);
-    }
   }
 
   let allModelNames = orderedModelNames;
   let defaultModelId = availableDefaultModelId ?? requestedDefaultModelId;
-  if (
-    (pulledRequestedModel || requestedCloudModel) &&
-    !allModelNames.includes(requestedDefaultModelId)
-  ) {
+  if (requestedCloudModel && !allModelNames.includes(requestedDefaultModelId)) {
     allModelNames = [...allModelNames, requestedDefaultModelId];
   }
 
@@ -640,32 +569,4 @@ export async function configureOllamaNonInteractive(params: {
   );
   params.runtime.log(`Default Ollama model: ${defaultModelId}`);
   return applyAgentDefaultModelPrimary(config, `ollama/${defaultModelId}`);
-}
-
-export async function ensureOllamaModelPulled(params: {
-  config: OpenClawConfig;
-  model: string;
-  prompter: WizardPrompter;
-}): Promise<void> {
-  if (!params.model.startsWith("ollama/")) {
-    return;
-  }
-  const baseUrl =
-    readProviderBaseUrl(params.config.models?.providers?.ollama) ?? OLLAMA_DEFAULT_BASE_URL;
-  const modelName = params.model.slice("ollama/".length);
-  if (isOllamaCloudModel(modelName)) {
-    return;
-  }
-  const { models } = await fetchOllamaModels(baseUrl);
-  if (
-    findAvailableOllamaModelName(
-      modelName,
-      models.map((model) => model.name),
-    )
-  ) {
-    return;
-  }
-  if (!(await pullOllamaModel(baseUrl, modelName, params.prompter))) {
-    throw new WizardCancelledError("Failed to download selected Ollama model");
-  }
 }

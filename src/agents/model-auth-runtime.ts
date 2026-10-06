@@ -146,10 +146,6 @@ function resolveRuntimeAvailableProviderAuth<T>(
   resolveSyntheticAuth: (provider: string) => T,
 ): boolean | T {
   const provider = normalizeProviderId(params.provider);
-  const authOverride = authConfig.resolveProviderAuthOverride(params.cfg, provider);
-  if (authOverride === "aws-sdk") {
-    return true;
-  }
 
   // Callers that supply the auth store get inline provider keys hidden while
   // their billing/auth cooldown is active, so browse and tool selection stop
@@ -169,11 +165,12 @@ function resolveRuntimeAvailableProviderAuth<T>(
   });
   if (
     envAuth &&
+    !envAuth.source.includes("OAUTH_TOKEN") &&
     isAuthModeAllowedForModel({
       provider,
       modelApi: params.modelApi,
       capability: params.capability,
-      mode: envAuth.source.includes("OAUTH_TOKEN") ? "oauth" : "api-key",
+      mode: "api-key",
     }) &&
     (!authConfig.isConfigBackedInlineProviderApiKey({
       cfg: params.cfg,

@@ -29,7 +29,6 @@ import {
   type JsonObject,
   type JsonValue,
 } from "./protocol.js";
-import { isCodexResponsesOAuthRun } from "./responses-oauth.js";
 import type { CodexThreadConfigurationOptions } from "./thread-configuration-options.js";
 import { fingerprintJsonObject } from "./thread-fingerprints.js";
 import {
@@ -366,7 +365,6 @@ export function isCodexNativeDelegationDisabledForRun(
 ): boolean {
   // Disabling only multi_agent still permits Codex's model-selected or explicit V2 tools.
   return (
-    isCodexResponsesOAuthRun(params) ||
     params.delegationCapability === "report_only" ||
     params.requireWorkspaceOnly === true ||
     params.pluginHarnessToolPolicyRestricted === true ||
@@ -418,7 +416,7 @@ export function buildCodexRuntimeThreadConfigForRun(
   const webSearchConfig = resolveCodexWebSearchPlan({
     config: params.config,
     disableTools: params.disableTools,
-    nativeToolSurfaceEnabled: isCodexResponsesOAuthRun(params) || options.nativeCodeModeEnabled,
+    nativeToolSurfaceEnabled: options.nativeCodeModeEnabled,
     nativeProviderWebSearchSupport: options.nativeProviderWebSearchSupport,
     webSearchAllowed: options.webSearchAllowed,
   }).threadConfig;
@@ -433,18 +431,6 @@ export function buildCodexRuntimeThreadConfigForRun(
       isCodexNativeDelegationDisabledForRun(params, options.hostSystemAgentActive)
         ? CODEX_DELEGATION_DISABLED_THREAD_CONFIG
         : undefined,
-      isCodexResponsesOAuthRun(params)
-        ? {
-            "features.apps": false,
-            "features.plugins": false,
-            "features.image_generation": false,
-            "features.memories": false,
-            "features.skill_search": false,
-            "orchestrator.skills.enabled": false,
-            "orchestrator.mcp.enabled": false,
-            "skills.bundled.enabled": false,
-          }
-        : undefined,
       params.pluginHarnessToolPolicySafeDeniedTools?.includes("image_generate")
         ? { "features.image_generation": false }
         : undefined,
@@ -456,9 +442,7 @@ export function buildCodexRuntimeThreadConfigForRun(
         params.requireWorkspaceOnly === true
         ? buildRestrictedToolConfigPatch(
             restrictedToolSurfaceMcpServerNames,
-            Boolean(params.scheduledRuntimeAuthority) &&
-              !isCodexResponsesOAuthRun(params) &&
-              params.requireWorkspaceOnly !== true,
+            Boolean(params.scheduledRuntimeAuthority) && params.requireWorkspaceOnly !== true,
           )
         : buildCodexRingZeroThreadConfigPatch(
             params,

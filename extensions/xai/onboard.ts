@@ -1,10 +1,5 @@
 import {
-  applyAgentDefaultModelPrimary,
-  applyOnboardAuthAgentModelsAndProviders,
   createModelCatalogPresetAppliers,
-  resolveAgentModelPrimaryValue,
-  withAgentModelAliases,
-  type ModelProviderConfig,
   type OpenClawConfig,
 } from "openclaw/plugin-sdk/provider-onboard";
 import {
@@ -18,11 +13,11 @@ export const XAI_DEFAULT_MODEL_REF = `xai/${XAI_DEFAULT_MODEL_ID}`;
 
 const xaiPresetAppliers = createModelCatalogPresetAppliers({
   primaryModelRef: XAI_DEFAULT_MODEL_REF,
-  resolveParams: (cfg) => ({
+  resolveParams: () => ({
     providerId: "xai",
     api: "openai-responses",
     baseUrl: XAI_BASE_URL,
-    catalogModels: cfg.models?.mode === "replace" ? buildXaiCatalogModels() : [],
+    catalogModels: buildXaiCatalogModels(),
     aliases: [{ modelRef: XAI_DEFAULT_MODEL_REF, alias: "Grok" }],
   }),
 });
@@ -57,27 +52,4 @@ export function applyXaiProviderConfig(cfg: OpenClawConfig): OpenClawConfig {
 
 export function applyXaiConfig(cfg: OpenClawConfig): OpenClawConfig {
   return xaiPresetAppliers.applyConfig(pruneRetiredXaiBuiltinModels(cfg));
-}
-
-export function applyXaiOAuthConfig(
-  cfg: OpenClawConfig,
-  provider: ModelProviderConfig,
-): OpenClawConfig {
-  const next = applyOnboardAuthAgentModelsAndProviders(cfg, {
-    agentModels: withAgentModelAliases(cfg.agents?.defaults?.models, [
-      { modelRef: XAI_DEFAULT_MODEL_REF, alias: "Grok" },
-    ]),
-    providers: {
-      xai: {
-        ...provider,
-        apiKey: undefined,
-        authHeader: undefined,
-        headers: undefined,
-        request: { auth: undefined, headers: undefined },
-      },
-    },
-  });
-  return resolveAgentModelPrimaryValue(cfg.agents?.defaults?.model)
-    ? next
-    : applyAgentDefaultModelPrimary(next, XAI_DEFAULT_MODEL_REF);
 }

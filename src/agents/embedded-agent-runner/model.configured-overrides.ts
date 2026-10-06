@@ -29,7 +29,6 @@ import {
   shouldUnconditionallySuppress,
 } from "../model-suppression.js";
 import { resolveProviderEndpoint } from "../provider-attribution.js";
-import { attachModelProviderLocalService } from "../provider-local-service.js";
 import {
   attachModelProviderRequestRouteFacts,
   attachModelProviderRequestTransport,
@@ -478,7 +477,6 @@ export function applyConfiguredProviderOverrides(params: {
     !providerHeaders &&
     !providerRequest &&
     !providerParams &&
-    !providerConfig.localService &&
     !manifestAliasTransport
   ) {
     const resolvedParams = mergeModelParams(
@@ -623,49 +621,46 @@ export function applyConfiguredProviderOverrides(params: {
       resolvedTransport.baseUrl ?? configuredStaticCatalogModel?.baseUrl ?? discoveredModel.baseUrl,
   });
   return attachModelProviderRequestRouteFacts(
-    attachModelProviderLocalService(
-      attachModelProviderRequestTransport(
-        {
-          ...discoveredModel,
-          provider: params.provider,
-          api: requestConfig.api ?? "openai-responses",
-          baseUrl: requestConfig.baseUrl ?? discoveredModel.baseUrl,
-          reasoning: resolvedReasoning,
-          input: normalizedInput,
-          cost: mergeConfiguredModelCost({
-            ...params,
-            configuredModel: metadataOverrideModel,
-            catalogCost: discoveredModel.cost,
-          }),
-          contextWindow,
-          contextTokens: metadataOverrideModel?.contextTokens ?? discoveredModel.contextTokens,
-          ...(normalizedResolvedMaxTokens !== undefined
-            ? {
-                maxTokens: normalizedResolvedMaxTokens,
-                maxTokensSource:
-                  configuredMaxTokens !== undefined
-                    ? "configured"
-                    : (discoveredModel.maxTokensSource ?? "discovered"),
-              }
-            : {}),
-          ...(resolvedParams ? { params: resolvedParams } : {}),
-          ...(requestTimeoutMs !== undefined ? { requestTimeoutMs } : {}),
-          headers: requestConfig.headers,
-          ...(providerConfig.authHeader !== undefined
-            ? { authHeader: providerConfig.authHeader }
-            : {}),
-          compat: resolvedCompat,
-          mediaInput: mergeModelMediaInput(
-            mergeModelMediaInput(
-              configuredStaticCatalogModel?.mediaInput,
-              discoveredModel.mediaInput,
-            ),
-            metadataOverrideModel?.mediaInput,
+    attachModelProviderRequestTransport(
+      {
+        ...discoveredModel,
+        provider: params.provider,
+        api: requestConfig.api ?? "openai-responses",
+        baseUrl: requestConfig.baseUrl ?? discoveredModel.baseUrl,
+        reasoning: resolvedReasoning,
+        input: normalizedInput,
+        cost: mergeConfiguredModelCost({
+          ...params,
+          configuredModel: metadataOverrideModel,
+          catalogCost: discoveredModel.cost,
+        }),
+        contextWindow,
+        contextTokens: metadataOverrideModel?.contextTokens ?? discoveredModel.contextTokens,
+        ...(normalizedResolvedMaxTokens !== undefined
+          ? {
+              maxTokens: normalizedResolvedMaxTokens,
+              maxTokensSource:
+                configuredMaxTokens !== undefined
+                  ? "configured"
+                  : (discoveredModel.maxTokensSource ?? "discovered"),
+            }
+          : {}),
+        ...(resolvedParams ? { params: resolvedParams } : {}),
+        ...(requestTimeoutMs !== undefined ? { requestTimeoutMs } : {}),
+        headers: requestConfig.headers,
+        ...(providerConfig.authHeader !== undefined
+          ? { authHeader: providerConfig.authHeader }
+          : {}),
+        compat: resolvedCompat,
+        mediaInput: mergeModelMediaInput(
+          mergeModelMediaInput(
+            configuredStaticCatalogModel?.mediaInput,
+            discoveredModel.mediaInput,
           ),
-        },
-        providerRequest,
-      ),
-      providerConfig.localService,
+          metadataOverrideModel?.mediaInput,
+        ),
+      },
+      providerRequest,
     ),
     params.providerMetadataOwners,
   );

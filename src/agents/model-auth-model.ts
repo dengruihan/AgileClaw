@@ -1,7 +1,6 @@
 /**
  * Model-level auth diagnostics and request-header preparation.
  */
-import { normalizeProviderId } from "@openclaw/model-catalog-core/provider-id";
 import { normalizeOptionalLowercaseString } from "@openclaw/normalization-core/string-coerce";
 import {
   getRuntimeConfigSnapshot,
@@ -21,7 +20,6 @@ import {
   resolveApiKeyForProfile,
   resolveAuthProfileOrder,
 } from "./auth-profiles.js";
-import * as cliCredentials from "./cli-credentials.js";
 import {
   CUSTOM_LOCAL_AUTH_MARKER,
   isNonSecretApiKeyMarker,
@@ -57,11 +55,6 @@ export function resolveModelAuthMode(
     return undefined;
   }
 
-  const authOverride = authConfig.resolveProviderAuthOverride(cfg, resolved);
-  if (authOverride === "aws-sdk") {
-    return "aws-sdk";
-  }
-
   const authStore =
     store ??
     resolveScopedAuthProfileStore({
@@ -70,9 +63,7 @@ export function resolveModelAuthMode(
     });
   const profiles = listProfilesForProvider(authStore, resolved);
   const modes = new Set(
-    profiles
-      .map((id) => authStore.profiles[id]?.type)
-      .filter((mode) => mode === "oauth" || mode === "token" || mode === "api_key"),
+    profiles.map((id) => authStore.profiles[id]?.type).filter((mode) => mode === "api_key"),
   );
   if (modes.size >= 2) {
     return "mixed";
@@ -84,14 +75,7 @@ export function resolveModelAuthMode(
 
   const envKey = authConfig.resolveConfigAwareEnvApiKey(cfg, resolved, options?.workspaceDir);
   if (envKey?.apiKey) {
-    return envKey.source.includes("OAUTH_TOKEN") ? "oauth" : "api-key";
-  }
-
-  if (
-    normalizeProviderId(resolved) === "codex" &&
-    cliCredentials.readCodexCliCredentialsCached({ ttlMs: 5_000, allowKeychainPrompt: false })
-  ) {
-    return "oauth";
+    return envKey.source.includes("OAUTH_TOKEN") ? undefined : "api-key";
   }
 
   if (authConfig.hasUsableCustomProviderApiKey(cfg, resolved)) {
@@ -115,10 +99,6 @@ export async function hasAvailableAuthForProvider(params: {
 }): Promise<boolean> {
   const { provider, cfg, preferredProfile } = params;
 
-  const authOverride = authConfig.resolveProviderAuthOverride(cfg, provider);
-  if (authOverride === "aws-sdk") {
-    return true;
-  }
   const store =
     params.store ??
     resolveScopedAuthProfileStore({
@@ -136,11 +116,12 @@ export async function hasAvailableAuthForProvider(params: {
   const envAuth = authConfig.resolveConfigAwareEnvApiKey(cfg, provider, params.workspaceDir);
   if (
     envAuth &&
+    !envAuth.source.includes("OAUTH_TOKEN") &&
     isAuthModeAllowedForModel({
       provider,
       modelApi: params.modelApi,
       modelBaseUrl: params.modelBaseUrl,
-      mode: envAuth.source.includes("OAUTH_TOKEN") ? "oauth" : "api-key",
+      mode: "api-key",
     }) &&
     (!authConfig.isConfigBackedInlineProviderApiKey({
       cfg,
@@ -181,30 +162,21 @@ export async function hasAvailableAuthForProvider(params: {
     provider,
     preferredProfile,
     forModel: params.modelId,
-    includePendingOAuthRefresh: true,
+    includePendingOAuthRefresh: false,
   });
   for (const candidate of order) {
     try {
-      if (
-        authConfig.resolveConfiguredAwsSdkProfileAuth({
-          cfg,
-          provider,
-          profileId: candidate,
-        })
-      ) {
-        return true;
-      }
       const candidateCredential = store.profiles[candidate];
       const candidateType = candidateCredential?.type;
+      if (candidateType !== "api_key") {
+        continue;
+      }
       if (
-        candidateType &&
         !isAuthModeAllowedForModel({
           provider,
           modelApi: params.modelApi,
           modelBaseUrl: params.modelBaseUrl,
           mode: authConfig.profileTypeToAuthMode(candidateType),
-          authFlow:
-            candidateCredential?.type === "oauth" ? candidateCredential.authFlow : undefined,
         })
       ) {
         continue;
@@ -219,12 +191,12 @@ export async function hasAvailableAuthForProvider(params: {
       const mode = resolved?.profileType ?? credential?.type;
       if (
         resolved &&
+        (!resolved.profileType || resolved.profileType === "api_key") &&
         isAuthModeAllowedForModel({
           provider,
           modelApi: params.modelApi,
           modelBaseUrl: params.modelBaseUrl,
           mode: mode ? authConfig.profileTypeToAuthMode(mode) : "api-key",
-          authFlow: credential?.type === "oauth" ? credential.authFlow : undefined,
         })
       ) {
         return true;

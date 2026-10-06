@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ModelCatalogAlias } from "@openclaw/model-catalog-core/model-catalog-types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ModelDefinitionConfig } from "../../config/types.models.js";
+import type { ModelDefinitionConfig, ModelProviderConfig } from "../../config/types.models.js";
 import type { PluginManifestRecord } from "../../plugins/manifest-registry.types.js";
 import { createManifestRecord } from "./model.static-catalog.test-helpers.js";
 
@@ -480,7 +480,7 @@ function aliasPlugin(
     ...overrides,
   };
 }
-function configuredAlias(provider: string, baseUrl: string, api?: ModelCatalogAlias["api"]) {
+function configuredAlias(provider: string, baseUrl: string, api?: ModelProviderConfig["api"]) {
   return { models: { providers: { [provider]: { baseUrl, api, models: [] } } } };
 }
 function setPlugins(...plugins: ReturnType<typeof aliasPlugin>[]) {

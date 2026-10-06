@@ -133,18 +133,7 @@ describe("LLM watchdog policy", () => {
     ["ollama-beelink", "http://ollama-host:11434", undefined, 300_000, 600_000],
     [undefined, "http://host.docker.internal:11434", undefined, 300_000, 600_000],
     ["gpu", "http://gpu-box:8000/v1", { apiKey: "custom-local" }, 300_000, 600_000],
-    [
-      "ds4",
-      "http://ds4-box:8000/v1",
-      {
-        localService: {
-          command: "/opt/ds4/ds4-server",
-          healthUrl: "http://ds4-box:8000/v1/models",
-        },
-      },
-      300_000,
-      600_000,
-    ],
+    ["ds4", "http://ds4-box:8000/v1", {}, 300_000, 600_000],
     ["custom-proxy", "http://gateway:4000/v1", undefined, 120_000, 60_000],
     ["ollama-cloud", "http://ollama-host:11434", undefined, 120_000, 60_000],
   ] satisfies [

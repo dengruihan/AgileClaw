@@ -228,7 +228,7 @@ describe("openai transport stream", () => {
     const model = makeResponsesModel({
       id: "gpt-5.4",
       name: "GPT-5.4",
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://proxy.example.com/v1",
     });
 
@@ -317,7 +317,7 @@ describe("openai transport stream", () => {
     const model = makeResponsesModel({
       id: "gpt-5.4",
       name: "GPT-5.4",
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://proxy.example.com/v1",
     });
 

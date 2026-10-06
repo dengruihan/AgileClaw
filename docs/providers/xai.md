@@ -6,45 +6,32 @@ read_when:
 title: "xAI"
 ---
 
-OpenClaw ships a bundled `xai` provider plugin for Grok models. The
-recommended path is Grok OAuth with an eligible SuperGrok or X Premium
-subscription. Gateway, config, routing, and tools stay local; only Grok
+OpenClaw ships a bundled `xai` provider plugin for Grok models. Model access
+uses an xAI API key. Gateway, config, routing, and tools stay local; only Grok
 requests go to xAI's API.
-
-OAuth does not require an xAI API key or the Grok Build app. xAI may still
-show Grok Build on the consent screen because OpenClaw uses xAI's shared
-OAuth client.
 
 ## Setup
 
 <Steps>
   <Step title="New install">
-    Run onboarding with daemon install, then pick xAI/Grok OAuth at the
+    Run onboarding with daemon install, then choose xAI API-key setup at the
     model/auth step:
 
     ```bash
     openclaw onboard --install-daemon
     ```
 
-    On a VPS or over SSH, select xAI OAuth directly; it uses device-code
-    verification and does not need a localhost callback:
-
-    ```bash
-    openclaw onboard --install-daemon --auth-choice xai-oauth
-    ```
-
   </Step>
   <Step title="Existing install">
-    Sign in to xAI only; do not rerun full onboarding just to connect Grok:
+    Add an xAI API key without rerunning full onboarding:
 
     ```bash
-    openclaw models auth login --provider xai --method oauth
+    openclaw models auth paste-api-key --provider xai
     ```
 
-    With no existing primary model, OAuth setup selects the curated default,
-    `xai/grok-4.7`. Authenticated discovery updates available model rows without
-    changing that default.
-    It preserves an existing primary; opt in explicitly when needed:
+    With no existing primary model, setup selects the curated default,
+    `xai/grok-4.7`. Discovery updates available model rows without changing
+    that default. It preserves an existing primary; opt in explicitly when needed:
 
     ```bash
     openclaw models set xai/grok-4.7
@@ -52,16 +39,6 @@ OAuth client.
 
     Rerun full onboarding only if you intentionally want to change Gateway,
     daemon, channel, workspace, or other setup choices.
-
-  </Step>
-  <Step title="API-key path">
-    API-key setup still works for xAI Console keys and for media surfaces
-    that need key-backed provider config. It uses the same Grok 4.7 setup default:
-
-    ```bash
-    openclaw models auth login --provider xai --method api-key
-    export XAI_API_KEY=xai-...
-    ```
 
   </Step>
   <Step title="Pick a model">
@@ -75,36 +52,19 @@ OAuth client.
 
 <Note>
 OpenClaw uses the xAI Responses API as the bundled xAI transport. The same
-credential from `openclaw models auth login --provider xai --method oauth` or
-`--method api-key` also powers `web_search` (provider id `grok`), `x_search`,
+API key also powers `web_search` (provider id `grok`), `x_search`,
 `code_execution`, speech/transcription, and xAI image/video generation. If you
 store an xAI key under `plugins.entries.xai.config.webSearch.apiKey`, the
 bundled xAI model provider reuses it as a fallback too.
 </Note>
 
-`openclaw status --usage`, `/status`, and the Control UI usage cards show
-SuperGrok quota when the xAI provider is signed in with OAuth. OpenClaw fetches
-the Grok billing window for that subscription and reports its reset time through
-the normal provider-usage surface. When xAI omits an included-usage percent on an
-otherwise valid weekly or monthly billing period, OpenClaw reports that included
-usage was omitted instead of inventing a percentage or showing generic
-"No usage data". Pay-as-you-go on-demand counters are not treated as SuperGrok
-subscription quota. API-key-only xAI setups are intentionally not
-shown as SuperGrok usage because xAI Console API credits and SuperGrok
-subscription quota are separate billing buckets.
+`openclaw status --usage`, `/status`, and the Control UI usage cards do not
+report SuperGrok subscription quota. Configure an xAI API key for xAI API
+access; its API billing is separate from SuperGrok subscription usage.
 
-## OAuth troubleshooting
+## Troubleshooting
 
-- For SSH, Docker, VPS, or other remote setups, use
-  `openclaw models auth login --provider xai --method oauth`; it uses
-  device-code verification, not a localhost callback.
-- If a previous OAuth login left xAI using the API-key endpoint or catalog,
-  rerun `openclaw models auth login --provider xai --method oauth`. A successful
-  login refreshes the subscription catalog and proxy route from your account.
-  It preserves your primary model and fallbacks.
-- If sign-in succeeds but Grok is not the default model, run
-  `openclaw models set xai/grok-4.7`. OAuth login preserves an existing
-  primary model unless you explicitly change it.
+- If Grok is not the default model, run `openclaw models set xai/grok-4.7`.
 - Inspect saved xAI auth profiles:
 
   ```bash
@@ -112,39 +72,13 @@ subscription quota are separate billing buckets.
   openclaw models status
   ```
 
-- xAI decides which accounts can receive OAuth API tokens. If an account is
-  not eligible, use the API-key path or check the subscription on xAI's side.
-- If the Gateway log shows `xai: OAuth profile "..." could not be resolved`,
-  credential preparation failed, for example because a refresh token expired
-  or was revoked. The warning includes the redacted cause and the resulting
-  live catalog origin, or reports that no live catalog was returned.
-  An existing API key can still supply the API catalog; OAuth-only models stay
-  unavailable. Run the warning's sign-in command on the Gateway host; it targets
-  the catalog's agent and saved profile. This describes catalog discovery, not
-  proof of an inference request or an API charge.
-
-Existing `xai/auto` selections on the native xAI API and Grok subscription routes are retired.
+Existing `xai/auto` selections are retired.
 Run `openclaw doctor --fix` to replace affected config and session selections
 with `xai/grok-4.7`. Doctor preserves account pins and fallbacks, and leaves
 custom endpoints unchanged. For a pinned session, an unavailable account or a
 disallowed successor keeps the selection unchanged, with a diagnostic explaining
 the required action. Doctor moves a shared alias only when the applicable accounts
 and routes agree on its successor. You can also choose a permitted concrete model explicitly.
-
-For a manually managed Grok subscription token, set `models.providers.xai.auth`
-to `"token"` and `models.providers.xai.baseUrl` to
-`https://cli-chat-proxy.grok.com/v1`. Model discovery uses the subscription
-catalog and keeps token authentication; an unavailable token does not switch
-discovery to the Console API. Tokens with the default or native xAI API endpoint
-continue to use the API catalog. Prefer OAuth login for automatic token refresh.
-Resolved environment-backed tokens also work in standalone model commands without
-a running Gateway.
-
-<Tip>
-Use `xai-oauth` when signing in from SSH, Docker, or a VPS. OpenClaw prints a
-URL and short code; finish sign-in in any local browser while the remote
-process polls xAI for the completed token exchange.
-</Tip>
 
 ## Built-in catalog
 
@@ -162,7 +96,7 @@ see [legacy compatibility and moving aliases](#legacy-compatibility-and-moving-a
 | Grok 4.20      | `grok-4.20-0309-reasoning`, `grok-4.20-0309-non-reasoning`   |
 
 <Tip>
-OAuth and API-key setup use `xai/grok-4.7` as the curated default.
+API-key setup uses `xai/grok-4.7` as the curated default.
 Grok 4.6, Grok 4.5, `grok-build-0.1`, Grok 4.3, and both dated
 Grok 4.20 variants remain selectable.
 </Tip>
@@ -170,7 +104,7 @@ Grok 4.20 variants remain selectable.
 The plugin manifest owns the curated list. Ordinary API-key setup keeps that
 inventory in the plugin instead of copying it into your configuration;
 `models.mode: "replace"` still receives the curated rows. Explicit model rows
-remain unchanged. OAuth login retains its authenticated account catalog.
+remain unchanged.
 
 Catalog context and token-cost metadata follows xAI's live
 [model pages](https://docs.x.ai/developers/models) and
@@ -283,11 +217,10 @@ An explicit tool model remains selected; the Grok 4.3 examples below are overrid
 
 <AccordionGroup>
   <Accordion title="Web search">
-    The bundled `grok` web-search provider prefers xAI OAuth, then falls back
-    to `XAI_API_KEY` or a plugin web-search key:
+    The bundled `grok` web-search provider uses `XAI_API_KEY` or a plugin
+    web-search key:
 
     ```bash
-    openclaw models auth login --provider xai --method oauth
     openclaw config set tools.web.search.provider grok
     ```
 
@@ -580,7 +513,7 @@ An explicit tool model remains selected; the Grok 4.3 examples below are overrid
     input-audio interruption are not supported by the xAI Voice Agent protocol.
 
     <Note>
-    xAI OAuth or `XAI_API_KEY` can authenticate realtime voice. Browser-owned
+    `XAI_API_KEY` can authenticate realtime voice. Browser-owned
     WebRTC is not part of this provider surface yet; use gateway-relay Talk on
     native nodes or the Control UI relay path.
     </Note>
@@ -706,11 +639,8 @@ An explicit tool model remains selected; the Grok 4.3 examples below are overrid
   </Accordion>
 
   <Accordion title="Known limits">
-    - xAI auth can use an API key, environment variable, plugin config
-      fallback, or OAuth with an eligible xAI account. OAuth uses device-code
-      verification without a localhost callback. xAI decides which accounts
-      can receive OAuth API tokens, and the consent page may show Grok Build
-      even though OpenClaw does not require the Grok Build app.
+    - xAI auth uses an API key from provider config, the environment, or the
+      plugin's documented key fallback.
     - OpenClaw does not currently expose the xAI multi-agent model family. xAI
       serves these models through the Responses API, but they do not accept
       the client-side or custom tools used by OpenClaw's shared agent loop.
@@ -728,7 +658,7 @@ An explicit tool model remains selected; the Grok 4.3 examples below are overrid
     - OpenClaw applies xAI-specific tool-schema and tool-call compatibility
       fixes automatically on the shared runner path.
     - Native `https://api.x.ai/v1` Responses requests keep tool images attached
-      to their tool results. On compatibility routes (including Grok OAuth),
+      to their tool results. On compatibility routes,
       image-capable models receive a labeled user image message immediately
       after each consecutive tool-result group. Parallel results stay together,
       and later turns preserve the historical image position for prompt caching.

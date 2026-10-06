@@ -40,14 +40,11 @@ const model = {
 
 const usage = createZeroUsageFixture();
 
-function wrapResponses(options: { fastMode?: boolean; clientVersion?: string }): StreamFn {
-  const wrapped = wrapXaiProviderStream(
-    {
-      streamFn: createOpenAIResponsesTransportStreamFn(),
-      extraParams: { fastMode: options.fastMode, tool_stream: false },
-    } as never,
-    { clientVersion: options.clientVersion },
-  );
+function wrapResponses(options: { fastMode?: boolean }): StreamFn {
+  const wrapped = wrapXaiProviderStream({
+    streamFn: createOpenAIResponsesTransportStreamFn(),
+    extraParams: { fastMode: options.fastMode, tool_stream: false },
+  } as never);
   if (!wrapped) {
     throw new Error("expected xAI stream wrapper");
   }
@@ -137,8 +134,8 @@ describe("xAI server compaction request preparation", () => {
     expect(JSON.stringify(replayPayload)).not.toContain("NORTH-COPPER-17");
   });
 
-  it("uses the same OAuth proxy headers as a normal turn", async () => {
-    const streamFn = wrapResponses({ clientVersion: "2026.7.2" });
+  it("uses the same request headers as a normal turn", async () => {
+    const streamFn = wrapResponses({});
     const oauthModel = {
       ...model,
       id: "grok-4.5",
@@ -168,11 +165,5 @@ describe("xAI server compaction request preparation", () => {
     const normalHeaders = sdkState.clients[1]?.defaultHeaders;
 
     expect(compactHeaders).toEqual(normalHeaders);
-    expect(compactHeaders).toMatchObject({
-      "x-existing": "kept",
-      "x-grok-client-version": "2026.7.2",
-      "x-grok-model-override": "grok-4.5",
-      "x-xai-token-auth": "xai-grok-cli",
-    });
   });
 });

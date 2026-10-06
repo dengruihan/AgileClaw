@@ -3,7 +3,6 @@ import type {
   ProviderResolveUsageAuthContext,
   ProviderResolvedUsageAuth,
 } from "openclaw/plugin-sdk/plugin-entry";
-import { resolveOpenAICodexAuthIdentity } from "openclaw/plugin-sdk/provider-oauth-runtime";
 import {
   addProviderUsageModel,
   asProviderUsageObject,
@@ -14,14 +13,12 @@ import {
   decodeProviderUsageAdminToken,
   encodeProviderUsageAdminToken,
   fetchProviderUsagePages,
-  fetchCodexUsage,
   parseProviderUsageNonNegativeInteger,
   parseProviderUsageNumber,
   resolveProviderUsageDailyPeriod,
   resolveProviderUsageDisplayName,
   type ProviderUsageSnapshot,
 } from "openclaw/plugin-sdk/provider-usage";
-import { isSIWCAuthFlow } from "./token-sharing.js";
 
 const OPENAI_COSTS_URL = "https://api.openai.com/v1/organization/costs";
 const OPENAI_COMPLETIONS_USAGE_URL = "https://api.openai.com/v1/organization/usage/completions";
@@ -221,14 +218,6 @@ export async function resolveOpenAIUsageAuth(
   if (explicitAdminKey) {
     return { token: encodeProviderUsageAdminToken(OPENAI_ADMIN_TOKEN_PREFIX, explicitAdminKey) };
   }
-  const oauth = await ctx.resolveOAuthToken();
-  if (oauth && isSIWCAuthFlow(oauth.authFlow)) {
-    // ChatPass has no supported usage endpoint. Never send its scoped bearer to WHAM.
-    return { handled: true };
-  }
-  if (oauth) {
-    return oauth;
-  }
   // Inference keys may belong to custom, Azure, or agent-local endpoints. Only
   // the dedicated admin credential may cross to api.openai.com organization APIs.
   return { handled: true };
@@ -239,17 +228,7 @@ export async function fetchOpenAIUsage(
 ): Promise<ProviderUsageSnapshot> {
   const adminKey = decodeProviderUsageAdminToken(OPENAI_ADMIN_TOKEN_PREFIX, ctx.token);
   if (!adminKey) {
-    const snapshot = await fetchCodexUsage(ctx.token, ctx.accountId, ctx.timeoutMs, ctx.fetchFn);
-    if (snapshot.error) {
-      return snapshot;
-    }
-    // ChatGPT access tokens carry the account email as a JWT claim; the auth
-    // profile stores no email for these logins.
-    const { token: accessToken, email: profileEmail } = ctx;
-    const accountEmail =
-      resolveOpenAICodexAuthIdentity({ access: accessToken, email: profileEmail }).email ??
-      profileEmail;
-    return accountEmail ? { ...snapshot, accountEmail } : snapshot;
+    return { provider: "openai", displayName: "OpenAI", windows: [], error: "Usage unavailable" };
   }
   return await fetchOpenAIAdminUsage({
     apiKey: adminKey,

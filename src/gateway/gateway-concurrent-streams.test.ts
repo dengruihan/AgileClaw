@@ -501,7 +501,6 @@ describe("Gateway concurrent HTTP streams", () => {
               },
             },
             models: {
-              mode: "replace",
               providers: {
                 [provider.providerId]: {
                   ...provider.config,

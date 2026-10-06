@@ -34,7 +34,6 @@ describe("terminal model catalog availability", () => {
             },
           },
           models: {
-            mode: "replace",
             providers: {
               ready: {
                 baseUrl: "https://ready.invalid/v1",

@@ -42,23 +42,17 @@ export async function runCodexSettledTurnFinalization(
   }
   const { selection, data: historyItems } = finalizationContext;
   const hostAuthPlan = attempt.runtimePlan?.auth;
-  const authRequirement = hostAuthPlan?.modelRoute?.authRequirement;
   // Capture fixes binding/ordered-profile selection. Ordinary user-home sessions
   // intentionally authorize private side turns through the host plan instead.
   const authProfileId =
     selection.authProfileId ?? hostAuthPlan?.forwardedAuthProfileId ?? attempt.authProfileId;
   const authHandoff = await resolveCodexAppServerPreparedAuthHandoff({
-    authRequirement,
     resolvedApiKey: attempt.resolvedApiKey,
     authProfileId,
     authProfileStore: attempt.authProfileStore,
     agentDir: attempt.agentDir,
     homeScope: "agent",
     config: attempt.config,
-    subscriptionProfileRequiredError:
-      "Prepared Codex settled-turn finalization requires its selected OpenAI subscription profile.",
-    subscriptionProfileUnusableError:
-      "The selected OpenAI subscription profile cannot finalize this settled turn.",
   });
   assertActive();
   const authSelection = authHandoff.preparedAuth
@@ -69,7 +63,6 @@ export async function runCodexSettledTurnFinalization(
     model: { mode: "required", id: selection.model },
     modelProvider: selection.modelProvider,
     ...authSelection,
-    authRequirement,
     timeoutMs: attempt.runTimeoutOverrideMs ?? attempt.timeoutMs,
     signal: attempt.abortSignal,
     agentDir: attempt.agentDir,

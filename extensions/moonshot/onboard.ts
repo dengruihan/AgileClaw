@@ -13,7 +13,7 @@ import {
 
 const moonshotPresetAppliers = createDefaultModelsPresetAppliers<[string]>({
   primaryModelRef: MOONSHOT_DEFAULT_MODEL_REF,
-  resolveParams: (cfg: OpenClawConfig, baseUrl: string) => {
+  resolveParams: (_cfg: OpenClawConfig, baseUrl: string) => {
     const defaultModel = buildMoonshotProvider().models.find(
       ({ id }) => id === MOONSHOT_DEFAULT_MODEL_ID,
     );
@@ -22,7 +22,7 @@ const moonshotPresetAppliers = createDefaultModelsPresetAppliers<[string]>({
           providerId: "moonshot",
           api: "openai-completions",
           baseUrl,
-          defaultModels: cfg.models?.mode === "replace" ? [defaultModel] : [],
+          defaultModels: [defaultModel],
           defaultModelId: MOONSHOT_DEFAULT_MODEL_ID,
           aliases: [{ modelRef: MOONSHOT_DEFAULT_MODEL_REF, alias: "Kimi" }],
         }

@@ -294,9 +294,9 @@ describe("resolveLogicalVisibleModelCatalog", () => {
   });
 
   const selectedRoute = {
-    api: "openai-chatgpt-responses" as const,
-    baseUrl: "https://chatgpt.com/backend-api/codex",
-    authRequirement: "subscription" as const,
+    api: "openai-responses" as const,
+    baseUrl: "https://openai-eu.example/v1",
+    authRequirement: "api-key" as const,
     requestTransportOverrides: "none" as const,
   };
   const platform: ModelCatalogEntry = {
@@ -309,12 +309,12 @@ describe("resolveLogicalVisibleModelCatalog", () => {
     reasoning: true,
     input: ["text", "image"],
   };
-  const chatGPT: ModelCatalogEntry = {
+  const secondary: ModelCatalogEntry = {
     provider: "openai",
     id: "gpt-5.5",
-    name: "ChatGPT GPT-5.5",
-    api: "openai-chatgpt-responses",
-    baseUrl: "https://chatgpt.com/backend-api/codex",
+    name: "Secondary GPT-5.5",
+    api: "openai-responses",
+    baseUrl: "https://openai-eu.example/v1",
     contextWindow: 400_000,
     reasoning: false,
     input: ["text"],
@@ -445,7 +445,7 @@ describe("resolveLogicalVisibleModelCatalog", () => {
     async (view) => {
       const catalog = [
         { ...platform, alias: "platform" },
-        { ...chatGPT, alias: "selected" },
+        { ...secondary, alias: "selected" },
       ];
       const result = await resolveLogicalVisibleModelCatalog({
         cfg: {} as OpenClawConfig,
@@ -468,10 +468,10 @@ describe("resolveLogicalVisibleModelCatalog", () => {
         {
           provider: "openai",
           id: "gpt-5.5",
-          name: "ChatGPT GPT-5.5",
+          name: "Secondary GPT-5.5",
           alias: view === "all" ? "platform" : "selected",
-          api: "openai-chatgpt-responses",
-          baseUrl: "https://chatgpt.com/backend-api/codex",
+          api: "openai-responses",
+          baseUrl: "https://openai-eu.example/v1",
           contextWindow: 400_000,
           reasoning: false,
           input: ["text"],
@@ -485,8 +485,8 @@ describe("resolveLogicalVisibleModelCatalog", () => {
     ["available", ["gpt-5.5"]],
   ] as const)("uses the selected route's %s lifecycle status", async (status, expectedIds) => {
     const platformAvailable = { ...platform, status: "available" as const };
-    const chatGPTSelected = { ...chatGPT, status };
-    const catalog = [platformAvailable, chatGPTSelected];
+    const secondarySelected = { ...secondary, status };
+    const catalog = [platformAvailable, secondarySelected];
     const result = await resolveLogicalVisibleModelCatalog({
       cfg: {} as OpenClawConfig,
       catalog,
@@ -535,12 +535,12 @@ describe("resolveLogicalVisibleModelCatalog", () => {
         id: "gpt-5.4-nano",
         name: "Platform Nano",
       };
-      const chatGPTNano: ModelCatalogEntry = {
-        ...chatGPT,
+      const secondaryNano: ModelCatalogEntry = {
+        ...secondary,
         id: "gpt-5.4-nano",
-        name: "ChatGPT Nano",
+        name: "Secondary Nano",
       };
-      const routeVariants = reverse ? [platformNano, chatGPTNano] : [chatGPTNano, platformNano];
+      const routeVariants = reverse ? [platformNano, secondaryNano] : [secondaryNano, platformNano];
       const evaluateEntry = vi.fn(
         async (_entry: ModelCatalogEntry, _variants: readonly ModelCatalogEntry[]) =>
           resolveLogicalModelCatalogEntryState({
@@ -569,9 +569,9 @@ describe("resolveLogicalVisibleModelCatalog", () => {
         {
           provider: "openai",
           id: "gpt-5.4-nano",
-          name: "ChatGPT Nano",
-          api: "openai-chatgpt-responses",
-          baseUrl: "https://chatgpt.com/backend-api/codex",
+          name: "Secondary Nano",
+          api: "openai-responses",
+          baseUrl: "https://openai-eu.example/v1",
           contextWindow: 400_000,
           reasoning: false,
           input: ["text"],

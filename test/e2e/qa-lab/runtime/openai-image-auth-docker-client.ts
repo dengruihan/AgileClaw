@@ -227,7 +227,7 @@ async function main() {
           providers: {
             openai: {
               baseUrl: `${mock.baseUrl}/backend-api/codex`,
-              api: "openai-chatgpt-responses",
+              api: "openai-responses",
               request: { allowPrivateNetwork: true },
               models: [],
             },

@@ -21,7 +21,6 @@ import {
 } from "openclaw/plugin-sdk/memory-core-host-runtime-core";
 import { asNullableRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { formatMemoryCoreSidecarNotice, resolveForeignMemorySlotOwner } from "./cli-memory-slot.js";
-import type { MemoryCoreAcquireLocalService } from "./memory/embedding-local-service.js";
 import { getMemorySearchManager } from "./memory/index.js";
 import type { ShortTermAuditSummary } from "./short-term-promotion.js";
 const { warn } = theme;
@@ -160,7 +159,6 @@ export async function withMemoryCommand(params: {
   onUnavailable?: (result: MemoryCommandUnavailable) => void;
   purpose?: MemoryManagerPurpose;
   inspectSources?: boolean;
-  acquireLocalService?: MemoryCoreAcquireLocalService;
   /** Refuse instead of answering from the sidecar index when another plugin owns the slot. */
   requiresMemorySlot?: boolean;
   run: (context: { manager: MemoryManager; cfg: OpenClawConfig; agentId: string }) => Promise<void>;
@@ -195,7 +193,6 @@ export async function withMemoryCommand(params: {
           agentId,
           purpose: params.purpose,
           inspectSources: params.inspectSources,
-          acquireLocalService: params.acquireLocalService,
         }),
       onMissing: (error) => {
         if (!error?.trim()) {

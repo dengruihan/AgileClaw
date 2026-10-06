@@ -1139,7 +1139,7 @@ describe("runMemoryFlushIfNeeded", () => {
             openai: {
               agentRuntime: { id: "codex" },
               baseUrl: "https://chatgpt.com/backend-api",
-              api: "openai-chatgpt-responses",
+              api: "openai-responses",
               models: [
                 {
                   id: "gpt-5.6-luna",

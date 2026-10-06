@@ -187,7 +187,7 @@ it(
           entries: { main: {} },
         },
         messages: { queue: { mode: "followup", debounceMsByChannel: { webchat: 0 } } },
-        models: { mode: "replace", providers: { [provider.providerId]: provider.config } },
+        models: { providers: { [provider.providerId]: provider.config } },
         gateway: { auth: { mode: "token", token } },
         plugins: { slots: { memory: "none" } },
       } satisfies OpenClawConfig;

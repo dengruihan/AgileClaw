@@ -249,7 +249,6 @@ export function createCodexLifecycleTurnHarness(
       agentDir: params.agentDir,
       authProfileId: null,
       preparedAuth: undefined,
-      authRequirement: undefined,
       config: {},
     });
   onTestFinished(async () => {

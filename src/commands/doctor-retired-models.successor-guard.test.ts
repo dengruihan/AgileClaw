@@ -104,7 +104,7 @@ describe("doctor retired successor guard", () => {
         vi.spyOn(openaiModelRoutes, "createOpenAIModelRoutesResolver").mockImplementation(
           actual.createOpenAIModelRoutesResolver,
         );
-        cfg.models!.providers!.openai!.api = "openai-chatgpt-responses";
+        cfg.models!.providers!.openai!.api = "openai-responses";
         cfg.models!.providers!.openai!.baseUrl = "https://chatgpt.com/backend-api/codex";
       }
       const modelRef = `openai/${source}`;

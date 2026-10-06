@@ -29,7 +29,6 @@ import { createProcessSessionFixture } from "../bash-process-registry.test-helpe
 import { getRegisteredAgentHarness, registerAgentHarness } from "../harness/registry.js";
 import type { AgentHarness } from "../harness/types.js";
 import { recordModelFallbackStop } from "../model-fallback-stop.js";
-import { getModelProviderLocalServiceReconciler } from "../provider-local-service-reconcile.js";
 import { createSessionMaintenanceOwner } from "../session-maintenance/coordinator.js";
 import {
   createAssistant,
@@ -1703,30 +1702,6 @@ describe("compactEmbeddedAgentSessionDirect hooks", () => {
     },
   );
 
-  it("carries the prepared provider reconciler into direct compaction", async () => {
-    mockResolvedModel();
-    const reconcile = vi.fn(async () => undefined);
-    const { resolvePreparedProviderRuntimeHandle } = await import("../runtime-plan/build.js");
-    vi.mocked(resolvePreparedProviderRuntimeHandle).mockImplementationOnce((params) => ({
-      provider: params.provider,
-      modelId: params.modelId,
-      workspaceDir: params.workspaceDir,
-      prepared: true,
-      plugin: { id: params.provider, label: "Fixture", auth: [], reconcileLocalService: reconcile },
-    }));
-
-    await expect(compactEmbeddedAgentSessionDirect(wrappedCompactionArgs())).resolves.toMatchObject(
-      { ok: true },
-    );
-
-    const streamRegistration = mockCallArg(registerProviderStreamForModelMock) as {
-      model: object;
-    };
-    expect(getModelProviderLocalServiceReconciler(streamRegistration.model)).toBe(reconcile);
-    expect(getModelProviderRuntimePluginHandle(streamRegistration.model)).toBe(
-      buildAgentRuntimePlanMock.mock.calls[0]?.[0].providerRuntimeHandle,
-    );
-  });
   it("compacts an overflow transcript anchored by a compaction summary", async () => {
     sessionMessages.splice(
       0,
@@ -1879,7 +1854,7 @@ describe("compactEmbeddedAgentSession hooks (ownsCompaction engine)", () => {
   }
 
   function mockQueuedRouteAwareModel(
-    defaultApi: "openai-responses" | "openai-chatgpt-responses" = "openai-responses",
+    defaultApi: "openai-responses" | "openai-responses" = "openai-responses",
   ) {
     resolveModelMock.mockImplementation(
       (provider = "openai", modelId = "gpt-5.5", _agentDir?: string, cfg?: unknown) => {
@@ -1893,7 +1868,7 @@ describe("compactEmbeddedAgentSession hooks (ownsCompaction engine)", () => {
             | undefined
         )?.models?.providers?.[provider];
         const api = providerConfig?.api ?? defaultApi;
-        const subscription = api === "openai-chatgpt-responses";
+        const subscription = api === "openai-responses";
         return {
           logicalRef: { provider, model: modelId },
           model: {
@@ -2168,7 +2143,7 @@ describe("compactEmbeddedAgentSession hooks (ownsCompaction engine)", () => {
         model: {
           provider: "openai",
           id: "fake",
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: "https://chatgpt.com/backend-api/codex",
           input: [],
         },
@@ -2682,7 +2657,7 @@ describe("compactEmbeddedAgentSession hooks (ownsCompaction engine)", () => {
         models: {
           providers: {
             openai: expect.objectContaining({
-              api: "openai-chatgpt-responses",
+              api: "openai-responses",
               baseUrl: "https://chatgpt.com/backend-api/codex",
             }),
           },
@@ -2707,7 +2682,7 @@ describe("compactEmbeddedAgentSession hooks (ownsCompaction engine)", () => {
         authProfileIdSource: "auto",
         contextTokenBudget: 272_000,
         runtimeModel: expect.objectContaining({
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: "https://chatgpt.com/backend-api/codex",
           contextWindow: 272_000,
         }),

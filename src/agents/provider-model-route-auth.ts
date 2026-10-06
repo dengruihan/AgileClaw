@@ -78,7 +78,7 @@ type ProviderModelRouteAuthDecision =
       authModeIncompatible?: true;
     };
 
-export type ProviderModelRouteMaterializationAuthMode = "api_key" | "aws-sdk" | "oauth" | "token";
+export type ProviderModelRouteMaterializationAuthMode = "api_key";
 
 /** Normalizes stored/runtime auth syntax for profile-scoped model lookup. */
 export function resolveProviderModelMaterializationAuthMode(
@@ -88,10 +88,6 @@ export function resolveProviderModelMaterializationAuthMode(
     case "api-key":
     case "api_key":
       return "api_key";
-    case "aws-sdk":
-    case "oauth":
-    case "token":
-      return mode;
     default:
       return undefined;
   }
@@ -103,19 +99,12 @@ export function resolveProviderModelRouteAuthRequirement(
   authRequirement?: ProviderModelRouteAuthRequirement | null,
 ): ProviderModelRouteAuthRequirement | undefined {
   if (authRequirement !== undefined) {
-    return authRequirement ?? undefined;
+    return authRequirement === "api-key" ? authRequirement : undefined;
   }
-  switch (mode) {
-    case "api-key":
-    case "api_key":
-    case "aws-sdk":
-      return "api-key";
-    case "oauth":
-    case "token":
-      return "subscription";
-    default:
-      return undefined;
+  if (mode === "api-key" || mode === "api_key") {
+    return "api-key";
   }
+  return undefined;
 }
 
 export function providerModelRouteAcceptsAuthMode(params: {
@@ -134,10 +123,7 @@ export function resolveProviderModelRouteMaterializationAuthMode(params: {
   mode?: string;
   requirement: ProviderModelRouteAuthRequirement;
 }): ProviderModelRouteMaterializationAuthMode {
-  return (
-    resolveProviderModelMaterializationAuthMode(params.mode) ??
-    (params.requirement === "api-key" ? "api_key" : "oauth")
-  );
+  return resolveProviderModelMaterializationAuthMode(params.mode) ?? "api_key";
 }
 
 function directAttempt(source: ProviderModelAuthDirectSource): ProviderModelAuthLogicalAttempt {

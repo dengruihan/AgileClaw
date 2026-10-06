@@ -276,7 +276,7 @@ describe("resolveApiKeyForProfile fallback to main agent", () => {
       const { resolveApiKeyForProviderCore } = await import("../model-auth.js");
       const resolution = resolveApiKeyForProviderCore({
         provider: "openai",
-        modelApi: "openai-chatgpt-responses",
+        modelApi: "openai-responses",
         store,
         agentDir: mainAgentDir,
         profileId,

@@ -67,7 +67,7 @@ function preparedOauthModel(
       provider: "openai",
       id: modelId,
       name: modelId,
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
       input: ["text"],
       reasoning: true,

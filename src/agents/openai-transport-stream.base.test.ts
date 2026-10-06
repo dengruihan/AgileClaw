@@ -155,7 +155,7 @@ describe("openai transport stream", () => {
     const model = makeResponsesModel({
       id: "gpt-5.4",
       name: "GPT-5.4",
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://proxy.example.com/v1",
     });
     const output: OpenAIResponsesOutput = {
@@ -371,7 +371,7 @@ describe("openai transport stream", () => {
       makeResponsesModel({
         id: "gpt-5.4-codex",
         name: "GPT-5.4 Codex",
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api",
         headers: {
           originator: "openclaw",

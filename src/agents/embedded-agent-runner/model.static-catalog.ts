@@ -3,6 +3,7 @@ import {
   findNormalizedProviderValue,
   normalizeProviderId,
 } from "@openclaw/model-catalog-core/provider-id";
+import { isApiKeyModelApi } from "../../config/model-config-vocabulary.js";
 import {
   findConfiguredProviderModel,
   projectModelProviderConfig,
@@ -280,7 +281,8 @@ export function createBundledStaticCatalogModelResolver(params?: {
               id: row.id,
               baseUrl: route.baseUrl,
               config: projectModelProviderConfig(params?.cfg, row.provider, {
-                api: row.api,
+                // Catalog donor rows may carry runtime-only APIs that cannot enter config.
+                ...(row.api !== undefined && isApiKeyModelApi(row.api) ? { api: row.api } : {}),
                 baseUrl: route.baseUrl,
               }),
               workspaceDir: params?.workspaceDir,

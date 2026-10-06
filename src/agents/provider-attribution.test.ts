@@ -1383,7 +1383,7 @@ describe("provider attribution", () => {
         name: "native OpenAI Codex responses",
         input: {
           provider: "openai",
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: "https://chatgpt.com/backend-api/codex",
         },
         expected: {

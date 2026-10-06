@@ -42,16 +42,12 @@ describe("litellm plugin", () => {
     clearLiveCatalogCacheForTests();
   });
 
-  it.each([
-    { authMode: "interactive", modelsMode: "merge" },
-    { authMode: "non-interactive", modelsMode: "replace" },
-  ] as const)(
-    "preserves an explicit proxy's authored models through registered $authMode auth in $modelsMode mode",
-    async ({ authMode, modelsMode }) => {
+  it.each([{ authMode: "interactive" }, { authMode: "non-interactive" }] as const)(
+    "preserves an explicit proxy's authored models through registered $authMode auth",
+    async ({ authMode }) => {
       const auth = registerProvider()?.auth?.[0];
       const config = {
         models: {
-          mode: modelsMode,
           providers: {
             litellm: {
               baseUrl: "https://litellm.example/v1",
@@ -111,12 +107,11 @@ describe("litellm plugin", () => {
         result = interactive?.configPatch;
       }
 
-      expect(result?.models?.mode).toBe(modelsMode);
       expect(result?.models?.providers?.litellm).toEqual({
         baseUrl: "https://litellm.example/v1",
         api: "openai-completions",
         apiKey: "old-key",
-        models: [...authoredModels, ...(modelsMode === "replace" ? [LITELLM_DEFAULT_MODEL] : [])],
+        models: authoredModels,
       });
     },
   );

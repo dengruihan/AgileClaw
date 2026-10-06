@@ -124,7 +124,7 @@ describe("normalizeEmbeddedRunAttempt", () => {
     };
     const assistant = {
       ...makeCliUsageAssistant("stop"),
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       usage: {
         input: 150_000,
         output: 100,

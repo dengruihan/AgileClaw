@@ -390,8 +390,9 @@ Use an explicit managed provider when you need OpenClaw's provider-specific
 network controls instead of Codex-hosted search.
 
 Selecting `provider: "codex"` enables the bundled `codex` plugin and uses the
-same `tools.web.search.openaiCodex` restrictions shown above. Authenticate the
-Codex app-server first with `openclaw models auth login --provider openai`.
+same `tools.web.search.openaiCodex` restrictions shown above. Provide an
+OpenAI API key first (for example `openclaw models auth paste-api-key
+--provider openai`); the Codex app-server channel runs on explicit API keys.
 The parent agent can use any model or runtime; only the bounded search worker
 runs through Codex.
 
@@ -458,8 +459,8 @@ Provider-specific config (API keys, base URLs, modes) lives under
 `models.providers.google.apiKey` and `models.providers.google.baseUrl` as lower-priority
 fallbacks after its dedicated web-search config and `GEMINI_API_KEY`. See the
 provider pages for examples.
-Grok can also reuse an xAI OAuth auth profile from `openclaw models auth login
---provider xai --method oauth`; API-key config remains the fallback.
+Grok also reads a saved xAI API key from the auth store; API-key config in
+`plugins.entries.xai.config.webSearch.apiKey` takes priority.
 
 `tools.web.search.provider` is validated against the web-search provider ids
 declared by bundled and installed plugin manifests. A typo such as `"brvae"`

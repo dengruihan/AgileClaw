@@ -248,7 +248,7 @@ describe("openai responses payload policy", () => {
   it("emits store false for native OpenAI Codex responses disable mode", () => {
     const policy = resolveOpenAIResponsesPayloadPolicy(
       {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "openai",
         baseUrl: "https://chatgpt.com/backend-api/codex",
       },
@@ -485,7 +485,7 @@ describe("openai responses payload policy", () => {
     // case above, plus the compat opt-in.
     const policy = resolveOpenAIResponsesPayloadPolicy(
       {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "openai",
         baseUrl: "https://chatgpt.com/backend-api/codex",
         compat: { supportsResponsesContinuation: true },

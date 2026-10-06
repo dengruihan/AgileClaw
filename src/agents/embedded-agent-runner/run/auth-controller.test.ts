@@ -147,7 +147,7 @@ describe("createEmbeddedRunAuthController", () => {
     const harness = createMutableAuthControllerHarness();
     const selectedModel = {
       ...createTestModel(),
-      api: "openai-chatgpt-responses" as const,
+      api: "openai-responses" as const,
       baseUrl: "https://chatgpt.com/backend-api/codex",
       contextWindow: 272_000,
     };
@@ -169,7 +169,7 @@ describe("createEmbeddedRunAuthController", () => {
       profileCandidates: ["openai:chatgpt"],
       prepareModelForAuthProfile: async () => ({
         runtimeModel: selectedModel,
-        authRequirement: "subscription",
+        authRequirement: "api-key",
         commit: () => {
           harness.models.runtime = selectedModel;
           harness.models.effective = selectedModel;
@@ -198,10 +198,10 @@ describe("createEmbeddedRunAuthController", () => {
       prepareModelForAuthProfile: async () => ({
         runtimeModel: {
           ...createTestModel(),
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: "https://chatgpt.com/backend-api/codex",
         },
-        authRequirement: "subscription",
+        authRequirement: "api-key",
         commit,
       }),
     });

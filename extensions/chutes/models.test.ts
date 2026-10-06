@@ -31,46 +31,40 @@ describe("chutes-models", () => {
     }
   });
 
-  it.each(["default", "replace"] as const)(
-    "keeps catalog ownership, defaults, and aliases aligned in %s mode",
-    (mode) => {
-      const runtimeIds = new Set(CHUTES_MODEL_CATALOG.map((model) => model.id));
-      expect(
-        CHUTES_MODEL_CATALOG.every((model) => model.compat?.supportsUsageInStreaming === false),
-      ).toBe(true);
-      const cfg = applyChutesConfig(mode === "default" ? {} : { models: { mode } });
-      expect(cfg.models?.mode).toBe(mode === "replace" ? "replace" : "merge");
-      expect(cfg.models?.providers?.chutes?.models).toEqual(
-        mode === "replace" ? CHUTES_MODEL_CATALOG : [],
-      );
-      expect(cfg.agents?.defaults?.model).toEqual({
-        primary: "chutes/zai-org/GLM-5.2-TEE",
-        fallbacks: ["chutes/deepseek-ai/DeepSeek-V3.2-TEE", "chutes/moonshotai/Kimi-K2.6-TEE"],
-      });
-      expect(cfg.agents?.defaults?.imageModel).toEqual({
-        primary: "chutes/moonshotai/Kimi-K2.6-TEE",
-        fallbacks: ["chutes/Qwen/Qwen3.6-27B-TEE"],
-      });
-      expect(cfg.agents?.defaults?.models?.["chutes-fast"]).toBeUndefined();
-      expect(cfg.agents?.defaults?.models?.["chutes-pro"]?.alias).toBe(
-        "chutes/deepseek-ai/DeepSeek-V3.2-TEE",
-      );
-      expect(cfg.agents?.defaults?.models?.["chutes-vision"]?.alias).toBe(
-        "chutes/moonshotai/Kimi-K2.6-TEE",
-      );
-      const catalogBackedTargets = [
-        CHUTES_DEFAULT_MODEL_REF,
-        "chutes/deepseek-ai/DeepSeek-V3.2-TEE",
-        "chutes/moonshotai/Kimi-K2.6-TEE",
-        "chutes/Qwen/Qwen3.6-27B-TEE",
-      ];
-      expect(
-        catalogBackedTargets.every((modelRef) => runtimeIds.has(modelRef.slice("chutes/".length))),
-      ).toBe(true);
-    },
-  );
+  it("keeps catalog ownership, defaults, and aliases aligned", () => {
+    const runtimeIds = new Set(CHUTES_MODEL_CATALOG.map((model) => model.id));
+    expect(
+      CHUTES_MODEL_CATALOG.every((model) => model.compat?.supportsUsageInStreaming === false),
+    ).toBe(true);
+    const cfg = applyChutesConfig({});
+    expect(cfg.models?.providers?.chutes?.models).toEqual(CHUTES_MODEL_CATALOG);
+    expect(cfg.agents?.defaults?.model).toEqual({
+      primary: "chutes/zai-org/GLM-5.2-TEE",
+      fallbacks: ["chutes/deepseek-ai/DeepSeek-V3.2-TEE", "chutes/moonshotai/Kimi-K2.6-TEE"],
+    });
+    expect(cfg.agents?.defaults?.imageModel).toEqual({
+      primary: "chutes/moonshotai/Kimi-K2.6-TEE",
+      fallbacks: ["chutes/Qwen/Qwen3.6-27B-TEE"],
+    });
+    expect(cfg.agents?.defaults?.models?.["chutes-fast"]).toBeUndefined();
+    expect(cfg.agents?.defaults?.models?.["chutes-pro"]?.alias).toBe(
+      "chutes/deepseek-ai/DeepSeek-V3.2-TEE",
+    );
+    expect(cfg.agents?.defaults?.models?.["chutes-vision"]?.alias).toBe(
+      "chutes/moonshotai/Kimi-K2.6-TEE",
+    );
+    const catalogBackedTargets = [
+      CHUTES_DEFAULT_MODEL_REF,
+      "chutes/deepseek-ai/DeepSeek-V3.2-TEE",
+      "chutes/moonshotai/Kimi-K2.6-TEE",
+      "chutes/Qwen/Qwen3.6-27B-TEE",
+    ];
+    expect(
+      catalogBackedTargets.every((modelRef) => runtimeIds.has(modelRef.slice("chutes/".length))),
+    ).toBe(true);
+  });
 
-  it("preserves authored zero prices, aliases, and selections without adding merge-mode pins", () => {
+  it("preserves authored zero prices, aliases, and selections", () => {
     const cost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
     const config = applyChutesProviderConfig({});
     const [seed] = CHUTES_MODEL_CATALOG;
@@ -95,7 +89,7 @@ describe("chutes-models", () => {
 
     const reapplied = applyChutesProviderConfig(config);
 
-    expect(reapplied.models?.providers?.chutes?.models).toEqual([model]);
+    expect(reapplied.models?.providers?.chutes?.models).toEqual([model, ...CHUTES_MODEL_CATALOG]);
     expect(reapplied.models?.providers?.chutes?.apiKey).toBe("fixture-key");
     expect(reapplied.agents?.defaults).toEqual(config.agents?.defaults);
   });

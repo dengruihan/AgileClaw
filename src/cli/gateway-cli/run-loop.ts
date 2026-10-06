@@ -175,14 +175,6 @@ export async function runGatewayLoop(params: {
     }
     let ownerToCommit = initialOwner;
     let commitOutcome = initialOutcome;
-    // Graceful signal/restart paths call process.exit(), which skips beforeExit.
-    if (!foregroundUpdateClosed) {
-      await eagerLifecycleRuntime
-        .stopActiveManagedProviderLocalServices()
-        .catch((error: unknown) => {
-          gatewayLog.warn(`managed local service shutdown failed: ${formatErrorMessage(error)}`);
-        });
-    }
     await cleanupSnapshotOperations();
     await loopLogs.flushGatewayLogsBeforeExit(gatewayLog);
     for (;;) {
@@ -393,30 +385,6 @@ export async function runGatewayLoop(params: {
     let cancelled = initiallyCancelled;
     const foregroundHandoff =
       expectedOwner && !cancelled && eagerLifecycleRuntime.isForegroundUpdateHandoff(expectedOwner);
-    if (foregroundHandoff) {
-      // Finish lazy old-runtime cleanup while activation is still fenced by the helper.
-      try {
-        await eagerLifecycleRuntime.stopActiveManagedProviderLocalServices();
-      } catch (error) {
-        gatewayLog.error(
-          `foreground update cancelled after provider cleanup failed: ${formatErrorMessage(error)}`,
-        );
-        await markRestartHandoffUnavailable("restart-local-service-stop-failed");
-        const restoration = await eagerLifecycleRuntime
-          .cancelManagedServiceUpdateHandoff(expectedOwner)
-          .catch(() => false);
-        if (!restoration) {
-          gatewayLog.error("foreground update cancellation unconfirmed; remaining draining");
-          return;
-        }
-        if (restoration === "restart-after-exit") {
-          await releaseLockIfHeld();
-          return exitProcessAfterLogFlush(1, expectedOwner, "restore");
-        }
-        // Cancellation joins the updater before lock release or reuse of unchanged code.
-        cancelled = true;
-      }
-    }
     await releaseLockIfHeld();
     if (forcedExitStarted) {
       return;

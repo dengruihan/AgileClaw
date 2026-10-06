@@ -175,7 +175,6 @@ export function buildOpenAILongContextConfig(params: {
   return {
     secrets: { providers: { default: { source: "env" } } },
     models: {
-      mode: "replace",
       providers: {
         openai: {
           baseUrl: profile.baseUrl,
@@ -246,7 +245,6 @@ export function assertOpenAILongContextConfig(
   profile: OpenAILongContextProfile,
 ): void {
   const providers = cfg.models?.providers ?? {};
-  expectConfigValue("models.mode", cfg.models?.mode, "replace");
   expectConfigValue("models.providers", Object.keys(providers), ["openai"]);
   const provider = providers.openai;
   expectConfigValue("models.providers.openai.baseUrl", provider?.baseUrl, profile.baseUrl);

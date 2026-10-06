@@ -1,7 +1,8 @@
 /** Generic core consumers for provider-owned model route facts. */
 import { normalizeProviderId } from "@openclaw/model-catalog-core/provider-id";
+import { isApiKeyModelApi } from "../config/model-config-vocabulary.js";
 import { projectModelProviderConfig } from "../config/model-provider-config.js";
-import type { ModelApi, ModelProviderConfig } from "../config/types.models.js";
+import type { ModelProviderConfig } from "../config/types.models.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { ProviderModelRouteCandidate } from "../plugin-sdk/provider-model-types.js";
 import {
@@ -67,9 +68,13 @@ export function modelMatchesProviderModelRoute(params: {
     return false;
   }
 
-  // Re-resolve through the owner only to canonicalize endpoint spelling.
+  // Re-resolve through the owner only to canonicalize endpoint spelling. Config
+  // projection carries API-key routes only; other apis matched directly above.
+  if (!isApiKeyModelApi(params.api)) {
+    return false;
+  }
   const configuredProvider = {
-    api: params.api as ModelApi,
+    api: params.api,
     baseUrl: params.baseUrl,
     models: [],
   } satisfies ModelProviderConfig;
@@ -120,7 +125,7 @@ export function projectProviderModelRouteConfig(params: {
   route: ProviderModelRouteCandidate;
 }): OpenClawConfig {
   return projectModelProviderConfig(params.config, params.provider, {
-    auth: params.route.authRequirement === "subscription" ? "oauth" : "api-key",
+    auth: "api-key",
     api: params.route.api,
     baseUrl: params.route.baseUrl,
   });

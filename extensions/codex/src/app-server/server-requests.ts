@@ -1,5 +1,4 @@
 import { embeddedAgentLog } from "openclaw/plugin-sdk/agent-harness-runtime";
-import { AsyncWorkScope } from "openclaw/plugin-sdk/concurrency-runtime";
 import { coerceErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
 import { addSafeTimeoutDelayGraceMs } from "openclaw/plugin-sdk/number-runtime";
@@ -26,7 +25,6 @@ type ServerRequest = Parameters<CodexServerRequestHandler>[0];
 /** Physical-client owner for inbound requests, cancellation, and response deadlines. */
 export class CodexServerRequests {
   readonly handlers = new Set<CodexServerRequestHandler>();
-  private readonly refreshWork = new AsyncWorkScope();
   private closed = false;
   private closing: Promise<void> | undefined;
   private readonly active = new Map<
@@ -53,7 +51,7 @@ export class CodexServerRequests {
 
   close(error: Error): Promise<void> {
     this.closed = true;
-    this.closing ??= this.refreshWork.drain();
+    this.closing ??= Promise.resolve();
     const requests = [...this.active.values()];
     this.active.clear();
     for (const request of requests) {
@@ -133,11 +131,7 @@ export class CodexServerRequests {
       // Auth recovery belongs to the retained physical client, not the turn
       // whose stdio handles delivered this request. Keep tool/approval work in
       // its existing caller context and join admitted refresh tails at close.
-      const work =
-        request.method === "account/chatgptAuthTokens/refresh"
-          ? this.refreshWork.track(run)
-          : run();
-      const result = await Promise.race([work, deadline.promise]);
+      const result = await Promise.race([run(), deadline.promise]);
       if (this.active.get(request.id) === entry) {
         this.respond({
           id: request.id,

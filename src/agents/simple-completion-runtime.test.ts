@@ -203,7 +203,7 @@ function callArg(mock: { mock: { calls: unknown[][] } }, index = 0): unknown {
 }
 
 function createOpenAIRouteModelResolver(params: {
-  api: "openai-responses" | "openai-chatgpt-responses";
+  api: "openai-responses" | "openai-responses";
   baseUrl: string;
 }) {
   return vi.fn<SimpleCompletionModelResolver>(
@@ -328,7 +328,7 @@ describe("prepareSimpleCompletionModel", () => {
       profileId,
       bindAuthOwner: true,
       modelResolver: createOpenAIRouteModelResolver({
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api/codex",
       }),
     };
@@ -851,7 +851,7 @@ describe("acquireSimpleCompletionModelForAgent", () => {
       },
     } as unknown as OpenClawConfig;
     const modelResolver = createOpenAIRouteModelResolver({
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
     });
     hoisted.getApiKeyForModelMock.mockResolvedValue({
@@ -939,7 +939,7 @@ describe("acquireSimpleCompletionModelForAgent", () => {
         };
       });
       const modelResolver = createOpenAIRouteModelResolver({
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api/codex",
       });
       const result = await acquireSimpleCompletionModelForAgent({
@@ -960,7 +960,7 @@ describe("acquireSimpleCompletionModelForAgent", () => {
           expect(result.selection.modelId).toBe("gpt-5.5");
           expect(result.auth.profileId).toBe("openai:ready");
           expect(result.model).toMatchObject({
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
             baseUrl: "https://chatgpt.com/backend-api/codex",
           });
         }
@@ -1038,7 +1038,7 @@ describe("acquireSimpleCompletionModelForAgent", () => {
       },
     } as unknown as OpenClawConfig;
     const modelResolver = createOpenAIRouteModelResolver({
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
     });
     hoisted.getApiKeyForModelMock.mockResolvedValue({

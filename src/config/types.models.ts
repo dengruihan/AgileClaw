@@ -7,6 +7,9 @@ import type { SecretInput } from "./types.secrets.js";
 import type { ModelsConfigSchema } from "./zod-schema.core.js";
 
 export {
+  API_KEY_MODEL_APIS,
+  isApiKeyModelApi,
+  type ApiKeyModelApi,
   MODEL_APIS,
   MODEL_THINKING_FORMATS,
   isModelThinkingFormat,
@@ -32,7 +35,8 @@ export type ModelMediaInputConfig = ModelDataMediaInputConfig;
 /** Authentication mode expected by a configured model provider. */
 export type ModelProviderAuthMode = NonNullable<ModelProviderSchemaInput["auth"]>;
 
-export type ModelProviderLocalServiceConfig = NonNullable<ModelProviderSchemaInput["localService"]>;
+/** Discovery-only transport settings copied from provider metadata into normal config. */
+export type ModelProviderDiscoveryConfig = NonNullable<ModelProviderSchemaInput["discovery"]>;
 
 export type ModelDefinitionConfig = Omit<
   ModelDefinitionSchemaInput,

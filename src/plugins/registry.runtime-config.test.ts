@@ -494,25 +494,6 @@ describe("plugin registry runtime config scope", () => {
     });
   });
 
-  it("runs local service acquisition with the owning plugin scope", async () => {
-    let acquireScope = getPluginRuntimeGatewayRequestScope();
-    const runtime = createPluginRuntime();
-    runtime.llm.acquireLocalService = vi.fn(async () => {
-      acquireScope = getPluginRuntimeGatewayRequestScope();
-      return undefined;
-    });
-    const pluginRegistry = createRuntimeTestRegistry(runtime);
-    const record = createRecord("memory-provider", { name: "Memory Provider", origin: "bundled" });
-    const api = pluginRegistry.createApi(record, { config: {} as OpenClawConfig });
-
-    await api.runtime.llm.acquireLocalService({
-      providerId: "gpu-host",
-      baseUrl: "http://127.0.0.1:11434",
-    });
-
-    expect(acquireScope).toMatchObject({ pluginId: "memory-provider" });
-  });
-
   it("runs lazy node helpers with the owning plugin scope", async () => {
     let listScope = getPluginRuntimeGatewayRequestScope();
     let invokeScope = getPluginRuntimeGatewayRequestScope();

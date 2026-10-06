@@ -75,28 +75,6 @@ export async function startModelSetupFirstRunRedirectAfterLocation(params: {
     ) {
       if (defaults?.modelConfigured === false) {
         redirect();
-      } else if (defaults?.modelConfigured) {
-        try {
-          if (localStorage.getItem("openclaw.modelSetup.pendingActivation.v1")) {
-            const ownerRevision = context.gateway.connectionRevision;
-            // Crypto stays lazy; only an existing receipt suspends startup.
-            void import("./first-run-activation-receipt.ts")
-              .then(({ resumeFirstRunActivation }) =>
-                resumeFirstRunActivation(
-                  { context, isStillDefaultLanding, redirect },
-                  snapshot,
-                  ownerRevision,
-                  selectedAgentId,
-                  () => initialDecisionSettled,
-                  settleInitialDecision,
-                ),
-              )
-              .catch(settleInitialDecision);
-            return;
-          }
-        } catch {
-          // Blocked browser storage cannot own durable activation recovery.
-        }
       }
     }
     settleInitialDecision();

@@ -293,7 +293,7 @@ it("keeps legacy Codex assistant rows that precede later transcript rows during 
       message: {
         role: "assistant",
         provider: id === "reply-1" ? "openai-codex" : "codex",
-        api: id === "reply-1" ? "openai-codex-responses" : "openai-chatgpt-responses",
+        api: id === "reply-1" ? "openai-codex-responses" : "openai-responses",
         content,
       },
     });
@@ -333,7 +333,7 @@ it("keeps legacy Codex assistant rows that precede later transcript rows during 
                 id: event.id,
                 message: expect.objectContaining({
                   provider: "openai",
-                  api: "openai-chatgpt-responses",
+                  api: "openai-responses",
                 }),
               }
             : { id: event.id },

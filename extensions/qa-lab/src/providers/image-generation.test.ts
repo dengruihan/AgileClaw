@@ -33,7 +33,6 @@ describe("QA provider image generation config", () => {
       forcedRuntime: "codex",
     });
 
-    expect(patch.models?.mode).toBe("merge");
     expect(patch.models?.providers["mock-openai"]).toBeUndefined();
     expect(patch.models?.providers.openai?.baseUrl).toBe("https://api.openai.com/v1");
     expect(patch.models?.providers.openai?.request).toBeUndefined();

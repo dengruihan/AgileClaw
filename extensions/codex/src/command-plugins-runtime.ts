@@ -80,15 +80,13 @@ export async function withCodexPluginCommandContext<T>(
       : await readAuthBinding();
   const accountId = usesNativeAuth
     ? undefined
-    : preparedAuth?.kind === "api-key"
+    : preparedAuth
       ? resolveCodexAppServerPreparedApiKeyCacheKey(preparedAuth.apiKey)
-      : preparedAuth?.kind === "profile"
-        ? preparedAuth.snapshot.secretFreeCacheKey
-        : await resolveCodexAppServerAuthAccountCacheKey({
-            authProfileId: profileId,
-            agentDir: scope.agentDir,
-            config: ctx.config,
-          });
+      : await resolveCodexAppServerAuthAccountCacheKey({
+          authProfileId: profileId,
+          agentDir: scope.agentDir,
+          config: ctx.config,
+        });
   if ((await readAuthBinding()) !== authBinding) {
     throw new Error(SCOPE_CHANGED_MESSAGE);
   }

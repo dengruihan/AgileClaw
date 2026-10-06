@@ -22,7 +22,7 @@ import type { AuthProfileStore } from "./auth-profiles/types.js";
 import { resolveUsableCustomProviderApiKey } from "./model-auth-provider-config.js";
 import { createPreparedModelCatalogWorkerInput } from "./prepared-model-catalog-worker.js";
 import { prepareWorkspaceBuildGroup } from "./prepared-model-runtime.facts.js";
-import { prepareAgentCatalogSource } from "./prepared-model-runtime.scoped-catalog.js";
+import { ensureAgentCatalogSource } from "./prepared-model-runtime.scoped-catalog.js";
 import { createCatalogInspectionPool } from "./test-helpers/prepared-model-catalog-inspection.js";
 
 const provider = "worker-secret-fixture";
@@ -236,13 +236,7 @@ module.exports = {
           : undefined;
         let nativeRequests: boolean[] | undefined;
         if (loader) {
-          await prepareAgentCatalogSource(
-            params.agentFacts,
-            prepared.pluginGeneration,
-            "live",
-            false,
-            { authStore },
-          );
+          await ensureAgentCatalogSource(params.agentFacts, prepared.pluginGeneration, false);
           nativeRequests = requests.splice(0);
         }
         const nativeRuntimeFacts = getConfigResolutionFacts(runtime);
@@ -357,11 +351,11 @@ module.exports = {
           },
         });
         expect(plans).toHaveLength(1);
-        const catalog = plans[0]!.pluginCatalogs.find((entry) => entry.pluginId === provider);
-        if (!catalog) {
+        const catalogContents = Object.values(plans[0]!.pluginCatalogWrites).find(Boolean);
+        if (!catalogContents) {
           throw new Error("Expected the provider-owned writable catalog");
         }
-        expect(JSON.parse(catalog.contents)).toMatchObject({
+        expect(JSON.parse(catalogContents)).toMatchObject({
           providers: { [provider]: { apiKey: loader ? value : NON_ENV_SECRETREF_MARKER } },
         });
         expect(JSON.stringify(plans)).not.toContain("discoveryApiKey");

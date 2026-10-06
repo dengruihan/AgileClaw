@@ -266,7 +266,7 @@ describe("Gateway automatic account dispatch authority", () => {
                 id: "gpt-5.4",
                 name: "Synthetic model",
                 provider: "openai",
-                api: "openai-chatgpt-responses",
+                api: "openai-responses",
                 baseUrl: "https://chatgpt.com/backend-api/codex",
               },
             ],

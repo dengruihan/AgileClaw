@@ -96,10 +96,6 @@ function createRuntimeMediaUnderstandingFacade(): PluginRuntime["mediaUnderstand
 }
 
 function createRuntimeLlmFacade(): PluginRuntime["llm"] {
-  const loadAcquireLocalService = createLazyRuntimeMethod(
-    () => import("../../agents/provider-local-service.js"),
-    (runtime) => runtime.createConfiguredProviderLocalServiceAcquirer(getRuntimeConfig),
-  );
   const loadLlm = createLazyRuntimeSurface(
     () => import("./runtime-llm.runtime.js"),
     (m) =>
@@ -111,7 +107,6 @@ function createRuntimeLlmFacade(): PluginRuntime["llm"] {
       }),
   );
   return {
-    acquireLocalService: loadAcquireLocalService,
     complete: createLazyRuntimeMethod(loadLlm, (llm) => llm.complete),
   };
 }

@@ -128,7 +128,6 @@ module.exports = { id: ${JSON.stringify(pluginId)}, register(api) {
             defaults: { workspace: state.workspaceDir, model: "anthropic/claude-opus-5" },
           },
           models: {
-            mode: "replace",
             providers: {
               anthropic: {
                 api: "anthropic-messages",

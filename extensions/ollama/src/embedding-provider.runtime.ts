@@ -1,7 +1,6 @@
 import type { EmbeddingProvider } from "openclaw/plugin-sdk/embedding-providers";
 import { sanitizeAndNormalizeEmbedding } from "openclaw/plugin-sdk/memory-core-host-engine-embeddings";
 import { resolveMemorySecretInputString } from "openclaw/plugin-sdk/memory-core-host-secret";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/provider-auth";
 import {
   isKnownEnvApiKeyMarker,
@@ -32,8 +31,6 @@ import { resolveOllamaApiBase } from "./provider-models.js";
 
 export type OllamaEmbeddingProvider = EmbeddingProvider;
 
-type MemoryCoreAcquireLocalService = OpenClawPluginApi["runtime"]["llm"]["acquireLocalService"];
-
 type OllamaEmbeddingOptions = {
   config: OpenClawConfig;
   agentDir?: string;
@@ -48,7 +45,6 @@ type OllamaEmbeddingOptions = {
   local?: unknown;
   dimensions?: number;
   taskType?: unknown;
-  acquireLocalService?: MemoryCoreAcquireLocalService;
 };
 
 export type OllamaEmbeddingClient = {
@@ -57,8 +53,6 @@ export type OllamaEmbeddingClient = {
   ssrfPolicy?: SsrFPolicy;
   model: string;
   outputDimensionality?: number;
-  localServiceTarget?: Parameters<MemoryCoreAcquireLocalService>[0];
-  acquireLocalService?: MemoryCoreAcquireLocalService;
   embedBatch: (texts: string[]) => Promise<number[][]>;
 };
 
@@ -323,23 +317,12 @@ async function resolveOllamaEmbeddingClient(
   if (apiKey) {
     headers.Authorization = `Bearer ${apiKey}`;
   }
-  const localService = providerConfig?.config.localService;
   return {
     baseUrl,
     headers,
     ssrfPolicy: ssrfPolicyFromHttpBaseUrlAllowedOrigin(baseUrl),
     model,
     outputDimensionality: options.dimensions,
-    ...(localService && baseUrlOrigin !== "remote-config"
-      ? {
-          localServiceTarget: {
-            providerId: providerConfig.providerId,
-            baseUrl: `${baseUrl.replace(/\/+$/, "")}/v1`,
-            headers,
-          },
-          acquireLocalService: options.acquireLocalService,
-        }
-      : {}),
   };
 }
 
@@ -350,41 +333,33 @@ export async function createOllamaEmbeddingProvider(
   const embedUrl = `${client.baseUrl.replace(/\/$/, "")}/api/embed`;
 
   const embedMany = async (input: string | string[], signal?: AbortSignal): Promise<number[][]> => {
-    const localServiceLease =
-      client.localServiceTarget && client.acquireLocalService
-        ? await client.acquireLocalService(client.localServiceTarget, signal)
-        : undefined;
     let json: Awaited<ReturnType<typeof readOllamaEmbeddingJsonResponse>>;
+    const { response, release } = await fetchConfiguredLocalOriginWithSsrFGuard({
+      url: embedUrl,
+      policy: client.ssrfPolicy,
+      configuredLocalOriginBaseUrl: client.baseUrl,
+      auditContext: "ollama-memory-embedding",
+      signal,
+      init: {
+        method: "POST",
+        headers: client.headers,
+        body: JSON.stringify({ model: client.model, input }),
+      },
+    });
     try {
-      const { response, release } = await fetchConfiguredLocalOriginWithSsrFGuard({
-        url: embedUrl,
-        policy: client.ssrfPolicy,
-        configuredLocalOriginBaseUrl: client.baseUrl,
-        auditContext: "ollama-memory-embedding",
-        signal,
-        init: {
-          method: "POST",
-          headers: client.headers,
-          body: JSON.stringify({ model: client.model, input }),
-        },
-      });
-      try {
-        if (!response.ok) {
-          // Reflected provider text can include request credentials; force tool-payload
-          // redaction even when the operator disables general log redaction.
-          const detail = await readProviderResponseErrorText(
-            response,
-            OLLAMA_EMBED_ERROR_BODY_LIMIT_BYTES,
-            client.headers,
-          ).catch(() => "unknown error");
-          throw new Error(`Ollama embed HTTP ${response.status}: ${detail}`);
-        }
-        json = await readOllamaEmbeddingJsonResponse(response);
-      } finally {
-        await release();
+      if (!response.ok) {
+        // Reflected provider text can include request credentials; force tool-payload
+        // redaction even when the operator disables general log redaction.
+        const detail = await readProviderResponseErrorText(
+          response,
+          OLLAMA_EMBED_ERROR_BODY_LIMIT_BYTES,
+          client.headers,
+        ).catch(() => "unknown error");
+        throw new Error(`Ollama embed HTTP ${response.status}: ${detail}`);
       }
+      json = await readOllamaEmbeddingJsonResponse(response);
     } finally {
-      localServiceLease?.release();
+      await release();
     }
     if (!Array.isArray(json.embeddings)) {
       throw new Error("Ollama embed response missing embeddings[]");

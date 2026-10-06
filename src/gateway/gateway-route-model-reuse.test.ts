@@ -235,7 +235,6 @@ describe("Gateway route model reuse", () => {
               ),
             },
             models: {
-              mode: "replace",
               providers: Object.fromEntries(
                 PROVIDERS.map((provider) => [
                   provider,

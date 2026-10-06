@@ -888,21 +888,55 @@ openclaw-model-account-usage,
   margin-block: 20px;
 }
 
-.provider-manager__hidden {
-  margin-block: 4px 12px;
+.provider-manager__templates {
+  display: grid;
+  gap: var(--space-3);
+  margin-block: var(--space-4);
 }
 
-.provider-manager__hidden summary {
-  cursor: pointer;
+.provider-manager__template {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.provider-manager__template--selected {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+
+.provider-manager__template span {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.provider-manager__template small {
   color: var(--text-muted);
-  font-size: 14px;
 }
 
-.provider-manager__hidden-list {
-  margin-block: 12px;
+.provider-manager__section-header,
+.provider-manager__clear-key {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
-.provider-manager__hidden-list .provider-manager__model {
+.provider-manager__models {
+  border-top: 1px solid var(--border);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+}
+
+.provider-manager__section-header h3 {
+  margin: 0;
+}
+
+.provider-manager__model {
   opacity: 0.75;
 }
 

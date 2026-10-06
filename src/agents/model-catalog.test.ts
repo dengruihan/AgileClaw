@@ -100,46 +100,6 @@ describe("prepared model catalog builder", () => {
     mocks.augmentModelCatalogWithProviderPlugins.mockResolvedValue([]);
   });
 
-  it.each(
-    (["static", "refreshable", "runtime"] as const).flatMap((discovery) =>
-      [false, true].map((warmCache) => ({ discovery, warmCache })),
-    ),
-  )(
-    "keeps replace publication closed to $discovery inventory (warm cache=$warmCache)",
-    async ({ discovery, warmCache }) => {
-      mocks.augmentModelCatalogWithProviderPlugins.mockResolvedValue([
-        { provider: "manifest-provider", id: "augmented-only", name: "Augmented" },
-      ]);
-      const config: OpenClawConfig = { models: { catalogRefresh: { enabled: false } } };
-      const manifest = providerManifestSnapshot({
-        provider: "manifest-provider",
-        discovery,
-        modelIds: ["manifest-only"],
-      });
-      if (warmCache) {
-        expect(loadManifestModelCatalog({ config, metadataSnapshot: manifest })).toHaveLength(1);
-      }
-      config.models = { ...config.models, mode: "replace", providers: {} };
-      expect(
-        loadManifestModelCatalog({
-          config,
-          get metadataSnapshot(): never {
-            throw new Error("replace must not resolve manifest metadata");
-          },
-        }),
-      ).toEqual([]);
-      const snapshot = await build({
-        config,
-        metadataSnapshot: manifest,
-        readOnly: false,
-        includeProviderPluginAugmentation: true,
-      });
-      expect(snapshot.entries).toEqual([]);
-      expect(snapshot.routeVariants).toEqual([]);
-      expect(mocks.augmentModelCatalogWithProviderPlugins).not.toHaveBeenCalled();
-    },
-  );
-
   it.each(["ready", "unavailable", "auth-rejected"] as const)(
     "preserves %s provider membership without replenishing it from metadata",
     async (status) => {

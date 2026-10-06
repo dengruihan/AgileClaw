@@ -7,7 +7,6 @@ import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
 import { patchSessionEntry, upsertSessionEntry } from "openclaw/plugin-sdk/session-store-runtime";
 import { useSessionStoreTempDirs } from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyCodexAppServerAuthProfile } from "./auth-bridge.js";
 import {
   consumeCodexAppServerLiveThread,
   retainCodexAppServerLiveThread,
@@ -33,7 +32,6 @@ import {
   writeCompactionTestBinding,
   writeSupervisedTestBinding,
 } from "./compact.test-support.js";
-import { CODEX_RESPONSES_OAUTH_PROVIDER } from "./responses-oauth.js";
 import { resolveCodexSessionBinding } from "./session-binding.js";
 import {
   clearCodexAppServerBindingForThread,
@@ -254,21 +252,6 @@ describe("maybeCompactCodexAppServerSession", () => {
     expect(bindingStore.read(successor)).toEqual(binding);
   });
 
-  it("explains manual subscription-sharing compaction without starting native inference", async () => {
-    const fake = createFakeCodexClient();
-    setCodexAppServerClientFactoryForTest(async () => fake.client);
-    const sessionFile = await writeCompactionTestBinding(tempDir, {
-      modelProvider: CODEX_RESPONSES_OAUTH_PROVIDER,
-    });
-
-    await expect(startCompaction(sessionFile)).resolves.toMatchObject({
-      ok: false,
-      compacted: false,
-      reason: expect.stringContaining("Automatic compaction runs during normal turns"),
-    });
-    expect(fake.request).not.toHaveBeenCalled();
-  });
-
   it("does not compact a thread created with restricted native authority", async () => {
     const fake = createFakeCodexClient();
     setCodexAppServerClientFactoryForTest(async () => fake.client);
@@ -455,7 +438,6 @@ describe("maybeCompactCodexAppServerSession", () => {
     expect(factory).toHaveBeenCalledWith(
       expect.objectContaining({
         preparedAuth: { kind: "api-key", apiKey: "prepared-platform-key" },
-        authRequirement: "api-key",
       }),
     );
     expect(factory.mock.calls[0]?.[0]).not.toHaveProperty("authProfileId");
@@ -498,76 +480,35 @@ describe("maybeCompactCodexAppServerSession", () => {
     expect(factory).not.toHaveBeenCalled();
   });
 
-  it.each([
-    [true, "api-key"],
-    [false, "api-key"],
-    [false, "subscription"],
-  ] as const)(
-    "keeps native auth ownership (supervision: %s, outer: %s)",
-    async (supervised, authRequirement) => {
-      const fake = createFakeCodexClient({ retainedThreadId: null });
-      const factory = vi.fn<CodexAppServerClientFactory>(async (options) => {
-        if (options?.authRequirement) {
-          fake.request.mockResolvedValueOnce({
-            account: { type: authRequirement === "api-key" ? "chatgpt" : "apiKey" },
-          });
-        }
-        // Exercise the real startup verifier against the conflicting native account.
-        await applyCodexAppServerAuthProfile({
-          client: fake.client,
-          authProfileId: options?.authProfileId,
-          authRequirement: options?.authRequirement,
-        });
-        return fake.client;
-      });
-      const sessionFile = supervised
-        ? await writeSupervisedTestBinding(tempDir, { authProfileId: "openai:binding-profile" })
-        : await writeCompactionTestBinding(tempDir);
-      const pending = maybeCompactCodexAppServerSession(
-        compactionParams(sessionFile, {
-          authProfileId: "openai:outer-profile",
-          runtimeAuthPlan: {
-            providerForAuth: "openai",
-            authProfileProviderForAuth: "openai",
-            harnessAuthProvider: "openai",
-            selectedAuthMode: authRequirement,
-            modelRoute: {
-              provider: "openai",
-              modelId: "gpt-5.5",
-              api: "openai-responses",
-              baseUrl: "https://api.openai.com/v1",
-              authRequirement,
-              requestTransportOverrides: "none",
-            },
-          },
-        }),
-        {
-          clientFactory: factory,
-          pluginConfig: supervised
-            ? { supervision: { enabled: true } }
-            : { appServer: { homeScope: "user" } },
-        },
-      );
-      if (supervised) {
-        await expect(pending).resolves.toMatchObject({ ok: true, compacted: true });
-      } else {
-        await expect(pending).rejects.toThrow(/Codex (Platform|subscription) route requires/);
-      }
-      expect(factory).toHaveBeenCalledWith(
-        expect.objectContaining({
-          authProfileId: null,
-          authRequirement: supervised ? undefined : authRequirement,
-          startOptions: expect.objectContaining({ homeScope: "user" }),
-        }),
-      );
-      expect(factory.mock.calls[0]?.[0]).not.toHaveProperty("preparedAuth");
-      expect(fake.request.mock.calls.map(([method]) => method)).toEqual(
-        supervised
-          ? ["thread/resume", "thread/compact/start", "thread/unsubscribe"]
-          : ["account/read"],
-      );
-    },
-  );
+  it("keeps native auth ownership for supervised compaction", async () => {
+    const fake = createFakeCodexClient({ retainedThreadId: null });
+    const factory = vi.fn<CodexAppServerClientFactory>(async () => fake.client);
+    const sessionFile = await writeSupervisedTestBinding(tempDir, {
+      authProfileId: "openai:binding-profile",
+    });
+    const pending = maybeCompactCodexAppServerSession(
+      compactionParams(sessionFile, {
+        authProfileId: "openai:outer-profile",
+      }),
+      {
+        clientFactory: factory,
+        pluginConfig: { supervision: { enabled: true } },
+      },
+    );
+    await expect(pending).resolves.toMatchObject({ ok: true, compacted: true });
+    expect(factory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authProfileId: null,
+        startOptions: expect.objectContaining({ homeScope: "user" }),
+      }),
+    );
+    expect(factory.mock.calls[0]?.[0]).not.toHaveProperty("preparedAuth");
+    expect(fake.request.mock.calls.map(([method]) => method)).toEqual([
+      "thread/resume",
+      "thread/compact/start",
+      "thread/unsubscribe",
+    ]);
+  });
 
   it("fails closed when a supervised binding is no longer enabled", async () => {
     const fake = createFakeCodexClient();

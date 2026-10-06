@@ -196,29 +196,6 @@ describe("model runtime generation scope", () => {
     expect(generation.resolveDynamicModel).not.toHaveBeenCalled();
   });
 
-  it("resolves a config-only AWS SDK profile without requiring a stored credential", async () => {
-    const provider = "amazon-bedrock";
-    const profileId = `${provider}:default`;
-    const generation = generationFixture({
-      provider,
-      requestProvider: provider,
-      config: {
-        auth: { profiles: { [profileId]: { provider, mode: "aws-sdk" } } },
-        models: {
-          providers: {
-            [provider]: { auth: "aws-sdk", baseUrl: "https://example.test", models: [] },
-          },
-        },
-      },
-      label: "aws",
-    });
-
-    expect((await resolveGeneration(generation, profileId)).model?.id).toBe(generation.modelId);
-    expect(generation.resolveDynamicModel).toHaveBeenCalledWith(
-      expect.objectContaining({ authProfileId: profileId, authProfileMode: "aws-sdk" }),
-    );
-  });
-
   it("passes the selected personal auth mode into dynamic model discovery", async () => {
     const generation = generationFixture({
       label: "personal",

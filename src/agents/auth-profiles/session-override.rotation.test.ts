@@ -101,7 +101,7 @@ describe("session auth-profile rotation", () => {
       configureProviderRoutes({
         provider: "openai",
         modelId: OPENAI_MODEL_ID,
-        requirements: ["subscription", "api-key"],
+        requirements: ["api-key", "api-key"],
       });
       authStoreMocks.state.store.usageStats = {
         [OAUTH_PROFILE_ID]: {
@@ -203,7 +203,7 @@ describe("session auth-profile rotation", () => {
         configureProviderRoutes({
           provider: "openai",
           modelId: OPENAI_MODEL_ID,
-          requirements: ["api-key", "subscription"],
+          requirements: ["api-key", "api-key"],
         });
         const sessionEntry = createTriggeredSessionEntry({
           profileId: API_PRIMARY_PROFILE_ID,

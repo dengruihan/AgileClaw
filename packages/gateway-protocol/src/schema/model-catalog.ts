@@ -8,7 +8,7 @@ import {
   GatewayContextWindowOptionSchema,
   GatewayThinkingLevelOptionSchema,
 } from "./model-runtime-options.js";
-import { NonEmptyString } from "./primitives.js";
+import { NonEmptyString, SecretInputSchema } from "./primitives.js";
 
 /** Model catalog request with optional visibility scope. */
 export const ModelsListParamsSchema = Type.Object(
@@ -186,8 +186,76 @@ export const ModelsListResultSchema = closedObject({
   providerOutcomes: Type.Optional(Type.Array(ModelCatalogProviderOutcomeSchema)),
 });
 
+/** Provider setup choices derived from lightweight plugin model metadata. */
+export const ModelsProviderTemplatesParamsSchema = Type.Object({}, { additionalProperties: false });
+
+export const ModelsProviderTemplateSchema = closedObject({
+  id: NonEmptyString,
+  name: NonEmptyString,
+  requiresApiKey: Type.Boolean(),
+  defaults: Type.Record(Type.String(), Type.Unknown()),
+});
+
+export const ModelsProviderTemplatesResultSchema = closedObject({
+  templates: Type.Array(ModelsProviderTemplateSchema),
+});
+
+const ProviderDiscoveryConfigSchema = closedObject({
+  name: Type.Optional(NonEmptyString),
+  baseUrl: NonEmptyString,
+  api: Type.Optional(
+    Type.Union([
+      Type.Literal("openai-completions"),
+      Type.Literal("openai-responses"),
+      Type.Literal("anthropic-messages"),
+      Type.Literal("google-generative-ai"),
+      Type.Literal("google-interactions"),
+      Type.Literal("ollama"),
+      Type.Literal("pi-messages"),
+      Type.Literal("azure-openai-responses"),
+    ]),
+  ),
+  apiKey: Type.Optional(SecretInputSchema),
+  auth: Type.Optional(Type.Literal("api-key")),
+  maxTokens: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+  timeoutSeconds: Type.Optional(Type.Integer({ minimum: 1 })),
+  region: Type.Optional(NonEmptyString),
+  injectNumCtxForOpenAICompat: Type.Optional(Type.Boolean()),
+  params: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+  agentRuntime: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+  authHeader: Type.Optional(Type.Boolean()),
+  headers: Type.Optional(Type.Record(Type.String(), SecretInputSchema)),
+  request: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+  models: Type.Optional(Type.Array(Type.Record(Type.String(), Type.Unknown()))),
+  discovery: Type.Optional(
+    closedObject({
+      endpointPath: Type.Optional(NonEmptyString),
+      headers: Type.Optional(Type.Record(Type.String(), SecretInputSchema)),
+      request: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+    }),
+  ),
+});
+
+/** Explicit, side-effect-free model discovery against the caller's unsaved provider draft. */
+export const ModelsDiscoverParamsSchema = closedObject({
+  agentId: NonEmptyString,
+  providerId: Type.Optional(NonEmptyString),
+  config: ProviderDiscoveryConfigSchema,
+});
+
+export const ModelsDiscoverResultSchema = closedObject({
+  models: Type.Array(Type.Record(Type.String(), Type.Unknown())),
+});
+
 export type ModelChoice = Static<typeof ModelChoiceSchema>;
 export type ModelRuntimeChoice = Static<typeof ModelRuntimeChoiceSchema>;
 export type ModelCatalogProviderOutcome = Static<typeof ModelCatalogProviderOutcomeSchema>;
 export type ModelsListResult = Static<typeof ModelsListResultSchema>;
+export type ModelsProviderTemplatesParams = Static<typeof ModelsProviderTemplatesParamsSchema>;
+export type ModelProviderTemplate = Static<typeof ModelsProviderTemplateSchema>;
+export type ModelsProviderTemplatesResult = Static<typeof ModelsProviderTemplatesResultSchema>;
+export type ModelProviderTemplatesResult = ModelsProviderTemplatesResult;
+export type ModelsDiscoverParams = Static<typeof ModelsDiscoverParamsSchema>;
+export type ModelsDiscoverResult = Static<typeof ModelsDiscoverResultSchema>;
+export type ModelDiscoverResult = ModelsDiscoverResult;
 export type ModelsListParams = Static<typeof ModelsListParamsSchema>;

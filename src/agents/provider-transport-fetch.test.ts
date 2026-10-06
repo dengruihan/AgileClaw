@@ -7,7 +7,6 @@ import { createDeferredCore } from "../shared/deferred.js";
 import {
   buildGuardedModelFetch,
   buildProviderRequestDispatcherPolicyMock,
-  ensureModelProviderLocalServiceMock,
   fetchWithSsrFGuardMock,
   installProviderTransportFetchTestHooks,
   latestGuardedFetchParams,
@@ -75,33 +74,6 @@ async function parseSse(response: Response) {
 describe("buildGuardedModelFetch", () => {
   installProviderTransportFetchTestHooks();
 
-  it("waits for local reconciliation and releases its lease after consuming the body", async () => {
-    const entered = createDeferredCore();
-    const lease = createDeferredCore<{ release: () => void }>();
-    const release = vi.fn();
-    ensureModelProviderLocalServiceMock.mockImplementation(() => {
-      entered.resolve();
-      return lease.promise;
-    });
-    const pending = request({ method: "POST" }, localModel);
-    await entered.promise;
-    expect(fetchWithSsrFGuardMock).not.toHaveBeenCalled();
-    lease.resolve({ release });
-    const response = await pending;
-    await expect(response.text()).resolves.toBe("ok");
-    expect(fetchWithSsrFGuardMock).toHaveBeenCalledOnce();
-    expect(release).toHaveBeenCalledOnce();
-  });
-
-  it("releases the local lease when guarded fetch fails", async () => {
-    const release = vi.fn();
-    const error = new Error("network down");
-    ensureModelProviderLocalServiceMock.mockResolvedValue({ release });
-    fetchWithSsrFGuardMock.mockRejectedValue(error);
-    await expect(request({}, localModel)).rejects.toBe(error);
-    expect(release).toHaveBeenCalledOnce();
-  });
-
   it.each([
     {
       name: "caps model metadata",
@@ -110,45 +82,22 @@ describe("buildGuardedModelFetch", () => {
       expected: MAX_TIMER_TIMEOUT_MS,
     },
     {
-      name: "combines an explicit timeout with caller abort",
+      name: "keeps an explicit timeout with caller abort",
       timeout: 750,
       caller: true,
       expected: 750,
     },
-  ])("$name for local startup and guarded fetch", async ({ timeout, caller, expected }) => {
+  ])("$name in guarded fetch options", async ({ timeout, caller, expected }) => {
     const target = { ...localModel, requestTimeoutMs: Number.MAX_SAFE_INTEGER };
-    const timeoutController = new AbortController();
     const callerController = new AbortController();
-    const combinedController = new AbortController();
-    const timeoutSpy = vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeoutController.signal);
-    const anySpy = vi.spyOn(AbortSignal, "any").mockReturnValue(combinedController.signal);
     const signal = caller ? callerController.signal : undefined;
-    try {
-      const response = await buildGuardedModelFetch(target, timeout)(
-        `${target.baseUrl}/responses`,
-        {
-          method: "POST",
-          signal,
-        },
-      );
-      await response.text();
-      expect(timeoutSpy).toHaveBeenCalledExactlyOnceWith(expected);
-      expect(ensureModelProviderLocalServiceMock).toHaveBeenCalledWith(
-        target,
-        undefined,
-        caller ? combinedController.signal : timeoutController.signal,
-      );
-      expect(latestGuardedFetchParams().timeoutMs).toBe(expected);
-      expect(latestGuardedFetchParams().signal).toBe(signal);
-      if (caller) {
-        expect(anySpy).toHaveBeenCalledExactlyOnceWith([signal, timeoutController.signal]);
-      } else {
-        expect(anySpy).not.toHaveBeenCalled();
-      }
-    } finally {
-      timeoutSpy.mockRestore();
-      anySpy.mockRestore();
-    }
+    const response = await buildGuardedModelFetch(target, timeout)(`${target.baseUrl}/responses`, {
+      method: "POST",
+      signal,
+    });
+    await response.text();
+    expect(latestGuardedFetchParams().timeoutMs).toBe(expected);
+    expect(latestGuardedFetchParams().signal).toBe(signal);
   });
 
   it("does not force the debug proxy onto plain HTTP local transports", async () => {

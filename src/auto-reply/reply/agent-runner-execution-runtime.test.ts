@@ -39,7 +39,7 @@ describe("executeAgentTurn: runtime selection", () => {
     {
       provider: "openai",
       model: "gpt-5.6-luna",
-      api: "openai-chatgpt-responses" as const,
+      api: "openai-responses" as const,
       baseUrl: "https://chatgpt.com/backend-api/codex",
       agentRuntime: "codex",
       runtimeOverride: "codex",

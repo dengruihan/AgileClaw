@@ -53,7 +53,7 @@ describe("malformed tool-call argument repair", () => {
   it.each([
     ["kimi", "anthropic-messages", true],
     ["kimi-coding", "anthropic-messages", false],
-    ["openai", "openai-chatgpt-responses", true],
+    ["openai", "openai-responses", true],
   ] as const)("gates %s / %s repair", (provider, modelApi, expected) => {
     expect(shouldRepairMalformedToolCallArguments({ provider, modelApi })).toBe(expected);
   });

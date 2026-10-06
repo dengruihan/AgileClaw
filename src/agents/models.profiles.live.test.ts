@@ -1585,11 +1585,7 @@ describeLive("live models (profile keys)", () => {
       activeLiveCompletionConfig = cfg;
       logProgress("[live-models] preparing models.json");
       await withLiveStageTimeout(
-        ensureOpenClawModelsJson(
-          cfg,
-          undefined,
-          providerList ? { providerDiscoveryProviderIds: providerList } : undefined,
-        ),
+        ensureOpenClawModelsJson(cfg, undefined),
         "[live-models] prepare models.json",
         LIVE_MODELS_JSON_TIMEOUT_MS,
       );

@@ -89,7 +89,6 @@ describeLive("Gateway visible worktree spawn (live)", () => {
           },
           secrets: { providers: { default: { source: "env" } } },
           models: {
-            mode: "replace",
             providers: {
               openai: {
                 baseUrl: "https://api.openai.com/v1",

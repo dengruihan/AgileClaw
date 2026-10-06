@@ -67,7 +67,7 @@ const installRunEmbeddedMocks = () => {
         model: {
           id: modelId,
           name: modelId,
-          api: subscriptionModel ? "openai-chatgpt-responses" : "openai-responses",
+          api: subscriptionModel ? "openai-responses" : "openai-responses",
           provider,
           baseUrl: subscriptionModel
             ? "https://chatgpt.com/backend-api/codex"

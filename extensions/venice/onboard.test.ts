@@ -5,11 +5,12 @@ import { applyVeniceConfig } from "./onboard.js";
 import manifest from "./openclaw.plugin.json" with { type: "json" };
 
 describe("Venice onboarding", () => {
-  it("keeps generated model prices out of merge-mode config while selecting the default and alias", () => {
+  it("seeds the manifest catalog while selecting the default and alias", () => {
     const config = applyVeniceConfig({});
 
-    expect(config.models?.providers?.venice?.models).toEqual([]);
-    expect(config.models?.mode).toBe("merge");
+    expect(config.models?.providers?.venice?.models.map(({ id }) => id)).toEqual(
+      manifest.modelCatalog.providers.venice.models.map(({ id }) => id),
+    );
     expect(resolveAgentModelPrimaryValue(config.agents?.defaults?.model)).toBe(
       VENICE_DEFAULT_MODEL_REF,
     );
@@ -45,9 +46,8 @@ describe("Venice onboarding", () => {
     expect(reapplied.agents?.defaults).toEqual(config.agents?.defaults);
   });
 
-  it("retains the explicit offline seed in replace mode where discovery is disabled", () => {
-    const config = applyVeniceConfig({ models: { mode: "replace" } });
-    expect(config.models?.mode).toBe("replace");
+  it("retains the explicit offline seed where discovery is disabled", () => {
+    const config = applyVeniceConfig({});
     expect(config.models?.providers?.venice?.models.map(({ id, cost }) => ({ id, cost }))).toEqual(
       manifest.modelCatalog.providers.venice.models.map(({ id, cost }) => ({ id, cost })),
     );

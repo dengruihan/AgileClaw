@@ -712,11 +712,8 @@ describe("worker turn execution", () => {
     },
   );
 
-  it.each([
-    { mode: "merge", reasoning: false, thinkingLevelMap: undefined, expected: "off" },
-    { mode: "replace", reasoning: true, thinkingLevelMap: { high: null }, expected: "medium" },
-  ] as const)(
-    "honors configured worker Ultra effort $expected in mode $mode with scheduled tools",
+  it.each([{ reasoning: true, thinkingLevelMap: { high: null }, expected: "medium" }] as const)(
+    "honors configured worker Ultra effort $expected with scheduled tools",
     async (testCase) => {
       await seedActivePlacement();
       let descriptor: WorkerLaunchPlan | undefined;
@@ -760,7 +757,6 @@ describe("worker turn execution", () => {
             model: "plain",
             config: {
               models: {
-                mode: testCase.mode,
                 providers: {
                   custom: {
                     baseUrl: "https://example.invalid/v1",

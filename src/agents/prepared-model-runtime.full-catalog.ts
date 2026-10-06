@@ -1,7 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { normalizeProviderId } from "@openclaw/model-catalog-core/provider-id";
 import type { Model } from "../llm/types.js";
-import { resolvePreparedProviderStaticConfigs } from "../plugins/provider-discovery.js";
 import { prepareModelCatalogThinkingPolicies } from "../plugins/provider-thinking.js";
 import { withPluginRuntimeGenerationScope } from "../plugins/runtime/generation-scope.js";
 import { dedupeByKey } from "../shared/dedupe-by-key.js";
@@ -32,7 +30,6 @@ import {
 import type {
   PreparedModelRuntimeAgentFacts,
   PreparedModelRuntimeCatalogFacts,
-  PreparedModelRuntimeCatalogSource,
 } from "./prepared-model-runtime.catalog-contract.js";
 import {
   completeConfiguredRuntimeModels,
@@ -118,67 +115,45 @@ export async function prepareFullCatalogFacts(
   >,
   pluginGeneration: PreparedModelRuntimePluginGeneration,
   catalogMode: PreparedModelRuntimeCatalogMode,
-  catalogSource: PreparedModelRuntimeCatalogSource,
   options: { includeNative?: boolean; providerIds?: readonly string[] } = {},
 ): Promise<PreparedModelRuntimeCatalogFacts> {
   const prepare = async (): Promise<PreparedModelRuntimeCatalogFacts> => {
     const { env, input, templateAuthStorage } = agentFacts;
     const { pluginMetadataSnapshot, preparedStaticProviderCatalog } = pluginGeneration;
-    const observedProviders = new Set(
-      catalogSource.providerOutcomes?.map(({ provider }) => normalizeProviderId(provider)),
-    );
     const templateModelRegistry = discoverModels(templateAuthStorage, input.agentDir, {
       config: input.config,
       ...(input.workspaceDir ? { workspaceDir: input.workspaceDir } : {}),
       pluginMetadataSnapshot,
       ...(catalogMode === "static" ? { normalizeModels: false } : {}),
-      includePluginCatalogs: true,
-      modelsJsonContents: catalogSource.modelsJsonContents,
-      pluginCatalogs: catalogSource.pluginCatalogs,
-      staticProviderConfigs: Object.fromEntries(
-        Object.entries(resolvePreparedProviderStaticConfigs(preparedStaticProviderCatalog))
-          .filter(([provider]) => !observedProviders.has(normalizeProviderId(provider)))
-          // Static seed rows are not picker membership; provider request settings
-          // still register so configured models stay invocable before discovery.
-          .map(([provider, config]) => [provider, { ...config, models: [] }]),
-      ),
     });
     const modelCatalog = await buildPreparedPluginModelCatalog({
       ...options,
       agentFacts,
       catalogMode,
       modelRegistry: templateModelRegistry,
-      providerOutcomes: catalogSource.providerOutcomes,
       pluginGeneration,
     });
     const providerStaticModels =
-      input.config.models?.mode === "replace"
-        ? []
-        : (pluginGeneration.providerStaticModels ??
-          (await loadBundledProviderStaticCatalogContextModels({
-            cfg: input.config,
-            env,
-            metadataSnapshot: pluginMetadataSnapshot,
-            registeredProviders: pluginGeneration.pluginRegistry?.providers,
-            providerIds: options.providerIds,
-            ...(preparedStaticProviderCatalog ? { preparedStaticProviderCatalog } : {}),
-            ...(input.workspaceDir ? { workspaceDir: input.workspaceDir } : {}),
-          })));
+      pluginGeneration.providerStaticModels ??
+      (await loadBundledProviderStaticCatalogContextModels({
+        cfg: input.config,
+        env,
+        metadataSnapshot: pluginMetadataSnapshot,
+        registeredProviders: pluginGeneration.pluginRegistry?.providers,
+        providerIds: options.providerIds,
+        ...(preparedStaticProviderCatalog ? { preparedStaticProviderCatalog } : {}),
+        ...(input.workspaceDir ? { workspaceDir: input.workspaceDir } : {}),
+      }));
     const configuredRuntimeModels = completeConfiguredRuntimeModels(
       agentFacts,
       pluginGeneration,
       templateModelRegistry,
     );
-    const providerOutcomes = catalogSource.providerOutcomes ?? [];
     const completeModelCatalog = {
       ...modelCatalog,
-      staticEntries:
-        input.config.models?.mode === "replace"
-          ? []
-          : dedupeByKey(providerStaticModels, createModelCatalogIdentityKeyResolver()).map(
-              modelCatalogRowToEntry,
-            ),
-      ...(providerOutcomes.length > 0 ? { providerOutcomes } : {}),
+      staticEntries: dedupeByKey(providerStaticModels, createModelCatalogIdentityKeyResolver()).map(
+        modelCatalogRowToEntry,
+      ),
     };
     if (catalogMode === "live") {
       fullModelCatalogSnapshots.add(completeModelCatalog);
@@ -615,9 +590,7 @@ export function createPreparedModelRuntimeSnapshot(
   const modelCatalog = materializePreparedModelCatalog(
     catalogFacts.modelCatalog,
     agentFacts.runtimeCapabilityModels,
-    input.config.models?.mode === "replace"
-      ? []
-      : configuredRuntimeModels.map(({ model }) => modelCatalogRowToEntry(model)),
+    configuredRuntimeModels.map(({ model }) => modelCatalogRowToEntry(model)),
   );
   prepareModelCatalogThinkingPolicies({
     catalog: modelCatalog,

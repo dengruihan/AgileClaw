@@ -5,9 +5,9 @@ export function createBedrockAwsSdkConfig(): OpenClawConfig {
     models: {
       providers: {
         "amazon-bedrock": {
-          auth: "aws-sdk",
+          auth: "api-key",
           baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
-          api: "bedrock-converse-stream",
+          api: "anthropic-messages",
           models: [],
         },
       },

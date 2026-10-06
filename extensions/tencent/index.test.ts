@@ -133,8 +133,8 @@ describe("tencent provider plugin", () => {
       }
       const config = await method.runNonInteractive({
         authChoice: choiceId,
-        config: { models: { mode: "replace" } },
-        baseConfig: { models: { mode: "replace" } },
+        config: {},
+        baseConfig: {},
         opts: { tokenhubApiKey: "tokenhub-test-key", tokenplanApiKey: "tokenplan-test-key" },
         runtime: createRuntimeEnv(),
         resolveApiKey,

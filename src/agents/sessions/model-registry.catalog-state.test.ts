@@ -51,7 +51,7 @@ describe("ModelRegistry persisted catalog state", () => {
       writeFileSync(catalogPath, contents, "utf8");
       chmodSync(dirname(catalogPath), 0o755);
 
-      const registry = ModelRegistry.create(AuthStorage.inMemory(), modelsPath, {
+      const registry = ModelRegistry.create(AuthStorage.inMemory(), {
         pluginMetadataSnapshot: pluginOwnerSnapshot(providerId, "zai"),
       });
 
@@ -117,7 +117,7 @@ describe("ModelRegistry persisted catalog state", () => {
       chmodSync(sourcePath, 0o000);
 
       try {
-        const registry = ModelRegistry.create(AuthStorage.inMemory(), modelsPath, {
+        const registry = ModelRegistry.create(AuthStorage.inMemory(), {
           ...(source === "captured"
             ? {
                 modelsJsonContents: readFileSync(modelsPath, "utf8"),
@@ -218,7 +218,7 @@ describe("ModelRegistry persisted catalog state", () => {
       const before = loadPersistedPluginModelCatalogsReadOnly(dirname(modelsPath));
 
       const errors = Array.from({ length: 3 }, () => {
-        const registry = ModelRegistry.create(AuthStorage.inMemory(), modelsPath, {
+        const registry = ModelRegistry.create(AuthStorage.inMemory(), {
           pluginMetadataSnapshot: snapshot,
         });
         registry.refresh();

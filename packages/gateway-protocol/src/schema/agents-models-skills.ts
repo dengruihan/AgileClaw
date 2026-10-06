@@ -20,6 +20,11 @@ export {
   ModelCatalogProviderOutcomeSchema,
   ModelsListParamsSchema,
   ModelsListResultSchema,
+  ModelsProviderTemplatesParamsSchema,
+  ModelsProviderTemplateSchema,
+  ModelsProviderTemplatesResultSchema,
+  ModelsDiscoverParamsSchema,
+  ModelsDiscoverResultSchema,
 } from "./model-catalog.js";
 export type {
   ModelChoice,
@@ -27,6 +32,13 @@ export type {
   ModelCatalogProviderOutcome,
   ModelsListParams,
   ModelsListResult,
+  ModelsProviderTemplatesParams,
+  ModelProviderTemplate,
+  ModelsProviderTemplatesResult,
+  ModelProviderTemplatesResult,
+  ModelsDiscoverParams,
+  ModelsDiscoverResult,
+  ModelDiscoverResult,
 } from "./model-catalog.js";
 
 /**

@@ -255,8 +255,11 @@ function accountSummary(
   authProfileId: string,
   value: string,
   links: UserModelLinks,
-): UserModelAccount {
+): UserModelAccount | undefined {
   const { credential } = parseRecord(value, profileSchema);
+  if (credential.type !== "api_key") {
+    return undefined;
+  }
   const identity = [credential.email?.trim(), credential.displayName?.trim()].filter(Boolean);
   return {
     authProfileId,
@@ -295,17 +298,19 @@ export function listUserModelAccounts(
         query = query.where("name", ">", `model-account:${params.cursor}`);
       }
       const rows = executeSqliteQuerySync(db, query).rows;
-      const accounts = rows.slice(0, MODEL_ACCOUNTS_PAGE_SIZE).map((row) => {
+      const pageRows = rows.slice(0, MODEL_ACCOUNTS_PAGE_SIZE);
+      const accounts = pageRows.flatMap((row) => {
         if (row.kind !== "secret" || row.allowed_hosts !== null) {
           throw invalidAccounts();
         }
-        return accountSummary(row.name.slice("model-account:".length), row.value, links);
+        const account = accountSummary(row.name.slice("model-account:".length), row.value, links);
+        return account ? [account] : [];
       });
-      const last = accounts.at(-1);
+      const lastRow = pageRows.at(-1);
       return {
         accounts,
-        ...(rows.length > MODEL_ACCOUNTS_PAGE_SIZE && last
-          ? { nextCursor: last.authProfileId }
+        ...(rows.length > MODEL_ACCOUNTS_PAGE_SIZE && lastRow
+          ? { nextCursor: lastRow.name.slice("model-account:".length) }
           : {}),
       };
     }, options) ?? { accounts: [] }
@@ -335,11 +340,12 @@ export function readUserModelAuthProfile(
 ): UserModelAuthProfile | undefined {
   return withExistingOpenClawStateDatabaseReadOnly(({ db }) => {
     const owner = credentialOwner(db, authProfileId);
-    return owner ? readProfile(db, owner, authProfileId) : undefined;
+    const profile = owner ? readProfile(db, owner, authProfileId) : undefined;
+    return profile?.credential.type === "api_key" ? profile : undefined;
   }, options);
 }
 
-/** The canonical OAuth/usage owners mutate one exact private credential under the DB lock. */
+/** Usage state mutates one exact private API-key credential under the DB lock. */
 export function updateUserModelAuthProfile(
   authProfileId: string,
   update: (profile: UserModelAuthProfile) => boolean,
@@ -352,6 +358,9 @@ export function updateUserModelAuthProfile(
       const owner = credentialOwner(db, authProfileId);
       const current = owner ? readProfile(db, owner, authProfileId) : undefined;
       if (!owner || !current) {
+        return false;
+      }
+      if (current.credential.type !== "api_key") {
         return false;
       }
       const provider = current.credential.provider;
@@ -381,6 +390,9 @@ export function connectUserModelAccount(
   options: OpenClawStateDatabaseOptions = {},
 ): { authProfileId: string; links: UserProfileAuthLink[] } {
   const credential = credentialSchema.parse(params.credential);
+  if (credential.type !== "api_key") {
+    throw new Error("Personal model accounts only support API-key credentials.");
+  }
   const candidate = withExistingOpenClawStateDatabaseReadOnly(({ db }) => {
     const record = readLinks(db, params.ownerProfileId);
     const id = record.links[credential.provider]?.authProfileId;

@@ -3,7 +3,7 @@
  */
 import { normalizeResolvedPricing } from "@openclaw/llm-core";
 import { normalizeOptionalLowercaseString } from "@openclaw/normalization-core/string-coerce";
-import { MODEL_APIS } from "../../config/model-config-vocabulary.js";
+import { API_KEY_MODEL_APIS } from "../../config/model-config-vocabulary.js";
 import { resolveMergedModelProviderModels } from "../../config/model-provider-config.js";
 import type { ModelDefinitionConfig, ModelProviderConfig } from "../../config/types.js";
 import { normalizeGoogleApiBaseUrl } from "../../infra/google-api-base-url.js";
@@ -13,7 +13,6 @@ import type { ProviderRuntimeModel } from "../../plugins/provider-runtime-model.
 import { isStringOption } from "../../utils/string-readers.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../defaults.js";
 import { isSecretRefHeaderValueMarker } from "../model-auth-markers.js";
-import { attachModelProviderLocalService } from "../provider-local-service.js";
 import {
   attachModelProviderRequestRouteFacts,
   attachModelProviderRequestTransport,
@@ -42,14 +41,13 @@ export type InlineProviderConfig = {
   authHeader?: boolean;
   timeoutSeconds?: ModelProviderConfig["timeoutSeconds"];
   request?: ModelProviderConfig["request"];
-  localService?: ModelProviderConfig["localService"];
 };
 
 /** Returns a supported transport API id from raw config values. */
 export function normalizeResolvedTransportApi(
   api: unknown,
 ): ModelDefinitionConfig["api"] | undefined {
-  return isStringOption(api, MODEL_APIS) ? api : undefined;
+  return isStringOption(api, API_KEY_MODEL_APIS) ? api : undefined;
 }
 
 /** Sanitizes configured provider/model headers before they enter runtime model metadata. */
@@ -156,25 +154,22 @@ export function buildInlineProviderModels(
       });
       const maxTokens = model.maxTokens ?? entry?.maxTokens;
       return attachModelProviderRequestRouteFacts(
-        attachModelProviderLocalService(
-          attachModelProviderRequestTransport(
-            {
-              ...model,
-              ...(maxTokens !== undefined ? { maxTokens } : {}),
-              input: resolveProviderModelInput({
-                provider: trimmed,
-                modelId: model.id,
-                modelName: model.name,
-                input: model.input,
-              }),
+        attachModelProviderRequestTransport(
+          {
+            ...model,
+            ...(maxTokens !== undefined ? { maxTokens } : {}),
+            input: resolveProviderModelInput({
               provider: trimmed,
-              baseUrl: requestConfig.baseUrl ?? baseUrl,
-              api: requestConfig.api ?? model.api,
-              headers: requestConfig.headers,
-            },
-            providerRequest,
-          ),
-          entry?.localService,
+              modelId: model.id,
+              modelName: model.name,
+              input: model.input,
+            }),
+            provider: trimmed,
+            baseUrl: requestConfig.baseUrl ?? baseUrl,
+            api: requestConfig.api ?? model.api,
+            headers: requestConfig.headers,
+          },
+          providerRequest,
         ),
         options.providerMetadataOwners,
       );

@@ -100,16 +100,6 @@ describe("OpenAI image generation auth availability", () => {
         }),
       }),
     ).toBe(true);
-
-    expect(
-      provider.isConfigured?.({
-        agentDir: "/tmp/agent",
-        cfg: openAIImageConfig({
-          api: "openai-chatgpt-responses",
-          baseUrl: "https://openai-compatible.example.test/v1",
-        }),
-      }),
-    ).toBe(true);
   });
 
   it("does not report OpenAI OAuth image auth as configured for custom OpenAI endpoints", () => {

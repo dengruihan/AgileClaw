@@ -21,4 +21,4 @@ export const applyBasetenConfig = (cfg: OpenClawConfig) =>
   applyConfig(cfg, buildStaticBasetenModels());
 
 export const applyBasetenSetupConfig = (cfg: OpenClawConfig) =>
-  applyConfig(cfg, cfg.models?.mode === "replace" ? buildStaticBasetenModels() : []);
+  applyConfig(cfg, buildStaticBasetenModels());

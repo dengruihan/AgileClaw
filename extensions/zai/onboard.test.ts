@@ -1,6 +1,3 @@
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { AuthStorage, ModelRegistry } from "openclaw/plugin-sdk/agent-sessions";
 import { resolveAgentModelPrimaryValue } from "openclaw/plugin-sdk/provider-onboard";
 import { expectProviderOnboardPreservesPrimary } from "openclaw/plugin-sdk/provider-test-contracts";
@@ -72,26 +69,24 @@ describe("zai onboard", () => {
         "https://proxy.example.test/zai",
       ],
     ] as const) {
-      const dir = await fs.mkdtemp(path.join(os.tmpdir(), `openclaw-zai-${name}-`));
-      try {
-        const modelsPath = path.join(dir, "models.json");
-        await fs.writeFile(
-          modelsPath,
-          JSON.stringify({
+      const zaiProvider = cfg.models?.providers?.zai;
+      if (!zaiProvider) {
+        throw new Error("expected the zai provider after onboarding");
+      }
+      const registry = ModelRegistry.create(AuthStorage.inMemory(), {
+        config: {
+          models: {
             ...cfg.models,
             providers: {
               ...cfg.models?.providers,
-              zai: { ...cfg.models?.providers?.zai, apiKey: "test-key" },
+              zai: { ...zaiProvider, apiKey: "test-key" },
             },
-          }),
-        );
-        const registry = ModelRegistry.create(AuthStorage.inMemory(), modelsPath);
-        expect(registry.getError()).toBeUndefined();
-        for (const modelId of ["glm-5.3", "glm-5.3-flash"]) {
-          expect(registry.find("zai", modelId)?.baseUrl).toBe(expectedBaseUrl);
-        }
-      } finally {
-        await fs.rm(dir, { recursive: true, force: true });
+          },
+        },
+      });
+      expect(registry.getError()).toBeUndefined();
+      for (const modelId of ["glm-5.3", "glm-5.3-flash"]) {
+        expect(registry.find("zai", modelId)?.baseUrl).toBe(expectedBaseUrl);
       }
     }
   });

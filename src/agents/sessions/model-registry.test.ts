@@ -77,7 +77,7 @@ describe("ModelRegistry models.json auth", () => {
       },
     });
 
-    const registry = ModelRegistry.create(AuthStorage.inMemory(), modelsPath);
+    const registry = ModelRegistry.create(AuthStorage.inMemory());
     const model = registry.find("amazon-bedrock", "anthropic.claude-sonnet-4-5-20250929-v1:0");
 
     expect(registry.getError()).toBeUndefined();
@@ -110,7 +110,6 @@ describe("ModelRegistry models.json auth", () => {
       AuthStorage.inMemory({
         custom: { type: "api_key", key: "test-token-placeholder" },
       }),
-      modelsPath,
     );
     const model = registry.find("custom", "example-model");
 
@@ -129,7 +128,7 @@ describe("ModelRegistry models.json auth", () => {
         },
       },
     });
-    const template = ModelRegistry.create(AuthStorage.inMemory(), modelsPath);
+    const template = ModelRegistry.create(AuthStorage.inMemory());
     const firstAuth = AuthStorage.inMemory();
     const secondAuth = AuthStorage.inMemory();
     const first = template.fork(firstAuth);
@@ -174,7 +173,7 @@ describe("ModelRegistry models.json auth", () => {
         },
       },
     });
-    const template = ModelRegistry.create(AuthStorage.inMemory(), modelsPath);
+    const template = ModelRegistry.create(AuthStorage.inMemory());
     const fork = template.fork(AuthStorage.inMemory());
     const model = fork.find("custom", "example-model");
 
@@ -210,7 +209,7 @@ describe("ModelRegistry models.json auth", () => {
         },
       },
     });
-    const source = ModelRegistry.create(AuthStorage.inMemory(), modelsPath);
+    const source = ModelRegistry.create(AuthStorage.inMemory());
     writeFileSync(
       modelsPath,
       JSON.stringify({
@@ -261,10 +260,7 @@ describe("ModelRegistry models.json auth", () => {
         },
       ]),
     );
-    const registry =
-      source === "persisted"
-        ? ModelRegistry.create(AuthStorage.inMemory(), writeModelsJson({ providers }))
-        : ModelRegistry.inMemory(AuthStorage.inMemory());
+    const registry = ModelRegistry.inMemory(AuthStorage.inMemory());
     if (source === "registered") {
       for (const [provider, config] of Object.entries(providers)) {
         registry.registerProvider(provider, config);
@@ -323,71 +319,12 @@ describe("ModelRegistry models.json auth", () => {
       },
     );
 
-    const registry = ModelRegistry.create(AuthStorage.inMemory(), modelsPath, {
-      includePluginCatalogs: false,
+    const registry = ModelRegistry.create(AuthStorage.inMemory(), {
       pluginMetadataSnapshot: pluginOwnerSnapshot("zai", "zai"),
     });
 
     expect(registry.find("custom", "authored-model")?.name).toBe("Authored Model");
     expect(registry.find("zai", "glm-5.1")).toBeUndefined();
-  });
-
-  it("can parse a lifecycle-captured models.json source without rereading the path", () => {
-    const modelsPath = writeModelsJson({ providers: {} });
-    writeFileSync(modelsPath, "not valid json");
-    const captured = JSON.stringify({
-      providers: {
-        custom: {
-          baseUrl: "https://models.example/v1",
-          api: "openai-completions",
-          models: [{ id: "captured-model", name: "Captured Model" }],
-        },
-      },
-    });
-
-    const registry = ModelRegistry.create(AuthStorage.inMemory(), modelsPath, {
-      includePluginCatalogs: false,
-      modelsJsonContents: captured,
-    });
-
-    expect(registry.getError()).toBeUndefined();
-    expect(registry.find("custom", "captured-model")?.name).toBe("Captured Model");
-  });
-
-  it("loads only lifecycle-captured generated catalogs when the root catalog is absent", () => {
-    const modelsPath = writeModelsJson({ providers: {} });
-    rmSync(modelsPath);
-    const capturedCatalog = {
-      pluginId: "zai",
-      contents: JSON.stringify({
-        generatedBy: PLUGIN_MODEL_CATALOG_GENERATED_BY,
-        providers: {
-          zai: {
-            baseUrl: "https://api.z.ai/api/paas/v4",
-            api: "openai-completions",
-            models: [{ id: "glm-5.1", name: "GLM 5.1" }],
-          },
-        },
-      }),
-    };
-
-    const pluginMetadataSnapshot = pluginOwnerSnapshotEntries([
-      { providerId: "zai", pluginId: "zai" },
-      { providerId: "other", pluginId: "other" },
-    ]);
-    const registry = ModelRegistry.create(AuthStorage.inMemory(), modelsPath, {
-      includePluginCatalogs: true,
-      modelsJsonContents: null,
-      pluginCatalogs: [capturedCatalog],
-      pluginMetadataSnapshot,
-    });
-    const fork = registry.fork(AuthStorage.inMemory());
-
-    expect(registry.getError()).toBeUndefined();
-    expect(registry.find("zai", "glm-5.1")?.name).toBe("GLM 5.1");
-    expect(registry.find("other", "unrelated-model")).toBeUndefined();
-    expect(registry.getProviderMetadataOwners()).toBe(pluginMetadataSnapshot.owners);
-    expect(fork.getProviderMetadataOwners()).toBe(pluginMetadataSnapshot.owners);
   });
 
   it("keeps authored provider models available when the plugin catalog database is corrupt", () => {
@@ -403,7 +340,7 @@ describe("ModelRegistry models.json auth", () => {
     });
     writeFileSync(join(dirname(modelsPath), "openclaw-agent.sqlite"), "not a SQLite database");
 
-    const registry = ModelRegistry.create(AuthStorage.inMemory(), modelsPath);
+    const registry = ModelRegistry.create(AuthStorage.inMemory());
 
     expect(registry.find("custom", "authored-model")?.name).toBe("Authored Model");
     expect(registry.getError()).toContain("Failed to load generated plugin model catalogs");
@@ -428,7 +365,7 @@ describe("ModelRegistry models.json auth", () => {
       },
     );
 
-    const registry = ModelRegistry.create(AuthStorage.inMemory(), modelsPath, {
+    const registry = ModelRegistry.create(AuthStorage.inMemory(), {
       pluginMetadataSnapshot: pluginOwnerSnapshot("zai", "zai"),
     });
 
@@ -458,7 +395,6 @@ describe("ModelRegistry models.json auth", () => {
 
     const registry = ModelRegistry.create(
       AuthStorage.inMemory({ openai: { type: "api_key", key: "test-token-placeholder" } }),
-      modelsPath,
       { pluginMetadataSnapshot: pluginOwnerSnapshot("openai", "openai") },
     );
 
@@ -518,7 +454,6 @@ describe("ModelRegistry models.json auth", () => {
         minimax: { type: "api_key", key: "sk-minimax" },
         nvidia: { type: "api_key", key: "sk-nvidia" },
       }),
-      modelsPath,
       {
         pluginMetadataSnapshot: pluginOwnerSnapshotEntries([
           { providerId: "minimax", pluginId: "minimax" },
@@ -592,7 +527,7 @@ describe("ModelRegistry models.json auth", () => {
         ],
       });
 
-      const registry = ModelRegistry.create(AuthStorage.inMemory(), modelsPath, {
+      const registry = ModelRegistry.create(AuthStorage.inMemory(), {
         ...(source === "captured"
           ? { pluginCatalogs: loadPersistedPluginModelCatalogsReadOnly(dirname(modelsPath)) }
           : {}),
@@ -625,7 +560,7 @@ describe("ModelRegistry models.json auth", () => {
       ],
     });
 
-    const registry = ModelRegistry.create(AuthStorage.inMemory(), modelsPath, {
+    const registry = ModelRegistry.create(AuthStorage.inMemory(), {
       pluginMetadataSnapshot: pluginOwnerSnapshot("amazon-bedrock", "amazon-bedrock"),
     });
 
@@ -655,7 +590,6 @@ describe("ModelRegistry models.json auth", () => {
 
     const registry = ModelRegistry.create(
       AuthStorage.inMemory({ zai: { type: "api_key", key: "sk-test" } }),
-      modelsPath,
     );
 
     expect(registry.getError()).toBeUndefined();
@@ -672,7 +606,6 @@ describe("ModelRegistry models.json auth", () => {
 
     const registry = ModelRegistry.create(
       AuthStorage.inMemory({ zai: { type: "api_key", key: "sk-test" } }),
-      modelsPath,
       { pluginMetadataSnapshot: pluginOwnerSnapshot("other", "other") },
     );
 
@@ -690,7 +623,6 @@ describe("ModelRegistry models.json auth", () => {
 
     const registry = ModelRegistry.create(
       AuthStorage.inMemory({ zai: { type: "api_key", key: "sk-test" } }),
-      modelsPath,
       { pluginMetadataSnapshot: pluginOwnerSnapshot("zai", "zai", false) },
     );
 

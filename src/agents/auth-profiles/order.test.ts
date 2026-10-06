@@ -179,7 +179,7 @@ describe("resolveAuthProfileOrder", () => {
     const cfg = {
       models: {
         providers: {
-          "fixture-provider": { auth: "oauth", baseUrl: "https://example.invalid", models: [] },
+          "fixture-provider": { auth: "api-key", baseUrl: "https://example.invalid", models: [] },
           "fixture-provider-plan": { baseUrl: "https://example.invalid", models: [] },
         },
       },
@@ -189,41 +189,16 @@ describe("resolveAuthProfileOrder", () => {
       isAmbientCredentialAllowedByProviderAuthPin({
         config: cfg,
         provider: "fixture-provider-plan",
-        type: "api_key",
+        type: "oauth",
       }),
     ).toBe(false);
-  });
-
-  it("keeps configured AWS SDK profiles eligible without stored credentials", () => {
-    const cfg = {
-      auth: {
-        profiles: {
-          "amazon-bedrock:default": { provider: "amazon-bedrock", mode: "aws-sdk" },
-        },
-      },
-      models: {
-        providers: {
-          "amazon-bedrock": {
-            auth: "aws-sdk",
-            baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
-            models: [],
-          },
-        },
-      },
-    } satisfies OpenClawConfig;
-    const store: AuthProfileStore = { version: 1, profiles: {} };
-
     expect(
-      resolveAuthProfileEligibility({
-        cfg,
-        store,
-        provider: "amazon-bedrock",
-        profileId: "amazon-bedrock:default",
+      isAmbientCredentialAllowedByProviderAuthPin({
+        config: cfg,
+        provider: "fixture-provider-plan",
+        type: "api_key",
       }),
-    ).toEqual({ eligible: true, reasonCode: "ok" });
-    expect(resolveAuthProfileOrder({ cfg, store, provider: "amazon-bedrock" })).toEqual([
-      "amazon-bedrock:default",
-    ]);
+    ).toBe(true);
   });
 
   it("falls back to legacy stored auth order when alias order is empty", async () => {

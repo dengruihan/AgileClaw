@@ -189,7 +189,6 @@ describe("gateway compaction hot reload", () => {
             entries: { dev: {} },
           },
           models: {
-            mode: "replace",
             providers: {
               [primaryModel.providerId]: {
                 ...primaryModel.config,

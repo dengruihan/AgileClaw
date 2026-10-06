@@ -550,15 +550,6 @@ export type PluginRuntimeCore = {
   };
   llm: {
     complete: (params: LlmCompleteParams) => Promise<LlmCompleteResult>;
-    acquireLocalService: (
-      target: {
-        providerId: string;
-        baseUrl: string;
-        headers?: HeadersInit;
-        reconcile?: import("../provider-plugin.types.js").ProviderPlugin["reconcileLocalService"];
-      },
-      signal?: AbortSignal | null,
-    ) => Promise<{ release: () => void } | undefined>;
   };
   modelConfig: {
     /** Read-only model selection; no session mutation or harness execution authority. */

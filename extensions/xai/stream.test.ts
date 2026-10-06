@@ -196,55 +196,6 @@ async function captureXaiResponsesPayloadWithThinking(
 }
 
 describe("xai stream wrappers", () => {
-  it.each(
-    ["grok-4.5", "grok-4.6", "grok-4.7"].flatMap((id) =>
-      ["https://cli-chat-proxy.grok.com/v1", "https://CLI-CHAT-PROXY.GROK.COM:443/v1/"].map(
-        (baseUrl) => ({ id, baseUrl }),
-      ),
-    ),
-  )("adds the Grok OAuth proxy request contract for $id at $baseUrl", ({ id, baseUrl }) => {
-    let capturedHeaders: Record<string, string> | undefined;
-    let capturedModelId: string | undefined;
-    const baseStreamFn: StreamFn = (model, _context, options) => {
-      capturedModelId = model.id;
-      capturedHeaders = options?.headers;
-      return {} as ReturnType<StreamFn>;
-    };
-    const wrapped = wrapXaiProviderStream(
-      {
-        streamFn: baseStreamFn,
-        extraParams: { tool_stream: false },
-      } as never,
-      { clientVersion: "2026.7.2" },
-    );
-
-    void wrapped?.(
-      {
-        api: "openai-responses",
-        provider: "xai",
-        id,
-        name: "Subscription default",
-        reasoning: true,
-        input: ["text"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 500_000,
-        maxTokens: 64_000,
-        params: { canonicalModelId: "grok-fixture-unselected" },
-        baseUrl,
-      },
-      { messages: [] },
-      { headers: { "X-XAI-Token-Auth": "operator-value", "X-Existing": "kept" } },
-    );
-
-    expect(capturedModelId).toBe(id);
-    expect(capturedHeaders).toEqual({
-      "x-existing": "kept",
-      "x-grok-client-version": "2026.7.2",
-      "x-grok-model-override": id,
-      "x-xai-token-auth": "xai-grok-cli",
-    });
-  });
-
   it.each([
     ["the public API-key endpoint", "xai", "https://api.x.ai/v1"],
     ["a different provider", "other", "https://cli-chat-proxy.grok.com/v1"],
@@ -257,13 +208,10 @@ describe("xai stream wrappers", () => {
       capturedHeaders = options?.headers;
       return {} as ReturnType<StreamFn>;
     };
-    const wrapped = wrapXaiProviderStream(
-      {
-        streamFn: baseStreamFn,
-        extraParams: { tool_stream: false },
-      } as never,
-      { clientVersion: "2026.7.2" },
-    );
+    const wrapped = wrapXaiProviderStream({
+      streamFn: baseStreamFn,
+      extraParams: { tool_stream: false },
+    } as never);
 
     void wrapped?.(
       {

@@ -1447,16 +1447,10 @@ export async function modelsStatusCommand(
         runtime.log("");
         runtime.log(colorize(rich, theme.heading, "Missing auth"));
         for (const provider of missingProvidersInUse) {
-          const requiresSubscription = dedupedModelRouteIssues.some(
-            (issue) =>
-              issue.kind === "missing-auth" &&
-              issue.provider === provider &&
-              issue.authRequirement === "subscription",
-          );
           const hint = buildProviderAuthRecoveryHint({
             provider,
             config: cfg,
-            includeEnvVar: !requiresSubscription,
+            includeEnvVar: true,
           });
           runtime.log(`- ${theme.heading(provider)} ${hint}`);
         }

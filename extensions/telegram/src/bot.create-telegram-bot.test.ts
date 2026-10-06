@@ -1899,7 +1899,7 @@ describe("createTelegramBot", () => {
           providerId: "openai",
           methodId: "device-code",
           authRefresh: "refreshed",
-          profiles: [{ profileId: "openai:codex", provider: "openai", mode: "oauth" }],
+          profiles: [{ profileId: "openai:codex", provider: "openai", mode: "api_key" }],
         };
       });
     loadConfig.mockReturnValue({

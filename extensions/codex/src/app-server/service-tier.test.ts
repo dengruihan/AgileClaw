@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { resolveCodexAppServerRuntimeOptions } from "./config.js";
 import { CodexAppServerScopedRequestRejectedError } from "./request.js";
-import { CODEX_RESPONSES_OAUTH_PROVIDER } from "./responses-oauth.js";
 import { withCodexAppServerFastModeServiceTier } from "./run-attempt-lifecycle.js";
 import { resolveCodexUltrafastServiceTier } from "./service-tier.js";
 import { createClientHarness } from "./test-support.js";
@@ -83,17 +82,6 @@ describe("optional Codex Ultrafast", () => {
       selection.serviceTier,
     );
     expect(request).toHaveBeenCalledTimes(0);
-  });
-
-  it("supports the managed ChatGPT subscription-sharing provider", async () => {
-    const { params } = fixture();
-    expect(
-      await resolveCodexUltrafastServiceTier({
-        ...params,
-        modelProvider: CODEX_RESPONSES_OAUTH_PROVIDER,
-        serviceTier: null,
-      }),
-    ).toBe("ultrafast");
   });
 
   it("does not match another model through its catalog alias", async () => {

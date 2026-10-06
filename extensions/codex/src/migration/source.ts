@@ -340,14 +340,12 @@ async function withPluginMigrationEligibility(params: {
 
 async function readSourceCodexAccount(
   options: SourceAppServerRequestOptions,
-): Promise<"chatgpt" | "non_chatgpt" | "missing"> {
+): Promise<"non_chatgpt" | "missing"> {
   const response = await options.request<CodexGetAccountResponse>({
     method: "account/read",
     requestParams: { refreshToken: false },
   });
   switch (response.account?.type) {
-    case "chatgpt":
-      return "chatgpt";
     case "apiKey":
     case "amazonBedrock":
       return "non_chatgpt";

@@ -43,23 +43,4 @@ describe("llama-server endpoint", () => {
       request: { allowPrivateNetwork: true },
     });
   });
-
-  it("preserves explicitly configured local service compatibility", () => {
-    expect(
-      normalizeLlamaServerProviderConfig({
-        baseUrl: "http://localhost:8080/v1",
-        api: "openai-completions",
-        models: [],
-        localService: {
-          command: "/usr/local/bin/llama-server",
-          healthUrl: "http://localhost:8080/health",
-        },
-      }),
-    ).toMatchObject({
-      localService: {
-        command: "/usr/local/bin/llama-server",
-        healthUrl: "http://localhost:8080/health",
-      },
-    });
-  });
 });

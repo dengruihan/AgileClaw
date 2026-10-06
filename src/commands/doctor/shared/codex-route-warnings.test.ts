@@ -692,9 +692,7 @@ describe("collectCodexRouteWarnings", () => {
           },
           "openai-codex": {
             baseUrl: "",
-            models: [
-              { ...MODEL_CATALOG_METADATA, id: "gpt-5.6-sol", api: "openai-chatgpt-responses" },
-            ],
+            models: [{ ...MODEL_CATALOG_METADATA, id: "gpt-5.6-sol", api: "openai-responses" }],
           },
         },
       },

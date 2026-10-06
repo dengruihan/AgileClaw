@@ -77,7 +77,7 @@ export function capturePreparedModelRuntimeCatalog(
   }
   const stores = snapshot.createStores();
   const credentials = stores.authStorage.getAll();
-  const registry = stores.modelRegistry.fork(stores.authStorage, models);
+  const registry = stores.modelRegistry.fork(stores.authStorage);
   const captured: PreparedModelRuntimeSnapshot = Object.freeze({
     ...capturedNative,
     readPublishedModels: () => models,

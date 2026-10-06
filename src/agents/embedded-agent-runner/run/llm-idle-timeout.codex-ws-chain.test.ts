@@ -39,7 +39,7 @@ const apiKey = createJwt({ "https://api.openai.com/auth": { chatgpt_account_id: 
 const model = {
   id: "test-codex-model",
   name: "test-codex-model",
-  api: "openai-chatgpt-responses",
+  api: "openai-responses",
   provider: "openai",
   baseUrl: "https://chatgpt.com/backend-api/codex",
   reasoning: true,

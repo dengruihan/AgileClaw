@@ -4,7 +4,11 @@ import { z } from "zod";
 import { isSafeExecutableValue } from "../infra/exec-safety.js";
 import { normalizeExactAllowedHost } from "../secrets/exact-hostname.js";
 import { ENV_SECRET_REF_ID_RE, SECRET_PROVIDER_ALIAS_PATTERN } from "../secrets/ref-contract.js";
-import { MODEL_APIS } from "./model-config-vocabulary.js";
+import { API_KEY_MODEL_APIS } from "./model-config-vocabulary.js";
+import {
+  buildProviderModelDedupKey,
+  normalizeModelProviderName,
+} from "./model-provider-normalization.js";
 import { isBuiltInModelProviderOverlayId } from "./model-provider-overlay-ids.js";
 import { AgentRuntimePolicySchema } from "./zod-schema.agent-entry-base.js";
 import { createAllowDenyChannelRulesSchema } from "./zod-schema.allowdeny.js";
@@ -151,13 +155,13 @@ export const SecretsConfigSchema = z
   .optional();
 
 const LEGACY_OPENAI_CODEX_RESPONSES_API = "openai-codex-responses";
-const OPENAI_CHATGPT_RESPONSES_API =
-  "openai-chatgpt-responses" satisfies (typeof MODEL_APIS)[number];
+const OPENAI_API_KEY_RESPONSES_API =
+  "openai-responses" satisfies (typeof API_KEY_MODEL_APIS)[number];
 
-const ModelApiSchema = z.enum(MODEL_APIS, {
+const ModelApiSchema = z.enum(API_KEY_MODEL_APIS, {
   error: (issue) =>
     issue.input === LEGACY_OPENAI_CODEX_RESPONSES_API
-      ? `"${LEGACY_OPENAI_CODEX_RESPONSES_API}" is a removed api id; use "${OPENAI_CHATGPT_RESPONSES_API}"`
+      ? `"${LEGACY_OPENAI_CODEX_RESPONSES_API}" is a removed api id; use "${OPENAI_API_KEY_RESPONSES_API}" with an OpenAI API key`
       : undefined,
 });
 
@@ -300,39 +304,20 @@ const ModelDefinitionSchema = z.strictObject({
   compat: ModelCompatSchema,
   /** Media input limits used by routing and preflight compression. */
   mediaInput: ModelMediaInputSchema.optional(),
-  /** Metadata source marker for models added by CLI/catalog tooling. */
-  metadataSource: z.literal("models-add").optional(),
+  /** Metadata source marker; discovery rows remain editable like all other models. */
+  metadataSource: z.enum(["provider-discovery", "models-add"]).optional(),
 });
 
-const ModelProviderLocalServiceSchema = z
-  .strictObject({
-    /** Executable started before model requests are sent. */
-    command: z.string().min(1),
-    /** Arguments passed without shell expansion. */
-    args: z.array(z.string()).optional(),
-    /** Working directory for the local service process. */
-    cwd: z.string().min(1).optional(),
-    /** Environment variables added to the service process. */
-    env: z.record(z.string(), z.string().register(sensitive)).optional(),
-    /** Optional health endpoint polled before the provider is considered ready. */
-    healthUrl: z.string().min(1).optional(),
-    /** Startup readiness timeout in milliseconds. */
-    readyTimeoutMs: z.number().int().positive().optional(),
-    /** Idle timeout in milliseconds before stopping the local service. */
-    idleStopMs: z.number().int().nonnegative().optional(),
-  })
-  .optional();
-
 const ModelProviderSchema = z.strictObject({
+  /** User-visible provider name, independent of its stable config key. */
+  name: z.string().trim().min(1).optional(),
   // Bundled provider overlays are materialized with an empty-string sentinel.
   // ModelProvidersSchema below still rejects empty baseUrl values for custom providers.
   baseUrl: z.string().optional(),
   /** API key or secret reference for this provider. */
   apiKey: SecretInputSchema.optional().register(sensitive),
   /** Authentication mode used when resolving credentials for this provider. */
-  auth: z
-    .union([z.literal("api-key"), z.literal("aws-sdk"), z.literal("oauth"), z.literal("token")])
-    .optional(),
+  auth: z.literal("api-key").optional(),
   /** Default API adapter for models under this provider. */
   api: ModelApiSchema.optional(),
   /** Provider-level default max output tokens. */
@@ -346,21 +331,59 @@ const ModelProviderSchema = z.strictObject({
   params: z.record(z.string(), z.unknown()).optional(),
   /** Optional default agent execution runtime for models under this provider. */
   agentRuntime: AgentRuntimePolicySchema,
-  /** Optional local service to start before calling this provider. */
-  localService: ModelProviderLocalServiceSchema,
   /** Secret-bearing headers merged into provider requests. */
   headers: z.record(z.string(), SecretInputSchema.register(sensitive)).optional(),
   /** Whether default Authorization header injection is enabled. */
   authHeader: z.boolean().optional(),
   /** Provider request transport/retry overrides. */
   request: ConfiguredModelProviderRequestSchema,
+  /** Editable settings used by explicit model discovery for this provider. */
+  discovery: z
+    .strictObject({
+      /** Relative models endpoint appended to baseUrl. */
+      endpointPath: z.string().min(1).optional(),
+      /** Additional discovery-only headers. */
+      headers: z.record(z.string(), SecretInputSchema.register(sensitive)).optional(),
+      /** Transport overrides used only by discovery. */
+      request: ConfiguredModelProviderRequestSchema,
+    })
+    .optional(),
   models: z.array(ModelDefinitionSchema).optional(),
 });
 
 const ModelProvidersSchema = z
   .record(z.string(), ModelProviderSchema)
   .superRefine((providers, ctx) => {
+    const names = new Map<string, string>();
+    const modelKeys = new Map<string, { providerId: string; modelId: string }>();
     for (const [providerId, provider] of Object.entries(providers)) {
+      const name = provider.name?.trim();
+      if (name) {
+        const normalizedName = normalizeModelProviderName(name);
+        const previous = names.get(normalizedName);
+        if (previous) {
+          ctx.addIssue({
+            code: "custom",
+            path: [providerId, "name"],
+            message: `provider name duplicates ${previous}; names must be unique ignoring case`,
+          });
+        } else {
+          names.set(normalizedName, providerId);
+        }
+      }
+      for (const model of provider.models ?? []) {
+        const key = buildProviderModelDedupKey(model.baseUrl ?? provider.baseUrl ?? "", model.id);
+        const previous = modelKeys.get(key);
+        if (previous) {
+          ctx.addIssue({
+            code: "custom",
+            path: [providerId, "models"],
+            message: `model ${model.id.trim()} duplicates ${previous.providerId}/${previous.modelId} at the same Base URL`,
+          });
+        } else {
+          modelKeys.set(key, { providerId, modelId: model.id.trim() });
+        }
+      }
       if (isBuiltInModelProviderOverlayId(providerId)) {
         continue;
       }
@@ -410,8 +433,6 @@ const ModelCatalogRefreshConfigSchema = z
 
 export const ModelsConfigSchema = z
   .strictObject({
-    /** Merge provider config with bundled catalogs or replace bundled catalogs entirely. */
-    mode: z.union([z.literal("merge"), z.literal("replace")]).optional(),
     providers: ModelProvidersSchema.optional(),
     /** Hosted model catalog refresh settings. */
     catalogRefresh: ModelCatalogRefreshConfigSchema,

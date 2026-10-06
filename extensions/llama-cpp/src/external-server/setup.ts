@@ -85,26 +85,7 @@ function stripEndpointCredentials(
   if (!provider) {
     return undefined;
   }
-  const { localService: _localService, ...external } = provider;
-  if (!provider.localService) {
-    return { ...external, auth: undefined, apiKey: undefined, headers: undefined };
-  }
-  const {
-    auth: _auth,
-    apiKey: _apiKey,
-    headers: _headers,
-    localService: _managedService,
-    models: _managedModels,
-    params: managedParams,
-    timeoutSeconds: _managedTimeout,
-    ...externalProvider
-  } = provider;
-  const { modelCacheDir: _modelCacheDir, ...params } = managedParams ?? {};
-  return {
-    ...externalProvider,
-    models: [],
-    params: Object.keys(params).length > 0 ? params : undefined,
-  };
+  return { ...provider, auth: undefined, apiKey: undefined, headers: undefined };
 }
 
 function hasEndpointChanged(provider: ModelProviderConfig | undefined, baseUrl: string): boolean {
@@ -201,7 +182,6 @@ function buildSetupResult(params: {
         ? buildLlamaCppAuthProfileRemovalPatch(params.config)
         : {}),
       models: {
-        mode: params.config.models?.mode ?? "merge",
         providers: {
           [LLAMA_CPP_PROVIDER_ID]: buildExistingProviderConfig(params),
         },
@@ -228,9 +208,6 @@ async function discoverForSetup(
   ctx: ProviderAppGuidedSetupContext,
 ): Promise<Extract<LlamaServerDiscoveryResult, { kind: "success" }> | null> {
   const provider = ctx.config.models?.providers?.[LLAMA_CPP_PROVIDER_ID];
-  if (provider?.localService) {
-    return null;
-  }
   try {
     const headers = await resolveLlamaServerProviderHeaders({
       config: ctx.config,
@@ -314,8 +291,7 @@ export async function runLlamaServerSetup(ctx: ProviderAuthContext): Promise<Pro
     },
   });
   const endpoint = resolveLlamaServerEndpoint(baseUrl);
-  const endpointChanged =
-    Boolean(existing?.localService) || hasEndpointChanged(existing, endpoint.inferenceBaseUrl);
+  const endpointChanged = hasEndpointChanged(existing, endpoint.inferenceBaseUrl);
   const resolvedHeaders = endpointChanged
     ? undefined
     : await resolveLlamaServerProviderHeaders({
@@ -410,8 +386,7 @@ async function validateNonInteractiveDiscovery(
     normalizeOptionalSecretInput(ctx.opts.customBaseUrl) ??
     configuredProvider?.baseUrl ??
     LLAMA_SERVER_DEFAULT_ORIGIN;
-  const endpointChanged =
-    Boolean(configuredProvider?.localService) || hasEndpointChanged(configuredProvider, baseUrl);
+  const endpointChanged = hasEndpointChanged(configuredProvider, baseUrl);
   const providerApiKey = normalizeOptionalSecretInput(ctx.opts.llamaServerApiKey);
   const customApiKey = normalizeOptionalSecretInput(ctx.opts.customApiKey);
   const authoredApiKey = providerApiKey ?? customApiKey;
@@ -497,7 +472,6 @@ export async function configureLlamaServerNonInteractive(
     ...ctx.config,
     models: {
       ...ctx.config.models,
-      mode: ctx.config.models?.mode ?? "merge",
       providers: {
         ...ctx.config.models?.providers,
         [LLAMA_CPP_PROVIDER_ID]: providerConfig,

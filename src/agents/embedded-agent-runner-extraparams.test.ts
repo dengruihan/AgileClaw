@@ -242,10 +242,10 @@ describe("applyExtraParamsToAgent", () => {
 
     const agent = { streamFn: (() => ({}) as ReturnType<StreamFn>) as StreamFn };
     const model = {
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       provider: "openai",
       id: "gpt-5.4",
-    } as Model<"openai-chatgpt-responses">;
+    } as Model<"openai-responses">;
 
     applyExtraParamsToAgent(
       agent,
@@ -289,7 +289,7 @@ describe("applyExtraParamsToAgent", () => {
     model:
       | Model<"openai-responses">
       | Model<"azure-openai-responses">
-      | Model<"openai-chatgpt-responses">
+      | Model<"openai-responses">
       | Model<"openai-completions">
       | Model<"anthropic-messages">
       | Model<"google-generative-ai">;
@@ -896,10 +896,10 @@ describe("applyExtraParamsToAgent", () => {
       cfg: buildModelConfig("openai/gpt-5.4", { transport: "websocket" }),
       modelId: "gpt-5.4",
       model: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "openai",
         id: "gpt-5.4",
-      } as Model<"openai-chatgpt-responses">,
+      } as Model<"openai-responses">,
       options: {},
       expected: "websocket",
     },
@@ -908,10 +908,10 @@ describe("applyExtraParamsToAgent", () => {
       cfg: buildModelConfig("openai/gpt-5.4", { transport: "websocket" }),
       modelId: "gpt-5.4",
       model: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "openai",
         id: "gpt-5.4",
-      } as Model<"openai-chatgpt-responses">,
+      } as Model<"openai-responses">,
       options: { transport: "sse" as const },
       expected: "sse",
     },
@@ -973,10 +973,10 @@ describe("applyExtraParamsToAgent", () => {
         },
       },
       model: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "openai",
         id: "gpt-5.4",
-      } as Model<"openai-chatgpt-responses">,
+      } as Model<"openai-responses">,
       payload: { tools: [{ type: "function", name: "read" }] },
     });
 
@@ -1016,10 +1016,10 @@ describe("applyExtraParamsToAgent", () => {
         },
       },
       model: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "openai",
         id: "gpt-5.4",
-      } as Model<"openai-chatgpt-responses">,
+      } as Model<"openai-responses">,
       payload: { tools: [{ type: "web_search" }] },
     });
 
@@ -1373,11 +1373,11 @@ describe("applyExtraParamsToAgent", () => {
       applyModelId: "gpt-5.4",
       cfg: buildModelConfig("openai/gpt-5.4", { text_verbosity: "high" }),
       model: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "openai",
         id: "gpt-5.4",
         baseUrl: "https://chatgpt.com/backend-api/codex/responses",
-      } as Model<"openai-chatgpt-responses">,
+      } as Model<"openai-responses">,
       payload: { store: false, text: { verbosity: "medium" } },
     });
     expect(payload.text).toEqual({ verbosity: "high" });

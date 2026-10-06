@@ -41,7 +41,6 @@ import {
 import { isCodexAppServerProxyLaunch } from "./launch-args.js";
 import { resolveCodexNativeHookRelayEvents } from "./native-hook-relay.js";
 import { isCodexAppServerProfilerEnabled } from "./profiler-flag.js";
-import { isCodexResponsesOAuthRun } from "./responses-oauth.js";
 import { ensureCodexWorkspaceDirOnce } from "./run-attempt-lifecycle.js";
 import type { CodexRunAttemptInput } from "./run-attempt-types.js";
 import { scopeCodexRunBindingStore } from "./session-binding-scope.js";
@@ -257,11 +256,6 @@ export async function prepareCodexAttemptConnection({ params, options }: CodexRu
   let startupBinding = admittedBinding;
   preDynamicStartupStages.mark("read-binding");
   const usesSupervisionConnection = startupBinding?.connectionScope === "supervision";
-  if (usesSupervisionConnection && isCodexResponsesOAuthRun(params)) {
-    throw new Error(
-      "ChatGPT subscription sharing requires an OpenClaw-owned Codex session; detach from native supervision first.",
-    );
-  }
   if (usesSupervisionConnection) {
     activeContextEngine = undefined;
   }
@@ -322,7 +316,6 @@ export async function prepareCodexAttemptConnection({ params, options }: CodexRu
   const authHandoff = usesSupervisionConnection
     ? { authProfileId: undefined, nativeAuthProfile: true, preparedAuth: undefined }
     : await resolveCodexAppServerPreparedAuthHandoff({
-        authRequirement: preparedAuthRoute?.authRequirement,
         resolvedApiKey: params.resolvedApiKey,
         authProfileId: resolvedStartupAuthProfileId,
         authProfileStore: params.authProfileStore,
@@ -330,9 +323,6 @@ export async function prepareCodexAttemptConnection({ params, options }: CodexRu
         homeScope: appServerHomeScope,
         requirePreparedAuth: isCodexRemoteExecPlacementSandbox(sandbox),
         config: params.config,
-        subscriptionProfileRequiredError:
-          "Prepared Codex subscription route requires a forwarded OpenAI OAuth or token profile.",
-        subscriptionProfileUnusableError: "Prepared Codex subscription auth profile is unusable.",
       });
   const {
     authProfileId: startupAuthProfileId,
@@ -614,7 +604,6 @@ export async function prepareCodexAttemptConnection({ params, options }: CodexRu
       isInactiveThreadBootstrapBinding,
       usesSupervisionConnection,
       startupAuthProfileId,
-      startupAuthRequirement: preparedAuthRoute?.authRequirement,
       startupPreparedAuth,
       startupClientAuthProfileId,
       effectiveWorkspace,

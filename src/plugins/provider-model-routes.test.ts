@@ -29,14 +29,14 @@ describe("provider model route adapter", () => {
             },
           },
         },
-        routeIntent: { runtimeId: "codex", authRequirement: "subscription", source },
+        routeIntent: { runtimeId: "codex", authRequirement: "api-key", source },
         env: {},
         surface: { resolveModelRoutes },
       });
       expect(resolveModelRoutes.mock.calls[0]?.[0]).toMatchObject({
         routeIntent:
           source === "explicit"
-            ? { runtimeId: "codex", authRequirement: "subscription", source }
+            ? { runtimeId: "codex", authRequirement: "api-key", source }
             : { runtimeId: "openclaw", source: "explicit" },
       });
     },
@@ -120,7 +120,7 @@ describe("provider model route adapter", () => {
             api: "openai-completions",
             baseUrl: "https://provider.example.test/v1",
             models: [
-              { id: "unrelated", api: "openai-chatgpt-responses" },
+              { id: "unrelated", api: "openai-responses" },
               {
                 id: "gpt-5.5",
                 api: "openai-responses",
@@ -278,7 +278,7 @@ describe("provider model route adapter", () => {
       resolveProviderModelRoutes({
         provider: "OPENAI",
         modelId: "gpt-5.5",
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api/codex",
         config,
         env: { OPENAI_BASE_URL: "https://env.example.test/v1" },
@@ -357,7 +357,7 @@ describe("provider model route adapter", () => {
     });
     const observedRoutes = [
       {
-        api: "openai-chatgpt-responses" as const,
+        api: "openai-responses" as const,
         baseUrl: "https://chatgpt.com/backend-api/codex",
       },
       { api: "openai-responses" as const, baseUrl: "https://api.openai.com/v1" },
@@ -547,7 +547,7 @@ describe("provider model route adapter", () => {
           },
           openai: {
             api: "openai-completions",
-            models: [{ id: "foo", api: "openai-chatgpt-responses" }],
+            models: [{ id: "foo", api: "openai-responses" }],
           },
         },
       },
@@ -575,7 +575,7 @@ describe("provider model route adapter", () => {
     });
     expect(resolveModelRoutes.mock.calls[1]?.[0]).toMatchObject({
       modelId: "foo",
-      configuredModel: { api: "openai-chatgpt-responses" },
+      configuredModel: { api: "openai-responses" },
     });
   });
 

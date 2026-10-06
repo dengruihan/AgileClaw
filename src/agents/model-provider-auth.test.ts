@@ -73,7 +73,7 @@ describe("model auth checker", () => {
   });
 
   it("consumes prepared native auth when checking runtime availability", async () => {
-    const nativeAuth = { apiKey: "native-marker", source: "Native auth", mode: "oauth" as const };
+    const nativeAuth = { apiKey: "native-marker", source: "Native auth", mode: "api-key" as const };
     const prepared = createDeferredCore<typeof nativeAuth | undefined>();
     syntheticAuthMocks.prepareProviderSyntheticAuthWithPlugin.mockImplementationOnce(
       async () => await prepared.promise,
@@ -201,7 +201,7 @@ describe("model auth checker", () => {
     await hasAuth("openai", { ...platformRef });
     await hasAuth("openai", {
       ...platformRef,
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
     });
 

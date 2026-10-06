@@ -45,7 +45,6 @@ import { getCodexInferenceThreadQualification } from "./inference-routing.js";
 import { readCodexRuntimeModelId } from "./model-runtime.js";
 import { codexNativeSubagentMonitorRuntime } from "./native-subagent-monitor.js";
 import type { JsonObject } from "./protocol.js";
-import { CODEX_RESPONSES_OAUTH_PROVIDER } from "./responses-oauth.js";
 import { CodexAppServerScopedRequestRejectedError } from "./rpc-error.js";
 import {
   CODEX_APP_SERVER_BINDING_GUARDED_REQUEST_TIMEOUT_MS,
@@ -159,16 +158,6 @@ export async function maybeCompactCodexAppServerSession(
       recovery: "missing_thread_binding",
     });
   }
-  if (initialBinding.modelProvider === CODEX_RESPONSES_OAUTH_PROVIDER) {
-    // The pinned manual compact RPC cannot carry the admitted turn generation.
-    // Automatic in-turn summarization carries it and remains authorized.
-    return {
-      ok: false,
-      compacted: false,
-      reason:
-        "Manual compaction is unavailable with ChatGPT subscription sharing. Automatic compaction runs during normal turns; continue the conversation or start a new session.",
-    };
-  }
   if (
     params.nativeToolSurface === "host-isolated" ||
     initialBinding.nativeToolPolicyRestricted === true ||
@@ -278,7 +267,6 @@ export async function maybeCompactCodexAppServerSession(
               ...(preparedApiKey
                 ? { preparedAuth: { kind: "api-key" as const, apiKey: preparedApiKey } }
                 : { authProfileId: connection.clientAuthProfileId }),
-              authRequirement: runtimeAuthPlan?.modelRoute?.authRequirement,
               agentDir: attempt.agentDir,
               config: attempt.config,
               assertCurrent: assertAdmissionCurrent,

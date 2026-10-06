@@ -3,7 +3,6 @@ import { createServer } from "node:http";
 import type { Socket } from "node:net";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
-import type { WizardPrompter } from "openclaw/plugin-sdk/setup";
 import { jsonResponse } from "openclaw/plugin-sdk/test-env";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -11,7 +10,6 @@ import {
   fetchOllamaModels,
   readOllamaModelShowInfo,
 } from "./provider-models.js";
-import { pullOllamaModel } from "./setup-pull.js";
 import { checkOllamaCloudAuth } from "./setup.runtime.js";
 
 const fetchWithSsrFGuardMock = vi.hoisted(() => vi.fn());
@@ -23,12 +21,6 @@ vi.mock("openclaw/plugin-sdk/ssrf-runtime", async (importOriginal) => {
     fetchWithSsrFGuard: fetchWithSsrFGuardMock,
   };
 });
-
-function createPullPrompter(): WizardPrompter {
-  return {
-    progress: vi.fn(() => ({ update: vi.fn(), stop: vi.fn() })),
-  } as unknown as WizardPrompter;
-}
 
 async function expectReleaseWithoutWaitingForCapture(params: {
   body: string;
@@ -122,22 +114,6 @@ describe("Ollama setup response cleanup", () => {
         await checkOllamaCloudAuth("http://127.0.0.1:11434");
       },
     },
-    {
-      name: "pull response error",
-      body: "ollama unavailable",
-      status: 503,
-      run: async () => {
-        await pullOllamaModel("http://127.0.0.1:11434", "gemma4:e2b", createPullPrompter());
-      },
-    },
-    {
-      name: "pull stream error",
-      body: '{"error":"disk full"}\n',
-      status: 200,
-      run: async () => {
-        await pullOllamaModel("http://127.0.0.1:11434", "gemma4:e2b", createPullPrompter());
-      },
-    },
   ])("releases a $name while capture retains a response clone", async ({ body, run, status }) => {
     await expectReleaseWithoutWaitingForCapture({ body, run, status });
   });
@@ -209,28 +185,6 @@ describe("Ollama setup response cleanup", () => {
       body: "ollama unavailable",
       run: async (baseUrl: string) => {
         await checkOllamaCloudAuth(baseUrl);
-      },
-    },
-    {
-      name: "failed pull response",
-      path: "/api/pull",
-      status: 503,
-      body: "ollama unavailable",
-      run: async (baseUrl: string) => {
-        await expect(pullOllamaModel(baseUrl, "gemma4:e2b", createPullPrompter())).resolves.toBe(
-          false,
-        );
-      },
-    },
-    {
-      name: "streamed pull error",
-      path: "/api/pull",
-      status: 200,
-      body: '{"error":"disk full"}\n',
-      run: async (baseUrl: string) => {
-        await expect(pullOllamaModel(baseUrl, "gemma4:e2b", createPullPrompter())).resolves.toBe(
-          false,
-        );
       },
     },
   ])("closes the real socket after a $name", async ({ path, status, body, run }) => {

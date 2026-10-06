@@ -222,12 +222,6 @@ export function createCodexAppServerAgentHarness(
         );
       },
     },
-    fetchUsageSnapshot: async (ctx) => {
-      const { fetchCodexAppServerUsageSnapshot } = await import("./src/app-server/usage.js");
-      return await fetchCodexAppServerUsageSnapshot(ctx, {
-        pluginConfig: options?.resolvePluginConfig?.() ?? options?.pluginConfig,
-      });
-    },
     loadModelCatalog: async (params) => {
       const { createCodexAppServerModelCatalog } =
         await import("./src/app-server/model-catalog.js");
@@ -283,19 +277,17 @@ export function createCodexAppServerAgentHarness(
       }
       const preparedAuth = ctx.modelProvider?.preparedAuth;
       const runtimePolicy = ctx.modelProvider?.runtimePolicy;
-      // Codex owns discovery and auth for new first-party models. Only trust that
-      // native account when no authored transport or host credential is involved.
-      const nativeAccountOwnsUnobservedModel =
-        provider === "openai" &&
-        ctx.requestedRuntime === "codex" &&
-        Boolean(ctx.modelId?.trim()) &&
-        (preparedAuth === undefined || preparedAuth.source === "harness") &&
-        preparedAuth?.mode === undefined &&
-        preparedAuth?.requirement === undefined &&
-        ctx.modelProvider?.api === undefined &&
-        ctx.modelProvider?.baseUrl === undefined &&
-        ctx.modelProvider?.azureApiVersion === undefined &&
-        ctx.modelProvider?.request === undefined;
+      const preparedApiKey =
+        preparedAuth?.source !== undefined &&
+        preparedAuth.source !== "none" &&
+        preparedAuth.source !== "harness" &&
+        (preparedAuth.mode === "api-key" || preparedAuth.mode === "api_key");
+      if (!preparedApiKey) {
+        return {
+          supported: false,
+          reason: "Codex model execution requires an explicitly prepared API key",
+        };
+      }
       if (runtimePolicy) {
         const compatible = runtimePolicy.compatibleIds.some(
           (id) => id.trim().toLowerCase() === normalizedHarnessRuntimeId,
@@ -306,33 +298,11 @@ export function createCodexAppServerAgentHarness(
             reason: "Codex cannot reproduce the prepared provider route",
           };
         }
-      } else if (ctx.modelProvider && provider !== "codex" && !nativeAccountOwnsUnobservedModel) {
+      } else if (ctx.modelProvider && provider !== "codex") {
         return {
           supported: false,
           reason: "provider route compatibility with Codex is not declared",
         };
-      }
-      if (preparedAuth?.requirement === "subscription") {
-        const reproducibleSubscription =
-          preparedAuth.source === "profile" &&
-          (preparedAuth.mode === "oauth" || preparedAuth.mode === "token");
-        if (!reproducibleSubscription) {
-          return {
-            supported: false,
-            reason: "Codex subscription auth requires a prepared OAuth or token profile",
-          };
-        }
-      } else if (preparedAuth?.requirement === "api-key") {
-        const reproducibleApiKey =
-          preparedAuth.source !== "none" &&
-          preparedAuth.source !== "harness" &&
-          (preparedAuth.mode === "api-key" || preparedAuth.mode === "api_key");
-        if (!reproducibleApiKey) {
-          return {
-            supported: false,
-            reason: "Codex Platform auth requires a prepared API key",
-          };
-        }
       }
       return { supported: true, priority: 100 };
     },

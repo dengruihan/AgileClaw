@@ -343,7 +343,6 @@ describe("lmstudio plugin", () => {
     await detectAvailability({
       config: {
         models: {
-          mode: "merge",
           providers: {
             lmstudio: {
               api: "openai-completions",

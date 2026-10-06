@@ -1,6 +1,4 @@
 // Manual facade. Keep loader boundary explicit.
-import { createConfiguredProviderLocalServiceAcquirer } from "../agents/provider-local-service.js";
-import { getRuntimeConfig } from "../config/config.js";
 import type {
   DreamingArtifactsAuditSummary,
   RepairDreamingArtifactsResult,
@@ -141,17 +139,11 @@ export function getMissingLocalMemoryEmbeddingProviderMessage(): string {
   return loadApiFacadeModule().MISSING_LOCAL_MEMORY_EMBEDDING_PROVIDER_MESSAGE;
 }
 
-const acquireLocalService = createConfiguredProviderLocalServiceAcquirer(getRuntimeConfig);
-
 /** Create a memory embedding provider with built-in fallback metadata. */
 export const createEmbeddingProvider: RuntimeFacadeModule["createEmbeddingProvider"] = (
   options,
 ) => {
-  const createOptions = {
-    ...options,
-    acquireLocalService,
-  };
-  return loadRuntimeFacadeModule().createEmbeddingProvider(createOptions);
+  return loadRuntimeFacadeModule().createEmbeddingProvider(options);
 };
 
 /** Remove short-term recall candidates already grounded into durable memory. */

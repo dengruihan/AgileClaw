@@ -348,7 +348,6 @@ describe("sessions_spawn model fallback through the Gateway", () => {
               ...(!scenario.inherited ? { entries: { main: { model: ladder } } } : {}),
             },
             models: {
-              mode: "replace",
               providers: {
                 "proof-primary": providerConfig(provider.baseUrl, ["primary"]),
                 "proof-backup": providerConfig(provider.baseUrl, ["backup", "child-backup"]),
@@ -731,7 +730,6 @@ describe("CLI model inheritance through MCP", () => {
               },
             },
             models: {
-              mode: "replace",
               providers: {
                 "proof-primary": providerConfig(provider.baseUrl, ["primary"]),
                 "proof-backup": providerConfig(provider.baseUrl, ["backup"]),

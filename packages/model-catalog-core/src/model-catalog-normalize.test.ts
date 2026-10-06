@@ -78,6 +78,12 @@ describe("model catalog normalization", () => {
       baseUrl: "https://api.openai.com/v1",
       api: "openai-responses",
       headers: { "x-provider": "openai" },
+      discovery: {
+        endpointPath: "models",
+        headers: { "anthropic-version": "2023-06-01" },
+        request: { timeoutSeconds: 10 },
+        requiresApiKey: true,
+      },
       defaultModel: "gpt-5.4",
       defaultUtilityModel: "gpt-5.6-luna",
       models: [model],

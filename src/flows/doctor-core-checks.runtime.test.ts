@@ -218,7 +218,7 @@ describe("doctor runtime tool schema checks", () => {
 
   it("preserves the catalog transport when building runtime models", async () => {
     const transport = {
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api",
     };
     mocks.loadModelCatalog.mockResolvedValueOnce([

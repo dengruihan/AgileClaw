@@ -367,7 +367,7 @@ describe("codex plugin", () => {
     expect(agentHarnessRegistration.compactNative).toBeUndefined();
     expect(typeof agentHarnessOptions?.nativeCompaction).toBe("function");
     expect(typeof agentHarnessRegistration.dispose).toBe("function");
-    expect(typeof agentHarnessRegistration.fetchUsageSnapshot).toBe("function");
+    expect(agentHarnessRegistration.fetchUsageSnapshot).toBeUndefined();
     expect(typeof agentHarnessRegistration.loadMcpToolCatalog).toBe("function");
     expect(mediaProviderRegistration?.id).toBe("codex");
     expect(mediaProviderRegistration?.capabilities).toEqual(["image"]);

@@ -614,7 +614,7 @@ describe("sanitizeChatHistoryMessages", () => {
               v: 1,
               source: "openai-responses",
               provider: "openai",
-              api: "openai-chatgpt-responses",
+              api: "openai-responses",
               model: "gpt-5.5",
             },
           },

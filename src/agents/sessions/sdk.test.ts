@@ -830,7 +830,7 @@ describe("createAgentSession thinking level clamping", () => {
     "openai-completions",
     "openai-responses",
     "azure-openai-responses",
-    "openai-chatgpt-responses",
+    "openai-responses",
   ] as const)("records declared max thinking in a new embedded %s session", async (api) => {
     const sessionManager = SessionManager.inMemory();
     const { session } = await createAgentSessionForEmbeddedRunner(

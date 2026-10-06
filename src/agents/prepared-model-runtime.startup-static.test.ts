@@ -410,12 +410,9 @@ describe("prepared model runtime Gateway catalog mode", () => {
     expect(project(fullCatalog, snapshot!.pluginRegistry)).toEqual(expected);
   });
 
-  it.each([
-    { live: false, mode: "merge" },
-    { live: true, mode: "replace" },
-  ] as const)(
-    "projects current static rows in scoped $mode catalogs (live=$live)",
-    async ({ live, mode }) => {
+  it.each([false, true] as const)(
+    "projects current saved rows in scoped catalogs (live=%s)",
+    async (live) => {
       mocks.resolveStaticCatalogModel.mockReturnValue({
         ...mocks.model("openai", "gpt-5.5", "Configured model"),
         baseUrl: "https://configured.example.test/v1",
@@ -425,28 +422,23 @@ describe("prepared model runtime Gateway catalog mode", () => {
           {
             config: {
               agents: { defaults: { model: "openai/gpt-5.5" } },
-              models: { mode },
+              models: {},
             },
             agentDir: "/tmp/prepared-scoped-static-projection",
             env: {},
             readOnly: true,
           },
-          ["openai"],
           live ? "live" : "static",
         ),
       );
-      expect(catalog.staticEntries).toEqual(
-        mode === "replace"
-          ? []
-          : [
-              expect.objectContaining({
-                provider: "openai",
-                id: "gpt-5.5",
-                name: "Configured model",
-                baseUrl: "https://configured.example.test/v1",
-              }),
-            ],
-      );
+      expect(catalog.staticEntries).toEqual([
+        expect.objectContaining({
+          provider: "openai",
+          id: "gpt-5.5",
+          name: "Configured model",
+          baseUrl: "https://configured.example.test/v1",
+        }),
+      ]);
       expect(mocks.ensureOpenClawModelsJson).not.toHaveBeenCalled();
     },
   );

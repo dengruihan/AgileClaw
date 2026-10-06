@@ -56,7 +56,7 @@ OpenAI API key and a model available to your Agents API project.
 Run:
 
 ```bash
-openclaw models auth login --provider openai --method api-key
+openclaw models auth paste-api-key --provider openai
 ```
 
 Use a key with Agents and Responses read/write plus Models read permission. The

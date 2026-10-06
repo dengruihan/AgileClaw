@@ -80,7 +80,7 @@ describe("runtime snapshot state", () => {
       { agents: { entries: { main: {} }, defaults: { model: "unit-test/changed" } } },
       "config",
     ],
-    ["catalog", { models: { mode: "replace", providers: {} } }, "config"],
+    ["catalog", { models: { providers: {} } }, "config"],
     ["session policy", { session: { scope: "global" } }, "config"],
     ["store topology", { session: { store: "/tmp/synthetic-session-store.sqlite" } }, "config"],
     ["visibility", { tools: { sessions: { visibility: "all" } } }, "config"],

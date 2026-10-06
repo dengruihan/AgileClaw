@@ -40,9 +40,8 @@ export const { applyConfig: applyLitellmConfig, applyProviderConfig: applyLitell
         providerId: "litellm",
         api: "openai-completions" as const,
         baseUrl: resolvedBaseUrl || LITELLM_BASE_URL,
-        // Replace mode disables discovery, so it still needs the configured default.
-        defaultModels:
-          resolvedBaseUrl && cfg.models?.mode !== "replace" ? [] : [buildLitellmModelDefinition()],
+        // A custom base URL defers seeding to discovery; otherwise seed the configured default.
+        defaultModels: resolvedBaseUrl ? [] : [buildLitellmModelDefinition()],
         defaultModelId: LITELLM_DEFAULT_MODEL_ID,
         aliases: [{ modelRef: LITELLM_DEFAULT_MODEL_REF, alias: "LiteLLM" }],
       };

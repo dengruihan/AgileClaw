@@ -15,7 +15,6 @@ import {
   clearRuntimeAuthProfileStoreSnapshots,
   setRuntimeAuthProfileStoreSnapshot,
 } from "./auth-profiles/runtime-snapshots.js";
-import type { AuthProfileStore } from "./auth-profiles/types.js";
 import { planOpenClawModelsJson } from "./models-config.plan.js";
 import { encodePluginModelCatalogRelativePath } from "./plugin-model-catalog.js";
 
@@ -72,10 +71,6 @@ describe("registered Ollama catalog SecretRef ownership", () => {
           provider: "ollama",
           keyRef: ref,
         } as const;
-        const authStore: AuthProfileStore = {
-          version: 1,
-          profiles: owner === "profile" ? { "ollama:fixture": profile } : {},
-        };
         if (owner === "profile") {
           setRuntimeAuthProfileStoreSnapshot(
             {
@@ -133,9 +128,7 @@ describe("registered Ollama catalog SecretRef ownership", () => {
                 plugins: [{ id: "ollama", providers: discovery.providers.map(({ id }) => id) }],
               }),
             },
-            authStore,
             existingRaw: "",
-            existingParsed: null,
           });
           const contents = expectDefined(
             plan.pluginCatalogWrites?.[encodePluginModelCatalogRelativePath("ollama")],

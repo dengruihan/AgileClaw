@@ -719,7 +719,6 @@ async function runSharedClientRestartTest(
         agentDir: path.join(tempDir, "restart-agent"),
         authProfileId: null,
         preparedAuth: undefined,
-        authRequirement: undefined,
         config: {},
       }),
   );

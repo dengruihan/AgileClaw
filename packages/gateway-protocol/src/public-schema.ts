@@ -1,4 +1,10 @@
 // Explicit schema exports keep public protocol changes reviewable.
+export type {
+  ModelsProviderTemplatesResult,
+  ModelProviderTemplatesResult,
+  ModelsDiscoverResult,
+  ModelDiscoverResult,
+} from "./schema/model-catalog.js";
 export * from "./schema/sessions-goal.js";
 export * from "./schema/session-processes.js";
 export * from "./schema/sessions-provider-review.js";
@@ -469,6 +475,11 @@ export {
   ModelsAuthSetApiKeyParamsSchema,
   ModelsAuthSetApiKeyResultSchema,
   ModelsListParamsSchema,
+  ModelsProviderTemplatesParamsSchema,
+  ModelsProviderTemplateSchema,
+  ModelsProviderTemplatesResultSchema,
+  ModelsDiscoverParamsSchema,
+  ModelsDiscoverResultSchema,
   AuthProbeStatusSchema,
   ModelsProbeParamsSchema,
   ModelsProbeResultSchema,

@@ -1,4 +1,3 @@
-import type { OpenClawConfig } from "openclaw/plugin-sdk/provider-auth";
 import type {
   SpeechProviderPlugin,
   SpeechSynthesisRequest,
@@ -31,7 +30,7 @@ async function resolveXaiSpeechSynthesisRequest(
     await import("openclaw/plugin-sdk/media-generation-runtime");
   return {
     text: req.text,
-    apiKey: await resolveXaiAudioApiKey(config.apiKey, req.cfg),
+    apiKey: await resolveXaiAudioApiKey(config.apiKey),
     baseUrl: config.baseUrl,
     voiceId: overrides.voiceId ?? config.voiceId,
     language: overrides.language ?? config.language,
@@ -49,7 +48,7 @@ export function buildXaiSpeechProvider() {
     listVoices: async (req) => {
       const config = readXaiSpeechProviderConfig(req.providerConfig ?? {});
       const directApiKey = normalizeOptionalString(req.apiKey) ?? config.apiKey;
-      const apiKey = await resolveOptionalXaiAudioApiKey(directApiKey, req.cfg);
+      const apiKey = await resolveOptionalXaiAudioApiKey(directApiKey);
       if (!apiKey) {
         return XAI_TTS_FALLBACK_VOICES.map((voice) => ({ id: voice, name: voice }));
       }
@@ -86,34 +85,21 @@ export function buildXaiSpeechProvider() {
 }
 
 // Resolve an xAI bearer for `/v1/tts`:
-// 1. Configured `tts.providers.xai.apiKey` (or talk equivalent)
-// 2. `XAI_API_KEY` env var
-// 3. xAI OAuth auth profile (cfg-scoped)
+// Resolve only capability config or the configured xAI API key.
 async function resolveOptionalXaiAudioApiKey(
   configApiKey: string | undefined,
-  cfg?: OpenClawConfig,
 ): Promise<string | undefined> {
   const direct = resolveDirectXaiAudioApiKey(configApiKey);
   if (direct) {
     return direct;
   }
-  if (!cfg) {
-    return undefined;
-  }
-  const { resolveApiKeyForProvider } = await import("openclaw/plugin-sdk/provider-auth-runtime");
-  const auth = await resolveApiKeyForProvider({ provider: "xai", cfg });
-  return normalizeOptionalString(auth?.apiKey);
+  return normalizeOptionalString(process.env.XAI_API_KEY);
 }
 
-async function resolveXaiAudioApiKey(
-  configApiKey: string | undefined,
-  cfg: OpenClawConfig,
-): Promise<string> {
-  const apiKey = await resolveOptionalXaiAudioApiKey(configApiKey, cfg);
+async function resolveXaiAudioApiKey(configApiKey: string | undefined): Promise<string> {
+  const apiKey = await resolveOptionalXaiAudioApiKey(configApiKey);
   if (apiKey) {
     return apiKey;
   }
-  throw new Error(
-    "xAI credentials missing for TTS. Sign in with `openclaw onboard --auth-choice xai-oauth`, or run `openclaw onboard --auth-choice xai-api-key`, or set XAI_API_KEY.",
-  );
+  throw new Error("xAI API key missing for TTS. Configure the xAI API key or set XAI_API_KEY.");
 }

@@ -12,10 +12,6 @@ import {
 import type { MemoryEmbeddingProbeResult } from "openclaw/plugin-sdk/memory-core-host-engine-storage";
 import { normalizeAgentId } from "openclaw/plugin-sdk/routing";
 import {
-  resolveMemoryCoreLocalServiceHostIdentity,
-  type MemoryCoreAcquireLocalService,
-} from "./embedding-local-service.js";
-import {
   MemoryManagerReloadError,
   type MemoryManagerLifecycle,
   type MemoryReloadState,
@@ -53,14 +49,12 @@ export function resolveMemoryIndexManagerCacheKey(params: {
   settings: ResolvedMemorySearchConfig;
   providerRequirement: unknown;
   purpose: MemoryIndexManagerPurpose;
-  acquireLocalService?: MemoryCoreAcquireLocalService;
 }): string {
   return [
     params.agentId,
     params.workspaceDir,
     JSON.stringify(params.settings),
     JSON.stringify(params.providerRequirement),
-    resolveMemoryCoreLocalServiceHostIdentity(params.acquireLocalService),
     params.purpose,
   ].join(":");
 }

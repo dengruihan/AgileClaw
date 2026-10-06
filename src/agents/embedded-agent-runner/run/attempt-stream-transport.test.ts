@@ -370,7 +370,7 @@ describe("prepareEmbeddedAttemptTransport", () => {
     });
     input.attempt.model = {
       ...input.attempt.model,
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       provider: "openai",
       id: "gpt-5.4",
       baseUrl: "https://chatgpt.com/backend-api",

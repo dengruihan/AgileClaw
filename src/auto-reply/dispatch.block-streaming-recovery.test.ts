@@ -275,7 +275,6 @@ it.each([
           },
         },
         models: {
-          mode: "replace",
           providers: {
             fixture: {
               baseUrl: `http://127.0.0.1:${address.port}/v1`,

@@ -22,7 +22,6 @@ export {
 export {
   buildOllamaProvider,
   configureOllamaNonInteractive,
-  ensureOllamaModelPulled,
   promptAndConfigureOllama,
   resolveOllamaSetupDefaultBaseUrl,
 } from "./src/setup.js";

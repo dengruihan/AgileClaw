@@ -324,7 +324,6 @@ async function writeGatewayConfig(params: {
           },
           secrets: { providers: { default: { source: "env" } } },
           models: {
-            mode: "merge",
             providers: {
               openai: {
                 api: "openai-responses",

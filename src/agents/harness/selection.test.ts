@@ -492,9 +492,9 @@ const OPENAI_PLATFORM_ROUTE = {
 const OPENAI_CHATGPT_ROUTE = {
   provider: "openai",
   modelId: "gpt-5.5",
-  api: "openai-chatgpt-responses",
-  baseUrl: "https://chatgpt.com/backend-api/codex",
-  authRequirement: "subscription",
+  api: "openai-responses",
+  baseUrl: "https://openai-eu.example/v1",
+  authRequirement: "api-key",
   requestTransportOverrides: "none",
 } as const;
 
@@ -2014,7 +2014,7 @@ describe("selectAgentHarness", () => {
 
   it.each([
     ["Platform", "openai-responses", "https://api.openai.com/v1", ["agentsapi"]],
-    ["ChatGPT", "openai-chatgpt-responses", "https://chatgpt.com/backend-api/codex", []],
+    ["secondary", "openai-responses", "https://openai-eu.example/v1", []],
   ] as const)(
     "keeps authored reasoning metadata and native controls on %s Codex",
     (_label, api, baseUrl, additionalRuntimes) => {

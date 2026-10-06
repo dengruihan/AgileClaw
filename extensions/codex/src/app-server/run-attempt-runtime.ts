@@ -23,7 +23,6 @@ import {
   CodexManagedHooksOnlyError,
 } from "./native-hook-relay.js";
 import { resolveCodexProviderWebSearchSupport } from "./provider-capabilities.js";
-import { isCodexResponsesOAuth } from "./responses-oauth.js";
 import { prewarmCodexAttemptClient } from "./run-attempt-client-prewarm.js";
 import type { CodexAttemptConnection } from "./run-attempt-connection.js";
 import {
@@ -142,16 +141,14 @@ export async function prepareCodexAttemptRuntime(connection: CodexAttemptConnect
       };
   const startupAuthAccountCacheKey = usesSupervisionConnection
     ? undefined
-    : startupPreparedAuth?.kind === "api-key"
+    : startupPreparedAuth
       ? resolveCodexAppServerPreparedApiKeyCacheKey(startupPreparedAuth.apiKey)
-      : startupPreparedAuth?.kind === "profile"
-        ? startupPreparedAuth.snapshot?.secretFreeCacheKey
-        : await resolveCodexAppServerAuthAccountCacheKey({
-            authProfileId: startupAuthProfileId,
-            authProfileStore: attemptAuthProfileStore,
-            agentDir,
-            config: params.config,
-          });
+      : await resolveCodexAppServerAuthAccountCacheKey({
+          authProfileId: startupAuthProfileId,
+          authProfileStore: attemptAuthProfileStore,
+          agentDir,
+          config: params.config,
+        });
   const startupEnvApiKeyCacheKey = usesSupervisionConnection
     ? undefined
     : startupPreparedAuth || startupAuthProfileId
@@ -237,7 +234,6 @@ export async function prepareCodexAttemptRuntime(connection: CodexAttemptConnect
       ...(startupPreparedAuth
         ? { preparedAuth: startupPreparedAuth }
         : { authProfileId: startupClientAuthProfileId }),
-      authRequirement: connection.startupAuthRequirement,
       authProfileStore: attemptAuthProfileStore,
       authBindingFingerprint: preparedAuthBinding?.fingerprint,
       ...(connection.runtimeArtifactRequest
@@ -299,9 +295,7 @@ export async function prepareCodexAttemptRuntime(connection: CodexAttemptConnect
   let nativeProviderWebSearchSupport: CodexNativeWebSearchSupport;
   // The bound thread owns its established search policy, not the daemon's current
   // provider defaults. Explicit OpenClaw policy changes still pass the lifecycle checks.
-  if (isCodexResponsesOAuth(startupPreparedAuth)) {
-    nativeProviderWebSearchSupport = "supported";
-  } else if (
+  if (
     webSearchPlan.kind !== "native-hosted" ||
     supervisedSearchFingerprint ===
       fingerprintJsonObject(resolveCodexWebSearchPlan({ disableTools: true }).threadConfig)

@@ -333,7 +333,7 @@ describe("handleModelsCommand", () => {
         provider: "openai",
         id: "gpt-5.5",
         name: "GPT-5.5",
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://api.openai.com/v1",
       },
     ]);
@@ -360,7 +360,7 @@ describe("handleModelsCommand", () => {
         provider: "openai",
         id: "gpt-5.5",
         name: "ChatGPT GPT-5.5",
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api/codex",
         reasoning: true,
         contextWindow: 128_000,

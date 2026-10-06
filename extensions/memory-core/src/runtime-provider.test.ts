@@ -69,34 +69,6 @@ describe("memoryRuntime", () => {
     });
   });
 
-  it("keeps local-service acquisition scoped to each runtime instance", async () => {
-    const cfg = {} as OpenClawConfig;
-    const firstAcquire = vi.fn(async () => undefined);
-    const secondAcquire = vi.fn(async () => undefined);
-
-    await Promise.all([
-      createMemoryRuntime({ acquireLocalService: firstAcquire }).getMemorySearchManager({
-        cfg,
-        agentId: "first",
-      }),
-      createMemoryRuntime({ acquireLocalService: secondAcquire }).getMemorySearchManager({
-        cfg,
-        agentId: "second",
-      }),
-    ]);
-
-    expect(getMemorySearchManagerMock).toHaveBeenCalledWith({
-      cfg,
-      agentId: "first",
-      acquireLocalService: firstAcquire,
-    });
-    expect(getMemorySearchManagerMock).toHaveBeenCalledWith({
-      cfg,
-      agentId: "second",
-      acquireLocalService: secondAcquire,
-    });
-  });
-
   it("binds the scoped state opener inside each lazy runtime instance", async () => {
     const cfg = {} as OpenClawConfig;
     const openKeyedStore = vi.fn();

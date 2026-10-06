@@ -259,7 +259,7 @@ export async function runModelProviderApiKeyMutation(
     apiKey: string | null;
     success: string;
   },
-): Promise<{ ok: false } | { ok: true; warning: string | null }> {
+): Promise<{ ok: false; error?: string } | { ok: true; warning: string | null }> {
   const isCurrent = () => owner.isCurrentClient() && owner.isCurrentAgent();
   owner.setBusy(true);
   owner.setMessage(null);
@@ -289,7 +289,7 @@ export async function runModelProviderApiKeyMutation(
     }
     if (!result.ok) {
       owner.setMessage({ kind: "error", text: result.error });
-      return { ok: false };
+      return { ok: false, error: result.error };
     }
     const warning = await modelProviderMutationWarnings(result, () => owner.refreshProviders());
     if (!isCurrent()) {

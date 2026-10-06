@@ -22,33 +22,29 @@ describe("Kilo Gateway provider config", () => {
     expect(model.cost).toEqual(KILOCODE_DEFAULT_COST);
   });
 
-  it("seeds the default model in replace mode", () => {
-    const result = applyKilocodeConfig({ models: { mode: "replace" } });
+  it("seeds the default model", () => {
+    const result = applyKilocodeConfig({});
     expect(result.models?.providers?.kilocode?.models.map((model) => model.id)).toEqual([
       "kilo-auto/balanced",
     ]);
   });
 
-  it.each([undefined, "merge"] as const)(
-    "preserves authored rows without seeding %s config",
-    (mode) => {
-      expect(applyKilocodeConfig({ models: { mode } }).models?.providers?.kilocode?.models).toEqual(
-        [],
-      );
-      const authored = {
-        ...buildKilocodeModelDefinition(),
-        id: "operator-model",
-        name: "My model",
-      };
-      const result = applyKilocodeConfig({
-        models: {
-          mode,
-          providers: { kilocode: { baseUrl: KILOCODE_BASE_URL, models: [authored] } },
-        },
-      });
-      expect(result.models?.providers?.kilocode?.models).toEqual([authored]);
-    },
-  );
+  it("preserves authored rows ahead of the seeded catalog", () => {
+    const authored = {
+      ...buildKilocodeModelDefinition(),
+      id: "operator-model",
+      name: "My model",
+    };
+    const result = applyKilocodeConfig({
+      models: {
+        providers: { kilocode: { baseUrl: KILOCODE_BASE_URL, models: [authored] } },
+      },
+    });
+    expect(result.models?.providers?.kilocode?.models).toEqual([
+      authored,
+      buildKilocodeModelDefinition(),
+    ]);
+  });
 
   it("sets up the Kilo Gateway default for a new config", () => {
     const result = applyKilocodeConfig({});

@@ -314,9 +314,9 @@ function sideParams(overrides: Partial<SideQuestionParams> = {}): SideQuestionPa
         modelRoute: {
           provider: "openai",
           modelId: "gpt-5.5",
-          api: "openai-chatgpt-responses",
-          baseUrl: "https://chatgpt.com/backend-api/codex",
-          authRequirement: "subscription",
+          api: "openai-responses",
+          baseUrl: "https://api.openai.com/v1",
+          authRequirement: "api-key",
           requestTransportOverrides: "none",
         },
       },

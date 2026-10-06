@@ -86,6 +86,10 @@
       "ollama-cloud": {
         "baseUrl": "https://ollama.com",
         "api": "ollama",
+        "discovery": {
+          "endpointPath": "api/tags",
+          "requiresApiKey": true
+        },
         "models": [
           {
             "id": "kimi-k2.5",

@@ -217,9 +217,6 @@ export function loadManifestModelCatalog(params: {
   fallbackToMetadataScan?: boolean;
   metadataSnapshot?: PluginMetadataSnapshot;
 }): ModelCatalogEntry[] {
-  if (params.config.models?.mode === "replace") {
-    return [];
-  }
   const resolvedSnapshot =
     params.metadataSnapshot ??
     (params.fallbackToMetadataScan === false
@@ -244,7 +241,7 @@ export function overlayConfiguredModelCatalog(params: {
   config: OpenClawConfig;
   workspaceDir?: string;
 }): ModelCatalogEntry[] {
-  const models = params.config.models?.mode === "replace" ? [] : [...params.catalog];
+  const models = [...params.catalog];
   mergeCatalogEntries(
     models,
     buildConfiguredModelCatalog({
@@ -262,10 +259,6 @@ function loadManifestModelCatalogRows(
   snapshot: PluginMetadataSnapshot,
   preparedPlan?: ReturnType<typeof planEffectiveModelCatalogRows>,
 ): ModelCatalogEntry[] {
-  // Prepared builds also enter here directly; replace must precede cached-row publication.
-  if (config.models?.mode === "replace") {
-    return [];
-  }
   const cached = manifestModelCatalogCache.get(config);
   if (cached?.snapshot === snapshot) {
     return cached.rows;
@@ -429,11 +422,7 @@ export async function buildPreparedModelCatalogSnapshot(
     const configuredModels = buildConfiguredModelCatalog(configuredCatalogParams);
     logStage("configured-models-prepared", `entries=${models.length}`);
 
-    if (
-      cfg.models?.mode !== "replace" &&
-      !params.readOnly &&
-      params.includeProviderPluginAugmentation !== false
-    ) {
+    if (!params.readOnly && params.includeProviderPluginAugmentation !== false) {
       const augmentEntries = [...models];
       if (configuredModels.length > 0) {
         mergeCatalogEntries(augmentEntries, configuredModels, {

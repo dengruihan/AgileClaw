@@ -11,7 +11,6 @@ import { isUserModelAuthProfileId } from "../../state/user-model-account-id.js";
 import { resolveUserProfileAuthLink } from "../../state/user-model-accounts.js";
 import { resolveNativeModelPrimary } from "../agent-scope.js";
 import {
-  isConfiguredAwsSdkAuthProfileForProvider,
   isStoredCredentialCompatibleWithAuthProvider,
   resolveAuthProfileOrderWithMetadata,
 } from "../auth-profiles/order.js";
@@ -199,13 +198,7 @@ function isProfileForProvider(params: {
       }),
     );
   }
-  return params.providers.some((provider) =>
-    isConfiguredAwsSdkAuthProfileForProvider({
-      cfg: params.cfg,
-      provider,
-      profileId: params.profileId,
-    }),
-  );
+  return false;
 }
 
 function uniqueProviders(provider: string, acceptedProviderIds?: readonly string[]): string[] {
@@ -349,17 +342,7 @@ async function resolveSessionAuthProfileOverride(params: {
   };
 
   const currentProfileId = current;
-  if (
-    currentProfileId &&
-    !store.profiles[currentProfileId] &&
-    !providers.some((candidateProvider) =>
-      isConfiguredAwsSdkAuthProfileForProvider({
-        cfg,
-        provider: candidateProvider,
-        profileId: currentProfileId,
-      }),
-    )
-  ) {
+  if (currentProfileId && !store.profiles[currentProfileId]) {
     if (isUserModelAuthProfileId(currentProfileId)) {
       // A missing personal owner must not let the next participant claim this session's billing.
       throw new Error(

@@ -9,7 +9,6 @@ import {
   resolveStorePath,
 } from "openclaw/plugin-sdk/session-store-runtime";
 import {
-  isCodexAppServerNativeAuthProfile,
   normalizeCodexAppServerBindingModelProvider,
   type CodexAppServerAuthProfileLookup,
 } from "./app-server/auth-profile.js";
@@ -374,9 +373,6 @@ export function resolveThreadRequestModelProvider(
 ): string | undefined {
   const modelProvider = params.modelProvider?.trim();
   if (!modelProvider || modelProvider.toLowerCase() === "codex") {
-    return undefined;
-  }
-  if (isCodexAppServerNativeAuthProfile(params) && modelProvider.toLowerCase() === "openai") {
     return undefined;
   }
   return modelProvider.toLowerCase() === "openai" ? "openai" : modelProvider;

@@ -83,7 +83,7 @@ describe("streamWithIdleTimeout parked consumer", () => {
     const source = createAssistantMessageEventStream();
     const message: AssistantMessage = makeAgentAssistantMessage({
       content: [{ type: "toolCall", id: "call_read", name: "read", arguments: {} }],
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       model: "test",
       usage: createZeroUsageFixture(),
       stopReason: "toolUse",

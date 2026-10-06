@@ -477,6 +477,13 @@ function normalizeModelCatalogProvider(value: unknown): ModelCatalogProvider | u
   const baseUrl = normalizeOptionalString(value.baseUrl) ?? "";
   const api = normalizeModelCatalogApi(value.api);
   const headers = normalizeStringMap(value.headers);
+  const discoveryValue = isRecord(value.discovery) ? value.discovery : undefined;
+  const discoveryEndpointPath = normalizeOptionalString(discoveryValue?.endpointPath);
+  const discoveryHeaders = normalizeStringMap(discoveryValue?.headers);
+  const discoveryRequest = isRecord(discoveryValue?.request)
+    ? { ...discoveryValue.request }
+    : undefined;
+  const requiresApiKey = discoveryValue?.requiresApiKey;
   const defaultModel = normalizeOptionalString(value.defaultModel) ?? "";
   const defaultUtilityModel = normalizeOptionalString(value.defaultUtilityModel) ?? "";
   const recommended = Array.isArray(value.recommendedModels)
@@ -492,6 +499,19 @@ function normalizeModelCatalogProvider(value: unknown): ModelCatalogProvider | u
     ...(baseUrl ? { baseUrl } : {}),
     ...(api ? { api } : {}),
     ...(headers ? { headers } : {}),
+    ...(discoveryEndpointPath ||
+    discoveryHeaders ||
+    discoveryRequest ||
+    typeof requiresApiKey === "boolean"
+      ? {
+          discovery: {
+            ...(discoveryEndpointPath ? { endpointPath: discoveryEndpointPath } : {}),
+            ...(discoveryHeaders ? { headers: discoveryHeaders } : {}),
+            ...(discoveryRequest ? { request: discoveryRequest } : {}),
+            ...(typeof requiresApiKey === "boolean" ? { requiresApiKey } : {}),
+          },
+        }
+      : {}),
     ...(defaultModel ? { defaultModel } : {}),
     ...(defaultUtilityModel ? { defaultUtilityModel } : {}),
     ...(recommendedModels.length > 0 ? { recommendedModels } : {}),

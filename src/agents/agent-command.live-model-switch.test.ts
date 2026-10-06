@@ -3531,7 +3531,7 @@ describe("agentCommand – LiveSessionModelSwitchError retry", () => {
         provider: "openai",
         id: modelId,
         name: modelId,
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api/codex",
         reasoning: true,
         compat: {

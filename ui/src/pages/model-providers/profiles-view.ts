@@ -1,7 +1,5 @@
 import { html, nothing, svg } from "lit";
-import "./account-usage.ts";
 import { repeat } from "lit/directives/repeat.js";
-import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import { strokeIcon } from "../../components/icons-tools.ts";
 import { icons } from "../../components/icons.ts";
 import { renderSettingsStatus } from "../../components/settings-ui.ts";
@@ -39,14 +37,12 @@ export function showProfileLogoutSuccess(warning?: string): void {
 type ProviderProfile = ModelProviderCard["profiles"][number];
 
 export type ProviderProfilesViewProps = {
-  usageClient?: GatewayBrowserClient | null;
-  usageAgentId?: string;
   busy: Record<string, boolean>;
   canMutate: boolean;
   mutationBlockedReason: string | null;
   profileOrders: Record<string, string[]>;
-  onAddAccount: (() => void) | undefined;
-  addAccountDisabled: boolean;
+  onAddAccount?: () => void;
+  addAccountDisabled?: boolean;
   onProfileOrderChange: (cardId: string, provider: string, profileIds: string[] | null) => void;
   onRequestLogout: (pending: ModelProviderPendingLogout) => void;
 };
@@ -592,15 +588,6 @@ export function renderProviderProfiles(card: ModelProviderCard, props: ProviderP
                   }
                 </span>
                 ${renderProfileIdentity(profile, identity, true)}
-                ${
-                  provider === "openai" && profile.type !== "api_key"
-                    ? html`<openclaw-model-account-usage
-                        .client=${props.usageClient ?? null}
-                        .agentId=${props.usageAgentId ?? ""}
-                        .profileId=${profile.profileId}
-                      ></openclaw-model-account-usage>`
-                    : nothing
-                }
                 <span class="model-providers__profile-status"
                   >${profileStatus(profile, card.catalogStatus === "auth-rejected")}</span
                 >

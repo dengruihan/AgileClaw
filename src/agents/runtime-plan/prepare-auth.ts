@@ -189,7 +189,10 @@ function resolveProfile(
     ...(authFlow ? { authFlow, authRequirement: policy?.authRequirement } : {}),
     // Runtime materialization owns secret readiness; only proven-invalid facts are terminal here.
     readiness:
-      policy?.compatible === false || (availability === false && !pendingOAuthRefresh)
+      (credential !== undefined && credential.type !== "api_key") ||
+      (configured?.mode !== undefined && configured.mode !== "api_key") ||
+      policy?.compatible === false ||
+      (availability === false && !pendingOAuthRefresh)
         ? "unavailable"
         : "unknown",
     cooldown:
@@ -268,7 +271,7 @@ export function prepareAgentRuntimeAuth(
           store,
           provider: authProfileSelectionProvider,
           profileId: userPinnedProfileId,
-          includePendingOAuthRefresh: true,
+          includePendingOAuthRefresh: false,
         })
       : { eligible: false };
     if (!eligibility.eligible) {
@@ -293,13 +296,12 @@ export function prepareAgentRuntimeAuth(
     userPinnedProfileId || !harnessAllowsAuthProfileForwarding
       ? undefined
       : configuredProvider?.auth;
-  const configuredAwsSdkAuth = configuredAuthMode === "aws-sdk";
   const providerApiKeySecretRef = harnessAllowsAuthProfileForwarding
     ? resolveProviderConfigSecretInput(params.config, params.provider).ref
     : undefined;
   const providerHasApiKeySecretRef = Boolean(providerApiKeySecretRef);
   const providerBinding =
-    harnessAllowsAuthProfileForwarding && !userPinnedProfileId && store && !configuredAwsSdkAuth
+    harnessAllowsAuthProfileForwarding && !userPinnedProfileId && store
       ? resolvePreparedProviderEntryApiKeyProfileReference({
           ...params,
           store,
@@ -315,8 +317,7 @@ export function prepareAgentRuntimeAuth(
     providerBinding.kind === "marker" &&
     hasUsableCustomProviderApiKey(params.config, params.provider, params.env);
   const providerHasDirectMaterial =
-    !configuredAwsSdkAuth &&
-    (providerBinding.kind === "literal" || providerHasUsableMarker || providerHasApiKeySecretRef);
+    providerBinding.kind === "literal" || providerHasUsableMarker || providerHasApiKeySecretRef;
   const explicitConfigApiKeyAuth = shouldPreferExplicitConfigApiKeyAuth(
     params.config,
     params.provider,
@@ -336,7 +337,6 @@ export function prepareAgentRuntimeAuth(
     !harnessAllowsAuthProfileForwarding ||
     selectedProfileId ||
     providerBindingSuppressesProfiles ||
-    configuredAwsSdkAuth ||
     !store
       ? {
           profileIds: selectedProfileId ? [selectedProfileId] : [],
@@ -350,7 +350,7 @@ export function prepareAgentRuntimeAuth(
           preferredProfile: requestedProfileId,
           forModel: params.modelId,
           readinessMode: "read-only",
-          includePendingOAuthRefresh: true,
+          includePendingOAuthRefresh: false,
         });
   const automaticOrderResolution = prependAuthProfilePin(
     resolvedAutomaticOrder,
@@ -361,7 +361,6 @@ export function prepareAgentRuntimeAuth(
     !selectedProfileId &&
     !userPinnedProfileId &&
     !providerBindingSuppressesProfiles &&
-    !configuredAwsSdkAuth &&
     store
       ? params.resolveProviderPreferredProfileId?.({
           config: params.config,
@@ -446,17 +445,12 @@ export function prepareAgentRuntimeAuth(
             : ("provider-binding" as const),
         source: resolveProfile(params, selectedProfileId, { ignoreCooldown: true }),
       }
-    : configuredAwsSdkAuth
+    : providerBindingSuppressesProfiles
       ? {
           reason: "configured-auth" as const,
-          source: directSource("aws-sdk", "aws-sdk"),
+          source: directSource(selectedConfiguredAuthMode),
         }
-      : providerBindingSuppressesProfiles
-        ? {
-            reason: "configured-auth" as const,
-            source: directSource(selectedConfiguredAuthMode),
-          }
-        : undefined;
+      : undefined;
   const sourcePlan = buildProviderModelAuthSourcePlan({
     ...(ownership ? { ownership } : {}),
     profiles: resolvedOrderedProfileIds.map((profileId) => resolveProfile(params, profileId)),
@@ -489,10 +483,7 @@ export function prepareAgentRuntimeAuth(
           })
         : undefined,
     resolveProfileAuthMode: (profileId) => params.authProfileStore?.profiles[profileId]?.type,
-    resolveProfileAuthFlow: (profileId) => {
-      const credential = params.authProfileStore?.profiles[profileId];
-      return credential?.type === "oauth" ? credential.authFlow : undefined;
-    },
+    resolveProfileAuthFlow: () => undefined,
     routeIntent: params.routeIntent,
     pinnedAuthRequirement: resolveProviderModelRouteAuthRequirement(
       sourcePlan.kind === "required"

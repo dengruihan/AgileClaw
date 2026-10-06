@@ -201,10 +201,7 @@ describe("config help copy quality", () => {
     },
     {
       name: "documents auth/model root semantics and provider secret handling",
-      fields: [
-        ["models.providers.*.apiKey", [/secret|env|credential/i]],
-        ["models.mode", ["SecretRef-managed", "preserve"]],
-      ],
+      fields: [["models.providers.*.apiKey", [/secret|env|credential/i]]],
     },
     {
       name: "documents agent compaction safeguards and memory flush behavior",

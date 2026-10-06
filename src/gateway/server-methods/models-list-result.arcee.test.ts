@@ -39,7 +39,6 @@ it.each([
             },
           },
           models: {
-            mode: "replace",
             providers: {
               arcee: {
                 baseUrl: "https://openrouter.ai/api/v1",
@@ -111,7 +110,6 @@ it("materializes a catalog selection from its authored provider wire row", async
         plugins: { allow: ["arcee"] },
         agents: { defaults: { model: { primary: "arcee/trinity-large-thinking" } } },
         models: {
-          mode: "replace",
           providers: {
             arcee: {
               baseUrl: "https://openrouter.ai/api/v1",

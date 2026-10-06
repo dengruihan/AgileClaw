@@ -2332,7 +2332,7 @@ describe("provider-runtime", () => {
           shouldDeferSyntheticProfileAuth,
           normalizeResolvedModel: ({ model }) => ({
             ...model,
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
           }),
           formatApiKey: (cred) =>
             cred.type === "oauth" ? JSON.stringify({ token: cred.access }) : "",
@@ -2583,7 +2583,7 @@ describe("provider-runtime", () => {
       }),
     ).toEqual({
       ...MODEL,
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
     });
 
     expect(

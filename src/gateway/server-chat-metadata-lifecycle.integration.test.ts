@@ -792,7 +792,7 @@ describe("gateway chat metadata lifecycle composition", () => {
       provider: "openai",
       agentDir: state.agentDir("main"),
       modelId: "gpt-5.4",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
       modelBaseUrl: "https://chatgpt.com/backend-api/codex",
       requestTransportOverrides: "none",
       config,
@@ -806,7 +806,7 @@ describe("gateway chat metadata lifecycle composition", () => {
       expect.objectContaining({
         provider: "openai",
         modelId: "gpt-5.4",
-        modelApi: "openai-chatgpt-responses",
+        modelApi: "openai-responses",
         modelBaseUrl: "https://chatgpt.com/backend-api/codex",
         requestTransportOverrides: "none",
         authMode: "oauth",

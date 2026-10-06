@@ -645,19 +645,17 @@ async function augmentConfiguredOllamaCatalogModels(params: {
 }
 
 // Local and cloud own distinct auth/catalog policy but share native transport and replay rules.
-const createOllamaSharedProviderHooks = (api: OpenClawPluginApi) =>
+const createOllamaSharedProviderHooks = () =>
   ({
     ...buildProviderToolCompatFamilyHooks("llamacpp-gbnf"),
     createStreamFn: ({ config, model, provider }) => {
       if (model.api !== "ollama") {
         return undefined;
       }
-      const { acquireLocalService } = api.runtime.llm;
       const configuredProviderId =
         findNormalizedProviderKey(config?.models?.providers, provider) ?? provider;
       return createLazyConfiguredOllamaStreamFn({
         model,
-        localService: { providerId: configuredProviderId, acquire: acquireLocalService },
         providerBaseUrl:
           readProviderBaseUrl(
             resolveConfiguredOllamaProviderConfig({ config, providerId: configuredProviderId }),
@@ -696,7 +694,7 @@ export default definePluginEntry({
   description: "Bundled Ollama provider plugin",
   register(api: OpenClawPluginApi) {
     const startupPluginConfig = (api.pluginConfig ?? {}) as OllamaPluginConfig;
-    const providerHooks = createOllamaSharedProviderHooks(api);
+    const providerHooks = createOllamaSharedProviderHooks();
     if (api.registrationMode === "full") {
       void checkWsl2CrashLoopRiskLazily(api);
     }
@@ -840,7 +838,6 @@ export default definePluginEntry({
                 defaultModel: ctx.modelRef,
                 configPatch: {
                   models: {
-                    mode: ctx.config.models?.mode ?? "merge",
                     providers: {
                       [OLLAMA_PROVIDER_ID]: {
                         ...discovered.existing,
@@ -933,13 +930,6 @@ export default definePluginEntry({
           hint: "Detect models from a local or remote Ollama instance",
           methodId: "local",
         },
-      },
-      onModelSelected: async ({ config, model, prompter }) => {
-        if (!model.startsWith("ollama/")) {
-          return;
-        }
-        const { ensureOllamaModelPulled } = await loadOllamaSetup();
-        await ensureOllamaModelPulled({ config, model, prompter });
       },
       ...providerHooks,
       augmentModelCatalog: async (ctx) =>

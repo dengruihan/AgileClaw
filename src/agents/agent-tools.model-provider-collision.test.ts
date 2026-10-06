@@ -145,7 +145,7 @@ describe("applyModelProviderToolPolicy", () => {
         },
         modelProvider,
         suppressManagedWebSearch,
-        modelApi: "openai-chatgpt-responses",
+        modelApi: "openai-responses",
         modelId: "gpt-5.4",
       });
       expect(toolNames(filtered)).toEqual(

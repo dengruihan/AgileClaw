@@ -60,7 +60,7 @@ describe("isCacheTtlEligibleProvider", () => {
     ).toBe(false);
   });
 
-  it.each(["openai-responses", "openai-completions", "openai-chatgpt-responses"])(
+  it.each(["openai-responses", "openai-completions", "openai-responses"])(
     "requires explicit cache support for a custom %s provider",
     (modelApi) => {
       const route = { baseUrl: "https://proxy.example/v1" };

@@ -5,46 +5,14 @@ import {
 } from "openclaw/plugin-sdk/provider-catalog-live-runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildGoogleLiveCatalogProvider } from "./provider-catalog-runtime.js";
-import {
-  buildGoogleStaticCatalogProvider,
-  buildGoogleVertexStaticCatalogProvider,
-} from "./provider-catalog.js";
+import { buildGoogleStaticCatalogProvider } from "./provider-catalog.js";
 
 describe("google provider catalog", () => {
   beforeEach(() => {
     clearLiveCatalogCacheForTests();
   });
 
-  it("registers current Gemini rows for the Google Vertex provider", () => {
-    const provider = buildGoogleVertexStaticCatalogProvider();
-
-    expect(provider.api).toBe("google-vertex");
-    expect(provider.baseUrl).toBe("https://{location}-aiplatform.googleapis.com");
-    expect(provider.models.map((model) => model.id)).toEqual(
-      expect.arrayContaining([
-        "gemini-2.5-pro",
-        "gemini-3.1-pro-preview",
-        "gemini-3.5-flash-lite",
-        "gemini-3.6-flash",
-        "gemini-3.7-flash",
-      ]),
-    );
-    expect(provider.models.find((model) => model.id === "gemini-3.7-flash")).toMatchObject({
-      contextWindow: 1_048_576,
-      maxTokens: 65_536,
-      reasoning: true,
-      input: ["text", "image"],
-      thinkingLevelMap: { minimal: null },
-    });
-    expect(provider.models.find((model) => model.id === "gemini-3.6-flash")).not.toHaveProperty(
-      "thinkingLevelMap",
-    );
-  });
-
-  it("keeps Google AI Studio and Vertex model ids aligned", () => {
-    expect(buildGoogleVertexStaticCatalogProvider().models.map((model) => model.id)).toEqual(
-      buildGoogleStaticCatalogProvider().models.map((model) => model.id),
-    );
+  it("keeps the Google AI Studio catalog input modalities aligned", () => {
     expect(buildGoogleStaticCatalogProvider().models[0]?.input).toEqual(["text", "image", "video"]);
   });
 

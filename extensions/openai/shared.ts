@@ -8,7 +8,6 @@ import type { ProviderPlugin } from "openclaw/plugin-sdk/provider-model-shared";
 import { normalizeOptionalString } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { classifyOpenAIBaseUrl, isOpenAICodexBaseUrl, OPENAI_API_BASE_URL } from "./base-url.js";
 import { buildOpenAIReplayPolicy } from "./replay-policy.js";
-import { TOKEN_SHARING_AUTH_FLOW } from "./token-sharing.js";
 import { resolveOpenAITransportTurnState } from "./transport-policy.js";
 
 export const OPENAI_DEFAULT_RUNTIME_CONTEXT_TOKENS = 272_000;
@@ -58,14 +57,6 @@ export function buildOpenAIResponsesProviderHooks(options?: {
         : { ...extraParams, transport: options?.transport ?? "auto" };
     },
     wrapStreamFn: wrapOpenAIResponsesProviderStreamFn,
-    wrapSimpleCompletionStreamFn: (ctx) =>
-      ctx.auth?.mode === "oauth" && ctx.auth.authFlow === TOKEN_SHARING_AUTH_FLOW
-        ? wrapOpenAIResponsesProviderStreamFn({
-            ...ctx,
-            // Isolated completions share credential policy but must remain tool-free.
-            nativeWebSearchAllowedByToolPolicy: false,
-          })
-        : undefined,
     resolveTransportTurnState: resolveOpenAITransportTurnState,
   };
 }

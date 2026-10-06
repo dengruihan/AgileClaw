@@ -101,7 +101,6 @@ export function registerCliThinkingPreparationTests({
       model: "claude-sonnet-4-5",
       config: {
         models: {
-          mode: testCase.mode,
           providers: {
             anthropic: {
               baseUrl: "https://example.invalid/v1",

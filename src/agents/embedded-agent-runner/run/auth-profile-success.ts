@@ -155,7 +155,7 @@ export function reportEmbeddedRunSuccessfulAuthBinding(input: {
       modelApi: materializedRoute.api,
       modelBaseUrl: materializedRoute.baseUrl,
       requestTransportOverrides: materializedRoute.requestTransportOverrides,
-      authMode: materializedRoute.authRequirement === "subscription" ? "oauth" : "api-key",
+      authMode: "api-key",
       runtimeOwnerId: input.agentHarnessId,
       ...(input.profileId ? { authProfileId: input.profileId } : {}),
     });

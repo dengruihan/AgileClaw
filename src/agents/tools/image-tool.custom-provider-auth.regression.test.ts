@@ -87,12 +87,11 @@ function createBedrockSdkConfig(): OpenClawConfig {
   return {
     agents: { defaults: { model: { primary: `${BEDROCK_PROVIDER}/text-1` } } },
     models: {
-      mode: "replace",
       providers: {
         [BEDROCK_PROVIDER]: {
           baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
-          auth: "aws-sdk",
-          api: "bedrock-converse-stream",
+          auth: "api-key",
+          api: "anthropic-messages",
           models: [makeVisionModel(BEDROCK_VISION_MODEL)],
         },
       },

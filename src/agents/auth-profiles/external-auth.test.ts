@@ -88,7 +88,7 @@ describe("external auth owner", () => {
   it("keeps plugin ownership over retired CLI slots and forwards active config", () => {
     testing.resetResolveExternalAuthProfilesForTest();
     const config = {
-      models: { providers: { openai: { auth: "oauth" as const, baseUrl: "", models: [] } } },
+      models: { providers: { openai: { auth: "api-key" as const, baseUrl: "", models: [] } } },
     };
     const pluginCredential = credential();
     const resolver = vi.fn(() => [{ profileId: "openai:default", credential: pluginCredential }]);

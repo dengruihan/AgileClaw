@@ -23,7 +23,7 @@ describe("OpenAI model route adapter", () => {
       defaultRuntimeId: "codex",
       routes: [
         { api: "openai-responses", authRequirement: "api-key" },
-        { api: "openai-chatgpt-responses", authRequirement: "subscription" },
+        { api: "openai-responses", authRequirement: "subscription" },
       ],
     });
   });

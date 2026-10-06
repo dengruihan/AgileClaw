@@ -141,7 +141,7 @@ describe("sanitizeSessionHistory openai tool id preservation", () => {
     expect(roles).toEqual(["assistant", "toolResult", "user", "assistant", "toolResult", "user"]);
   });
 
-  it.each(["openai-responses", "openai-chatgpt-responses", "azure-openai-responses"])(
+  it.each(["openai-responses", "openai-responses", "azure-openai-responses"])(
     "preserves paired tool IDs for an unowned provider using %s",
     async (modelApi) => {
       const id = "call_gateway_0|fc_gateway_0";

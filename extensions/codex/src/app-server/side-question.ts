@@ -207,7 +207,6 @@ export async function runCodexAppServerSideQuestion(
   const authHandoff = usesSupervisionConnection
     ? { authProfileId: undefined, nativeAuthProfile: true, preparedAuth: undefined }
     : await resolveCodexAppServerPreparedAuthHandoff({
-        authRequirement: preparedRuntimeAuth.plan.modelRoute?.authRequirement,
         resolvedApiKey: preparedRuntimeAuth.resolvedApiKey,
         authProfileId: preparedRuntimeAuth.plan.forwardedAuthProfileId,
         authProfileStore: preparedRuntimeAuth.authProfileStore,
@@ -215,9 +214,6 @@ export async function runCodexAppServerSideQuestion(
         homeScope: resolveCodexAppServerHomeScope({ appServer: pluginConfig.appServer }),
         requirePreparedAuth: isCodexRemoteExecPlacementSandbox(params.sandbox),
         config: params.cfg,
-        subscriptionProfileRequiredError:
-          "Prepared Codex subscription route requires a scoped native OAuth or token profile.",
-        subscriptionProfileUnusableError: `Prepared Codex auth profile "${preparedRuntimeAuth.plan.forwardedAuthProfileId}" is unusable.`,
       });
   const {
     authProfileId,
@@ -354,7 +350,6 @@ export async function runCodexAppServerSideQuestion(
     assertCurrent: authority.assertLegacyCurrent,
     startOptions: appServer.start,
     timeoutMs: appServer.requestTimeoutMs,
-    authRequirement: preparedRuntimeAuth.plan.modelRoute?.authRequirement,
     ...(startupPreparedAuth
       ? { preparedAuth: startupPreparedAuth }
       : { authProfileId: connection.clientAuthProfileId }),

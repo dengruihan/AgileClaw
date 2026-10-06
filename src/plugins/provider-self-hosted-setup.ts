@@ -76,7 +76,6 @@ function buildOpenAICompatibleSelfHostedProviderConfig(
       ...params.cfg,
       models: {
         ...params.cfg.models,
-        mode: params.cfg.models?.mode ?? "merge",
         providers: {
           ...params.cfg.models?.providers,
           [params.providerId]: {

@@ -186,8 +186,7 @@ describe("selected route thinking metadata at runtime preparation", () => {
     expect(subscriptionModel.thinkingLevelMap?.off).toBeNull();
     expect(subscriptionModel.compat?.supportedReasoningEfforts).not.toContain("none");
     const capabilityModel = capability === "platform" ? platformModel : subscriptionModel;
-    const capabilityApi =
-      capability === "platform" ? "openai-responses" : "openai-chatgpt-responses";
+    const capabilityApi = capability === "platform" ? "openai-responses" : "openai-responses";
     expect(capabilityModel.api).toBe(capabilityApi);
     const capabilityEntry = {
       ...capabilityModel,

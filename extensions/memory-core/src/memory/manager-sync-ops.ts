@@ -451,7 +451,6 @@ export abstract class MemoryManagerSyncOps extends MemoryManagerSourceSyncOps {
         createProvider: this.createProvider,
         config: this.cfg,
         agentDir: resolveAgentDir(this.cfg, this.agentId),
-        ...(this.acquireLocalService ? { acquireLocalService: this.acquireLocalService } : {}),
         ...fallbackRequest,
       });
     } catch (err) {

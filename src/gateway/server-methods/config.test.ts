@@ -793,6 +793,35 @@ describe("config.patch hash-free ui.prefs LWW", () => {
 });
 
 describe("config.patch ID-keyed arrays", () => {
+  it("rejects removing a provider model that is still referenced", async () => {
+    storedConfig = {
+      agents: { defaults: { model: { primary: "custom/one" } } },
+      models: {
+        providers: {
+          custom: {
+            baseUrl: "https://example.invalid",
+            models: [{ id: "one", name: "One" }],
+          },
+        },
+      },
+    } as unknown as OpenClawConfig;
+
+    const { respond } = await invokeConfigPatch({
+      raw: { models: { providers: { custom: { models: [] } } } },
+      replacePaths: ["models.providers.custom.models"],
+      baseHash: "base-hash",
+    });
+
+    expect(respond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({
+        message: expect.stringContaining("agents.defaults.model.primary"),
+      }),
+    );
+    expect(configWriteMocks.commitGatewayConfigWrite).not.toHaveBeenCalled();
+  });
+
   it("rejects duplicate IDs before applying an ID-merged array patch", async () => {
     storedConfig = {
       models: {

@@ -116,7 +116,6 @@ it.each(["plugins.reload", "auth refresh"] as const)(
           entries: { main: { workspace: state.workspaceDir, model: "fixture/probe" } },
         },
         models: {
-          mode: "replace",
           providers: {
             fixture: {
               baseUrl: "https://fixture.invalid/v1",

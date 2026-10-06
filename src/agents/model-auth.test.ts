@@ -268,17 +268,6 @@ describe("resolveModelAuthMode", () => {
   it("does not infer AWS SDK auth from a provider alias", () => {
     expect(resolveModelAuthMode("bedrock", undefined, authStore({}))).toBe("unknown");
   });
-  it("honors explicit AWS SDK auth", () => {
-    expect(
-      resolveModelAuthMode(
-        "amazon-bedrock",
-        configForProviders({
-          "amazon-bedrock": providerEntry("https://bedrock.example", { auth: "aws-sdk" }),
-        }),
-        authStore({}),
-      ),
-    ).toBe("aws-sdk");
-  });
 
   it("returns oauth for codex when Codex CLI auth is available", () => {
     const readCodexCliCredentialsCached = vi
@@ -703,51 +692,6 @@ describe("resolveApiKeyForProviderCore", () => {
       source: "models.json",
       mode: "api-key",
     });
-  });
-
-  it("preserves explicit subscription modes for literal provider credentials", async () => {
-    for (const mode of ["oauth", "token"] as const) {
-      const provider = `custom-${mode}`;
-      const resolved = await resolveModelAuth({
-        model: {
-          id: "subscription-model",
-          provider,
-          api: "openai-completions",
-        } as Model,
-        cfg: configForProviders({
-          [provider]: providerEntry("https://subscription.example/v1", {
-            auth: mode,
-            apiKey: "configured-subscription-credential",
-          }),
-        }),
-        store: authStore({}),
-      });
-
-      expect(resolved).toMatchObject({
-        apiKey: "configured-subscription-credential",
-        source: "models.json",
-        mode,
-      });
-    }
-  });
-
-  it("does not reinterpret explicit OpenAI oauth material as a Platform API key", async () => {
-    await expect(
-      resolveModelAuth({
-        model: {
-          id: "platform-model",
-          provider: "openai",
-          api: "openai-responses",
-        } as Model,
-        cfg: configForProviders({
-          openai: providerEntry("https://api.openai.com/v1", {
-            auth: "oauth",
-            apiKey: "configured-subscription-credential",
-          }),
-        }),
-        store: authStore({}),
-      }),
-    ).rejects.toThrow('No API key found for provider "openai"');
   });
 
   it("prefers explicit api-key provider SecretRef config over ambient auth profiles", async () => {

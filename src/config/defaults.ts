@@ -18,6 +18,7 @@ import {
   DEFAULT_SUBAGENT_MAX_CONCURRENT,
   resolveAgentMaxConcurrent,
 } from "./agent-limits.js";
+import { isApiKeyModelApi } from "./model-config-vocabulary.js";
 import { mergeModelCost } from "./model-cost.js";
 import {
   normalizeAgentModelMapForConfig,
@@ -201,13 +202,18 @@ function buildManifestCatalogModelLookup(
             continue;
           }
           for (const model of provider.models) {
+            const effectiveApi = model.api ?? provider.api;
+            // Plugin-transport APIs cannot seed configured model rows.
+            if (effectiveApi !== undefined && !isApiKeyModelApi(effectiveApi)) {
+              continue;
+            }
             const key = keyFor(catalogProviderId, model.id);
             if (!index.has(key)) {
               // SAFETY: ModelCatalogModel's seed fields are a structural subset of ModelDefinitionConfig; only the picked metadata fields are read from this entry.
               const metadata = model as Partial<CatalogSeedModel>;
               index.set(key, {
                 ...metadata,
-                api: model.api ?? provider.api,
+                api: effectiveApi,
                 baseUrl: model.baseUrl ?? provider.baseUrl,
               });
             }

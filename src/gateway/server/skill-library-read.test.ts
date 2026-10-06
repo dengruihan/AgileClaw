@@ -314,7 +314,7 @@ describe("Gateway pinned manual library read", () => {
                   compaction: { memoryFlush: { enabled: false } },
                 },
               },
-              models: { mode: "replace", providers: { [provider.providerId]: provider.config } },
+              models: { providers: { [provider.providerId]: provider.config } },
               plugins: { slots: { memory: "none" } },
               skills: { allowBundled: [], load: { watch: false } },
               tools: {

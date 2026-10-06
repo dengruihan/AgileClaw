@@ -47,7 +47,6 @@ function createFixture(defaults: AgentDefaults) {
     plugins: { allow: ["openai"] },
     agents: { ownership: "explicit", defaults, entries: { main: {} } },
     models: {
-      mode: "replace",
       providers: {
         openai: {
           api: "openai-completions",

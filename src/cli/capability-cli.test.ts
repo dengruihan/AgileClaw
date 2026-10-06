@@ -44,7 +44,7 @@ function preparedModel(provider = "openai", modelId = "gpt-5.4", chatGpt = false
       provider,
       id: modelId,
       maxTokens: 128,
-      ...(chatGpt ? { api: "openai-chatgpt-responses" } : {}),
+      ...(chatGpt ? { api: "openai-responses" } : {}),
     },
     auth: chatGpt
       ? { apiKey: "codex-app-server", source: "codex-app-server", mode: "token" }

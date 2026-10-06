@@ -166,48 +166,6 @@ const oauthFixture = {
   accountId: "acct_123",
 };
 
-const BEDROCK_PROVIDER_CFG = {
-  models: {
-    providers: {
-      "amazon-bedrock": providerEntry("https://bedrock-runtime.us-east-1.amazonaws.com", {
-        api: "bedrock-converse-stream",
-        auth: "aws-sdk",
-      }),
-    },
-  },
-} satisfies OpenClawConfig;
-
-const BEDROCK_PROVIDER_CFG_WITH_PROFILE = {
-  ...BEDROCK_PROVIDER_CFG,
-  auth: {
-    order: {
-      "amazon-bedrock": ["amazon-bedrock:default"],
-    },
-    profiles: {
-      "amazon-bedrock:default": {
-        provider: "amazon-bedrock",
-        mode: "aws-sdk",
-      },
-    },
-  },
-} satisfies OpenClawConfig;
-
-it.each(["amazon-bedrock:default", undefined])(
-  "resolves config-only AWS SDK auth with explicit profile %s",
-  async (profileId) => {
-    const resolved = await resolveAuth({
-      provider: "amazon-bedrock",
-      profileId,
-      store: authStore({}),
-      cfg: BEDROCK_PROVIDER_CFG_WITH_PROFILE,
-    });
-    expect(resolved.mode).toBe("aws-sdk");
-    expect(resolved.profileId).toBe("amazon-bedrock:default");
-    expect(resolved.source).toBe("profile:amazon-bedrock:default");
-    expect(resolved.apiKey).toBeUndefined();
-  },
-);
-
 function cooldownStore(
   provider: string,
   profiles: import("./auth-profiles.js").AuthProfileStore["profiles"] = {},
@@ -368,7 +326,7 @@ describe("getApiKeyForModelCore", () => {
           model: {
             id: "gpt-5.5",
             provider: "openai",
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
           } as Model,
           store,
           agentDir,
@@ -442,7 +400,7 @@ describe("getApiKeyForModelCore", () => {
         model: {
           id: "gpt-5.5",
           provider: "openai",
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
         } as Model,
         profileId: "openai:api-key",
         lockedProfile: true,
@@ -606,31 +564,6 @@ describe("getApiKeyForModelCore", () => {
     expect(resolved.apiKey).toBe("env-demo-key");
     expect(resolved.source).toContain("DEMO_LOCAL_API_KEY");
     expect(resolved.profileId).toBeUndefined();
-  });
-
-  it.each([
-    ["bearer", "AWS_BEARER_TOKEN_BEDROCK"],
-    ["access", "AWS_ACCESS_KEY_ID"],
-    ["profile", "AWS_PROFILE"],
-  ])("prefers Bedrock %s credentials over lower-priority sources", async (kind, source) => {
-    await withEnvAsync(
-      {
-        AWS_BEARER_TOKEN_BEDROCK: kind === "bearer" ? "bedrock-token" : undefined,
-        AWS_ACCESS_KEY_ID: kind === "profile" ? undefined : "access-key",
-        AWS_SECRET_ACCESS_KEY: kind === "profile" ? undefined : "secret-key",
-        AWS_PROFILE: "profile",
-      },
-      async () => {
-        const resolved = await resolveAuth({
-          provider: "amazon-bedrock",
-          cfg: BEDROCK_PROVIDER_CFG,
-          store: authStore({}),
-        });
-        expect(resolved.mode).toBe("aws-sdk");
-        expect(resolved.apiKey).toBeUndefined();
-        expect(resolved.source).toContain(source);
-      },
-    );
   });
 
   it("resolveEnvApiKey('google-vertex') keeps ADC fallback when manifest env candidates are empty", async () => {

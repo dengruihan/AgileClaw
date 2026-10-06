@@ -39,6 +39,16 @@ const preparedCatalog: ModelCatalogResult = {
 };
 
 const savedModelConfig = {
+  models: {
+    providers: {
+      openai: {
+        name: "OpenAI",
+        baseUrl: "https://example.test/v1",
+        api: "openai-completions",
+        models: [],
+      },
+    },
+  },
   agents: {
     defaults: {
       model: {
@@ -282,15 +292,6 @@ describe("Models page catalog publication", () => {
     discover.mockReturnValue(catalogRefresh.promise);
     const page = appendPage(context);
     await waitForFast(() => expect(page.textContent).toContain("Not configured"));
-    const editKey = [
-      ...page.querySelectorAll<HTMLButtonElement>(".model-providers__card-actions button"),
-    ].find((button) => button.textContent?.trim() === "Set API key");
-    expect(editKey).toBeDefined();
-    editKey!.click();
-    await page.updateComplete;
-    const input = page.querySelector<HTMLInputElement>('input[type="password"]')!;
-    input.value = "unsaved-key-draft";
-    input.dispatchEvent(new Event("input", { bubbles: true }));
 
     page.querySelector<HTMLButtonElement>('button[aria-label="Refresh"]')!.click();
     await waitForFast(() => expect(authSignal).toBeDefined());
@@ -316,9 +317,6 @@ describe("Models page catalog publication", () => {
     expect(discover).toHaveBeenCalledOnce();
     expect(readPublished).toHaveBeenCalledTimes(2);
     expect(page.textContent).not.toContain("Not configured");
-    expect(page.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe(
-      "unsaved-key-draft",
-    );
     expect(page.querySelector('[role="option"][data-value="openai/published"]')).not.toBeNull();
   });
 
@@ -374,7 +372,7 @@ describe("Models page catalog publication", () => {
   });
 
   it.each(["config.changed", "chat.metadata.changed"])(
-    "updates credential and catalog facts on %s without clearing a key draft",
+    "updates credential and catalog facts on %s",
     async (event) => {
       const { context, request, publishEvent, readPublished, discover, catalogRequest } =
         createCatalogHarness();
@@ -384,15 +382,6 @@ describe("Models page catalog publication", () => {
       );
       const page = appendPage(context);
       await waitForFast(() => expect(page.textContent).toContain("Not configured"));
-      const editKey = [
-        ...page.querySelectorAll<HTMLButtonElement>(".model-providers__card-actions button"),
-      ].find((button) => button.textContent?.trim() === "Set API key");
-      expect(editKey).toBeDefined();
-      editKey!.click();
-      await page.updateComplete;
-      const input = page.querySelector<HTMLInputElement>('input[type="password"]')!;
-      input.value = "unsaved-key-draft";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
       auth = createAuthStatus([{ status: "static", profiles: [], apiKey: { source: "config" } }]);
       const current = {
         models: [{ id: "new", name: "New model", provider: "openai", available: true }],
@@ -404,9 +393,6 @@ describe("Models page catalog publication", () => {
       await waitForFast(() => expect(displayedCatalog(page)?.models).toEqual(current.models));
       await page.updateComplete;
       expect(page.textContent).not.toContain("Not configured");
-      expect(page.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe(
-        "unsaved-key-draft",
-      );
       expect(discover).not.toHaveBeenCalled();
     },
   );

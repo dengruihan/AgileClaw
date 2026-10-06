@@ -18,7 +18,7 @@ describe("OpenAI-family schema normalization runtime contract", () => {
     const normalized = hooks.normalizeToolSchemas({
       provider: "openai",
       modelId: "gpt-5.4",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
       model: createNativeOpenAICodexResponsesModel() as never,
       tools: [createParameterFreeTool()] as never,
     });
@@ -44,7 +44,7 @@ describe("OpenAI-family schema normalization runtime contract", () => {
     const normalized = hooks.normalizeToolSchemas({
       provider: "openai",
       modelId: "gpt-5.4",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
       model: createNativeOpenAICodexResponsesModel() as never,
       tools: [tool] as never,
     });
@@ -54,7 +54,7 @@ describe("OpenAI-family schema normalization runtime contract", () => {
       hooks.inspectToolSchemas({
         provider: "openai",
         modelId: "gpt-5.4",
-        modelApi: "openai-chatgpt-responses",
+        modelApi: "openai-responses",
         model: createNativeOpenAICodexResponsesModel() as never,
         tools: [tool] as never,
       }),

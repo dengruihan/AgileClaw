@@ -155,7 +155,7 @@ describe("OpenAI dynamic model capabilities", () => {
       provider: "openai",
       modelId: id,
       providerConfig: {
-        api,
+        api: "openai-responses",
         baseUrl:
           api === "openai-responses"
             ? "https://api.openai.com/v1"
@@ -328,7 +328,7 @@ describe("OpenAI dynamic model capabilities", () => {
         provider: "openai",
         modelId: template.id,
         providerConfig: {
-          api,
+          api: "openai-responses",
           baseUrl:
             api === "openai-responses"
               ? "https://api.openai.com/v1"

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { mintSecretSentinel } from "../secrets/sentinel.js";
 import {
   buildGuardedModelFetch,
-  ensureModelProviderLocalServiceMock,
   fetchWithSsrFGuardMock,
   installProviderTransportFetchTestHooks,
   latestGuardedFetchParams,
@@ -46,9 +45,6 @@ describe("buildGuardedModelFetch headers", () => {
       expect(egressHeaders().get(header)).toBe(`${prefix}${secret}`);
       expect(headers.get(header)).toBe(original);
       if (request) {
-        expect(
-          new Headers(ensureModelProviderLocalServiceMock.mock.lastCall?.[1]).get(header),
-        ).toBe(original);
         expect(request.headers.get(header)).toBe(original);
         const init = fetchWithSsrFGuardMock.mock.lastCall?.[0]?.init;
         expect(init.method).toBe("POST");

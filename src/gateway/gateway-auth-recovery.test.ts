@@ -170,7 +170,6 @@ describe("Gateway profile failure recovery", () => {
                 },
               },
               models: {
-                mode: "replace",
                 providers: {
                   [provider.providerId]: {
                     ...provider.config,
@@ -493,7 +492,6 @@ describe("Gateway configured catalog authentication", () => {
               entries: Object.fromEntries(agentIds.map((agentId) => [agentId, {}])),
             },
             models: {
-              mode: "replace",
               providers: {
                 [provider.providerId]: {
                   ...provider.config,

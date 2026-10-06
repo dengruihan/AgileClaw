@@ -25,13 +25,13 @@ const openaiModel = {
 } as Model<"openai-responses">;
 
 const codexModel = {
-  api: "openai-chatgpt-responses",
+  api: "openai-responses",
   provider: "openai",
   id: "gpt-5.5",
   input: ["text"],
   reasoning: true,
   baseUrl: "https://chatgpt.com/backend-api",
-} as Model<"openai-chatgpt-responses">;
+} as Model<"openai-responses">;
 
 const codexTestToken = [
   "eyJhbGciOiJub25lIn0",
@@ -98,7 +98,7 @@ describe("OpenAI thinking contract", () => {
           provider: "openai",
           id: "gpt-5.6-sol",
           reasoning: true,
-          api: agentRuntime === "codex" ? "openai-chatgpt-responses" : "openai-responses",
+          api: agentRuntime === "codex" ? "openai-responses" : "openai-responses",
           thinkingLevelMap: { max: null },
           compat: {
             supportedReasoningEfforts: [
@@ -341,7 +341,7 @@ async function captureHttpProviderPayload(params: {
 }
 
 async function captureProviderPayload<
-  TApi extends "openai-responses" | "openai-chatgpt-responses",
+  TApi extends "openai-responses" | "openai-responses",
 >(params: {
   model: Model<TApi>;
   streamFn: (
@@ -362,7 +362,7 @@ async function captureProviderPayload<
         messages: [{ role: "user", content: "hello", timestamp: 0 }],
       },
       {
-        apiKey: params.model.api === "openai-chatgpt-responses" ? codexTestToken : "test-api-key",
+        apiKey: params.model.api === "openai-responses" ? codexTestToken : "test-api-key",
         cacheRetention: "none",
         ...params.options,
         signal: abortController.signal,

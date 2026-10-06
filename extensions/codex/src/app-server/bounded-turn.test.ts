@@ -502,7 +502,6 @@ describe("runBoundedCodexAppServerTurn settled finalization isolation", () => {
 
       await runTurn({
         ...(authSelection === "prepared" ? { preparedAuth } : { profile }),
-        authRequirement: "api-key",
         options: {
           clientFactory: fake.factory,
           pluginConfig: { appServer: { homeScope: "user" } },
@@ -513,7 +512,6 @@ describe("runBoundedCodexAppServerTurn settled finalization isolation", () => {
       expect(fake.factory).toHaveBeenCalledWith(
         expect.objectContaining({
           ...(authSelection === "prepared" ? { preparedAuth } : { authProfileId: profile }),
-          authRequirement: "api-key",
           startOptions: expect.objectContaining({
             homeScope: "agent",
             env: expect.objectContaining({

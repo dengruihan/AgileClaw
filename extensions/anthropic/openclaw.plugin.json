@@ -177,6 +177,11 @@
       "anthropic": {
         "baseUrl": "https://api.anthropic.com",
         "api": "anthropic-messages",
+        "discovery": {
+          "endpointPath": "v1/models",
+          "headers": { "anthropic-version": "2023-06-01" },
+          "requiresApiKey": true
+        },
         "defaultUtilityModel": "claude-haiku-4-5",
         "models": [
           {
@@ -445,32 +450,6 @@
   "providerAuthChoices": [
     {
       "provider": "anthropic",
-      "method": "cli",
-      "choiceId": "anthropic-cli",
-      "deprecatedChoiceIds": ["claude-cli"],
-      "choiceLabel": "Anthropic Claude CLI",
-      "choiceHint": "Keep using an existing Claude Code CLI login on this host",
-      "assistantPriority": -20,
-      "groupId": "anthropic",
-      "groupLabel": "Anthropic",
-      "groupHint": "Claude CLI + API key",
-      "onboardingFeatured": true
-    },
-    {
-      "provider": "anthropic",
-      "method": "setup-token",
-      "choiceId": "setup-token",
-      "appGuidedSecret": true,
-      "choiceLabel": "Anthropic setup-token",
-      "choiceHint": "Token created by running 'claude setup-token' in your terminal",
-      "assistantPriority": 40,
-      "groupId": "anthropic",
-      "groupLabel": "Anthropic",
-      "groupHint": "Claude CLI + API key + token",
-      "onboardingFeatured": true
-    },
-    {
-      "provider": "anthropic",
       "method": "api-key",
       "personalAccount": true,
       "choiceId": "apiKey",
@@ -478,7 +457,7 @@
       "choiceLabel": "Anthropic API key",
       "groupId": "anthropic",
       "groupLabel": "Anthropic",
-      "groupHint": "Claude CLI + API key",
+      "groupHint": "API key",
       "onboardingFeatured": true,
       "optionKey": "anthropicApiKey",
       "cliFlag": "--anthropic-api-key",

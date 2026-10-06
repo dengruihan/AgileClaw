@@ -58,7 +58,7 @@ export interface CreateAgentSessionOptions {
 
   /** Auth storage for credentials. Default: canonical per-agent SQLite auth profiles. */
   authStorage?: AuthStorage;
-  /** Model registry. Default: ModelRegistry.create(authStorage, agentDir/models.json) */
+  /** Model registry. Default: ModelRegistry.create(authStorage, { config, workspaceDir }) */
   modelRegistry?: ModelRegistry;
 
   /** Model already selected by the run owner. */
@@ -240,8 +240,7 @@ async function createAgentSessionImpl(
   const config = options.authStorage && options.modelRegistry ? undefined : install.config;
   const authStorage = options.authStorage ?? AuthStorage.forAgent(agentDir, config);
   const modelRegistry =
-    options.modelRegistry ??
-    ModelRegistry.create(authStorage, join(agentDir, "models.json"), { config, workspaceDir: cwd });
+    options.modelRegistry ?? ModelRegistry.create(authStorage, { config, workspaceDir: cwd });
 
   const settingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
   const sessionManager =

@@ -1,25 +1,21 @@
 import type { ProviderAuthMethod } from "openclaw/plugin-sdk/plugin-entry";
 import type { ProviderPlugin } from "openclaw/plugin-sdk/provider-model-shared";
-import type { MiniMaxRegion } from "./oauth.js";
 import { resolveMinimaxThinkingProfile } from "./thinking.js";
 
 const noopAuth = async () => ({ profiles: [] });
+type MiniMaxRegion = "cn" | "global";
 
-export function minimaxAuthMethodMetadata(
-  region: MiniMaxRegion,
-  kind: "api_key" | "device_code",
-): Omit<ProviderAuthMethod, "run"> {
+export function minimaxAuthMethodMetadata(region: MiniMaxRegion): Omit<ProviderAuthMethod, "run"> {
   const isCn = region === "cn";
-  const isApiKey = kind === "api_key";
-  const label = `MiniMax ${isApiKey ? "API key" : "OAuth"} (${isCn ? "CN" : "Global"})`;
+  const label = `MiniMax API key (${isCn ? "CN" : "Global"})`;
   const hint = isCn ? "CN endpoint - api.minimaxi.com" : "Global endpoint - api.minimax.io";
   return {
-    id: isApiKey ? (isCn ? "api-cn" : "api-global") : isCn ? "oauth-cn" : "oauth",
-    kind,
+    id: isCn ? "api-cn" : "api-global",
+    kind: "api_key",
     label,
     hint,
     wizard: {
-      choiceId: `minimax-${isCn ? "cn" : "global"}-${isApiKey ? "api" : "oauth"}`,
+      choiceId: `minimax-${isCn ? "cn" : "global"}-api`,
       choiceLabel: label,
       choiceHint: hint,
       groupId: "minimax",
@@ -35,13 +31,13 @@ function createMinimaxProviderContract(portal: boolean): ProviderPlugin {
     label: "MiniMax",
     hookAliases: [portal ? "minimax-portal-cn" : "minimax-cn"],
     docsPath: "/providers/minimax",
-    envVars: portal ? ["MINIMAX_OAUTH_TOKEN", "MINIMAX_API_KEY"] : ["MINIMAX_API_KEY"],
+    envVars: ["MINIMAX_API_KEY"],
     resolveThinkingProfile: ({ modelId }) => resolveMinimaxThinkingProfile(modelId),
-    auth: (["global", "cn"] as const).map((region) =>
-      Object.assign(minimaxAuthMethodMetadata(region, portal ? "device_code" : "api_key"), {
-        run: noopAuth,
-      }),
-    ),
+    auth: portal
+      ? []
+      : (["global", "cn"] as const).map((region) =>
+          Object.assign(minimaxAuthMethodMetadata(region), { run: noopAuth }),
+        ),
   };
 }
 

@@ -18,7 +18,6 @@ import {
   getPreparedMessageToolCatalog,
   getPreparedMessageToolCatalogForRegistry,
 } from "../plugins/prepared-message-tool-catalog.js";
-import { resolvePreparedProviderStaticConfigs } from "../plugins/provider-discovery.js";
 import type { ProviderRuntimeModel } from "../plugins/provider-runtime-model.types.js";
 import { getPluginRegistryInspectionResources } from "../plugins/registry-inspection-resources.js";
 import { capturePluginLifecycleAuthority } from "../plugins/registry-lifecycle.js";
@@ -40,7 +39,6 @@ import {
   parseConfiguredModelVisibilityEntries,
 } from "./model-selection-shared.js";
 import { prepareImplicitProviderStaticCatalog } from "./models-config.providers.implicit.js";
-import { loadPersistedPluginModelCatalogs } from "./plugin-model-catalog-execution.js";
 import { resolvePluginModelCatalogOwnerPluginId } from "./plugin-model-catalog.js";
 import { prepareAgentFacts } from "./prepared-model-runtime.agent-facts.js";
 import type {
@@ -446,15 +444,13 @@ export async function prepareWorkspaceBuildGroup(
       });
       const configuredGeneratedCatalogPluginIds = [
         ...new Set(
-          (facts.input.config.models?.mode === "replace" ? [] : facts.providerIds).flatMap(
-            (provider) => {
-              const pluginId = resolvePluginModelCatalogOwnerPluginId({
-                providerId: provider,
-                pluginMetadataSnapshot,
-              });
-              return pluginId ? [pluginId] : [];
-            },
-          ),
+          facts.providerIds.flatMap((provider) => {
+            const pluginId = resolvePluginModelCatalogOwnerPluginId({
+              providerId: provider,
+              pluginMetadataSnapshot,
+            });
+            return pluginId ? [pluginId] : [];
+          }),
         ),
       ].toSorted((left, right) => left.localeCompare(right));
       agentFacts.push({
@@ -599,13 +595,6 @@ export async function prepareConfiguredRuntimeFactsBatch(params: {
 }> {
   const catalogs = new Map<PreparedModelRuntimeInput, PreparedModelRuntimeCatalogFacts>();
   let registryCount = 0;
-  // Static seed rows are not picker membership; provider request settings still
-  // register so configured models stay invocable before live discovery runs.
-  const staticProviderConfigs = Object.fromEntries(
-    Object.entries(
-      resolvePreparedProviderStaticConfigs(params.pluginGeneration.preparedStaticProviderCatalog),
-    ).map(([provider, config]) => [provider, { ...config, models: [] }]),
-  );
   const { pluginMetadataSnapshot } = params.pluginGeneration;
   const registries: PreparedConfiguredModelRegistries = params.registries ?? new Map();
   let registriesBySource = registries.get(pluginMetadataSnapshot);
@@ -616,22 +605,12 @@ export async function prepareConfiguredRuntimeFactsBatch(params: {
   for (const facts of params.agentFacts) {
     await nextTurn();
     params.assertCurrent?.(facts.input);
-    const modelsJsonContents = captureModelsJsonContents(facts.input.agentDir);
     const oauthProviders = facts.templateAuthStorage.getOAuthProviders();
-    // Root files remain authored inventory even when static preparation returned an empty result.
-    const pluginCatalogs = await loadPersistedPluginModelCatalogs(
-      facts.input.agentDir,
-      facts.configuredGeneratedCatalogPluginIds,
-      facts.env,
-    );
     params.assertCurrent?.(facts.input);
     const key = fingerprintPreparedRuntimeFacts({
       config: hashRuntimeConfigValue(facts.input.config),
       sourceModels: projectConfigOntoRuntimeSourceSnapshot(facts.input.config).models,
       credentials: facts.credentials,
-      modelsJsonContents,
-      pluginCatalogs,
-      staticProviderConfigs,
     });
     const candidates = registriesBySource.get(key) ?? [];
     let prepared = candidates.find((candidate) =>
@@ -642,10 +621,6 @@ export async function prepareConfiguredRuntimeFactsBatch(params: {
         oauthProviders,
         modelRegistry: discoverModelsFromCapturedSources(facts.templateAuthStorage, {
           config: facts.input.config,
-          includePluginCatalogs: true,
-          modelsJsonContents,
-          pluginCatalogs,
-          staticProviderConfigs,
           pluginMetadataSnapshot,
           ...(facts.input.workspaceDir ? { workspaceDir: facts.input.workspaceDir } : {}),
         }),

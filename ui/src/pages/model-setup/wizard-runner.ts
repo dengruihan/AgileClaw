@@ -4,11 +4,7 @@ import type {
   WizardStatusResult,
 } from "../../../../packages/gateway-protocol/src/schema/wizard.ts";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
-import type {
-  ProviderLoginOption,
-  SystemAgentSetupActivateParams,
-  WizardNextResult,
-} from "../../api/types.ts";
+import type { ProviderLoginOption, WizardNextResult } from "../../api/types.ts";
 import { formatUiError } from "../../lib/format-error.ts";
 import { isSetupAdmissionBusyError, isWizardNotFoundError } from "../../lib/gateway-errors.ts";
 import {
@@ -17,28 +13,18 @@ import {
   resolveSafeExternalUrl,
 } from "../../lib/open-external-url.ts";
 import { generateUUID } from "../../lib/uuid.ts";
-import type { FirstRunSetup } from "./first-run-setup.ts";
 import {
   MODEL_SETUP_AUTH_START_TIMEOUT_MS,
   MODEL_SETUP_WIZARD_NEXT_TIMEOUT_MS,
   type ModelSetupWizardResult,
-  type ModelSetupWizardRecovery,
   type ModelSetupWizardState,
   wizardStateFromResult,
 } from "./state.ts";
 
-export type ModelSetupWizardStartMethod =
-  | "mcp.authLogin"
-  | "models.authLogin"
-  | "openclaw.setup.auth.start"
-  | "openclaw.setup.prepare.start"
-  | "openclaw.setup.activate.start";
+export type ModelSetupWizardStartMethod = "mcp.authLogin";
 
 export type ModelSetupWizardCompletion = {
   startMethod: ModelSetupWizardStartMethod;
-  preparedModelRef?: string;
-  activationTargetId?: string;
-  modelActivation?: WizardNextResult["modelActivation"];
   isCurrent?: () => boolean;
 };
 
@@ -50,10 +36,6 @@ type WizardRunnerOptions = {
   onChange: (state: ModelSetupWizardState) => void;
   onBackgroundCompletion?: (completion: ModelSetupWizardCompletion) => Promise<void>;
   onSessionMissing?: () => void;
-  onStart?: (
-    method: ModelSetupWizardStartMethod,
-    activation?: Parameters<FirstRunSetup["beginActivation"]>[0],
-  ) => WizardTerminalObserver | undefined;
   requestFailedMessage: () => string;
   cancelledMessage: () => string;
   sessionExpiredMessage: () => string;
@@ -80,7 +62,6 @@ type WizardSession = {
   inputClosurePromise?: Promise<WizardStatusResult>;
   abortController: AbortController;
   startMethod: ModelSetupWizardStartMethod;
-  activationTargetId?: string;
   onTerminalResult?: WizardTerminalObserver;
 };
 
@@ -113,104 +94,6 @@ export class ModelSetupWizardRunner {
     return this.session?.admitted === true;
   }
 
-  suspend(notice?: string): void {
-    const session = this.session;
-    if (!session) {
-      return;
-    }
-    session.suspended = true;
-    session.abortController.abort();
-    // A suspended wizard cannot receive its sign-in URL; a resumed step still
-    // offers that URL as an explicit link.
-    session.reservedWindow?.close();
-    session.reservedWindow = null;
-    this.setState({
-      phase: "starting",
-      authChoice: session.authChoice,
-      ...(notice ? { notice } : {}),
-    });
-  }
-
-  restore(recovery: ModelSetupWizardRecovery, onTerminalResult: WizardTerminalObserver): void {
-    const client = this.options.getClient();
-    if (!client || this.session) {
-      return;
-    }
-    this.session = {
-      ...recovery,
-      client,
-      notes: [],
-      admitted: true,
-      retirementGeneration: this.retirementGeneration,
-      abortController: new AbortController(),
-      startMethod: "openclaw.setup.auth.start",
-      onTerminalResult,
-    };
-    this.setState({ phase: "starting", authChoice: recovery.authChoice });
-  }
-
-  async resume(): Promise<ModelSetupWizardCompletion | null> {
-    const previous = this.session;
-    const client = this.options.getClient();
-    if (!previous?.admitted || !client) {
-      return null;
-    }
-    // Retire the old request handle, not its Gateway-owned wizard. A reply or
-    // timeout from the old transport must not cancel the resumed operation.
-    previous.retired = true;
-    previous.abortController.abort();
-    const session: WizardSession = {
-      ...previous,
-      client,
-      abortController: new AbortController(),
-      cancellationPromise: undefined,
-      inputClosurePromise: undefined,
-      suspended: false,
-      retired: false,
-    };
-    this.session = session;
-    this.setState({ phase: "starting", authChoice: session.authChoice });
-    try {
-      if (session.terminalResult) {
-        return this.applyResult(session, session.terminalResult);
-      }
-      // Never repeat start or the last answer: either may have committed before
-      // the socket closed. The existing wizard owns the next visible step.
-      return await this.requestNext(session);
-    } catch (error) {
-      this.handleError(error, session);
-      return null;
-    }
-  }
-
-  async start(
-    authChoice: string,
-    startMethod: Exclude<
-      ModelSetupWizardStartMethod,
-      "openclaw.setup.activate.start" | "mcp.authLogin"
-    > = "openclaw.setup.auth.start",
-    preferences: Pick<SystemAgentSetupActivateParams, "nativeSessionCatalogsEnabled"> = {},
-    modelTarget?: "utility",
-  ): Promise<ModelSetupWizardCompletion | null> {
-    return this.startSession(authChoice, startMethod, {
-      authChoice,
-      ...preferences,
-      ...(modelTarget ? { modelTarget } : {}),
-    });
-  }
-
-  activate(
-    params: SystemAgentSetupActivateParams,
-    targetId: string,
-  ): Promise<ModelSetupWizardCompletion | null> {
-    return this.startSession(
-      params.authChoice ?? params.kind,
-      "openclaw.setup.activate.start",
-      params,
-      targetId,
-    );
-  }
-
   startMcpLogin(serverName: string): Promise<ModelSetupWizardCompletion | null> {
     return this.startSession(serverName, "mcp.authLogin", { serverName });
   }
@@ -218,11 +101,7 @@ export class ModelSetupWizardRunner {
   private async startSession(
     authChoice: string,
     startMethod: ModelSetupWizardStartMethod,
-    params:
-      | { authChoice: string; modelTarget?: "utility" }
-      | SystemAgentSetupActivateParams
-      | { serverName: string },
-    activationTargetId?: string,
+    params: { serverName: string },
   ): Promise<ModelSetupWizardCompletion | null> {
     const client = this.options.getClient();
     if (!client || this.currentState.phase !== "idle") {
@@ -239,32 +118,17 @@ export class ModelSetupWizardRunner {
       reservedWindow: this.pendingSignIn?.window,
       abortController: new AbortController(),
       startMethod,
-      activationTargetId,
-      onTerminalResult: this.options.onStart?.(
-        startMethod,
-        "kind" in params
-          ? params
-          : startMethod === "openclaw.setup.auth.start" && "authChoice" in params
-            ? {
-                ...params,
-                kind: "provider-auth",
-                wizard: { sessionId, authChoice, authKind: this.pendingSignIn?.kind },
-              }
-            : undefined,
-      ),
     };
     this.pendingSignIn = undefined;
     this.session = session;
     this.setState({ phase: "starting", authChoice });
     try {
-      const agentId = startMethod === "mcp.authLogin" ? null : this.options.getAgentId();
       const request = client
         .request<WizardStartResult>(
           startMethod,
           {
             sessionId: session.sessionId,
             ...params,
-            ...(agentId ? { agentId } : {}),
           },
           { timeoutMs: null },
         )
@@ -355,7 +219,7 @@ export class ModelSetupWizardRunner {
       return undefined;
     }
     if (result?.status === "cancelled" || result?.status === "error") {
-      if (session.startMethod === "models.authLogin" || session.startMethod === "mcp.authLogin") {
+      if (session.startMethod === "mcp.authLogin") {
         // Cancellation acknowledges the abort before provider teardown releases
         // admission. Status waits for that release; a purged session is settled.
         try {
@@ -576,10 +440,7 @@ export class ModelSetupWizardRunner {
     }
     return {
       startMethod: session.startMethod,
-      ...(session.activationTargetId ? { activationTargetId: session.activationTargetId } : {}),
       ...(isCurrent ? { isCurrent } : {}),
-      ...(result.preparedModelRef ? { preparedModelRef: result.preparedModelRef } : {}),
-      ...(result.modelActivation ? { modelActivation: result.modelActivation } : {}),
     };
   }
 
@@ -658,10 +519,7 @@ export class ModelSetupWizardRunner {
 
   private async cancelSession(session: WizardSession): Promise<WizardStatusResult | undefined> {
     try {
-      return await this.sendCancellation(
-        session,
-        session.startMethod === "models.authLogin" || session.startMethod === "mcp.authLogin",
-      );
+      return await this.sendCancellation(session, session.startMethod === "mcp.authLogin");
     } catch {
       // Detached cleanup is best effort; explicit cancellation surfaces failures.
       return undefined;

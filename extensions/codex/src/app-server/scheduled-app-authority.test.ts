@@ -49,7 +49,11 @@ function authority(overrides?: Record<string, unknown>) {
     namespace: "codex.apps",
     payload: {
       version: 1,
-      auth: { profileId: "openai:work", accountId: "acct-1" },
+      auth: {
+        kind: "configured-app-server",
+        connectionFingerprint: "configured-connection",
+        managedRequirementsFingerprint: "managed-requirements",
+      },
       apps: [
         {
           id: "calendar",
@@ -111,11 +115,8 @@ describe("scheduled Codex app authority", () => {
     },
     { name: "user home", overrides: { homeScope: "user" }, message: "user-home runtime" },
     {
-      name: "missing account identity",
-      overrides: {
-        hasPreparedAccountIdentity: false,
-        hasConfiguredAppServerIdentity: false,
-      },
+      name: "missing app-server identity",
+      overrides: { hasConfiguredAppServerIdentity: false },
       message: "configured app-server identity",
     },
   ])("refuses creator capture for $name before mutation", ({ overrides, message }) => {
@@ -124,7 +125,6 @@ describe("scheduled Codex app authority", () => {
       authenticatedScheduledMode: false,
       usesSupervisionConnection: false,
       homeScope: "agent",
-      hasPreparedAccountIdentity: true,
       hasConfiguredAppServerIdentity: false,
       ...overrides,
     });
@@ -134,18 +134,14 @@ describe("scheduled Codex app authority", () => {
     expect(decision.unavailableReason).toContain("no automation changes were saved");
   });
 
-  it.each([
-    ["prepared profile", true, false],
-    ["configured app-server", false, true],
-  ])("supports creator capture with a %s identity", (_name, prepared, configured) => {
+  it("supports creator capture with a configured app-server identity", () => {
     expect(
       resolveScheduledCodexAppCreatorCaptureDecision({
         appsMayBeVisible: true,
         authenticatedScheduledMode: false,
         usesSupervisionConnection: false,
         homeScope: "agent",
-        hasPreparedAccountIdentity: prepared,
-        hasConfiguredAppServerIdentity: configured,
+        hasConfiguredAppServerIdentity: true,
       }),
     ).toEqual({ required: true, supported: true });
   });
@@ -182,6 +178,9 @@ describe("scheduled Codex app authority", () => {
           config: { apps: { calendar: { tools: { "List events": { approval_mode: "writes" } } } } },
         };
       }
+      if (method === "configRequirements/read") {
+        return { requirements: null };
+      }
       throw new Error(`unexpected method ${method}`);
     });
 
@@ -190,15 +189,22 @@ describe("scheduled Codex app authority", () => {
       threadId: "thread-final",
       policyContext: policyContext(),
       auth: {
-        kind: "prepared-profile",
-        profileId: "openai:work",
-        accountId: "acct-1",
+        kind: "configured-app-server",
+        connectionFingerprint: "configured-connection",
       },
       configCwd: "/workspace",
     });
 
+    const managedRequirementsFingerprint = await readCodexManagedRequirementsFingerprint({
+      request,
+    } as never);
     expect(captured).toEqual(
       authority({
+        auth: {
+          kind: "configured-app-server",
+          connectionFingerprint: "configured-connection",
+          managedRequirementsFingerprint,
+        },
         apps: [
           {
             id: "calendar",
@@ -225,6 +231,9 @@ describe("scheduled Codex app authority", () => {
       if (method === "mcpServerStatus/list") {
         return { data: [{ name: "codex_apps", tools: {} }], nextCursor: null };
       }
+      if (method === "configRequirements/read") {
+        return { requirements: null };
+      }
       return { config: {} };
     });
 
@@ -234,9 +243,8 @@ describe("scheduled Codex app authority", () => {
         threadId: "thread-final",
         policyContext: policyContext(),
         auth: {
-          kind: "prepared-profile",
-          profileId: "openai:work",
-          accountId: "acct-1",
+          kind: "configured-app-server",
+          connectionFingerprint: "configured-connection",
         },
       }),
     ).resolves.toBeUndefined();
@@ -250,6 +258,9 @@ describe("scheduled Codex app authority", () => {
       }
       if (method === "config/read") {
         return { config: {} };
+      }
+      if (method === "configRequirements/read") {
+        return { requirements: null };
       }
       if (method === "mcpServerStatus/list") {
         statusPage += 1;
@@ -268,9 +279,8 @@ describe("scheduled Codex app authority", () => {
         threadId: "thread-final",
         policyContext: policyContext(),
         auth: {
-          kind: "prepared-profile",
-          profileId: "openai:work",
-          accountId: "acct-1",
+          kind: "configured-app-server",
+          connectionFingerprint: "configured-connection",
         },
         timeoutMs: 100,
       }),
@@ -294,6 +304,9 @@ describe("scheduled Codex app authority", () => {
       if (method === "app/installed") {
         return { apps: [] };
       }
+      if (method === "configRequirements/read") {
+        return { requirements: null };
+      }
       return { config: {} };
     });
 
@@ -303,9 +316,8 @@ describe("scheduled Codex app authority", () => {
         threadId: "thread-final",
         policyContext: policyContext(),
         auth: {
-          kind: "prepared-profile",
-          profileId: "openai:work",
-          accountId: "acct-1",
+          kind: "configured-app-server",
+          connectionFingerprint: "configured-connection",
         },
       }),
     ).rejects.toThrow("No automation changes were saved");
@@ -725,7 +737,7 @@ describe("scheduled Codex app authority", () => {
         client: { request } as never,
         threadId: "thread-final",
         policyContext: policyContext(),
-        auth: { kind: "prepared-profile", profileId: "openai:work", accountId: "acct-1" },
+        auth: { kind: "configured-app-server", connectionFingerprint: "configured-connection" },
       });
       expect(captured).toMatchObject({ payload: { apps: [{ tools: { edit: expected } }] } });
 

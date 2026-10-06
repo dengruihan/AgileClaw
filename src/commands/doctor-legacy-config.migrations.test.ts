@@ -405,12 +405,12 @@ describe("normalizeCompatibilityConfigValues", () => {
         providers: {
           "openai-codex": {
             baseUrl: "https://chatgpt.com/backend-api",
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
             models: [
               {
                 id: "gpt-5.5",
                 name: "gpt-5.5",
-                api: "openai-chatgpt-responses",
+                api: "openai-responses",
                 reasoning: true,
                 input: ["text", "image"],
                 cost: { input: 5, output: 30, cacheRead: 0.5, cacheWrite: 0 },
@@ -702,12 +702,12 @@ describe("normalizeCompatibilityConfigValues", () => {
         providers: {
           "openai-codex": {
             baseUrl: "https://chatgpt.com/backend-api",
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
             models: [
               {
                 id: "gpt-5.5",
                 name: "gpt-5.5",
-                api: "openai-chatgpt-responses",
+                api: "openai-responses",
                 reasoning: true,
                 input: ["text", "image"],
                 cost: { input: 9, output: 99, cacheRead: 0.9, cacheWrite: 0 },
@@ -726,12 +726,12 @@ describe("normalizeCompatibilityConfigValues", () => {
         providers: {
           "openai-codex": {
             baseUrl: "https://chatgpt.com/backend-api",
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
             models: [
               {
                 id: "gpt-5.5",
                 name: "gpt-5.5",
-                api: "openai-chatgpt-responses",
+                api: "openai-responses",
                 reasoning: true,
                 input: ["text", "image"],
                 cost: { input: 9, output: 99, cacheRead: 0.9, cacheWrite: 0 },
@@ -909,7 +909,7 @@ describe("normalizeCompatibilityConfigValues", () => {
         providers: {
           codex: {
             baseUrl: "https://chatgpt.com/backend-api",
-            api: "openai-chatgpt-responses",
+            api: "openai-responses",
             models: [
               {
                 id: "gpt-5.6-sol",

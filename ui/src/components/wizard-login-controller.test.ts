@@ -11,8 +11,8 @@ import { WizardLoginController } from "./wizard-login-controller.ts";
 it.each([
   ["mcp.authLogin", "terminal during status", "cancelled"],
   ["mcp.authLogin", "failed cancellation", "cancelled"],
-  ["models.authLogin", "failed status", "cancelled"],
-  ["models.authLogin", "failed cancellation", "done"],
+  ["mcp.authLogin", "failed status", "cancelled"],
+  ["mcp.authLogin", "failed cancellation", "done"],
 ] as const)(
   "settles %s after %s with %s without poisoning a new sign-in",
   async (startMethod, ordering, terminal) => {
@@ -109,9 +109,7 @@ it.each([
     });
     const start = () => {
       controller.runner.prepareSignIn("oauth", "docs");
-      return startMethod === "mcp.authLogin"
-        ? controller.runner.startMcpLogin("docs")
-        : controller.runner.start("provider", "models.authLogin");
+      return controller.runner.startMcpLogin("docs");
     };
     try {
       const first = start();

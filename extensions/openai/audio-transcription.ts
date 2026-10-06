@@ -66,13 +66,12 @@ export const transcribeOpenAiAudioWithContext: NonNullable<
     preferredProfile: context.preferredProfile,
     lockedProfile: Boolean(context.profile),
   };
-  const explicitSubscription = providerConfig?.auth === "oauth" || providerConfig?.auth === "token";
   let auth: Awaited<ReturnType<typeof resolveApiKeyForProvider>>;
   let credential: string;
   try {
     auth = await resolveApiKeyForProvider({
       ...params,
-      modelApi: context.profile || explicitSubscription ? undefined : "openai-audio-transcriptions",
+      modelApi: context.profile ? undefined : "openai-audio-transcriptions",
     }).catch((error: unknown) => {
       if (
         context.profile ||

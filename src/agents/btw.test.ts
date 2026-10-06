@@ -120,7 +120,7 @@ function createOpenAIModel(subscription = false) {
   return {
     provider: "openai",
     id: "gpt-5.5",
-    api: subscription ? ("openai-chatgpt-responses" as const) : ("openai-responses" as const),
+    api: subscription ? ("openai-responses" as const) : ("openai-responses" as const),
     baseUrl: subscription ? "https://chatgpt.com/backend-api/codex" : "https://api.openai.com/v1",
   };
 }
@@ -477,7 +477,7 @@ describe("runBtwSideQuestion", () => {
             ? {
                 provider: "openai",
                 id: "gpt-5.5",
-                api: "openai-chatgpt-responses",
+                api: "openai-responses",
                 baseUrl: "https://chatgpt.com/backend-api/codex",
               }
             : resolveModelWithRegistryMock(),
@@ -531,7 +531,7 @@ describe("runBtwSideQuestion", () => {
         senderE164: "+15550001",
         opts: { runId: "btw-side-authority" },
         runtimeModel: expect.objectContaining({
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: "https://chatgpt.com/backend-api/codex",
         }),
       }),
@@ -980,7 +980,7 @@ describe("runBtwSideQuestion", () => {
       model: {
         provider: "openai",
         id: "gpt-5.5",
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api/codex",
       },
     });
@@ -1027,7 +1027,7 @@ describe("runBtwSideQuestion", () => {
     expect(sideQuestionParams.provider).toBe("openai");
     expect(sideQuestionParams.authProfileId).toBe("openai-codex:user@example.test");
     expect(sideQuestionParams.runtimeModel).toMatchObject({
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api/codex",
     });
     expect(sideQuestionParams.preparedRuntimeAuth?.plan?.modelRoute).toMatchObject({
@@ -1457,7 +1457,7 @@ describe("runBtwSideQuestion", () => {
     const subscriptionModel = {
       provider: "openai",
       id: "gpt-5.5",
-      api: "openai-chatgpt-responses" as const,
+      api: "openai-responses" as const,
       baseUrl: "https://chatgpt.com/backend-api/codex",
       name: "Subscription model",
     };

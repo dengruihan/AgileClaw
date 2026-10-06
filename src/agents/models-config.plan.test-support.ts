@@ -1,4 +1,5 @@
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import type { AuthProfileStore } from "./auth-profiles/types.js";
 import { planOpenClawModelsJson, type PreparedModelsConfigContext } from "./models-config.plan.js";
 
 type PreparedPlanParams = Parameters<typeof planOpenClawModelsJson>[0];
@@ -9,18 +10,21 @@ type FlatPreparedContext = Omit<
   discoveryAuthConfig?: OpenClawConfig;
   sourceConfigForSecrets?: OpenClawConfig;
 };
-type PlanParams = Omit<PreparedPlanParams, "context" | "existingRaw" | "existingParsed"> &
+type PlanParams = Omit<PreparedPlanParams, "context" | "existingRaw"> &
   FlatPreparedContext & {
     existingRaw?: string;
+    // Accepted for caller compatibility; the API-key-only plan no longer consumes these.
+    authStore?: AuthProfileStore;
+    pluginCatalogs?: unknown;
     existingParsed?: unknown;
   };
 
 export function planModelsJsonForTest(params: PlanParams) {
   const {
-    authStore,
+    authStore: _authStore,
+    existingParsed: _existingParsed,
+    pluginCatalogs: _pluginCatalogs,
     existingRaw = "",
-    existingParsed = null,
-    pluginCatalogs,
     ...contextParams
   } = params;
   return planOpenClawModelsJson({
@@ -30,9 +34,6 @@ export function planModelsJsonForTest(params: PlanParams) {
       sourceConfigForSecrets: params.sourceConfigForSecrets ?? params.cfg,
       envFingerprint: params.env,
     },
-    ...(authStore ? { authStore } : {}),
     existingRaw,
-    existingParsed,
-    ...(pluginCatalogs ? { pluginCatalogs } : {}),
   });
 }

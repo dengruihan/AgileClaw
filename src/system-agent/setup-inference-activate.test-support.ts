@@ -110,7 +110,7 @@ export async function fixture(
           baseUrl: options.subscription
             ? "https://chatgpt.com/backend-api"
             : "https://provider.example/v1",
-          api: options.subscription ? "openai-chatgpt-responses" : "openai-responses",
+          api: "openai-responses",
           models: [
             {
               id: "gpt-5.4-mini",

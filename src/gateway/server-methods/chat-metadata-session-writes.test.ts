@@ -502,7 +502,7 @@ it("keeps prepared chat metadata across only a committed read acknowledgment", a
       );
       const harness = createChatMetadataHarness(config, { useDefaultProjection: true });
       harness.setOwner(
-        createChatMetadataOwner(config, "gpt-5.6-luna", {}, "openai", "openai-chatgpt-responses"),
+        createChatMetadataOwner(config, "gpt-5.6-luna", {}, "openai", "openai-responses"),
       );
       const context = createDirectChatContext({
         getRuntimeConfig: () => config,

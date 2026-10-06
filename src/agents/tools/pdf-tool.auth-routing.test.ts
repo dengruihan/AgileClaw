@@ -125,9 +125,7 @@ describe("PDF model authentication routing", () => {
             provider: "openai",
             id: modelId,
             api:
-              mode === "OAuth"
-                ? expect.stringContaining("openai-chatgpt-responses")
-                : "openai-responses",
+              mode === "OAuth" ? expect.stringContaining("openai-responses") : "openai-responses",
             baseUrl:
               mode === "OAuth"
                 ? "https://chatgpt.com/backend-api/codex"

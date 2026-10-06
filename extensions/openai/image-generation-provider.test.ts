@@ -859,8 +859,7 @@ describe("openai image generation provider", () => {
     it("honors configured transport overrides for transparent PNG requests", async () => {
       const result = await generateOpenAIImage("Transparent sticker", {
         cfg: openAIImageConfig({
-          baseUrl: "http://127.0.0.1:44220/backend-api/codex",
-          api: "openai-chatgpt-responses",
+          baseUrl: "https://chatgpt.com/backend-api/codex",
           request: { allowPrivateNetwork: true },
         }),
         authStore: createCodexOAuthAuthStore(),
@@ -872,7 +871,7 @@ describe("openai image generation provider", () => {
         allowPrivateNetwork: true,
       });
       expect(jsonRequestCall()).toMatchObject({
-        url: "http://127.0.0.1:44220/backend-api/codex/responses",
+        url: "https://chatgpt.com/backend-api/codex/responses",
         allowPrivateNetwork: true,
         ssrfPolicy: { allowRfc2544BenchmarkRange: true },
       });
@@ -892,7 +891,6 @@ describe("openai image generation provider", () => {
       await generateOpenAIImage("Legacy endpoint", {
         cfg: openAIImageConfig({
           baseUrl: "https://chatgpt.com/backend-api/codex/v1",
-          api: "openai-chatgpt-responses",
         }),
         authStore: createMixedOpenAIAuthStore(),
       });

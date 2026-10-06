@@ -609,32 +609,6 @@ async function createOllamaTestStream(
   );
 }
 
-type OllamaLocalService = NonNullable<
-  Parameters<typeof createConfiguredOllamaStreamFn>[0]["localService"]
->;
-
-async function createManagedOllamaTestStream(params: {
-  baseUrl?: string;
-  providerId?: string;
-  defaultHeaders?: Record<string, string>;
-  model?: Record<string, unknown>;
-  context?: Record<string, unknown>;
-  options?: Parameters<ReturnType<typeof createConfiguredOllamaStreamFn>>[2];
-  acquire: OllamaLocalService["acquire"];
-}) {
-  const baseUrl = params.baseUrl ?? "http://provider-host:11434";
-  return createOllamaTestStream({
-    ...params,
-    baseUrl,
-    model: { provider: params.providerId ?? "custom-ollama", ...params.model },
-    configured: {
-      model: { baseUrl, headers: params.defaultHeaders },
-      providerBaseUrl: baseUrl,
-      localService: { providerId: params.providerId ?? "custom-ollama", acquire: params.acquire },
-    },
-  });
-}
-
 async function collectStreamEvents<T>(stream: AsyncIterable<T>): Promise<T[]> {
   const events: T[] = [];
   for await (const event of stream) {
@@ -1537,42 +1511,21 @@ describe("createOllamaStreamFn", () => {
 });
 
 describe("createConfiguredOllamaStreamFn", () => {
-  it("streams model-specific remote endpoints without acquiring the provider service", async () => {
+  it("streams model-specific remote endpoints", async () => {
     await withSuccessfulOllamaFetch(async (fetchMock) => {
-      const acquire = vi.fn(async () => ({ release: vi.fn() }));
       const events = await collectStreamEvents(
         await createOllamaTestStream({
           baseUrl: "",
           model: { provider: "ollama-gpu" },
           configured: {
             model: { baseUrl: "https://remote-ollama.example.test" },
-            localService: { providerId: "ollama-gpu", acquire },
           },
         }),
       );
       expect(events.at(-1)).toMatchObject({ type: "done" });
-      expect(acquire).toHaveBeenCalledTimes(0);
       expect(getGuardedFetchCall(fetchMock).url).toBe(
         "https://remote-ollama.example.test/api/chat",
       );
-    });
-  });
-  it("acquires the provider service when model baseUrl is whitespace", async () => {
-    await withSuccessfulOllamaFetch(async (fetchMock) => {
-      const acquire = vi.fn(async () => ({ release: vi.fn() }));
-      const events = await collectStreamEvents(
-        await createOllamaTestStream({
-          baseUrl: "",
-          model: { provider: "ollama-gpu" },
-          configured: {
-            model: { baseUrl: "   " },
-            localService: { providerId: "ollama-gpu", acquire },
-          },
-        }),
-      );
-      expect(events.at(-1)).toMatchObject({ type: "done" });
-      expect(acquire).toHaveBeenCalledTimes(1);
-      expect(getGuardedFetchCall(fetchMock).url).toBe("http://127.0.0.1:11434/api/chat");
     });
   });
   it("uses provider-level baseUrl when model baseUrl is absent", async () => {
@@ -1591,234 +1544,6 @@ describe("createConfiguredOllamaStreamFn", () => {
       expect(request.url).toBe("http://provider-host:11434/api/chat");
       expect(request.init?.headers).toMatchObject({ Authorization: "Bearer proxy-token" });
     });
-  });
-  it("acquires the exact provider service after final payload and headers, before fetch", async () => {
-    const signal = new AbortController().signal;
-    const leaseRelease = vi.fn();
-    const payloadStarted = Promise.withResolvers<void>();
-    const finishPayload = Promise.withResolvers<void>();
-    let payloadReady = false;
-    const preparationAtAcquisition: boolean[] = [];
-    const acquire = vi.fn(async () => {
-      preparationAtAcquisition.push(payloadReady);
-      return { release: leaseRelease };
-    });
-    const guardRelease = mockResponse(
-      ndjson({ content: "ok" }) + "\n" + ndjson({}, { done: true }),
-    );
-
-    const stream = await createManagedOllamaTestStream({
-      providerId: "ollama-gpu",
-      defaultHeaders: { "X-Provider": "provider", Authorization: "Bearer proxy-token" },
-      options: {
-        apiKey: "real-token", // pragma: allowlist secret
-        headers: { "X-Request": "request" },
-        onPayload: async (payload) => {
-          payloadStarted.resolve();
-          await finishPayload.promise;
-          payloadReady = true;
-          return { ...requireRecord(payload, "payload"), model: "patched" };
-        },
-        signal,
-      },
-      acquire,
-    });
-    const eventsPromise = collectStreamEvents(stream);
-    try {
-      await payloadStarted.promise;
-      expect(fetchWithSsrFGuardMock).not.toHaveBeenCalled();
-      expect(acquire).not.toHaveBeenCalled();
-    } finally {
-      finishPayload.resolve();
-      await eventsPromise;
-    }
-
-    expect(preparationAtAcquisition).toEqual([true]);
-    expect(acquire).toHaveBeenCalledWith(
-      {
-        providerId: "ollama-gpu",
-        baseUrl: "http://provider-host:11434",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer real-token",
-          "X-Provider": "provider",
-          "X-Request": "request",
-        },
-      },
-      signal,
-    );
-    expect(getGuardedFetchJsonBody(fetchWithSsrFGuardMock).model).toBe("patched");
-    expect(acquire.mock.invocationCallOrder[0]).toBeLessThan(
-      expectDefined(fetchWithSsrFGuardMock.mock.invocationCallOrder[0], "fetch call order"),
-    );
-    expect(guardRelease).toHaveBeenCalledOnce();
-    expect(leaseRelease).toHaveBeenCalledOnce();
-    expect(guardRelease.mock.invocationCallOrder[0]).toBeLessThan(
-      expectDefined(leaseRelease.mock.invocationCallOrder[0], "lease release call order"),
-    );
-  });
-
-  it("times out pending local-service acquisition before fetch", async () => {
-    vi.useFakeTimers();
-    try {
-      let acquisitionSignal: AbortSignal | undefined;
-      const acquire = vi.fn((_request, signal) => {
-        const timeoutSignal = expectDefined(signal, "acquisition timeout signal");
-        acquisitionSignal = timeoutSignal;
-        return rejectWhenAborted(timeoutSignal);
-      });
-      const eventsPromise = collectStreamEvents(
-        await createManagedOllamaTestStream({
-          model: { requestTimeoutMs: 25 },
-          acquire,
-        }),
-      );
-
-      await vi.advanceTimersByTimeAsync(0);
-      expect(acquire).toHaveBeenCalledOnce();
-      await vi.advanceTimersByTimeAsync(25);
-      const events = await eventsPromise;
-
-      expect(acquisitionSignal?.reason).toMatchObject({
-        name: "TimeoutError",
-        message: "request timed out",
-      });
-      expect(events).toMatchObject([
-        { type: "error", reason: "error", error: { errorMessage: "request timed out" } },
-      ]);
-      expect(fetchWithSsrFGuardMock).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("keeps caller aborts classified as aborted during acquisition", async () => {
-    const caller = new AbortController();
-    let acquisitionSignal: AbortSignal | undefined;
-    const acquire = vi.fn((_request, signal) => {
-      const combinedSignal = expectDefined(signal, "combined acquisition signal");
-      acquisitionSignal = combinedSignal;
-      return rejectWhenAborted(combinedSignal);
-    });
-    const eventsPromise = collectStreamEvents(
-      await createManagedOllamaTestStream({
-        model: { requestTimeoutMs: 5_000 },
-        options: { signal: caller.signal },
-        acquire,
-      }),
-    );
-    await vi.waitFor(() => expect(acquire).toHaveBeenCalledOnce());
-
-    const reason = new Error("caller stopped");
-    caller.abort(reason);
-    const events = await eventsPromise;
-
-    expect(acquisitionSignal?.reason).toBe(reason);
-    expect(events).toMatchObject([{ type: "error", reason: "aborted" }]);
-    expect(fetchWithSsrFGuardMock).not.toHaveBeenCalled();
-  });
-
-  it("cleans the acquisition timer before a long progressing stream", async () => {
-    vi.useFakeTimers();
-    try {
-      const source = createControlledNdjsonFetch();
-      fetchWithSsrFGuardMock.mockImplementation(source.fetchImpl);
-      let acquisitionSignal: AbortSignal | undefined;
-      const acquire = vi.fn(async (_request, signal) => {
-        acquisitionSignal = expectDefined(signal, "acquisition timeout signal");
-        return { release: vi.fn() };
-      });
-      const eventsPromise = collectStreamEvents(
-        await createManagedOllamaTestStream({
-          model: { requestTimeoutMs: 25 },
-          acquire,
-        }),
-      );
-      await vi.advanceTimersByTimeAsync(0);
-      expect(fetchWithSsrFGuardMock).toHaveBeenCalledOnce();
-      expect(getGuardedFetchCall(fetchWithSsrFGuardMock)).toMatchObject({ timeoutMs: 25 });
-      expect(getGuardedFetchCall(fetchWithSsrFGuardMock).signal).toBeUndefined();
-      await vi.advanceTimersByTimeAsync(100);
-      expect(acquisitionSignal?.aborted).toBe(false);
-      source.pushLine(ndjson({ content: "partial" }));
-      await vi.advanceTimersByTimeAsync(0);
-      expect(source.refreshTimeout).toHaveBeenCalledOnce();
-      await vi.advanceTimersByTimeAsync(100);
-      expect(acquisitionSignal?.aborted).toBe(false);
-      source.pushLine(ndjson({}, { done: true }));
-      source.close();
-      expect((await eventsPromise).at(-1)).toMatchObject({ type: "done" });
-      expect(source.refreshTimeout).toHaveBeenCalledTimes(2);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-  it("holds the local-service lease through incomplete NDJSON handling", async () => {
-    const source = createControlledNdjsonFetch();
-    fetchWithSsrFGuardMock.mockImplementation(source.fetchImpl);
-    const leaseRelease = vi.fn();
-    const acquire = vi.fn(async () => ({ release: leaseRelease }));
-    const stream = await createManagedOllamaTestStream({ acquire });
-    const iterator = stream[Symbol.asyncIterator]();
-    source.pushLine(ndjson({ content: "partial" }));
-    await expect(iterator.next()).resolves.toMatchObject({ value: { type: "start" } });
-    expect(leaseRelease).not.toHaveBeenCalled();
-    source.close();
-    const events = await collectStreamEvents(stream);
-    expect(events.at(-1)).toMatchObject({
-      type: "error",
-      reason: "error",
-      error: { errorMessage: OLLAMA_INCOMPLETE_STREAM_ERROR },
-    });
-    expect(source.release).toHaveBeenCalledOnce();
-    expect(leaseRelease).toHaveBeenCalledOnce();
-  });
-  it("releases the service exactly once after an empty body", async () => {
-    const leaseRelease = vi.fn();
-    const acquire = vi.fn(async () => ({ release: leaseRelease }));
-    const guardRelease = mockResponse(null);
-    const events = await collectStreamEvents(await createManagedOllamaTestStream({ acquire }));
-    expect(events).toMatchObject([{ type: "error" }]);
-    expect(acquire).toHaveBeenCalledOnce();
-    expect(guardRelease).toHaveBeenCalledOnce();
-    expect(leaseRelease).toHaveBeenCalledOnce();
-  });
-
-  it("releases the service exactly once when guarded fetch rejects", async () => {
-    const leaseRelease = vi.fn();
-    const acquire = vi.fn(async () => ({ release: leaseRelease }));
-    fetchWithSsrFGuardMock.mockRejectedValue(
-      Object.assign(new Error("connect failed"), { code: "ECONNREFUSED" }),
-    );
-
-    const events = await collectStreamEvents(await createManagedOllamaTestStream({ acquire }));
-
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
-      type: "error",
-      reason: "error",
-      error: { errorMessage: "connect failed", errorCode: "ECONNREFUSED" },
-    });
-    expect(leaseRelease).toHaveBeenCalledOnce();
-  });
-
-  it("does not acquire or fetch when payload preparation rejects", async () => {
-    const acquire = vi.fn();
-
-    const events = await collectStreamEvents(
-      await createManagedOllamaTestStream({
-        options: {
-          onPayload: () => {
-            throw new Error("payload rejected");
-          },
-        },
-        acquire,
-      }),
-    );
-
-    expect(events).toMatchObject([{ type: "error", reason: "error" }]);
-    expect(acquire).not.toHaveBeenCalled();
-    expect(fetchWithSsrFGuardMock).not.toHaveBeenCalled();
   });
 });
 /* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

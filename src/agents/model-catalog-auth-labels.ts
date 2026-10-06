@@ -6,11 +6,7 @@ import type { PluginMetadataSnapshot } from "../plugins/plugin-metadata-snapshot
 import { maskApiKey } from "../security/secret-mask.js";
 import { shortenHomePath } from "../utils.js";
 import { formatRemainingShort } from "./auth-health.js";
-import {
-  isConfiguredAwsSdkAuthProfileForProvider,
-  isProfileInCooldown,
-  resolveAuthProfileDisplayLabel,
-} from "./auth-profiles.js";
+import { isProfileInCooldown, resolveAuthProfileDisplayLabel } from "./auth-profiles.js";
 import { cloneAuthProfileStore } from "./auth-profiles/clone.js";
 import { resolveAuthProfileOrder } from "./auth-profiles/order.js";
 import type { AuthProfileStore } from "./auth-profiles/types.js";
@@ -189,15 +185,7 @@ export function prepareModelCatalogAuthLabels(params: {
   for (const provider of providers) {
     const all = {
       provider,
-      profiles: Object.fromEntries(
-        profileLabels.map(([id, label]) => [
-          id,
-          !params.store.profiles[id] &&
-          isConfiguredAwsSdkAuthProfileForProvider({ cfg: params.config, provider, profileId: id })
-            ? `${id}=aws-sdk`
-            : label,
-        ]),
-      ),
+      profiles: Object.fromEntries(profileLabels),
       source: `auth profile store: ${shortenHomePath(params.authStorePath)}`,
       fallback: captureFallbackLabel(
         provider,

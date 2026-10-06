@@ -1,7 +1,7 @@
 /**
  * Public SDK type surface for model provider and model definition config.
  */
-import type { ModelApi } from "../config/types.models.js";
+import type { ApiKeyModelApi, ModelApi } from "../config/types.models.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 
 /** Private selected-request facts; omission means the host cannot establish applicability. */
@@ -34,7 +34,7 @@ export type ProviderModelRouteSource = {
 };
 
 /** A concrete provider route. Order expresses provider default, never credential precedence. */
-export type ProviderModelRouteAuthRequirement = "api-key" | "subscription";
+export type ProviderModelRouteAuthRequirement = "api-key";
 /** Secret-free credential facts used by the provider to select and constrain its route. */
 export type ProviderModelAuthPolicyContext = {
   provider: string;
@@ -59,7 +59,7 @@ export type ProviderModelRouteRuntimePolicy = {
 };
 
 export type ProviderModelRouteCandidate = {
-  api: ModelApi;
+  api: ApiKeyModelApi;
   baseUrl: string;
   authRequirement: ProviderModelRouteAuthRequirement;
   /** Secret-free summary of request behavior the selected runtime must reproduce. */

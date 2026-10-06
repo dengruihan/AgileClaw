@@ -946,7 +946,6 @@ describe("lmstudio setup", () => {
       }),
       promptText: createPromptText("fresh-prompt-key"),
     });
-    expect(result.configPatch?.models?.mode).toBe("merge");
     const provider = requireConfigPatchLmstudioProvider(result);
     expectRecordFields(provider, {
       baseUrl: "http://localhost:1234/v1",

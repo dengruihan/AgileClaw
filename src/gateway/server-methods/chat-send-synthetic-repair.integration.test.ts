@@ -122,7 +122,6 @@ it("chat.send replays synthetic repairs through session history and the register
         },
       },
       models: {
-        mode: "replace",
         catalogRefresh: { enabled: false },
         providers: {
           [provider]: {

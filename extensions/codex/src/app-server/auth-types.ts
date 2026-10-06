@@ -2,11 +2,8 @@ import type { AuthProfileStore } from "openclaw/plugin-sdk/agent-runtime";
 import type { CodexLoginAccountParams } from "./protocol.js";
 
 export type CodexAppServerPreparedAuthProfileSnapshot = {
-  inferenceAuth?: "host-oauth";
-  loginParams: CodexLoginAccountParams;
+  loginParams: Extract<CodexLoginAccountParams, { type: "apiKey" }>;
   secretFreeCacheKey: string;
-  /** Genuine ChatGPT principal id; email/profile fallbacks are not authorization identity. */
-  chatgptAccountId?: string;
 };
 
 export type CodexAppServerPreparedAuth =
@@ -23,9 +20,3 @@ export type CodexAppServerResolvedPreparedAuth =
   | (Extract<CodexAppServerPreparedAuth, { kind: "profile" }> & {
       snapshot: CodexAppServerPreparedAuthProfileSnapshot;
     });
-
-export type CodexAppServerAuthRequirement = "api-key" | "subscription";
-export type CodexAppServerAuthHandoff = Readonly<{
-  accessFingerprint: string;
-  chatgptAccountId: string;
-}>;

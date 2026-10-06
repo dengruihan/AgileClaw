@@ -27,7 +27,6 @@ vi.mock("./cli-auth-seam.js", () => {
 import { CLAUDE_CLI_NATIVE_AUTH_MARKER } from "./cli-constants.js";
 import anthropicPlugin from "./index.js";
 import { claude5ContractCases } from "./model-contract-cases.test-support.js";
-import anthropicProviderDiscovery from "./provider-discovery.js";
 
 beforeEach(() => {
   probeClaudeCliAuthStatusMock.mockReset();
@@ -1436,21 +1435,15 @@ describe("anthropic provider replay hooks", () => {
         config,
         provider: "claude-cli",
       } as never);
-      const discoveryAuth = await anthropicProviderDiscovery.prepareSyntheticAuth?.({
-        config,
-        provider: "claude-cli",
-      } as never);
-      for (const auth of [runtimeAuth, discoveryAuth]) {
-        expect(auth).toEqual(
-          authenticated
-            ? {
-                apiKey: CLAUDE_CLI_NATIVE_AUTH_MARKER,
-                source: "Claude CLI native auth",
-                mode: "oauth",
-              }
-            : undefined,
-        );
-      }
+      expect(runtimeAuth).toEqual(
+        authenticated
+          ? {
+              apiKey: CLAUDE_CLI_NATIVE_AUTH_MARKER,
+              source: "Claude CLI native auth",
+              mode: "oauth",
+            }
+          : undefined,
+      );
       expect(
         await provider.prepareSyntheticAuth?.({ provider: "claude-cli" } as never),
       ).toBeUndefined();

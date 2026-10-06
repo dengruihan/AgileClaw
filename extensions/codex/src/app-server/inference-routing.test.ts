@@ -542,7 +542,7 @@ describe("managed inference route ownership", () => {
 
   it("fails closed for host OAuth on native backend and custom provider configurations", async () => {
     const h = harness();
-    ownCodexInferenceClient(h.client, {}, { resolve: vi.fn() });
+    ownCodexInferenceClient(h.client, {});
     const configs: CodexConfigReadResponse["config"][] = [
       { openai_base_url: "https://chatgpt.com/backend-api/codex" },
       { openai_base_url: "https://models.example.com/v1" },

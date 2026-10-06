@@ -44,7 +44,7 @@ describe("resolveAgentHarnessPolicy", () => {
       name: "HTTP official ChatGPT route",
       params: {
         config: openAIProviderConfig({
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: "http://chatgpt.com/backend-api/codex",
         }),
       },

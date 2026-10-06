@@ -1132,7 +1132,6 @@ describe("image tool implicit imageModel config", () => {
       const cfg: OpenClawConfig = {
         agents: { defaults: { model: { primary: "minimax/MiniMax-M2.7" } } },
         models: {
-          mode: "merge",
           providers: {
             minimax: {
               baseUrl: "https://api.minimax.io/anthropic",
@@ -1156,7 +1155,6 @@ describe("image tool implicit imageModel config", () => {
       const cfg: OpenClawConfig = {
         agents: { defaults: { model: { primary: "minimax-cn/MiniMax-M2.5" } } },
         models: {
-          mode: "merge",
           providers: {
             "minimax-cn": {
               baseUrl: "https://api.minimaxi.com/anthropic",
@@ -1205,7 +1203,6 @@ describe("image tool implicit imageModel config", () => {
       });
       const cfg: OpenClawConfig = {
         models: {
-          mode: "merge",
           providers: {
             "minimax-cn": {
               baseUrl: "https://api.minimaxi.com/anthropic",
@@ -1248,7 +1245,6 @@ describe("image tool implicit imageModel config", () => {
       });
       const cfg: OpenClawConfig = {
         models: {
-          mode: "merge",
           providers: {
             "minimax-cn": {
               baseUrl: "https://api.minimaxi.com/anthropic",

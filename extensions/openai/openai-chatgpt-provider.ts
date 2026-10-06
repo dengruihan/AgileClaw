@@ -1,11 +1,7 @@
-import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import type {
-  ProviderAuthContext,
-  ProviderAuthMethod,
   ProviderResolveDynamicModelContext,
   ProviderRuntimeModel,
 } from "openclaw/plugin-sdk/plugin-entry";
-import type { OAuthCredential } from "openclaw/plugin-sdk/provider-auth";
 import {
   buildFirstTemplateModel,
   buildManifestModelProviderConfig,
@@ -14,10 +10,8 @@ import {
   normalizeProviderId,
 } from "openclaw/plugin-sdk/provider-model-metadata";
 import type { ProviderPlugin } from "openclaw/plugin-sdk/provider-model-shared";
-import { resolveOpenAICodexAuthIdentity } from "openclaw/plugin-sdk/provider-oauth-runtime";
 import {
   normalizeLowercaseStringOrEmpty,
-  readStringValue,
   uniqueValues,
 } from "openclaw/plugin-sdk/string-coerce-runtime";
 import {
@@ -25,7 +19,6 @@ import {
   isOpenAICodexBaseUrl,
   OPENAI_CODEX_RESPONSES_BASE_URL,
 } from "./base-url.js";
-import { OPENAI_CODEX_DEFAULT_MODEL } from "./default-models.js";
 import {
   OPENAI_CHATGPT_MODERN_MODEL_IDS,
   OPENAI_GPT_53_CODEX_SPARK_MODEL_ID as OPENAI_CODEX_GPT_53_SPARK_MODEL_ID,
@@ -361,173 +354,6 @@ function withDefaultCodexContextMetadata(params: {
   };
 }
 
-function buildCodexCredentialExtra(identity: {
-  accountId?: string;
-  chatgptPlanType?: string;
-}): Record<string, unknown> | undefined {
-  const extra = {
-    ...(identity.accountId ? { accountId: identity.accountId } : {}),
-    ...(identity.chatgptPlanType ? { chatgptPlanType: identity.chatgptPlanType } : {}),
-  };
-  return Object.keys(extra).length > 0 ? extra : undefined;
-}
-
-async function refreshOpenAICodexOAuthCredential(cred: OAuthCredential) {
-  try {
-    const { refreshOpenAICodexToken } = await import("./openai-chatgpt-provider.runtime.js");
-    const refreshed = await refreshOpenAICodexToken(cred.refresh);
-    const identity = resolveOpenAICodexAuthIdentity({
-      access: refreshed.access,
-      email: cred.email,
-    });
-    return {
-      ...cred,
-      ...refreshed,
-      type: "oauth" as const,
-      provider: PROVIDER_ID,
-      email: identity.email ?? cred.email,
-      displayName: cred.displayName,
-      ...buildCodexCredentialExtra(identity),
-    };
-  } catch (error) {
-    const message = formatErrorMessage(error);
-    if (
-      /extract\s+accountid\s+from\s+token/i.test(message) &&
-      typeof cred.access === "string" &&
-      cred.access.trim().length > 0
-    ) {
-      return cred;
-    }
-    throw error;
-  }
-}
-
-type OpenAICodexOAuthContext = ProviderAuthContext & {
-  onManualCodeInput?: () => Promise<string>;
-};
-
-function buildOpenAICodexAuthResult(
-  buildResult: typeof import("openclaw/plugin-sdk/provider-auth-result").buildOauthProviderAuthResult,
-  creds: { access: string; refresh: string; expires: number; email?: unknown },
-) {
-  const identity = resolveOpenAICodexAuthIdentity({
-    access: creds.access,
-    email: readStringValue(creds.email),
-  });
-  return buildResult({
-    providerId: PROVIDER_ID,
-    defaultModel: OPENAI_CODEX_DEFAULT_MODEL,
-    configPatch: { agents: { defaults: { models: { [OPENAI_CODEX_DEFAULT_MODEL]: {} } } } },
-    access: creds.access,
-    refresh: creds.refresh,
-    expires: creds.expires,
-    email: identity.email,
-    profileName: identity.profileName,
-    credentialExtra: buildCodexCredentialExtra(identity),
-  });
-}
-
-async function runOpenAICodexOAuth(ctx: OpenAICodexOAuthContext) {
-  const [{ loginOpenAICodexOAuth }, { buildOauthProviderAuthResult }] = await Promise.all([
-    import("./openai-chatgpt-oauth.runtime.js"),
-    import("openclaw/plugin-sdk/provider-auth-result"),
-  ]);
-  const creds = await loginOpenAICodexOAuth({
-    prompter: ctx.prompter,
-    runtime: ctx.runtime,
-    oauth: ctx.oauth,
-    isRemote: ctx.isRemote,
-    openUrl: ctx.openUrl,
-    signal: ctx.signal,
-    assertCurrent: ctx.assertCurrent,
-    onManualCodeInput: ctx.onManualCodeInput,
-    localBrowserMessage: "Complete sign-in in browser…",
-  });
-  if (!creds) {
-    return { profiles: [] };
-  }
-
-  return buildOpenAICodexAuthResult(buildOauthProviderAuthResult, creds);
-}
-
-async function runOpenAICodexDeviceCode(ctx: ProviderAuthContext) {
-  const spin = ctx.prompter.progress("Starting device code flow…");
-  try {
-    const [{ loginOpenAICodexDeviceCode }, { buildOauthProviderAuthResult }] = await Promise.all([
-      import("./openai-chatgpt-device-code.js"),
-      import("openclaw/plugin-sdk/provider-auth-result"),
-    ]);
-    const creds = await loginOpenAICodexDeviceCode({
-      ...(ctx.signal ? { signal: ctx.signal } : {}),
-      assertCurrent: ctx.assertCurrent,
-      onProgress: (message) => spin.update(message),
-      onVerification: async ({ verificationUrl, userCode, expiresInMs }) => {
-        const expiresInMinutes = Math.max(1, Math.round(expiresInMs / 60_000));
-        const deviceCodeMessage = [
-          ctx.isRemote
-            ? "Open this URL in your LOCAL browser and enter the code below."
-            : "Open this URL in your browser and enter the code below.",
-          `URL: <${verificationUrl}>`,
-        ].join("\n");
-        if (ctx.isRemote) {
-          await ctx.openUrl(verificationUrl);
-        }
-        if (ctx.prompter.deviceCode) {
-          await ctx.prompter.deviceCode({
-            title: "OpenAI Codex device code",
-            code: userCode,
-            expiresInMinutes,
-            message: "Enter this one-time code on the sign-in page.",
-          });
-        } else {
-          // The prompter note is the user-facing TTY fallback, so
-          // remote/headless users need the code in its plain-text body.
-          await ctx.prompter.note(
-            [
-              deviceCodeMessage,
-              `Code: ${userCode}`,
-              `Code expires in ${expiresInMinutes} minutes. Never share it.`,
-            ].join("\n"),
-            "OpenAI Codex device code",
-          );
-        }
-        if (ctx.isRemote) {
-          // Keep the persistent runtime log URL-only; the short-lived code
-          // belongs on the interactive surface that requested authorization.
-          ctx.runtime.log(`\nOpen this URL in your LOCAL browser:\n\n${verificationUrl}\n`);
-          return;
-        }
-        try {
-          await ctx.openUrl(verificationUrl);
-          ctx.runtime.log(`Open: ${verificationUrl}`);
-        } catch {
-          ctx.runtime.log(`Open manually: ${verificationUrl}`);
-        }
-      },
-    });
-    spin.stop("OpenAI device code complete");
-
-    return buildOpenAICodexAuthResult(buildOauthProviderAuthResult, creds);
-  } catch (error) {
-    spin.stop("OpenAI device code failed");
-    ctx.runtime.error(formatErrorMessage(error));
-    await ctx.prompter.note(
-      "Trouble with device code login? See https://docs.openclaw.ai/start/faq",
-      "OAuth help",
-    );
-    throw error;
-  }
-}
-
-export function buildOpenAIChatGPTAuthMethodRuns(): Readonly<
-  Record<"oauth" | "device-code", ProviderAuthMethod["run"]>
-> {
-  return {
-    oauth: runOpenAICodexOAuth,
-    "device-code": runOpenAICodexDeviceCode,
-  };
-}
-
 export function buildOpenAICodexProviderHooks(): Required<
   Pick<
     ProviderPlugin,
@@ -537,7 +363,6 @@ export function buildOpenAICodexProviderHooks(): Required<
     | "normalizeTransport"
     | "resolveUsageAuth"
     | "fetchUsageSnapshot"
-    | "refreshOAuth"
   >
 > {
   return {
@@ -573,6 +398,5 @@ export function buildOpenAICodexProviderHooks(): Required<
     },
     resolveUsageAuth: resolveOpenAIUsageAuth,
     fetchUsageSnapshot: fetchOpenAIUsage,
-    refreshOAuth: refreshOpenAICodexOAuthCredential,
   };
 }

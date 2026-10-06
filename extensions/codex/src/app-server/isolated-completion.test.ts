@@ -44,7 +44,7 @@ function createParams(): IsolatedParams {
           modelId: "gpt-5.4",
           api: "openai-responses",
           baseUrl: "https://api.openai.com/v1",
-          authRequirement: "subscription",
+          authRequirement: "api-key",
           requestTransportOverrides: "none",
         },
       },
@@ -106,7 +106,6 @@ describe("runCodexIsolatedCompletion", () => {
     });
     expect(mocks.resolveAuthHandoff).toHaveBeenCalledWith(
       expect.objectContaining({
-        authRequirement: "subscription",
         authProfileId: "openai:test",
         authProfileStore,
         agentDir: "/tmp/agent",
@@ -117,7 +116,6 @@ describe("runCodexIsolatedCompletion", () => {
       expect.objectContaining({
         model: { mode: "required", id: "gpt-5.4" },
         profile: "openai:test",
-        authRequirement: "subscription",
         isolation: "private-stdio",
         assertCurrent: params.assertCurrent,
         requireNoExternalCapabilities: true,

@@ -91,10 +91,10 @@ no `openclaw plugins install` step. Start at the credential you already have.
 }
 ```
 
-**Credential alternatives:** `openclaw models auth login --provider xai
---method oauth`, `XAI_API_KEY` in the Gateway environment, or
-`plugins.entries.xai.config.webSearch.apiKey`. For a gateway install, put env
-vars in `~/.openclaw/.env`.
+**Credential options:** `XAI_API_KEY` in the Gateway environment,
+`plugins.entries.xai.config.webSearch.apiKey`, or a saved key via
+`openclaw models auth paste-api-key --provider xai`. For a gateway install,
+put env vars in `~/.openclaw/.env`.
 
 ## How it works
 
@@ -112,10 +112,10 @@ searches can run longer than the shared `web_search` default. This budget
 includes credential preparation, the search request, and authentication
 recovery. Override it with `tools.web.search.timeoutSeconds`.
 
-OAuth refresh failures remain authentication errors rather than being reported
-as a missing API key. If a refresh cannot recover, sign in again with
-`openclaw models auth login --provider xai --method oauth`; increasing the search
-timeout does not repair an unavailable credential.
+Authentication failures remain authentication errors rather than being
+reported as a missing API key. If the saved key becomes invalid, update it
+with `openclaw models auth paste-api-key --provider xai`; increasing the
+search timeout does not repair an unavailable credential.
 
 ## Base URL overrides
 

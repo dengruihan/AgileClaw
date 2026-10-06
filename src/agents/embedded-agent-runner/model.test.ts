@@ -241,7 +241,6 @@ vi.mock("./model.static-catalog.js", () => ({
 import type { OpenClawConfig, OpenClawConfigInput } from "../../config/config.js";
 import type { ModelDefinitionConfig, ModelProviderConfig } from "../../config/types.models.js";
 import type { Model } from "../../llm/types.js";
-import { getModelProviderLocalService } from "../provider-local-service.js";
 import { getModelProviderRequestTransport } from "../provider-request-config.js";
 import {
   applyConfiguredProviderOverrides,
@@ -872,7 +871,7 @@ describe("resolveModel", () => {
       provider: "openai",
       id: "gpt-5.3-codex",
       name: "GPT-5.3 Codex",
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api",
       reasoning: true,
       input: ["text", "image"],
@@ -898,7 +897,7 @@ describe("resolveModel", () => {
     expectRecordFields(expectResolvedModel(result), {
       provider: "openai",
       id: "gpt-5.3-codex",
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api",
       contextWindow: 400_000,
       maxTokens: 128_000,
@@ -932,7 +931,7 @@ describe("resolveModel", () => {
           api:
             params.context.authProfileMode === "api_key"
               ? ("openai-responses" as const)
-              : ("openai-chatgpt-responses" as const),
+              : ("openai-responses" as const),
           baseUrl:
             params.context.authProfileMode === "api_key"
               ? "https://api.openai.com/v1"
@@ -1034,11 +1033,6 @@ describe("resolveModel", () => {
       api: "openai-completions",
       headers: { "X-Proxy": "static-fast-path" },
       request: { proxy: { mode: "explicit-proxy", url: "http://127.0.0.1:18080" } },
-      localService: {
-        command: "/opt/mistral/start",
-        args: ["--port", "18080"],
-        healthUrl: "http://127.0.0.1:18080/health",
-      },
       models: [],
     });
 
@@ -1053,11 +1047,6 @@ describe("resolveModel", () => {
     expect(model.headers).toEqual({ "X-Proxy": "static-fast-path" });
     expect(getModelProviderRequestTransport(model)).toEqual({
       proxy: { mode: "explicit-proxy", url: "http://127.0.0.1:18080" },
-    });
-    expect(getModelProviderLocalService(model)).toEqual({
-      command: "/opt/mistral/start",
-      args: ["--port", "18080"],
-      healthUrl: "http://127.0.0.1:18080/health",
     });
     expect(discoverAuthStorageFacts).not.toHaveBeenCalled();
     expect(discoverModels).not.toHaveBeenCalled();
@@ -1965,7 +1954,7 @@ describe("resolveModel", () => {
     mockOpenAICodexTemplateModel(discoverModels);
 
     const cfg = makeProviderConfig("openai", {
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       models: [
         {
           ...makeModel("gpt-5.4"),
@@ -2007,7 +1996,7 @@ describe("resolveModel", () => {
     expectRecordFields(result.model, {
       provider: "openai",
       id: "gpt-5.4",
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       baseUrl: "https://chatgpt.com/backend-api",
       contextWindow: 1_050_000,
       contextTokens: 272_000,

@@ -30,9 +30,7 @@ type SettledTurnFinalizationAttemptParams = Parameters<
   NonNullable<AgentHarnessV2["finalizeSettledTurn"]>
 >[0]["attempt"];
 
-function createAttempt(
-  authRequirement?: "api-key" | "subscription",
-): SettledTurnFinalizationAttemptParams {
+function createAttempt(authRequirement?: "api-key"): SettledTurnFinalizationAttemptParams {
   return {
     prompt: "Produce the final user-visible answer now.",
     sessionId: "session-1",
@@ -237,7 +235,7 @@ describe("runCodexSettledTurnFinalization", () => {
       expect.objectContaining({
         model: { mode: "required", id: "gpt-5.6-luna" },
         modelProvider,
-        profile: "openai:captured",
+        preparedAuth: { kind: "api-key", apiKey: "synthetic-captured-key" },
         isolation: "private-stdio",
         requireNoExternalCapabilities: true,
         allowEmptyText: true,
@@ -291,12 +289,13 @@ describe("runCodexSettledTurnFinalization", () => {
     expect(mocks.runBounded).toHaveBeenCalledWith(
       expect.objectContaining({
         preparedAuth: { kind: "api-key", apiKey: "synthetic-resolved-api-key" },
-        authRequirement: "api-key",
         authProfileStore: attempt.authProfileStore,
       }),
     );
     expect(mocks.runBounded.mock.calls[0]?.[0]).not.toHaveProperty("profile");
-    expect(resolveProfile).not.toHaveBeenCalled();
+    expect(resolveProfile).not.toHaveBeenCalledWith(
+      expect.objectContaining({ profileId: "openai:outer" }),
+    );
     expect(result.assistant).toMatchObject({
       api: "openai-responses",
       provider: "openai",
@@ -326,78 +325,32 @@ describe("runCodexSettledTurnFinalization", () => {
     );
   });
 
-  it.each(["agent", "user"])(
-    "uses the selected scoped subscription for a bounded side turn (ordinary home: %s)",
-    async (homeScope) => {
-      const attempt = createAttempt("subscription");
-      const token = [
-        Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url"),
-        Buffer.from(
-          JSON.stringify({
-            "https://api.openai.com/auth": { chatgpt_account_id: "synthetic-account" },
-          }),
-        ).toString("base64url"),
-        "synthetic-signature",
-      ].join(".");
-      attempt.authProfileStore.profiles["openai:captured"] = {
-        type: "token",
-        provider: "openai",
-        token,
-      };
-      const resolveProfile = vi.spyOn(agentAuth, "resolveApiKeyForProfile").mockResolvedValue({
-        apiKey: token,
-        provider: "openai",
-        profileId: "openai:captured",
-        profileType: "token",
-      });
-      const ordinaryNativeHome = homeScope === "user";
-      if (ordinaryNativeHome) {
-        attempt.runtimePlan!.auth.forwardedAuthProfileId = "openai:captured";
-      }
-      const settledAttempt = createSettledAttempt({
-        model: "gpt-5.6-luna",
-        authProfileId: ordinaryNativeHome ? undefined : "openai:captured",
-      });
-      const options = { pluginConfig: { appServer: { homeScope } } };
+  it("uses the selected API-key profile for a bounded side turn", async () => {
+    const attempt = createAttempt("api-key");
+    const settledAttempt = createSettledAttempt({
+      model: "gpt-5.6-luna",
+      authProfileId: "openai:captured",
+    });
 
-      await finalize(attempt, settledAttempt, options);
+    await finalize(attempt, settledAttempt, {
+      pluginConfig: { appServer: { homeScope: "agent" } },
+    });
 
-      expect(resolveProfile).toHaveBeenCalledExactlyOnceWith({
-        store: attempt.authProfileStore,
-        profileId: "openai:captured",
-        agentDir: attempt.agentDir,
-      });
-      expect(authBridge.resolveCodexAppServerPreparedAuthHandoff).toHaveBeenCalledWith(
-        expect.objectContaining({
-          homeScope: "agent",
-          authProfileId: "openai:captured",
-          authProfileStore: attempt.authProfileStore,
-          authRequirement: "subscription",
-        }),
-      );
-      expect(mocks.runBounded).toHaveBeenCalledWith(
-        expect.objectContaining({
-          isolation: "private-stdio",
-          options,
-          authRequirement: "subscription",
-          preparedAuth: {
-            kind: "profile",
-            profileId: "openai:captured",
-            store: attempt.authProfileStore,
-            snapshot: expect.objectContaining({
-              loginParams: {
-                type: "chatgptAuthTokens",
-                accessToken: token,
-                chatgptAccountId: "synthetic-account",
-                chatgptPlanType: null,
-              },
-            }),
-          },
-        }),
-      );
-      expect(mocks.runBounded.mock.calls[0]?.[0]).not.toHaveProperty("profile");
-    },
-  );
+    expect(authBridge.resolveCodexAppServerPreparedAuthHandoff).toHaveBeenCalledWith(
+      expect.objectContaining({
+        homeScope: "agent",
+        authProfileId: "openai:captured",
+        authProfileStore: attempt.authProfileStore,
+      }),
+    );
+    expect(mocks.runBounded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isolation: "private-stdio",
+        preparedAuth: { kind: "api-key", apiKey: "synthetic-captured-key" },
+      }),
+    );
+    expect(mocks.runBounded.mock.calls[0]?.[0]).not.toHaveProperty("profile");
+  });
 
   it("does not mutate the transcript when the bounded turn is interrupted", async () => {
     mocks.runBounded.mockRejectedValue(
@@ -519,7 +472,11 @@ describe("runCodexSettledTurnFinalization", () => {
       vi.mocked(authBridge.resolveCodexAppServerPreparedAuthHandoff).mockImplementationOnce(
         async () => {
           caller.abort(reason);
-          return { nativeAuthProfile: false, authProfileId: "openai:captured" };
+          return {
+            authProfileId: "openai:captured",
+            nativeAuthProfile: false,
+            preparedAuth: { kind: "api-key", apiKey: "captured-platform-key" },
+          };
         },
       );
     } else if (stage === "after inference") {

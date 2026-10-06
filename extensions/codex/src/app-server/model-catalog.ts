@@ -13,10 +13,8 @@ import {
   listAllCodexAppServerModels,
   type CodexAppServerModel,
 } from "./models.js";
-import { probeCodexNativeAuth } from "./native-auth.js";
 import type { CodexGetAccountResponse } from "./protocol.js";
 import { withCodexAppServerJsonClient } from "./request.js";
-import { isCodexResponsesOAuthCredential } from "./responses-oauth.js";
 import { captureSharedCodexAppServerCatalogLifetime } from "./shared-client.js";
 
 type ModelInputType = NonNullable<ModelCatalogEntry["input"]>[number];
@@ -55,7 +53,7 @@ export function createCodexAppServerModelCatalog(runtime: string) {
   type Observation = {
     pluginConfig: unknown;
     models?: ReadonlySet<string>;
-    accountType?: "apiKey" | "chatgpt";
+    accountType?: "apiKey";
     authMode?: string;
     isCurrent?: () => boolean;
   };
@@ -109,6 +107,9 @@ export function createCodexAppServerModelCatalog(runtime: string) {
       const options = resolveCodexAppServerRuntimeOptions({ pluginConfig });
       const ownsLocalProcess =
         options.start.transport === "stdio" && !isCodexAppServerProxyLaunch(options.start.args);
+      if (ownsLocalProcess && options.start.homeScope === "user") {
+        return [];
+      }
       const authProfileStore =
         ownsLocalProcess && options.start.homeScope === "agent"
           ? resolveCodexAppServerAuthProfileStore({
@@ -119,14 +120,7 @@ export function createCodexAppServerModelCatalog(runtime: string) {
       const authProfileId = authProfileStore
         ? resolveCodexAppServerAuthProfileId({ store: authProfileStore, config: params.config })
         : undefined;
-      // SIWC's public provider owns the account model list. Native Codex sees only a
-      // placeholder API key here, so its bundled catalog cannot describe that account.
-      if (isCodexResponsesOAuthCredential(authProfileStore?.profiles[authProfileId ?? ""])) {
-        return [];
-      }
-      const usesNativeHome = ownsLocalProcess && options.start.homeScope === "user";
-      const native = usesNativeHome ? await probeCodexNativeAuth({ pluginConfig }) : undefined;
-      if ((usesNativeHome && !native) || disposed || observations.get(key) !== observation) {
+      if (disposed || observations.get(key) !== observation) {
         return [];
       }
       const { start } = options;
@@ -158,11 +152,10 @@ export function createCodexAppServerModelCatalog(runtime: string) {
             requestParams: { refreshToken: false },
           });
           const observedType = account.account?.type;
-          const accountType = account.requiresOpenaiAuth
-            ? observedType === "apiKey" || observedType === "chatgpt"
-              ? observedType
-              : undefined
-            : undefined;
+          const accountType =
+            account.requiresOpenaiAuth && observedType === "apiKey"
+              ? ("apiKey" as const)
+              : undefined;
           return { models, isCurrent, accountType } as const;
         },
       );
@@ -171,22 +164,9 @@ export function createCodexAppServerModelCatalog(runtime: string) {
         return [];
       }
       observation.models = new Set(result.models.map((model) => model.id));
-      observation.accountType =
-        !usesNativeHome ||
-        (native?.mode === "api-key" && result.accountType === "apiKey") ||
-        ((native?.mode === "oauth" || native?.mode === "token") && result.accountType === "chatgpt")
-          ? result.accountType
-          : undefined;
+      observation.accountType = result.accountType === "apiKey" ? "apiKey" : undefined;
       observation.isCurrent = result.isCurrent;
-      // A remote ChatGPT account does not distinguish OAuth from caller-supplied tokens.
-      // Carry the local mode only after its account type matches this discovery observation.
-      observation.authMode =
-        observation.accountType === "apiKey"
-          ? "api_key"
-          : observation.accountType === "chatgpt" &&
-              (native?.mode === "oauth" || native?.mode === "token")
-            ? native.mode
-            : undefined;
+      observation.authMode = observation.accountType ? "api_key" : undefined;
       return codexAppServerModelsToCatalogEntries(result.models, runtime);
     },
   };

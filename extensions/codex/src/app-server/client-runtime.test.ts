@@ -7,15 +7,7 @@ const EXPECTED_LIVE_THREAD_IDLE_TIMEOUT_MS = 30 * 60_000;
 const EXPECTED_MAX_IDLE_LIVE_THREADS = 64;
 
 const mocks = vi.hoisted(() => ({
-  refreshAuth: vi.fn(async (_params?: { authProfileStore?: unknown }) => ({
-    accessToken: "refreshed",
-    chatgptAccountId: "account",
-  })),
   mergeRateLimitUpdate: vi.fn(),
-}));
-
-vi.mock("./auth-bridge.js", () => ({
-  refreshCodexAppServerAuthTokens: mocks.refreshAuth,
 }));
 
 vi.mock("./rate-limit-cache.js", () => ({
@@ -55,7 +47,6 @@ describe("Codex app-server client runtime", () => {
     }
     clients.length = 0;
     vi.useRealTimers();
-    mocks.refreshAuth.mockClear();
     mocks.mergeRateLimitUpdate.mockClear();
   });
 
@@ -95,7 +86,7 @@ describe("Codex app-server client runtime", () => {
     const updatedContext = {
       ...context,
       authProfileStore: { version: 1 as const, profiles: {} },
-      config: { models: { mode: "merge" as const } },
+      config: { models: {} },
     };
     const addNotificationHandler = vi.spyOn(harness.client, "addNotificationHandler");
     const addRequestHandler = vi.spyOn(harness.client, "addRequestHandler");
@@ -105,137 +96,17 @@ describe("Codex app-server client runtime", () => {
     ensureCodexAppServerClientRuntime(harness.client, updatedContext);
 
     expect(addNotificationHandler).toHaveBeenCalledTimes(1);
-    expect(addRequestHandler).toHaveBeenCalledTimes(1);
+    expect(addRequestHandler).not.toHaveBeenCalled();
     expect(addCloseHandler).toHaveBeenCalledTimes(1);
     harness.send({
       method: "account/rateLimits/updated",
       params: { rateLimits: { primary: { usedPercent: 12 } } },
     });
-    harness.send({
-      id: "refresh-1",
-      method: "account/chatgptAuthTokens/refresh",
-      params: { reason: "expired" },
-    });
 
     await vi.waitFor(() => expect(mocks.mergeRateLimitUpdate).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(mocks.refreshAuth).toHaveBeenCalledTimes(1));
-    expect(mocks.refreshAuth).toHaveBeenCalledWith({
-      ...context,
-      config: updatedContext.config,
-    });
     expect(mocks.mergeRateLimitUpdate).toHaveBeenCalledWith(harness.client, {
       rateLimits: { primary: { usedPercent: 12 } },
     });
-    await vi.waitFor(() =>
-      expect(harness.writes.map((line) => JSON.parse(line) as unknown)).toContainEqual({
-        id: "refresh-1",
-        result: { accessToken: "refreshed", chatgptAccountId: "account" },
-      }),
-    );
-  });
-
-  it("rejects ChatGPT refresh on a prepared API-key client", async () => {
-    const harness = createHarness();
-    ensureCodexAppServerClientRuntime(harness.client, {
-      agentDir: "/tmp/agent",
-      authMode: "prepared-api-key",
-    });
-
-    harness.send({
-      id: "refresh-api-key",
-      method: "account/chatgptAuthTokens/refresh",
-      params: { reason: "expired" },
-    });
-
-    await vi.waitFor(() => expect(harness.writes.length).toBeGreaterThan(0));
-    expect(mocks.refreshAuth).not.toHaveBeenCalled();
-    expect(JSON.parse(harness.writes.at(-1) ?? "{}")).toMatchObject({
-      id: "refresh-api-key",
-      error: {
-        message: "ChatGPT token refresh is unavailable for prepared Codex API-key auth.",
-      },
-    });
-  });
-
-  it("bounds token refresh at the Codex external-auth request boundary", async () => {
-    vi.useFakeTimers();
-    mocks.refreshAuth.mockImplementationOnce(() => new Promise(() => {}));
-    const harness = createRuntimeHarness();
-
-    harness.send({
-      id: "refresh-timed-out",
-      method: "account/chatgptAuthTokens/refresh",
-      params: { reason: "expired" },
-    });
-
-    await vi.advanceTimersByTimeAsync(8_999);
-    expect(harness.writes).toHaveLength(0);
-    await vi.advanceTimersByTimeAsync(1);
-
-    expect(JSON.parse(harness.writes.at(-1) ?? "{}")).toMatchObject({
-      id: "refresh-timed-out",
-      error: { message: expect.stringContaining("token refresh timed out") },
-    });
-  });
-
-  it("requests retirement when its auth owner rejects a workspace change", async () => {
-    vi.useFakeTimers();
-    mocks.refreshAuth.mockRejectedValueOnce(new Error("ChatGPT workspace changed"));
-    const harness = createHarness();
-    const onAuthRefreshFailure = vi.fn();
-    ensureCodexAppServerClientRuntime(harness.client, {
-      agentDir: "/tmp/agent",
-      authProfileId: "openai:default",
-      onAuthRefreshFailure,
-    });
-
-    harness.send({
-      id: "refresh-other-workspace",
-      method: "account/chatgptAuthTokens/refresh",
-      params: {
-        reason: "unauthorized",
-        previousAccountId: "original-workspace",
-      },
-    });
-
-    await vi.advanceTimersByTimeAsync(0);
-    expect(onAuthRefreshFailure).toHaveBeenCalledOnce();
-    expect(JSON.parse(harness.writes.at(-1) ?? "{}")).toMatchObject({
-      id: "refresh-other-workspace",
-      error: { message: expect.stringContaining("ChatGPT workspace changed") },
-    });
-  });
-
-  it("keeps the physical client's original auth store across later leases", async () => {
-    const harness = createHarness();
-    const originalStore = { version: 1 as const, profiles: {} };
-    const replacementStore = { version: 1 as const, profiles: {} };
-    ensureCodexAppServerClientRuntime(harness.client, {
-      agentDir: "/tmp/agent",
-      authProfileId: "openai:default",
-      authProfileStore: originalStore,
-    });
-    ensureCodexAppServerClientRuntime(harness.client, {
-      agentDir: "/tmp/agent",
-      authProfileId: "openai:default",
-      authProfileStore: replacementStore,
-      config: { models: { mode: "merge" } },
-    });
-
-    harness.send({
-      id: "refresh-original-owner",
-      method: "account/chatgptAuthTokens/refresh",
-      params: { reason: "unauthorized", previousAccountId: "account" },
-    });
-
-    await vi.waitFor(() => expect(mocks.refreshAuth).toHaveBeenCalledOnce());
-    expect(mocks.refreshAuth).toHaveBeenCalledWith(
-      expect.objectContaining({
-        authProfileStore: originalStore,
-        previousAccountId: "account",
-      }),
-    );
-    expect(mocks.refreshAuth.mock.calls[0]?.[0]?.authProfileStore).toBe(originalStore);
   });
 
   it("retains independently subscribed conversations on the same physical client", async () => {

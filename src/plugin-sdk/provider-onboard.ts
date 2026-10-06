@@ -15,6 +15,7 @@ import {
 } from "../config/model-input.js";
 import type { AgentModelEntryConfig } from "../config/types.agent-defaults.js";
 import type {
+  ApiKeyModelApi,
   ModelApi,
   ModelDefinitionConfig,
   ModelProviderConfig,
@@ -59,7 +60,8 @@ function resolveConnectionModels(
   cfg: OpenClawConfig,
   models: ProviderPresetModels,
 ): ModelDefinitionConfig[] {
-  return cfg.models?.mode === "replace" ? structuredClone(resolvePresetModels(models)) : [];
+  void cfg;
+  return structuredClone(resolvePresetModels(models));
 }
 
 function extractAgentDefaultModelFallbacks(model: unknown): string[] | undefined {
@@ -179,7 +181,7 @@ function applyProviderConfigWithMergedModels(
     agentModels: Record<string, AgentModelEntryConfig>;
     providerId: string;
     providerState: ProviderModelMergeState;
-    api: ModelApi;
+    api: ApiKeyModelApi;
     baseUrl: string;
     mergedModels: ModelDefinitionConfig[];
   },
@@ -359,7 +361,6 @@ export function applyOnboardAuthAgentModelsAndProviders(
     },
     models: {
       ...cfg.models,
-      mode: cfg.models?.mode ?? "merge",
       providers: mergedProviders,
     },
   };
@@ -427,7 +428,7 @@ export function applyProviderConfigWithDefaultModels(
   params: {
     agentModels: Record<string, AgentModelEntryConfig>;
     providerId: string;
-    api: ModelApi;
+    api: ApiKeyModelApi;
     baseUrl: string;
     defaultModels: ModelDefinitionConfig[];
     defaultModelId?: string;
@@ -458,7 +459,7 @@ export function applyProviderConfigWithDefaultModel(
   params: {
     agentModels: Record<string, AgentModelEntryConfig>;
     providerId: string;
-    api: ModelApi;
+    api: ApiKeyModelApi;
     baseUrl: string;
     defaultModel: ModelDefinitionConfig;
     defaultModelId?: string;
@@ -476,7 +477,7 @@ export function applyProviderConfigWithDefaultModelPreset(
   cfg: OpenClawConfig,
   params: {
     providerId: string;
-    api: ModelApi;
+    api: ApiKeyModelApi;
     baseUrl: string;
     defaultModel: ModelDefinitionConfig;
     defaultModelId?: string;
@@ -512,7 +513,7 @@ export function applyProviderConfigWithDefaultModelsPreset(
   cfg: OpenClawConfig,
   params: {
     providerId: string;
-    api: ModelApi;
+    api: ApiKeyModelApi;
     baseUrl: string;
     defaultModels: ProviderPresetModels;
     defaultModelId?: string;
@@ -565,7 +566,7 @@ export function applyProviderConfigWithModelCatalog(
   params: {
     agentModels: Record<string, AgentModelEntryConfig>;
     providerId: string;
-    api: ModelApi;
+    api: ApiKeyModelApi;
     baseUrl: string;
     catalogModels: ModelDefinitionConfig[];
   },
@@ -593,7 +594,7 @@ export function applyProviderConfigWithModelCatalogPreset(
   cfg: OpenClawConfig,
   params: {
     providerId: string;
-    api: ModelApi;
+    api: ApiKeyModelApi;
     baseUrl: string;
     catalogModels: ProviderPresetModels;
     aliases?: readonly AgentModelAliasEntry[];

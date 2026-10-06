@@ -48,7 +48,6 @@ import { resolveImplicitProviderDiscoveryScope } from "./models-config.providers
 import { prepareImplicitProviderStaticCatalog } from "./models-config.providers.implicit.js";
 import { createModelCatalogIdentityKeyResolver } from "./openai-model-routes.js";
 import {
-  PREPARED_MODEL_CATALOG_WORKER_TIMEOUT_MS,
   fingerprintPreparedModelCatalogGeneration,
   fingerprintPreparedModelCatalogPluginContext,
   fingerprintPreparedModelWorkerRequest,
@@ -312,8 +311,7 @@ async function runCatalogRequest(
         authModes: resolveUsableAgentCredentialModes(credentials),
       };
     }
-    const { prepareAgentCatalogSource } =
-      await import("./prepared-model-runtime.scoped-catalog.js");
+    const { ensureAgentCatalogSource } = await import("./prepared-model-runtime.scoped-catalog.js");
     const { prepareFullCatalogFacts } = await import("./prepared-model-runtime.full-catalog.js");
     const startupProviderIds = new Set(value.providerIds.map(normalizeProviderId));
     const exactAgentFacts = {
@@ -391,27 +389,13 @@ async function runCatalogRequest(
       staticOwner.staticProviderIds = staticProviderIds;
     }
     catalogGeneration = staticOwner.pluginGeneration;
-    const {
-      value: source,
-      providerExpiries,
-      providerModels,
-    } = await captureProviderCatalogExpiries(() =>
-      prepareAgentCatalogSource(exactAgentFacts, catalogGeneration, "live", false, {
-        authStore,
-        providerDiscoveryProviderIds: request.providerIds,
-        providerDiscoveryTimeoutMs: PREPARED_MODEL_CATALOG_WORKER_TIMEOUT_MS,
-      }),
-    );
-    const facts = await prepareFullCatalogFacts(
-      exactAgentFacts,
-      catalogGeneration,
-      "live",
-      source,
-      {
-        includeNative: false,
-        providerIds: request.providerIds,
-      },
-    );
+    const { providerExpiries, providerModels } = await captureProviderCatalogExpiries(async () => {
+      await ensureAgentCatalogSource(exactAgentFacts, catalogGeneration, false);
+    });
+    const facts = await prepareFullCatalogFacts(exactAgentFacts, catalogGeneration, "live", {
+      includeNative: false,
+      providerIds: request.providerIds,
+    });
     // Full discovery can publish routes absent from startup config. Pair those exact rows with
     // provider-owned synthetic auth before the catalog and auth modes cross the worker boundary.
     const catalogCredentials = {

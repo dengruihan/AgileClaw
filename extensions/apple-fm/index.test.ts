@@ -117,7 +117,6 @@ describe("Apple Foundation Models setup", () => {
       compat: { supportsTools: true, supportsJsonSchemaResponseFormat: true },
     });
     expect(configured?.apiKey).toBeUndefined();
-    expect(configured?.localService).toBeUndefined();
     expect(
       provider.resolveSyntheticAuth?.({ provider: "apple-fm", providerConfig: configured }),
     ).toMatchObject({
@@ -191,7 +190,6 @@ describe("Apple Foundation Models setup", () => {
         },
       },
       models: {
-        mode: "replace",
         providers: { existing: { baseUrl: "https://example.com", models: [] } },
       },
     };
@@ -203,7 +201,6 @@ describe("Apple Foundation Models setup", () => {
     const updated = await setup(nonInteractiveContext(config));
     expect(config).toEqual(before);
     expect(updated?.auth).toEqual(before.auth);
-    expect(updated?.models?.mode).toBe("replace");
     expect(updated?.models?.providers?.existing).toEqual(before.models?.providers?.existing);
     expect(updated?.agents?.defaults?.model).toEqual(before.agents?.defaults?.model);
     expect(updated?.agents?.defaults?.utilityModel).toBe("apple-fm/system");

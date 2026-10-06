@@ -19,10 +19,6 @@ import { resolveModelExtraParamSources } from "./model-extra-params.js";
 import { createOpenAICompletionsPayloadPolicyWrapper } from "./openai-completions-payload-policy.js";
 import { resolveProviderRequestCapabilities } from "./provider-attribution.js";
 import {
-  attachModelProviderLocalService,
-  getModelProviderLocalService,
-} from "./provider-local-service.js";
-import {
   attachModelProviderRequestTransport,
   getModelProviderRequestTransport,
   getModelProviderRequestRouteFacts,
@@ -110,15 +106,12 @@ export function configureAiTransportRuntimeHost(): void {
       }).headers,
     requiresManagedTransport: (model) => {
       const request = getModelProviderRequestTransport(model);
-      return Boolean(request?.proxy || request?.tls || getModelProviderLocalService(model));
+      return Boolean(request?.proxy || request?.tls);
     },
     inheritManagedTransport: (source, target) =>
       inheritModelProviderRequestRouteFacts(
         source,
-        attachModelProviderLocalService(
-          attachModelProviderRequestTransport(target, getModelProviderRequestTransport(source)),
-          getModelProviderLocalService(source),
-        ),
+        attachModelProviderRequestTransport(target, getModelProviderRequestTransport(source)),
       ),
     transformTransportMessages,
     registerCustomApi: ensureCustomApiRegistered,

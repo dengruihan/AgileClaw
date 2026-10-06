@@ -5,7 +5,7 @@ import { isLegacyModelsAddCodexMetadataModel } from "./legacy-models-add-metadat
 
 function buildLegacyModel(
   id: string,
-  api: "openai-codex-responses" | "openai-chatgpt-responses" = "openai-codex-responses",
+  api: "openai-codex-responses" | "openai-responses" = "openai-codex-responses",
 ): Partial<ModelDefinitionConfig> {
   return {
     id,
@@ -33,7 +33,7 @@ describe("isLegacyModelsAddCodexMetadataModel", () => {
     expect(
       isLegacyModelsAddCodexMetadataModel({
         provider: "openai-codex",
-        model: buildLegacyModel("gpt-5.5-pro", "openai-chatgpt-responses"),
+        model: buildLegacyModel("gpt-5.5-pro", "openai-responses"),
       }),
     ).toBe(true);
   });

@@ -5,12 +5,7 @@ import {
 } from "openclaw/plugin-sdk/provider-onboard";
 import { createLegacyProviderConfig } from "openclaw/plugin-sdk/provider-test-contracts";
 import { describe, expect, it } from "vitest";
-import {
-  applyXaiConfig,
-  applyXaiOAuthConfig,
-  applyXaiProviderConfig,
-  XAI_DEFAULT_MODEL_REF,
-} from "./onboard.js";
+import { applyXaiConfig, applyXaiProviderConfig, XAI_DEFAULT_MODEL_REF } from "./onboard.js";
 
 describe("xai onboard", () => {
   it("adds xAI provider with correct settings", () => {
@@ -82,8 +77,8 @@ describe("xai onboard", () => {
     ).toBe("Custom Moving Grok 4.20");
   });
 
-  it("fills replace mode with the curated models newest first", () => {
-    const cfg = applyXaiProviderConfig({ models: { mode: "replace" } });
+  it("fills config with the curated models newest first", () => {
+    const cfg = applyXaiProviderConfig({});
 
     expect(cfg.models?.providers?.xai?.baseUrl).toBe("https://api.x.ai/v1");
     expect(cfg.models?.providers?.xai?.api).toBe("openai-responses");
@@ -96,19 +91,5 @@ describe("xai onboard", () => {
       "grok-4.20-0309-reasoning",
       "grok-4.20-0309-non-reasoning",
     ]);
-  });
-
-  it("uses the curated default while retaining the OAuth transport", () => {
-    const provider: ModelProviderConfig = {
-      api: "openai-responses",
-      auth: "oauth",
-      baseUrl: "https://cli-chat-proxy.grok.com/v1",
-      models: [],
-    };
-    const cfg = applyXaiOAuthConfig({}, provider);
-    expect(cfg.models?.providers?.xai).toMatchObject(provider);
-
-    expect(resolveAgentModelPrimaryValue(cfg.agents?.defaults?.model)).toBe("xai/grok-4.7");
-    expect(cfg.agents?.defaults?.models?.["xai/grok-4.7"]?.alias).toBe("Grok");
   });
 });

@@ -248,7 +248,7 @@ describe("resolvePluginDiscoveryProvidersRuntime", () => {
   });
 
   it("retains prepared auth through attribution until the provider hook changes", async () => {
-    const auth = { apiKey: "native-marker", source: "fixture", mode: "oauth" as const };
+    const auth = { apiKey: "native-marker", source: "fixture", mode: "api-key" as const };
     const provider: ProviderPlugin = {
       id: "deepseek",
       label: "Native fixture",
@@ -504,7 +504,7 @@ describe("resolvePluginDiscoveryProvidersRuntime", () => {
       resolveSyntheticAuth: () => ({
         apiKey: "synthetic-token",
         source: "test",
-        mode: "oauth",
+        mode: "api-key",
       }),
     };
     mocks.loadSource.mockReturnValue(syntheticProvider);

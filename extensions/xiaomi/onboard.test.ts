@@ -45,8 +45,8 @@ describe("xiaomi onboard", () => {
     ]);
   });
 
-  it("adds Xiaomi Token Plan replace rows with a regional endpoint preset", () => {
-    const cfg = applyXiaomiTokenPlanConfig({ models: { mode: "replace" } }, "ams");
+  it("adds Xiaomi Token Plan rows with a regional endpoint preset", () => {
+    const cfg = applyXiaomiTokenPlanConfig({}, "ams");
     const provider = cfg.models?.providers?.["xiaomi-token-plan"];
     expect(provider).toEqual({
       ...buildXiaomiTokenPlanProvider(),
@@ -74,17 +74,20 @@ describe("xiaomi onboard", () => {
       legacyModelId: "custom-token-plan-model",
       legacyModelName: "Custom Token Plan",
     });
-    expect(provider?.models.map((m) => m.id)).toEqual(["custom-token-plan-model"]);
+    expect(provider?.models.map((m) => m.id)).toEqual([
+      "custom-token-plan-model",
+      "mimo-v2.6-pro",
+      "mimo-v2.6-flash",
+      "mimo-v2.5-pro",
+      "mimo-v2.5",
+    ]);
   });
 
-  it("leaves ordinary Token Plan rows runtime-owned", () => {
-    for (const mode of [undefined, "merge"] as const) {
-      const cfg = applyXiaomiTokenPlanConfig({ models: { mode } }, "cn");
-      expect(cfg.models?.providers?.["xiaomi-token-plan"]?.models).toEqual([]);
-      expect(cfg.agents?.defaults?.models?.["xiaomi-token-plan/mimo-v2.6-pro"]).toEqual({
-        alias: "Xiaomi MiMo V2.6 Pro",
-      });
-      expect(applyXiaomiTokenPlanConfig(cfg, "cn")).toEqual(cfg);
-    }
+  it("is idempotent when Token Plan setup is reapplied", () => {
+    const cfg = applyXiaomiTokenPlanConfig({}, "cn");
+    expect(cfg.agents?.defaults?.models?.["xiaomi-token-plan/mimo-v2.6-pro"]).toEqual({
+      alias: "Xiaomi MiMo V2.6 Pro",
+    });
+    expect(applyXiaomiTokenPlanConfig(cfg, "cn")).toEqual(cfg);
   });
 });

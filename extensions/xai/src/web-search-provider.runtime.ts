@@ -179,7 +179,7 @@ function hasConfiguredXaiWebSearchCredentialRef(searchConfig?: Record<string, un
 
 type XaiResolvedWebSearchAuth = {
   apiKey: string;
-  mode?: "api-key" | "oauth" | "token" | "aws-sdk";
+  mode?: "api-key";
   profileId?: string;
 };
 
@@ -187,7 +187,6 @@ async function resolveXaiProviderAuthCredential(params: {
   config?: Record<string, unknown>;
   agentDir?: string;
   credentialPrecedence?: "profile-first" | "env-first";
-  forceRefresh?: boolean;
   profileId?: string;
   signal?: AbortSignal;
 }): Promise<XaiResolvedWebSearchAuth | undefined> {
@@ -205,7 +204,6 @@ async function resolveXaiProviderAuthCredential(params: {
             lockedProfile: true,
           }
         : {}),
-      ...(params.forceRefresh ? { forceRefresh: true } : {}),
       ...(params.credentialPrecedence ? { credentialPrecedence: params.credentialPrecedence } : {}),
     });
     params.signal?.throwIfAborted();
@@ -215,7 +213,7 @@ async function resolveXaiProviderAuthCredential(params: {
     }
     return {
       apiKey,
-      mode: resolved.mode,
+      ...(resolved.mode === "api-key" ? { mode: "api-key" as const } : {}),
       ...(resolved.profileId ? { profileId: resolved.profileId } : {}),
     };
   } catch (error) {
@@ -248,7 +246,7 @@ async function resolveXaiProviderApiKeyProfileFallback(params: {
   });
   for (const profileId of usableProfiles.profileIds) {
     const profile = store.profiles[profileId];
-    if (!profile || profile.provider !== XAI_PROVIDER_ID || profile.type === "oauth") {
+    if (!profile || profile.provider !== XAI_PROVIDER_ID || profile.type !== "api_key") {
       continue;
     }
     const resolved = await resolveXaiProviderAuthCredential({
@@ -260,7 +258,7 @@ async function resolveXaiProviderApiKeyProfileFallback(params: {
       params.signal?.throwIfAborted();
       return undefined;
     });
-    if (resolved?.apiKey && resolved.mode !== "oauth") {
+    if (resolved?.apiKey && resolved.mode === "api-key") {
       return resolved;
     }
   }
@@ -271,14 +269,13 @@ async function resolveXaiProviderApiKeyProfileFallback(params: {
 async function resolveXaiWebSearchAuth(
   ctx: { config?: Record<string, unknown>; agentDir?: string; signal?: AbortSignal },
   searchConfig?: Record<string, unknown>,
-  options?: { forceRefresh?: boolean; profileId?: string },
+  options?: { profileId?: string },
 ): Promise<XaiResolvedWebSearchAuth | undefined> {
   let providerAuth: XaiResolvedWebSearchAuth | undefined;
   try {
     providerAuth = await resolveXaiProviderAuthCredential({
       agentDir: ctx.agentDir,
       config: ctx.config,
-      forceRefresh: options?.forceRefresh,
       profileId: options?.profileId,
       signal: ctx.signal,
     });
@@ -290,10 +287,6 @@ async function resolveXaiWebSearchAuth(
     }
     throw error;
   }
-  if (providerAuth?.mode === "oauth") {
-    return providerAuth;
-  }
-
   const configured = resolveConfiguredXaiWebSearchCredential(searchConfig);
   if (configured) {
     return {
@@ -333,7 +326,7 @@ async function resolveXaiWebSearchApiKeyFallback(
     ctx.signal?.throwIfAborted();
     return undefined;
   });
-  if (providerAuth?.apiKey && providerAuth.mode !== "oauth") {
+  if (providerAuth?.apiKey) {
     return providerAuth;
   }
 
@@ -376,7 +369,7 @@ export async function executeXaiWebSearchProviderTool(
       return {
         error: "missing_xai_api_key",
         message:
-          "web_search (grok) needs xAI credentials. Run `openclaw onboard --auth-choice xai-oauth` to sign in with Grok, run `openclaw onboard --auth-choice xai-api-key`, set `XAI_API_KEY` in the Gateway environment, or configure `plugins.entries.xai.config.webSearch.apiKey`. If you do not want to configure search credentials, use web_fetch for a specific URL or the browser tool for interactive pages.",
+          "web_search (grok) needs an xAI API key. Run `openclaw onboard --auth-choice xai-api-key`, set `XAI_API_KEY` in the Gateway environment, or configure `plugins.entries.xai.config.webSearch.apiKey`. If you do not want to configure search credentials, use web_fetch for a specific URL or the browser tool for interactive pages.",
         docs: "https://docs.openclaw.ai/tools/web",
       };
     }
@@ -404,19 +397,6 @@ export async function executeXaiWebSearchProviderTool(
         throw error;
       }
       let authError = error;
-      if (auth.mode === "oauth") {
-        const refreshed = await resolveXaiWebSearchAuth(authContext, searchConfig, {
-          forceRefresh: true,
-          profileId: auth.profileId,
-        }).catch((refreshError: unknown) => {
-          signal?.throwIfAborted();
-          authError = refreshError;
-          return undefined;
-        });
-        if (refreshed?.apiKey && refreshed.apiKey !== auth.apiKey) {
-          return await runXaiWebSearch({ ...request, apiKey: refreshed.apiKey });
-        }
-      }
       const fallback = await resolveXaiWebSearchApiKeyFallback(authContext, searchConfig);
       if (!fallback?.apiKey || fallback.apiKey === auth.apiKey) {
         throw authError;

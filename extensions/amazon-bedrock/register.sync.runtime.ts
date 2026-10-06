@@ -1,6 +1,6 @@
 /**
  * Synchronous Amazon Bedrock provider registration. It wires Bedrock streaming,
- * model discovery, thinking policy, guardrails, and embedding integration.
+ * thinking policy, guardrails, and embedding integration.
  */
 import type { BedrockClient } from "@aws-sdk/client-bedrock";
 import type { StreamFn } from "openclaw/plugin-sdk/agent-core";
@@ -11,8 +11,6 @@ import type {
   OpenClawPluginApi,
   ProviderNormalizeResolvedModelContext,
 } from "openclaw/plugin-sdk/plugin-entry";
-import { resolveAwsSdkEnvVarName } from "openclaw/plugin-sdk/provider-auth-runtime";
-import { runLiveProviderCatalog } from "openclaw/plugin-sdk/provider-catalog-live-runtime";
 import {
   buildProviderReplayFamilyHooks,
   normalizeProviderId,
@@ -21,7 +19,6 @@ import {
   resolveClaudeMythos5ModelIdentity,
   resolveClaudeOpus5ModelIdentity,
   resolveClaudeSonnet5ModelIdentity,
-  type BedrockDiscoveryConfig,
 } from "openclaw/plugin-sdk/provider-model-shared";
 import { createPayloadPatchStreamWrapper } from "openclaw/plugin-sdk/provider-stream-shared";
 import { splitSystemPromptCacheBoundary } from "openclaw/plugin-sdk/provider-transport-runtime";
@@ -49,7 +46,6 @@ type GuardrailConfig = {
 };
 
 type AmazonBedrockPluginConfig = {
-  discovery?: BedrockDiscoveryConfig;
   guardrail?: GuardrailConfig;
 };
 
@@ -306,7 +302,7 @@ function patchMaxThinkingEffort(payload: Record<string, unknown>): void {
   payload.additionalModelRequestFields = fields;
 }
 
-/** Register Amazon Bedrock provider, discovery catalog, stream wrappers, and embeddings. */
+/** Register the Amazon Bedrock provider stream wrappers and embeddings. */
 export function registerAmazonBedrockPlugin(api: OpenClawPluginApi): void {
   // Keep registration-local constants inside the function so partial module
   // initialization during test bootstrap cannot trip TDZ reads.
@@ -429,24 +425,6 @@ export function registerAmazonBedrockPlugin(api: OpenClawPluginApi): void {
     label: "Amazon Bedrock",
     docsPath: "/providers/models",
     auth: [],
-    catalog: {
-      order: "simple",
-      run: (ctx) =>
-        runLiveProviderCatalog({
-          providerId,
-          run: async () => {
-            const { resolveImplicitBedrockProvider } = await import("./discovery.js");
-            const currentPluginConfig = resolveCurrentPluginConfig(ctx.config);
-            const implicit = await resolveImplicitBedrockProvider({
-              discoveryMode: "strict",
-              pluginConfig: currentPluginConfig,
-              env: ctx.env,
-            });
-            return implicit ? { provider: implicit } : null;
-          },
-        }),
-    },
-    resolveConfigApiKey: ({ env }) => resolveAwsSdkEnvVarName(env),
     normalizeResolvedModel: normalizeBedrockResolvedModel,
     supportsSystemPromptCacheBoundary: true,
     createStreamFn: ({ model }) =>
@@ -482,10 +460,7 @@ export function registerAmazonBedrockPlugin(api: OpenClawPluginApi): void {
         }
       }
 
-      const region =
-        resolveBedrockRegion(config) ??
-        extractRegionFromBaseUrl(model?.baseUrl) ??
-        currentPluginConfig?.discovery?.region;
+      const region = resolveBedrockRegion(config) ?? extractRegionFromBaseUrl(model?.baseUrl);
       const mayNeedCacheInjection =
         isBedrockAppInferenceProfile(modelId) && !supportsBedrockClaudePromptCaching(modelId);
       const shouldOmitTemperature =

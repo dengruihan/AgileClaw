@@ -8,7 +8,6 @@ import {
   MEMORY_SEARCH_DEADLINE_CONTROL,
 } from "../../packages/memory-host-sdk/src/host/search-deadline-control.js";
 import { withTestTimeout } from "../../test/helpers/promise.js";
-import type { ConfiguredProviderLocalServiceTarget } from "../agents/provider-local-service-target.js";
 import { UnresolvedSecretInputError } from "../config/types.secrets.js";
 import type { EmbeddingProviderCreateOptions } from "./embedding-providers.js";
 import { getRegisteredEmbeddingProvider } from "./embedding-providers.js";
@@ -379,94 +378,6 @@ describe("openai-compatible generic embedding provider", () => {
     expect(release).toHaveBeenCalledOnce();
   });
 
-  it("forwards readiness phases without pausing reconciliation", async () => {
-    const server = await startEmbeddingServer();
-    const release = vi.fn();
-    const events: string[] = [];
-    const acquireLocalService = vi.fn(async (target: ConfiguredProviderLocalServiceTarget) => {
-      events.push("acquire");
-      target.onReadinessWait?.(true);
-      target.onReadinessWait?.(false);
-      events.push("reconcile");
-      return { release };
-    });
-    const options = {
-      ...createOptions({
-        config: {
-          models: {
-            providers: {
-              "gpu-spark": {
-                api: "openai-completions",
-                baseUrl: server.baseUrl,
-                localService: { command: process.execPath },
-                models: [],
-              },
-            },
-          },
-        },
-        provider: "gpu-spark",
-        model: "gpu-spark/nomic-embed-text",
-      }),
-      acquireLocalService,
-    };
-
-    const { provider } = await createOpenAICompatibleEmbeddingProvider(options);
-    const control = createMemorySearchDeadlineControl();
-    control.subscribe((action) => events.push(action));
-    const caller = new AbortController();
-    await expect(
-      provider.embed("hello", {
-        signal: caller.signal,
-        [MEMORY_SEARCH_DEADLINE_CONTROL]: control,
-      }),
-    ).resolves.toEqual([0.1, 0.2, 0.3]);
-
-    expect(events).toEqual(["acquire", "pause", "resume", "reconcile"]);
-    expect(acquireLocalService).toHaveBeenCalledWith(expect.anything(), caller.signal);
-    expect(release).toHaveBeenCalledOnce();
-  });
-
-  it("resumes the caller deadline when local-service acquisition fails", async () => {
-    const server = await startEmbeddingServer();
-    const events: string[] = [];
-    const failure = new Error("local service did not become ready");
-    const acquireLocalService = vi.fn(async (target: ConfiguredProviderLocalServiceTarget) => {
-      target.onReadinessWait?.(true);
-      try {
-        throw failure;
-      } finally {
-        target.onReadinessWait?.(false);
-      }
-    });
-    const options = {
-      ...createOptions({
-        config: {
-          models: {
-            providers: {
-              "gpu-spark": {
-                api: "openai-completions",
-                baseUrl: server.baseUrl,
-                localService: { command: process.execPath },
-                models: [],
-              },
-            },
-          },
-        },
-        provider: "gpu-spark",
-        model: "gpu-spark/nomic-embed-text",
-      }),
-      acquireLocalService,
-    };
-
-    const { provider } = await createOpenAICompatibleEmbeddingProvider(options);
-    const control = createMemorySearchDeadlineControl();
-    control.subscribe((action) => events.push(action));
-    await expect(
-      provider.embed("hello", { [MEMORY_SEARCH_DEADLINE_CONTROL]: control }),
-    ).rejects.toBe(failure);
-    expect(events).toEqual(["pause", "resume"]);
-  });
-
   it("does not lease a configured local service for a remote endpoint override", async () => {
     const server = await startEmbeddingServer();
     const acquireLocalService = vi.fn(async () => ({ release: vi.fn() }));
@@ -477,7 +388,6 @@ describe("openai-compatible generic embedding provider", () => {
             "gpu-spark": {
               api: "openai-completions",
               baseUrl: "http://spark.local:11434/v1",
-              localService: { command: process.execPath },
               models: [],
             },
           },

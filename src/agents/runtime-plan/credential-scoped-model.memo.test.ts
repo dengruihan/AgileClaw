@@ -13,9 +13,9 @@ function buildPlan(overrides: Partial<AgentRuntimeAuthPlan> = {}): AgentRuntimeA
     modelRoute: {
       provider: "openai",
       modelId: "gpt-5.5",
-      api: "openai-chatgpt-responses",
-      baseUrl: "https://chatgpt.com/backend-api/codex",
-      authRequirement: "subscription",
+      api: "openai-responses",
+      baseUrl: "https://openai-eu.example/v1",
+      authRequirement: "api-key",
       requestTransportOverrides: "none",
     },
     ...overrides,
@@ -25,8 +25,8 @@ function buildPlan(overrides: Partial<AgentRuntimeAuthPlan> = {}): AgentRuntimeA
 const routedModel = {
   provider: "openai",
   id: "gpt-5.5",
-  api: "openai-chatgpt-responses",
-  baseUrl: "https://chatgpt.com/backend-api/codex",
+  api: "openai-responses",
+  baseUrl: "https://openai-eu.example/v1",
 };
 
 type RouteMemo = Map<string, Promise<typeof routedModel>>;

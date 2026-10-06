@@ -30,10 +30,10 @@ const platformRoute = {
   requestTransportOverrides: "none",
 } as const satisfies ProviderModelRouteCandidate;
 
-const chatGPTRoute = {
-  api: "openai-chatgpt-responses",
-  baseUrl: "https://chatgpt.com/backend-api/codex",
-  authRequirement: "subscription",
+const secondaryRoute = {
+  api: "openai-responses",
+  baseUrl: "https://openai-eu.example/v1",
+  authRequirement: "api-key",
   requestTransportOverrides: "none",
 } as const satisfies ProviderModelRouteCandidate;
 
@@ -52,18 +52,18 @@ const platformEntry: ModelCatalogEntry = {
   compat: { supportsTools: false },
 };
 
-const chatGPTEntry: ModelCatalogEntry = {
+const secondaryEntry: ModelCatalogEntry = {
   provider: "openai",
   id: "gpt-5.5",
   name: "GPT-5.5",
-  api: "openai-chatgpt-responses",
-  baseUrl: "https://chatgpt.com/backend-api/codex",
+  api: "openai-responses",
+  baseUrl: "https://openai-eu.example/v1",
   contextWindow: 400_000,
   contextTokens: 300_000,
   reasoning: true,
   thinkingLevelMap: { off: null, xhigh: null, max: "max" },
   input: ["text"],
-  params: { chatGPTOnly: true },
+  params: { secondaryOnly: true },
   compat: { supportsTools: true },
 };
 
@@ -71,24 +71,24 @@ describe("projectModelCatalogEntryForRoute", () => {
   it.each([
     platformEntry,
     {
-      ...chatGPTEntry,
+      ...secondaryEntry,
       compat: { supportsTools: false },
       params: { logicalOnly: true },
     },
   ])("prefers the exact physical donor over the $api row", (entry) => {
     const { entry: publicEntry, runtimeEntry } = projectModelCatalogEntryForRoute({
       entry,
-      projection: { kind: "selected", route: chatGPTRoute, policy: routePolicy },
+      projection: { kind: "selected", route: secondaryRoute, policy: routePolicy },
       catalog: [
         platformEntry,
         {
-          ...chatGPTEntry,
+          ...secondaryEntry,
           contextWindows: [{ id: "native", label: "Native", contextWindow: 400_000 }],
           contextWindowDefault: "native",
         },
       ],
     });
-    expect(runtimeEntry.params).toEqual({ chatGPTOnly: true });
+    expect(runtimeEntry.params).toEqual({ secondaryOnly: true });
     expect(runtimeEntry.compat).toEqual({ supportsTools: true });
     expect(runtimeEntry.contextWindow).toBe(400_000);
     expect(publicEntry).not.toHaveProperty("params");
@@ -104,7 +104,7 @@ describe("projectModelCatalogEntryForRoute", () => {
       projectModelCatalogEntryForRoute({
         entry: platformEntry,
         projection: { kind: "selected", route: platformRoute, policy: routePolicy },
-        catalog: [platformEntry, chatGPTEntry],
+        catalog: [platformEntry, secondaryEntry],
       }).entry,
     ).toEqual({
       provider: "openai",
@@ -122,15 +122,15 @@ describe("projectModelCatalogEntryForRoute", () => {
     expect(
       projectModelCatalogEntryForRoute({
         entry: platformEntry,
-        projection: { kind: "selected", route: chatGPTRoute, policy: routePolicy },
-        catalog: [platformEntry, chatGPTEntry],
+        projection: { kind: "selected", route: secondaryRoute, policy: routePolicy },
+        catalog: [platformEntry, secondaryEntry],
       }).entry,
     ).toEqual({
       provider: "openai",
       id: "gpt-5.5",
       name: "GPT-5.5",
-      api: "openai-chatgpt-responses",
-      baseUrl: "https://chatgpt.com/backend-api/codex",
+      api: "openai-responses",
+      baseUrl: "https://openai-eu.example/v1",
       contextWindow: 400_000,
       contextTokens: 300_000,
       reasoning: true,
@@ -143,15 +143,15 @@ describe("projectModelCatalogEntryForRoute", () => {
     expect(
       projectModelCatalogEntryForRoute({
         entry: platformEntry,
-        projection: { kind: "selected", route: chatGPTRoute, policy: routePolicy },
+        projection: { kind: "selected", route: secondaryRoute, policy: routePolicy },
         catalog: [platformEntry],
       }).entry,
     ).toEqual({
       provider: "openai",
       id: "gpt-5.5",
       name: "GPT-5.5",
-      api: "openai-chatgpt-responses",
-      baseUrl: "https://chatgpt.com/backend-api/codex",
+      api: "openai-responses",
+      baseUrl: "https://openai-eu.example/v1",
     });
   });
 
@@ -164,13 +164,19 @@ describe("projectModelCatalogEntryForRoute", () => {
       owner: "fixture-platform",
     },
     {
-      name: "subscription",
-      route: chatGPTRoute,
+      name: "secondary",
+      route: secondaryRoute,
       donor: true,
       expected: "ultra",
-      owner: "fixture-subscription",
+      owner: "fixture-secondary",
     },
-    { name: "missing donor", route: chatGPTRoute, donor: false, expected: "off", owner: undefined },
+    {
+      name: "missing donor",
+      route: secondaryRoute,
+      donor: false,
+      expected: "off",
+      owner: undefined,
+    },
     { name: "unresolved", route: undefined, donor: true, expected: "off", owner: undefined },
   ])(
     "retains only the $name route's prepared thinking owner",
@@ -188,7 +194,7 @@ describe("projectModelCatalogEntryForRoute", () => {
         entries: [entry],
         routeVariants: [
           entry,
-          ...(donor ? [{ ...chatGPTEntry, thinkingPolicyProvider: "fixture-subscription" }] : []),
+          ...(donor ? [{ ...secondaryEntry, thinkingPolicyProvider: "fixture-secondary" }] : []),
         ],
       };
       prepareModelCatalogThinkingPolicies({
@@ -196,7 +202,7 @@ describe("projectModelCatalogEntryForRoute", () => {
         metadataSnapshot: createPluginMetadataSnapshotFixture(),
         pluginRegistry: {
           ...createEmptyPluginRegistry(),
-          providers: ["fixture-platform", "fixture-subscription"].map((id) => ({
+          providers: ["fixture-platform", "fixture-secondary"].map((id) => ({
             pluginId: id,
             source: "test",
             provider: { id, label: id, auth: [], resolveThinkingProfile: resolvePolicy },
@@ -277,7 +283,7 @@ describe("projectModelCatalogEntryForRoute", () => {
     expect(
       projectModelCatalogEntryForRoute({
         entry: platformEntry,
-        projection: { kind: "selected", route: chatGPTRoute, policy: routePolicy },
+        projection: { kind: "selected", route: secondaryRoute, policy: routePolicy },
         catalog: [platformEntry],
         ...(overrides ? { overrides } : {}),
       }).entry,
@@ -285,8 +291,8 @@ describe("projectModelCatalogEntryForRoute", () => {
       provider: "openai",
       id: "gpt-5.5",
       name: "GPT-5.5",
-      api: "openai-chatgpt-responses",
-      baseUrl: "https://chatgpt.com/backend-api/codex",
+      api: "openai-responses",
+      baseUrl: "https://openai-eu.example/v1",
       contextTokens: 160_000,
       thinkingLevelMap: { off: "none", max: null },
     });

@@ -5,7 +5,6 @@ import {
   CodexAppServerScopedRequestRejectedError,
   requestCodexAppServerClientJson,
 } from "./request.js";
-import { CODEX_RESPONSES_OAUTH_PROVIDER } from "./responses-oauth.js";
 
 /** Validate an explicit Ultrafast selection against this turn's native model and client. */
 export async function resolveCodexUltrafastServiceTier(params: {
@@ -19,12 +18,7 @@ export async function resolveCodexUltrafastServiceTier(params: {
   assertCurrent: () => void;
   config?: Parameters<typeof requestCodexAppServerClientJson>[0]["config"];
 }): Promise<CodexServiceTier | null | undefined> {
-  if (
-    !params.enabled ||
-    (params.modelProvider !== "openai" &&
-      params.modelProvider !== CODEX_RESPONSES_OAUTH_PROVIDER) ||
-    !params.model
-  ) {
+  if (!params.enabled || params.modelProvider !== "openai" || !params.model) {
     return params.serviceTier;
   }
   params.signal.throwIfAborted();

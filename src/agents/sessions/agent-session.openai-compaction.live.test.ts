@@ -146,7 +146,7 @@ async function createLiveSession() {
 
   const authStorage = AuthStorage.inMemory();
   authStorage.setRuntimeApiKey("openai", API_KEY);
-  const modelRegistry = ModelRegistry.create(authStorage, modelsPath);
+  const modelRegistry = ModelRegistry.create(authStorage);
   const model = modelRegistry.find("openai", MODEL_ID) as Model<"openai-responses"> | undefined;
   if (!model) {
     throw new Error(`failed to load live OpenAI model ${MODEL_ID}`);

@@ -51,7 +51,7 @@ describe("resolveCliExecutionAuthProfileId", () => {
   });
 
   it.each(["auto", "user"] as const)(
-    "ignores a retired native Claude profile selected by %s",
+    "rejects a retired native Claude OAuth profile selected by %s",
     (authProfileIdSource) => {
       const authProfileId = "anthropic:claude-cli";
       mocks.profiles[authProfileId] = {
@@ -63,7 +63,7 @@ describe("resolveCliExecutionAuthProfileId", () => {
       };
       mocks.order.push(authProfileId);
 
-      expect(
+      const resolve = () =>
         resolveCliExecutionAuthProfileId({
           cliExecutionProvider: "claude-cli",
           authProfileProvider: "claude-cli",
@@ -72,12 +72,16 @@ describe("resolveCliExecutionAuthProfileId", () => {
           ...(authProfileIdSource === "user"
             ? { selected: { authProfileId, authProfileIdSource } }
             : {}),
-        }),
-      ).toBeUndefined();
+        });
+      if (authProfileIdSource === "user") {
+        expect(resolve).toThrow(/cannot use auth profile/);
+      } else {
+        expect(resolve()).toBeUndefined();
+      }
     },
   );
 
-  it("keeps forwarding a non-retired Claude profile", () => {
+  it("rejects a Claude CLI OAuth profile", () => {
     const authProfileId = "claude-cli:work";
     mocks.profiles[authProfileId] = {
       type: "oauth",
@@ -87,7 +91,7 @@ describe("resolveCliExecutionAuthProfileId", () => {
       expires: Date.now() + 60_000,
     };
 
-    expect(
+    expect(() =>
       resolveCliExecutionAuthProfileId({
         cliExecutionProvider: "claude-cli",
         authProfileProvider: "claude-cli",
@@ -95,17 +99,17 @@ describe("resolveCliExecutionAuthProfileId", () => {
         agentDir: "/tmp/unused-agent",
         selected: { authProfileId, authProfileIdSource: "user" },
       }),
-    ).toBe(authProfileId);
+    ).toThrow(/cannot use auth profile/);
   });
 
   it.each([
-    { type: "api_key", registry: "runtime" },
-    { type: "token", registry: "runtime" },
-    { type: "oauth", registry: "runtime" },
-    { type: "token", registry: "setup" },
+    { type: "api_key", registry: "runtime", accepted: true },
+    { type: "api_key", registry: "setup", accepted: true },
+    { type: "token", registry: "runtime", accepted: false },
+    { type: "oauth", registry: "runtime", accepted: false },
   ] as const)(
-    "forwards an explicitly selected canonical Anthropic $type through the $registry registry",
-    ({ type, registry }) => {
+    "only forwards canonical Anthropic API-key credentials through the $registry registry",
+    ({ type, registry, accepted }) => {
       if (registry === "setup") {
         cliBackendsTesting.setDepsForTest({
           resolveRuntimeCliBackends: () => [],
@@ -136,19 +140,23 @@ describe("resolveCliExecutionAuthProfileId", () => {
                 expires: Date.now() + 60_000,
               };
 
-      expect(
+      const resolve = () =>
         resolveCliExecutionAuthProfileId({
           cliExecutionProvider: "claude-cli",
           authProfileProvider: "anthropic",
           config: {},
           agentDir: "/tmp/unused-agent",
           selected: { authProfileId, authProfileIdSource: "user" },
-        }),
-      ).toBe(authProfileId);
+        });
+      if (accepted) {
+        expect(resolve()).toBe(authProfileId);
+      } else {
+        expect(resolve).toThrow(/cannot use auth profile/);
+      }
     },
   );
 
-  it("loads the selected personal profile without falling back to an ambient Claude account", () => {
+  it("rejects a selected Anthropic token instead of falling back to another CLI profile", () => {
     const authProfileId =
       "personal:11111111-1111-4111-8111-111111111111:22222222-2222-4222-8222-222222222222";
     const credential: AuthProfileCredential = {
@@ -159,7 +167,7 @@ describe("resolveCliExecutionAuthProfileId", () => {
     mocks.profiles["claude-cli:ambient"] = createApiKeyCredential("claude-cli", "test-ambient-key");
     mocks.order.push("claude-cli:ambient");
 
-    expect(
+    expect(() =>
       resolveCliExecutionAuthProfileId({
         cliExecutionProvider: "claude-cli",
         authProfileProvider: "anthropic",
@@ -174,11 +182,11 @@ describe("resolveCliExecutionAuthProfileId", () => {
           },
         }),
       }),
-    ).toBe(authProfileId);
+    ).toThrow(/cannot use auth profile/);
   });
 
   it.each(["absent", "auto"] as const)(
-    "forwards only automatic Claude profiles owned by Claude CLI (%s selection)",
+    "forwards an automatic Anthropic API key for Claude CLI (%s selection)",
     (selection) => {
       const selected =
         selection === "auto"
@@ -198,7 +206,7 @@ describe("resolveCliExecutionAuthProfileId", () => {
           agentDir: "/tmp/unused-agent",
           selected,
         }),
-      ).toBeUndefined();
+      ).toBe("anthropic:default");
 
       mocks.profiles["claude-cli:work"] = createApiKeyCredential("claude-cli", "test-claude-key");
       mocks.order.push("claude-cli:work");

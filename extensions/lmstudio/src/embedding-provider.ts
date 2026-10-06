@@ -1,6 +1,3 @@
-import { createAsyncLock } from "openclaw/plugin-sdk/async-lock-runtime";
-import { toErrorObject } from "openclaw/plugin-sdk/error-runtime";
-import { createSubsystemLogger } from "openclaw/plugin-sdk/logging-core";
 import {
   buildRemoteBaseUrlPolicy,
   createRemoteEmbeddingProvider,
@@ -10,21 +7,11 @@ import {
   type MemoryEmbeddingProviderCreateOptions,
 } from "openclaw/plugin-sdk/memory-core-host-engine-embeddings";
 import { resolveMemorySecretInputString } from "openclaw/plugin-sdk/memory-core-host-secret";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import { findNormalizedProviderKey } from "openclaw/plugin-sdk/provider-model-metadata";
-import { formatErrorMessage, type SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime";
+import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime";
 import { LMSTUDIO_DEFAULT_EMBEDDING_MODEL, LMSTUDIO_PROVIDER_ID } from "./defaults.js";
-import {
-  fetchLmstudioModels,
-  prepareLmstudioModelForInference,
-  type LmstudioPreparedModel,
-} from "./models.fetch.js";
-import {
-  normalizeLmstudioConfiguredCatalogEntries,
-  resolveLmstudioCanonicalModelKey,
-  resolveLmstudioInferenceBase,
-  resolveLmstudioServerBase,
-} from "./models.js";
+import { fetchLmstudioModels } from "./models.fetch.js";
+import { resolveLmstudioCanonicalModelKey, resolveLmstudioInferenceBase } from "./models.js";
 import { hasLmstudioAuthorizationHeader } from "./provider-auth.js";
 import {
   buildLmstudioAuthHeaders,
@@ -34,17 +21,11 @@ import {
   sanitizeLmstudioStringHeaders,
 } from "./runtime.js";
 
-const log = createSubsystemLogger("memory/embeddings");
-
 type LmstudioEmbeddingClient = {
   baseUrl: string;
   headers: Record<string, string>;
   ssrfPolicy?: SsrFPolicy;
   model: string;
-};
-type MemoryCoreAcquireLocalService = OpenClawPluginApi["runtime"]["llm"]["acquireLocalService"];
-type LocalServiceAwareEmbeddingOptions = MemoryEmbeddingProviderCreateOptions & {
-  acquireLocalService?: MemoryCoreAcquireLocalService;
 };
 export const DEFAULT_LMSTUDIO_EMBEDDING_MODEL = LMSTUDIO_DEFAULT_EMBEDDING_MODEL;
 
@@ -77,21 +58,12 @@ async function resolveLmstudioApiKey(
     });
   } catch (error) {
     // Embeddings can target local LM Studio instances that do not require auth.
-    if (/LM Studio API key is required/i.test(formatErrorMessage(error))) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/LM Studio API key is required/i.test(message)) {
       return undefined;
     }
     throw error;
   }
-}
-
-function resolveEmbeddingPreloadContextLength(params: {
-  model: string;
-  models: unknown;
-}): number | undefined {
-  const configuredModel = normalizeLmstudioConfiguredCatalogEntries(params.models).find(
-    (entry) => normalizeLmstudioModel(entry.id) === params.model,
-  );
-  return configuredModel?.contextTokens ?? configuredModel?.contextWindow;
 }
 
 function resolveConfiguredLmstudioProvider(options: MemoryEmbeddingProviderCreateOptions) {
@@ -105,19 +77,6 @@ function resolveConfiguredLmstudioProvider(options: MemoryEmbeddingProviderCreat
     : (findNormalizedProviderKey(providers, requestedId) ?? LMSTUDIO_PROVIDER_ID);
   const config = providers[providerId];
   return config ? { providerId, config } : undefined;
-}
-
-function resolveLmstudioLocalServiceBaseUrl(
-  configuredBaseUrl: string | undefined,
-  inferenceBaseUrl: string,
-): string {
-  const configured = configuredBaseUrl?.trim();
-  if (!configured) {
-    return inferenceBaseUrl;
-  }
-  const configuredPath = configured.replace(/[?#].*$/u, "").replace(/\/+$/u, "");
-  const serverBaseUrl = resolveLmstudioServerBase(configured);
-  return /\/api\/v1$/iu.test(configuredPath) ? `${serverBaseUrl}/api/v1` : `${serverBaseUrl}/v1`;
 }
 
 function resolveLmstudioEmbeddingBaseUrl(configuredBaseUrl?: string): string {
@@ -147,9 +106,9 @@ async function resolveLmstudioEmbeddingModelKey(params: {
   });
 }
 
-/** Creates the LM Studio embedding provider client and preloads the target model before return. */
+/** Creates an embedding provider for an LM Studio model already loaded by the operator. */
 export async function createLmstudioEmbeddingProvider(
-  options: LocalServiceAwareEmbeddingOptions,
+  options: MemoryEmbeddingProviderCreateOptions,
 ): Promise<{ provider: MemoryEmbeddingProvider; client: LmstudioEmbeddingClient }> {
   const resolvedProvider = resolveConfiguredLmstudioProvider(options);
   const providerConfig = resolvedProvider?.config;
@@ -198,134 +157,14 @@ export async function createLmstudioEmbeddingProvider(
     headers,
     ssrfPolicy,
   };
-  const requestedContextLength = resolveEmbeddingPreloadContextLength({
-    model,
-    models: providerConfig?.models,
-  });
-  const localServiceTarget =
-    providerConfig?.localService && !remoteBaseUrl
-      ? {
-          providerId: resolvedProvider?.providerId ?? LMSTUDIO_PROVIDER_ID,
-          baseUrl: resolveLmstudioLocalServiceBaseUrl(providerBaseUrl, baseUrl),
-          headers,
-        }
-      : undefined;
-  const acquireLocalService = options.acquireLocalService;
-  const withLocalServiceLease = async <T>(
-    signal: AbortSignal | undefined,
-    action: () => Promise<T>,
-  ): Promise<T> => {
-    signal?.throwIfAborted();
-    const lease =
-      localServiceTarget && acquireLocalService
-        ? await acquireLocalService(localServiceTarget, signal)
-        : undefined;
-    try {
-      signal?.throwIfAborted();
-      return await action();
-    } finally {
-      lease?.release();
-    }
-  };
-
-  const withPreloadLock = createAsyncLock();
-  const preloadModel = async (
-    signal?: AbortSignal,
-    initializeIdentity = false,
-  ): Promise<LmstudioPreparedModel | undefined> => {
-    if (providerConfig?.params?.preload === false) {
-      return undefined;
-    }
-    // Serialize discovery/load, keeping embedding requests themselves concurrent.
-    let entered = false;
-    const preparation = withPreloadLock(async () => {
-      entered = true;
-      signal?.throwIfAborted();
-      try {
-        const prepared = await prepareLmstudioModelForInference({
-          baseUrl,
-          apiKey,
-          headers: headerOverrides,
-          ssrfPolicy,
-          modelKey: client.model,
-          requestedContextLength,
-          timeoutMs: 120_000,
-          signal,
-        });
-        if (initializeIdentity) {
-          client.model = prepared.modelKey;
-        }
-        return prepared;
-      } catch (error) {
-        signal?.throwIfAborted();
-        // Cache identity is frozen at construction, including after a failed load.
-        if (initializeIdentity && error instanceof Error && "resolvedModelKey" in error) {
-          const resolvedModelKey = error.resolvedModelKey;
-          if (typeof resolvedModelKey === "string" && resolvedModelKey.trim()) {
-            client.model = resolvedModelKey.trim();
-          }
-        }
-        const details = { baseUrl, model: client.model, error: formatErrorMessage(error) };
-        if (initializeIdentity) {
-          log.warn("lmstudio embeddings warmup failed; continuing without preload", details);
-        } else {
-          log.debug("lmstudio embeddings preload failed; continuing without preload", details);
-        }
-        return undefined;
-      }
+  if (model.includes("@")) {
+    client.model = await resolveLmstudioEmbeddingModelKey({
+      baseUrl,
+      apiKey,
+      headers: headerOverrides,
+      ssrfPolicy,
+      model,
     });
-    if (!signal) {
-      return await preparation;
-    }
-    // A queued cancellation owns no load. Once entered, wait for transport cleanup
-    // before the caller releases its service lease.
-    return await new Promise<LmstudioPreparedModel | undefined>((resolve, reject) => {
-      const onAbort = () => {
-        if (!entered) {
-          signal.removeEventListener("abort", onAbort);
-          reject(toErrorObject(signal.reason, "LM Studio preload aborted"));
-        }
-      };
-      signal.addEventListener("abort", onAbort, { once: true });
-      void preparation.then(
-        (prepared) => {
-          signal.removeEventListener("abort", onAbort);
-          resolve(prepared);
-        },
-        (error: unknown) => {
-          signal.removeEventListener("abort", onAbort);
-          reject(toErrorObject(error, "LM Studio model preload failed"));
-        },
-      );
-      if (signal.aborted) {
-        onAbort();
-      }
-    });
-  };
-
-  // Resolve the canonical embedding/cache identity before returning the provider.
-  if (providerConfig?.params?.preload !== false) {
-    await withLocalServiceLease(undefined, async () => await preloadModel(undefined, true));
-  } else if (model.includes("@")) {
-    // Variant aliases are not accepted by LM Studio's inference routes. Resolve
-    // only the stable wire/cache identity here; JIT still owns the actual load.
-    try {
-      await withLocalServiceLease(undefined, async () => {
-        client.model = await resolveLmstudioEmbeddingModelKey({
-          baseUrl,
-          apiKey,
-          headers: headerOverrides,
-          ssrfPolicy,
-          model,
-        });
-      });
-    } catch (error) {
-      log.debug("lmstudio embedding variant discovery failed; using requested model", {
-        baseUrl,
-        model,
-        error: formatErrorMessage(error),
-      });
-    }
   }
 
   const remoteProvider = createRemoteEmbeddingProvider({
@@ -333,21 +172,10 @@ export async function createLmstudioEmbeddingProvider(
     client,
     errorPrefix: "lmstudio embeddings failed",
   });
-  const resolveRequestProvider = (prepared: LmstudioPreparedModel | undefined) =>
-    prepared?.instanceId
-      ? createRemoteEmbeddingProvider({
-          id: LMSTUDIO_PROVIDER_ID,
-          // Route only this operation to the prepared instance; cache identity stays canonical.
-          client: { ...client, model: prepared.instanceId },
-          errorPrefix: "lmstudio embeddings failed",
-        })
-      : remoteProvider;
-  const embed: MemoryEmbeddingProvider["embed"] = async (input, callOptions) =>
-    await withLocalServiceLease(callOptions?.signal, async () => {
-      const prepared = await preloadModel(callOptions?.signal);
-      callOptions?.signal?.throwIfAborted();
-      return await resolveRequestProvider(prepared).embed(input, callOptions);
-    });
+  const embed: MemoryEmbeddingProvider["embed"] = async (input, callOptions) => {
+    callOptions?.signal?.throwIfAborted();
+    return await remoteProvider.embed(input, callOptions);
+  };
   const embedBatch: MemoryEmbeddingProvider["embedBatch"] = async (inputs, callOptions) => {
     if (inputs.length === 0) {
       return [];
@@ -356,11 +184,8 @@ export async function createLmstudioEmbeddingProvider(
       // Promise.all rejects before sibling requests settle, so every query keeps its own lease.
       return await Promise.all(inputs.map((input) => embed(input, callOptions)));
     }
-    return await withLocalServiceLease(callOptions?.signal, async () => {
-      const prepared = await preloadModel(callOptions?.signal);
-      callOptions?.signal?.throwIfAborted();
-      return await resolveRequestProvider(prepared).embedBatch(inputs, callOptions);
-    });
+    callOptions?.signal?.throwIfAborted();
+    return await remoteProvider.embedBatch(inputs, callOptions);
   };
   const provider: MemoryEmbeddingProvider = {
     ...remoteProvider,

@@ -220,10 +220,6 @@ describe("ollama lazy imports", () => {
     });
     expect(streamParams).toMatchObject({
       providerBaseUrl: "http://127.0.0.1:11435",
-      localService: {
-        providerId: "ollama-gpu",
-        acquire: runtime.llm.acquireLocalService,
-      },
     });
 
     expect({

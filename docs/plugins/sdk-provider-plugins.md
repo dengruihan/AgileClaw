@@ -31,10 +31,11 @@ API calls, not exported OpenClaw functions.
 ## Import an existing credential during sign-in
 
 An auth method can declare `credentialImport` with a `migrationProviderId`,
-an exact `itemId`, and a `credentialKind` (`api_key`, `oauth`, or `token`).
-`models auth login` asks that migration owner for an auth-only plan before
-starting interactive sign-in. `--force`, `--profile-id`, and `--set-default` skip
-import. `--set-default` uses the auth method's recommended model through the normal
+an exact `itemId`, and a `credentialKind` (`api_key` only; model sign-in no
+longer accepts other credential kinds). The Gateway account-connect flow asks
+that migration owner for an auth-only plan before starting interactive
+sign-in. `--force`, `--profile-id`, and `--set-default` skip import.
+`--set-default` uses the auth method's recommended model through the normal
 sign-in flow.
 
 The migration plugin declares its ID in `contracts.migrationProviders` and can

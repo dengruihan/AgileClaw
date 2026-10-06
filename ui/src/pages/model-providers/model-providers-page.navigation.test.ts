@@ -61,7 +61,7 @@ it.each([
   ],
 ])(
   "opens a provider link once and keeps it closed after revalidation: %s %s",
-  async (search, hash, title) => {
+  async (search, hash) => {
     const { context, runtimeConfig, notifyRuntimeConfig } = createHarness("writer");
     await runtimeConfig.ensureLoaded();
     runtimeConfig.state.configForm = {
@@ -77,12 +77,9 @@ it.each([
     notifyRuntimeConfig();
     await waitForFast(() =>
       expect(page.querySelector(".provider-manager__header h2")?.textContent?.trim()).toBe(
-        `Local.one — ${title}`,
+        "Edit provider",
       ),
     );
-    expect(
-      page.querySelector<HTMLDetailsElement>("openclaw-model-catalog-settings > details")?.open,
-    ).toBe(false);
     page.querySelector<HTMLButtonElement>(".provider-manager__header button")!.click();
     await waitForFast(() => expect(page.querySelector(".provider-manager__header")).toBeNull());
     page.routeData = { ...routeData };

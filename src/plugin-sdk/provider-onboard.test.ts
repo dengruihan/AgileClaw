@@ -29,7 +29,7 @@ describe("createAliasOnlyPresetAppliers", () => {
 
   it("adds only the alias entry in provider-only mode", () => {
     const cfg: OpenClawConfig = {
-      models: { mode: "merge", providers: {} },
+      models: { providers: {} },
       agents: { defaults: { models: { "other/model": { alias: "Other" } } } },
     };
 

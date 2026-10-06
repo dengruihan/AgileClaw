@@ -7,7 +7,6 @@ import { resolveAuthProfileOrderWithMetadata } from "./auth-profiles/order.js";
 import { loadAuthProfileStoreForRuntime } from "./auth-profiles/store-runtime.js";
 import type { AuthProfileCredential } from "./auth-profiles/types.js";
 import { resolveCliBackendConfig, resolveCliRuntimeCanonicalProvider } from "./cli-backends.js";
-import { resolveBundledCliBackendAuthPolicy } from "./cli-runner/cli-backend-auth-policy.js";
 
 const GOOGLE_GEMINI_CLI_PROVIDER_ID = "google-gemini-cli";
 const GOOGLE_PROVIDER_ID = "google";
@@ -59,35 +58,26 @@ export function resolveCliExecutionAuthProfileId(params: {
       ? selectedAuthProfileId
       : (sessionAuthProfileId ?? selectedAuthProfileId),
   });
-  const nativeAuthProfileIds = resolveBundledCliBackendAuthPolicy(
-    params.cliExecutionProvider,
-  )?.nativeAuthProfileIds;
   if (!hasExplicitSelection && params.sessionBinding && !sessionAuthProfileId) {
     return undefined;
   }
   const retainedProfileId = hasExplicitSelection
     ? selectedAuthProfileId
-    : sessionAuthProfileId &&
-        (store.profiles[sessionAuthProfileId] ||
-          nativeAuthProfileIds?.includes(sessionAuthProfileId))
+    : sessionAuthProfileId && store.profiles[sessionAuthProfileId]
       ? sessionAuthProfileId
       : undefined;
-  const nativeProfileId = retainedProfileId ?? selectedAuthProfileId;
-  if (nativeProfileId && nativeAuthProfileIds?.includes(nativeProfileId)) {
-    return undefined;
-  }
   const canonicalProvider = resolveCliRuntimeCanonicalProvider({
     runtime: params.cliExecutionProvider,
     config: params.config,
     includeSetupRegistry: true,
   });
-  const acceptsCredential = (credential: AuthProfileCredential, explicitSelection: boolean) =>
-    credential.provider === params.cliExecutionProvider ||
-    (credential.provider === canonicalProvider &&
-      (params.cliExecutionProvider === CLAUDE_CLI_PROVIDER_ID
-        ? explicitSelection || credential.type !== "api_key"
-        : params.cliExecutionProvider === GOOGLE_GEMINI_CLI_PROVIDER_ID &&
-          credential.type === "api_key"));
+  const acceptsCredential = (credential: AuthProfileCredential) =>
+    credential.type === "api_key" &&
+    (credential.provider === params.cliExecutionProvider ||
+      (credential.provider === canonicalProvider &&
+        (params.cliExecutionProvider === CLAUDE_CLI_PROVIDER_ID ||
+          (params.cliExecutionProvider === GOOGLE_GEMINI_CLI_PROVIDER_ID &&
+            params.authProfileProvider === GOOGLE_PROVIDER_ID))));
   if (retainedProfileId) {
     const credential = store.profiles[retainedProfileId];
     if (!credential) {
@@ -95,7 +85,7 @@ export function resolveCliExecutionAuthProfileId(params: {
         `No credentials found for profile "${retainedProfileId}".`,
       );
     }
-    if (acceptsCredential(credential, true)) {
+    if (acceptsCredential(credential)) {
       return retainedProfileId;
     }
     throw new CliExecutionAuthProfileError(
@@ -121,9 +111,7 @@ export function resolveCliExecutionAuthProfileId(params: {
     });
     const profileId = order.profileIds.find((id) => {
       const credential = store.profiles[id];
-      return (
-        credential && acceptsCredential(credential, false) && !nativeAuthProfileIds?.includes(id)
-      );
+      return credential && acceptsCredential(credential);
     });
     if (profileId || order.hasExplicitOrder) {
       return profileId;

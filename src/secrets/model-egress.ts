@@ -66,11 +66,10 @@ function resolveModelEgressSelection(params: ConfiguredModelEgressOptions) {
     hasEntries(providerConfig.headers) ||
     hasEntries(configuredModel?.headers) ||
     hasEntries(providerConfig.request) ||
-    providerConfig.authHeader === false ||
-    providerConfig.localService !== undefined
+    providerConfig.authHeader === false
   ) {
     throw new Error(
-      "Model egress does not support custom request headers, authentication, proxy, TLS, or local-service configuration",
+      "Model egress does not support custom request headers, authentication, proxy, or TLS configuration",
     );
   }
   const resolution = resolveProviderModelRoutes({

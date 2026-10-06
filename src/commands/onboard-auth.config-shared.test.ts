@@ -73,7 +73,6 @@ describe("onboard auth provider config merges", () => {
     const next = applyOnboardAuthAgentModelsAndProviders(
       {
         models: {
-          mode: "merge",
           providers: {
             custom: makeProvider(["model-a"], { timeoutSeconds: 900 }),
             other: makeProvider(["other-a"], {

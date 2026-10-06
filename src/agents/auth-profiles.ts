@@ -17,7 +17,6 @@ export {
   resolveApiKeyForProfile,
 } from "./auth-profiles/oauth.js";
 export {
-  isConfiguredAwsSdkAuthProfileForProvider,
   resolveAuthProfileEligibility,
   resolveExplicitAuthOrderSelection,
   resolveAuthProfileOrder,

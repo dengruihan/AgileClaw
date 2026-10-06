@@ -1,3 +1,5 @@
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
+import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import type {
   ProviderCatalogContext,
   ProviderCatalogResult,
@@ -5,6 +7,7 @@ import type {
 } from "../plugins/types.js";
 import {
   fetchLiveProviderModelIds,
+  fetchLiveProviderModelRows,
   getCachedLiveProviderModelRows,
   getCachedUpstreamProviderCatalog,
   liveModelCatalogAuthCacheKey,
@@ -33,6 +36,8 @@ import {
   type ModelDefinitionConfig,
   type ModelProviderConfig,
 } from "./provider-model-shared.js";
+import { mergeSsrFPolicies, ssrfPolicyFromPrivateNetworkOptIn } from "./ssrf-policy.js";
+import { ssrfPolicyFromHttpBaseUrlAllowedHostname } from "./ssrf-runtime.js";
 
 export { LiveModelCatalogHttpError, runLiveProviderCatalog };
 export { fetchLiveProviderModelIds, getCachedLiveProviderModelRows };
@@ -49,6 +54,131 @@ export type {
   LiveModelCatalogHeaderContext,
   LiveModelRowProjection,
 } from "./provider-catalog-live-acquisition.internal.js";
+
+/**
+ * Performs explicit model discovery for a draft provider config using its current API adapter.
+ * Results are complete config model rows and carry a refresh-only source marker.
+ */
+export async function discoverProviderModelRows(params: {
+  providerId: string;
+  providerConfig: ModelProviderConfig;
+  apiKey?: string;
+  additionalHeaders?: Record<string, string>;
+  signal?: AbortSignal;
+}): Promise<ModelDefinitionConfig[]> {
+  const providerId = normalizeProviderId(params.providerId) || "custom";
+  const providerConfig = params.providerConfig;
+  const api = normalizeOptionalString(providerConfig.api);
+  const baseUrl = normalizeOptionalString(providerConfig.baseUrl);
+  if (!api || !baseUrl) {
+    throw new Error("Set a provider API format and Base URL before pulling models.");
+  }
+  if (
+    ![
+      "openai-completions",
+      "openai-responses",
+      "azure-openai-responses",
+      "anthropic-messages",
+      "google-generative-ai",
+      "google-interactions",
+      "ollama",
+      "pi-messages",
+    ].includes(api)
+  ) {
+    throw new Error(`Model discovery is not supported for the ${api} API format.`);
+  }
+  const isGoogleApi = api === "google-generative-ai" || api === "google-interactions";
+
+  const discovery = providerConfig.discovery;
+  const defaultEndpointPath =
+    api === "anthropic-messages"
+      ? new URL(baseUrl).pathname.replace(/\/+$/u, "").endsWith("/v1")
+        ? "models"
+        : "v1/models"
+      : api === "ollama"
+        ? "api/tags"
+        : "models";
+  const endpointPath = normalizeOptionalString(discovery?.endpointPath) ?? defaultEndpointPath;
+  const base = new URL(baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
+  const endpoint = new URL(endpointPath.replace(/^\/+/, ""), base).toString();
+  const effectiveTimeoutMs = Math.min(
+    120_000,
+    Math.max(5_000, (providerConfig.timeoutSeconds ?? 30) * 1_000),
+  );
+  const readRows = (body: unknown): readonly unknown[] => {
+    if (Array.isArray(body)) {
+      return body;
+    }
+    if (!isRecord(body)) {
+      throw new Error(`${providerId} returned an unsupported model-list response.`);
+    }
+    const rows = api === "ollama" || isGoogleApi ? body.models : body.data;
+    if (!Array.isArray(rows)) {
+      throw new Error(`${providerId} returned an unsupported model-list response.`);
+    }
+    return rows;
+  };
+  const rows = await fetchLiveProviderModelRows({
+    providerId,
+    endpoint,
+    apiKey: params.apiKey,
+    timeoutMs: effectiveTimeoutMs,
+    signal: params.signal,
+    readRows,
+    policy: mergeSsrFPolicies(
+      ssrfPolicyFromHttpBaseUrlAllowedHostname(endpoint),
+      ssrfPolicyFromPrivateNetworkOptIn(providerConfig.request?.allowPrivateNetwork),
+    ),
+    buildRequestHeaders: ({ apiKey }) => ({
+      Accept: "application/json",
+      ...(apiKey
+        ? api === "anthropic-messages"
+          ? { "x-api-key": apiKey, "anthropic-version": "2023-06-01" }
+          : api === "azure-openai-responses"
+            ? { "api-key": apiKey }
+            : isGoogleApi
+              ? { "x-goog-api-key": apiKey }
+              : { Authorization: `Bearer ${apiKey}` }
+        : {}),
+      ...(discovery?.headers ?? {}),
+      ...(params.additionalHeaders ?? {}),
+    }),
+  });
+  const normalizedRows =
+    isGoogleApi || api === "ollama"
+      ? rows.map((row) => {
+          if (!isRecord(row)) {
+            return row;
+          }
+          const rawId = normalizeOptionalString(row.id ?? row.name ?? row.model);
+          if (!rawId) {
+            return row;
+          }
+          const id = isGoogleApi ? rawId.replace(/^models\//u, "") : rawId;
+          return {
+            ...row,
+            id,
+            ...(row.displayName && typeof row.displayName === "string"
+              ? { display_name: row.displayName }
+              : {}),
+            ...(typeof row.inputTokenLimit === "number"
+              ? { contextWindow: row.inputTokenLimit }
+              : {}),
+            ...(typeof row.outputTokenLimit === "number"
+              ? { maxOutputTokens: row.outputTokenLimit }
+              : {}),
+          };
+        })
+      : rows;
+  const models = buildOpenAICompatibleLiveModels(normalizedRows, providerConfig).map((model) => ({
+    ...model,
+    metadataSource: "provider-discovery" as const,
+  }));
+  if (models.length === 0) {
+    throw new Error(`${providerId} returned no usable text models.`);
+  }
+  return models;
+}
 export { clearLiveCatalogCacheForTests } from "./provider-catalog-shared.js";
 export {
   readLiveModelCatalogBooleanField,

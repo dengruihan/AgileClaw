@@ -253,7 +253,7 @@ describe("repairCodexSessionStoreRoutes", () => {
         models: {
           providers: {
             codex: { models: [{ id: "gpt-5.6-sol", api: "openai-responses" }] },
-            openai: { models: [{ id: "gpt-5.6-sol", api: "openai-chatgpt-responses" }] },
+            openai: { models: [{ id: "gpt-5.6-sol", api: "openai-responses" }] },
           },
         },
       }).blockedModelIdentities[0],

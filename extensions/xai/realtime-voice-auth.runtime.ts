@@ -23,6 +23,6 @@ export async function resolveXaiRealtimeApiKey(
     return oauthKey;
   }
   throw new Error(
-    "xAI credentials missing for realtime voice. Sign in with `openclaw onboard --auth-choice xai-oauth`, run `openclaw onboard --auth-choice xai-api-key`, or set XAI_API_KEY.",
+    "xAI API key missing for realtime voice. Configure the xAI API key or set XAI_API_KEY.",
   );
 }

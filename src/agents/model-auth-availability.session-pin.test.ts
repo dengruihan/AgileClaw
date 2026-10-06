@@ -12,7 +12,7 @@ import {
 import { prepareAgentRuntimeAuth } from "./runtime-plan/prepare-auth.js";
 
 describe.each(["acme", "openai"])("%s session account readiness", (provider) => {
-  it.each(["api-key", "oauth"] as const)(
+  it.each(["api-key"] as const)(
     "requires provider SecretRef %s auth instead of a shared profile",
     (mode) => {
       const config: OpenClawConfig = {
@@ -188,7 +188,7 @@ describe("session account pin admission", () => {
         selection === "ordered"
           ? { auth: { order: { openai: [pin] } } }
           : selection === "configured"
-            ? { models: { providers: { openai: { auth: "oauth", baseUrl: "", models: [] } } } }
+            ? { models: { providers: { openai: { auth: "api-key", baseUrl: "", models: [] } } } }
             : {};
       const store = authStore({
         [pin]: {
@@ -338,7 +338,7 @@ describe("session account pin admission", () => {
           profiles: { [pin]: { provider, mode: "aws-sdk" } },
           order: { [provider]: ["acme:shared"] },
         },
-        models: { providers: { [provider]: { baseUrl: "", models: [], auth: "aws-sdk" } } },
+        models: { providers: { [provider]: { baseUrl: "", models: [], auth: "api-key" } } },
       };
       const store: AuthProfileStore = {
         version: 1,
@@ -465,7 +465,7 @@ describe("OpenAI materialized route readiness", () => {
         store,
         resolution: {
           ...dualRoutes,
-          preferredAuthRequirement: selection === "no-preference" ? undefined : "subscription",
+          preferredAuthRequirement: selection === "no-preference" ? undefined : "api-key",
         },
         ref: {
           modelId: "gpt-5.4-mini",

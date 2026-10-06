@@ -16,7 +16,6 @@ import {
 import type {
   PreparedModelRuntimeAgentFacts,
   PreparedModelRuntimeCatalogFacts,
-  PreparedModelRuntimeCatalogSource,
 } from "./prepared-model-runtime.catalog-contract.js";
 import {
   assertPreparedModelRuntimeInputCurrent,
@@ -45,7 +44,7 @@ import {
   retainPreparedPluginRegistry,
 } from "./prepared-model-runtime.plugin-lifetime.js";
 import { PreparedModelRuntimeBuildResources } from "./prepared-model-runtime.resources.js";
-import { prepareAgentCatalogSource } from "./prepared-model-runtime.scoped-catalog.js";
+import { ensureAgentCatalogSource } from "./prepared-model-runtime.scoped-catalog.js";
 import type {
   PreparedModelRuntimeBuildStats,
   PreparedModelRuntimeCatalogMode,
@@ -317,7 +316,6 @@ async function buildSnapshotBatch(
     const workspaceFactsMs = performance.now() - workspaceFactsStartedAt;
     const catalogSourceStartedAt = performance.now();
     onStage?.("agent catalog sources");
-    const catalogSources = new Map<PreparedModelRuntimeInput, PreparedModelRuntimeCatalogSource>();
     if (catalogMode === "live") {
       const sourceCandidatesByAgentDir = groupBuildCandidates(
         candidates,
@@ -340,13 +338,8 @@ async function buildSnapshotBatch(
             // A replacement waits for this batch's completion. Stop the stale batch before another
             // same-directory write so a superseded generation cannot overwrite catalog state.
             assertPreparedModelRuntimeInputCurrent(input, candidate.isBuildCurrent);
-            const catalogSource = await prepareAgentCatalogSource(
-              agentFacts,
-              pluginGeneration,
-              catalogMode,
-            );
+            await ensureAgentCatalogSource(agentFacts, pluginGeneration);
             assertPreparedModelRuntimeInputCurrent(input, candidate.isBuildCurrent);
-            catalogSources.set(input, catalogSource);
           }
         }),
       });
@@ -370,14 +363,10 @@ async function buildSnapshotBatch(
         await nextTurn();
         const { input } = candidate;
         const { agentFacts, pluginGeneration } = requirePreparedInput(input);
-        const catalogSource = catalogSources.get(input);
-        if (!catalogSource) {
-          throw new Error(`prepared model runtime catalog source missing for ${input.agentDir}`);
-        }
         assertPreparedModelRuntimeInputCurrent(input, candidate.isBuildCurrent);
         preparedCatalogs.set(
           input,
-          await prepareFullCatalogFacts(agentFacts, pluginGeneration, catalogMode, catalogSource),
+          await prepareFullCatalogFacts(agentFacts, pluginGeneration, catalogMode),
         );
         assertPreparedModelRuntimeInputCurrent(input, candidate.isBuildCurrent);
         runtimeRegistryCount += 1;

@@ -97,7 +97,7 @@ import {
   restorePreparedSyntheticAuthFacts,
 } from "./provider-synthetic-auth.js";
 
-const nativeAuth = { apiKey: "native-marker", source: "native auth", mode: "oauth" as const };
+const nativeAuth = { apiKey: "native-marker", source: "native auth", mode: "api-key" as const };
 
 function nativeParams(config = {}, env = {}, workspaceDir = "/workspace") {
   return {

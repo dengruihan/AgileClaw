@@ -10,7 +10,6 @@ export default definePluginEntry({
       async ({ program }) => {
         const { registerMemoryCli } = await import("./cli.js");
         registerMemoryCli(program, {
-          acquireLocalService: api.runtime.llm?.acquireLocalService,
           openKeyedStore: <T>(options: OpenKeyedStoreOptions) =>
             api.runtime.state.openKeyedStore<T>(options),
         });

@@ -1870,7 +1870,7 @@ describe("codex command", () => {
         account: {
           ok: true as const,
           value: {
-            account: { type: "chatgpt" as const, email: unsafe, planType: "plus" as const },
+            account: { type: "apiKey" as const },
             requiresOpenaiAuth: false,
           },
         },
@@ -1905,7 +1905,7 @@ describe("codex command", () => {
       [
         "Codex app-server: connected",
         "Models: &lt;\uff20U123&gt; \uff3btrusted\uff3d\uff08https://evil\uff09 \uff20here",
-        "Account: &lt;\uff20U123&gt; \uff3btrusted\uff3d\uff08https://evil\uff09 \uff20here",
+        "Account: available",
         "Rate limits: Codex: primary 58% left",
         "MCP servers: none returned",
         "Skills: 2",

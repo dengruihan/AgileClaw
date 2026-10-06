@@ -40,7 +40,7 @@ export const { applyConfig: applyXiaomiTokenPlanConfig } = createDefaultModelsPr
   [XiaomiTokenPlanRegion]
 >({
   primaryModelRef: XIAOMI_TOKEN_PLAN_DEFAULT_MODEL_REF,
-  resolveParams: (cfg, region) => {
+  resolveParams: (_cfg, region) => {
     const defaultProvider = buildXiaomiTokenPlanProvider();
     const defaultModel = defaultProvider.models.find(
       (model) => model.id === XIAOMI_TOKEN_PLAN_DEFAULT_MODEL_ID,
@@ -49,7 +49,7 @@ export const { applyConfig: applyXiaomiTokenPlanConfig } = createDefaultModelsPr
       providerId: XIAOMI_TOKEN_PLAN_PROVIDER_ID,
       api: defaultProvider.api ?? "openai-completions",
       baseUrl: resolveXiaomiTokenPlanBaseUrl(region),
-      defaultModels: cfg.models?.mode === "replace" ? (defaultProvider.models ?? []) : [],
+      defaultModels: defaultProvider.models ?? [],
       defaultModelId: XIAOMI_TOKEN_PLAN_DEFAULT_MODEL_ID,
       aliases: [
         {

@@ -169,7 +169,6 @@ export async function prepareCodexControlSessionAuth(
       })
     : undefined;
   const handoff = await resolveCodexAppServerPreparedAuthHandoff({
-    authRequirement: route?.authRequirement,
     resolvedApiKey: resolvedAuth?.apiKey,
     authProfileId: route
       ? plan.forwardedAuthProfileId
@@ -182,9 +181,6 @@ export async function prepareCodexControlSessionAuth(
     agentDir,
     homeScope: startOptions.homeScope ?? "agent",
     config,
-    subscriptionProfileRequiredError:
-      "Prepared Codex subscription route requires a forwarded OpenAI OAuth or token profile.",
-    subscriptionProfileUnusableError: "Prepared Codex subscription auth profile is unusable.",
   });
   const binding = handoff.authProfileId
     ? await prepareCodexAppServerAuthBinding({
@@ -200,7 +196,6 @@ export async function prepareCodexControlSessionAuth(
       ...(handoff.preparedAuth
         ? { preparedAuth: handoff.preparedAuth }
         : { authProfileId: handoff.authProfileId }),
-      authRequirement: route?.authRequirement,
       authProfileStore: binding?.authProfileStore ?? store,
       authBindingFingerprint: binding?.fingerprint,
       agentDir,

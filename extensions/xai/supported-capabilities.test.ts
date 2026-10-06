@@ -1,33 +1,5 @@
-import { clearLiveCatalogCacheForTests } from "openclaw/plugin-sdk/provider-catalog-live-runtime";
-import { afterEach, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { buildXaiCatalogModels, resolveXaiCatalogEntry } from "./model-definitions.js";
-import { buildLiveXaiOAuthProvider } from "./provider-catalog.js";
-
-afterEach(clearLiveCatalogCacheForTests);
-
-it.each([true, false])(
-  "preserves a supported OAuth alias with backend metadata=%s",
-  async (withBackend) => {
-    const provider = await buildLiveXaiOAuthProvider({
-      discoveryApiKey: "synthetic-capability-fixture",
-      fetchGuard: async ({ url }) => ({
-        response: Response.json({
-          data: [{ id: "grok-latest", ...(withBackend ? { api_backend: "responses" } : {}) }],
-        }),
-        finalUrl: url,
-        release: async () => undefined,
-      }),
-    });
-    expect(provider.models).toEqual([
-      expect.objectContaining({
-        id: "grok-latest",
-        reasoning: true,
-        input: ["text", "image"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      }),
-    ]);
-  },
-);
 
 it.each([
   { id: "grok-3", reasoning: false, input: ["text"], maxTokens: 64_000 },

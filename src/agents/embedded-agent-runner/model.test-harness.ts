@@ -74,7 +74,7 @@ export function buildOpenAICodexForwardCompatExpectation(
   return {
     provider: "openai",
     id,
-    api: "openai-chatgpt-responses",
+    api: "openai-responses",
     baseUrl: "https://chatgpt.com/backend-api",
     reasoning: true,
     input: isSpark ? ["text"] : ["text", "image"],

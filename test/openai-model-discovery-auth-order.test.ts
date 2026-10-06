@@ -372,7 +372,7 @@ describe("Provider model discovery auth preparation", () => {
           providers: {
             openai: {
               baseUrl: "https://chatgpt.com/backend-api/codex",
-              api: "openai-chatgpt-responses",
+              api: "openai-responses",
               auth,
               apiKey: accessToken,
               models: [],
@@ -415,7 +415,7 @@ describe("Provider model discovery auth preparation", () => {
       expect(outcomes).toEqual([{ provider: "openai", status: "ready" }]);
       const provider = readPlannedProvider(plan, "openai");
       expect(provider).toMatchObject({
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api/codex",
       });
       expect(provider?.models.map((model) => model.id)).toContain("gpt-5.5");

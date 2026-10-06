@@ -326,82 +326,34 @@ openclaw models accounts list --timeout 45000 --json
 
 ## Auth profiles
 
-These commands manage **System / agent** credentials, not personal Gateway accounts. Before provider sign-in, `models auth login` shows the selected agent and that it is operating on the machine running OpenClaw.
-
-Before a `models auth` command changes the local auth store, OpenClaw compares the selected CLI state/config paths with the local Gateway or its installed service. A proven mismatch stops before the write. A remote Gateway or an authenticated path that cannot be verified produces a warning instead.
+These commands manage system and agent model API keys in the local auth store.
+They do not manage personal Gateway accounts. Before writing, OpenClaw checks
+that the selected local state matches the local Gateway or installed service;
+a proven mismatch stops the write.
 
 ```bash
-openclaw models auth add
 openclaw models auth list [--provider <id>] [--json]
-openclaw models auth login --provider <id> [--agent <agentId>]
-openclaw models auth login --provider openai --profile-id openai:work
-openclaw models auth login-github-copilot
+openclaw models auth paste-api-key --provider <id> [--profile-id <id>]
 openclaw models auth activate <profileId> [--agent <id>]
-openclaw models auth logout <profileId> [--yes]
-openclaw models auth paste-api-key --provider <id>
-openclaw models auth setup-token --provider <id>
-openclaw models auth paste-token --provider <id>
+openclaw models auth logout <profileId> [--yes] [--agent <id>]
 openclaw models auth order get --provider <id>
 openclaw models auth order set --provider <id> <profileIds...>
 openclaw models auth order clear --provider <id>
 ```
 
-`models auth add` is the interactive auth helper. It can launch a provider auth flow (OAuth/API key) or guide you into manual token paste, depending on the provider you choose.
+`paste-api-key` prompts for a key and stores it in the auth profile store. It
+updates the configured profile or active saved key, or creates
+`<provider>:manual` when neither exists. Use `--profile-id` to choose a profile.
+In automation, provide the key on stdin rather than in command arguments.
 
-`models auth list` lists saved auth profiles for the selected agent without printing token, API-key, or OAuth secret material. Active cooldown and disable entries include their reason and recovery action. Legacy Gemini CLI OAuth cooldowns direct you to the supported Google AI Studio API-key setup instead of offering an unavailable Gemini CLI login flow. Use `--provider <id>` to filter to one provider, such as `openai`, and `--json` for scripting.
+`list` shows profile ids, providers, key status, and cooldowns without printing
+secret material. `activate` checks a saved key before selecting it for the
+agent. `logout` removes one key profile and its config references. `auth order`
+sets a per-agent priority for saved API-key profiles.
 
-`models auth login` runs a provider plugin's auth flow (OAuth/API key). Use `openclaw plugins list` to see which providers are installed. `login` accepts `--profile-id <id>` for providers that support named profiles during login (use this to keep multiple logins for the same provider separate), `--method <id>` to pick a specific auth method, `--device-code` as a shortcut for `--method device-code`, `--set-default` to apply the provider's recommended default model, and `--force` to remove existing profiles for that provider first (use when a cached OAuth profile is stuck or you want to switch accounts).
-
-After credentials are saved, an existing model restriction can prompt **Show all &lt;Provider&gt; models** or **Keep current restrictions**. Only the first choice adds that provider's wildcard to the current restriction. Credentials stay saved either way. The CLI, private-chat login, and Control UI use the same choice. No prompt appears when the provider is already unrestricted. If restrictions change during sign-in, OpenClaw preserves the newer settings and asks you to choose model access again.
-
-The CLI reports saved model access separately from confirmed Gateway application. If application is not confirmed, run `openclaw gateway restart` to apply the saved policy to the running Gateway. This is required when automatic config reload is disabled.
-
-Without `--set-default`, login preserves the current default, including an unset default, and keeps unrelated configuration edits made while login is running. If credentials are saved but provider settings cannot be applied, the error reports the saved credentials separately. Auth changes request a refresh from the running local Gateway; a refresh failure does not undo the saved change, and the command reports how to apply it.
-
-With an older Gateway, the CLI tries its legacy auth-status refresh. This cannot
-confirm that the saved change is active; follow the restart guidance. This
-fallback applies to auth changes, not to `models list`.
-
-For the shared-main agent, `--force` clears the provider's shared credentials and main-agent local overrides, including their order and health state. For another agent it clears only that agent's local profiles, leaving shared credentials unchanged. A busy auth store stops the command before login starts; close other OpenClaw commands using the same state directory and retry. SQLite lock diagnostics can name either the shared state database or an agent database, so checking only the legacy auth file for open handles does not rule out contention.
-
-`models auth activate <profileId>` tests a saved sign-in and selects its verified model and account for the chosen agent. Use the exact command printed after unattended replacement setup, or find the saved id with `models auth list --json`. This command confirms activation without another prompt; a failed test leaves the current connection unchanged.
-
-`models auth logout <profileId>` removes one saved auth profile from the selected agent auth store. Use the profile id shown by `models auth list`. It also drops that profile from `auth.profiles` and from every `auth.order` list in your config, so no stale reference is left behind, and it deletes an `auth.order.<provider>` entry that would otherwise be emptied (an authored empty order means "select no profiles" and would disable the provider). It prompts for confirmation on a TTY; pass `--yes` for scripts and agents. Provider key references are cleared before the credential is removed. Model defaults and connection settings stay unchanged. Logout refuses when the profile is not in the store.
-
-Logout also removes copies of the selected credential from generated plugin model catalog caches, including retained migration copies, while preserving model inventory and other accounts. Unusable generated-cache rows are discarded rather than retaining unknown secrets. Cleanup checks candidate stores together and only writes catalogs that need credentials removed or unusable rows discarded. A catalog refresh already in progress rechecks saved credentials before publishing. Doctor's catalog credential recovery is unchanged. This cleanup applies while the selected profile is still saved; it cannot identify cached credentials from profiles already removed by an older version.
-
-If final catalog cleanup fails, logout restores the saved credential and its config references so you can rerun the same command with the same profile ID. The error reports whether restoration completed; concurrent auth changes can prevent full restoration and require inspecting the current profiles before retrying.
-
-`models auth login-github-copilot` is a shortcut for `models auth login --provider github-copilot --method device` (GitHub device flow); it accepts `--yes` to overwrite an existing profile without prompting.
-
-Use either `openclaw models auth --agent <id> <subcommand>` or `openclaw models auth <subcommand> --agent <id>` to target a specific configured agent store. Both forms are supported by `add`, `list`, `login`, `activate`, `logout`, `paste-api-key`, `setup-token`, `paste-token`, `login-github-copilot`, and `order get`/`set`/`clear`.
-
-For OpenAI models, `--provider openai` defaults to ChatGPT/Codex account login. Use `--method api-key` only when you want to add an OpenAI API-key profile, usually as a backup for Codex subscription limits. Run `openclaw doctor --fix` to migrate older legacy OpenAI Codex prefix auth/profile state to `openai`.
-
-See [OpenAI authentication](/providers/openai/authentication) to compare Codex
-OAuth, device code, API keys, and Sign in with ChatGPT (Beta) (`--method siwc`),
-including model access, hosted plugins, and shared versus personal setup.
-
-Examples:
-
-```bash
-openclaw models auth login --provider openai --set-default
-openclaw models auth login --provider openai --method api-key
-openclaw models auth paste-api-key --provider openai
-openclaw models auth list --provider openai
-openclaw models auth logout openai:manual --yes
-```
-
-Notes:
-
-- `paste-api-key` accepts API keys generated elsewhere, prompts for the key value, and uses the same credential writer as the Models page. It updates the configured profile or the active saved key, or creates `<provider>:manual` when neither exists. Use `--profile-id` to update a named profile or add a backup without changing the active provider connection. A configured provider stores the profile reference, while key material stays in the auth store. Saved changes report any Gateway refresh failure with a recovery step. In automation, pipe the key on stdin, for example `printf "%s\n" "$OPENAI_API_KEY" | openclaw models auth paste-api-key --provider openai`.
-- `setup-token` and `paste-token` remain generic token commands for providers that expose token auth methods.
-- `setup-token` requires an interactive TTY and runs the provider's token-auth method (defaulting to that provider's `setup-token` method when it exposes one).
-- `paste-token` requires `--provider`, prompts for the token value by default, and writes it to the default profile id `<provider>:manual` unless you pass `--profile-id`. In automation, pipe the token on stdin instead of passing it as an argument so provider credentials do not appear in shell history or process lists.
-- `paste-token --expires-in <duration>` stores an absolute token expiry from a relative duration such as `365d` or `12h`.
-- For `openai`, OpenAI API keys and ChatGPT/OAuth token material are different auth shapes. Use `paste-api-key` for `sk-...` OpenAI API keys and `paste-token` only for token auth material.
-- Anthropic: `setup-token`/`paste-token` are supported OpenClaw auth paths for `anthropic`, but OpenClaw prefers reusing the Claude CLI (`claude -p`) on the host when it is available.
-- `auth order get/set/clear` manages a per-agent auth profile order override for one provider in the SQLite auth store, separate from the `auth.order.<provider>` config key. `set` takes one or more profile ids in priority order. The stored order takes precedence over config for profile selection and CLI runtime routing; `clear` falls back to config/round-robin ordering.
+Saved key changes request a generic model-auth snapshot refresh from the running
+Gateway. If refresh cannot be confirmed, the command reports how to apply the
+saved change. A refresh does not sign in to a provider or renew provider tokens.
 
 ## Related
 

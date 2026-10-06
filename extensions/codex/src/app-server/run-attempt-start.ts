@@ -67,7 +67,6 @@ export async function startCodexAttemptRuntime(resources: CodexAttemptResources)
     resolveReviewerPolicyContext,
     resolveRuntimeOptionsForCurrentBinding,
     startupAuthProfileId,
-    startupAuthRequirement,
   } = connection;
   let pluginAppServer = withCodexAppServerFastModeServiceTier(appServer, runtimeParams);
   const loopDetectionEnabled =
@@ -91,7 +90,6 @@ export async function startCodexAttemptRuntime(resources: CodexAttemptResources)
       pluginConfig,
       computerUseConfig,
       startupAuthProfileId: startupClientAuthProfileId,
-      startupAuthRequirement,
       startupAuthBindingFingerprint: preparedAuthBinding?.fingerprint,
       ...(runtimeArtifactRequest ? { runtimeArtifactRequest } : {}),
       startupPreparedAuth,

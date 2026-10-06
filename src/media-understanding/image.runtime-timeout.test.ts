@@ -65,7 +65,7 @@ describe("describeImageWithModelCore", () => {
       baseUrl: "https://chatgpt.com/backend-api",
     });
     completeMock.mockResolvedValue(
-      imageCompletion("openai-chatgpt-responses", "openai", "gpt-5.4", "codex ok"),
+      imageCompletion("openai-responses", "openai", "gpt-5.4", "codex ok"),
     );
 
     const result = await describeImageWithModelCore({
@@ -119,7 +119,7 @@ describe("describeImageWithModelCore", () => {
       baseUrl: "https://chatgpt.com/backend-api",
     });
     completeMock.mockResolvedValue(
-      imageCompletion("openai-chatgpt-responses", "openai", "gpt-5.4", "codex ok"),
+      imageCompletion("openai-responses", "openai", "gpt-5.4", "codex ok"),
     );
 
     const result = await describeImageWithModelCore({

@@ -121,7 +121,7 @@ afterAll(cleanupPluginLoaderFixturesForTest);
 
 describe("provider selection registration coverage", () => {
   it("reselects retained API owners from current config without activating plugins", async () => {
-    const ids = ["ollama", "github-copilot"];
+    const ids = ["ollama", "openai"];
     const metadataSnapshot = createPluginMetadataSnapshotFixture({
       plugins: ids.map((id) => ({ id, providers: [id] })),
     });
@@ -142,8 +142,8 @@ describe("provider selection registration coverage", () => {
       await withPluginRuntimeGenerationScope({ metadataSnapshot, pluginRegistry }, async () => {
         expect(lookup().plugin?.id).toBe("ollama");
         await Promise.resolve();
-        config.models!.providers!.custom!.api = "github-copilot";
-        expect(lookup().plugin?.id).toBe("github-copilot");
+        config.models!.providers!.custom!.api = "openai-completions";
+        expect(lookup().plugin?.id).toBe("openai");
         expect(
           withPluginRuntimeGenerationScope({ metadataSnapshot }, lookup).plugin,
         ).toBeUndefined();

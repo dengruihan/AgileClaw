@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ModelDefinitionConfig } from "../config/types.models.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { createPluginMetadataSnapshotFixture } from "../plugins/plugin-metadata.test-support.js";
 import * as providerPolicy from "../plugins/provider-policy-surface.js";
@@ -45,13 +46,9 @@ describe("configured catalog registry composition", () => {
             ]
           : [],
       });
-      const registry = ModelRegistry.create(AuthStorage.inMemory({}), "captured:models.json", {
+      const registry = ModelRegistry.create(AuthStorage.inMemory({}), {
         config,
-        includePluginCatalogs: false,
         pluginMetadataSnapshot: metadataSnapshot,
-        modelsJsonContents: JSON.stringify({
-          providers: { fixture: provider },
-        }),
       });
       const { modelCatalog } = prepareCapturedRuntimeFacts({
         agentFacts: { input: { config }, configuredModelRefs: [] },
@@ -77,34 +74,15 @@ describe("configured catalog registry composition", () => {
     },
   );
 
-  it("bounds captured catalog policy loading by provider and refreshes it per invocation", () => {
+  it("does not restore unconfigured model rows from a captured catalog file", () => {
     const loadPolicy = vi.spyOn(providerPolicy, "resolveDirectBundledProviderPolicySurface");
     try {
       const capture = (rowCount: number, scope: "first" | "second") => {
         const config: OpenClawConfig = {};
         const metadataSnapshot = createPluginMetadataSnapshotFixture();
-        const registry = ModelRegistry.create(AuthStorage.inMemory({}), "captured:models.json", {
+        const registry = ModelRegistry.create(AuthStorage.inMemory({}), {
           config,
-          includePluginCatalogs: false,
           pluginMetadataSnapshot: metadataSnapshot,
-          modelsJsonContents: JSON.stringify({
-            providers: {
-              fixture: {
-                api: "openai-responses",
-                baseUrl: "https://fixture.invalid/v1",
-                models: Array.from({ length: rowCount }, (_, index) =>
-                  ["legacy", "first", "second"].map((prefix) => ({
-                    id: `${prefix}-${index}`,
-                    name: `${prefix}-${index}`,
-                    contextWindow: 32_000,
-                    maxTokens: 4096,
-                    reasoning: false,
-                    input: ["text"],
-                  })),
-                ).flat(),
-              },
-            },
-          }),
         });
         loadPolicy.mockClear().mockReturnValue({
           normalizeModelCatalogId: ({ modelId }) => modelId.replace(/^legacy-/, `${scope}-`),
@@ -115,19 +93,12 @@ describe("configured catalog registry composition", () => {
           templateModelRegistry: registry,
           configuredRuntimeModels: [],
         });
-        expect(modelCatalog.entries.map(({ id }) => id)).toEqual(
-          Array.from({ length: rowCount }, (_, index) => [
-            `legacy-${index}`,
-            `${scope === "first" ? "second" : "first"}-${index}`,
-          ]).flat(),
-        );
+        expect(modelCatalog.entries.map(({ id }) => id)).toEqual([]);
         return loadPolicy.mock.calls.length;
       };
 
-      const singleRowLoads = capture(1, "first");
-      expect(singleRowLoads).toBeGreaterThan(0);
-      expect(capture(32, "first")).toBe(singleRowLoads);
-      expect(capture(32, "second")).toBe(singleRowLoads);
+      expect(capture(1, "first")).toBe(0);
+      expect(capture(32, "second")).toBe(0);
     } finally {
       loadPolicy.mockRestore();
     }
@@ -135,9 +106,8 @@ describe("configured catalog registry composition", () => {
 
   it.each<{
     name: string;
-    mode?: "merge" | "replace";
     capturedBaseUrl?: string;
-    modelApi?: ModelCatalogEntry["api"];
+    modelApi?: ModelDefinitionConfig["api"];
     modelBaseUrl?: string;
     expectedBaseUrl?: string;
     expectedIds?: string[];
@@ -147,13 +117,6 @@ describe("configured catalog registry composition", () => {
       name: "captured endpoint",
       capturedBaseUrl: "http://127.0.0.1:9/v1",
       expectedBaseUrl: "http://127.0.0.1:9/v1",
-      inheritsChoices: false,
-    },
-    {
-      name: "replace with a different captured endpoint",
-      mode: "replace",
-      capturedBaseUrl: "http://127.0.0.1:9/v1",
-      expectedIds: ["selected"],
       inheritsChoices: false,
     },
     {
@@ -182,12 +145,11 @@ describe("configured catalog registry composition", () => {
   ])(
     "keeps configured rows and same-route choices: $name",
     ({
-      mode = "merge",
       capturedBaseUrl = "https://fixture.invalid/v1",
       modelApi,
       modelBaseUrl,
       expectedBaseUrl = "https://fixture.invalid/v1",
-      expectedIds = ["selected", "retained-only"],
+      expectedIds = ["selected"],
       inheritsChoices,
     }) => {
       const configured: ModelCatalogEntry = {
@@ -204,7 +166,6 @@ describe("configured catalog registry composition", () => {
       const metadataSnapshot = createPluginMetadataSnapshotFixture();
       const config: OpenClawConfig = {
         models: {
-          mode,
           providers: {
             "donor-fixture": {
               api: "openai-completions",
@@ -226,36 +187,9 @@ describe("configured catalog registry composition", () => {
           },
         },
       };
-      const registry = ModelRegistry.create(AuthStorage.inMemory({}), "captured:models.json", {
+      const registry = ModelRegistry.create(AuthStorage.inMemory({}), {
         config,
-        includePluginCatalogs: false,
         pluginMetadataSnapshot: metadataSnapshot,
-        modelsJsonContents: JSON.stringify({
-          providers: {
-            "donor-fixture": {
-              api: "openai-completions",
-              baseUrl: capturedBaseUrl,
-              models: [
-                {
-                  id: "selected",
-                  name: "Earlier selected",
-                  contextWindow: 64_000,
-                  maxTokens: 4096,
-                  reasoning: false,
-                  input: ["text", "image"],
-                },
-                {
-                  id: "retained-only",
-                  name: "Retained authored row",
-                  contextWindow: 48_000,
-                  maxTokens: 4096,
-                  reasoning: false,
-                  input: ["text", "image"],
-                },
-              ],
-            },
-          },
-        }),
       });
       const agentFacts = {
         input: { config },

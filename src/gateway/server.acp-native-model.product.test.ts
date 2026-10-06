@@ -223,7 +223,6 @@ module.exports = {
         },
         acp: { enabled: true, backend: BACKEND_ID, allowedAgents: ["cursor"] },
         models: {
-          mode: "replace",
           providers: {
             [primary.providerId]: {
               ...primary.config,

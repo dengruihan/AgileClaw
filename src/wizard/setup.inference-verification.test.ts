@@ -332,7 +332,6 @@ describe("offerLiveModelVerification", () => {
           "local-fixture": {
             baseUrl: "http://127.0.0.1:12345/v1",
             models: [],
-            localService: { command: "/fixture/server" },
           },
         },
       },
@@ -371,7 +370,6 @@ describe("offerLiveModelVerification", () => {
           "local-fixture": {
             baseUrl: "http://127.0.0.1:12345/v1",
             models: [],
-            localService: { command: "/fixture/server" },
           },
         },
       },

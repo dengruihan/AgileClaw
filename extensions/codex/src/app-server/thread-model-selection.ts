@@ -1,12 +1,5 @@
-import {
-  isCodexAppServerNativeAuthProfile,
-  type CodexAppServerAuthProfileLookup,
-} from "./auth-profile.js";
+import type { CodexAppServerAuthProfileLookup } from "./auth-profile.js";
 import type { CodexAppServerHomeScope } from "./config-contracts.js";
-import {
-  CODEX_RESPONSES_OAUTH_PROVIDER,
-  isCodexResponsesOAuthCredential,
-} from "./responses-oauth.js";
 import type { CodexAppServerThreadBinding } from "./session-binding.js";
 
 export const CODEX_NATIVE_PERSONALITY_NONE = "none";
@@ -114,26 +107,8 @@ export function resolveCodexAppServerModelProvider(
 ): string | undefined {
   const normalized = params.provider.trim();
   const normalizedLower = normalized.toLowerCase();
-  if (
-    normalizedLower === "openai" &&
-    params.authProfileId &&
-    isCodexResponsesOAuthCredential(params.authProfileStore?.profiles[params.authProfileId])
-  ) {
-    return CODEX_RESPONSES_OAUTH_PROVIDER;
-  }
   if (!normalized || normalizedLower === "codex") {
-    // `codex` is OpenClaw's virtual provider; let Codex app-server keep its
-    // native provider/auth selection instead of forcing the legacy OpenAI path.
-    return undefined;
-  }
-  if (
-    normalizedLower === "openai" &&
-    (params.homeScope === "user" || isCodexAppServerNativeAuthProfile(params))
-  ) {
-    // User-home connections own native auth and provider selection, as do forwarded
-    // ChatGPT profiles. Keep that pair together; account/route checks still run
-    // at the auth boundary before starting a thread.
-    return undefined;
+    return "openai";
   }
   return normalizedLower === "openai" ? "openai" : normalized;
 }

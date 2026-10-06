@@ -25,21 +25,18 @@ const makeStore = (profiles: AuthProfileStore["profiles"]): AuthProfileStore => 
 });
 
 describe("resolveAuthProfileOrder", () => {
-  it.each(["aws-sdk", "api-key"] as const)(
-    "accepts a config-only AWS profile only with %s provider auth",
-    (auth) => {
-      const cfg: OpenClawConfig = {
-        models: { providers: { bedrock: { auth, baseUrl: "https://example.test", models: [] } } },
-        auth: {
-          profiles: { aws: { provider: "bedrock", mode: "aws-sdk" } },
-          order: { bedrock: ["aws"] },
-        },
-      };
-      expect(resolveAuthProfileOrder({ cfg, store: makeStore({}), provider: "bedrock" })).toEqual(
-        auth === "aws-sdk" ? ["aws"] : [],
-      );
-    },
-  );
+  it("drops a config-only AWS profile now that provider auth is API-key only", () => {
+    const cfg: OpenClawConfig = {
+      models: {
+        providers: { bedrock: { auth: "api-key", baseUrl: "https://example.test", models: [] } },
+      },
+      auth: {
+        profiles: { aws: { provider: "bedrock", mode: "aws-sdk" } },
+        order: { bedrock: ["aws"] },
+      },
+    };
+    expect(resolveAuthProfileOrder({ cfg, store: makeStore({}), provider: "bedrock" })).toEqual([]);
+  });
 
   it("ranks credential modes, then lastUsed, without prioritizing lastGood", () => {
     const store = makeStore({

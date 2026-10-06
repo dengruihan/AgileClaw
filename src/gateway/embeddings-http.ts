@@ -7,7 +7,6 @@ import {
 import { z } from "zod";
 import { resolveAgentDir } from "../agents/agent-scope.js";
 import { resolveMemorySearchConfig } from "../agents/memory-search.js";
-import { createConfiguredProviderLocalServiceAcquirer } from "../agents/provider-local-service.js";
 import { getRuntimeConfig } from "../config/io.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { formatErrorMessage } from "../infra/errors.js";
@@ -101,7 +100,6 @@ async function createConfiguredEmbeddingProvider(params: {
   dimensions?: number;
   memorySearch?: MemorySearchEmbeddingConfig;
 }): Promise<MemoryEmbeddingProvider> {
-  const acquireLocalService = createConfiguredProviderLocalServiceAcquirer(() => params.cfg);
   const providerId =
     params.provider === "auto" ? DEFAULT_MEMORY_EMBEDDING_PROVIDER : params.provider;
   const adapter = getMemoryEmbeddingProvider(providerId, params.cfg);
@@ -123,7 +121,6 @@ async function createConfiguredEmbeddingProvider(params: {
     documentInputType: params.memorySearch?.documentInputType,
     dimensions: params.dimensions,
     fallback: "none",
-    acquireLocalService,
   };
   const { provider } = await adapter.create(createOptions);
   if (!provider) {

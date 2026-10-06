@@ -24,11 +24,5 @@ export function isAmbientCredentialAllowedByProviderAuthPin(params: {
   if (auth === "api-key") {
     return params.type === "api_key";
   }
-  if (auth === "oauth") {
-    return params.type === "oauth" || params.type === "token";
-  }
-  if (auth === "token") {
-    return params.type === "token";
-  }
   return auth === undefined;
 }

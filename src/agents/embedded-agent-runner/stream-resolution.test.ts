@@ -112,7 +112,7 @@ describe("prepared embedded stream strategy", () => {
         sessionId: "session-1",
         currentStreamFn: undefined,
         model: {
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           provider: "openai",
           id: "codex-mini-latest",
         } as never,
@@ -334,7 +334,7 @@ describe("resolveEmbeddedAgentStream", () => {
       currentStreamFn: undefined,
       sessionId: "session-1",
       model: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "openai",
         id: "codex-mini-latest",
       } as never,
@@ -417,7 +417,7 @@ describe("resolveEmbeddedAgentStream", () => {
     const model = {
       id: "gpt-5.5",
       name: "GPT-5.5",
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       provider: "openai",
       baseUrl: "https://chatgpt.test/backend-api",
       reasoning: true,
@@ -425,7 +425,7 @@ describe("resolveEmbeddedAgentStream", () => {
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: 128_000,
       maxTokens: 16_000,
-    } satisfies Model<"openai-chatgpt-responses">;
+    } satisfies Model<"openai-responses">;
     // Match createAgentSession's real auth-owning runtime wrapper without importing
     // the complete session/plugin graph into this focused stream-routing suite.
     const resolveSessionAuth = vi.fn(async () => protectedAccessToken);
@@ -524,7 +524,7 @@ describe("resolveEmbeddedAgentStream", () => {
         currentStreamFn: customStream as StreamFn,
         sessionId: "custom-session",
         model: {
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           provider: "openai",
           id: "gpt-5.5",
         } as never,
@@ -841,7 +841,7 @@ describe("resolveEmbeddedAgentStream", () => {
       currentStreamFn: undefined,
       sessionId: "session-1",
       model: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "openai",
         id: "gpt-5.5",
       } as never,
@@ -866,7 +866,7 @@ describe("resolveEmbeddedAgentStream", () => {
       currentStreamFn: undefined,
       sessionId: "session-1",
       model: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "openai",
         id: "gpt-5.5",
       } as never,
@@ -890,7 +890,7 @@ describe("resolveEmbeddedAgentStream", () => {
       sessionId: "session-1",
       signal: runSignal,
       model: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "openai",
         id: "gpt-5.5",
       } as never,
@@ -917,7 +917,7 @@ describe("resolveEmbeddedAgentStream", () => {
         sessionId: "session-1",
         signal: runController.signal,
         model: {
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           provider: "openai",
           id: "gpt-5.5",
         } as never,
@@ -945,7 +945,7 @@ describe("resolveEmbeddedAgentStream", () => {
       sessionId: "session-1",
       signal: runSignal,
       model: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "openai",
         id: "gpt-5.5",
       } as never,
@@ -965,7 +965,7 @@ describe("resolveEmbeddedAgentStream", () => {
       currentStreamFn: undefined,
       sessionId: "session-1",
       model: {
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         provider: "openai",
         id: "gpt-5.5",
       } as never,

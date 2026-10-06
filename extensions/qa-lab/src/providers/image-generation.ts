@@ -38,7 +38,6 @@ export function buildQaImageGenerationConfigPatch(input: QaImageGenerationPatchI
       throw new Error("forced Codex mock image QA requires the OpenAI mock catalog");
     }
     return {
-      mode: "merge" as const,
       providers: {
         openai: {
           ...openAiCatalog,

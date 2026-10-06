@@ -8,7 +8,6 @@ import {
 } from "openclaw/plugin-sdk/memory-core-host-runtime-core";
 import type { OpenClawPluginToolContext } from "openclaw/plugin-sdk/plugin-entry";
 import type { TSchema } from "typebox";
-import type { MemoryCoreAcquireLocalService } from "./memory/embedding-local-service.js";
 
 export type MemoryToolOptions = {
   config?: OpenClawConfig;
@@ -19,7 +18,6 @@ export type MemoryToolOptions = {
   oneShotCliRun?: boolean;
   conversationRecall?: OpenClawPluginToolContext["conversationRecall"];
   activeProjectKeys?: readonly string[];
-  acquireLocalService?: MemoryCoreAcquireLocalService;
 };
 
 const MemorySearchSchema = {

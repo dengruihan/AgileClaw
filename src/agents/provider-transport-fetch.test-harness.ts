@@ -11,7 +11,6 @@ type ProviderRequestPolicyConfigMockResult = {
 const {
   buildProviderRequestDispatcherPolicyMock,
   fetchWithSsrFGuardMock,
-  ensureModelProviderLocalServiceMock,
   mergeModelProviderRequestOverridesMock,
   resolveProviderRequestPolicyConfigMock,
   shouldUseEnvHttpProxyForUrlMock,
@@ -53,7 +52,6 @@ const {
       (_request?: unknown) => { mode: "direct" } | undefined
     >(() => undefined),
     fetchWithSsrFGuardMock: vi.fn(),
-    ensureModelProviderLocalServiceMock: vi.fn(),
     mergeModelProviderRequestOverridesMock: vi.fn((current, overrides) => ({
       ...current,
       ...overrides,
@@ -81,10 +79,6 @@ vi.mock("../infra/net/proxy-env.js", () => ({
   shouldUseEnvHttpProxyForUrl: shouldUseEnvHttpProxyForUrlMock,
 }));
 
-vi.mock("./provider-local-service.js", () => ({
-  ensureModelProviderLocalService: ensureModelProviderLocalServiceMock,
-}));
-
 vi.mock("./provider-request-config.js", () => ({
   buildProviderRequestDispatcherPolicy: buildProviderRequestDispatcherPolicyMock,
   getModelProviderRequestRouteFacts: vi.fn(() => undefined),
@@ -98,7 +92,6 @@ const { buildGuardedModelFetch } = await import("./provider-transport-fetch.js")
 export {
   buildGuardedModelFetch,
   buildProviderRequestDispatcherPolicyMock,
-  ensureModelProviderLocalServiceMock,
   fetchWithSsrFGuardMock,
   managedStreamCleanupRegistrations,
   resolveProviderRequestPolicyConfigMock,
@@ -114,7 +107,6 @@ export function installProviderTransportFetchTestHooks() {
       finalUrl: "https://api.openai.com/v1/responses",
       release: vi.fn(async () => undefined),
     });
-    ensureModelProviderLocalServiceMock.mockReset().mockResolvedValue(undefined);
     buildProviderRequestDispatcherPolicyMock.mockClear().mockReturnValue(undefined);
     mergeModelProviderRequestOverridesMock.mockClear();
     resolveProviderRequestPolicyConfigMock

@@ -20,10 +20,8 @@ import {
 } from "../../auto-reply/thinking.shared.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { ADMIN_SCOPE } from "../../gateway/operator-scopes.js";
-import { defaultRuntime } from "../../runtime.js";
 import { AsyncWorkScope, captureAsyncWorkTracker } from "../../shared/async-work-scope.js";
 import { createDeferredCore } from "../../shared/deferred.js";
-import { runCommandWithRuntime } from "../cli-utils.js";
 import { collectOption } from "../program/helpers.js";
 import type { CapabilityEnvelope, CapabilityTransport } from "./metadata.js";
 import { formatEnvelopeForText, providerSummaryText } from "./output.js";
@@ -531,27 +529,6 @@ export function registerModelCapabilityCommands(capability: Command): void {
       surface,
     );
   };
-
-  modelAuth
-    .command("login")
-    .description("Run provider auth login")
-    .requiredOption("--provider <id>", "Provider id")
-    .option("--method <id>", "Provider auth method id")
-    .option("--agent <id>", "Agent id (default: configured default agent)")
-    .action(async (opts, command) => {
-      await runCommandWithRuntime(defaultRuntime, async () => {
-        const agent = await resolveModelAuthAgent(command, opts.agent, "infer model auth login");
-        const { modelsAuthLoginCommand } = await import("../../commands/models/auth.js");
-        await modelsAuthLoginCommand(
-          {
-            provider: String(opts.provider),
-            method: opts.method ? String(opts.method) : undefined,
-            agent,
-          },
-          defaultRuntime,
-        );
-      });
-    });
 
   modelAuth
     .command("logout")

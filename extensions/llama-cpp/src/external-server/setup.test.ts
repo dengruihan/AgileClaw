@@ -232,19 +232,6 @@ describe("llama-server setup", () => {
     upsertAuthProfileWithLockMock.mockResolvedValue({ version: 1, profiles: {} });
   });
 
-  it("does not present a managed localService as an existing-server candidate", async () => {
-    const config = configWithProvider({
-      baseUrl: "http://127.0.0.1:19432/v1",
-      localService: { command: "/runtime/llama-server" },
-    });
-
-    await expect(detectLlamaServerSetup({ config, env: {} })).resolves.toBeNull();
-    await expect(
-      prepareLlamaServerSetup({ config, env: {}, modelRef: "llama-cpp/model" }),
-    ).resolves.toBeNull();
-    expect(discoverMock).not.toHaveBeenCalled();
-  });
-
   it.each([
     {
       name: "prefers a loaded model over an unloaded higher-ranked family",
@@ -512,10 +499,6 @@ describe("llama-server setup", () => {
             headers: { Authorization: "Bearer managed-header" },
             timeoutSeconds: 600,
             params: { modelCacheDir: "/managed/cache" },
-            localService: {
-              command: "/runtime/llama-server",
-              healthUrl: "http://127.0.0.1:19432/health",
-            },
             models: [
               modelConfig({
                 id: "managed-model",
@@ -542,7 +525,6 @@ describe("llama-server setup", () => {
       }),
     );
     const provider = result.configPatch?.models?.providers?.[LLAMA_CPP_PROVIDER_ID];
-    expect(provider).not.toHaveProperty("localService");
     expect(provider).not.toHaveProperty("timeoutSeconds");
     expect(provider).not.toHaveProperty("headers");
     expect(provider?.apiKey).toBeUndefined();

@@ -46,9 +46,10 @@ export type CurrentCodexScheduledAppPolicy = {
   toolsByApp: ReadonlyMap<string, ReadonlyMap<string, CodexScheduledAppTool>>;
 };
 
-export type ScheduledCodexAppCreatorAuth =
-  | { kind: "prepared-profile"; profileId: string; accountId: string }
-  | { kind: "configured-app-server"; connectionFingerprint: string };
+export type ScheduledCodexAppCreatorAuth = {
+  kind: "configured-app-server";
+  connectionFingerprint: string;
+};
 
 /** Hashes stable configured endpoint identity without retaining credentials or endpoint details. */
 export function buildScheduledCodexAppServerConnectionIdentity(
@@ -82,7 +83,6 @@ export function resolveScheduledCodexAppCreatorCaptureDecision(params: {
   authenticatedScheduledMode: boolean;
   usesSupervisionConnection: boolean;
   homeScope: string | undefined;
-  hasPreparedAccountIdentity: boolean;
   hasConfiguredAppServerIdentity: boolean;
 }): { required: boolean; supported: boolean; unavailableReason?: string } {
   if (!params.appsMayBeVisible) {
@@ -91,11 +91,11 @@ export function resolveScheduledCodexAppCreatorCaptureDecision(params: {
   const unavailableReason = params.authenticatedScheduledMode
     ? "A scheduled Codex continuation cannot create new app-authorized automations. Recreate it from a fresh authenticated owner turn; no automation changes were saved."
     : params.usesSupervisionConnection
-      ? "Codex apps are visible through a supervised connection that cannot capture creator authority. Use an isolated prepared-profile Codex creator turn; no automation changes were saved."
+      ? "Codex apps are visible through a supervised connection that cannot capture creator authority. Use a configured external app-server; no automation changes were saved."
       : params.homeScope === "user"
-        ? "Codex apps are visible through a user-home runtime that cannot capture isolated creator authority. Use an agent-scoped prepared-profile Codex creator turn; no automation changes were saved."
-        : !params.hasPreparedAccountIdentity && !params.hasConfiguredAppServerIdentity
-          ? "Codex app authority requires either a prepared ChatGPT profile or an isolated configured app-server identity. Reauthenticate the selected Codex profile or configured app-server, then retry; no automation changes were saved."
+        ? "Codex apps are visible through a user-home runtime that cannot capture isolated creator authority. Use a configured external app-server; no automation changes were saved."
+        : !params.hasConfiguredAppServerIdentity
+          ? "Codex app authority requires a configured app-server identity. Configure an external app-server, then retry; no automation changes were saved."
           : undefined;
   return {
     required: true,
@@ -104,19 +104,12 @@ export function resolveScheduledCodexAppCreatorCaptureDecision(params: {
   };
 }
 
-type ScheduledCodexAppPreparedProfileAuth = {
-  kind?: undefined;
-  profileId: string;
-  accountId: string;
-};
 type ScheduledCodexAppConfiguredServerAuth = {
   kind: "configured-app-server";
   connectionFingerprint: string;
   managedRequirementsFingerprint: string;
 };
-type ScheduledCodexAppAuthorityAuth =
-  | ScheduledCodexAppPreparedProfileAuth
-  | ScheduledCodexAppConfiguredServerAuth;
+type ScheduledCodexAppAuthorityAuth = ScheduledCodexAppConfiguredServerAuth;
 
 type ScheduledCodexAppAuthorityPayload = {
   version: 1;
@@ -156,12 +149,10 @@ function parseScheduledCodexAppAuthority(
   }
   const payload = asOptionalRecord(authority.payload);
   const auth = asOptionalRecord(payload?.auth);
-  const profileId = normalizeOptionalString(auth?.profileId);
   const connectionFingerprint = normalizeOptionalString(auth?.connectionFingerprint);
   const managedRequirementsFingerprint = normalizeOptionalString(
     auth?.managedRequirementsFingerprint,
   );
-  const accountId = normalizeOptionalString(auth?.accountId);
   const parsedAuth: ScheduledCodexAppAuthorityAuth | undefined =
     auth?.kind === "configured-app-server" &&
     connectionFingerprint &&
@@ -171,9 +162,7 @@ function parseScheduledCodexAppAuthority(
           connectionFingerprint,
           managedRequirementsFingerprint,
         }
-      : auth?.kind === undefined && profileId && accountId
-        ? { profileId, accountId }
-        : undefined;
+      : undefined;
   if (payload?.version !== 1 || !parsedAuth || !Array.isArray(payload.apps)) {
     throw new Error("Stored Codex app authority is invalid; reauthorize this automation.");
   }
@@ -356,15 +345,13 @@ export async function captureScheduledCodexAppAuthority(params: {
           threadId: params.threadId,
           configCwd: params.configCwd,
         }),
-        creatorAuth.kind === "prepared-profile"
-          ? Promise.resolve({ profileId: creatorAuth.profileId, accountId: creatorAuth.accountId })
-          : readCodexManagedRequirementsFingerprint(boundedClient, params.signal).then(
-              (managedRequirementsFingerprint) => ({
-                kind: creatorAuth.kind,
-                connectionFingerprint: creatorAuth.connectionFingerprint,
-                managedRequirementsFingerprint,
-              }),
-            ),
+        readCodexManagedRequirementsFingerprint(boundedClient, params.signal).then(
+          (managedRequirementsFingerprint) => ({
+            kind: creatorAuth.kind,
+            connectionFingerprint: creatorAuth.connectionFingerprint,
+            managedRequirementsFingerprint,
+          }),
+        ),
       ]),
       timeoutMs,
       signal: params.signal,
@@ -615,17 +602,6 @@ export function assertScheduledCodexAppAuthorityRuntime(
       );
     }
     return;
-  }
-  const prepared = connection.startupPreparedAuth;
-  if (
-    prepared?.kind !== "profile" ||
-    prepared.profileId !== scheduledAuth.profileId ||
-    prepared.snapshot?.loginParams.type !== "chatgptAuthTokens" ||
-    prepared.snapshot.chatgptAccountId !== scheduledAuth.accountId
-  ) {
-    throw new AgentHarnessPreflightError(
-      `This automation was authorized for Codex profile ${scheduledAuth.profileId}, but that exact prepared account is not active. Restore the profile or reauthorize the automation from a fresh owner turn.`,
-    );
   }
 }
 

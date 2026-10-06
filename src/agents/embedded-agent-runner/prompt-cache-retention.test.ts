@@ -8,7 +8,7 @@ describe("prompt cache retention", () => {
       resolveCacheRetention(
         { cacheRetention: "long" },
         "openai",
-        "openai-chatgpt-responses",
+        "openai-responses",
         "gpt-5.6-sol",
         undefined,
         "https://chatgpt.com/backend-api/codex",

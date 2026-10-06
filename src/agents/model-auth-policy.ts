@@ -38,12 +38,20 @@ function policyForModel(params: ModelAuthPolicyParams): ProviderModelAuthPolicy 
 }
 
 export function isAuthModeAllowedForModel(params: ModelAuthPolicyParams): boolean {
+  if (params.mode !== undefined && params.mode !== "api-key") {
+    return false;
+  }
   return policyForModel(params).compatible;
 }
 
 export function assertAuthModeAllowedForModel(
   params: ModelAuthPolicyParams & { profileId: string },
 ): void {
+  if (params.mode !== undefined && params.mode !== "api-key") {
+    throw new Error(
+      `Auth profile "${params.profileId}" uses ${params.mode} auth, but model inference only accepts API keys.`,
+    );
+  }
   const policy = policyForModel(params);
   if (policy.compatible) {
     return;

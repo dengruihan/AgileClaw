@@ -152,7 +152,7 @@ describe("prepared model catalog worker input", () => {
       syntheticAuth: [
         {
           providerRef: "native",
-          result: { apiKey: "native-login-not-real", source: "fixture", mode: "oauth" as const },
+          result: { apiKey: "native-login-not-real", source: "fixture", mode: "api-key" as const },
         },
       ],
     };

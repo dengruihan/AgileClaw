@@ -363,8 +363,6 @@ export function createPluginRuntimeResolver(state: PluginRegistryState) {
         if (prop === "llm") {
           const llm = getRuntimeProperty();
           return {
-            acquireLocalService: (...args) =>
-              runWithPluginScope(() => llm.acquireLocalService(...args)),
             complete: (params) => runWithPluginScope(() => llm.complete(params)),
           } satisfies PluginRuntime["llm"];
         }

@@ -12,7 +12,7 @@ export function buildXaiWebSearchProviderBase(): Omit<
   return {
     id: "grok",
     label: "Grok (xAI)",
-    hint: "Uses xAI OAuth or API key · xAI web-grounded responses",
+    hint: "Uses an xAI API key for web-grounded responses",
     onboardingScopes: ["text-inference"],
     credentialLabel: "xAI API key",
     envVars: ["XAI_API_KEY"],

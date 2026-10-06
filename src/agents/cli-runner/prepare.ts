@@ -60,9 +60,7 @@ import {
 } from "../admitted-run-context.js";
 import { hasAgentRosterProperty, resolveAgentWorkspaceDir } from "../agent-scope-config.js";
 import { resolveAgentDir, resolveSessionAgentIds } from "../agent-scope.js";
-import { hasUsableOAuthCredential } from "../auth-profiles/credential-state.js";
 import { externalCliDiscoveryForProviderAuth } from "../auth-profiles/external-cli-discovery.js";
-import { buildOAuthRefreshFailureLoginCommand } from "../auth-profiles/oauth-refresh-failure.js";
 import { resolveApiKeyForProfile } from "../auth-profiles/oauth.js";
 import { resolveAuthProfileOrder } from "../auth-profiles/order.js";
 import { isSetupCredentialAccessible } from "../auth-profiles/setup-access.js";
@@ -481,8 +479,9 @@ async function prepareCliRunContextWithinReadFence(
         cfg: params.config,
         store: authStore,
         provider: params.provider,
-        includePendingOAuthRefresh: true,
-      })[0]?.trim() || undefined;
+      })
+        .find((profileId) => authStore?.profiles[profileId]?.type === "api_key")
+        ?.trim() || undefined;
     if (effectiveAuthProfileId) {
       authCredential = authStore.profiles[effectiveAuthProfileId];
     }
@@ -498,34 +497,23 @@ async function prepareCliRunContextWithinReadFence(
   ) {
     throw new Error("This saved sign-in is inactive. Test and activate it in Model Setup.");
   }
-  // Claude owns its native login and single-use refresh-token family. Never
-  // preflight, refresh, or forward OpenClaw's snapshot; the installed Claude
-  // process validates and refreshes its own current login.
-  const usesNativeAuthProfile =
-    backendAuthPolicy?.nativeAuthProfileIds !== undefined &&
-    effectiveAuthProfileId !== undefined &&
-    backendAuthPolicy.nativeAuthProfileIds.includes(effectiveAuthProfileId);
-  if (usesNativeAuthProfile) {
-    effectiveAuthProfileId = undefined;
-    authCredential = undefined;
-  } else if (
-    effectiveAuthProfileId &&
-    backendAuthPolicy &&
-    (authCredential
-      ? authCredential.type !== "oauth" || backendAuthPolicy.oauthRefreshOwner === "core"
-      : backendAuthPolicy.strictSelectedProfile)
-  ) {
+  if (effectiveAuthProfileId && backendAuthPolicy && authCredential?.type !== "api_key") {
+    throw new CliAuthProfilePreparationError({
+      message: `CLI backend "${backendResolved.id}" requires an explicitly selected API-key profile. Open Models settings, connect this provider with an API key, then select that profile. OpenClaw did not start the run.`,
+      profileId: effectiveAuthProfileId,
+      provider: authCredential?.provider ?? params.provider,
+      agentDir,
+    });
+  }
+  if (effectiveAuthProfileId && authCredential && backendAuthPolicy) {
     const authProfileId = effectiveAuthProfileId;
     const profileResolutionError = (provider: string, resolvedProfileId?: string) => {
-      const loginCommand = buildOAuthRefreshFailureLoginCommand(provider, {
-        profileId: authProfileId,
-      });
       const reason =
         resolvedProfileId !== undefined
           ? `selected auth profile "${authProfileId}" resolved as "${resolvedProfileId}"`
           : `could not materialize selected auth profile "${authProfileId}"`;
       return new CliAuthProfilePreparationError({
-        message: `CLI backend "${backendResolved.id}" ${reason}. Re-authenticate with: ${loginCommand}. OpenClaw did not start the run.`,
+        message: `CLI backend "${backendResolved.id}" ${reason}. Repair the selected API-key profile in Models settings. OpenClaw did not start the run.`,
         profileId: authProfileId,
         provider,
         agentDir,
@@ -560,11 +548,7 @@ async function prepareCliRunContextWithinReadFence(
     const resolvedAuthProfileId = resolvedAuth?.profileId ?? authProfileId;
     authStore = loadScopedAuthStore({ profileId: resolvedAuthProfileId });
     authCredential = resolvedAuth?.credential ?? authStore.profiles[resolvedAuthProfileId];
-    if (
-      backendAuthPolicy?.strictSelectedProfile &&
-      (!authCredential ||
-        (authCredential.type === "oauth" && !hasUsableOAuthCredential(authCredential)))
-    ) {
+    if (authCredential?.type !== "api_key") {
       throw profileResolutionError(resolvedAuth?.provider ?? params.provider);
     }
     if (resolvedAuth && authCredential) {
@@ -576,11 +560,8 @@ async function prepareCliRunContextWithinReadFence(
         mode: resolvedAuth.profileType === "api_key" ? "api-key" : resolvedAuth.profileType,
       };
       // Apply resolved strings only to static credentials with secret refs.
-      // OAuth CLI bridges need raw refreshed fields from the reloaded store.
       if (authCredential.type === "api_key") {
         authCredential = { ...authCredential, key: resolvedAuth.apiKey };
-      } else if (authCredential.type === "token") {
-        authCredential = { ...authCredential, token: resolvedAuth.apiKey };
       }
     }
   }

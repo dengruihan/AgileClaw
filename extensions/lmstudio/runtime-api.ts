@@ -11,11 +11,7 @@ export {
   LMSTUDIO_PROVIDER_ID,
   LMSTUDIO_PROVIDER_LABEL,
 } from "./src/defaults.js";
-export {
-  discoverLmstudioModels,
-  ensureLmstudioModelLoaded,
-  fetchLmstudioModels,
-} from "./src/models.fetch.js";
+export { discoverLmstudioModels, fetchLmstudioModels } from "./src/models.fetch.js";
 export {
   mapLmstudioWireEntry,
   mapLmstudioWireModelsToConfig,

@@ -9,9 +9,9 @@ title: "Custom providers and local runtimes"
 
 ## Providers via `models.providers` (custom/base URL)
 
-Use `models.providers` (or `models.json`) to add **custom** providers or OpenAI/Anthropic-compatible proxies.
+Use `models.providers` to save providers and their complete model lists, including OpenAI/Anthropic-compatible proxies. The generated `models.json` inventory derives from these saved entries.
 
-Many of the bundled provider plugins below already publish a default catalog. Use explicit `models.providers.<id>` entries only when you want to override the default base URL, headers, or model list.
+Provider plugins supply initialization templates. Copy or discover the models you want into `models.providers.<id>.models`; the runtime does not merge an implicit plugin catalog into the saved list. Set `name` independently of the stable provider ID to distinguish multiple instances of the same template.
 
 Bundled and catalog-known routes take their `compat` capabilities from the owning provider plugin. A config `compat` block is for a custom provider/model or a different `api`/`baseUrl` route whose endpoint contract you have verified; see the [custom-provider capability guide](/gateway/config-tools#custom-provider-capability-declarations). Doctor removes legacy values that merely repeat the catalog and leaves divergent values visible for operator review.
 
@@ -50,7 +50,6 @@ Kimi model IDs:
     defaults: { model: { primary: "moonshot/kimi-k3" } },
   },
   models: {
-    mode: "merge",
     providers: {
       moonshot: {
         baseUrl: "https://api.moonshot.ai/v1",
@@ -188,7 +187,6 @@ Synthetic provides Anthropic-compatible models behind the `synthetic` provider:
     defaults: { model: { primary: "synthetic/hf:MiniMaxAI/MiniMax-M3" } },
   },
   models: {
-    mode: "merge",
     providers: {
       synthetic: {
         baseUrl: "https://api.synthetic.new/anthropic",

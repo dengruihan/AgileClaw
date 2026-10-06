@@ -15,7 +15,6 @@ import { readVisibleSessionTranscriptMessageEntries } from "openclaw/plugin-sdk/
 import { resolveCodexAppServerForModelProvider } from "./app-server/app-server-policy.js";
 import { closeCodexStartupClientBestEffort } from "./app-server/attempt-client-cleanup.js";
 import {
-  isCodexAppServerNativeAuthProfile,
   normalizeCodexAppServerBindingModelProvider,
   type CodexAppServerAuthProfileLookup,
 } from "./app-server/auth-profile.js";
@@ -648,5 +647,5 @@ export function resolveModelBackedReviewerPolicyProvider(params: {
   if (modelProvider && modelProvider.toLowerCase() !== "codex") {
     return modelProvider.toLowerCase() === "openai" ? "openai" : modelProvider;
   }
-  return isCodexAppServerNativeAuthProfile(params) ? "openai" : undefined;
+  return undefined;
 }

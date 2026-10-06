@@ -119,13 +119,6 @@ export async function offerLiveModelVerification(params: {
   verified: boolean;
   modelRef?: string;
 }> {
-  const requiresCandidateVerification = (config: OpenClawConfig) => {
-    const provider = resolveDefaultModelForAgent({ cfg: config }).provider;
-    return (
-      params.opts.nonInteractive !== true &&
-      config.models?.providers?.[provider]?.localService !== undefined
-    );
-  };
   const agentDir =
     params.agentDir ?? resolveAgentDir(params.config, resolveAmbientOwnerAgentId(params.config));
   const replacesCredential = params.initialCandidate?.authProfiles.some(({ credential }) =>
@@ -135,10 +128,7 @@ export async function offerLiveModelVerification(params: {
       agentDir,
     }),
   );
-  let required =
-    params.required ||
-    (params.initialCandidate !== undefined &&
-      requiresCandidateVerification(params.initialCandidate.config));
+  let required = params.required ?? false;
   if (!required && !replacesCredential) {
     const shouldTest = await params.prompter.confirm({
       message: t("wizard.setup.testAiAccess"),
@@ -389,6 +379,5 @@ export async function offerLiveModelVerification(params: {
       ...(params.stateDir ? { stateDir: params.stateDir } : {}),
     });
     shouldPersistCandidate = true;
-    required ||= requiresCandidateVerification(candidate.config);
   }
 }

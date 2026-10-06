@@ -166,7 +166,7 @@ it("retires model choices at its config commit before pending metadata settles",
     committedConfig = { auth: { profiles: { account: { provider: "fixture", mode: "api_key" } } } };
     publishOperatorRoleConfigChange(ownedContext);
     expect(broadcast).not.toHaveBeenCalled();
-    committedConfig = { ...committedConfig, models: { mode: "replace" } };
+    committedConfig = { ...committedConfig, models: { providers: {} } };
     publishOperatorRoleConfigChange(ownedContext);
     expect(broadcast).toHaveBeenCalledExactlyOnceWith(
       "chat.metadata.changed",

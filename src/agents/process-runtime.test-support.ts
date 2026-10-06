@@ -20,11 +20,6 @@ export const agentProcessTestEntrypoints = {
     sourceWorkerName: "../infra/unhandled-rejections",
     distWorkerPath: "infra/unhandled-rejections.js",
   },
-  providerLocalService: {
-    currentModuleUrl: import.meta.url,
-    sourceWorkerName: "provider-local-service",
-    distWorkerPath: "agents/provider-local-service.js",
-  },
   settingsStorage: {
     currentModuleUrl: import.meta.url,
     sourceWorkerName: "sessions/settings-storage",

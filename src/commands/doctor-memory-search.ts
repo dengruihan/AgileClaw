@@ -9,7 +9,6 @@ import { tryResolveDefaultAgentId } from "../agents/agent-scope.js";
 import {
   hasAnyAuthProfileStoreSource,
   hasAuthProfileStoreSourceForProvider,
-  isConfiguredAwsSdkAuthProfileForProvider,
 } from "../agents/auth-profiles.js";
 import { resolveMemorySearchConfig } from "../agents/memory-search.js";
 import {
@@ -65,19 +64,6 @@ const MEMORY_EMBEDDING_PROVIDER_AUTH_IDS = new Map([
 ]);
 const OPENAI_COMPATIBLE_MEMORY_EMBEDDING_PROVIDER = "openai-compatible";
 const OPENAI_COMPATIBLE_MODEL_APIS = new Set(["openai-completions", "openai-responses"]);
-
-function hasConfiguredAwsSdkAuthForProvider(provider: string, cfg: OpenClawConfig): boolean {
-  const providerConfig = findNormalizedProviderValue(cfg.models?.providers, provider);
-  if (providerConfig?.auth === "aws-sdk") {
-    return true;
-  }
-  const orderedProfileIds = findNormalizedProviderValue(cfg.auth?.order, provider);
-  const profileIds =
-    orderedProfileIds ?? (cfg.auth?.profiles ? Object.keys(cfg.auth.profiles) : []);
-  return profileIds.some((profileId) =>
-    isConfiguredAwsSdkAuthProfileForProvider({ cfg, provider, profileId }),
-  );
-}
 
 function isOpenAICompatibleMemoryProvider(providerId: string, cfg: OpenClawConfig): boolean {
   const normalizedProviderId = normalizeProviderId(providerId);
@@ -631,9 +617,6 @@ async function hasApiKeyForProvider(
     return true;
   }
   if (opts?.skipProfileResolution === true) {
-    if (authProviderId === "amazon-bedrock") {
-      return hasConfiguredAwsSdkAuthForProvider(authProviderId, cfg);
-    }
     const orderedProfileIds = findNormalizedProviderValue(cfg.auth?.order, authProviderId);
     return orderedProfileIds === undefined
       ? hasAuthProfileStoreSourceForProvider(authProviderId, agentDir)

@@ -559,7 +559,7 @@ describe("gateway chat metadata runtime", () => {
           },
         },
         "openai",
-        "openai-chatgpt-responses",
+        "openai-responses",
       );
 
       if (publicationOrder === "before") {
@@ -629,7 +629,7 @@ describe("gateway chat metadata runtime", () => {
       "gpt-5.6-luna",
       credentials,
       "openai",
-      "openai-chatgpt-responses",
+      "openai-responses",
     );
     const fullCatalog = {
       ...owner.modelCatalog,
@@ -678,7 +678,7 @@ describe("gateway chat metadata runtime", () => {
           },
         },
         "openai",
-        "openai-chatgpt-responses",
+        "openai-responses",
       ),
     );
     harness.setAuthStore({ version: 1, profiles: {} });
@@ -714,7 +714,7 @@ describe("gateway chat metadata runtime", () => {
       "gpt-5.6-luna",
       credentials,
       "openai",
-      "openai-chatgpt-responses",
+      "openai-responses",
     );
     const preparedAuthStore: AuthProfileStore = {
       version: 1,
@@ -725,7 +725,7 @@ describe("gateway chat metadata runtime", () => {
       id: "gpt-5.6-terra",
       name: "GPT-5.6 Terra",
       provider: "openai",
-      api: "openai-chatgpt-responses" as const,
+      api: "openai-responses" as const,
     };
     const fullCatalog = markPreparedModelCatalogFull({
       ...owner.modelCatalog,

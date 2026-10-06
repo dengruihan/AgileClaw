@@ -46,7 +46,6 @@ export const liveFrontierProviderDefinition: QaProviderDefinition = {
     const providers = liveProviderConfigs ?? {};
     return Object.keys(providers).length > 0
       ? {
-          mode: "merge",
           providers,
         }
       : null;

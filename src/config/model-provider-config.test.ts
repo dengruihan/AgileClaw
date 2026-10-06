@@ -5,6 +5,9 @@ import {
   resolveMergedModelProviderModels,
   createModelProviderRouteOverrideResolver,
   findConfiguredProviderModel,
+  modelProviderModelKey,
+  modelReferences,
+  normalizeModelProviderName,
 } from "./model-provider-config.js";
 import type { ModelDefinitionConfig } from "./types.models.js";
 
@@ -23,6 +26,33 @@ function model(id: string, fields: Partial<ModelDefinitionConfig> = {}): ModelDe
 afterEach(() =>
   providerModelNormalization.setCurrentManifestModelIdNormalizationPolicies(undefined),
 );
+
+describe("provider configuration identity helpers", () => {
+  it("normalizes display names and duplicate model URLs consistently", () => {
+    expect(normalizeModelProviderName("  Acme API  ")).toBe("acme api");
+    expect(modelProviderModelKey("https://API.example.test/v1/", { id: " model-A " })).toBe(
+      modelProviderModelKey("https://api.example.test/v1", { id: "model-A" }),
+    );
+    expect(modelProviderModelKey("https://api.example.test/v1", { id: "Model-A" })).not.toBe(
+      modelProviderModelKey("https://api.example.test/v1", { id: "model-A" }),
+    );
+  });
+
+  it("finds model references and ignores declared provider models", () => {
+    expect(
+      modelReferences(
+        {
+          agents: {
+            defaults: { model: { primary: "acme/model-a", fallbacks: ["acme/model-a@work"] } },
+          },
+          models: { providers: { acme: { models: [{ id: "model-a" }] } } },
+        },
+        "acme",
+        "model-a",
+      ),
+    ).toEqual(["agents.defaults.model.primary", "agents.defaults.model.fallbacks[0]"]);
+  });
+});
 
 describe("resolveMergedModelProviderModels", () => {
   it.each([

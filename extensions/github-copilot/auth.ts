@@ -12,9 +12,7 @@ import {
   resolveConfiguredSecretInputWithFallback,
   resolveRequiredConfiguredSecretRefInputString,
 } from "openclaw/plugin-sdk/secret-input-runtime";
-import { PUBLIC_GITHUB_COPILOT_DOMAIN } from "./domain.js";
 import { PROVIDER_ID } from "./models.js";
-import { formatGithubCopilotApiKey, parseGithubCopilotApiKey } from "./oauth.js";
 
 export async function resolveFirstGithubToken(params: {
   agentDir?: string;
@@ -90,27 +88,14 @@ export async function resolveFirstGithubToken(params: {
           provider: PROVIDER_ID,
         })[0];
   const profile = profileId ? authStore.profiles[profileId] : undefined;
-  if (profile?.type === "oauth") {
-    const formatted = formatGithubCopilotApiKey(profile);
-    if (!normalizeOptionalSecretInput(profile.refresh)) {
-      return { githubToken: "", hasProfile };
-    }
-    const parsed = parseGithubCopilotApiKey(formatted);
-    return {
-      ...parsed,
-      githubDomain: parsed.githubDomain ?? PUBLIC_GITHUB_COPILOT_DOMAIN,
-      hasProfile,
-      profileId,
-    };
-  }
-  if (profile?.type !== "token") {
+  if (profile?.type !== "api_key") {
     return { githubToken: "", hasProfile };
   }
   const resolved = await resolveRequiredConfiguredSecretRefInputString({
     config: params.config ?? {},
     env: params.env,
-    value: profile.tokenRef,
-    path: `providers.github-copilot.authProfiles.${profileId ?? "default"}.tokenRef`,
+    value: profile.keyRef,
+    path: `providers.github-copilot.authProfiles.${profileId ?? "default"}.keyRef`,
   });
-  return { githubToken: (resolved ?? profile.token ?? "").trim(), hasProfile, profileId };
+  return { githubToken: (resolved ?? profile.key ?? "").trim(), hasProfile, profileId };
 }

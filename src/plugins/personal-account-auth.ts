@@ -10,7 +10,11 @@ export function listPersonalAccountAuthChoices(config: OpenClawConfig) {
     config,
     metadataSnapshot,
     includeUntrustedWorkspacePlugins: false,
-  }).filter((choice) => choice.personalAccount);
+  }).filter(
+    (choice) =>
+      choice.personalAccount &&
+      (choice.methodId === "api-key" || choice.methodId.startsWith("api-")),
+  );
   const allowed = new Set(
     resolveDiscoverableProviderOwnerPluginIds({
       config,
@@ -43,5 +47,6 @@ export async function resolvePersonalAccountAuthMethod(
     activate: false,
     includeUntrustedWorkspacePlugins: false,
   }).find((entry) => entry.pluginId === choice.pluginId && entry.id === providerId);
-  return provider?.auth.find((method) => method.id === methodId);
+  const method = provider?.auth.find((entry) => entry.id === methodId);
+  return method?.kind === "api_key" ? method : undefined;
 }

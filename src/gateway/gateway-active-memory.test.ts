@@ -238,7 +238,7 @@ describe("Gateway Active Memory", () => {
             },
             gateway: { auth: { mode: "token", token } },
             hooks: { enabled: false },
-            models: { mode: "replace", providers: { [provider.providerId]: provider.config } },
+            models: { providers: { [provider.providerId]: provider.config } },
             memory: { search: { rememberAcrossConversations: false } },
             plugins: {
               allow: ["active-memory", "memory-core", "openai"],

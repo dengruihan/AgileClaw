@@ -146,8 +146,8 @@ describe("hasProviderAuthForTool", () => {
         providers: {
           "amazon-bedrock": {
             baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
-            auth: "aws-sdk",
-            api: "bedrock-converse-stream",
+            auth: "api-key",
+            api: "anthropic-messages",
             models: [],
           },
         },

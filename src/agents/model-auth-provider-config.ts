@@ -26,10 +26,7 @@ import { SecretSurfaceUnavailableError } from "../secrets/runtime-degraded-state
 import { mintSecretSentinel } from "../secrets/sentinel.js";
 import { appendConfigPathSegment } from "../shared/dot-path.js";
 import { normalizeOptionalSecretInput } from "../utils/normalize-secret-input.js";
-import {
-  isConfiguredAwsSdkAuthProfileForProvider,
-  isStoredCredentialCompatibleWithAuthProvider,
-} from "./auth-profiles/order.js";
+import { isStoredCredentialCompatibleWithAuthProvider } from "./auth-profiles/order.js";
 import type { AuthProfileCredential, AuthProfileStore } from "./auth-profiles/types.js";
 import { readInlineProviderApiKeyUsage } from "./auth-profiles/usage-state.js";
 import { resolveEnvApiKey, type EnvApiKeyResult } from "./model-auth-env.js";
@@ -39,11 +36,7 @@ import {
   isNonSecretApiKeyMarker,
   SECRETREF_ENV_HEADER_MARKER_PREFIX,
 } from "./model-auth-markers.js";
-import {
-  resolveAwsSdkEnvVarName,
-  resolveDirectProviderCredentialMode,
-  type ResolvedProviderAuth,
-} from "./model-auth-runtime-shared.js";
+import { type ResolvedProviderAuth } from "./model-auth-runtime-shared.js";
 import { isLocalProviderBaseUrl } from "./model-provider-local.js";
 import type { ProviderAuthAliasLookupParams } from "./provider-auth-aliases.js";
 
@@ -368,7 +361,9 @@ function providerEntriesShareBaseUrl(params: {
 }
 
 function isBearerProfileCredential(credential: AuthProfileCredential): boolean {
-  return credential.type === "api_key" || credential.type === "token";
+  // Model inference only accepts prepared API keys; shared OAuth profiles stay
+  // available to MCP and channel callers outside this resolver.
+  return credential.type === "api_key";
 }
 
 /** True when a bearer auth profile can safely satisfy a provider-entry apiKey reference. */
@@ -509,21 +504,6 @@ export async function resolveProviderEntryApiKeyBinding(params: {
     }
     return { kind: "profile-unresolved", profileId: reference.profileId, error: err };
   }
-}
-
-export function resolveConfiguredAwsSdkProfileAuth(params: {
-  cfg?: OpenClawConfig;
-  provider: string;
-  profileId: string;
-}): ResolvedProviderAuth | null {
-  if (!isConfiguredAwsSdkAuthProfileForProvider(params)) {
-    return null;
-  }
-  return {
-    ...resolveAwsSdkAuthInfo(),
-    profileId: params.profileId,
-    source: `profile:${params.profileId}`,
-  };
 }
 
 function isLocalAuthProviderBaseUrl(baseUrl: string): boolean {
@@ -694,11 +674,7 @@ export function resolveRuntimeProviderConfigApiKeyAuth(params: {
   return {
     apiKey,
     source: `models.providers.${params.provider}`,
-    mode: resolveDirectProviderCredentialMode({
-      cfg: params.cfg,
-      provider: params.provider,
-      inferredMode: "api-key",
-    }),
+    mode: "api-key" as const,
   };
 }
 
@@ -707,14 +683,4 @@ function resolveEnvSourceLabel(envVars: string[], label = envVars.join(" + ")): 
   const shellApplied = envVars.some((envVar) => applied.has(envVar));
   const prefix = shellApplied ? "shell env: " : "env: ";
   return `${prefix}${label}`;
-}
-
-export function resolveAwsSdkAuthInfo(): { mode: "aws-sdk"; source: string } {
-  const envVar = resolveAwsSdkEnvVarName();
-  const envVars =
-    envVar === "AWS_ACCESS_KEY_ID" ? [envVar, "AWS_SECRET_ACCESS_KEY"] : envVar ? [envVar] : [];
-  return {
-    mode: "aws-sdk",
-    source: envVar ? resolveEnvSourceLabel(envVars) : "aws-sdk default chain",
-  };
 }

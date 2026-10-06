@@ -13,4 +13,3 @@ export const promptAndConfigureOllama = setupMethod((runtime) => runtime.promptA
 export const configureOllamaNonInteractive = setupMethod(
   (runtime) => runtime.configureOllamaNonInteractive,
 );
-export const ensureOllamaModelPulled = setupMethod((runtime) => runtime.ensureOllamaModelPulled);

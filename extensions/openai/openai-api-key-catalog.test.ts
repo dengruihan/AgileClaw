@@ -165,7 +165,7 @@ describe("OpenAI API-key catalog", () => {
     expect(provider.baseUrl).toBe(customBaseUrl);
     expect(provider.api).toBe("openai-responses");
     expect(provider.apiKey).toBe("sk-custom-openai-compatible");
-    const apiModel = provider.models.find((model) => model.api !== "openai-chatgpt-responses");
+    const apiModel = provider.models.find((model) => model.baseUrl === customBaseUrl);
     expect(apiModel?.baseUrl).toBe(customBaseUrl);
     expect(
       resolveModelRoutes({

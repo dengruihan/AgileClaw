@@ -3,34 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { parse as parseDotEnv } from "dotenv";
 import { extractErrorCode } from "openclaw/plugin-sdk/error-runtime";
-import {
-  asOptionalRecord,
-  isRecord,
-  normalizeOptionalString,
-} from "openclaw/plugin-sdk/string-coerce-runtime";
+import { isRecord, normalizeOptionalString } from "openclaw/plugin-sdk/string-coerce-runtime";
 
-const GEMINI_CLI_AMBIENT_AUTH_ENV = new Set([
-  "GEMINI_API_KEY",
-  "GOOGLE_API_KEY",
-  "GOOGLE_GENAI_USE_VERTEXAI",
-  "GOOGLE_APPLICATION_CREDENTIALS",
-  "GOOGLE_CLOUD_PROJECT",
-  "GOOGLE_CLOUD_PROJECT_ID",
-  "GOOGLE_CLOUD_QUOTA_PROJECT",
-  "GOOGLE_CLOUD_LOCATION",
-]);
-const GEMINI_CLI_UNSAFE_AUTH_ENV = [
-  "GOOGLE_GENAI_USE_GCA",
-  "CLOUD_SHELL",
-  "GEMINI_CLI_USE_COMPUTE_ADC",
-] as const;
-const GEMINI_CLI_AUTH_SELECTOR_ENV = new Set([
-  "GEMINI_API_KEY",
-  "GOOGLE_GENAI_USE_GCA",
-  "GOOGLE_GENAI_USE_VERTEXAI",
-  "CLOUD_SHELL",
-  "GEMINI_CLI_USE_COMPUTE_ADC",
-]);
 const GEMINI_CLI_TRUSTED_TRANSPORT_ENV = new Set([
   "GOOGLE_GEMINI_BASE_URL",
   "GOOGLE_VERTEX_BASE_URL",
@@ -57,17 +31,8 @@ export type GeminiCliRestrictedAuthContext = {
   isolatedCompletionSystemPrompt?: string;
 };
 
-type GeminiCliAmbientAuth = {
-  selectedType?: string;
-  envOverrides: Record<string, string>;
-  safeSettings: Record<string, unknown>;
-};
-
-type GeminiCliAmbientEnv = {
-  auth: Record<string, string>;
+type GeminiCliTransportEnv = {
   transport: Record<string, string>;
-  unsafeAuth: Record<string, string>;
-  telemetryEnabled?: boolean;
 };
 
 // Gemini CLI 0.39.1 runs this commandUtils grammar before pasted-text unescape;
@@ -81,24 +46,6 @@ export function isolatedCompletionInputError(message: string): Error & { code: "
   error.name = "IsolatedCompletionInputError";
   error.code = "input-rejected";
   return error;
-}
-
-export function isolatedCompletionUnsupportedError(
-  message: string,
-): Error & { code: "unsupported" } {
-  const error = new Error(message) as Error & { code: "unsupported" };
-  error.name = "IsolatedCompletionUnsupportedError";
-  error.code = "unsupported";
-  return error;
-}
-
-function unsupportedExactToolAuthError(
-  ctx: GeminiCliRestrictedAuthContext,
-  message: string,
-): Error {
-  return ctx.isolatedCompletionSystemPrompt === undefined
-    ? new Error(message)
-    : isolatedCompletionUnsupportedError(message);
 }
 
 export function assertGeminiCliLiteralIsolatedPrompt(ctx: GeminiCliRestrictedAuthContext): boolean {
@@ -145,26 +92,6 @@ export async function readGeminiCliJsonObject(
   }
 }
 
-function projectGeminiCliSafeSettings(settings: Record<string, unknown>): Record<string, unknown> {
-  const projected: Record<string, unknown> = {};
-  const privacy = asOptionalRecord(settings.privacy);
-  if (typeof privacy?.usageStatisticsEnabled === "boolean") {
-    projected.privacy = { usageStatisticsEnabled: privacy.usageStatisticsEnabled };
-  }
-  const telemetry = asOptionalRecord(settings.telemetry);
-  const safeTelemetry: Record<string, boolean> = {};
-  if (typeof telemetry?.enabled === "boolean") {
-    safeTelemetry.enabled = telemetry.enabled;
-  }
-  if (typeof telemetry?.logPrompts === "boolean") {
-    safeTelemetry.logPrompts = telemetry.logPrompts;
-  }
-  if (Object.keys(safeTelemetry).length > 0) {
-    projected.telemetry = safeTelemetry;
-  }
-  return projected;
-}
-
 function resolveGeminiCliAmbientHome(ctx: GeminiCliRestrictedAuthContext): string {
   return (
     normalizeOptionalString(ctx.baseEnv?.GEMINI_CLI_HOME) ??
@@ -175,7 +102,7 @@ function resolveGeminiCliAmbientHome(ctx: GeminiCliRestrictedAuthContext): strin
 
 function projectGeminiCliTrustedTransportEnv(
   ctx: GeminiCliRestrictedAuthContext,
-  ambientEnv: GeminiCliAmbientEnv,
+  ambientEnv: GeminiCliTransportEnv,
 ): Record<string, string> {
   return Object.fromEntries(
     [...GEMINI_CLI_TRUSTED_TRANSPORT_ENV].map((name) => [
@@ -188,27 +115,15 @@ function projectGeminiCliTrustedTransportEnv(
   );
 }
 
-async function readGeminiCliAmbientAuthEnv(
+async function readGeminiCliTransportEnv(
   filePath: string,
-): Promise<GeminiCliAmbientEnv | undefined> {
+): Promise<GeminiCliTransportEnv | undefined> {
   try {
     const parsed = parseDotEnv(await fs.readFile(filePath, "utf8"));
-    const telemetryValue = parsed.GEMINI_TELEMETRY_ENABLED?.trim().toLowerCase();
     return {
-      auth: Object.fromEntries(
-        Object.entries(parsed).filter(([key]) => GEMINI_CLI_AMBIENT_AUTH_ENV.has(key)),
-      ),
       transport: Object.fromEntries(
         Object.entries(parsed).filter(([key]) => GEMINI_CLI_TRUSTED_TRANSPORT_ENV.has(key)),
       ),
-      unsafeAuth: Object.fromEntries(
-        Object.entries(parsed).filter(([key]) =>
-          GEMINI_CLI_UNSAFE_AUTH_ENV.includes(key as (typeof GEMINI_CLI_UNSAFE_AUTH_ENV)[number]),
-        ),
-      ),
-      ...(telemetryValue
-        ? { telemetryEnabled: telemetryValue === "true" || telemetryValue === "1" }
-        : {}),
     };
   } catch (error) {
     if (extractErrorCode(error) === "ENOENT") {
@@ -218,121 +133,21 @@ async function readGeminiCliAmbientAuthEnv(
   }
 }
 
-async function loadGeminiCliAmbientEnv(
+async function loadGeminiCliTransportEnv(
   ctx: GeminiCliRestrictedAuthContext,
-): Promise<GeminiCliAmbientEnv> {
+): Promise<GeminiCliTransportEnv> {
   const home = resolveGeminiCliAmbientHome(ctx);
   for (const candidate of [path.join(home, ".gemini", ".env"), path.join(home, ".env")]) {
-    const env = await readGeminiCliAmbientAuthEnv(candidate);
+    const env = await readGeminiCliTransportEnv(candidate);
     if (env !== undefined) {
       return env;
     }
   }
-  return { auth: {}, transport: {}, unsafeAuth: {} };
+  return { transport: {} };
 }
 
 export async function resolveGeminiCliTrustedTransportEnv(
   ctx: GeminiCliRestrictedAuthContext,
 ): Promise<Record<string, string>> {
-  return projectGeminiCliTrustedTransportEnv(ctx, await loadGeminiCliAmbientEnv(ctx));
-}
-
-export async function resolveGeminiCliAmbientAuth(
-  ctx: GeminiCliRestrictedAuthContext,
-): Promise<GeminiCliAmbientAuth> {
-  const home = resolveGeminiCliAmbientHome(ctx);
-  const settings = await readGeminiCliJsonObject(path.join(home, ".gemini", "settings.json"));
-  const systemSettings = await readGeminiCliJsonObject(ctx.systemSettingsPath);
-  const userAuth = asOptionalRecord(asOptionalRecord(settings.security)?.auth);
-  const systemAuth = asOptionalRecord(asOptionalRecord(systemSettings.security)?.auth);
-  const ambientEnv = await loadGeminiCliAmbientEnv(ctx);
-  const preparedSelectorOwnsAuth = [...GEMINI_CLI_AUTH_SELECTOR_ENV].some((name) => {
-    const value = normalizeOptionalString(ctx.baseEnv?.[name]);
-    return value !== undefined && value !== "false" && value !== "0";
-  });
-  const systemSelectedType = normalizeOptionalString(systemAuth?.selectedType);
-  const userSelectedType = normalizeOptionalString(userAuth?.selectedType);
-  // A request-prepared selector is the credential owner for this turn. It may
-  // override ambient user preference, but never system-enforced selection.
-  const selectedType =
-    systemSelectedType ?? (preparedSelectorOwnsAuth ? undefined : userSelectedType);
-  const enforcedType = normalizeOptionalString(systemAuth?.enforcedType);
-  if (enforcedType && enforcedType !== "gemini-api-key" && enforcedType !== "vertex-ai") {
-    throw unsupportedExactToolAuthError(
-      ctx,
-      "Gemini CLI exact tool availability supports only API-key or Vertex auth; Code Assist auth can inject administrator-required tools.",
-    );
-  }
-  const envValue = (name: string): string | undefined => {
-    const prepared = normalizeOptionalString(ctx.baseEnv?.[name]);
-    if (prepared !== undefined) {
-      return prepared;
-    }
-    if (preparedSelectorOwnsAuth && GEMINI_CLI_AUTH_SELECTOR_ENV.has(name)) {
-      return undefined;
-    }
-    return (
-      normalizeOptionalString(process.env[name]) ??
-      normalizeOptionalString(ambientEnv.auth[name]) ??
-      normalizeOptionalString(ambientEnv.unsafeAuth[name])
-    );
-  };
-  // Gemini CLI selects auth from selectedType or its auth env, then compares
-  // enforcedType. Do not turn the policy constraint into credential selection.
-  const effectiveAuthType =
-    selectedType ??
-    (envValue("GOOGLE_GENAI_USE_GCA") === "true"
-      ? "oauth-personal"
-      : envValue("GOOGLE_GENAI_USE_VERTEXAI") === "true"
-        ? "vertex-ai"
-        : // Gemini CLI consumes GOOGLE_API_KEY only after Vertex auth is selected;
-          // unlike GEMINI_API_KEY, it is not itself an auth-type selector.
-          envValue("GEMINI_API_KEY")
-          ? "gemini-api-key"
-          : envValue("CLOUD_SHELL") === "true" || envValue("GEMINI_CLI_USE_COMPUTE_ADC") === "true"
-            ? "compute-default-credentials"
-            : undefined);
-  if (effectiveAuthType !== "gemini-api-key" && effectiveAuthType !== "vertex-ai") {
-    throw unsupportedExactToolAuthError(
-      ctx,
-      "Gemini CLI exact tool availability supports only API-key or Vertex auth; Code Assist auth can inject administrator-required tools.",
-    );
-  }
-  if (enforcedType !== undefined && enforcedType !== effectiveAuthType) {
-    throw new Error(
-      `Gemini CLI system settings enforce ${enforcedType} auth, but exact tool availability resolved ${effectiveAuthType}.`,
-    );
-  }
-  const envOverrides: Record<string, string> = {
-    ...Object.fromEntries([...GEMINI_CLI_AMBIENT_AUTH_ENV].map((name) => [name, ""])),
-    ...GEMINI_CLI_EXACT_TOOL_ENV_BARRIERS,
-    ...projectGeminiCliTrustedTransportEnv(ctx, ambientEnv),
-  };
-  for (const name of GEMINI_CLI_AMBIENT_AUTH_ENV) {
-    const value = envValue(name);
-    if (value) {
-      envOverrides[name] = value;
-    }
-  }
-  const applicationCredentials = normalizeOptionalString(
-    envOverrides.GOOGLE_APPLICATION_CREDENTIALS,
-  );
-  if (applicationCredentials && !path.isAbsolute(applicationCredentials)) {
-    const workspaceDir = normalizeOptionalString(ctx.workspaceDir);
-    if (!workspaceDir) {
-      throw new Error(
-        "Gemini exact tool availability cannot resolve relative GOOGLE_APPLICATION_CREDENTIALS without a workspace.",
-      );
-    }
-    envOverrides.GOOGLE_APPLICATION_CREDENTIALS = path.resolve(
-      workspaceDir,
-      applicationCredentials,
-    );
-  }
-  const safeSettings = projectGeminiCliSafeSettings(settings);
-  if (ambientEnv.telemetryEnabled === false) {
-    const telemetry = asOptionalRecord(safeSettings.telemetry);
-    safeSettings.telemetry = { ...telemetry, enabled: false };
-  }
-  return { selectedType, envOverrides, safeSettings };
+  return projectGeminiCliTrustedTransportEnv(ctx, await loadGeminiCliTransportEnv(ctx));
 }

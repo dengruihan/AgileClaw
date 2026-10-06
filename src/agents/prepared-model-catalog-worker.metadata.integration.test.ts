@@ -130,7 +130,6 @@ describe("prepared catalog parent metadata ownership", () => {
             configuredCatalogEntries: [],
           },
           "live",
-          { modelsJsonContents: null, pluginCatalogs: [] },
           { includeNative: false, ...(scope === "selected" ? { providerIds: ["selected"] } : {}) },
         );
 

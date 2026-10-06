@@ -13,7 +13,7 @@ const COHERE_NORTH_MINI_CODE_MODEL_ID = "north-mini-code-1-0";
 
 describe("Cohere onboarding", () => {
   it("registers the manifest catalog through the onboarding preset", () => {
-    const result = applyCohereConfig({ models: { mode: "replace" } });
+    const result = applyCohereConfig({});
     const provider = result.models?.providers?.cohere;
 
     expect(provider).toMatchObject({
@@ -55,17 +55,19 @@ describe("Cohere onboarding", () => {
     );
   });
 
-  it("preserves authored rows in merge mode", () => {
+  it("preserves authored rows ahead of the seeded catalog", () => {
     const authored = buildCohereCatalogModels().map((model) =>
       Object.assign({}, model, { id: `operator-${model.id}`, name: "My model" }),
     );
     const result = applyCohereConfig({
       models: {
-        mode: "merge",
         providers: { cohere: { baseUrl: COHERE_BASE_URL, models: authored } },
       },
     });
 
-    expect(result.models?.providers?.cohere?.models).toEqual(authored);
+    expect(result.models?.providers?.cohere?.models).toEqual([
+      ...authored,
+      ...buildCohereCatalogModels(),
+    ]);
   });
 });

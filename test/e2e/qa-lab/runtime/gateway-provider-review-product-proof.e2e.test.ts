@@ -333,7 +333,7 @@ describe("Gateway provider review product proof", () => {
               providers: {
                 openai: {
                   baseUrl: `${baseUrl}/backend-api/codex`,
-                  api: "openai-chatgpt-responses",
+                  api: "openai-responses",
                   auth: "oauth",
                   request: { allowPrivateNetwork: true },
                   models: [

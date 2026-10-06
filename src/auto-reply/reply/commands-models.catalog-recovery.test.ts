@@ -416,7 +416,7 @@ describe("/models browse catalog recovery", () => {
         provider: "openai",
         id: "gpt-5.6-luna",
         name: "GPT-5.6 Luna",
-        api: "openai-chatgpt-responses" as const,
+        api: "openai-responses" as const,
         baseUrl: "https://chatgpt.com/backend-api/codex",
       };
       catalogMocks.readSnapshot.mockReturnValueOnce({
@@ -429,7 +429,7 @@ describe("/models browse catalog recovery", () => {
       expect(data.providers.includes("openai")).toBe(!excluded);
       if (!excluded) {
         expect(data.modelCatalog.find((entry) => entry.provider === "openai")).toMatchObject({
-          api: "openai-chatgpt-responses",
+          api: "openai-responses",
           baseUrl: "https://chatgpt.com/backend-api/codex",
         });
       }

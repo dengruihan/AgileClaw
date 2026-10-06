@@ -71,8 +71,6 @@ const CORE_GATEWAY_HANDLER_MODULES = {
   themes: () => import("./themes.js").then((module) => module.themeHandlers),
   "models-auth-status": () =>
     import("./models-auth-status.js").then((module) => module.modelsAuthStatusHandlers),
-  "models-auth-login": () =>
-    import("./models-auth-login.js").then((module) => module.modelsAuthLoginHandlers),
   "mcp-auth-login": () =>
     import("./mcp-auth-login.js").then((module) => module.mcpAuthLoginHandlers),
   "models-auth-order": () =>

@@ -20,7 +20,6 @@ import { normalizeAgentId } from "openclaw/plugin-sdk/routing";
 import { createPluginRuntimeStore } from "openclaw/plugin-sdk/runtime-store";
 import { withOpenClawAgentDatabaseWrite } from "openclaw/plugin-sdk/sqlite-runtime";
 import { runInMemoryBackgroundContext } from "./background-context.js";
-import type { MemoryCoreAcquireLocalService } from "./embedding-local-service.js";
 import type { EmbeddingProvider } from "./embeddings.js";
 import { getMemoryManagerLifecycle } from "./lifecycle.js";
 import { MemoryIndexDatabase } from "./manager-database-context.js";
@@ -77,7 +76,6 @@ export class MemoryIndexManager extends MemorySearchOrchestration implements Mem
   }
   protected readonly cacheKey: string;
   protected readonly purpose: MemoryIndexManagerPurpose;
-  protected override readonly acquireLocalService?: MemoryCoreAcquireLocalService;
   protected override readonly memoryFiles?: MemoryWorkspaceFiles;
   protected readonly cfg: OpenClawConfig;
   protected readonly agentId: string;
@@ -106,7 +104,6 @@ export class MemoryIndexManager extends MemorySearchOrchestration implements Mem
     agentId: string;
     purpose?: MemoryIndexManagerPurpose;
     inspectSources?: boolean;
-    acquireLocalService?: MemoryCoreAcquireLocalService;
     maintenanceSource?: MemoryIndexManager;
   }): Promise<MemoryIndexManager | null> {
     const source = params.maintenanceSource;
@@ -138,7 +135,6 @@ export class MemoryIndexManager extends MemorySearchOrchestration implements Mem
             settings,
             providerRequirement,
             purpose,
-            acquireLocalService: params.acquireLocalService,
           });
           const databaseOptions = MemoryIndexDatabase.captureWriteOptions(
             agentId,
@@ -161,7 +157,6 @@ export class MemoryIndexManager extends MemorySearchOrchestration implements Mem
                     settings,
                     providerRequirement,
                     purpose,
-                    acquireLocalService: params.acquireLocalService,
                     maintenanceSource: source,
                     databaseOptions,
                   });
@@ -215,7 +210,6 @@ export class MemoryIndexManager extends MemorySearchOrchestration implements Mem
     settings: ResolvedMemorySearchConfig;
     providerRequirement: MemoryEmbeddingProviderRequirement;
     purpose: MemoryIndexManagerPurpose;
-    acquireLocalService?: MemoryCoreAcquireLocalService;
     maintenanceSource?: MemoryIndexManager;
     databaseOptions: Parameters<typeof withOpenClawAgentDatabaseWrite>[0] & { path: string };
   }) {
@@ -225,7 +219,6 @@ export class MemoryIndexManager extends MemorySearchOrchestration implements Mem
     const effectiveSettings = resolveEffectiveMemorySearchSettings(params.settings);
     const dbPath = params.databaseOptions.path;
     this.cacheKey = params.cacheKey;
-    this.acquireLocalService = params.acquireLocalService;
     this.purpose = params.purpose;
     this.cfg = params.cfg;
     this.agentId = params.agentId;
@@ -349,7 +342,6 @@ export class MemoryIndexManager extends MemorySearchOrchestration implements Mem
             cfg: this.cfg,
             agentId: this.agentId,
             purpose: "maintenance",
-            acquireLocalService: this.acquireLocalService,
             maintenanceSource: this,
           }),
       }),

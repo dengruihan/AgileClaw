@@ -3,7 +3,6 @@ import { createDeferred } from "../../../../test/helpers/promise.js";
 import { routeIdFromPath } from "../../app-routes.ts";
 import type { ApplicationContext } from "../../app/context.ts";
 import { createStorageMock } from "../../test-helpers/storage.ts";
-import { persistFirstRunActivationReceipt } from "./first-run-activation-receipt.ts";
 import { isDefaultChatLanding, startModelSetupFirstRunRedirectAfterLocation } from "./first-run.ts";
 
 const defaultLanding = { pathname: "/chat/main", search: "", hash: "" };
@@ -203,38 +202,6 @@ describe("model setup first-run redirect", () => {
     });
 
     expect(request).not.toHaveBeenCalled();
-    expect(replace).not.toHaveBeenCalled();
-    dispose();
-  });
-
-  it("restores unfinished onboarding after its activation already configured the model", async () => {
-    const { context, replace } = createConnectedContext({ modelConfigured: true });
-    persistFirstRunActivationReceipt(context, {
-      kind: "openai-api-key",
-      modelRef: "openai/expected",
-    });
-
-    const decision = createDeferred();
-    const dispose = await startRedirect(context, defaultLanding, decision.resolve);
-
-    await decision.promise;
-    expect(replace).toHaveBeenCalledWith("model-setup", { search: "?firstRun=1" });
-    dispose();
-  });
-
-  it("does not restore an activation owned by replaced Gateway credentials", async () => {
-    const { context, replace } = createConnectedContext({ modelConfigured: true });
-    persistFirstRunActivationReceipt(context, {
-      kind: "openai-api-key",
-      modelRef: "openai/expected",
-    });
-    context.gateway.connection.token = "different-owner-token";
-
-    const decision = createDeferred();
-    const dispose = await startRedirect(context, defaultLanding, decision.resolve);
-
-    await decision.promise;
-    expect(localStorage.getItem("openclaw.modelSetup.pendingActivation.v1")).toBeNull();
     expect(replace).not.toHaveBeenCalled();
     dispose();
   });

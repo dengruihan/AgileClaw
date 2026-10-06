@@ -339,21 +339,6 @@ describe("Codex agent harness supports()", () => {
 
   it.each([
     {
-      label: "forwarded OAuth subscription",
-      preparedAuth: { source: "profile", mode: "oauth", requirement: "subscription" } as const,
-      supported: true,
-    },
-    {
-      label: "direct subscription credential",
-      preparedAuth: { source: "direct", mode: "oauth", requirement: "subscription" } as const,
-      supported: false,
-    },
-    {
-      label: "missing subscription credential",
-      preparedAuth: { source: "none", requirement: "subscription" } as const,
-      supported: false,
-    },
-    {
       label: "resolved direct Platform key",
       preparedAuth: { source: "direct", mode: "api-key", requirement: "api-key" } as const,
       supported: true,
@@ -366,11 +351,6 @@ describe("Codex agent harness supports()", () => {
     {
       label: "unresolved harness-native auth",
       preparedAuth: { source: "harness" } as const,
-      supported: true,
-    },
-    {
-      label: "unvalidated harness-native subscription",
-      preparedAuth: { source: "harness", requirement: "subscription" } as const,
       supported: false,
     },
   ])("reports $label reproducibility", ({ preparedAuth, supported }) => {
@@ -378,12 +358,8 @@ describe("Codex agent harness supports()", () => {
       provider: "openai",
       requestedRuntime: "codex",
       modelProvider: {
-        api:
-          preparedAuth.requirement === "api-key" ? "openai-responses" : "openai-chatgpt-responses",
-        baseUrl:
-          preparedAuth.requirement === "api-key"
-            ? "https://api.openai.com/v1"
-            : "https://chatgpt.com/backend-api/codex",
+        api: "openai-responses",
+        baseUrl: "https://api.openai.com/v1",
         requestTransportOverrides: "none",
         runtimePolicy: { compatibleIds: ["openclaw", "codex"] },
         preparedAuth,

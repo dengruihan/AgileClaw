@@ -37,11 +37,7 @@ import {
   resolveCodexModelInput,
   type OpenAILiveModelReaders,
 } from "./codex-model-rows.js";
-import {
-  applyOpenAIConfig,
-  OPENAI_CODEX_DEFAULT_MODEL,
-  OPENAI_DEFAULT_MODEL,
-} from "./default-models.js";
+import { applyOpenAIConfig, OPENAI_DEFAULT_MODEL } from "./default-models.js";
 import {
   buildOpenAIUnknownModelHint,
   OPENAI_CHAT_LATEST_MODEL_ID,
@@ -68,10 +64,7 @@ import {
   projectOpenAICatalog,
   readOpenAICodexServiceTiers,
 } from "./model-service-tiers.js";
-import {
-  buildOpenAIChatGPTAuthMethodRuns,
-  buildOpenAICodexProviderHooks,
-} from "./openai-chatgpt-provider.js";
+import { buildOpenAICodexProviderHooks } from "./openai-chatgpt-provider.js";
 import manifest from "./openclaw.plugin.json" with { type: "json" };
 import { createOpenAIProvider } from "./provider-contract-api.js";
 import { resolveAuthoredOpenAIProviderConfig } from "./provider-policy-api.js";
@@ -80,11 +73,6 @@ import {
   OPENAI_DEFAULT_RUNTIME_CONTEXT_TOKENS,
 } from "./shared.js";
 import { resolveUnifiedOpenAIThinkingProfile } from "./thinking-policy.js";
-import {
-  isSIWCAuthFlow,
-  TOKEN_SHARING_AUTH_FLOW,
-  TOKEN_SHARING_RESOURCE,
-} from "./token-sharing.js";
 
 const PROVIDER_ID = "openai";
 
@@ -152,7 +140,7 @@ type BuildOpenAILiveProviderConfigParams = {
 
 function buildOpenAIManifestModelsForBaseUrl(baseUrl: string): ModelDefinitionConfig[] {
   return OPENAI_MANIFEST_PROVIDER.models.map((model) =>
-    model.api === "openai-chatgpt-responses" || isOpenAICodexBaseUrl(model.baseUrl)
+    isOpenAICodexBaseUrl(model.baseUrl)
       ? { ...model }
       : {
           ...model,
@@ -368,7 +356,9 @@ function buildOpenAICodexModelFromLiveRow(
   return normalizeOpenAICodexCatalogModel({
     id: modelId,
     name: readLiveModelCatalogStringField(row, "display_name") ?? fallback?.name ?? modelId,
-    api: "openai-chatgpt-responses",
+    // Config-level api stays API-key-shaped; the codex transport hook upgrades
+    // it to openai-chatgpt-responses for the codex base URL at runtime.
+    api: "openai-responses",
     baseUrl: OPENAI_CODEX_RESPONSES_BASE_URL,
     reasoning: (reasoningLevels?.length ?? 0) > 0 || fallback?.reasoning || false,
     input: resolveCodexModelInput(row, fallback),
@@ -387,8 +377,9 @@ function buildOpenAICodexModelFromLiveRow(
 function buildOpenAICodexStaticProviderConfig(): ModelProviderConfig {
   return {
     baseUrl: OPENAI_CODEX_RESPONSES_BASE_URL,
-    api: "openai-chatgpt-responses",
-    auth: "oauth",
+    // Config-level api stays API-key-shaped; the codex transport hook upgrades
+    // it to openai-chatgpt-responses for the codex base URL at runtime.
+    api: "openai-responses",
     models: OPENAI_MANIFEST_PROVIDER.models.flatMap((model) => {
       const modelId = normalizeLowercaseStringOrEmpty(model.id);
       if (isOpenAIPlatformOnlyRouteModelId(modelId)) {
@@ -447,8 +438,7 @@ async function buildOpenAICodexLiveProviderConfig(params: {
     return {
       provider: {
         baseUrl: OPENAI_CODEX_RESPONSES_BASE_URL,
-        api: "openai-chatgpt-responses",
-        auth: "oauth",
+        api: "openai-responses",
         models,
       },
       outcome: {
@@ -705,7 +695,6 @@ export function buildOpenAIProvider(): ProviderPlugin {
   if (!apiKeyDefinition) {
     throw new Error("OpenAI provider contract is missing API-key auth");
   }
-  const chatGPTAuthRuns = buildOpenAIChatGPTAuthMethodRuns();
   const apiKeyRuntime = createProviderApiKeyAuthMethod({
     providerId: PROVIDER_ID,
     methodId: apiKeyDefinition.id,
@@ -723,17 +712,6 @@ export function buildOpenAIProvider(): ProviderPlugin {
     wizard: apiKeyDefinition.wizard,
   });
   for (const method of providerDefinition.auth) {
-    if (method.id === "siwc") {
-      method.starterModel = OPENAI_DEFAULT_MODEL;
-      method.run = async (ctx) =>
-        (await import("./token-sharing-oauth.runtime.js")).loginTokenSharing(ctx);
-      continue;
-    }
-    if (method.id === "oauth" || method.id === "device-code") {
-      method.starterModel = OPENAI_CODEX_DEFAULT_MODEL;
-      method.run = chatGPTAuthRuns[method.id];
-      continue;
-    }
     if (method.id !== "api-key") {
       throw new Error(`OpenAI provider contract has unknown auth method: ${method.id}`);
     }
@@ -754,15 +732,6 @@ export function buildOpenAIProvider(): ProviderPlugin {
           return null;
         }
         const auth = ctx.resolveProviderAuth(PROVIDER_ID);
-        if (isSIWCAuthFlow(auth.authFlow)) {
-          const { buildTokenSharingCatalog } = await import("./token-sharing-catalog.js");
-          return await buildTokenSharingCatalog({
-            auth,
-            models: buildOpenAIStaticPlatformProviderConfig(undefined, TOKEN_SHARING_RESOURCE)
-              .models,
-            signal: ctx.signal,
-          });
-        }
         if (auth.preparationFailed) {
           return null;
         }
@@ -920,14 +889,6 @@ export function buildOpenAIProvider(): ProviderPlugin {
     },
     ...responsesHooks,
     prepareExtraParams: (ctx) => {
-      if (ctx.auth?.mode === "oauth" && ctx.auth.authFlow === TOKEN_SHARING_AUTH_FLOW) {
-        return {
-          ...ctx.extraParams,
-          transport: "sse",
-          store: false,
-          responsesServerCompaction: false,
-        };
-      }
       const providerConfig = ctx.config?.models?.providers?.[PROVIDER_ID];
       const useCodexTransport =
         shouldUseCodexResponsesHooks({
@@ -942,12 +903,6 @@ export function buildOpenAIProvider(): ProviderPlugin {
     },
     resolveUsageAuth: codexHooks.resolveUsageAuth,
     fetchUsageSnapshot: codexHooks.fetchUsageSnapshot,
-    refreshOAuth: async (credential) =>
-      isSIWCAuthFlow(credential.authFlow)
-        ? (await import("./token-sharing-oauth.runtime.js")).refreshTokenSharingCredential(
-            credential,
-          )
-        : codexHooks.refreshOAuth(credential),
     buildUnknownModelHint: ({ modelId }) => buildOpenAIUnknownModelHint(modelId),
     buildMissingAuthMessage: (ctx) => {
       if (normalizeProviderId(ctx.provider) !== PROVIDER_ID) {
@@ -956,7 +911,7 @@ export function buildOpenAIProvider(): ProviderPlugin {
       if (ctx.listProfileIds(PROVIDER_ID).length === 0) {
         return undefined;
       }
-      return `No API key found for provider "openai". You are authenticated with OpenAI ChatGPT/Codex OAuth. Use ${OPENAI_CODEX_DEFAULT_MODEL} with the ChatGPT/Codex OAuth profile, or set OPENAI_API_KEY for direct OpenAI API access.`;
+      return `No API key found for provider "openai". Set OPENAI_API_KEY or configure an API-key credential for direct OpenAI API access.`;
     },
     matchesContextOverflowError: ({ errorMessage }) =>
       /content_filter.*(?:prompt|input).*(?:too long|exceed)/i.test(errorMessage),

@@ -65,7 +65,7 @@ it("reopens an existing session and preserves its provider pause without a schem
 
     const retainedReview: SessionProviderReview = {
       ...review,
-      api: "openai-chatgpt-responses",
+      api: "openai-responses",
       nativeThreadId: "review-thread",
       nativeTurnId: "review-turn",
       review: {

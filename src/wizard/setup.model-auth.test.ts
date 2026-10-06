@@ -86,7 +86,6 @@ const managedModels: OpenClawConfig["models"] = {
     "managed-local": {
       baseUrl: "http://127.0.0.1:8080/v1",
       models: [],
-      localService: { command: "/fixture/server" },
     },
   },
 };

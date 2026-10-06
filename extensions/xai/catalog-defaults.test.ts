@@ -3,7 +3,6 @@ import { clearLiveCatalogCacheForTests } from "openclaw/plugin-sdk/provider-cata
 import type { ModelProviderConfig, OpenClawConfig } from "openclaw/plugin-sdk/provider-onboard";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { buildXaiCatalogModels } from "./model-definitions.js";
-import { applyXaiOAuthConfig } from "./onboard.js";
 
 vi.mock("openclaw/plugin-sdk/provider-auth-runtime", () => ({
   resolveApiKeyForProvider: vi.fn().mockRejectedValue(new Error("No runtime credential")),
@@ -20,13 +19,6 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-const oauthProvider: ModelProviderConfig = {
-  api: "openai-responses",
-  auth: "oauth",
-  baseUrl: "https://cli-chat-proxy.grok.com/v1",
-  models: [],
-};
-
 it("keeps a caller's price and input edits out of the curated catalog", () => {
   const customized = buildXaiCatalogModels();
   const first = customized[0];
@@ -41,34 +33,7 @@ it("keeps a caller's price and input edits out of the curated catalog", () => {
   expect(fresh?.input).toEqual(["text", "image"]);
 });
 
-it("preserves the existing primary during OAuth setup", () => {
-  const original: OpenClawConfig = {
-    agents: {
-      defaults: { model: { primary: "openai/retained-model", fallbacks: ["xai/grok-4.3"] } },
-    },
-  };
-  const config = applyXaiOAuthConfig(original, oauthProvider);
-  expect(config.agents?.defaults?.model).toEqual({
-    primary: "openai/retained-model",
-    fallbacks: ["xai/grok-4.3"],
-  });
-});
-
 it.each([
-  {
-    label: "OAuth",
-    mode: "oauth" as const,
-    baseUrl: undefined,
-    expectedUrl: "https://cli-chat-proxy.grok.com/v1",
-    expectedAuth: "oauth",
-  },
-  {
-    label: "subscription token",
-    mode: "token" as const,
-    baseUrl: "https://cli-chat-proxy.grok.com/v1",
-    expectedUrl: "https://cli-chat-proxy.grok.com/v1",
-    expectedAuth: "token",
-  },
   {
     label: "API token",
     mode: "token" as const,

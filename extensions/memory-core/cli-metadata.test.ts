@@ -17,11 +17,9 @@ describe("memory-core CLI metadata", () => {
     let registrar: Parameters<OpenClawPluginApi["registerCli"]>[0] | undefined;
     const keyedStore = {};
     const openKeyedStore = vi.fn(() => keyedStore);
-    const acquireLocalService = vi.fn(async () => undefined);
     plugin.register(
       createTestPluginApi({
         runtime: {
-          llm: { acquireLocalService },
           state: { openKeyedStore },
         } as unknown as OpenClawPluginApi["runtime"],
         registerCli(nextRegistrar) {
@@ -37,7 +35,6 @@ describe("memory-core CLI metadata", () => {
     await registrar({ program } as never);
 
     expect(registerMemoryCliMock).toHaveBeenCalledWith(program, {
-      acquireLocalService,
       openKeyedStore: expect.any(Function),
     });
     const boundOpenKeyedStore = registerMemoryCliMock.mock.calls[0]?.[1]?.openKeyedStore as

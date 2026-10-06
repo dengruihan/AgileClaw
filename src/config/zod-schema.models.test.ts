@@ -51,6 +51,53 @@ describe("ModelsConfigSchema", () => {
     ).toBe(false);
   });
 
+  it("accepts editable provider display names and discovery settings", () => {
+    const config = ModelsConfigSchema.parse({
+      providers: {
+        "stable-id": {
+          name: "My Provider",
+          baseUrl: "https://models.example/v1",
+          api: "openai-completions",
+          apiKey: "test-key",
+          discovery: {
+            endpointPath: "models",
+            headers: { "X-Discovery-Key": "discovery-key" },
+            request: { allowPrivateNetwork: true },
+          },
+          models: [
+            { id: "automatic", name: "Automatic", metadataSource: "provider-discovery" },
+            { id: "manual", name: "Manual", metadataSource: "models-add" },
+            { id: "legacy", name: "Legacy" },
+          ],
+        },
+      },
+    });
+    expect(config?.providers?.["stable-id"]).toMatchObject({
+      name: "My Provider",
+      discovery: {
+        endpointPath: "models",
+        headers: { "X-Discovery-Key": "discovery-key" },
+        request: { allowPrivateNetwork: true },
+      },
+      models: [
+        { id: "automatic", metadataSource: "provider-discovery" },
+        { id: "manual", metadataSource: "models-add" },
+        { id: "legacy" },
+      ],
+    });
+  });
+
+  it("rejects provider names that collide after trimming and case folding", () => {
+    expect(
+      ModelsConfigSchema.safeParse({
+        providers: {
+          first: { name: "  My Provider ", baseUrl: "https://first.example/v1", models: [] },
+          second: { name: "my provider", baseUrl: "https://second.example/v1", models: [] },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts and preserves declared model compatibility settings", () => {
     const compat = {
       thinkingFormat: "deepseek",

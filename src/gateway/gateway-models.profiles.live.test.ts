@@ -2233,13 +2233,13 @@ describe("buildLiveGatewayConfig", () => {
       });
 
       expect(cfg.models?.providers?.["amazon-bedrock"]).toMatchObject({
-        api: "bedrock-converse-stream",
-        auth: "aws-sdk",
+        api: "anthropic-messages",
+        auth: "api-key",
         baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
         models: [
           {
             id: "global.anthropic.claude-sonnet-4-6",
-            api: "bedrock-converse-stream",
+            api: "anthropic-messages",
           },
         ],
       });
@@ -2301,8 +2301,8 @@ describe("buildLiveGatewayConfig", () => {
           models: {
             providers: {
               "amazon-bedrock": {
-                api: "bedrock-converse-stream",
-                auth: "aws-sdk",
+                api: "anthropic-messages",
+                auth: "api-key",
                 baseUrl: "https://bedrock-runtime.ap-south-1.amazonaws.com",
                 models: [],
               },
@@ -2346,8 +2346,8 @@ describe("buildLiveGatewayConfig", () => {
     });
 
     expect(cfg.models?.providers?.["amazon-bedrock"]).toMatchObject({
-      api: "bedrock-converse-stream",
-      auth: "aws-sdk",
+      api: "anthropic-messages",
+      auth: "api-key",
       baseUrl: "https://bedrock-runtime.ap-south-1.amazonaws.com",
     });
   });
@@ -3403,9 +3403,8 @@ describe("buildLiveGatewayAuthProfileStore", () => {
               });
               saveAuthProfileStore(prepared, discoveryAgentDir);
               await ensureOpenClawModelsJson(
-                { plugins: { enabled: false }, models: { mode: "replace", providers: {} } },
+                { plugins: { enabled: false }, models: { providers: {} } },
                 discoveryAgentDir,
-                { providerDiscoveryProviderIds: [] },
               );
             } finally {
               await leaveDiscoveryState();
@@ -5324,7 +5323,7 @@ function buildLiveProviderConfig(params: {
     return {
       ...config,
       api: model.api as ModelProviderConfig["api"],
-      auth: "aws-sdk",
+      auth: "api-key",
     };
   }
   return config;
@@ -6100,7 +6099,7 @@ async function runGatewayModelSuite(params: GatewayModelSuiteParams) {
 
               if (
                 (model.provider === "openai" && model.api === "openai-responses") ||
-                (model.provider === "openai" && model.api === "openai-chatgpt-responses")
+                (model.provider === "openai" && model.api === "openai-responses")
               ) {
                 phase = "tool-only";
                 logProgress(`${progressLabel}: tool-only regression`);

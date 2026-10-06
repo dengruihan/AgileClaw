@@ -33,7 +33,7 @@ export function registerSharedClientWebSocketStartupTests({
     const backoff = vi.spyOn(runtimeEnv, "sleepWithAbort").mockResolvedValue();
     const options = {
       startOptions: createStartOptions({ transport: "websocket", url: "ws://example.invalid" }),
-      authProfileId: null,
+      preparedAuth: { kind: "api-key", apiKey: "websocket-test-key" },
       timeoutMs: 10_000,
     };
     const background = getLeasedSharedCodexAppServerClient(options);
@@ -82,7 +82,7 @@ export function registerSharedClientWebSocketStartupTests({
     await expect(
       getLeasedSharedCodexAppServerClient({
         startOptions: createStartOptions({ transport: "websocket", url: "ws://example.invalid" }),
-        authProfileId: null,
+        preparedAuth: { kind: "api-key", apiKey: "websocket-test-key" },
         timeoutMs: 10_000,
       }),
     ).rejects.toThrow("transport failed");
@@ -122,7 +122,7 @@ export function registerSharedClientWebSocketStartupTests({
       await expect(
         createIsolatedCodexAppServerClient({
           startOptions: createStartOptions({ transport: "websocket", url: "ws://example.invalid" }),
-          authProfileId: null,
+          preparedAuth: { kind: "api-key", apiKey: "websocket-test-key" },
           timeoutMs: 5_000,
           abandonSignal: controller.signal,
         }),
@@ -144,6 +144,7 @@ export function registerSharedClientWebSocketStartupTests({
         pluginConfig: {
           appServer: { transport: "websocket", url: "ws://127.0.0.1:39175" },
         },
+        preparedAuth: { kind: "api-key", apiKey: "websocket-test-key" },
         timeoutMs: 1_000,
       });
 

@@ -73,7 +73,6 @@ function resolveMemoryEmbeddingProviderContract(params: {
         request: providerConfig.request,
         params: providerConfig.params,
         region: providerConfig.region,
-        localService: providerConfig.localService,
       });
     }
   }

@@ -34,7 +34,7 @@ export function createLoginResult(
     providerId: "openai",
     methodId: "device-code",
     authRefresh,
-    profiles: [{ profileId, provider: "openai", mode: "oauth" }],
+    profiles: [{ profileId, provider: "openai", mode: "api_key" }],
   };
 }
 
@@ -182,7 +182,7 @@ export async function exerciseDeferredModelAccess(choice: "all" | "keep" | "canc
               {
                 profileId: "ux-catalog-fixture:consent",
                 provider: "ux-catalog-fixture",
-                mode: "oauth",
+                mode: "api_key",
               },
             ],
           };

@@ -254,6 +254,13 @@ export type ModelCatalogProvider = {
   baseUrl?: string;
   api?: ModelCatalogApi;
   headers?: Record<string, string>;
+  /** Lightweight defaults for explicit API model discovery and provider templates. */
+  discovery?: {
+    endpointPath?: string;
+    headers?: Record<string, string>;
+    request?: Record<string, unknown>;
+    requiresApiKey?: boolean;
+  };
   /** Provider-recommended primary model id. */
   defaultModel?: string;
   /** Provider-recommended small model id for short internal utility tasks. */

@@ -32,7 +32,7 @@ You need:
   command backed by the system `screencapture` tool.
 - The bundled Codex plugin enabled and authenticated. Codex provides
   the structured image-extraction contract Logbook requires. Sign in with
-  `openclaw models auth login --provider openai`; see
+  `openclaw models auth paste-api-key --provider openai`; see
   [Codex harness](/plugins/codex-harness) for other auth paths.
 - A working default agent model. Logbook uses it to synthesize cards, standup
   notes, and day Q&A after the vision pass.

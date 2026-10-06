@@ -121,9 +121,9 @@ describe("config validation allowed-values metadata", () => {
     });
     const provider = result.find((issue) => issue.path === "models.providers.openai-codex.api");
     expect(provider?.message).toContain('"openai-codex-responses" is a removed api id');
-    expect(provider?.message).toContain('use "openai-chatgpt-responses"');
+    expect(provider?.message).toContain('use "openai-responses"');
     expect(
       result.find((issue) => issue.path === "models.providers.openai-codex.models.0.api")?.message,
-    ).toContain('use "openai-chatgpt-responses"');
+    ).toContain('use "openai-responses"');
   });
 });

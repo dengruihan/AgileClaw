@@ -34,6 +34,7 @@ import {
 import type { ModelCatalogEntry, ModelCatalogSnapshot } from "./model-catalog.types.js";
 import { hasAuthoredProviderRequestParams } from "./model-extra-params.js";
 import { splitTrailingAuthProfile } from "./model-ref-profile.js";
+import { buildConfiguredModelCatalog } from "./model-selection-shared.js";
 import {
   createModelCatalogIdentityKeyResolver,
   openAIModelCatalogRoutePolicy,
@@ -184,9 +185,13 @@ export type ModelCatalogViewFacts = {
 export function prepareModelCatalogView(params: ModelCatalogViewFacts) {
   const defaultModel = resolveNativeModelPrimary(params.cfg, params.agentId);
   const agentDir = params.agentDir ?? resolveAgentDir(params.cfg, params.agentId);
-  // Membership is live discovery and authored config only. Snapshot static rows
-  // stay internal (route donors, capability fallbacks) and never join the view.
-  const catalog = [...params.snapshot.entries];
+  // Saved provider rows own runtime membership. Captured catalog rows may donate
+  // route facts for those exact identities, but never restore deleted models.
+  const catalog = buildConfiguredModelCatalog({
+    cfg: params.cfg,
+    catalog: params.snapshot.entries,
+    manifestPlugins: params.metadataSnapshot,
+  });
   const isCurrent = () => params.isCurrent?.() ?? params.observationConfig === undefined;
   const routes = createModelCatalogView({
     cfg: params.cfg,
@@ -356,32 +361,12 @@ export function prepareModelCatalogView(params: ModelCatalogViewFacts) {
       canonicalEntries: readonly ModelCatalogEntry[],
     ) {
       const keyOf = createModelCatalogIdentityKeyResolver();
-      const dynamicProviders = new Set(
-        params.metadataSnapshot.plugins.flatMap((plugin) =>
-          Object.entries(plugin.modelCatalog?.discovery ?? {}).flatMap(([provider, mode]) =>
-            mode === "runtime" || mode === "refreshable" ? [normalizeProviderId(provider)] : [],
-          ),
-        ),
-      );
-      const discoveryOnlyProviders = new Set(
-        Object.entries(sourceConfig.models?.providers ?? {}).flatMap(([provider, config]) => {
-          const id = normalizeProviderId(provider);
-          return dynamicProviders.has(id) && !Array.isArray(config?.models) ? [id] : [];
-        }),
-      );
       const canonicalByKey = indexFirstByKey(canonicalEntries, keyOf);
-      // Authored config owns membership; captured catalog rows own route metadata.
-      const authored = buildProviderConfigModelCatalogForBrowse({
-        cfg: sourceConfig,
-        workspaceDir: params.workspaceDir,
-      }).map((entry) => canonicalByKey.get(keyOf(entry)) ?? entry);
       return dedupeByKey(
-        [
-          ...authored,
-          ...canonicalEntries.filter((entry) =>
-            discoveryOnlyProviders.has(normalizeProviderId(entry.provider)),
-          ),
-        ],
+        buildProviderConfigModelCatalogForBrowse({
+          cfg: sourceConfig,
+          workspaceDir: params.workspaceDir,
+        }).map((entry) => canonicalByKey.get(keyOf(entry)) ?? entry),
         keyOf,
       );
     },
@@ -556,96 +541,11 @@ export async function loadPreparedModelCatalogView(
 async function acquirePickerModelCatalogView(
   params: PickerModelCatalogViewRequest,
 ): Promise<{ snapshot: ModelCatalogSnapshot }> {
-  const cfg = params.config;
-  const fromEntries = (entries: ModelCatalogEntry[]) => ({
-    snapshot: { entries, routeVariants: entries },
-  });
-  if (cfg.models?.mode === "replace") {
-    const { buildConfiguredModelCatalog } = await import("./model-selection-shared.js");
-    return fromEntries(buildConfiguredModelCatalog({ cfg }));
-  }
-  const { loadPreparedModelCatalogSnapshot } = await import("./prepared-model-catalog.js");
-  if (params.preferredProvider) {
-    if (params.preferLiveProviderCatalog) {
-      const { resolveDefaultAgentDir } = await import("./agent-scope.js");
-      const { resolvePluginMetadataSnapshot } =
-        await import("../plugins/plugin-metadata-snapshot.js");
-      const { createPreparedModelCatalogProviderNormalizer } =
-        await import("./model-catalog-provider-normalizer.js");
-      const requestedProvider = normalizeProviderId(params.preferredProvider);
-      if (requestedProvider) {
-        const env = params.env ?? process.env;
-        const metadataSnapshot = resolvePluginMetadataSnapshot({
-          config: cfg,
-          env,
-          ...(params.workspaceDir ? { workspaceDir: params.workspaceDir } : {}),
-        });
-        const provider = createPreparedModelCatalogProviderNormalizer(
-          metadataSnapshot,
-          cfg,
-          env,
-        )(requestedProvider);
-        const acquired = await loadPreparedModelCatalogSnapshot({
-          config: cfg,
-          agentDir: params.agentDir ?? resolveDefaultAgentDir(cfg, params.env),
-          ...(params.workspaceDir ? { workspaceDir: params.workspaceDir } : {}),
-          ...(params.env ? { env: params.env } : {}),
-          readOnly: true,
-          providerDiscoveryProviderIds: [provider],
-          scopedLiveProviderDiscovery: true,
-        });
-        const matchesProvider = (entry: { provider: string }) =>
-          normalizeProviderId(entry.provider) === provider;
-        const entries = acquired.entries.filter(matchesProvider);
-        if (entries.length > 0) {
-          return {
-            snapshot: {
-              ...acquired,
-              get refreshFailed() {
-                return acquired.refreshFailed;
-              },
-              entries,
-              routeVariants: acquired.routeVariants.filter(matchesProvider),
-              ...(acquired.staticEntries
-                ? { staticEntries: acquired.staticEntries.filter(matchesProvider) }
-                : {}),
-              ...(acquired.providerOutcomes
-                ? { providerOutcomes: acquired.providerOutcomes.filter(matchesProvider) }
-                : {}),
-            },
-          };
-        }
-      }
-    }
-    // Static manifest seeds serve setup surfaces that explicitly opt in while
-    // credentials prevent discovery; runtime picker views compose membership
-    // from live discovery and authored config only.
-    if (params.allowStaticFallbackCatalog === true) {
-      const { loadStaticManifestCatalogRowsForList } =
-        await import("../commands/models/list.manifest-catalog.js");
-      const rows = loadStaticManifestCatalogRowsForList({
-        cfg,
-        providerFilter: params.preferredProvider,
-        ...(params.env !== undefined ? { env: params.env } : {}),
-      });
-      if (rows.length > 0) {
-        return fromEntries(
-          rows.map((row) => ({
-            id: row.id,
-            name: row.name,
-            provider: row.provider,
-            api: row.api,
-            baseUrl: row.baseUrl,
-            contextWindow: row.contextWindow,
-            reasoning: row.reasoning,
-            input: row.input,
-          })),
-        );
-      }
-    }
-    if (params.providerScoped) {
-      return fromEntries([]);
-    }
-  }
-  return { snapshot: await loadPreparedModelCatalogSnapshot({ config: cfg }) };
+  const { buildConfiguredModelCatalog } = await import("./model-selection-shared.js");
+  const provider = normalizeProviderId(params.preferredProvider ?? "");
+  const entries = buildConfiguredModelCatalog({ cfg: params.config }).filter(
+    (entry) =>
+      !params.providerScoped || !provider || normalizeProviderId(entry.provider) === provider,
+  );
+  return { snapshot: { entries, routeVariants: entries } };
 }

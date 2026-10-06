@@ -23,6 +23,7 @@ import {
 import { ConfigWritePostCommitError } from "../../config/io.write-errors.js";
 import { applyMergePatch, createMergePatch } from "../../config/merge-patch.js";
 import { normalizeSubmittedConfigModelRefs } from "../../config/model-input-normalization.js";
+import { modelReferences } from "../../config/model-provider-config.js";
 import { isBuiltInModelProviderOverlayId } from "../../config/model-provider-overlay-ids.js";
 import { ConfigMutationConflictError } from "../../config/mutation-conflict.js";
 import {
@@ -96,6 +97,45 @@ const configWriteRecovery = new WeakMap<
 
 type ConfigRedactionHints = Parameters<typeof redactConfigObject>[1];
 type ConfigRestartWriteMode = Parameters<typeof resolveGatewayConfigRestartWriteResult>[0]["mode"];
+
+function providerModelRemovalReferences(
+  currentConfig: OpenClawConfig,
+  nextConfig: OpenClawConfig,
+): string[] {
+  const currentProviders = currentConfig.models?.providers ?? {};
+  const nextProviders = nextConfig.models?.providers ?? {};
+  const references: string[] = [];
+  for (const [providerId, currentProvider] of Object.entries(currentProviders)) {
+    const nextIds = new Set((nextProviders[providerId]?.models ?? []).map((model) => model.id));
+    for (const model of currentProvider.models ?? []) {
+      if (nextIds.has(model.id)) {
+        continue;
+      }
+      references.push(...modelReferences(currentConfig, providerId, model.id));
+    }
+  }
+  return [...new Set(references)];
+}
+
+function rejectReferencedProviderModelRemoval(params: {
+  currentConfig: OpenClawConfig;
+  nextConfig: OpenClawConfig;
+  respond: RespondFn;
+}): boolean {
+  const references = providerModelRemovalReferences(params.currentConfig, params.nextConfig);
+  if (references.length === 0) {
+    return false;
+  }
+  params.respond(
+    false,
+    undefined,
+    errorShape(
+      ErrorCodes.INVALID_REQUEST,
+      `Cannot remove or change a referenced provider model. First update these references: ${references.join(", ")}`,
+    ),
+  );
+  return true;
+}
 
 function requireConfigBaseHash(
   params: unknown,
@@ -1037,6 +1077,15 @@ export const configHandlers: GatewayRequestHandlers = {
     }
     const writeConfig = validatedSubmission.validationCandidate;
     const validatedConfig = validatedSubmission.config;
+    if (
+      rejectReferencedProviderModelRemoval({
+        currentConfig: snapshot.config,
+        nextConfig: validatedConfig,
+        respond,
+      })
+    ) {
+      return;
+    }
     const preparedSecretsSnapshot = await ensureResolvableSecretRefsOrRespond({
       config: validatedConfig,
       respond,
@@ -1067,6 +1116,15 @@ export const configHandlers: GatewayRequestHandlers = {
       context.configRevisionProjector,
     );
     if (!parsed) {
+      return;
+    }
+    if (
+      rejectReferencedProviderModelRemoval({
+        currentConfig: parsed.writeSnapshot.snapshot.config,
+        nextConfig: parsed.config,
+        respond,
+      })
+    ) {
       return;
     }
     const preparedSecretsSnapshot = await ensureResolvableSecretRefsOrRespond({

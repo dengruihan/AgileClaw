@@ -12,6 +12,7 @@ import type {
   UserProfile,
 } from "../packages/gateway-protocol/src/index.js";
 import { expectDefined } from "../packages/normalization-core/src/expect.js";
+import { computeBaseConfigSchemaResponse } from "../src/config/schema-base.js";
 import { applySharedChannelFieldHelp } from "../src/config/schema.channel-field-help.js";
 import { buildBaseHints } from "../src/config/schema.hints.js";
 import { applyConfigTierHints, applyResolvedConfigTierHints } from "../src/config/schema.tiers.js";
@@ -918,7 +919,29 @@ function buildConfigMocks(options: { swarmEnabled?: boolean; workboardEnabled?: 
     gateway: { port: 18789, bind: "127.0.0.1", publicOrigin: "https://gateway.example" },
     agents: { defaults: { thinkingDefault: "medium" } },
     commands: { native: "auto", nativeSkills: "auto" },
-    models: { mode: "merge" },
+    models: {
+      providers: {
+        "demo-api": {
+          name: "Demo API",
+          baseUrl: "https://models.example.test/v1",
+          api: "openai-completions",
+          models: [
+            {
+              id: "demo-chat",
+              name: "Demo Chat",
+              input: ["text"],
+              metadataSource: "provider-discovery",
+            },
+            {
+              id: "my-custom-model",
+              name: "My custom model",
+              input: ["text", "image"],
+              metadataSource: "models-add",
+            },
+          ],
+        },
+      },
+    },
     ui: { prefs: { locale: "en" } },
     ...(options.swarmEnabled ? { tools: { swarm: true } } : {}),
     ...(options.workboardEnabled ? { plugins: { entries: { workboard: { enabled: true } } } } : {}),
@@ -1057,17 +1080,7 @@ function buildConfigMocks(options: { swarmEnabled?: boolean; workboardEnabled?: 
           },
         },
       },
-      models: {
-        type: "object",
-        title: "Models",
-        properties: {
-          mode: {
-            type: "string",
-            title: "Catalog mode",
-            enum: ["merge", "replace"],
-          },
-        },
-      },
+      models: computeBaseConfigSchemaResponse().schema.properties?.models,
       // Channel settings are the one schema surface the channels page renders,
       // so the fixture keeps both tiers represented.
       channels: {
@@ -2759,6 +2772,62 @@ async function createChatPickerScenario(
       "skills.proposals.requestRevision": skillWorkshop.requestRevision,
       "usage.cost": profileUsage.cost,
       "sessions.usage": profileUsage.sessions,
+      "models.providerTemplates": {
+        templates: [
+          {
+            id: "openai",
+            name: "OpenAI",
+            requiresApiKey: true,
+            defaults: {
+              name: "OpenAI",
+              baseUrl: "https://api.openai.com/v1",
+              api: "openai-responses",
+              models: [],
+            },
+          },
+          {
+            id: "anthropic",
+            name: "Anthropic",
+            requiresApiKey: true,
+            defaults: {
+              name: "Anthropic",
+              baseUrl: "https://api.anthropic.com",
+              api: "anthropic-messages",
+              models: [],
+            },
+          },
+          {
+            id: "ollama",
+            name: "Ollama",
+            requiresApiKey: false,
+            defaults: {
+              name: "Ollama",
+              baseUrl: "http://localhost:11434",
+              api: "ollama",
+              models: [],
+            },
+          },
+        ],
+      },
+      "models.discover": {
+        models: [
+          {
+            id: "demo-chat",
+            name: "Demo Chat",
+            input: ["text"],
+            contextWindow: 128000,
+            maxTokens: 8192,
+          },
+          {
+            id: "demo-reasoning",
+            name: "Demo Reasoning",
+            input: ["text", "image"],
+            reasoning: true,
+            contextWindow: 256000,
+            maxTokens: 16384,
+          },
+        ],
+      },
       "models.authStatus": modelAuthStatus,
       "update.hold": heldUpdateSchedule
         ? { ok: true, schedule: heldUpdateSchedule }

@@ -81,8 +81,7 @@ docker compose -f docker-compose.yml -f docker-compose.extra.yml run --rm \
 docker compose -f docker-compose.yml -f docker-compose.extra.yml run --rm \
   --entrypoint /home/node/.local/bin/claude openclaw-cli auth status --text
 docker compose -f docker-compose.yml -f docker-compose.extra.yml run --rm \
-  openclaw-cli models auth login \
-  --provider anthropic --method cli --set-default
+  openclaw-cli models auth paste-api-key --provider anthropic
 docker compose -f docker-compose.yml -f docker-compose.extra.yml run --rm \
   openclaw-cli models list --provider anthropic
 ```

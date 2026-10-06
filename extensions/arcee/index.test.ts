@@ -133,11 +133,9 @@ describe("arcee provider plugin", () => {
       expect(result.defaultModel).toBe("arcee/trinity-large-thinking");
     });
 
-    it.each([
-      { mode: undefined, expectedIds: [] },
-      { mode: "replace" as const, expectedIds: route.catalogIds },
-    ])("keeps the registered row policy in $mode mode", async ({ mode, expectedIds }) => {
-      const input: OpenClawConfig = { models: { mode } };
+    it("keeps the registered row policy", async () => {
+      const expectedIds = route.catalogIds;
+      const input: OpenClawConfig = {};
       const nonInteractive = await onboard(input);
       const interactive = await onboardInteractive(input);
 
@@ -171,13 +169,11 @@ describe("arcee provider plugin", () => {
         expect(output?.agents?.defaults?.model).toEqual({ primary: modelRef });
         expect(output?.agents?.defaults?.models?.[modelRef]).toEqual({ alias: route.alias });
       }
-      expect(input).toEqual({ models: { mode } });
+      expect(input).toEqual({});
     });
 
-    it.each([
-      { mode: "merge" as const, addedIds: [] },
-      { mode: "replace" as const, addedIds: route.addedIds },
-    ])("preserves authored rows and aliases in $mode mode", async ({ mode, addedIds }) => {
+    it("preserves authored rows and aliases", async () => {
+      const addedIds = route.addedIds;
       const collision: ModelDefinitionConfig = {
         id: route.collisionId,
         name: "Authored collision",
@@ -197,7 +193,6 @@ describe("arcee provider plugin", () => {
           },
         },
         models: {
-          mode,
           providers: {
             arcee: { baseUrl: route.baseUrl, models: [collision, authoredOnly] },
             other: { baseUrl: "https://other.invalid/v1", models: [] },

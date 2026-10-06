@@ -161,11 +161,7 @@ export async function warnIfModelConfigLooksOff(
   if (authStatus.status === "missing") {
     warnings.push(
       `No auth configured for provider "${authStatus.provider}". The agent may fail until credentials are added. ${buildProviderAuthRecoveryHint(
-        {
-          provider: authStatus.provider,
-          config,
-          includeEnvVar: authStatus.authRequirement !== "subscription",
-        },
+        { provider: authStatus.provider, config, includeEnvVar: true },
       )}`,
     );
   } else if (authStatus.status === "incompatible") {

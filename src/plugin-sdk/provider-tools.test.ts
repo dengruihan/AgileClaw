@@ -280,7 +280,7 @@ describe("buildProviderToolCompatFamilyHooks", () => {
     },
   ])("$title", ({ baseUrl }) => {
     const normalized = normalizeOpenAITools([tool({})], {
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
       baseUrl,
     });
     expect(normalized[0]?.parameters).toEqual(strictObject());
@@ -1016,7 +1016,7 @@ describe("buildProviderToolCompatFamilyHooks", () => {
         ),
       ],
       {
-        modelApi: "openai-chatgpt-responses",
+        modelApi: "openai-responses",
         baseUrl: "https://chatgpt.com/backend-api",
       },
     );

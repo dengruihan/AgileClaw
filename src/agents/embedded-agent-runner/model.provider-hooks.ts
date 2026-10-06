@@ -1,4 +1,3 @@
-import { findNormalizedProviderValue } from "@openclaw/model-catalog-core/provider-id";
 import { asFiniteNumber } from "@openclaw/normalization-core/number-coercion";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import type { Api, Model } from "../../llm/types.js";
@@ -15,7 +14,6 @@ import {
   runProviderDynamicModel,
   shouldPreferProviderRuntimeResolvedModel,
 } from "../../plugins/provider-runtime.js";
-import { modelTransportRoutesMatch } from "../model-compat-catalog.js";
 import { canonicalizeOpenAIModelId } from "../openai-routing.js";
 import { inheritModelProviderRequestRouteFacts } from "../provider-request-config.js";
 import {
@@ -190,24 +188,12 @@ export function normalizeResolvedModel(params: {
     normalizedInputModel.requestTimeoutMs !== undefined
       ? { ...normalizedModel, requestTimeoutMs: normalizedInputModel.requestTimeoutMs }
       : normalizedModel;
-  const providerConfig = findNormalizedProviderValue(
-    params.cfg?.models?.providers,
-    params.provider,
-  );
-  const toolSearchMode =
-    runtimeHooks.resolveToolSearchMode?.({
-      provider: params.provider,
-      modelId: modelWithProviderTimeout.id,
-      api: modelWithProviderTimeout.api,
-      baseUrl: modelWithProviderTimeout.baseUrl,
-    }) ??
-    (providerConfig?.localService &&
-    modelTransportRoutesMatch(
-      { baseUrl: providerConfig.baseUrl },
-      { baseUrl: modelWithProviderTimeout.baseUrl },
-    )
-      ? "tools"
-      : undefined);
+  const toolSearchMode = runtimeHooks.resolveToolSearchMode?.({
+    provider: params.provider,
+    modelId: modelWithProviderTimeout.id,
+    api: modelWithProviderTimeout.api,
+    baseUrl: modelWithProviderTimeout.baseUrl,
+  });
   // Capture the final route's preference once; tool construction must not reload provider policy.
   const modelWithToolSearch = { ...modelWithProviderTimeout, toolSearchMode };
   return inheritModelProviderRequestRouteFacts(

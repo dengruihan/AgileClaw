@@ -43,17 +43,13 @@ function resolveConfiguredProviders(
       hasConfiguredSecretInput(provider?.apiKey, cfg.secrets?.defaults) &&
       (rawKey === NON_ENV_SECRETREF_MARKER ||
         !isNonSecretApiKeyMarker(rawKey, { includeEnvVarName: false }));
-    const mode = provider?.auth;
-    if (mode !== "oauth" && mode !== "token" && !hasApiKey) {
+    if (!hasApiKey) {
       continue;
     }
     if (apiKeys.has(normalized)) {
       continue;
     }
     out.add(normalized);
-    if (mode === "oauth") {
-      expectsOAuth.add(normalized);
-    }
   }
   // auth.profiles opt in via `mode: oauth | token`; API-key profiles have no lifecycle.
   for (const profile of Object.values(cfg.auth?.profiles ?? {})) {

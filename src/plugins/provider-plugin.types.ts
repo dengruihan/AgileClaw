@@ -90,7 +90,6 @@ import type {
   ProviderCacheTtlEligibilityContext,
   ProviderBuildMissingAuthMessageContext,
   ProviderBuildUnknownModelHintContext,
-  ProviderReconcileLocalServiceContext,
 } from "./provider-transport.types.js";
 
 export type ProviderPlugin = {
@@ -339,8 +338,6 @@ export type ProviderPlugin = {
    * wrapper-local state and reads per-request options on each invocation.
    */
   wrapSimpleCompletionStreamFn?: (ctx: ProviderWrapStreamFnContext) => StreamFn | null | undefined;
-  /** Cheap, idempotent provider repair after local-service health and before each request. */
-  reconcileLocalService?: (ctx: ProviderReconcileLocalServiceContext) => Promise<void>;
   /**
    * Provider-owned native transport turn identity.
    *

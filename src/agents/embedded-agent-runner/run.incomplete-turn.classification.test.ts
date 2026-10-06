@@ -91,7 +91,7 @@ describe("incomplete-turn retry classification", () => {
     {
       provider: "openai",
       modelId: "gpt-5.5",
-      modelApi: "openai-chatgpt-responses",
+      modelApi: "openai-responses",
       output: 111,
       expected: EMPTY_RETRY,
     },

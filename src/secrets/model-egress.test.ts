@@ -140,7 +140,7 @@ describe("configured model egress", () => {
     ["unencrypted endpoint", { baseUrl: "http://api.openai.com/v1" }],
     ["unsupported endpoint port", { baseUrl: "https://inference.example.test:8443/v1" }],
     ["credential-bearing endpoint", { baseUrl: "https://user:password@inference.example.test/v1" }],
-    ["subscription route", { api: "openai-chatgpt-responses" }],
+    ["subscription route", { api: "openai-responses" }],
   ])("rejects %s before starting a proxy", async (_label, override) => {
     Object.assign(config.models!.providers!.openai!, override);
     const run = vi.fn();

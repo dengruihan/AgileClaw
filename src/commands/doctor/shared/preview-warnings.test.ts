@@ -574,15 +574,15 @@ describe("doctor preview warnings", () => {
         models: {
           providers: {
             openai: {
-              api: "openai-chatgpt-responses",
+              api: "openai-responses",
               baseUrl: "https://api.openai.com/v1",
               params: { store: true },
               models: [{ id: "text-embedding-3-small" }],
             },
             "openai-codex": {
-              api: "openai-chatgpt-responses",
+              api: "openai-responses",
               baseUrl: "https://chatgpt.com/backend-api",
-              models: [{ id: "gpt-5.5", api: "openai-chatgpt-responses" }],
+              models: [{ id: "gpt-5.5", api: "openai-responses" }],
             },
           },
         },

@@ -36,16 +36,9 @@ export const CORE_AUTH_CHOICE_OPTIONS: ReadonlyArray<AuthChoiceOption> = [
 ];
 
 /**
- * Provider-agnostic auth choices that `--token-provider` binds to a concrete
- * provider method. They stay out of `CORE_AUTH_CHOICE_OPTIONS` because the
- * interactive picker only offers self-contained choices, but every CLI surface
- * must advertise and accept them even when no manifest contributes the same id.
+ * API-key auth choice that `--token-provider` binds to a concrete provider.
  */
-export const GENERIC_PROVIDER_AUTH_CHOICES: ReadonlyArray<AuthChoice> = [
-  "setup-token",
-  "token",
-  "apiKey",
-];
+export const GENERIC_PROVIDER_AUTH_CHOICES: ReadonlyArray<AuthChoice> = ["apiKey"];
 
 /** Format static auth-choice values for Commander help/validation text. */
 export function formatStaticAuthChoiceChoicesForCli(): string {

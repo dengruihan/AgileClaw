@@ -1,7 +1,6 @@
 import { html, nothing, type TemplateResult } from "lit";
 import { titleForRoute } from "../../app-navigation.ts";
 import { icons } from "../../components/icons.ts";
-import { renderProviderBrandIcon } from "../../components/provider-icon.ts";
 import {
   renderLearnMoreLink,
   renderSettingsEmpty,
@@ -19,11 +18,8 @@ import { MODEL_SETTINGS_TARGET_IDS } from "../config/route-data.ts";
 import "../../styles/model-providers.css";
 import "../../styles/usage.css";
 import type { ModelProviderRowMessage } from "./config-mutation.ts";
-import type { ModelProviderCard } from "./data.ts";
 import { renderDefaultModels } from "./default-models-view.ts";
 import {
-  configMutationDisabled,
-  renderAddProvider,
   renderModelReadiness,
   renderProviderNoticeRow,
   renderProviderRow,
@@ -40,45 +36,11 @@ export function renderModelProviders(props: ModelProvidersViewProps) {
     );
   }
   const query = (props.providerQuery ?? "").trim().toLocaleLowerCase();
-  const category = props.providerCategory ?? "cloud";
-  const matchesQuery = (values: string[]) =>
-    values.some((value) => value.toLocaleLowerCase().includes(query));
-  const isLocalOrCustom = (card: ModelProviderCard) => props.isLocalOrCustom?.(card) ?? false;
-  const matchesCategory = (custom: boolean) =>
-    !props.onProviderCategoryChange || custom === (category === "custom");
-  const matchingCards = props.cards.filter(
-    (card) =>
-      matchesCategory(isLocalOrCustom(card)) &&
-      matchesQuery([card.id, card.displayName, ...card.credentialProviderIds]),
-  );
-  const availableProviders = props.unconfiguredProviders.filter(
-    (provider) =>
-      matchesCategory(props.isLocalOrCustomProvider?.(provider.id) ?? false) &&
-      matchesQuery([provider.id, provider.displayName]),
+  const matchingCards = props.cards.filter((card) =>
+    [card.id, card.displayName].some((value) => value.toLocaleLowerCase().includes(query)),
   );
   const providerRows = html`
     <div class="model-providers__overview-toolbar">
-      ${
-        props.onProviderCategoryChange
-          ? html`<div
-              class="model-providers__category-tabs"
-              role="group"
-              aria-label=${t("modelProviders.accessTitle")}
-            >
-              ${(["cloud", "custom"] as const).map(
-                (entry) => html`<button
-                  type="button"
-                  class="btn btn--sm ${category === entry ? "primary" : "btn--ghost"}"
-                  aria-pressed=${category === entry ? "true" : "false"}
-                  data-provider-category=${entry}
-                  @click=${() => props.onProviderCategoryChange?.(entry)}
-                >
-                  ${t(`modelProviders.manager.${entry}`)}
-                </button>`,
-              )}
-            </div>`
-          : nothing
-      }
       <label class="field model-providers__search">
         <input
           type="search"
@@ -112,38 +74,6 @@ export function renderModelProviders(props: ModelProvidersViewProps) {
           ${props.cards.length > 0 && matchingCards.length === 0 ? renderSettingsEmpty(t("modelProviders.noMatches")) : nothing}
         </div>
       </div>
-      <div class="model-providers__provider-section model-providers__provider-section--available">
-        <h3>${t("modelProviders.manager.available")}</h3>
-        <div class="model-providers__available-grid">
-          ${availableProviders.map(
-            (provider) => html`<button
-              type="button"
-              class="btn model-providers__available-provider"
-              data-available-provider=${provider.id}
-              ?disabled=${configMutationDisabled(props) || props.loginBusy}
-              @click=${() => (props.onAvailableProvider ? props.onAvailableProvider(provider.id) : props.onConnectProvider())}
-            >
-              ${renderProviderBrandIcon(provider.id, { className: "model-providers__icon" })}
-              <span>${provider.displayName}</span>
-              ${icons.chevronRight}
-            </button>`,
-          )}
-          ${
-            props.onCustomProvider && matchesCategory(true)
-              ? html`<button
-                  type="button"
-                  class="btn model-providers__available-provider model-providers__available-provider--custom"
-                  data-custom-provider
-                  ?disabled=${configMutationDisabled(props) || props.loginBusy}
-                  @click=${props.onCustomProvider}
-                >
-                  ${icons.plus}<span>${t("modelProviders.manager.customProvider")}</span>
-                </button>`
-              : nothing
-          }
-          ${availableProviders.length === 0 && !(props.onCustomProvider && matchesCategory(true)) ? renderSettingsEmpty(t("modelProviders.noMatches")) : nothing}
-        </div>
-      </div>
     </div>
   `;
   const needsModelSetup =
@@ -160,7 +90,6 @@ export function renderModelProviders(props: ModelProvidersViewProps) {
         message: props.messages.defaults,
       })}
     </div>
-    ${props.installedAgents}
     <div id="settings-model-providers">
       ${renderSettingsSection(
         {
@@ -196,19 +125,7 @@ export function renderModelProviders(props: ModelProvidersViewProps) {
             </openclaw-tooltip>
           `,
         },
-        html`${props.accountRecovery}${
-          props.loading
-            ? renderSettingsGroup(renderSettingsLoadingSkeleton())
-            : // The custom entry stays reachable through Connect provider even when
-              // the area is hidden, so a truly empty scope renders no stray section.
-              props.cards.length === 0 &&
-                props.unconfiguredProviders.length === 0 &&
-                props.installedAgents !== nothing &&
-                !props.error &&
-                !props.providerUsageFailed
-              ? nothing
-              : providerRows
-        }`,
+        html`${props.loading ? renderSettingsGroup(renderSettingsLoadingSkeleton()) : providerRows}`,
       )}
     </div>
     ${
@@ -216,8 +133,7 @@ export function renderModelProviders(props: ModelProvidersViewProps) {
         ? html`<div class="callout warning" role="status">${t("usage.providerUsage.stalled")}</div>`
         : nothing
     }
-    ${props.catalogSettings ?? nothing}
-  `)}${renderAddProvider(props)}`;
+  `)}`;
 }
 
 /** The Settings selection scopes provider access, never the global defaults above it. */

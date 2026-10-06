@@ -1,14 +1,17 @@
 import type { ProviderNormalizeResolvedModelContext } from "openclaw/plugin-sdk/plugin-entry";
+import type { ModelProviderConfig } from "openclaw/plugin-sdk/provider-model-shared";
 import type { ModelApi } from "openclaw/plugin-sdk/provider-model-types";
 import { describe, expect, it } from "vitest";
 import { projectConfiguredModelRow } from "./provider-policy-api.js";
+
+type ConfigModelApi = NonNullable<ModelProviderConfig["api"]>;
 
 function createProjectionContext(params?: {
   modelId?: string;
   rowApi?: ModelApi;
   rowBaseUrl?: string;
-  providerApi?: ModelApi;
-  configuredModelApi?: ModelApi;
+  providerApi?: ConfigModelApi;
+  configuredModelApi?: ConfigModelApi;
 }): ProviderNormalizeResolvedModelContext {
   const modelId = params?.modelId ?? "gpt-5.5";
   return {
@@ -72,12 +75,6 @@ describe("OpenAI configured-row projection", () => {
       providerApi: "openai-responses" as const,
       configuredModelApi: "openai-completions" as const,
       rowApi: "openai-completions" as const,
-    },
-    {
-      source: "provider ChatGPT",
-      providerApi: "openai-chatgpt-responses" as const,
-      configuredModelApi: undefined,
-      rowApi: undefined,
     },
   ])(
     "keeps runtime normalization for a $source configured route",

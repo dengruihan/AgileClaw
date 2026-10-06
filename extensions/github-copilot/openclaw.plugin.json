@@ -296,40 +296,7 @@
       }
     ]
   },
-  "providerAuthChoices": [
-    {
-      "provider": "github-copilot",
-      "method": "device",
-      "choiceId": "github-copilot",
-      "appGuidedAuth": "device-code",
-      "credentialOnly": true,
-      "channelLogin": {},
-      "appGuidedSecret": true,
-      "choiceLabel": "GitHub Copilot",
-      "choiceHint": "Device login with your GitHub account",
-      "assistantPriority": 1,
-      "groupId": "copilot",
-      "groupLabel": "Copilot",
-      "groupHint": "GitHub, GitHub Enterprise + Local Proxy",
-      "optionKey": "githubCopilotToken",
-      "cliFlag": "--github-copilot-token",
-      "cliOption": "--github-copilot-token <token>",
-      "cliDescription": "GitHub Copilot OAuth token"
-    },
-    {
-      "provider": "github-copilot",
-      "method": "device-enterprise",
-      "choiceId": "github-copilot-enterprise",
-      "appGuidedAuth": "device-code",
-      "credentialOnly": true,
-      "choiceLabel": "GitHub Copilot (Enterprise / data residency)",
-      "choiceHint": "Device login against your GitHub Enterprise (*.ghe.com) tenant",
-      "assistantPriority": 2,
-      "groupId": "copilot",
-      "groupLabel": "Copilot",
-      "groupHint": "GitHub, GitHub Enterprise + Local Proxy"
-    }
-  ],
+  "providerAuthChoices": [],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

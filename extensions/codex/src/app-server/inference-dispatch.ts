@@ -5,7 +5,7 @@ import { zstdCompress, zstdDecompress } from "node:zlib";
 import type { CodexAppServerClient } from "./client.js";
 import type { createCodexInferenceContext } from "./inference-context.js";
 import { readCodexInferenceMetadata, type CodexInferenceMetadata } from "./inference-metadata.js";
-import { createUploadBody, createRetryableUploadBody, MAX_BODY_BYTES } from "./inference-upload.js";
+import { createUploadBody, MAX_BODY_BYTES } from "./inference-upload.js";
 import type {
   NativeModelSourceCapture,
   NativeModelSourceRequest,
@@ -339,7 +339,6 @@ export function createCodexInferenceDispatch(params: {
     path: string,
     signal: AbortSignal,
     release: () => void,
-    retryable = false,
   ) => {
     const wire = await readProxyBody(req, MAX_BODY_BYTES);
     const encoding = req.headers["content-encoding"];
@@ -359,13 +358,7 @@ export function createCodexInferenceDispatch(params: {
             : prepared.bytes;
       prepared.assertCurrent();
       return {
-        ...(retryable
-          ? createRetryableUploadBody(body, prepared.signal, release)
-          : {
-              ...createUploadBody(body, prepared.signal, release),
-              retry: undefined,
-              commit: undefined,
-            }),
+        ...createUploadBody(body, prepared.signal, release),
         assertCurrent: prepared.assertCurrent,
         signal: prepared.signal,
         releaseModelExecution: prepared.release,

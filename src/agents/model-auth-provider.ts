@@ -25,7 +25,6 @@ import {
   resolveAuthStorePathForDisplay,
 } from "./auth-profiles.js";
 import { assertAuthProfileMigrationReady } from "./auth-profiles/legacy-source-diagnostic.js";
-import { OAuthRefreshFailureError } from "./auth-profiles/oauth-refresh-failure.js";
 import { isStoredCredentialCompatibleWithAuthProvider } from "./auth-profiles/order.js";
 import { isNonSecretApiKeyMarker } from "./model-auth-markers.js";
 import { assertAuthModeAllowedForModel, isAuthModeAllowedForModel } from "./model-auth-policy.js";
@@ -35,11 +34,7 @@ import {
   assertRuntimeProviderSecretOwnerAvailable,
   resolveManagedSecretRefRuntimeProviderAuth,
 } from "./model-auth-runtime-config.js";
-import {
-  ProviderAuthError,
-  resolveDirectProviderCredentialMode,
-  type ResolvedProviderAuth,
-} from "./model-auth-runtime-shared.js";
+import { ProviderAuthError, type ResolvedProviderAuth } from "./model-auth-runtime-shared.js";
 import { prepareSyntheticLocalProviderAuth } from "./model-auth-runtime.js";
 
 export type ProviderCredentialPrecedence = "profile-first" | "env-first";
@@ -228,14 +223,6 @@ export async function resolveApiKeyForProviderCore(input: {
     }));
 
   if (profileId) {
-    const awsSdkProfileAuth = authConfig.resolveConfiguredAwsSdkProfileAuth({
-      cfg,
-      provider,
-      profileId,
-    });
-    if (awsSdkProfileAuth) {
-      return awsSdkProfileAuth;
-    }
     const store = getScopedStore(profileId);
     assertAuthProfileNotRetired({
       profileId,
@@ -243,6 +230,11 @@ export async function resolveApiKeyForProviderCore(input: {
     });
     const configuredCredential = store.profiles[profileId];
     const configuredProfileType = configuredCredential?.type;
+    if (configuredProfileType !== "api_key") {
+      throw new Error(
+        `Auth profile "${profileId}" is not an API-key profile. Prepare an API key for model inference.`,
+      );
+    }
     if (configuredProfileType) {
       assertAuthModeAllowedForModel({
         provider,
@@ -251,8 +243,6 @@ export async function resolveApiKeyForProviderCore(input: {
         capability: params.capability,
         profileId,
         mode: authConfig.profileTypeToAuthMode(configuredProfileType),
-        authFlow:
-          configuredCredential?.type === "oauth" ? configuredCredential.authFlow : undefined,
       });
     }
     const resolved = await resolveApiKeyForProfile({
@@ -267,6 +257,9 @@ export async function resolveApiKeyForProviderCore(input: {
     params.signal?.throwIfAborted();
     if (!resolved) {
       throw new Error(`No credentials found for profile "${profileId}".`);
+    }
+    if (resolved.profileType && resolved.profileType !== "api_key") {
+      throw new Error(`Auth profile "${profileId}" is not an API-key profile.`);
     }
     const resolvedProfileId = resolved.profileId ?? profileId;
     if (params.lockedProfile && resolvedProfileId !== profileId) {
@@ -328,35 +321,6 @@ export async function resolveApiKeyForProviderCore(input: {
     return result;
   }
 
-  if (params.allowAuthProfileFallback !== false && (cfg?.auth?.profiles || cfg?.auth?.order)) {
-    const store = getScopedStore();
-    const configuredProfileOrder = resolveAuthProfileOrder({
-      cfg,
-      store,
-      provider,
-      preferredProfile,
-      forModel: params.modelId,
-    });
-    for (const candidate of configuredProfileOrder) {
-      const awsSdkProfileAuth = authConfig.resolveConfiguredAwsSdkProfileAuth({
-        cfg,
-        provider,
-        profileId: candidate,
-      });
-      if (awsSdkProfileAuth) {
-        return awsSdkProfileAuth;
-      }
-    }
-  }
-
-  const authOverride = authConfig.resolveProviderAuthOverride(cfg, provider);
-  if (authOverride === "aws-sdk") {
-    return authConfig.resolveAwsSdkAuthInfo();
-  }
-  if (authConfig.shouldUseImplicitAwsSdkAuth({ cfg, provider, modelApi: params.modelApi })) {
-    return authConfig.resolveAwsSdkAuthInfo();
-  }
-
   const modeAllowed = (mode: ResolvedProviderAuth["mode"], authFlow?: string) =>
     isAuthModeAllowedForModel({
       provider,
@@ -383,11 +347,10 @@ export async function resolveApiKeyForProviderCore(input: {
     if (!resolved) {
       return null;
     }
-    const mode = resolveDirectProviderCredentialMode({
-      cfg,
-      provider,
-      inferredMode: resolved.source.includes("OAUTH_TOKEN") ? "oauth" : "api-key",
-    });
+    if (resolved.source.includes("OAUTH_TOKEN")) {
+      return null;
+    }
+    const mode: ResolvedProviderAuth["mode"] = "api-key";
     if (mode === "api-key") {
       assertInlineSourceUsable(resolved.source);
     }
@@ -497,33 +460,25 @@ export async function resolveApiKeyForProviderCore(input: {
           provider,
           preferredProfile,
           forModel: params.modelId,
-          includePendingOAuthRefresh: true,
+          includePendingOAuthRefresh: false,
         });
   let deferredAuthProfileResult: ResolvedProviderAuth | null = null;
-  let refreshFailure: OAuthRefreshFailureError | undefined;
   for (const candidate of order) {
     const candidateCredential = store.profiles[candidate];
     const candidateType = candidateCredential?.type;
-    const candidateAuthFlow =
-      candidateCredential?.type === "oauth" ? candidateCredential.authFlow : undefined;
+    if (candidateType !== "api_key") {
+      continue;
+    }
     const candidateMode = candidateType
       ? authConfig.profileTypeToAuthMode(candidateType)
       : undefined;
-    if (candidateMode && !modeAllowed(candidateMode, candidateAuthFlow)) {
+    if (candidateMode && !modeAllowed(candidateMode)) {
       continue;
     }
     if (getDeprecatedProfileIds().has(candidate)) {
       continue;
     }
     try {
-      const awsSdkProfileAuth = authConfig.resolveConfiguredAwsSdkProfileAuth({
-        cfg,
-        provider,
-        profileId: candidate,
-      });
-      if (awsSdkProfileAuth) {
-        return awsSdkProfileAuth;
-      }
       const resolved = await resolveApiKeyForProfile({
         cfg,
         store,
@@ -534,6 +489,9 @@ export async function resolveApiKeyForProviderCore(input: {
       });
       params.signal?.throwIfAborted();
       if (resolved) {
+        if (resolved.profileType && resolved.profileType !== "api_key") {
+          continue;
+        }
         const resolvedProfileId = resolved.profileId ?? candidate;
         const credential = resolved.credential ?? store.profiles[resolvedProfileId];
         const mode = resolved.profileType ?? credential?.type;
@@ -544,9 +502,8 @@ export async function resolveApiKeyForProviderCore(input: {
           provider,
           store,
           mode: mode ? authConfig.profileTypeToAuthMode(mode) : "api-key",
-          authFlow: credential?.type === "oauth" ? credential.authFlow : undefined,
         });
-        if (!modeAllowed(result.mode, result.authFlow)) {
+        if (!modeAllowed(result.mode)) {
           continue;
         }
         if (
@@ -567,19 +524,8 @@ export async function resolveApiKeyForProviderCore(input: {
       if (err instanceof SecretSurfaceUnavailableError) {
         throw err;
       }
-      if (
-        !refreshFailure &&
-        err instanceof OAuthRefreshFailureError &&
-        (!candidateMode || modeAllowed(candidateMode, candidateAuthFlow))
-      ) {
-        refreshFailure = err;
-      }
       log.debug?.(`auth profile "${candidate}" failed for provider "${provider}": ${String(err)}`);
     }
-  }
-
-  if (refreshFailure) {
-    throw refreshFailure;
   }
 
   const envAuth = resolveEnvAuth();
@@ -603,11 +549,7 @@ export async function resolveApiKeyForProviderCore(input: {
     secretSentinels: params.secretSentinels,
   });
   if (customKey) {
-    const mode = resolveDirectProviderCredentialMode({
-      cfg,
-      provider,
-      inferredMode: "api-key",
-    });
+    const mode: ResolvedProviderAuth["mode"] = "api-key";
     if (modeAllowed(mode)) {
       authConfig.assertInlineProviderApiKeyUsable({ store: getScopedStore(), provider });
       return { apiKey: customKey.apiKey, source: customKey.source, mode };

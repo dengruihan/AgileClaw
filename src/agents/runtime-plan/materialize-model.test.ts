@@ -16,9 +16,9 @@ const plan: AgentRuntimeAuthPlan = {
   modelRoute: {
     provider: "openai",
     modelId: "gpt-5.5",
-    api: "openai-chatgpt-responses",
-    baseUrl: "https://chatgpt.com/backend-api/codex",
-    authRequirement: "subscription",
+    api: "openai-responses",
+    baseUrl: "https://openai-eu.example/v1",
+    authRequirement: "api-key",
     requestTransportOverrides: "none",
   },
 };
@@ -40,7 +40,7 @@ describe("materializePreparedRuntimeModel", () => {
               retirement: {},
               when: {
                 baseUrlHosts: ["subscription.example"],
-                providerConfigApiIn: ["openai-chatgpt-responses"],
+                providerConfigApiIn: ["openai-responses"],
               },
             },
           ],
@@ -50,7 +50,7 @@ describe("materializePreparedRuntimeModel", () => {
       const model = {
         provider: "openai",
         id: "gpt-retirement-fixture",
-        api: "openai-chatgpt-responses",
+        api: "openai-responses",
         baseUrl: "https://subscription.example/v1",
       };
       const subscriptionPlan: AgentRuntimeAuthPlan = {
@@ -62,7 +62,7 @@ describe("materializePreparedRuntimeModel", () => {
         models: {
           providers: {
             openai: {
-              api: mode === "route-less" ? "openai-chatgpt-responses" : "openai-responses",
+              api: "openai-responses",
               baseUrl: mode === "route-less" ? model.baseUrl : "https://api.example/v1",
               models: [],
             },
@@ -117,8 +117,8 @@ describe("materializePreparedRuntimeModel", () => {
     const model = {
       provider: "openai",
       id: "gpt-5.5",
-      api: "openai-chatgpt-responses",
-      baseUrl: "https://chatgpt.com/backend-api/codex",
+      api: "openai-responses",
+      baseUrl: "https://openai-eu.example/v1",
     };
     const rematerialized = { ...model, name: "backup-profile-model" };
     const resolveModel = vi.fn(async () => ({ model: rematerialized }));
@@ -176,8 +176,8 @@ describe("materializePreparedRuntimeModel", () => {
     const resolved = {
       provider: "openai",
       id: "gpt-5.5",
-      api: "openai-chatgpt-responses",
-      baseUrl: "https://chatgpt.com/backend-api/codex",
+      api: "openai-responses",
+      baseUrl: "https://openai-eu.example/v1",
     };
     const resolveModel = vi.fn(async () => ({ model: resolved }));
 
@@ -204,8 +204,8 @@ describe("materializePreparedRuntimeModel", () => {
           models: expect.objectContaining({
             providers: expect.objectContaining({
               openai: expect.objectContaining({
-                api: "openai-chatgpt-responses",
-                baseUrl: "https://chatgpt.com/backend-api/codex",
+                api: "openai-responses",
+                baseUrl: "https://openai-eu.example/v1",
               }),
             }),
           }),
@@ -340,8 +340,8 @@ describe("materializePreparedRuntimeModel", () => {
     const resolved = {
       provider: "openai",
       id: "gpt-5.5",
-      api: "openai-chatgpt-responses",
-      baseUrl: "https://chatgpt.com/backend-api/codex",
+      api: "openai-responses",
+      baseUrl: "https://openai-eu.example/v1",
     };
     const resolveModel = vi.fn(async () => ({ model: resolved }));
 
@@ -353,8 +353,8 @@ describe("materializePreparedRuntimeModel", () => {
         model: {
           provider: "openai",
           id: "gpt-5.4",
-          api: "openai-chatgpt-responses",
-          baseUrl: "https://chatgpt.com/backend-api/codex",
+          api: "openai-responses",
+          baseUrl: "https://openai-eu.example/v1",
         },
         resolveModel,
       }),
