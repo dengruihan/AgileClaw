@@ -127,7 +127,7 @@ describe("PR #119473 real gateway proof", () => {
             },
             entries: { main: {} },
           },
-          models: { mode: "replace", providers: { [provider.providerId]: provider.config } },
+          models: { providers: { [provider.providerId]: provider.config } },
           gateway: { auth: { mode: "token", token: "pr119473-proof-token" } },
         };
         const sessionKey = "agent:main:pr119473-fresh-runtime";

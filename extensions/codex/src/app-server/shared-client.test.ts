@@ -301,12 +301,10 @@ describe("shared Codex app-server client", () => {
     mocks.resolveCodexAppServerPreparedAuthProfileSnapshot.mockReset();
     mocks.resolveCodexAppServerPreparedAuthProfileSnapshot.mockResolvedValue({
       loginParams: {
-        type: "chatgptAuthTokens",
-        accessToken: "prepared-token",
-        chatgptAccountId: "prepared-account",
-        chatgptPlanType: null,
+        type: "apiKey",
+        apiKey: "prepared-fixture-key",
       },
-      secretFreeCacheKey: "prepared-account:token:sha256:prepared",
+      secretFreeCacheKey: "prepared-fixture-key:api-key:sha256:prepared",
     });
     mocks.refreshCodexAppServerAuthTokens.mockClear();
     mocks.resolveCodexAppServerFallbackApiKeyCacheKey.mockClear();

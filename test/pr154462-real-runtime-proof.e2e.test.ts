@@ -334,7 +334,7 @@ describe("runtime-config replacement during a turn", () => {
               },
               entries: { main: {} },
             },
-            models: { mode: "merge", providers: { [PROVIDER_ID]: provider.config } },
+            models: { providers: { [PROVIDER_ID]: provider.config } },
             gateway: { auth: { mode: "token", token: TOKEN } },
           },
           configPath,

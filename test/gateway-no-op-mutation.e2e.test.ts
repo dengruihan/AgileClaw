@@ -107,7 +107,6 @@ function createTestConfig(baseUrl: string): OpenClawConfig {
     },
     tools: { profile: "coding" },
     models: {
-      mode: "replace",
       providers: {
         "no-op-proof": {
           baseUrl: `${baseUrl}/v1`,

@@ -87,9 +87,24 @@ export function createGithubCopilotDynamicModelHooks() {
   }
 
   async function runCatalog(ctx: ProviderCatalogContext): Promise<ProviderCatalogResult> {
-    const auth = await resolveCatalogAuth(ctx);
-    if (!auth) {
-      return null;
+    const auth = await resolveFirstGithubToken(ctx);
+    if (!auth.githubToken) {
+      if (!auth.hasProfile) {
+        return null;
+      }
+      // A stored profile that cannot yield a usable source token (e.g. a
+      // retired credential type) must surface as an unavailable outcome
+      // instead of silently disabling discovery for the provider.
+      return {
+        providers: {},
+        outcomes: [
+          {
+            provider: PROVIDER_ID,
+            ...(auth.profileId ? { profileId: auth.profileId } : {}),
+            status: "unavailable",
+          },
+        ],
+      };
     }
     const headers = buildCopilotRuntimeHeaders({ config: ctx.config });
     return await runLiveProviderCatalog({

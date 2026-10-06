@@ -76,7 +76,6 @@ it(
         },
         tools: { profile: "minimal" },
         models: {
-          mode: "replace",
           providers: {
             [provider.providerId]: {
               ...provider.config,

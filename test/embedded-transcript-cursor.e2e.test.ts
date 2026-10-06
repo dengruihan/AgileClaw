@@ -132,7 +132,6 @@ function createTestConfig(baseUrl: string): OpenClawConfig {
     },
     tools: { profile: "minimal" },
     models: {
-      mode: "replace",
       providers: {
         "cursor-settlement": {
           baseUrl: `${baseUrl}/v1`,

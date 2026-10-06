@@ -211,7 +211,7 @@ describe("PR #142176 real runtime proof", () => {
             },
             entries: { main: {} },
           },
-          models: { mode: "replace", providers: { [provider.providerId]: provider.config } },
+          models: { providers: { [provider.providerId]: provider.config } },
           gateway: { auth: { mode: "token", token: TOKEN } },
         };
         const sessionKey = "agent:main:pr142176-proof";

@@ -89,7 +89,9 @@ export async function resolveFirstGithubToken(params: {
         })[0];
   const profile = profileId ? authStore.profiles[profileId] : undefined;
   if (profile?.type !== "api_key") {
-    return { githubToken: "", hasProfile };
+    // Report the selected profile id so callers can attribute an unusable
+    // stored credential (e.g. a retired credential type) instead of hiding it.
+    return { githubToken: "", hasProfile, profileId };
   }
   const resolved = await resolveRequiredConfiguredSecretRefInputString({
     config: params.config ?? {},

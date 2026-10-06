@@ -12,30 +12,9 @@ import {
 } from "openclaw/plugin-sdk/plugin-test-runtime";
 // Anthropic tests cover index plugin behavior.
 import { createRequireRecord } from "openclaw/plugin-sdk/test-fixtures";
-import { afterAll, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-
-const { probeClaudeCliAuthStatusMock } = vi.hoisted(() => ({
-  probeClaudeCliAuthStatusMock: vi.fn(),
-}));
-
-vi.mock("./cli-auth-seam.js", () => {
-  return {
-    probeClaudeCliAuthStatus: probeClaudeCliAuthStatusMock,
-  };
-});
-
-import { CLAUDE_CLI_NATIVE_AUTH_MARKER } from "./cli-constants.js";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import anthropicPlugin from "./index.js";
 import { claude5ContractCases } from "./model-contract-cases.test-support.js";
-
-beforeEach(() => {
-  probeClaudeCliAuthStatusMock.mockReset();
-});
-
-afterAll(() => {
-  vi.doUnmock("./cli-auth-seam.js");
-  vi.resetModules();
-});
 
 function createModelRegistry(models: ProviderRuntimeModel[]) {
   return {
@@ -70,8 +49,6 @@ function levelIds(profile: unknown): Array<unknown> {
   return (levels as Array<{ id?: unknown }>).map((level) => level.id);
 }
 
-const ANTHROPIC_SETUP_TOKEN = `sk-ant-oat01-${"a".repeat(80)}`;
-
 describe("anthropic provider replay hooks", () => {
   it("registers the claude-cli backend", () => {
     const captured = capturePluginRegistration({ register: anthropicPlugin.register });
@@ -89,12 +66,6 @@ describe("anthropic provider replay hooks", () => {
       sessionArgs: ["--session-id", "{sessionId}"],
     });
     expect(backend.config.reliability?.watchdog?.resume).toBeUndefined();
-  });
-
-  it("declares the copied Claude CLI profile as retired", async () => {
-    const provider = await registerSingleProviderPlugin(anthropicPlugin);
-
-    expect(provider.deprecatedProfileIds).toEqual(["anthropic:claude-cli"]);
   });
 
   it("lets native session discovery be disabled without disabling Anthropic", () => {
@@ -1313,159 +1284,6 @@ describe("anthropic provider replay hooks", () => {
         },
       ],
     });
-  });
-
-  it("stores setup-token expiry from a bounded duration", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000);
-    try {
-      const provider = await registerSingleProviderPlugin(anthropicPlugin);
-      const setupTokenAuth = provider.auth.find((entry) => entry.id === "setup-token");
-      if (!setupTokenAuth) {
-        throw new Error("expected Anthropic setup-token auth method");
-      }
-
-      const result = await setupTokenAuth.run({
-        opts: {
-          token: ANTHROPIC_SETUP_TOKEN,
-          tokenExpiresIn: "1h",
-        },
-      } as never);
-
-      expect(result?.profiles[0]?.credential).toMatchObject({
-        type: "token",
-        provider: "anthropic",
-        token: ANTHROPIC_SETUP_TOKEN,
-        expires: 3_601_000,
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it.each([
-    {
-      name: "preflights non-interactive setup-token input without writing credentials",
-      opts: {},
-    },
-    {
-      name: "rejects setup-token ref storage during non-interactive preflight",
-      opts: { secretInputMode: "ref" }, // pragma: allowlist secret
-      error:
-        "Anthropic setup-token input cannot be stored with --secret-input-mode ref. Use --secret-input-mode plaintext.",
-    },
-    {
-      name: "rejects invalid setup-token expiry during non-interactive preflight",
-      opts: { tokenExpiresIn: "nope" },
-      error: "Invalid --token-expires-in",
-      partialError: true,
-    },
-  ] as Array<{
-    name: string;
-    opts: Record<string, string>;
-    error?: string;
-    partialError?: boolean;
-  }>)("$name", async ({ opts, error, partialError }) => {
-    const provider = await registerSingleProviderPlugin(anthropicPlugin);
-    const setupTokenAuth = provider.auth.find((entry) => entry.id === "setup-token");
-    if (!setupTokenAuth?.validateNonInteractive) {
-      throw new Error("expected setup-token reset preflight");
-    }
-    const runtime = { log: vi.fn(), error: vi.fn(), exit: vi.fn() };
-
-    const valid = await setupTokenAuth.validateNonInteractive({
-      authChoice: "setup-token",
-      config: {},
-      baseConfig: {},
-      opts: { token: ANTHROPIC_SETUP_TOKEN, ...opts },
-      runtime,
-      resolveApiKey: vi.fn(async () => null),
-    });
-
-    expect(valid).toBe(!error);
-    if (error) {
-      expect(runtime.error).toHaveBeenCalledWith(
-        partialError ? expect.stringContaining(error) : error,
-      );
-      expect(runtime.exit).toHaveBeenCalledWith(1);
-    } else {
-      expect(runtime.error).not.toHaveBeenCalled();
-    }
-  });
-
-  it("omits setup-token expiry when duration overflows the Date range", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(8_640_000_000_000_000);
-    try {
-      const provider = await registerSingleProviderPlugin(anthropicPlugin);
-      const setupTokenAuth = provider.auth.find((entry) => entry.id === "setup-token");
-      if (!setupTokenAuth) {
-        throw new Error("expected Anthropic setup-token auth method");
-      }
-
-      const result = await setupTokenAuth.run({
-        opts: {
-          token: ANTHROPIC_SETUP_TOKEN,
-          tokenExpiresIn: "1h",
-        },
-      } as never);
-
-      expect(result?.profiles[0]?.credential).toEqual({
-        type: "token",
-        provider: "anthropic",
-        token: ANTHROPIC_SETUP_TOKEN,
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it.each([
-    { status: "available", authenticated: true },
-    { status: "missing", authenticated: false },
-    { status: "unreadable", authenticated: false },
-  ] as const)(
-    "publishes native Claude auth only when its CLI reports $status",
-    async ({ status, authenticated }) => {
-      probeClaudeCliAuthStatusMock.mockResolvedValue({ status });
-      const provider = await registerSingleProviderPlugin(anthropicPlugin);
-      const config = {};
-
-      const runtimeAuth = await provider.prepareSyntheticAuth?.({
-        config,
-        provider: "claude-cli",
-      } as never);
-      expect(runtimeAuth).toEqual(
-        authenticated
-          ? {
-              apiKey: CLAUDE_CLI_NATIVE_AUTH_MARKER,
-              source: "Claude CLI native auth",
-              mode: "oauth",
-            }
-          : undefined,
-      );
-      expect(
-        await provider.prepareSyntheticAuth?.({ provider: "claude-cli" } as never),
-      ).toBeUndefined();
-      expect(probeClaudeCliAuthStatusMock).toHaveBeenCalledOnce();
-    },
-  );
-
-  it("does not copy native Claude auth during anthropic cli migration", async () => {
-    probeClaudeCliAuthStatusMock.mockReturnValue({ status: "available" });
-
-    const provider = await registerSingleProviderPlugin(anthropicPlugin);
-    const cliAuth = provider.auth.find((entry) => entry.id === "cli");
-
-    if (!cliAuth) {
-      throw new Error("expected Anthropic CLI auth method");
-    }
-
-    const result = await cliAuth.run({
-      config: {},
-    } as never);
-
-    expect(result?.profiles).toEqual([]);
   });
 });
 /* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

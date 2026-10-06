@@ -175,7 +175,6 @@ test("keeps an emitted model button bound to its provider after inventory replac
           },
         },
         models: {
-          mode: "replace",
           providers: {
             anchor: providerConfig(apiRoot, "baseline"),
             [PROVIDER]: providerConfig(apiRoot, MODEL),

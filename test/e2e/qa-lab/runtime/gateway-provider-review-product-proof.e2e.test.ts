@@ -329,7 +329,6 @@ describe("Gateway provider review product proof", () => {
             },
             tools: { deny: ["*"] },
             models: {
-              mode: "replace",
               providers: {
                 openai: {
                   baseUrl: `${baseUrl}/backend-api/codex`,

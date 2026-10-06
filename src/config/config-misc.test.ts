@@ -381,7 +381,6 @@ describe("config identity/materialization regressions", () => {
   it("accepts blank model provider apiKey values", () => {
     const res = validateConfigObjectRaw({
       models: {
-        mode: "merge",
         providers: {
           minimax: {
             baseUrl: "https://api.minimax.io/anthropic",

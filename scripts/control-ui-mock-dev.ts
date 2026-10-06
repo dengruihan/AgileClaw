@@ -15,6 +15,7 @@ import { expectDefined } from "../packages/normalization-core/src/expect.js";
 import { computeBaseConfigSchemaResponse } from "../src/config/schema-base.js";
 import { applySharedChannelFieldHelp } from "../src/config/schema.channel-field-help.js";
 import { buildBaseHints } from "../src/config/schema.hints.js";
+import { asSchemaObject } from "../src/config/schema.shared.js";
 import { applyConfigTierHints, applyResolvedConfigTierHints } from "../src/config/schema.tiers.js";
 import { CONTROL_UI_BOOTSTRAP_CONFIG_PATH } from "../src/gateway/control-ui-contract.js";
 import {
@@ -1080,7 +1081,7 @@ function buildConfigMocks(options: { swarmEnabled?: boolean; workboardEnabled?: 
           },
         },
       },
-      models: computeBaseConfigSchemaResponse().schema.properties?.models,
+      models: asSchemaObject(computeBaseConfigSchemaResponse().schema)?.properties?.models,
       // Channel settings are the one schema surface the channels page renders,
       // so the fixture keeps both tiers represented.
       channels: {

@@ -179,7 +179,6 @@ function config(url: string): OpenClawConfig {
       exec: { security: "full", ask: "off" },
     },
     models: {
-      mode: "replace",
       providers: {
         "completion-replay": {
           baseUrl: url + "/v1",

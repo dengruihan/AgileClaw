@@ -207,7 +207,6 @@ describe("PR #126853 real Gateway lane proof", () => {
             entries: { main: {} },
           },
           models: {
-            mode: "replace",
             providers: { [provider.providerId]: provider.config },
           },
           gateway: { auth: { mode: "token", token } },

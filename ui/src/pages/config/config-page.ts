@@ -1171,13 +1171,6 @@ export class ConfigPage extends OpenClawLightDomElement {
             properties: { ...properties, models: { ...models, properties: globalFields } },
           };
         })(),
-        uiHints: {
-          ...props.uiHints,
-          "models.mode": {
-            ...props.uiHints["models.mode"],
-            help: t("modelProviders.catalogSettings.modeHelp"),
-          },
-        },
       });
     }
     if (this.pageId === "memory") {

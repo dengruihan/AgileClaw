@@ -530,7 +530,7 @@ describe("Gateway admitted Discord transcript capture", () => {
           },
         },
         gateway: { auth: { mode: "token", token } },
-        models: { mode: "replace", providers: { [provider.providerId]: provider.config } },
+        models: { providers: { [provider.providerId]: provider.config } },
         plugins: {
           allow: ["discord"],
           entries: { discord: { enabled: true } },

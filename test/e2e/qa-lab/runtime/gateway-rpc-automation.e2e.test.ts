@@ -192,7 +192,6 @@ describe("Gateway run cancellation and automation RPCs", () => {
             entries: { main: {} },
           },
           models: {
-            mode: "replace",
             providers: {
               [provider.providerId]: {
                 ...provider.config,

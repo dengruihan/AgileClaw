@@ -75,7 +75,6 @@ it.skipIf(!isLiveTestEnabled() || process.platform === "win32")(
         const config: OpenClawConfig = {
           secrets: { providers: { default: { source: "env" } } },
           models: {
-            mode: "replace",
             providers: {
               openai: {
                 api: "openai-responses",

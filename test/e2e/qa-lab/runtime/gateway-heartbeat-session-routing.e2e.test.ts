@@ -333,7 +333,6 @@ describe("Gateway heartbeat session routing", () => {
             entries: { main: {} },
           },
           models: {
-            mode: "replace",
             providers: {
               [provider.providerId]: {
                 ...provider.config,

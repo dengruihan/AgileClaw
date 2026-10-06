@@ -375,7 +375,6 @@ describe("lmstudio setup", () => {
       defaultModel: "lmstudio/qwen3-8b-instruct",
       configPatch: {
         models: {
-          mode: "merge",
           providers: {
             lmstudio: {
               baseUrl: LMSTUDIO_DEFAULT_INFERENCE_BASE_URL,

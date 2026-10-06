@@ -148,7 +148,6 @@ function pickerConfig(apiRoot: string, modelId: string): OpenClawConfig {
       entries: { main: { model: modelRef } },
     },
     models: {
-      mode: "merge",
       providers: {
         [REPLACEMENT_PROVIDER]: {
           baseUrl: apiRoot,
@@ -624,7 +623,6 @@ test("initializes unrestricted Telegram model browsing and reuses its prepared c
               },
               models: {
                 ...cfg.models,
-                mode: "merge",
                 providers: {
                   ...cfg.models?.providers,
                   ollama: {

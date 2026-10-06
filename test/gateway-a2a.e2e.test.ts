@@ -38,7 +38,6 @@ test("A2A completes correlated tasks under message-tool-only source policy", asy
             },
           },
           models: {
-            mode: "replace",
             providers: {
               "a2a-proof": {
                 baseUrl: `${model.baseUrl}/v1`,

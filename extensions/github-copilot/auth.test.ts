@@ -40,8 +40,8 @@ describe("resolveFirstGithubToken", () => {
     ensureAuthProfileStoreMock.mockReturnValue({
       profiles: {
         "github-copilot:github": {
-          type: "token",
-          tokenRef: { source: "file", provider: "default", id: "/providers/github-copilot/token" },
+          type: "api_key",
+          keyRef: { source: "file", provider: "default", id: "/providers/github-copilot/key" },
         },
       },
     });
@@ -127,14 +127,14 @@ describe("resolveFirstGithubToken", () => {
       version: 1,
       profiles: {
         "github-copilot:first": {
-          type: "token",
+          type: "api_key",
           provider: "github-copilot",
-          token: "first-token",
+          key: "first-token",
         },
         "github-copilot:preferred": {
-          type: "token",
+          type: "api_key",
           provider: "github-copilot",
-          token: "preferred-token",
+          key: "preferred-token",
         },
       },
       ...(testCase.storedOrder ? { order: { [providerKey]: testCase.storedOrder } } : {}),
@@ -165,112 +165,20 @@ describe("resolveFirstGithubToken", () => {
     });
   });
 
-  it.each([
-    {
-      label: "a public GitHub OAuth account",
-      enterpriseUrl: undefined,
-      expected: {
-        githubToken: "durable-github-token",
-        githubDomain: "github.com",
-        hasProfile: true,
-        profileId: "github-copilot:preferred",
-      },
-    },
-    {
-      label: "an enterprise GitHub OAuth account",
-      enterpriseUrl: "acme.ghe.com",
-      expected: {
-        githubToken: "durable-github-token",
-        githubDomain: "acme.ghe.com",
-        hasProfile: true,
-        profileId: "github-copilot:preferred",
-      },
-    },
-    {
-      label: "an OAuth account without a durable credential",
-      enterpriseUrl: undefined,
-      refresh: "",
-      expected: { githubToken: "", hasProfile: true },
-    },
-    {
-      label: "an enterprise OAuth account with a whitespace-only durable credential",
-      enterpriseUrl: "acme.ghe.com",
-      refresh: "   ",
-      expected: { githubToken: "", hasProfile: true },
-    },
-  ])("uses the durable credential when explicit order selects $label", async (testCase) => {
-    ensureAuthProfileStoreMock.mockReturnValue({
-      version: 1,
-      profiles: {
-        "github-copilot:first": {
-          type: "token",
-          provider: "github-copilot",
-          token: "first-token",
-        },
-        "github-copilot:preferred": {
-          type: "oauth",
-          provider: "github-copilot",
-          access: "short-lived-copilot-token",
-          refresh: testCase.refresh ?? " durable-github-token ",
-          expires: Date.now() + 60_000,
-          ...(testCase.enterpriseUrl ? { enterpriseUrl: testCase.enterpriseUrl } : {}),
-        },
-      },
-    });
-    listProfilesForProviderMock.mockReturnValue([
-      "github-copilot:first",
-      "github-copilot:preferred",
-    ]);
-
-    await expect(
-      resolveFirstGithubToken({
-        config: { auth: { order: { "github-copilot": ["github-copilot:preferred"] } } },
-        env: {},
-      }),
-    ).resolves.toEqual(testCase.expected);
-  });
-
-  it.each(["durable-github-token", ""])(
-    "rejects an explicitly ordered OAuth account with an unsupported enterprise domain (refresh: %j)",
-    async (refresh) => {
-      ensureAuthProfileStoreMock.mockReturnValue({
-        version: 1,
-        profiles: {
-          "github-copilot:preferred": {
-            type: "oauth",
-            provider: "github-copilot",
-            access: "short-lived-copilot-token",
-            refresh,
-            expires: Date.now() + 60_000,
-            enterpriseUrl: "attacker.example",
-          },
-        },
-      });
-      listProfilesForProviderMock.mockReturnValue(["github-copilot:preferred"]);
-
-      await expect(
-        resolveFirstGithubToken({
-          config: { auth: { order: { "github-copilot": ["github-copilot:preferred"] } } },
-          env: {},
-        }),
-      ).rejects.toThrow(/attacker\.example/);
-    },
-  );
-
   it("keeps the first stored account without an explicit order or cooldown mutation", async () => {
     const expiredCooldown = Date.now() - 60_000;
     const store = {
       version: 1,
       profiles: {
         "github-copilot:first": {
-          type: "token",
+          type: "api_key",
           provider: "github-copilot",
-          token: "first-token",
+          key: "first-token",
         },
         "github-copilot:preferred": {
-          type: "token",
+          type: "api_key",
           provider: "github-copilot",
-          token: "preferred-token",
+          key: "preferred-token",
         },
       },
       usageStats: {
@@ -296,14 +204,14 @@ describe("resolveFirstGithubToken", () => {
       version: 1,
       profiles: {
         "github-copilot:first": {
-          type: "token",
+          type: "api_key",
           provider: "github-copilot",
-          token: "first-token",
+          key: "first-token",
         },
         "github-copilot:preferred": {
-          type: "token",
+          type: "api_key",
           provider: "github-copilot",
-          token: "preferred-token",
+          key: "preferred-token",
         },
       },
     });
@@ -558,17 +466,17 @@ describe("resolveFirstGithubToken", () => {
   });
 
   it("does not read process.env or swallow an explicitly requested unavailable profile ref", async () => {
-    const tokenRef = { source: "env", provider: "default", id: "COPILOT_PROCESS_ONLY_TOKEN" };
-    vi.stubEnv(tokenRef.id, "process-only-token");
+    const keyRef = { source: "env", provider: "default", id: "COPILOT_PROCESS_ONLY_TOKEN" };
+    vi.stubEnv(keyRef.id, "process-only-token");
     ensureAuthProfileStoreMock.mockReturnValue({
       profiles: {
-        "github-copilot:github": { type: "token", tokenRef },
-        "github-copilot:other": { type: "token", token: "other-profile-token" },
+        "github-copilot:github": { type: "api_key", keyRef },
+        "github-copilot:other": { type: "api_key", key: "other-profile-token" },
       },
     });
     listProfilesForProviderMock.mockReturnValue(["github-copilot:github", "github-copilot:other"]);
     resolveRequiredConfiguredSecretRefInputStringMock.mockRejectedValue(
-      new Error("github-copilot:github tokenRef unavailable"),
+      new Error("github-copilot:github keyRef unavailable"),
     );
 
     await expect(
@@ -576,19 +484,19 @@ describe("resolveFirstGithubToken", () => {
         env: {},
         profileId: "github-copilot:github",
       }),
-    ).rejects.toThrow("github-copilot:github tokenRef unavailable");
+    ).rejects.toThrow("github-copilot:github keyRef unavailable");
     expect(resolveRequiredConfiguredSecretRefInputStringMock).toHaveBeenCalledWith(
-      expect.objectContaining({ config: {}, env: {}, value: tokenRef }),
+      expect.objectContaining({ config: {}, env: {}, value: keyRef }),
     );
   });
 
   it("resolves a profile SecretRef before stale plaintext through the central resolver", async () => {
     const config = { secrets: { defaults: { provider: "default" } } } as never;
     const env = {} as NodeJS.ProcessEnv;
-    const tokenRef = { source: "file", provider: "default", id: "/providers/github-copilot/token" };
+    const keyRef = { source: "file", provider: "default", id: "/providers/github-copilot/key" };
     ensureAuthProfileStoreMock.mockReturnValue({
       profiles: {
-        "github-copilot:github": { type: "token", token: "stale-profile-token", tokenRef },
+        "github-copilot:github": { type: "api_key", key: "stale-profile-token", keyRef },
       },
     });
     const result = await resolveFirstGithubToken({
@@ -604,8 +512,8 @@ describe("resolveFirstGithubToken", () => {
     expect(resolveRequiredConfiguredSecretRefInputStringMock).toHaveBeenCalledWith({
       config,
       env,
-      value: tokenRef,
-      path: "providers.github-copilot.authProfiles.github-copilot:github.tokenRef",
+      value: keyRef,
+      path: "providers.github-copilot.authProfiles.github-copilot:github.keyRef",
     });
   });
 });

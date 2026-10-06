@@ -492,7 +492,6 @@ function buildMockOpenAiConfig(mockPort: number) {
     },
     gateway: { mode: "local" },
     models: {
-      mode: "merge",
       catalogRefresh: { enabled: false },
       providers: {
         openai: {

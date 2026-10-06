@@ -627,7 +627,6 @@ const enSettings = {
   },
   modelProviders: {
     title: "Configured providers",
-    configureModels: "Model setup",
     login: {
       action: "Add provider",
       title: "Connect a provider",
@@ -728,21 +727,6 @@ const enSettings = {
         "Model discovery failed. Check the connection and retry, or add models manually.",
       addModelsAfterSave:
         "Save the connection, then open Models on its card to add model definitions.",
-    },
-    catalogSettings: {
-      title: "Global model catalog settings",
-      description:
-        "Choose catalog merge behavior and automatic catalog updates. Manage connections and model definitions on the provider cards above.",
-      scope:
-        "These settings apply to the whole Gateway. Choose the model agents use in Defaults for all agents above.",
-      providers:
-        "Providers: set the API address, protocol, authentication, and optional request headers.",
-      models:
-        "Model definitions: add model IDs and describe their input types, context limits, output limits, and costs.",
-      catalog:
-        'Catalog mode: "merge" keeps built-in models and adds your definitions; "replace" uses only your configured catalog. Also control automatic catalog updates.',
-      modeHelp:
-        'Choose "merge" to keep built-in providers and add or customize your own. Choose "replace" to use only the providers and models defined here.',
     },
     search: "Search providers…",
     noMatches: "No providers match your search.",

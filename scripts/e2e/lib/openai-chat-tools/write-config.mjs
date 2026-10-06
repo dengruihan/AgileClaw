@@ -36,7 +36,6 @@ const config = {
     },
   },
   models: {
-    mode: "merge",
     providers: {
       openai: {
         api: "openai-responses",

@@ -346,7 +346,6 @@ function createTestConfig(baseUrl: string): OpenClawConfig {
     },
     tools: { profile: "minimal" },
     models: {
-      mode: "replace",
       providers: {
         "restored-settle": {
           baseUrl: `${baseUrl}/v1`,

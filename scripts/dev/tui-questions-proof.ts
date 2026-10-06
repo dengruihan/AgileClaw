@@ -338,7 +338,6 @@ async function runProof(outputDir: string) {
           entries: { main: { skills: [] } },
         },
         models: {
-          mode: "replace",
           providers: {
             "question-proof": {
               baseUrl: `http://127.0.0.1:${mockPort}/v1`,

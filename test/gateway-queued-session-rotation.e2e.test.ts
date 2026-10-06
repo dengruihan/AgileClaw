@@ -221,7 +221,6 @@ describe("Gateway queued session rotation", () => {
         },
         tools: { profile: "minimal" },
         models: {
-          mode: "replace",
           providers: {
             "queued-rotation": {
               baseUrl: `${modelServer.baseUrl}/v1`,
@@ -322,7 +321,6 @@ describe("Gateway queued session rotation", () => {
         },
         tools: { profile: "minimal" },
         models: {
-          mode: "replace",
           providers: {
             "queued-rotation": {
               baseUrl: `${modelServer.baseUrl}/v1`,

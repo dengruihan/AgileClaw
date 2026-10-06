@@ -80,7 +80,6 @@ describe("gateway RPC model catalog", () => {
             },
             gateway: { auth: { mode: "token", token } },
             models: {
-              mode: "replace",
               providers: {
                 fixture: {
                   apiKey: "rpc-model-secret",

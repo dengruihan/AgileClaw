@@ -45,6 +45,80 @@ export function createOwnerLoginConfig(): OpenClawConfig {
   };
 }
 
+/**
+ * Bundled model OAuth was removed, so chat-mode provider logins now come only
+ * from plugins that declare `channelLogin` auth choices. This fixture recreates
+ * the retired OpenAI Codex chat-login shape as a local plugin so the Telegram
+ * /login command's device-code, cancellation, and session-adoption contracts
+ * stay covered through a real manifest-declared choice.
+ */
+export async function withCodexChannelLoginFixture<T>(
+  run: (registerLoginCommand: typeof registerLoginCommand) => Promise<T>,
+): Promise<T> {
+  clearRuntimeConfigSnapshot();
+  try {
+    return await withTempHome(
+      async (home) => {
+        const pluginDir = path.join(home, "codex-login-fixture");
+        await fs.mkdir(pluginDir);
+        await Promise.all([
+          fs.writeFile(path.join(pluginDir, "index.js"), "export default { register() {} };\n"),
+          fs.writeFile(
+            path.join(pluginDir, "package.json"),
+            JSON.stringify({ type: "module", openclaw: { extensions: ["./index.js"] } }),
+          ),
+          fs.writeFile(
+            path.join(pluginDir, "openclaw.plugin.json"),
+            JSON.stringify({
+              id: "codex-login-fixture",
+              configSchema: { type: "object", additionalProperties: false, properties: {} },
+              providerAuthChoices: [
+                {
+                  provider: "openai",
+                  method: "oauth",
+                  choiceId: "codex-oauth",
+                  choiceLabel: "Codex login (browser)",
+                  groupLabel: "OpenAI",
+                  appGuidedAuth: "oauth",
+                  credentialOnly: true,
+                  channelLogin: {},
+                },
+                {
+                  provider: "openai",
+                  method: "device-code",
+                  choiceId: "codex-device-code",
+                  choiceLabel: "Codex login (device code)",
+                  groupLabel: "OpenAI",
+                  appGuidedAuth: "device-code",
+                  credentialOnly: true,
+                  channelLogin: { aliases: ["codex"] },
+                },
+              ],
+            }),
+          ),
+        ]);
+        const registerWithFixture = (params: Parameters<typeof registerLoginCommand>[0]) =>
+          registerLoginCommand({
+            ...params,
+            cfg: {
+              ...params.cfg,
+              plugins: {
+                load: { paths: [pluginDir] },
+                entries: { "codex-login-fixture": { enabled: true } },
+              },
+            },
+          });
+        return await run(registerWithFixture);
+      },
+      {
+        env: { OPENCLAW_CONFIG_PATH: (home) => path.join(home, ".openclaw", "openclaw.json") },
+      },
+    );
+  } finally {
+    clearRuntimeConfigSnapshot();
+  }
+}
+
 export function registerLoginCommand(params: {
   cfg: OpenClawConfig;
   loginFlow: TelegramLoginFlow;
@@ -52,7 +126,8 @@ export function registerLoginCommand(params: {
   allowFrom?: string[];
   abortSignal?: AbortSignal;
   runtime?: RuntimeEnv;
-  getRuntimeConfig?: () => OpenClawConfig;
+  /** Transforms the harness config (fixture plugins included) on each read. */
+  getRuntimeConfig?: (base: OpenClawConfig) => OpenClawConfig;
 }) {
   const botHarness = createCommandBot();
   const accountId = params.accountId ?? `login-test-${++loginAccountIndex}`;
@@ -88,7 +163,9 @@ export function registerLoginCommand(params: {
         ...nativeParams,
         telegramDeps: {
           ...nativeParams.telegramDeps,
-          ...(params.getRuntimeConfig ? { getRuntimeConfig: params.getRuntimeConfig } : {}),
+          ...(params.getRuntimeConfig
+            ? { getRuntimeConfig: () => params.getRuntimeConfig!(cfg) }
+            : {}),
           runModelsAuthLoginFlow: params.loginFlow,
           sendMessageTelegram,
         },

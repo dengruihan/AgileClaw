@@ -19,7 +19,6 @@ export function configureLiveGatewayBenchmark(
   concurrency: number,
 ): void {
   config.models = {
-    mode: "merge",
     providers: {
       openai: {
         baseUrl: "https://api.openai.com/v1",

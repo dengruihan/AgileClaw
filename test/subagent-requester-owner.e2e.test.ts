@@ -652,7 +652,6 @@ function createTestConfig(baseUrl: string): OpenClawConfig {
     },
     tools: { profile: "coding", codeMode: false, toolSearch: false },
     models: {
-      mode: "replace",
       providers: {
         "requester-owner": {
           baseUrl: `${baseUrl}/v1`,

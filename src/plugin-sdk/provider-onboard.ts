@@ -61,6 +61,8 @@ function resolveConnectionModels(
   models: ProviderPresetModels,
 ): ModelDefinitionConfig[] {
   void cfg;
+  // Runtime consumes only saved provider rows, so connection setup always
+  // seeds the preset catalog; there is no implicit catalog merge to defer to.
   return structuredClone(resolvePresetModels(models));
 }
 
@@ -546,7 +548,7 @@ export function createDefaultModelsPresetAppliers<TArgs extends unknown[]>(param
   });
 }
 
-/** Build connection-only setup appliers while retaining the default-model merge rule in replace mode. */
+/** Build setup appliers that always seed the preset catalog as saved config rows. */
 export function createDefaultModelsConnectionPresetAppliers<TArgs extends unknown[]>(
   params: Parameters<typeof createDefaultModelsPresetAppliers<TArgs>>[0],
 ): ProviderOnboardPresetAppliers<TArgs> {
@@ -626,7 +628,7 @@ export function createModelCatalogPresetAppliers<TArgs extends unknown[]>(params
   });
 }
 
-/** Apply connection facts and aliases, seeding the supplied catalog only in explicit replace mode. */
+/** Apply connection facts, aliases, and the supplied catalog as saved config rows. */
 export function applyProviderConnectionConfig(
   cfg: OpenClawConfig,
   params: Parameters<typeof applyProviderConfigWithModelCatalogPreset>[1],
@@ -637,7 +639,7 @@ export function applyProviderConnectionConfig(
   });
 }
 
-/** Build registered setup appliers without changing the catalog-seeding public helper contract. */
+/** Build registered setup appliers that seed the preset catalog into saved config. */
 export function createProviderConnectionPresetAppliers<TArgs extends unknown[]>(
   params: Parameters<typeof createModelCatalogPresetAppliers<TArgs>>[0],
 ): ProviderOnboardPresetAppliers<TArgs> {

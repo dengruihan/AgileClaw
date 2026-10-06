@@ -568,7 +568,6 @@ function configure() {
   };
   cfg.models = {
     ...cfg.models,
-    mode: "merge",
     providers: {
       ...cfg.models?.providers,
       openai: {

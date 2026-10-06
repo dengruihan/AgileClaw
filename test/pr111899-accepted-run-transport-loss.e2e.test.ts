@@ -196,7 +196,7 @@ describe("accepted agent run transport loss against a real gateway", () => {
             },
             entries: { main: {} },
           },
-          models: { mode: "replace", providers: { [provider.providerId]: provider.config } },
+          models: { providers: { [provider.providerId]: provider.config } },
           session: { store: path.join(stateDir, "sessions.json"), mainKey: "main" },
           gateway: { auth: { mode: "token", token: "pr111899-proof-token" } },
         };

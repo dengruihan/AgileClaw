@@ -216,7 +216,6 @@ describe("litellm plugin", () => {
           model: { primary: "litellm/claude-opus-4-6" },
         });
         expect(result?.models).toStrictEqual({
-          mode: "merge",
           providers: {
             litellm: {
               baseUrl: expectedBaseUrl,

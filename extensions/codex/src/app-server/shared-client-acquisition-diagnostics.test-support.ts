@@ -14,6 +14,9 @@ import {
 import { createClientHarness } from "./test-support.js";
 import { CODEX_APP_SERVER_VERSION } from "./version.js";
 
+/** API-key prepared auth shared by the acquisition diagnostics fixtures. */
+const DIAGNOSTICS_PREPARED_AUTH = { kind: "api-key" as const, apiKey: "diagnostics-fixture-key" };
+
 export function deferNextAuthProfileApplication(): () => void {
   let release: () => void = () => {};
   const gate = new Promise<void>((resolve) => {
@@ -99,9 +102,10 @@ export function registerSharedClientAcquisitionDiagnosticsTests({
       );
     }
     const run = vi.fn(async () => undefined);
-    const result = withCodexAppServerJsonClient({ timeoutMs: 50 }, run).catch(
-      (error: unknown) => error,
-    );
+    const result = withCodexAppServerJsonClient(
+      { timeoutMs: 50, preparedAuth: DIAGNOSTICS_PREPARED_AUTH },
+      run,
+    ).catch((error: unknown) => error);
     if (boundary === "initialize") {
       await harness.waitForWrite(0);
     } else {
@@ -167,9 +171,10 @@ export function registerSharedClientAcquisitionDiagnosticsTests({
       await finish.promise;
       return await close();
     });
-    const result = withCodexAppServerJsonClient({ timeoutMs: 50 }, async () => undefined).catch(
-      (error: unknown) => error,
-    );
+    const result = withCodexAppServerJsonClient(
+      { timeoutMs: 50, preparedAuth: DIAGNOSTICS_PREPARED_AUTH },
+      async () => undefined,
+    ).catch((error: unknown) => error);
     await harness.waitForWrite(0);
     await vi.advanceTimersByTimeAsync(5);
     expect(closing).toHaveBeenCalled();
@@ -217,6 +222,7 @@ export function registerSharedClientAcquisitionDiagnosticsTests({
     const controller = new AbortController();
     const first = getSharedCodexAppServerClient({
       abandonSignal: controller.signal,
+      preparedAuth: DIAGNOSTICS_PREPARED_AUTH,
       onAcquireObservation: (observation) => firstObservations.push(observation),
     });
     const rejection = expect(first).rejects.toThrow("codex app-server initialize aborted");
@@ -224,6 +230,7 @@ export function registerSharedClientAcquisitionDiagnosticsTests({
     const joinedAtInitialize = createDeferred<void>();
     const reachedAuth = createDeferred<void>();
     const second = getSharedCodexAppServerClient({
+      preparedAuth: DIAGNOSTICS_PREPARED_AUTH,
       onAcquireObservation: (observation) => {
         joinedObservations.push(observation);
         if (observation.startup === "joined-shared") {
@@ -249,7 +256,10 @@ export function registerSharedClientAcquisitionDiagnosticsTests({
     await expect(second).resolves.toBe(harness.client);
     const hit: CodexAppServerAcquireObservation[] = [];
     await expect(
-      getSharedCodexAppServerClient({ onAcquireObservation: (value) => hit.push(value) }),
+      getSharedCodexAppServerClient({
+        preparedAuth: DIAGNOSTICS_PREPARED_AUTH,
+        onAcquireObservation: (value) => hit.push(value),
+      }),
     ).resolves.toBe(harness.client);
     expect(hit).toContainEqual({ boundary: "ready", startup: "ready-cache-hit" });
     expect(firstObservations).toContainEqual({

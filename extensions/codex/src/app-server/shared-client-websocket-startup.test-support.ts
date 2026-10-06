@@ -33,7 +33,7 @@ export function registerSharedClientWebSocketStartupTests({
     const backoff = vi.spyOn(runtimeEnv, "sleepWithAbort").mockResolvedValue();
     const options = {
       startOptions: createStartOptions({ transport: "websocket", url: "ws://example.invalid" }),
-      preparedAuth: { kind: "api-key", apiKey: "websocket-test-key" },
+      preparedAuth: { kind: "api-key" as const, apiKey: "websocket-test-key" },
       timeoutMs: 10_000,
     };
     const background = getLeasedSharedCodexAppServerClient(options);

@@ -460,7 +460,6 @@ function createConfig(params: {
         }
       : { profile: "minimal" },
     models: {
-      mode: "replace",
       providers: {
         [provider.providerId]: {
           ...provider.config,

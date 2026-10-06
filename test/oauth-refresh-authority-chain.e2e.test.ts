@@ -349,7 +349,6 @@ function createConfig(pluginDir: string, providerBaseUrl: string) {
     },
     tools: { profile: "minimal" },
     models: {
-      mode: "replace",
       providers: {
         [PROVIDER_ID]: {
           baseUrl: `${providerBaseUrl}/v1`,

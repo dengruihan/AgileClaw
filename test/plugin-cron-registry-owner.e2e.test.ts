@@ -340,7 +340,6 @@ describe("plugin cron registry ownership e2e", () => {
         },
         tools: { profile: "minimal" },
         models: {
-          mode: "replace",
           providers: {
             "cron-owner": {
               baseUrl: `${server.baseUrl}/v1`,
@@ -525,7 +524,6 @@ describe("plugin cron registry ownership e2e", () => {
         },
         tools: { profile: "minimal" },
         models: {
-          mode: "replace",
           providers: {
             "cron-owner": {
               baseUrl: `${modelServer.baseUrl}/v1`,
