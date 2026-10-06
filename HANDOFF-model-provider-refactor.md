@@ -159,3 +159,45 @@
 - 计划中每条验收点都能指出对应的代码或测试；找不到的要么补上，要么明确报告为缺口。
 - 工作区只包含本任务改动 + 2 个前置本地提交；提交信息 Conventional Commits、作者身份正确、无 agent 署名 trailer。
 - 明确报告：哪些做了、哪些是缺口、哪些检查未跑及原因。
+
+## 8. 附录：诊断细节与未落盘结论（转移机器前由旧机器 agent 追加）
+
+### 8.1 E2E 截图 04/13 修复方案（待办 #1 的具体做法）
+
+- **04-saved-provider-list.png**（保存后仍显示空态）：根因是保存 ack 之后页面刷新读取的 `config.get` mock 仍返回 `baseConfig`（无 `models.providers`）。修法：`savedConfigAck()` 与保存后的 `config.get` 响应都携带已保存 provider 的配置——`structuredClone(baseConfig)` 加 `models.providers.openai = { name: "OpenAI", baseUrl: "https://api.openai.com/v1", api: "openai-responses", models: [<合并后的 24 行>] }`（行至少含 `id`/`name`，被改名的 "Renamed model" 和手动 "manual-model" 要在）。保存流程会触发 `onRefresh("replacement")` 重新拉 config，等 `[data-provider-id="openai"]` 卡片出现、manager 宿主卸载（`.provider-manager` 计数为 0）后再截全页图。注意用 mock gateway 的 `setMethodResponse` 覆盖 `config.get`，让保存后的 config 读取拿到新快照。
+- **13-\*-dense-models.png**（24 行只露出 1 行）：截图前 `await manager.locator(".provider-manager__model").nth(12).scrollIntoViewIfNeeded()` 再截 manager 对话框，让中段多行入镜证明密集渲染。窄屏 390px 同样处理。
+
+### 8.2 扩展运行时失败 lane 的逐条诊断与建议处置
+
+| lane                      | 现象                                       | 诊断                                                                                                               | 建议处置                                                                                               |
+| ------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| github-copilot index.test | ~40 例失败                                 | `provider.auth` 现为空；`providerAuthChoices` 已清空，manifest 驱动的 onboarding 测试已删（`choice` 类型为 never） | 若 choice 清空是永久决策→按新契约重写/删除这批用例；若临时→需先恢复 choices 列表（产品决策，问所有者） |
+| anthropic index.test      | setup-token / Claude CLI native auth 10 例 | 源码已删这些接入路径                                                                                               | 删除用例（不要"修复"成已不存在的行为）                                                                 |
+| telegram /login 流        | 流程测试失败                               | 源码不再调用 `runModelsAuthLoginFlow`                                                                              | 改写为 API-key 粘贴路径或删除                                                                          |
+| xai OAuth 发现类          | 用例失败                                   | OAuth 路径已删（`applyXaiOAuthConfig`/`buildLiveXaiOAuthProvider` 测试已删）                                       | 剩余 OAuth 场景用例删除                                                                                |
+| lmstudio                  | 1 例                                       | `/api/v1` 端点规范化断言与现状不符                                                                                 | 核对当前规范化行为后改断言                                                                             |
+| google 静态目录           | 不再发布 google-vertex                     | `buildGoogleVertexStaticCatalogProvider` 已整体删除（宽 API 收窄）；google-vertex 仍为 hook alias                  | 若产品仍要 Vertex API-key 接入，需要新的合法 `api` 值或运行时专属通道——产品决策，记缺口                |
+
+**需要所有者决策的真问题**：`resolveConnectionModels`（`src/plugin-sdk/provider-onboard.ts:59`）现在忽略 `cfg` 一律内联种入目录，但注释仍写 "seeding only in explicit replace mode"——注释与行为背离。venice "preserves existing zero pricing"、deepseek "keeps discovery-owned rows out of default config"、cohere/fireworks/xai "leaves ordinary catalogs runtime-owned" 等旧 merge 断言测试因此运行时失败。二选一：把实现修回「显式 replace 才种入」（尊重注释语义），或按「总是种入」更新注释与这批测试。这是合并语义问题，不是夹具问题。
+
+### 8.3 codex 批 shared-client 挂起排查线索
+
+1. **先复跑**（已修未验证）：`extensions/codex/src/app-server/shared-client.test.ts` 的 websocket 启动组 6 例——`shared-client-websocket-startup.test-support.ts` 已把 `authProfileId: null` 改为 api-key `preparedAuth`，改动在检查点里但没跑过。
+2. **挂起组**："reports the real shared acquisition boundary *" 7 例每个 120s 超时。诊断点在 `shared-client-acquisition-diagnostics.test-support.ts:46`。工作假设：`withCodexAppServerJsonClient` 的 options 需要传 `preparedAuth`，否则客户端等一个永远不完成的 app-server 启动/授权。全部 7 例一起挂而不是个别用例，指向共享 setup 而非单例缺陷。
+3. **保留上报**：command-rpc.test.ts "resumes with the prepared environment API key"——src 侧路由规划对「空 auth 存储 + 环境 `OPENAI_API_KEY`」不形成路由。这是 src 路由规划所有者的问题，不是 codex 扩展夹具能修的。
+
+### 8.4 E2E/单测额外坑位（补充 §0 未列的）
+
+- mock `models.providerTemplates` **不要**包含 `custom` 模板——服务端渲染时固定在首位，夹具再给一份就成了 strict-mode 重复元素。
+- 配置表单字段用 aria-label 定位：`getByLabel(/base url/iu)`、`getByLabel("Name"|"Id", { exact: true })`；`input[name=baseUrl]` 选择器找不到。
+- 模型行保存按钮文案是 **"Apply to draft"**（`t applyModel`），不是 "save model"。
+- 保存时 config.set/patch **只有一个会真正发出**：先 `waitForRequest` 哪个到了用哪个，两个 deferred 都要 resolve，各挂 `.catch(() => undefined)`。
+- config ack 必须回完整 snapshot 形状（config/hash/appliedConfigHash/configRevisionHash/issues/raw/valid）——只回 `{ok:true}` 会被当无效 ack。
+- 断言对话框关闭：宿主元素常驻，poll `.provider-manager` 内容计数 → 0，不要查宿主本身。
+- `models.test.ts` 给 provider 夹具加 `api` 字段会改变 thinking 阶梯投影路径（多出 adaptive/xhigh/max）——§0 已提，这里强调它同样适用于其他 anthropic-messages 夹具。
+
+### 8.5 原始材料在旧机器上的位置（仅当附录不够时）
+
+- ZCode 子代理最终报告全文：`/Users/raymond/.zcode/cli/agents/sess_7e48e0ec-955d-408d-abdc-1c5e177a0064/agent_b2f46f1e-d86a-4965-8a84-57dcc4b14b0f/output.txt`（codex 批）与 `.../agent_1a260f63-b45d-4a53-8263-a15524d4e1a0/output.txt`（其余扩展批）。
+- E2E 证据包：旧机器 `/tmp/e2e-evidence.tgz`（5.2MB、130 个文件，含 before/after 成对截图 `provider-refactor-7qhhUn/before-*` 与 `after-*`，及 12 张 after 证据）。
+- 前序 Codex 会话 JSONL（取证用、低优先级，勿改 `~/.codex` 其他内容）：`~/.codex/sessions/2026/10/05/rollout-2026-10-05T14-42-48-01a10acc-fd62-7a61-8fa3-c79240906ab4.jsonl`。
