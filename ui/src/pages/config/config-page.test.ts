@@ -22,7 +22,8 @@ import {
 } from "../../test-helpers/modal-dialog.ts";
 import { createStorageMock } from "../../test-helpers/storage.ts";
 import * as realtimeTalk from "../chat/talk/session.ts";
-import { ConfigPage, extractQuickSettingsSecurity } from "./config-page.ts";
+import { ConfigPage } from "./config-page.ts";
+import { extractQuickSettingsSecurity } from "./security.ts";
 import type { ConfigViewState } from "./view.ts";
 
 const switchActiveRealtimeTalkCameras =

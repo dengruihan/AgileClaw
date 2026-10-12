@@ -81,7 +81,7 @@ import "./meeting-capture.ts";
 import "./memory-page.ts";
 import { memorySettingsSchema } from "./memory-schema.ts";
 import { configTargetIdFromHash, type ConfigRouteData } from "./route-data.ts";
-import { renderSecurity, type SecurityOverview } from "./security.ts";
+import { extractQuickSettingsSecurity, renderSecurity } from "./security.ts";
 import {
   buildSessionObserverTogglePatch,
   buildSessionObserverUtilityModelPatch,
@@ -178,40 +178,6 @@ function renderConfigPageSubtitle(pageId: ConfigPageId) {
     default:
       return subtitleForRoute(pageId);
   }
-}
-
-export function extractQuickSettingsSecurity(root: Record<string, unknown>): SecurityOverview {
-  const gateway = asConfigRecord(root.gateway);
-  const auth = asConfigRecord(gateway?.auth);
-  const tools = asConfigRecord(root.tools);
-  const exec = asConfigRecord(tools?.exec) ?? {};
-  const browser = asConfigRecord(root.browser);
-  const logging = asConfigRecord(root.logging);
-  let gatewayAuth = "unknown";
-  if (auth) {
-    const mode = typeof auth.mode === "string" ? auth.mode.trim() : "";
-    gatewayAuth = mode
-      ? mode
-      : auth.password
-        ? "password"
-        : auth.token
-          ? "token"
-          : auth.trustedProxy
-            ? "trusted-proxy"
-            : "none";
-  }
-  const profile = tools?.profile;
-  const security = exec.security;
-  return {
-    gatewayAuth,
-    execPolicy: typeof security === "string" && security.trim() ? security.trim() : "allowlist",
-    browserEnabled: browser?.enabled !== false,
-    browserEnabledOverridden: browser !== null && Object.hasOwn(browser, "enabled"),
-    redactionEnabled: logging?.redact !== "off",
-    redactionOverridden: logging !== null && Object.hasOwn(logging, "redact"),
-    toolProfile: typeof profile === "string" ? profile.trim() : "",
-    toolProfileOverridden: tools !== null && Object.hasOwn(tools, "profile"),
-  };
 }
 
 function applyTextScale(value: unknown) {
