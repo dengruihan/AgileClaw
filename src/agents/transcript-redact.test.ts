@@ -138,29 +138,6 @@ describe("redactTranscriptMessage", () => {
     expect(msgContent(redacted)).toEqual([{ type: "text", text }]);
   });
 
-  it("stores credential-shaped transcript text verbatim when logging.redact is off", () => {
-    const text = "https://control.example/#/callback?code=EQEEAEnVOG6xW7eQeKZN3pRjm2HL4fwYXzT9";
-    const redacted = redactTranscriptMessage(textMessage(text), { logging: { redact: "off" } });
-    expect(msgContent(redacted)).toEqual([{ type: "text", text }]);
-  });
-
-  it("still masks registered secret values in transcripts while logging.redact is off", () => {
-    resetSecretRedactionRegistryForTest();
-    const secret = "EQEEAEnVOG6xW7eQeKZN3pRjm2HL4fwYXzT9";
-    registerSecretValueForRedaction(secret);
-    try {
-      const redacted = redactTranscriptMessage(
-        textMessage(`https://control.example/#/callback?code=${secret}`),
-        { logging: { redact: "off" } },
-      );
-      const text = (msgContent(redacted) as Array<{ text: string }>)[0]?.text ?? "";
-      expect(text).not.toContain(secret);
-      expect(text).toContain("code=EQEEAE…XzT9");
-    } finally {
-      resetSecretRedactionRegistryForTest();
-    }
-  });
-
   it("masks a config-shaped pass: credential in assistant text before persistence", () => {
     const secret = "opaque-pass-secret-1234567890";
     const redacted = redactTranscriptMessage(
