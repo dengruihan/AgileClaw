@@ -21,6 +21,8 @@ export type SecurityOverview = {
   execPolicy: string;
   browserEnabled: boolean;
   browserEnabledOverridden: boolean;
+  redactionEnabled: boolean;
+  redactionOverridden: boolean;
   toolProfile: string;
   toolProfileOverridden: boolean;
 };
@@ -31,6 +33,7 @@ type SecurityViewProps = {
   canPairDevice: boolean;
   onPairMobile?: () => void;
   onBrowserEnabledToggle?: (enabled: boolean) => void;
+  onRedactionToggle?: (enabled: boolean) => void;
   onToolProfileChange?: (profile: string) => void;
   /** Embedded schema editor; it owns autosave status and the restart banner. */
   editor: TemplateResult;
@@ -42,6 +45,8 @@ function renderSecurityOverview(props: SecurityViewProps) {
     execPolicy,
     browserEnabled,
     browserEnabledOverridden,
+    redactionEnabled,
+    redactionOverridden,
     toolProfile,
     toolProfileOverridden,
   } = props.security;
@@ -75,6 +80,15 @@ function renderSecurityOverview(props: SecurityViewProps) {
       checked: browserEnabled,
       disabled: props.configBusy,
       onChange: (enabled) => props.onBrowserEnabledToggle?.(enabled),
+    }),
+    renderSettingsToggleRow({
+      title: t("quickSettings.security.redaction"),
+      description: redactionEnabled
+        ? renderSettingsDefaultDescription(t("common.enabled"), redactionOverridden)
+        : t("quickSettings.security.redactionOffWarning"),
+      checked: redactionEnabled,
+      disabled: props.configBusy,
+      onChange: (enabled) => props.onRedactionToggle?.(enabled),
     }),
     renderSettingsRow({
       title: t("quickSettings.security.toolProfile"),

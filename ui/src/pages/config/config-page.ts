@@ -186,6 +186,7 @@ export function extractQuickSettingsSecurity(root: Record<string, unknown>): Sec
   const tools = asConfigRecord(root.tools);
   const exec = asConfigRecord(tools?.exec) ?? {};
   const browser = asConfigRecord(root.browser);
+  const logging = asConfigRecord(root.logging);
   let gatewayAuth = "unknown";
   if (auth) {
     const mode = typeof auth.mode === "string" ? auth.mode.trim() : "";
@@ -206,6 +207,8 @@ export function extractQuickSettingsSecurity(root: Record<string, unknown>): Sec
     execPolicy: typeof security === "string" && security.trim() ? security.trim() : "allowlist",
     browserEnabled: browser?.enabled !== false,
     browserEnabledOverridden: browser !== null && Object.hasOwn(browser, "enabled"),
+    redactionEnabled: logging?.redact !== "off",
+    redactionOverridden: logging !== null && Object.hasOwn(logging, "redact"),
     toolProfile: typeof profile === "string" ? profile.trim() : "",
     toolProfileOverridden: tools !== null && Object.hasOwn(tools, "profile"),
   };
@@ -1214,6 +1217,13 @@ export class ConfigPage extends OpenClawLightDomElement {
             return;
           }
           runtimeConfig.patchForm(["browser", "enabled"], false);
+        },
+        onRedactionToggle: (enabled) => {
+          if (enabled) {
+            runtimeConfig.removeFormValue(["logging", "redact"]);
+            return;
+          }
+          runtimeConfig.patchForm(["logging", "redact"], "off");
         },
         onToolProfileChange: (profile) => {
           runtimeConfig.patchForm(["tools", "profile"], profile);

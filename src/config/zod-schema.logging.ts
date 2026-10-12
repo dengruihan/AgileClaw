@@ -59,6 +59,13 @@ export const LoggingConfigSchema = z
     consoleStyle: z.union([z.literal("pretty"), z.literal("json")]).optional(),
     /** Regex patterns used to redact sensitive tokens from logs and transcripts. */
     redactPatterns: z.array(z.string()).optional(),
+    /**
+     * Pattern-based sensitive-value redaction for logs, transcripts, tool payloads,
+     * and echoed content. Default: "tools". "off" keeps only registered-secret
+     * exact-value masking; secrets pasted while off stay in cleartext on disk and
+     * in model context, and turning redaction back on does not re-mask them.
+     */
+    redact: z.union([z.literal("tools"), z.literal("off")]).optional(),
     /** Metadata-only agent activity audit ledger settings. */
     audit: z
       .strictObject({

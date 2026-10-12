@@ -28,6 +28,8 @@ export function captureModelVisibleRedactionPolicy(loggingConfig: LoggingConfig)
   return {
     patterns: [...(loggingConfig?.redactPatterns ?? [])],
     fullContext: fullContextToolPayloadRedactionState.isMarked(loggingConfig),
+    // Mode flips change prepared bytes; memo identity must follow or stale blocks serve.
+    redactMode: loggingConfig?.redact === "off" ? "off" : "tools",
     registryRevision: getSecretRedactionRegistryRevision(),
   };
 }
@@ -40,6 +42,7 @@ export function matchesModelVisibleRedactionPolicy(
   return (
     policy.registryRevision === getSecretRedactionRegistryRevision() &&
     policy.fullContext === fullContextToolPayloadRedactionState.isMarked(loggingConfig) &&
+    policy.redactMode === (loggingConfig?.redact === "off" ? "off" : "tools") &&
     policy.patterns.length === patterns.length &&
     policy.patterns.every((pattern, index) => pattern === patterns[index])
   );

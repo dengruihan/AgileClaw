@@ -20,6 +20,7 @@ export type TranscriptRedactionSnapshot = SensitiveTextRedactionSnapshot & {
 const transcriptPolicy = resolveGlobalSingleton<{
   token: number;
   patterns?: readonly string[];
+  redactMode?: string;
   registryRevision: number;
   scope: AsyncLocalStorage<TranscriptRedactionSnapshot>;
 }>(Symbol.for("openclaw.transcriptRedactionPolicy"), () => ({
@@ -35,10 +36,12 @@ export function captureTranscriptRedactionSnapshot(): TranscriptRedactionSnapsho
   if (
     snapshot.registryRevision !== transcriptPolicy.registryRevision ||
     patterns.length !== transcriptPolicy.patterns?.length ||
-    patterns.some((pattern, index) => pattern !== transcriptPolicy.patterns?.[index])
+    patterns.some((pattern, index) => pattern !== transcriptPolicy.patterns?.[index]) ||
+    snapshot.redactMode !== transcriptPolicy.redactMode
   ) {
     transcriptPolicy.token++;
     transcriptPolicy.patterns = patterns;
+    transcriptPolicy.redactMode = snapshot.redactMode;
     transcriptPolicy.registryRevision = snapshot.registryRevision;
   }
   return {
@@ -69,6 +72,16 @@ export function resolveTranscriptLoggingConfig(cfg?: OpenClawConfig) {
     cfg?.logging?.redactPatterns ??
     transcriptPolicy.scope.getStore()?.patterns ??
     readLoggingConfig()?.redactPatterns;
+  // "tools" is the default, so only an explicit "off" needs a config object at all.
+  const redact =
+    cfg?.logging?.redact === "off" ||
+    transcriptPolicy.scope.getStore()?.redactMode === "off" ||
+    readLoggingConfig()?.redact === "off"
+      ? ("off" as const)
+      : undefined;
+  if (redact === "off") {
+    return redactPatterns ? { redact, redactPatterns: [...redactPatterns] } : { redact };
+  }
   return redactPatterns ? { redactPatterns: [...redactPatterns] } : undefined;
 }
 

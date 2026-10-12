@@ -1403,6 +1403,9 @@ export const en: TranslationMap & {
       gatewayAuth: "Gateway auth",
       execPolicy: "Exec policy",
       browserEnabled: "Browser enabled",
+      redaction: "Sensitive-value redaction",
+      redactionOffWarning:
+        "Off: secrets pasted into chat or tool output persist in cleartext in transcripts and logs and are sent to model providers with the transcript. Stored secret-store values stay masked. Re-enabling does not re-mask what was already stored.",
       toolProfile: "Available tools",
       toolProfileDefault:
         "Using core and default plugin tools. Choose Full to include available optional plugin tools.",

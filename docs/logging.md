@@ -967,7 +967,9 @@ OTLP log records, persisted session transcript text, or Control UI tool
 event payloads (tool start args, partial/final result payloads, derived
 exec output, and patch summaries):
 
-- Sensitive-value redaction is always enabled.
+- Sensitive-value redaction defaults to enabled and follows `logging.redact`: `"tools"` (default) or `"off"`.
+  - `"off"` stops pattern-based masking at every sink listed above. Secrets you paste into chat or tool output then persist in cleartext in transcripts and log files and travel to your configured model providers with the transcript. Turning redaction back on does not re-mask what was already stored while off.
+  - Exact-value masking of secrets registered in the [secret store](/gateway/secrets) stays on in both modes, so stored credentials never echo verbatim.
 - `logging.redactPatterns`: list of regex strings that replaces the default string list for log/transcript output. Built-in structural protections for form bodies, structured authorization headers, and bare AWS secret access keys always apply, including when this list is copied or customized. For Control UI tool payloads, custom patterns apply on top of the built-in defaults, so adding a pattern never weakens redaction of values already caught by the defaults.
 
 File logs use JSONL; active session transcripts live in the
@@ -1000,8 +1002,9 @@ names such as card number, CVC/CVV, shared payment token, and payment credential
 when they appear as JSON fields, URL parameters, CLI flags, or assignments.
 
 OpenClaw also redacts safety-boundary payloads shown to UI clients, support
-bundles, diagnostics observers, approval prompts, or agent tools. Custom
-`logging.redactPatterns` can add project-specific patterns on those surfaces.
+bundles, diagnostics observers, approval prompts, or agent tools. Those surfaces
+share the `logging.redact` mode; custom `logging.redactPatterns` can add
+project-specific patterns on top.
 
 ## Diagnostics and OpenTelemetry
 

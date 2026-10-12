@@ -233,7 +233,7 @@ result. Other config and source reads preserve opaque values. Register actual
 secrets instead of relying on key-name matching. Other transcript fields and
 diagnostic sinks retain broad assignment matching.
 
-- Sensitive-value redaction is always enabled.
+- Sensitive-value redaction defaults to enabled and follows `logging.redact`: `"tools"` (default) or `"off"`. `"off"` stops pattern-based masking at console, file-log, OTLP, transcript, tool-payload, and echoed-content sinks; secrets pasted while off persist in cleartext and are not re-masked retroactively when redaction is re-enabled. Exact-value masking of secrets registered in the secret store always stays on.
 - `logging.redactPatterns`: array of regex strings (replaces the default string list). Built-in structural protections for form bodies, structured authorization headers, and bare AWS secret access keys always apply.
   - Use raw regex strings (auto `gi`), or `/pattern/flags` for custom flags.
   - Matches are masked keeping the first 6 + last 4 chars (values >= 18 chars). Shorter values become `***`.
@@ -241,7 +241,7 @@ diagnostic sinks retain broad assignment matching.
 
 File and JSON console records finish masking before final JSON encoding. Rules run in order over decoded values, then serialized record context, with later rules seeing earlier masks. String matches retain their existing token hints so later rules can match those hints. Structured credential fields use full masks; matched numbers, booleans, and null become the JSON string `"***"`. File records retain built-in credential patterns when custom patterns are configured.
 
-Safety boundaries such as Control UI tool-call events, `sessions_history` output, diagnostics exports, provider errors, exec approval display, and Gateway WebSocket logs always redact. `logging.redactPatterns` adds deployment-specific patterns.
+Safety boundaries such as Control UI tool-call events, `sessions_history` output, diagnostics exports, provider errors, exec approval display, and Gateway WebSocket logs share the same `logging.redact` policy; `logging.redactPatterns` adds deployment-specific patterns.
 
 ## Gateway WebSocket logs
 
