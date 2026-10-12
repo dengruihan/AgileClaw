@@ -76,6 +76,9 @@ function resolvePartialDiagnosticLoggingConfig(logging: unknown): LoggingConfig 
       // A missing variable in one pattern must not hide a separately resolvable style.
     }
   }
+  if (logging.redact === "tools" || logging.redact === "off") {
+    partial.redact = logging.redact;
+  }
   return Object.keys(partial).length > 0 ? (partial as LoggingConfig) : undefined;
 }
 

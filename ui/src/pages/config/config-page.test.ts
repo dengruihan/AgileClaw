@@ -54,6 +54,8 @@ describe("extractQuickSettingsSecurity", () => {
     expect(extractQuickSettingsSecurity({})).toMatchObject({
       browserEnabled: true,
       browserEnabledOverridden: false,
+      redactionEnabled: true,
+      redactionOverridden: false,
       toolProfile: "",
       toolProfileOverridden: false,
     });
@@ -63,13 +65,23 @@ describe("extractQuickSettingsSecurity", () => {
     expect(
       extractQuickSettingsSecurity({
         browser: { enabled: true },
+        logging: { redact: "tools" },
         tools: { profile: "full" },
       }),
     ).toMatchObject({
       browserEnabled: true,
       browserEnabledOverridden: true,
+      redactionEnabled: true,
+      redactionOverridden: true,
       toolProfile: "full",
       toolProfileOverridden: true,
+    });
+  });
+
+  it("reports redaction disabled only for an explicit off", () => {
+    expect(extractQuickSettingsSecurity({ logging: { redact: "off" } })).toMatchObject({
+      redactionEnabled: false,
+      redactionOverridden: true,
     });
   });
 });

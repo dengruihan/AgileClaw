@@ -48,6 +48,8 @@ function createProps(overrides: Partial<SecurityViewProps> = {}): SecurityViewPr
       execPolicy: "allowlist",
       browserEnabled: true,
       browserEnabledOverridden: true,
+      redactionEnabled: true,
+      redactionOverridden: false,
       toolProfile: "coding",
       toolProfileOverridden: true,
     },
@@ -55,6 +57,7 @@ function createProps(overrides: Partial<SecurityViewProps> = {}): SecurityViewPr
     canPairDevice: true,
     onPairMobile: vi.fn(),
     onBrowserEnabledToggle: vi.fn(),
+    onRedactionToggle: vi.fn(),
     onToolProfileChange: vi.fn(),
     editor: html``,
     ...overrides,
@@ -75,6 +78,8 @@ describe("renderSecurity", () => {
             execPolicy: "allowlist",
             browserEnabled: false,
             browserEnabledOverridden: true,
+            redactionEnabled: true,
+            redactionOverridden: false,
             toolProfile: "messaging",
             toolProfileOverridden: true,
           },
@@ -132,6 +137,8 @@ describe("renderSecurity", () => {
             execPolicy: "allowlist",
             browserEnabled: true,
             browserEnabledOverridden: false,
+            redactionEnabled: true,
+            redactionOverridden: false,
             toolProfile: "",
             toolProfileOverridden: false,
           },
@@ -144,6 +151,71 @@ describe("renderSecurity", () => {
     const authStatus = authRow.querySelector(".settings-status");
     expect(authStatus?.textContent?.trim()).toBe("none");
     expect(authStatus?.classList.contains("settings-status--warn")).toBe(true);
+  });
+
+  it("flips sensitive-value redaction and warns while it is off", () => {
+    const onRedactionToggle = vi.fn();
+    const container = document.createElement("div");
+
+    render(
+      renderSecurity(
+        createProps({
+          security: {
+            gatewayAuth: "token",
+            execPolicy: "allowlist",
+            browserEnabled: true,
+            browserEnabledOverridden: false,
+            redactionEnabled: true,
+            redactionOverridden: false,
+            toolProfile: "",
+            toolProfileOverridden: false,
+          },
+          onRedactionToggle,
+        }),
+      ),
+      container,
+    );
+
+    const onRow = expectRowByTitle(container, "Sensitive-value redaction");
+    expect(onRow.textContent).not.toContain("Off:");
+    const onSwitch = onRow.querySelector<HTMLElement & { checked: boolean }>("wa-switch");
+    if (!onSwitch) {
+      throw new Error("Expected redaction switch");
+    }
+    expect(onSwitch.checked).toBe(true);
+    onSwitch.checked = false;
+    onSwitch.dispatchEvent(new Event("change"));
+    expect(onRedactionToggle).toHaveBeenCalledWith(false);
+
+    const offContainer = document.createElement("div");
+    render(
+      renderSecurity(
+        createProps({
+          security: {
+            gatewayAuth: "token",
+            execPolicy: "allowlist",
+            browserEnabled: true,
+            browserEnabledOverridden: false,
+            redactionEnabled: false,
+            redactionOverridden: true,
+            toolProfile: "",
+            toolProfileOverridden: false,
+          },
+          onRedactionToggle,
+        }),
+      ),
+      offContainer,
+    );
+    const offRow = expectRowByTitle(offContainer, "Sensitive-value redaction");
+    expect(offRow.textContent).toContain("Off:");
+    expect(offRow.textContent).toContain("secret-store values stay masked");
+    const offSwitch = offRow.querySelector<HTMLElement & { checked: boolean }>("wa-switch");
+    expect(offSwitch?.checked).toBe(false);
+    if (offSwitch) {
+      offSwitch.checked = true;
+      offSwitch.dispatchEvent(new Event("change"));
+      expect(onRedactionToggle).toHaveBeenCalledWith(true);
+    }
   });
 
   it("opens mobile pairing from the overview", () => {
@@ -183,6 +255,8 @@ describe("renderSecurity", () => {
             execPolicy: "allowlist",
             browserEnabled: true,
             browserEnabledOverridden: false,
+            redactionEnabled: true,
+            redactionOverridden: false,
             toolProfile: "",
             toolProfileOverridden: false,
           },

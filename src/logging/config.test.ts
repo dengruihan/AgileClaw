@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { LoggingConfigSchema } from "../config/zod-schema.logging.js";
 import { withEnv } from "../test-utils/env.js";
 import { readLoggingConfig } from "./config.js";
 import { applyLoggingConfig, resetLogger } from "./logger.js";
@@ -165,6 +166,35 @@ describe("readLoggingConfig", () => {
           redactPatterns: ["/custom-only-secret/g"],
         });
       },
+    );
+  });
+
+  it("preserves the redact mode while another logging field is unresolved", () => {
+    const configPath = writeConfig(`{
+      logging: {
+        redact: "off",
+        file: "\${MISSING_LOG_FILE}",
+      },
+    }`);
+
+    withEnv(
+      {
+        OPENCLAW_CONFIG_PATH: configPath,
+        MISSING_LOG_FILE: undefined,
+      },
+      () => {
+        expect(readLoggingConfig()).toStrictEqual({ redact: "off" });
+      },
+    );
+  });
+
+  it("accepts only the documented redact modes", () => {
+    expect(LoggingConfigSchema.safeParse({ redact: "tools" }).success).toBe(true);
+    expect(LoggingConfigSchema.safeParse({ redact: "off" }).success).toBe(true);
+    expect(LoggingConfigSchema.safeParse({}).success).toBe(true);
+    expect(LoggingConfigSchema.safeParse({ redact: "disable" }).success).toBe(false);
+    expect(LoggingConfigSchema.safeParse({ redact: "tools", redactSensitive: "off" }).success).toBe(
+      false,
     );
   });
 

@@ -181,6 +181,7 @@ export const SETTINGS_SEARCH_TARGETS = {
       "quickSettings.security.gatewayAuth",
       "quickSettings.security.execPolicy",
       "quickSettings.security.browserEnabled",
+      "quickSettings.security.redaction",
       "quickSettings.security.toolProfile",
     ],
   },

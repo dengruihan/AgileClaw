@@ -67,6 +67,8 @@ export const CORE_FIELD_HELP: Record<string, string> = {
     'Console-specific log threshold: "silent", "fatal", "error", "warn", "info", "debug", or "trace" for terminal output control. Use this to keep local console quieter while retaining richer file logging if needed.',
   "logging.consoleStyle":
     'Console output format style: "pretty" or "json". Use json for machine parsing pipelines and pretty for human-first terminal workflows.',
+  "logging.redact":
+    'Sensitive-value redaction mode: "tools" (default) or "off". "off" stops pattern-based masking in logs, transcripts, tool payloads, and echoed content; secrets pasted while off persist in cleartext and are not re-masked later. Registered secret-store values stay masked in both modes.',
   "logging.redactPatterns":
     "Custom regex strings replace the default string list for log/transcript output and add to safety-boundary UI/tool/diagnostic rules. Built-in form-body, structured-auth, and AWS bare-key protections always apply. Use this to mask deployment-specific tokens and identifiers.",
   update:

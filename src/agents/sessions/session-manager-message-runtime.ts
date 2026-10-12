@@ -64,16 +64,20 @@ export async function appendSessionTranscriptMessage(
 ): Promise<SessionTranscriptAppendResult<TranscriptAppendMessage>> {
   const readRedactPatterns = () =>
     input.config?.logging?.redactPatterns ?? readLoggingConfig()?.redactPatterns;
+  const readRedactMode = () => input.config?.logging?.redact ?? readLoggingConfig()?.redact;
   let redactionRevision = getSecretRedactionRegistryRevision();
   let redactPatterns = readRedactPatterns()?.slice();
+  let redactMode = readRedactMode();
   const prepared = prepareTranscriptMessageAppendForWorker(input);
   Object.freeze(prepared.persistedMessage);
   const assertPrepared = () => {
     input.assertCurrent();
     const revision = getSecretRedactionRegistryRevision();
     const patterns = readRedactPatterns();
+    const mode = readRedactMode();
     if (
       revision !== redactionRevision ||
+      mode !== redactMode ||
       patterns?.length !== redactPatterns?.length ||
       patterns?.some((pattern, index) => pattern !== redactPatterns?.[index])
     ) {
@@ -82,6 +86,7 @@ export async function appendSessionTranscriptMessage(
       }
       redactionRevision = revision;
       redactPatterns = patterns?.slice();
+      redactMode = mode;
     }
   };
   assertPrepared();

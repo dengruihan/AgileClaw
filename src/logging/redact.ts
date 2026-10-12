@@ -750,12 +750,11 @@ function redactAppSpecificPasswords(text: string): string {
   );
 }
 
-function resolveConfigRedaction(): RedactOptions {
-  const cfg = readLoggingConfig();
-  return {
-    mode: DEFAULT_REDACT_MODE,
-    patterns: cfg?.redactPatterns,
-  };
+/** The user-facing `logging.redact` choice; absent or invalid values stay on "tools". */
+const configRedactMode = (c?: LoggingConfig): RedactSensitiveMode => normalizeMode(c?.redact);
+
+function resolveConfigRedaction(cfg = readLoggingConfig()): RedactOptions {
+  return { mode: configRedactMode(cfg), patterns: cfg?.redactPatterns };
 }
 
 export function resolveRedactOptions(options?: RedactOptions): ResolvedRedactOptions {
@@ -775,19 +774,21 @@ export function redactSensitiveText(text: string, options?: RedactOptions): stri
 export type SensitiveTextRedactionSnapshot = {
   readonly registryRevision: number;
   readonly registeredSecretValues: readonly string[];
+  readonly redactMode: RedactSensitiveMode;
 };
 
-/** Captures the built-in tools-mode policy used by session preparation. Never log this snapshot. */
+/** Captures the config-driven redaction policy used by session preparation. Never log this snapshot. */
 export function captureSensitiveTextRedactionSnapshot(): SensitiveTextRedactionSnapshot {
   const { revision, values } = captureSecretRedactionRegistrySnapshot();
-  return { registryRevision: revision, registeredSecretValues: values };
+  const redactMode = configRedactMode(readLoggingConfig());
+  return { registryRevision: revision, registeredSecretValues: values, redactMode };
 }
 
 export function createSensitiveTextRedactor(
   snapshot: SensitiveTextRedactionSnapshot,
 ): (text: string) => string {
   const redactExactValues = createSecretValueRedactor(snapshot.registeredSecretValues);
-  const options: RedactOptions = { mode: "tools" };
+  const options: RedactOptions = { mode: snapshot.redactMode };
   return (text) => redactSensitiveTextWithOptions(redactExactValues(text, maskToken), options);
 }
 
@@ -820,7 +821,7 @@ function resolveToolPayloadRedaction(
     userPatterns && userPatterns.length > 0
       ? [...userPatterns, ...DEFAULT_REDACT_PATTERNS]
       : undefined;
-  return { mode: "tools", patterns };
+  return { mode: configRedactMode(loggingConfig), patterns };
 }
 
 function resolveModelVisibleToolPayloadRedaction(
@@ -829,7 +830,7 @@ function resolveModelVisibleToolPayloadRedaction(
   const userPatterns = loggingConfig?.redactPatterns;
   const hasUserPatterns = userPatterns && userPatterns.length > 0;
   return {
-    mode: "tools",
+    mode: configRedactMode(loggingConfig),
     patterns: hasUserPatterns
       ? [...userPatterns, ...TOOL_PAYLOAD_REDACT_PATTERNS]
       : TOOL_PAYLOAD_REDACT_PATTERNS,
@@ -839,9 +840,8 @@ function resolveModelVisibleToolPayloadRedaction(
   };
 }
 
-// Forces tools-mode so UI/tool payloads never inherit a caller-supplied "off"
-// mode, and merges user `logging.redactPatterns` with the built-in defaults so
-// both apply.
+// Follows `logging.redact`; registered-secret masking stays on even when it is
+// "off", and user `logging.redactPatterns` still merge with the defaults.
 export function redactToolPayloadText(text: string): string {
   return redactToolPayloadTextWithConfig(text, readLoggingConfig());
 }
@@ -877,18 +877,18 @@ export function redactToolPayloadTextWithConfig(
 /** Input source retains computations, but uses diagnostic credential masking, not output policy. */
 export function redactInputTextWithSourcePolicy(
   text: string,
-  loggingConfig: LoggingConfig | undefined,
+  loggingConfig: LoggingConfig | undefined = readLoggingConfig(),
   preserveSourceAssignment: (text: string, offset: number) => boolean,
 ): string {
+  const off = configRedactMode(loggingConfig) === "off";
   // Custom patterns run without syntax exemptions, even when identical to a built-in pattern.
   const customPatterns = loggingConfig?.redactPatterns;
   const prepared = customPatterns?.length
-    ? redactSensitiveText(text, { mode: "tools", patterns: customPatterns })
+    ? redactSensitiveText(text, { mode: off ? "off" : "tools", patterns: customPatterns })
     : redactRegisteredSecretValues(text, maskToken);
-  return redactText(prepared, resolvePatterns(), {
-    fullContext: true,
-    preserveSourceAssignment,
-  });
+  return off
+    ? prepared
+    : redactText(prepared, resolvePatterns(), { fullContext: true, preserveSourceAssignment });
 }
 
 // Model-visible tool output commonly contains source code, so its assignment matching is
