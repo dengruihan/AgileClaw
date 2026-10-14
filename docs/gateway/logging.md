@@ -233,8 +233,8 @@ result. Other config and source reads preserve opaque values. Register actual
 secrets instead of relying on key-name matching. Other transcript fields and
 diagnostic sinks retain broad assignment matching.
 
-- Sensitive-value redaction defaults to enabled and follows `logging.redact`: `"tools"` (default) or `"off"`. `"off"` stops pattern-based masking at console, file-log, OTLP, transcript, tool-payload, and echoed-content sinks; secrets pasted while off persist in cleartext and are not re-masked retroactively when redaction is re-enabled. Exact-value masking of secrets registered in the secret store always stays on.
-- `logging.redactPatterns`: array of regex strings (replaces the default string list). Built-in structural protections for form bodies, structured authorization headers, and bare AWS secret access keys always apply.
+- Sensitive-value redaction defaults to enabled and follows `logging.redact`: `"tools"` (default) or `"off"`. `"off"` disables pattern-based, registered-secret, and structured-field masking at console, file-log, OTLP, transcript, tool-payload, and echoed-content sinks. User input and workspace content remain verbatim even when they match registered secrets. Content stored while off is not re-masked retroactively when redaction is re-enabled. Secret-store read permissions and protected credential transport remain unchanged.
+- `logging.redactPatterns`: array of regex strings (replaces the default string list). When redaction is enabled, built-in structural protections for form bodies, structured authorization headers, and bare AWS secret access keys still apply.
   - Use raw regex strings (auto `gi`), or `/pattern/flags` for custom flags.
   - Matches are masked keeping the first 6 + last 4 chars (values >= 18 chars). Shorter values become `***`.
   - Defaults cover common key assignments, CLI flags, JSON fields, bearer headers, PEM blocks, popular vendor token prefixes, and payment credential field names (card number, CVC/CVV, shared payment token, payment credential).

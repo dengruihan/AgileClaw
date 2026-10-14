@@ -110,7 +110,7 @@ describe("registered exact secret values", () => {
     const secret = "registered-exact-secret";
     registerSecretValueForRedaction(secret);
 
-    expect(redactSensitiveText(`before ${secret} after`, { mode: "off" })).toBe(
+    expect(redactSensitiveText(`before ${secret} after`, { mode: "tools" })).toBe(
       "before regist…cret after",
     );
     expect(redactSecrets({ detail: `before ${secret} after` })).toEqual({
@@ -141,8 +141,8 @@ describe("registered exact secret values", () => {
     registerSecretValueForRedaction(first);
     registerSecretValueForRedaction("exact-registry-refresh-512");
 
-    expect(redactSensitiveText(first, { mode: "off" })).not.toContain(first);
-    expect(redactSensitiveText(second, { mode: "off" })).toBe(second);
+    expect(redactSensitiveText(first, { mode: "tools" })).not.toContain(first);
+    expect(redactSensitiveText(second, { mode: "tools" })).toBe(second);
   });
 
   it("keeps outer matches fixed when a mask callback registers another value", () => {

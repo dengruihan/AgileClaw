@@ -1,5 +1,3 @@
-// Transcript-storage behavior of the logging.redact mode switch: off keeps
-// credential-shaped message text verbatim while registered secrets stay masked.
 import type { AgentMessage } from "openclaw/plugin-sdk/agent-core";
 import { describe, expect, it } from "vitest";
 import { registerSecretValueForRedaction } from "../logging/secret-redaction-registry.js";
@@ -29,7 +27,7 @@ describe("transcript redaction mode", () => {
     expect(messageText(redacted)).toBe(text);
   });
 
-  it("still masks registered secret values in transcripts while logging.redact is off", () => {
+  it("preserves registered values in transcripts while logging.redact is off", () => {
     resetSecretRedactionRegistryForTest();
     const secret = "EQEEAEnVOG6xW7eQeKZN3pRjm2HL4fwYXzT9";
     registerSecretValueForRedaction(secret);
@@ -39,8 +37,7 @@ describe("transcript redaction mode", () => {
         { logging: { redact: "off" } },
       );
       const text = messageText(redacted);
-      expect(text).not.toContain(secret);
-      expect(text).toContain("code=EQEEAE…XzT9");
+      expect(text).toBe(`https://control.example/#/callback?code=${secret}`);
     } finally {
       resetSecretRedactionRegistryForTest();
     }

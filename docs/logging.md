@@ -968,9 +968,9 @@ event payloads (tool start args, partial/final result payloads, derived
 exec output, and patch summaries):
 
 - Sensitive-value redaction defaults to enabled and follows `logging.redact`: `"tools"` (default) or `"off"`.
-  - `"off"` stops pattern-based masking at every sink listed above. Secrets you paste into chat or tool output then persist in cleartext in transcripts and log files and travel to your configured model providers with the transcript. Turning redaction back on does not re-mask what was already stored while off.
-  - Exact-value masking of secrets registered in the [secret store](/gateway/secrets) stays on in both modes, so stored credentials never echo verbatim.
-- `logging.redactPatterns`: list of regex strings that replaces the default string list for log/transcript output. Built-in structural protections for form bodies, structured authorization headers, and bare AWS secret access keys always apply, including when this list is copied or customized. For Control UI tool payloads, custom patterns apply on top of the built-in defaults, so adding a pattern never weakens redaction of values already caught by the defaults.
+  - `"off"` disables pattern-based, registered-secret, and structured-field masking at every sink listed above. User input and workspace file content, including AGENTS.md and USER.md, remain verbatim through tool calls, transcript persistence, and model context even when they match a registered secret. This content can persist in cleartext in log files and travel to your configured model providers. Turning redaction back on does not re-mask what was already stored while off, and turning it off cannot restore values already replaced with masking placeholders.
+  - The [secret store](/gateway/secrets) retains its read permissions and protected credential transport. Disabling content redaction does not add a reveal operation for protected store entries.
+- `logging.redactPatterns`: list of regex strings that replaces the default string list for log/transcript output. When redaction is enabled, built-in structural protections for form bodies, structured authorization headers, and bare AWS secret access keys still apply, including when this list is copied or customized. For Control UI tool payloads, custom patterns apply on top of the built-in defaults, so adding a pattern never weakens redaction of values already caught by the defaults.
 
 File logs use JSONL; active session transcripts live in the
 [per-agent SQLite database](/reference/database-schemas#database-layout). Matching

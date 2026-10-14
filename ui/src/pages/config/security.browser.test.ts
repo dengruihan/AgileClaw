@@ -22,6 +22,8 @@ it.each([
             execPolicy: "allowlist",
             browserEnabled: true,
             browserEnabledOverridden: false,
+            redactionEnabled: true,
+            redactionOverridden: false,
             toolProfile: profile,
             toolProfileOverridden: profile !== "",
           },

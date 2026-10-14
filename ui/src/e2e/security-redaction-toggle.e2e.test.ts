@@ -103,7 +103,7 @@ suite.define(() => {
         expect(await switchChecked(offSwitch)).toBe(false);
         const offText = await offRow.textContent();
         expect(offText).toContain("Off:");
-        expect(offText).toContain("secret-store values stay masked");
+        expect(offText).toContain("masking is disabled, including registered secret values");
         await writeFile(
           path.join(suite.artifactDir, "after-redaction-off.png"),
           await takeControlUiViewportScreenshot(offPage, offPage.locator(".shell"), [offRow]),

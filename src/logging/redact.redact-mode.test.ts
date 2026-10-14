@@ -1,94 +1,96 @@
-// logging.redact mode tests: the config switch that disables pattern-based
-// sensitive-value redaction while registered exact-value masking stays on.
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { withEnv } from "../test-utils/env.js";
+import { applyLoggingConfig, resetLogger } from "./logger.js";
 import { redactSourceInputTextWithConfig } from "./redact-source.js";
 import {
+  captureSensitiveTextRedactionSnapshot,
+  createSensitiveTextRedactor,
   prepareModelVisibleToolTextBlock,
+  redactLogRecordForTransport,
+  redactModelVisibleSecrets,
   redactModelVisibleToolPayloadText,
   redactSecrets,
   redactSensitiveText,
   redactToolPayloadTextWithConfig,
+  serializeRedactedFileLogRecord,
 } from "./redact.js";
+import { withFullContextToolPayloadRedaction } from "./redact.test-support.js";
 import { registerSecretValueForRedaction } from "./secret-redaction-registry.js";
 import { resetSecretRedactionRegistryForTest } from "./secret-redaction-registry.test-support.js";
 
-let tempDirs: string[] = [];
-
-function writeConfig(source: string): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-redact-mode-"));
-  tempDirs.push(dir);
-  const configPath = path.join(dir, "openclaw.json");
-  fs.writeFileSync(configPath, source);
-  return configPath;
-}
-
 afterEach(() => {
   resetSecretRedactionRegistryForTest();
-  for (const dir of tempDirs) {
-    fs.rmSync(dir, { force: true, recursive: true });
-  }
-  tempDirs = [];
+  resetLogger();
 });
 
 describe("logging.redact mode", () => {
-  const assignmentPayload = "token=abcdef1234567890ghij";
-  const sourcePayload = 'const API_TOKEN = "fixture-only-not-a-real-secret"; return API_TOKEN;';
+  const phone = "13900000000";
+  const text = `手机号：${phone}\ntoken=fixture-only-credential-value`;
 
-  it("disables pattern redaction across log, tool, and source surfaces when off", () => {
-    const configPath = writeConfig(`{
-      logging: {
-        redact: "off",
-      },
-    }`);
+  it("preserves registered values across text, source, tool, and worker surfaces when off", () => {
+    registerSecretValueForRedaction(phone);
+    applyLoggingConfig({ redact: "off", redactPatterns: [phone] });
 
-    withEnv({ OPENCLAW_CONFIG_PATH: configPath }, () => {
-      expect(redactSensitiveText(assignmentPayload)).toBe(assignmentPayload);
-      expect(redactToolPayloadTextWithConfig(assignmentPayload)).toBe(assignmentPayload);
-      expect(redactModelVisibleToolPayloadText(sourcePayload)).toBe(sourcePayload);
-      expect(redactSourceInputTextWithConfig(sourcePayload)).toBe(sourcePayload);
-      expect(redactSecrets({ detail: assignmentPayload })).toEqual({
-        detail: assignmentPayload,
-      });
-    });
+    expect(redactSensitiveText(text)).toBe(text);
+    expect(redactToolPayloadTextWithConfig(text)).toBe(text);
+    expect(
+      redactToolPayloadTextWithConfig(text, withFullContextToolPayloadRedaction({ redact: "off" })),
+    ).toBe(text);
+    expect(redactModelVisibleToolPayloadText(text)).toBe(text);
+    expect(redactSourceInputTextWithConfig(text)).toBe(text);
+    const workerRedactor = createSensitiveTextRedactor(captureSensitiveTextRedactionSnapshot());
+    expect(workerRedactor(text)).toBe(text);
   });
 
-  it("keeps registered exact-value masking while mode is off", () => {
-    const secret = "sk-registeredfloor1234567890";
-    registerSecretValueForRedaction(secret);
-    const configPath = writeConfig(`{
-      logging: {
-        redact: "off",
-      },
-    }`);
+  it("preserves structured fields and serialized log values when off", () => {
+    registerSecretValueForRedaction(phone);
+    applyLoggingConfig({ redact: "off", redactPatterns: [phone] });
+    const record = {
+      message: text,
+      password: phone,
+      token: Number(phone),
+      credential: true,
+      nested: { authorization: `Bearer ${phone}` },
+      publicShare: { id: phone },
+    };
 
-    withEnv({ OPENCLAW_CONFIG_PATH: configPath }, () => {
-      expect(redactSensitiveText(`echo ${secret} ${assignmentPayload}`)).toBe(
-        `echo sk-reg…7890 ${assignmentPayload}`,
-      );
-    });
+    expect(redactSecrets(record)).toEqual(record);
+    expect(redactModelVisibleSecrets(record)).toEqual(record);
+    expect(redactLogRecordForTransport(record, { format: "console" })).toEqual(record);
+    expect(JSON.parse(serializeRedactedFileLogRecord(record))).toEqual(record);
+    expect(
+      JSON.parse(
+        serializeRedactedFileLogRecord({ ...record, converted: { toJSON: () => record } }),
+      ),
+    ).toEqual({ ...record, converted: record });
   });
 
-  it("re-prepares model-visible tool text when the redact mode flips", () => {
-    const block = { type: "text", text: "Authorization: Bearer abcdef1234567890ghij" };
-    expect(prepareModelVisibleToolTextBlock(block, {}).text).toBe(
-      "Authorization: Bearer abcdef…ghij",
-    );
-    expect(prepareModelVisibleToolTextBlock(block, { redact: "off" }).text).toBe(block.text);
+  it("re-prepares tool text and worker snapshots when redaction is toggled", () => {
+    registerSecretValueForRedaction(phone);
+    const block = { type: "text" as const, text: phone };
+    applyLoggingConfig({ redact: "tools" });
+    expect(prepareModelVisibleToolTextBlock(block).text).toBe("***");
+    const enabledSnapshot = captureSensitiveTextRedactionSnapshot();
+
+    applyLoggingConfig({ redact: "off" });
+    const rawBlock = prepareModelVisibleToolTextBlock(block);
+    expect(rawBlock.text).toBe(phone);
+    const disabledSnapshot = captureSensitiveTextRedactionSnapshot();
+    expect(createSensitiveTextRedactor(disabledSnapshot)(phone)).toBe(phone);
+
+    applyLoggingConfig({ redact: "tools" });
+    expect(prepareModelVisibleToolTextBlock(rawBlock).text).toBe("***");
+    expect(createSensitiveTextRedactor(captureSensitiveTextRedactionSnapshot())(phone)).toBe("***");
+    expect(createSensitiveTextRedactor(enabledSnapshot)(phone)).toBe("***");
+    expect(createSensitiveTextRedactor(disabledSnapshot)(phone)).toBe(phone);
   });
 
-  it("treats an explicit tools mode the same as the default", () => {
-    const configPath = writeConfig(`{
-      logging: {
-        redact: "tools",
-      },
-    }`);
-
-    withEnv({ OPENCLAW_CONFIG_PATH: configPath }, () => {
-      expect(redactSensitiveText(assignmentPayload)).toBe("token=abcdef…ghij");
+  it.each([{}, { redact: "tools" as const }])("keeps redaction enabled for %j", (config) => {
+    registerSecretValueForRedaction(phone);
+    applyLoggingConfig(config);
+    expect(redactSensitiveText(text)).not.toContain(phone);
+    expect(redactModelVisibleSecrets({ password: phone, token: Number(phone) })).toEqual({
+      password: "***",
+      token: "***",
     });
   });
 });

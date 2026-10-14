@@ -764,11 +764,12 @@ export function resolveRedactOptions(options?: RedactOptions): ResolvedRedactOpt
 }
 
 export function redactSensitiveText(text: string, options?: RedactOptions): string {
-  if (!text) {
+  const policy = options ?? resolveConfigRedaction();
+  if (!text || normalizeMode(policy.mode) === "off") {
     return text;
   }
   const exactRedacted = redactRegisteredSecretValues(text, maskToken);
-  return redactSensitiveTextWithOptions(exactRedacted, options ?? resolveConfigRedaction());
+  return redactSensitiveTextWithOptions(exactRedacted, policy);
 }
 
 export type SensitiveTextRedactionSnapshot = {
@@ -787,26 +788,19 @@ export function captureSensitiveTextRedactionSnapshot(): SensitiveTextRedactionS
 export function createSensitiveTextRedactor(
   snapshot: SensitiveTextRedactionSnapshot,
 ): (text: string) => string {
+  if (snapshot.redactMode === "off") {
+    return (text) => text;
+  }
   const redactExactValues = createSecretValueRedactor(snapshot.registeredSecretValues);
   const options: RedactOptions = { mode: snapshot.redactMode };
   return (text) => redactSensitiveTextWithOptions(redactExactValues(text, maskToken), options);
 }
 
-function redactSensitiveTextWithOptions(
-  exactRedacted: string,
-  resolvedOptions: RedactOptions,
-): string {
-  if (normalizeMode(resolvedOptions.mode) === "off") {
-    return exactRedacted;
+function redactSensitiveTextWithOptions(text: string, options: RedactOptions): string {
+  if (usesBuiltInRedactPatterns(options.patterns) && !couldMatchDefaultRedactPatterns(text)) {
+    return text;
   }
-  if (
-    usesBuiltInRedactPatterns(resolvedOptions.patterns) &&
-    !couldMatchDefaultRedactPatterns(exactRedacted)
-  ) {
-    return exactRedacted;
-  }
-  const resolved = resolveRedactOptions(resolvedOptions);
-  return redactText(exactRedacted, resolved.patterns);
+  return redactText(text, resolveRedactOptions(options).patterns);
 }
 
 export function redactToolDetail(detail: string): string {
@@ -840,8 +834,7 @@ function resolveModelVisibleToolPayloadRedaction(
   };
 }
 
-// Follows `logging.redact`; registered-secret masking stays on even when it is
-// "off", and user `logging.redactPatterns` still merge with the defaults.
+// Custom patterns merge with the defaults; the mode applies to both exact and pattern matches.
 export function redactToolPayloadText(text: string): string {
   return redactToolPayloadTextWithConfig(text, readLoggingConfig());
 }
@@ -851,7 +844,7 @@ function redactToolPayloadTextWithPolicy(
   loggingConfig: LoggingConfig | undefined,
   options: RedactOptions,
 ): string {
-  if (!text) {
+  if (!text || normalizeMode(options.mode) === "off") {
     return text;
   }
   if (!isFullContextToolPayloadRedaction(loggingConfig)) {
@@ -877,18 +870,19 @@ export function redactToolPayloadTextWithConfig(
 /** Input source retains computations, but uses diagnostic credential masking, not output policy. */
 export function redactInputTextWithSourcePolicy(
   text: string,
-  loggingConfig: LoggingConfig | undefined = readLoggingConfig(),
+  loggingConfig: LoggingConfig | undefined,
   preserveSourceAssignment: (text: string, offset: number) => boolean,
 ): string {
-  const off = configRedactMode(loggingConfig) === "off";
+  const config = loggingConfig ?? readLoggingConfig();
+  if (configRedactMode(config) === "off") {
+    return text;
+  }
   // Custom patterns run without syntax exemptions, even when identical to a built-in pattern.
-  const customPatterns = loggingConfig?.redactPatterns;
+  const customPatterns = config?.redactPatterns;
   const prepared = customPatterns?.length
-    ? redactSensitiveText(text, { mode: off ? "off" : "tools", patterns: customPatterns })
+    ? redactSensitiveText(text, { mode: "tools", patterns: customPatterns })
     : redactRegisteredSecretValues(text, maskToken);
-  return off
-    ? prepared
-    : redactText(prepared, resolvePatterns(), { fullContext: true, preserveSourceAssignment });
+  return redactText(prepared, resolvePatterns(), { fullContext: true, preserveSourceAssignment });
 }
 
 // Model-visible tool output commonly contains source code, so its assignment matching is
@@ -944,6 +938,9 @@ function redactSensitiveFieldValueWithOptions(
   objectPath = true,
   couldMatch = couldMatchDefaultRedactPatterns,
 ): string {
+  if (normalizeMode(options.mode) === "off") {
+    return value;
+  }
   const exactRedacted = redactRegisteredSecretValues(value, maskToken);
   if (isPublicShareIdPath(path)) {
     return maskToken(exactRedacted);
@@ -954,9 +951,6 @@ function redactSensitiveFieldValueWithOptions(
       ? { ...options, patterns: options.sensitiveFieldPatterns }
       : options;
   const resolved = resolveRedactOptions(fieldOptions);
-  if (resolved.mode === "off") {
-    return exactRedacted;
-  }
   // Structured payloads can contain thousands of short, benign strings. Avoid
   // walking the full default pattern table for each one; the prefilter is kept
   // in sync with every built-in pattern and sensitive form/URL key. Explicit
@@ -1084,6 +1078,9 @@ function redactStructuredSecretValue(
 }
 
 function redactSecretsWithOptions<T>(value: T, options: RedactOptions): T {
+  if (normalizeMode(options.mode) === "off") {
+    return value;
+  }
   if (typeof value === "string") {
     return redactSensitiveText(value, options) as T;
   }
@@ -1385,7 +1382,7 @@ function redactLogRecord<Result>(
   try {
     const resolved = resolveRedactOptions();
     const prepared =
-      options.format === "console"
+      resolved.mode === "off" || options.format === "console"
         ? { record, decoded: new WeakSet<object>() }
         : prepareFileToJsonReceivers(record, options.decodedOptions?.patterns ?? resolved.patterns);
     const ordinary = { structured: true, primitiveMask: false };
@@ -1466,32 +1463,34 @@ function redactLogRecord<Result>(
     const decodedPatterns = options.decodedOptions?.patterns ?? resolved.patterns;
     const couldMatch = createRedactPrefilter(couldMatchDefaultFullContextPatterns);
     const result = finish(
-      redactJsonRecord(
-        serialized,
-        origins,
-        [
-          [{ patterns: decodedPatterns }],
-          [
-            { patterns: preparationPatterns },
-            {
-              patterns: resolved.patterns,
-              ...(resolved.patterns === defaultResolvedPatterns ? { couldMatch } : {}),
-            },
-          ],
-        ],
-        prepareRedactionCapture,
-        options.format === "console" ? () => [] : getLegacyFieldRecordEdits,
-        (field) => getFieldRecordEdits(field, resolved.mode),
-        (field) => getTextRecordEdits(field, resolved.mode, options.format !== "console"),
-        (field, currentValue) =>
-          (options.format === "console"
-            ? field.path.length === 1 && CONSOLE_STRUCTURAL_FIELDS.has(field.key)
-            : !field.origin.structured ||
-              field.origin.primitiveMask ||
-              isPublicShareIdPath(field.path)) ||
-          (decodedPatterns === defaultResolvedPatterns && !couldMatch(currentValue)),
-        message,
-      ),
+      resolved.mode === "off"
+        ? serialized
+        : redactJsonRecord(
+            serialized,
+            origins,
+            [
+              [{ patterns: decodedPatterns }],
+              [
+                { patterns: preparationPatterns },
+                {
+                  patterns: resolved.patterns,
+                  ...(resolved.patterns === defaultResolvedPatterns ? { couldMatch } : {}),
+                },
+              ],
+            ],
+            prepareRedactionCapture,
+            options.format === "console" ? () => [] : getLegacyFieldRecordEdits,
+            (field) => getFieldRecordEdits(field, resolved.mode),
+            (field) => getTextRecordEdits(field, resolved.mode, options.format !== "console"),
+            (field, currentValue) =>
+              (options.format === "console"
+                ? field.path.length === 1 && CONSOLE_STRUCTURAL_FIELDS.has(field.key)
+                : !field.origin.structured ||
+                  field.origin.primitiveMask ||
+                  isPublicShareIdPath(field.path)) ||
+              (decodedPatterns === defaultResolvedPatterns && !couldMatch(currentValue)),
+            message,
+          ),
       // Native conversion can preserve proxy key order; only the materialized tree is canonical.
       message ? serialized : undefined,
     );

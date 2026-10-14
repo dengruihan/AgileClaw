@@ -32,7 +32,7 @@ admission owner controls recovery; a secrets reload alone cannot readmit the age
 
 For model-provider credentials backed by SecretRefs, OpenClaw mints an opaque, process-local sentinel during model-auth resolution. Auth storage, stream options, SDK configuration, logs, error objects, and most runtime introspection therefore see a value such as `oc-sent-v2.<authenticated-ciphertext>.end`, not the provider credential. The guarded model fetch and managed local-provider health probes replace known sentinels in URL and header values immediately before each request leaves the process.
 
-Unknown sentinel-shaped values fail closed before network activity. OpenClaw refuses to send the request rather than forwarding an unresolved sentinel to a provider. Resolved secret values are also registered for exact-value log redaction as a defense in depth measure. That exact-value registration is independent of the `logging.redact` mode: setting it to `"off"` disables pattern-based redaction but never un-masks registered secret values.
+Unknown sentinel-shaped values fail closed before network activity. OpenClaw refuses to send the request rather than forwarding an unresolved sentinel to a provider. Resolved secret values are also registered for exact-value content redaction. Registration is retained independently of the `logging.redact` mode, but matching follows that mode: `"off"` preserves user input, workspace content, tool payloads, transcripts, and logs even when they contain registered secret values. Re-enabling restores masking for new content. Secret-store read permissions and sentinel-based credential transport remain unchanged.
 
 Provider adapters use the latest injection point their SDK supports:
 
