@@ -7,6 +7,8 @@ import {
 } from "../config/sessions/session-accessor.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { areHeartbeatsEnabled, setHeartbeatsEnabled } from "../infra/heartbeat-wake.js";
+import { registerSecretValueForRedaction } from "../logging/secret-redaction-registry.js";
+import { resetSecretRedactionRegistryForTest } from "../logging/secret-redaction-registry.test-support.js";
 import { createOpenClawTestState } from "../test-utils/openclaw-test-state.js";
 import type { ChatAbortControllerEntry } from "./chat-abort.js";
 import * as subscriptions from "./server-runtime-subscriptions.js";
@@ -31,6 +33,8 @@ it("binds a first native chat.send before streaming and persists its stopped par
   });
   const runId = "first-native-turn";
   const sessionKey = "agent:main:first-turn-binding";
+  const phone = "13900000000";
+  const input = `手机号：${phone}。Start a reply and wait for Stop.`;
   const partial = "This is the first native assistant partial.";
   const providerResponse = createDeferred<ServerResponse>();
   const providerClosed = createDeferred();
@@ -71,6 +75,7 @@ it("binds a first native chat.send before streaming and persists its stopped par
       "first-turn",
     );
     const cfg = {
+      logging: { redact: "off" },
       agents: {
         defaults: {
           workspace: state.workspaceDir,
@@ -140,14 +145,16 @@ it("binds a first native chat.send before streaming and persists its stopped par
     }
     expect(loadExactSessionEntryReadOnly({ sessionKey })?.entry).toBeUndefined();
     await gateway.client.request("sessions.messages.subscribe", { key: sessionKey });
+    registerSecretValueForRedaction(phone);
     expect(
       await gateway.client.request("chat.send", {
         sessionKey,
-        message: "Start a reply and wait for Stop.",
+        message: input,
         idempotencyKey: runId,
       }),
     ).toMatchObject({ runId, status: "started" });
     const response = await providerResponse.promise;
+    expect(JSON.stringify(JSON.parse(requestBodies[0]!))).toContain(input);
     original = runtime.chatAbortControllers.get(runId);
     expect(original).toBeDefined();
     const committed = loadExactSessionEntryReadOnly({ sessionKey });
@@ -261,6 +268,11 @@ it("binds a first native chat.send before streaming and persists its stopped par
     const events = await loadTranscriptEvents(transcriptScope);
     expect(events).toContainEqual(
       expect.objectContaining({
+        message: expect.objectContaining({ role: "user", content: input }),
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
         message: expect.objectContaining({
           content: [{ type: "text", text: partial }],
           openclawAbort: { aborted: true, origin: "stop-command", runId },
@@ -284,6 +296,7 @@ it("binds a first native chat.send before streaming and persists its stopped par
       try {
         await state.cleanup();
       } finally {
+        resetSecretRedactionRegistryForTest();
         setHeartbeatsEnabled(heartbeatsEnabled);
       }
     }

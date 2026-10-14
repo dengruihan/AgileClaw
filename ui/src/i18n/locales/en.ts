@@ -1405,7 +1405,7 @@ export const en: TranslationMap & {
       browserEnabled: "Browser enabled",
       redaction: "Sensitive-value redaction",
       redactionOffWarning:
-        "Off: secrets pasted into chat or tool output persist in cleartext in transcripts and logs and are sent to model providers with the transcript. Stored secret-store values stay masked. Re-enabling does not re-mask what was already stored.",
+        "Off: sensitive-value masking is disabled, including registered secret values. Chat and tool content can persist in cleartext in transcripts and logs and reach model providers. Re-enabling does not re-mask stored content.",
       toolProfile: "Available tools",
       toolProfileDefault:
         "Using core and default plugin tools. Choose Full to include available optional plugin tools.",

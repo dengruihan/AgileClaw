@@ -68,9 +68,9 @@ export const CORE_FIELD_HELP: Record<string, string> = {
   "logging.consoleStyle":
     'Console output format style: "pretty" or "json". Use json for machine parsing pipelines and pretty for human-first terminal workflows.',
   "logging.redact":
-    'Sensitive-value redaction mode: "tools" (default) or "off". "off" stops pattern-based masking in logs, transcripts, tool payloads, and echoed content; secrets pasted while off persist in cleartext and are not re-masked later. Registered secret-store values stay masked in both modes.',
+    'Sensitive-value redaction mode: "tools" (default) or "off". "off" disables pattern, registered-value, and structured-field masking in logs, transcripts, tool payloads, and echoed content. Chat and workspace content remains verbatim, even when it matches a registered secret. Re-enabling does not re-mask stored content. Secret-store read permissions are unchanged.',
   "logging.redactPatterns":
-    "Custom regex strings replace the default string list for log/transcript output and add to safety-boundary UI/tool/diagnostic rules. Built-in form-body, structured-auth, and AWS bare-key protections always apply. Use this to mask deployment-specific tokens and identifiers.",
+    "Custom regex strings replace the default string list for log/transcript output and add to safety-boundary UI/tool/diagnostic rules. When redaction is enabled, built-in form-body, structured-auth, and AWS bare-key protections still apply. Use this to mask deployment-specific tokens and identifiers.",
   update:
     "Update-channel and startup-check behavior for keeping OpenClaw runtime versions current. Use conservative channels in production and more experimental channels only in controlled environments.",
   "update.channel":

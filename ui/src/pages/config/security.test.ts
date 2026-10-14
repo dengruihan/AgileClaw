@@ -208,7 +208,7 @@ describe("renderSecurity", () => {
     );
     const offRow = expectRowByTitle(offContainer, "Sensitive-value redaction");
     expect(offRow.textContent).toContain("Off:");
-    expect(offRow.textContent).toContain("secret-store values stay masked");
+    expect(offRow.textContent).toContain("masking is disabled, including registered secret values");
     const offSwitch = offRow.querySelector<HTMLElement & { checked: boolean }>("wa-switch");
     expect(offSwitch?.checked).toBe(false);
     if (offSwitch) {
