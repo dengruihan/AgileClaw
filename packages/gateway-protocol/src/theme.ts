@@ -38,11 +38,6 @@ export const THEME_COLOR_KEYS = [
 export const THEME_FONT_KEYS = ["font-sans", "font-mono"] as const;
 export const THEME_MASCOT_VALUES = ["claw", "none"] as const;
 export type ThemeMascot = (typeof THEME_MASCOT_VALUES)[number];
-export const THEME_CRITTER_IDS = ["penguin", "fedora"] as const;
-export type ThemeCritterId = (typeof THEME_CRITTER_IDS)[number];
-export function isThemeCritterId(value: unknown): value is ThemeCritterId {
-  return THEME_CRITTER_IDS.some((id) => id === value);
-}
 export const THEME_AVATAR_HAT_IDS = ["fedora", "crown", "santa", "party", "pumpkin"] as const;
 export type ThemeAvatarHatId = (typeof THEME_AVATAR_HAT_IDS)[number];
 export function isThemeAvatarHatId(value: unknown): value is ThemeAvatarHatId {
@@ -63,14 +58,12 @@ export type ThemeDefinition = {
   description: string;
   mascot?: ThemeMascot;
   workingPhrases?: string[];
-  critters?: string[];
   avatarHat?: string;
   light?: ThemePalette;
   dark?: ThemePalette;
 };
 export type ThemeArtwork = {
   hats?: Record<string, { url: string }>;
-  critters?: Record<string, { url: string; title?: string; crossMs?: number }>;
 };
 export type ThemeDescriptor = {
   id: ThemeId;
@@ -81,7 +74,6 @@ export type ThemeDescriptor = {
   pluginId?: string;
   mascot?: ThemeMascot;
   workingPhrases?: readonly string[];
-  critters?: readonly string[];
   avatarHat?: string;
   artwork?: ThemeArtwork;
 };
@@ -89,22 +81,16 @@ export type ThemeCatalogEntry = ThemeDescriptor & { definition?: ThemeDefinition
 export type ThemeBranding = {
   mascot: ThemeMascot;
   workingPhrases?: readonly string[];
-  critters: readonly string[];
   avatarHat?: string;
   artwork?: ThemeArtwork;
 };
 
-const DEFAULT_THEME_CRITTERS: readonly ThemeCritterId[] = [];
-
 export function resolveThemeBranding(
-  source:
-    | Pick<ThemeDescriptor, "mascot" | "workingPhrases" | "critters" | "avatarHat" | "artwork">
-    | undefined,
+  source: Pick<ThemeDescriptor, "mascot" | "workingPhrases" | "avatarHat" | "artwork"> | undefined,
 ): ThemeBranding {
   return {
     mascot: source?.mascot ?? "claw",
     workingPhrases: source?.workingPhrases,
-    critters: source?.critters ?? DEFAULT_THEME_CRITTERS,
     avatarHat: source?.avatarHat,
     ...(source?.artwork ? { artwork: source.artwork } : {}),
   };
@@ -310,9 +296,11 @@ function normalizePalette(value: unknown, mode: ThemeColorMode): ThemePalette {
 /** Rejects executable CSS and incomplete palettes before they reach storage or a stylesheet. */
 export function normalizeThemeDefinition(
   input: unknown,
-  options?: { hatIds?: readonly string[]; critterIds?: readonly string[] },
+  options?: { hatIds?: readonly string[] },
 ): ThemeDefinition {
   const record = requireRecord(input, "theme");
+  // Older saved and plugin themes carry pet metadata. Admit it without
+  // publishing it so their palettes and avatar hats survive pet removal.
   requireKeys(
     record,
     ["name", "description", "mascot", "workingPhrases", "critters", "avatarHat", "light", "dark"],
@@ -347,23 +335,6 @@ export function normalizeThemeDefinition(
       throw new Error("theme.workingPhrases must not contain duplicate entries after trimming");
     }
     definition.workingPhrases = phrases;
-  }
-  if (record.critters !== undefined) {
-    if (!Array.isArray(record.critters) || record.critters.length > 8) {
-      throw new Error("theme.critters must be an array of at most 8 entries");
-    }
-    const allowedIds = [...THEME_CRITTER_IDS, ...(options?.critterIds ?? [])];
-    const critters = Array.from(record.critters, (entry, index) => {
-      const critter = allowedIds.find((id) => id === entry);
-      if (!critter) {
-        throw new Error(`theme.critters[${index}] must be one of ${allowedIds.join(", ")}`);
-      }
-      return critter;
-    });
-    if (new Set(critters).size !== critters.length) {
-      throw new Error("theme.critters must not contain duplicate entries");
-    }
-    definition.critters = critters;
   }
   if (record.avatarHat !== undefined) {
     const allowedIds = [...THEME_AVATAR_HAT_IDS, ...(options?.hatIds ?? [])];

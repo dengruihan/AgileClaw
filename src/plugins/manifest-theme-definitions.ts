@@ -39,7 +39,6 @@ export function loadManifestThemeDefinitions(params: {
       }
       const definition = normalizeThemeDefinition(JSON.parse(file.contents.toString("utf8")), {
         hatIds: Object.keys(theme.hats ?? {}),
-        critterIds: Object.keys(theme.critters ?? {}),
       });
       if (definition.name !== theme.name || definition.description !== theme.description) {
         throw new Error("name and description must match the manifest declaration");
@@ -70,18 +69,8 @@ export function loadManifestThemeDefinitions(params: {
               ),
             }
           : {}),
-        ...(theme.critters
-          ? {
-              critters: Object.fromEntries(
-                Object.entries(theme.critters).map(([id, { source, ...metadata }]) => [
-                  id,
-                  { svg: readSvg(source), ...metadata },
-                ]),
-              ),
-            }
-          : {}),
       };
-      return [{ id: theme.id, definition, ...(theme.hats || theme.critters ? { artwork } : {}) }];
+      return [{ id: theme.id, definition, ...(theme.hats ? { artwork } : {}) }];
     } catch (error) {
       params.diagnostics.push({
         level: "warn",

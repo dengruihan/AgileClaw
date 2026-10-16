@@ -644,7 +644,7 @@ Android also has an experimental `mobile_ui` path that lets an authorized agent 
 
 Startup and several messaging paths now skip unnecessary work, while smaller fixes across onboarding, Tasks, Worktrees, Activity, dashboards, generated titles, durations, phone numbers, and themes make [familiar screens](/web/control-ui) easier to read and use.
 
-The optional [Control UI lobster](/web/lobster) now reacts to status changes and adds seasonal or rare variants, visitors, collection rewards, and controls to dismiss one visit or disable visits. These additions are cosmetic, many appearances remain rare or session-seeded, reduced-motion preferences are preserved, and related CLI flourishes stay inside interactive use so automated output is unchanged.
+The optional Control UI lobster reacted to status changes and added seasonal or rare variants, visitors, collection rewards, and controls to dismiss one visit or disable visits. These additions were cosmetic, many appearances were rare or session-seeded, reduced-motion preferences were preserved, and related CLI flourishes stayed inside interactive use so automated output remained unchanged.
 
 <details class="release-source-toggle">
 <summary>Sources and complete change list</summary>

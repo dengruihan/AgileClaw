@@ -42,7 +42,6 @@ const pageStyles = {
   "cloud-workers": ["ui/src/styles/settings-controls.css", "ui/src/styles/settings.css"],
   config: [
     "ui/src/styles/config.css",
-    "ui/src/styles/lobster-pet.css",
     "ui/src/styles/memory-memories.css",
     "ui/src/styles/memory-overview.css",
     "ui/src/styles/select-picker.css",
@@ -1381,16 +1380,6 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
     ["ui/src/pages/chat/chat-pane.ts"],
   ),
   pageWatch("ui/src/e2e/link-favicons.e2e.test.ts", ["chat"]),
-  pageWatch(
-    "ui/src/e2e/lobster-pet-dismiss-menu-overflow.e2e.test.ts",
-    ["chat", "new-session"],
-    ["ui/src/components/lobster-pet.runtime.ts", "ui/src/components/menu-surface.ts"],
-  ),
-  pageWatch(
-    "ui/src/e2e/lobster-pet.e2e.test.ts",
-    ["chat", "new-session"],
-    ["ui/src/components/lobster-pet-plans.ts", "ui/src/components/lobster-pet.runtime.ts"],
-  ),
   pageWatch("ui/src/e2e/logs-autofollow.e2e.test.ts", ["logs"], ["ui/src/pages/logs/logs-page.ts"]),
   pageWatch("ui/src/e2e/logs-layout.e2e.test.ts", ["config", "logs"]),
   pageWatch(

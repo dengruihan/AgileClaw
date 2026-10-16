@@ -14,10 +14,10 @@ const pageLoadRandom = vi.hoisted(() => vi.spyOn(Math, "random").mockReturnValue
 beforeAll(() => pageLoadRandom.mockRestore());
 
 afterEach(() => {
-  setCurrentThemeBranding({ mascot: "claw", critters: [] });
+  setCurrentThemeBranding({ mascot: "claw" });
 });
 
-const branding: ThemeBranding = { mascot: "none", critters: [], avatarHat: "fedora" };
+const branding: ThemeBranding = { mascot: "none", avatarHat: "fedora" };
 
 describe("theme avatar hats", () => {
   it("keeps one of six fixed agent seeds selected across render order within a page load", () => {
@@ -89,7 +89,7 @@ describe("theme avatar hats", () => {
           "http://www.w3.org/2000/svg",
         );
       }
-      setCurrentThemeBranding({ mascot: "claw", critters: [] });
+      setCurrentThemeBranding({ mascot: "claw" });
       render(renderAgentIdentityAvatar(agent), container);
       expect(container.querySelector(".identity-avatar__hat")).toBeNull();
       render(nothing, container);
@@ -106,7 +106,6 @@ it.each([false, true])(
     onTestFinished(() => fetchArtwork.mockRestore());
     setCurrentThemeBranding({
       mascot: "claw",
-      critters: [],
       avatarHat: "beret",
       artwork: { hats: { beret: { url: missing ? "/missing" : "/beret" } } },
     });

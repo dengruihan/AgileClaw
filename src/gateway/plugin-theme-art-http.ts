@@ -45,19 +45,19 @@ export async function handlePluginThemeArtHttpRequest(
   ) {
     return true;
   }
-  const [themeId, kind, artId] = request.segments ?? [];
+  const [themeId, _kind, artId] = request.segments ?? [];
   if (
     !request.value ||
     !themeId ||
     !THEME_LOCAL_ID_PATTERN.test(themeId) ||
-    (kind !== "hat" && kind !== "critter") ||
+    _kind !== "hat" ||
     !artId ||
     !THEME_ARTWORK_ID_PATTERN.test(artId)
   ) {
     respondNotFound(res);
     return true;
   }
-  const svg = resolvePluginThemeArtwork(request.value, themeId, kind, artId);
+  const svg = resolvePluginThemeArtwork(request.value, themeId, artId);
   const image = svg
     ? await resolveHttpImageRepresentation("theme-art.svg", Buffer.from(svg, "utf8"))
     : undefined;

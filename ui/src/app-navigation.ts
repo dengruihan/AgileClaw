@@ -307,7 +307,6 @@ const SETTINGS_SUBPAGE_ROUTES: readonly NavigationRouteId[] = [
   "config",
   "ai-agents",
   "model-setup",
-  "lobsterdex",
 ];
 export const SETTINGS_SEARCHABLE_SUBPAGE_ROUTES: readonly NavigationRouteId[] = ["ai-agents"];
 const SETTINGS_SUBPAGE_OWNER_ROUTES: Partial<
@@ -361,7 +360,6 @@ const NAVIGATION_PRESENTATION: Record<NavigationRouteId, NavigationPresentation>
   profile: navigationPresentation("circleUser", "profile"),
   communications: navigationPresentation("send", "communications"),
   appearance: navigationPresentation("palette", "appearance"),
-  lobsterdex: navigationPresentation("bug", "lobsterdex"),
   automation: navigationPresentation("terminal", "automation"),
   mcp: navigationPresentation("wrench", "mcp"),
   memory: navigationPresentation("book", "memory"),

@@ -81,7 +81,6 @@ export function composerFixture(
             onSend: () => send({ draft, mentions }),
           })
         : renderNewSessionComposer({
-            renderCritters: () => nothing,
             message: draft,
             mentions,
             getMentions: () => mentions,

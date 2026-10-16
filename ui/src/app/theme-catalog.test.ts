@@ -102,14 +102,13 @@ afterEach(() => {
 it("resolves built-in branding before the palette and catalog load", () => {
   const id = "knot";
   patchSettings({ theme: id });
-  setCurrentThemeBranding({ mascot: "none", critters: [] });
+  setCurrentThemeBranding({ mascot: "none" });
   const { gateway } = createGatewayStoreTestStore();
   const theme = createApplicationTheme(loadSettings(), gateway);
   try {
     expect(theme.branding).toEqual({
       mascot: "claw",
       workingPhrases: undefined,
-      critters: [],
       avatarHat: undefined,
     });
     expect(currentThemeBranding()).toEqual(theme.branding);
@@ -190,7 +189,6 @@ it("applies routed profile updates and plugin hot reloads, restoring an unavaila
       ...definition,
       mascot: "none",
       workingPhrases: ["Building", "Compiling"],
-      critters: ["penguin", "fedora"],
       avatarHat: "fedora",
       dark: createThemePaletteFixture({ background: "#221133" }),
     });
@@ -208,7 +206,6 @@ it("applies routed profile updates and plugin hot reloads, restoring an unavaila
     expect(applicationTheme.branding).toEqual({
       mascot: "none",
       workingPhrases: ["Building", "Compiling"],
-      critters: ["penguin", "fedora"],
       avatarHat: "fedora",
     });
     expect(document.documentElement.dataset.themeMascot).toBe("none");
@@ -220,18 +217,11 @@ it("applies routed profile updates and plugin hot reloads, restoring an unavaila
       hats: {
         beret: { url: "/__openclaw__/plugin-theme-art/space-pack/xenovessel/hat/beret?v=1" },
       },
-      critters: {
-        ferris: {
-          url: "/__openclaw__/plugin-theme-art/space-pack/xenovessel/critter/ferris?v=1",
-          crossMs: 5000,
-        },
-      },
     };
     response = catalog({
       ...definition,
       mascot: "none",
       avatarHat: "beret",
-      critters: ["ferris"],
       workingPhrases: [],
       dark: createThemePaletteFixture({ background: "#332244" }),
     });
@@ -245,7 +235,6 @@ it("applies routed profile updates and plugin hot reloads, restoring an unavaila
     expect(applicationTheme.branding.artwork).toEqual(artwork);
     expect(currentThemeBranding().artwork).toEqual(artwork);
     expect(currentThemeBranding().avatarHat).toBe("beret");
-    expect(currentThemeBranding().critters).toEqual(["ferris"]);
 
     response = {
       themes: [...BUILTIN_THEMES],

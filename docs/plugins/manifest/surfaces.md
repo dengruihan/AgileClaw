@@ -174,14 +174,7 @@ execute plugin code or require the Custom plugin UI Labs setting.
       "name": "Xenovessel",
       "description": "Near-black indigo, acid lime, and alien cyan with monospace text.",
       "source": "themes/xenovessel.json",
-      "hats": { "beret": "assets/theme-art/beret.svg" },
-      "critters": {
-        "ferris": {
-          "source": "assets/theme-art/ferris.svg",
-          "title": "a crab, allegedly",
-          "crossMs": 12000
-        }
-      }
+      "hats": { "beret": "assets/theme-art/beret.svg" }
     }
   ]
 }
@@ -201,13 +194,10 @@ published package's `files` list. Absolute paths, traversal, and symlinks escapi
 the root are rejected. Each source file can contain at most 16 KiB including
 formatting whitespace. Its normalized definition must fit in 4096 UTF-8 bytes.
 
-Each theme may declare `hats`, a map of artwork IDs to relative `.svg` paths,
-and `critters`, a map of artwork IDs to objects containing `source` and optional
-`title` and `crossMs`. Each map allows at most 8 entries. Artwork IDs must match
-`^[a-z0-9][a-z0-9_-]{0,31}$`; duplicates and collisions with the corresponding
-built-in hat or critter catalog are manifest errors. `title` is untranslated
-hover text of at most 60 printable characters. `crossMs` is an integer from
-5000 through 90000, defaulting to 12000 milliseconds.
+Each theme may declare `hats`, a map of artwork IDs to relative `.svg` paths.
+The map allows at most 8 entries. Artwork IDs must match
+`^[a-z0-9][a-z0-9_-]{0,31}$`; duplicates and collisions with the built-in hat
+catalog are manifest errors.
 
 Artwork paths follow the same containment rules as `source`. Each SVG must be
 self-contained and at most 32 KiB; scripts, event handlers, external references,
@@ -240,14 +230,17 @@ diagnostic; other plugin capabilities remain available.
 
 The source JSON also accepts optional presentation fields. They belong in the definition referenced by `themes[].source`, alongside `name`, `description`, and the palettes:
 
-- `mascot`: `"claw"` (the default) or `"none"`; `"none"` uses neutral branding and hides the resident lobster and visiting lobster strangers. Ordinary critters can still cross the composer ledge when Lobster visits is enabled, and the toggle stays unchanged.
+- `mascot`: `"claw"` (the default) or `"none"`; `"none"` uses neutral branding.
 - `workingPhrases`: up to 24 literal, untranslated long-wait status phrases. Each phrase is trimmed, must contain 1–24 characters, and cannot contain control characters or duplicate another trimmed phrase. Omit it to keep the default vocabulary; use `[]` to hide long-wait phrases.
-- `critters`: up to 8 unique IDs from the built-in `"penguin"` and `"fedora"` catalog or this theme's declared `critters` map, adding occasional visitors to ordinary composer ledge traffic while Lobster visits is enabled. Omit it or use `[]` for no theme-supplied critters. Unknown IDs and duplicates are rejected.
 - `avatarHat`: `"fedora"`, `"crown"`, `"santa"`, `"party"`, `"pumpkin"`, or an ID from this theme's declared `hats` map adds an occasional decorative hat to agent avatars; omission adds no hat.
 
-These fields count toward the same 4096-byte normalized definition limit and are returned with the catalog descriptor. The [theme definition example](/tools/theme#create-and-apply-a-personal-theme) includes all four fields.
+These fields count toward the same 4096-byte normalized definition limit and are returned with the catalog descriptor. The [theme definition example](/tools/theme#create-and-apply-a-personal-theme) includes all three fields.
 Definitions carry IDs only, never SVG markup or URLs. Personal themes imported
 through the agent's `theme` tool remain limited to built-in artwork IDs.
+
+Pet artwork is retired. Existing `critters` fields in theme declarations and
+source definitions are ignored when loading; palettes and avatar hats remain
+available. Remove those fields when updating your theme files.
 
 Only enabled plugins contribute themes. OpenClaw retains validated definitions
 and artwork bytes with the current plugin inventory. After editing a source,

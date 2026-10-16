@@ -56,7 +56,6 @@ const APP_ROUTE_DEFINITIONS = {
   profile: { path: "/settings/profile", aliases: ["/profile"] },
   communications: { path: "/settings/communications", aliases: ["/communications"] },
   appearance: { path: "/settings/appearance", aliases: ["/appearance"] },
-  lobsterdex: { path: "/settings/lobsterdex", aliases: ["/lobsterdex"] },
   device: { path: "/settings/device" },
   "device-permissions": { path: "/settings/device/permissions" },
   notifications: { path: "/settings/notifications" },

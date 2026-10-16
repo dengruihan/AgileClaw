@@ -304,7 +304,6 @@ describe("plugin npm runtime build planning", () => {
             description: "Workshop colors",
             source: "palettes/workshop.json",
             hats: { beret: "art/beret.svg" },
-            critters: { ferris: { source: "visitors/ferris.svg", crossMs: 9000 } },
           },
         ],
       }),
@@ -313,12 +312,7 @@ describe("plugin npm runtime build planning", () => {
       resolvePluginNpmRuntimeBuildPlan({ repoRoot, packageDir }),
     );
     expect(plan.packageFiles).toEqual(
-      expect.arrayContaining([
-        "openclaw.plugin.json",
-        "palettes/workshop.json",
-        "art/beret.svg",
-        "visitors/ferris.svg",
-      ]),
+      expect.arrayContaining(["openclaw.plugin.json", "palettes/workshop.json", "art/beret.svg"]),
     );
   });
 

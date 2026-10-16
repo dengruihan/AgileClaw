@@ -13,7 +13,6 @@ import type { NewSessionVisibility } from "./create-params.ts";
 
 export type NewSessionComposerOptions = {
   uploadConfig?: ApplicationConfigCapability;
-  renderCritters: (floorEnabled: boolean) => TemplateResult | typeof nothing;
   attachmentLimits?: ChatAttachmentLimits;
   attachmentReads?: ChatAttachmentReadLifecycle;
   attachments: ChatAttachment[];

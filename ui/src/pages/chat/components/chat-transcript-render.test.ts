@@ -161,7 +161,6 @@ describe("chat transcript rendering", () => {
       .mockImplementation(async ({ url }) => `blob:${url}`);
     let branding = {
       mascot: "claw" as const,
-      critters: [],
       avatarHat: "beret",
       artwork: { hats: { beret: { url: "/hat?v=1" } } },
     };

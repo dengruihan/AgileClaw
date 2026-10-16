@@ -20,8 +20,6 @@ import {
 import { insertComposerDictation } from "../chat/composer-dictation.ts";
 
 export class NewSessionComposerTextareaController {
-  // An opening gets one cast; typing and async picker updates never reroll it.
-  readonly critterVisit = Math.random();
   private textarea: HTMLTextAreaElement | null = null;
   private placeholderFrame: number | null = null;
   private placeholderStartedAt: number | null = null;

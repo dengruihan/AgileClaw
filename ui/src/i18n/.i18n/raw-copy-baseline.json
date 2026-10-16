@@ -177,20 +177,6 @@
       "text": "/verbose"
     },
     {
-      "count": 2,
-      "kind": "html-text",
-      "name": "text",
-      "path": "ui/src/components/lobster-pet-scene-view.ts",
-      "text": "z"
-    },
-    {
-      "count": 1,
-      "kind": "html-text",
-      "name": "text",
-      "path": "ui/src/components/lobster-pet-scene-view.ts",
-      "text": "Z"
-    },
-    {
       "count": 1,
       "kind": "html-attribute",
       "name": "placeholder",
@@ -308,20 +294,6 @@
       "name": "text",
       "path": "ui/src/pages/agents/memory/view.ts",
       "text": "plugins.entries.memory-wiki.enabled = true"
-    },
-    {
-      "count": 2,
-      "kind": "html-text",
-      "name": "text",
-      "path": "ui/src/pages/agents/memory/view.ts",
-      "text": "z"
-    },
-    {
-      "count": 1,
-      "kind": "html-text",
-      "name": "text",
-      "path": "ui/src/pages/agents/memory/view.ts",
-      "text": "Z"
     },
     {
       "count": 1,

@@ -19,8 +19,7 @@ export function composerContext(snapshot: { client: GatewayBrowserClient | null 
     config: { current: {} },
     sessions: { state: { result: null } },
     theme: {
-      branding: { mascot: "claw", critters: [] },
-      settings: { lobsterPetVisits: true, lobsterPetSounds: false },
+      branding: { mascot: "claw" },
       refresh: vi.fn(),
     },
   } as unknown as ApplicationContext;

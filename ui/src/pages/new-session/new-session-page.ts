@@ -12,7 +12,6 @@ import { registerNewSessionSetupEnglish } from "../../i18n/locales/en-new-sessio
 import { normalizeAgentTargetLabel, resolveAgentTextAvatar } from "../../lib/agents/display.ts";
 import { resolveAgentAvatarUrl } from "../../lib/avatar.ts";
 import type { HumanMention } from "../../lib/chat/chat-types.ts";
-import { createIdleImport } from "../../lib/idle-import.ts";
 import "../../components/web-awesome-popover.ts";
 import { sessionNavigationTarget } from "../../lib/sessions/route-navigation.ts";
 import { buildAgentMainSessionKey } from "../../lib/sessions/session-key.ts";
@@ -75,9 +74,6 @@ export class NewSessionPage extends OpenClawLightDomElement {
 
   private retainedForHandoff: object | null = null;
   private openedFor: string | null = null;
-  private readonly critterImport = createIdleImport(
-    () => import("../../components/lobster-pet.runtime.ts"),
-  );
   private openedGroupDefaults = "";
   private openedAgentId = "";
   private messageOwnerKey = "";
@@ -236,7 +232,6 @@ export class NewSessionPage extends OpenClawLightDomElement {
   override connectedCallback() {
     super.connectedCallback();
     this.submission.draftPersistence.connect();
-    this.critterImport.schedule();
     document.addEventListener("keydown", this, true);
     window.addEventListener("beforeunload", this.flushDraft);
   }
@@ -244,7 +239,6 @@ export class NewSessionPage extends OpenClawLightDomElement {
   override disconnectedCallback() {
     this.closeAttachmentPanel();
     this.attachmentPanelLoader.requestWhileActive(attachmentPanelElement, false);
-    this.critterImport.dispose();
     document.removeEventListener("keydown", this, true);
     window.removeEventListener("beforeunload", this.flushDraft);
     this.subscriptions.clear();

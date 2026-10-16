@@ -1,8 +1,6 @@
 import { expectDefined } from "@openclaw/normalization-core";
-// The Control UI lobster pet has a CLI cousin: on roughly one day in sixteen
-// the interactive banner gains a tiny ASCII lobster. The day comes from the
-// shared lobster-day hash (the sidebar pet dresses up on the same days), so
-// every surface agrees on the calendar and tests can pin dates.
+// On roughly one day in sixteen, the interactive banner gains a tiny ASCII
+// lobster. The shared lobster-day hash keeps the banner deterministic.
 import { isLobsterDay, lobsterDayHash } from "../shared/lobster-day.js";
 
 const LOBSTER_ARTS: readonly string[] = [

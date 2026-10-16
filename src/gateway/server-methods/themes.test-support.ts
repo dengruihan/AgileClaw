@@ -5,7 +5,6 @@ export function pluginTheme(): ThemeCatalogEntry {
   const definition = createThemeDefinitionFixture({
     mascot: "none",
     workingPhrases: ["Building"],
-    critters: ["penguin", "fedora"],
     avatarHat: "fedora",
   });
   return {
@@ -14,7 +13,6 @@ export function pluginTheme(): ThemeCatalogEntry {
     description: definition.description,
     mascot: definition.mascot,
     workingPhrases: definition.workingPhrases,
-    critters: definition.critters,
     avatarHat: definition.avatarHat,
     source: "plugin",
     pluginId: "space-pack",

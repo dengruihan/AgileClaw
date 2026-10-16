@@ -37,26 +37,23 @@ describe("portable theme definition", () => {
     expect(definition.dark?.accent).toBe("color(display-p3 0.2 0.9 1)");
     expect(definition).not.toHaveProperty("mascot");
     expect(definition).not.toHaveProperty("workingPhrases");
-    expect(definition).not.toHaveProperty("critters");
     expect(definition).not.toHaveProperty("avatarHat");
   });
 
   it.each(["claw", "none"] as const)(
-    "accepts the %s mascot, authored critters and hat, and normalizes custom working phrases",
+    "accepts the %s mascot and hat, and normalizes custom working phrases",
     (mascot) => {
       expect(
         normalizeThemeDefinition(
           createThemeDefinitionFixture({
             mascot,
             workingPhrases: [" Building ", "x".repeat(24)],
-            critters: ["fedora", "penguin"],
             avatarHat: "fedora",
           }),
         ),
       ).toMatchObject({
         mascot,
         workingPhrases: ["Building", "x".repeat(24)],
-        critters: ["fedora", "penguin"],
         avatarHat: "fedora",
       });
     },
@@ -69,12 +66,6 @@ describe("portable theme definition", () => {
     expect(
       normalizeThemeDefinition(createThemeDefinitionFixture({ workingPhrases })).workingPhrases,
     ).toEqual(workingPhrases);
-  });
-
-  it("accepts an explicitly empty critter list", () => {
-    expect(
-      normalizeThemeDefinition(createThemeDefinitionFixture({ critters: [] })).critters,
-    ).toEqual([]);
   });
 
   it("accepts a built-in avatar hat in portable definitions and import requests", () => {
@@ -96,25 +87,10 @@ describe("portable theme definition", () => {
     },
   );
 
-  it("accepts plugin artwork only from declared IDs of the corresponding kind", () => {
-    const definition = createThemeDefinitionFixture({ avatarHat: "beret", critters: ["ferris"] });
-    expect(() => normalizeThemeDefinition(definition)).toThrow(
-      "theme.critters[0] must be one of penguin, fedora",
-    );
-    expect(() =>
-      normalizeThemeDefinition(definition, { hatIds: ["ferris"], critterIds: ["beret"] }),
-    ).toThrow("theme.critters[0]");
-    expect(
-      normalizeThemeDefinition(definition, { hatIds: ["beret"], critterIds: ["ferris"] }),
-    ).toMatchObject({ avatarHat: "beret", critters: ["ferris"] });
-    expect(Value.Check(ThemesImportParamsSchema, { id: "hat-theme", definition })).toBe(true);
-    expect(parseThemeDefinition(definition)).toBeNull();
-  });
-
   it.each(["", "Beret", "a".repeat(33), "beret.svg", "<svg>"])(
     "rejects nonportable artwork ID %j at the wire boundary",
     (id) => {
-      for (const branding of [{ avatarHat: id }, { critters: [id] }]) {
+      for (const branding of [{ avatarHat: id }]) {
         expect(
           Value.Check(ThemesImportParamsSchema, {
             id: "hat-theme",
@@ -137,10 +113,6 @@ describe("portable theme definition", () => {
     [{ workingPhrases: [" "] }, "nonempty text"],
     [{ workingPhrases: ["Build\ning"] }, "nonempty text"],
     [{ workingPhrases: ["Building\u007f"] }, "nonempty text"],
-    [{ critters: "penguin" }, "theme.critters must be an array"],
-    [{ critters: Array.from({ length: 9 }, () => "penguin") }, "at most 8 entries"],
-    [{ critters: ["penguin", "penguin"] }, "duplicate entries"],
-    [{ critters: [" Penguin "] }, "theme.critters[0] must be one of penguin, fedora"],
   ])("rejects invalid branding %j", (fields, message) => {
     expect(() =>
       normalizeThemeDefinition({ ...createThemeDefinitionFixture(), ...fields }),
@@ -247,11 +219,10 @@ describe("portable theme definition", () => {
   });
 });
 
-it("resolves omitted branding to the claw without critters or a hat and retains authored branding", () => {
+it("resolves omitted branding to the claw without a hat and retains authored branding", () => {
   const defaults = {
     mascot: "claw",
     workingPhrases: undefined,
-    critters: [],
     avatarHat: undefined,
   };
   expect(resolveThemeBranding(undefined)).toEqual(defaults);
@@ -264,13 +235,11 @@ it("resolves omitted branding to the claw without critters or a hat and retains 
     resolveThemeBranding({
       mascot: "none",
       workingPhrases: ["Building"],
-      critters: ["penguin", "fedora"],
       avatarHat: "fedora",
     }),
   ).toEqual({
     mascot: "none",
     workingPhrases: ["Building"],
-    critters: ["penguin", "fedora"],
     avatarHat: "fedora",
   });
 });

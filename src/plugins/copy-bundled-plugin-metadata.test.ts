@@ -99,7 +99,6 @@ describe("copyBundledPluginMetadata", () => {
             description: "Workshop colors",
             source: "themes/workshop.json",
             hats: { beret: "assets/theme-art/beret.svg" },
-            critters: { ferris: { source: "assets/theme-art/ferris.svg" } },
           },
         ],
       },

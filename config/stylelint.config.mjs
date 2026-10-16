@@ -73,13 +73,6 @@ export default {
       },
     },
     {
-      // Lobster sprite artwork owns a fixed illustration palette, not UI theme colors.
-      files: ["../ui/src/styles/lobster-pet.css"],
-      rules: {
-        "color-no-hex": null,
-      },
-    },
-    {
       files: ["**/*.ts"],
       customSyntax: "postcss-lit",
     },

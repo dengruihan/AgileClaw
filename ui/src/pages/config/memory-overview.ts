@@ -1,12 +1,6 @@
 import { html, nothing } from "lit";
 import type { DoctorMemoryStatusPayload } from "../../../../src/gateway/server-methods/doctor.ts";
 import { shellLayoutTraits } from "../../app/shell-layout-traits.ts";
-import { lobsterPetSeed } from "../../components/lobster-pet-contract.ts";
-import {
-  createLobsterPetLook,
-  lobsterLookStyle,
-  renderLobsterSvg,
-} from "../../components/lobster-pet-look.ts";
 import {
   renderSettingsNavRow,
   renderSettingsRow,
@@ -29,7 +23,6 @@ export type MemoryOverviewStatus =
   | { kind: "error"; message: string };
 
 type MemoryOverviewProps = {
-  agentId: string | null;
   engineSelection: MemoryEngineSelection;
   engineDisabled: boolean;
   status: MemoryOverviewStatus;
@@ -62,7 +55,6 @@ function renderHero(props: MemoryOverviewProps) {
   const error =
     props.status.kind === "error" ||
     (!noSearchRuntime && readyPayload !== null && hasEmbeddingError(readyPayload));
-  const look = createLobsterPetLook(lobsterPetSeed(props.agentId ?? "memory"));
   const headline = off
     ? t("memoryPage.overview.hero.hibernating")
     : props.status.kind === "loading" || props.status.kind === "idle"
@@ -92,19 +84,8 @@ function renderHero(props: MemoryOverviewProps) {
                 mode: searchMode(readyPayload),
               })
         : t("memoryPage.overview.hero.loadingDescription");
-  const pose = off
-    ? { sleeping: true }
-    : error
-      ? { grumpy: true, standalone: true }
-      : readyPayload && !noSearchRuntime
-        ? { reading: true, standalone: true }
-        : { standalone: true };
-
   return html`
     <section class="memory-overview__hero ${off ? "memory-overview__hero--sleeping" : ""}">
-      <div class="memory-overview__lobster" style=${lobsterLookStyle(look)}>
-        ${renderLobsterSvg(look, pose)}
-      </div>
       <div class="memory-overview__hero-copy">
         <h2>${headline}</h2>
         <p class=${error ? "memory-overview__hero-error" : ""}>${description}</p>
