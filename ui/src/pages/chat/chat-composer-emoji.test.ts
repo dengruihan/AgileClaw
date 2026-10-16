@@ -75,7 +75,6 @@ function fixture(kind: "chat" | "new", locked = false, requiresModifier = false)
       kind === "chat"
         ? renderChatComposer({ ...props, draft })
         : renderNewSessionComposer({
-            renderCritters: () => nothing,
             attachments: [],
             getAttachments: () => [],
             canSubmit: true,

@@ -30,7 +30,6 @@ function snapshot(svg = SVG, enabled = true) {
             definition: createThemeDefinitionFixture(),
             artwork: {
               hats: { beret: { svg } },
-              critters: { ferris: { svg, title: "a crab, allegedly", crossMs: 15000 } },
             },
           },
         ],
@@ -72,9 +71,9 @@ describe("plugin theme artwork HTTP", () => {
     expect(authorize).toHaveBeenCalledWith(expect.objectContaining({ auth: AUTH_TOKEN }));
   });
 
-  it("serves captured hats and critters with private caching, SVG sandboxing, HEAD and ETags", async () => {
+  it("serves captured hats with private caching, SVG sandboxing, HEAD and ETags", async () => {
     await withPluginMetadataSnapshotScope(snapshot(), async () => {
-      for (const pathname of [ART_PATH, ART_PATH.replace("hat/beret", "critter/ferris")]) {
+      for (const pathname of [ART_PATH]) {
         const get = await request(`${pathname}?v=content-hash`);
         expect(get.res.statusCode).toBe(200);
         expect(get.end).toHaveBeenCalledExactlyOnceWith(Buffer.from(SVG));

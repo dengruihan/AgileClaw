@@ -170,14 +170,8 @@ export type ConfigProps = {
   sessionObserverDisabled?: boolean;
   setSessionObserverEnabled?: (enabled: boolean) => void;
   setSessionObserverUtilityModel?: (selection: SessionObserverModelSelection) => void;
-  lobsterPetVisits: boolean;
-  setLobsterPetVisits: (enabled: boolean) => void;
   sessionDeleteConfirm: boolean;
   setSessionDeleteConfirm: (enabled: boolean) => void;
-  lobsterPetSounds: boolean;
-  setLobsterPetSounds: (enabled: boolean) => void;
-  lobsterdexHref?: string;
-  onOpenLobsterdex?: () => void;
   chatSendShortcut: ChatSendShortcut;
   chatSendShortcutOverridden: boolean;
   chatSendShortcutProvenance: ServerUiPrefProvenance;

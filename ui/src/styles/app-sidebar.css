@@ -1,4 +1,4 @@
-/* The lobster uses this ledge even when the invitation is disabled. */
+/* The invitation floats above other sidebar content. */
 .sidebar-shell__invite {
   position: relative;
   z-index: 1;

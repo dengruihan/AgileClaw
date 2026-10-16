@@ -72,7 +72,6 @@ const actionSectionCases = [{ route: "mcp", heading: "Configured servers" }] as 
 const settingsRowRoutes = [
   "profile",
   "appearance",
-  "lobsterdex",
   "notifications",
   "connection",
   "channels",

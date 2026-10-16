@@ -81,7 +81,6 @@ it.each([
               description: "Fixture palette",
               source: "theme.json",
               hats: { beret: "assets/beret.svg" },
-              critters: { ferris: { source: "assets/ferris.svg" } },
             },
           ],
         }),

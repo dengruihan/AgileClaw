@@ -321,14 +321,6 @@ export function renderNewSessionComposer(options: NewSessionComposerOptions) {
           options.requestUpdate();
         }}
       >
-        ${options.renderCritters(
-          !composerLocked &&
-            visibleMessage.length === 0 &&
-            options.attachments.length === 0 &&
-            options.pendingAttachmentReads === 0 &&
-            !menuVisible &&
-            !options.textareaController.capabilityMenuOpen,
-        )}
         ${mentionMenu.render(mentionMenuHost, options.requestUpdate)}
         ${emojiMenu.render("new-session", options.textareaController.getTextarea(), options.requestUpdate)}
         ${options.nativeTerminal ? nothing : renderChatAttachmentInputs(attachmentProps)}

@@ -31,7 +31,6 @@ import { renderSessionSources } from "./session-sources.ts";
 import {
   renderChatPreferencesSection,
   renderLanguageSection,
-  renderLobsterPetSection,
   serverUiPrefProvenanceHint,
   renderSidebarPreferencesSection,
 } from "./view-appearance-preferences.ts";
@@ -572,8 +571,8 @@ export function renderAppearanceSection(props: ConfigProps) {
         </div>
       </section>
 
-      ${renderSidebarPreferencesSection(props)} ${renderLobsterPetSection(props)}
-      ${renderChatPreferencesSection(props)} ${renderSessionSources(props)}
+      ${renderSidebarPreferencesSection(props)} ${renderChatPreferencesSection(props)}
+      ${renderSessionSources(props)}
 
       <section id=${APPEARANCE_SETTINGS_TARGET_IDS.connection} class="settings-section">
         <div class="settings-section__header">

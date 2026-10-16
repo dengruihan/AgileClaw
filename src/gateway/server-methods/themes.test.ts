@@ -181,13 +181,6 @@ describe("theme RPC", () => {
         hats: {
           beret: { url: "/__openclaw__/plugin-theme-art/space-pack/xenovessel/hat/beret?v=abc" },
         },
-        critters: {
-          ferris: {
-            url: "/__openclaw__/plugin-theme-art/space-pack/xenovessel/critter/ferris?v=def",
-            title: "a crab, allegedly",
-            crossMs: 15000,
-          },
-        },
       },
     };
     pluginThemes.push(entry);
@@ -222,7 +215,6 @@ describe("theme RPC", () => {
     const branding = {
       mascot: "none",
       workingPhrases: ["Building", "Compiling"],
-      critters: ["penguin", "fedora"],
       avatarHat: "fedora",
     } satisfies Parameters<typeof createThemeDefinitionFixture>[0];
     const definition = createThemeDefinitionFixture(branding);
@@ -290,6 +282,37 @@ describe("theme RPC", () => {
         ]),
       },
     });
+  });
+
+  it("keeps saved themes selected after pet metadata is retired", async () => {
+    const definition = createThemeDefinitionFixture({ avatarHat: "crown" });
+    for (const critters of [[], ["penguin"]]) {
+      const stored = {
+        "ui.theme": "user/legacy",
+        "ui.themeDefinition.legacy": { ...definition, critters },
+      };
+      expect(setUserPreferences(requesterProfileId, stored).ok).toBe(true);
+      const saved = getUserPreferences(requesterProfileId);
+      const result = await invoke("themes.get");
+      expect(result).toMatchObject({
+        ok: true,
+        payload: { current: { id: "user/legacy" }, definition },
+      });
+      expect(result.payload).not.toHaveProperty("definition.critters");
+      expect(getUserPreferences(requesterProfileId)).toEqual(saved);
+      const imported = await invoke("themes.import", {
+        id: "restored",
+        definition: { ...definition, critters },
+        apply: true,
+      });
+      expect(imported).toMatchObject({
+        ok: true,
+        payload: { current: { id: "user/restored" }, definition },
+      });
+      expect(getUserPreferences(requesterProfileId)["ui.themeDefinition.restored"]).toEqual(
+        definition,
+      );
+    }
   });
 
   it("rolls back the imported definition when selecting it fails in storage", async () => {

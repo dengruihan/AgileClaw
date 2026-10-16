@@ -133,7 +133,6 @@ describe("manifest theme catalog", () => {
           dark: createThemePaletteFixture({ primary: "#ff33aa" }),
           mascot: "none",
           workingPhrases: ["Building", "Compiling"],
-          critters: ["penguin", "fedora"],
           avatarHat: "fedora",
         }),
       ),
@@ -146,12 +145,10 @@ describe("manifest theme catalog", () => {
     expect(withPluginMetadataSnapshotScope(after, readTheme)).toMatchObject({
       mascot: "none",
       workingPhrases: ["Building", "Compiling"],
-      critters: ["penguin", "fedora"],
       avatarHat: "fedora",
       definition: {
         mascot: "none",
         workingPhrases: ["Building", "Compiling"],
-        critters: ["penguin", "fedora"],
         avatarHat: "fedora",
         dark: { primary: "#ff33aa" },
       },
@@ -161,7 +158,6 @@ describe("manifest theme catalog", () => {
     );
     expect(withPluginMetadataSnapshotScope(before, readTheme)).not.toHaveProperty("mascot");
     expect(withPluginMetadataSnapshotScope(before, readTheme)).not.toHaveProperty("workingPhrases");
-    expect(withPluginMetadataSnapshotScope(before, readTheme)).not.toHaveProperty("critters");
     expect(withPluginMetadataSnapshotScope(before, readTheme)).not.toHaveProperty("avatarHat");
   });
 
@@ -182,7 +178,6 @@ describe("manifest theme catalog", () => {
     const plugin = fixture(undefined, "@scope/pack");
     const svg = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h20v10H0z"/></svg>';
     fs.writeFileSync(path.join(plugin.rootDir, "hat.svg"), svg);
-    fs.writeFileSync(path.join(plugin.rootDir, "critter.svg"), svg);
     fs.writeFileSync(
       path.join(plugin.rootDir, "openclaw.plugin.json"),
       JSON.stringify({
@@ -192,22 +187,18 @@ describe("manifest theme catalog", () => {
           {
             ...plugin.declaration,
             hats: { beret: "hat.svg" },
-            critters: {
-              ferris: { source: "critter.svg", title: "a crab, allegedly", crossMs: 15000 },
-            },
           },
         ],
       }),
     );
     fs.writeFileSync(
       path.join(plugin.rootDir, "theme.json"),
-      JSON.stringify({ ...plugin.definition, avatarHat: "beret", critters: ["ferris"] }),
+      JSON.stringify({ ...plugin.definition, avatarHat: "beret" }),
     );
     const before = plugin.readSnapshot();
     const original = withPluginMetadataSnapshotScope(before, listPluginThemes)[0];
     expect(original).toMatchObject({
       avatarHat: "beret",
-      critters: ["ferris"],
       artwork: {
         hats: {
           beret: {
@@ -216,32 +207,23 @@ describe("manifest theme catalog", () => {
             ),
           },
         },
-        critters: {
-          ferris: {
-            url: expect.stringMatching(/\/neon\/critter\/ferris\?v=[a-f0-9]{12}$/),
-            title: "a crab, allegedly",
-            crossMs: 15000,
-          },
-        },
       },
     });
     const replacement = svg.replace("h20", "h30");
     fs.writeFileSync(path.join(plugin.rootDir, "hat.svg"), replacement);
     const after = plugin.readSnapshot();
     fs.unlinkSync(path.join(plugin.rootDir, "hat.svg"));
-    fs.unlinkSync(path.join(plugin.rootDir, "critter.svg"));
     const updated = withPluginMetadataSnapshotScope(after, listPluginThemes)[0];
     expect(updated?.artwork?.hats?.beret?.url).not.toBe(original?.artwork?.hats?.beret?.url);
-    expect(updated?.artwork?.critters).toEqual(original?.artwork?.critters);
     expect(withPluginMetadataSnapshotScope(before, listPluginThemes)[0]).toEqual(original);
     expect(
       withPluginMetadataSnapshotScope(before, () =>
-        resolvePluginThemeArtwork(plugin.id, "neon", "hat", "beret"),
+        resolvePluginThemeArtwork(plugin.id, "neon", "beret"),
       ),
     ).toBe(svg);
     expect(
       withPluginMetadataSnapshotScope(after, () =>
-        resolvePluginThemeArtwork(plugin.id, "neon", "hat", "beret"),
+        resolvePluginThemeArtwork(plugin.id, "neon", "beret"),
       ),
     ).toBe(replacement);
   });

@@ -7,7 +7,6 @@ import {
   THEME_DESCRIPTION_MAX_LENGTH,
   THEME_ARTWORK_ID_PATTERN,
   THEME_AVATAR_HAT_IDS,
-  THEME_CRITTER_IDS,
 } from "../../packages/gateway-protocol/src/theme.ts";
 import type { PluginManifestTheme } from "./manifest-types.js";
 
@@ -43,7 +42,7 @@ function validateArtworkDuplicates(source: string): void {
       }
       for (const artwork of objectProperties(theme)) {
         const kind = propertyName(artwork);
-        if (kind !== "hats" && kind !== "critters") {
+        if (kind !== "hats") {
           continue;
         }
         const ids = new Set<string>();
@@ -87,68 +86,16 @@ function normalizeArtworkPath(value: unknown, label: string): string {
   return relativePath;
 }
 
-function normalizeArtwork(
-  hats: unknown,
-  critters: unknown,
-  label: string,
-): Pick<PluginManifestTheme, "hats" | "critters"> {
-  return {
-    ...(hats !== undefined
-      ? {
-          hats: Object.fromEntries(
-            normalizeArtworkEntries(hats, `${label}.hats`, THEME_AVATAR_HAT_IDS).map(
-              ([id, source]) => [id, normalizeArtworkPath(source, `${label}.hats.${id}`)],
-            ),
+function normalizeArtwork(hats: unknown, label: string): Pick<PluginManifestTheme, "hats"> {
+  return hats === undefined
+    ? {}
+    : {
+        hats: Object.fromEntries(
+          normalizeArtworkEntries(hats, `${label}.hats`, THEME_AVATAR_HAT_IDS).map(
+            ([id, source]) => [id, normalizeArtworkPath(source, `${label}.hats.${id}`)],
           ),
-        }
-      : {}),
-    ...(critters !== undefined
-      ? {
-          critters: Object.fromEntries(
-            normalizeArtworkEntries(critters, `${label}.critters`, THEME_CRITTER_IDS).map(
-              ([id, metadata]) => {
-                const entryLabel = `${label}.critters.${id}`;
-                if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
-                  throw new Error(`${entryLabel} must be an object with an SVG source`);
-                }
-                // SAFETY: metadata is an object; its supported fields are validated below.
-                const { source, title, crossMs } = metadata as Record<string, unknown>;
-                if (
-                  Object.keys(metadata).some((key) => !["source", "title", "crossMs"].includes(key))
-                ) {
-                  throw new Error(`${entryLabel} has unsupported fields`);
-                }
-                if (
-                  title !== undefined &&
-                  (typeof title !== "string" ||
-                    title.length > 60 ||
-                    /[\p{Cc}\p{Cf}\p{Cs}]/u.test(title))
-                ) {
-                  throw new Error(`${entryLabel}.title must be at most 60 printable characters`);
-                }
-                if (
-                  crossMs !== undefined &&
-                  (typeof crossMs !== "number" ||
-                    !Number.isInteger(crossMs) ||
-                    crossMs < 5000 ||
-                    crossMs > 90000)
-                ) {
-                  throw new Error(`${entryLabel}.crossMs must be an integer from 5000 to 90000`);
-                }
-                return [
-                  id,
-                  {
-                    source: normalizeArtworkPath(source, `${entryLabel}.source`),
-                    ...(title !== undefined ? { title } : {}),
-                    ...(crossMs !== undefined ? { crossMs } : {}),
-                  },
-                ];
-              },
-            ),
-          ),
-        }
-      : {}),
-  };
+        ),
+      };
 }
 
 export function normalizeManifestThemes(
@@ -178,9 +125,10 @@ export function normalizeManifestThemes(
       return { ok: false, error: `themes[${index}] must be an object` };
     }
     // SAFETY: entry is a non-null, non-array object; every field is validated below.
-    const { id, name, description, source, hats, critters } = entry as Record<string, unknown>;
+    const { id, name, description, source, hats } = entry as Record<string, unknown>;
     if (
       Object.keys(entry).some(
+        // Retired pet artwork must not invalidate the plugin's other capabilities.
         (key) => !["id", "name", "description", "source", "hats", "critters"].includes(key),
       ) ||
       typeof id !== "string" ||
@@ -215,14 +163,14 @@ export function normalizeManifestThemes(
         name: name.trim(),
         description: description.trim(),
         source: relativePath,
-        ...normalizeArtwork(hats, critters, `themes[${index}]`),
+        ...normalizeArtwork(hats, `themes[${index}]`),
       });
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "invalid theme artwork" };
     }
     ids.add(id);
   }
-  if (manifestSource && themes.some((theme) => theme.hats || theme.critters)) {
+  if (manifestSource && themes.some((theme) => theme.hats)) {
     try {
       validateArtworkDuplicates(manifestSource);
     } catch (error) {

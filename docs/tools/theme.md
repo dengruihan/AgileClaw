@@ -86,10 +86,14 @@ definitions cannot load external stylesheets or resources.
 
 Definitions can also supply these optional presentation fields, shared by built-in, plugin, and personal themes:
 
-- `mascot`: `"claw"` (the default) or `"none"`. `"none"` replaces lobster branding with a neutral prompt mark and hides the resident lobster and visiting lobster strangers. Ordinary critters can still cross the composer ledge when Lobster visits is enabled; the theme does not change that toggle.
+- `mascot`: `"claw"` (the default) or `"none"`. `"none"` replaces lobster branding with a neutral prompt mark.
 - `workingPhrases`: up to 24 literal status phrases, each trimmed to 1–24 characters with no control characters or duplicates after trimming. These authored strings are not translated. Omit the field to use the default whimsical vocabulary, or set it to `[]` to hide long-wait phrases.
-- `critters`: up to 8 unique IDs from the built-in `"penguin"` and `"fedora"` catalog. These add occasional visitors to ordinary composer ledge traffic while Lobster visits is enabled. Omit the field or use `[]` to add none; unknown IDs and duplicates are rejected.
 - `avatarHat`: `"fedora"`, `"crown"`, `"santa"`, `"party"`, or `"pumpkin"` adds an occasional decorative hat to agent avatars. Omit the field for no theme-supplied avatar hat.
+
+Previously saved themes remain available if they contain the retired `critters`
+field. Loading ignores that field and preserves the palette and avatar hat;
+reimporting an older definition also discards it before saving. New definitions
+should omit it.
 
 Use consistent CSS separators: `rgb(20 30 40 / 50%)` or
 `rgba(20, 30, 40, 0.5)`. Modern functions such as `oklch()` use spaces between
@@ -112,7 +116,6 @@ This example creates and activates a dark theme in one call:
     "description": "Indigo spacecraft surfaces, lime controls, cyan highlights, and monospace typography.",
     "mascot": "none",
     "workingPhrases": ["Navigating", "Calibrating", "Scanning"],
-    "critters": ["penguin", "fedora"],
     "avatarHat": "fedora",
     "dark": {
       "background": "#090818",
@@ -149,8 +152,8 @@ publishing the definition elsewhere.
 ## Plugin themes and hot reload
 
 Plugins contribute theme definitions declaratively through their manifest.
-Personal themes use only the built-in hat and critter catalog IDs; plugin themes
-may also reference their own SVG artwork IDs declared in the
+Personal themes use only the built-in hat catalog IDs; plugin themes may also
+reference their own SVG artwork IDs declared in the
 [plugin manifest](/plugins/manifest/surfaces#themes). Definitions never contain
 artwork markup or external URLs.
 The shared catalog updates when the plugin is enabled, disabled, or reloaded;

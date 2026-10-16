@@ -3,8 +3,6 @@ import { parseDateStringTimestampMs } from "@openclaw/normalization-core/number-
 import { html, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { renderHubTabs } from "../../../components/hub-tabs.ts";
-import { lobsterPetSeed } from "../../../components/lobster-pet-contract.ts";
-import { createLobsterPetLook, renderLobsterSvg } from "../../../components/lobster-pet-look.ts";
 import { toSanitizedMarkdownHtml } from "../../../components/markdown.ts";
 import "../../../components/modal-dialog.ts";
 import { i18n, t } from "../../../i18n/index.ts";
@@ -248,16 +246,6 @@ const STARS: {
   { top: 88, left: 18, size: 2, delay: 2.3, hue: "neutral" },
 ];
 
-// The dreams sleeper is the same seeded lobster that visits the sidebar for
-// this agent (eyes closed), so the pet identity carries across surfaces.
-function renderDreamsCameo(agentId: string) {
-  const look = createLobsterPetLook(lobsterPetSeed(agentId));
-  const style = `--lob-shell:${look.palette.shell};--lob-claw:${look.palette.claw}`;
-  return html`
-    <div class="dreams__lobster" style=${style}>${renderLobsterSvg(look, { sleeping: true })}</div>
-  `;
-}
-
 export function renderDreaming(props: DreamingProps) {
   const state = props.viewState;
   const idle = !props.active;
@@ -379,10 +367,6 @@ function renderScene(props: DreamingProps, idle: boolean, dreamText: string) {
       }
 
       <div class="dreams__glow"></div>
-      ${renderDreamsCameo(props.selectedAgentId)}
-      <span class="dreams__z">z</span>
-      <span class="dreams__z">z</span>
-      <span class="dreams__z">Z</span>
 
       <div class="dreams__status">
         <span class="dreams__status-label"

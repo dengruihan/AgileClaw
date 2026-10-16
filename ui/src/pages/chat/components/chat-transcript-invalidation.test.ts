@@ -43,7 +43,7 @@ describe("chat transcript invalidation", () => {
   it.each(["ready", "delayed"])(
     "updates settled avatars when only the theme hat changes with a %s palette",
     (palette) => {
-      const branding = { mascot: "claw" as const, critters: [], avatarHat: "fedora" as const };
+      const branding = { mascot: "claw" as const, avatarHat: "fedora" as const };
       const agentId = Array.from({ length: 100 }, (_, index) => `agent-${index}`).find((id) =>
         resolveAvatarHat(id, branding),
       )!;

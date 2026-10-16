@@ -17,7 +17,6 @@ const callGateway = vi.mocked(callAgentToolGatewayRequest);
 const definition = createThemeDefinitionFixture({
   mascot: "none",
   workingPhrases: ["Building", "Compiling"],
-  critters: ["penguin", "fedora"],
   avatarHat: "fedora",
 });
 
@@ -69,7 +68,6 @@ describe("theme tool", () => {
         source: "user",
         mascot: "none",
         workingPhrases: ["Building", "Compiling"],
-        critters: ["penguin", "fedora"],
         avatarHat: "fedora",
       },
       definition,

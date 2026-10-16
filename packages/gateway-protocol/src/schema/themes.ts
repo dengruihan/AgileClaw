@@ -46,6 +46,7 @@ export const ThemeDefinitionSchema = closedObject({
       maxItems: THEME_WORKING_PHRASES_MAX,
     }),
   ),
+  // Older exported themes can be reimported; normalization discards pet metadata.
   critters: Type.Optional(Type.Array(ThemeArtworkId, { maxItems: 8 })),
   avatarHat: Type.Optional(ThemeArtworkId),
   light: Type.Optional(ThemePaletteSchema),

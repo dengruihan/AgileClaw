@@ -645,7 +645,6 @@ class MemorySettingsPage extends OpenClawLightDomElement {
       memoryImportHref: this.memoryImportHref,
       canImportMemory: readGatewayOperatorAccess(this.context.gateway.snapshot).canAdmin,
       overview: renderMemoryOverview({
-        agentId,
         engineSelection,
         engineDisabled: engineState === "disabled",
         status: agentError ? { kind: "error", message: agentError } : this.overviewStatus,

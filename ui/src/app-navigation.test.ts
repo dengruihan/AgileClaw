@@ -42,7 +42,6 @@ const ALL_ROUTES: RouteId[] = Array.from(
     "memory-import",
     "ai-agents",
     "model-setup",
-    "lobsterdex",
     ...visibleSettingsNavigationGroups(true).flatMap((group) => group.routes),
   ]),
 );
@@ -57,7 +56,6 @@ const SETTINGS_ROUTE_PATHS = [
     alias: "/communications",
   },
   { routeId: "appearance", path: "/settings/appearance", alias: "/appearance" },
-  { routeId: "lobsterdex", path: "/settings/lobsterdex", alias: "/lobsterdex" },
   { routeId: "automation", path: "/settings/automation", alias: "/automation" },
   { routeId: "mcp", path: "/settings/mcp", alias: "/mcp" },
   {
@@ -358,6 +356,8 @@ describe("routeIdFromPath", () => {
   it("returns null for unknown path", () => {
     expect(routeIdFromPath("/unknown")).toBeNull();
     expect(routeIdFromPath("/instances")).toBeNull();
+    expect(routeIdFromPath("/lobsterdex")).toBeNull();
+    expect(routeIdFromPath("/settings/lobsterdex")).toBeNull();
   });
 
   it("matches static routes case-insensitively like the uirouter path key", () => {

@@ -1,5 +1,4 @@
 import { html, nothing } from "lit";
-import "../../styles/lobster-pet.css";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { shellLayoutTraits } from "../../app/shell-layout-traits.ts";
 import { countSensitiveConfigValues } from "../../components/config-form.shared.ts";

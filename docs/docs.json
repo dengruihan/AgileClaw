@@ -2716,8 +2716,7 @@
                   "web/dashboard-architecture",
                   "web/urls",
                   "web/webchat",
-                  "web/tui",
-                  "web/lobster"
+                  "web/tui"
                 ]
               }
             ]

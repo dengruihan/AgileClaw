@@ -1,8 +1,4 @@
 import { html, nothing } from "lit";
-import {
-  BUILTIN_THEMES,
-  resolveThemeBranding,
-} from "../../../../packages/gateway-protocol/src/theme.ts";
 import type { ServerUiPrefProvenance } from "../../app/server-prefs.ts";
 import {
   normalizeCatalogOpenTarget,
@@ -11,15 +7,6 @@ import {
   normalizeChatSendShortcut,
   UI_APPEARANCE_DEFAULTS,
 } from "../../app/settings.ts";
-import { getLobsterdexEntries } from "../../components/lobster-dex.ts";
-import { previewLobsterChirp } from "../../components/lobster-pet-audio.ts";
-import {
-  canonicalLobsterLook,
-  lobsterLookStyle,
-  renderLobsterSvg,
-} from "../../components/lobster-pet-look.ts";
-import { LOBSTER_PALETTE_LORE, lobsterPaletteName } from "../../components/lobster-pet-lore.ts";
-import { LOBSTER_PET_PALETTES } from "../../components/lobster-pet-palettes.ts";
 import "../../components/tooltip.ts";
 import {
   renderSettingsDefaultDescription,
@@ -27,7 +14,6 @@ import {
   renderSettingsToggleRow,
 } from "../../components/settings-ui.ts";
 import { t } from "../../i18n/index.ts";
-import { shouldHandleNavigationClick } from "../../lib/navigation-click.ts";
 import { languageLabel, renderLanguageSelect } from "./language-select.ts";
 import { APPEARANCE_SETTINGS_TARGET_IDS } from "./route-data.ts";
 import { renderSessionObserverSettings } from "./session-observer-settings.ts";
@@ -336,144 +322,6 @@ export function renderChatPreferencesSection(props: ConfigProps) {
             ${holdToRecordDefaultDescription} ${t("quickSettings.personal.browserOnly")}`,
           checked: props.composerHoldToRecord,
           onChange: props.setComposerHoldToRecord,
-        })}
-      </div>
-    </section>
-  `;
-}
-
-export function renderLobsterPetSection(props: ConfigProps) {
-  const { lobsterPetVisits, lobsterPetSounds } = props;
-  const activeTheme =
-    BUILTIN_THEMES.find((theme) => theme.id === props.theme) ??
-    props.themeCatalog?.themes.find((theme) => theme.id === props.theme);
-  const themeHiddenDescription =
-    resolveThemeBranding(activeTheme).mascot === "none"
-      ? html`<br />${t("quickSettings.appearance.lobsterVisitsThemeHidden", {
-            theme:
-              activeTheme?.source === "builtin"
-                ? t(`configView.themes.${activeTheme.id}.label`)
-                : (activeTheme?.name ?? props.theme),
-          })}`
-      : nothing;
-  const lobsterVisitsDefaultDescription = renderSettingsDefaultDescription(
-    t("common.enabled"),
-    lobsterPetVisits !== UI_APPEARANCE_DEFAULTS.lobsterPetVisits,
-  );
-  const lobsterSoundsDefaultDescription = renderSettingsDefaultDescription(
-    t("common.disabled"),
-    lobsterPetSounds !== UI_APPEARANCE_DEFAULTS.lobsterPetSounds,
-  );
-  const dexEntries = getLobsterdexEntries();
-  const seenCount = LOBSTER_PET_PALETTES.filter((palette) => dexEntries.has(palette.id)).length;
-  return html`
-    <section class="settings-section">
-      <div class="settings-section__header">
-        <h2 class="settings-section__heading">${t("quickSettings.appearance.lobsterdex")}</h2>
-      </div>
-      <div class="settings-group">
-        ${renderSettingsToggleRow({
-          title: t("quickSettings.appearance.lobsterVisits"),
-          description: html`${t(
-              lobsterPetVisits
-                ? "quickSettings.appearance.lobsterVisitsOn"
-                : "quickSettings.appearance.lobsterVisitsOff",
-            )}<br />
-            ${lobsterVisitsDefaultDescription}
-            ${t("quickSettings.personal.browserOnly")}${themeHiddenDescription}`,
-          checked: lobsterPetVisits,
-          onChange: props.setLobsterPetVisits,
-        })}
-        ${renderSettingsToggleRow({
-          title: t("quickSettings.appearance.lobsterSounds"),
-          description: html`${t(
-              lobsterPetSounds
-                ? "quickSettings.appearance.lobsterSoundsOn"
-                : "quickSettings.appearance.lobsterSoundsOff",
-            )}<br />
-            ${lobsterSoundsDefaultDescription} ${t("quickSettings.personal.browserOnly")}`,
-          checked: lobsterPetSounds,
-          onChange: props.setLobsterPetSounds,
-          onAct: (enabled) => {
-            if (enabled) {
-              previewLobsterChirp();
-            }
-          },
-        })}
-        ${renderSettingsRow({
-          title: t("quickSettings.appearance.lobsterdex"),
-          description: t("quickSettings.appearance.lobsterdexSeen", {
-            seen: String(seenCount),
-            total: String(LOBSTER_PET_PALETTES.length),
-          }),
-          stacked: true,
-          control: html`
-            <div class="lobsterdex__gallery">
-              <div class="lobsterdex">
-                ${LOBSTER_PET_PALETTES.map((palette) => {
-                  const look = canonicalLobsterLook(palette);
-                  const entry = dexEntries.get(palette.id);
-                  const seen = entry !== undefined;
-                  const shinySeen = entry?.shinySeenAt != null;
-                  const baseName = seen ? (entry.name ?? lobsterPaletteName(palette.id)) : "?";
-                  const displayName = shinySeen ? `${baseName} ✦` : baseName;
-                  const lore = LOBSTER_PALETTE_LORE[palette.id];
-                  const loreLine = seen ? lore.flavor : lore.hint;
-                  const visitedLine =
-                    seen && entry.firstSeenAt !== null
-                      ? t("quickSettings.appearance.lobsterdexFirstVisited", {
-                          name: baseName,
-                          date: new Date(entry.firstSeenAt).toLocaleDateString(),
-                        })
-                      : null;
-                  const ariaLabel = [displayName, loreLine, visitedLine]
-                    .filter((line): line is string => line !== null)
-                    .join("\n");
-                  return html`
-                    <openclaw-tooltip>
-                      <span
-                        class="lobsterdex__mini lobster-pet--palette-${palette.id} ${
-                          seen ? "" : "lobsterdex__mini--unseen"
-                        }"
-                        style=${lobsterLookStyle(look)}
-                        tabindex="0"
-                        role="img"
-                        aria-label=${ariaLabel}
-                      >
-                        ${renderLobsterSvg(look, { standalone: true })}
-                        ${
-                          shinySeen
-                            ? html`<span class="lobsterdex__mini-star" aria-hidden="true">✦</span>`
-                            : nothing
-                        }
-                      </span>
-                      <span slot="content" class="lobsterdex__tooltip">
-                        <strong>${displayName}</strong>
-                        <span>${loreLine}</span>
-                        ${visitedLine ? html`<span>${visitedLine}</span>` : nothing}
-                      </span>
-                    </openclaw-tooltip>
-                  `;
-                })}
-              </div>
-              ${
-                props.lobsterdexHref
-                  ? html`<a
-                      class="btn btn--sm lobsterdex__open"
-                      href=${props.lobsterdexHref}
-                      @click=${(event: MouseEvent) => {
-                        if (!shouldHandleNavigationClick(event)) {
-                          return;
-                        }
-                        event.preventDefault();
-                        props.onOpenLobsterdex?.();
-                      }}
-                      >${t("quickSettings.appearance.lobsterdexOpen")}</a
-                    >`
-                  : nothing
-              }
-            </div>
-          `,
         })}
       </div>
     </section>

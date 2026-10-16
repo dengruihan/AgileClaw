@@ -39,7 +39,6 @@ type PluginManifestRecordStatic = Omit<
 
 export type PluginThemeArtwork = {
   hats?: Record<string, { svg: string }>;
-  critters?: Record<string, { svg: string; title?: string; crossMs?: number }>;
 };
 
 export type PluginManifestRecord = PluginManifestRecordStatic & {

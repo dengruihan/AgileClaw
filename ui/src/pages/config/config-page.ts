@@ -657,7 +657,7 @@ export class ConfigPage extends OpenClawLightDomElement {
       : patchSettings(patch);
     applyTextScale(this.settings.textScale);
     // theme.refresh() also republishes non-theme appearance prefs (text
-    // scale, lobster pet visits/sounds) to app-host subscribers.
+    // scale) to app-host subscribers.
     this.context.theme.refresh();
   }
 
@@ -1006,15 +1006,9 @@ export class ConfigPage extends OpenClawLightDomElement {
             }
           });
       },
-      lobsterPetVisits: this.settings.lobsterPetVisits ?? UI_APPEARANCE_DEFAULTS.lobsterPetVisits,
-      setLobsterPetVisits: (enabled) => this.applySettings({ lobsterPetVisits: enabled }),
       sessionDeleteConfirm:
         this.settings.sessionDeleteConfirm ?? UI_APPEARANCE_DEFAULTS.sessionDeleteConfirm,
       setSessionDeleteConfirm: (enabled) => this.applySettings({ sessionDeleteConfirm: enabled }),
-      lobsterPetSounds: this.settings.lobsterPetSounds ?? UI_APPEARANCE_DEFAULTS.lobsterPetSounds,
-      setLobsterPetSounds: (enabled) => this.applySettings({ lobsterPetSounds: enabled }),
-      lobsterdexHref: pathForRoute("lobsterdex", this.context.basePath),
-      onOpenLobsterdex: () => this.context.navigate("lobsterdex"),
       chatSendShortcut: normalizeChatSendShortcut(this.settings.chatSendShortcut),
       chatSendShortcutOverridden: chatSendShortcutPref.overridden,
       chatSendShortcutProvenance: chatSendShortcutPref.provenance,

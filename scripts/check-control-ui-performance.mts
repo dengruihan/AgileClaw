@@ -75,7 +75,7 @@ const controlUiPerformanceBudgets = {
   // operator decision 2026-08-25 rejected boot splitting due to precedence risk.
   // 53.0 KiB was exhausted by organic growth (main sat at 99.94% by 2026-08-29);
   // bumped to 53.5 KiB with operator approval on PR #132054. 2026-09-02: side
-  // panel, workboard chip, and Lobsterdex styles moved to their lazy owners,
+  // panel and workboard chip styles moved to their lazy owners,
   // measured boot sheet 52,337 B; ceiling lowered to keep ~1 KiB headroom.
   largestCssGzipBytes: 53_400,
 } satisfies Record<string, number>;

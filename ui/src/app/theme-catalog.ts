@@ -53,7 +53,6 @@ export function createThemeCatalog(gateway: ApplicationGateway, onChange: () => 
     try {
       definition = normalizeThemeDefinition(result.definition, {
         hatIds: Object.keys(artwork?.hats ?? {}),
-        critterIds: Object.keys(artwork?.critters ?? {}),
       });
     } catch {
       return;

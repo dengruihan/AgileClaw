@@ -15,9 +15,6 @@ export function collectPluginThemeAssetPaths(manifest: Record<string, unknown>):
     for (const source of Object.values(theme.hats ?? {})) {
       paths.add(source);
     }
-    for (const critter of Object.values(theme.critters ?? {})) {
-      paths.add(critter.source);
-    }
   }
   return [...paths];
 }
