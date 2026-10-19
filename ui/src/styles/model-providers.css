@@ -934,6 +934,7 @@ openclaw-model-account-usage,
 
 .provider-manager__thinking-add {
   align-self: flex-start;
+  max-width: 200px;
 }
 
 .provider-manager__key,
