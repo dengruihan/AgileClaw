@@ -1,4 +1,7 @@
-import { listMappedModelThinkingLevels } from "@openclaw/model-catalog-core/model-catalog-types";
+import {
+  listMappedModelThinkingLevels,
+  listMapDeclaredThinkingLevels,
+} from "@openclaw/model-catalog-core/model-catalog-types";
 // Thinking/reasoning level catalog helpers for auto-reply model controls.
 import { normalizeProviderId } from "@openclaw/model-catalog-core/provider-id";
 import {
@@ -269,9 +272,14 @@ function resolveModelThinkingProfile(params: ThinkingProfileParams): ResolvedThi
   const runtime = normalizeOptionalLowercaseString(params.agentRuntime);
   const mappedLevels =
     !runtime || runtime === "auto" || runtime === "openclaw"
-      ? listMappedModelThinkingLevels(context).filter(
-          (level) => level === "xhigh" || level === "max",
-        )
+      ? [
+          ...listMappedModelThinkingLevels(context).filter(
+            (level) => level === "xhigh" || level === "max",
+          ),
+          // An authored thinkingLevelMap declares the levels this model
+          // actually offers on transports that send its values verbatim.
+          ...listMapDeclaredThinkingLevels(context),
+        ]
       : [];
   if (
     pluginProfile &&

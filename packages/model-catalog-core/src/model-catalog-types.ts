@@ -152,6 +152,32 @@ export function listMappedModelThinkingLevels(model: {
   return MODEL_CATALOG_THINKING_LEVELS.filter((level) => mapped.has(level));
 }
 
+/**
+ * Advanced levels an authored thinkingLevelMap declares for transports that
+ * send its values verbatim (anthropic-messages output_config.effort and the
+ * non-binary OpenAI family). Binary toggle formats and transports that ignore
+ * mapped strings stay governed by their own contracts.
+ */
+export function listMapDeclaredThinkingLevels(model: {
+  api?: string | null;
+  compat?: unknown;
+  thinkingLevelMap?: unknown;
+}): ("xhigh" | "max")[] {
+  const compat = asOptionalRecord(model.compat);
+  const format = compat?.thinkingFormat;
+  const binaryOnly = format === "qwen" || format === "qwen-chat-template" || format === "zai";
+  const openaiApi = resolveOpenAIThinkingApi(model.api);
+  const verbatimTransport = model.api === "anthropic-messages" || (openaiApi && !binaryOnly);
+  if (!verbatimTransport) {
+    return [];
+  }
+  const map = asOptionalRecord(model.thinkingLevelMap);
+  return (["xhigh", "max"] as const).filter((level) => {
+    const value = map?.[level];
+    return typeof value === "string" ? value.trim() !== "" : false;
+  });
+}
+
 /** Discovery lifecycle for a provider catalog. */
 export type ModelCatalogDiscovery = "static" | "refreshable" | "runtime";
 /** Availability state for a model. */
