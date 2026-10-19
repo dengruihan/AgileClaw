@@ -41,27 +41,23 @@ it.each([
   [
     "?section=models&subsection=providers&provider=local.one&view=settings",
     "#settings-model-providers",
-    "Settings",
   ],
   [
     "?section=models&subsection=providers&provider=local.one&view=models",
     "#settings-model-providers",
-    "Models",
   ],
-  ["?section=models.providers.local.one.models", "", "Models"],
+  ["?section=models.providers.local.one.models", ""],
   [
     "?section=models",
     `#${configFieldId(["models", "providers", "local.one", "baseUrl"], "description")}`,
-    "Settings",
   ],
   [
     "?section=models",
     `#${configFieldId(["models", "providers", "local.one", "models", 0, "name"], "description")}`,
-    "Models",
   ],
 ])(
   "opens a provider link once and keeps it closed after revalidation: %s %s",
-  async (search, hash, title) => {
+  async (search, hash) => {
     const { context, runtimeConfig, notifyRuntimeConfig } = createHarness("writer");
     await runtimeConfig.ensureLoaded();
     runtimeConfig.state.configForm = {
@@ -75,11 +71,14 @@ it.each([
     };
     page.routeData = routeData;
     notifyRuntimeConfig();
+    // The merged provider dialog shows connection settings and models in one
+    // view, so every provider deep link opens the same titled editor.
     await waitForFast(() =>
       expect(page.querySelector(".provider-manager__header h2")?.textContent?.trim()).toBe(
-        `Local.one — ${title}`,
+        "Local.one",
       ),
     );
+    expect(page.querySelector(".provider-manager__models-section")).not.toBeNull();
     expect(
       page.querySelector<HTMLDetailsElement>("openclaw-model-catalog-settings > details")?.open,
     ).toBe(false);
