@@ -252,7 +252,7 @@ describe("provider manager dialog forms", () => {
     });
   });
 
-  it("passes thinking level values through without freezing catalog maps", async () => {
+  it("builds thinking levels from an empty add-based list and passes values through", async () => {
     const { manager, save, patches, input, setInput } = await openDialog(
       {
         providers: {
@@ -292,61 +292,100 @@ describe("provider manager dialog forms", () => {
         string,
         unknown
       >[];
-    // Editing one level materializes the effective map: catalog values ride
-    // along, the typed value passes through trimmed, and a null level stays
-    // hidden instead of being reset to its name.
+    const addLevel = () =>
+      [...manager.querySelectorAll<HTMLButtonElement>("button")].find(
+        (candidate) => candidate.textContent?.trim() === "Add level",
+      )!;
+    const rowLevel = (level: string) => manager.querySelector(`[data-thinking-level="${level}"]`);
+    const moveLevel = (from: string, to: string) => {
+      const select = rowLevel(from)!.querySelector<HTMLSelectElement>("select")!;
+      select.value = to;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    const removeLevel = (level: string) =>
+      rowLevel(level)!.querySelector<HTMLButtonElement>("button")!.click();
+
+    // A new model starts with an empty list; added rows choose their slot and
+    // value, and every level not added is hidden in the saved map.
+    const add = [...manager.querySelectorAll<HTMLButtonElement>("button")].find(
+      (candidate) => candidate.textContent?.trim() === "Add model",
+    )!;
+    add!.click();
+    await waitForFast(() => expect(input("name")).not.toBeNull());
+    expect(rowLevel("off")).toBeNull();
+    for (const level of ["off", "minimal", "low"]) {
+      addLevel().click();
+      await waitForFast(() => expect(rowLevel(level)).not.toBeNull());
+    }
+    moveLevel("minimal", "high");
+    await waitForFast(() => expect(rowLevel("high")).not.toBeNull());
+    setInput("id", "fresh");
+    setInput("name", "Fresh");
+    setInput("thinking-off", "  disabled  ");
+    setInput("thinking-high", "high");
+    await save();
+    expect(savedRows().find((row) => row.id === "fresh")?.thinkingLevelMap).toEqual({
+      off: "disabled",
+      minimal: null,
+      low: "low",
+      medium: null,
+      high: "high",
+      xhigh: null,
+      max: null,
+    });
+    // Prefilled catalog rows list only their offered levels; removing and
+    // adding rows re-materializes the map with hidden slots.
     editButton(manager, "discovered").click();
     await waitForFast(() => expect(input("name")).not.toBeNull());
-    expect(input("thinking-low").value).toBe("cat-low");
-    // A null-mapped level renders blank with a distinct placeholder so a
-    // hidden level is visible instead of looking unmapped.
-    expect(input("thinking-max").value).toBe("");
-    expect(input("thinking-max").placeholder).toBe("Hidden from the model picker");
-    setInput("thinking-high", "  user-high  ");
+    expect(rowLevel("low")).not.toBeNull();
+    expect(rowLevel("high")).not.toBeNull();
+    expect(rowLevel("max")).toBeNull();
+    removeLevel("high");
+    await waitForFast(() => expect(rowLevel("high")).toBeNull());
+    addLevel().click();
+    await waitForFast(() => expect(rowLevel("off")).not.toBeNull());
+    setInput("thinking-off", "disabled");
     await save();
     expect(savedRows().find((row) => row.id === "discovered")?.thinkingLevelMap).toEqual({
+      off: "disabled",
+      minimal: null,
       low: "cat-low",
-      high: "user-high",
+      medium: null,
+      high: null,
+      xhigh: null,
       max: null,
     });
     // Editing a catalog row without touching its levels keeps the map
     // inherited: nothing is frozen into the authored entry.
     editButton(manager, "quiet").click();
     await waitForFast(() => expect(input("name")).not.toBeNull());
-    expect(input("thinking-low").value).toBe("quiet-low");
     setInput("name", "Quiet renamed");
     await save();
     expect(savedRows().find((row) => row.id === "quiet")).not.toHaveProperty("thinkingLevelMap");
     // An authored map rides along unchanged through an unrelated edit.
     editButton(manager, "authored").click();
     await waitForFast(() => expect(input("name")).not.toBeNull());
-    expect(input("thinking-high").value).toBe("auth-high");
     setInput("name", "Authored renamed");
     await save();
     expect(savedRows().find((row) => row.id === "authored")?.thinkingLevelMap).toEqual({
       high: "auth-high",
     });
-    // A configured row without its own map still prefills the effective
-    // catalog map; editing a level materializes it whole, nulls included.
+    // A configured row without its own map prefills the effective catalog
+    // rows; editing a value materializes the whole map, nulls included.
     editButton(manager, "renamed-only").click();
     await waitForFast(() => expect(input("name")).not.toBeNull());
-    expect(input("thinking-high").value).toBe("rename-high");
     setInput("thinking-high", "renamed-high");
     setInput("name", "Renamed Only again");
     await save();
     expect(savedRows().find((row) => row.id === "renamed-only")?.thinkingLevelMap).toEqual({
+      off: null,
+      minimal: null,
+      low: null,
+      medium: null,
       high: "renamed-high",
       xhigh: null,
+      max: null,
     });
-    // Clearing the last mapped level writes an explicit empty override so the
-    // catalog value does not silently come back.
-    editButton(manager, "discovered").click();
-    await waitForFast(() => expect(input("name")).not.toBeNull());
-    for (const level of ["low", "high", "max"]) {
-      setInput(`thinking-${level}`, "");
-    }
-    await save();
-    expect(savedRows().find((row) => row.id === "discovered")?.thinkingLevelMap).toEqual({});
   });
 
   it("saves a new model with the text-only default input and the models-add marker", async () => {

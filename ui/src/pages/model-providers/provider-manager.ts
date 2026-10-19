@@ -334,19 +334,12 @@ export class ProviderManager extends OpenClawLightDomElement {
       lockId: this.originalModelId !== undefined,
       onCostField: (key, value) => this.setCostField(key, value),
       onField: (patch) => this.setModelFields(patch),
-      onThinkingField: (level, value) => this.setThinkingField(level, value),
+      onThinkingMap: (map) => this.setModelFields({ thinkingLevelMap: map }),
+      onThinkingValue: (level, value) => this.setThinkingValue(level, value),
     });
   }
 
-  private setCostField(key: "input" | "output" | "cacheRead" | "cacheWrite", value: string) {
-    if (!this.modelDraft) {
-      return;
-    }
-    const cost = { ...(isRecord(this.modelDraft.cost) ? this.modelDraft.cost : {}), [key]: value };
-    this.setModelFields({ cost });
-  }
-
-  private setThinkingField(
+  private setThinkingValue(
     level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
     value: string,
   ) {
@@ -358,6 +351,14 @@ export class ProviderManager extends OpenClawLightDomElement {
       [level]: value,
     };
     this.setModelFields({ thinkingLevelMap: map });
+  }
+
+  private setCostField(key: "input" | "output" | "cacheRead" | "cacheWrite", value: string) {
+    if (!this.modelDraft) {
+      return;
+    }
+    const cost = { ...(isRecord(this.modelDraft.cost) ? this.modelDraft.cost : {}), [key]: value };
+    this.setModelFields({ cost });
   }
 
   private renderModels() {

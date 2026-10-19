@@ -21,9 +21,16 @@ export const MODEL_THINKING_LEVELS = [
 
 export type ModelThinkingLevel = (typeof MODEL_THINKING_LEVELS)[number];
 
-/** Raw input value for a thinking level; a null level stays blank but hidden. */
-function thinkingInputValue(value: unknown): string {
-  return value === undefined || value === null ? "" : String(value);
+/** Levels the draft lists as offered; null levels stay hidden. */
+function thinkingRows(map: Record<string, unknown>): ModelThinkingLevel[] {
+  return MODEL_THINKING_LEVELS.filter((level) => map[level] !== null && map[level] !== undefined);
+}
+
+/** Compare maps by their offered rows only; null (hidden) keys are equal. */
+function sameThinkingRows(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
+  const rows = (map: Record<string, unknown>) =>
+    JSON.stringify(Object.fromEntries(Object.entries(map).filter(([, value]) => value !== null)));
+  return rows(a) === rows(b);
 }
 
 /** Raw input value for a number field; blank means inherit or omit. */
@@ -104,23 +111,22 @@ export function modelConfigEntry(
     delete entry.cost;
   }
   if (isRecord(draft.thinkingLevelMap)) {
-    const userEdited =
-      original?.thinkingLevelMap === undefined &&
-      JSON.stringify(draft.thinkingLevelMap) !== JSON.stringify(thinkingPrefill);
-    if (original?.thinkingLevelMap !== undefined || userEdited) {
+    const baseline = isRecord(original?.thinkingLevelMap)
+      ? original.thinkingLevelMap
+      : (thinkingPrefill ?? {});
+    const userEdited = !sameThinkingRows(draft.thinkingLevelMap, baseline);
+    if (userEdited) {
+      // Materialize the explicit list the user built: added levels send the
+      // typed value (blank falls back to the level's own name) and every
+      // other canonical level is hidden from the picker.
       const map: Record<string, unknown> = {};
-      for (const [level, value] of Object.entries(draft.thinkingLevelMap)) {
-        if (value === null) {
-          // A null level is hidden from the picker, not reset to its name.
-          map[level] = null;
-        } else if (typeof value === "string" && value.trim() !== "") {
-          map[level] = value.trim();
-        }
+      for (const level of MODEL_THINKING_LEVELS) {
+        const value = draft.thinkingLevelMap[level];
+        map[level] = value === null || value === undefined ? null : String(value).trim() || level;
       }
-      // A fully cleared map stays as an explicit empty override: falling back
-      // to the catalog map would silently restore what the user just erased.
       entry.thinkingLevelMap = map;
-    } else {
+    } else if (!isRecord(original?.thinkingLevelMap)) {
+      // Untouched rows keep inheriting the catalog map instead of freezing.
       delete entry.thinkingLevelMap;
     }
   } else {
@@ -137,9 +143,13 @@ export function providerModelForm(params: {
   lockId: boolean;
   onCostField: (key: (typeof MODEL_COST_FIELDS)[number], value: string) => void;
   onField: (patch: Record<string, unknown>) => void;
-  onThinkingField: (level: ModelThinkingLevel, value: string) => void;
+  /** Structural row add/remove/move reports the resulting level map. */
+  onThinkingMap: (map: Record<string, unknown>) => void;
+  /** Typing in one row's value merges into the live map without clobbering
+   * concurrent edits to other rows. */
+  onThinkingValue: (level: ModelThinkingLevel, value: string) => void;
 }) {
-  const { disabled, draft, lockId, onCostField, onField, onThinkingField } = params;
+  const { disabled, draft, lockId, onCostField, onField, onThinkingMap, onThinkingValue } = params;
   const cost = isRecord(draft.cost) ? draft.cost : {};
   const input = Array.isArray(draft.input) ? draft.input.map(String) : [];
   return html` <div class="provider-manager__fields">
@@ -223,26 +233,86 @@ export function providerModelForm(params: {
           <p class="muted provider-manager__thinking-help">
             ${t("modelProviders.manager.thinkingLevels.help")}
           </p>
-          ${MODEL_THINKING_LEVELS.map((level) => {
-            const levelValue = isRecord(draft.thinkingLevelMap)
-              ? draft.thinkingLevelMap[level]
-              : undefined;
-            return html`<label class="field"
-              ><span>${t(`modelProviders.manager.thinkingLevels.${level}`)}</span
-              ><input
-                name="thinking-${level}"
-                .value=${thinkingInputValue(levelValue)}
-                placeholder=${t(
-                  levelValue === null
-                    ? "modelProviders.manager.thinkingLevels.hidden"
-                    : "modelProviders.manager.thinkingLevels.placeholder",
-                )}
-                ?disabled=${disabled}
-                @input=${(event: Event) => {
-                  onThinkingField(level, (event.target as HTMLInputElement).value);
+          ${(() => {
+            const map = isRecord(draft.thinkingLevelMap) ? draft.thinkingLevelMap : {};
+            const rows = thinkingRows(map);
+            const unused = MODEL_THINKING_LEVELS.filter((level) => !rows.includes(level));
+            const levelLabel = (level: ModelThinkingLevel) =>
+              t(`modelProviders.manager.thinkingLevels.${level}`);
+            const replaceMap = (next: Record<string, unknown>) => onThinkingMap(next);
+            return html`
+              ${rows.map((level) => {
+                const value = map[level];
+                return html`<div
+                  class="provider-manager__thinking-row"
+                  data-thinking-level=${level}
+                >
+                  <select
+                    class="settings-select"
+                    aria-label=${t("modelProviders.manager.thinkingLevels.levelLabel")}
+                    .value=${level}
+                    ?disabled=${disabled}
+                    @change=${(event: Event) => {
+                      const to = (event.target as HTMLSelectElement).value as ModelThinkingLevel;
+                      const { [level]: moved, ...rest } = map;
+                      replaceMap({ ...rest, [to]: moved });
+                    }}
+                  >
+                    ${[...unused, level]
+                      .toSorted(
+                        (a, b) =>
+                          MODEL_THINKING_LEVELS.indexOf(a) - MODEL_THINKING_LEVELS.indexOf(b),
+                      )
+                      .map(
+                        (option) =>
+                          html`<option value=${option} ?selected=${option === level}>
+                            ${levelLabel(option)}
+                          </option>`,
+                      )}
+                  </select>
+                  <input
+                    name="thinking-${level}"
+                    .value=${String(value ?? "")}
+                    placeholder=${t("modelProviders.manager.thinkingLevels.placeholder")}
+                    aria-label=${t("modelProviders.manager.thinkingLevels.valueLabel", {
+                      level: levelLabel(level),
+                    })}
+                    ?disabled=${disabled}
+                    @input=${(event: Event) => {
+                      onThinkingValue(level, (event.target as HTMLInputElement).value);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    class="btn btn--sm"
+                    aria-label=${t("modelProviders.manager.thinkingLevels.removeLevel", {
+                      level: levelLabel(level),
+                    })}
+                    ?disabled=${disabled}
+                    @click=${() => {
+                      const { [level]: _removed, ...rest } = map;
+                      replaceMap(rest);
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>`;
+              })}
+              <button
+                type="button"
+                class="btn btn--sm provider-manager__thinking-add"
+                ?disabled=${disabled || unused.length === 0}
+                @click=${() => {
+                  const level = unused[0];
+                  if (level) {
+                    replaceMap({ ...map, [level]: "" });
+                  }
                 }}
-            /></label>`;
-          })}
+              >
+                ${t("modelProviders.manager.thinkingLevels.addLevel")}
+              </button>
+            `;
+          })()}
         </fieldset>
         <fieldset class="provider-manager__cost">
           <legend>${t("modelProviders.manager.costTitle")}</legend>
