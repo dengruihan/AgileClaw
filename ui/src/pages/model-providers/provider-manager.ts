@@ -62,6 +62,8 @@ export class ProviderManager extends OpenClawLightDomElement {
   private original: Record<string, unknown> = {};
   private originalModelId: string | undefined;
   private originalModel: Record<string, unknown> | undefined;
+  /** Catalog thinking map the current model draft prefilled from, if any. */
+  private modelThinkingPrefill: Record<string, unknown> | undefined;
   private generation = 0;
   private touched = new Set<string>();
   private listScrollTop = 0;
@@ -196,11 +198,24 @@ export class ProviderManager extends OpenClawLightDomElement {
     const configured =
       model && providerModels(this.config, this.providerId).find((row) => row.id === model.id);
     this.originalModel = configured ? structuredClone(configured) : undefined;
-    this.modelDraft = configured
+    // Every row prefills the thinking map it effectively runs with — its own
+    // authored map, else the catalog's — so the form shows exactly what the
+    // provider would receive per level before and after an override.
+    const catalogMap = model
+      ? this.catalog.find((row) => row.id === model.id)?.thinkingLevelMap
+      : undefined;
+    const catalogPrefill = isRecord(catalogMap) ? structuredClone(catalogMap) : undefined;
+    const draft: Record<string, unknown> = configured
       ? structuredClone(configured)
       : model
         ? { id: model.id, name: model.name }
         : { id: "", name: "", input: ["text"] };
+    const authoredMap = isRecord(draft.thinkingLevelMap);
+    this.modelThinkingPrefill = authoredMap ? undefined : catalogPrefill;
+    if (!authoredMap && catalogPrefill) {
+      draft.thinkingLevelMap = catalogPrefill;
+    }
+    this.modelDraft = draft;
     this.originalModelId = model && typeof model.id === "string" ? model.id : undefined;
     this.error = this.notice = null;
   }
@@ -218,7 +233,7 @@ export class ProviderManager extends OpenClawLightDomElement {
     if (!this.modelDraft || !this.querySelector<HTMLFormElement>("form")?.reportValidity()) {
       return;
     }
-    const model = modelConfigEntry(this.modelDraft, this.originalModel);
+    const model = modelConfigEntry(this.modelDraft, this.originalModel, this.modelThinkingPrefill);
     if (
       !model.id ||
       !model.name ||
@@ -319,6 +334,7 @@ export class ProviderManager extends OpenClawLightDomElement {
       lockId: this.originalModelId !== undefined,
       onCostField: (key, value) => this.setCostField(key, value),
       onField: (patch) => this.setModelFields(patch),
+      onThinkingField: (level, value) => this.setThinkingField(level, value),
     });
   }
 
@@ -328,6 +344,20 @@ export class ProviderManager extends OpenClawLightDomElement {
     }
     const cost = { ...(isRecord(this.modelDraft.cost) ? this.modelDraft.cost : {}), [key]: value };
     this.setModelFields({ cost });
+  }
+
+  private setThinkingField(
+    level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
+    value: string,
+  ) {
+    if (!this.modelDraft) {
+      return;
+    }
+    const map = {
+      ...(isRecord(this.modelDraft.thinkingLevelMap) ? this.modelDraft.thinkingLevelMap : {}),
+      [level]: value,
+    };
+    this.setModelFields({ thinkingLevelMap: map });
   }
 
   private renderModels() {

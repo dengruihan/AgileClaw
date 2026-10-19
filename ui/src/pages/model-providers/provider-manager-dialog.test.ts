@@ -252,6 +252,103 @@ describe("provider manager dialog forms", () => {
     });
   });
 
+  it("passes thinking level values through without freezing catalog maps", async () => {
+    const { manager, save, patches, input, setInput } = await openDialog(
+      {
+        providers: {
+          "custom-lab": {
+            baseUrl: "https://example.test/v1",
+            models: [
+              { id: "authored", name: "Authored", thinkingLevelMap: { high: "auth-high" } },
+              { id: "renamed-only", name: "Renamed Only" },
+            ],
+          },
+        },
+        catalog: [
+          {
+            id: "discovered",
+            name: "Discovered",
+            provider: "custom-lab",
+            thinkingLevelMap: { low: "cat-low", high: "cat-high", max: null },
+          },
+          {
+            id: "quiet",
+            name: "Quiet",
+            provider: "custom-lab",
+            thinkingLevelMap: { low: "quiet-low" },
+          },
+          {
+            id: "renamed-only",
+            name: "Renamed Only",
+            provider: "custom-lab",
+            thinkingLevelMap: { high: "rename-high", xhigh: null },
+          },
+        ],
+      },
+      "custom-lab",
+    );
+    const savedRows = () =>
+      JSON.parse(String(patches.at(-1)!.raw)).models.providers["custom-lab"].models as Record<
+        string,
+        unknown
+      >[];
+    // Editing one level materializes the effective map: catalog values ride
+    // along, the typed value passes through trimmed, and a null level stays
+    // hidden instead of being reset to its name.
+    editButton(manager, "discovered").click();
+    await waitForFast(() => expect(input("name")).not.toBeNull());
+    expect(input("thinking-low").value).toBe("cat-low");
+    // A null-mapped level renders blank with a distinct placeholder so a
+    // hidden level is visible instead of looking unmapped.
+    expect(input("thinking-max").value).toBe("");
+    expect(input("thinking-max").placeholder).toBe("Hidden from the model picker");
+    setInput("thinking-high", "  user-high  ");
+    await save();
+    expect(savedRows().find((row) => row.id === "discovered")?.thinkingLevelMap).toEqual({
+      low: "cat-low",
+      high: "user-high",
+      max: null,
+    });
+    // Editing a catalog row without touching its levels keeps the map
+    // inherited: nothing is frozen into the authored entry.
+    editButton(manager, "quiet").click();
+    await waitForFast(() => expect(input("name")).not.toBeNull());
+    expect(input("thinking-low").value).toBe("quiet-low");
+    setInput("name", "Quiet renamed");
+    await save();
+    expect(savedRows().find((row) => row.id === "quiet")).not.toHaveProperty("thinkingLevelMap");
+    // An authored map rides along unchanged through an unrelated edit.
+    editButton(manager, "authored").click();
+    await waitForFast(() => expect(input("name")).not.toBeNull());
+    expect(input("thinking-high").value).toBe("auth-high");
+    setInput("name", "Authored renamed");
+    await save();
+    expect(savedRows().find((row) => row.id === "authored")?.thinkingLevelMap).toEqual({
+      high: "auth-high",
+    });
+    // A configured row without its own map still prefills the effective
+    // catalog map; editing a level materializes it whole, nulls included.
+    editButton(manager, "renamed-only").click();
+    await waitForFast(() => expect(input("name")).not.toBeNull());
+    expect(input("thinking-high").value).toBe("rename-high");
+    setInput("thinking-high", "renamed-high");
+    setInput("name", "Renamed Only again");
+    await save();
+    expect(savedRows().find((row) => row.id === "renamed-only")?.thinkingLevelMap).toEqual({
+      high: "renamed-high",
+      xhigh: null,
+    });
+    // Clearing the last mapped level writes an explicit empty override so the
+    // catalog value does not silently come back.
+    editButton(manager, "discovered").click();
+    await waitForFast(() => expect(input("name")).not.toBeNull());
+    for (const level of ["low", "high", "max"]) {
+      setInput(`thinking-${level}`, "");
+    }
+    await save();
+    expect(savedRows().find((row) => row.id === "discovered")?.thinkingLevelMap).toEqual({});
+  });
+
   it("saves a new model with the text-only default input and the models-add marker", async () => {
     const { manager, input, setInput, save, patches } = await openDialog(
       {
