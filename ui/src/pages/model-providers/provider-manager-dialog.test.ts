@@ -292,33 +292,27 @@ describe("provider manager dialog forms", () => {
         string,
         unknown
       >[];
-    const addLevel = () =>
-      [...manager.querySelectorAll<HTMLButtonElement>("button")].find(
-        (candidate) => candidate.textContent?.trim() === "Add level",
-      )!;
-    const rowLevel = (level: string) => manager.querySelector(`[data-thinking-level="${level}"]`);
-    const moveLevel = (from: string, to: string) => {
-      const select = rowLevel(from)!.querySelector<HTMLSelectElement>("select")!;
-      select.value = to;
+    const addLevel = (level: string) => {
+      const select = manager.querySelector<HTMLSelectElement>(".provider-manager__thinking-add")!;
+      select.value = level;
       select.dispatchEvent(new Event("change", { bubbles: true }));
     };
+    const rowLevel = (level: string) => manager.querySelector(`[data-thinking-level="${level}"]`);
     const removeLevel = (level: string) =>
       rowLevel(level)!.querySelector<HTMLButtonElement>("button")!.click();
 
-    // A new model starts with an empty list; added rows choose their slot and
-    // value, and every level not added is hidden in the saved map.
+    // A new model starts with an empty list; the add dropdown offers the
+    // exact levels to append, so off/low/high needs no reshuffling.
     const add = [...manager.querySelectorAll<HTMLButtonElement>("button")].find(
       (candidate) => candidate.textContent?.trim() === "Add model",
     )!;
     add!.click();
     await waitForFast(() => expect(input("name")).not.toBeNull());
     expect(rowLevel("off")).toBeNull();
-    for (const level of ["off", "minimal", "low"]) {
-      addLevel().click();
+    for (const level of ["off", "low", "high"]) {
+      addLevel(level);
       await waitForFast(() => expect(rowLevel(level)).not.toBeNull());
     }
-    moveLevel("minimal", "high");
-    await waitForFast(() => expect(rowLevel("high")).not.toBeNull());
     setInput("id", "fresh");
     setInput("name", "Fresh");
     setInput("thinking-off", "  disabled  ");
@@ -342,7 +336,7 @@ describe("provider manager dialog forms", () => {
     expect(rowLevel("max")).toBeNull();
     removeLevel("high");
     await waitForFast(() => expect(rowLevel("high")).toBeNull());
-    addLevel().click();
+    addLevel("off");
     await waitForFast(() => expect(rowLevel("off")).not.toBeNull());
     setInput("thinking-off", "disabled");
     await save();

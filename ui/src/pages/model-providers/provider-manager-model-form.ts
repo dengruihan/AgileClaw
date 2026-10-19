@@ -298,19 +298,24 @@ export function providerModelForm(params: {
                   </button>
                 </div>`;
               })}
-              <button
-                type="button"
-                class="btn btn--sm provider-manager__thinking-add"
+              <select
+                class="settings-select provider-manager__thinking-add"
+                aria-label=${t("modelProviders.manager.thinkingLevels.addLevel")}
                 ?disabled=${disabled || unused.length === 0}
-                @click=${() => {
-                  const level = unused[0];
-                  if (level) {
+                @change=${(event: Event) => {
+                  const select = event.target as HTMLSelectElement;
+                  const level = select.value as ModelThinkingLevel;
+                  if (MODEL_THINKING_LEVELS.includes(level)) {
                     replaceMap({ ...map, [level]: "" });
                   }
+                  select.value = "";
                 }}
               >
-                ${t("modelProviders.manager.thinkingLevels.addLevel")}
-              </button>
+                <option value="" selected disabled hidden>
+                  ${t("modelProviders.manager.thinkingLevels.addLevel")}
+                </option>
+                ${unused.map((level) => html`<option value=${level}>${levelLabel(level)}</option>`)}
+              </select>
             `;
           })()}
         </fieldset>
