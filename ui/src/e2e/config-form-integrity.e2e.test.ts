@@ -590,7 +590,7 @@ suite.define(() => {
         await openCustom();
         await manager.locator('input[name="providerId"]').fill("cancelled-provider");
         await manager
-          .getByRole("textbox", { name: "Model Provider Base URL", exact: true })
+          .getByRole("textbox", { name: "Base URL", exact: true })
           .fill("https://cancelled.example.test/v1");
         await manager.getByRole("button", { name: "Cancel", exact: true }).click();
         await manager.waitFor({ state: "hidden" });
@@ -600,7 +600,7 @@ suite.define(() => {
         await openCustom();
         const providerId = "custom-lab";
         await manager.locator('input[name="providerId"]').fill(providerId);
-        const url = manager.getByRole("textbox", { name: "Model Provider Base URL", exact: true });
+        const url = manager.getByRole("textbox", { name: "Base URL", exact: true });
         await url.fill("https://models.example.test/v1");
         await manager.locator('input[name="apiKey"]').fill("synthetic-provider-key");
         expect(await manager.locator('input[name="apiKey"]').getAttribute("type")).toBe("password");
@@ -671,6 +671,10 @@ suite.define(() => {
         });
         expect(await gateway.getRequests("config.patch")).toHaveLength(1);
         await gateway.resolveDeferred("models.authSetApiKey", {});
+        // Creation continues in place: the saved provider now shows its model
+        // list under the connection fields instead of closing the dialog.
+        await manager.getByRole("button", { name: "Add model", exact: true }).waitFor();
+        await manager.getByRole("button", { name: "Cancel", exact: true }).click();
         await manager.waitFor({ state: "hidden" });
         await page.locator('[data-provider-category="custom"]').click();
         await page.locator(`[data-provider-settings="${providerId}"]`).click();
@@ -715,8 +719,13 @@ suite.define(() => {
           results: [],
         });
         await expect
-          .poll(() => manager.getByRole("status").allTextContents())
-          .toContainEqual(expect.stringMatching(/^Connected\s*$/));
+          .poll(() =>
+            manager
+              .getByRole("status")
+              .allTextContents()
+              .then((texts) => texts.map((text) => text.trim())),
+          )
+          .toContainEqual("Connected");
         await manager.getByRole("button", { name: "Cancel", exact: true }).click();
         await manager.waitFor({ state: "hidden" });
         expect(await gateway.getRequests("config.patch")).toHaveLength(2);

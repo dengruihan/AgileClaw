@@ -1,6 +1,5 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { ModelsProbeResult } from "../../api/types.ts";
-import type { JsonSchema } from "../../components/config-form.ts";
 import { t } from "../../i18n/index.ts";
 import type { ModelProviderCard } from "./data.ts";
 
@@ -12,6 +11,7 @@ export type ProviderConnectionActions = {
   onProviderIdInput: (value: string) => void;
   onKeyInput: (value: string) => void;
   onToggleRevealKey: () => void;
+  onFieldInput: (key: "baseUrl" | "api", value: string) => void;
 };
 
 export type ProviderConnectionState = {
@@ -27,17 +27,41 @@ export type ProviderConnectionState = {
   providerCreated: boolean;
   providerId: string;
   revealKey: boolean;
-  schema: JsonSchema | null;
 };
+
+/** Provider protocol options shown with friendly labels; values are config `api` values. */
+export const PROVIDER_API_OPTIONS = [
+  "openai-completions",
+  "openai-responses",
+  "openai-chatgpt-responses",
+  "anthropic-messages",
+  "google-generative-ai",
+  "google-interactions",
+  "google-vertex",
+  "github-copilot",
+  "bedrock-converse-stream",
+  "ollama",
+  "pi-messages",
+  "azure-openai-responses",
+] as const;
+
+function apiOptionLabel(value: string): string {
+  return t(`modelProviders.manager.apiFormat.${value}`);
+}
 
 /** Connection form for one provider-manager dialog body. */
 export function providerConnectionFields(params: {
   actions: ProviderConnectionActions;
-  renderFields: (schema: JsonSchema, draft: Record<string, unknown>) => TemplateResult;
   state: ProviderConnectionState;
 }): TemplateResult {
   const { actions, state } = params;
   const { creating } = state;
+  // A custom provider has no catalog protocol to inherit, so creation starts
+  // from the OpenAI-compatible default the save path already applies.
+  const selectedApi =
+    creating && state.draft.api === undefined
+      ? "openai-completions"
+      : String(state.draft.api ?? "");
   return html` <p class="muted">
       ${t("modelProviders.manager.connectionScope", { agent: state.agentId })}
     </p>
@@ -57,7 +81,42 @@ export function providerConnectionFields(params: {
           /></label>`
         : nothing
     }
-    ${state.schema ? params.renderFields(state.schema, state.draft) : nothing}
+    <label class="field"
+      ><span>${t("modelProviders.manager.baseUrlLabel")}</span
+      ><input
+        name="baseUrl"
+        .value=${String(state.draft.baseUrl ?? "")}
+        ?required=${creating}
+        ?disabled=${state.disabled}
+        @input=${(event: Event) => {
+          actions.onFieldInput("baseUrl", (event.target as HTMLInputElement).value);
+        }}
+    /></label>
+    <label class="field"
+      ><span>${t("modelProviders.manager.apiFormatLabel")}</span
+      ><select
+        name="api"
+        class="settings-select"
+        ?disabled=${state.disabled}
+        @change=${(event: Event) => {
+          actions.onFieldInput("api", (event.target as HTMLSelectElement).value);
+        }}
+      >
+        ${
+          creating
+            ? nothing
+            : html`<option value="" ?selected=${selectedApi === ""}>
+                ${t("modelProviders.manager.apiFormatDefault")}
+              </option>`
+        }
+        ${PROVIDER_API_OPTIONS.map(
+          (value) =>
+            html`<option value=${value} ?selected=${selectedApi === value}>
+              ${apiOptionLabel(value)}
+            </option>`,
+        )}
+      </select></label
+    >
     ${
       state.card?.apiKeySupported === false && !creating
         ? html`<button
@@ -130,6 +189,8 @@ export function providerConnectionFields(params: {
                   </p>`
                 : nothing
             }`
-        : html`<p class="muted">${t("modelProviders.manager.addModelsAfterSave")}</p>`
+        : state.providerCreated
+          ? nothing
+          : html`<p class="muted">${t("modelProviders.manager.addModelsAfterSave")}</p>`
     }`;
 }

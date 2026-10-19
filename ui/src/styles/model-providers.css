@@ -866,6 +866,43 @@ openclaw-model-account-usage,
   font-weight: 600;
 }
 
+.provider-manager__models-section {
+  margin-block-start: 24px;
+  padding-block-start: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.provider-manager__models-section h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.provider-manager__toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.provider-manager__toggle input {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.provider-manager__cost {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.provider-manager__cost legend {
+  grid-column: 1 / -1;
+  font-weight: 600;
+  padding: 0;
+}
+
 .provider-manager__key,
 .provider-manager__actions {
   display: flex;
