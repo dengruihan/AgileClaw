@@ -888,8 +888,7 @@ openclaw-model-account-usage,
   flex-shrink: 0;
 }
 
-.provider-manager__cost,
-.provider-manager__thinking {
+.provider-manager__cost {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px 16px;
@@ -898,16 +897,43 @@ openclaw-model-account-usage,
   border: 0;
 }
 
-.provider-manager__cost legend,
-.provider-manager__thinking legend {
+.provider-manager__cost legend {
   grid-column: 1 / -1;
   font-weight: 600;
   padding: 0;
 }
 
-.provider-manager__thinking-help {
-  grid-column: 1 / -1;
+.provider-manager__thinking {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.provider-manager__thinking legend {
+  font-weight: 600;
+  padding: 0;
+}
+
+.provider-manager__thinking-help {
+  margin: 0;
+}
+
+.provider-manager__thinking-row {
+  display: grid;
+  grid-template-columns: minmax(0, 180px) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.provider-manager__thinking-row input {
+  min-width: 0;
+}
+
+.provider-manager__thinking-add {
+  align-self: flex-start;
 }
 
 .provider-manager__key,
