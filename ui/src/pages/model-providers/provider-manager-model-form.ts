@@ -8,6 +8,24 @@ const MODEL_INPUT_TYPES = ["text", "image", "audio", "video", "document"] as con
 
 const MODEL_COST_FIELDS = ["input", "output", "cacheRead", "cacheWrite"] as const;
 
+/** Canonical thinking levels a model entry can map to provider effort values. */
+export const MODEL_THINKING_LEVELS = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
+
+export type ModelThinkingLevel = (typeof MODEL_THINKING_LEVELS)[number];
+
+/** Raw input value for a thinking level; a null level stays blank but hidden. */
+function thinkingInputValue(value: unknown): string {
+  return value === undefined || value === null ? "" : String(value);
+}
+
 /** Raw input value for a number field; blank means inherit or omit. */
 function numberInputValue(value: unknown): string {
   return value === undefined || value === null ? "" : String(value);
@@ -29,10 +47,14 @@ function numberValue(value: unknown, min: number): number | undefined {
  * input strings, blank optional fields drop so the entry inherits catalog
  * and provider defaults, and fields the form does not show ride along.
  * `original` is the authored entry the draft started from, if any.
+ * `thinkingPrefill` is the catalog map the form displayed for a catalog-only
+ * row; an untouched prefill stays inherited instead of being frozen into
+ * config, because an authored map replaces the catalog map wholesale.
  */
 export function modelConfigEntry(
   draft: Record<string, unknown>,
   original: Record<string, unknown> | undefined,
+  thinkingPrefill: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
   const text = (value: unknown) => (typeof value === "string" ? value : "").trim();
   const entry: Record<string, unknown> = { ...draft, id: text(draft.id), name: text(draft.name) };
@@ -81,6 +103,29 @@ export function modelConfigEntry(
   } else {
     delete entry.cost;
   }
+  if (isRecord(draft.thinkingLevelMap)) {
+    const userEdited =
+      original?.thinkingLevelMap === undefined &&
+      JSON.stringify(draft.thinkingLevelMap) !== JSON.stringify(thinkingPrefill);
+    if (original?.thinkingLevelMap !== undefined || userEdited) {
+      const map: Record<string, unknown> = {};
+      for (const [level, value] of Object.entries(draft.thinkingLevelMap)) {
+        if (value === null) {
+          // A null level is hidden from the picker, not reset to its name.
+          map[level] = null;
+        } else if (typeof value === "string" && value.trim() !== "") {
+          map[level] = value.trim();
+        }
+      }
+      // A fully cleared map stays as an explicit empty override: falling back
+      // to the catalog map would silently restore what the user just erased.
+      entry.thinkingLevelMap = map;
+    } else {
+      delete entry.thinkingLevelMap;
+    }
+  } else {
+    delete entry.thinkingLevelMap;
+  }
   return entry;
 }
 
@@ -92,8 +137,9 @@ export function providerModelForm(params: {
   lockId: boolean;
   onCostField: (key: (typeof MODEL_COST_FIELDS)[number], value: string) => void;
   onField: (patch: Record<string, unknown>) => void;
+  onThinkingField: (level: ModelThinkingLevel, value: string) => void;
 }) {
-  const { disabled, draft, lockId, onCostField, onField } = params;
+  const { disabled, draft, lockId, onCostField, onField, onThinkingField } = params;
   const cost = isRecord(draft.cost) ? draft.cost : {};
   const input = Array.isArray(draft.input) ? draft.input.map(String) : [];
   return html` <div class="provider-manager__fields">
@@ -172,6 +218,32 @@ export function providerModelForm(params: {
             }}
           /><span>${t("modelProviders.manager.reasoningSupport")}</span></label
         >
+        <fieldset class="provider-manager__thinking">
+          <legend>${t("modelProviders.manager.thinkingLevels.title")}</legend>
+          <p class="muted provider-manager__thinking-help">
+            ${t("modelProviders.manager.thinkingLevels.help")}
+          </p>
+          ${MODEL_THINKING_LEVELS.map((level) => {
+            const levelValue = isRecord(draft.thinkingLevelMap)
+              ? draft.thinkingLevelMap[level]
+              : undefined;
+            return html`<label class="field"
+              ><span>${t(`modelProviders.manager.thinkingLevels.${level}`)}</span
+              ><input
+                name="thinking-${level}"
+                .value=${thinkingInputValue(levelValue)}
+                placeholder=${t(
+                  levelValue === null
+                    ? "modelProviders.manager.thinkingLevels.hidden"
+                    : "modelProviders.manager.thinkingLevels.placeholder",
+                )}
+                ?disabled=${disabled}
+                @input=${(event: Event) => {
+                  onThinkingField(level, (event.target as HTMLInputElement).value);
+                }}
+            /></label>`;
+          })}
+        </fieldset>
         <fieldset class="provider-manager__cost">
           <legend>${t("modelProviders.manager.costTitle")}</legend>
           ${MODEL_COST_FIELDS.map(

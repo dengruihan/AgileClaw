@@ -366,6 +366,8 @@ suite.define(() => {
         expect(await name.inputValue()).toBe("Broken");
         expect(await gateway.getRequests("config.patch")).toHaveLength(1);
         if (captureUiProofEnabled) {
+          // Proof captures show the curated Advanced section expanded.
+          await manager.locator("details.provider-manager__advanced > summary").click();
           await page.screenshot({
             animations: "disabled",
             path: path.join(uiProofArtifactDir, "03-model-row-rejection.png"),
