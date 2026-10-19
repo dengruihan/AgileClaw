@@ -328,6 +328,32 @@ describe("provider profiles", () => {
     },
   );
 
+  it("surfaces an authored thinkingLevelMap's max on the anthropic-messages transport", () => {
+    // Non-Claude models on anthropic-messages collapse to the Claude base
+    // set, but a map-authored level declares a real capability: its values
+    // ride the transport verbatim, so max must stay selectable and Ultra
+    // must resolve to it instead of silently dropping to high.
+    const params = thinkingModel({
+      api: "anthropic-messages",
+      reasoning: true,
+      thinkingLevelMap: {
+        off: null,
+        minimal: null,
+        low: "low",
+        medium: null,
+        high: "high",
+        xhigh: null,
+        max: "max",
+      },
+    });
+    expect(resolveThinkingProfile(params).levels.map(({ id }) => id)).toEqual([
+      "low",
+      "high",
+      "max",
+    ]);
+    expect(resolveProviderThinkingLevel({ ...params, level: "ultra" })).toBe("max");
+  });
+
   it.each<{
     levels: ThinkLevel[];
     defaultLevel?: ThinkLevel;
