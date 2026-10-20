@@ -128,7 +128,7 @@ function removeCredentialConfigReferences(params: {
     next = removeAuthProfileConfig(next, id);
   }
   if (params.apiKeyProvider === undefined || !next.models?.providers) {
-    return next;
+    return dropEmptyModelProviderEntries(next);
   }
   const owner = resolveProviderIdForAuth(params.apiKeyProvider, { config: next });
   const providers = { ...next.models.providers };
@@ -146,7 +146,28 @@ function removeCredentialConfigReferences(params: {
       providers[provider] = connection;
     }
   }
-  return { ...next, models: { ...next.models, providers } };
+  return dropEmptyModelProviderEntries({ ...next, models: { ...next.models, providers } });
+}
+
+/**
+ * A provider entry left with no fields carried only credentials and no connection
+ * settings, so removal drops it instead of leaving an empty key that keeps the
+ * provider listed as configured.
+ */
+function dropEmptyModelProviderEntries(config: OpenClawConfig): OpenClawConfig {
+  const providers = config.models?.providers;
+  if (!providers || !Object.values(providers).some((entry) => Object.keys(entry).length === 0)) {
+    return config;
+  }
+  return {
+    ...config,
+    models: {
+      ...config.models,
+      providers: Object.fromEntries(
+        Object.entries(providers).filter(([, entry]) => Object.keys(entry).length > 0),
+      ),
+    },
+  };
 }
 
 /** Clears selected config references before deleting the credentials they name. */
