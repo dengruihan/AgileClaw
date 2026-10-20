@@ -254,20 +254,76 @@ function renderKeyEditor(card: ModelProviderCard, props: ModelProvidersViewProps
   `;
 }
 
+/** Shared busy/disabled gates for provider mutation buttons across the card. */
+function providerActionStates(card: ModelProviderCard, props: ModelProvidersViewProps) {
+  const blocked = props.mutationBlockedReason ?? "";
+  const authModeBlocked = Boolean(card.configAuthMode && card.configAuthMode !== "api-key");
+  return {
+    blocked,
+    authModeBlocked,
+    mutationDisabled: configMutationDisabled(props),
+    keyBlocked: authModeBlocked
+      ? t("modelProviders.apiKey.authModeBlocked", { mode: card.configAuthMode ?? "" })
+      : blocked,
+    keyBusy: Boolean(props.busy[`key:${card.id}`]),
+    deleteBusy: Boolean(props.busy[`delete:${card.id}`]),
+  };
+}
+
+function hasRemovableApiKey(card: ModelProviderCard): boolean {
+  return (
+    card.hasConfigApiKey ||
+    card.profiles.some((profile) => profile.type === "api_key" && profile.logoutSupported)
+  );
+}
+
+/** Destructive actions ride the always-visible manager row, not the folded details. */
+function renderDestructiveProviderActions(card: ModelProviderCard, props: ModelProvidersViewProps) {
+  const { blocked, authModeBlocked, mutationDisabled, keyBlocked, keyBusy, deleteBusy } =
+    providerActionStates(card, props);
+  return html`
+    ${
+      hasRemovableApiKey(card)
+        ? html`
+            <button
+              class="btn btn--sm danger"
+              ?disabled=${keyBusy || mutationDisabled || authModeBlocked}
+              title=${keyBlocked}
+              @click=${() => props.onRemoveKey(card.id, card.configKey ?? card.id)}
+            >
+              ${t("modelProviders.apiKey.remove")}
+            </button>
+          `
+        : nothing
+    }
+    ${
+      props.canDeleteProvider?.(card)
+        ? html`
+            <button
+              class="btn btn--sm danger"
+              data-models-delete-provider=${card.id}
+              ?disabled=${deleteBusy || mutationDisabled}
+              title=${blocked}
+              @click=${() => props.onDeleteProvider(card)}
+            >
+              ${t("modelProviders.delete.action")}
+            </button>
+          `
+        : nothing
+    }
+  `;
+}
+
 function renderProviderActions(card: ModelProviderCard, props: ModelProvidersViewProps) {
   const credentialProviders = card.credentialProviderIds.length
     ? card.credentialProviderIds
     : [card.id];
   const probeBusy = Boolean(props.busy[`probe:${card.id}`]);
-  const keyBusy = Boolean(props.busy[`key:${card.id}`]);
-  const deleteBusy = Boolean(props.busy[`delete:${card.id}`]);
-  const blocked = props.mutationBlockedReason ?? "";
-  const authModeBlocked = Boolean(card.configAuthMode && card.configAuthMode !== "api-key");
+  const { blocked, authModeBlocked, mutationDisabled, keyBlocked, keyBusy } = providerActionStates(
+    card,
+    props,
+  );
   const apiKeyUnsupported = card.apiKeySupported === false;
-  const mutationDisabled = configMutationDisabled(props);
-  const keyBlocked = authModeBlocked
-    ? t("modelProviders.apiKey.authModeBlocked", { mode: card.configAuthMode ?? "" })
-    : blocked;
   return html`
     <div class="model-providers__card-actions">
       ${
@@ -310,36 +366,6 @@ function renderProviderActions(card: ModelProviderCard, props: ModelProvidersVie
               </button>
             `
       }
-      ${
-        card.hasConfigApiKey ||
-        card.profiles.some((profile) => profile.type === "api_key" && profile.logoutSupported)
-          ? html`
-              <button
-                class="btn btn--sm danger"
-                ?disabled=${keyBusy || mutationDisabled || authModeBlocked}
-                title=${keyBlocked}
-                @click=${() => props.onRemoveKey(card.id, card.configKey ?? card.id)}
-              >
-                ${t("modelProviders.apiKey.remove")}
-              </button>
-            `
-          : nothing
-      }
-      ${
-        props.canDeleteProvider?.(card)
-          ? html`
-              <button
-                class="btn btn--sm danger"
-                data-models-delete-provider=${card.id}
-                ?disabled=${deleteBusy || mutationDisabled}
-                title=${blocked}
-                @click=${() => props.onDeleteProvider(card)}
-              >
-                ${t("modelProviders.delete.action")}
-              </button>
-            `
-          : nothing
-      }
     </div>
   `;
 }
@@ -376,7 +402,10 @@ export function renderProviderRow(card: ModelProviderCard, props: ModelProviders
         </div>
       </div>
       ${
-        props.onProviderModels || props.onProviderSettings
+        props.onProviderModels ||
+        props.onProviderSettings ||
+        hasRemovableApiKey(card) ||
+        props.canDeleteProvider?.(card)
           ? html`<div class="model-providers__manager-actions">
               ${
                 props.onProviderModels
@@ -402,6 +431,7 @@ export function renderProviderRow(card: ModelProviderCard, props: ModelProviders
                     </button>`
                   : nothing
               }
+              ${renderDestructiveProviderActions(card, props)}
             </div>`
           : nothing
       }
