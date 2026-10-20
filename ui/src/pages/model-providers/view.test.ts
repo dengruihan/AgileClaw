@@ -921,6 +921,38 @@ describe("renderModelProviders", () => {
     ).toBe(true);
   });
 
+  it("rides destructive actions on the manager row next to models and settings", () => {
+    const container = mount(
+      props({
+        cards: [
+          card({
+            id: "custom.proxy",
+            configKey: "custom.proxy",
+            apiKey: { source: "config" },
+            hasConfigApiKey: true,
+          }),
+        ],
+        canDeleteProvider: () => true,
+        onProviderModels: () => undefined,
+        onProviderSettings: () => undefined,
+      }),
+    );
+    const provider = container.querySelector('[data-provider-id="custom.proxy"]')!;
+    const row = provider.querySelector(".model-providers__manager-actions");
+    expect(row).not.toBeNull();
+    expect(row!.textContent).toContain("Models");
+    expect(row!.textContent).toContain("Settings");
+    expect(row!.textContent).toContain("Remove key");
+    expect(row!.textContent).toContain("Delete provider");
+    // The folded details no longer duplicate the destructive actions.
+    expect(provider.querySelector(".model-providers__card-actions")!.textContent).not.toContain(
+      "Remove key",
+    );
+    expect(provider.querySelector(".model-providers__card-actions")!.textContent).not.toContain(
+      "Delete provider",
+    );
+  });
+
   it("shows the current key-operation failure over an older card success", () => {
     const container = mount(
       props({

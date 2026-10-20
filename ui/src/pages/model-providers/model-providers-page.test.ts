@@ -458,7 +458,7 @@ describe("ModelProvidersPage agent scope", () => {
         : originalRequest(method),
     );
     await page.updateComplete;
-    page.querySelector<HTMLButtonElement>(".model-providers__card-actions .danger")!.click();
+    page.querySelector<HTMLButtonElement>(".model-providers__manager-actions .danger")!.click();
     await waitForFast(() => expect(page.messages.openai?.kind).toBe("success"));
     expect(request).toHaveBeenCalledWith("models.authLogout", {
       provider: "openai",
