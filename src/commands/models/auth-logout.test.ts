@@ -367,6 +367,51 @@ describe("models auth logout", () => {
     expect(mocks.removeAuthProfilesAcrossOwnerStores).toHaveBeenCalledOnce();
   });
 
+  it("drops a provider entry left empty by key removal", async () => {
+    const cfg: OpenClawConfig = {
+      models: {
+        providers: {
+          openai: { apiKey: "openai:manual" },
+          anthropic: { baseUrl: "https://example.test/v1" },
+        },
+      },
+    };
+    mocks.loadModelsConfig.mockResolvedValue(cfg);
+    await modelsAuthLogoutCommand({ profileId: "openai:manual", yes: true }, createRuntime());
+    const updated = await applyCapturedConfigUpdate(cfg);
+    // A key-only entry carries no connection settings; removal deletes it so the
+    // provider stops counting as configured. Sibling entries keep their fields.
+    expect(updated.models?.providers?.openai).toBeUndefined();
+    expect(updated.models?.providers?.anthropic).toEqual({ baseUrl: "https://example.test/v1" });
+  });
+
+  it("drops a literal-key-only provider entry through the API-key logout path", async () => {
+    const keyId = "openai:key";
+    let liveConfig: OpenClawConfig = {
+      auth: { profiles: { [keyId]: { provider: "openai", mode: "api_key" } } },
+      models: { providers: { openai: { apiKey: "sk-literal-config-key" } } },
+    };
+    mocks.ensureAuthProfileStoreWithoutExternalProfiles.mockReturnValue(
+      createAuthProfileStoreFixture({ [keyId]: createApiKeyCredential("openai", "synthetic-key") }),
+    );
+    mocks.updateConfig.mockImplementation(
+      async (
+        mutator: (
+          current: OpenClawConfig,
+          context: { runtimeConfig: OpenClawConfig },
+        ) => OpenClawConfig | Promise<OpenClawConfig>,
+      ) => {
+        liveConfig = await mutator(liveConfig, { runtimeConfig: liveConfig });
+        return liveConfig;
+      },
+    );
+
+    await dispatchAuthLogout(liveConfig, { credentialType: "api_key" });
+
+    expect(liveConfig.models?.providers?.openai).toBeUndefined();
+    expect(liveConfig.auth?.profiles).toEqual({});
+  });
+
   it("fails when the auth store update does not complete", async () => {
     mocks.removeAuthProfilesAcrossOwnerStores.mockResolvedValue(false);
 
