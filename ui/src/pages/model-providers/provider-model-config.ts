@@ -212,42 +212,211 @@ function referencePath(parent: string, key: string | number): string {
   return `${parent}[${JSON.stringify(key)}]`;
 }
 
-export function modelReferences(
+function segmentsToPath(segments: readonly (string | number)[]): string {
+  return segments.reduce<string>(
+    (path, segment) =>
+      typeof segment === "number" ? `${path}[${segment}]` : referencePath(path, segment),
+    "",
+  );
+}
+
+/** One config site naming a model reference: an object field or an array element. */
+export type ProviderReferenceSite = {
+  /** Display path from the config root, e.g. "agents.defaults.model.fallbacks[1]". */
+  path: string;
+  kind: "field" | "arrayItem";
+  /** Segments from the config root to the containing object or array. */
+  parentSegments: (string | number)[];
+  /** Containing object key or array index holding the reference. */
+  key: string | number;
+};
+
+function collectReferenceSites(
   config: Record<string, unknown> | null,
-  key: string,
-  id: string,
-): string[] {
-  const target = `${key}/${id}`;
-  const references = new Set<string>();
-  const matches = (value: string) => splitTrailingAuthProfile(value).model === target;
-  function visit(value: unknown, path: string): void {
+  matches: (value: string) => boolean,
+): ProviderReferenceSite[] {
+  const sites: ProviderReferenceSite[] = [];
+  function visit(
+    value: unknown,
+    segments: (string | number)[],
+    parent: Record<string, unknown> | unknown[] | null,
+    key: string | number | null,
+  ): void {
     if (typeof value === "string") {
-      if (matches(value)) {
-        references.add(path);
+      if (parent !== null && key !== null && matches(value)) {
+        sites.push({
+          path: segmentsToPath(segments),
+          kind: typeof key === "number" ? "arrayItem" : "field",
+          parentSegments: segments.slice(0, -1),
+          key,
+        });
       }
       return;
     }
     if (Array.isArray(value)) {
-      value.forEach((entry, index) => visit(entry, referencePath(path, index)));
+      value.forEach((entry, index) => visit(entry, [...segments, index], value, index));
       return;
     }
     if (!isRecord(value)) {
       return;
     }
     for (const [entryKey, entry] of Object.entries(value)) {
-      const childPath = referencePath(path, entryKey);
       // Provider definitions describe models; their own IDs are not consumers.
-      if (path === "models" && entryKey === "providers") {
+      if (segments.length === 1 && segments[0] === "models" && entryKey === "providers") {
         continue;
       }
       if (matches(entryKey)) {
-        references.add(childPath);
+        sites.push({
+          path: segmentsToPath([...segments, entryKey]),
+          kind: "field",
+          parentSegments: segments,
+          key: entryKey,
+        });
       }
-      visit(entry, childPath);
+      visit(entry, [...segments, entryKey], value, entryKey);
     }
   }
-  visit(config, "");
-  return [...references];
+  visit(config, [], null, null);
+  return sites;
+}
+
+export function modelReferences(
+  config: Record<string, unknown> | null,
+  key: string,
+  id: string,
+): string[] {
+  const target = `${key}/${id}`;
+  return [
+    ...new Set(
+      collectReferenceSites(
+        config,
+        (value) => splitTrailingAuthProfile(value).model === target,
+      ).map((site) => site.path),
+    ),
+  ];
+}
+
+/** Every config site referencing any model of one provider, for provider deletion. */
+export function providerReferenceSites(
+  config: Record<string, unknown> | null,
+  key: string,
+): ProviderReferenceSite[] {
+  const prefix = `${key}/`;
+  return collectReferenceSites(config, (value) =>
+    splitTrailingAuthProfile(value).model.startsWith(prefix),
+  );
+}
+
+function resolveSegments(
+  root: Record<string, unknown> | null,
+  segments: readonly (string | number)[],
+): unknown {
+  let value: unknown = root;
+  for (const segment of segments) {
+    value =
+      typeof segment === "number"
+        ? Array.isArray(value)
+          ? value[segment]
+          : undefined
+        : isRecord(value)
+          ? value[segment]
+          : undefined;
+    if (value === undefined) {
+      return undefined;
+    }
+  }
+  return value;
+}
+
+/**
+ * Deletes a provider entry and clears every config site referencing its models.
+ * Object fields null out (merge-patch deletes the key); fallback-style arrays
+ * rebuild without the deleted provider's entries, confirmed via replacePaths;
+ * and resetting a primary takes the whole model selection object with it so no
+ * selection is left with fallbacks but no primary.
+ */
+export function providerDeletePatch(
+  config: Record<string, unknown> | null,
+  key: string,
+  sites: readonly ProviderReferenceSite[],
+): ProviderModelsPatch {
+  const raw: Record<string, unknown> = {};
+  const replacePaths = new Set<string>();
+  const setRaw = (segments: readonly (string | number)[], value: unknown): void => {
+    let node: Record<string, unknown> = raw;
+    let path = "";
+    for (const segment of segments.slice(0, -1)) {
+      if (typeof segment !== "string") {
+        return;
+      }
+      if (!isMergePatchObjectKeyAllowed(segment, path)) {
+        return;
+      }
+      const child = node[segment];
+      const next = isRecord(child) ? child : {};
+      node[segment] = next;
+      node = next;
+      path = formatConfigPatchPath(path, segment);
+    }
+    const last = segments.at(-1);
+    if (typeof last === "string" && isMergePatchObjectKeyAllowed(last, path)) {
+      node[last] = value;
+    }
+  };
+  const resetPrefixes: (readonly (string | number)[])[] = [];
+  const withinReset = (segments: readonly (string | number)[]) =>
+    resetPrefixes.some(
+      (prefix) =>
+        prefix.length <= segments.length &&
+        prefix.every((segment, index) => segment === segments[index]),
+    );
+  const arraysByName = new Map<string, { segments: (string | number)[]; indexes: Set<number> }>();
+  for (const site of sites) {
+    if (site.kind === "arrayItem") {
+      if (typeof site.key === "number") {
+        const arrayPath = segmentsToPath(site.parentSegments);
+        const group = arraysByName.get(arrayPath) ?? {
+          segments: [...site.parentSegments],
+          indexes: new Set<number>(),
+        };
+        group.indexes.add(site.key);
+        arraysByName.set(arrayPath, group);
+      }
+      continue;
+    }
+    const resetsModelSelection = site.key === "primary" && site.parentSegments.at(-1) === "model";
+    const segments = resetsModelSelection
+      ? site.parentSegments
+      : [...site.parentSegments, site.key];
+    if (resetsModelSelection) {
+      resetPrefixes.push(segments);
+    }
+    setRaw(segments, null);
+  }
+  for (const group of arraysByName.values()) {
+    if (withinReset(group.segments)) {
+      continue;
+    }
+    const array = resolveSegments(config, group.segments);
+    if (!Array.isArray(array)) {
+      continue;
+    }
+    setRaw(
+      group.segments,
+      array.filter((_, index) => !group.indexes.has(index)),
+    );
+    replacePaths.add(
+      group.segments.reduce<string>(
+        (path, segment) =>
+          typeof segment === "number"
+            ? `${path}[${segment}]`
+            : formatConfigPatchPath(path, segment),
+        "",
+      ),
+    );
+  }
+  setRaw(["models", "providers", key], null);
+  return { raw, replacePaths: [...replacePaths] };
 }
 
 export function localOrCustomProvider(

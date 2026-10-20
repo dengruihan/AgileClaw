@@ -34,6 +34,7 @@ import {
   readModelBehaviorConfig,
   runModelProviderApiKeyMutation,
   runModelProviderConfigMutation,
+  runModelProviderDeleteMutation,
   type ModelProviderConfigMutation,
   type ModelProviderRowMessage,
 } from "./config-mutation.ts";
@@ -44,6 +45,7 @@ import {
   buildUnconfiguredProviderOptions,
   readModelProviderConfig,
   type DefaultsDraft,
+  type ModelProviderCard,
   type ModelProviderPendingLogout,
 } from "./data.ts";
 import { ModelProviderDiscoveryController } from "./discovery-controller.ts";
@@ -59,7 +61,13 @@ import { ModelProviderLoginController } from "./login-controller.ts";
 import { ModelProviderProfileActionsController } from "./profile-actions-controller.ts";
 import { showProfileActionError, showProfileLogoutSuccess } from "./profiles-view.ts";
 import type { ProviderManagerIntent } from "./provider-manager.ts";
-import { localOrCustomProvider, providerEndpoint } from "./provider-model-config.ts";
+import {
+  configuredProvider,
+  localOrCustomProvider,
+  providerDeletePatch,
+  providerEndpoint,
+  providerReferenceSites,
+} from "./provider-model-config.ts";
 import { providerRouteIntent } from "./provider-route-intent.ts";
 import { updateRecordEntry } from "./record-state.ts";
 import type { ModelProvidersRouteData } from "./route.ts";
@@ -90,6 +98,7 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
   @state() private keyEditorProvider: string | null = null;
   @state() private keyDraft = "";
   private logoutConfirmation: AbortController | null = null;
+  private providerDeleteConfirmation: AbortController | null = null;
   @state() private profileOrders: Record<string, string[]> = {};
   @state() private providerQuery = "";
   private pendingConnection = false;
@@ -402,6 +411,7 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
 
   private invalidateRequests() {
     this.logoutConfirmation?.abort();
+    this.providerDeleteConfirmation?.abort();
     this.cancelCoreRefresh();
     this.supplemental.invalidate();
   }
@@ -427,6 +437,7 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
     this.probeResults = {};
     this.closeKeyEditor();
     this.logoutConfirmation?.abort();
+    this.providerDeleteConfirmation?.abort();
     this.profileActions.resetOrders();
     this.addProviderOpen = false;
     this.addProviderId = "";
@@ -611,6 +622,85 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
     }
   }
 
+  private async deleteProvider(card: ModelProviderCard) {
+    const client = this.gateway.client;
+    const busyKey = `delete:${card.id}`;
+    const configKey = card.configKey ?? card.id;
+    if (!client || this.providerDeleteConfirmation || !this.canMutate() || this.busy[busyKey]) {
+      return;
+    }
+    const references = providerReferenceSites(
+      currentConfigObject(this.context.runtimeConfig.state),
+      configKey,
+    ).map((site) => site.path);
+    // Like logout, agent changes, reconnects and navigation abort this decision
+    // before it can authorize a deletion under a different scope.
+    const controller = new AbortController();
+    this.providerDeleteConfirmation = controller;
+    let confirmed = false;
+    try {
+      confirmed = await showConfirmDialog({
+        title: t("modelProviders.delete.action"),
+        message: [
+          t("modelProviders.delete.confirm", { provider: card.displayName }),
+          ...(references.length
+            ? [
+                t("modelProviders.delete.confirmRefs", {
+                  provider: card.displayName,
+                  references: references.join(", "),
+                }),
+              ]
+            : []),
+        ].join(" "),
+        confirmLabel: t("modelProviders.delete.action"),
+        danger: true,
+        signal: controller.signal,
+      });
+    } finally {
+      this.providerDeleteConfirmation = null;
+    }
+    if (!confirmed || controller.signal.aborted || !this.canMutate() || this.busy[busyKey]) {
+      return;
+    }
+    // Rebuild from the post-confirmation snapshot: the patch must reflect the
+    // config as it stands, not as it was when the dialog opened.
+    const configObject = currentConfigObject(this.context.runtimeConfig.state);
+    const sites = providerReferenceSites(configObject, configKey);
+    const clientEpoch = this.gateway.epoch;
+    const agentEpoch = this.agentEpoch;
+    const isCurrent = () =>
+      this.gateway.isCurrent({ client, epoch: clientEpoch }) && this.agentEpoch === agentEpoch;
+    await runModelProviderDeleteMutation(
+      {
+        runtimeConfig: this.context.runtimeConfig,
+        isCurrentClient: isCurrent,
+        isCurrentAgent: isCurrent,
+        canMutate: () => this.canMutate(),
+        refreshProviders: async () => {
+          const previous = this.data;
+          await this.refresh("replacement");
+          if (isCurrent() && this.data?.error) {
+            const warning = this.data.error;
+            this.data = previous;
+            return warning;
+          }
+          return this.data?.error ?? this.data?.catalogError ?? null;
+        },
+        setBusy: (busy) => this.setBusy(busyKey, busy),
+        // The deleted card's row is gone; the page-level slot still reports the outcome.
+        setMessage: (message) => this.setMessage("connection", message),
+      },
+      {
+        client,
+        agentId: this.selectedAgentId,
+        provider: configKey,
+        hasCredentials: card.profiles.length > 0 || card.hasConfigApiKey || Boolean(card.apiKey),
+        patch: providerDeletePatch(configObject, configKey, sites),
+        success: t("modelProviders.delete.success", { provider: card.displayName }),
+      },
+    );
+  }
+
   private async saveDefaults(defaults = this.defaultsDraft) {
     if (!defaults) {
       return;
@@ -786,6 +876,11 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
       onSaveKey: (provider, configKey) =>
         void this.mutateApiKey(provider, configKey, this.keyDraft.trim()),
       onRemoveKey: (provider, configKey) => void this.mutateApiKey(provider, configKey, null),
+      onDeleteProvider: (card) => void this.deleteProvider(card),
+      canDeleteProvider: (card) => {
+        const key = card.configKey ?? card.id;
+        return configuredProvider(configObject, key) !== null && !knownProviderIds.has(key);
+      },
       onProbe: (cardId, providers) => void this.profileActions.probe(cardId, providers),
       onRequestLogout: (pending) => void this.requestLogout(pending),
       onProfileOrderChange: (cardId, provider, profileIds) =>
