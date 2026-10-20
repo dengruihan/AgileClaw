@@ -528,6 +528,51 @@ describe("ModelProvidersPage agent scope", () => {
       );
     });
 
+    it("offers deletion for catalog-known providers with an authored entry", async () => {
+      const harness = createHarness("main");
+      const originalRequest = harness.request.getMockImplementation()!;
+      const openaiConfig = {
+        config: {
+          agents: { defaults: { thinkingDefault: "low", fastModeDefault: "auto" } },
+          models: {
+            providers: {
+              openai: {
+                baseUrl: "https://api.openai.com/v1",
+                models: [{ id: "gpt-5", name: "GPT-5" }],
+              },
+            },
+          },
+        },
+        hash: "hash",
+        valid: true,
+      };
+      harness.request.mockImplementation(async (method: string) =>
+        method === "config.get" ? openaiConfig : originalRequest(method),
+      );
+      confirmMocks.showConfirmDialog.mockResolvedValue(true);
+      const page = appendPage(harness.context);
+      await waitForProviders(page);
+      page.data = {
+        ...EMPTY_MODEL_PROVIDERS_DATA,
+        authStatus: {
+          ...createAuthStatus([]),
+          providerCapabilities: [{ provider: "openai", apiKeySupported: true }],
+        },
+      };
+      await page.updateComplete;
+      // The cloud tab is the default; no category switch needed.
+      const button = page.querySelector<HTMLButtonElement>(
+        '[data-models-delete-provider="openai"]',
+      );
+      expect(button).not.toBeNull();
+      button!.click();
+      await waitForFast(() => expect(page.messages.connection?.kind).toBe("success"));
+      expect(harness.runtimeConfig.patch).toHaveBeenCalledWith({
+        raw: { models: { providers: { openai: null } } },
+        note: "Delete provider",
+      });
+    });
+
     it("declining the confirmation leaves the provider untouched", async () => {
       const { request, runtimeConfig, page } = await setupDeletePage();
       confirmMocks.showConfirmDialog.mockResolvedValue(false);
