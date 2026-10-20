@@ -22,11 +22,12 @@ with nothing but the removed key is deleted so the provider stops counting as
 configured. See [Auth profiles](/cli/models#auth-profiles) for the matching CLI
 commands.
 
-Custom providers (a config entry no installed plugin declares) also offer
-**Delete provider** on their card. Deletion signs out the provider's stored
+Any provider card with an authored `models.providers` entry — cloud or custom —
+also offers **Delete provider**. Deletion signs out the provider's stored
 credentials, removes its config entry and model definitions, and clears default
-model selections that referenced its models after an explicit confirmation; the
-last 30 days of recorded usage still show until they age out.
+model selections that referenced its models after an explicit confirmation;
+catalog-known providers remain available for quick setup, and the last 30 days
+of recorded usage still show until they age out.
 
 Provider controls appear as soon as credentials, the model catalog, and configuration are ready. Usage and local costs load independently afterward, so a slow usage response does not block provider settings.
 

@@ -877,10 +877,10 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
         void this.mutateApiKey(provider, configKey, this.keyDraft.trim()),
       onRemoveKey: (provider, configKey) => void this.mutateApiKey(provider, configKey, null),
       onDeleteProvider: (card) => void this.deleteProvider(card),
-      canDeleteProvider: (card) => {
-        const key = card.configKey ?? card.id;
-        return configuredProvider(configObject, key) !== null && !knownProviderIds.has(key);
-      },
+      // Any authored provider entry can go, cloud or custom; catalog-known
+      // providers without an entry only carry credentials (logout covers those).
+      canDeleteProvider: (card) =>
+        configuredProvider(configObject, card.configKey ?? card.id) !== null,
       onProbe: (cardId, providers) => void this.profileActions.probe(cardId, providers),
       onRequestLogout: (pending) => void this.requestLogout(pending),
       onProfileOrderChange: (cardId, provider, profileIds) =>
