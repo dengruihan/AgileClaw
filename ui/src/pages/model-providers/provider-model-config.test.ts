@@ -11,6 +11,8 @@ import {
   modelRestorePatch,
   modelWritePatch,
   providerConnectionPatch,
+  providerDeletePatch,
+  providerReferenceSites,
 } from "./provider-model-config.ts";
 
 describe("provider model edits", () => {
@@ -306,6 +308,130 @@ describe("provider connection edits", () => {
           },
         },
       },
+    });
+  });
+});
+
+describe("provider deletion", () => {
+  const config = {
+    agents: {
+      defaults: {
+        model: {
+          primary: "custom.proxy/first",
+          fallbacks: ["other/sibling", "custom.proxy/second#work"],
+        },
+        utilityModel: "custom.proxy/second",
+      },
+    },
+    models: {
+      aliases: { fast: "custom.proxy/first" },
+      providers: {
+        "custom.proxy": {
+          baseUrl: "https://models.example.test/v1",
+          models: [
+            { id: "first", name: "First" },
+            { id: "second", name: "Second" },
+          ],
+        },
+        other: { models: [{ id: "sibling", name: "Sibling" }] },
+      },
+    },
+  };
+
+  it("collects every reference site outside the provider definitions", () => {
+    expect(providerReferenceSites(config, "custom.proxy").map((site) => site.path)).toEqual([
+      "agents.defaults.model.primary",
+      "agents.defaults.model.fallbacks[1]",
+      "agents.defaults.utilityModel",
+      "models.aliases.fast",
+    ]);
+    // Provider-adjacent ids must not match by prefix.
+    expect(providerReferenceSites(config, "custom")).toEqual([]);
+    expect(providerReferenceSites(config, "other").map((site) => site.path)).toEqual([
+      "agents.defaults.model.fallbacks[0]",
+    ]);
+  });
+
+  it("deletes a provider entry and clears scalar references without replace paths", () => {
+    const sites = providerReferenceSites(
+      {
+        agents: { defaults: { utilityModel: "custom.proxy/second", decisionModel: null } },
+        models: { providers: { "custom.proxy": { models: [] }, other: { models: [] } } },
+      },
+      "custom.proxy",
+    );
+    const patch = providerDeletePatch(config, "custom.proxy", sites);
+    expect(patch).toEqual({
+      raw: {
+        agents: { defaults: { utilityModel: null } },
+        models: { providers: { "custom.proxy": null } },
+      },
+      replacePaths: [],
+    });
+  });
+
+  it("resets the whole model selection with its primary and filters fallbacks", () => {
+    const patch = providerDeletePatch(
+      config,
+      "custom.proxy",
+      providerReferenceSites(config, "custom.proxy"),
+    );
+    expect(patch.raw).toEqual({
+      agents: { defaults: { model: null, utilityModel: null } },
+      models: { aliases: { fast: null }, providers: { "custom.proxy": null } },
+    });
+    expect(patch.replacePaths).toEqual([]);
+    const next = applyMergePatch(config, patch.raw, {
+      mergeObjectArraysById: true,
+      replaceArrayPaths: new Set(patch.replacePaths),
+    });
+    expect(next.agents.defaults.model).toBeUndefined();
+    expect(next.models.providers["custom.proxy"]).toBeUndefined();
+    expect(next.models.providers.other).toEqual(config.models.providers.other);
+  });
+
+  it("keeps a primary from another provider and rebuilds only its fallback entries", () => {
+    const mixed = {
+      agents: {
+        defaults: {
+          model: { primary: "other/sibling", fallbacks: ["custom.proxy/first", "other/sibling"] },
+        },
+      },
+      models: config.models,
+    };
+    const patch = providerDeletePatch(
+      mixed,
+      "custom.proxy",
+      providerReferenceSites(mixed, "custom.proxy"),
+    );
+    expect(patch.raw).toEqual({
+      agents: { defaults: { model: { fallbacks: ["other/sibling"] } } },
+      models: { aliases: { fast: null }, providers: { "custom.proxy": null } },
+    });
+    expect(patch.replacePaths).toEqual(["agents.defaults.model.fallbacks"]);
+    const next = applyMergePatch(mixed, patch.raw, {
+      mergeObjectArraysById: true,
+      replaceArrayPaths: new Set(patch.replacePaths),
+    });
+    expect(next.agents.defaults.model).toEqual({
+      primary: "other/sibling",
+      fallbacks: ["other/sibling"],
+    });
+  });
+
+  it("clears per-agent model overrides alongside the provider entry", () => {
+    const perAgent = {
+      agents: { entries: { worker: { model: "custom.proxy/first" } } },
+      models: config.models,
+    };
+    const patch = providerDeletePatch(
+      perAgent,
+      "custom.proxy",
+      providerReferenceSites(perAgent, "custom.proxy"),
+    );
+    expect(patch.raw).toEqual({
+      agents: { entries: { worker: { model: null } } },
+      models: { aliases: { fast: null }, providers: { "custom.proxy": null } },
     });
   });
 });

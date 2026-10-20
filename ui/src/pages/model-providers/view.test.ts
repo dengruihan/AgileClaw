@@ -890,6 +890,37 @@ describe("renderModelProviders", () => {
     expect(onRemoveKey).toHaveBeenCalledWith("openai", "OpenAI");
   });
 
+  it("offers provider deletion only for deletable cards and forwards the card", () => {
+    const onDeleteProvider = vi.fn();
+    const deletable = card({ id: "custom.proxy", displayName: "Custom Proxy" });
+    const container = mount(
+      props({
+        cards: [deletable, card()],
+        onDeleteProvider,
+        canDeleteProvider: (entry) => entry.id === "custom.proxy",
+      }),
+    );
+    const custom = container.querySelector('[data-provider-id="custom.proxy"]');
+    expect(button(custom!, "Delete provider")).toBeDefined();
+    // Cloud cards without the flag render no delete action.
+    expect(button(container.querySelector('[data-provider-id="openai"]')!, "Delete provider")).toBe(
+      undefined,
+    );
+    button(custom!, "Delete provider")!.click();
+    expect(onDeleteProvider).toHaveBeenCalledWith(deletable);
+
+    const busy = mount(
+      props({
+        cards: [deletable],
+        canDeleteProvider: () => true,
+        busy: { "delete:custom.proxy": true },
+      }),
+    );
+    expect(
+      button(busy.querySelector('[data-provider-id="custom.proxy"]')!, "Delete provider")!.disabled,
+    ).toBe(true);
+  });
+
   it("shows the current key-operation failure over an older card success", () => {
     const container = mount(
       props({

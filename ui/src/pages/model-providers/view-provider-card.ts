@@ -74,6 +74,9 @@ export type ModelProvidersViewProps = Omit<
     onKeyDraftChange: (value: string) => void;
     onSaveKey: (provider: string, configKey: string) => void;
     onRemoveKey: (provider: string, configKey: string) => void;
+    /** Deletes an authored provider entry and its references; custom providers only. */
+    onDeleteProvider: (card: ModelProviderCard) => void;
+    canDeleteProvider?: (card: ModelProviderCard) => boolean;
     onProbe: (cardId: string, providers: string[]) => void;
     onAddProviderToggle: () => void;
     onAddProviderKeyChange: (value: string) => void;
@@ -257,6 +260,7 @@ function renderProviderActions(card: ModelProviderCard, props: ModelProvidersVie
     : [card.id];
   const probeBusy = Boolean(props.busy[`probe:${card.id}`]);
   const keyBusy = Boolean(props.busy[`key:${card.id}`]);
+  const deleteBusy = Boolean(props.busy[`delete:${card.id}`]);
   const blocked = props.mutationBlockedReason ?? "";
   const authModeBlocked = Boolean(card.configAuthMode && card.configAuthMode !== "api-key");
   const apiKeyUnsupported = card.apiKeySupported === false;
@@ -317,6 +321,21 @@ function renderProviderActions(card: ModelProviderCard, props: ModelProvidersVie
                 @click=${() => props.onRemoveKey(card.id, card.configKey ?? card.id)}
               >
                 ${t("modelProviders.apiKey.remove")}
+              </button>
+            `
+          : nothing
+      }
+      ${
+        props.canDeleteProvider?.(card)
+          ? html`
+              <button
+                class="btn btn--sm danger"
+                data-models-delete-provider=${card.id}
+                ?disabled=${deleteBusy || mutationDisabled}
+                title=${blocked}
+                @click=${() => props.onDeleteProvider(card)}
+              >
+                ${t("modelProviders.delete.action")}
               </button>
             `
           : nothing

@@ -17,8 +17,16 @@ process environment. The page shows credential sources without revealing keys.
 
 Saving a key and refreshing the catalog are separate outcomes. If refresh fails,
 the saved key remains; follow the reported recovery step. Removing a stored key
-keeps model defaults and provider connection settings. See
-[Auth profiles](/cli/models#auth-profiles) for the matching CLI commands.
+keeps model defaults and provider connection settings; a provider entry left
+with nothing but the removed key is deleted so the provider stops counting as
+configured. See [Auth profiles](/cli/models#auth-profiles) for the matching CLI
+commands.
+
+Custom providers (a config entry no installed plugin declares) also offer
+**Delete provider** on their card. Deletion signs out the provider's stored
+credentials, removes its config entry and model definitions, and clears default
+model selections that referenced its models after an explicit confirmation; the
+last 30 days of recorded usage still show until they age out.
 
 Provider controls appear as soon as credentials, the model catalog, and configuration are ready. Usage and local costs load independently afterward, so a slow usage response does not block provider settings.
 

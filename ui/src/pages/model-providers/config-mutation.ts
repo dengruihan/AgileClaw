@@ -304,6 +304,85 @@ export async function runModelProviderApiKeyMutation(
   }
 }
 
+/**
+ * Provider deletion removes credentials first — a failed logout must leave the
+ * provider entry untouched — then applies the entry delete and reference
+ * cleanup as one config write.
+ */
+export async function runModelProviderDeleteMutation(
+  owner: ModelProviderConfigMutationOwner & {
+    canMutate: () => boolean;
+    refreshProviders: () => Promise<string | null>;
+  },
+  params: {
+    client: GatewayBrowserClient;
+    agentId: string;
+    provider: string;
+    hasCredentials: boolean;
+    patch: { raw: Record<string, unknown>; replacePaths: string[] };
+    success: string;
+  },
+): Promise<{ ok: false } | { ok: true; warning: string | null }> {
+  const isCurrent = () => owner.isCurrentClient() && owner.isCurrentAgent();
+  owner.setBusy(true);
+  owner.setMessage(null);
+  try {
+    if (params.hasCredentials) {
+      const loggedOut = await owner.runtimeConfig.runExternalMutation(
+        async (client) => {
+          if (client !== params.client) {
+            throw new Error(t("modelProviders.requestFailed"));
+          }
+          const receipt = await client.request<{ warning?: string }>("models.authLogout", {
+            provider: params.provider,
+            agentId: params.agentId,
+          });
+          invalidateModelAuthStatusRequests(client);
+          return receipt;
+        },
+        { canDispatch: () => isCurrent() && owner.canMutate() },
+      );
+      if (!isCurrent()) {
+        return { ok: false };
+      }
+      if (!loggedOut.ok) {
+        owner.setMessage({ kind: "error", text: loggedOut.error });
+        return { ok: false };
+      }
+    }
+    const patched = await owner.runtimeConfig.patch({
+      raw: params.patch.raw,
+      note: t("modelProviders.delete.action"),
+      ...(params.patch.replacePaths.length ? { replacePaths: params.patch.replacePaths } : {}),
+    });
+    if (!isCurrent()) {
+      return { ok: false };
+    }
+    if (!patched) {
+      owner.setMessage({
+        kind: "error",
+        text: owner.runtimeConfig.state.lastError ?? t("modelProviders.configUnavailable"),
+      });
+      return { ok: false };
+    }
+    const warning = await owner.refreshProviders();
+    if (!isCurrent()) {
+      return { ok: false };
+    }
+    owner.setMessage({ kind: "success", text: params.success, ...(warning ? { warning } : {}) });
+    return { ok: true, warning };
+  } catch (error) {
+    if (isCurrent()) {
+      owner.setMessage({ kind: "error", text: modelProviderErrorMessage(error) });
+    }
+    return { ok: false };
+  } finally {
+    if (isCurrent()) {
+      owner.setBusy(false);
+    }
+  }
+}
+
 export function modelProviderApiKeySuccess(
   action: "edit" | "add",
   apiKey: string | null,

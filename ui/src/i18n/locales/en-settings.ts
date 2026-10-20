@@ -881,6 +881,14 @@ const enSettings = {
       loggingOut: "Logging out…",
       done: "Logged out.",
     },
+    delete: {
+      action: "Delete provider",
+      confirm:
+        "Delete {provider} from OpenClaw? Its connection settings, model definitions, and saved credentials are removed.",
+      confirmRefs:
+        "The following settings reference {provider} models and are cleared with it: {references}",
+      success: "Provider {provider} deleted.",
+    },
     add: {
       title: "Add provider",
       subtitle: "Choose a known model provider and save its API key.",
