@@ -18,6 +18,14 @@ type LoginProvider = {
   apiKeyProvider?: string;
 };
 
+/**
+ * Login-option ids are `pluginId/choiceId` refs; setup-discovery surfaces the
+ * same choices under their bare choice id. Normalize before comparing.
+ */
+export function loginOptionChoiceId(option: Pick<ProviderLoginOption, "id">): string {
+  return decodeURIComponent(option.id.split("/").pop() ?? option.id);
+}
+
 export function buildLoginProviders({
   providers,
   authStatus,
@@ -31,14 +39,24 @@ export function buildLoginProviders({
 }): LoginProvider[] {
   const groups = new Map<string, LoginProvider>();
   const choices = new Set<string>();
+  const choiceGroups = new Map<string, string>();
+  // When the caller wires the manual setup section, a paste-a-key login option
+  // duplicates its verify-and-use entry for the same choice; browser sign-in
+  // methods stay — they are a different operation, not a duplicate.
+  const manualSecretChoiceIds = new Set((manualProviders ?? []).map((option) => option.id));
   for (const capability of authStatus?.providerCapabilities ?? []) {
     if (providers && !providers.includes(capability.provider)) {
       continue;
     }
     for (const option of capability.loginOptions ?? []) {
-      let group = groups.get(option.brandId);
+      const groupId = option.groupId ?? option.brandId;
+      choiceGroups.set(loginOptionChoiceId(option), groupId);
+      if (option.kind === "secret" && manualSecretChoiceIds.has(loginOptionChoiceId(option))) {
+        continue;
+      }
+      let group = groups.get(groupId);
       if (!group) {
-        group = { id: option.brandId, label: "", choices: [], authProviders: [] };
+        group = { id: groupId, label: "", choices: [], authProviders: [] };
         groups.set(group.id, group);
       }
       group.label ||= option.groupLabel?.trim() ?? "";
@@ -54,7 +72,7 @@ export function buildLoginProviders({
     // capability owner for the key form even when its login brand is an alias.
     if (capability.quickApiKeySetup && allowQuickApiKey) {
       const brands = capability.loginOptions?.length
-        ? capability.loginOptions.map((option) => option.brandId)
+        ? capability.loginOptions.map((option) => option.groupId ?? option.brandId)
         : [capability.provider];
       for (const id of new Set(brands)) {
         const group = groups.get(id) ?? { id, label: "", choices: [], authProviders: [] };
@@ -67,19 +85,20 @@ export function buildLoginProviders({
   }
   if (manualProviders) {
     for (const option of manualProviders) {
-      const id = option.brandId ?? option.id;
-      if (choices.has(option.id) || (providers && !providers.includes(id))) {
+      const authProvider = option.brandId ?? option.id;
+      const id = choiceGroups.get(option.id) ?? authProvider;
+      if (choices.has(option.id) || (providers && !providers.includes(authProvider))) {
         continue;
       }
       const group = groups.get(id) ?? { id, label: "", choices: [], authProviders: [] };
       group.label ||= option.groupLabel?.trim() || option.label;
-      if (!group.authProviders.includes(id)) {
-        group.authProviders.push(id);
+      if (!group.authProviders.includes(authProvider)) {
+        group.authProviders.push(authProvider);
       }
       const duplicateLabel = group.choices.some((choice) => choice.label === option.label);
       group.choices.push({
         ...option,
-        brandId: id,
+        brandId: authProvider,
         kind: "setup-secret",
         featured: false,
         ...(duplicateLabel

@@ -58,6 +58,7 @@ import {
   type ModelProvidersData,
 } from "./load.ts";
 import { ModelProviderLoginController } from "./login-controller.ts";
+import { loginOptionChoiceId } from "./login-providers.ts";
 import { ModelProviderProfileActionsController } from "./profile-actions-controller.ts";
 import { showProfileActionError, showProfileLogoutSuccess } from "./profiles-view.ts";
 import type { ProviderManagerIntent } from "./provider-manager.ts";
@@ -939,7 +940,7 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
           agentLabel: selected ? normalizeAgentLabel(selected) : this.selectedAgentId,
           credentialChoices:
             data.authStatus?.providerCapabilities?.flatMap(
-              (provider) => provider.loginOptions?.map((option) => option.id) ?? [],
+              (provider) => provider.loginOptions?.map(loginOptionChoiceId) ?? [],
             ) ?? [],
         })}`,
     });
