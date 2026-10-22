@@ -1124,7 +1124,7 @@
     },
     {
       "source": "/web/control-ui/community-invitation",
-      "destination": "/web/control-ui/settings#community-invitation"
+      "destination": "/web/control-ui/settings"
     },
     {
       "source": "/web/control-ui/composer-capability-menu",

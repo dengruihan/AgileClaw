@@ -103,7 +103,6 @@ describeControlUiE2e("Control UI Plugins mocked Gateway E2E", () => {
       expect(await cards.count()).toBe(1);
       expect(await loading.count()).toBe(0);
       if (proofDir) {
-        expect(await page.locator(".community-invite-card").count()).toBe(0);
         await page.screenshot({
           animations: "disabled",
           fullPage: true,

@@ -43,7 +43,6 @@ suite.define(() => {
             spawnedCwd: "/workspace/scoped-proof",
           };
           const gateway = await installMockGateway(page, {
-            communityInvite: false,
             sessionKey: row.key,
             sessions: [row],
             operatorScopes: scenario.scopes,

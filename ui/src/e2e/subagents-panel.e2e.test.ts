@@ -118,7 +118,6 @@ suite.define(() => {
         const gateway = await installMockGateway(page, {
           ...previewModel,
           sessionKey: parent.key,
-          communityInvite: false,
           sessions: [parent, child, other, finished, swarm, persistent, queued],
           methodResponses: {
             "chat.history": {
@@ -314,7 +313,6 @@ suite.define(() => {
         const gateway = await installMockGateway(page, {
           ...previewModel,
           sessionKey: parent.key,
-          communityInvite: false,
           sessions: [parent, completedChild],
           sessionTranscripts: {
             [parent.key]: { messages: [] },
@@ -408,7 +406,6 @@ suite.define(() => {
           const gateway = await installMockGateway(page, {
             ...previewModel,
             sessionKey: child.key,
-            communityInvite: false,
             sessions: [parent, child],
             sessionTranscripts: {
               [parent.key]: { messages: [{ role: "assistant", content: "Parent conversation." }] },

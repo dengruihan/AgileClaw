@@ -29,3 +29,21 @@ it("removes even a false tool-title preference without changing other settings",
   expect(migrate(result.next)).toEqual({ next: null, changes: [] });
   expect(raw.gateway.controlUi.toolTitles).toBe(false);
 });
+
+it("removes a retired community-invite preference without changing other settings", () => {
+  const raw = { gateway: { controlUi: { enabled: true, communityInvite: false } } };
+  expect(findLegacyConfigIssues(raw)).toContainEqual(
+    expect.objectContaining({
+      path: "gateway.controlUi.communityInvite",
+      message: expect.stringContaining("openclaw doctor --fix"),
+    }),
+  );
+  expect(validateConfigObject(raw).ok).toBe(false);
+  const result = migrate(raw);
+  expect(result.next).toEqual({ gateway: { controlUi: { enabled: true } } });
+  expect(result.changes).toHaveLength(1);
+  expect(validateConfigObject(result.next).ok).toBe(true);
+  expect(findLegacyConfigIssues(result.next)).toEqual([]);
+  expect(migrate(result.next)).toEqual({ next: null, changes: [] });
+  expect(raw.gateway.controlUi.communityInvite).toBe(false);
+});

@@ -141,11 +141,6 @@ suite.define(() => {
         );
         const context = await suite.newBrowserContext(createControlUiE2eContextOptions());
         const freshContext = await suite.newBrowserContext(createControlUiE2eContextOptions());
-        for (const browserContext of [context, freshContext]) {
-          await browserContext.addInitScript(() => {
-            localStorage.setItem("openclaw:control-ui:community-invite:v2", "dismissed");
-          });
-        }
         const chat = await context.newPage();
         // Keep this handoff only for the explicit replay rejection below.
         await chat.goto(browserUrl);

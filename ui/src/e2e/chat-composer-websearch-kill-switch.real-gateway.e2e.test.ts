@@ -15,7 +15,6 @@ import {
 } from "../../../test/helpers/openclaw-test-instance.ts";
 import { runQaGatewayFixture } from "../../../test/helpers/qa-gateway-cleanup.ts";
 import type { GatewayBrowserClient } from "../api/gateway.ts";
-import { COMMUNITY_INVITE_KEY } from "../components/community-invite-state.ts";
 import {
   waitForControlUiGatewayReady,
   waitForControlUiGatewayReconnecting,
@@ -271,9 +270,6 @@ for (const globallyEnabled of [false, true]) {
             ...(capture ? { recordVideo: { dir: suite.artifactDir, size: viewport } } : {}),
           },
           async ({ page }) => {
-            await page.context().addInitScript((key) => {
-              localStorage.setItem(key, JSON.stringify({ dismissedAtMs: Date.now() }));
-            }, COMMUNITY_INVITE_KEY);
             const traffic = observeRequests(page);
             const observed = {
               stage,

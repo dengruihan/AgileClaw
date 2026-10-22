@@ -560,16 +560,6 @@ export const en: TranslationMap & {
     retry: "Retry",
     stylesFailed: "Styles failed to load, so the page may look broken.",
   },
-  communityInvite: {
-    title: "Pull up a chair.",
-    body: "There’s a place for you in the AI future. Join the Community on Reddit, Discord, and X.",
-    join: "Join",
-    follow: "Follow",
-    joinPlatform: "Join the OpenClaw community on {platform}",
-    followPlatform: "Follow OpenClaw on {platform}",
-    dismissForever: "Dismiss and don't show again",
-    dismissFailed: "Invitation dismissed, but your preference couldn't be saved.",
-  },
   updates: {
     adminRequired: "Administrator access is required to change update settings or start an update.",
     campaign: {

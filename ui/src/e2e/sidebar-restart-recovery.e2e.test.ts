@@ -24,10 +24,6 @@ suite.define(() => {
               key,
               JSON.stringify({ sidebarAgentsMode: "roster", navWidth: 320 }),
             );
-            localStorage.setItem(
-              "openclaw:control-ui:community-invite:v2",
-              JSON.stringify({ dismissedAtMs: Date.now() }),
-            );
           },
           { key: controlUiBundledSettingsStorageKey(suite.server.baseUrl) },
         );

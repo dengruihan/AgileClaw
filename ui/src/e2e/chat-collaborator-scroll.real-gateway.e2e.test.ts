@@ -341,12 +341,6 @@ suite.define(() => {
             };
             try {
               for (const [index, page] of pages.entries()) {
-                await page.addInitScript(() =>
-                  localStorage.setItem(
-                    "openclaw:control-ui:community-invite:v2",
-                    JSON.stringify({ dismissedAtMs: 1770000000000 }),
-                  ),
-                );
                 const documentResponse = await page.goto(
                   new URL("settings/profile", urls[index]!).href,
                 );

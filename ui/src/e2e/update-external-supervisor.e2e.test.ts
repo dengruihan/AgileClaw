@@ -34,7 +34,6 @@ suite.define(() => {
           verification: { serviceRunning: true, runningVersion: "2026.8.1" },
         });
         const gateway = await installMockGateway(page, {
-          communityInvite: false,
           agentModel: "openai/gpt-5",
           models: [{ id: "gpt-5", name: "GPT-5", provider: "openai" }],
           updateAvailable: {
@@ -154,7 +153,6 @@ suite.define(() => {
   it("keeps a retained external supervisor sentinel actionable without failure recovery", async () => {
     await suite.withPage({}, async ({ page }) => {
       const gateway = await installMockGateway(page, {
-        communityInvite: false,
         agentModel: "openai/gpt-5",
         models: [{ id: "gpt-5", name: "GPT-5", provider: "openai" }],
         methodResponses: {

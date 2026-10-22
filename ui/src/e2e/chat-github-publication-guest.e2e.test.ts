@@ -51,7 +51,6 @@ async function installGuestGateway(
   return await installMockGateway(page, {
     assistantName: "Publication QA",
     workspace: "/synthetic/visitor-publication",
-    communityInvite: false,
     operatorScopes: ["operator.sessions.write"],
     // Guests do not receive the broad PR watcher; publication must work without its branch event.
     featureMethods: publicationMethods.filter(

@@ -62,8 +62,6 @@ export type ControlUiBootstrapConfig = {
   automaticallyFetchFavicons?: boolean;
   seamColor?: string;
   environment?: ControlUiEnvironment;
-  /** Whether this Gateway's served UI may show the Discord community invitation. */
-  communityInvite?: boolean;
   /** Fresh-draft model, runtime and reasoning preference policy; never a selection restriction. */
   newSessionModelDefaults?: "last-used" | "configured";
   /**

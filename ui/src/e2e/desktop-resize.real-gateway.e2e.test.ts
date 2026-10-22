@@ -145,10 +145,6 @@ async function captureDesktopSockets(page: Page) {
   // Observe native sockets so forbidden messages exercise the production filter.
   // No connection, RFB authentication, RPC, or bridge is replaced.
   await page.addInitScript(() => {
-    localStorage.setItem(
-      "openclaw:control-ui:community-invite:v2",
-      JSON.stringify({ dismissedAtMs: 1770000000000 }),
-    );
     const NativeSocket = window.WebSocket;
     const sockets: WebSocket[] = [];
     const closes: NonNullable<DesktopViewerResizeFailure["socketCloses"]> = [];

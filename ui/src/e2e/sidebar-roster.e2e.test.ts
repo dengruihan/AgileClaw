@@ -102,12 +102,6 @@ suite.define(() => {
           hasMore: false,
           nextOffset: null,
         });
-        await page.addInitScript(() => {
-          localStorage.setItem(
-            "openclaw:control-ui:community-invite:v2",
-            JSON.stringify({ dismissedAtMs: Date.now() }),
-          );
-        });
         const gateway = await installMockGateway(page, {
           sessions: sessions.sessions,
           methodResponses: {

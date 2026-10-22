@@ -367,7 +367,6 @@ Every section heading from the previous single-page version keeps its anchor her
 - <a id="start-a-native-coding-cli" />[Start a native coding CLI](/web/control-ui/sessions-and-sidebar#start-a-native-coding-cli)
 - <a id="openclaw-chat-workspace-startup" />[OpenClaw Chat workspace startup](/web/control-ui/sessions-and-sidebar#openclaw-chat-workspace-startup)
 - <a id="environment-identity" />[Environment identity](/web/control-ui/settings#environment-identity)
-- <a id="community-invitation" />[Community invitation](/web/control-ui/settings#community-invitation)
 - <a id="personal-identity" />[Personal identity](/web/control-ui/settings#personal-identity)
 - <a id="gateway-host-status" />[Gateway host status](/web/control-ui/settings#gateway-host-status)
 - <a id="language-support" />[Language support](/web/control-ui/settings#language-support)

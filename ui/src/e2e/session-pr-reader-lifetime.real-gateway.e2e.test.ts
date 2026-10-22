@@ -395,12 +395,6 @@ suite.define(() => {
             ...(artifacts ? { recordVideo: { dir: artifacts, size: viewport } } : {}),
           },
           async ({ page }) => {
-            await page.addInitScript(() =>
-              localStorage.setItem(
-                "openclaw:control-ui:community-invite:v2",
-                JSON.stringify({ dismissedAtMs: 1770000000000 }),
-              ),
-            );
             const initialDelivery = createDeferredCore<Delivery>();
             const changedDelivery = createDeferredCore<Delivery>();
             const replacementSummaryDelivery = createDeferredCore<Delivery>();

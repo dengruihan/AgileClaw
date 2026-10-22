@@ -186,7 +186,6 @@ suite.define(() => {
         const gateway = await installMockGateway(page, {
           sessionKey,
           terminalEnabled: true,
-          communityInvite: false,
           featureMethods: ["board.get", "chat.metadata", "chat.startup", "terminal.open"],
           historyMessages: [
             { role: "assistant", content: "Arrange the dashboard beside this chat." },

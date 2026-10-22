@@ -28,7 +28,6 @@ suite.define(() => {
     await suite.withPage(publicationContextOptions(), async ({ page }) => {
       const href = "https://github.com/synthetic/publication-demo/pull/42";
       const gateway = await installMockGateway(page, {
-        communityInvite: false,
         featureMethods: [
           ...publicationMethods,
           TEST_LINK_READER.linkReader.previewMethod!,
@@ -92,7 +91,6 @@ suite.define(() => {
   it("shows unavailable cached PR state distinctly and clears the warning after recovery", async () => {
     await suite.withPage(publicationContextOptions(), async ({ page }) => {
       const gateway = await installMockGateway(page, {
-        communityInvite: false,
         featureMethods: publicationMethods,
         methodResponses: {
           [SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD]: { subscribed: true },
@@ -171,7 +169,6 @@ suite.define(() => {
           "The pull request base or its Git history could not be verified. Check repository read access, connectivity, and local Git objects before retrying publication.",
       };
       const gateway = await installMockGateway(page, {
-        communityInvite: false,
         featureMethods: publicationMethods,
         methodResponses: {
           [SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD]: { subscribed: true },
@@ -376,7 +373,6 @@ suite.define(() => {
       };
       const completed = { result: published, confirmation: null };
       const gateway = await installMockGateway(page, {
-        communityInvite: false,
         featureMethods: [...publicationMethods, "sessions.subscribe"],
         deferredMethods: ["sessions.github.status"],
         methodResponses: {
