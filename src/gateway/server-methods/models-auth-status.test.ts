@@ -672,6 +672,15 @@ describe("models.authStatus", () => {
             },
             {
               provider: "openai",
+              method: "api-key",
+              choiceId: "openai-key-variant",
+              groupId: "openai",
+              choiceLabel: "OpenAI key variant",
+              appGuidedSecret: true,
+              credentialOnly: true,
+            },
+            {
+              provider: "openai",
               method: "oauth",
               choiceId: "openai-oauth",
               choiceLabel: "OpenAI OAuth",
@@ -703,7 +712,21 @@ describe("models.authStatus", () => {
 
     expect(result.providerCapabilities).toEqual([
       { provider: "github-copilot", apiKeySupported: false, quickApiKeySetup: false },
-      { provider: "openai", apiKeySupported: true, quickApiKeySetup: true },
+      {
+        provider: "openai",
+        apiKeySupported: true,
+        quickApiKeySetup: true,
+        loginOptions: [
+          {
+            id: "provider-auth/openai-key-variant",
+            brandId: "openai",
+            groupId: "openai",
+            label: "OpenAI key variant",
+            kind: "secret",
+            featured: false,
+          },
+        ],
+      },
     ]);
   });
 

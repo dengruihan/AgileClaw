@@ -37,7 +37,11 @@ on the next startup. See [Apply changes and inspect](/plugins/manage-plugins#app
 
 ## Getting started
 
-Choose your plan type and follow the setup steps.
+Choose your plan type and follow the setup steps. In the Control UI,
+**Models → Connect provider → Qwen Cloud** lists the same plan and endpoint
+choices (Coding Plan, Standard pay-as-you-go, Token Plan, China/Global); pick
+one, paste your key, and the credential is saved with that endpoint preset
+without changing the active model.
 
 <Tabs>
   <Tab title="Coding Plan (subscription)">

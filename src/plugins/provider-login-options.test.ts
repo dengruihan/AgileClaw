@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { normalizeProviderAuthChoices } from "./manifest-setup-normalizers.js";
 import type { ProviderAuthChoiceMetadata } from "./provider-auth-choices.js";
@@ -40,6 +41,21 @@ describe("provider login choices", () => {
     ];
     expect(listProviderLoginOptions(choices)).toMatchObject([
       { id: "demo/demo-device", docsUrl: "https://docs.example.com/authentication" },
+    ]);
+  });
+
+  it("keeps credential ownership separate from the declared provider family", () => {
+    expect(
+      listProviderLoginOptions([
+        choice({ providerId: "qwen-token-plan", groupId: "qwen", groupLabel: "Qwen Cloud" }),
+      ]),
+    ).toMatchObject([
+      {
+        id: "demo/demo-device",
+        brandId: "qwen-token-plan",
+        groupId: "qwen",
+        groupLabel: "Qwen Cloud",
+      },
     ]);
   });
 
@@ -147,6 +163,30 @@ describe("provider login choices", () => {
       status: "resolved",
       choice: { mode: "setup" },
     });
+  });
+
+  it("lists bundled Z.AI key variants as credential-only secret logins", () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL("../../extensions/zai/openclaw.plugin.json", import.meta.url), "utf8"),
+    );
+    const metadata: ProviderAuthChoiceMetadata[] = (
+      normalizeProviderAuthChoices(manifest.providerAuthChoices) ?? []
+    ).map((entry) => ({
+      pluginId: "zai",
+      providerId: entry.provider,
+      methodId: entry.method,
+      choiceId: entry.choiceId,
+      choiceLabel: entry.choiceLabel,
+      ...(entry.appGuidedSecret ? { appGuidedSecret: true } : {}),
+      ...(entry.credentialOnly ? { credentialOnly: true } : {}),
+    }));
+    const options = listProviderLoginOptions(metadata);
+    expect(options.map((option) => option.id).toSorted()).toEqual(
+      ["zai/zai-coding-global", "zai/zai-coding-cn", "zai/zai-global", "zai/zai-cn"].toSorted(),
+    );
+    expect(options.every((option) => option.kind === "secret")).toBe(true);
+    // The plain default key stays on the quick-key form instead of a duplicate choice.
+    expect(options.some((option) => option.id === "zai/zai-api-key")).toBe(false);
   });
 
   it("normalizes valid chat declarations without enabling malformed ones", () => {

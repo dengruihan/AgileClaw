@@ -9,6 +9,7 @@ export type ProviderLoginOption = {
   brandId: string;
   label: string;
   hint?: string;
+  groupId?: string;
   groupLabel?: string;
   icon?: string;
   website?: string;
@@ -79,6 +80,7 @@ export function listProviderLoginOptions(
           brandId: choice.providerId,
           label: choice.choiceLabel,
           hint: choice.choiceHint,
+          ...(choice.groupId ? { groupId: choice.groupId } : {}),
           groupLabel: choice.groupLabel,
           icon: choice.icon,
           website: choice.website,

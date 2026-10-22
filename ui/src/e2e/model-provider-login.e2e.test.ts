@@ -80,7 +80,20 @@ suite.define(() => {
               ts: 1,
               providers: [],
               providerCapabilities: [
-                { provider: "anthropic", apiKeySupported: true, quickApiKeySetup: true },
+                {
+                  provider: "anthropic",
+                  apiKeySupported: true,
+                  quickApiKeySetup: true,
+                  loginOptions: [
+                    {
+                      id: "anthropic/setup-token",
+                      brandId: "anthropic",
+                      label: "Anthropic setup-token",
+                      kind: "secret",
+                      featured: false,
+                    },
+                  ],
+                },
                 {
                   provider: "openai",
                   apiKeySupported: true,
@@ -156,10 +169,8 @@ suite.define(() => {
         await dialog.locator("[data-models-login-back]").click();
         await dialog.locator('[data-models-login-provider="anthropic"]').click();
         expect(
-          await dialog
-            .getByRole("button", { name: "Anthropic setup-token", exact: true })
-            .isVisible(),
-        ).toBe(true);
+          await dialog.locator("[data-models-login-choice] button strong").allTextContents(),
+        ).toEqual(["Anthropic setup-token", "Anthropic API key"]);
         await dialog.getByRole("button", { name: "Anthropic API key", exact: true }).click();
         const keyInput = page.locator('.model-setup__manual input[type="password"]');
         await expect
@@ -181,6 +192,115 @@ suite.define(() => {
           apiKey: "synthetic-anthropic-api-key",
         });
         expect(await gateway.getRequests("models.authLogin")).toHaveLength(0);
+        expect(await gateway.getRequests("models.authSetApiKey")).toHaveLength(0);
+      },
+    );
+  });
+
+  it("saves a Coding Plan key in place from the Models page Connect provider dialog", async () => {
+    await suite.withPage(
+      {
+        colorScheme: "light",
+        locale: "en-US",
+        reducedMotion: "reduce",
+        serviceWorkers: "block",
+        viewport: { width: 1280, height: 900 },
+      },
+      async ({ page }) => {
+        const zaiCapability = {
+          provider: "zai",
+          apiKeySupported: true,
+          quickApiKeySetup: true,
+          loginOptions: [
+            {
+              id: "zai/zai-coding-global",
+              brandId: "zai",
+              groupLabel: "Z.AI",
+              label: "Coding-Plan-Global",
+              hint: "GLM Coding Plan Global (api.z.ai)",
+              kind: "secret",
+              featured: false,
+            },
+            {
+              id: "zai/zai-coding-cn",
+              brandId: "zai",
+              groupLabel: "Z.AI",
+              label: "Coding-Plan-CN",
+              hint: "GLM Coding Plan CN (open.bigmodel.cn)",
+              kind: "secret",
+              featured: false,
+            },
+          ],
+        };
+        const gateway = await installMockGateway(page, {
+          featureMethods: [...defaultControlUiFeatureMethods, "wizard.next"],
+          models: [{ id: "glm-5.3", name: "GLM 5.3", provider: "zai", available: true }],
+          methodResponses: {
+            "models.authStatus": {
+              ts: 1,
+              providers: [],
+              providerCapabilities: [zaiCapability],
+            },
+            "models.authLogin": { done: false, status: "running" },
+            "wizard.next": {
+              done: false,
+              status: "running",
+              step: {
+                id: "credential",
+                type: "text",
+                sensitive: true,
+                message: "Enter Z.AI API key",
+              },
+            },
+          },
+        });
+        await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+        await page.locator("[data-models-connect]").click();
+        const dialog = page.locator(".model-provider-login");
+        await dialog.locator('[data-models-login-provider="zai"]').waitFor();
+        await dialog.locator('[data-models-login-provider="zai"]').click();
+        const choices = dialog.locator("[data-models-login-choice] button strong");
+        expect(await choices.allTextContents()).toEqual(["Coding-Plan-Global", "Coding-Plan-CN"]);
+        if (recordVisuals) {
+          await writeFile(
+            path.join(suite.artifactDir, "models-page-zai-variants.png"),
+            await takeControlUiViewportScreenshot(
+              page,
+              page.locator("openclaw-modal-dialog dialog"),
+              [dialog],
+            ),
+          );
+        }
+        const login = gateway.waitForRequest("models.authLogin");
+        await dialog
+          .locator("[data-models-login-choice] button", { hasText: "Coding-Plan-CN" })
+          .click();
+        const keyInput = page.locator('.wizard-step__form input[name="wizard-text"]');
+        await keyInput.waitFor();
+        await captureProviderProof("models-page-zai-coding-key-step.png", keyInput);
+        await keyInput.fill("synthetic-zai-coding-key");
+        const loginParams = (await login).params;
+        assert(loginParams && typeof loginParams === "object" && "sessionId" in loginParams);
+        expect(loginParams).toEqual({
+          sessionId: expect.any(String),
+          agentId: "main",
+          authChoice: "zai/zai-coding-cn",
+        });
+        await gateway.setMethodResponse("wizard.next", { done: true, status: "done" });
+        await page.locator('.wizard-step__form button[type="submit"]').click();
+        await expect
+          .poll(async () => (await gateway.getRequests("wizard.next")).at(-1)?.params)
+          .toEqual({
+            sessionId: loginParams.sessionId,
+            answer: { stepId: "credential", value: "synthetic-zai-coding-key" },
+          });
+        await expect.poll(() => page.locator("openclaw-modal-dialog").count()).toBe(0);
+        await expect.poll(() => page.getByText("Provider credentials saved.").count()).toBe(1);
+        await captureProviderProof(
+          "models-page-zai-coding-saved.png",
+          page.getByText("Provider credentials saved."),
+        );
+        expect(await gateway.getRequests("openclaw.setup.activate.start")).toHaveLength(0);
         expect(await gateway.getRequests("models.authSetApiKey")).toHaveLength(0);
       },
     );
@@ -258,6 +378,8 @@ suite.define(() => {
           expect(search.has("connect")).toBe(false);
           await gateway.waitForRequest("models.authStatus", { match: { agentId: "writer" } });
           const card = page.locator('[data-provider-id="openai"]');
+          // Accounts live inside the card's collapsed Accounts & usage details.
+          await card.locator(".model-providers__card-details > summary").click();
           await card.getByText("alex@example.invalid", { exact: true }).waitFor();
           expect(await page.locator('[data-provider-id="anthropic"]').count()).toBe(0);
           expect(await page.locator("openclaw-modal-dialog").count()).toBe(0);
@@ -535,7 +657,10 @@ suite.define(() => {
           });
         const saved = page.getByRole("status").filter({ hasText: "Provider credentials saved." });
         await saved.waitFor();
-        await page.getByText("signed-in@example.invalid", { exact: true }).waitFor();
+        // Accounts live inside the card's collapsed Accounts & usage details.
+        const savedCard = page.locator('[data-provider-id="example"]');
+        await savedCard.locator(".model-providers__card-details > summary").click();
+        await savedCard.getByText("signed-in@example.invalid", { exact: true }).waitFor();
         await expect
           .poll(async () => (await gateway.getRequests("models.authStatus")).length)
           .toBeGreaterThan(authReads);

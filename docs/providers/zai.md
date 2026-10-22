@@ -25,6 +25,11 @@ refs such as `zai/glm-5.3`: provider `zai`, model id `glm-5.3`.
 
 ## Getting started
 
+In the Control UI, **Models → Connect provider → Z.AI** lists the same choices
+(`Coding-Plan-Global`, `Coding-Plan-CN`, `Global`, `CN`): pick one, paste your
+key, and the credential is saved with that endpoint preset without changing the
+active model. The CLI paths below also apply that endpoint's base URL.
+
 Install the provider plugin first:
 
 ```bash
