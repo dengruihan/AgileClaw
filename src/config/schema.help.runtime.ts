@@ -216,8 +216,6 @@ export const RUNTIME_FIELD_HELP: Record<string, string> = {
     "Environment label displayed in the Control UI and browser tab; surrounding whitespace is trimmed and the label must contain 1 to 24 characters.",
   "gateway.controlUi.environment.color":
     "Named environment color ramp: teal, amber, purple, coral, pink, blue, green, red, or gray.",
-  "gateway.controlUi.communityInvite":
-    "Show the community invitation with Reddit, Discord, and X links in the Control UI served by this Gateway (default on). Set false to hide it for every browser using this UI deployment. Changes apply after browser refresh or reconnect; re-enabling preserves browser-local dismissals.",
   "gateway.controlUi.newSessionModelDefaults":
     'Choose "configured" to start fresh Control UI drafts with the selected agent’s configured model, runtime and reasoning defaults instead of remembered selections. Default: "last-used". Explicit draft and conversation choices remain editable; Fast Mode and placement preferences are unchanged. Applies after browser refresh or reconnect.',
   "gateway.controlUi.github.host":

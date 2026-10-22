@@ -50,16 +50,6 @@ When you run several Gateways, set `gateway.controlUi.environment` to distinguis
 
 The environment adds a 2 px top stripe, an agent-avatar ring, label pills in the sidebar and narrow topbar, a browser-title suffix, and a matching favicon. The label is trimmed and must contain 1–24 characters. Available colors are `teal`, `amber`, `purple`, `coral`, `pink`, `blue`, `green`, `red`, and `gray`. The label and color are intentionally visible before sign-in; leave `environment` unset to keep the standard appearance unchanged.
 
-## Community invitation
-
-The sidebar shows a community invitation with Reddit, Discord, and X links by default. Its first appearance waits until sidebar interaction finishes, so it does not move session controls while you use them. Its close button dismisses it for the current browser origin. The redesigned invitation appears again for browsers that dismissed the older Discord-only card. Dismissing this version keeps it hidden across routine updates. To hide the invitation for everyone using a Control UI deployment, run this on the Gateway serving that UI:
-
-```bash
-openclaw config set gateway.controlUi.communityInvite false
-```
-
-After the Gateway applies the change, reload the browser page or reconnect to pick it up. The setting belongs to the Gateway serving the UI, including when that UI connects to a different remote Gateway. Setting it to `false` hides the card even in new browser profiles. Re-enabling it with `true` preserves existing browser-local dismissals.
-
 ## Personal identity
 
 Authenticated people have a durable Gateway profile with a display name, avatar, linked emails, and optional verified GitHub identity. Open **Settings → Profile → Identity** to update the editable fields. The profile follows the authenticated person across browsers; clearing browser site data does not delete it.

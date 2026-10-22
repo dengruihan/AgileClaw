@@ -170,12 +170,6 @@ suite.define(() => {
               }
             });
           });
-          await page.addInitScript(() => {
-            localStorage.setItem(
-              "openclaw:control-ui:community-invite:v2",
-              JSON.stringify({ dismissedAtMs: 1770000000000 }),
-            );
-          });
           const dashboard = await instance.cli(["dashboard", "--json"]);
           expect(dashboard.code, dashboard.stderr).toBe(0);
           const { browserUrl }: { browserUrl: string } = JSON.parse(dashboard.stdout);

@@ -262,12 +262,6 @@ suite.define(() => {
           await suite.withPage(
             { locale: "en-US", serviceWorkers: "block", viewport: { width: 1280, height: 900 } },
             async ({ page }) => {
-              await page.addInitScript(() => {
-                localStorage.setItem(
-                  "openclaw:control-ui:community-invite:v2",
-                  JSON.stringify({ dismissedAtMs: 1770000000000 }),
-                );
-              });
               page.on("pageerror", () => {
                 proof.browserFailed = true;
               });

@@ -22,7 +22,6 @@ suite.define(() => {
         };
         const gateway = await installMockGateway(page, {
           sessionKey: child.key,
-          communityInvite: false,
           sessions: [parent, child],
           historyMessages: [{ role: "assistant", content: "The workspace review is complete." }],
           featureMethods: ["chat.metadata", "chat.startup", "progressCard.get"],

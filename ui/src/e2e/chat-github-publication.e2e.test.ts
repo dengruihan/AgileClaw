@@ -80,7 +80,6 @@ suite.define(() => {
           assistantAgentId: "research",
           assistantName: "Research QA",
           workspace: "/synthetic/research",
-          communityInvite: false,
           sessionKey,
           sessionScope: scope === "global" ? "global" : "per-sender",
           operatorScopes: ["operator.read", "operator.write"],
@@ -215,7 +214,6 @@ suite.define(() => {
     const gateway = await installMockGateway(page, {
       assistantName: "Publication QA",
       workspace: "/synthetic/publication-qa",
-      communityInvite: false,
       operatorScopes: ["operator.read", "operator.write"],
       featureMethods: publicationMethods,
       sessionKey,
@@ -293,7 +291,6 @@ suite.define(() => {
     const gateway = await installMockGateway(page, {
       assistantName: "Publication QA",
       workspace: "/synthetic/publication-qa",
-      communityInvite: false,
       operatorScopes: ["operator.read", "operator.write"],
       featureMethods: publicationMethods,
       sessionKey: sessionA,
@@ -400,7 +397,6 @@ suite.define(() => {
       const gateway = await installMockGateway(page, {
         assistantName: "Publication QA",
         workspace: "/synthetic/publication-qa",
-        communityInvite: false,
         operatorScopes: ["operator.read", "operator.write"],
         featureMethods: publicationMethods,
         presenceUsers: [
@@ -742,7 +738,6 @@ suite.define(() => {
     const gateway = await installMockGateway(page, {
       assistantName: "Publication QA",
       workspace: "/synthetic/publication-qa",
-      communityInvite: false,
       operatorScopes: ["operator.read"],
       featureMethods: publicationMethods,
       presenceUsers: [

@@ -14,7 +14,6 @@ export function resolveControlUiBootstrapPresentation(config: OpenClawConfig | u
     automaticallyFetchFavicons: config?.gateway?.controlUi?.automaticallyFetchFavicons !== false,
     seamColor: config?.ui?.seamColor,
     environment: config?.gateway?.controlUi?.environment,
-    communityInvite: config?.gateway?.controlUi?.communityInvite !== false,
     newSessionModelDefaults: config?.gateway?.controlUi?.newSessionModelDefaults ?? "last-used",
     uploadsEnabled: config?.gateway?.uploads?.enabled !== false,
   } satisfies Partial<ControlUiBootstrapConfig>;

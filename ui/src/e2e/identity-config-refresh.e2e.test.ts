@@ -53,7 +53,6 @@ suite.define(() => {
       const gateway = await installMockGateway(page, {
         assistantName: initialName,
         historyMessages: [],
-        communityInvite: false,
         methodResponses: {
           "agent.identity.get": identity(initialName, initialAvatar),
           "agents.list": roster(initialName, initialAvatar),

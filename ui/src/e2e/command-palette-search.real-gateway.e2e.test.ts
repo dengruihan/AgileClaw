@@ -18,7 +18,6 @@ import {
 } from "../../../test/helpers/openclaw-test-instance.ts";
 import { runQaGatewayFixture } from "../../../test/helpers/qa-gateway-cleanup.ts";
 import { createRequireRecord } from "../../../test/helpers/record.js";
-import { COMMUNITY_INVITE_KEY } from "../components/community-invite-state.ts";
 import { waitForControlUiGatewayReady } from "../test-helpers/control-ui-e2e-readiness.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
@@ -362,9 +361,6 @@ suite.define(() => {
       await suite.withPage(
         { serviceWorkers: "block", locale: "en-US", viewport: { width: 1280, height: 900 } },
         async ({ page }) => {
-          await page.addInitScript((key) => {
-            localStorage.setItem(key, JSON.stringify({ dismissedAtMs: 1770000000000 }));
-          }, COMMUNITY_INVITE_KEY);
           observeSearchTraffic(page, rpc);
           expect((await page.goto(url.href))?.status()).toBe(200);
           await waitForControlUiGatewayReady(page);

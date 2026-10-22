@@ -288,12 +288,6 @@ suite.define(() => {
                   }
                 });
               });
-              await page.addInitScript(() => {
-                localStorage.setItem(
-                  "openclaw:control-ui:community-invite:v2",
-                  JSON.stringify({ dismissedAtMs: 1770000000000 }),
-                );
-              });
               await page.goto(url.href);
               await waitForControlUiGatewayReady(page);
               const composer = page.getByRole("textbox", { name: "Chat composer", exact: true });

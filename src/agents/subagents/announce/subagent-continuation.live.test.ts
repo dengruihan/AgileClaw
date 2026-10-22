@@ -173,12 +173,6 @@ describeLive("subagent continuation live", () => {
           locale: "en-US",
           serviceWorkers: "block",
         });
-        await page.addInitScript(() => {
-          localStorage.setItem(
-            "openclaw:control-ui:community-invite:v2",
-            JSON.stringify({ dismissedAtMs: 1770000000000 }),
-          );
-        });
         const { browserUrl } = await issueControlUiBrowserHandoff({
           httpUrl: controlUiSessionUrl(`http://127.0.0.1:${port}/`, sessionKey),
           wsUrl: `ws://127.0.0.1:${port}`,

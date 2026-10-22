@@ -55,6 +55,13 @@ const CONTROL_UI_TOOL_TITLES_RULE: LegacyConfigRule = {
     'gateway.controlUi.toolTitles is retired. Tool activity uses agent-provided descriptions automatically, without utility-model calls. Run "openclaw doctor --fix" to remove it.',
 };
 
+const CONTROL_UI_COMMUNITY_INVITE_RULE: LegacyConfigRule = {
+  path: ["gateway", "controlUi", "communityInvite"],
+  message:
+    'gateway.controlUi.communityInvite is retired because the sidebar community invitation was removed from the Control UI. Run "openclaw doctor --fix" to remove the legacy key.',
+  match: (value) => typeof value === "boolean",
+};
+
 const LEGACY_GATEWAY_BIND_HOST_ALIASES = new Map<string, "lan" | "loopback">([
   ["0.0.0.0", "lan"],
   ["::", "lan"],
@@ -89,6 +96,21 @@ export const LEGACY_CONFIG_MIGRATIONS_RUNTIME_GATEWAY: LegacyConfigMigrationSpec
       delete controlUi.toolTitles;
       changes.push(
         "Removed retired gateway.controlUi.toolTitles; tool activity descriptions are automatic and make no utility-model calls.",
+      );
+    },
+  }),
+  defineLegacyConfigMigration({
+    id: "gateway.control-ui-community-invite-remove",
+    describe: "Remove the retired Control UI community invitation preference",
+    legacyRules: [CONTROL_UI_COMMUNITY_INVITE_RULE],
+    apply: (raw, changes) => {
+      const controlUi = getRecord(getRecord(raw.gateway)?.controlUi);
+      if (!controlUi || !Object.hasOwn(controlUi, "communityInvite")) {
+        return;
+      }
+      delete controlUi.communityInvite;
+      changes.push(
+        "Removed retired gateway.controlUi.communityInvite; the Control UI no longer shows the community invitation.",
       );
     },
   }),

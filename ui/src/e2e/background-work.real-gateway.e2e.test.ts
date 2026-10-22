@@ -161,7 +161,6 @@ async function capture(page: Page, name: string, focus: Locator) {
     expect(visibleText.includes(secret), name + " contains private fixture data").toBe(false);
   }
   expect(new URL(page.url()).hash).toBe("");
-  expect(await page.locator(".community-invite-card:visible").count()).toBe(0);
   await page.screenshot({ path: path.join(artifactDir, name + ".png") });
   screenshots.push(name + ".png");
   await saveProof();
@@ -176,13 +175,6 @@ suite.define(() => {
           ...createControlUiE2eContextOptions(),
           viewport: { width: 1440, height: 1000 },
           colorScheme: "dark",
-        });
-        await context.addInitScript(() => {
-          // Real-Gateway contexts do not install the mock helper that seeds this preference.
-          const key = "openclaw:control-ui:community-invite:v2";
-          if (localStorage.getItem(key) === null) {
-            localStorage.setItem(key, JSON.stringify({ dismissedAtMs: 1770000000000 }));
-          }
         });
         const page = await context.newPage();
         const wire = observeBackgroundWorkRpc(page, signal);

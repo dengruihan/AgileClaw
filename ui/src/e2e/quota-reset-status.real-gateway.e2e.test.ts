@@ -170,12 +170,6 @@ async function captureFinalStatus(
     page.on("pageerror", (error) =>
       observations.push({ action: "browser-error", message: error.message }),
     );
-    await page.addInitScript(() => {
-      localStorage.setItem(
-        "openclaw:control-ui:community-invite:v2",
-        JSON.stringify({ dismissedAtMs: 1770000000000 }),
-      );
-    });
     try {
       await page.goto(url.href);
       await waitForControlUiGatewayReady(page);
@@ -205,7 +199,6 @@ async function captureFinalStatus(
         status: (await badge.textContent())?.trim(),
         text: await card.textContent(),
       });
-      expect(await page.locator(".community-invite-card").count()).toBe(0);
       await page.screenshot({
         path: path.join(artifactDir, "provider-status.png"),
         animations: "disabled",
@@ -231,12 +224,10 @@ async function captureFinalStatus(
         path.join(artifactDir, "rendered-page.json"),
         JSON.stringify({ text: await page.locator("body").textContent() }, null, 2),
       );
-      if ((await page.locator(".community-invite-card").count()) === 0) {
-        await page.screenshot({
-          path: path.join(artifactDir, "final-page.png"),
-          animations: "disabled",
-        });
-      }
+      await page.screenshot({
+        path: path.join(artifactDir, "final-page.png"),
+        animations: "disabled",
+      });
     }
     await context.close();
   } finally {

@@ -46,7 +46,6 @@ suite.define(() => {
           },
         );
         const gateway = await installMockGateway(page, {
-          communityInvite: false,
           sessionKey: row.key,
           sessions: [row],
           workspace: "/synthetic/scope-review",
@@ -152,7 +151,6 @@ suite.define(() => {
       async ({ page }) => {
         const row = createControlUiSessionRow("agent:main:main", "Scoped workspace", Date.now());
         const gateway = await installMockGateway(page, {
-          communityInvite: false,
           sessionKey: row.key,
           sessions: [row],
           operatorScopes: ["operator.sessions.read", "operator.sessions.write"],

@@ -7,7 +7,6 @@ function bootstrapResponse(
   serverVersion: string,
   automaticallyFetchFavicons = false,
   pluginAssetsRequireAuth?: boolean,
-  communityInvite = true,
 ): Response {
   const payload: ControlUiBootstrapConfig = {
     basePath: "",
@@ -18,7 +17,6 @@ function bootstrapResponse(
     terminalEnabled: false,
     cliAgentsEnabled: true,
     automaticallyFetchFavicons,
-    communityInvite,
     ...(pluginAssetsRequireAuth === undefined ? {} : { pluginAssetsRequireAuth }),
     pluginFrameGrants: [],
   };
@@ -97,23 +95,6 @@ describe("createApplicationConfigCapability", () => {
     });
     expect(config.current.pluginFrameGrants[0]).not.toHaveProperty("unrecognized");
     expect(fetchMock).toHaveBeenCalledOnce();
-  });
-
-  it("keeps invitations hidden until bootstrap enables them and accepts later opt-outs", async () => {
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(bootstrapResponse("test"))
-      .mockResolvedValueOnce(bootstrapResponse("test", false, undefined, false));
-    vi.stubGlobal("fetch", fetchMock);
-    const config = createApplicationConfigCapability({ resourceBasePath: "" });
-    const listener = vi.fn();
-    const unsubscribe = config.subscribe(listener);
-
-    expect(config.current.communityInvite).toBe(false);
-    await expect(config.refresh()).resolves.toMatchObject({ communityInvite: true });
-    await expect(config.refresh()).resolves.toMatchObject({ communityInvite: false });
-    expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({ communityInvite: false }));
-    unsubscribe();
   });
 
   it.each([undefined, true, false])(

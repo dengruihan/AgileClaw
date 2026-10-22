@@ -32,7 +32,6 @@ suite.define(() => {
           sessionKey: key,
           agentModel: "openai/gpt-4.1",
           models: [{ id: "gpt-4.1", name: "Preview model", provider: "openai" }],
-          communityInvite: false,
           featureMethods: ["sessions.processes.list", "sessions.processes.stop"],
           sessions: [
             {

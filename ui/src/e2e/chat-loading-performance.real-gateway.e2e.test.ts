@@ -272,10 +272,6 @@ suite.define(() => {
               localStorage.removeItem(key);
             }
           }
-          window.localStorage.setItem(
-            "openclaw:control-ui:community-invite:v2",
-            JSON.stringify({ dismissedAtMs: 1770000000000 }),
-          );
           const sample: BrowserPerformanceSample = {
             lcpMs: null,
             cls: 0,

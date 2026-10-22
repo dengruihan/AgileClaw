@@ -94,7 +94,6 @@ suite.define(() => {
           operatorScopes: guestQuestionScopes,
           sessionKey: guestQuestionSessionKey,
           mainSessionKey: "agent:main:main",
-          communityInvite: false,
           featureMethods: [
             "chat.startup",
             "chat.metadata",
