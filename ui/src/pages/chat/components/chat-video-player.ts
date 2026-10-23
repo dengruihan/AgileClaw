@@ -28,6 +28,7 @@ class ChatVideoPlayer extends OpenClawLightDomContentsElement {
   @property({ type: Number }) mediaHeight: number | undefined;
   @property({ attribute: false }) onExpand: ((src: string) => void) | undefined;
   @property({ attribute: false }) onFallbackExpand: (() => void) | undefined;
+  @property({ attribute: false }) onDownload: (() => void) | undefined;
   @property({ attribute: false }) onMediaLoaded: (() => void) | undefined;
 
   // Buffering can lower readyState after the first frame without another loadeddata event.
@@ -139,7 +140,8 @@ class ChatVideoPlayer extends OpenClawLightDomContentsElement {
         label: this.label,
         mimeType: this.mimeType,
         sizeBytes: this.sizeBytes,
-        downloadHref,
+        downloadHref: this.onDownload ? undefined : downloadHref,
+        onDownload: this.onDownload,
         onExpand: this.onFallbackExpand,
       });
     }
@@ -166,8 +168,9 @@ class ChatVideoPlayer extends OpenClawLightDomContentsElement {
           label: this.label,
           mimeType: this.mimeType,
           sizeBytes: this.sizeBytes,
-          downloadHref,
-          downloadPending: this.preview && !downloadHref,
+          downloadHref: this.onDownload ? undefined : downloadHref,
+          onDownload: this.onDownload,
+          downloadPending: this.preview && !downloadHref && !this.onDownload,
           loading,
           expandLabel: t("chat.mediaPlayer.openVideo", { filename: this.label }),
           onExpand,
