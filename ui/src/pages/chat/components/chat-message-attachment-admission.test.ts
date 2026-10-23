@@ -152,9 +152,10 @@ describe("nonimage attachment source admission", () => {
     await settle();
 
     expect(resolveArtifactDownload).toHaveBeenCalledOnce();
-    expect(container.querySelector("a[download]")?.getAttribute("href")).toBe(
-      `${url}?mediaTicket=fixture`,
+    const download = container.querySelector<HTMLButtonElement>(
+      "button.chat-assistant-attachment-card__download",
     );
+    expect(download?.disabled ?? true).toBe(false);
   });
 
   it("ignores stale admission after source replacement and disconnect", async () => {

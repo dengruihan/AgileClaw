@@ -3949,6 +3949,7 @@ export const en: TranslationMap & {
       allowImage: "Allow image",
       attachedFile: "Attached file",
       audio: "Audio",
+      downloadFailed: "Could not download this attachment. Try again.",
       expand: "Open {filename} in the side panel",
       open: "Open",
       previewUnavailable: "Preview unavailable",
