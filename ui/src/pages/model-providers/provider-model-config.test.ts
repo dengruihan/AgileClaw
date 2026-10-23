@@ -52,8 +52,8 @@ describe("provider model edits", () => {
         "glm-5.3",
       );
       const next = applyMergePatch(config, patch.raw, {
-        replacePaths: patch.replacePaths,
-      });
+        replaceArrayPaths: new Set(patch.replacePaths),
+      }) as typeof config;
       const entry = next.models.providers.zai.models.find((row) => row.id === "glm-5.3");
       expect(entry).toEqual({ id: "glm-5.3", name: "GLM-5.3", hidden: true });
     });
@@ -384,7 +384,7 @@ describe("provider deletion", () => {
     const next = applyMergePatch(config, patch.raw, {
       mergeObjectArraysById: true,
       replaceArrayPaths: new Set(patch.replacePaths),
-    });
+    }) as typeof config;
     expect(next.agents.defaults.model).toBeUndefined();
     expect(next.models.providers["custom.proxy"]).toBeUndefined();
     expect(next.models.providers.other).toEqual(config.models.providers.other);
@@ -412,7 +412,7 @@ describe("provider deletion", () => {
     const next = applyMergePatch(mixed, patch.raw, {
       mergeObjectArraysById: true,
       replaceArrayPaths: new Set(patch.replacePaths),
-    });
+    }) as typeof mixed;
     expect(next.agents.defaults.model).toEqual({
       primary: "other/sibling",
       fallbacks: ["other/sibling"],

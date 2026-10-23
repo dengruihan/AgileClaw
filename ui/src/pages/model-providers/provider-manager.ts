@@ -14,7 +14,11 @@ import {
 } from "./config-mutation.ts";
 import type { ModelProviderCard } from "./data.ts";
 import { providerConnectionFields } from "./provider-manager-connection.ts";
-import { modelConfigEntry, providerModelForm } from "./provider-manager-model-form.ts";
+import {
+  MODEL_THINKING_LEVEL_IDS,
+  modelConfigEntry,
+  providerModelForm,
+} from "./provider-manager-model-form.ts";
 import { providerModelsList } from "./provider-manager-models.ts";
 import {
   configuredProvider,
@@ -198,13 +202,18 @@ export class ProviderManager extends OpenClawLightDomElement {
     const configured =
       model && providerModels(this.config, this.providerId).find((row) => row.id === model.id);
     this.originalModel = configured ? structuredClone(configured) : undefined;
-    // Every row prefills the thinking map it effectively runs with — its own
-    // authored map, else the catalog's — so the form shows exactly what the
-    // provider would receive per level before and after an override.
-    const catalogMap = model
-      ? this.catalog.find((row) => row.id === model.id)?.thinkingLevelMap
+    // Every row prefills the thinking levels it effectively runs with — its own
+    // authored map, else the catalog's offered levels. The wire only carries the
+    // level set ({id, label}[]), so prefilled values stay blank: the form's
+    // blank-value rule passes the level's own name through to the provider.
+    const catalogLevels = model
+      ? this.catalog.find((row) => row.id === model.id)?.thinkingLevels
       : undefined;
-    const catalogPrefill = isRecord(catalogMap) ? structuredClone(catalogMap) : undefined;
+    const catalogPrefill = catalogLevels
+      ? Object.fromEntries(
+          catalogLevels.flatMap(({ id }) => (MODEL_THINKING_LEVEL_IDS.has(id) ? [[id, ""]] : [])),
+        )
+      : undefined;
     const draft: Record<string, unknown> = configured
       ? structuredClone(configured)
       : model

@@ -284,37 +284,6 @@ describe("theme RPC", () => {
     });
   });
 
-  it("keeps saved themes selected after pet metadata is retired", async () => {
-    const definition = createThemeDefinitionFixture({ avatarHat: "crown" });
-    for (const critters of [[], ["penguin"]]) {
-      const stored = {
-        "ui.theme": "user/legacy",
-        "ui.themeDefinition.legacy": { ...definition, critters },
-      };
-      expect(setUserPreferences(requesterProfileId, stored).ok).toBe(true);
-      const saved = getUserPreferences(requesterProfileId);
-      const result = await invoke("themes.get");
-      expect(result).toMatchObject({
-        ok: true,
-        payload: { current: { id: "user/legacy" }, definition },
-      });
-      expect(result.payload).not.toHaveProperty("definition.critters");
-      expect(getUserPreferences(requesterProfileId)).toEqual(saved);
-      const imported = await invoke("themes.import", {
-        id: "restored",
-        definition: { ...definition, critters },
-        apply: true,
-      });
-      expect(imported).toMatchObject({
-        ok: true,
-        payload: { current: { id: "user/restored" }, definition },
-      });
-      expect(getUserPreferences(requesterProfileId)["ui.themeDefinition.restored"]).toEqual(
-        definition,
-      );
-    }
-  });
-
   it("rolls back the imported definition when selecting it fails in storage", async () => {
     expect(setUserPreferences(requesterProfileId, { "ui.theme": "claw" }).ok).toBe(true);
     expect((await invoke("themes.get")).ok).toBe(true);

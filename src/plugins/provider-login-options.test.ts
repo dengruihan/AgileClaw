@@ -171,15 +171,22 @@ describe("provider login choices", () => {
     );
     const metadata: ProviderAuthChoiceMetadata[] = (
       normalizeProviderAuthChoices(manifest.providerAuthChoices) ?? []
-    ).map((entry) => ({
-      pluginId: "zai",
-      providerId: entry.provider,
-      methodId: entry.method,
-      choiceId: entry.choiceId,
-      choiceLabel: entry.choiceLabel,
-      ...(entry.appGuidedSecret ? { appGuidedSecret: true } : {}),
-      ...(entry.credentialOnly ? { credentialOnly: true } : {}),
-    }));
+    ).map((entry) => {
+      const option: ProviderAuthChoiceMetadata = {
+        pluginId: "zai",
+        providerId: entry.provider,
+        methodId: entry.method,
+        choiceId: entry.choiceId,
+        choiceLabel: entry.choiceLabel,
+      };
+      if (entry.appGuidedSecret) {
+        option.appGuidedSecret = true;
+      }
+      if (entry.credentialOnly) {
+        option.credentialOnly = true;
+      }
+      return option;
+    });
     const options = listProviderLoginOptions(metadata);
     expect(options.map((option) => option.id).toSorted()).toEqual(
       ["zai/zai-coding-global", "zai/zai-coding-cn", "zai/zai-global", "zai/zai-cn"].toSorted(),

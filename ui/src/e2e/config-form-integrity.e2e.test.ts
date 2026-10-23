@@ -429,7 +429,7 @@ suite.define(() => {
     // Onboarding-seeded rows carry no metadataSource marker; deleting one drops
     // the authored entry and keeps endpoint-listed rows restorable in the
     // collapsed Hidden models section.
-    const models = [
+    const models: { id: string; name: string; input?: string[]; hidden?: boolean }[] = [
       { id: "model-1", name: "One", input: ["text"] },
       { id: "model-2", name: "Two", input: ["text"], hidden: true },
       { id: "model-3", name: "Three", input: ["text"] },
@@ -518,24 +518,29 @@ suite.define(() => {
         await gateway.deferNext("config.patch");
         await third.getByRole("button", { name: "Delete", exact: true }).click();
         const rejected = await gateway.waitForRequest("config.patch");
-        expect(JSON.parse(String(rejected.params.raw))).toEqual({
+        const params = rejected.params as {
+          baseHash?: string;
+          raw?: string;
+          replacePaths?: string[];
+        };
+        expect(JSON.parse(String(params.raw))).toEqual({
           models: {
             providers: {
               [providerId]: {
-                models: [models[0], models[1], { id: "model-3", name: "Three", hidden: true }],
+                models: [models[0]!, models[1]!, { id: "model-3", name: "Three", hidden: true }],
               },
             },
           },
         });
-        expect(rejected.params.baseHash).toBe("seeded-row-e2e");
-        expect(rejected.params.replacePaths).toHaveLength(1);
+        expect(params.baseHash).toBe("seeded-row-e2e");
+        expect(params.replacePaths).toHaveLength(1);
         const afterDelete = {
           agents: initial.agents,
           models: {
             providers: {
               [providerId]: {
                 baseUrl: "https://seeded.example.test/v1",
-                models: [models[0], models[1], { id: "model-3", name: "Three", hidden: true }],
+                models: [models[0]!, models[1]!, { id: "model-3", name: "Three", hidden: true }],
               },
             },
           },

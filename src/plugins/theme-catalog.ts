@@ -23,20 +23,15 @@ function pluginThemes(plugin: PluginManifestRecord): ThemeCatalogEntry[] {
       const hash = createHash("sha256").update(svg).digest("hex").slice(0, 12);
       return `${buildControlUiResourcePath("pluginThemeArt", "", plugin.id, [id, "hat", artId])}?v=${hash}`;
     };
-    const projected: ThemeArtwork | undefined = artwork
-      ? {
-          ...(artwork.hats
-            ? {
-                hats: Object.fromEntries(
-                  Object.entries(artwork.hats).map(([artId, art]) => [
-                    artId,
-                    { url: resourceUrl(artId, art.svg) },
-                  ]),
-                ),
-              }
-            : {}),
-        }
+    const hats = artwork?.hats
+      ? Object.fromEntries(
+          Object.entries(artwork.hats).map(([artId, art]) => [
+            artId,
+            { url: resourceUrl(artId, art.svg) },
+          ]),
+        )
       : undefined;
+    const projected: ThemeArtwork | undefined = hats ? { hats } : undefined;
     themes.push({
       id: `${plugin.id}/${id}`,
       name: definition.name,

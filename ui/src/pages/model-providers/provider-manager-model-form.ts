@@ -21,6 +21,9 @@ export const MODEL_THINKING_LEVELS = [
 
 export type ModelThinkingLevel = (typeof MODEL_THINKING_LEVELS)[number];
 
+/** Canonical level ids as a string set, for filtering wire level options. */
+export const MODEL_THINKING_LEVEL_IDS: ReadonlySet<string> = new Set(MODEL_THINKING_LEVELS);
+
 /** Levels the draft lists as offered; null levels stay hidden. */
 function thinkingRows(map: Record<string, unknown>): ModelThinkingLevel[] {
   return MODEL_THINKING_LEVELS.filter((level) => map[level] !== null && map[level] !== undefined);
@@ -33,9 +36,15 @@ function sameThinkingRows(a: Record<string, unknown>, b: Record<string, unknown>
   return rows(a) === rows(b);
 }
 
+/** Raw input value for a draft string field; non-strings stay blank instead of
+ * stringifying opaque objects into "[object Object]". */
+export function stringInputValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
 /** Raw input value for a number field; blank means inherit or omit. */
 function numberInputValue(value: unknown): string {
-  return value === undefined || value === null ? "" : String(value);
+  return typeof value === "number" ? String(value) : stringInputValue(value);
 }
 
 /** Coerces a form value to a finite number; blank stays undefined. */
@@ -122,7 +131,8 @@ export function modelConfigEntry(
       const map: Record<string, unknown> = {};
       for (const level of MODEL_THINKING_LEVELS) {
         const value = draft.thinkingLevelMap[level];
-        map[level] = value === null || value === undefined ? null : String(value).trim() || level;
+        map[level] =
+          value === null || value === undefined ? null : stringInputValue(value).trim() || level;
       }
       entry.thinkingLevelMap = map;
     } else if (!isRecord(original?.thinkingLevelMap)) {
@@ -158,9 +168,10 @@ export function providerModelForm(params: {
         ><input
           name="name"
           required
-          .value=${String(draft.name ?? "")}
+          .value=${stringInputValue(draft.name)}
           ?disabled=${disabled}
           @input=${(event: Event) => {
+            // SAFETY: the handler only fires on this name text input.
             onField({ name: (event.target as HTMLInputElement).value });
           }}
       /></label>
@@ -169,9 +180,10 @@ export function providerModelForm(params: {
         ><input
           name="id"
           required
-          .value=${String(draft.id ?? "")}
+          .value=${stringInputValue(draft.id)}
           ?disabled=${disabled || lockId}
           @input=${(event: Event) => {
+            // SAFETY: the handler only fires on this id text input.
             onField({ id: (event.target as HTMLInputElement).value });
           }}
       /></label>
@@ -185,6 +197,7 @@ export function providerModelForm(params: {
           .value=${numberInputValue(draft.contextWindow)}
           ?disabled=${disabled}
           @input=${(event: Event) => {
+            // SAFETY: the handler only fires on this context-window number input.
             onField({ contextWindow: (event.target as HTMLInputElement).value });
           }}
       /></label>
@@ -198,6 +211,7 @@ export function providerModelForm(params: {
           .value=${numberInputValue(draft.maxTokens)}
           ?disabled=${disabled}
           @input=${(event: Event) => {
+            // SAFETY: the handler only fires on this max-tokens number input.
             onField({ maxTokens: (event.target as HTMLInputElement).value });
           }}
       /></label>
@@ -224,6 +238,7 @@ export function providerModelForm(params: {
             .checked=${draft.reasoning === true}
             ?disabled=${disabled}
             @change=${(event: Event) => {
+              // SAFETY: the handler only fires on this reasoning checkbox.
               onField({ reasoning: (event.target as HTMLInputElement).checked });
             }}
           /><span>${t("modelProviders.manager.reasoningSupport")}</span></label
@@ -253,6 +268,9 @@ export function providerModelForm(params: {
                     .value=${level}
                     ?disabled=${disabled}
                     @change=${(event: Event) => {
+                      // The change fires on this level select whose options only
+                      // carry canonical levels, never an arbitrary string.
+                      // SAFETY: double cast reading a canonical ModelThinkingLevel.
                       const to = (event.target as HTMLSelectElement).value as ModelThinkingLevel;
                       const { [level]: moved, ...rest } = map;
                       replaceMap({ ...rest, [to]: moved });
@@ -272,13 +290,14 @@ export function providerModelForm(params: {
                   </select>
                   <input
                     name="thinking-${level}"
-                    .value=${String(value ?? "")}
+                    .value=${stringInputValue(value)}
                     placeholder=${t("modelProviders.manager.thinkingLevels.placeholder")}
                     aria-label=${t("modelProviders.manager.thinkingLevels.valueLabel", {
                       level: levelLabel(level),
                     })}
                     ?disabled=${disabled}
                     @input=${(event: Event) => {
+                      // SAFETY: the handler only fires on this level value input.
                       onThinkingValue(level, (event.target as HTMLInputElement).value);
                     }}
                   />
@@ -303,7 +322,9 @@ export function providerModelForm(params: {
                 aria-label=${t("modelProviders.manager.thinkingLevels.addLevel")}
                 ?disabled=${disabled || unused.length === 0}
                 @change=${(event: Event) => {
+                  // SAFETY: the change fires on the add-level select below.
                   const select = event.target as HTMLSelectElement;
+                  // SAFETY: the select's options only carry canonical levels.
                   const level = select.value as ModelThinkingLevel;
                   if (MODEL_THINKING_LEVELS.includes(level)) {
                     replaceMap({ ...map, [level]: "" });
@@ -333,6 +354,7 @@ export function providerModelForm(params: {
                   .value=${numberInputValue(cost[key])}
                   ?disabled=${disabled}
                   @input=${(event: Event) => {
+                    // SAFETY: the handler only fires on this cost number input.
                     onCostField(key, (event.target as HTMLInputElement).value);
                   }}
               /></label>`,
