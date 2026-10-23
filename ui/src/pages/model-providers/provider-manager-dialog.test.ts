@@ -65,13 +65,13 @@ async function openDialog(config: DialogTestConfig, provider: string) {
     if (method === "config.patch") {
       const patch = params as DialogPatchParams;
       patches.push(patch);
-      applyPatch(current, JSON.parse(String(patch.raw ?? "{}")), new Set(patch.replacePaths ?? []));
+      applyPatch(current, JSON.parse(patch.raw ?? "{}"), new Set(patch.replacePaths ?? []));
       return { config: current, hash: `patched-${patches.length}` };
     }
     if (method === "models.list") {
       return { models: config.catalog };
     }
-    return originalRequest(method, params);
+    return originalRequest(method);
   });
   const page = appendPage(harness.context);
   harness.runtimeConfig.state.configForm = structuredClone(current);
@@ -269,19 +269,22 @@ describe("provider manager dialog forms", () => {
             id: "discovered",
             name: "Discovered",
             provider: "custom-lab",
-            thinkingLevelMap: { low: "cat-low", high: "cat-high", max: null },
+            thinkingLevels: [
+              { id: "low", label: "low" },
+              { id: "high", label: "high" },
+            ],
           },
           {
             id: "quiet",
             name: "Quiet",
             provider: "custom-lab",
-            thinkingLevelMap: { low: "quiet-low" },
+            thinkingLevels: [{ id: "low", label: "low" }],
           },
           {
             id: "renamed-only",
             name: "Renamed Only",
             provider: "custom-lab",
-            thinkingLevelMap: { high: "rename-high", xhigh: null },
+            thinkingLevels: [{ id: "high", label: "high" }],
           },
         ],
       },
@@ -328,7 +331,9 @@ describe("provider manager dialog forms", () => {
       max: null,
     });
     // Prefilled catalog rows list only their offered levels; removing and
-    // adding rows re-materializes the map with hidden slots.
+    // adding rows re-materializes the map with hidden slots. Untouched
+    // prefilled values stay blank on the wire, so materialization passes the
+    // level's own name through instead of a catalog effort value.
     editButton(manager, "discovered").click();
     await waitForFast(() => expect(input("name")).not.toBeNull());
     expect(rowLevel("low")).not.toBeNull();
@@ -343,7 +348,7 @@ describe("provider manager dialog forms", () => {
     expect(savedRows().find((row) => row.id === "discovered")?.thinkingLevelMap).toEqual({
       off: "disabled",
       minimal: null,
-      low: "cat-low",
+      low: "low",
       medium: null,
       high: null,
       xhigh: null,

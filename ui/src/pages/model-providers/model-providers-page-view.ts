@@ -1,0 +1,266 @@
+import { redactSensitiveUrlLikeString } from "@openclaw/net-policy/redact-sensitive-url";
+import { asNullableRecord as asConfigRecord } from "@openclaw/normalization-core/record-coerce";
+import { html, type TemplateResult } from "lit";
+import { hasOperatorAdminAccess } from "../../app/operator-access.ts";
+import { t } from "../../i18n/index.ts";
+import { listSelectableAgents, normalizeAgentLabel } from "../../lib/agents/display.ts";
+import { currentConfigObject } from "../../lib/config/config-state-model.ts";
+import { isGatewayMethodAdvertised } from "../../lib/gateway-methods.ts";
+import * as modelCatalog from "../../lib/model-catalog-store.ts";
+import { normalizeAgentId } from "../../lib/sessions/session-key.ts";
+import {
+  modelDefaultsActions,
+  modelProviderConfigBusy,
+  modelProviderConfigMutationBlockedReason,
+  readModelBehaviorConfig,
+} from "./config-mutation.ts";
+import {
+  buildModelProviderCards,
+  buildUnconfiguredProviderOptions,
+  readModelProviderConfig,
+  resolveDefaultModelPresentation,
+  type DefaultsDraft,
+} from "./data.ts";
+import { EMPTY_MODEL_PROVIDERS_DATA, MODEL_PROVIDERS_COST_DAYS } from "./load.ts";
+import { loginOptionChoiceId } from "./login-providers.ts";
+import type { ModelProvidersPage } from "./model-providers-page.ts";
+import {
+  configuredProvider,
+  localOrCustomProvider,
+  providerEndpoint,
+} from "./provider-model-config.ts";
+import {
+  renderModelProviderScope,
+  renderModelProviders,
+  renderModelProvidersPageShell,
+} from "./view.ts";
+
+/**
+ * Page-body assembly for the models/providers settings page: derives the
+ * card, defaults, and capability projections from page state and wires every
+ * view callback back into the page. Hosted beside the page class so the page
+ * file stays within the line budget without splitting its controller seams.
+ */
+export function renderModelProvidersPageContent(page: ModelProvidersPage): TemplateResult {
+  const gatewaySnapshot = page.context.gateway.snapshot;
+  const operatorAuth = gatewaySnapshot.hello?.auth;
+  const agentsState = page.context.agents.state;
+  const agents = agentsState.agentsList?.agents ?? [];
+  const noSelectableAgents =
+    agentsState.agentsList !== null && listSelectableAgents(agents).length === 0;
+  const rosterError = agentsState.agentsList ? null : agentsState.agentsError;
+  const selected = agents.find((agent) => normalizeAgentId(agent.id) === page.selectedAgentId);
+  const data = page.data ?? EMPTY_MODEL_PROVIDERS_DATA;
+  const configObject = currentConfigObject(page.context.runtimeConfig.state);
+  const config = readModelProviderConfig(configObject);
+  const catalog = modelCatalog.readAgentModelCatalog(gatewaySnapshot.client, page.selectedAgentId);
+  const configuredDefaults = {
+    ...config.defaults,
+    ...readModelBehaviorConfig(asConfigRecord(asConfigRecord(configObject?.agents)?.defaults)),
+  };
+  const { defaults, configuredModels } = resolveDefaultModelPresentation(
+    catalog,
+    configuredDefaults,
+    page.defaultsDraft,
+  );
+  const stageDefaults = (patch: Partial<DefaultsDraft>) => {
+    page.defaultsDraft = { ...(page.defaultsDraft ?? configuredDefaults), ...patch };
+    page.setMessage("defaults", null);
+    void page.saveDefaults(page.defaultsDraft);
+  };
+  const cards = buildModelProviderCards({
+    ...data,
+    models: catalog?.models ?? null,
+    providerOutcomes: catalog.hasSnapshot
+      ? (catalog.providerOutcomes ?? [])
+      : data.providerOutcomes,
+    pendingProviders: catalog?.pendingProviders,
+    providerUsage: data.providerUsage?.ok ? data.providerUsage.value : null,
+    configProviderIds: config.providerIds,
+    configApiKeyProviderIds: config.apiKeyProviderIds,
+    configProviderAuthModes: config.providerAuthModes,
+  });
+  const configuredProviderIds = new Set([
+    ...config.providerIds,
+    ...(data.authStatus?.providers
+      .filter((provider) => Boolean(provider.apiKey) || provider.profiles.length > 0)
+      .map((provider) => provider.provider) ?? []),
+  ]);
+  const knownProviderIds = new Set(
+    data.authStatus?.providerCapabilities?.map((entry) => entry.provider) ?? [],
+  );
+  const isLocalOrCustom = (id: string) =>
+    localOrCustomProvider(configObject, id, knownProviderIds, catalog?.models ?? []);
+  const usageAvailable = isGatewayMethodAdvertised(gatewaySnapshot, "codex.accountUsage");
+  const login = page.login.pageActions;
+  const body = renderModelProviders({
+    accountRecovery: page.login.renderRecovery(),
+    catalogSettings: html`<openclaw-model-catalog-settings
+      .routeData=${page.routeData?.catalogConfig ?? null}
+      .runtimeConfig=${page.context.runtimeConfig}
+    ></openclaw-model-catalog-settings>`,
+    providerScope: renderModelProviderScope({
+      agentLabel: selected ? normalizeAgentLabel(selected) : page.selectedAgentId,
+      ...login,
+      connectDisabled: login.connectDisabled || page.discovery.busy || page.addProviderOpen,
+    }),
+    providerCategory: page.providerCategory,
+    onProviderCategoryChange: (value) => {
+      page.providerCategory = value;
+    },
+    isLocalOrCustom: (card) => isLocalOrCustom(card.configKey ?? card.id),
+    isLocalOrCustomProvider: isLocalOrCustom,
+    providerEndpoint: (card) => {
+      const endpoint = providerEndpoint(configObject, card.configKey ?? card.id);
+      return endpoint ? redactSensitiveUrlLikeString(endpoint) : undefined;
+    },
+    onProviderSettings: (card) => {
+      page.managerIntent = { provider: card.configKey ?? card.id, view: "settings" };
+    },
+    onProviderModels: (card) => {
+      page.managerIntent = { provider: card.configKey ?? card.id, view: "models" };
+    },
+    onCustomProvider: () => {
+      page.managerIntent = { provider: "", view: "create" };
+    },
+    onAvailableProvider: (provider) => {
+      page.managerIntent = { provider, view: "settings" };
+    },
+    providerQuery: page.providerQuery,
+    onProviderQueryChange: (value) => (page.providerQuery = value),
+    onConnectProvider: () => void page.login.open(),
+    usageClient: !page.mutationBlockedReason() && usageAvailable ? gatewaySnapshot.client : null,
+    usageAgentId: page.selectedAgentId,
+    connected: gatewaySnapshot.phase === "connected",
+    loading:
+      gatewaySnapshot.phase === "connected" &&
+      page.data === null &&
+      !rosterError &&
+      !noSelectableAgents,
+    refreshing: page.core.loading,
+    error: rosterError ?? (noSelectableAgents ? t("agents.noAgents") : data.error),
+    providerUsageFailed: data.providerUsage?.ok === false,
+    supplementalLoading: page.loaderPending || page.supplemental.loading,
+    updatedAt: data.updatedAt,
+    costDays: MODEL_PROVIDERS_COST_DAYS,
+    credentialAgentLabel: selected ? normalizeAgentLabel(selected) : page.selectedAgentId,
+    cards: noSelectableAgents ? [] : page.installedAgents.filterProviders(cards),
+    configuredModels,
+    decisionModels: catalog?.decisionModels ?? [],
+    defaultModels: defaults,
+    authStatus: data.authStatus,
+    automaticUtilityModel: catalog?.defaultModels?.automaticUtilityModel,
+    utilityRuntime: catalog?.defaultModels?.utilityRuntime,
+    thinkingLevel: defaults.thinkingLevel,
+    thinkingOverridden: defaults.thinkingOverridden,
+    fastMode: defaults.fastMode,
+    fastModeOverridden: defaults.fastModeOverridden,
+    catalogDiscovering:
+      page.catalogDiscovery.discovering || Boolean(catalog?.pendingProviders?.length),
+    catalogDiscoveryError: page.catalogDiscovery.discovering
+      ? null
+      : (page.catalogDiscovery.error ?? data.catalogError),
+    configBusy: modelProviderConfigBusy(page.context),
+    unconfiguredProviders: buildUnconfiguredProviderOptions(
+      data.authStatus?.providerCapabilities,
+      configuredProviderIds,
+    ),
+    canViewProfiles:
+      gatewaySnapshot.phase === "connected" &&
+      operatorAuth?.scopes !== undefined &&
+      hasOperatorAdminAccess(operatorAuth),
+    mutationBlockedReason: page.mutationBlockedReason(),
+    defaultsMutationBlockedReason: modelProviderConfigMutationBlockedReason(page.context),
+    providerUsageStalled: page.refreshPolicy.incompleteUsageExhausted,
+    probeAvailable: isGatewayMethodAdvertised(gatewaySnapshot, "models.probe") !== false,
+    busy: page.busy,
+    messages: page.messages,
+    probeResults: page.probeResults,
+    keyEditorProvider: page.keyEditorProvider,
+    keyDraft: page.keyDraft,
+    profileOrders: page.profileOrders,
+    addProviderOpen: page.addProviderOpen,
+    addProviderId: page.addProviderId,
+    addProviderKey: page.addProviderKey,
+    installedAgents: page.installedAgents.render(cards, () => page.catalogDiscovery.retry()),
+    onRefresh: () =>
+      void (rosterError
+        ? page.context.agents.refreshList()
+        : Promise.all([
+            page.context.runtimeConfig.refresh({ background: true }),
+            page.refresh("forced"),
+          ])),
+    onOpenKeyEditor: (provider) => page.openKeyEditor(provider),
+    onCloseKeyEditor: () => page.closeKeyEditor(),
+    onKeyDraftChange: (value) => (page.keyDraft = value),
+    onSaveKey: (provider, configKey) =>
+      void page.mutateApiKey(provider, configKey, page.keyDraft.trim()),
+    onRemoveKey: (provider, configKey) => void page.mutateApiKey(provider, configKey, null),
+    onDeleteProvider: (card) => void page.deleteProvider(card),
+    // Any authored provider entry can go, cloud or custom; catalog-known
+    // providers without an entry only carry credentials (logout covers those).
+    canDeleteProvider: (card) =>
+      configuredProvider(configObject, card.configKey ?? card.id) !== null,
+    onProbe: (cardId, providers) => void page.profileActions.probe(cardId, providers),
+    onRequestLogout: (pending) => void page.requestLogout(pending),
+    onProfileOrderChange: (cardId, provider, profileIds) =>
+      page.profileActions.setOrder(cardId, provider, profileIds),
+    onAddProviderToggle: () => {
+      page.addProviderOpen = !page.addProviderOpen;
+      page.addProviderKey = "";
+      page.setMessage("add", null);
+    },
+    onAddProviderKeyChange: (value) => (page.addProviderKey = value),
+    onAddProvider: () => void page.addProvider(),
+    ...modelDefaultsActions(() => page.defaultsDraft ?? configuredDefaults, stageDefaults),
+    onCatalogRetry: () => page.catalogDiscovery.retry(),
+    ...page.login.providerActions,
+  });
+  return renderModelProvidersPageShell({
+    body,
+    loginMessage: page.messages.connection ?? login.loginMessage,
+    login: html`<openclaw-provider-manager
+        .context=${page.context}
+        .agentId=${page.selectedAgentId}
+        .intent=${page.managerIntent}
+        .card=${cards.find((card) => (card.configKey ?? card.id) === page.managerIntent?.provider) ?? null}
+        .probe=${page.probeResults[cards.find((card) => (card.configKey ?? card.id) === page.managerIntent?.provider)?.id ?? ""]}
+        .onClose=${() => {
+          page.managerIntent = null;
+        }}
+        .onRefresh=${() => {
+          void page.refresh("replacement");
+        }}
+        .onProbe=${() => {
+          const card = cards.find(
+            (entry) => (entry.configKey ?? entry.id) === page.managerIntent?.provider,
+          );
+          if (card) {
+            void page.profileActions.probe(
+              card.id,
+              card.credentialProviderIds.length ? card.credentialProviderIds : [card.id],
+            );
+          }
+        }}
+        .onConnect=${() => {
+          const card = cards.find(
+            (entry) => (entry.configKey ?? entry.id) === page.managerIntent?.provider,
+          );
+          page.managerIntent = null;
+          if (card) {
+            void page.login.providerActions.onConnect(card);
+          } else {
+            void page.login.open();
+          }
+        }}
+        .onCredential=${(provider: string, key: string | null) => page.mutateApiKey(provider, provider, key)}
+      ></openclaw-provider-manager
+      >${login.login}${page.discovery.render({
+        agentLabel: selected ? normalizeAgentLabel(selected) : page.selectedAgentId,
+        credentialChoices:
+          data.authStatus?.providerCapabilities?.flatMap(
+            (provider) => provider.loginOptions?.map(loginOptionChoiceId) ?? [],
+          ) ?? [],
+      })}`,
+  });
+}

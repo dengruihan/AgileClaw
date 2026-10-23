@@ -61,16 +61,14 @@ export function loadManifestThemeDefinitions(params: {
         }
         return svg;
       };
-      const artwork: PluginThemeArtwork = {
-        ...(theme.hats
-          ? {
-              hats: Object.fromEntries(
-                Object.entries(theme.hats).map(([id, source]) => [id, { svg: readSvg(source) }]),
-              ),
-            }
-          : {}),
-      };
-      return [{ id: theme.id, definition, ...(theme.hats ? { artwork } : {}) }];
+      const artwork: PluginThemeArtwork | undefined = theme.hats
+        ? {
+            hats: Object.fromEntries(
+              Object.entries(theme.hats).map(([id, source]) => [id, { svg: readSvg(source) }]),
+            ),
+          }
+        : undefined;
+      return [{ id: theme.id, definition, ...(artwork ? { artwork } : {}) }];
     } catch (error) {
       params.diagnostics.push({
         level: "warn",

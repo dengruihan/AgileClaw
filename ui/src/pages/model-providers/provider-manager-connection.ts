@@ -2,6 +2,7 @@ import { html, nothing, type TemplateResult } from "lit";
 import type { ModelsProbeResult } from "../../api/types.ts";
 import { t } from "../../i18n/index.ts";
 import type { ModelProviderCard } from "./data.ts";
+import { stringInputValue } from "./provider-manager-model-form.ts";
 
 /** Interactive members the provider-manager connection form reads and calls. */
 export type ProviderConnectionActions = {
@@ -61,7 +62,7 @@ export function providerConnectionFields(params: {
   const selectedApi =
     creating && state.draft.api === undefined
       ? "openai-completions"
-      : String(state.draft.api ?? "");
+      : stringInputValue(state.draft.api);
   return html` <p class="muted">
       ${t("modelProviders.manager.connectionScope", { agent: state.agentId })}
     </p>
@@ -76,6 +77,7 @@ export function providerConnectionFields(params: {
               .value=${state.providerId}
               ?disabled=${state.disabled || state.providerCreated}
               @input=${(event: Event) => {
+                // SAFETY: the handler only fires on this provider-id text input.
                 actions.onProviderIdInput((event.target as HTMLInputElement).value);
               }}
           /></label>`
@@ -85,10 +87,11 @@ export function providerConnectionFields(params: {
       ><span>${t("modelProviders.manager.baseUrlLabel")}</span
       ><input
         name="baseUrl"
-        .value=${String(state.draft.baseUrl ?? "")}
+        .value=${stringInputValue(state.draft.baseUrl)}
         ?required=${creating}
         ?disabled=${state.disabled}
         @input=${(event: Event) => {
+          // SAFETY: the handler only fires on this base-url text input.
           actions.onFieldInput("baseUrl", (event.target as HTMLInputElement).value);
         }}
     /></label>
@@ -99,6 +102,7 @@ export function providerConnectionFields(params: {
         class="settings-select"
         ?disabled=${state.disabled}
         @change=${(event: Event) => {
+          // SAFETY: the handler only fires on this api-format select.
           actions.onFieldInput("api", (event.target as HTMLSelectElement).value);
         }}
       >
@@ -138,6 +142,7 @@ export function providerConnectionFields(params: {
                 .value=${state.keyDraft}
                 ?disabled=${state.disabled}
                 @input=${(event: Event) => {
+                  // SAFETY: the handler only fires on this api-key text input.
                   actions.onKeyInput((event.target as HTMLInputElement).value);
                 }}
               /><button

@@ -49,7 +49,7 @@ describe("buildLoginProviders", () => {
       ],
     });
     expect(groups).toHaveLength(1);
-    expect(groups[0].choices.map((choice) => [choice.id, choice.kind])).toEqual([
+    expect(groups[0]!.choices.map((choice) => [choice.id, choice.kind])).toEqual([
       ["zai/zai-coding-global", "secret"],
       ["zai-coding-cn", "setup-secret"],
     ]);
@@ -90,7 +90,7 @@ describe("buildLoginProviders", () => {
       ],
     });
     expect(groups).toHaveLength(1);
-    expect(groups[0].choices.map((choice) => [choice.id, choice.kind])).toEqual([
+    expect(groups[0]!.choices.map((choice) => [choice.id, choice.kind])).toEqual([
       ["github-copilot/github-copilot", "device-code"],
       ["github-copilot", "setup-secret"],
     ]);
@@ -122,7 +122,7 @@ describe("buildLoginProviders", () => {
               id: `${capability.provider}-key`,
               brandId: capability.provider,
               groupLabel: "Qwen Cloud",
-              label: capability.loginOptions[0].label,
+              label: capability.loginOptions[0]!.label,
             }))
           : undefined,
       });
@@ -132,11 +132,11 @@ describe("buildLoginProviders", () => {
         label: "Qwen Cloud",
         authProviders: ["qwen", "qwen-token-plan"],
       });
-      expect(groups[0].choices.map(({ brandId, kind }) => [brandId, kind])).toEqual([
+      expect(groups[0]!.choices.map(({ brandId, kind }) => [brandId, kind])).toEqual([
         ["qwen", setup ? "setup-secret" : "secret"],
         ["qwen-token-plan", setup ? "setup-secret" : "secret"],
       ]);
-      expect(groups[0].apiKeyProvider).toBe(setup ? undefined : "qwen");
+      expect(groups[0]!.apiKeyProvider).toBe(setup ? undefined : "qwen");
     },
   );
 });
