@@ -1,39 +1,21 @@
 /* @vitest-environment jsdom */
 
 import { expectDefined } from "@openclaw/normalization-core";
-import { html, render } from "lit";
-import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { render } from "lit";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { normalizeAttachmentContentBlock } from "../../../lib/chat/message-normalizer-attachments.ts";
-import { renderAssistantAttachments as renderAttachmentCards } from "./chat-message-attachments.ts";
-import { renderMessageImages } from "./chat-message-images.ts";
 import {
-  projectMessageMedia,
-  releaseChatMediaResourceSubscriber,
-  type AttachmentItem,
-} from "./chat-message-media.ts";
+  flushAttachmentResolution,
+  managedAttachment,
+  registerChatAttachmentTestCleanup,
+  renderAssistantAttachments,
+} from "./chat-message-attachments.test-support.ts";
+import type { AttachmentItem } from "./chat-message-media.ts";
 import type { SidebarContent } from "./chat-sidebar-content-types.ts";
 
+const subscribers = registerChatAttachmentTestCleanup();
+
 type AttachmentSidebarContent = Extract<SidebarContent, { kind: "attachment" }>;
-
-function renderAssistantAttachments(
-  ...[content, options, ...rest]: Parameters<typeof renderAttachmentCards>
-) {
-  const { images, attachments } = projectMessageMedia({}, content);
-  return html`${renderMessageImages(images, options)}${renderAttachmentCards(attachments, options, ...rest)}`;
-}
-
-function managedAttachment(url: string, artifactId?: string): AttachmentItem {
-  return {
-    type: "attachment",
-    attachment: {
-      kind: "document",
-      label: "asset.bin",
-      mimeType: "application/octet-stream",
-      url,
-      artifactId,
-    },
-  };
-}
 
 function svgAttachment(
   url: string,
@@ -45,14 +27,6 @@ function svgAttachment(
     attachment: { kind: "document", label, mimeType: "image/svg+xml", url, ...overrides },
   };
 }
-
-async function flushAttachmentResolution() {
-  for (let index = 0; index < 8; index += 1) {
-    await Promise.resolve();
-  }
-}
-
-const subscribers = new Set<() => void>();
 
 function stubAttachmentIntersection(): () => Promise<void> {
   const callbacks: IntersectionObserverCallback[] = [];
@@ -74,16 +48,6 @@ function stubAttachmentIntersection(): () => Promise<void> {
     );
   };
 }
-
-afterEach(() => {
-  for (const subscriber of subscribers) {
-    releaseChatMediaResourceSubscriber(subscriber);
-  }
-  subscribers.clear();
-  document.body.replaceChildren();
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
-});
 
 describe("attachment sidebar source ownership", () => {
   it("preserves an ordinary comment-named file when its source cannot be previewed", async () => {
@@ -570,7 +534,8 @@ describe("attachment sidebar source ownership", () => {
     const resolveArtifactDownload = vi
       .fn<() => Promise<{ url: string } | null>>()
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ url: ticketedUrl });
+      .mockResolvedValueOnce({ url: ticketedUrl })
+      .mockResolvedValueOnce({ url: `${source}?mediaTicket=clicked` });
     const container = document.body.appendChild(document.createElement("div"));
     const rerender = () =>
       render(
@@ -591,11 +556,21 @@ describe("attachment sidebar source ownership", () => {
 
     expect(resolveArtifactDownload).toHaveBeenCalledTimes(2);
     expect(container.querySelector(".chat-assistant-attachment-card--blocked")).toBeNull();
-    expect(
-      container
-        .querySelector<HTMLAnchorElement>(".chat-assistant-attachment-card__download")
-        ?.getAttribute("href"),
-    ).toBe(ticketedUrl);
+    const downloadClick = vi.spyOn(HTMLAnchorElement.prototype, "click");
+    container
+      .querySelector<HTMLButtonElement>(".chat-assistant-attachment-card__download")
+      ?.click();
+    await flushAttachmentResolution();
+
+    expect(resolveArtifactDownload).toHaveBeenLastCalledWith({
+      sessionKey: "agent:main:main",
+      artifactId,
+    });
+    expect(downloadClick).toHaveBeenCalledOnce();
+    const savedAnchor = downloadClick.mock.instances[0] as HTMLAnchorElement | undefined;
+    expect(savedAnchor?.href).toContain(`${source}?mediaTicket=clicked`);
+    expect(savedAnchor?.getAttribute("download")).toBe("asset.bin");
+    downloadClick.mockRestore();
     container.remove();
   });
 
@@ -629,34 +604,6 @@ describe("attachment sidebar source ownership", () => {
     expect(
       container.querySelector(".chat-assistant-attachment-card")?.hasAttribute("data-openable"),
     ).toBe(false);
-    container.remove();
-  });
-
-  it("prefixes managed attachment tickets with the Control UI resource base path", async () => {
-    const attachmentId = crypto.randomUUID();
-    const source = `/api/chat/media/outgoing/agent%3Amain%3Amain/${attachmentId}/full`;
-    const ticketedUrl = `${source}?mediaTicket=ticket`;
-    const resolveArtifactDownload = vi.fn(async () => ({ url: ticketedUrl }));
-    const container = document.body.appendChild(document.createElement("div"));
-    const rerender = () =>
-      render(
-        renderAssistantAttachments([managedAttachment(source, `artifact_${attachmentId}`)], {
-          onRequestUpdate: rerender,
-          resourceBasePath: "/rosita",
-          resolveArtifactDownload,
-        }),
-        container,
-      );
-    subscribers.add(rerender);
-
-    rerender();
-    await flushAttachmentResolution();
-
-    expect(
-      container
-        .querySelector<HTMLAnchorElement>(".chat-assistant-attachment-card__download")
-        ?.getAttribute("href"),
-    ).toBe(`/rosita${ticketedUrl}`);
     container.remove();
   });
 

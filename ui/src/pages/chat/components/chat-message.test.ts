@@ -402,6 +402,11 @@ function attachmentDownload(container: Element) {
   return container.querySelector<HTMLAnchorElement>(".chat-assistant-attachment-card__download");
 }
 
+function audioPlayerSrc(container: Element) {
+  const player = container.querySelector("openclaw-chat-audio-player");
+  return (player as null | (HTMLElement & { src: string }))?.src ?? null;
+}
+
 function stubObjectUrls(create: () => string) {
   const createObjectURL = vi.fn(create);
   const revokeObjectURL = vi.fn();
@@ -2155,11 +2160,7 @@ describe("grouped chat rendering", () => {
     expect(view.textContent).not.toContain("Outside allowed folders");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await vi.waitFor(() =>
-      expect(
-        view
-          .querySelector<HTMLAnchorElement>(".chat-assistant-attachment-card__download")
-          ?.getAttribute("href"),
-      ).toBe(
+      expect(audioPlayerSrc(view)).toBe(
         `/__openclaw__/assistant-media?source=${encodeURIComponent(source)}&mediaTicket=ticket-bootstrap-audio&filename=${filename}`,
       ),
     );
@@ -2206,7 +2207,7 @@ describe("grouped chat rendering", () => {
       `${ticketedUrl}&playback=1`,
       expect.objectContaining({ method: "HEAD" }),
     );
-    expect(attachmentDownload(container)?.getAttribute("href")).toBe(ticketedUrl);
+    expect(audioPlayerSrc(container)).toBe(ticketedUrl);
     expect(container.querySelector("openclaw-chat-audio-player")).not.toBeNull();
   });
 
@@ -2275,7 +2276,7 @@ describe("grouped chat rendering", () => {
     await flushAssistantAttachmentAvailabilityChecks();
 
     expect(resolveArtifactDownload).toHaveBeenCalledTimes(3);
-    expect(attachmentDownload(container)?.getAttribute("href")).toContain("mediaTicket=short-2");
+    expect(audioPlayerSrc(container)).toContain("mediaTicket=short-2");
     expect(container.querySelector(".chat-assistant-attachment-card--blocked")).toBeNull();
 
     await vi.advanceTimersByTimeAsync(4_999);
@@ -2309,12 +2310,12 @@ describe("grouped chat rendering", () => {
     await flushAssistantAttachmentAvailabilityChecks();
     expect(resolveArtifactDownload).toHaveBeenCalledTimes(2);
     expect(container.querySelector(".chat-assistant-attachment-card--blocked")).toBeNull();
-    expect(attachmentDownload(container)?.getAttribute("href")).toContain("mediaTicket=short-1");
+    expect(audioPlayerSrc(container)).toContain("mediaTicket=short-1");
     await vi.advanceTimersByTimeAsync(10_000);
     await flushAssistantAttachmentAvailabilityChecks();
 
     expect(resolveArtifactDownload).toHaveBeenCalledTimes(3);
-    expect(attachmentDownload(container)?.getAttribute("href")).toContain("mediaTicket=short-3");
+    expect(audioPlayerSrc(container)).toContain("mediaTicket=short-3");
 
     await vi.advanceTimersByTimeAsync(5_000);
     await flushAssistantAttachmentAvailabilityChecks();
@@ -2571,12 +2572,14 @@ describe("grouped chat rendering", () => {
 
     rerender();
     const card = expectElement(view, ".chat-assistant-attachment-card--compact", HTMLElement);
-    const download = expectElement(card, "a[download]", HTMLAnchorElement);
+    const download = expectElement(
+      card,
+      "button.chat-assistant-attachment-card__download",
+      HTMLButtonElement,
+    );
     expect(card.textContent).toContain(source.split("/").at(-1));
     expect(card.querySelector(".skeleton")).toBeNull();
-    expect(download.hasAttribute("href")).toBe(false);
-    expect(download.getAttribute("aria-disabled")).toBe("true");
-    expect(download.tabIndex).toBe(0);
+    expect(download.disabled).toBe(true);
 
     const expectedMetaUrl = `/openclaw/__openclaw__/assistant-media?source=${encodeURIComponent(source)}&meta=1`;
     const [, fetchInit] = requireFetchCallForUrl(fetchMock, expectedMetaUrl);
