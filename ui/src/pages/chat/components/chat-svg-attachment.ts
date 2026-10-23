@@ -25,6 +25,7 @@ class ChatSvgAttachment extends OpenClawLightDomContentsElement {
   @property() downloadHref = "";
   @property({ attribute: false }) onOpen: ((src: string, release: () => void) => void) | undefined;
   @property({ attribute: false }) onExpand: (() => void) | undefined;
+  @property({ attribute: false }) onDownload: (() => void) | undefined;
   @property({ attribute: false }) onMediaLoaded: (() => void) | undefined;
 
   @state() private renderSource: SvgRenderSource | undefined;
@@ -197,7 +198,8 @@ class ChatSvgAttachment extends OpenClawLightDomContentsElement {
         label: this.label,
         mimeType: this.mimeType,
         sizeBytes: this.sizeBytes,
-        downloadHref: this.downloadHref,
+        downloadHref: this.onDownload ? undefined : this.downloadHref,
+        onDownload: this.onDownload,
         onExpand: this.onExpand,
       });
     }

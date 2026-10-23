@@ -87,11 +87,11 @@ suite.define(() => {
           .slice(1)
           .some((url) => url.searchParams.get("mediaTicket") === "ticket-dollar-home"),
       ).toBe(true);
-      const downloadHref = await attachment
-        .locator(".chat-assistant-attachment-card__download")
-        .getAttribute("href");
-      expect(downloadHref).toBeTruthy();
-      const downloadUrl = new URL(downloadHref ?? "", suite.server.baseUrl);
+      const downloadControl = attachment.locator("button.chat-assistant-attachment-card__download");
+      await expect.poll(() => downloadControl.count()).toBe(1);
+      const playerSrc =
+        (await attachment.evaluate((element) => (element as { src?: string }).src)) ?? "";
+      const downloadUrl = new URL(playerSrc, suite.server.baseUrl);
       expect(downloadUrl.searchParams.get("mediaTicket")).toBe("ticket-dollar-home");
       expect(downloadUrl.searchParams.get("source")).toBe(source);
       await expect

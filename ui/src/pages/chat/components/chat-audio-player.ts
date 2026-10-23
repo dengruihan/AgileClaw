@@ -57,6 +57,7 @@ class ChatAudioPlayer extends OpenClawLightDomContentsElement {
   @property({ type: Number }) serverDurationMs: number | undefined;
   @property({ type: Boolean }) voiceNote = false;
   @property({ attribute: false }) onExpand: (() => void) | undefined;
+  @property({ attribute: false }) onDownload: (() => void) | undefined;
   @property({ attribute: false }) onMediaLoaded: (() => void) | undefined;
 
   @state() private currentTime = 0;
@@ -520,7 +521,29 @@ class ChatAudioPlayer extends OpenClawLightDomContentsElement {
           <span class="chat-assistant-attachment-card__reason" role="status"
             >${t("chat.attachments.previewUnavailable")}</span
           >
-          ${downloadHref ? html`<a class="chat-assistant-attachment-card__action" href=${downloadHref} download=${this.label} target="_blank" rel="noreferrer" aria-label=${t("chat.mediaPlayer.download", { filename: this.label })}>${icons.download}</a>` : nothing}
+          ${
+            this.onDownload
+              ? html`<button
+                  type="button"
+                  class="chat-assistant-attachment-card__action"
+                  aria-label=${t("chat.mediaPlayer.download", { filename: this.label })}
+                  title=${t("chat.mediaPlayer.download", { filename: this.label })}
+                  @click=${this.onDownload}
+                >
+                  ${icons.download}
+                </button>`
+              : downloadHref
+                ? html`<a
+                    class="chat-assistant-attachment-card__action"
+                    href=${downloadHref}
+                    download=${this.label}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label=${t("chat.mediaPlayer.download", { filename: this.label })}
+                    >${icons.download}</a
+                  >`
+                : nothing
+          }
         </div>
       </div>`;
     }
@@ -530,7 +553,8 @@ class ChatAudioPlayer extends OpenClawLightDomContentsElement {
         label: this.label,
         mimeType: this.mimeType,
         sizeBytes: this.sizeBytes,
-        downloadHref,
+        downloadHref: this.onDownload ? undefined : downloadHref,
+        onDownload: this.onDownload,
         onExpand: this.onExpand,
         voiceNote: this.voiceNote,
       });
@@ -551,7 +575,8 @@ class ChatAudioPlayer extends OpenClawLightDomContentsElement {
                 label: this.label,
                 mimeType: this.mimeType,
                 sizeBytes: this.sizeBytes,
-                downloadHref,
+                downloadHref: this.onDownload ? undefined : downloadHref,
+                onDownload: this.onDownload,
                 onExpand: this.onExpand,
                 visualMode: "preview-with-favicon",
                 voiceNote: this.voiceNote,

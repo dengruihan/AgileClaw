@@ -1,6 +1,7 @@
 import { html, nothing } from "lit";
 import { t } from "../../../i18n/index.ts";
 import { renderCompactAttachmentCard } from "./chat-attachment-card.ts";
+import { createAttachmentDownloadHandler } from "./chat-attachment-download.ts";
 import "./chat-audio-player.ts";
 import "./chat-svg-attachment.ts";
 import "./chat-video-player.ts";
@@ -497,6 +498,7 @@ function renderMessageAttachmentContent(
   }
   const media = resolved?.status === "available" ? resolved.source : undefined;
   const attachmentUrl = media?.src ?? "";
+  const onDownload = createAttachmentDownloadHandler(attachment, options);
   const safeAttachmentUrl =
     attachment.kind === "audio" || attachment.kind === "video"
       ? safeMediaAttachmentHref(attachmentUrl, attachment.kind)
@@ -596,7 +598,8 @@ function renderMessageAttachmentContent(
       label: attachment.label,
       mimeType: attachment.mimeType,
       sizeBytes: media?.sizeBytes ?? attachment.sizeBytes,
-      downloadHref: safeAttachmentUrl,
+      downloadHref: onDownload ? undefined : safeAttachmentUrl,
+      onDownload,
       downloadPending: Boolean(admission && !media),
       downloadPendingFocusable: Boolean(admission),
       onExpand: openAttachmentSidebar,
@@ -616,7 +619,8 @@ function renderMessageAttachmentContent(
       .label=${title}
       .mimeType=${attachment.mimeType ?? "image/svg+xml"}
       .sizeBytes=${media?.sizeBytes}
-      .downloadHref=${safeAttachmentHref(attachmentUrl)}
+      .downloadHref=${onDownload ? "" : safeAttachmentHref(attachmentUrl)}
+      .onDownload=${onDownload}
       .onOpen=${(src: string, release: () => void) =>
         openResolvedImage(onOpenImage, src, title, release, onRequestOpenImage?.())}
       .onExpand=${openAttachmentSidebar}
@@ -642,6 +646,7 @@ function renderMessageAttachmentContent(
       .sizeBytes=${media?.sizeBytes}
       .serverDurationMs=${media?.durationMs}
       .voiceNote=${attachment.isVoiceNote === true}
+      .onDownload=${onDownload}
       .onExpand=${attachment.isVoiceNote ? undefined : openAttachmentSidebar}
       .onMediaLoaded=${onAssistantAttachmentLoaded}
     ></openclaw-chat-audio-player>`;
@@ -657,6 +662,7 @@ function renderMessageAttachmentContent(
       .sizeBytes=${media?.sizeBytes}
       .mediaWidth=${media?.width}
       .mediaHeight=${media?.height}
+      .onDownload=${onDownload}
       .onExpand=${openVideoOverlay}
       .onFallbackExpand=${openAttachmentSidebar}
       .onMediaLoaded=${onAssistantAttachmentLoaded}

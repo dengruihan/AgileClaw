@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, it } from "vitest";
+import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { waitForControlUiProofSurface } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
   captureUiProofEnabled,
@@ -86,11 +87,28 @@ suite.define(() => {
     }
   });
 
-  it("exposes an assistant document download with its Unicode filename and ticketed URL", async () => {
+  it("re-mints a stale document download ticket at click time with its Unicode filename", async () => {
     const context = await suite.newBrowserContext(createControlUiE2eContextOptions());
     const page = await context.newPage();
     const source = "/tmp/openclaw/测试 report.pdf";
-    const mediaUrl = `/__openclaw__/assistant-media?source=${encodeURIComponent(source)}&mediaTicket=ticket-download`;
+    const staleTicketUrl = `/__openclaw__/assistant-media?source=${encodeURIComponent(source)}&mediaTicket=ticket-download-stale`;
+    const documentBytes = Buffer.from("%PDF-1.4 re-minted download bytes");
+    await page.route("**/__openclaw__/assistant-media?**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get("meta") === "1") {
+        expect(url.searchParams.get("source")).toBe(source);
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            available: true,
+            mediaTicket: "ticket-download-fresh",
+            mediaTicketExpiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+          }),
+        });
+        return;
+      }
+      await route.fulfill({ contentType: "application/pdf", body: documentBytes });
+    });
     await installMockGateway(page, {
       historyMessages: [
         {
@@ -103,7 +121,7 @@ suite.define(() => {
                 kind: "document",
                 label: "测试 report.pdf",
                 mimeType: "application/pdf",
-                url: mediaUrl,
+                url: staleTicketUrl,
               },
             },
           ],
@@ -117,14 +135,102 @@ suite.define(() => {
       const card = page
         .locator(".chat-assistant-attachment-card--compact")
         .filter({ hasText: "测试 report.pdf" });
-      const link = card.locator(".chat-assistant-attachment-card__download");
-      await link.waitFor({ state: "visible", timeout: 10_000 });
-      expect(await link.getAttribute("href")).toBe(mediaUrl);
+      const download = card.getByRole("button", { name: "Download 测试 report.pdf" });
+      await download.waitFor({ state: "visible", timeout: 10_000 });
       await card.hover();
-      const [download] = await Promise.all([page.waitForEvent("download"), link.click()]);
-      await download.path();
+      const [saved] = await Promise.all([page.waitForEvent("download"), download.click()]);
 
-      expect(download.suggestedFilename()).toBe("测试 report.pdf");
+      expect(saved.suggestedFilename()).toBe("测试 report.pdf");
+      // Chromium's download manager bypasses Playwright routes, so the freshly
+      // minted ticket is asserted from the download's own request URL.
+      const savedUrl = new URL(saved.url());
+      expect(savedUrl.searchParams.get("mediaTicket")).toBe("ticket-download-fresh");
+      expect(savedUrl.searchParams.get("source")).toBe(source);
+    } finally {
+      await suite.closeBrowserContext(context);
+    }
+  });
+
+  it("downloads a managed document with a freshly minted ticket after the gateway restarted", async () => {
+    const context = await suite.newBrowserContext(createControlUiE2eContextOptions());
+    const page = await context.newPage();
+    const attachmentId = crypto.randomUUID();
+    const artifactId = `artifact_managed_document_${attachmentId}`;
+    const source = `/api/chat/media/outgoing/agent%3Amain%3Amain/${attachmentId}/full`;
+    const staleTicketUrl = `${source}?mediaTicket=stale-render-ticket`;
+    const restartedTicketUrl = `${source}?mediaTicket=fresh-restart-ticket`;
+    const documentBytes = Buffer.from("managed document bytes after restart");
+    const artifact = {
+      id: artifactId,
+      type: "file",
+      title: "canvas-draft.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      download: { mode: "url" },
+    };
+    const gateway = await installMockGateway(page, {
+      historyMessages: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "attachment",
+              attachment: {
+                kind: "document",
+                label: "canvas-draft.docx",
+                mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                url: source,
+                artifactId,
+                sizeBytes: documentBytes.length,
+              },
+            },
+          ],
+          timestamp: Date.now(),
+        },
+      ],
+      methodResponses: {
+        "artifacts.download": {
+          artifact,
+          url: staleTicketUrl,
+          expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+        },
+      },
+    });
+
+    try {
+      await page.goto(`${suite.server.baseUrl}chat`);
+      const card = page
+        .locator(".chat-assistant-attachment-card--compact")
+        .filter({ hasText: "canvas-draft.docx" });
+      const download = card.locator("button.chat-assistant-attachment-card__download");
+      await download.waitFor({ state: "visible", timeout: 10_000 });
+      if (captureUiProofEnabled) {
+        await page.screenshot({
+          fullPage: true,
+          path: path.join(
+            createControlUiE2eArtifactDir("r03-download-reauth"),
+            "managed-document-card-button.png",
+          ),
+        });
+      }
+      // The card's own resolution consumes the stale static response first; only
+      // the click-time re-mint is held back so a restarted gateway can answer it.
+      await gateway.waitForRequest("artifacts.download");
+      await gateway.deferNext("artifacts.download");
+      await card.hover();
+      const saved = page.waitForEvent("download");
+      await download.click();
+      await gateway.resolveDeferred("artifacts.download", {
+        artifact,
+        url: restartedTicketUrl,
+        expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+      });
+
+      const received = await saved;
+      expect(received.suggestedFilename()).toBe("canvas-draft.docx");
+      // Chromium's download manager bypasses Playwright routes, so the freshly
+      // minted ticket is asserted from the download's own request URL.
+      expect(new URL(received.url()).searchParams.get("mediaTicket")).toBe("fresh-restart-ticket");
+      expect(await gateway.getRequests("artifacts.download")).toHaveLength(2);
     } finally {
       await suite.closeBrowserContext(context);
     }
@@ -316,22 +422,16 @@ suite.define(() => {
       const cards = page.locator(".chat-assistant-attachment-card--compact");
       await cards.first().waitFor({ state: "visible", timeout: 10_000 });
       expect(await cards.count()).toBe(4);
-      const downloads = cards.locator("a[download]");
+      const downloads = cards.locator("button.chat-assistant-attachment-card__download");
       expect(await downloads.count()).toBe(4);
       expect(
         await downloads.evaluateAll((elements) =>
-          elements.every(
-            (element) =>
-              !element.hasAttribute("href") &&
-              element.getAttribute("aria-disabled") === "true" &&
-              element.getAttribute("tabindex") === "0",
-          ),
+          elements.every((element) => element instanceof HTMLButtonElement && element.disabled),
         ),
       ).toBe(true);
       expect(await cards.locator(".skeleton").count()).toBe(0);
       const pendingDownload = await downloads.first().elementHandle();
       expect(pendingDownload).not.toBeNull();
-      await downloads.first().focus();
       // Ancestor entrance animations must settle before comparing viewport rectangles.
       const openButtons = cards.locator(".chat-assistant-attachment-card__expand");
       await waitForControlUiProofSurface(cards.first(), [openButtons.first()]);
@@ -353,19 +453,20 @@ suite.define(() => {
 
       await gateway.waitForRequest("artifacts.download", { after: attachments.length - 1 });
       await gateway.resolveDeferred("artifacts.download");
-      await expect.poll(() => cards.locator("a[download][href]").count()).toBe(4);
+      await expect
+        .poll(() =>
+          cards.locator("button.chat-assistant-attachment-card__download:not([disabled])").count(),
+        )
+        .toBe(4);
       expect(
         await downloads.evaluateAll((elements) =>
-          elements.every((element) => !element.hasAttribute("aria-disabled")),
+          elements.every((element) => element instanceof HTMLButtonElement && !element.disabled),
         ),
       ).toBe(true);
       expect(
         await downloads
           .first()
           .evaluate((element, pending) => element === pending, pendingDownload),
-      ).toBe(true);
-      expect(
-        await downloads.first().evaluate((element) => document.activeElement === element),
       ).toBe(true);
       expect(await cards.locator(".skeleton").count()).toBe(0);
       const openButtonSize = await openButtons.first().evaluate((element) => {
