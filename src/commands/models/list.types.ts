@@ -1,3 +1,13 @@
+export type AuthProbeOptions = {
+  provider?: string;
+  modelId?: string;
+  profileIds?: string[];
+  includeDirectKeys?: boolean;
+  timeoutMs: number;
+  concurrency: number;
+  maxTokens: number;
+};
+
 export type ModelRow = {
   key: string;
   name: string;

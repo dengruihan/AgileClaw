@@ -47,10 +47,15 @@ function probePriority(provider: string, modelId: string): number {
 /** Selects a requested-provider candidate before falling back to its catalog rows. */
 export function selectProbeModel(params: {
   provider: string;
+  modelId?: string;
   candidates: Map<string, string[]>;
   catalog: Array<Pick<ModelCatalogEntry, "provider" | "id" | "status">>;
 }): { provider: string; model: string } | null {
-  const { provider, candidates, catalog } = params;
+  const { provider, modelId, candidates, catalog } = params;
+  // Model-row tests keep their exact provider-local ID, including slashes.
+  if (modelId) {
+    return { provider, model: modelId };
+  }
   const direct = candidates.get(provider)?.[0];
   if (direct) {
     return { provider, model: direct };

@@ -327,8 +327,6 @@ export class ModelProviderLoginController implements ReactiveController {
           ? buildModelProviderCards({
               authStatus: picker.authStatus,
               models: null,
-              providerUsage: null,
-              costByProvider: null,
             }).filter((card) =>
               provider.authProviders.some(
                 (owner) => card.id === canonicalModelAuthProviderId(owner),

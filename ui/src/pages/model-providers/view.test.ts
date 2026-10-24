@@ -110,15 +110,6 @@ function selectSegment(group: SegmentedGroup, value: string) {
 }
 
 describe("renderModelProviders", () => {
-  it("surfaces a provider-usage failure on the provider list", () => {
-    const container = document.createElement("div");
-    mount(props({ providerUsageFailed: true }), container);
-
-    expect(container.textContent).toContain(
-      "Provider usage is unavailable; the last request failed. Refresh to retry.",
-    );
-  });
-
   beforeEach(async () => {
     await i18n.setLocale("en");
   });
@@ -304,11 +295,8 @@ describe("renderModelProviders", () => {
             profiles: [
               { profileId: "openai:one", type: "oauth", status: "ok", logoutSupported: true },
             ],
-            logoutTargets: [{ provider: "openai", profileIds: ["openai:one"] }],
           }),
         ],
-        keyEditorProvider: "openai",
-        keyDraft: "replacement",
         addProviderOpen: true,
         addProviderId: "anthropic",
         addProviderKey: "new-provider-key",
@@ -334,16 +322,6 @@ describe("renderModelProviders", () => {
       ].every((control) => control.disabled),
     ).toBe(true);
     expect(button(defaults!, "Save")).toBeUndefined();
-
-    const provider = container.querySelector('[data-provider-details="openai"]');
-    expect(
-      provider?.querySelector<HTMLInputElement>(".model-providers__inline-form input")?.disabled,
-    ).toBe(true);
-    expect(button(provider!, "Set API key")?.disabled).toBe(true);
-    expect(button(provider!, "Remove key")?.disabled).toBe(true);
-    expect(
-      provider?.querySelector<HTMLButtonElement>(".model-providers__profile-logout")?.disabled,
-    ).toBe(true);
 
     const addForm = container.querySelector("[data-models-key-dialog]");
     expect(
@@ -478,35 +456,6 @@ describe("renderModelProviders", () => {
     expect(container.querySelector('[data-provider-id="openai"]')).toBeNull();
   });
 
-  it("renders credential provenance and probe results", () => {
-    const container = mount(
-      props({
-        probeResults: {
-          openai: {
-            provider: "openai",
-            status: "ok",
-            latencyMs: 145,
-            results: [
-              {
-                profileId: "openai:default",
-                label: "Default profile",
-                status: "ok",
-                latencyMs: 145,
-              },
-            ],
-          },
-        },
-      }),
-    );
-    const provider = container.querySelector('[data-provider-details="openai"]');
-    expect(text(provider)).toContain("Credentials for Writer");
-    expect(text(provider)).toContain("Global usage and cost");
-    expect(text(provider)).toContain("API key from environment (OPENAI_API_KEY)");
-    expect(text(provider)).toContain("Connected");
-    expect(text(provider)).toContain("145 ms");
-    expect(text(provider)).toContain("Default profile");
-  });
-
   it("puts model recovery first when credentials expose no selectable models", () => {
     const onConnectProvider = vi.fn();
     const container = mount(
@@ -560,9 +509,6 @@ describe("renderModelProviders", () => {
       const provider = container.querySelector('[data-provider-select="openai"]');
       expect(text(provider)).toContain("Credentials rejected");
       expect(text(provider)).not.toContain("Signed in");
-      expect(text(container.querySelector(".model-providers__profile-status"))).toContain(
-        "Credentials configured",
-      );
     },
   );
 
@@ -580,130 +526,6 @@ describe("renderModelProviders", () => {
     const provider = container.querySelector('[data-provider-select="openai"]');
     expect(text(provider)).toContain("Credentials configured");
     expect(text(provider)).not.toContain("Ready");
-  });
-
-  it("labels provider usage and session cost as global", () => {
-    const container = mount(
-      props({
-        cards: [
-          card({
-            localCost: { totalCost: 12, totalTokens: 1_000, messageCount: 2 },
-          }),
-        ],
-      }),
-    );
-
-    const provider = container.querySelector('[data-provider-details="openai"]');
-    expect(text(provider)).toContain("Credentials for Writer");
-    expect(text(provider)).toContain("Global usage and cost");
-    expect(text(provider)).toContain("Global session spend · 30d");
-  });
-
-  it("does not invent config key provenance when auth status is unavailable", () => {
-    const container = mount(
-      props({
-        cards: [card({ apiKey: undefined, hasConfigApiKey: true })],
-      }),
-    );
-
-    const provider = container.querySelector('[data-provider-details="openai"]');
-    expect(text(provider)).not.toContain("API key set in config");
-    expect(text(provider)).toContain("Not configured");
-  });
-
-  it("renders mixed credential probes as connected with warnings", () => {
-    const container = mount(
-      props({
-        probeResults: {
-          openai: {
-            provider: "openai",
-            status: "ok",
-            latencyMs: 145,
-            results: [
-              {
-                label: "Configured credential · openai/gpt-5.6-sol",
-                status: "unknown",
-                error:
-                  "The configured credential could not be resolved. Update or remove it, then retry.",
-              },
-              {
-                profileId: "openai:default",
-                label: "Profile Default · openai/gpt-5.6-sol",
-                status: "ok",
-                latencyMs: 145,
-              },
-            ],
-          },
-        },
-      }),
-    );
-
-    const probe = container.querySelector(".model-providers__probe--warning");
-    expect(text(probe)).toContain("Connected with warnings");
-    expect(text(probe)).toContain("Configured credential · openai/gpt-5.6-sol");
-    expect(text(probe)).toContain("Profile Default · openai/gpt-5.6-sol");
-    expect(text(probe)).toContain("Update or remove it, then retry");
-  });
-
-  it("renders categorized probe errors", () => {
-    const container = mount(
-      props({
-        probeResults: {
-          openai: {
-            provider: "openai",
-            status: "billing",
-            error: "Account has no credits",
-            results: [
-              {
-                label: "API key",
-                status: "billing",
-                error: "Account has no credits",
-              },
-            ],
-          },
-        },
-      }),
-    );
-    const probe = container.querySelector(".model-providers__probe--error");
-    expect(text(probe)).toContain("Billing problem");
-    expect(text(probe)).toContain("Account has no credits");
-  });
-
-  it("presents no-model probe results as a setup state, not a connection failure", () => {
-    const container = mount(
-      props({
-        cards: [
-          card({
-            auth: { kind: "ok" },
-            profiles: [{ profileId: "openai:chatgpt", type: "oauth", status: "ok" }],
-            modelCount: 0,
-            availableModelCount: 0,
-          }),
-        ],
-        configuredModels: [],
-        probeResults: {
-          openai: {
-            provider: "openai",
-            status: "no_model",
-            error: "No model is available for this provider.",
-            results: [
-              {
-                profileId: "openai:chatgpt",
-                label: "ChatGPT",
-                status: "no_model",
-              },
-            ],
-          },
-        },
-      }),
-    );
-
-    expect(text(container.querySelector('[data-provider-select="openai"]'))).toContain(
-      "Credentials configured",
-    );
-    const probe = container.querySelector('[data-provider-details="openai"]');
-    expect(text(probe)).toContain("No models available");
-    expect(text(probe)).not.toContain("Connection failed");
   });
 
   it("qualifies slash-bearing model IDs with their catalog provider", async () => {
@@ -848,54 +670,6 @@ describe("renderModelProviders", () => {
     );
   });
 
-  it("disables probing when the gateway does not advertise the method", () => {
-    const onProbe = vi.fn();
-    const container = mount(props({ probeAvailable: false, onProbe }));
-    const testButton = button(container, "Test connection");
-    expect(testButton?.disabled).toBe(true);
-    expect(testButton?.title).toContain("newer gateway");
-    testButton?.click();
-    expect(onProbe).not.toHaveBeenCalled();
-  });
-
-  it("uses every credential owner id for connection probes", () => {
-    const onProbe = vi.fn();
-    const container = mount(
-      props({
-        cards: [card({ credentialProviderIds: ["anthropic", "claude-cli"] })],
-        onProbe,
-      }),
-    );
-    button(container, "Test connection")?.click();
-    expect(onProbe).toHaveBeenCalledWith("openai", ["anthropic", "claude-cli"]);
-  });
-
-  it("uses the original config key for credential mutations", () => {
-    const onSaveKey = vi.fn();
-    const onRemoveKey = vi.fn();
-    const container = mount(
-      props({
-        cards: [
-          card({
-            configKey: "OpenAI",
-            apiKey: { source: "config" },
-            hasConfigApiKey: true,
-          }),
-        ],
-        keyEditorProvider: "openai",
-        keyDraft: "replacement",
-        onSaveKey,
-        onRemoveKey,
-      }),
-    );
-    const provider = container.querySelector('[data-provider-details="openai"]');
-    expect(provider).not.toBeNull();
-    button(provider!, "Save")?.click();
-    button(provider!, "Remove key")?.click();
-    expect(onSaveKey).toHaveBeenCalledWith("openai", "OpenAI");
-    expect(onRemoveKey).toHaveBeenCalledWith("openai", "OpenAI");
-  });
-
   it("offers provider deletion only for deletable cards and forwards the card", () => {
     const onDeleteProvider = vi.fn();
     const onProviderSettings = vi.fn();
@@ -944,26 +718,6 @@ describe("renderModelProviders", () => {
     expect(text(container.querySelector('[data-provider-details="openai"] .callout'))).toBe(
       "Current failure",
     );
-  });
-
-  it("disables API-key mutations for explicit non-API-key auth modes", () => {
-    const container = mount(
-      props({
-        cards: [card({ configAuthMode: "oauth" })],
-      }),
-    );
-    const setKey = button(container, "Set API key");
-    expect(setKey?.disabled).toBe(true);
-    expect(setKey?.title).toContain('auth mode is "oauth"');
-  });
-
-  it("hides API-key setup for providers that explicitly do not support it", () => {
-    const container = mount(
-      props({
-        cards: [card({ apiKeySupported: false })],
-      }),
-    );
-    expect(button(container, "Set API key")).toBeUndefined();
   });
 });
 

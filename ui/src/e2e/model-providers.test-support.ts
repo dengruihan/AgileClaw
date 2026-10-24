@@ -39,15 +39,11 @@ export function providerConfig(value: string): { apiKey: string } {
   return Object.fromEntries([["apiKey", value]]) as { apiKey: string };
 }
 
-export async function selectProviderAccounts(page: Page, id: string): Promise<Locator> {
+export async function selectProviderEditor(page: Page, id: string): Promise<Locator> {
   await page.locator(`[data-provider-select="${id}"]`).click();
-  const details = page.locator(`[data-provider-details="${id}"]`);
-  await details.waitFor();
-  const disclosure = details.locator(".model-providers__card-details");
-  if ((await disclosure.getAttribute("open")) === null) {
-    await disclosure.locator(":scope > summary").click();
-  }
-  return details;
+  const editor = page.locator(".model-providers__editor");
+  await editor.locator("openclaw-provider-manager").waitFor();
+  return editor;
 }
 
 export async function expectPassiveProviderReads(gateway: MockGatewayControls): Promise<void> {

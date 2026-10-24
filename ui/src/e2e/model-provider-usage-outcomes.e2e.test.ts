@@ -1,4 +1,4 @@
-// Control UI E2E proves provider-usage request failures remain distinct from provider data.
+// Control UI E2E covers catalog recovery and retirement of agent-scoped credential drafts.
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { expect, it } from "vitest";
@@ -15,10 +15,7 @@ const suite = createControlUiE2eSuite({
 });
 const now = Date.now();
 const recordVisuals = process.env.OPENCLAW_UI_E2E_RECORD === "1";
-const unavailableMessage =
-  "Provider usage is unavailable; the last request failed. Refresh to retry.";
-
-function providerUsageResponses(usageStatus: unknown) {
+function providerResponses() {
   return {
     "config.get": { config: {}, hash: "provider-usage-outcome" },
     "models.list": { models: [] },
@@ -33,95 +30,10 @@ function providerUsageResponses(usageStatus: unknown) {
         },
       ],
     },
-    "sessions.usage": { aggregates: { byProvider: [] } },
-    "usage.status": usageStatus,
   };
 }
 
 suite.define(() => {
-  it("shows usage request failures with no configured providers", async () => {
-    await suite.withPage(
-      {
-        locale: "en-US",
-        serviceWorkers: "block",
-        viewport: { height: 1_000, width: 1_440 },
-      },
-      async ({ page }) => {
-        const gateway = await installMockGateway(page, {
-          methodResponses: providerUsageResponses({
-            __mockError: { code: "INTERNAL_ERROR", message: "gateway transport unavailable" },
-          }),
-        });
-
-        await page.goto(`${suite.server.baseUrl}settings/model-providers`);
-        await expect
-          .poll(async () => (await gateway.getRequests("usage.status")).length)
-          .toBeGreaterThan(0);
-        await expect
-          .poll(() => page.locator(".settings-page").textContent())
-          .toContain(unavailableMessage);
-        expect(await page.locator("[data-provider-id]").count()).toBe(0);
-        if (recordVisuals) {
-          await mkdir(path.join(suite.artifactDir, "model-providers"), { recursive: true });
-          await page.screenshot({
-            animations: "disabled",
-            fullPage: true,
-            path: path.join(
-              path.join(suite.artifactDir, "model-providers"),
-              "provider-usage-request-failed.png",
-            ),
-          });
-        }
-      },
-    );
-  });
-
-  it("keeps provider-scoped usage errors as data without the global warning", async () => {
-    await suite.withPage(
-      {
-        locale: "en-US",
-        serviceWorkers: "block",
-        viewport: { height: 1_000, width: 1_440 },
-      },
-      async ({ page }) => {
-        const gateway = await installMockGateway(page, {
-          methodResponses: providerUsageResponses({
-            updatedAt: now,
-            providers: [
-              {
-                provider: "openai",
-                displayName: "OpenAI",
-                windows: [],
-                error: "provider API unavailable",
-              },
-            ],
-          }),
-        });
-
-        await page.goto(`${suite.server.baseUrl}settings/model-providers`);
-        const card = page.locator('[data-provider-id="openai"]');
-        await card.waitFor();
-        await expect
-          .poll(async () => (await gateway.getRequests("usage.status")).length)
-          .toBeGreaterThan(0);
-        await expect.poll(() => card.textContent()).toContain("provider API unavailable");
-        await expect
-          .poll(() => page.locator(".settings-page").textContent())
-          .not.toContain(unavailableMessage);
-        if (recordVisuals) {
-          await mkdir(path.join(suite.artifactDir, "model-providers"), { recursive: true });
-          await card.screenshot({
-            animations: "disabled",
-            path: path.join(
-              path.join(suite.artifactDir, "model-providers"),
-              "provider-usage-provider-error.png",
-            ),
-          });
-        }
-      },
-    );
-  });
-
   it("keeps configured models visible when their catalog fails, then recovers on refresh", async () => {
     await suite.withPage(
       {
@@ -136,7 +48,7 @@ suite.define(() => {
         };
         const gateway = await installMockGateway(page, {
           methodResponses: {
-            ...providerUsageResponses({ updatedAt: now, providers: [] }),
+            ...providerResponses(),
             "config.get": {
               config,
               sourceConfig: config,
@@ -203,7 +115,6 @@ suite.define(() => {
 
         await expect.poll(() => catalogWarning.count()).toBe(0);
         await expect.poll(() => page.locator(".provider-usage-error").count()).toBe(0);
-        await expect.poll(() => card.textContent()).toContain("API key set in config");
         await expect.poll(() => pickerValue(primary)).toBe("openai/gpt-5.5");
         if (recordVisuals) {
           await page.screenshot({
@@ -235,7 +146,7 @@ suite.define(() => {
           defaultAgentId: "main",
           featureMethods: ["chat.metadata", "chat.startup", "config.patch"],
           methodResponses: {
-            ...providerUsageResponses({ updatedAt: now, providers: [] }),
+            ...providerResponses(),
             "agents.list": {
               agents: [
                 { id: "main", name: "Main" },
@@ -277,9 +188,10 @@ suite.define(() => {
         });
 
         await page.goto(`${suite.server.baseUrl}settings/model-providers`);
-        const openaiCard = page.locator('[data-provider-id="openai"]');
-        await expect.poll(async () => openaiCard.textContent()).toContain("Credentials for Main");
-        await openaiCard.getByRole("button", { name: "Set API key" }).click();
+        await page.locator('[data-provider-select="openai"]').click();
+        const editor = page.locator("openclaw-provider-manager");
+        const keyInput = editor.locator('input[name="apiKey"]');
+        await expect.poll(() => keyInput.isEnabled()).toBe(true);
         if (recordVisuals) {
           await mkdir(path.join(suite.artifactDir, "model-providers"), { recursive: true });
           await page.screenshot({
@@ -290,13 +202,15 @@ suite.define(() => {
             fullPage: true,
           });
         }
-        await openaiCard.getByLabel("API key").fill("synthetic-main-provider-key");
+        await keyInput.fill("synthetic-main-provider-key");
 
         const agentPicker = page.locator(".settings-sidebar__agent openclaw-agent-select");
         await agentPicker.locator(".agent-select__trigger").click();
         await agentPicker.locator('wa-dropdown-item[aria-label="Writer"]').click();
-        await expect.poll(async () => openaiCard.textContent()).toContain("Credentials for Writer");
-        await expect.poll(async () => openaiCard.locator('input[type="password"]').count()).toBe(0);
+        await expect
+          .poll(() => editor.locator(".provider-manager__connection").textContent())
+          .toContain("writer");
+        await expect.poll(() => keyInput.inputValue()).toBe("");
         expect(await gateway.getRequests("config.patch")).toHaveLength(0);
         if (recordVisuals) {
           await page.screenshot({
@@ -320,9 +234,11 @@ suite.define(() => {
           const app = element as HTMLElement & { runtime: ApplicationRuntime };
           app.runtime.context.settingsAgentSelection.set("main");
         });
-        await expect.poll(async () => openaiCard.textContent()).toContain("Credentials for Main");
+        await expect
+          .poll(() => editor.locator(".provider-manager__connection").textContent())
+          .toContain("main");
         await expect.poll(async () => page.locator("[data-models-key-dialog]").count()).toBe(0);
-        await expect.poll(async () => openaiCard.locator('input[type="password"]').count()).toBe(0);
+        await expect.poll(() => keyInput.inputValue()).toBe("");
         expect(await gateway.getRequests("config.patch")).toHaveLength(0);
         if (recordVisuals) {
           await page.screenshot({

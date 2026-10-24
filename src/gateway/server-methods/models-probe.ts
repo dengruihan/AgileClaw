@@ -137,12 +137,20 @@ export const modelsProbeHandlers: GatewayRequestHandlers = {
       return;
     }
     const provider = normalizeProviderId(params.provider);
+    const modelId = params.modelId?.trim();
     const profileId = params.profileId?.trim();
-    if (!provider || (params.profileId !== undefined && !profileId)) {
+    if (
+      !provider ||
+      (params.modelId !== undefined && !modelId) ||
+      (params.profileId !== undefined && !profileId)
+    ) {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "provider and profileId must not be blank"),
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          "provider, modelId, and profileId must not be blank",
+        ),
       );
       return;
     }
@@ -171,6 +179,7 @@ export const modelsProbeHandlers: GatewayRequestHandlers = {
         modelCandidates: modelCandidatesFromConfig(cfg),
         options: {
           provider,
+          ...(modelId ? { modelId } : {}),
           ...(profileId ? { profileIds: [profileId] } : {}),
           ...(!profileId ? { includeDirectKeys: true } : {}),
           timeoutMs,

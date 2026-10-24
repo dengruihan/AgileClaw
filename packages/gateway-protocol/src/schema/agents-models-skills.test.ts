@@ -10,8 +10,6 @@ import {
   ModelsAuthOrderSetParamsSchema,
   ModelsAuthStatusParamsSchema,
   ModelsListResultSchema,
-  ModelsProbeParamsSchema,
-  ModelsProbeResultSchema,
   SkillProposalEvaluationSchema,
   SkillProposalLifecycleEventSchema,
   SkillsCuratorStatusResultSchema,
@@ -27,6 +25,7 @@ import {
   ToolsInvokeParamsSchema,
 } from "./agents-models-skills.js";
 import { ModelsListParamsSchema } from "./model-catalog.js";
+import { ModelsProbeParamsSchema, ModelsProbeResultSchema } from "./model-provider-connection.js";
 import { ToolsEffectiveResultSchema } from "./tools-catalog.js";
 
 type ProtocolSchema = TSchema;
@@ -454,12 +453,14 @@ describe("ModelsProbe schemas", () => {
       ModelsProbeParamsSchema,
       {
         provider: "openai",
+        modelId: "vendor/selected-model",
         profileId: "work",
         timeoutMs: 20_000,
         agentId: "writer",
       },
       { provider: "openai", agentId: "" },
     );
+    expectRejected(ModelsProbeParamsSchema, { provider: "openai", modelId: "" });
     expectAccepted(ModelsProbeResultSchema, {
       provider: "openai",
       status: "ok",

@@ -8,6 +8,310 @@ const suite = createControlUiE2eSuite({ name: "Models settings layout and discov
 const recordVisuals = process.env.OPENCLAW_UI_E2E_RECORD === "1";
 
 suite.define(() => {
+  it("discards a late API-key response after switching providers", async () => {
+    await suite.withPage({ locale: "en-US", serviceWorkers: "block" }, async ({ page }) => {
+      const config = {
+        models: {
+          providers: {
+            alpha: { baseUrl: "https://alpha.example.test/v1", models: [] },
+            beta: { baseUrl: "https://beta.example.test/v1", models: [] },
+          },
+        },
+      };
+      const gateway = await installMockGateway(page, {
+        deferredMethods: ["models.authInspectApiKey"],
+        methodResponses: {
+          "config.get": {
+            config,
+            sourceConfig: config,
+            raw: JSON.stringify(config),
+            hash: "key-scope",
+            valid: true,
+            issues: [],
+          },
+          "models.authInspectApiKey": {
+            provider: "beta",
+            agentId: "main",
+            baseHash: "key-scope",
+            configured: true,
+            source: "profile",
+            key: "synthetic-beta-credential",
+          },
+          "models.list": { models: [] },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+      expect((await gateway.waitForRequest("models.authInspectApiKey")).params).toEqual(
+        expect.objectContaining({ provider: "alpha" }),
+      );
+      await page.locator('[data-provider-select="beta"]').click();
+      const key = page.locator('.provider-manager--inline [name="apiKey"]');
+      await expect.poll(() => key.inputValue()).toBe("synthetic-beta-credential");
+      await key.fill("synthetic-beta-edited");
+      await gateway.resolveDeferred("models.authInspectApiKey", {
+        provider: "alpha",
+        agentId: "main",
+        baseHash: "key-scope",
+        configured: true,
+        source: "profile",
+        key: "synthetic-alpha-credential",
+      });
+      // The next render must keep the selected provider's local edit.
+      await page.getByRole("button", { name: "Show API key", exact: true }).click();
+      expect(await key.inputValue()).toBe("synthetic-beta-edited");
+      expect(await key.getAttribute("type")).toBe("text");
+      expect(await gateway.getRequests("models.authSetApiKey")).toHaveLength(0);
+    });
+  });
+
+  it("edits a masked saved key and tests each exact model independently", async () => {
+    await suite.withPage(
+      { locale: "en-US", serviceWorkers: "block", viewport: { width: 1440, height: 1100 } },
+      async ({ page }) => {
+        const savedKey = ["synthetic", "saved", "credential"].join("-");
+        const replacement = ["synthetic", "replacement", "credential"].join("-");
+        const models = ["vendor/one", "vendor/two"].map((id) => ({
+          id,
+          name: id,
+          provider: "studio",
+          available: true,
+        }));
+        const connection = {
+          baseUrl: "https://studio.example.test/v1",
+          api: "openai-completions",
+          models,
+        };
+        const config = { models: { providers: { studio: connection } } };
+        const inspection = (key: string, baseHash: string) => ({
+          provider: "studio",
+          agentId: "main",
+          baseHash,
+          configured: true,
+          source: "profile",
+          key,
+        });
+        const gateway = await installMockGateway(page, {
+          models,
+          methodResponses: {
+            "config.get": {
+              config,
+              sourceConfig: config,
+              raw: JSON.stringify(config),
+              hash: "saved-key",
+              valid: true,
+              issues: [],
+            },
+            "models.authInspectApiKey": inspection(savedKey, "saved-key"),
+            "models.authStatus": {
+              ts: 1,
+              providers: [{ provider: "studio", status: "static", profiles: [] }],
+            },
+            "models.list": { models },
+            "models.probe": { provider: "studio", status: "ok", latencyMs: 12, results: [] },
+          },
+        });
+        await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+        await page.locator('[data-provider-select="studio"]').click();
+        const editor = page.locator(".provider-manager--inline");
+        const input = editor.locator('[name="apiKey"]');
+        const save = editor.getByRole("button", { name: "Save", exact: true });
+        await expect.poll(() => input.inputValue()).toBe(savedKey);
+        expect(await input.getAttribute("type")).toBe("password");
+        expect(await save.isDisabled()).toBe(true);
+        await editor.getByRole("button", { name: "Show API key", exact: true }).click();
+        expect(await input.getAttribute("type")).toBe("text");
+        await editor.getByRole("button", { name: "Hide API key", exact: true }).click();
+        expect(await input.getAttribute("type")).toBe("password");
+        expect(await save.isDisabled()).toBe(true);
+        expect(await page.getByText("Accounts & usage", { exact: true }).count()).toBe(0);
+        const one = editor.locator('[data-model-id="vendor/one"]');
+        const two = editor.locator('[data-model-id="vendor/two"]');
+        const testOne = one.getByRole("button", { name: "Test model vendor/one", exact: true });
+        const testTwo = two.getByRole("button", { name: "Test model vendor/two", exact: true });
+        await gateway.deferNext("models.probe");
+        await testOne.click();
+        expect((await gateway.waitForRequest("models.probe")).params).toEqual({
+          provider: "studio",
+          agentId: "main",
+          modelId: "vendor/one",
+        });
+        await expect.poll(() => testOne.isDisabled()).toBe(true);
+        expect(await testTwo.isEnabled()).toBe(true);
+        await testTwo.click();
+        expect((await gateway.waitForRequest("models.probe", { after: 1 })).params).toEqual({
+          provider: "studio",
+          agentId: "main",
+          modelId: "vendor/two",
+        });
+        await expect.poll(() => two.locator('[role="status"]').textContent()).toContain("12 ms");
+        await gateway.resolveDeferred("models.probe", {
+          provider: "studio",
+          status: "auth",
+          error: "Model access denied",
+          results: [],
+        });
+        await expect
+          .poll(() => one.locator('[role="alert"]').textContent())
+          .toContain("Model access denied");
+        expect(await two.locator('[role="status"]').textContent()).toContain("Connected");
+        await input.fill(replacement);
+        await expect.poll(() => testOne.isDisabled()).toBe(true);
+        await gateway.deferNext("models.authSetApiKey");
+        await save.click();
+        const write = await gateway.waitForRequest("models.authSetApiKey");
+        expect(write.params).toEqual(
+          expect.objectContaining({ provider: "studio", apiKey: replacement }),
+        );
+        await gateway.setMethodResponse(
+          "models.authInspectApiKey",
+          inspection(replacement, "key-replaced"),
+        );
+        await resolveConfigMutation(gateway, config, "key-replaced", "studio");
+        await expect.poll(() => save.isDisabled()).toBe(true);
+        expect(await input.inputValue()).toBe(replacement);
+        expect(await input.getAttribute("type")).toBe("password");
+        await expect.poll(() => one.locator('[role="alert"]').count()).toBe(0);
+        await editor.locator('[name="baseUrl"]').fill("https://changed.example.test/v1");
+        await gateway.deferNext("config.patch");
+        await save.click();
+        await gateway.waitForRequest("config.patch");
+        await gateway.setMethodResponse(
+          "models.authInspectApiKey",
+          inspection(replacement, "endpoint-changed"),
+        );
+        await resolveConfigMutation(
+          gateway,
+          {
+            models: {
+              providers: { studio: { ...connection, baseUrl: "https://changed.example.test/v1" } },
+            },
+          },
+          "endpoint-changed",
+        );
+        await expect.poll(() => save.isDisabled()).toBe(true);
+        expect(await gateway.getRequests("models.authSetApiKey")).toHaveLength(1);
+        for (const method of ["usage.status", "sessions.usage", "codex.accountUsage"]) {
+          expect(await gateway.getRequests(method)).toHaveLength(0);
+        }
+      },
+    );
+  });
+
+  it("reloads saved keys after auth-only changes and retries failed inspections", async () => {
+    await suite.withPage({ locale: "en-US", serviceWorkers: "block" }, async ({ page }) => {
+      const config = {
+        models: {
+          providers: {
+            studio: {
+              baseUrl: "https://studio.example.test/v1",
+              api: "openai-completions",
+              models: [],
+            },
+          },
+        },
+      };
+      const inspection = (key: string) => ({
+        provider: "studio",
+        agentId: "main",
+        baseHash: "saved-key",
+        configured: true,
+        source: "profile",
+        key,
+      });
+      const authStatus = (ts: number) => ({
+        ts,
+        providers: [{ provider: "studio", status: "static", profiles: [] }],
+      });
+      const gateway = await installMockGateway(page, {
+        methodResponses: {
+          "config.get": {
+            config,
+            sourceConfig: config,
+            raw: JSON.stringify(config),
+            hash: "saved-key",
+            valid: true,
+            issues: [],
+          },
+          "models.authInspectApiKey": inspection("synthetic-key-one"),
+          "models.authStatus": authStatus(1),
+          "models.list": { models: [] },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+      await page.locator('[data-provider-select="studio"]').click();
+      const editor = page.locator(".provider-manager--inline");
+      const input = editor.locator('[name="apiKey"]');
+      await expect.poll(() => input.inputValue()).toBe("synthetic-key-one");
+
+      await gateway.setMethodResponse("models.authInspectApiKey", inspection("synthetic-key-two"));
+      await gateway.setMethodResponse("models.authStatus", authStatus(2));
+      await page.getByRole("button", { name: "Refresh", exact: true }).click();
+      await expect.poll(() => input.inputValue()).toBe("synthetic-key-two");
+
+      await gateway.setMethodResponse("models.authInspectApiKey", {
+        __mockError: { code: "UNAVAILABLE", message: "Inspection unavailable" },
+      });
+      await gateway.setMethodResponse("models.authStatus", authStatus(3));
+      await page.getByRole("button", { name: "Refresh", exact: true }).click();
+      await expect
+        .poll(() => editor.locator('[role="alert"]').textContent())
+        .toContain("Inspection unavailable");
+
+      await gateway.setMethodResponse(
+        "models.authInspectApiKey",
+        inspection("synthetic-key-three"),
+      );
+      await gateway.setMethodResponse("models.authStatus", authStatus(4));
+      await page.getByRole("button", { name: "Refresh", exact: true }).click();
+      await expect.poll(() => input.inputValue()).toBe("synthetic-key-three");
+      await expect.poll(() => editor.locator('[role="alert"]').count()).toBe(0);
+    });
+  });
+
+  it("keeps API-key inspection and edits unavailable in explicit OAuth mode", async () => {
+    await suite.withPage({ locale: "en-US", serviceWorkers: "block" }, async ({ page }) => {
+      const config = {
+        models: {
+          providers: {
+            studio: {
+              baseUrl: "https://studio.example.test/v1",
+              api: "openai-completions",
+              auth: "oauth",
+              apiKey: "synthetic-configured-key",
+              models: [],
+            },
+          },
+        },
+      };
+      const gateway = await installMockGateway(page, {
+        methodResponses: {
+          "config.get": {
+            config,
+            sourceConfig: config,
+            raw: JSON.stringify(config),
+            hash: "oauth-mode",
+            valid: true,
+            issues: [],
+          },
+          "models.authStatus": {
+            ts: 1,
+            providers: [{ provider: "studio", status: "ok", profiles: [] }],
+          },
+          "models.list": { models: [] },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+      await page.locator('[data-provider-select="studio"]').click();
+      const editor = page.locator(".provider-manager--inline");
+      await expect
+        .poll(() => editor.textContent())
+        .toContain('API key changes are unavailable while auth mode is "oauth".');
+      expect(await editor.locator('[name="apiKey"]').count()).toBe(0);
+      expect(await editor.getByRole("button", { name: "Remove key", exact: true }).count()).toBe(0);
+      expect(await gateway.getRequests("models.authInspectApiKey")).toHaveLength(0);
+    });
+  });
+
   it("keeps connection drafts while searching and requires an explicit decision before switching providers", async () => {
     await suite.withPage(
       { locale: "en-US", serviceWorkers: "block", viewport: { width: 1440, height: 1000 } },

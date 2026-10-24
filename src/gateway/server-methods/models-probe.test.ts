@@ -160,6 +160,39 @@ describe("models.probe", () => {
     );
   });
 
+  it("forwards the selected model instead of the configured default", async () => {
+    const cfg: OpenClawConfig = {
+      agents: { defaults: { model: { primary: "openai/default-model" } } },
+    };
+    const { options, respond } = createOptions(
+      { provider: " OpenAI ", modelId: " vendor/selected-model " },
+      cfg,
+    );
+
+    await handler(options);
+
+    expect(mocks.runAuthProbes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providers: ["openai"],
+        options: expect.objectContaining({ provider: "openai", modelId: "vendor/selected-model" }),
+      }),
+    );
+    expect(respond).toHaveBeenCalledWith(true, expect.any(Object), undefined);
+  });
+
+  it("rejects a blank model ID before running a probe", async () => {
+    const { options, respond } = createOptions({ provider: "openai", modelId: "   " });
+
+    await handler(options);
+
+    expect(mocks.runAuthProbes).not.toHaveBeenCalled();
+    expect(respond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({ code: "INVALID_REQUEST" }),
+    );
+  });
+
   it("probes an explicit configured agent", async () => {
     const cfg: OpenClawConfig = {
       agents: { entries: { main: {}, writer: {} } },

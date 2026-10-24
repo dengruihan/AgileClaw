@@ -809,12 +809,12 @@ describe("Models provider login", () => {
     await waitForFast(() =>
       expect(page.querySelector('[data-provider-details="example-owner"]')).not.toBeNull(),
     );
-    const card = page.querySelector('[data-provider-details="example-owner"]')!;
-    const addAccount = [...card.querySelectorAll<HTMLButtonElement>("button")].find(
-      (button) => button.textContent?.trim() === "Add account",
-    );
-    expect(addAccount?.disabled).toBe(false);
-    addAccount!.click();
+    const connectProvider = [
+      ...page.querySelectorAll<HTMLButtonElement>("openclaw-provider-manager button"),
+    ].find((button) => button.textContent?.trim() === "Connect provider");
+    expect(connectProvider).toBeDefined();
+    await waitForFast(() => expect(connectProvider!.disabled).toBe(false));
+    connectProvider!.click();
     await page.updateComplete;
     expect(page.querySelector("[data-models-login-search]")).toBeNull();
     expect(page.querySelector(".model-provider-login__provider")?.textContent).toContain(

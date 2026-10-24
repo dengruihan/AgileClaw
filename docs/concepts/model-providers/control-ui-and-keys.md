@@ -13,11 +13,13 @@ Open **Settings → Models** in the Control UI to add, replace, or remove provid
 API keys. The page and `openclaw models auth paste-api-key` use the same credential
 writer: key material stays in the auth store, and configured providers reference
 the saved profile. Environment-provided keys remain managed by the Gateway
-process environment. The page shows credential sources without revealing keys.
+process environment. Administrators can edit saved API keys directly in the provider panel. The field
+starts masked; use its eye button to show or hide the value. Environment and
+external secret references stay managed at their source and are not revealed.
 
 The provider list groups cloud providers and local or custom endpoints. Select a
 provider to edit its **Base URL**, **API format**, and **API key** in the main
-panel. Leave the key blank to keep the saved credential. Connection changes save
+panel. Changing or clearing a saved key replaces or removes that credential. Connection changes save
 only when you choose **Save**; switching providers asks before discarding unsaved
 changes.
 
@@ -39,16 +41,15 @@ Any provider with an authored `models.providers` entry — cloud or custom —
 also offers **Delete provider**. Deletion signs out the provider's stored
 credentials, removes its config entry and model definitions, and clears default
 model selections that referenced its models after an explicit confirmation;
-catalog-known providers remain available for quick setup, and the last 30 days
-of recorded usage still show until they age out.
+catalog-known providers remain available for quick setup.
 
-Provider controls appear as soon as credentials, the model catalog, and configuration are ready. Usage and local costs load independently afterward, so a slow usage response does not block provider settings.
+Provider controls appear as soon as credentials, the model catalog, and configuration are ready. The provider workspace does not load account usage or local cost reports.
 
 After an account's quota recovers, model availability reflects the recovered account even if a catalog refresh began while it was blocked.
 
-Use **Connect provider** to sign in or inspect detected AI access. When available, it shows the authentication method (API key or account sign-in) and the actual email address reported by the provider or local runtime. API keys and tokens stay hidden.
+Use **Connect provider** to sign in or inspect detected AI access. When available, it shows the authentication method (API key or account sign-in) and the actual email address reported by the provider or local runtime. The sign-in dialog keeps API keys and tokens hidden.
 
-Use **Test connection** to run a live provider probe and see latency or a categorized authentication, rate-limit, billing, timeout, or response error. A probe makes a real provider request and may consume a small number of tokens. OAuth and token profiles can also be logged out from **Accounts & usage** in the provider workspace.
+Use the plug button beside each model to test that specific model and see latency or a categorized authentication, rate-limit, billing, timeout, or response error on its row. Save connection changes before testing. A probe makes a real provider request and may consume a small number of tokens; it does not fall back to another model. Account and usage details are no longer part of the provider workspace.
 
 The **Defaults** section manages the primary model, utility model, first fallback, thinking level, and Fast mode from the configured model catalog. Changes save automatically to the existing `agents.defaults` settings. For the utility model, **Auto** leaves the setting unset and **Disabled** stores an empty string to turn utility routing off.
 

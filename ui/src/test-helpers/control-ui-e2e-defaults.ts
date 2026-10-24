@@ -1,6 +1,18 @@
 import type { UserProfile } from "../../../packages/gateway-protocol/src/index.ts";
 import { BUILTIN_THEMES } from "../../../packages/gateway-protocol/src/theme.js";
+import type { ControlUiBuildInfo } from "../build-info.ts";
 import type { ControlUiMockPresenceUser } from "./control-ui-e2e-contract.ts";
+
+export const DEFAULT_CONTROL_UI_E2E_BUILD_INFO: ControlUiBuildInfo = {
+  version: "2026.7.10",
+  commit: "0123456789abcdef0123456789abcdef01234567",
+  commitAt: "2026-07-10T11:22:33.000Z",
+  builtAt: "2026-07-10T12:34:56.000Z",
+  branch: null,
+  dirty: false,
+  release: false,
+  buildId: "e2e",
+};
 
 export const defaultControlUiFeatureMethods = [
   "chat.abort",

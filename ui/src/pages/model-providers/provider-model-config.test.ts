@@ -3,11 +3,8 @@ import { describe, expect, it } from "vitest";
 import { applyMergePatch } from "../../../../src/config/merge-patch.js";
 import {
   modelDeletePatch,
-  modelEntryHasAuthorFields,
   modelEntryHidden,
-  modelEntryWithoutHidden,
   modelReferences,
-  modelRemovePatch,
   modelRestorePatch,
   modelWritePatch,
   providerConnectionPatch,
@@ -17,24 +14,10 @@ import {
 
 describe("provider model edits", () => {
   describe("provider model hide markers", () => {
-    it("detects hidden entries and authored fields beyond the hide marker", () => {
+    it("detects hidden entries", () => {
       expect(modelEntryHidden({ id: "a", name: "A", hidden: true })).toBe(true);
       expect(modelEntryHidden({ id: "a", name: "A" })).toBe(false);
       expect(modelEntryHidden(undefined)).toBe(false);
-      expect(modelEntryHasAuthorFields({ id: "a", name: "A", hidden: true })).toBe(false);
-      expect(modelEntryHasAuthorFields({ id: "a", name: "A", hidden: true, reasoning: true })).toBe(
-        true,
-      );
-      expect(modelEntryHasAuthorFields({ id: "a", name: "A", metadataSource: "models-add" })).toBe(
-        true,
-      );
-    });
-
-    it("strips the hide marker while keeping the rest of the entry", () => {
-      expect(modelEntryWithoutHidden({ id: "a", name: "A", hidden: true })).toEqual({
-        id: "a",
-        name: "A",
-      });
     });
 
     it("writes a hide override without the user-added marker", () => {
@@ -101,7 +84,7 @@ describe("provider model edits", () => {
     expect(config.models.providers["custom.proxy"].models[0]?.id).toBe("first");
   });
 
-  it("marks new additions separately from built-in overrides and preserves siblings on removal", () => {
+  it("marks new additions separately from built-in overrides", () => {
     const added = modelWritePatch(config, "custom.proxy", { id: "third", name: "Third" });
     expect(added.raw).toMatchObject({
       models: {
@@ -128,18 +111,6 @@ describe("provider model edits", () => {
           },
         },
       },
-    });
-    expect(modelRemovePatch(config, "custom.proxy", "first")).toEqual({
-      raw: {
-        models: {
-          providers: {
-            "custom.proxy": {
-              models: [{ id: "second", name: "Second", metadataSource: "models-add" }],
-            },
-          },
-        },
-      },
-      replacePaths: ["models.providers.custom.proxy.models"],
     });
   });
 

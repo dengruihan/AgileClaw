@@ -16,7 +16,6 @@ import { registerSettingsEnglish } from "../../i18n/locales/en-settings.ts";
 import { formatTimeMs } from "../../lib/format.ts";
 import { MODEL_SETTINGS_TARGET_IDS } from "../config/route-data.ts";
 import "../../styles/model-providers.css";
-import "../../styles/usage.css";
 import type { ModelProviderRowMessage } from "./config-mutation.ts";
 import { renderDefaultModels } from "./default-models-view.ts";
 import { renderProviderWorkspace } from "./provider-workspace-view.ts";
@@ -90,13 +89,6 @@ export function renderModelProviders(props: ModelProvidersViewProps) {
           }`,
         )}
       </div>
-      ${
-        props.providerUsageStalled
-          ? html`<div class="callout warning" role="status">
-              ${t("usage.providerUsage.stalled")}
-            </div>`
-          : nothing
-      }
       <div id=${MODEL_SETTINGS_TARGET_IDS.behavior}>
         ${renderDefaultModels({
           ...props,

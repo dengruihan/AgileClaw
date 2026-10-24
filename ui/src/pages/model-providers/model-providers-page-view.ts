@@ -1,10 +1,8 @@
 import { asNullableRecord as asConfigRecord } from "@openclaw/normalization-core/record-coerce";
 import { html, type TemplateResult } from "lit";
-import { hasOperatorAdminAccess } from "../../app/operator-access.ts";
 import { t } from "../../i18n/index.ts";
 import { listSelectableAgents, normalizeAgentLabel } from "../../lib/agents/display.ts";
 import { currentConfigObject } from "../../lib/config/config-state-model.ts";
-import { isGatewayMethodAdvertised } from "../../lib/gateway-methods.ts";
 import * as modelCatalog from "../../lib/model-catalog-store.ts";
 import { normalizeAgentId } from "../../lib/sessions/session-key.ts";
 import {
@@ -20,7 +18,7 @@ import {
   resolveDefaultModelPresentation,
   type DefaultsDraft,
 } from "./data.ts";
-import { EMPTY_MODEL_PROVIDERS_DATA, MODEL_PROVIDERS_COST_DAYS } from "./load.ts";
+import { EMPTY_MODEL_PROVIDERS_DATA } from "./load.ts";
 import { loginOptionChoiceId } from "./login-providers.ts";
 import type { ModelProvidersPage } from "./model-providers-page.ts";
 import { configuredProvider, localOrCustomProvider } from "./provider-model-config.ts";
@@ -38,7 +36,6 @@ import {
  */
 export function renderModelProvidersPageContent(page: ModelProvidersPage): TemplateResult {
   const gatewaySnapshot = page.context.gateway.snapshot;
-  const operatorAuth = gatewaySnapshot.hello?.auth;
   const agentsState = page.context.agents.state;
   const agents = agentsState.agentsList?.agents ?? [];
   const noSelectableAgents =
@@ -70,7 +67,6 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
       ? (catalog.providerOutcomes ?? [])
       : data.providerOutcomes,
     pendingProviders: catalog?.pendingProviders,
-    providerUsage: data.providerUsage?.ok ? data.providerUsage.value : null,
     configProviderIds: config.providerIds,
     configApiKeyProviderIds: config.apiKeyProviderIds,
     configProviderAuthModes: config.providerAuthModes,
@@ -86,7 +82,6 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
   );
   const isLocalOrCustom = (id: string) =>
     localOrCustomProvider(configObject, id, knownProviderIds, catalog?.models ?? []);
-  const usageAvailable = isGatewayMethodAdvertised(gatewaySnapshot, "codex.accountUsage");
   const login = page.login.pageActions;
   const visibleCards = noSelectableAgents ? [] : page.installedAgents.filterProviders(cards);
   const managerIntent = page.providerIntent(visibleCards);
@@ -96,19 +91,24 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
     .intent=${managerIntent}
     .customProvider=${isLocalOrCustom(managerIntent?.provider ?? "")}
     .card=${cards.find((card) => (card.configKey ?? card.id) === managerIntent?.provider) ?? null}
-    .probe=${page.probeResults[cards.find((card) => (card.configKey ?? card.id) === managerIntent?.provider)?.id ?? ""]}
+    .probeResults=${page.probeResults}
+    .probeBusy=${page.busy}
+    .probeErrors=${page.messages}
     .onCreated=${(provider: string) => {
       page.managerIntent = { provider, view: "settings" };
     }}
     .onRefresh=${() => {
+      if (managerIntent) {
+        page.probes.clearProviderProbes(managerIntent.provider);
+      }
       void page.refresh("replacement");
     }}
-    .onProbe=${() => {
-      const card = cards.find((entry) => (entry.configKey ?? entry.id) === managerIntent?.provider);
-      if (card) {
-        void page.profileActions.probe(
-          card.id,
-          card.credentialProviderIds.length ? card.credentialProviderIds : [card.id],
+    .onProbe=${(modelId: string) => {
+      if (managerIntent) {
+        void page.probes.probe(
+          `${managerIntent.provider}/${modelId}`,
+          [managerIntent.provider],
+          modelId,
         );
       }
     }}
@@ -149,8 +149,6 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
     providerQuery: page.providerQuery,
     onProviderQueryChange: (value) => (page.providerQuery = value),
     onConnectProvider: () => void page.login.open(),
-    usageClient: !page.mutationBlockedReason() && usageAvailable ? gatewaySnapshot.client : null,
-    usageAgentId: page.selectedAgentId,
     connected: gatewaySnapshot.phase === "connected",
     loading:
       gatewaySnapshot.phase === "connected" &&
@@ -159,10 +157,7 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
       !noSelectableAgents,
     refreshing: page.core.loading,
     error: rosterError ?? (noSelectableAgents ? t("agents.noAgents") : data.error),
-    providerUsageFailed: data.providerUsage?.ok === false,
-    supplementalLoading: page.loaderPending || page.supplemental.loading,
     updatedAt: data.updatedAt,
-    costDays: MODEL_PROVIDERS_COST_DAYS,
     credentialAgentLabel: selected ? normalizeAgentLabel(selected) : page.selectedAgentId,
     cards: visibleCards,
     configuredModels,
@@ -185,20 +180,10 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
       data.authStatus?.providerCapabilities,
       configuredProviderIds,
     ),
-    canViewProfiles:
-      gatewaySnapshot.phase === "connected" &&
-      operatorAuth?.scopes !== undefined &&
-      hasOperatorAdminAccess(operatorAuth),
     mutationBlockedReason: page.mutationBlockedReason(),
     defaultsMutationBlockedReason: modelProviderConfigMutationBlockedReason(page.context),
-    providerUsageStalled: page.refreshPolicy.incompleteUsageExhausted,
-    probeAvailable: isGatewayMethodAdvertised(gatewaySnapshot, "models.probe") !== false,
     busy: page.busy,
     messages: page.messages,
-    probeResults: page.probeResults,
-    keyEditorProvider: page.keyEditorProvider,
-    keyDraft: page.keyDraft,
-    profileOrders: page.profileOrders,
     addProviderOpen: page.addProviderOpen,
     addProviderId: page.addProviderId,
     addProviderKey: page.addProviderKey,
@@ -210,21 +195,11 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
             page.context.runtimeConfig.refresh({ background: true }),
             page.refresh("forced"),
           ])),
-    onOpenKeyEditor: (provider) => page.openKeyEditor(provider),
-    onCloseKeyEditor: () => page.closeKeyEditor(),
-    onKeyDraftChange: (value) => (page.keyDraft = value),
-    onSaveKey: (provider, configKey) =>
-      void page.mutateApiKey(provider, configKey, page.keyDraft.trim()),
-    onRemoveKey: (provider, configKey) => void page.mutateApiKey(provider, configKey, null),
     onDeleteProvider: (card) => void page.deleteProvider(card),
     // Any authored provider entry can go, cloud or custom; catalog-known
     // providers without an entry only carry credentials (logout covers those).
     canDeleteProvider: (card) =>
       configuredProvider(configObject, card.configKey ?? card.id) !== null,
-    onProbe: (cardId, providers) => void page.profileActions.probe(cardId, providers),
-    onRequestLogout: (pending) => void page.requestLogout(pending),
-    onProfileOrderChange: (cardId, provider, profileIds) =>
-      page.profileActions.setOrder(cardId, provider, profileIds),
     onAddProviderToggle: () => {
       page.addProviderOpen = !page.addProviderOpen;
       page.addProviderKey = "";

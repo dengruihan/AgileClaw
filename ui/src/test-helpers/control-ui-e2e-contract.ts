@@ -1,6 +1,19 @@
 import type { AuthenticatedUser } from "../app/user-profile.ts";
 import type { ControlUiSessionFixture } from "./control-ui-session-fixtures.ts";
 
+export type ControlUiE2eServer = {
+  baseUrl: string;
+  close: () => Promise<void>;
+};
+
+export type ControlUiE2eProductionServer = ControlUiE2eServer & {
+  replaceBuild: (nextDir: string, previousDir: string) => Promise<void>;
+};
+
+export type ControlUiE2eServerOptions = {
+  source?: boolean;
+};
+
 export type ControlUiMockPresenceUser = {
   self?: boolean;
   id: string;
