@@ -13,6 +13,7 @@ import { renderSettingsWorkspace } from "../../components/settings-workspace.ts"
 import { t } from "../../i18n/index.ts";
 import { registerCronEnglish } from "../../i18n/locales/en-cron.ts";
 import { watchAgentScope } from "../../lib/agents/index.ts";
+import { currentConfigObject } from "../../lib/config/config-state-model.ts";
 import {
   addCronJob,
   cancelCronEdit,
@@ -40,6 +41,7 @@ import type { CronFormState, CronState } from "../../lib/cron/types.ts";
 import { formatUiError } from "../../lib/format-error.ts";
 import { modelCatalogEventInvalidation } from "../../lib/model-catalog-cache.ts";
 import { loadModelCatalog, modelCatalogRefreshError } from "../../lib/model-catalog-store.ts";
+import { filterCustomModelCatalog } from "../../lib/models/custom-model-refs.ts";
 import { shouldHandleNavigationClick } from "../../lib/navigation-click.ts";
 import { GatewayPageController } from "../../lit/gateway-page-controller.ts";
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
@@ -356,7 +358,10 @@ class CronPage extends OpenClawLightDomElement {
     try {
       const result = await loadModelCatalog(client, { agentId });
       if (isCurrent()) {
-        this.cronModelSuggestions = result.models
+        this.cronModelSuggestions = filterCustomModelCatalog(
+          result.models,
+          currentConfigObject(this.context.runtimeConfig.state),
+        )
           .filter((entry) => entry.manualSelectionAllowed !== false)
           .map((entry) => entry.id);
         this.modelSuggestionsError = modelCatalogRefreshError(result);

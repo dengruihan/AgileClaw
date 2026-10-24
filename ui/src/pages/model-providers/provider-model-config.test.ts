@@ -2,10 +2,8 @@
 import { describe, expect, it } from "vitest";
 import { applyMergePatch } from "../../../../src/config/merge-patch.js";
 import {
-  modelDeletePatch,
-  modelEntryHidden,
   modelReferences,
-  modelRestorePatch,
+  modelRemovePatch,
   modelWritePatch,
   providerConnectionPatch,
   providerDeletePatch,
@@ -13,35 +11,6 @@ import {
 } from "./provider-model-config.ts";
 
 describe("provider model edits", () => {
-  describe("provider model hide markers", () => {
-    it("detects hidden entries", () => {
-      expect(modelEntryHidden({ id: "a", name: "A", hidden: true })).toBe(true);
-      expect(modelEntryHidden({ id: "a", name: "A" })).toBe(false);
-      expect(modelEntryHidden(undefined)).toBe(false);
-    });
-
-    it("writes a hide override without the user-added marker", () => {
-      const config = {
-        models: {
-          providers: {
-            zai: { models: [{ id: "glm-5.3", name: "GLM-5.3" }] },
-          },
-        },
-      };
-      const patch = modelWritePatch(
-        config,
-        "zai",
-        { id: "glm-5.3", name: "GLM-5.3", hidden: true },
-        "glm-5.3",
-      );
-      const next = applyMergePatch(config, patch.raw, {
-        replaceArrayPaths: new Set(patch.replacePaths),
-      }) as typeof config;
-      const entry = next.models.providers.zai.models.find((row) => row.id === "glm-5.3");
-      expect(entry).toEqual({ id: "glm-5.3", name: "GLM-5.3", hidden: true });
-    });
-  });
-
   const config = {
     models: {
       mode: "merge",
@@ -114,86 +83,26 @@ describe("provider model edits", () => {
     });
   });
 
-  it("deletes a listed model to a bare hide marker, dropping authored fields", () => {
-    const patch = modelDeletePatch(config, "custom.proxy", "first", {
-      listed: true,
-      name: "First",
-    });
+  it("deletes a model by removing its entry entirely, keeping siblings", () => {
+    const patch = modelRemovePatch(config, "custom.proxy", "first");
     expect(patch).toEqual({
       raw: {
         models: {
           providers: {
             "custom.proxy": {
-              models: [
-                { id: "first", name: "First", hidden: true },
-                { id: "second", name: "Second", metadataSource: "models-add" },
-              ],
+              models: [{ id: "second", name: "Second", metadataSource: "models-add" }],
             },
           },
         },
       },
       replacePaths: ["models.providers.custom.proxy.models"],
     });
-  });
-
-  it("deletes an unlisted model by removing its entry entirely", () => {
-    const patch = modelDeletePatch(config, "custom.proxy", "second", { listed: false });
-    expect(patch).toEqual({
-      raw: {
-        models: {
-          providers: {
-            "custom.proxy": {
-              models: [{ id: "first", name: "First", compat: { supportsStore: false } }],
-            },
-          },
-        },
-      },
-      replacePaths: ["models.providers.custom.proxy.models"],
-    });
-  });
-
-  it("restores a deleted model by dropping the bare hide marker", () => {
-    const patch = modelRestorePatch(
-      {
-        models: {
-          providers: { zai: { models: [{ id: "glm-5.3", name: "GLM-5.3", hidden: true }] } },
-        },
-      },
-      "zai",
-      "glm-5.3",
-      "GLM-5.3",
-    );
-    expect(patch).toEqual({
-      raw: { models: { providers: { zai: { models: [] } } } },
-      replacePaths: ["models.providers.zai.models"],
-    });
-  });
-
-  it("restores a legacy hidden override while keeping its authored fields", () => {
-    const patch = modelRestorePatch(
-      {
-        models: {
-          providers: {
-            zai: {
-              models: [{ id: "glm-5.3", name: "Renamed", hidden: true, contextWindow: 200000 }],
-            },
-          },
-        },
-      },
-      "zai",
-      "glm-5.3",
-      "GLM-5.3",
-    );
-    expect(patch).toEqual({
-      raw: {
-        models: {
-          providers: {
-            zai: { models: [{ id: "glm-5.3", name: "Renamed", contextWindow: 200000 }] },
-          },
-        },
-      },
-      replacePaths: ["models.providers.zai.models"],
-    });
+    const next = applyMergePatch(config, patch.raw, {
+      mergeObjectArraysById: true,
+      replaceArrayPaths: new Set(patch.replacePaths),
+    }) as typeof config;
+    expect(next.models.providers["custom.proxy"].models).toHaveLength(1);
+    expect(config.models.providers["custom.proxy"].models).toHaveLength(2);
   });
 
   it("finds selected and allowlisted references without confusing profile or version suffixes", () => {

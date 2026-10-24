@@ -139,6 +139,8 @@ export function renderChatPaneComposerControls(params: {
   contextWindowAccess: SessionMethodAccess;
   permissionAccess: SessionMethodAccess;
   canSelectFull: boolean;
+  /** Authored model refs the picker lists; null keeps catalog rows unfiltered. */
+  customModelRefs?: ReadonlySet<string> | null;
   onModelSetup: () => void;
   onProviderSettings?: (provider: string) => void;
   onModelAccounts?: () => void;
@@ -156,6 +158,7 @@ export function renderChatPaneComposerControls(params: {
     contextWindowAccess,
     permissionAccess,
     canSelectFull,
+    customModelRefs,
     onModelSetup,
     onProviderSettings,
     onModelAccounts,
@@ -280,6 +283,7 @@ export function renderChatPaneComposerControls(params: {
           gatewayAvailable: Boolean(state.client),
           loading: state.chatLoading,
           modelCatalog: state.chatModelCatalog,
+          customModelRefs,
           modelCatalogState,
           modelOverrides: state.sessions.state.modelOverrides,
           thinkingSession: settingsSession,

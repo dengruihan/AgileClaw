@@ -225,14 +225,17 @@ describe("provider manager dialog forms", () => {
   });
 
   it("keeps catalog reasoning inherited until the form overrides it", async () => {
-    // A catalog-advertised model without an authored entry: saving without
-    // touching reasoning must not freeze the capability into config.
+    // A catalog-advertised model edited from its bare authored entry: saving
+    // without touching reasoning must not freeze the capability into config.
     const { manager, save, patches, input, setInput, page } = await openDialog(
       {
         providers: {
           "custom-lab": {
             baseUrl: "https://example.test/v1",
-            models: [{ id: "kept", name: "Kept", reasoning: true }],
+            models: [
+              { id: "kept", name: "Kept", reasoning: true },
+              { id: "discovered", name: "Discovered" },
+            ],
           },
         },
         catalog: [
@@ -278,8 +281,8 @@ describe("provider manager dialog forms", () => {
       id: "kept",
       reasoning: false,
     });
-    // Toggling reasoning off on a catalog-only row saves an explicit false
-    // override instead of falling back to the advertised capability.
+    // Toggling reasoning off on a bare catalog-matched entry saves an explicit
+    // false override instead of falling back to the advertised capability.
     editButton(manager, "discovered").click();
     await waitForFast(() => expect(input("name")).not.toBeNull());
     const reasoning = manager.querySelector<HTMLInputElement>('input[name="reasoning"]')!;
@@ -319,6 +322,8 @@ describe("provider manager dialog forms", () => {
             models: [
               { id: "authored", name: "Authored", thinkingLevelMap: { high: "auth-high" } },
               { id: "renamed-only", name: "Renamed Only" },
+              { id: "discovered", name: "Discovered" },
+              { id: "quiet", name: "Quiet" },
             ],
           },
         },

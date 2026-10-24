@@ -282,6 +282,31 @@ describe("chat-model-select-state", () => {
     ]);
   });
 
+  it("lists authored models with the selection and default retained when custom refs filter", () => {
+    const state = createChatModelState({
+      chatModelCatalog: createModelCatalog(
+        { id: "gpt-5", name: "GPT-5", provider: "openai" },
+        { id: "gpt-5-mini", name: "GPT-5 Mini", provider: "openai" },
+        { id: "glm-5.3", name: "GLM-5.3", provider: "zai" },
+      ),
+      customModelRefs: new Set(["zai/glm-5.3"]),
+      sessionsResult: createSessionsListResult({
+        model: "gpt-5",
+        modelProvider: "openai",
+      }),
+    });
+
+    const resolved = resolveChatModelSelectState(state);
+    // The authored zai entry lists; the catalog-only selection and default stay
+    // visible so an in-use catalog model never disappears mid-session.
+    expect(resolved.options).toEqual([
+      { value: "openai/gpt-5", label: "GPT-5" },
+      { value: "zai/glm-5.3", label: "GLM-5.3" },
+    ]);
+    expect(resolved.currentOverride).toBe("openai/gpt-5");
+    expect(resolved.defaultModel).toBe("openai/gpt-5");
+  });
+
   it("keeps configured unavailable catalog entries visible but disabled", () => {
     const state = createChatModelState({
       chatModelCatalog: createModelCatalog(

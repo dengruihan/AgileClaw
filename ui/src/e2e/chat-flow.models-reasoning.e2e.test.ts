@@ -912,4 +912,57 @@ suite.define(() => {
       await suite.closeBrowserContext(context);
     }
   });
+
+  it("lists authored models only, keeping the selection and default visible", async () => {
+    const context = await suite.newBrowserContext(createControlUiE2eContextOptions());
+    const page = await context.newPage();
+    const config = {
+      agents: { defaults: { model: { primary: "openai/gpt-5.5" } } },
+      models: {
+        providers: { openai: { models: [{ id: "gpt-5.5-mini", name: "GPT-5.5 Mini" }] } },
+      },
+    };
+    await installMockGateway(page, {
+      methodResponses: {
+        "sessions.list": chatSessionListResponse(),
+        "config.get": {
+          config,
+          hash: "custom-models-e2e",
+          issues: [],
+          raw: JSON.stringify(config),
+          valid: true,
+        },
+      },
+      models: [
+        { id: "gpt-5.5", name: "GPT-5.5", provider: "openai" },
+        { id: "gpt-5.5-mini", name: "GPT-5.5 Mini", provider: "openai" },
+        { id: "claude-opus-4.5", name: "Claude Opus 4.5", provider: "bedrock" },
+      ],
+      sessionKey: "agent:main:session-a",
+    });
+
+    try {
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:session-a"));
+      const main = page.getByRole("main");
+      const activePane = main.locator('openclaw-chat-pane[aria-hidden="false"]');
+      const modelSelect = activePane.locator('[data-chat-model-select="true"]');
+      await modelSelect.waitFor({ state: "visible", timeout: 10_000 });
+      await modelSelect.click();
+      // With an authored entry present, catalog-only rows hide: the picker
+      // lists the authored mini plus the retained default, never bedrock.
+      const options = activePane.locator("[data-chat-model-option]");
+      await expect.poll(() => options.count()).toBe(2);
+      await revealChatModelOption(
+        activePane.locator('[data-chat-model-option="openai/gpt-5.5-mini"]'),
+      );
+      expect(
+        await activePane.locator('[data-chat-model-option="bedrock/claude-opus-4.5"]').count(),
+      ).toBe(0);
+      const defaultOption = activePane.locator('[data-chat-model-default="true"]');
+      await expect.poll(() => defaultOption.getAttribute("aria-selected")).toBe("true");
+      expect(await defaultOption.getAttribute("data-chat-model-option")).toBe("openai/gpt-5.5");
+    } finally {
+      await suite.closeBrowserContext(context);
+    }
+  });
 });
