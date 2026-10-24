@@ -53,6 +53,7 @@ import {
   subscribeModelCatalogCache,
   subscribeModelCatalogChanges,
 } from "../../lib/model-catalog-store.ts";
+import { filterCustomModelCatalog } from "../../lib/models/custom-model-refs.ts";
 import { parseAgentSessionKey } from "../../lib/sessions/session-key.ts";
 import { GatewayPageController } from "../../lit/gateway-page-controller.ts";
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
@@ -110,7 +111,20 @@ class AgentsPage
   @state() toolsEffectiveError: string | null = null;
   @state() toolsEffectiveResult: ToolsEffectiveResult | null = null;
   get modelCatalog() {
-    return readAgentModelCatalog(this.connected ? this.client : null, this.agentsSelectedId);
+    const presentation = readAgentModelCatalog(
+      this.connected ? this.client : null,
+      this.agentsSelectedId,
+    );
+    // The agent panel lists authored models; buildModelOptions retains the
+    // current selection itself when it names a catalog-only row.
+    const runtimeState = this.context.runtimeConfig?.state;
+    return {
+      ...presentation,
+      models: filterCustomModelCatalog(
+        presentation.models,
+        runtimeState ? currentConfigObject(runtimeState) : null,
+      ),
+    };
   }
   @state() chatModelCatalogStatus = createPanelRefreshStatus();
   private chatModelCatalogPending: Promise<unknown> | null = null;

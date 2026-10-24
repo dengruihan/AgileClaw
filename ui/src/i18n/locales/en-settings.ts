@@ -689,7 +689,7 @@ const enSettings = {
       connectionScope:
         "Connection settings apply to the whole Gateway. Accounts follow the existing credential scope for agent {agent}.",
       modelScope:
-        "Model definitions apply to the whole Gateway. Editing a built-in model creates an override.",
+        "Model definitions apply to the whole Gateway. The list shows only models you add here.",
       saveBeforeTest: "Save changes before testing the connection.",
       credentialsFailed:
         "Connection settings were saved, but the API key was not saved. Check the credential error and retry.",
@@ -702,10 +702,8 @@ const enSettings = {
         "Enter a model ID and name. New model IDs must be unique within this provider.",
       referenced:
         "This model is referenced by {references}. Update these settings before removing it.",
-      builtIn: "Catalog",
       override: "Configured",
       userAdded: "User added",
-      showModel: "Show",
       inherited: "Provider default",
       editModel: "Edit model",
       modelName: "Name",
@@ -755,14 +753,9 @@ const enSettings = {
         "azure-openai-responses": "Azure OpenAI Responses",
       },
       addModel: "Add model",
-      hiddenModels: "Hidden models ({count})",
       noModels: "No models yet. Add a model ID supplied by your provider.",
-      refreshModels: "Refresh model list",
-      discoveryHelp:
-        "Refresh uses the provider’s existing catalog discovery. If your endpoint does not expose models, add them manually.",
-      refreshed: "Model catalog refreshed",
-      refreshFailed:
-        "Model discovery failed. Check the connection and retry, or add models manually.",
+      modelsHelp:
+        "Deleting a model removes its definition. Enter a model ID and name your provider serves.",
       addModelsAfterSave: "Save the connection, then add model definitions in the list below.",
     },
     catalogSettings: {

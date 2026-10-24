@@ -66,6 +66,8 @@ type ChatModelControlsProps = {
   gatewayAvailable: boolean;
   loading: boolean;
   modelCatalog: ModelCatalogEntry[];
+  /** Authored model refs the picker lists; null keeps catalog rows unfiltered. */
+  customModelRefs?: ReadonlySet<string> | null;
   modelCatalogState?: ChatModelCatalogState;
   modelOverrides?: Readonly<Record<string, string | null | undefined>>;
   modelSelectionLocked?: boolean;
@@ -274,6 +276,7 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
     activeSession: props.selectedSession,
     agentDefaultModel: props.agentDefaultModel,
     chatModelCatalog: props.modelCatalog,
+    customModelRefs: props.customModelRefs,
     modelOverrides: props.modelOverrides ?? {},
     sessionKey: props.sessionKey,
     sessionsResult: props.sessionsResult,

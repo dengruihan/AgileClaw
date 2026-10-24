@@ -431,18 +431,23 @@ suite.define(() => {
   it("deletes seeded provider model rows from the list and guards references", async () => {
     const { buildConfigSchemaCore } = await import("../../../src/config/schema.ts");
     const providerId = "seeded-lab";
-    // Onboarding-seeded rows carry no metadataSource marker; deleting one drops
-    // the authored entry and keeps endpoint-listed rows restorable in the
-    // collapsed Hidden models section.
-    const models: { id: string; name: string; input?: string[]; hidden?: boolean }[] = [
+    // The list shows only authored entries: catalog rows never render, legacy
+    // hidden entries list like any other row, and deleting removes the entry.
+    const configModels: { id: string; name: string; input?: string[]; hidden?: boolean }[] = [
       { id: "model-1", name: "One", input: ["text"] },
       { id: "model-2", name: "Two", input: ["text"], hidden: true },
       { id: "model-3", name: "Three", input: ["text"] },
     ];
+    const catalogModels = [
+      ...configModels.map((row) => ({ id: row.id, name: row.name, provider: providerId })),
+      { id: "catalog-only", name: "Catalog Only", provider: providerId },
+    ];
     const initial = {
       agents: { defaults: { model: { primary: `${providerId}/model-1` } } },
       models: {
-        providers: { [providerId]: { baseUrl: "https://seeded.example.test/v1", models } },
+        providers: {
+          [providerId]: { baseUrl: "https://seeded.example.test/v1", models: configModels },
+        },
       },
     };
     const snapshot = (config: typeof initial, hash: string) => ({
@@ -463,7 +468,7 @@ suite.define(() => {
       },
       async ({ page }) => {
         const gateway = await installMockGateway(page, {
-          models: models.map((row) => ({ id: row.id, name: row.name, provider: providerId })),
+          models: catalogModels,
           methodResponses: {
             "config.get": snapshot(initial, "seeded-row-e2e"),
             "config.schema": buildConfigSchemaCore(),
@@ -486,15 +491,15 @@ suite.define(() => {
         expect(
           await manager.getByRole("button", { name: "Restore default", exact: true }).count(),
         ).toBe(0);
-        const hiddenSection = manager.locator("details.provider-manager__hidden");
-        await hiddenSection.getByText("Hidden models (1)", { exact: true }).waitFor();
-        const mainList = manager.locator(".provider-manager__model-list").first();
-        expect(await mainList.locator('[data-model-id="model-2"]').count()).toBe(0);
-        await hiddenSection.locator("summary").click();
-        await hiddenSection
-          .locator('[data-model-id="model-2"]')
-          .getByRole("button", { name: "Show", exact: true })
-          .waitFor();
+        // Catalog rows stay out of the list; authored rows all render, including
+        // a legacy hidden entry, and no restore section or refresh affordance exists.
+        expect(await manager.locator('[data-model-id="catalog-only"]').count()).toBe(0);
+        await manager.locator('[data-model-id="model-2"]').waitFor();
+        expect(await manager.getByRole("button", { name: "Show", exact: true }).count()).toBe(0);
+        expect(await manager.locator("details.provider-manager__hidden").count()).toBe(0);
+        expect(
+          await manager.getByRole("button", { name: "Refresh model list", exact: true }).count(),
+        ).toBe(0);
         if (captureUiProofEnabled) {
           await page.screenshot({
             animations: "disabled",
@@ -518,8 +523,7 @@ suite.define(() => {
             path: path.join(uiProofArtifactDir, "06-seeded-model-reference-guard.png"),
           });
         }
-        // Deleting an unreferenced endpoint-listed row swaps its authored entry
-        // for a bare hide marker so it stays out of the invocable list.
+        // Deleting an unreferenced row removes its authored entry entirely.
         await gateway.deferNext("config.patch");
         await third.getByRole("button", { name: "Delete", exact: true }).click();
         const rejected = await gateway.waitForRequest("config.patch");
@@ -532,7 +536,7 @@ suite.define(() => {
           models: {
             providers: {
               [providerId]: {
-                models: [models[0]!, models[1]!, { id: "model-3", name: "Three", hidden: true }],
+                models: [configModels[0]!, configModels[1]!],
               },
             },
           },
@@ -545,7 +549,7 @@ suite.define(() => {
             providers: {
               [providerId]: {
                 baseUrl: "https://seeded.example.test/v1",
-                models: [models[0]!, models[1]!, { id: "model-3", name: "Three", hidden: true }],
+                models: [configModels[0]!, configModels[1]!],
               },
             },
           },
@@ -555,8 +559,7 @@ suite.define(() => {
           config: afterDelete,
           hash: "seeded-row-deleted",
         });
-        await hiddenSection.getByText("Hidden models (2)", { exact: true }).waitFor();
-        expect(await mainList.locator('[data-model-id="model-3"]').count()).toBe(0);
+        await expect.poll(() => manager.locator('[data-model-id="model-3"]').count()).toBe(0);
         expect(await gateway.getRequests("config.set")).toHaveLength(0);
       },
     );

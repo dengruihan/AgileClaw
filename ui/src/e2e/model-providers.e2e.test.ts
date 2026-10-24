@@ -496,6 +496,12 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
         : {}),
     });
     const page = await context.newPage();
+    // The workspace list renders authored entries only, so the probed model
+    // needs its own config entry.
+    const openaiProvider = (apiKey: string) => ({
+      ...providerConfig(apiKey),
+      models: [{ id: "gpt-5.5", name: "GPT-5.5" }],
+    });
     const config = {
       agents: {
         defaults: {
@@ -503,7 +509,7 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
           utilityModel: "openai/gpt-5.5-mini",
         },
       },
-      models: { providers: { openai: providerConfig(redactedConfigValue) } },
+      models: { providers: { openai: openaiProvider(redactedConfigValue) } },
     };
     const configuredModels = [
       { id: "gpt-5.5", name: "GPT-5.5", provider: "openai", available: true },
@@ -646,7 +652,7 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
       expect(await gateway.getRequests("config.patch")).toHaveLength(0);
       const keyedConfig = {
         ...config,
-        models: { providers: { openai: providerConfig("openai:manual-api-key") } },
+        models: { providers: { openai: openaiProvider("openai:manual-api-key") } },
       };
       await resolveConfigMutation(gateway, keyedConfig, "model-providers-hash-key", "openai");
       await expect.poll(async () => openaiCard.textContent()).toContain("Secret saved.");

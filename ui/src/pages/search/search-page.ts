@@ -37,6 +37,7 @@ import { currentConfigObject } from "../../lib/config/config-state-model.ts";
 import { formatUiError } from "../../lib/format-error.ts";
 import type { GatewayConnectionScope } from "../../lib/gateway-connection-lifecycle.ts";
 import { loadModelCatalog } from "../../lib/model-catalog-store.ts";
+import { filterCustomModelCatalog } from "../../lib/models/custom-model-refs.ts";
 import { GatewayPageController } from "../../lit/gateway-page-controller.ts";
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
 import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
@@ -183,7 +184,12 @@ class SearchPage extends OpenClawLightDomElement {
       if (!current()) {
         return;
       }
-      this.models = catalog?.models ?? [];
+      // The picker lists authored models; keep the current selection selectable.
+      this.models = filterCustomModelCatalog(
+        catalog?.models ?? [],
+        currentConfigObject(this.context.runtimeConfig.state),
+        this.model ? [this.model] : [],
+      );
       const result = await scope.client.request<WebSearchStatusResult>(
         "webSearch.status",
         selection,

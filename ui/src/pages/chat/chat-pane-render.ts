@@ -13,7 +13,9 @@ import { personActivityRouting } from "../../components/person-activity-link.ts"
 import { isCloudWorkerPlacementState } from "../../components/session-row-badges.ts";
 import { t } from "../../i18n/index.ts";
 import { isModelIndependentChatCommand } from "../../lib/chat/commands.ts";
+import { currentConfigObject } from "../../lib/config/config-state-model.ts";
 import { canCallGatewayMethod, isGatewayMethodAdvertised } from "../../lib/gateway-methods.ts";
+import { customModelRefs } from "../../lib/models/custom-model-refs.ts";
 import {
   pickFreshestObserverDigest,
   projectSessionObserverDigest,
@@ -262,6 +264,7 @@ export class ChatPane extends ChatPaneLayoutRender {
           contextWindowAccess: mutationAccess.contextWindow,
           permissionAccess: mutationAccess.permission,
           canSelectFull: hasOperatorAdminAccess(gatewaySnapshot.hello?.auth ?? null),
+          customModelRefs: customModelRefs(currentConfigObject(this.context.runtimeConfig.state)),
           onModelSetup: () => this.context.navigate("model-setup"),
           onProviderSettings: (provider) =>
             navigateToModelProvider(this.context, currentAgentId, provider),

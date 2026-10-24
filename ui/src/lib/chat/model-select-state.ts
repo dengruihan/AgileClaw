@@ -24,6 +24,12 @@ type ChatModelSelectStateInput = {
   activeSession?: GatewaySessionRow;
   agentDefaultModel?: string;
   chatModelCatalog: ModelCatalogEntry[];
+  /**
+   * Authored model refs (`models.providers.*.models[]`) the picker lists.
+   * Non-null filters catalog-only rows out; the active selection and default
+   * stay visible either way. Null keeps the catalog unfiltered.
+   */
+  customModelRefs?: ReadonlySet<string> | null;
   modelOverrides: Readonly<Record<string, string | null | undefined>>;
   sessionKey: string;
   sessionsResult: SessionsListResult | null;
@@ -264,8 +270,24 @@ export function resolveChatModelSelectState(
   const pickerCatalog = catalog.filter(
     (entry) => entry.available !== false || !availableKeys.has(catalogModelAvailabilityKey(entry)),
   );
-  const displayLookup = buildCatalogDisplayLookup(pickerCatalog);
-  const options = buildChatModelOptions(pickerCatalog, displayLookup);
+  // The picker lists authored models; the resolved selection and default stay
+  // visible so a catalog model already in use never disappears mid-session.
+  const normalizedCustomRefs = state.customModelRefs
+    ? new Set([...state.customModelRefs].map(normalizeChatModelAvailabilityKey))
+    : null;
+  const selectedKey = normalizeChatModelAvailabilityKey(resolveChatModelOverrideValue(state));
+  const defaultKey = normalizeChatModelAvailabilityKey(resolveDefaultModelValue(state));
+  const visibleCatalog =
+    normalizedCustomRefs === null
+      ? pickerCatalog
+      : pickerCatalog.filter(
+          (entry) =>
+            normalizedCustomRefs.has(catalogModelAvailabilityKey(entry)) ||
+            catalogModelAvailabilityKey(entry) === selectedKey ||
+            catalogModelAvailabilityKey(entry) === defaultKey,
+        );
+  const displayLookup = buildCatalogDisplayLookup(visibleCatalog);
+  const options = buildChatModelOptions(visibleCatalog, displayLookup);
   const currentOverride = resolveCatalogChatModelValue(
     resolveChatModelOverrideValue(state),
     options,

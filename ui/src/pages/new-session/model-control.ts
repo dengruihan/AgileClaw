@@ -7,6 +7,7 @@ import type { DurableDraftModelSelection } from "../../lib/chat/composer-draft-s
 import { buildQualifiedChatModelValue } from "../../lib/chat/model-ref.ts";
 import { normalizeChatFastModeInput } from "../../lib/chat/model-select-state.ts";
 import { normalizeThinkingOptionValue } from "../../lib/chat/thinking.ts";
+import { currentConfigObject } from "../../lib/config/config-state-model.ts";
 import {
   hasUnrestrictedModelCatalogSnapshot,
   invalidateModelCatalogCache,
@@ -14,6 +15,7 @@ import {
 } from "../../lib/model-catalog-cache.ts";
 import { ModelCatalogReader } from "../../lib/model-catalog-reader.ts";
 import { resolveModelCatalogState } from "../../lib/model-catalog-store.ts";
+import { customModelRefs } from "../../lib/models/custom-model-refs.ts";
 import { normalizeAgentId } from "../../lib/sessions/session-key.ts";
 import { requiresChatModelSetup } from "../chat/chat-model-setup.ts";
 import { renderChatModelAccountControl } from "../chat/components/chat-model-account-control.ts";
@@ -589,8 +591,10 @@ export class NewSessionModelControl extends NewSessionModelSelection {
         this.ownsMetadata(client, scope) &&
         this.metadataState.accountSelection === accountSelection,
       );
+    const runtimeState = options.context?.runtimeConfig?.state;
     return renderChatModelControls({
       ...modelControls,
+      customModelRefs: customModelRefs(runtimeState ? currentConfigObject(runtimeState) : null),
       renderAccountSection: (model) =>
         renderChatModelAccountControl({
           owner: this,
