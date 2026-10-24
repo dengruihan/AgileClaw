@@ -61,6 +61,10 @@ describe("ModelProvidersPage usage convergence", () => {
       return original(method);
     });
     const page = appendPage(context);
+    await vi.waitFor(() =>
+      expect(page.querySelector('[data-provider-select="openai"]')).not.toBeNull(),
+    );
+    page.querySelector<HTMLButtonElement>('[data-provider-select="openai"]')!.click();
     await vi.waitFor(() => expect(page.textContent).toContain("90% left"));
     expect(accountRequests).toEqual([
       { agentId: "main", profileId: "openai:one" },

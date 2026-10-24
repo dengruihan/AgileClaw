@@ -297,6 +297,13 @@
     },
     {
       "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/pages/chat/components/chat-message-attachments.test-support.ts",
+      "text": "asset.bin"
+    },
+    {
+      "count": 1,
       "kind": "html-text",
       "name": "text",
       "path": "ui/src/pages/chat/components/chat-message-timestamp.ts",
@@ -399,6 +406,13 @@
       "name": "text",
       "path": "ui/src/pages/devices/view-exec-approvals.ts",
       "text": "exec host=gateway/node"
+    },
+    {
+      "count": 1,
+      "kind": "html-attribute",
+      "name": "placeholder",
+      "path": "ui/src/pages/model-providers/provider-manager-connection.ts",
+      "text": "https://api.example.com/v1"
     },
     {
       "count": 1,

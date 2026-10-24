@@ -94,15 +94,14 @@ async function openDialog(config: DialogTestConfig, provider: string) {
     input(name).dispatchEvent(new Event("input", { bubbles: true }));
   };
   const save = async () => {
+    const previous = patches.length;
     manager
       .querySelector<HTMLButtonElement>('.provider-manager__footer button[type="submit"]')!
       .click();
-    await waitForFast(() => expect(patches.length).toBeGreaterThan(0));
+    await waitForFast(() => expect(patches.length).toBeGreaterThan(previous));
     // The write settles asynchronously; the edit form closing marks the saved
     // return to the merged view.
-    await waitForFast(() =>
-      expect(manager.querySelector(".provider-manager__models-section")).not.toBeNull(),
-    );
+    await waitForFast(() => expect(manager.querySelector(".provider-manager--model")).toBeNull());
     await page.updateComplete;
   };
   return { harness, manager, input, setInput, save, patches, page };
@@ -119,6 +118,58 @@ function editButton(manager: Element, modelId: string): HTMLButtonElement {
 }
 
 describe("provider manager dialog forms", () => {
+  it("clears an API override when selecting the provider default", async () => {
+    const { manager, save, patches } = await openDialog(
+      {
+        providers: { openai: { api: "openai-responses", models: [] } },
+        catalog: [],
+      },
+      "openai",
+    );
+    const api = manager.querySelector<HTMLSelectElement>('select[name="api"]')!;
+    api.value = "";
+    api.dispatchEvent(new Event("change", { bubbles: true }));
+    await waitForFast(() =>
+      expect(
+        manager.querySelector<HTMLButtonElement>('.provider-manager__footer button[type="submit"]')!
+          .disabled,
+      ).toBe(false),
+    );
+    await save();
+    expect(JSON.parse(String(patches.at(-1)!.raw))).toEqual({
+      models: { providers: { openai: { api: null } } },
+    });
+  });
+
+  it("preserves authored tiered pricing when renaming a model", async () => {
+    const cost = {
+      tieredPricing: [{ input: 2, output: 8, cacheRead: 0.2, cacheWrite: 2.5, range: [0] }],
+    };
+    const { manager, setInput, save, patches } = await openDialog(
+      {
+        providers: {
+          "custom-lab": {
+            baseUrl: "https://example.test/v1",
+            models: [{ id: "tiered", name: "Tiered", cost }],
+          },
+        },
+        catalog: [],
+      },
+      "custom-lab",
+    );
+    editButton(manager, "tiered").click();
+    await waitForFast(() => expect(manager.querySelector('input[name="name"]')).not.toBeNull());
+    setInput("name", "Renamed");
+    await save();
+    expect(JSON.parse(String(patches.at(-1)!.raw))).toMatchObject({
+      models: {
+        providers: {
+          "custom-lab": { models: [{ id: "tiered", name: "Renamed", cost }] },
+        },
+      },
+    });
+  });
+
   it("normalizes an edited model: coerces numbers, drops blanked overrides, keeps hidden fields", async () => {
     const { manager, setInput, save, patches } = await openDialog(
       {
@@ -185,7 +236,13 @@ describe("provider manager dialog forms", () => {
           },
         },
         catalog: [
-          { id: "discovered", name: "Discovered", provider: "custom-lab", reasoning: true },
+          {
+            id: "discovered",
+            name: "Discovered",
+            provider: "custom-lab",
+            reasoning: true,
+            input: ["text", "image"],
+          },
         ],
       },
       "custom-lab",
@@ -193,6 +250,7 @@ describe("provider manager dialog forms", () => {
     editButton(manager, "discovered").click();
     await waitForFast(() => expect(input("id")).not.toBeNull());
     expect(input("id").disabled).toBe(true);
+    expect(input("input-image").checked).toBe(true);
     await save();
     expect(JSON.parse(String(patches.at(-1)!.raw))).toEqual({
       models: {
@@ -387,7 +445,7 @@ describe("provider manager dialog forms", () => {
     });
   });
 
-  it("saves a new model with the text-only default input and the models-add marker", async () => {
+  it("saves text input by default and edits model modalities without losing its added marker", async () => {
     const { manager, input, setInput, save, patches } = await openDialog(
       {
         providers: { "custom-lab": { baseUrl: "https://example.test/v1", models: [] } },
@@ -410,6 +468,25 @@ describe("provider manager dialog forms", () => {
           "custom-lab": {
             models: [
               { id: "new-model", name: "New Model", input: ["text"], metadataSource: "models-add" },
+            ],
+          },
+        },
+      },
+    });
+    editButton(manager, "new-model").click();
+    await waitForFast(() => expect(input("input-video")).not.toBeNull());
+    input("input-video").click();
+    await save();
+    expect(JSON.parse(String(patches.at(-1)!.raw))).toMatchObject({
+      models: {
+        providers: {
+          "custom-lab": {
+            models: [
+              {
+                id: "new-model",
+                input: ["text", "video"],
+                metadataSource: "models-add",
+              },
             ],
           },
         },

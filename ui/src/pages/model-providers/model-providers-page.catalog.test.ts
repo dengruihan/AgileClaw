@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDeferred as deferred } from "../../../../test/helpers/promise.js";
 import type { ModelAuthStatusResult, ModelCatalogResult } from "../../api/types.ts";
 import { currentConfigObject } from "../../lib/config/config-state-model.ts";
-import { invalidateModelCatalogCache } from "../../lib/model-catalog-cache.ts";
 import { updatePickers } from "../../test-helpers/select-picker.ts";
 import { waitForFast } from "../../test-helpers/wait-for.ts";
 import { EMPTY_MODEL_PROVIDERS_DATA } from "./load.ts";
@@ -12,14 +11,18 @@ import {
   appendPage,
   chatModelPickers,
   createAuthStatus,
+  createCatalogHarness,
   createEmptyModelProvidersRouteData,
   createHarness,
   displayedCatalog,
   drainPageUpdates,
   modelPicker,
+  isDefaultCatalogRequest,
   openModelPicker,
   publishCatalog,
+  preparedCatalog,
   retryCatalog,
+  savedModelConfig,
   waitForProviders,
 } from "./model-providers-page.test-support.ts";
 
@@ -28,50 +31,6 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
-
-const preparedCatalog: ModelCatalogResult = {
-  models: [
-    { id: "prepared-primary", name: "Prepared primary", provider: "openai", available: true },
-    { id: "prepared-utility", name: "Prepared utility", provider: "openai", available: true },
-    { id: "prepared-fallback", name: "Prepared fallback", provider: "openai", available: true },
-  ],
-  decisionModels: [{ id: "jev-latest", name: "Jev", provider: "typesafe", pluginId: "typesafe" }],
-};
-
-const savedModelConfig = {
-  agents: {
-    defaults: {
-      model: {
-        primary: "openai/prepared-primary",
-        fallbacks: ["openai/prepared-fallback"],
-      },
-      utilityModel: "openai/prepared-utility",
-      decisionModel: "typesafe/jev-latest",
-    },
-  },
-};
-
-function createCatalogHarness(lastAcceptedCatalog?: ModelCatalogResult) {
-  const harness = createHarness("main");
-  if (lastAcceptedCatalog) {
-    publishCatalog(harness.context, "main", lastAcceptedCatalog);
-    invalidateModelCatalogCache(harness.snapshot.client!);
-  }
-  const originalRequest = harness.request.getMockImplementation()!;
-  const discover = vi.fn<() => Promise<ModelCatalogResult>>();
-  const readPublished = vi.fn((): ModelCatalogResult => preparedCatalog);
-  const catalogRequest = async (method: string, params?: { refresh?: boolean }) => {
-    if (method === "models.list") {
-      return params?.refresh ? discover() : readPublished();
-    }
-    if (method === "config.get") {
-      return { config: savedModelConfig, hash: "saved-model-config" };
-    }
-    return originalRequest(method);
-  };
-  harness.request.mockImplementation(catalogRequest);
-  return { ...harness, discover, readPublished, catalogRequest };
-}
 
 describe("Models page catalog publication", () => {
   it("disables defaults without showing an admin warning when config patches are unavailable", async () => {
@@ -369,7 +328,7 @@ describe("Models page catalog publication", () => {
     await waitForFast(() => expect(displayedCatalog(page)?.models).toEqual(writerModels));
     await drainPageUpdates(page);
     expect(discover).not.toHaveBeenCalled();
-    expect(request.mock.calls.filter(([method]) => method === "models.list")).toHaveLength(2);
+    expect(request.mock.calls.filter(isDefaultCatalogRequest)).toHaveLength(2);
     expect(page.querySelector('[role="option"][data-value="openai/writer"]')).not.toBeNull();
   });
 
@@ -535,14 +494,12 @@ describe("Models page catalog publication", () => {
       const page = appendPage(context);
       await waitForProviders(page, savedModelConfig);
       await page.updateComplete;
-      const requestsAfterLoad = request.mock.calls.filter(([method]) => method === "models.list");
+      const requestsAfterLoad = request.mock.calls.filter(isDefaultCatalogRequest);
       expect(requestsAfterLoad).toHaveLength(1);
 
       await openModelPicker(page, role);
       await drainPageUpdates(page);
-      expect(request.mock.calls.filter(([method]) => method === "models.list")).toEqual(
-        requestsAfterLoad,
-      );
+      expect(request.mock.calls.filter(isDefaultCatalogRequest)).toEqual(requestsAfterLoad);
       expect(discover).not.toHaveBeenCalled();
       expect(
         page.querySelector('.model-providers__catalog-progress[role="status"]'),
@@ -627,7 +584,7 @@ describe("Models page catalog publication", () => {
       expect(currentConfigObject(page.context.runtimeConfig.state)).toEqual(savedModelConfig);
       expect(runtimeConfig.patch).not.toHaveBeenCalled();
       expect(discover).not.toHaveBeenCalled();
-      expect(request.mock.calls.filter(([method]) => method === "models.list")).toHaveLength(3);
+      expect(request.mock.calls.filter(isDefaultCatalogRequest)).toHaveLength(3);
       expect(readPublished).toHaveBeenCalledTimes(3);
     },
   );
@@ -939,9 +896,7 @@ describe("Models page catalog publication", () => {
       expect(page.querySelector('[role="option"][data-value="openai/newer"]')).not.toBeNull();
       expect(page.querySelector('[role="option"][data-value="openai/retired"]')).toBeNull();
       expect(page.querySelector(".model-providers__catalog-progress")).toBeNull();
-      expect(request.mock.calls.filter(([method]) => method === "models.list")).toHaveLength(
-        catalogRequests,
-      );
+      expect(request.mock.calls.filter(isDefaultCatalogRequest)).toHaveLength(catalogRequests);
       readPublished.mockReturnValue(newer);
       await openModelPicker(page, "utility");
       await drainPageUpdates(page);

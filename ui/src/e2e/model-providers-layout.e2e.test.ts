@@ -2,11 +2,174 @@ import path from "node:path";
 import { expect, it } from "vitest";
 import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
+import { requestRaw, resolveConfigMutation } from "./model-providers.test-support.ts";
 
 const suite = createControlUiE2eSuite({ name: "Models settings layout and discovery" });
 const recordVisuals = process.env.OPENCLAW_UI_E2E_RECORD === "1";
 
 suite.define(() => {
+  it("keeps connection drafts while searching and requires an explicit decision before switching providers", async () => {
+    await suite.withPage(
+      { locale: "en-US", serviceWorkers: "block", viewport: { width: 1440, height: 1000 } },
+      async ({ page }) => {
+        const config = {
+          models: {
+            providers: {
+              alpha: { baseUrl: "https://alpha.example/v1", api: "openai-completions", models: [] },
+              beta: { baseUrl: "https://beta.example/v1", api: "anthropic-messages", models: [] },
+            },
+          },
+        };
+        const gateway = await installMockGateway(page, {
+          methodResponses: {
+            "config.get": {
+              config,
+              sourceConfig: config,
+              hash: "workspace-drafts",
+              raw: JSON.stringify(config),
+              valid: true,
+              issues: [],
+            },
+            "models.list": { models: [] },
+            "models.authStatus": { ts: 1, providers: [] },
+            "usage.status": { updatedAt: 1, providers: [] },
+            "sessions.usage": { aggregates: { byProvider: [] } },
+          },
+        });
+        await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+        const alpha = page.locator('[data-provider-select="alpha"]');
+        const beta = page.locator('[data-provider-select="beta"]');
+        await alpha.click();
+        const editor = page.locator(".provider-manager--inline");
+        const baseUrl = editor.locator('[name="baseUrl"]');
+        await expect.poll(() => baseUrl.isEnabled()).toBe(true);
+        await baseUrl.fill("https://draft.example/v1");
+        const search = page.getByRole("searchbox", { name: "Search providers…" });
+        await search.fill("beta");
+        expect(await alpha.count()).toBe(0);
+        expect(await baseUrl.inputValue()).toBe("https://draft.example/v1");
+        await beta.click();
+        const confirmation = page.locator(
+          'openclaw-modal-dialog[label="Discard unsaved changes?"]',
+        );
+        await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
+        expect(await baseUrl.inputValue()).toBe("https://draft.example/v1");
+        expect(await beta.getAttribute("aria-pressed")).toBe("false");
+        await beta.click();
+        await confirmation.getByRole("button", { name: "Discard changes", exact: true }).click();
+        await expect.poll(() => beta.getAttribute("aria-pressed")).toBe("true");
+        await expect.poll(() => baseUrl.inputValue()).toBe("https://beta.example/v1");
+        await search.fill("");
+        await alpha.click();
+        await expect.poll(() => baseUrl.inputValue()).toBe("https://alpha.example/v1");
+        expect(await gateway.getRequests("config.patch")).toHaveLength(0);
+      },
+    );
+  });
+
+  it("creates a custom provider and persists model dialog edits without submitting the connection form", async () => {
+    await suite.withPage(
+      { locale: "en-US", serviceWorkers: "block", viewport: { width: 1440, height: 1000 } },
+      async ({ page }) => {
+        const gateway = await installMockGateway(page, {
+          methodResponses: {
+            "config.get": {
+              config: {},
+              sourceConfig: {},
+              hash: "workspace-create",
+              raw: "{}",
+              valid: true,
+              issues: [],
+            },
+            "models.list": { models: [] },
+            "models.authStatus": { ts: 1, providers: [] },
+            "usage.status": { updatedAt: 1, providers: [] },
+            "sessions.usage": { aggregates: { byProvider: [] } },
+          },
+        });
+        await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+        await page.locator("[data-custom-provider]").click();
+        const editor = page.locator(".provider-manager--inline");
+        await editor.locator('[name="providerId"]').fill("workspace-custom");
+        await editor.locator('[name="baseUrl"]').fill("https://custom.example/v1");
+        await editor.locator('[name="api"]').selectOption("anthropic-messages");
+        await gateway.deferNext("config.patch");
+        await editor.getByRole("button", { name: "Save", exact: true }).click();
+        const connection = {
+          baseUrl: "https://custom.example/v1",
+          api: "anthropic-messages",
+          models: [],
+        };
+        expect(requestRaw(await gateway.waitForRequest("config.patch"))).toEqual({
+          models: { providers: { "workspace-custom": connection } },
+        });
+        await resolveConfigMutation(
+          gateway,
+          { models: { providers: { "workspace-custom": connection } } },
+          "workspace-created",
+        );
+        const selected = page.locator('[data-provider-select="workspace-custom"]');
+        await expect.poll(() => selected.getAttribute("aria-pressed")).toBe("true");
+        await editor.locator('[name="baseUrl"]').fill("https://unsaved.example/v1");
+        await editor.getByRole("button", { name: "Add model", exact: true }).click();
+        const dialog = page.locator('openclaw-modal-dialog[label="Edit model"]');
+        await dialog.locator('[name="id"]').fill("custom-model");
+        await dialog.locator('[name="name"]').fill("Custom model");
+        await dialog.locator('[name="contextWindow"]').fill("128000");
+        await dialog.locator('[name="maxTokens"]').fill("8192");
+        await gateway.deferNext("config.patch");
+        await dialog.getByRole("button", { name: "Save", exact: true }).click();
+        const model = {
+          id: "custom-model",
+          name: "Custom model",
+          input: ["text"],
+          contextWindow: 128000,
+          maxTokens: 8192,
+          metadataSource: "models-add",
+        };
+        const patch = await gateway.waitForRequest("config.patch", { after: 1 });
+        expect(requestRaw(patch)).toEqual({
+          models: { providers: { "workspace-custom": { models: [model] } } },
+        });
+        const saved = {
+          models: { providers: { "workspace-custom": { ...connection, models: [model] } } },
+        };
+        await resolveConfigMutation(gateway, saved, "workspace-model-created");
+        await dialog.locator("form").waitFor({ state: "hidden" });
+        const row = editor.locator('[data-model-id="custom-model"]');
+        await row.getByRole("button", { name: "Edit model", exact: true }).click();
+        expect(await dialog.locator('[name="contextWindow"]').inputValue()).toBe("128000");
+        await dialog.locator('[name="name"]').fill("Renamed model");
+        await dialog.locator('[name="maxTokens"]').fill("16384");
+        await gateway.deferNext("config.patch");
+        await dialog.getByRole("button", { name: "Save", exact: true }).click();
+        const edited = { ...model, name: "Renamed model", maxTokens: 16384 };
+        expect(requestRaw(await gateway.waitForRequest("config.patch", { after: 2 }))).toEqual({
+          models: { providers: { "workspace-custom": { models: [edited] } } },
+        });
+        await resolveConfigMutation(
+          gateway,
+          { models: { providers: { "workspace-custom": { ...connection, models: [edited] } } } },
+          "workspace-model-edited",
+        );
+        await dialog.locator("form").waitFor({ state: "hidden" });
+        await expect.poll(() => row.textContent()).toContain("Renamed model");
+        expect(await gateway.getRequests("config.patch")).toHaveLength(3);
+        expect(await editor.locator('[name="baseUrl"]').inputValue()).toBe(
+          "https://unsaved.example/v1",
+        );
+        await page.reload();
+        await selected.click();
+        await row.getByRole("button", { name: "Edit model", exact: true }).click();
+        expect(await dialog.locator('[name="name"]').inputValue()).toBe("Renamed model");
+        expect(await dialog.locator('[name="maxTokens"]').inputValue()).toBe("16384");
+        expect(await editor.locator('[name="baseUrl"]').inputValue()).toBe(
+          "https://custom.example/v1",
+        );
+        expect(await editor.locator('[name="api"]').inputValue()).toBe("anthropic-messages");
+      },
+    );
+  });
   it.each([1440, 1100, 768, 640, 390])(
     "Models page keeps controls separate and publishes discovery into a passive picker at %ipx",
     async (width) => {

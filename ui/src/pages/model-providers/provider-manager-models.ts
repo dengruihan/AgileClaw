@@ -1,4 +1,5 @@
 import { html, nothing, type TemplateResult } from "lit";
+import { icons } from "../../components/icons.ts";
 import { t } from "../../i18n/index.ts";
 
 /** Interactive members the provider-manager models list reads and calls. */
@@ -81,11 +82,25 @@ export function providerModelsList(params: {
       </div>
     </article>`;
   };
-  return html` <p class="muted">${t("modelProviders.manager.modelScope")}</p>
+  return html`<div class="provider-manager__list-toolbar">
+      <h3>${t("modelProviders.manager.models")}</h3>
+      <button
+        type="button"
+        class="btn btn--sm"
+        ?disabled=${state.disabled}
+        @click=${actions.onRefresh}
+      >
+        ${t("modelProviders.manager.refreshModels")}
+      </button>
+      <button type="button" class="btn btn--sm" ?disabled=${state.disabled} @click=${actions.onAdd}>
+        ${icons.plus}${t("modelProviders.manager.addModel")}
+      </button>
+    </div>
+    <p class="muted">${t("modelProviders.manager.modelScope")}</p>
     <div class="provider-manager__model-list">${state.rows.map((row) => modelRow(row, false))}</div>
     ${
       !state.rows.length && !state.hiddenRows.length && !state.loading
-        ? html`<p>${t("modelProviders.manager.noModels")}</p>`
+        ? html`<p class="provider-manager__empty">${t("modelProviders.manager.noModels")}</p>`
         : nothing
     }
     ${
@@ -102,17 +117,5 @@ export function providerModelsList(params: {
           </details>`
         : nothing
     }
-    <p class="muted">${t("modelProviders.manager.discoveryHelp")}</p>
-    <div class="provider-manager__actions">
-      <button type="button" class="btn" ?disabled=${state.disabled} @click=${actions.onRefresh}>
-        ${t("modelProviders.manager.refreshModels")}</button
-      ><button
-        type="button"
-        class="btn primary"
-        ?disabled=${state.disabled}
-        @click=${actions.onAdd}
-      >
-        ${t("modelProviders.manager.addModel")}
-      </button>
-    </div>`;
+    <p class="muted">${t("modelProviders.manager.discoveryHelp")}</p> `;
 }

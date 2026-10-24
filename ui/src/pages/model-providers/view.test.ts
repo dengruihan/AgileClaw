@@ -137,15 +137,19 @@ describe("renderModelProviders", () => {
     expect(retry?.disabled).toBe(false);
   });
 
-  it("hides quick API-key setup when provider capabilities are unavailable", () => {
+  it("keeps custom provider creation available when quick setup capabilities are unavailable", () => {
+    const onCustomProvider = vi.fn();
     const container = mount(
       props({
         configuredModels: [],
         unconfiguredProviders: [],
+        onCustomProvider,
       }),
     );
 
-    expect(text(container)).not.toContain("Add provider");
+    expect(container.querySelector("[data-available-provider]")).toBeNull();
+    container.querySelector<HTMLButtonElement>("[data-custom-provider]")!.click();
+    expect(onCustomProvider).toHaveBeenCalledOnce();
     expect(container.querySelector('[data-model-readiness="model-required"]')).not.toBeNull();
   });
 
@@ -331,7 +335,7 @@ describe("renderModelProviders", () => {
     ).toBe(true);
     expect(button(defaults!, "Save")).toBeUndefined();
 
-    const provider = container.querySelector('[data-provider-id="openai"]');
+    const provider = container.querySelector('[data-provider-details="openai"]');
     expect(
       provider?.querySelector<HTMLInputElement>(".model-providers__inline-form input")?.disabled,
     ).toBe(true);
@@ -450,7 +454,7 @@ describe("renderModelProviders", () => {
       }),
     );
 
-    expect(text(container.querySelector('[data-provider-id="openai"] [role="alert"]'))).toBe(
+    expect(text(container.querySelector('[data-provider-details="openai"] [role="alert"]'))).toBe(
       "Provider credential could not be saved.",
     );
     expect(text(container.querySelector('.model-providers__defaults [role="alert"]'))).toBe(
@@ -494,7 +498,7 @@ describe("renderModelProviders", () => {
         },
       }),
     );
-    const provider = container.querySelector('[data-provider-id="openai"]');
+    const provider = container.querySelector('[data-provider-details="openai"]');
     expect(text(provider)).toContain("Credentials for Writer");
     expect(text(provider)).toContain("Global usage and cost");
     expect(text(provider)).toContain("API key from environment (OPENAI_API_KEY)");
@@ -553,7 +557,7 @@ describe("renderModelProviders", () => {
         }),
       );
 
-      const provider = container.querySelector('[data-provider-id="openai"]');
+      const provider = container.querySelector('[data-provider-select="openai"]');
       expect(text(provider)).toContain("Credentials rejected");
       expect(text(provider)).not.toContain("Signed in");
       expect(text(container.querySelector(".model-providers__profile-status"))).toContain(
@@ -573,7 +577,7 @@ describe("renderModelProviders", () => {
       }),
     );
 
-    const provider = container.querySelector('[data-provider-id="openai"]');
+    const provider = container.querySelector('[data-provider-select="openai"]');
     expect(text(provider)).toContain("Credentials configured");
     expect(text(provider)).not.toContain("Ready");
   });
@@ -589,7 +593,7 @@ describe("renderModelProviders", () => {
       }),
     );
 
-    const provider = container.querySelector('[data-provider-id="openai"]');
+    const provider = container.querySelector('[data-provider-details="openai"]');
     expect(text(provider)).toContain("Credentials for Writer");
     expect(text(provider)).toContain("Global usage and cost");
     expect(text(provider)).toContain("Global session spend · 30d");
@@ -602,7 +606,7 @@ describe("renderModelProviders", () => {
       }),
     );
 
-    const provider = container.querySelector('[data-provider-id="openai"]');
+    const provider = container.querySelector('[data-provider-details="openai"]');
     expect(text(provider)).not.toContain("API key set in config");
     expect(text(provider)).toContain("Not configured");
   });
@@ -694,10 +698,12 @@ describe("renderModelProviders", () => {
       }),
     );
 
-    const provider = container.querySelector('[data-provider-id="openai"]');
-    expect(text(provider)).toContain("Credentials configured");
-    expect(text(provider)).toContain("No models available");
-    expect(text(provider)).not.toContain("Connection failed");
+    expect(text(container.querySelector('[data-provider-select="openai"]'))).toContain(
+      "Credentials configured",
+    );
+    const probe = container.querySelector('[data-provider-details="openai"]');
+    expect(text(probe)).toContain("No models available");
+    expect(text(probe)).not.toContain("Connection failed");
   });
 
   it("qualifies slash-bearing model IDs with their catalog provider", async () => {
@@ -882,7 +888,7 @@ describe("renderModelProviders", () => {
         onRemoveKey,
       }),
     );
-    const provider = container.querySelector('[data-provider-id="openai"]');
+    const provider = container.querySelector('[data-provider-details="openai"]');
     expect(provider).not.toBeNull();
     button(provider!, "Save")?.click();
     button(provider!, "Remove key")?.click();
@@ -892,22 +898,26 @@ describe("renderModelProviders", () => {
 
   it("offers provider deletion only for deletable cards and forwards the card", () => {
     const onDeleteProvider = vi.fn();
+    const onProviderSettings = vi.fn();
     const deletable = card({ id: "custom.proxy", displayName: "Custom Proxy" });
-    const container = mount(
-      props({
-        cards: [deletable, card()],
-        onDeleteProvider,
-        canDeleteProvider: (entry) => entry.id === "custom.proxy",
-      }),
-    );
-    const custom = container.querySelector('[data-provider-id="custom.proxy"]');
+    const viewProps = props({
+      cards: [deletable, card()],
+      onDeleteProvider,
+      onProviderSettings,
+      canDeleteProvider: (entry) => entry.id === "custom.proxy",
+    });
+    const container = mount(viewProps);
+    const custom = container.querySelector('[data-provider-details="custom.proxy"]');
     expect(button(custom!, "Delete provider")).toBeDefined();
-    // Cloud cards without the flag render no delete action.
-    expect(button(container.querySelector('[data-provider-id="openai"]')!, "Delete provider")).toBe(
-      undefined,
-    );
     button(custom!, "Delete provider")!.click();
     expect(onDeleteProvider).toHaveBeenCalledWith(deletable);
+    container.querySelector<HTMLButtonElement>('[data-provider-select="openai"]')!.click();
+    expect(onProviderSettings).toHaveBeenCalledWith(viewProps.cards[1]);
+    render(renderModelProviders({ ...viewProps, selectedProvider: "openai" }), container);
+    expect(container.querySelector('[data-provider-details="custom.proxy"]')).toBeNull();
+    expect(
+      button(container.querySelector('[data-provider-details="openai"]')!, "Delete provider"),
+    ).toBeUndefined();
 
     const busy = mount(
       props({
@@ -917,40 +927,9 @@ describe("renderModelProviders", () => {
       }),
     );
     expect(
-      button(busy.querySelector('[data-provider-id="custom.proxy"]')!, "Delete provider")!.disabled,
+      button(busy.querySelector('[data-provider-details="custom.proxy"]')!, "Delete provider")!
+        .disabled,
     ).toBe(true);
-  });
-
-  it("rides destructive actions on the manager row next to models and settings", () => {
-    const container = mount(
-      props({
-        cards: [
-          card({
-            id: "custom.proxy",
-            configKey: "custom.proxy",
-            apiKey: { source: "config" },
-            hasConfigApiKey: true,
-          }),
-        ],
-        canDeleteProvider: () => true,
-        onProviderModels: () => undefined,
-        onProviderSettings: () => undefined,
-      }),
-    );
-    const provider = container.querySelector('[data-provider-id="custom.proxy"]')!;
-    const row = provider.querySelector(".model-providers__manager-actions");
-    expect(row).not.toBeNull();
-    expect(row!.textContent).toContain("Models");
-    expect(row!.textContent).toContain("Settings");
-    expect(row!.textContent).toContain("Remove key");
-    expect(row!.textContent).toContain("Delete provider");
-    // The folded details no longer duplicate the destructive actions.
-    expect(provider.querySelector(".model-providers__card-actions")!.textContent).not.toContain(
-      "Remove key",
-    );
-    expect(provider.querySelector(".model-providers__card-actions")!.textContent).not.toContain(
-      "Delete provider",
-    );
   });
 
   it("shows the current key-operation failure over an older card success", () => {
@@ -962,7 +941,7 @@ describe("renderModelProviders", () => {
         },
       }),
     );
-    expect(text(container.querySelector('[data-provider-id="openai"] .callout'))).toBe(
+    expect(text(container.querySelector('[data-provider-details="openai"] .callout'))).toBe(
       "Current failure",
     );
   });
@@ -988,26 +967,33 @@ describe("renderModelProviders", () => {
   });
 });
 
-it("filters provider access without hiding global defaults and exposes an empty result", () => {
-  const onProviderQueryChange = vi.fn();
-  const viewProps = props({
-    cards: [
-      card(),
-      card({ id: "anthropic", displayName: "Anthropic", credentialProviderIds: ["anthropic"] }),
-    ],
-    providerQuery: " ANTHROPIC ",
-    onProviderQueryChange,
-  });
-  const container = mount(viewProps);
-  expect(container.querySelectorAll("[data-provider-id]")).toHaveLength(1);
-  expect(container.querySelector('[data-provider-id="anthropic"]')).not.toBeNull();
-  expect(container.querySelector("#settings-model-behavior")).not.toBeNull();
-  const search = container.querySelector<HTMLInputElement>('input[type="search"]')!;
-  search.value = "missing";
-  search.dispatchEvent(new Event("input", { bubbles: true }));
-  expect(onProviderQueryChange).toHaveBeenCalledExactlyOnceWith("missing");
-  render(renderModelProviders({ ...viewProps, providerQuery: "missing" }), container);
-  expect(text(container)).toContain("No providers match your search.");
-  expect(container.querySelectorAll("[data-provider-id]")).toHaveLength(0);
-  expect(container.querySelector("#settings-model-behavior")).not.toBeNull();
-});
+it.each([" ANTHROPIC ", "claude-cli"])(
+  "filters provider access by name or credential alias (%s) without hiding defaults",
+  (providerQuery) => {
+    const onProviderQueryChange = vi.fn();
+    const viewProps = props({
+      cards: [
+        card(),
+        card({
+          id: "anthropic",
+          displayName: "Anthropic",
+          credentialProviderIds: ["anthropic", "claude-cli"],
+        }),
+      ],
+      providerQuery,
+      onProviderQueryChange,
+    });
+    const container = mount(viewProps);
+    expect(container.querySelectorAll("[data-provider-id]")).toHaveLength(1);
+    expect(container.querySelector('[data-provider-id="anthropic"]')).not.toBeNull();
+    expect(container.querySelector("#settings-model-behavior")).not.toBeNull();
+    const search = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+    search.value = "missing";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(onProviderQueryChange).toHaveBeenCalledExactlyOnceWith("missing");
+    render(renderModelProviders({ ...viewProps, providerQuery: "missing" }), container);
+    expect(text(container)).toContain("No providers match your search.");
+    expect(container.querySelectorAll("[data-provider-id]")).toHaveLength(0);
+    expect(container.querySelector("#settings-model-behavior")).not.toBeNull();
+  },
+);

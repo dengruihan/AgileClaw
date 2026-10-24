@@ -89,7 +89,13 @@ export function providerConnectionPatch(
     }
     const changed = changedValue(
       original[field],
-      Object.hasOwn(draft, field) ? draft[field] : null,
+      // The empty select option restores protocol inheritance; an empty API
+      // string is not a valid adapter id in persisted configuration.
+      field === "api" && draft[field] === ""
+        ? null
+        : Object.hasOwn(draft, field)
+          ? draft[field]
+          : null,
       formatConfigPatchPath(providerPath, field),
     );
     if (changed !== undefined) {
@@ -428,7 +434,7 @@ export function localOrCustomProvider(
   const provider = configuredProvider(config, key);
   // An explicit config entry outside the known catalog is a custom provider even
   // when no capabilities loaded; a card with neither config nor capability
-  // information stays cloud so it is not hidden from the default tab.
+  // information stays cloud so it remains grouped with cloud providers.
   const known = knownProviderIds.size > 0 && knownProviderIds.has(key);
   return (
     (provider !== null && !known) ||
@@ -437,12 +443,4 @@ export function localOrCustomProvider(
     isRecord(provider?.agentRuntime) ||
     catalogModels.some((model) => model.provider === key && model.local === true)
   );
-}
-
-export function providerEndpoint(
-  config: Record<string, unknown> | null,
-  key: string,
-): string | undefined {
-  const baseUrl = configuredProvider(config, key)?.baseUrl;
-  return typeof baseUrl === "string" ? baseUrl : undefined;
 }

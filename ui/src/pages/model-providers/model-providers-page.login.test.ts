@@ -805,7 +805,11 @@ describe("Models provider login", () => {
     await waitForFast(() =>
       expect(page.querySelector('[data-provider-id="example-owner"]')).not.toBeNull(),
     );
-    const card = page.querySelector('[data-provider-id="example-owner"]')!;
+    page.querySelector<HTMLButtonElement>('[data-provider-select="example-owner"]')!.click();
+    await waitForFast(() =>
+      expect(page.querySelector('[data-provider-details="example-owner"]')).not.toBeNull(),
+    );
+    const card = page.querySelector('[data-provider-details="example-owner"]')!;
     const addAccount = [...card.querySelectorAll<HTMLButtonElement>("button")].find(
       (button) => button.textContent?.trim() === "Add account",
     );
@@ -965,7 +969,7 @@ describe("Models provider login", () => {
   );
 });
 
-it("keeps provider access scoped below global defaults and connects without navigation", async () => {
+it("keeps provider access scoped independently of global defaults and connects without navigation", async () => {
   const { context } = createHarness("writer");
   const page = appendPage(context);
   await waitForFast(() => expect(page.data?.updatedAt).toEqual(expect.any(Number)));
@@ -979,8 +983,7 @@ it("keeps provider access scoped below global defaults and connects without navi
   expect(context.agentSelection.state.selectedId).toBe("main");
   expect(context.settingsAgentSelection.state.selectedId).toBe("writer");
   expect(defaults.contains(agent)).toBe(false);
-  expect(defaults.compareDocumentPosition(agent) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
-  expect(agent.closest(".settings-section")?.textContent).toContain("Provider access");
+  expect(page.querySelector("#settings-model-providers")?.contains(agent)).toBe(true);
   expect(
     [...page.querySelectorAll("button")].some(
       (button) => button.textContent?.trim() === "Model setup",

@@ -660,10 +660,16 @@ const enSettings = {
     },
     subtitle:
       "Manage model defaults, provider access, and custom model configuration in one place.",
-    accessTitle: "Provider access",
-    accessDescription:
-      "Manage connections for the selected agent. Global defaults above apply to all agents.",
+    accessTitle: "Model providers",
+    accessDescription: "Configure provider connections and models, then choose them in chat.",
     manager: {
+      addProvider: "Add provider",
+      selectProvider: "Select a provider or add one to configure its connection and models.",
+      unsaved: "Unsaved changes",
+      unsavedTitle: "Discard unsaved changes?",
+      unsavedDescription: "Your changes have not been saved. Discard them to switch providers.",
+      discard: "Discard changes",
+      resetForm: "Reset form",
       cloud: "Cloud providers",
       custom: "Local & custom",
       configured: "Configured providers",
@@ -761,9 +767,9 @@ const enSettings = {
     catalogSettings: {
       title: "Global model catalog settings",
       description:
-        "Choose catalog merge behavior and automatic catalog updates. Manage connections and model definitions on the provider cards above.",
+        "Choose catalog merge behavior and automatic catalog updates. Manage connections and model definitions in the provider workspace above.",
       scope:
-        "These settings apply to the whole Gateway. Choose the model agents use in Defaults for all agents above.",
+        "These settings apply to the whole Gateway. Choose the model agents use in Defaults for all agents below.",
       providers:
         "Providers: set the API address, protocol, authentication, and optional request headers.",
       models:
@@ -959,6 +965,7 @@ const enSettings = {
     readOnly: {
       disconnected: "Connect to the gateway to change model settings.",
       adminRequired: "Browsing only. Model changes require operator.admin access.",
+      unavailable: "Model configuration changes are unavailable on this connection.",
     },
     notes: {
       defaultModel: "Update defaults from Control UI",
