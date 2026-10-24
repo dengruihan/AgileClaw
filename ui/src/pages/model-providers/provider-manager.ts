@@ -3,6 +3,8 @@ import { html, nothing, type PropertyValues } from "lit";
 import { property, state } from "lit/decorators.js";
 import type { ModelCatalogEntry, ModelCatalogResult, ModelsProbeResult } from "../../api/types.ts";
 import type { ApplicationContext } from "../../app/context.ts";
+import { showConfirmDialog } from "../../components/confirm-dialog.ts";
+import { renderProviderBrandIcon } from "../../components/provider-icon.ts";
 import { t } from "../../i18n/index.ts";
 import { registerSettingsEnglish } from "../../i18n/locales/en-settings.ts";
 import { currentConfigObject } from "../../lib/config/config-state-model.ts";
@@ -14,6 +16,7 @@ import {
 } from "./config-mutation.ts";
 import type { ModelProviderCard } from "./data.ts";
 import { providerConnectionFields } from "./provider-manager-connection.ts";
+import { providerModelDialog } from "./provider-manager-model-dialog.ts";
 import {
   MODEL_THINKING_LEVEL_IDS,
   modelConfigEntry,
@@ -32,6 +35,7 @@ import {
   providerModels,
   type ProviderModelsPatch,
 } from "./provider-model-config.ts";
+import { renderProviderStatus } from "./view-status.ts";
 
 registerSettingsEnglish();
 
@@ -45,7 +49,7 @@ export class ProviderManager extends OpenClawLightDomElement {
   @property({ attribute: false }) card: ModelProviderCard | null = null;
   @property({ type: Boolean }) customProvider = false;
   @property({ attribute: false }) probe: ModelsProbeResult | undefined;
-  @property({ attribute: false }) onClose: () => void = () => {};
+  @property({ attribute: false }) onCreated: (provider: string) => void = () => {};
   @property({ attribute: false }) onRefresh: () => void = () => {};
   @property({ attribute: false }) onProbe: () => void = () => {};
   @property({ attribute: false }) onConnect: () => void = () => {};
@@ -65,6 +69,8 @@ export class ProviderManager extends OpenClawLightDomElement {
   @state() private modelDraft: Record<string, unknown> | null = null;
   private original: Record<string, unknown> = {};
   private originalModelId: string | undefined;
+  private initialModelDraft: Record<string, unknown> | null = null;
+  private discardConfirmation: AbortController | null = null;
   private originalModel: Record<string, unknown> | undefined;
   /** Catalog thinking map the current model draft prefilled from, if any. */
   private modelThinkingPrefill: Record<string, unknown> | undefined;
@@ -76,6 +82,7 @@ export class ProviderManager extends OpenClawLightDomElement {
 
   override willUpdate(changed: PropertyValues<ProviderManager>) {
     if (changed.has("intent") || changed.has("agentId") || changed.has("context")) {
+      this.discardConfirmation?.abort();
       this.generation += 1;
       this.busy = false;
       this.loading = false;
@@ -93,10 +100,14 @@ export class ProviderManager extends OpenClawLightDomElement {
       if (this.intent) {
         void this.load();
       }
+    } else if (!this.dirty && !this.modelDraft && !this.busy) {
+      this.original = structuredClone(configuredProvider(this.config, this.providerId) ?? {});
+      this.draft = structuredClone(this.original);
     }
   }
 
   override disconnectedCallback() {
+    this.discardConfirmation?.abort();
     this.generation += 1;
     super.disconnectedCallback();
   }
@@ -225,6 +236,7 @@ export class ProviderManager extends OpenClawLightDomElement {
       draft.thinkingLevelMap = catalogPrefill;
     }
     this.modelDraft = draft;
+    this.initialModelDraft = structuredClone(draft);
     this.originalModelId = model && typeof model.id === "string" ? model.id : undefined;
     this.error = this.notice = null;
   }
@@ -239,7 +251,10 @@ export class ProviderManager extends OpenClawLightDomElement {
   }
 
   private async saveModel() {
-    if (!this.modelDraft || !this.querySelector<HTMLFormElement>("form")?.reportValidity()) {
+    if (
+      !this.modelDraft ||
+      !this.querySelector<HTMLFormElement>(".provider-manager--model")?.reportValidity()
+    ) {
       return;
     }
     const model = modelConfigEntry(this.modelDraft, this.originalModel, this.modelThinkingPrefill);
@@ -340,6 +355,7 @@ export class ProviderManager extends OpenClawLightDomElement {
     return providerModelForm({
       disabled: this.disabled,
       draft: this.modelDraft ?? {},
+      inheritedInput: this.catalog.find((row) => row.id === this.modelDraft?.id)?.input,
       lockId: this.originalModelId !== undefined,
       onCostField: (key, value) => this.setCostField(key, value),
       onField: (patch) => this.setModelFields(patch),
@@ -401,113 +417,157 @@ export class ProviderManager extends OpenClawLightDomElement {
     });
   }
 
+  /** Provider switching keeps edits until the operator explicitly discards them. */
+  async confirmLeave(): Promise<boolean> {
+    if (this.busy || this.discardConfirmation) {
+      return false;
+    }
+    const modelDirty =
+      this.modelDraft !== null &&
+      JSON.stringify(this.modelDraft) !== JSON.stringify(this.initialModelDraft);
+    if (!this.dirty && !modelDirty && !(this.intent?.view === "create" && this.providerId)) {
+      return true;
+    }
+    const controller = new AbortController();
+    this.discardConfirmation = controller;
+    try {
+      return await showConfirmDialog({
+        title: t("modelProviders.manager.unsavedTitle"),
+        message: t("modelProviders.manager.unsavedDescription"),
+        confirmLabel: t("modelProviders.manager.discard"),
+        signal: controller.signal,
+      });
+    } finally {
+      this.discardConfirmation = null;
+    }
+  }
+
+  private resetConnection() {
+    this.draft = structuredClone(this.original);
+    this.touched.clear();
+    this.keyDraft = "";
+    this.revealKey = false;
+    this.error = this.notice = null;
+  }
+
+  private renderMessages() {
+    return html`${this.error ? html`<div class="callout danger" role="alert">${this.error}</div>` : nothing}
+    ${this.notice ? html`<div class="callout" role="status">${this.notice}</div>` : nothing}`;
+  }
+
   override render() {
     if (!this.intent) {
       return nothing;
     }
-    const creating = this.intent.view === "create";
-    const editingModel = Boolean(this.modelDraft);
-    const title = editingModel
-      ? `${this.card?.displayName ?? this.providerId} — ${t("modelProviders.manager.editModel")}`
-      : creating && !this.providerCreated
-        ? t("modelProviders.manager.customProvider")
-        : (this.card?.displayName ?? this.providerId);
-    const showModelsSection = !editingModel && (!creating || this.providerCreated);
-    return html`<openclaw-modal-dialog
-      class="provider-manager-dialog"
-      label=${title}
-      @modal-cancel=${(event: Event) => {
-        event.preventDefault();
-        if (!this.busy) {
-          this.onClose();
-        }
-      }}
-    >
+    const creating = this.intent.view === "create" && !this.providerCreated;
+    const title = creating
+      ? t("modelProviders.manager.customProvider")
+      : (this.card?.displayName ?? this.providerId);
+    return html`${
+        this.modelDraft
+          ? providerModelDialog({
+              providerLabel: this.card?.displayName ?? this.providerId,
+              body: html`${this.renderModelForm()}${this.renderMessages()}`,
+              busy: this.busy,
+              disabled: this.disabled,
+              onSave: () => void this.saveModel(),
+              onCancel: () => {
+                if (!this.busy) {
+                  void this.backToModels();
+                }
+              },
+              onReset: () => {
+                this.modelDraft = structuredClone(this.initialModelDraft);
+                this.error = this.notice = null;
+              },
+            })
+          : nothing
+      }
       <form
-        class="provider-manager"
+        class="provider-manager provider-manager--inline"
+        ?inert=${Boolean(this.modelDraft)}
         @submit=${(event: Event) => {
           event.preventDefault();
-          void (editingModel ? this.saveModel() : this.saveConnection());
+          void this.saveConnection();
         }}
       >
         <header class="provider-manager__header">
-          <h2>${title}</h2>
-          <button
-            type="button"
-            class="btn btn--icon"
-            aria-label=${t("common.close")}
-            ?disabled=${this.busy}
-            @click=${this.onClose}
-          >
-            ×
-          </button>
+          <div class="provider-manager__identity">
+            ${renderProviderBrandIcon(this.providerId, { className: "model-providers__icon" })}
+            <div>
+              <h2>${title}</h2>
+              <span class="muted">${this.providerId}</span>
+            </div>
+          </div>
+          ${this.card ? renderProviderStatus(this.card) : nothing}
         </header>
         <div class="provider-manager__body">
-          ${this.loading ? html`<p role="status">${t("common.loading")}</p>` : nothing}
           ${this.blocked ? html`<p class="callout warning">${this.blocked}</p>` : nothing}
+          <div class="provider-manager__connection">
+            ${providerConnectionFields({
+              actions: {
+                onConnect: this.onConnect,
+                onProbe: this.onProbe,
+                onRemoveCredential: () => this.removeCredential(),
+                onProviderIdInput: (value) => {
+                  this.providerId = value;
+                },
+                onKeyInput: (value) => {
+                  this.keyDraft = value;
+                },
+                onToggleRevealKey: () => {
+                  this.revealKey = !this.revealKey;
+                },
+                onFieldInput: (key, value) => this.setDraftField(key, value),
+              },
+              state: {
+                agentId: this.agentId,
+                busy: this.busy,
+                card: this.card,
+                creating,
+                dirty: this.dirty,
+                disabled: this.disabled,
+                draft: this.draft,
+                keyDraft: this.keyDraft,
+                probe: this.probe,
+                providerCreated: this.providerCreated,
+                providerId: this.providerId,
+                revealKey: this.revealKey,
+              },
+            })}
+          </div>
+          <footer class="provider-manager__footer">
+            <span class="muted" role="status"
+              >${this.dirty ? t("modelProviders.manager.unsaved") : nothing}</span
+            >
+            <div class="provider-manager__actions">
+              <button
+                type="button"
+                class="btn"
+                ?disabled=${this.disabled || !this.dirty}
+                @click=${() => this.resetConnection()}
+              >
+                ${t("modelProviders.manager.resetForm")}
+              </button>
+              <button
+                type="submit"
+                class="btn primary"
+                ?disabled=${this.disabled || (!creating && !this.dirty)}
+              >
+                ${this.busy ? t("modelProviders.saving") : t("common.save")}
+              </button>
+            </div>
+          </footer>
+          ${!this.modelDraft ? this.renderMessages() : nothing}
           ${
-            editingModel
-              ? this.renderModelForm()
-              : html`${providerConnectionFields({
-                  actions: {
-                    onConnect: this.onConnect,
-                    onProbe: this.onProbe,
-                    onRemoveCredential: () => this.removeCredential(),
-                    onProviderIdInput: (value) => {
-                      this.providerId = value;
-                    },
-                    onKeyInput: (value) => {
-                      this.keyDraft = value;
-                    },
-                    onToggleRevealKey: () => {
-                      this.revealKey = !this.revealKey;
-                    },
-                    onFieldInput: (key, value) => this.setDraftField(key, value),
-                  },
-                  state: {
-                    agentId: this.agentId,
-                    busy: this.busy,
-                    card: this.card,
-                    creating,
-                    dirty: this.dirty,
-                    disabled: this.disabled,
-                    draft: this.draft,
-                    keyDraft: this.keyDraft,
-                    probe: this.probe,
-                    providerCreated: this.providerCreated,
-                    providerId: this.providerId,
-                    revealKey: this.revealKey,
-                  },
-                })}${
-                  showModelsSection
-                    ? html`<section class="provider-manager__models-section">
-                        <h3>${t("modelProviders.manager.models")}</h3>
-                        ${this.renderModels()}
-                      </section>`
-                    : nothing
-                }`
+            !creating
+              ? html`<section class="provider-manager__models-section">
+                  ${this.renderModels()}
+                </section>`
+              : nothing
           }
-          ${this.error ? html`<div class="callout danger" role="alert">${this.error}</div>` : nothing}
-          ${this.notice ? html`<div class="callout" role="status">${this.notice}</div>` : nothing}
         </div>
-        <footer class="provider-manager__footer">
-          <button
-            type="button"
-            class="btn"
-            ?disabled=${this.busy}
-            @click=${() => (this.modelDraft ? this.backToModels() : this.onClose())}
-          >
-            ${t(this.modelDraft ? "common.back" : "common.cancel")}</button
-          ><button
-            type="submit"
-            class="btn primary"
-            ?disabled=${this.disabled || (!editingModel && !creating && !this.dirty)}
-          >
-            ${t("common.save")}
-          </button>
-        </footer>
-      </form>
-    </openclaw-modal-dialog>`;
+      </form>`;
   }
 
   private async write(
@@ -563,7 +623,10 @@ export class ProviderManager extends OpenClawLightDomElement {
   }
 
   private async saveConnection() {
-    if (this.disabled || !this.querySelector<HTMLFormElement>("form")?.reportValidity()) {
+    if (
+      this.disabled ||
+      !this.querySelector<HTMLFormElement>(".provider-manager--inline")?.reportValidity()
+    ) {
       return;
     }
     // A retry after a failed credential save must start clean: the stale error
@@ -653,6 +716,7 @@ export class ProviderManager extends OpenClawLightDomElement {
       }
     }
     if (creating && generation === this.generation && !this.error) {
+      this.onCreated(this.providerId);
       // Creation continues in place: the merged view lists models to add next.
       if (!this.loading) {
         void this.load();

@@ -104,7 +104,7 @@ it.each([
       totalCost: messageCount,
     });
     const container = mount(props({ cards }));
-    const row = container.querySelector('[data-provider-id="anthropic"]');
+    const row = container.querySelector('[data-provider-details="anthropic"]');
     expect(text(row?.querySelector(".model-providers__local-cost-detail") ?? null)).toBe(
       `${messageCount * 100} tokens · ${messageCount} messages`,
     );

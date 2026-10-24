@@ -87,6 +87,7 @@ export function providerConnectionFields(params: {
       ><span>${t("modelProviders.manager.baseUrlLabel")}</span
       ><input
         name="baseUrl"
+        placeholder="https://api.example.com/v1"
         .value=${stringInputValue(state.draft.baseUrl)}
         ?required=${creating}
         ?disabled=${state.disabled}

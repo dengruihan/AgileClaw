@@ -15,6 +15,19 @@ writer: key material stays in the auth store, and configured providers reference
 the saved profile. Environment-provided keys remain managed by the Gateway
 process environment. The page shows credential sources without revealing keys.
 
+The provider list groups cloud providers and local or custom endpoints. Select a
+provider to edit its **Base URL**, **API format**, and **API key** in the main
+panel. Leave the key blank to keep the saved credential. Connection changes save
+only when you choose **Save**; switching providers asks before discarding unsaved
+changes.
+
+Use **Add provider** to create a custom endpoint, save its connection, then use
+**Add model** to enter the model IDs supplied by that endpoint. Model editing
+opens a separate dialog for the name, context window, maximum output tokens,
+supported inputs, reasoning levels, and token costs. Advanced fields you do not
+edit remain intact. Provider defaults are inherited when optional overrides are
+cleared. The global model defaults remain below the provider workspace.
+
 Saving a key and refreshing the catalog are separate outcomes. If refresh fails,
 the saved key remains; follow the reported recovery step. Removing a stored key
 keeps model defaults and provider connection settings; a provider entry left
@@ -22,7 +35,7 @@ with nothing but the removed key is deleted so the provider stops counting as
 configured. See [Auth profiles](/cli/models#auth-profiles) for the matching CLI
 commands.
 
-Any provider card with an authored `models.providers` entry — cloud or custom —
+Any provider with an authored `models.providers` entry — cloud or custom —
 also offers **Delete provider**. Deletion signs out the provider's stored
 credentials, removes its config entry and model definitions, and clears default
 model selections that referenced its models after an explicit confirmation;
@@ -33,11 +46,11 @@ Provider controls appear as soon as credentials, the model catalog, and configur
 
 After an account's quota recovers, model availability reflects the recovered account even if a catalog refresh began while it was blocked.
 
-Open **Model Setup** from the page header to inspect detected AI access. When available, it shows the authentication method (API key or account sign-in) and the actual email address reported by the provider or local runtime. API keys and tokens stay hidden.
+Use **Connect provider** to sign in or inspect detected AI access. When available, it shows the authentication method (API key or account sign-in) and the actual email address reported by the provider or local runtime. API keys and tokens stay hidden.
 
-Use **Test connection** to run a live provider probe and see latency or a categorized authentication, rate-limit, billing, timeout, or response error. A probe makes a real provider request and may consume a small number of tokens. OAuth and token profiles can also be logged out from the provider card.
+Use **Test connection** to run a live provider probe and see latency or a categorized authentication, rate-limit, billing, timeout, or response error. A probe makes a real provider request and may consume a small number of tokens. OAuth and token profiles can also be logged out from **Accounts & usage** in the provider workspace.
 
-The **Defaults** card manages the primary model, utility model, first fallback, thinking level, and Fast mode from the configured model catalog. Changes save automatically to the existing `agents.defaults` settings. For the utility model, **Auto** leaves the setting unset and **Disabled** stores an empty string to turn utility routing off.
+The **Defaults** section manages the primary model, utility model, first fallback, thinking level, and Fast mode from the configured model catalog. Changes save automatically to the existing `agents.defaults` settings. For the utility model, **Auto** leaves the setting unset and **Disabled** stores an empty string to turn utility routing off.
 
 The fallback selector edits the first model in the ordered fallback chain. Replacing it preserves any later fallbacks already configured; selecting **No fallback model** clears the chain. Use `openclaw models fallbacks` to manage the full ordered list.
 

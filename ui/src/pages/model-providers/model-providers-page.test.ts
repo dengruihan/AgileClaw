@@ -453,7 +453,13 @@ describe("ModelProvidersPage agent scope", () => {
         : originalRequest(method),
     );
     await page.updateComplete;
-    page.querySelector<HTMLButtonElement>(".model-providers__manager-actions .danger")!.click();
+    page.querySelector<HTMLButtonElement>('[data-provider-select="openai"]')!.click();
+    await waitForFast(() =>
+      expect(page.querySelector('[data-provider-details="openai"]')).not.toBeNull(),
+    );
+    page
+      .querySelector<HTMLButtonElement>('[data-provider-details="openai"] > button.danger')!
+      .click();
     await waitForFast(() => expect(page.messages.openai?.kind).toBe("success"));
     expect(request).toHaveBeenCalledWith("models.authLogout", {
       provider: "openai",

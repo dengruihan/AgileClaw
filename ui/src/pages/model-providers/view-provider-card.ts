@@ -1,6 +1,5 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { ModelsProbeResult } from "../../api/types.ts";
-import { renderProviderBrandIcon } from "../../components/provider-icon.ts";
 import { renderProviderUsageDetails } from "../../components/provider-usage.ts";
 import {
   renderSettingsRow,
@@ -27,7 +26,6 @@ import {
 import {
   hasVerifiedProvider,
   hasProviderCredentials,
-  renderProviderStatus,
   renderMutationMessage,
 } from "./view-status.ts";
 
@@ -82,14 +80,12 @@ export type ModelProvidersViewProps = Omit<
     onAddProviderKeyChange: (value: string) => void;
     onAddProvider: () => void;
     providerScope?: TemplateResult;
+    providerEditor?: TemplateResult;
+    selectedProvider?: string;
+    creatingProvider?: boolean;
     accountRecovery?: TemplateResult | typeof nothing;
-    providerCategory?: "cloud" | "custom";
-    onProviderCategoryChange?: (category: "cloud" | "custom") => void;
     isLocalOrCustom?: (card: ModelProviderCard) => boolean;
-    isLocalOrCustomProvider?: (id: string) => boolean;
-    providerEndpoint?: (card: ModelProviderCard) => string | undefined;
     onProviderSettings?: (card: ModelProviderCard) => void;
-    onProviderModels?: (card: ModelProviderCard) => void;
     onCustomProvider?: () => void;
     onAvailableProvider?: (id: string) => void;
     providerQuery?: string;
@@ -102,20 +98,6 @@ export type ModelProvidersViewProps = Omit<
 
 export function configMutationDisabled(props: ModelProvidersViewProps): boolean {
   return !props.canMutate || props.configBusy;
-}
-
-function modelsText(card: ModelProviderCard): string | null {
-  if (card.modelCount === 0) {
-    return null;
-  }
-  return card.availableModelCount < card.modelCount
-    ? t("modelProviders.modelsAvailable", {
-        available: String(card.availableModelCount),
-        count: String(card.modelCount),
-      })
-    : card.modelCount === 1
-      ? t("modelProviders.modelOne")
-      : t("modelProviders.models", { count: String(card.modelCount) });
 }
 
 function renderLocalCost(card: ModelProviderCard, costDays: number) {
@@ -371,70 +353,10 @@ function renderProviderActions(card: ModelProviderCard, props: ModelProvidersVie
 }
 
 export function renderProviderRow(card: ModelProviderCard, props: ModelProvidersViewProps) {
-  const models = modelsText(card);
-  const endpoint = props.providerEndpoint?.(card);
   const message = props.messages[`key:${card.id}`] ?? props.messages[card.id];
   return html`
-    <div
-      class="settings-row settings-row--stacked model-providers__row"
-      data-provider-id=${card.id}
-    >
-      <div class="model-providers__head">
-        <div class="model-providers__identity">
-          ${renderProviderBrandIcon(card.id, { className: "model-providers__icon" })}
-          <div class="settings-row__text">
-            <span class="settings-row__title">${card.displayName}</span>
-            <span class="settings-row__desc">${card.id}</span>
-          </div>
-        </div>
-        <div class="settings-row__control">${renderProviderStatus(card)}</div>
-      </div>
-      <div class="model-providers__connection-summary">
-        <div>
-          <span>${t("modelProviders.manager.endpoint")}</span>
-          <code title=${endpoint ?? ""}
-            >${endpoint ?? t("modelProviders.manager.defaultEndpoint")}</code
-          >
-        </div>
-        <div>
-          <span>${t("modelProviders.manager.models")}</span>
-          <strong>${models ?? t("modelProviders.models", { count: "0" })}</strong>
-        </div>
-      </div>
-      ${
-        props.onProviderModels ||
-        props.onProviderSettings ||
-        hasRemovableApiKey(card) ||
-        props.canDeleteProvider?.(card)
-          ? html`<div class="model-providers__manager-actions">
-              ${
-                props.onProviderModels
-                  ? html`<button
-                      type="button"
-                      class="btn btn--sm"
-                      data-provider-models=${card.id}
-                      @click=${() => props.onProviderModels?.(card)}
-                    >
-                      ${t("modelProviders.manager.models")}
-                    </button>`
-                  : nothing
-              }
-              ${
-                props.onProviderSettings
-                  ? html`<button
-                      type="button"
-                      class="btn btn--sm"
-                      data-provider-settings=${card.id}
-                      @click=${() => props.onProviderSettings?.(card)}
-                    >
-                      ${t("modelProviders.manager.settings")}
-                    </button>`
-                  : nothing
-              }
-              ${renderDestructiveProviderActions(card, props)}
-            </div>`
-          : nothing
-      }
+    <div class="model-providers__provider-details" data-provider-details=${card.id}>
+      ${renderDestructiveProviderActions(card, props)}
       <details class="model-providers__card-details" ?open=${props.keyEditorProvider === card.id}>
         <summary>${t("modelProviders.manager.details")}</summary>
         <div class="model-providers__card-details-body">
@@ -555,16 +477,6 @@ export function renderModelReadiness(props: ModelProvidersViewProps) {
           `,
         }),
       )}
-    </div>
-  `;
-}
-
-export function renderProviderNoticeRow(text: string) {
-  return html`
-    <div class="settings-row">
-      <div class="settings-row__text">
-        <span class="settings-row__desc provider-usage-error">${text}</span>
-      </div>
     </div>
   `;
 }

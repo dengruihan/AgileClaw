@@ -26,6 +26,7 @@ export function card(overrides: Partial<ModelProviderCard> = {}): ModelProviderC
 }
 
 export function props(overrides: Partial<ModelProvidersViewProps> = {}): ModelProvidersViewProps {
+  const cards = overrides.cards ?? [card()];
   return {
     connected: true,
     loading: false,
@@ -36,7 +37,8 @@ export function props(overrides: Partial<ModelProvidersViewProps> = {}): ModelPr
     updatedAt: 1,
     costDays: 30,
     credentialAgentLabel: "Writer",
-    cards: [card()],
+    cards,
+    selectedProvider: cards[0]?.configKey ?? cards[0]?.id,
     configuredModels: [{ id: "openai/gpt-5", provider: "openai", name: "GPT-5", available: true }],
     decisionModels: [],
     defaultModels: { primary: "openai/gpt-5", fallbacks: [], utilityModel: null },

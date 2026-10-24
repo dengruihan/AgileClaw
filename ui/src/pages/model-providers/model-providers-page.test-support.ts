@@ -24,7 +24,11 @@ import {
   type RuntimeConfigCapability,
 } from "../../lib/config/runtime-config-capability.ts";
 import { invalidateModelAuthStatusRequests } from "../../lib/model-auth-request-state.ts";
-import { beginModelCatalogRead, publishModelCatalogResult } from "../../lib/model-catalog-cache.ts";
+import {
+  beginModelCatalogRead,
+  invalidateModelCatalogCache,
+  publishModelCatalogResult,
+} from "../../lib/model-catalog-cache.ts";
 import { peekModelCatalog } from "../../lib/model-catalog-store.ts";
 import { createApplicationGateway } from "../../test-helpers/application-context.ts";
 import { updatePickers } from "../../test-helpers/select-picker.ts";
@@ -476,4 +480,63 @@ export async function submitCredential(page: ModelProvidersPageTestElement) {
   await page.updateComplete;
   page.querySelector<HTMLButtonElement>('.wizard-step__form button[type="submit"]')!.click();
   await waitForFast(() => expect(input.disabled).toBe(true));
+}
+
+export const preparedCatalog: ModelCatalogResult = {
+  models: [
+    { id: "prepared-primary", name: "Prepared primary", provider: "openai", available: true },
+    { id: "prepared-utility", name: "Prepared utility", provider: "openai", available: true },
+    { id: "prepared-fallback", name: "Prepared fallback", provider: "openai", available: true },
+  ],
+  decisionModels: [{ id: "jev-latest", name: "Jev", provider: "typesafe", pluginId: "typesafe" }],
+};
+
+export const savedModelConfig = {
+  agents: {
+    defaults: {
+      model: {
+        primary: "openai/prepared-primary",
+        fallbacks: ["openai/prepared-fallback"],
+      },
+      utilityModel: "openai/prepared-utility",
+      decisionModel: "typesafe/jev-latest",
+    },
+  },
+};
+
+export function createCatalogHarness(lastAcceptedCatalog?: ModelCatalogResult) {
+  const harness = createHarness("main");
+  if (lastAcceptedCatalog) {
+    publishCatalog(harness.context, "main", lastAcceptedCatalog);
+    invalidateModelCatalogCache(harness.snapshot.client!);
+  }
+  const originalRequest = harness.request.getMockImplementation()!;
+  const discover = vi.fn<() => Promise<ModelCatalogResult>>();
+  const readPublished = vi.fn((): ModelCatalogResult => preparedCatalog);
+  const catalogRequest = async (
+    method: string,
+    params?: { refresh?: boolean; provider?: string },
+  ) => {
+    if (method === "models.list") {
+      if (params?.provider) {
+        return {
+          models: preparedCatalog.models.filter((model) => model.provider === params.provider),
+        };
+      }
+      return params?.refresh ? discover() : readPublished();
+    }
+    if (method === "config.get") {
+      return { config: savedModelConfig, hash: "saved-model-config" };
+    }
+    return originalRequest(method);
+  };
+  harness.request.mockImplementation(catalogRequest);
+  return { ...harness, discover, readPublished, catalogRequest };
+}
+
+export function isDefaultCatalogRequest([method, params]: readonly [
+  string,
+  { provider?: string }?,
+]) {
+  return method === "models.list" && !params?.provider;
 }

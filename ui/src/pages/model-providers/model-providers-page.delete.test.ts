@@ -55,8 +55,11 @@ describe("ModelProvidersPage provider deletion", () => {
     const page = appendPage(harness.context);
     await waitForProviders(page);
     page.data = data;
-    // Custom-provider cards render on the Custom tab.
-    page.querySelector<HTMLButtonElement>('[data-provider-category="custom"]')!.click();
+    await page.updateComplete;
+    page.querySelector<HTMLButtonElement>('[data-provider-select="custom.proxy"]')!.click();
+    await waitForFast(() =>
+      expect(page.querySelector('[data-provider-details="custom.proxy"]')).not.toBeNull(),
+    );
     await page.updateComplete;
     return { ...harness, page };
   }
@@ -109,7 +112,10 @@ describe("ModelProvidersPage provider deletion", () => {
       },
     };
     await page.updateComplete;
-    // The cloud tab is the default; no category switch needed.
+    page.querySelector<HTMLButtonElement>('[data-provider-select="openai"]')!.click();
+    await waitForFast(() =>
+      expect(page.querySelector('[data-provider-details="openai"]')).not.toBeNull(),
+    );
     const button = page.querySelector<HTMLButtonElement>('[data-models-delete-provider="openai"]');
     expect(button).not.toBeNull();
     button!.click();

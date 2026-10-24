@@ -1,4 +1,3 @@
-import { redactSensitiveUrlLikeString } from "@openclaw/net-policy/redact-sensitive-url";
 import { asNullableRecord as asConfigRecord } from "@openclaw/normalization-core/record-coerce";
 import { html, type TemplateResult } from "lit";
 import { hasOperatorAdminAccess } from "../../app/operator-access.ts";
@@ -24,11 +23,7 @@ import {
 import { EMPTY_MODEL_PROVIDERS_DATA, MODEL_PROVIDERS_COST_DAYS } from "./load.ts";
 import { loginOptionChoiceId } from "./login-providers.ts";
 import type { ModelProvidersPage } from "./model-providers-page.ts";
-import {
-  configuredProvider,
-  localOrCustomProvider,
-  providerEndpoint,
-} from "./provider-model-config.ts";
+import { configuredProvider, localOrCustomProvider } from "./provider-model-config.ts";
 import {
   renderModelProviderScope,
   renderModelProviders,
@@ -93,7 +88,44 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
     localOrCustomProvider(configObject, id, knownProviderIds, catalog?.models ?? []);
   const usageAvailable = isGatewayMethodAdvertised(gatewaySnapshot, "codex.accountUsage");
   const login = page.login.pageActions;
+  const visibleCards = noSelectableAgents ? [] : page.installedAgents.filterProviders(cards);
+  const managerIntent = page.providerIntent(visibleCards);
+  const providerEditor = html`<openclaw-provider-manager
+    .context=${page.context}
+    .agentId=${page.selectedAgentId}
+    .intent=${managerIntent}
+    .customProvider=${isLocalOrCustom(managerIntent?.provider ?? "")}
+    .card=${cards.find((card) => (card.configKey ?? card.id) === managerIntent?.provider) ?? null}
+    .probe=${page.probeResults[cards.find((card) => (card.configKey ?? card.id) === managerIntent?.provider)?.id ?? ""]}
+    .onCreated=${(provider: string) => {
+      page.managerIntent = { provider, view: "settings" };
+    }}
+    .onRefresh=${() => {
+      void page.refresh("replacement");
+    }}
+    .onProbe=${() => {
+      const card = cards.find((entry) => (entry.configKey ?? entry.id) === managerIntent?.provider);
+      if (card) {
+        void page.profileActions.probe(
+          card.id,
+          card.credentialProviderIds.length ? card.credentialProviderIds : [card.id],
+        );
+      }
+    }}
+    .onConnect=${() => {
+      const card = cards.find((entry) => (entry.configKey ?? entry.id) === managerIntent?.provider);
+      if (card) {
+        void page.login.providerActions.onConnect(card);
+      } else {
+        void page.login.open();
+      }
+    }}
+    .onCredential=${(provider: string, key: string | null) => page.mutateApiKey(provider, provider, key)}
+  ></openclaw-provider-manager>`;
   const body = renderModelProviders({
+    providerEditor,
+    selectedProvider: managerIntent?.provider,
+    creatingProvider: managerIntent?.view === "create",
     accountRecovery: page.login.renderRecovery(),
     catalogSettings: html`<openclaw-model-catalog-settings
       .routeData=${page.routeData?.catalogConfig ?? null}
@@ -104,27 +136,15 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
       ...login,
       connectDisabled: login.connectDisabled || page.discovery.busy || page.addProviderOpen,
     }),
-    providerCategory: page.providerCategory,
-    onProviderCategoryChange: (value) => {
-      page.providerCategory = value;
-    },
     isLocalOrCustom: (card) => isLocalOrCustom(card.configKey ?? card.id),
-    isLocalOrCustomProvider: isLocalOrCustom,
-    providerEndpoint: (card) => {
-      const endpoint = providerEndpoint(configObject, card.configKey ?? card.id);
-      return endpoint ? redactSensitiveUrlLikeString(endpoint) : undefined;
-    },
     onProviderSettings: (card) => {
-      page.managerIntent = { provider: card.configKey ?? card.id, view: "settings" };
-    },
-    onProviderModels: (card) => {
-      page.managerIntent = { provider: card.configKey ?? card.id, view: "models" };
+      void page.selectProvider({ provider: card.configKey ?? card.id, view: "settings" });
     },
     onCustomProvider: () => {
-      page.managerIntent = { provider: "", view: "create" };
+      void page.selectProvider({ provider: "", view: "create" });
     },
     onAvailableProvider: (provider) => {
-      page.managerIntent = { provider, view: "settings" };
+      void page.selectProvider({ provider, view: "settings" });
     },
     providerQuery: page.providerQuery,
     onProviderQueryChange: (value) => (page.providerQuery = value),
@@ -144,7 +164,7 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
     updatedAt: data.updatedAt,
     costDays: MODEL_PROVIDERS_COST_DAYS,
     credentialAgentLabel: selected ? normalizeAgentLabel(selected) : page.selectedAgentId,
-    cards: noSelectableAgents ? [] : page.installedAgents.filterProviders(cards),
+    cards: visibleCards,
     configuredModels,
     decisionModels: catalog?.decisionModels ?? [],
     defaultModels: defaults,
@@ -219,48 +239,12 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
   return renderModelProvidersPageShell({
     body,
     loginMessage: page.messages.connection ?? login.loginMessage,
-    login: html`<openclaw-provider-manager
-        .context=${page.context}
-        .agentId=${page.selectedAgentId}
-        .intent=${page.managerIntent}
-        .card=${cards.find((card) => (card.configKey ?? card.id) === page.managerIntent?.provider) ?? null}
-        .probe=${page.probeResults[cards.find((card) => (card.configKey ?? card.id) === page.managerIntent?.provider)?.id ?? ""]}
-        .onClose=${() => {
-          page.managerIntent = null;
-        }}
-        .onRefresh=${() => {
-          void page.refresh("replacement");
-        }}
-        .onProbe=${() => {
-          const card = cards.find(
-            (entry) => (entry.configKey ?? entry.id) === page.managerIntent?.provider,
-          );
-          if (card) {
-            void page.profileActions.probe(
-              card.id,
-              card.credentialProviderIds.length ? card.credentialProviderIds : [card.id],
-            );
-          }
-        }}
-        .onConnect=${() => {
-          const card = cards.find(
-            (entry) => (entry.configKey ?? entry.id) === page.managerIntent?.provider,
-          );
-          page.managerIntent = null;
-          if (card) {
-            void page.login.providerActions.onConnect(card);
-          } else {
-            void page.login.open();
-          }
-        }}
-        .onCredential=${(provider: string, key: string | null) => page.mutateApiKey(provider, provider, key)}
-      ></openclaw-provider-manager
-      >${login.login}${page.discovery.render({
-        agentLabel: selected ? normalizeAgentLabel(selected) : page.selectedAgentId,
-        credentialChoices:
-          data.authStatus?.providerCapabilities?.flatMap(
-            (provider) => provider.loginOptions?.map(loginOptionChoiceId) ?? [],
-          ) ?? [],
-      })}`,
+    login: html`${login.login}${page.discovery.render({
+      agentLabel: selected ? normalizeAgentLabel(selected) : page.selectedAgentId,
+      credentialChoices:
+        data.authStatus?.providerCapabilities?.flatMap(
+          (provider) => provider.loginOptions?.map(loginOptionChoiceId) ?? [],
+        ) ?? [],
+    })}`,
   });
 }

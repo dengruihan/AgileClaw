@@ -1,10 +1,9 @@
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { html } from "lit";
 import { t } from "../../i18n/index.ts";
-import "../../components/multi-select-registration.ts";
 
 /** Input modalities a model entry can advertise. */
-const MODEL_INPUT_TYPES = ["text", "image", "audio", "video", "document"] as const;
+const MODEL_INPUT_TYPES = ["text", "image", "audio", "video"] as const;
 
 const MODEL_COST_FIELDS = ["input", "output", "cacheRead", "cacheWrite"] as const;
 
@@ -100,7 +99,6 @@ export function modelConfigEntry(
   }
   if (isRecord(draft.cost)) {
     const cost: Record<string, unknown> = { ...draft.cost };
-    let hasRate = false;
     for (const key of MODEL_COST_FIELDS) {
       // Zero is a valid free-model rate; only blanks drop the key.
       const parsed = numberValue(draft.cost[key], 0);
@@ -108,10 +106,9 @@ export function modelConfigEntry(
         delete cost[key];
       } else {
         cost[key] = parsed;
-        hasRate = true;
       }
     }
-    if (hasRate) {
+    if (Object.keys(cost).length) {
       entry.cost = cost;
     } else {
       delete entry.cost;
@@ -149,6 +146,8 @@ export function modelConfigEntry(
 export function providerModelForm(params: {
   disabled: boolean;
   draft: Record<string, unknown>;
+  /** Effective catalog modalities remain inherited until the user edits them. */
+  inheritedInput?: readonly string[];
   /** Editing an existing row locks its ID; new entries choose their own. */
   lockId: boolean;
   onCostField: (key: (typeof MODEL_COST_FIELDS)[number], value: string) => void;
@@ -161,7 +160,9 @@ export function providerModelForm(params: {
 }) {
   const { disabled, draft, lockId, onCostField, onField, onThinkingMap, onThinkingValue } = params;
   const cost = isRecord(draft.cost) ? draft.cost : {};
-  const input = Array.isArray(draft.input) ? draft.input.map(String) : [];
+  const input = Array.isArray(draft.input)
+    ? draft.input.map(String)
+    : (params.inheritedInput ?? ["text"]);
   return html` <div class="provider-manager__fields">
       <label class="field"
         ><span>${t("modelProviders.manager.modelName")}</span
@@ -219,18 +220,35 @@ export function providerModelForm(params: {
     <details class="provider-manager__advanced">
       <summary>${t("modelProviders.manager.advanced")}</summary>
       <div class="provider-manager__fields">
-        <div class="field">
-          <span>${t("modelProviders.manager.inputTypes")}</span>
-          <openclaw-multi-select
-            .options=${MODEL_INPUT_TYPES.map((value) => ({ value, label: value }))}
-            .value=${input}
-            .disabled=${disabled}
-            accessibleLabel=${t("modelProviders.manager.inputTypes")}
-            .onChange=${(value: string[]) => {
-              onField({ input: value });
-            }}
-          ></openclaw-multi-select>
-        </div>
+        <fieldset class="provider-manager__modalities">
+          <legend>${t("modelProviders.manager.inputTypes")}</legend>
+          <div class="provider-manager__chips">
+            ${MODEL_INPUT_TYPES.map(
+              (value) => html`<label
+                class="provider-manager__chip ${input.includes(value) ? "is-selected" : ""}"
+              >
+                <input
+                  type="checkbox"
+                  name=${`input-${value}`}
+                  value=${value}
+                  .checked=${input.includes(value)}
+                  ?disabled=${disabled}
+                  @change=${(event: Event) => {
+                    const selected = new Set(input);
+                    // SAFETY: the listener is attached to this modality checkbox.
+                    if ((event.target as HTMLInputElement).checked) {
+                      selected.add(value);
+                    } else {
+                      selected.delete(value);
+                    }
+                    onField({ input: [...selected] });
+                  }}
+                />
+                <span>${value}</span>
+              </label>`,
+            )}
+          </div>
+        </fieldset>
         <label class="field provider-manager__toggle"
           ><input
             type="checkbox"
@@ -289,6 +307,7 @@ export function providerModelForm(params: {
                       )}
                   </select>
                   <input
+                    class="settings-input"
                     name="thinking-${level}"
                     .value=${stringInputValue(value)}
                     placeholder=${t("modelProviders.manager.thinkingLevels.placeholder")}

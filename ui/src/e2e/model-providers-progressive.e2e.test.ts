@@ -136,15 +136,11 @@ describeControlUiE2e("Control UI progressive Model Providers loading", () => {
           .poll(() => warning.textContent())
           .toContain("More models could not be discovered.");
         await expect
-          .poll(() =>
-            settings.locator('[data-provider-id="broken"] .model-providers__head').textContent(),
-          )
+          .poll(() => settings.locator('[data-provider-id="broken"]').textContent())
           .toContain("Models unavailable");
-        expect(
-          await settings
-            .locator('[data-provider-id="healthy"] .model-providers__head')
-            .textContent(),
-        ).not.toContain("Models unavailable");
+        expect(await settings.locator('[data-provider-id="healthy"]').textContent()).not.toContain(
+          "Models unavailable",
+        );
         expect(await trigger.getAttribute("aria-expanded")).toBe("true");
         await expect
           .poll(() => picker.locator('[role="option"][data-value="healthy/retired"]').count())
@@ -203,11 +199,9 @@ describeControlUiE2e("Control UI progressive Model Providers loading", () => {
           .waitFor({ state: "visible" });
         expect(await trigger.getAttribute("aria-expanded")).toBe("true");
         await expect.poll(() => warning.count()).toBe(0);
-        expect(
-          await settings
-            .locator('[data-provider-id="broken"] .model-providers__head')
-            .textContent(),
-        ).not.toContain("Models unavailable");
+        expect(await settings.locator('[data-provider-id="broken"]').textContent()).not.toContain(
+          "Models unavailable",
+        );
         expect(await utility.textContent()).toContain("Auto · Healthy recovered");
       } finally {
         await capture("settled");
@@ -742,7 +736,7 @@ describeControlUiE2e("Control UI progressive Model Providers loading", () => {
           await page.locator('a[href="/settings/model-providers"]').first().click();
           await waitForControlUiRoute(page, { routeId: "model-providers" });
           await expect
-            .poll(() => page.locator('[data-provider-id="openai"]').textContent())
+            .poll(() => page.locator('[data-provider-details="openai"]').textContent())
             .toContain("$1.25");
           await page.locator('a[href="/settings/appearance"]').first().click();
           await waitForControlUiRoute(page, { routeId: "appearance" });
@@ -788,7 +782,7 @@ describeControlUiE2e("Control UI progressive Model Providers loading", () => {
             .poll(() => page.locator('[data-provider-id="openai"]').textContent())
             .toContain("Credentials configured");
           await expect
-            .poll(() => page.locator('[data-provider-id="openai"]').textContent())
+            .poll(() => page.locator('[data-provider-details="openai"]').textContent())
             .toContain("Loading");
         }
         if (recordVisuals) {
@@ -805,9 +799,11 @@ describeControlUiE2e("Control UI progressive Model Providers loading", () => {
         await waitForControlUiRoute(page, { routeId: "model-providers" });
         await gateway.waitForRequest("usage.status");
         await gateway.waitForRequest("sessions.usage");
-        const provider = page.locator('[data-provider-id="openai"]');
+        const provider = page.locator('[data-provider-details="openai"]');
         await provider.waitFor();
-        await expect.poll(async () => provider.textContent()).toContain("Credentials configured");
+        await expect
+          .poll(() => page.locator('[data-provider-id="openai"]').textContent())
+          .toContain("Credentials configured");
         await expect.poll(async () => provider.textContent()).toContain("Loading");
         expect(await gateway.getRequests("usage.status")).toHaveLength(previousLoads + 1);
         expect(await gateway.getRequests("sessions.usage")).toHaveLength(previousLoads + 1);

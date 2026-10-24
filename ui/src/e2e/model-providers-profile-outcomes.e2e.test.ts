@@ -6,6 +6,7 @@ import {
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
+import { selectProviderAccounts } from "./model-providers.test-support.ts";
 
 const suite = createControlUiE2eSuite({ name: "Control UI model provider profile outcomes" });
 const NOW = Date.now();
@@ -78,17 +79,13 @@ suite.define(() => {
           },
         });
         await page.goto(`${suite.server.baseUrl}settings/model-providers`);
-        const xaiCard = page.locator('[data-provider-id="xai"]');
-        const minimaxCard = page.locator('[data-provider-id="minimax"]');
-        await xaiCard.waitFor();
-        await minimaxCard.waitFor();
+        const xaiCard = page.locator('[data-provider-details="xai"]');
+        const minimaxCard = page.locator('[data-provider-details="minimax"]');
+        await selectProviderAccounts(page, "xai");
         await xaiCard.screenshot({ path: path.join(suite.artifactDir, "account-status.png") });
-        await minimaxCard.screenshot({ path: path.join(suite.artifactDir, "catalog-status.png") });
         await expect
           .poll(async () =>
-            (
-              await xaiCard.locator(".model-providers__head .settings-status").textContent()
-            )?.trim(),
+            (await page.locator('[data-provider-id="xai"] .settings-status').textContent())?.trim(),
           )
           .toBe("Ready");
         expect(await xaiCard.locator(".model-providers__profile-copy strong").textContent()).toBe(
@@ -97,13 +94,16 @@ suite.define(() => {
         expect(await xaiCard.locator(".model-providers__profile-status").textContent()).toContain(
           "Signed in",
         );
+        await selectProviderAccounts(page, "minimax");
+        await minimaxCard.screenshot({ path: path.join(suite.artifactDir, "catalog-status.png") });
         expect(
-          await minimaxCard.locator(".model-providers__head .settings-status").textContent(),
+          await page.locator('[data-provider-id="minimax"] .settings-status').textContent(),
         ).toContain("Models unavailable");
         expect(
           await minimaxCard.locator(".model-providers__profile-copy strong").textContent(),
         ).toBe("Work account");
-        const details = xaiCard.locator("details");
+        await selectProviderAccounts(page, "xai");
+        const details = xaiCard.locator(".model-providers__profile details");
         expect(await details.locator("summary").textContent()).toBe("Details");
         expect(await details.getAttribute("open")).toBeNull();
         await details.locator("summary").click();
@@ -152,9 +152,10 @@ suite.define(() => {
           },
         });
         await page.goto(`${suite.server.baseUrl}settings/model-providers`);
-        const card = page.locator('[data-provider-id="openai"]');
+        const card = page.locator('[data-provider-details="openai"]');
         const alex = card.locator('[data-profile-id="openai:alex"]');
         const blair = card.locator('[data-profile-id="openai:blair"]');
+        await card.locator(".model-providers__card-details > summary").click();
         const grip = alex.locator(".model-providers__profile-grip");
         await expect.poll(() => grip.isEnabled()).toBe(true);
         await grip.scrollIntoViewIfNeeded();
@@ -331,7 +332,7 @@ suite.define(() => {
           )
           .toBe(true);
 
-        const openaiCard = page.locator('[data-provider-id="openai"]');
+        const openaiCard = page.locator('[data-provider-details="openai"]');
         await openaiCard.waitFor();
         await page.getByRole("button", { name: "Refresh", exact: true }).click();
         await expect
@@ -354,7 +355,7 @@ suite.define(() => {
         await expect
           .poll(async () =>
             (
-              await openaiCard.locator(".model-providers__head .settings-status").textContent()
+              await page.locator('[data-provider-id="openai"] .settings-status').textContent()
             )?.trim(),
           )
           .toBe(status);

@@ -46,12 +46,8 @@ import { ModelProviderLoginController } from "./login-controller.ts";
 import { renderModelProvidersPageContent } from "./model-providers-page-view.ts";
 import { ModelProviderProfileActionsController } from "./profile-actions-controller.ts";
 import { showProfileActionError, showProfileLogoutSuccess } from "./profiles-view.ts";
-import type { ProviderManagerIntent } from "./provider-manager.ts";
-import {
-  localOrCustomProvider,
-  providerDeletePatch,
-  providerReferenceSites,
-} from "./provider-model-config.ts";
+import type { ProviderManager, ProviderManagerIntent } from "./provider-manager.ts";
+import { providerDeletePatch, providerReferenceSites } from "./provider-model-config.ts";
 import { providerRouteIntent } from "./provider-route-intent.ts";
 import { updateRecordEntry } from "./record-state.ts";
 import type { ModelProvidersRouteData } from "./route.ts";
@@ -82,8 +78,44 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
   @state() providerQuery = "";
   private pendingConnection = false;
   @state() addProviderOpen = false;
-  @state() providerCategory: "cloud" | "custom" = "cloud";
   @state() managerIntent: ProviderManagerIntent | null = null;
+  private initialManagerIntent: ProviderManagerIntent | null = null;
+  private providerSelectionRevision = 0;
+
+  providerIntent(cards: ModelProviderCard[]): ProviderManagerIntent | null {
+    if (this.managerIntent) {
+      return this.managerIntent;
+    }
+    if (
+      this.initialManagerIntent &&
+      cards.some((card) => (card.configKey ?? card.id) === this.initialManagerIntent?.provider)
+    ) {
+      return this.initialManagerIntent;
+    }
+    const card = cards.find((entry) => entry.id === this.providerQuery) ?? cards[0];
+    const provider = card?.configKey ?? card?.id;
+    if (!provider) {
+      return null;
+    }
+    if (this.initialManagerIntent?.provider !== provider) {
+      this.initialManagerIntent = { provider, view: "settings" };
+    }
+    return this.initialManagerIntent;
+  }
+
+  async selectProvider(intent: ProviderManagerIntent) {
+    const manager = this.querySelector<ProviderManager>("openclaw-provider-manager");
+    if (manager?.intent?.provider === intent.provider && manager.intent.view === intent.view) {
+      return;
+    }
+    const revision = ++this.providerSelectionRevision;
+    if (manager && !(await manager.confirmLeave())) {
+      return;
+    }
+    if (revision === this.providerSelectionRevision && this.isConnected) {
+      this.managerIntent = intent;
+    }
+  }
   @state() addProviderId = "";
   @state() addProviderKey = "";
   @state() defaultsDraft: DefaultsDraft | null = null;
@@ -340,17 +372,6 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
       ) {
         this.managerIntent = { provider: intent.provider, view: intent.view };
         this.providerQuery = intent.provider;
-        this.providerCategory = localOrCustomProvider(
-          config,
-          intent.provider,
-          new Set(
-            this.data?.authStatus?.providerCapabilities?.map((entry) => entry.provider) ?? [],
-          ),
-          modelCatalog.readAgentModelCatalog(this.gateway.client, this.selectedAgentId)?.models ??
-            [],
-        )
-          ? "custom"
-          : "cloud";
       }
     }
     if (this.pendingConnection && this.data && this.canMutate() && !this.core.loading) {
@@ -409,6 +430,8 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
   }
 
   private resetAgentScopeState() {
+    this.providerSelectionRevision += 1;
+    this.initialManagerIntent = null;
     this.managerIntent = null;
     this.login.reset();
     this.busy = {};
@@ -678,6 +701,16 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
         success: t("modelProviders.delete.success", { provider: card.displayName }),
       },
     );
+    if (
+      isCurrent() &&
+      !readModelProviderConfig(
+        currentConfigObject(this.context.runtimeConfig.state),
+      ).providerIds.includes(configKey)
+    ) {
+      if (this.managerIntent?.provider === configKey) {
+        this.managerIntent = null;
+      }
+    }
   }
 
   async saveDefaults(defaults = this.defaultsDraft) {

@@ -8,6 +8,7 @@ import {
   appendPage,
   createEmptyModelProvidersRouteData,
   createHarness,
+  waitForProviders,
 } from "./model-providers-page.test-support.ts";
 
 afterEach(() => document.body.replaceChildren());
@@ -56,13 +57,24 @@ it.each([
     `#${configFieldId(["models", "providers", "local.one", "models", 0, "name"], "description")}`,
   ],
 ])(
-  "opens a provider link once and keeps it closed after revalidation: %s %s",
+  "selects a provider deep link and preserves later workspace selection after revalidation: %s %s",
   async (search, hash) => {
-    const { context, runtimeConfig, notifyRuntimeConfig } = createHarness("writer");
-    await runtimeConfig.ensureLoaded();
-    runtimeConfig.state.configForm = {
-      models: { providers: { "local.one": { baseUrl: "http://localhost:11434/v1", models: [] } } },
+    const { context, runtimeConfig, notifyRuntimeConfig, request } = createHarness("writer");
+    const config = {
+      models: {
+        providers: {
+          "local.one": { baseUrl: "http://localhost:11434/v1", models: [] },
+          "local.two": { baseUrl: "http://localhost:11435/v1", models: [] },
+        },
+      },
     };
+    const originalRequest = request.getMockImplementation()!;
+    request.mockImplementation(async (method: string) =>
+      method === "config.get"
+        ? { config, hash: "provider-config", valid: true }
+        : originalRequest(method),
+    );
+    await runtimeConfig.ensureLoaded();
     const page = appendPage(context);
     const routeData = {
       ...createEmptyModelProvidersRouteData(context),
@@ -71,8 +83,6 @@ it.each([
     };
     page.routeData = routeData;
     notifyRuntimeConfig();
-    // The merged provider dialog shows connection settings and models in one
-    // view, so every provider deep link opens the same titled editor.
     await waitForFast(() =>
       expect(page.querySelector(".provider-manager__header h2")?.textContent?.trim()).toBe(
         "Local.one",
@@ -82,10 +92,25 @@ it.each([
     expect(
       page.querySelector<HTMLDetailsElement>("openclaw-model-catalog-settings > details")?.open,
     ).toBe(false);
-    page.querySelector<HTMLButtonElement>(".provider-manager__header button")!.click();
-    await waitForFast(() => expect(page.querySelector(".provider-manager__header")).toBeNull());
+    const providerSearch = page.querySelector<HTMLInputElement>(".model-providers__search input")!;
+    providerSearch.value = "";
+    providerSearch.dispatchEvent(new Event("input", { bubbles: true }));
+    await page.updateComplete;
+    page.querySelector<HTMLButtonElement>('[data-provider-select="local.two"]')!.click();
+    await waitForFast(() =>
+      expect(page.querySelector(".provider-manager__header h2")?.textContent?.trim()).toBe(
+        "Local.two",
+      ),
+    );
     page.routeData = { ...routeData };
     await page.updateComplete;
-    expect(page.querySelector(".provider-manager__header")).toBeNull();
+    await waitForProviders(page, config);
+    await page.updateComplete;
+    expect(page.querySelector(".provider-manager__header h2")?.textContent?.trim()).toBe(
+      "Local.two",
+    );
+    expect(
+      page.querySelector('[data-provider-select="local.two"]')?.getAttribute("aria-pressed"),
+    ).toBe("true");
   },
 );
