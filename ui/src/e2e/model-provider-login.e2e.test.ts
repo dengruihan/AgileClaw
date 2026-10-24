@@ -378,9 +378,8 @@ suite.define(() => {
           expect(search.has("connect")).toBe(false);
           await gateway.waitForRequest("models.authStatus", { match: { agentId: "writer" } });
           const card = page.locator('[data-provider-id="openai"]');
-          // Accounts live inside the card's collapsed Accounts & usage details.
-          await card.locator(".model-providers__card-details > summary").click();
-          await card.getByText("alex@example.invalid", { exact: true }).waitFor();
+          await page.locator('openclaw-provider-manager input[name="apiKey"]').waitFor();
+          expect(await page.locator(".model-providers__card-details").count()).toBe(0);
           expect(await page.locator('[data-provider-id="anthropic"]').count()).toBe(0);
           expect(await page.locator("openclaw-modal-dialog").count()).toBe(0);
           await captureProviderProof(`provider-settings-${origin}.png`, card);
@@ -657,10 +656,7 @@ suite.define(() => {
           });
         const saved = page.getByRole("status").filter({ hasText: "Provider credentials saved." });
         await saved.waitFor();
-        // Accounts live inside the card's collapsed Accounts & usage details.
-        const savedCard = page.locator('[data-provider-id="example"]');
-        await savedCard.locator(".model-providers__card-details > summary").click();
-        await savedCard.getByText("signed-in@example.invalid", { exact: true }).waitFor();
+        await page.locator('[data-provider-id="example"]').waitFor();
         await expect
           .poll(async () => (await gateway.getRequests("models.authStatus")).length)
           .toBeGreaterThan(authReads);

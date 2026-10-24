@@ -212,43 +212,6 @@ export const ModelsAuthOrderSetParamsSchema = closedObject({
   agentId: Type.Optional(Type.String()),
 });
 
-/** Runs a bounded live credential probe for one model provider. */
-export const ModelsProbeParamsSchema = closedObject({
-  provider: NonEmptyString,
-  profileId: Type.Optional(NonEmptyString),
-  timeoutMs: Type.Optional(Type.Integer({ minimum: 1 })),
-  agentId: Type.Optional(Type.String()),
-});
-
-export const AuthProbeStatusSchema = Type.Union([
-  Type.Literal("ok"),
-  Type.Literal("auth"),
-  Type.Literal("rate_limit"),
-  Type.Literal("billing"),
-  Type.Literal("timeout"),
-  Type.Literal("format"),
-  Type.Literal("unknown"),
-  Type.Literal("no_model"),
-]);
-
-/** Secret-free result for one provider credential target. */
-export const ModelsProbeTargetResultSchema = closedObject({
-  profileId: Type.Optional(NonEmptyString),
-  label: NonEmptyString,
-  status: AuthProbeStatusSchema,
-  latencyMs: Type.Optional(Type.Integer({ minimum: 0 })),
-  error: Type.Optional(Type.String()),
-});
-
-/** Provider-level live probe rollup plus per-credential results. */
-export const ModelsProbeResultSchema = closedObject({
-  provider: NonEmptyString,
-  status: AuthProbeStatusSchema,
-  latencyMs: Type.Optional(Type.Integer({ minimum: 0 })),
-  error: Type.Optional(Type.String()),
-  results: Type.Array(ModelsProbeTargetResultSchema),
-});
-
 /** Reads installed skill status, optionally for a selected agent. */
 export const SkillsStatusParamsSchema = closedObject({
   agentId: Type.Optional(NonEmptyString),
@@ -1088,10 +1051,6 @@ export type ModelsAuthStatusParams = Static<typeof ModelsAuthStatusParamsSchema>
 export type ModelsAuthLogoutParams = Static<typeof ModelsAuthLogoutParamsSchema>;
 export type ModelsAuthOrderSetParams = Static<typeof ModelsAuthOrderSetParamsSchema>;
 export type ModelsAuthRefreshParams = Static<typeof ModelsAuthRefreshParamsSchema>;
-export type AuthProbeStatus = Static<typeof AuthProbeStatusSchema>;
-export type ModelsProbeParams = Static<typeof ModelsProbeParamsSchema>;
-export type ModelsProbeTargetResult = Static<typeof ModelsProbeTargetResultSchema>;
-export type ModelsProbeResult = Static<typeof ModelsProbeResultSchema>;
 export type SkillsStatusParams = Static<typeof SkillsStatusParamsSchema>;
 export type GitHubIdentityFacts = Static<typeof GitHubIdentityFactsSchema>;
 export type GitHubSelectedIdentity = Static<typeof GitHubSelectedIdentitySchema>;

@@ -321,16 +321,16 @@ suite.define(() => {
         });
         await page.goto(`${suite.server.baseUrl}settings/advanced?section=models`);
         await expect.poll(() => new URL(page.url()).pathname).toBe("/settings/model-providers");
-        await page.locator('[data-provider-category="custom"]').click();
-        await page.locator(`[data-provider-models="${providerId}"]`).click();
-        const manager = page.locator("openclaw-provider-manager form.provider-manager");
+        await page.locator(`[data-provider-select="${providerId}"]`).click();
+        const manager = page.locator(".provider-manager--inline");
+        const dialog = page.locator('openclaw-modal-dialog[label="Edit model"]');
         const fourth = manager.locator('[data-model-id="model-4"]');
         await fourth.getByRole("button", { name: "Edit model", exact: true }).click();
-        const name = manager.getByRole("textbox", { name: /^name$/i });
+        const name = dialog.getByRole("textbox", { name: /^name$/i });
         await expect.poll(() => name.inputValue()).toBe("Fourth");
         await name.fill("Broken");
         await gateway.deferNext("config.patch");
-        await manager.getByRole("button", { name: "Save", exact: true }).click();
+        await dialog.getByRole("button", { name: "Save", exact: true }).click();
         const rejected = await gateway.waitForRequest("config.patch");
         const params = rejected.params as {
           baseHash?: string;
@@ -362,28 +362,29 @@ suite.define(() => {
             ],
           },
         });
-        await manager.getByRole("alert").filter({ hasText: "Invalid model name" }).waitFor();
+        await dialog.getByRole("alert").filter({ hasText: "Invalid model name" }).waitFor();
         expect(await name.inputValue()).toBe("Broken");
         expect(await gateway.getRequests("config.patch")).toHaveLength(1);
         if (captureUiProofEnabled) {
           // Proof captures show the curated Advanced section expanded.
-          await manager.locator("details.provider-manager__advanced > summary").click();
+          await dialog.locator("details.provider-manager__advanced > summary").click();
           await page.screenshot({
             animations: "disabled",
             path: path.join(uiProofArtifactDir, "03-model-row-rejection.png"),
           });
           await writeFile(
             path.join(uiProofArtifactDir, "03-model-row-rejection-accessibility.yml"),
-            await manager.ariaSnapshot(),
+            await dialog.ariaSnapshot(),
           );
         }
-        await manager.getByRole("button", { name: "Back", exact: true }).click();
+        await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+        await dialog.locator("form").waitFor({ state: "hidden" });
         await fourth.getByRole("button", { name: "Edit model", exact: true }).click();
         expect(await name.inputValue()).toBe("Fourth");
         expect(await gateway.getRequests("config.patch")).toHaveLength(1);
         await name.fill("Fourth updated");
         await gateway.deferNext("config.patch");
-        await manager.getByRole("button", { name: "Save", exact: true }).click();
+        await dialog.getByRole("button", { name: "Save", exact: true }).click();
         await gateway.waitForRequest("config.patch", { after: 1 });
         const saved = {
           models: {
@@ -400,14 +401,18 @@ suite.define(() => {
         await gateway.setMethodResponse("config.get", snapshot(saved, "model-row-saved"));
         await gateway.resolveDeferred("config.patch", { config: saved, hash: "model-row-saved" });
         await fourth.getByText("Fourth updated", { exact: true }).waitFor();
-        await manager.getByRole("button", { name: "Cancel", exact: true }).click();
-        await manager.waitFor({ state: "hidden" });
-        await page.locator(`[data-provider-models="${providerId}"]`).click();
+        await page.locator("[data-custom-provider]").click();
+        await manager.locator('[name="providerId"]').waitFor();
+        await page.locator(`[data-provider-select="${providerId}"]`).click();
         await fourth.getByRole("button", { name: "Edit model", exact: true }).click();
         await expect.poll(() => name.inputValue()).toBe("Fourth updated");
         await name.fill("Cancelled change");
-        await manager.getByRole("button", { name: "Close", exact: true }).click();
-        await manager.waitFor({ state: "hidden" });
+        await dialog.getByRole("button", { name: "Close", exact: true }).click();
+        await dialog.locator("form").waitFor({ state: "hidden" });
+        await fourth.getByRole("button", { name: "Edit model", exact: true }).click();
+        await expect.poll(() => name.inputValue()).toBe("Fourth updated");
+        await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+        await dialog.locator("form").waitFor({ state: "hidden" });
         expect(await gateway.getRequests("config.patch")).toHaveLength(2);
         expect(await gateway.getRequests("config.set")).toHaveLength(0);
         if (captureUiProofEnabled) {
@@ -472,8 +477,8 @@ suite.define(() => {
           },
         });
         await page.goto(`${suite.server.baseUrl}settings/model-providers`);
-        await page.locator(`[data-provider-models="${providerId}"]`).click();
-        const manager = page.locator("openclaw-provider-manager form.provider-manager");
+        await page.locator(`[data-provider-select="${providerId}"]`).click();
+        const manager = page.locator(".provider-manager--inline");
         const first = manager.locator('[data-model-id="model-1"]');
         const third = manager.locator('[data-model-id="model-3"]');
         await first.getByRole("button", { name: "Delete", exact: true }).waitFor();
@@ -559,6 +564,8 @@ suite.define(() => {
 
   it("retries failed custom provider credentials without recreating its saved connection", async () => {
     const { buildConfigSchemaCore } = await import("../../../src/config/schema.ts");
+    const providerId = "custom-lab";
+    const credentialKey = "synthetic-provider-key";
     const initial = { models: { providers: {} } };
     const snapshot = (config: Record<string, unknown>, hash: string) => ({
       appliedConfigHash: hash,
@@ -582,35 +589,35 @@ suite.define(() => {
           methodResponses: {
             "config.get": snapshot(initial, "custom-provider-initial"),
             "config.schema": buildConfigSchemaCore(),
+            "models.authInspectApiKey": {
+              provider: providerId,
+              agentId: "main",
+              baseHash: "custom-provider-created",
+              configured: true,
+              source: "profile",
+              key: credentialKey,
+            },
             "models.authSetApiKey": {},
           },
         });
         await page.goto(`${suite.server.baseUrl}settings/model-providers`);
-        const manager = page.locator("openclaw-provider-manager form.provider-manager");
-        const openCustom = async () => {
-          // The readiness banner and provider section both say "Connect provider";
-          // target the section entry that opens the provider picker.
-          await page.locator("[data-models-connect]").click();
-          await page.locator("[data-models-login-custom]").click();
-          await manager.locator('input[name="providerId"]').waitFor();
-        };
-        await openCustom();
-        await manager.locator('input[name="providerId"]').fill("cancelled-provider");
-        await manager
-          .getByRole("textbox", { name: "Base URL", exact: true })
-          .fill("https://cancelled.example.test/v1");
-        await manager.getByRole("button", { name: "Cancel", exact: true }).click();
-        await manager.waitFor({ state: "hidden" });
+        await page.locator("[data-custom-provider]").click();
+        const manager = page.locator(".provider-manager--inline");
+        const providerIdInput = manager.locator('input[name="providerId"]');
+        const url = manager.getByRole("textbox", { name: "Base URL", exact: true });
+        const apiKey = manager.locator('input[name="apiKey"]');
+        await providerIdInput.waitFor();
+        await providerIdInput.fill("cancelled-provider");
+        await url.fill("https://cancelled.example.test/v1");
+        await manager.getByRole("button", { name: "Reset form", exact: true }).click();
+        await expect.poll(() => url.inputValue()).toBe("");
         expect(await gateway.getRequests("config.patch")).toHaveLength(0);
         expect(await gateway.getRequests("models.authSetApiKey")).toHaveLength(0);
 
-        await openCustom();
-        const providerId = "custom-lab";
-        await manager.locator('input[name="providerId"]').fill(providerId);
-        const url = manager.getByRole("textbox", { name: "Base URL", exact: true });
+        await providerIdInput.fill(providerId);
         await url.fill("https://models.example.test/v1");
-        await manager.locator('input[name="apiKey"]').fill("synthetic-provider-key");
-        expect(await manager.locator('input[name="apiKey"]').getAttribute("type")).toBe("password");
+        await apiKey.fill(credentialKey);
+        expect(await apiKey.getAttribute("type")).toBe("password");
         if (captureUiProofEnabled) {
           await page.screenshot({
             animations: "disabled",
@@ -653,7 +660,7 @@ suite.define(() => {
         expect(credential.params).toMatchObject({
           provider: providerId,
           agentId: "main",
-          apiKey: "synthetic-provider-key",
+          apiKey: credentialKey,
         });
         await gateway.rejectDeferred("models.authSetApiKey", {
           message: "Synthetic credential save failure",
@@ -661,10 +668,8 @@ suite.define(() => {
         await expect
           .poll(() => manager.getByRole("alert").textContent())
           .toContain("Connection settings were saved, but the API key was not saved");
-        expect(await manager.locator('input[name="apiKey"]').inputValue()).toBe(
-          "synthetic-provider-key",
-        );
-        expect(await manager.locator('input[name="providerId"]').isDisabled()).toBe(true);
+        expect(await apiKey.inputValue()).toBe(credentialKey);
+        await expect.poll(() => providerIdInput.count()).toBe(0);
         expect(await gateway.getRequests("config.patch")).toHaveLength(1);
         await gateway.deferNext("models.authSetApiKey");
         await manager.getByRole("button", { name: "Save", exact: true }).click();
@@ -674,26 +679,67 @@ suite.define(() => {
         expect(retriedCredential.params).toMatchObject({
           provider: providerId,
           agentId: "main",
-          apiKey: "synthetic-provider-key",
+          apiKey: credentialKey,
         });
         expect(await gateway.getRequests("config.patch")).toHaveLength(1);
         await gateway.resolveDeferred("models.authSetApiKey", {});
-        // Creation continues in place: the saved provider now shows its model
-        // list under the connection fields instead of closing the dialog.
+        const selected = page.locator(`[data-provider-select="${providerId}"]`);
+        await expect.poll(() => selected.getAttribute("aria-pressed")).toBe("true");
         await manager.getByRole("button", { name: "Add model", exact: true }).waitFor();
-        await manager.getByRole("button", { name: "Cancel", exact: true }).click();
-        await manager.waitFor({ state: "hidden" });
-        await page.locator('[data-provider-category="custom"]').click();
-        await page.locator(`[data-provider-settings="${providerId}"]`).click();
+        expect((await gateway.waitForRequest("models.authInspectApiKey")).params).toMatchObject({
+          provider: providerId,
+          agentId: "main",
+          reveal: true,
+        });
+        await expect.poll(() => apiKey.inputValue()).toBe(credentialKey);
+        expect(await apiKey.getAttribute("type")).toBe("password");
         await expect.poll(() => url.inputValue()).toBe("https://models.example.test/v1");
-        expect(await manager.locator('input[name="apiKey"]').inputValue()).toBe("");
+
+        const dialog = page.locator('openclaw-modal-dialog[label="Edit model"]');
+        await manager.getByRole("button", { name: "Add model", exact: true }).click();
+        await dialog.locator('[name="id"]').fill("custom-model");
+        await dialog.locator('[name="name"]').fill("Custom model");
+        await gateway.deferNext("config.patch");
+        await dialog.getByRole("button", { name: "Save", exact: true }).click();
+        const model = {
+          id: "custom-model",
+          name: "Custom model",
+          input: ["text"],
+          metadataSource: "models-add",
+        };
+        const modelRequest = await gateway.waitForRequest("config.patch", { after: 1 });
+        expect(JSON.parse(String((modelRequest.params as { raw?: string }).raw))).toEqual({
+          models: { providers: { [providerId]: { models: [model] } } },
+        });
+        const savedWithModel = {
+          models: {
+            providers: {
+              [providerId]: { ...saved.models.providers[providerId], models: [model] },
+            },
+          },
+        };
+        await gateway.setMethodResponse(
+          "config.get",
+          snapshot(savedWithModel, "custom-provider-model-created"),
+        );
+        await gateway.resolveDeferred("config.patch", {
+          config: savedWithModel,
+          hash: "custom-provider-model-created",
+        });
+        await dialog.locator("form").waitFor({ state: "hidden" });
+        const modelRow = manager.locator('[data-model-id="custom-model"]');
+        await modelRow.waitFor();
+        expect(await gateway.getRequests("config.patch")).toHaveLength(2);
+
         await url.fill("https://changed.example.test/v1");
-        expect(
-          await manager.getByRole("button", { name: "Test connection", exact: true }).isDisabled(),
-        ).toBe(true);
+        const testModel = modelRow.getByRole("button", {
+          name: "Test model Custom model",
+          exact: true,
+        });
+        await expect.poll(() => testModel.isDisabled()).toBe(true);
         await gateway.deferNext("config.patch");
         await manager.getByRole("button", { name: "Save", exact: true }).click();
-        const changed = await gateway.waitForRequest("config.patch", { after: 1 });
+        const changed = await gateway.waitForRequest("config.patch", { after: 2 });
         expect(JSON.parse(String((changed.params as { raw?: string }).raw))).toEqual({
           models: { providers: { [providerId]: { baseUrl: "https://changed.example.test/v1" } } },
         });
@@ -701,7 +747,7 @@ suite.define(() => {
           models: {
             providers: {
               [providerId]: {
-                ...saved.models.providers[providerId],
+                ...savedWithModel.models.providers[providerId],
                 baseUrl: "https://changed.example.test/v1",
               },
             },
@@ -716,26 +762,25 @@ suite.define(() => {
           .poll(() => manager.getByRole("button", { name: "Save", exact: true }).isDisabled())
           .toBe(true);
         expect(await gateway.getRequests("models.authSetApiKey")).toHaveLength(2);
+        await expect.poll(() => testModel.isEnabled()).toBe(true);
         await gateway.deferNext("models.probe");
-        await manager.getByRole("button", { name: "Test connection", exact: true }).click();
+        await testModel.click();
         const probe = await gateway.waitForRequest("models.probe");
-        expect(probe.params).toMatchObject({ provider: providerId, agentId: "main" });
+        expect(probe.params).toEqual({
+          provider: providerId,
+          agentId: "main",
+          modelId: "custom-model",
+        });
         await gateway.resolveDeferred("models.probe", {
           provider: providerId,
           status: "ok",
           results: [],
         });
-        await expect
-          .poll(() =>
-            manager
-              .getByRole("status")
-              .allTextContents()
-              .then((texts) => texts.map((text) => text.trim())),
-          )
-          .toContainEqual("Connected");
-        await manager.getByRole("button", { name: "Cancel", exact: true }).click();
-        await manager.waitFor({ state: "hidden" });
-        expect(await gateway.getRequests("config.patch")).toHaveLength(2);
+        await expect.poll(() => modelRow.getByRole("status").textContent()).toContain("Connected");
+        await url.fill("https://discarded.example.test/v1");
+        await manager.getByRole("button", { name: "Reset form", exact: true }).click();
+        await expect.poll(() => url.inputValue()).toBe("https://changed.example.test/v1");
+        expect(await gateway.getRequests("config.patch")).toHaveLength(3);
         if (captureUiProofEnabled) {
           await page.screenshot({
             animations: "disabled",

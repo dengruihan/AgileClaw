@@ -35,6 +35,8 @@ async function withTempState<T>(run: (stateDir: string) => Promise<T>): Promise<
 }
 
 type RunnerParams = {
+  provider?: string;
+  model?: string;
   agentDir?: string;
   agentHarnessRuntimeOverride?: string;
   authProfileId?: string;
@@ -182,6 +184,34 @@ describe("mapFailoverReasonToProbeStatus", () => {
 describe("runAuthProbes", () => {
   beforeAll(async () => {
     probeModule ??= await import("./list.probe.js");
+  });
+
+  it("reports the selected model's failure without probing a working default or catalog model", async () => {
+    await withProbeRuntime("profile", async ({ probe, runner }) => {
+      runner.mockImplementation(async ({ model }) =>
+        model === "vendor/selected-model"
+          ? { payloads: [{ text: "Unknown model", isError: true }] }
+          : { payloads: [{ text: "OK" }] },
+      );
+
+      const result = await probe.runAuthProbes(
+        probeInput({
+          options: { profileIds: ["openai:profile"], modelId: "vendor/selected-model" },
+        }),
+      );
+
+      expect(result.results).toEqual([
+        expect.objectContaining({ model: "openai/vendor/selected-model", status: "format" }),
+      ]);
+      expect(runner).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          provider: "openai",
+          model: "vendor/selected-model",
+          modelFallbacksOverride: [],
+          modelSelectionLocked: true,
+        }),
+      );
+    });
   });
 
   it("refuses direct CLI probes while a live Gateway owns canonical state", async () => {

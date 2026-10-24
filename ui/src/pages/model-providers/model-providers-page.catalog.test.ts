@@ -240,14 +240,16 @@ describe("Models page catalog publication", () => {
     );
     discover.mockReturnValue(catalogRefresh.promise);
     const page = appendPage(context);
-    await waitForFast(() => expect(page.textContent).toContain("Not configured"));
-    const editKey = [
-      ...page.querySelectorAll<HTMLButtonElement>(".model-providers__card-actions button"),
-    ].find((button) => button.textContent?.trim() === "Set API key");
-    expect(editKey).toBeDefined();
-    editKey!.click();
-    await page.updateComplete;
-    const input = page.querySelector<HTMLInputElement>('input[type="password"]')!;
+    await waitForFast(() => expect(page.data?.authStatus?.providers[0]?.status).toBe("missing"));
+    await waitForFast(() =>
+      expect(
+        page.querySelector<HTMLInputElement>('openclaw-provider-manager input[name="apiKey"]')
+          ?.disabled,
+      ).toBe(false),
+    );
+    const input = page.querySelector<HTMLInputElement>(
+      'openclaw-provider-manager input[name="apiKey"]',
+    )!;
     input.value = "unsaved-key-draft";
     input.dispatchEvent(new Event("input", { bubbles: true }));
 
@@ -274,7 +276,7 @@ describe("Models page catalog publication", () => {
     expect(authSignal!.aborted).toBe(false);
     expect(discover).toHaveBeenCalledOnce();
     expect(readPublished).toHaveBeenCalledTimes(2);
-    expect(page.textContent).not.toContain("Not configured");
+    expect(page.data?.authStatus?.providers[0]?.status).toBe("static");
     expect(page.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe(
       "unsaved-key-draft",
     );
@@ -342,14 +344,16 @@ describe("Models page catalog publication", () => {
         method === "models.authStatus" ? Promise.resolve(auth) : catalogRequest(method, params),
       );
       const page = appendPage(context);
-      await waitForFast(() => expect(page.textContent).toContain("Not configured"));
-      const editKey = [
-        ...page.querySelectorAll<HTMLButtonElement>(".model-providers__card-actions button"),
-      ].find((button) => button.textContent?.trim() === "Set API key");
-      expect(editKey).toBeDefined();
-      editKey!.click();
-      await page.updateComplete;
-      const input = page.querySelector<HTMLInputElement>('input[type="password"]')!;
+      await waitForFast(() => expect(page.data?.authStatus?.providers[0]?.status).toBe("missing"));
+      await waitForFast(() =>
+        expect(
+          page.querySelector<HTMLInputElement>('openclaw-provider-manager input[name="apiKey"]')
+            ?.disabled,
+        ).toBe(false),
+      );
+      const input = page.querySelector<HTMLInputElement>(
+        'openclaw-provider-manager input[name="apiKey"]',
+      )!;
       input.value = "unsaved-key-draft";
       input.dispatchEvent(new Event("input", { bubbles: true }));
       auth = createAuthStatus([{ status: "static", profiles: [], apiKey: { source: "config" } }]);
@@ -362,7 +366,7 @@ describe("Models page catalog publication", () => {
 
       await waitForFast(() => expect(displayedCatalog(page)?.models).toEqual(current.models));
       await page.updateComplete;
-      expect(page.textContent).not.toContain("Not configured");
+      expect(page.data?.authStatus?.providers[0]?.status).toBe("static");
       expect(page.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe(
         "unsaved-key-draft",
       );

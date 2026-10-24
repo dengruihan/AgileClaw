@@ -1,11 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { GatewayPendingRequests } from "../../../../packages/gateway-client/src/pending-request.js";
 import { createDeferred } from "../../../../test/helpers/promise.js";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import { peekModelCatalog } from "../../lib/model-catalog-store.ts";
-import { requestProviderUsage } from "../../lib/provider-usage-request.ts";
 import { createTestGatewayClient } from "../../test-helpers/gateway-client.ts";
-import { loadModelProviderCost, loadModelProvidersData } from "./load.ts";
+import { loadModelProvidersData } from "./load.ts";
 
 describe("loadModelProvidersData", () => {
   it.each([false, true])(
@@ -136,7 +134,7 @@ describe("loadModelProvidersData", () => {
     });
     const client = { request } as unknown as GatewayBrowserClient;
 
-    const result = await loadModelProvidersData(client, { agentId: "writer" });
+    await loadModelProvidersData(client, { agentId: "writer" });
 
     expect(request).toHaveBeenCalledWith("models.list", {
       view: "configured",
@@ -150,8 +148,6 @@ describe("loadModelProvidersData", () => {
     ).toHaveLength(0);
     expect(request.mock.calls.some(([method]) => method === "usage.status")).toBe(false);
     expect(request.mock.calls.some(([method]) => method === "sessions.usage")).toBe(false);
-    expect(result.providerUsage).toBeNull();
-    expect(result.costByProvider).toBeNull();
   });
 
   it("scopes only credential status to the selected agent", async () => {
@@ -298,8 +294,6 @@ describe("loadModelProvidersData", () => {
       expect(peekModelCatalog(client, { agentId: "main" })?.models).toEqual([]);
       expect(result.providerOutcomes).toEqual([]);
       expect(result.catalogError).toBeNull();
-      expect(result.providerUsage).toBeNull();
-      expect(result.costByProvider).toBeNull();
       expect(result.error).toBeNull();
       malformed = false;
       expect((await loadModelProvidersData(client, { agentId: "main" })).authStatus).toEqual({
@@ -309,52 +303,6 @@ describe("loadModelProvidersData", () => {
       expect(request.mock.calls.filter(([method]) => method === "models.authStatus")).toHaveLength(
         2,
       );
-    },
-  );
-
-  it.each(["before dispatch", "while pending"] as const)(
-    "retires both supplemental requests when aborted %s",
-    async (when) => {
-      const pending = new GatewayPendingRequests({
-        createRequestId: () => "models-test",
-        nowMs: () => 0,
-      });
-      const sent: Array<{ method: string; params?: Record<string, unknown> }> = [];
-      const sender = {
-        send(frame: string) {
-          sent.push(JSON.parse(frame));
-        },
-      };
-      const client = {
-        request: <T>(...args: Parameters<GatewayBrowserClient["request"]>) =>
-          pending.request<T>(sender, ...args),
-      } as GatewayBrowserClient;
-      const controller = new AbortController();
-      if (when === "before dispatch") {
-        controller.abort();
-      }
-      const loading = Promise.allSettled([
-        requestProviderUsage(client, { signal: controller.signal }),
-        loadModelProviderCost(client, controller.signal),
-      ]);
-      try {
-        if (when === "while pending") {
-          expect(sent.map(({ method }) => method)).toEqual(["usage.status", "sessions.usage"]);
-          expect(sent[0]?.params).toBeUndefined();
-          expect(sent[1]?.params).toMatchObject({ agentScope: "all", groupBy: "family" });
-          expect(sent[1]?.params).not.toHaveProperty("agentId");
-          expect(pending.hasPending).toBe(true);
-          controller.abort();
-        } else {
-          expect(sent).toEqual([]);
-        }
-        expect(pending.hasPending).toBe(false);
-        expect(await loading).toMatchObject([{ status: "rejected" }, { status: "rejected" }]);
-      } finally {
-        // Release any leaked wait if a cancellation regression makes the assertion fail.
-        pending.flush(new Error("test cleanup"));
-        await loading;
-      }
     },
   );
 

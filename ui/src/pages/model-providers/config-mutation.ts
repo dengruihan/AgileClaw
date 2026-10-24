@@ -185,7 +185,7 @@ export function modelProviderErrorMessage(error: unknown): string {
   return formatUiError(error, t("modelProviders.requestFailed"));
 }
 
-export async function modelProviderMutationWarnings(
+async function modelProviderMutationWarnings(
   result: {
     value: { warning?: string };
     refresh: { ok: true } | { ok: false; error: string };

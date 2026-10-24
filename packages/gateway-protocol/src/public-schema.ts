@@ -468,6 +468,8 @@ export {
   ModelsAuthStatusParamsSchema,
   ModelsAuthSetApiKeyParamsSchema,
   ModelsAuthSetApiKeyResultSchema,
+  ModelsAuthInspectApiKeyParamsSchema,
+  ModelsAuthInspectApiKeyResultSchema,
   ModelsListParamsSchema,
   AuthProbeStatusSchema,
   ModelsProbeParamsSchema,

@@ -19,7 +19,7 @@ import {
 } from "../test-helpers/select-picker-e2e.ts";
 import {
   requestRaw,
-  selectProviderAccounts,
+  selectProviderEditor,
   expectPassiveProviderReads,
   providerHeaderMetrics,
   resolveConfigMutation,
@@ -132,7 +132,6 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
     try {
       const response = await page.goto(`${server.baseUrl}settings/model-providers`);
       expect(response?.status()).toBe(200);
-      const openaiCard = page.locator('[data-provider-details="openai"]');
       const readiness = page.locator('[data-model-readiness="model-required"]');
       await readiness.waitFor();
       await expect
@@ -140,12 +139,10 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
         .toContain("Connect a verified AI model");
       await expect.poll(async () => readiness.textContent()).toContain("Model required");
       const providerReadiness = page.locator('[data-provider-id="openai"]');
-      const profileStatus = openaiCard.locator(".model-providers__profile-status");
       await expect
         .poll(async () => providerReadiness.textContent())
         .toContain("Credentials configured");
       await expect.poll(async () => providerReadiness.textContent()).not.toContain("Signed in");
-      await expect.poll(async () => (await profileStatus.textContent())?.trim()).toBe("Signed in");
       await expectPassiveProviderReads(gateway);
       expect(
         (await gateway.getRequests("models.list")).filter(
@@ -190,9 +187,6 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
       await expect
         .poll(async () => providerReadiness.textContent())
         .toContain("Credentials rejected");
-      await expect
-        .poll(async () => (await profileStatus.textContent())?.trim())
-        .toBe("Credentials configured");
       await expectPassiveProviderReads(gateway);
       expect(
         (await gateway.getRequests("models.list")).filter(
@@ -261,7 +255,7 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
     }
   });
 
-  it("lists configured providers with auth state, quota, billing, and local spend", async () => {
+  it("lists configured providers and model availability without account or usage details", async () => {
     const context = await browser.newContext({
       locale: "en-US",
       serviceWorkers: "block",
@@ -284,6 +278,7 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
             { provider: "openai", apiKeySupported: true, quickApiKeySetup: true },
             { provider: "anthropic", apiKeySupported: true, quickApiKeySetup: true },
             { provider: "google", apiKeySupported: true, quickApiKeySetup: true },
+            { provider: "openrouter", apiKeySupported: true, quickApiKeySetup: true },
           ],
           providers: [
             {
@@ -363,12 +358,12 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
       expect(response?.status()).toBe(200);
       await page.locator(".page-title", { hasText: "Models" }).first().waitFor();
 
-      const claudeCard = await selectProviderAccounts(page, "anthropic");
+      const claudeCard = await selectProviderEditor(page, "anthropic");
       // Alias auth row (claude-cli) merges onto the canonical anthropic card.
       expect(
         await page.locator('[data-provider-select="anthropic"]').getAttribute("aria-pressed"),
       ).toBe("true");
-      await expect.poll(async () => claudeCard.textContent()).toContain("Max 20x");
+      expect(await claudeCard.locator(".model-providers__card-details").count()).toBe(0);
       await expect
         .poll(async () => page.locator('[data-provider-id="anthropic"]').textContent())
         .toContain("Credentials configured");
@@ -376,34 +371,26 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
       await expect.poll(async () => claudeReadiness.textContent()).not.toContain("Expired");
       await expect.poll(async () => claudeReadiness.textContent()).not.toContain("Expiring");
       await expect.poll(async () => claudeReadiness.textContent()).not.toContain("Not signed in");
-      await expect
-        .poll(async () => claudeCard.locator(".model-providers__profile").textContent())
-        .toContain("Expired");
-      await expect.poll(async () => claudeCard.textContent()).toContain("$4.20");
-      await claudeCard.locator(".provider-usage-progress").first().waitFor();
       await expect.poll(() => page.getByText("Model auth expired: Claude").count()).toBe(0);
 
       if (recordVisuals) {
         await captureProviderProof("claude-cli-oauth-alias.png", claudeCard);
       }
 
-      const openrouterCard = await selectProviderAccounts(page, "openrouter");
-      await openrouterCard.getByRole("button", { name: "Set API key", exact: true }).waitFor();
-      expect(await openrouterCard.locator(".model-providers__profile").textContent()).toContain(
-        "openrouter:default",
-      );
-      await expect.poll(async () => openrouterCard.textContent()).toContain("$12.34");
+      const openrouterCard = await selectProviderEditor(page, "openrouter");
+      await openrouterCard.locator('input[name="apiKey"]').waitFor();
+      expect(await openrouterCard.locator(".model-providers__profile").count()).toBe(0);
 
       // openai qualifies via its available catalog model despite having no
       // auth row; the shared label map renders "OpenAI", not "Openai".
-      await selectProviderAccounts(page, "openai");
+      await selectProviderEditor(page, "openai");
       await expect
         .poll(() => page.locator('[data-provider-select="openai"]').textContent())
         .toContain("1 model");
 
       // google is in the configured catalog with an unavailable model; the
       // page surfaces it instead of hiding the broken provider.
-      await selectProviderAccounts(page, "google");
+      await selectProviderEditor(page, "google");
       await expect
         .poll(() => page.locator('[data-provider-select="google"]').textContent())
         .toContain("0 of 1 models available");
@@ -499,7 +486,7 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
     }
   });
 
-  it("configures credentials, probes a provider, and changes default models", async () => {
+  it("configures credentials, probes a model, and changes default models", async () => {
     const context = await browser.newContext({
       locale: "en-US",
       serviceWorkers: "block",
@@ -621,7 +608,7 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
 
     try {
       await page.goto(`${server.baseUrl}settings/model-providers`);
-      const openaiCard = await selectProviderAccounts(page, "openai");
+      const openaiCard = await selectProviderEditor(page, "openai");
       await expectPassiveProviderReads(gateway);
       expect(
         (await gateway.getRequests("models.list")).filter(
@@ -632,7 +619,7 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
           params: { agentId: "main", view: "configured" },
         }),
       ]);
-      await expect.poll(async () => openaiCard.textContent()).toContain("API key set in config");
+      await expect.poll(() => openaiCard.locator('input[name="apiKey"]').isEnabled()).toBe(true);
       await expect
         .poll(() =>
           modelPickerValue(
@@ -644,8 +631,7 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
         await captureProviderProof("01-configured.png", openaiCard);
       }
 
-      await openaiCard.getByRole("button", { name: "Set API key" }).click();
-      await openaiCard.getByLabel("API key").fill(openaiInputValue);
+      await openaiCard.locator('input[name="apiKey"]').fill(openaiInputValue);
       const keyWriteCount = (await gateway.getRequests("models.authSetApiKey")).length;
       await gateway.deferNext("models.authSetApiKey");
       await openaiCard.getByRole("button", { name: "Save" }).click();
@@ -665,12 +651,9 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
       await resolveConfigMutation(gateway, keyedConfig, "model-providers-hash-key", "openai");
       await expect.poll(async () => openaiCard.textContent()).toContain("Secret saved.");
 
-      await page
-        .locator(".provider-manager--inline")
-        .getByRole("button", { name: "Test connection", exact: true })
-        .click();
+      await openaiCard.locator('[data-model-id="gpt-5.5"] button[aria-label]').click();
       const probe = await gateway.waitForRequest("models.probe");
-      expect(probe.params).toEqual({ provider: "openai", agentId: "main" });
+      expect(probe.params).toEqual({ provider: "openai", agentId: "main", modelId: "gpt-5.5" });
       await expect.poll(async () => openaiCard.textContent()).toContain("87 ms");
 
       const primary = page.locator(".model-providers__defaults openclaw-select-picker").first();

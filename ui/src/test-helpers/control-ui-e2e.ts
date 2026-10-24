@@ -24,6 +24,9 @@ import type { ControlUiBuildInfo } from "../build-info.ts";
 import { createControlUiAttachmentFacts } from "./control-ui-attachment-fixtures.ts";
 import { createControlUiE2eBuildPublication } from "./control-ui-e2e-build-publication.ts";
 import type {
+  ControlUiE2eProductionServer,
+  ControlUiE2eServer,
+  ControlUiE2eServerOptions,
   ControlUiMockGateway,
   ControlUiMockPresenceUser,
   ControlUiMockRequestHandler,
@@ -35,6 +38,7 @@ import { createMockGatewayControls } from "./control-ui-e2e-controls.ts";
 import {
   defaultControlUiFeatureMethods,
   createControlUiDefaultResponses,
+  DEFAULT_CONTROL_UI_E2E_BUILD_INFO,
 } from "./control-ui-e2e-defaults.ts";
 import {
   installControlUiE2ePageDiagnosticRing,
@@ -57,6 +61,8 @@ import {
 } from "./control-ui-session-fixtures.ts";
 
 export type {
+  ControlUiE2eProductionServer,
+  ControlUiE2eServer,
   ControlUiMockGateway,
   ControlUiMockRequestHandler,
   MockGatewayControls,
@@ -509,30 +515,6 @@ const DEFAULT_MOCK_MAX_PAYLOAD_BYTES = 25 * 1024 * 1024;
 const DEFAULT_MOCK_ATTACHMENT_MAX_BYTES = Math.floor(
   ((DEFAULT_MOCK_MAX_PAYLOAD_BYTES - 256 * 1024) * 3) / 4,
 );
-
-export type ControlUiE2eServer = {
-  baseUrl: string;
-  close: () => Promise<void>;
-};
-
-export type ControlUiE2eProductionServer = ControlUiE2eServer & {
-  replaceBuild: (nextDir: string, previousDir: string) => Promise<void>;
-};
-
-type ControlUiE2eServerOptions = {
-  source?: boolean;
-};
-
-const DEFAULT_CONTROL_UI_E2E_BUILD_INFO: ControlUiBuildInfo = {
-  version: "2026.7.10",
-  commit: "0123456789abcdef0123456789abcdef01234567",
-  commitAt: "2026-07-10T11:22:33.000Z",
-  builtAt: "2026-07-10T12:34:56.000Z",
-  branch: null,
-  dirty: false,
-  release: false,
-  buildId: "e2e",
-};
 
 export async function reconnectMockGateway(
   page: Page,
@@ -2177,6 +2159,14 @@ function installControlUiMockGateway(
           ok: true,
           sessions: { count: 1, path: "", recent: [] },
           ts: Date.now(),
+        };
+      case "models.authInspectApiKey":
+        return {
+          provider: isRecord(params) ? params.provider : "openai",
+          agentId: isRecord(params) ? params.agentId : scenario.defaultAgentId,
+          baseHash: isRecord(params) ? params.baseHash : "mock-config-hash",
+          configured: false,
+          source: "none",
         };
       case "models.authStatus":
         return { ts: Date.now(), providers: [] };

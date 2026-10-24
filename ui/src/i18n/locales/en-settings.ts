@@ -676,15 +676,16 @@ const enSettings = {
       available: "Available providers",
       models: "Models",
       settings: "Settings",
-      details: "Accounts & usage",
       endpoint: "Endpoint",
       defaultEndpoint: "Provider default",
       customProvider: "Custom provider",
       advanced: "Advanced configuration",
       providerId: "Provider ID",
-      keepKey: "Leave blank to keep the current key",
-      showKey: "Show",
-      hideKey: "Hide",
+      keepKey: "Enter an API key",
+      externalKey:
+        "Environment and secret-reference keys are managed at their source and cannot be shown here.",
+      showKey: "Show API key",
+      hideKey: "Hide API key",
       connectionScope:
         "Connection settings apply to the whole Gateway. Accounts follow the existing credential scope for agent {agent}.",
       modelScope:
@@ -801,10 +802,6 @@ const enSettings = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
-    globalUsage: "Global usage and cost",
-    noStats: "No live usage data reported by this provider.",
-    localCost: "Global session spend · {days}d",
-    localCostDetail: "{tokens} tokens · {messages} messages",
     saving: "Saving…",
     requestFailed: "Request failed.",
     configUnavailable: "Configuration is unavailable. Refresh and try again.",
@@ -853,9 +850,9 @@ const enSettings = {
       authModeBlocked: 'API key changes are unavailable while auth mode is "{mode}".',
     },
     probe: {
+      model: "Test model {model}",
       test: "Test connection",
       testing: "Testing…",
-      unavailable: "Connection testing requires a newer gateway.",
       latency: "{ms} ms",
       status: {
         ok: "Connected",

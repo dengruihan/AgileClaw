@@ -35,7 +35,7 @@ import { updatePickers } from "../../test-helpers/select-picker.ts";
 import { waitForFast } from "../../test-helpers/wait-for.ts";
 import type { DefaultModelSelection, ModelBehaviorConfig } from "./data.ts";
 import { EMPTY_MODEL_PROVIDERS_DATA, type ModelProvidersData } from "./load.ts";
-import type { ModelProviderProfileActionsController } from "./profile-actions-controller.ts";
+import type { ModelProbeController } from "./model-probe-controller.ts";
 import type { ModelProvidersRouteData } from "./route.ts";
 import "./model-providers-page.ts";
 
@@ -57,11 +57,8 @@ export type ModelProvidersPageTestElement = HTMLElement & {
   addProviderKey: string;
   addProviderOpen: boolean;
   defaultsDraft: (DefaultModelSelection & Partial<ModelBehaviorConfig>) | null;
-  keyDraft: string;
-  keyEditorProvider: string | null;
-  profileActions: Pick<ModelProviderProfileActionsController, "logout" | "setOrder" | "probe">;
+  probes: Pick<ModelProbeController, "probe">;
   messages: Record<string, { kind: "success" | "error"; text: string; warning?: string }>;
-  profileOrders: Record<string, string[]>;
   probeResults: Record<string, ModelsProbeResult>;
   refresh: (reason: "forced") => Promise<void>;
   routeData: ModelProvidersRouteData | undefined;
@@ -175,10 +172,26 @@ export function createApiKeyProviderData(): ModelProvidersData {
 
 export async function saveKey(page: ModelProvidersPageTestElement, value: string) {
   page.data = createApiKeyProviderData();
-  page.keyEditorProvider = "openai";
-  page.keyDraft = value;
   await page.updateComplete;
-  page.querySelector<HTMLButtonElement>(".model-providers__inline-form button")!.click();
+  page.querySelector<HTMLButtonElement>('[data-provider-select="openai"]')!.click();
+  await waitForFast(() =>
+    expect(
+      page.querySelector<HTMLInputElement>('openclaw-provider-manager input[name="apiKey"]')
+        ?.disabled,
+    ).toBe(false),
+  );
+  const input = page.querySelector<HTMLInputElement>(
+    'openclaw-provider-manager input[name="apiKey"]',
+  )!;
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  await waitForFast(() =>
+    expect(
+      page.querySelector<HTMLButtonElement>('openclaw-provider-manager button[type="submit"]')
+        ?.disabled,
+    ).toBe(false),
+  );
+  page.querySelector<HTMLButtonElement>('openclaw-provider-manager button[type="submit"]')!.click();
 }
 
 export function createHarness(initialScopeId: string) {
@@ -190,8 +203,6 @@ export function createHarness(initialScopeId: string) {
     });
     return () => releaseAuthStatus?.();
   };
-  let usageStatus: unknown = { updatedAt: 1, providers: [] };
-  let usageStatusRejects = false;
   const request = vi.fn(async (method: string): Promise<unknown> => {
     switch (method) {
       case "models.authStatus": {
@@ -217,10 +228,7 @@ export function createHarness(initialScopeId: string) {
           valid: true,
         };
       case "usage.status":
-        if (usageStatusRejects) {
-          throw new Error("usage.status unavailable");
-        }
-        return usageStatus;
+        return { updatedAt: 1, providers: [] };
       case "sessions.usage":
         return { aggregates: { byProvider: [] } };
       default:
@@ -387,12 +395,6 @@ export function createHarness(initialScopeId: string) {
       snapshot.phase = phase;
       gatewaySource.publish({ ...snapshot });
     },
-    setUsageStatus: (value: unknown) => {
-      usageStatus = value;
-    },
-    failUsageStatus: () => {
-      usageStatusRejects = true;
-    },
   };
 }
 
@@ -412,17 +414,6 @@ export async function waitForProviders(
       expect(currentConfigObject(page.context.runtimeConfig.state)).toEqual(expectedConfig);
     }
   });
-}
-
-export async function advanceUsageRetries(): Promise<void> {
-  for (const delay of [5_000, 10_000, 20_000]) {
-    await vi.advanceTimersByTimeAsync(delay);
-  }
-}
-
-export function focusDocument(): void {
-  vi.spyOn(document, "hasFocus").mockReturnValue(true);
-  vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
 }
 
 export function createEmptyModelProvidersRouteData(

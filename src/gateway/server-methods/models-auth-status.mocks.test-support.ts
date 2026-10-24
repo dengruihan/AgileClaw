@@ -144,7 +144,7 @@ export function setPreparedMetadataSnapshot(snapshot: unknown): void {
   preparedMetadataSnapshot = snapshot;
 }
 
-export function createPreparedOwnerSnapshot(agentId: string) {
+function createPreparedOwnerSnapshot(agentId: string) {
   const config = mocks.getRuntimeConfig.mock.results.at(-1)?.value ?? {};
   const agentDir =
     mocks.resolveAgentDir.mock.results.at(-1)?.value ??
@@ -206,4 +206,4 @@ export function resetAuthStatusMocks(): void {
   mocks.prepareModelRuntimeSnapshot.mockResolvedValue();
 }
 
-export { emptyUsageSummary, mocks };
+export { mocks };

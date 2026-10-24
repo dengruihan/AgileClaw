@@ -15,10 +15,11 @@ import {
   modelProviderConfigMutationBlockedReason,
 } from "./config-mutation.ts";
 import type { ModelProviderCard } from "./data.ts";
+import { ProviderCredentialController } from "./provider-credential-controller.ts";
 import { providerConnectionFields } from "./provider-manager-connection.ts";
 import { providerModelDialog } from "./provider-manager-model-dialog.ts";
 import {
-  MODEL_THINKING_LEVEL_IDS,
+  createProviderModelEditorDraft,
   modelConfigEntry,
   providerModelForm,
 } from "./provider-manager-model-form.ts";
@@ -48,10 +49,12 @@ export class ProviderManager extends OpenClawLightDomElement {
   @property({ attribute: false }) intent: ProviderManagerIntent | null = null;
   @property({ attribute: false }) card: ModelProviderCard | null = null;
   @property({ type: Boolean }) customProvider = false;
-  @property({ attribute: false }) probe: ModelsProbeResult | undefined;
+  @property({ attribute: false }) probeResults: Record<string, ModelsProbeResult> = {};
+  @property({ attribute: false }) probeBusy: Record<string, boolean> = {};
+  @property({ attribute: false }) probeErrors: Record<string, { text: string }> = {};
   @property({ attribute: false }) onCreated: (provider: string) => void = () => {};
   @property({ attribute: false }) onRefresh: () => void = () => {};
-  @property({ attribute: false }) onProbe: () => void = () => {};
+  @property({ attribute: false }) onProbe: (modelId: string) => void = () => {};
   @property({ attribute: false }) onConnect: () => void = () => {};
   @property({ attribute: false }) onCredential: (
     provider: string,
@@ -59,8 +62,7 @@ export class ProviderManager extends OpenClawLightDomElement {
   ) => Promise<CredentialResult | undefined> = async () => undefined;
   @state() private draft: Record<string, unknown> = {};
   @state() private providerId = "";
-  @state() private keyDraft = "";
-  @state() private revealKey = false;
+  private readonly credential = new ProviderCredentialController(() => this.requestUpdate());
   @state() private error: string | null = null;
   @state() private notice: string | null = null;
   @state() private busy = false;
@@ -88,8 +90,7 @@ export class ProviderManager extends OpenClawLightDomElement {
       this.loading = false;
       this.error = this.notice = null;
       this.modelDraft = null;
-      this.keyDraft = "";
-      this.revealKey = false;
+      this.credential.clear();
       this.touched.clear();
       this.providerCreated = false;
       this.providerId = this.intent?.provider ?? "";
@@ -104,11 +105,26 @@ export class ProviderManager extends OpenClawLightDomElement {
       this.original = structuredClone(configuredProvider(this.config, this.providerId) ?? {});
       this.draft = structuredClone(this.original);
     }
+    this.credential.sync({
+      client: this.context.gateway.snapshot.client,
+      agentId: this.agentId,
+      provider: this.providerId,
+      baseHash: this.context.runtimeConfig.state.configSnapshot?.hash ?? undefined,
+      revision: this.card?.credentialRevision,
+      enabled: Boolean(
+        this.intent &&
+        this.intent.view !== "create" &&
+        this.card?.apiKeySupported !== false &&
+        (!this.card?.configAuthMode || this.card.configAuthMode === "api-key") &&
+        !this.blocked,
+      ),
+    });
   }
 
   override disconnectedCallback() {
     this.discardConfirmation?.abort();
     this.generation += 1;
+    this.credential.clear();
     super.disconnectedCallback();
   }
 
@@ -136,7 +152,7 @@ export class ProviderManager extends OpenClawLightDomElement {
 
   private get dirty() {
     return (
-      this.keyDraft.trim() !== "" ||
+      this.credential.dirty ||
       [...this.touched].some(
         (key) => JSON.stringify(this.draft[key]) !== JSON.stringify(this.original[key]),
       )
@@ -213,31 +229,15 @@ export class ProviderManager extends OpenClawLightDomElement {
     const configured =
       model && providerModels(this.config, this.providerId).find((row) => row.id === model.id);
     this.originalModel = configured ? structuredClone(configured) : undefined;
-    // Every row prefills the thinking levels it effectively runs with — its own
-    // authored map, else the catalog's offered levels. The wire only carries the
-    // level set ({id, label}[]), so prefilled values stay blank: the form's
-    // blank-value rule passes the level's own name through to the provider.
-    const catalogLevels = model
-      ? this.catalog.find((row) => row.id === model.id)?.thinkingLevels
-      : undefined;
-    const catalogPrefill = catalogLevels
-      ? Object.fromEntries(
-          catalogLevels.flatMap(({ id }) => (MODEL_THINKING_LEVEL_IDS.has(id) ? [[id, ""]] : [])),
-        )
-      : undefined;
-    const draft: Record<string, unknown> = configured
-      ? structuredClone(configured)
-      : model
-        ? { id: model.id, name: model.name }
-        : { id: "", name: "", input: ["text"] };
-    const authoredMap = isRecord(draft.thinkingLevelMap);
-    this.modelThinkingPrefill = authoredMap ? undefined : catalogPrefill;
-    if (!authoredMap && catalogPrefill) {
-      draft.thinkingLevelMap = catalogPrefill;
-    }
-    this.modelDraft = draft;
-    this.initialModelDraft = structuredClone(draft);
-    this.originalModelId = model && typeof model.id === "string" ? model.id : undefined;
+    const editor = createProviderModelEditorDraft({
+      model,
+      configured,
+      catalogEntry: this.catalog.find((row) => row.id === model?.id),
+    });
+    this.modelThinkingPrefill = editor.thinkingPrefill;
+    this.modelDraft = editor.draft;
+    this.initialModelDraft = structuredClone(editor.draft);
+    this.originalModelId = editor.originalModelId;
     this.error = this.notice = null;
   }
 
@@ -343,6 +343,9 @@ export class ProviderManager extends OpenClawLightDomElement {
       if (generation === this.generation) {
         this.error = result?.ok ? null : t("modelProviders.requestFailed");
         this.notice = result?.ok ? t("modelProviders.apiKey.removed") : null;
+        if (result?.ok) {
+          this.credential.saved("");
+        }
       }
     } finally {
       if (generation === this.generation) {
@@ -398,6 +401,7 @@ export class ProviderManager extends OpenClawLightDomElement {
         onDelete: (id) => void this.deleteModel(id),
         onEdit: (row) => this.editModel(row),
         onRefresh: () => void this.load(true),
+        onProbe: this.onProbe,
         onRestore: (id) => void this.restoreModel(id),
       },
       state: {
@@ -412,6 +416,11 @@ export class ProviderManager extends OpenClawLightDomElement {
         disabled: this.disabled,
         hiddenRows: merged.filter((row) => hiddenIds.has(String(row.id))),
         loading: this.loading,
+        probeBlocked: this.dirty,
+        providerId: this.providerId,
+        probeResults: this.probeResults,
+        probeBusy: this.probeBusy,
+        probeErrors: this.probeErrors,
         rows: merged.filter((row) => !hiddenIds.has(String(row.id))),
       },
     });
@@ -445,8 +454,7 @@ export class ProviderManager extends OpenClawLightDomElement {
   private resetConnection() {
     this.draft = structuredClone(this.original);
     this.touched.clear();
-    this.keyDraft = "";
-    this.revealKey = false;
+    this.credential.reset();
     this.error = this.notice = null;
   }
 
@@ -507,16 +515,17 @@ export class ProviderManager extends OpenClawLightDomElement {
             ${providerConnectionFields({
               actions: {
                 onConnect: this.onConnect,
-                onProbe: this.onProbe,
                 onRemoveCredential: () => this.removeCredential(),
                 onProviderIdInput: (value) => {
                   this.providerId = value;
                 },
                 onKeyInput: (value) => {
-                  this.keyDraft = value;
+                  this.credential.value = value;
+                  this.requestUpdate();
                 },
                 onToggleRevealKey: () => {
-                  this.revealKey = !this.revealKey;
+                  this.credential.revealed = !this.credential.revealed;
+                  this.requestUpdate();
                 },
                 onFieldInput: (key, value) => this.setDraftField(key, value),
               },
@@ -528,11 +537,13 @@ export class ProviderManager extends OpenClawLightDomElement {
                 dirty: this.dirty,
                 disabled: this.disabled,
                 draft: this.draft,
-                keyDraft: this.keyDraft,
-                probe: this.probe,
+                keyDraft: this.credential.value,
+                keyLoading: this.credential.loading,
+                keyError: this.credential.error,
+                keySource: this.credential.source,
                 providerCreated: this.providerCreated,
                 providerId: this.providerId,
-                revealKey: this.revealKey,
+                revealKey: this.credential.revealed,
               },
             })}
           </div>
@@ -690,10 +701,10 @@ export class ProviderManager extends OpenClawLightDomElement {
       this.draft = structuredClone(this.original);
       this.touched.clear();
     }
-    if (this.keyDraft.trim()) {
+    if (this.credential.dirty) {
       this.busy = true;
       try {
-        const result = await this.onCredential(id, this.keyDraft.trim());
+        const result = await this.onCredential(id, this.credential.value.trim() || null);
         if (generation !== this.generation) {
           return;
         }
@@ -703,7 +714,7 @@ export class ProviderManager extends OpenClawLightDomElement {
             .join(" ");
           return;
         }
-        this.keyDraft = "";
+        this.credential.saved(this.credential.value);
         this.notice = result.warning ?? t("modelProviders.manager.saved");
       } catch (error) {
         if (generation === this.generation) {

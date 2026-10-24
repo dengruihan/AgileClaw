@@ -38,6 +38,7 @@ import { hasGatewayAdminScope } from "../operator-scopes.js";
 import { loadDeferredCatalog, readPreparedCatalog } from "../server-model-catalog-auth.js";
 import { formatForLog } from "../ws-log.js";
 import { resolveModelAuthAgentScope } from "./model-auth-agent-scope.js";
+import { modelsAuthApiKeyInspectHandlers } from "./models-auth-api-key-inspect.js";
 import { modelsAuthRefreshHandlers } from "./models-auth-refresh.js";
 import { readModelAuthStatusFacts } from "./models-auth-status-facts.js";
 import {
@@ -317,6 +318,7 @@ async function refreshAfterCredentialMutation(
 
 export const modelsAuthStatusHandlers: GatewayRequestHandlers = {
   ...modelsAuthRefreshHandlers,
+  ...modelsAuthApiKeyInspectHandlers,
   "models.authSetApiKey": async ({ params, respond, context }) => {
     if (
       !assertValidParams(params, validateModelsAuthSetApiKeyParams, "models.authSetApiKey", respond)

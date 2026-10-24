@@ -1,6 +1,8 @@
 import { expect, it } from "vitest";
 import {
   type ModelsAuthSetApiKeyResult,
+  type ModelsAuthInspectApiKeyResult,
+  validateModelsAuthInspectApiKeyResult,
   validateModelsAuthSetApiKeyResult,
 } from "../../../packages/gateway-protocol/src/index.js";
 import { loadPersistedAuthProfileStore } from "../../agents/auth-profiles/persisted.js";
@@ -72,10 +74,47 @@ it("models.authSetApiKey validates the old wire request before the real credenti
         await expect(reader.request("models.authSetApiKey", request)).rejects.toThrow(
           "operator.admin",
         );
+        await expect(
+          reader.request("models.authInspectApiKey", {
+            provider: "fixture",
+            agentId: "main",
+            baseHash: "unread-revision",
+            reveal: true,
+          }),
+        ).rejects.toThrow("operator.admin");
       } finally {
         await disconnectGatewayClient(reader);
       }
       expect(persisted()?.[saved.profileId]).toMatchObject({ key: request.apiKey });
+      const { hash: baseHash } = await client.request<{ hash: string }>("config.get", {});
+      const inspect = { provider: "fixture", agentId: "main", baseHash };
+      const hidden = await client.request<ModelsAuthInspectApiKeyResult>(
+        "models.authInspectApiKey",
+        inspect,
+      );
+      expect(validateModelsAuthInspectApiKeyResult(hidden)).toBe(true);
+      expect(hidden).toMatchObject({
+        configured: true,
+        source: "profile",
+        profileId: saved.profileId,
+      });
+      expect(hidden).not.toHaveProperty("key");
+      expect(
+        await client.request("models.authInspectApiKey", { ...inspect, reveal: true }),
+      ).toMatchObject({ key: request.apiKey });
+      await client.request("models.authSetApiKey", {
+        ...request,
+        apiKey: "synthetic-replacement-key",
+      });
+      const latest = await client.request<{ hash: string }>("config.get", {});
+      expect(
+        await client.request("models.authInspectApiKey", {
+          ...inspect,
+          baseHash: latest.hash,
+          reveal: true,
+        }),
+      ).toMatchObject({ profileId: saved.profileId, key: "synthetic-replacement-key" });
+      expect(persisted()?.[saved.profileId]).toMatchObject({ key: "synthetic-replacement-key" });
     } finally {
       await disconnectGatewayClient(client);
       await server.close({ reason: "API-key contract test complete" });

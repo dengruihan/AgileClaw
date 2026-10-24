@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDeferred as deferred } from "../../../../test/helpers/promise.js";
 import type { ModelAuthStatusProfile, WizardNextResult } from "../../api/types.ts";
 import { currentConfigObject } from "../../lib/config/config-state-model.ts";
-import { getRenderedModalDialog, installDialogPolyfill } from "../../test-helpers/modal-dialog.ts";
 import { waitForFast } from "../../test-helpers/wait-for.ts";
 import {
   appendPage,
@@ -84,9 +83,6 @@ function accountRecoveryHarness(
             },
           ],
         };
-      case "models.authLogout":
-        profiles = [];
-        return { provider: "example", removedProfiles: ["example:original"], abortedRunIds: [] };
       case "models.authLogin":
         return { done: false, status: "running" };
       case "openclaw.setup.activate.start":
@@ -128,6 +124,9 @@ function accountRecoveryHarness(
     modelRef,
     login,
     activation,
+    removeAccounts: () => {
+      profiles = [];
+    },
     setConfiguredModel: (model: string) => {
       configuredModel = model;
     },
@@ -162,27 +161,17 @@ describe("Models account recovery", () => {
   it.each(["saved", "inherited"] as const)(
     "recovers a removed selected account only after explicitly activating its %s replacement",
     async (source) => {
-      const restoreDialog = installDialogPolyfill();
-      const { context, request, runtimeConfig, modelRef, login, activation } =
+      const { context, request, runtimeConfig, modelRef, login, activation, removeAccounts } =
         accountRecoveryHarness("original", source);
       const page = appendPage(context);
       try {
         await waitForProviders(page);
         expect(page.querySelector("[data-models-account-recovery]")).toBeNull();
-        page
-          .querySelector<HTMLButtonElement>('[aria-label="Log out original@example.invalid"]')!
-          .click();
-        await page.updateComplete;
-        const { modal } = await getRenderedModalDialog(document.body);
-        modal.querySelector<HTMLButtonElement>("button.danger")!.click();
+        removeAccounts();
+        await page.refresh("forced");
         await waitForFast(() =>
-          expect(page.querySelectorAll(".model-providers__profile")).toHaveLength(0),
+          expect(page.querySelector("[data-models-account-recovery]")).not.toBeNull(),
         );
-        expect(request).toHaveBeenCalledWith("models.authLogout", {
-          provider: "example",
-          profileIds: ["example:original"],
-          agentId: "writer",
-        });
         const recovery = page.querySelector("[data-models-account-recovery]");
         expect(recovery?.textContent).toContain(modelRef);
         expect(runtimeConfig.patch).not.toHaveBeenCalled();
@@ -227,7 +216,6 @@ describe("Models account recovery", () => {
         expect(context.navigate).not.toHaveBeenCalled();
       } finally {
         page.remove();
-        restoreDialog();
       }
     },
   );

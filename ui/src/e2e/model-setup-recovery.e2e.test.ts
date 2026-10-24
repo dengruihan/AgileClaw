@@ -169,39 +169,32 @@ suite.define(() => {
           .locator(".model-setup-discovery")
           .getByRole("button", { name: "Close", exact: true })
           .click();
-        const currentProvider = page.locator('[data-provider-id="openai"]');
-        await currentProvider.getByRole("button", { name: "Test connection", exact: true }).click();
+        const currentProvider = page.locator('[data-provider-select="openai"]');
+        await currentProvider.click();
+        const currentModel = page.locator('.provider-manager--inline [data-model-id="gpt-5"]');
+        const testConnection = currentModel.getByRole("button", {
+          name: "Test model GPT-5",
+          exact: true,
+        });
+        await testConnection.click();
         const verify = await gateway.waitForRequest("models.probe");
-        expect(verify.params).toEqual({ provider: "openai", agentId: "main" });
-        await currentProvider
-          .locator(".model-providers__probe-summary")
-          .getByText("1234 ms", { exact: true })
-          .waitFor();
-        await currentProvider
-          .locator(".model-providers__probe-summary")
-          .getByText("Connected", { exact: true })
-          .waitFor();
+        expect(verify.params).toEqual({ provider: "openai", agentId: "main", modelId: "gpt-5" });
+        const probeResult = currentModel.locator(".provider-manager__probe-result");
+        await probeResult.getByText("1234 ms", { exact: false }).waitFor();
+        await probeResult.getByText("Connected", { exact: false }).waitFor();
         const detectCountBeforeRefresh = (await gateway.getRequests("openclaw.setup.detect"))
           .length;
         const verifyCountBeforeRefresh = (await gateway.getRequests("models.probe")).length;
-        await currentProvider.getByRole("button", { name: "Test connection", exact: true }).click();
+        await testConnection.click();
         await expect
           .poll(async () => (await gateway.getRequests("models.probe")).length)
           .toBe(verifyCountBeforeRefresh + 1);
         expect((await gateway.getRequests("openclaw.setup.detect")).length).toBe(
           detectCountBeforeRefresh,
         );
-        await currentProvider
-          .getByRole("button", { name: "Test connection", exact: true })
-          .waitFor();
-        await currentProvider
-          .locator(".model-providers__probe-summary")
-          .getByText("1234 ms", { exact: true })
-          .waitFor();
-        await currentProvider
-          .locator(".model-providers__probe-summary")
-          .getByText("Connected", { exact: true })
-          .waitFor();
+        await testConnection.waitFor();
+        await probeResult.getByText("1234 ms", { exact: false }).waitFor();
+        await probeResult.getByText("Connected", { exact: false }).waitFor();
         await openModelSetup(page);
         await savedCredentials
           .getByRole("button", { name: "Test & use for this agent", exact: true })
@@ -459,22 +452,28 @@ suite.define(() => {
 
         const response = await page.goto(suite.server.baseUrl + "settings/model-providers");
         expect(response?.status()).toBe(200);
-        const selectedModel = page.locator('[data-provider-id="lmstudio"]');
+        const selectedModel = page.locator('[data-provider-select="lmstudio"]');
         await selectedModel.getByText("LM Studio", { exact: true }).waitFor();
         await expect
           .poll(() =>
             page.locator(".model-providers__defaults openclaw-select-picker").first().textContent(),
           )
           .toContain("qwen3-8b-instruct");
-        await selectedModel.getByRole("button", { name: "Test connection", exact: true }).click();
-        await selectedModel
-          .locator(".model-providers__probe-summary")
-          .getByText("Connection failed", { exact: true })
-          .waitFor();
+        await selectedModel.click();
+        const modelRow = page.locator(
+          '.provider-manager--inline [data-model-id="qwen3-8b-instruct"]',
+        );
+        const testConnection = modelRow.getByRole("button", {
+          name: "Test model qwen3-8b-instruct",
+          exact: true,
+        });
+        await testConnection.click();
+        const probeResult = modelRow.locator(".provider-manager__probe-result");
         await expect
-          .poll(() => selectedModel.locator(".model-providers__probe").textContent())
+          .poll(() => probeResult.textContent())
           .toContain("The connection probe failed.");
-        await selectedModel.getByRole("button", { name: "Test connection", exact: true }).waitFor();
+        await expect.poll(() => probeResult.getAttribute("role")).toBe("alert");
+        await testConnection.waitFor();
         expect(await gateway.getRequests("openclaw.setup.prepare.start")).toHaveLength(0);
         expect(await gateway.getRequests("openclaw.setup.activate.start")).toHaveLength(0);
 
@@ -493,7 +492,11 @@ suite.define(() => {
         }
 
         const verify = await gateway.waitForRequest("models.probe");
-        expect(verify.params).toEqual({ provider: "lmstudio", agentId: "main" });
+        expect(verify.params).toEqual({
+          provider: "lmstudio",
+          agentId: "main",
+          modelId: "qwen3-8b-instruct",
+        });
         await openModelSetup(page);
         expect(await page.locator('[data-candidate-kind="provider-auto:lmstudio"]').count()).toBe(
           0,

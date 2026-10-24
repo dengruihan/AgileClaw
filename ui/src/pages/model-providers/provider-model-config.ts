@@ -136,7 +136,7 @@ export function modelWritePatch(
   return modelsPatch(key, next);
 }
 
-export function modelRemovePatch(
+function modelRemovePatch(
   config: Record<string, unknown> | null,
   key: string,
   id: string,
@@ -150,7 +150,7 @@ export function modelRemovePatch(
 const ENTRY_BOOKKEEPING_FIELDS = new Set(["id", "name", "hidden"]);
 
 /** Whether a config entry carries user-authored fields beyond the hide marker. */
-export function modelEntryHasAuthorFields(entry: Record<string, unknown>): boolean {
+function modelEntryHasAuthorFields(entry: Record<string, unknown>): boolean {
   return Object.keys(entry).some((field) => !ENTRY_BOOKKEEPING_FIELDS.has(field));
 }
 
@@ -160,7 +160,7 @@ export function modelEntryHidden(entry: Record<string, unknown> | undefined): bo
 }
 
 /** The config entry without its hide marker, for toggling visibility back on. */
-export function modelEntryWithoutHidden(entry: Record<string, unknown>): Record<string, unknown> {
+function modelEntryWithoutHidden(entry: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(entry).filter(([field]) => field !== "hidden"));
 }
 

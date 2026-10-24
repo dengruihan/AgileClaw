@@ -2,11 +2,6 @@ import { normalizeProviderId } from "@openclaw/model-catalog-core/provider-id";
 import { asNullableRecord as asRecord } from "@openclaw/normalization-core/record-coerce";
 import { splitTrailingAuthProfile } from "../../../../src/agents/model-ref-profile.js";
 import type {
-  ProviderUsageSnapshot,
-  UsageSummary,
-} from "../../../../src/infra/provider-usage.types.js";
-import type { SessionModelUsage } from "../../../../src/infra/session-cost-usage.types.js";
-import type {
   FastMode,
   ModelAuthStatusProvider,
   ModelAuthStatusProfile,
@@ -29,27 +24,6 @@ type ModelProviderAuthSummary = {
   expiryLabel?: string;
 };
 
-type ModelProviderLocalCost = {
-  totalCost: number;
-  totalTokens: number;
-  messageCount: number;
-};
-
-export type ModelProviderLogoutTarget = {
-  provider: string;
-  profileIds: string[];
-};
-
-export type ModelProviderPendingLogout = {
-  cardId: string;
-  label: string;
-  target: ModelProviderLogoutTarget;
-};
-
-export type ModelProviderProfileOrderLock = NonNullable<
-  ModelAuthStatusProvider["profileOrderLocked"]
->;
-
 export type ModelProviderCard = {
   /** Canonical provider id used for icon + label lookup. */
   id: string;
@@ -59,31 +33,19 @@ export type ModelProviderCard = {
   apiKeySupported?: boolean;
   /** Provider ids that own credentials merged into this card. */
   credentialProviderIds: string[];
-  /** Saved OAuth/token profiles eligible for targeted logout. */
-  logoutTargets: ModelProviderLogoutTarget[];
   displayName: string;
   auth?: ModelProviderAuthSummary;
   profiles: ModelAuthStatusProfile[];
   /** Gateway auth owner used for priority changes to each visible profile. */
   profileProviderIds: Record<string, string>;
-  /** Explicit priority, or inventory order while selection is automatic, by auth owner. */
-  profileOrders: Record<string, string[]>;
-  /** Auth owners with explicit priority, including inherited and configured orders. */
-  profileOrderExplicitProviders: string[];
-  /** Auth owners whose stored priority can be reset. */
-  profileOrderStoredProviders: string[];
-  /** Configuration owner that pins priority for each auth owner. */
-  profileOrderLocks: Record<string, ModelProviderProfileOrderLock>;
   apiKey?: ModelAuthStatusProvider["apiKey"];
   hasConfigApiKey: boolean;
   modelCount: number;
   availableModelCount: number;
   catalogStatus?: ModelCatalogProviderOutcome["status"];
   checkingModels?: boolean;
-  /** Live provider-reported usage (quota windows, billing, cost history). */
-  usage?: ProviderUsageSnapshot;
-  /** Locally-computed session spend for the requested window. */
-  localCost?: ModelProviderLocalCost;
+  /** Auth-status revision used to invalidate inspected credentials without a config change. */
+  credentialRevision?: number;
 };
 
 type ModelProviderCardsInput = {
@@ -94,8 +56,6 @@ type ModelProviderCardsInput = {
   configProviderIds?: string[] | null;
   configApiKeyProviderIds?: string[] | null;
   configProviderAuthModes?: Record<string, string> | null;
-  providerUsage: UsageSummary | null;
-  costByProvider: SessionModelUsage[] | null;
 };
 
 type CardDraft = {
@@ -126,12 +86,7 @@ function ensureDraft(drafts: CardDraft[], id: string, displayName: string): Card
       displayName,
       profiles: [],
       profileProviderIds: {},
-      profileOrders: {},
-      profileOrderExplicitProviders: [],
-      profileOrderStoredProviders: [],
-      profileOrderLocks: {},
       credentialProviderIds: [],
-      logoutTargets: [],
       hasConfigApiKey: false,
       modelCount: 0,
       availableModelCount: 0,
@@ -149,38 +104,16 @@ function addProviderId(ids: string[], provider: string): void {
   }
 }
 
-function addLogoutTarget(
-  targets: ModelProviderLogoutTarget[],
-  provider: string,
-  profileIds: string[],
-): void {
-  if (profileIds.length === 0) {
-    return;
-  }
-  const normalized = normalizeProviderId(provider);
-  const existing = targets.find(
-    (candidate) => normalizeProviderId(candidate.provider) === normalized,
-  );
-  if (!existing) {
-    targets.push({ provider, profileIds: [...new Set(profileIds)] });
-    return;
-  }
-  existing.profileIds = [...new Set([...existing.profileIds, ...profileIds])];
-}
-
 /**
  * Builds the provider card list. A provider qualifies as "configured" when it
- * has model-provider auth, catalog models (the default models.list view only contains
- * configured or auth-backed entries), a live usage snapshot, or recorded
- * local spend. Model presence alone is enough: a configured API-key provider
+ * has model-provider auth or catalog models (the default models.list view only contains
+ * configured or auth-backed entries). Model presence alone is enough: a configured API-key provider
  * with a broken credential reports available=false and no auth row, and the
  * page must surface that state rather than hide the provider.
  */
 export function buildModelProviderCards(input: ModelProviderCardsInput): ModelProviderCard[] {
   const drafts: CardDraft[] = [];
   const apiKeyCapabilities = new Map<string, boolean>();
-  const profileOrdersByAuthProvider = new Map<string, string[]>();
-  const explicitOrderProviders = new Set<string>();
   for (const capability of input.authStatus?.providerCapabilities ?? []) {
     const id = canonicalModelAuthProviderId(capability.provider);
     if (!id) {
@@ -256,19 +189,7 @@ export function buildModelProviderCards(input: ModelProviderCardsInput): ModelPr
     if (!id) {
       continue;
     }
-    // The usage embed names the id the payload was fetched under; keep both
-    // ids matchable in case it diverges from the static alias table.
-    const canonicalId = provider.usage
-      ? canonicalModelAuthProviderId(provider.usage.providerId)
-      : id;
-    const ids = [...new Set([id, canonicalId])];
-    const existing = findDraft(drafts, ids);
-    // Fresh cards adopt the canonical usage id so icon/label lookups resolve
-    // brand assets (claude-cli would miss the anthropic icon alias).
-    const draft = existing ?? ensureDraft(drafts, canonicalId, providerDisplayLabel(canonicalId));
-    for (const candidate of ids) {
-      draft.ids.add(candidate);
-    }
+    const draft = findDraft(drafts, [id]) ?? ensureDraft(drafts, id, providerDisplayLabel(id));
     draft.card.displayName = provider.displayName || draft.card.displayName;
     draft.card.profiles.push(...provider.profiles);
     if (provider.profiles.length > 0) {
@@ -276,60 +197,13 @@ export function buildModelProviderCards(input: ModelProviderCardsInput): ModelPr
       for (const profile of provider.profiles) {
         draft.card.profileProviderIds[profile.profileId] = authProvider;
       }
-      if (provider.profileOrder !== undefined) {
-        explicitOrderProviders.add(authProvider);
-      }
-      const order = provider.profileOrder ?? provider.profiles.map((profile) => profile.profileId);
-      profileOrdersByAuthProvider.set(authProvider, [
-        ...new Set([...(profileOrdersByAuthProvider.get(authProvider) ?? []), ...order]),
-      ]);
-      draft.card.profileOrders[authProvider] = order;
-      if (
-        provider.profileOrderStored === true &&
-        !draft.card.profileOrderStoredProviders.includes(authProvider)
-      ) {
-        draft.card.profileOrderStoredProviders.push(authProvider);
-      }
-      if (provider.profileOrderLocked !== undefined) {
-        draft.card.profileOrderLocks[authProvider] ??= provider.profileOrderLocked;
-      }
     }
     if (provider.apiKey || provider.profiles.length > 0) {
       addProviderId(draft.card.credentialProviderIds, provider.provider);
     }
-    addLogoutTarget(
-      draft.card.logoutTargets,
-      provider.provider,
-      provider.profiles
-        .filter((profile) => profile.logoutSupported === true)
-        .map((profile) => profile.profileId),
-    );
     draft.card.apiKey ??= provider.apiKey;
     // Generic auth discovery also includes tool-only API keys; those alone do not make a model card.
     draft.hasModelAuth ||= isMonitoredAuthProvider(provider) || apiKeyCapabilities.has(id);
-    const usage = provider.usage;
-    if (usage && !draft.card.usage) {
-      draft.card.usage = {
-        provider: usage.providerId,
-        displayName: provider.displayName,
-        windows: usage.windows,
-        ...(usage.summary ? { summary: usage.summary } : {}),
-        ...(usage.plan ? { plan: usage.plan } : {}),
-        ...(usage.billing?.length ? { billing: usage.billing } : {}),
-      };
-    }
-  }
-
-  for (const draft of drafts) {
-    draft.card.profileOrderExplicitProviders = Object.keys(draft.card.profileOrders).filter(
-      (provider) => explicitOrderProviders.has(provider),
-    );
-    for (const authProvider of Object.keys(draft.card.profileOrders)) {
-      const completeOrder = profileOrdersByAuthProvider.get(authProvider);
-      if (completeOrder) {
-        draft.card.profileOrders[authProvider] = completeOrder;
-      }
-    }
   }
 
   for (const provider of listEffectiveModelAuthProviders(input.authStatus?.providers ?? [])) {
@@ -342,32 +216,6 @@ export function buildModelProviderCards(input: ModelProviderCardsInput): ModelPr
     }
   }
 
-  for (const snapshot of input.providerUsage?.providers ?? []) {
-    const id = canonicalModelAuthProviderId(snapshot.provider);
-    if (!id) {
-      continue;
-    }
-    const draft =
-      findDraft(drafts, [id]) ??
-      ensureDraft(drafts, id, snapshot.displayName || providerDisplayLabel(id));
-    draft.ids.add(id);
-    // usage.status snapshots carry cost history and errors that the
-    // auth-status embed drops, so they win when both are present.
-    draft.card.usage = snapshot;
-  }
-
-  for (const entry of input.costByProvider ?? []) {
-    const id = canonicalModelAuthProviderId(entry.provider ?? "");
-    if (!id) {
-      continue;
-    }
-    const draft = ensureDraft(drafts, id, providerDisplayLabel(id));
-    const cost = (draft.card.localCost ??= { totalCost: 0, totalTokens: 0, messageCount: 0 });
-    cost.totalCost += entry.totals.totalCost;
-    cost.totalTokens += entry.totals.totalTokens;
-    cost.messageCount += entry.count;
-  }
-
   return drafts
     .filter(
       (draft) =>
@@ -375,17 +223,16 @@ export function buildModelProviderCards(input: ModelProviderCardsInput): ModelPr
         (input.configProviderIds ?? []).some(
           (id) => canonicalModelAuthProviderId(id) === draft.card.id,
         ) ||
-        Boolean(draft.card.usage) ||
         draft.card.modelCount > 0 ||
         Boolean(draft.catalogOutcome) ||
-        draft.card.checkingModels ||
-        (draft.card.localCost?.totalTokens ?? 0) > 0,
+        draft.card.checkingModels,
     )
     .map((draft) => {
       const apiKeySupported = apiKeyCapabilities.get(draft.card.id);
       return Object.assign(
         {},
         draft.card,
+        { credentialRevision: input.authStatus?.ts },
         draft.catalogOutcome ? { catalogStatus: draft.catalogOutcome.status } : {},
         apiKeySupported === undefined ? {} : { apiKeySupported },
       );

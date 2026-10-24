@@ -72,6 +72,7 @@ import { disposeOpenClawAgentDatabaseByPath } from "../../state/openclaw-agent-d
 import { redactStatusSecrets } from "../status-all/format.js";
 import { createAuthProbeWork } from "./list.probe.cleanup.js";
 import { buildProbeCandidateMap, selectProbeModel } from "./list.probe.models.js";
+import type { AuthProbeOptions } from "./list.types.js";
 import { formatMs } from "./shared.js";
 
 const PROBE_PROMPT = "Reply with OK. Do not use tools.";
@@ -161,15 +162,6 @@ export type AuthProbeSummary = {
     maxTokens: number;
   };
   results: AuthProbeResult[];
-};
-
-export type AuthProbeOptions = {
-  provider?: string;
-  profileIds?: string[];
-  includeDirectKeys?: boolean;
-  timeoutMs: number;
-  concurrency: number;
-  maxTokens: number;
 };
 
 export function mapFailoverReasonToProbeStatus(reason?: string | null): AuthProbeStatus {
@@ -387,6 +379,7 @@ export async function buildProbeTargets(params: {
 
     const model = selectProbeModel({
       provider: providerKey,
+      modelId: options.modelId,
       candidates,
       catalog,
     });
@@ -799,6 +792,7 @@ async function probeTarget(params: {
         model: model.model,
         requestedRouteResolution: "resolved",
         modelFallbacksOverride: [],
+        modelSelectionLocked: true,
         authProfileId: isolatedProfileId ?? target.profileId,
         authProfileIdSource: isolatedProfileId || target.profileId ? "user" : undefined,
         timeoutMs,

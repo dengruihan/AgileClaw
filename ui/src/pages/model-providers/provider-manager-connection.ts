@@ -1,5 +1,6 @@
 import { html, nothing, type TemplateResult } from "lit";
-import type { ModelsProbeResult } from "../../api/types.ts";
+import type { ModelsAuthInspectApiKeyResult } from "../../../../packages/gateway-protocol/src/index.js";
+import { icons } from "../../components/icons.ts";
 import { t } from "../../i18n/index.ts";
 import type { ModelProviderCard } from "./data.ts";
 import { stringInputValue } from "./provider-manager-model-form.ts";
@@ -7,7 +8,6 @@ import { stringInputValue } from "./provider-manager-model-form.ts";
 /** Interactive members the provider-manager connection form reads and calls. */
 export type ProviderConnectionActions = {
   onConnect: () => void;
-  onProbe: () => void;
   onRemoveCredential: () => Promise<void>;
   onProviderIdInput: (value: string) => void;
   onKeyInput: (value: string) => void;
@@ -24,14 +24,16 @@ export type ProviderConnectionState = {
   disabled: boolean;
   draft: Record<string, unknown>;
   keyDraft: string;
-  probe: ModelsProbeResult | undefined;
+  keyLoading: boolean;
+  keyError: string | null;
+  keySource: ModelsAuthInspectApiKeyResult["source"];
   providerCreated: boolean;
   providerId: string;
   revealKey: boolean;
 };
 
 /** Provider protocol options shown with friendly labels; values are config `api` values. */
-export const PROVIDER_API_OPTIONS = [
+const PROVIDER_API_OPTIONS = [
   "openai-completions",
   "openai-responses",
   "openai-chatgpt-responses",
@@ -63,6 +65,8 @@ export function providerConnectionFields(params: {
     creating && state.draft.api === undefined
       ? "openai-completions"
       : stringInputValue(state.draft.api);
+  const authMode = !creating ? state.card?.configAuthMode : undefined;
+  const authModeBlocked = Boolean(authMode && authMode !== "api-key");
   return html` <p class="muted">
       ${t("modelProviders.manager.connectionScope", { agent: state.agentId })}
     </p>
@@ -132,71 +136,64 @@ export function providerConnectionFields(params: {
           >
             ${t("modelProviders.login.action")}
           </button>`
-        : html`<label class="field"
-            ><span>${t("modelProviders.apiKey.label")}</span>
-            <div class="provider-manager__key">
-              <input
-                name="apiKey"
-                type=${state.revealKey ? "text" : "password"}
-                autocomplete="new-password"
-                placeholder=${t("modelProviders.manager.keepKey")}
-                .value=${state.keyDraft}
-                ?disabled=${state.disabled}
-                @input=${(event: Event) => {
-                  // SAFETY: the handler only fires on this api-key text input.
-                  actions.onKeyInput((event.target as HTMLInputElement).value);
-                }}
-              /><button
-                type="button"
-                class="btn btn--sm"
-                aria-pressed=${state.revealKey}
-                @click=${actions.onToggleRevealKey}
-              >
-                ${t(state.revealKey ? "modelProviders.manager.hideKey" : "modelProviders.manager.showKey")}
-              </button>
-            </div></label
-          >`
+        : authModeBlocked
+          ? html`<p class="muted">
+              ${t("modelProviders.apiKey.authModeBlocked", { mode: authMode ?? "" })}
+            </p>`
+          : html`<label class="field"
+              ><span>${t("modelProviders.apiKey.label")}</span>
+              <div class="provider-manager__key">
+                <input
+                  name="apiKey"
+                  type=${state.revealKey ? "text" : "password"}
+                  autocomplete="new-password"
+                  placeholder=${t("modelProviders.manager.keepKey")}
+                  .value=${state.keyDraft}
+                  ?disabled=${state.disabled || state.keyLoading}
+                  @input=${(event: Event) => {
+                    // SAFETY: the handler only fires on this api-key text input.
+                    actions.onKeyInput((event.target as HTMLInputElement).value);
+                  }}
+                /><button
+                  type="button"
+                  class="btn btn--icon provider-manager__key-toggle"
+                  aria-label=${t(state.revealKey ? "modelProviders.manager.hideKey" : "modelProviders.manager.showKey")}
+                  title=${t(state.revealKey ? "modelProviders.manager.hideKey" : "modelProviders.manager.showKey")}
+                  ?disabled=${state.keyLoading || !state.keyDraft}
+                  aria-pressed=${state.revealKey}
+                  @click=${actions.onToggleRevealKey}
+                >
+                  ${state.revealKey ? icons.eyeOff : icons.eye}
+                </button>
+              </div></label
+            >`
+    }
+    ${state.keyError ? html`<p class="callout danger" role="alert">${state.keyError}</p>` : nothing}
+    ${
+      state.keySource === "environment" || state.keySource === "reference"
+        ? html`<p class="muted">${t("modelProviders.manager.externalKey")}</p>`
+        : nothing
     }
     ${
-      !creating
-        ? html`<p class="muted">${t("modelProviders.manager.saveBeforeTest")}</p>
-            <div class="provider-manager__actions">
-              <button
-                type="button"
-                class="btn"
-                ?disabled=${state.disabled || state.dirty || !state.card}
-                @click=${actions.onProbe}
-              >
-                ${t("modelProviders.probe.test")}</button
-              >${
-                state.card?.hasConfigApiKey ||
-                state.card?.profiles.some(
-                  (profile) => profile.type === "api_key" && profile.logoutSupported,
-                )
-                  ? html`<button
-                      type="button"
-                      class="btn danger"
-                      ?disabled=${state.disabled}
-                      @click=${() => void actions.onRemoveCredential()}
-                    >
-                      ${t("modelProviders.apiKey.remove")}
-                    </button>`
-                  : nothing
-              }
-            </div>
-            ${
-              state.probe
-                ? html`<p
-                    role="status"
-                    class="callout ${state.probe.status === "ok" ? "success" : "danger"}"
-                  >
-                    ${t(`modelProviders.probe.status.${state.probe.status}`)}
-                    ${state.probe.error ?? ""}
-                  </p>`
-                : nothing
-            }`
-        : state.providerCreated
-          ? nothing
-          : html`<p class="muted">${t("modelProviders.manager.addModelsAfterSave")}</p>`
+      !creating &&
+      !authModeBlocked &&
+      (state.card?.hasConfigApiKey ||
+        state.card?.profiles.some(
+          (profile) => profile.type === "api_key" && profile.logoutSupported,
+        ))
+        ? html`<button
+            type="button"
+            class="btn btn--sm danger"
+            ?disabled=${state.disabled || state.keyLoading}
+            @click=${() => void actions.onRemoveCredential()}
+          >
+            ${t("modelProviders.apiKey.remove")}
+          </button>`
+        : nothing
+    }
+    ${
+      creating && !state.providerCreated
+        ? html`<p class="muted">${t("modelProviders.manager.addModelsAfterSave")}</p>`
+        : nothing
     }`;
 }

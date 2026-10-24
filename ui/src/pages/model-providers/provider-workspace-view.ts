@@ -39,7 +39,6 @@ export function renderProviderWorkspace(props: ModelProvidersViewProps) {
     matches(provider.id, provider.displayName),
   );
   return html` ${props.error ? html`<p class="callout danger" role="alert">${props.error}</p>` : nothing}
-    ${props.providerUsageFailed ? html`<p class="muted" role="status">${t("usage.providerUsage.unavailable")}</p>` : nothing}
     <div class="model-providers__workspace">
       <nav class="model-providers__navigation" aria-label=${t("modelProviders.manager.configured")}>
         <label class="field model-providers__search">

@@ -1,5 +1,6 @@
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { html } from "lit";
+import type { ModelCatalogEntry } from "../../api/types.ts";
 import { t } from "../../i18n/index.ts";
 
 /** Input modalities a model entry can advertise. */
@@ -8,20 +9,12 @@ const MODEL_INPUT_TYPES = ["text", "image", "audio", "video"] as const;
 const MODEL_COST_FIELDS = ["input", "output", "cacheRead", "cacheWrite"] as const;
 
 /** Canonical thinking levels a model entry can map to provider effort values. */
-export const MODEL_THINKING_LEVELS = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-] as const;
+const MODEL_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
 export type ModelThinkingLevel = (typeof MODEL_THINKING_LEVELS)[number];
 
 /** Canonical level ids as a string set, for filtering wire level options. */
-export const MODEL_THINKING_LEVEL_IDS: ReadonlySet<string> = new Set(MODEL_THINKING_LEVELS);
+const MODEL_THINKING_LEVEL_IDS: ReadonlySet<string> = new Set(MODEL_THINKING_LEVELS);
 
 /** Levels the draft lists as offered; null levels stay hidden. */
 function thinkingRows(map: Record<string, unknown>): ModelThinkingLevel[] {
@@ -39,6 +32,36 @@ function sameThinkingRows(a: Record<string, unknown>, b: Record<string, unknown>
  * stringifying opaque objects into "[object Object]". */
 export function stringInputValue(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+export function createProviderModelEditorDraft(params: {
+  model?: ModelCatalogEntry | Record<string, unknown>;
+  configured?: Record<string, unknown>;
+  catalogEntry?: ModelCatalogEntry;
+}) {
+  const { model, configured, catalogEntry } = params;
+  const catalogLevels = catalogEntry?.thinkingLevels;
+  const catalogPrefill = catalogLevels
+    ? Object.fromEntries(
+        catalogLevels.flatMap(({ id }) => (MODEL_THINKING_LEVEL_IDS.has(id) ? [[id, ""]] : [])),
+      )
+    : undefined;
+  const draft: Record<string, unknown> = configured
+    ? structuredClone(configured)
+    : model
+      ? { id: model.id, name: model.name }
+      : { id: "", name: "", input: ["text"] };
+  // Every row prefills the thinking levels it effectively runs with. An
+  // untouched catalog prefill stays inherited instead of becoming an override.
+  const authoredMap = isRecord(draft.thinkingLevelMap);
+  if (!authoredMap && catalogPrefill) {
+    draft.thinkingLevelMap = catalogPrefill;
+  }
+  return {
+    draft,
+    originalModelId: model && typeof model.id === "string" ? model.id : undefined,
+    thinkingPrefill: authoredMap ? undefined : catalogPrefill,
+  };
 }
 
 /** Raw input value for a number field; blank means inherit or omit. */
