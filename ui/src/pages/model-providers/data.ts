@@ -17,7 +17,7 @@ import {
 } from "../../lib/model-auth.ts";
 import type { ModelCatalogPresentation } from "../../lib/model-catalog-store.ts";
 
-export type ModelProviderAuthKind = "ok" | "expiring" | "expired" | "missing" | "api-key";
+type ModelProviderAuthKind = "ok" | "expiring" | "expired" | "missing" | "api-key";
 
 type ModelProviderAuthSummary = {
   kind: ModelProviderAuthKind;

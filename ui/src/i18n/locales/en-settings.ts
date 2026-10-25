@@ -779,11 +779,12 @@ const enSettings = {
     status: {
       ok: "Signed in",
       ready: "Ready",
+      notReady: "Not ready",
+      notEnabled: "Not enabled",
       expiring: "Expiring",
       expired: "Expired",
       missing: "Not signed in",
       apiKey: "API key",
-      denied: "Credentials rejected",
       configured: "Credentials configured",
       modelsUnavailable: "Models unavailable",
     },
