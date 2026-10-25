@@ -685,10 +685,6 @@ const enSettings = {
         "Environment and secret-reference keys are managed at their source and cannot be shown here.",
       showKey: "Show API key",
       hideKey: "Hide API key",
-      connectionScope:
-        "Connection settings apply to the whole Gateway. Accounts follow the existing credential scope for agent {agent}.",
-      modelScope:
-        "Model definitions apply to the whole Gateway. The list shows only models you add here.",
       saveBeforeTest: "Save changes before testing the connection.",
       credentialsFailed:
         "Connection settings were saved, but the API key was not saved. Check the credential error and retry.",
@@ -753,8 +749,6 @@ const enSettings = {
       },
       addModel: "Add model",
       noModels: "No models yet. Add a model ID supplied by your provider.",
-      modelsHelp:
-        "Deleting a model removes its definition. Enter a model ID and name your provider serves.",
       addModelsAfterSave: "Save the connection, then add model definitions in the list below.",
     },
     catalogSettings: {
@@ -836,7 +830,6 @@ const enSettings = {
       placeholder: "Enter provider API key",
       replacePlaceholder: "Secret saved. Enter a new key to replace it.",
       set: "Set API key",
-      remove: "Remove key",
       saved: "Secret saved.",
       removed: "Saved API keys removed.",
       authModeBlocked: 'API key changes are unavailable while auth mode is "{mode}".',

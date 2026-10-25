@@ -289,25 +289,6 @@ export class ProviderManager extends OpenClawLightDomElement {
     });
   }
 
-  private async removeCredential() {
-    const generation = this.generation;
-    this.busy = true;
-    try {
-      const result = await this.onCredential(this.providerId, null);
-      if (generation === this.generation) {
-        this.error = result?.ok ? null : t("modelProviders.requestFailed");
-        this.notice = result?.ok ? t("modelProviders.apiKey.removed") : null;
-        if (result?.ok) {
-          this.credential.saved("");
-        }
-      }
-    } finally {
-      if (generation === this.generation) {
-        this.busy = false;
-      }
-    }
-  }
-
   private renderModelForm() {
     return providerModelForm({
       disabled: this.disabled,
@@ -399,13 +380,6 @@ export class ProviderManager extends OpenClawLightDomElement {
     }
   }
 
-  private resetConnection() {
-    this.draft = structuredClone(this.original);
-    this.touched.clear();
-    this.credential.reset();
-    this.error = this.notice = null;
-  }
-
   private renderMessages() {
     return html`${this.error ? html`<div class="callout danger" role="alert">${this.error}</div>` : nothing}
     ${this.notice ? html`<div class="callout" role="status">${this.notice}</div>` : nothing}`;
@@ -463,7 +437,6 @@ export class ProviderManager extends OpenClawLightDomElement {
             ${providerConnectionFields({
               actions: {
                 onConnect: this.onConnect,
-                onRemoveCredential: () => this.removeCredential(),
                 onProviderIdInput: (value) => {
                   this.providerId = value;
                 },
@@ -478,7 +451,6 @@ export class ProviderManager extends OpenClawLightDomElement {
                 onFieldInput: (key, value) => this.setDraftField(key, value),
               },
               state: {
-                agentId: this.agentId,
                 busy: this.busy,
                 card: this.card,
                 creating,
@@ -500,14 +472,6 @@ export class ProviderManager extends OpenClawLightDomElement {
               >${this.dirty ? t("modelProviders.manager.unsaved") : nothing}</span
             >
             <div class="provider-manager__actions">
-              <button
-                type="button"
-                class="btn"
-                ?disabled=${this.disabled || !this.dirty}
-                @click=${() => this.resetConnection()}
-              >
-                ${t("modelProviders.manager.resetForm")}
-              </button>
               <button
                 type="submit"
                 class="btn primary"
@@ -566,7 +530,6 @@ export class ProviderManager extends OpenClawLightDomElement {
           this.context.runtimeConfig.state.lastError ?? t("modelProviders.requestFailed");
         return false;
       }
-      this.notice = t("modelProviders.manager.saved");
       this.onRefresh();
       return true;
     } catch (error) {
@@ -663,7 +626,7 @@ export class ProviderManager extends OpenClawLightDomElement {
           return;
         }
         this.credential.saved(this.credential.value);
-        this.notice = result.warning ?? t("modelProviders.manager.saved");
+        this.notice = result.warning;
       } catch (error) {
         if (generation === this.generation) {
           this.error = formatUiError(error);

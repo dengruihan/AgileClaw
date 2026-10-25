@@ -111,12 +111,10 @@ export function providerModelsList(params: {
         ${icons.plus}${t("modelProviders.manager.addModel")}
       </button>
     </div>
-    <p class="muted">${t("modelProviders.manager.modelScope")}</p>
     <div class="provider-manager__model-list">${state.rows.map((row) => modelRow(row))}</div>
     ${
       !state.rows.length && !state.loading
         ? html`<p class="provider-manager__empty">${t("modelProviders.manager.noModels")}</p>`
         : nothing
-    }
-    <p class="muted">${t("modelProviders.manager.modelsHelp")}</p> `;
+    }`;
 }

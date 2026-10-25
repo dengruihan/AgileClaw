@@ -63,12 +63,6 @@ export class ProviderCredentialController {
     this.scope = null;
   }
 
-  reset() {
-    this.value = this.original;
-    this.revealed = false;
-    this.update();
-  }
-
   saved(value: string) {
     this.value = this.original = value.trim();
     this.revealed = false;
