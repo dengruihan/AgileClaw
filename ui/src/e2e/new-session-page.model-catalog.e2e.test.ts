@@ -763,6 +763,9 @@ suite.define(() => {
       reasoning: true,
     };
     const gateway = await installMockGateway(page, {
+      // Seeding the recovered row keeps the derived scenario config authoring
+      // it, so the strict picker lists the model once the catalog recovers.
+      models: [recoveredModel],
       methodResponses: {
         "models.list": {
           __mockError: {

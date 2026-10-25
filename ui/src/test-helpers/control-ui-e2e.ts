@@ -2168,6 +2168,35 @@ function installControlUiMockGateway(
           configured: false,
           source: "none",
         };
+      case "config.get": {
+        // Strict pickers list authored models only; a scenario without its own
+        // config fixture gets one authorizing every catalog row so listed
+        // models stay selectable exactly as they were before that filter.
+        const providers: Record<string, { models: Record<string, unknown>[] }> = {};
+        for (const model of scenario.models) {
+          if (
+            isRecord(model) &&
+            typeof model.id === "string" &&
+            typeof model.provider === "string"
+          ) {
+            const entry = (providers[model.provider] ??= { models: [] });
+            entry.models.push(
+              typeof model.name === "string" && model.name
+                ? { id: model.id, name: model.name }
+                : { id: model.id },
+            );
+          }
+        }
+        const config = Object.keys(providers).length ? { models: { providers } } : {};
+        return {
+          config,
+          sourceConfig: config,
+          hash: "mock-scenario-config",
+          issues: [],
+          raw: JSON.stringify(config),
+          valid: true,
+        };
+      }
       case "models.authStatus":
         return { ts: Date.now(), providers: [] };
       case "models.list":

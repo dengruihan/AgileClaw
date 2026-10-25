@@ -6,9 +6,9 @@ export function modelRefKey(provider: string, id: string): string {
 
 /**
  * Qualified lowercase `provider/model` refs of user-authored model entries
- * (`models.providers.*.models[]`). Returns null when no config snapshot is
- * loaded or no authored entry exists, so callers without a custom roster keep
- * the full catalog instead of emptying their lists.
+ * (`models.providers.*.models[]`). Returns null only while no config snapshot
+ * is loaded; a loaded config with no authored entries yields an empty set so
+ * pickers show nothing custom until the operator adds models.
  */
 export function customModelRefs(
   config: Record<string, unknown> | null | undefined,
@@ -32,7 +32,7 @@ export function customModelRefs(
       }
     }
   }
-  return refs.size ? refs : null;
+  return refs;
 }
 
 /**
