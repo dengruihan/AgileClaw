@@ -33,6 +33,15 @@ function formatEffortLabel(label: string): string {
   return label.replace(/^Inherited:\s*/u, "");
 }
 
+// Keep in sync with --chat-effort-knob-width in composer.css: the travel calc
+// centers the knob on the stop position and ends the fill at that center.
+const REASONING_KNOB_WIDTH_PX = 28;
+
+function reasoningTravelCss(fillPercent: number): string {
+  const offset = REASONING_KNOB_WIDTH_PX / 2 - (REASONING_KNOB_WIDTH_PX * fillPercent) / 100;
+  return `calc(${fillPercent}% + ${offset.toFixed(2)}px)`;
+}
+
 export function renderChatEffortPicker(params: ChatEffortPickerParams) {
   const sliderStops = params.thinking.options;
   const showReasoning = sliderStops.length > 0;
@@ -63,6 +72,7 @@ export function renderChatEffortPicker(params: ChatEffortPickerParams) {
   const committedBoost = sliderUnanchored ? "" : sliderBoost(sliderIndex);
   const sliderFillPercent = (index: number) =>
     sliderStops.length > 1 ? (index / (sliderStops.length - 1)) * 100 : 0;
+  const committedFillPercent = sliderFillPercent(sliderIndex);
   const defaultLevelLabel = formatEffortLabel(params.thinking.inherited.displayLabel);
   const reasoningValueText = formatEffortLabel(selection.displayLabel);
   const reasoningValueLabel = hasThinkingOverride
@@ -140,7 +150,10 @@ export function renderChatEffortPicker(params: ChatEffortPickerParams) {
   const syncSliderPreview = (input: HTMLInputElement, previewIndex?: number) => {
     const preview = previewIndex === undefined ? undefined : sliderStops[previewIndex];
     const index = previewIndex ?? sliderIndex;
-    input.style.setProperty("--reasoning-fill", `${sliderFillPercent(index)}%`);
+    const track = input.closest<HTMLElement>(".chat-controls__reasoning-slider");
+    const fillPercent = sliderFillPercent(index);
+    track?.style.setProperty("--reasoning-fill", `${fillPercent}%`);
+    track?.style.setProperty("--reasoning-travel", reasoningTravelCss(fillPercent));
     input.dataset.effortBoost = preview ? sliderBoost(index) : committedBoost;
     input.setAttribute(
       "aria-valuetext",
@@ -297,7 +310,14 @@ export function renderChatEffortPicker(params: ChatEffortPickerParams) {
                     ${
                       sliderStops.length > 1
                         ? html`
-                            <div class="chat-controls__reasoning-slider">
+                            <div
+                              class="chat-controls__reasoning-slider"
+                              style=${`--reasoning-fill: ${committedFillPercent}%; --reasoning-travel: ${reasoningTravelCss(committedFillPercent)}`}
+                            >
+                              <div class="chat-controls__reasoning-groove" aria-hidden="true">
+                                <div class="chat-controls__reasoning-fill"></div>
+                                <div class="chat-controls__reasoning-boost"></div>
+                              </div>
                               <div class="chat-controls__reasoning-dots" aria-hidden="true">
                                 ${sliderStops.map(
                                   (stop) => html`<span
@@ -306,6 +326,7 @@ export function renderChatEffortPicker(params: ChatEffortPickerParams) {
                                   ></span>`,
                                 )}
                               </div>
+                              <div class="chat-controls__reasoning-knob" aria-hidden="true"></div>
                               <input
                                 class="chat-controls__reasoning-range ${
                                   hasThinkingOverride
@@ -321,7 +342,6 @@ export function renderChatEffortPicker(params: ChatEffortPickerParams) {
                                 max=${sliderStops.length - 1}
                                 step="1"
                                 .value=${String(sliderIndex)}
-                                style=${`--reasoning-fill: ${sliderFillPercent(sliderIndex)}%`}
                                 data-chat-thinking-slider="true"
                                 data-effort-boost=${committedBoost}
                                 data-chat-thinking-values=${sliderStops

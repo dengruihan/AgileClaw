@@ -361,7 +361,9 @@ suite.define(() => {
       expect(
         Number.parseFloat(
           await thinkingSlider.evaluate((element) =>
-            (element as HTMLElement).style.getPropertyValue("--reasoning-fill"),
+            (
+              element.closest(".chat-controls__reasoning-slider") as HTMLElement
+            ).style.getPropertyValue("--reasoning-fill"),
           ),
         ),
       ).toBeCloseTo(83.33, 1);

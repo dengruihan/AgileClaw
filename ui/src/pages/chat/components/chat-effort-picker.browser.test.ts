@@ -68,11 +68,33 @@ async function fixture(
   };
 }
 
-function appearance(input: HTMLInputElement) {
+function sliderLayers(input: HTMLInputElement) {
+  const slider = input.closest<HTMLElement>(".chat-controls__reasoning-slider")!;
   return {
-    fill: getComputedStyle(input.parentElement!).backgroundImage,
-    glow: getComputedStyle(input).boxShadow,
+    slider,
+    boost: slider.querySelector<HTMLElement>(".chat-controls__reasoning-boost")!,
+    groove: slider.querySelector<HTMLElement>(".chat-controls__reasoning-groove")!,
+    fill: slider.querySelector<HTMLElement>(".chat-controls__reasoning-fill")!,
+    knob: slider.querySelector<HTMLElement>(".chat-controls__reasoning-knob")!,
   };
+}
+
+function appearance(input: HTMLInputElement) {
+  const { boost, groove } = sliderLayers(input);
+  const boostStyle = getComputedStyle(boost);
+  return {
+    wash: boostStyle.opacity === "1" ? boostStyle.backgroundImage : "none",
+    glow: getComputedStyle(groove).boxShadow,
+  };
+}
+
+// The boost wash and glow fade between states; wait for the layer to reach the
+// state the input's data-effort-boost attribute asks for before comparing.
+async function settledAppearance(input: HTMLInputElement) {
+  const { boost } = sliderLayers(input);
+  const boosted = input.dataset.effortBoost === "max" || input.dataset.effortBoost === "ultra";
+  await vi.waitFor(() => expect(getComputedStyle(boost).opacity).toBe(boosted ? "1" : "0"));
+  return appearance(input);
 }
 
 describe("effort bar colour and flow", () => {
@@ -149,33 +171,60 @@ describe("effort bar colour and flow", () => {
       const levels = ["off", "low", maximum, "adaptive", "ultra"];
       const { input } = await fixture(levels, maximum);
       const maximumStyle = appearance(input);
-      expect(maximumStyle.fill).toContain("linear-gradient");
+      expect(maximumStyle.wash).toContain("linear-gradient");
       expect(maximumStyle.glow).not.toBe("none");
       expect(appearance((await fixture(levels, maximum, true)).input)).toEqual(maximumStyle);
       const ultraStyle = appearance((await fixture(levels, "ultra")).input);
-      expect(ultraStyle.fill).toContain("linear-gradient");
-      expect(ultraStyle.fill).not.toBe(maximumStyle.fill);
+      expect(ultraStyle.wash).toContain("linear-gradient");
+      expect(ultraStyle.wash).not.toBe(maximumStyle.wash);
       expect(ultraStyle.glow).not.toBe(maximumStyle.glow);
       for (const value of ["off", "low", "adaptive", "unsupported"]) {
         expect(appearance((await fixture(levels, value)).input)).toEqual({
-          fill: "none",
+          wash: "none",
           glow: "none",
         });
       }
     }
     expect(appearance((await fixture(["off", "on"], "on")).input)).toEqual({
-      fill: "none",
+      wash: "none",
       glow: "none",
     });
     for (const id of ["low", "high"]) {
       const { input } = await fixture(["off", { id, label: "on" }, "ultra"], id);
-      expect(appearance(input)).toEqual({ fill: "none", glow: "none" });
+      expect(appearance(input)).toEqual({ wash: "none", glow: "none" });
+    }
+  });
+
+  it("ends the fill at the knob's center on every stop", async () => {
+    const levels = ["off", "low", "medium", "high"];
+    const { input } = await fixture(levels, "high");
+    const { slider, fill, knob } = sliderLayers(input);
+    const fillStyle = getComputedStyle(fill);
+    const knobStyle = getComputedStyle(knob);
+    expect(fillStyle.transitionProperty).toContain("width");
+    expect(fillStyle.transitionDuration).toContain("0.3s");
+    expect(knobStyle.transitionProperty).toContain("left");
+    expect(knobStyle.transitionDuration).toContain("0.3s");
+    const knobWidth = knob.getBoundingClientRect().width;
+    const sliderLeft = slider.getBoundingClientRect().left;
+    const sliderWidth = slider.clientWidth;
+    for (const [index] of levels.entries()) {
+      input.value = String(index);
+      input.dispatchEvent(new Event("input"));
+      const fraction = index / (levels.length - 1);
+      const expected = sliderWidth * fraction + knobWidth / 2 - knobWidth * fraction;
+      await vi.waitFor(() => {
+        expect(Math.abs(fill.getBoundingClientRect().width - expected)).toBeLessThanOrEqual(1.5);
+        const knobCenter =
+          knob.getBoundingClientRect().left + knob.getBoundingClientRect().width / 2;
+        expect(Math.abs(knobCenter - (sliderLeft + expected))).toBeLessThanOrEqual(1.5);
+      });
     }
   });
 
   it("previews colour without committing and restores the committed level on cancel or blur", async () => {
     const { input, onThinkingSelect } = await fixture(["low", "max", "ultra"], "max", true);
-    const maximumStyle = appearance(input);
+    const maximumStyle = await settledAppearance(input);
     for (const resetEvent of ["pointercancel", "blur"]) {
       input.value = "2";
       input.dispatchEvent(new Event("input"));
@@ -185,13 +234,14 @@ describe("effort bar colour and flow", () => {
       input.dispatchEvent(new Event(resetEvent));
       expect(input.value).toBe("1");
       expect(input.getAttribute("aria-valuetext")).toContain("Maximum");
-      expect(appearance(input)).toEqual(maximumStyle);
+      expect(await settledAppearance(input)).toEqual(maximumStyle);
     }
     input.value = "0";
     input.dispatchEvent(new Event("input"));
-    expect(appearance(input)).toEqual({ fill: "none", glow: "none" });
+    expect(appearance(input)).not.toEqual(maximumStyle);
+    await vi.waitFor(() => expect(appearance(input)).toEqual({ wash: "none", glow: "none" }));
     input.dispatchEvent(new Event("change"));
     expect(onThinkingSelect).toHaveBeenCalledExactlyOnceWith("low", "effort-preview");
-    expect(appearance(input)).toEqual(maximumStyle);
+    expect(await settledAppearance(input)).toEqual(maximumStyle);
   });
 });
