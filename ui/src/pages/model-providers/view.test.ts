@@ -128,21 +128,35 @@ describe("renderModelProviders", () => {
     expect(retry?.disabled).toBe(false);
   });
 
-  it("keeps custom provider creation available when quick setup capabilities are unavailable", () => {
-    const onCustomProvider = vi.fn();
-    const container = mount(
-      props({
-        configuredModels: [],
-        unconfiguredProviders: [],
-        onCustomProvider,
-      }),
-    );
+  it.each([
+    { cards: [], providerQuery: "", sidebarAction: true },
+    { cards: [card()], providerQuery: "", sidebarAction: false },
+    { cards: [card()], providerQuery: "no-match", sidebarAction: false },
+  ])(
+    "keeps provider creation available with sidebar action: $sidebarAction, query: $providerQuery",
+    ({ cards, providerQuery, sidebarAction }) => {
+      const onCustomProvider = vi.fn();
+      const container = mount(
+        props({
+          cards,
+          providerQuery,
+          configuredModels: [],
+          unconfiguredProviders: [],
+          onCustomProvider,
+        }),
+      );
 
-    expect(container.querySelector("[data-available-provider]")).toBeNull();
-    container.querySelector<HTMLButtonElement>("[data-custom-provider]")!.click();
-    expect(onCustomProvider).toHaveBeenCalledOnce();
-    expect(container.querySelector('[data-model-readiness="model-required"]')).not.toBeNull();
-  });
+      expect(container.querySelector("[data-available-provider]")).toBeNull();
+      const sidebarButton = container.querySelector<HTMLButtonElement>(
+        ".model-providers__navigation [data-custom-provider]",
+      );
+      expect(Boolean(sidebarButton)).toBe(sidebarAction);
+      (sidebarButton ??
+        container.querySelector<HTMLButtonElement>("[data-custom-provider]"))!.click();
+      expect(onCustomProvider).toHaveBeenCalledOnce();
+      expect(container.querySelector('[data-model-readiness="model-required"]')).toBeNull();
+    },
+  );
 
   it("shows inherited model policy, restores overrides, and preserves advanced thinking", () => {
     const onThinkingReset = vi.fn();
@@ -454,36 +468,6 @@ describe("renderModelProviders", () => {
     expect(text(container)).not.toContain("Configure a provider before selecting default models.");
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
     expect(container.querySelector('[data-provider-id="openai"]')).toBeNull();
-  });
-
-  it("puts model recovery first when credentials expose no selectable models", () => {
-    const onConnectProvider = vi.fn();
-    const container = mount(
-      props({
-        cards: [
-          card({
-            auth: { kind: "ok" },
-            profiles: [{ profileId: "openai:chatgpt", type: "oauth", status: "ok" }],
-            modelCount: 0,
-            availableModelCount: 0,
-          }),
-        ],
-        configuredModels: [],
-        defaultModels: { primary: "", fallbacks: [], utilityModel: null },
-        onConnectProvider,
-      }),
-    );
-
-    const readiness = container.querySelector('[data-model-readiness="model-required"]');
-    expect(text(readiness)).toContain("Connect a verified AI model");
-    expect(text(readiness)).toContain("Model required");
-    expect(container.querySelector(".model-providers__defaults")).not.toBeNull();
-    expect(text(container.querySelector('[data-provider-id="openai"]'))).toContain(
-      "Credentials configured",
-    );
-
-    button(readiness!, "Connect provider")?.click();
-    expect(onConnectProvider).toHaveBeenCalledOnce();
   });
 
   it.each([false, true])(

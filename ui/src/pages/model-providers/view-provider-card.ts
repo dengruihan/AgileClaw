@@ -1,9 +1,4 @@
 import { html, nothing, type TemplateResult } from "lit";
-import {
-  renderSettingsRow,
-  renderSettingsSection,
-  renderSettingsStatus,
-} from "../../components/settings-ui.ts";
 import { t } from "../../i18n/index.ts";
 import type { ModelProviderRowMessage } from "./config-mutation.ts";
 import type {
@@ -13,7 +8,7 @@ import type {
   ProviderOption,
 } from "./data.ts";
 import type { DefaultModelsViewProps } from "./default-models-view.ts";
-import { hasVerifiedProvider, renderMutationMessage } from "./view-status.ts";
+import { renderMutationMessage } from "./view-status.ts";
 
 export type ModelProvidersViewProps = Omit<
   DefaultModelsViewProps,
@@ -57,10 +52,8 @@ export type ModelProvidersViewProps = Omit<
   isLocalOrCustom?: (card: ModelProviderCard) => boolean;
   onProviderSettings?: (card: ModelProviderCard) => void;
   onCustomProvider?: () => void;
-  onAvailableProvider?: (id: string) => void;
   providerQuery?: string;
   onProviderQueryChange?: (value: string) => void;
-  onConnectProvider: () => void;
   onConnect: (card: ModelProviderCard) => void;
   canConnect: (card: ModelProviderCard) => boolean;
   loginBusy: boolean;
@@ -144,38 +137,5 @@ export function renderAddProvider(props: ModelProvidersViewProps) {
         </div>
       </div>
     </openclaw-modal-dialog>
-  `;
-}
-
-export function renderModelReadiness(props: ModelProvidersViewProps) {
-  const signedIn = props.cards.some(hasVerifiedProvider);
-  return html`
-    <div class="model-providers__setup" data-model-readiness="model-required">
-      ${renderSettingsSection(
-        { title: t("modelProviders.readiness.title") },
-        renderSettingsRow({
-          title: t("modelProviders.readiness.heading"),
-          description: signedIn
-            ? t("modelProviders.readiness.signedInNoModels")
-            : t("modelProviders.readiness.notConfigured"),
-          control: html`
-            ${renderSettingsStatus({
-              kind: "warn",
-              label: signedIn
-                ? t("modelProviders.readiness.noModels")
-                : t("modelProviders.readiness.modelRequired"),
-            })}
-            <button
-              class="btn primary"
-              ?disabled=${configMutationDisabled(props) || props.loginBusy}
-              title=${props.mutationBlockedReason ?? ""}
-              @click=${props.onConnectProvider}
-            >
-              ${t("modelProviders.login.action")}
-            </button>
-          `,
-        }),
-      )}
-    </div>
   `;
 }

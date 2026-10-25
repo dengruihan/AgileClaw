@@ -133,8 +133,6 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
     ></openclaw-model-catalog-settings>`,
     providerScope: renderModelProviderScope({
       agentLabel: selected ? normalizeAgentLabel(selected) : page.selectedAgentId,
-      ...login,
-      connectDisabled: login.connectDisabled || page.discovery.busy || page.addProviderOpen,
     }),
     isLocalOrCustom: (card) => isLocalOrCustom(card.configKey ?? card.id),
     onProviderSettings: (card) => {
@@ -143,12 +141,8 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
     onCustomProvider: () => {
       void page.selectProvider({ provider: "", view: "create" });
     },
-    onAvailableProvider: (provider) => {
-      void page.selectProvider({ provider, view: "settings" });
-    },
     providerQuery: page.providerQuery,
     onProviderQueryChange: (value) => (page.providerQuery = value),
-    onConnectProvider: () => void page.login.open(),
     connected: gatewaySnapshot.phase === "connected",
     loading:
       gatewaySnapshot.phase === "connected" &&

@@ -50,6 +50,7 @@ afterEach(() => {
 export type ModelProvidersPageTestElement = HTMLElement & {
   context: ApplicationContext;
   updateComplete: Promise<boolean>;
+  login: import("./login-controller.ts").ModelProviderLoginController;
   busy: Record<string, boolean>;
   data: ModelProvidersData | null;
   addProvider: () => Promise<void>;

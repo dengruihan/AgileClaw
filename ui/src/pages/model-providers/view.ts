@@ -19,12 +19,8 @@ import "../../styles/model-providers.css";
 import type { ModelProviderRowMessage } from "./config-mutation.ts";
 import { renderDefaultModels } from "./default-models-view.ts";
 import { renderProviderWorkspace } from "./provider-workspace-view.ts";
-import {
-  renderAddProvider,
-  renderModelReadiness,
-  type ModelProvidersViewProps,
-} from "./view-provider-card.ts";
-import { renderModelProviderConnectAction, renderMutationMessage } from "./view-status.ts";
+import { renderAddProvider, type ModelProvidersViewProps } from "./view-provider-card.ts";
+import { renderMutationMessage } from "./view-status.ts";
 
 registerSettingsEnglish();
 
@@ -35,11 +31,8 @@ export function renderModelProviders(props: ModelProvidersViewProps) {
     );
   }
   const providerRows = renderProviderWorkspace(props);
-  const needsModelSetup =
-    !props.loading && !props.configuredModels.some((model) => model.available !== false);
   return html`${renderSettingsPage(
     html`
-      ${needsModelSetup ? renderModelReadiness(props) : nothing}
       <div id="settings-model-providers">
         ${renderSettingsSection(
           {
@@ -106,16 +99,11 @@ export function renderModelProviders(props: ModelProvidersViewProps) {
 }
 
 /** The Settings selection scopes provider access, never the global defaults above it. */
-export function renderModelProviderScope(props: {
-  agentLabel: string;
-  onConnect: () => void;
-  connectDisabled: boolean;
-}): TemplateResult {
+export function renderModelProviderScope(props: { agentLabel: string }): TemplateResult {
   return html`
     <span class="muted" data-models-provider-agent
       >${t("agentScope.label")}: ${props.agentLabel}</span
     >
-    ${renderModelProviderConnectAction(props)}
   `;
 }
 

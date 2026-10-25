@@ -65,7 +65,6 @@ export function props(overrides: Partial<ModelProvidersViewProps> = {}): ModelPr
     onFastModeChange: () => undefined,
     onFastModeReset: () => undefined,
     onCatalogRetry: () => undefined,
-    onConnectProvider: () => undefined,
     onConnect: () => undefined,
     canConnect: () => false,
     loginBusy: false,

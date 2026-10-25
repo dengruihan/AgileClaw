@@ -84,16 +84,6 @@
   place-items: center;
 }
 
-.model-providers__setup .settings-row {
-  min-height: 92px;
-  padding-block: var(--space-5);
-}
-
-.model-providers__setup .settings-row__title {
-  font-size: var(--control-ui-text-lg);
-  font-weight: 600;
-}
-
 .model-providers__label-with-help {
   display: inline-flex;
   align-items: center;
@@ -572,15 +562,9 @@
   gap: 0;
 }
 
-.model-providers__available {
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border);
-}
-
-.model-providers__available summary {
-  padding: var(--space-3);
-  color: var(--muted);
-  font-size: var(--control-ui-text-sm);
+.model-providers__add-empty {
+  width: 100%;
+  justify-content: center;
 }
 
 .model-providers__editor {

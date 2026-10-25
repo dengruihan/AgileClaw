@@ -255,7 +255,7 @@ suite.define(() => {
           },
         });
         await page.goto(`${suite.server.baseUrl}settings/model-providers`);
-        await page.locator("[data-models-connect]").click();
+        await page.goto(`${suite.server.baseUrl}settings/model-providers?connect=1`);
         const dialog = page.locator(".model-provider-login");
         await dialog.locator('[data-models-login-provider="zai"]').waitFor();
         await dialog.locator('[data-models-login-provider="zai"]').click();
@@ -383,7 +383,7 @@ suite.define(() => {
           expect(await page.locator('[data-provider-id="anthropic"]').count()).toBe(0);
           expect(await page.locator("openclaw-modal-dialog").count()).toBe(0);
           await captureProviderProof(`provider-settings-${origin}.png`, card);
-          await page.locator("[data-models-connect]").click();
+          await page.goto(`${suite.server.baseUrl}settings/model-providers?connect=1`);
           const dialog = page.locator("openclaw-modal-dialog");
           await dialog.getByRole("heading", { name: "Connect a provider", exact: true }).waitFor();
           await dialog.locator('[data-models-login-provider="openai"]').waitFor();
@@ -437,7 +437,7 @@ suite.define(() => {
           },
         });
         await page.goto(`${suite.server.baseUrl}settings/model-providers`);
-        await page.locator("[data-models-connect]").click();
+        await page.goto(`${suite.server.baseUrl}settings/model-providers?connect=1`);
         await page.locator('[data-models-login-provider="example"]').click();
         expect(
           (
@@ -573,7 +573,7 @@ suite.define(() => {
         const primary = page.locator(".model-providers__defaults openclaw-select-picker").first();
         await expect.poll(() => modelPickerValue(primary)).toBe("example/existing");
         await captureProviderProof(`login-models-before-${modelAccess.value}.png`, primary);
-        await page.locator("[data-models-connect]").click();
+        await page.goto(`${suite.server.baseUrl}settings/model-providers?connect=1`);
         expect(await gateway.getRequests("models.authLogin")).toHaveLength(0);
         await page.locator('[data-models-login-provider="example"]').click();
         const signIn = page.getByRole("button", { name: "Example device sign-in", exact: true });
@@ -789,7 +789,7 @@ suite.define(() => {
           },
         });
         await page.goto(suite.server.baseUrl + "settings/model-providers");
-        await page.locator("[data-models-connect]").click();
+        await page.goto(`${suite.server.baseUrl}settings/model-providers?connect=1`);
         await page.locator('[data-models-login-provider="openai"]').click();
         const dialog = page.locator(".model-setup-wizard");
         await dialog.getByText("Accounts available to this agent", { exact: true }).waitFor();
