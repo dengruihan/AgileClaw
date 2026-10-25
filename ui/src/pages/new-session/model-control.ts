@@ -2,10 +2,8 @@ import { DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS } from "@openclaw/gateway-client/bro
 import type { UserModelAccount } from "@openclaw/gateway-protocol";
 import type { GatewayAgentRow, ModelCatalogEntry, ModelCatalogResult } from "../../api/types.ts";
 import type { ApplicationContext } from "../../app/context.ts";
-import { hasOperatorWriteAccess } from "../../app/operator-access.ts";
 import type { DurableDraftModelSelection } from "../../lib/chat/composer-draft-store.runtime.ts";
 import { buildQualifiedChatModelValue } from "../../lib/chat/model-ref.ts";
-import { normalizeChatFastModeInput } from "../../lib/chat/model-select-state.ts";
 import { normalizeThinkingOptionValue } from "../../lib/chat/thinking.ts";
 import { currentConfigObject } from "../../lib/config/config-state-model.ts";
 import {
@@ -18,9 +16,7 @@ import { resolveModelCatalogState } from "../../lib/model-catalog-store.ts";
 import { customModelRefs } from "../../lib/models/custom-model-refs.ts";
 import { normalizeAgentId } from "../../lib/sessions/session-key.ts";
 import { requiresChatModelSetup } from "../chat/chat-model-setup.ts";
-import { renderChatModelAccountControl } from "../chat/components/chat-model-account-control.ts";
 import { renderChatModelControls } from "../chat/components/chat-model-controls.ts";
-import { navigateToModelProvider } from "../model-providers/navigation.ts";
 import { CatalogTargetDiscovery } from "./catalog-target.ts";
 import type { DraftCloudProfile } from "./discovery.ts";
 import {
@@ -246,27 +242,6 @@ export class NewSessionModelControl extends NewSessionModelSelection {
     }
     this.restoringPreference = false;
     this.updateMetadataState({ ...this.metadataState, status: "error" });
-  }
-
-  private selectDraftAccount(account: UserModelAccount, model: string): Promise<boolean> {
-    const client = this.metadataClient;
-    if (!client || !model) {
-      return Promise.resolve(false);
-    }
-    this.selectionGeneration += 1;
-    this.restoringPreference = false;
-    this.draftAccount = { authProfileId: account.authProfileId, provider: account.provider, model };
-    const requestedScope = { agentId: this.agentId, authProfileId: account.authProfileId };
-    this.metadataState = {
-      catalog: [],
-      accountSelection: this.metadataState.accountSelection,
-      hasSnapshot: false,
-      status: "loading",
-    };
-    const scope = this.bindMetadataSubscription(client, requestedScope);
-    return this.metadataReader
-      .read()
-      .then((result) => Boolean(result) && this.ownsMetadata(client, scope));
   }
 
   private clearDraftAccount() {
@@ -581,43 +556,10 @@ export class NewSessionModelControl extends NewSessionModelSelection {
       agent: options.agent,
       defaults: sourceResult?.defaults,
     });
-    const client = snapshot?.client;
-    const scope = this.metadataScope;
-    const accountSelection = this.metadataState.accountSelection;
-    const ownsSelection = () =>
-      Boolean(
-        client &&
-        scope &&
-        this.ownsMetadata(client, scope) &&
-        this.metadataState.accountSelection === accountSelection,
-      );
     const runtimeState = options.context?.runtimeConfig?.state;
     return renderChatModelControls({
       ...modelControls,
       customModelRefs: customModelRefs(runtimeState ? currentConfigObject(runtimeState) : null),
-      renderAccountSection: (model) =>
-        renderChatModelAccountControl({
-          owner: this,
-          client,
-          selection: ownsSelection() && snapshot?.selfUser ? accountSelection : undefined,
-          model,
-          disabled:
-            options.sending || !model || !hasOperatorWriteAccess(snapshot?.hello?.auth ?? null),
-          ownsSelection,
-          onSelect: (account) =>
-            ownsSelection() ? this.selectDraftAccount(account, model) : Promise.resolve(false),
-          onAutomatic: this.draftAccount
-            ? () => {
-                if (ownsSelection()) {
-                  this.selectionGeneration += 1;
-                  this.clearDraftAccount();
-                  this.load(options.context, options.agentId, true, { agent: options.agent });
-                }
-              }
-            : undefined,
-          onManage: () => options.context?.navigate("profile"),
-          onRequestUpdate: this.notify,
-        }),
       activeRunId: null,
       connected: snapshot?.phase === "connected",
       gatewayAvailable: Boolean(snapshot?.client),
@@ -693,14 +635,6 @@ export class NewSessionModelControl extends NewSessionModelSelection {
         this.persistSelection();
         this.onDraftSelectionChange?.();
       },
-      onFastModeSelect: (value) => {
-        this.selectionGeneration += 1;
-        this.restoringPreference = false;
-        this.fastModeSelected = true;
-        this.fastMode = normalizeChatFastModeInput(value);
-        this.persistSelection();
-        this.notify();
-      },
       onContextWindowSelect: (value) => {
         this.selectionGeneration += 1;
         this.restoringPreference = false;
@@ -708,8 +642,6 @@ export class NewSessionModelControl extends NewSessionModelSelection {
         this.notify();
       },
       onModelSetup: () => options.context?.navigate("model-setup"),
-      onProviderSettings: (provider) =>
-        navigateToModelProvider(options.context, options.agentId, provider),
       onModelPickerOpen: () => this.retryPickerCatalogs(),
       onRequestUpdate: this.notify,
     });

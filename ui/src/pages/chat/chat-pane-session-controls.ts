@@ -20,7 +20,6 @@ import { areUiSessionKeysEquivalent } from "../../lib/sessions/session-key.ts";
 import { readChatSessionActionAccess } from "./chat-session-action-access.ts";
 import {
   switchChatContextWindow,
-  switchChatFastMode,
   switchChatModel,
   switchChatThinkingLevel,
 } from "./chat-session.ts";
@@ -29,7 +28,6 @@ import type { ChatPageHost } from "./chat-state-host.ts";
 import { refreshChatModelCatalogOnDemand } from "./chat-state-refresh.ts";
 import { selectedChatSessionRow } from "./chat-state-route.ts";
 import type { ChatProps } from "./chat-view.ts";
-import { renderChatModelAccountControl } from "./components/chat-model-account-control.ts";
 import { renderChatModelControls } from "./components/chat-model-controls.ts";
 import type { ChatPermissionPickerProps } from "./components/chat-permission-picker.ts";
 import { getChatModelObservedRunId, getChatRunOwnerSessionKey } from "./history-merge.ts";
@@ -142,8 +140,6 @@ export function renderChatPaneComposerControls(params: {
   /** Authored model refs the picker lists; null keeps catalog rows unfiltered. */
   customModelRefs?: ReadonlySet<string> | null;
   onModelSetup: () => void;
-  onProviderSettings?: (provider: string) => void;
-  onModelAccounts?: () => void;
 }): {
   composerControls: NonNullable<ChatProps["composerControls"]>;
   permissionPicker: ChatPermissionPickerProps;
@@ -160,12 +156,9 @@ export function renderChatPaneComposerControls(params: {
     canSelectFull,
     customModelRefs,
     onModelSetup,
-    onProviderSettings,
-    onModelAccounts,
   } = params;
   const sessionKey = state.sessionKey;
   const client = state.client;
-  const accountSelection = state.chatAccountSelection;
   const connectionEpoch = state.connectionEpoch;
   const agentScope = scopedAgentParamsForSession(state, sessionKey);
   const affectedAgentId = scopedAgentListParamsForSession(state, sessionKey).agentId;
@@ -246,35 +239,6 @@ export function renderChatPaneComposerControls(params: {
     composerControls: html`
       <div class="chat-composer-model-control">
         ${renderChatModelControls({
-          modelAuthStatusResult: state.modelAuthStatusResult,
-          accountSelection,
-          renderAccountSection: (accountModel) =>
-            renderChatModelAccountControl({
-              owner: state,
-              client,
-              selection: accountSelection,
-              modelAuthStatusResult: state.modelAuthStatusResult,
-              model: accountModel,
-              disabled:
-                !modelAccess.allowed ||
-                !state.connected ||
-                !accountModel ||
-                selectedSession?.modelSelectionLocked === true ||
-                state.chatLoading ||
-                state.chatSending ||
-                Boolean(state.chatRunId) ||
-                state.chatStream !== null ||
-                Boolean(state.chatModelSwitchPromises[sessionKey]),
-              ownsSelection: () =>
-                ownsSelection() && state.chatAccountSelection === accountSelection,
-              onSelect: (account) =>
-                modelAccess.allowed &&
-                canPatch({ model: `${accountModel}@${account.authProfileId}` })
-                  ? switchChatModel(state, `${accountModel}@${account.authProfileId}`, sessionKey)
-                  : Promise.resolve(false),
-              onManage: onModelAccounts,
-              onRequestUpdate: () => state.requestUpdate?.(),
-            }),
           activeRunId: state.chatRunId,
           activeRunSessionKey: getChatRunOwnerSessionKey(state),
           modelObservedRunId: getChatModelObservedRunId(state, selectedSession),
@@ -287,7 +251,6 @@ export function renderChatPaneComposerControls(params: {
           modelCatalogState,
           modelOverrides: state.sessions.state.modelOverrides,
           thinkingSession: settingsSession,
-          fastModeTarget: settingsSession,
           contextWindowTarget: settingsPreview
             ? { ...(selectedSession ?? state.sessionsResult?.defaults), ...settingsPreview }
             : undefined,
@@ -314,11 +277,6 @@ export function renderChatPaneComposerControls(params: {
           stream: state.chatStream,
           onRequestUpdate: () => state.requestUpdate?.(),
           onModelSetup,
-          onProviderSettings,
-          onFastModeSelect: (next, targetSessionKey) =>
-            effortAccess.allowed && canPatch({ fastMode: null }, targetSessionKey)
-              ? switchChatFastMode(state, next, targetSessionKey)
-              : Promise.resolve(false),
           onContextWindowSelect: (next, targetSessionKey) =>
             contextWindowAccess.allowed && canPatch({ contextWindow: next }, targetSessionKey)
               ? switchChatContextWindow(state, next, targetSessionKey)
