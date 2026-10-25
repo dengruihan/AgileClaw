@@ -485,11 +485,6 @@
   color: var(--danger);
 }
 
-.provider-manager__badge {
-  color: var(--muted);
-  font-size: var(--control-ui-text-xs);
-}
-
 @media (max-width: 640px) {
   .provider-manager__header,
   .provider-manager__footer,
