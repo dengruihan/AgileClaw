@@ -649,7 +649,10 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
       await resolveConfigMutation(gateway, keyedConfig, "model-providers-hash-key", "openai");
       await expect.poll(async () => openaiCard.textContent()).toContain("Secret saved.");
 
-      await openaiCard.locator('[data-model-id="gpt-5.5"] button[aria-label]').click();
+      await openaiCard
+        .locator('[data-model-id="gpt-5.5"]')
+        .getByRole("button", { name: "Test model GPT-5.5", exact: true })
+        .click();
       const probe = await gateway.waitForRequest("models.probe");
       expect(probe.params).toEqual({ provider: "openai", agentId: "main", modelId: "gpt-5.5" });
       await expect.poll(async () => openaiCard.textContent()).toContain("87 ms");
