@@ -17,6 +17,7 @@ import {
   readModelProviderConfig,
   resolveDefaultModelPresentation,
   type DefaultsDraft,
+  type ModelProviderCard,
 } from "./data.ts";
 import { EMPTY_MODEL_PROVIDERS_DATA } from "./load.ts";
 import { loginOptionChoiceId } from "./login-providers.ts";
@@ -121,6 +122,11 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
       }
     }}
     .onCredential=${(provider: string, key: string | null) => page.mutateApiKey(provider, provider, key)}
+    .onDeleteProvider=${(card: ModelProviderCard) => void page.deleteProvider(card)}
+    // Any authored provider entry can go, cloud or custom; catalog-known
+    // providers without an entry only carry credentials (logout covers those).
+    .canDeleteProvider=${(card: ModelProviderCard) =>
+      configuredProvider(configObject, card.configKey ?? card.id) !== null}
   ></openclaw-provider-manager>`;
   const body = renderModelProviders({
     providerEditor,
@@ -189,11 +195,6 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
             page.context.runtimeConfig.refresh({ background: true }),
             page.refresh("forced"),
           ])),
-    onDeleteProvider: (card) => void page.deleteProvider(card),
-    // Any authored provider entry can go, cloud or custom; catalog-known
-    // providers without an entry only carry credentials (logout covers those).
-    canDeleteProvider: (card) =>
-      configuredProvider(configObject, card.configKey ?? card.id) !== null,
     onAddProviderToggle: () => {
       page.addProviderOpen = !page.addProviderOpen;
       page.addProviderKey = "";

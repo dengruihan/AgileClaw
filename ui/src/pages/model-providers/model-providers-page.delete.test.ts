@@ -64,9 +64,18 @@ describe("ModelProvidersPage provider deletion", () => {
     return { ...harness, page };
   }
 
+  /** The delete action lives in the provider header's dropdown menu. */
+  function chooseDeleteAction(page: Element, providerId: string) {
+    const item = page.querySelector(`[data-models-delete-provider="${providerId}"]`);
+    expect(item).not.toBeNull();
+    item!.dispatchEvent(
+      new CustomEvent("wa-select", { bubbles: true, detail: { item: { value: "delete" } } }),
+    );
+  }
+
   it("deletes a custom provider entry without a logout when it has no credentials", async () => {
     const { request, runtimeConfig, page } = await setupDeletePage();
-    page.querySelector<HTMLButtonElement>('[data-models-delete-provider="custom.proxy"]')!.click();
+    chooseDeleteAction(page, "custom.proxy");
     await waitForFast(() => expect(page.messages.connection?.kind).toBe("success"));
     expect(request.mock.calls.filter(([method]) => method === "models.authLogout")).toHaveLength(0);
     expect(runtimeConfig.patch).toHaveBeenCalledWith({
@@ -116,9 +125,7 @@ describe("ModelProvidersPage provider deletion", () => {
     await waitForFast(() =>
       expect(page.querySelector('[data-provider-details="openai"]')).not.toBeNull(),
     );
-    const button = page.querySelector<HTMLButtonElement>('[data-models-delete-provider="openai"]');
-    expect(button).not.toBeNull();
-    button!.click();
+    chooseDeleteAction(page, "openai");
     await waitForFast(() => expect(page.messages.connection?.kind).toBe("success"));
     expect(harness.runtimeConfig.patch).toHaveBeenCalledWith({
       raw: { models: { providers: { openai: null } } },
@@ -126,10 +133,22 @@ describe("ModelProvidersPage provider deletion", () => {
     });
   });
 
+  it("offers no header delete menu for credential-only providers", async () => {
+    const { page } = await setupDeletePage();
+    page.querySelector<HTMLButtonElement>('[data-provider-select="openai"]')!.click();
+    await waitForFast(() =>
+      expect(page.querySelector('[data-provider-details="openai"]')).not.toBeNull(),
+    );
+    expect(page.querySelector('[data-models-delete-provider="openai"]')).toBeNull();
+    expect(
+      page.querySelector("openclaw-provider-manager .provider-manager__menu-trigger"),
+    ).toBeNull();
+  });
+
   it("declining the confirmation leaves the provider untouched", async () => {
     const { request, runtimeConfig, page } = await setupDeletePage();
     confirmMocks.showConfirmDialog.mockResolvedValue(false);
-    page.querySelector<HTMLButtonElement>('[data-models-delete-provider="custom.proxy"]')!.click();
+    chooseDeleteAction(page, "custom.proxy");
     await page.updateComplete;
     expect(request).not.toHaveBeenCalledWith("models.authLogout", expect.anything());
     expect(runtimeConfig.patch).not.toHaveBeenCalled();
@@ -161,7 +180,7 @@ describe("ModelProvidersPage provider deletion", () => {
         },
       },
     );
-    page.querySelector<HTMLButtonElement>('[data-models-delete-provider="custom.proxy"]')!.click();
+    chooseDeleteAction(page, "custom.proxy");
     await waitForFast(() => expect(page.messages.connection?.kind).toBe("success"));
     expect(request).toHaveBeenCalledWith("models.authLogout", {
       provider: "custom.proxy",
@@ -206,7 +225,7 @@ describe("ModelProvidersPage provider deletion", () => {
       }
       return originalRequest(method);
     });
-    page.querySelector<HTMLButtonElement>('[data-models-delete-provider="custom.proxy"]')!.click();
+    chooseDeleteAction(page, "custom.proxy");
     await waitForFast(() => expect(page.messages.connection?.kind).toBe("error"));
     expect(runtimeConfig.patch).not.toHaveBeenCalled();
   });
@@ -216,7 +235,7 @@ describe("ModelProvidersPage provider deletion", () => {
       model: { primary: "custom.proxy/m1", fallbacks: ["openai/gpt-5", "custom.proxy/m2"] },
       utilityModel: "custom.proxy/m2",
     });
-    page.querySelector<HTMLButtonElement>('[data-models-delete-provider="custom.proxy"]')!.click();
+    chooseDeleteAction(page, "custom.proxy");
     await waitForFast(() => expect(page.messages.connection?.kind).toBe("success"));
     expect(confirmMocks.showConfirmDialog).toHaveBeenCalledWith(
       expect.objectContaining({

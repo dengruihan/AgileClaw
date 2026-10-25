@@ -658,40 +658,12 @@ describe("renderModelProviders", () => {
     );
   });
 
-  it("offers provider deletion only for deletable cards and forwards the card", () => {
-    const onDeleteProvider = vi.fn();
+  it("forwards provider navigation to the settings callback", () => {
     const onProviderSettings = vi.fn();
-    const deletable = card({ id: "custom.proxy", displayName: "Custom Proxy" });
-    const viewProps = props({
-      cards: [deletable, card()],
-      onDeleteProvider,
-      onProviderSettings,
-      canDeleteProvider: (entry) => entry.id === "custom.proxy",
-    });
-    const container = mount(viewProps);
-    const custom = container.querySelector('[data-provider-details="custom.proxy"]');
-    expect(button(custom!, "Delete provider")).toBeDefined();
-    button(custom!, "Delete provider")!.click();
-    expect(onDeleteProvider).toHaveBeenCalledWith(deletable);
+    const selected = card();
+    const container = mount(props({ cards: [selected], onProviderSettings }));
     container.querySelector<HTMLButtonElement>('[data-provider-select="openai"]')!.click();
-    expect(onProviderSettings).toHaveBeenCalledWith(viewProps.cards[1]);
-    render(renderModelProviders({ ...viewProps, selectedProvider: "openai" }), container);
-    expect(container.querySelector('[data-provider-details="custom.proxy"]')).toBeNull();
-    expect(
-      button(container.querySelector('[data-provider-details="openai"]')!, "Delete provider"),
-    ).toBeUndefined();
-
-    const busy = mount(
-      props({
-        cards: [deletable],
-        canDeleteProvider: () => true,
-        busy: { "delete:custom.proxy": true },
-      }),
-    );
-    expect(
-      button(busy.querySelector('[data-provider-details="custom.proxy"]')!, "Delete provider")!
-        .disabled,
-    ).toBe(true);
+    expect(onProviderSettings).toHaveBeenCalledWith(selected);
   });
 
   it("shows the current key-operation failure over an older card success", () => {

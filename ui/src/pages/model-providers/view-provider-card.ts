@@ -38,9 +38,6 @@ export type ModelProvidersViewProps = Omit<
   addProviderKey: string;
   installedAgents: TemplateResult | typeof nothing;
   onRefresh: () => void;
-  /** Deletes an authored provider entry and its references; custom providers only. */
-  onDeleteProvider: (card: ModelProviderCard) => void;
-  canDeleteProvider?: (card: ModelProviderCard) => boolean;
   onAddProviderToggle: () => void;
   onAddProviderKeyChange: (value: string) => void;
   onAddProvider: () => void;
@@ -63,26 +60,11 @@ export function configMutationDisabled(props: ModelProvidersViewProps): boolean 
   return !props.canMutate || props.configBusy;
 }
 
-function renderDeleteProviderAction(card: ModelProviderCard, props: ModelProvidersViewProps) {
-  if (!props.canDeleteProvider?.(card)) {
-    return nothing;
-  }
-  return html`<button
-    class="btn btn--sm danger"
-    data-models-delete-provider=${card.id}
-    ?disabled=${Boolean(props.busy[`delete:${card.id}`]) || configMutationDisabled(props)}
-    title=${props.mutationBlockedReason ?? ""}
-    @click=${() => props.onDeleteProvider(card)}
-  >
-    ${t("modelProviders.delete.action")}
-  </button>`;
-}
-
 export function renderProviderRow(card: ModelProviderCard, props: ModelProvidersViewProps) {
   const message = props.messages[`key:${card.id}`] ?? props.messages[card.id];
   return html`
     <div class="model-providers__provider-details" data-provider-details=${card.id}>
-      ${renderDeleteProviderAction(card, props)} ${renderMutationMessage(message)}
+      ${renderMutationMessage(message)}
     </div>
   `;
 }
