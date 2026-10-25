@@ -35,9 +35,6 @@ export function renderProviderWorkspace(props: ModelProvidersViewProps) {
   const selected = props.cards.find(
     (card) => (card.configKey ?? card.id) === props.selectedProvider,
   );
-  const available = props.unconfiguredProviders.filter((provider) =>
-    matches(provider.id, provider.displayName),
-  );
   return html` ${props.error ? html`<p class="callout danger" role="alert">${props.error}</p>` : nothing}
     <div class="model-providers__workspace">
       <nav class="model-providers__navigation" aria-label=${t("modelProviders.manager.configured")}>
@@ -90,28 +87,19 @@ export function renderProviderWorkspace(props: ModelProvidersViewProps) {
             : nothing
         }
         ${cards.length === 0 && !props.creatingProvider ? html`<p class="model-providers__nav-empty muted">${t(props.cards.length ? "modelProviders.noMatches" : "modelProviders.emptyTitle")}</p>` : nothing}
-        <details
-          class="model-providers__available"
-          ?open=${props.cards.length === 0 || Boolean(query)}
-        >
-          <summary>
-            ${t("modelProviders.manager.available")} <span class="muted">${available.length}</span>
-          </summary>
-          ${available.map(
-            (provider) => html`<button
-              type="button"
-              class="model-providers__nav-item ${props.selectedProvider === provider.id && !props.creatingProvider ? "is-selected" : ""}"
-              aria-pressed=${props.selectedProvider === provider.id && !props.creatingProvider}
-              data-available-provider=${provider.id}
-              ?disabled=${configMutationDisabled(props) || props.loginBusy}
-              @click=${() => props.onAvailableProvider?.(provider.id)}
-            >
-              ${renderProviderBrandIcon(provider.id, { className: "model-providers__icon" })}
-              <span>${provider.displayName}</span>${icons.plus}
-            </button>`,
-          )}
-          ${available.length === 0 ? html`<p class="muted">${t("modelProviders.noMatches")}</p>` : nothing}
-        </details>
+        ${
+          props.cards.length === 0
+            ? html`<button
+                type="button"
+                class="btn primary model-providers__add-empty"
+                data-custom-provider
+                ?disabled=${configMutationDisabled(props)}
+                @click=${props.onCustomProvider}
+              >
+                ${icons.plus}${t("modelProviders.manager.addProvider")}
+              </button>`
+            : nothing
+        }
       </nav>
       <div class="model-providers__editor">
         ${props.selectedProvider || props.creatingProvider ? props.providerEditor : renderSettingsEmpty(t("modelProviders.manager.selectProvider"))}

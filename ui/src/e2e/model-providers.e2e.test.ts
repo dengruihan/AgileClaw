@@ -35,12 +35,10 @@ const describeControlUiE2e = chromiumAvailable || !allowMissingChromium ? descri
 const NOW = Date.now();
 const recordVisuals = process.env.OPENCLAW_UI_E2E_RECORD === "1";
 let artifactDir: string;
-let readinessArtifactDir: string;
 const captureProviderProof = createProviderProofCapture(() => artifactDir);
 beforeEach(() => {
   if (recordVisuals) {
     artifactDir = createControlUiE2eArtifactDir("model-providers");
-    readinessArtifactDir = path.join(artifactDir, "models-provider-readiness");
   }
 });
 const redactedConfigValue = "[redacted]";
@@ -132,12 +130,7 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
     try {
       const response = await page.goto(`${server.baseUrl}settings/model-providers`);
       expect(response?.status()).toBe(200);
-      const readiness = page.locator('[data-model-readiness="model-required"]');
-      await readiness.waitFor();
-      await expect
-        .poll(async () => readiness.textContent())
-        .toContain("Connect a verified AI model");
-      await expect.poll(async () => readiness.textContent()).toContain("Model required");
+      expect(await page.locator("[data-model-readiness]").count()).toBe(0);
       const providerReadiness = page.locator('[data-provider-id="openai"]');
       await expect
         .poll(async () => providerReadiness.textContent())
@@ -160,7 +153,7 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
         await page.screenshot({
           animations: "disabled",
           fullPage: true,
-          path: path.join(readinessArtifactDir, "after-desktop.png"),
+          path: path.join(artifactDir, "after-desktop.png"),
         });
         await page.setViewportSize({ height: 844, width: 390 });
         await expect
@@ -178,7 +171,7 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
         await page.screenshot({
           animations: "disabled",
           fullPage: true,
-          path: path.join(readinessArtifactDir, "after-mobile.png"),
+          path: path.join(artifactDir, "after-mobile.png"),
         });
         await page.setViewportSize({ height: 1000, width: 1440 });
       }
@@ -194,7 +187,7 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
         ),
       ).toHaveLength(2);
 
-      await readiness.getByRole("button", { name: "Connect provider", exact: true }).click();
+      await page.goto(`${server.baseUrl}settings/model-providers?connect=1`);
       await page.locator("[data-models-login-search]").waitFor();
       expect(new URL(page.url()).pathname).toBe("/settings/model-providers");
     } finally {
@@ -692,7 +685,7 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
       expect(await modelPickerValue(primary)).toBe("anthropic/claude-sonnet-4-5");
       expect(await page.locator(".model-providers__defaults .callout.success").count()).toBe(0);
 
-      await page.locator("[data-models-connect]").click();
+      await page.goto(`${server.baseUrl}settings/model-providers?connect=1`);
       await page.locator('[data-models-login-provider="google"]').click();
       await page.locator("[data-models-login-api-key]").click();
       const addSection = page.locator("[data-models-key-dialog]");

@@ -34,7 +34,7 @@ it.each(["empty", "system-only"] as const)(
       expect(selection.state.selectedId).toBeNull();
       expect(page.querySelector(".settings-loading-skeleton")).toBeNull();
       expect(page.textContent).toContain("No agents");
-      expect(page.querySelector<HTMLButtonElement>("[data-models-connect]")?.disabled).toBe(true);
+      expect(page.login.pageActions.connectDisabled).toBe(true);
 
       const groups = page.querySelectorAll<HTMLElement & { disabled: boolean; value: string }>(
         ".model-providers__defaults wa-radio-group",

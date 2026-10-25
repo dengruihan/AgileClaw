@@ -673,7 +673,6 @@ const enSettings = {
       cloud: "Cloud providers",
       custom: "Local & custom",
       configured: "Configured providers",
-      available: "Available providers",
       models: "Models",
       settings: "Settings",
       endpoint: "Endpoint",
@@ -858,16 +857,6 @@ const enSettings = {
         no_model: "No models available",
         partial: "Connected with warnings",
       },
-    },
-    readiness: {
-      title: "AI setup",
-      heading: "Connect a verified AI model",
-      signedInNoModels:
-        "You're signed in, but this account exposes no usable models. Choose another provider or account to continue.",
-      notConfigured: "Choose a provider and verify the model OpenClaw will use.",
-      noModels: "No models available",
-      modelRequired: "Model required",
-      chooseProvider: "Choose another provider",
     },
     logout: {
       action: "Log out",

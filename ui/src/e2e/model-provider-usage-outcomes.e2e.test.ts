@@ -222,21 +222,24 @@ suite.define(() => {
           });
         }
 
-        await page.locator("[data-models-connect]").click();
+        await page.goto(`${suite.server.baseUrl}settings/model-providers?connect=1`);
+        await expect
+          .poll(() => editor.locator(".provider-manager__connection").textContent())
+          .toContain("main");
         await page.locator('[data-models-login-provider="google"]').click();
         await page.locator("[data-models-login-api-key]").click();
         const addSection = page.locator("[data-models-key-dialog]");
-        await addSection.getByLabel("API key").fill("synthetic-writer-provider-key");
+        await addSection.getByLabel("API key").fill("synthetic-main-provider-key");
         // The modal makes the picker inert. Use its selection owner without
         // closing the dialog so this still proves open-draft scope retirement.
         await page.locator("openclaw-app").evaluate((element) => {
           // SAFETY: This selector is the initialized app root that owns the runtime.
           const app = element as HTMLElement & { runtime: ApplicationRuntime };
-          app.runtime.context.settingsAgentSelection.set("main");
+          app.runtime.context.settingsAgentSelection.set("writer");
         });
         await expect
           .poll(() => editor.locator(".provider-manager__connection").textContent())
-          .toContain("main");
+          .toContain("writer");
         await expect.poll(async () => page.locator("[data-models-key-dialog]").count()).toBe(0);
         await expect.poll(() => keyInput.inputValue()).toBe("");
         expect(await gateway.getRequests("config.patch")).toHaveLength(0);

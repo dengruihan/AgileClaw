@@ -392,7 +392,7 @@ suite.define(() => {
           },
         });
         await page.goto(`${suite.server.baseUrl}settings/model-providers`);
-        await page.locator("[data-custom-provider]").click();
+        await page.locator(".model-providers__navigation [data-custom-provider]").click();
         const editor = page.locator(".provider-manager--inline");
         await editor.locator('[name="providerId"]').fill("workspace-custom");
         await editor.locator('[name="baseUrl"]').fill("https://custom.example/v1");
@@ -413,6 +413,10 @@ suite.define(() => {
           "workspace-created",
         );
         const selected = page.locator('[data-provider-select="workspace-custom"]');
+        await selected.waitFor();
+        expect(
+          await page.locator(".model-providers__navigation [data-custom-provider]").count(),
+        ).toBe(0);
         await expect.poll(() => selected.getAttribute("aria-pressed")).toBe("true");
         await editor.locator('[name="baseUrl"]').fill("https://unsaved.example/v1");
         await editor.getByRole("button", { name: "Add model", exact: true }).click();
@@ -590,7 +594,9 @@ suite.define(() => {
           expect(await page.locator(".content openclaw-agent-select").count()).toBe(0);
           expect(await page.locator(".settings-sidebar openclaw-agent-select").count()).toBe(1);
           const bounds = await page
-            .locator("[data-models-connect], .model-providers__refresh-button")
+            .locator(
+              ".settings-section__actions [data-custom-provider], .model-providers__refresh-button",
+            )
             .evaluateAll((buttons) =>
               buttons.map((button) => {
                 const { x, y, width: buttonWidth, height } = button.getBoundingClientRect();
