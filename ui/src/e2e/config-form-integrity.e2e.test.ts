@@ -612,6 +612,10 @@ suite.define(() => {
         await providerIdInput.waitFor();
         expect(await gateway.getRequests("config.patch")).toHaveLength(0);
         expect(await gateway.getRequests("models.authSetApiKey")).toHaveLength(0);
+        // The connection form auto-saves; defer both writes before typing so the
+        // debounced save hits held responses regardless of fill timing.
+        await gateway.deferNext("config.patch");
+        await gateway.deferNext("models.authSetApiKey");
 
         await providerIdInput.fill(providerId);
         await url.fill("https://models.example.test/v1");
@@ -623,9 +627,6 @@ suite.define(() => {
             path: path.join(uiProofArtifactDir, "05-custom-provider-connection.png"),
           });
         }
-        await gateway.deferNext("config.patch");
-        await gateway.deferNext("models.authSetApiKey");
-        await manager.getByRole("button", { name: "Save", exact: true }).click();
         const created = await gateway.waitForRequest("config.patch");
         expect(JSON.parse(String((created.params as { raw?: string }).raw))).toEqual({
           models: {
@@ -671,7 +672,10 @@ suite.define(() => {
         await expect.poll(() => providerIdInput.count()).toBe(0);
         expect(await gateway.getRequests("config.patch")).toHaveLength(1);
         await gateway.deferNext("models.authSetApiKey");
-        await manager.getByRole("button", { name: "Save", exact: true }).click();
+        // Retrying the failed credential save means editing the key again; the
+        // auto-save lane picks the change up after the debounce.
+        await apiKey.fill("");
+        await apiKey.fill(credentialKey);
         const retriedCredential = await gateway.waitForRequest("models.authSetApiKey", {
           after: 1,
         });
@@ -730,14 +734,13 @@ suite.define(() => {
         await modelRow.waitFor();
         expect(await gateway.getRequests("config.patch")).toHaveLength(2);
 
+        await gateway.deferNext("config.patch");
         await url.fill("https://changed.example.test/v1");
         const testModel = modelRow.getByRole("button", {
           name: "Test model Custom model",
           exact: true,
         });
         await expect.poll(() => testModel.isDisabled()).toBe(true);
-        await gateway.deferNext("config.patch");
-        await manager.getByRole("button", { name: "Save", exact: true }).click();
         const changed = await gateway.waitForRequest("config.patch", { after: 2 });
         expect(JSON.parse(String((changed.params as { raw?: string }).raw))).toEqual({
           models: { providers: { [providerId]: { baseUrl: "https://changed.example.test/v1" } } },
@@ -757,9 +760,10 @@ suite.define(() => {
           config: updated,
           hash: "custom-provider-updated",
         });
+        // The auto-save settles: the footer stops reporting pending changes.
         await expect
-          .poll(() => manager.getByRole("button", { name: "Save", exact: true }).isDisabled())
-          .toBe(true);
+          .poll(() => manager.locator(".provider-manager__footer [role='status']").textContent())
+          .toBe("");
         expect(await gateway.getRequests("models.authSetApiKey")).toHaveLength(2);
         await expect.poll(() => testModel.isEnabled()).toBe(true);
         await gateway.deferNext("models.probe");

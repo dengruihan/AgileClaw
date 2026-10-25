@@ -186,13 +186,10 @@ export async function saveKey(page: ModelProvidersPageTestElement, value: string
   )!;
   input.value = value;
   input.dispatchEvent(new Event("input", { bubbles: true }));
-  await waitForFast(() =>
-    expect(
-      page.querySelector<HTMLButtonElement>('openclaw-provider-manager button[type="submit"]')
-        ?.disabled,
-    ).toBe(false),
-  );
-  page.querySelector<HTMLButtonElement>('openclaw-provider-manager button[type="submit"]')!.click();
+  // Connection edits auto-save; submit dispatch flushes the pending save now.
+  page
+    .querySelector<HTMLFormElement>("openclaw-provider-manager .provider-manager--inline")
+    ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
 }
 
 export function createHarness(initialScopeId: string) {

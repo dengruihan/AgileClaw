@@ -96,8 +96,8 @@ async function openDialog(config: DialogTestConfig, provider: string) {
   const save = async () => {
     const previous = patches.length;
     manager
-      .querySelector<HTMLButtonElement>('.provider-manager__footer button[type="submit"]')!
-      .click();
+      .querySelector<HTMLFormElement>(".provider-manager--model, .provider-manager--inline")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await waitForFast(() => expect(patches.length).toBeGreaterThan(previous));
     // The write settles asynchronously; the edit form closing marks the saved
     // return to the merged view.
@@ -129,11 +129,11 @@ describe("provider manager dialog forms", () => {
     const api = manager.querySelector<HTMLSelectElement>('select[name="api"]')!;
     api.value = "";
     api.dispatchEvent(new Event("change", { bubbles: true }));
+    // The connection form auto-saves; the pending edit announces itself in the footer.
     await waitForFast(() =>
       expect(
-        manager.querySelector<HTMLButtonElement>('.provider-manager__footer button[type="submit"]')!
-          .disabled,
-      ).toBe(false),
+        manager.querySelector(".provider-manager__footer [role='status']")?.textContent?.trim(),
+      ).toBe("Unsaved changes"),
     );
     await save();
     expect(JSON.parse(String(patches.at(-1)!.raw))).toEqual({

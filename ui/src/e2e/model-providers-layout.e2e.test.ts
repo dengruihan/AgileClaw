@@ -114,15 +114,15 @@ suite.define(() => {
         await page.locator('[data-provider-select="studio"]').click();
         const editor = page.locator(".provider-manager--inline");
         const input = editor.locator('[name="apiKey"]');
-        const save = editor.getByRole("button", { name: "Save", exact: true });
+        const footerStatus = editor.locator(".provider-manager__footer [role='status']");
         await expect.poll(() => input.inputValue()).toBe(savedKey);
         expect(await input.getAttribute("type")).toBe("password");
-        expect(await save.isDisabled()).toBe(true);
+        await expect.poll(() => footerStatus.textContent()).toBe("");
         await editor.getByRole("button", { name: "Show API key", exact: true }).click();
         expect(await input.getAttribute("type")).toBe("text");
         await editor.getByRole("button", { name: "Hide API key", exact: true }).click();
         expect(await input.getAttribute("type")).toBe("password");
-        expect(await save.isDisabled()).toBe(true);
+        expect((await footerStatus.textContent()) ?? "").toBe("");
         expect(await page.getByText("Accounts & usage", { exact: true }).count()).toBe(0);
         const one = editor.locator('[data-model-id="vendor/one"]');
         const two = editor.locator('[data-model-id="vendor/two"]');
@@ -154,10 +154,9 @@ suite.define(() => {
           .poll(() => one.locator('[role="alert"]').textContent())
           .toContain("Model access denied");
         expect(await two.locator('[role="status"]').textContent()).toContain("Connected");
+        await gateway.deferNext("models.authSetApiKey");
         await input.fill(replacement);
         await expect.poll(() => testOne.isDisabled()).toBe(true);
-        await gateway.deferNext("models.authSetApiKey");
-        await save.click();
         const write = await gateway.waitForRequest("models.authSetApiKey");
         expect(write.params).toEqual(
           expect.objectContaining({ provider: "studio", apiKey: replacement }),
@@ -167,13 +166,12 @@ suite.define(() => {
           inspection(replacement, "key-replaced"),
         );
         await resolveConfigMutation(gateway, config, "key-replaced", "studio");
-        await expect.poll(() => save.isDisabled()).toBe(true);
+        await expect.poll(() => footerStatus.textContent()).toBe("");
         expect(await input.inputValue()).toBe(replacement);
         expect(await input.getAttribute("type")).toBe("password");
         await expect.poll(() => one.locator('[role="alert"]').count()).toBe(0);
-        await editor.locator('[name="baseUrl"]').fill("https://changed.example.test/v1");
         await gateway.deferNext("config.patch");
-        await save.click();
+        await editor.locator('[name="baseUrl"]').fill("https://changed.example.test/v1");
         await gateway.waitForRequest("config.patch");
         await gateway.setMethodResponse(
           "models.authInspectApiKey",
@@ -188,7 +186,7 @@ suite.define(() => {
           },
           "endpoint-changed",
         );
-        await expect.poll(() => save.isDisabled()).toBe(true);
+        await expect.poll(() => footerStatus.textContent()).toBe("");
         expect(await gateway.getRequests("models.authSetApiKey")).toHaveLength(1);
         for (const method of ["usage.status", "sessions.usage", "codex.accountUsage"]) {
           expect(await gateway.getRequests(method)).toHaveLength(0);
@@ -312,7 +310,7 @@ suite.define(() => {
     });
   });
 
-  it("keeps connection drafts while searching and requires an explicit decision before switching providers", async () => {
+  it("auto-saves connection edits and switches providers without pending changes", async () => {
     await suite.withPage(
       { locale: "en-US", serviceWorkers: "block", viewport: { width: 1440, height: 1000 } },
       async ({ page }) => {
@@ -347,31 +345,44 @@ suite.define(() => {
         const editor = page.locator(".provider-manager--inline");
         const baseUrl = editor.locator('[name="baseUrl"]');
         await expect.poll(() => baseUrl.isEnabled()).toBe(true);
+        // Connection edits save themselves once typing settles.
+        await gateway.deferNext("config.patch");
         await baseUrl.fill("https://draft.example/v1");
+        expect(requestRaw(await gateway.waitForRequest("config.patch"))).toEqual({
+          models: { providers: { alpha: { baseUrl: "https://draft.example/v1" } } },
+        });
+        await resolveConfigMutation(
+          gateway,
+          {
+            models: {
+              providers: {
+                alpha: { ...config.models.providers.alpha, baseUrl: "https://draft.example/v1" },
+                beta: config.models.providers.beta,
+              },
+            },
+          },
+          "workspace-drafts-saved",
+        );
         const search = page.getByRole("searchbox", { name: "Search providers…" });
         await search.fill("beta");
         expect(await alpha.count()).toBe(0);
         expect(await baseUrl.inputValue()).toBe("https://draft.example/v1");
+        // Nothing is pending after the auto-save, so switching needs no decision.
         await beta.click();
-        const confirmation = page.locator(
-          'openclaw-modal-dialog[label="Discard unsaved changes?"]',
-        );
-        await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
-        expect(await baseUrl.inputValue()).toBe("https://draft.example/v1");
-        expect(await beta.getAttribute("aria-pressed")).toBe("false");
-        await beta.click();
-        await confirmation.getByRole("button", { name: "Discard changes", exact: true }).click();
+        expect(
+          await page.locator('openclaw-modal-dialog[label="Discard unsaved changes?"]').count(),
+        ).toBe(0);
         await expect.poll(() => beta.getAttribute("aria-pressed")).toBe("true");
         await expect.poll(() => baseUrl.inputValue()).toBe("https://beta.example/v1");
         await search.fill("");
         await alpha.click();
-        await expect.poll(() => baseUrl.inputValue()).toBe("https://alpha.example/v1");
-        expect(await gateway.getRequests("config.patch")).toHaveLength(0);
+        await expect.poll(() => baseUrl.inputValue()).toBe("https://draft.example/v1");
+        expect(await gateway.getRequests("config.patch")).toHaveLength(1);
       },
     );
   });
 
-  it("creates a custom provider and persists model dialog edits without submitting the connection form", async () => {
+  it("creates a custom provider through auto-save and persists model dialog edits", async () => {
     await suite.withPage(
       { locale: "en-US", serviceWorkers: "block", viewport: { width: 1440, height: 1000 } },
       async ({ page }) => {
@@ -394,11 +405,11 @@ suite.define(() => {
         await page.goto(`${suite.server.baseUrl}settings/model-providers`);
         await page.locator(".model-providers__navigation [data-custom-provider]").click();
         const editor = page.locator(".provider-manager--inline");
+        // The create form auto-saves once its required fields are filled.
+        await gateway.deferNext("config.patch");
         await editor.locator('[name="providerId"]').fill("workspace-custom");
         await editor.locator('[name="baseUrl"]').fill("https://custom.example/v1");
         await editor.locator('[name="api"]').selectOption("anthropic-messages");
-        await gateway.deferNext("config.patch");
-        await editor.getByRole("button", { name: "Save", exact: true }).click();
         const connection = {
           baseUrl: "https://custom.example/v1",
           api: "anthropic-messages",
@@ -418,7 +429,6 @@ suite.define(() => {
           await page.locator(".model-providers__navigation [data-custom-provider]").count(),
         ).toBe(0);
         await expect.poll(() => selected.getAttribute("aria-pressed")).toBe("true");
-        await editor.locator('[name="baseUrl"]').fill("https://unsaved.example/v1");
         await editor.getByRole("button", { name: "Add model", exact: true }).click();
         const dialog = page.locator('openclaw-modal-dialog[label="Edit model"]');
         await dialog.locator('[name="id"]').fill("custom-model");
@@ -463,9 +473,6 @@ suite.define(() => {
         await dialog.locator("form").waitFor({ state: "hidden" });
         await expect.poll(() => row.textContent()).toContain("Renamed model");
         expect(await gateway.getRequests("config.patch")).toHaveLength(3);
-        expect(await editor.locator('[name="baseUrl"]').inputValue()).toBe(
-          "https://unsaved.example/v1",
-        );
         await page.reload();
         await selected.click();
         await row.getByRole("button", { name: "Edit model", exact: true }).click();
