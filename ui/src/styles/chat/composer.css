@@ -2817,23 +2817,82 @@ html[dir="rtl"] .chat-attachment-loading > span {
   font-weight: 550;
 }
 
-/* Discrete effort slider: native range input for keyboard/a11y, decorative
-   stop dots layered underneath. */
+/* Discrete effort slider: a transparent native range input carries keyboard
+   and pointer interaction; the pill track, fill, boost glow, and knob are
+   sibling layers whose geometry transitions between stops. The knob width
+   here must match REASONING_KNOB_WIDTH_PX in chat-effort-picker.ts because
+   --reasoning-travel compensates for half of it. */
 .chat-controls__reasoning-slider {
+  --chat-effort-knob-width: 28px;
   position: relative;
-  display: flex;
-  align-items: center;
   height: 26px;
   margin: 0 6px;
+}
+
+.chat-controls__reasoning-groove {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  pointer-events: none;
+}
+
+/* The fill always ends at the knob's center: --reasoning-travel is the stop
+   position shifted by the knob radius compensation computed in the picker. */
+.chat-controls__reasoning-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--reasoning-travel, 0px);
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+/* Max/ultra boost washes the whole groove with the flowing accent gradient;
+   it fades in and out instead of swapping backgrounds. */
+.chat-controls__reasoning-boost {
+  --reasoning-boost-highlight: color-mix(in srgb, var(--accent) 60%, white);
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background-image: linear-gradient(
+    105deg,
+    color-mix(in srgb, var(--accent) 70%, var(--card)) 0%,
+    var(--accent) 25%,
+    var(--reasoning-boost-highlight) 50%,
+    var(--accent) 75%,
+    color-mix(in srgb, var(--accent) 70%, var(--card)) 100%
+  );
+  background-position: 50% 50%;
+  background-size: 220% 100%;
+}
+
+.chat-controls__reasoning-knob {
+  position: absolute;
+  z-index: 4;
+  top: 50%;
+  left: var(--reasoning-travel, calc(var(--chat-effort-knob-width) / 2));
+  width: var(--chat-effort-knob-width);
+  height: 20px;
+  margin-left: calc(var(--chat-effort-knob-width) / -2);
+  transform: translateY(-50%);
+  border-radius: var(--radius-full);
+  background: var(--text-strong);
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
 }
 
 .chat-controls__reasoning-dots {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 0 calc(var(--chat-effort-knob-width) / 2);
   pointer-events: none;
 }
 
@@ -2847,47 +2906,41 @@ html[dir="rtl"] .chat-attachment-loading > span {
 .chat-controls__reasoning-range {
   -webkit-appearance: none;
   appearance: none;
-  position: relative;
-  z-index: 1;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
   width: 100%;
   height: 26px;
   margin: 0;
   padding: 0;
   border-radius: var(--radius-full);
   background: transparent;
+  cursor: pointer;
 }
 
-.chat-controls__reasoning-slider:has([data-effort-boost="max"], [data-effort-boost="ultra"]) {
-  --reasoning-track-background: transparent;
-  --reasoning-boost-highlight: color-mix(in srgb, var(--accent) 60%, white);
-  border-radius: var(--radius-full);
-  background-image: linear-gradient(
-    105deg,
-    color-mix(in srgb, var(--accent) 70%, var(--card)) 0%,
-    var(--accent) 25%,
-    var(--reasoning-boost-highlight) 50%,
-    var(--accent) 75%,
-    color-mix(in srgb, var(--accent) 70%, var(--card)) 100%
-  );
-  background-position: 50% 50%;
-  background-size: 220% 100%;
+.chat-controls__reasoning-slider:has(
+    [data-effort-boost="max"],
+    [data-effort-boost="ultra"]
+  )
+  .chat-controls__reasoning-boost {
+  opacity: 1;
 }
 
-.chat-controls__reasoning-range[data-effort-boost="max"] {
+.chat-controls__reasoning-slider:has([data-effort-boost="max"]) .chat-controls__reasoning-groove {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
     0 0 12px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
-.chat-controls__reasoning-slider:has([data-effort-boost="ultra"]) {
+.chat-controls__reasoning-slider:has([data-effort-boost="ultra"]) .chat-controls__reasoning-boost {
   --reasoning-boost-highlight: color-mix(in srgb, var(--accent-2) 70%, white);
+  box-shadow: inset 0 0 12px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-.chat-controls__reasoning-range[data-effort-boost="ultra"] {
+.chat-controls__reasoning-slider:has([data-effort-boost="ultra"]) .chat-controls__reasoning-groove {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--accent) 75%, transparent),
-    0 0 18px color-mix(in srgb, var(--accent) 48%, transparent),
-    inset 0 0 12px color-mix(in srgb, var(--accent) 18%, transparent);
+    0 0 18px color-mix(in srgb, var(--accent) 48%, transparent);
 }
 
 @keyframes chat-effort-flow {
@@ -2900,14 +2953,32 @@ html[dir="rtl"] .chat-attachment-loading > span {
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  .chat-controls__reasoning-fill {
+    transition: width 300ms ease;
+  }
+
+  .chat-controls__reasoning-knob {
+    transition: left 300ms ease;
+  }
+
+  .chat-controls__reasoning-boost {
+    transition: opacity 300ms ease;
+  }
+
+  .chat-controls__reasoning-groove {
+    transition: box-shadow 300ms ease;
+  }
+
   .chat-controls__reasoning-slider:has(
-    [data-effort-boost="max"]:not(:disabled),
-    [data-effort-boost="ultra"]:not(:disabled)
-  ) {
+      [data-effort-boost="max"]:not(:disabled),
+      [data-effort-boost="ultra"]:not(:disabled)
+    )
+    .chat-controls__reasoning-boost {
     animation: chat-effort-flow 6s ease-in-out infinite alternate;
   }
 
-  .chat-controls__reasoning-slider:has([data-effort-boost="ultra"]:not(:disabled)) {
+  .chat-controls__reasoning-slider:has([data-effort-boost="ultra"]:not(:disabled))
+    .chat-controls__reasoning-boost {
     animation-duration: 4s;
   }
 }
@@ -2924,71 +2995,55 @@ html[dir="rtl"] .chat-attachment-loading > span {
   outline: none;
 }
 
+.chat-controls__reasoning-slider:has(
+    .chat-controls__reasoning-range:focus-visible
+  )
+  .chat-controls__reasoning-knob {
+  box-shadow: var(--focus-ring);
+}
+
+.chat-controls__reasoning-slider:has(.chat-controls__reasoning-range--inherit)
+  .chat-controls__reasoning-knob {
+  background: var(--muted);
+}
+
+.chat-controls__reasoning-slider:has(.chat-controls__reasoning-range--unanchored)
+  .chat-controls__reasoning-knob {
+  opacity: 0.35;
+}
+
+/* The native thumb stays invisible at the knob's width so pointer positions
+   map to the same stop centers the knob and dots are drawn at. */
 .chat-controls__reasoning-range::-webkit-slider-runnable-track {
   height: 26px;
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border: none;
   border-radius: var(--radius-full);
-  background: var(
-    --reasoning-track-background,
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--text) 18%, transparent) var(--reasoning-fill, 0%),
-      color-mix(in srgb, var(--text) 7%, transparent) var(--reasoning-fill, 0%)
-    )
-  );
+  background: transparent;
 }
 
 .chat-controls__reasoning-range::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 28px;
+  width: var(--chat-effort-knob-width);
   height: 20px;
   margin-top: 3px;
   border: none;
   border-radius: var(--radius-full);
-  background: var(--text-strong);
-  box-shadow: var(--shadow-sm);
-}
-
-.chat-controls__reasoning-range:focus-visible::-webkit-slider-thumb {
-  box-shadow: var(--focus-ring);
-}
-
-.chat-controls__reasoning-range--inherit::-webkit-slider-thumb {
-  background: var(--muted);
-}
-
-.chat-controls__reasoning-range--unanchored::-webkit-slider-thumb {
-  opacity: 0.35;
+  background: transparent;
 }
 
 .chat-controls__reasoning-range::-moz-range-track {
   height: 26px;
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border: none;
   border-radius: var(--radius-full);
-  background: var(--reasoning-track-background, color-mix(in srgb, var(--text) 7%, transparent));
-}
-
-.chat-controls__reasoning-range::-moz-range-progress {
-  height: 24px;
-  border-radius: var(--radius-full);
-  background: var(--reasoning-track-background, color-mix(in srgb, var(--text) 18%, transparent));
+  background: transparent;
 }
 
 .chat-controls__reasoning-range::-moz-range-thumb {
-  width: 28px;
+  width: var(--chat-effort-knob-width);
   height: 20px;
   border: none;
   border-radius: var(--radius-full);
-  background: var(--text-strong);
-  box-shadow: var(--shadow-sm);
-}
-
-.chat-controls__reasoning-range--inherit::-moz-range-thumb {
-  background: var(--muted);
-}
-
-.chat-controls__reasoning-range--unanchored::-moz-range-thumb {
-  opacity: 0.35;
+  background: transparent;
 }
 
 .chat-controls__speed-panel {
