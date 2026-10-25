@@ -52,7 +52,6 @@ export function props(overrides: Partial<ModelProvidersViewProps> = {}): ModelPr
     addProviderKey: "",
     installedAgents: nothing,
     onRefresh: () => undefined,
-    onDeleteProvider: () => undefined,
     onAddProviderToggle: () => undefined,
     onAddProviderKeyChange: () => undefined,
     onAddProvider: () => undefined,

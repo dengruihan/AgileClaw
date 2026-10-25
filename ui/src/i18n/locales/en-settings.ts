@@ -678,6 +678,7 @@ const enSettings = {
       endpoint: "Endpoint",
       defaultEndpoint: "Provider default",
       customProvider: "Custom provider",
+      providerActions: "Actions for {name}",
       advanced: "Advanced configuration",
       providerId: "Provider ID",
       keepKey: "Enter an API key",

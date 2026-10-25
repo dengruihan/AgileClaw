@@ -634,6 +634,16 @@
   font-size: var(--control-ui-text-xs);
 }
 
+.provider-manager__menu {
+  flex-shrink: 0;
+}
+
+.provider-manager__menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .provider-manager--inline .provider-manager__body {
   padding: var(--space-5) var(--space-6) var(--space-6);
   overflow: visible;

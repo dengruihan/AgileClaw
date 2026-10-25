@@ -4,7 +4,9 @@ import { property, state } from "lit/decorators.js";
 import type { ModelCatalogEntry, ModelCatalogResult, ModelsProbeResult } from "../../api/types.ts";
 import type { ApplicationContext } from "../../app/context.ts";
 import { showConfirmDialog } from "../../components/confirm-dialog.ts";
+import { icons } from "../../components/icons.ts";
 import { renderProviderBrandIcon } from "../../components/provider-icon.ts";
+import "../../components/web-awesome.ts";
 import { t } from "../../i18n/index.ts";
 import { registerSettingsEnglish } from "../../i18n/locales/en-settings.ts";
 import { currentConfigObject } from "../../lib/config/config-state-model.ts";
@@ -57,6 +59,11 @@ export class ProviderManager extends OpenClawLightDomElement {
   @property({ attribute: false }) onRefresh: () => void = () => {};
   @property({ attribute: false }) onProbe: (modelId: string) => void = () => {};
   @property({ attribute: false }) onConnect: () => void = () => {};
+  /** Opens the page-owned delete flow for the header menu; policy stays with the page. */
+  @property({ attribute: false })
+  onDeleteProvider: ((card: ModelProviderCard) => void) | null = null;
+  @property({ attribute: false })
+  canDeleteProvider: ((card: ModelProviderCard) => boolean) | null = null;
   @property({ attribute: false }) onCredential: (
     provider: string,
     key: string | null,
@@ -411,6 +418,45 @@ export class ProviderManager extends OpenClawLightDomElement {
     ${this.notice ? html`<div class="callout" role="status">${this.notice}</div>` : nothing}`;
   }
 
+  private renderHeaderMenu() {
+    const card = this.card;
+    // Deletion applies to authored entries only; the page owns that decision
+    // and the confirm/logout flow, so the menu just forwards the current card.
+    if (!card || this.canDeleteProvider?.(card) !== true) {
+      return nothing;
+    }
+    const actionsLabel = t("modelProviders.manager.providerActions", { name: card.displayName });
+    return html`
+      <wa-dropdown
+        placement="bottom-end"
+        @wa-select=${(event: CustomEvent<{ item: { value?: string } }>) => {
+          if (event.detail.item.value === "delete") {
+            this.onDeleteProvider?.(card);
+          }
+        }}
+      >
+        <button
+          slot="trigger"
+          type="button"
+          class="btn btn--sm btn--icon provider-manager__menu-trigger"
+          aria-label=${actionsLabel}
+          title=${actionsLabel}
+          ?disabled=${this.disabled}
+        >
+          ${icons.moreHorizontal}
+        </button>
+        <wa-dropdown-item
+          value="delete"
+          variant="danger"
+          data-models-delete-provider=${card.id}
+          ?disabled=${this.disabled}
+        >
+          ${t("modelProviders.delete.action")}
+        </wa-dropdown-item>
+      </wa-dropdown>
+    `;
+  }
+
   override render() {
     if (!this.intent) {
       return nothing;
@@ -455,6 +501,7 @@ export class ProviderManager extends OpenClawLightDomElement {
               <span class="muted">${this.providerId}</span>
             </div>
           </div>
+          ${this.renderHeaderMenu()}
         </header>
         <div class="provider-manager__body">
           ${this.blocked ? html`<p class="callout warning">${this.blocked}</p>` : nothing}
