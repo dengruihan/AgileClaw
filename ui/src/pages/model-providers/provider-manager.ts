@@ -370,14 +370,6 @@ export class ProviderManager extends OpenClawLightDomElement {
         onProbe: this.onProbe,
       },
       state: {
-        addedRows: new Set(
-          this.customProvider
-            ? configRows.map((entry) => String(entry.id))
-            : configRows
-                .filter((entry) => entry.metadataSource === "models-add")
-                .map((entry) => String(entry.id)),
-        ),
-        configuredRows: new Set(configRows.map((entry) => String(entry.id))),
         disabled: this.disabled,
         loading: this.loading,
         probeBlocked: this.dirty,

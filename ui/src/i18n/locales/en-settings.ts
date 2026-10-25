@@ -697,8 +697,6 @@ const enSettings = {
         "Enter a model ID and name. New model IDs must be unique within this provider.",
       referenced:
         "This model is referenced by {references}. Update these settings before removing it.",
-      override: "Configured",
-      userAdded: "User added",
       inherited: "Provider default",
       editModel: "Edit model",
       modelName: "Name",
@@ -706,6 +704,11 @@ const enSettings = {
       contextWindow: "Context window",
       maxOutputTokens: "Max output tokens",
       inputTypes: "Input types",
+      capabilities: {
+        vision: "Vision",
+        audio: "Audio",
+        document: "Document",
+      },
       reasoningSupport: "Reasoning",
       thinkingLevels: {
         title: "Thinking levels",

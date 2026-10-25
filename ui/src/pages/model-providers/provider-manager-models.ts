@@ -13,10 +13,6 @@ export type ProviderModelsActions = {
 };
 
 export type ProviderModelsListState = {
-  /** Rows with a user-added definition; their badge marks them as added. */
-  addedRows: ReadonlySet<string>;
-  /** Rows with any authored config entry; the badge marks them as overrides. */
-  configuredRows: ReadonlySet<string>;
   disabled: boolean;
   loading: boolean;
   providerId: string;
@@ -41,14 +37,19 @@ export function providerModelsList(params: {
     const probing = state.probeBusy[`probe:${ref}`];
     const result = state.probeResults[ref];
     const error = state.probeErrors[ref]?.text;
-    const badge = html`<span class="provider-manager__badge">
-      ${t(
-        state.addedRows.has(id)
-          ? "modelProviders.manager.userAdded"
-          : "modelProviders.manager.override",
-      )}
-    </span>`;
     const inputs = Array.isArray(row.input) ? row.input.map((value) => String(value)) : [];
+    // Text is the baseline capability, so only extras earn a chip; image and
+    // video collapse into one visual label.
+    const capabilities: string[] = [];
+    if (inputs.includes("image") || inputs.includes("video")) {
+      capabilities.push("vision");
+    }
+    if (inputs.includes("audio")) {
+      capabilities.push("audio");
+    }
+    if (inputs.includes("document")) {
+      capabilities.push("document");
+    }
     const contextWindow =
       typeof row.contextWindow === "number" && Number.isFinite(row.contextWindow)
         ? row.contextWindow
@@ -61,15 +62,19 @@ export function providerModelsList(params: {
             ? html`<span class="muted provider-manager__model-id">${id}</span>`
             : nothing
         }
-        ${badge}
         ${
-          inputs.length
-            ? inputs.map(
-                (value) => html`<span class="provider-manager__model-chip">${value}</span>`,
+          capabilities.length
+            ? capabilities.map(
+                (capability) =>
+                  html`<span class="provider-manager__model-chip"
+                    >${t(`modelProviders.manager.capabilities.${capability}`)}</span
+                  >`,
               )
-            : html`<span class="muted provider-manager__model-meta-fallback">
-                ${t("modelProviders.manager.inherited")}
-              </span>`
+            : inputs.length
+              ? nothing
+              : html`<span class="muted provider-manager__model-meta-fallback">
+                  ${t("modelProviders.manager.inherited")}
+                </span>`
         }
         ${
           contextWindow !== undefined
