@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import { customModelRefs, filterCustomModelCatalog } from "./custom-model-refs.ts";
 
 describe("custom model refs", () => {
-  it("collects authored provider model refs and keeps empty rosters unfiltered", () => {
+  it("collects authored provider model refs and keeps only unloaded config unfiltered", () => {
     expect(customModelRefs(null)).toBeNull();
     expect(customModelRefs(undefined)).toBeNull();
-    expect(customModelRefs({})).toBeNull();
+    // A loaded config with no authored entries is strict: pickers show nothing
+    // custom until the operator adds models.
+    expect(customModelRefs({})).toEqual(new Set());
     expect(
       customModelRefs({
         models: {
@@ -28,6 +30,9 @@ describe("custom model refs", () => {
     expect(filterCustomModelCatalog(models, null)).toEqual(models);
     expect(filterCustomModelCatalog(models, config)).toEqual([{ provider: "zai", id: "glm-5.3" }]);
     expect(filterCustomModelCatalog(models, config, ["OPENAI/gpt-5"])).toEqual(models);
-    expect(filterCustomModelCatalog(models, {})).toEqual(models);
+    expect(filterCustomModelCatalog(models, {})).toEqual([]);
+    expect(filterCustomModelCatalog(models, {}, ["openai/gpt-5"])).toEqual([
+      { provider: "openai", id: "gpt-5" },
+    ]);
   });
 });

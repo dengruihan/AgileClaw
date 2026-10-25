@@ -117,6 +117,14 @@ suite.define(() => {
         },
         entries: { main: {} },
       },
+      // Strict pickers list authored models only, so the catalog rows under
+      // test need their own provider entries.
+      models: {
+        providers: {
+          anthropic: { models: [{ id: "claude-opus-4-8" }, { id: "claude-sonnet-5" }] },
+          nvidia: { models: [{ id: "moonshotai/kimi-k2.5" }] },
+        },
+      },
     };
     const gateway = await installMockGateway(page, {
       defaultAgentId: "main",

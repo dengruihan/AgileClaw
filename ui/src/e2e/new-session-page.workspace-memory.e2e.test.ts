@@ -576,23 +576,9 @@ suite.define(() => {
             "agents.list": mainAgentList(),
             "fs.listDir": FOLDER_LISTINGS,
             "projects.list": { projects: [], recents: [] },
-            "users.prefs.get": {
-              sequence: [
-                { status: "ok", entries: {} },
-                {
-                  status: "ok",
-                  entries: {
-                    "new-session.migration.v1": true,
-                    "new-session.v1:main": {
-                      folder: PICKED,
-                      workspace: WORKSPACE,
-                      worktree: true,
-                      model: "anthropic/claude-sonnet-4-6",
-                    },
-                  },
-                },
-              ],
-            },
+            // A stable unmigrated state keeps the read order irrelevant; the
+            // test advances to the gateway-first state explicitly below.
+            "users.prefs.get": { status: "ok", entries: {} },
             "users.prefs.set": { status: "ok" },
             "worktrees.branches": GIT_BRANCHES,
           },
@@ -614,6 +600,20 @@ suite.define(() => {
         await pollLocatorText(trigger.locator(".new-session-page__trigger-label")).toBe("packages");
         await expect.poll(() => checkoutTrigger.getAttribute("data-worktree")).toBe("true");
         await captureProjectUiProof(suite, page, "identity-preferences-migrated.png");
+
+        // The migration is committed; later reads observe the gateway-first state.
+        await gateway.setMethodResponse("users.prefs.get", {
+          status: "ok",
+          entries: {
+            "new-session.migration.v1": true,
+            "new-session.v1:main": {
+              folder: PICKED,
+              workspace: WORKSPACE,
+              worktree: true,
+              model: "anthropic/claude-sonnet-4-6",
+            },
+          },
+        });
 
         await navigateInApp(page, "chat");
         await waitForCommittedChatRoute(page);

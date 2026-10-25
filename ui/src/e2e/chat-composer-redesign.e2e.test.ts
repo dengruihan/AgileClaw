@@ -301,13 +301,27 @@ suite.define(() => {
           },
         ],
         methodResponses: {
-          "config.get": {
-            config: { ui: { prefs: { chatFollowUpMode: "steer" } } },
-            hash: "composer-redesign-config",
-            issues: [],
-            raw: JSON.stringify({ ui: { prefs: { chatFollowUpMode: "steer" } } }),
-            valid: true,
-          },
+          "config.get": (() => {
+            // Strict pickers list authored models only, so the catalog rows
+            // under test need their own provider entries.
+            const config = {
+              ui: { prefs: { chatFollowUpMode: "steer" } },
+              models: {
+                providers: {
+                  openai: { models: [{ id: "gpt-5.5" }, { id: "gpt-5.4-pro" }] },
+                  codex: { models: [{ id: "gpt-5.3-codex-spark" }] },
+                  anthropic: { models: [{ id: "claude-sonnet-4-6" }] },
+                },
+              },
+            };
+            return {
+              config,
+              hash: "composer-redesign-config",
+              issues: [],
+              raw: JSON.stringify(config),
+              valid: true,
+            };
+          })(),
           "models.authStatus": {
             ts: Date.now(),
             providers: [
