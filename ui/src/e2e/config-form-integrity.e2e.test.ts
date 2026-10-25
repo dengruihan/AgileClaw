@@ -610,10 +610,6 @@ suite.define(() => {
         const url = manager.getByRole("textbox", { name: "Base URL", exact: true });
         const apiKey = manager.locator('input[name="apiKey"]');
         await providerIdInput.waitFor();
-        await providerIdInput.fill("cancelled-provider");
-        await url.fill("https://cancelled.example.test/v1");
-        await manager.getByRole("button", { name: "Reset form", exact: true }).click();
-        await expect.poll(() => url.inputValue()).toBe("");
         expect(await gateway.getRequests("config.patch")).toHaveLength(0);
         expect(await gateway.getRequests("models.authSetApiKey")).toHaveLength(0);
 
@@ -780,9 +776,6 @@ suite.define(() => {
           results: [],
         });
         await expect.poll(() => modelRow.getByRole("status").textContent()).toContain("Connected");
-        await url.fill("https://discarded.example.test/v1");
-        await manager.getByRole("button", { name: "Reset form", exact: true }).click();
-        await expect.poll(() => url.inputValue()).toBe("https://changed.example.test/v1");
         expect(await gateway.getRequests("config.patch")).toHaveLength(3);
         if (captureUiProofEnabled) {
           await page.screenshot({

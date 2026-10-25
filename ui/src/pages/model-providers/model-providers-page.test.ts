@@ -11,7 +11,6 @@ import type { DefaultModelSelection } from "./data.ts";
 import { EMPTY_MODEL_PROVIDERS_DATA } from "./load.ts";
 import {
   appendPage,
-  createApiKeyProviderData,
   createAuthStatus,
   createHarness,
   waitForProviders,
@@ -292,41 +291,6 @@ describe("ModelProvidersPage agent scope", () => {
     });
     await page.updateComplete;
     expect(page.textContent).toContain(page.messages.openai?.warning);
-  });
-
-  it("removes stored API keys through the rendered action and retains its warning", async () => {
-    const { context, request, runtimeConfig } = createHarness("main");
-    const page = appendPage(context);
-    await waitForProviders(page);
-    page.data = createApiKeyProviderData();
-    const originalRequest = request.getMockImplementation()!;
-    request.mockImplementation(async (method) =>
-      method === "models.authLogout"
-        ? { removedProfiles: ["openai:key"], warning: "Authentication refresh failed." }
-        : originalRequest(method),
-    );
-    await page.updateComplete;
-    page.querySelector<HTMLButtonElement>('[data-provider-select="openai"]')!.click();
-    await waitForFast(() =>
-      expect(page.querySelector('[data-provider-details="openai"]')).not.toBeNull(),
-    );
-    const removeKey = [
-      ...page.querySelectorAll<HTMLButtonElement>("openclaw-provider-manager button"),
-    ].find((button) => button.textContent?.trim() === "Remove key");
-    expect(removeKey).toBeDefined();
-    await waitForFast(() => expect(removeKey!.disabled).toBe(false));
-    removeKey!.click();
-    await waitForFast(() => expect(page.messages.openai?.kind).toBe("success"));
-    expect(request).toHaveBeenCalledWith("models.authLogout", {
-      provider: "openai",
-      agentId: "main",
-      credentialType: "api_key",
-    });
-    expect(runtimeConfig.patch).not.toHaveBeenCalled();
-    expect(page.messages.openai).toMatchObject({
-      text: "Saved API keys removed.",
-      warning: "Authentication refresh failed.",
-    });
   });
 
   it("keeps committed provider-add feedback visible when its refresh fails", async () => {

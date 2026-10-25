@@ -8,7 +8,6 @@ import { stringInputValue } from "./provider-manager-model-form.ts";
 /** Interactive members the provider-manager connection form reads and calls. */
 export type ProviderConnectionActions = {
   onConnect: () => void;
-  onRemoveCredential: () => Promise<void>;
   onProviderIdInput: (value: string) => void;
   onKeyInput: (value: string) => void;
   onToggleRevealKey: () => void;
@@ -16,7 +15,6 @@ export type ProviderConnectionActions = {
 };
 
 export type ProviderConnectionState = {
-  agentId: string;
   busy: boolean;
   card: ModelProviderCard | null;
   creating: boolean;
@@ -67,10 +65,7 @@ export function providerConnectionFields(params: {
       : stringInputValue(state.draft.api);
   const authMode = !creating ? state.card?.configAuthMode : undefined;
   const authModeBlocked = Boolean(authMode && authMode !== "api-key");
-  return html` <p class="muted">
-      ${t("modelProviders.manager.connectionScope", { agent: state.agentId })}
-    </p>
-    ${
+  return html` ${
       creating
         ? html`<label class="field"
             ><span>${t("modelProviders.manager.providerId")}</span
@@ -172,23 +167,6 @@ export function providerConnectionFields(params: {
     ${
       state.keySource === "environment" || state.keySource === "reference"
         ? html`<p class="muted">${t("modelProviders.manager.externalKey")}</p>`
-        : nothing
-    }
-    ${
-      !creating &&
-      !authModeBlocked &&
-      (state.card?.hasConfigApiKey ||
-        state.card?.profiles.some(
-          (profile) => profile.type === "api_key" && profile.logoutSupported,
-        ))
-        ? html`<button
-            type="button"
-            class="btn btn--sm danger"
-            ?disabled=${state.disabled || state.keyLoading}
-            @click=${() => void actions.onRemoveCredential()}
-          >
-            ${t("modelProviders.apiKey.remove")}
-          </button>`
         : nothing
     }
     ${
