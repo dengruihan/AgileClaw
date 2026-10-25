@@ -3,41 +3,15 @@ import { renderSettingsStatus } from "../../components/settings-ui.ts";
 import { t } from "../../i18n/index.ts";
 import { registerModelControlsEnglish } from "../../i18n/locales/en-model-controls.ts";
 import type { ModelProviderRowMessage } from "./config-mutation.ts";
-import type { ModelProviderAuthKind, ModelProviderCard } from "./data.ts";
+import type { ModelProviderCard } from "./data.ts";
 
 registerModelControlsEnglish();
-
-const AUTH_STATUS: Record<
-  ModelProviderAuthKind,
-  { kind: "ok" | "warn" | "danger" | "muted"; labelKey: string }
-> = {
-  ok: { kind: "ok", labelKey: "modelProviders.status.ok" },
-  expiring: { kind: "warn", labelKey: "modelProviders.status.expiring" },
-  expired: { kind: "danger", labelKey: "modelProviders.status.expired" },
-  missing: { kind: "danger", labelKey: "modelProviders.status.missing" },
-  "api-key": { kind: "muted", labelKey: "modelProviders.status.apiKey" },
-};
-
-function renderAuthStatus(card: ModelProviderCard) {
-  const auth = card.auth;
-  if (!auth) {
-    return nothing;
-  }
-  const status = AUTH_STATUS[auth.kind];
-  const label = t(status.labelKey);
-  const detail = auth.expiryLabel
-    ? t("modelProviders.expiresIn", { time: auth.expiryLabel })
-    : undefined;
-  return html`
-    <span title=${detail ?? label}> ${renderSettingsStatus({ kind: status.kind, label })} </span>
-  `;
-}
 
 function hasProviderCredentials(card: ModelProviderCard): boolean {
   return card.hasConfigApiKey || Boolean(card.apiKey) || card.profiles.length > 0;
 }
 
-export function hasVerifiedProvider(card: ModelProviderCard): boolean {
+function hasVerifiedProvider(card: ModelProviderCard): boolean {
   return (
     card.catalogStatus === "ready" &&
     card.auth?.kind !== "expired" &&
@@ -46,6 +20,12 @@ export function hasVerifiedProvider(card: ModelProviderCard): boolean {
   );
 }
 
+/**
+ * Display-only mapping, mirroring ZCode's three provider states: ready
+ * (green, catalog-confirmed with usable models), not ready (yellow,
+ * credentials exist but the catalog has not confirmed usable models), and
+ * not enabled (gray, the card carries no credentials at all).
+ */
 export function renderProviderStatus(card: ModelProviderCard) {
   if (card.checkingModels) {
     return renderSettingsStatus({
@@ -53,35 +33,16 @@ export function renderProviderStatus(card: ModelProviderCard) {
       label: t("chat.modelControls.checkingProviderModels", { providers: card.displayName }),
     });
   }
-  if (
-    card.auth?.kind === "expired" ||
-    card.auth?.kind === "missing" ||
-    card.auth?.kind === "expiring"
-  ) {
-    return renderAuthStatus(card);
-  }
-  if (card.catalogStatus === "auth-rejected") {
-    return renderSettingsStatus({ kind: "danger", label: t("modelProviders.status.denied") });
-  }
-  if (card.catalogStatus === "unavailable") {
-    return renderSettingsStatus({
-      kind: "warn",
-      label: t("modelProviders.status.modelsUnavailable"),
-    });
-  }
-  if (!hasProviderCredentials(card)) {
-    return renderAuthStatus(card);
-  }
-  const verified = hasVerifiedProvider(card);
-  const ready = verified && card.availableModelCount > 0;
+  const ready = hasVerifiedProvider(card) && card.availableModelCount > 0;
+  const hasCredentials = hasProviderCredentials(card);
   return renderSettingsStatus({
-    kind: ready ? "ok" : "muted",
+    kind: ready ? "ok" : hasCredentials ? "warn" : "muted",
     label: t(
       ready
         ? "modelProviders.status.ready"
-        : verified
-          ? "modelProviders.status.ok"
-          : "modelProviders.status.configured",
+        : hasCredentials
+          ? "modelProviders.status.notReady"
+          : "modelProviders.status.notEnabled",
     ),
   });
 }

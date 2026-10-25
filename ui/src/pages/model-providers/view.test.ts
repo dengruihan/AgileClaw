@@ -470,46 +470,50 @@ describe("renderModelProviders", () => {
     expect(container.querySelector('[data-provider-id="openai"]')).toBeNull();
   });
 
-  it.each([false, true])(
-    "does not present catalog-rejected credentials as signed in (configured key: %s)",
-    (hasConfigApiKey) => {
-      const container = mount(
-        props({
-          cards: [
-            card({
-              auth: { kind: "ok" },
-              profiles: [{ profileId: "openai:chatgpt", type: "oauth", status: "ok" }],
-              hasConfigApiKey,
-              catalogStatus: "auth-rejected",
-              modelCount: 0,
-              availableModelCount: 0,
-            }),
-          ],
-          configuredModels: [],
-          defaultModels: { primary: "", fallbacks: [], utilityModel: null },
-        }),
-      );
-
-      const provider = container.querySelector('[data-provider-select="openai"]');
-      expect(text(provider)).toContain("Credentials rejected");
-      expect(text(provider)).not.toContain("Signed in");
+  it.each([
+    {
+      name: "ready when the catalog confirms usable models",
+      card: card({ auth: { kind: "ok" }, catalogStatus: "ready" }),
+      expected: "Ready",
     },
-  );
-
-  it("does not report an unverified API key as ready", () => {
-    const container = mount(
-      props({
-        cards: [
-          card({
-            auth: { kind: "api-key" },
-          }),
-        ],
+    {
+      name: "not ready when an API key is unverified",
+      card: card({ auth: { kind: "api-key" } }),
+      expected: "Not ready",
+    },
+    {
+      name: "not ready when the catalog rejects the credentials",
+      card: card({
+        auth: { kind: "ok" },
+        profiles: [{ profileId: "openai:chatgpt", type: "oauth", status: "ok" }],
+        catalogStatus: "auth-rejected",
+        modelCount: 0,
+        availableModelCount: 0,
       }),
-    );
+      expected: "Not ready",
+    },
+    {
+      name: "not ready when the login expired",
+      card: card({ auth: { kind: "expired" }, catalogStatus: "ready" }),
+      expected: "Not ready",
+    },
+    {
+      name: "not enabled when the card carries no credentials",
+      card: card({ apiKey: undefined, profiles: [] }),
+      expected: "Not enabled",
+    },
+    {
+      name: "checking while a catalog refresh is in flight",
+      card: card({ checkingModels: true }),
+      expected: "OpenAI: checking models…",
+    },
+  ])("renders the provider status badge: $name", ({ card: providerCard, expected }) => {
+    const container = mount(props({ cards: [providerCard] }));
 
     const provider = container.querySelector('[data-provider-select="openai"]');
-    expect(text(provider)).toContain("Credentials configured");
-    expect(text(provider)).not.toContain("Ready");
+    expect(
+      text(provider?.querySelector(".model-providers__nav-status .settings-status") ?? null),
+    ).toBe(expected);
   });
 
   it("qualifies slash-bearing model IDs with their catalog provider", async () => {
