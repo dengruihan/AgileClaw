@@ -33,7 +33,6 @@ import {
   providerModels,
   type ProviderModelsPatch,
 } from "./provider-model-config.ts";
-import { renderProviderStatus } from "./view-status.ts";
 
 registerSettingsEnglish();
 
@@ -456,7 +455,6 @@ export class ProviderManager extends OpenClawLightDomElement {
               <span class="muted">${this.providerId}</span>
             </div>
           </div>
-          ${this.card ? renderProviderStatus(this.card) : nothing}
         </header>
         <div class="provider-manager__body">
           ${this.blocked ? html`<p class="callout warning">${this.blocked}</p>` : nothing}
