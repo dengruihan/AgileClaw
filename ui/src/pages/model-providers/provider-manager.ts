@@ -40,6 +40,11 @@ registerSettingsEnglish();
 export type ProviderManagerIntent = { provider: string; view: "settings" | "models" | "create" };
 type CredentialResult = { ok: false; error?: string } | { ok: true; warning: string | null };
 
+/** Matches the config form's auto-save debounce so both lanes feel alike. */
+const CONNECTION_AUTO_SAVE_DEBOUNCE_MS = 800;
+/** Retry cadence while an earlier save is still in flight. */
+const CONNECTION_AUTO_SAVE_RETRY_MS = 200;
+
 export class ProviderManager extends OpenClawLightDomElement {
   @property({ attribute: false }) context!: ApplicationContext;
   @property() agentId = "";
@@ -78,10 +83,12 @@ export class ProviderManager extends OpenClawLightDomElement {
   private listScrollTop = 0;
   private providerCreated = false;
   private focusModelsSection = false;
+  private autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   override willUpdate(changed: PropertyValues<ProviderManager>) {
     if (changed.has("intent") || changed.has("agentId") || changed.has("context")) {
       this.discardConfirmation?.abort();
+      this.clearConnectionAutoSave();
       this.generation += 1;
       this.busy = false;
       this.loading = false;
@@ -120,6 +127,7 @@ export class ProviderManager extends OpenClawLightDomElement {
 
   override disconnectedCallback() {
     this.discardConfirmation?.abort();
+    this.clearConnectionAutoSave();
     this.generation += 1;
     this.credential.clear();
     super.disconnectedCallback();
@@ -205,6 +213,33 @@ export class ProviderManager extends OpenClawLightDomElement {
   private setDraftField(key: "baseUrl" | "api", value: string) {
     this.draft = { ...this.draft, [key]: value };
     this.touched.add(key);
+    this.scheduleConnectionAutoSave();
+  }
+
+  /** Connection edits save themselves; the submit path only flushes them early. */
+  private scheduleConnectionAutoSave() {
+    this.armConnectionAutoSave(CONNECTION_AUTO_SAVE_DEBOUNCE_MS);
+  }
+
+  private armConnectionAutoSave(delay: number) {
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+    }
+    this.autoSaveTimer = setTimeout(() => {
+      this.autoSaveTimer = null;
+      if (this.busy || this.loading) {
+        this.armConnectionAutoSave(CONNECTION_AUTO_SAVE_RETRY_MS);
+        return;
+      }
+      void this.saveConnection(true);
+    }, delay);
+  }
+
+  private clearConnectionAutoSave() {
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+      this.autoSaveTimer = null;
+    }
   }
 
   private setModelFields(patch: Record<string, unknown>) {
@@ -439,10 +474,12 @@ export class ProviderManager extends OpenClawLightDomElement {
                 onConnect: this.onConnect,
                 onProviderIdInput: (value) => {
                   this.providerId = value;
+                  this.scheduleConnectionAutoSave();
                 },
                 onKeyInput: (value) => {
                   this.credential.value = value;
                   this.requestUpdate();
+                  this.scheduleConnectionAutoSave();
                 },
                 onToggleRevealKey: () => {
                   this.credential.revealed = !this.credential.revealed;
@@ -469,17 +506,14 @@ export class ProviderManager extends OpenClawLightDomElement {
           </div>
           <footer class="provider-manager__footer">
             <span class="muted" role="status"
-              >${this.dirty ? t("modelProviders.manager.unsaved") : nothing}</span
+              >${
+                this.busy
+                  ? t("modelProviders.saving")
+                  : this.dirty
+                    ? t("modelProviders.manager.unsaved")
+                    : nothing
+              }</span
             >
-            <div class="provider-manager__actions">
-              <button
-                type="submit"
-                class="btn primary"
-                ?disabled=${this.disabled || (!creating && !this.dirty)}
-              >
-                ${this.busy ? t("modelProviders.saving") : t("common.save")}
-              </button>
-            </div>
           </footer>
           ${!this.modelDraft ? this.renderMessages() : nothing}
           ${
@@ -544,10 +578,11 @@ export class ProviderManager extends OpenClawLightDomElement {
     }
   }
 
-  private async saveConnection() {
+  private async saveConnection(auto = false) {
+    this.clearConnectionAutoSave();
     if (
       this.disabled ||
-      !this.querySelector<HTMLFormElement>(".provider-manager--inline")?.reportValidity()
+      !this.querySelector<HTMLFormElement>(".provider-manager--inline")?.checkValidity()
     ) {
       return;
     }
@@ -561,11 +596,16 @@ export class ProviderManager extends OpenClawLightDomElement {
       ["__proto__", "constructor", "prototype"].includes(id) ||
       (creating && !this.providerCreated && configuredProvider(this.config, id))
     ) {
-      this.error = t("modelProviders.manager.duplicateProvider");
+      // Auto-saves stay silent on incomplete input; an explicit submit reports it.
+      if (!auto) {
+        this.error = t("modelProviders.manager.duplicateProvider");
+      }
       return;
     }
     if (creating && !this.draft.baseUrl) {
-      this.error = t("modelProviders.manager.urlRequired");
+      if (!auto) {
+        this.error = t("modelProviders.manager.urlRequired");
+      }
       return;
     }
     const { raw, replacePaths } = providerConnectionPatch(

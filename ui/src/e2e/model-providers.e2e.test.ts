@@ -630,10 +630,9 @@ describeControlUiE2e("Control UI Models mocked Gateway E2E", () => {
         await captureProviderProof("01-configured.png", openaiCard);
       }
 
-      await openaiCard.locator('input[name="apiKey"]').fill(openaiInputValue);
       const keyWriteCount = (await gateway.getRequests("models.authSetApiKey")).length;
       await gateway.deferNext("models.authSetApiKey");
-      await openaiCard.getByRole("button", { name: "Save" }).click();
+      await openaiCard.locator('input[name="apiKey"]').fill(openaiInputValue);
       const keyWrite = await gateway.waitForRequest("models.authSetApiKey", {
         after: keyWriteCount,
       });
