@@ -1,11 +1,6 @@
-import { html, nothing } from "lit";
-import type { ChatAccountSelection } from "../../../../../packages/gateway-protocol/src/index.ts";
+import { html } from "lit";
 import { resolveModelRuntimeRoute } from "../../../../../src/shared/model-runtime-route.js";
-import type {
-  ModelAuthStatusResult,
-  ModelCatalogEntry,
-  SessionsListResult,
-} from "../../../api/types.ts";
+import type { ModelCatalogEntry, SessionsListResult } from "../../../api/types.ts";
 import { t } from "../../../i18n/index.ts";
 import { registerModelControlsEnglish } from "../../../i18n/locales/en-model-controls.ts";
 import {
@@ -13,33 +8,18 @@ import {
   normalizeChatModelProviderId,
   resolvePreferredServerChatModelValue,
 } from "../../../lib/chat/model-ref.ts";
-import {
-  resolveChatFastModeSelectState,
-  resolveChatModelSelectState,
-  type ChatFastModeSelectValue,
-  type ChatFastModeTarget,
-} from "../../../lib/chat/model-select-state.ts";
+import { resolveChatModelSelectState } from "../../../lib/chat/model-select-state.ts";
 import {
   resolveChatThinkingSelectState,
   type ChatThinkingTarget,
 } from "../../../lib/chat/thinking.ts";
-import {
-  canonicalModelAuthProviderId,
-  listEffectiveModelAuthProviders,
-} from "../../../lib/model-auth.ts";
 import type { ChatModelCatalogState } from "../../../lib/model-catalog-store.ts";
-import {
-  describeModelProviderAuth,
-  type ModelProviderAuthLabel,
-} from "../../../lib/model-provider-auth-label.ts";
 import {
   isSessionRuntimePinned,
   resolveModelRuntimeEntry,
 } from "../../../lib/model-runtime-choice.ts";
 import { isSessionRunActive } from "../../../lib/session-run-state.ts";
 import { areUiSessionKeysEquivalent } from "../../../lib/sessions/session-key.ts";
-import { renderChatEffortPicker } from "./chat-effort-picker.ts";
-import type { ChatModelAccountSection } from "./chat-model-account-control.ts";
 import {
   isModelPickerOptionSelected,
   type ChatModelPickerOption,
@@ -55,9 +35,6 @@ type ChatContextWindowTarget = Pick<
 >;
 
 type ChatModelControlsProps = {
-  modelAuthStatusResult?: ModelAuthStatusResult | null;
-  accountSelection?: ChatAccountSelection | null;
-  renderAccountSection?: (model: string) => ChatModelAccountSection | undefined;
   activeRunId: string | null;
   activeRunSessionKey?: string;
   modelObservedRunId?: string;
@@ -79,7 +56,6 @@ type ChatModelControlsProps = {
   modelMutationDisabledReason?: string;
   effortMutationDisabledReason?: string;
   contextWindowMutationDisabledReason?: string;
-  fastModeTarget?: ChatFastModeTarget;
   sending: boolean;
   sessionKey: string;
   selectedSession: SessionsListResult["sessions"][number] | undefined;
@@ -89,10 +65,8 @@ type ChatModelControlsProps = {
   contextWindowTarget?: ChatContextWindowTarget;
   thinkingDefaults?: SessionsListResult["defaults"];
   thinkingSession?: ChatThinkingTarget;
-  onFastModeSelect?: (value: ChatFastModeSelectValue, sessionKey: string) => unknown;
   onContextWindowSelect?: (value: string, sessionKey: string) => unknown;
   onModelSetup?: () => void;
-  onProviderSettings?: (provider: string) => void;
   onModelPickerOpen?: () => unknown;
   onModelPickerOpenChange?: (open: boolean) => void;
   onModelSelect?: (value: string, sessionKey: string, agentRuntime?: string | null) => unknown;
@@ -245,27 +219,6 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
   const retired = props.modelCatalogState?.retired === true;
   const uninitialized = props.modelCatalogState?.initialized === false;
   const catalogOwnsChoices = retired || uninitialized || policy?.restricted === true;
-  const providerAuth = new Map<string, ModelProviderAuthLabel>();
-  const headingKey = (id: string) =>
-    normalizeChatModelProviderGroupId(
-      canonicalModelAuthProviderId(normalizeChatModelProviderId(id)),
-    );
-  // Alias records (e.g. google and google-gemini-cli) share one heading, so merge
-  // them under that key first; iterating raw records let the later one overwrite it.
-  for (const provider of listEffectiveModelAuthProviders(
-    (props.modelAuthStatusResult?.providers ?? []).map((record) =>
-      Object.assign({}, record, { provider: headingKey(record.provider) }),
-    ),
-  )) {
-    const selectedId =
-      props.accountSelection?.kind === "automatic"
-        ? undefined
-        : props.accountSelection?.authProfileId;
-    const auth = describeModelProviderAuth(provider, { authProfileId: selectedId });
-    if (auth) {
-      providerAuth.set(headingKey(provider.provider), auth);
-    }
-  }
   const {
     currentOverride: rawCurrentOverride,
     defaultModel,
@@ -303,23 +256,6 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
   );
   const activeRunId = localRunMatchesSession ? props.activeRunId : null;
   const stream = localRunMatchesSession ? props.stream : null;
-  const resolvedFastMode = resolveChatFastModeSelectState({
-    activeRunId,
-    catalog: props.modelCatalog,
-    connected: props.connected,
-    currentModelOverride: currentOverride,
-    fastModeTarget: props.fastModeTarget ?? props.selectedSession,
-    gatewayAvailable: props.gatewayAvailable,
-    loading: props.loading,
-    sending: props.sending,
-    sessionsResult: props.sessionsResult,
-    stream,
-  });
-  // Reasoning/fast state still describes the previous model until the refreshed
-  // session row lands. Lock both so stale levels cannot be committed mid-switch.
-  const fastMode = props.modelSwitching
-    ? { ...resolvedFastMode, disabled: true }
-    : resolvedFastMode;
   const runtimeSelectionLocked = activeSession?.runtimeSelectionLocked === true;
   const currentProviderHint = activeSession?.modelProvider ?? "";
   const hasPendingModelSelection = Object.hasOwn(props.modelOverrides ?? {}, props.sessionKey);
@@ -572,10 +508,6 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
             : "chat.modelControls.noPermittedModels",
         )
       : resolveCatalogTriggerStatus(managedCatalog, modelOptions.length, selectionKnown);
-  const hasResolvableModel =
-    managedCatalog.status === "ready" &&
-    activeModelOption?.disabled !== true &&
-    modelOptions.some((option) => !option.disabled);
   const busy = props.sending || Boolean(props.activeRunId) || props.stream !== null;
   const modelControlsDisabled =
     !props.connected || busy || props.modelSwitching || !props.gatewayAvailable;
@@ -598,21 +530,9 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
   const selectedContextWindow =
     contextWindowOwner?.contextWindow ?? contextWindowOwner?.contextWindowDefault ?? "";
   const defaultContextWindow = contextWindowOwner?.contextWindowDefault;
-  const effortDisabled =
-    commonDisabled ||
-    effortMutationDisabled ||
-    (thinking.options.length === 0 && fastMode.disabled);
-  // Floating UI deliberately tracks a live anchor. Keep the eventual effort
-  // control in layout while catalog state is transient (and until an open model
-  // menu closes), so a sibling appearing cannot move that anchor mid-interaction.
-  const reserveEffortPicker =
-    !hasResolvableModel && (catalogLoadingWithoutSnapshot || props.modelPickerOpen === true);
-  const showEffortPicker = hasResolvableModel || reserveEffortPicker;
   return html`
     <div class="chat-controls__session chat-controls__model chat-controls__model-settings">
       ${renderChatModelPicker({
-        providerAuth: props.modelAuthStatusResult ? providerAuth : undefined,
-        accountSection: props.renderAccountSection?.(currentOverride || defaultModel),
         contextWindow:
           contextWindows.length > 1
             ? {
@@ -639,6 +559,8 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
         selectedAgentRuntime,
         sessionModelPinned,
         sessionKey: props.sessionKey,
+        thinking,
+        thinkingDisabled,
         triggerModelLabel: formatPickerModelLabel(committedModelLabel),
         triggerModelValue: modelPending && !modelStarting ? "" : triggerModelValue || undefined,
         triggerStarting: modelStarting,
@@ -656,37 +578,16 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
           !selectionKnown,
         onModelSetup:
           policy?.restricted || retired || uninitialized ? undefined : props.onModelSetup,
-        onProviderSettings:
-          policy?.restricted || retired || uninitialized ? undefined : props.onProviderSettings,
         onOpen: props.onModelPickerOpen,
         onOpenChange: props.onModelPickerOpenChange,
         onModelSelect: async (next, targetSessionKey, agentRuntime) =>
           props.onModelSelect?.(next, targetSessionKey, agentRuntime),
         onTargetRetry: props.onModelPickerTargetRetry,
         onTargetSelect: props.onModelPickerTargetSelect,
+        onThinkingSelect: async (next, targetSessionKey) =>
+          props.onThinkingSelect?.(next, targetSessionKey),
         onRequestUpdate: props.onRequestUpdate,
       })}
-      ${
-        !showEffortPicker
-          ? nothing
-          : renderChatEffortPicker({
-              disabled: effortDisabled,
-              disabledReason: props.effortMutationDisabledReason,
-              fastMode: {
-                ...fastMode,
-                disabled: fastMode.disabled || commonDisabled || effortMutationDisabled,
-              },
-              sessionKey: props.sessionKey,
-              thinkingDisabled,
-              thinking,
-              onFastModeSelect: async (next, targetSessionKey) =>
-                props.onFastModeSelect?.(next, targetSessionKey),
-              onRequestUpdate: props.onRequestUpdate,
-              onThinkingSelect: async (next, targetSessionKey) =>
-                props.onThinkingSelect?.(next, targetSessionKey),
-              reserved: reserveEffortPicker,
-            })
-      }
     </div>
   `;
 }
