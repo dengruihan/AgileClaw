@@ -112,7 +112,7 @@ function editButton(manager: Element, modelId: string): HTMLButtonElement {
     ...manager
       .querySelector(`[data-model-id="${modelId}"]`)!
       .querySelectorAll<HTMLButtonElement>("button"),
-  ].find((candidate) => candidate.textContent?.trim() === "Edit model");
+  ].find((candidate) => candidate.getAttribute("aria-label") === "Edit model");
   expect(button).toBeDefined();
   return button!;
 }

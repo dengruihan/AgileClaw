@@ -2,6 +2,7 @@ import { html, nothing, type TemplateResult } from "lit";
 import type { ModelsProbeResult } from "../../api/types.ts";
 import { icons } from "../../components/icons.ts";
 import { t } from "../../i18n/index.ts";
+import { formatContextTokenCapacity } from "../../lib/format.ts";
 
 /** Interactive members the provider-manager models list reads and calls. */
 export type ProviderModelsActions = {
@@ -47,15 +48,37 @@ export function providerModelsList(params: {
           : "modelProviders.manager.override",
       )}
     </span>`;
-    return html`<article class="provider-manager__model" data-model-id=${id}>
-      <div>
-        <strong>${modelName}</strong>
-        <div class="muted provider-manager__model-id">${id}</div>
-        <small
-          >${Array.isArray(row.input) ? row.input.join(" · ") : t("modelProviders.manager.inherited")}</small
-        >
+    const inputs = Array.isArray(row.input) ? row.input.map((value) => String(value)) : [];
+    const contextWindow =
+      typeof row.contextWindow === "number" && Number.isFinite(row.contextWindow)
+        ? row.contextWindow
+        : undefined;
+    return html`<li class="provider-manager__model" data-model-id=${id}>
+      <div class="provider-manager__model-copy">
+        <span class="provider-manager__model-name">${modelName}</span>
+        ${
+          id !== modelName
+            ? html`<span class="muted provider-manager__model-id">${id}</span>`
+            : nothing
+        }
+        ${badge}
+        ${
+          inputs.length
+            ? inputs.map(
+                (value) => html`<span class="provider-manager__model-chip">${value}</span>`,
+              )
+            : html`<span class="muted provider-manager__model-meta-fallback">
+                ${t("modelProviders.manager.inherited")}
+              </span>`
+        }
+        ${
+          contextWindow !== undefined
+            ? html`<span class="provider-manager__model-chip"
+                >${formatContextTokenCapacity(contextWindow)}</span
+              >`
+            : nothing
+        }
       </div>
-      ${badge}
       <div class="provider-manager__actions">
         <button
           type="button"
@@ -68,19 +91,22 @@ export function providerModelsList(params: {
           ${probing ? icons.loader : icons.plug}</button
         ><button
           type="button"
-          class="btn btn--sm"
+          class="btn btn--sm btn--icon"
+          aria-label=${t("modelProviders.manager.editModel")}
+          title=${t("modelProviders.manager.editModel")}
           ?disabled=${state.disabled}
           @click=${() => actions.onEdit(row)}
         >
-          ${t("modelProviders.manager.editModel")}
-        </button>
-        <button
+          ${icons.edit}</button
+        ><button
           type="button"
-          class="btn btn--sm danger"
+          class="btn btn--sm btn--icon danger"
+          aria-label=${t("common.delete")}
+          title=${t("common.delete")}
           ?disabled=${state.disabled}
           @click=${() => actions.onDelete(id)}
         >
-          ${t("common.delete")}
+          ${icons.trash}
         </button>
       </div>
       ${
@@ -103,7 +129,7 @@ export function providerModelsList(params: {
             </p>`
           : nothing
       }
-    </article>`;
+    </li>`;
   };
   return html`<div class="provider-manager__list-toolbar">
       <h3>${t("modelProviders.manager.models")}</h3>
@@ -111,7 +137,9 @@ export function providerModelsList(params: {
         ${icons.plus}${t("modelProviders.manager.addModel")}
       </button>
     </div>
-    <div class="provider-manager__model-list">${state.rows.map((row) => modelRow(row))}</div>
+    <ul class="provider-manager__model-list">
+      ${state.rows.map((row) => modelRow(row))}
+    </ul>
     ${
       !state.rows.length && !state.loading
         ? html`<p class="provider-manager__empty">${t("modelProviders.manager.noModels")}</p>`
