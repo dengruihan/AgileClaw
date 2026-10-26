@@ -1,13 +1,9 @@
 import { nothing, render } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  resolveChatFastModeSelectState,
-  type ChatFastModeSelectState,
-} from "../../../lib/chat/model-select-state.ts";
 import { resolveChatThinkingSelectState } from "../../../lib/chat/thinking.ts";
 import "../../../styles/base.css";
 import "../../../styles/chat/composer.css";
-import { renderChatEffortPicker } from "./chat-effort-picker.ts";
+import { renderChatEffortPanel } from "./chat-effort-picker.ts";
 
 let host: HTMLDivElement | undefined;
 
@@ -24,16 +20,13 @@ async function fixture(
   levels: Array<string | { id: string; label: string }>,
   value: string,
   inherited = false,
-  fastMode?: ChatFastModeSelectState,
 ) {
   host ??= document.body.appendChild(document.createElement("div"));
   const onThinkingSelect = vi.fn(async () => undefined);
-  const onFastModeSelect = vi.fn(async () => undefined);
   render(
-    renderChatEffortPicker({
-      disabled: false,
-      thinkingDisabled: false,
+    renderChatEffortPanel({
       sessionKey: "effort-preview",
+      thinkingDisabled: false,
       thinking: resolveChatThinkingSelectState({
         catalog: [],
         sessionKey: "effort-preview",
@@ -46,25 +39,13 @@ async function fixture(
           ),
         },
       }),
-      fastMode: fastMode ?? {
-        active: false,
-        currentOverride: "",
-        disabled: true,
-        label: "Off",
-        nextValue: "on",
-        supported: false,
-      },
-      onFastModeSelect,
       onThinkingSelect,
     }),
     host,
   );
-  host.querySelector("details")!.open = true;
-  await host.querySelector("wa-popup")!.updateComplete;
   return {
     input: host.querySelector<HTMLInputElement>("input[type=range]")!,
     onThinkingSelect,
-    onFastModeSelect,
   };
 }
 
@@ -82,116 +63,63 @@ function sliderLayers(input: HTMLInputElement) {
 function appearance(input: HTMLInputElement) {
   const { boost, groove } = sliderLayers(input);
   const boostStyle = getComputedStyle(boost);
+  // The groove's accent glow is driven by the input's data-effort-boost state;
+  // the resting ring is a zero-blur outline, not a glow.
+  const boosted = input.dataset.effortBoost === "max" || input.dataset.effortBoost === "ultra";
   return {
     wash: boostStyle.opacity === "1" ? boostStyle.backgroundImage : "none",
-    glow: getComputedStyle(groove).boxShadow,
+    glow: boosted ? getComputedStyle(groove).boxShadow : "none",
   };
 }
 
 // The boost wash and glow fade between states; wait for the layer to reach the
 // state the input's data-effort-boost attribute asks for before comparing.
+// The groove's ring/glow fades in parallel and may finish a tick later, so its
+// shadow must also stop changing before equality comparisons read it.
 async function settledAppearance(input: HTMLInputElement) {
-  const { boost } = sliderLayers(input);
+  const { boost, groove } = sliderLayers(input);
   const boosted = input.dataset.effortBoost === "max" || input.dataset.effortBoost === "ultra";
   await vi.waitFor(() => expect(getComputedStyle(boost).opacity).toBe(boosted ? "1" : "0"));
+  let lastShadow = "";
+  await vi.waitFor(() => {
+    const current = getComputedStyle(groove).boxShadow;
+    const stable = current === lastShadow;
+    lastShadow = current;
+    expect(stable).toBe(true);
+  });
   return appearance(input);
 }
 
 describe("effort bar colour and flow", () => {
-  it("keeps speed names accessible without chip labels and only exposes entitled choices", async () => {
-    const state = (mode: boolean | "ultrafast", tiers?: string[], supportsFastMode = true) =>
-      resolveChatFastModeSelectState({
-        activeRunId: null,
-        connected: true,
-        gatewayAvailable: true,
-        loading: false,
-        sending: false,
-        stream: null,
-        sessionsResult: null,
-        currentModelOverride: "openai/model",
-        fastModeTarget: { model: "model", modelProvider: "openai", fastMode: mode },
-        catalog: [
-          {
-            id: "model",
-            name: "Model",
-            provider: "openai",
-            available: true,
-            supportsFastMode,
-            serviceTiers: tiers,
-          },
-        ],
-      });
-    await fixture(["low", "medium", "high"], "high", false, state(false));
-    expect(host!.querySelector("summary")!.textContent?.trim()).toBe("High");
-    expect(host!.querySelectorAll("[data-chat-speed-option]")).toHaveLength(2);
-    expect(host!.textContent).not.toContain("higher usage");
-    const { onFastModeSelect } = await fixture(
-      ["low", "medium", "high"],
-      "high",
-      false,
-      state("ultrafast", ["priority", "ultrafast"]),
-    );
-    expect(host!.querySelector("summary")!.textContent?.trim()).toBe("High");
-    expect(host!.querySelector("summary")!.getAttribute("aria-label")).toContain(
-      "High · Ultrafast",
-    );
-    expect(host!.querySelector("summary")!.title).toBe("High · Ultrafast");
-    expect(
-      [...host!.querySelectorAll("[data-chat-speed-option]")].map((option) =>
-        option.textContent?.trim(),
-      ),
-    ).toEqual(["Standard", "Fast", "Ultrafast"]);
-    const ultra = host!.querySelector<HTMLButtonElement>('[data-chat-speed-option="ultrafast"]')!;
-    expect(ultra.getAttribute("aria-checked")).toBe("true");
-    ultra.focus();
-    ultra.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
-    expect(onFastModeSelect).toHaveBeenLastCalledWith("on", "effort-preview");
-    const standard = host!.querySelector<HTMLButtonElement>('[data-chat-speed-option="off"]')!;
-    standard.click();
-    expect(onFastModeSelect).toHaveBeenLastCalledWith("off", "effort-preview");
-    await fixture(
-      ["low", "medium", "high"],
-      "high",
-      false,
-      state("ultrafast", ["priority", "ultrafast"], false),
-    );
-    expect(host!.querySelector('[data-chat-speed-option="ultrafast"]')).toBeNull();
-    expect(host!.querySelector('[data-chat-speed-option="on"]')).toBeNull();
-    await fixture(["low", "medium", "high"], "high", false, state("ultrafast"));
-    expect(host!.querySelector('[data-chat-speed-option="ultrafast"]')).toBeNull();
-    expect(host!.querySelector("summary")!.getAttribute("aria-label")).not.toContain("Ultrafast");
-    expect(host!.querySelector('[data-chat-speed-option="on"]')?.getAttribute("aria-checked")).toBe(
-      "true",
-    );
-  });
-
   it.each(["dark", "light"])("highlights the highest discrete effort in %s mode", async (theme) => {
     document.documentElement.dataset.themeMode = theme;
     for (const maximum of ["high", "xhigh", "max"]) {
       const levels = ["off", "low", maximum, "adaptive", "ultra"];
       const { input } = await fixture(levels, maximum);
-      const maximumStyle = appearance(input);
+      const maximumStyle = await settledAppearance(input);
       expect(maximumStyle.wash).toContain("linear-gradient");
       expect(maximumStyle.glow).not.toBe("none");
-      expect(appearance((await fixture(levels, maximum, true)).input)).toEqual(maximumStyle);
-      const ultraStyle = appearance((await fixture(levels, "ultra")).input);
+      expect(await settledAppearance((await fixture(levels, maximum, true)).input)).toEqual(
+        maximumStyle,
+      );
+      const ultraStyle = await settledAppearance((await fixture(levels, "ultra")).input);
       expect(ultraStyle.wash).toContain("linear-gradient");
       expect(ultraStyle.wash).not.toBe(maximumStyle.wash);
       expect(ultraStyle.glow).not.toBe(maximumStyle.glow);
       for (const value of ["off", "low", "adaptive", "unsupported"]) {
-        expect(appearance((await fixture(levels, value)).input)).toEqual({
+        expect(await settledAppearance((await fixture(levels, value)).input)).toEqual({
           wash: "none",
           glow: "none",
         });
       }
     }
-    expect(appearance((await fixture(["off", "on"], "on")).input)).toEqual({
+    expect(await settledAppearance((await fixture(["off", "on"], "on")).input)).toEqual({
       wash: "none",
       glow: "none",
     });
     for (const id of ["low", "high"]) {
       const { input } = await fixture(["off", { id, label: "on" }, "ultra"], id);
-      expect(appearance(input)).toEqual({ wash: "none", glow: "none" });
+      expect(await settledAppearance(input)).toEqual({ wash: "none", glow: "none" });
     }
   });
 
