@@ -158,7 +158,6 @@ class KeyboardShortcutsDialog extends OpenClawLitElement {
     const newSession =
       matchesShortcutCombo(KEYBOARD_SHORTCUT_COMBOS.newSession, event) &&
       host &&
-      !host.onboardingMode &&
       readSessionMethodAccess(context?.gateway.snapshot, {
         method: "sessions.create",
         params: {},

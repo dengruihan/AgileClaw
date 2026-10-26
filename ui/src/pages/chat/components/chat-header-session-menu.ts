@@ -71,7 +71,6 @@ const COMPACT_MENU_VIEW_BY_VALUE: Record<string, CompactMenuView> = {
 class ChatHeaderSessionMenu extends OpenClawLightDomElement {
   @property({ attribute: false }) session: SessionMenuData = EMPTY_SESSION_MENU_DATA;
   @property({ attribute: false }) worktreePath: string | null = null;
-  @property({ attribute: false }) onboarding = false;
   @property({ attribute: false }) preferencesBrowserOnly = false;
   @property({ attribute: false }) compact = false;
   @property({ attribute: false }) navigationAllowed = false;
@@ -182,9 +181,6 @@ class ChatHeaderSessionMenu extends OpenClawLightDomElement {
     }
     if (value.startsWith("view:")) {
       event.preventDefault();
-      if (this.onboarding) {
-        return;
-      }
       const setting = value.slice("view:".length);
       if (setting === "reasoning") {
         this.onSettingsChange({ chatShowThinking: !this.settings.chatShowThinking });
@@ -285,10 +281,9 @@ class ChatHeaderSessionMenu extends OpenClawLightDomElement {
   }
 
   private renderViewSubmenu(inline = false) {
-    const showThinking = this.onboarding ? false : this.settings.chatShowThinking;
-    const showToolCalls = this.onboarding ? true : this.settings.chatShowToolCalls;
+    const showThinking = this.settings.chatShowThinking;
+    const showToolCalls = this.settings.chatShowToolCalls;
     const persistCommentary = this.settings.chatPersistCommentary !== false;
-    const disabledTitle = this.onboarding ? t("chat.onboardingDisabled") : nothing;
     const item = (value: string, label: string, checked: boolean) => html`
       <wa-dropdown-item
         slot=${inline ? nothing : "submenu"}
@@ -296,8 +291,6 @@ class ChatHeaderSessionMenu extends OpenClawLightDomElement {
         type="checkbox"
         value=${`view:${value}`}
         .checked=${checked}
-        ?disabled=${this.onboarding}
-        title=${disabledTitle}
       >
         <span class="session-menu__text">${label}</span>
       </wa-dropdown-item>

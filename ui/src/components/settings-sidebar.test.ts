@@ -116,7 +116,7 @@ describe("settings sidebar search", () => {
     expect(active?.textContent?.trim()).toBe("Models");
   });
 
-  it("links Ask AgileClaw to the shared custodian route", () => {
+  it("does not link a removed custodian route", () => {
     const onNavigate = vi.fn();
     render(
       renderSettingsSidebar({
@@ -137,12 +137,7 @@ describe("settings sidebar search", () => {
       container,
     );
 
-    const link = container.querySelector<HTMLAnchorElement>(
-      '.settings-sidebar__item[href="/custodian"]',
-    );
-    expect(link?.textContent?.trim()).toBe("Ask AgileClaw");
-    link?.click();
-    expect(onNavigate).toHaveBeenCalledWith("custodian");
+    expect(container.querySelector('.settings-sidebar__item[href="/custodian"]')).toBeNull();
   });
 
   it("does not match the middle of a word for a short query", () => {

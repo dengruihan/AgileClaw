@@ -25,7 +25,6 @@ import {
 import { compactCronJobFixture } from "../test-helpers/cron.ts";
 import { createStorageMock as createTestStorageMock } from "../test-helpers/storage.ts";
 import { waitForFast } from "../test-helpers/wait-for.ts";
-import { CUSTODIAN_PANEL_TOGGLE_EVENT } from "./panel-toggle-contract.ts";
 import { resolveUpdateAttentionDismissal } from "./sidebar-attention-dismissals.ts";
 import { buildUpdateInboxEntry } from "./sidebar-attention-entries.ts";
 import { buildSidebarAttentionEntries } from "./sidebar-attention-items.ts";
@@ -141,23 +140,13 @@ describe("model auth attention", () => {
     expect(items.some((entry) => entry.kind === "modelAuthExpired")).toBe(true);
   });
 
-  it("presents expired providers to the custodian with raw status", () => {
+  it("routes expired providers to the model providers page", () => {
     const item = authItems("main")[0];
     expect(item).toMatchObject({
       label: "OpenAI",
       inlineAction: { label: "Reconnect", routeId: "model-providers" },
     });
-    const action = item?.action;
-    expect(action).toMatchObject({ kind: "askCustodian" });
-    if (action?.kind !== "askCustodian") {
-      throw new Error("expected model auth custodian action");
-    }
-    expect(action.alert.facts).toEqual(["OpenAI: missing"]);
-    expect(action.alert.question).toContain("OpenAI: missing");
-    expect(action.alert.action?.target).toEqual({
-      kind: "navigate",
-      routeId: "model-providers",
-    });
+    expect(item?.action).toEqual({ kind: "navigate", routeId: "model-providers" });
   });
 });
 
@@ -824,24 +813,12 @@ describe("sidebar attention refresh ownership", () => {
       ).some((label) => label?.includes("Ask AgileClaw")),
     ).toBe(false);
 
-    const { custodianAlertStore } = await import("../pages/custodian/custodian-alert-store.ts");
-    const dispatch = vi.spyOn(window, "dispatchEvent");
-    try {
-      const alertAction = panel.querySelector<HTMLButtonElement>(
-        '[data-attention-kind="modelAuthExpired"] .sidebar-issues-panel__action:not(.sidebar-issues-panel__action--primary)',
-      )!;
-      expect(alertAction.textContent?.trim()).toBe("Ask AgileClaw");
-      alertAction.click();
-      await waitForFast(() =>
-        expect(dispatch).toHaveBeenCalledWith(
-          expect.objectContaining({ type: CUSTODIAN_PANEL_TOGGLE_EVENT, detail: { open: true } }),
-        ),
-      );
-      expect(custodianAlertStore.alert?.id).toBe("modelAuthExpired:agent:main\nopenai");
-      expect(element.querySelector(".sidebar-issues-panel")).toBeNull();
-    } finally {
-      custodianAlertStore.dismiss();
-    }
+    const authRow = panel.querySelector<HTMLAnchorElement>(
+      '[data-attention-kind="modelAuthExpired"] .sidebar-issues-panel__navigation-link',
+    )!;
+    expect(authRow.getAttribute("href")).toBe("/settings/model-providers");
+    authRow.click();
+    await waitForFast(() => expect(element.querySelector(".sidebar-issues-panel")).toBeNull());
     trigger.click();
     await waitForFast(() => expect(element.querySelector(".sidebar-issues-panel")).not.toBeNull());
 

@@ -280,15 +280,3 @@ export function renderPluginDeclaredCapabilities(
     icons.layers,
   );
 }
-
-export function renderPluginAskAction(onAsk?: () => void, primary = true) {
-  return onAsk
-    ? html`<button
-        type="button"
-        class="btn oc-action ${primary ? "primary oc-action-primary" : "oc-action-secondary"}"
-        @click=${onAsk}
-      >
-        ${t("nav.askOpenClaw")}
-      </button>`
-    : nothing;
-}

@@ -32,7 +32,6 @@ import { pluginTabKey, pluginTabRefFromSearch } from "./pages/plugin/route.ts";
 const ALL_ROUTES: RouteId[] = Array.from(
   new Set<RouteId>([
     "chat",
-    "custodian",
     ...SIDEBAR_NAV_ROUTES,
     "workboard",
     "skills",
@@ -111,9 +110,8 @@ describe("settingsSearchTextMatches", () => {
 });
 
 describe("formatDocumentTitle", () => {
-  it("does not duplicate a context ending in the brand", () => {
-    expect(formatDocumentTitle({ context: "Ask AgileClaw" })).toBe("Ask AgileClaw");
-    expect(formatDocumentTitle({ context: "AgileClaw" })).toBe("AgileClaw");
+  it("always appends the brand suffix", () => {
+    expect(formatDocumentTitle({ context: "AgileClaw" })).toBe("AgileClaw — AgileClaw");
   });
 
   it("names the disconnected gateway without implying internet loss", () => {
@@ -151,7 +149,6 @@ describe("pathForRoute", () => {
     expect(pathForRoute("agents")).toBe("/settings/agents");
     expect(pathForRoute("apps")).toBe("/apps");
     expect(pathForRoute("dashboards")).toBe("/dashboards");
-    expect(pathForRoute("custodian")).toBe("/custodian");
     expect(pathForRoute("connection")).toBe("/settings/connection");
     expect(pathForRoute("debug")).toBe("/debug");
     expect(pathForRoute("logs")).toBe("/logs");
@@ -186,7 +183,6 @@ describe("routeIdFromPath", () => {
     expect(routeIdFromPath("/chat")).toBe("chat");
     expect(routeIdFromPath("/agents")).toBe("agents-home");
     expect(routeIdFromPath("/settings/agents")).toBe("agents");
-    expect(routeIdFromPath("/custodian")).toBe("custodian");
     expect(routeIdFromPath("/new")).toBe("new-session");
     expect(routeIdFromPath("/overview")).toBeNull();
     expect(routeIdFromPath("/settings/connection")).toBe("connection");
@@ -398,7 +394,7 @@ describe("inferBasePathFromPathname", () => {
   it("handles direct routes, nested mounts, mount roots, and index.html", () => {
     expect(inferBasePathFromPathname("/")).toBe("");
     expect(inferBasePathFromPathname("/chat")).toBe("");
-    expect(inferBasePathFromPathname("/custodian")).toBe("");
+    expect(inferBasePathFromPathname("/activity")).toBe("");
     expect(inferBasePathFromPathname("/settings/connection")).toBe("");
     expect(inferBasePathFromPathname("/ui/chat")).toBe("/ui");
     expect(inferBasePathFromPathname("/apps/openclaw/sessions")).toBe("/apps/openclaw");
@@ -416,7 +412,7 @@ describe("inferBasePathFromPathname", () => {
     expect(inferBasePathFromPathname("/settings/config/")).toBe("");
     expect(inferBasePathFromPathname("/settings/chat/main")).toBe("");
     // A leaf route is equally not a mount directory.
-    expect(inferBasePathFromPathname("/custodian/config")).toBe("");
+    expect(inferBasePathFromPathname("/activity/config")).toBe("");
     // Nested unknown segments below a route namespace stay root-mounted too.
     expect(inferBasePathFromPathname("/settings/other/config")).toBe("");
     expect(inferBasePathFromPathname("/settings/")).toBe("");
@@ -475,7 +471,6 @@ describe("SIDEBAR_NAV_ROUTES", () => {
   it("keeps the canonical settings navigation order", () => {
     const settingsRoutes = visibleSettingsNavigationGroups(true).flatMap((group) => group.routes);
     expect(settingsRoutes).toEqual([
-      "custodian",
       "profile",
       "appearance",
       "notifications",
@@ -510,7 +505,7 @@ describe("SIDEBAR_NAV_ROUTES", () => {
     const settingsGroups = visibleSettingsNavigationGroups(true);
     const [firstGroup] = settingsGroups;
     expect(firstGroup?.labelKey).toBeNull();
-    expect(firstGroup?.routes).toEqual(["custodian", "profile", "appearance", "notifications"]);
+    expect(firstGroup?.routes).toEqual(["profile", "appearance", "notifications"]);
     for (const group of settingsGroups.slice(1)) {
       expect(group.labelKey).toBeTruthy();
     }

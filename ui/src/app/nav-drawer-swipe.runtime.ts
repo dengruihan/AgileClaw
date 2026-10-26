@@ -17,7 +17,6 @@ type Swipe = {
 };
 
 export type NavDrawerHost = HTMLElement & {
-  readonly onboardingMode: boolean;
   readonly updateComplete: Promise<boolean>;
   readonly navDrawerOpen: boolean;
 };
@@ -31,12 +30,7 @@ export class NavDrawerSwipeOwner {
   ) {}
 
   private canOpen(): boolean {
-    return (
-      isMobileNavLayout() &&
-      !this.host.navDrawerOpen &&
-      !this.host.onboardingMode &&
-      !document.openClawModalLayers?.size
-    );
+    return isMobileNavLayout() && !this.host.navDrawerOpen && !document.openClawModalLayers?.size;
   }
 
   connect(): void {

@@ -156,23 +156,6 @@ describe("AgileClaw shell dock suppression", () => {
         }
       ).suppressed,
     ).toBe(true);
-    expect(
-      (
-        container.querySelector("openclaw-assistant-panel") as HTMLElement & {
-          custodianSuppressed: boolean;
-        }
-      ).custodianSuppressed,
-    ).toBe(false);
-
-    shell.routeState = { routeId: "custodian" };
-    renderLit(shell.render(), container);
-    expect(
-      (
-        container.querySelector("openclaw-assistant-panel") as HTMLElement & {
-          custodianSuppressed: boolean;
-        }
-      ).custodianSuppressed,
-    ).toBe(true);
 
     shell.routeState = { routeId: "systems" };
     renderLit(shell.render(), container);
@@ -264,17 +247,14 @@ describe("AgileClaw shell dock suppression", () => {
     expect(desktopAvailable()).toBe(true);
 
     // The collapsed toolbar opens the shared dock through Home.
-    expect(container.querySelector(".shell-chrome-controls__custodian")).toBeNull();
     context.navigation.snapshot.navCollapsed = true;
     renderLit(shell.render(), container);
-    expect(container.querySelector(".shell-chrome-controls__custodian")).toBeNull();
     expect(container.querySelector(".shell-chrome-controls__home")).not.toBeNull();
     context.gateway.snapshot.hello!.auth = {
       role: "operator",
       scopes: ["operator.read", "operator.write"],
     };
     renderLit(shell.render(), container);
-    expect(container.querySelector(".shell-chrome-controls__custodian")).toBeNull();
     expect(container.querySelector(".shell-chrome-controls__home")).not.toBeNull();
     context.gateway.snapshot.phase = "offline";
     renderLit(shell.render(), container);
@@ -287,7 +267,6 @@ describe("AgileClaw shell dock suppression", () => {
     expect(container.querySelector(".shell-chrome-controls__home")).not.toBeNull();
     context.gateway.snapshot.hello!.auth = { role: "operator", scopes: ["operator.read"] };
     renderLit(shell.render(), container);
-    expect(container.querySelector(".shell-chrome-controls__custodian")).toBeNull();
     expect(container.querySelector(".shell-chrome-controls__home")).toBeNull();
     context.gateway.snapshot.phase = "offline";
     renderLit(shell.render(), container);

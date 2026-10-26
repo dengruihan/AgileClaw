@@ -343,7 +343,6 @@ suite.define(() => {
       await expect
         .poll(() => trimmedTextContents(settingsLinks))
         .toEqual([
-          "Ask AgileClaw",
           "Approvals",
           "Infrastructure",
           "Labs",
@@ -477,18 +476,12 @@ suite.define(() => {
       await expect.poll(() => settingsSearch.inputValue()).toBe("");
       await captureSettingsSidebarProof(settingsSidebar, "01g-settings-search-reset.png");
       await holdUiProof(page);
-      await settingsSidebar.getByRole("link", { name: "Ask AgileClaw" }).click();
-      await expect.poll(() => new URL(page.url()).pathname).toBe("/custodian");
-      await expect
-        .poll(() => page.locator(".shell").getAttribute("class"))
-        .not.toContain("shell--onboarding");
-      // Ask AgileClaw is a settings-takeover page (#111686): the settings
+      await settingsSidebar.getByRole("link", { name: "Profile" }).click();
+      await expect.poll(() => new URL(page.url()).pathname).toBe("/settings/profile");
+      // Settings routes are settings-takeover pages (#111686): the settings
       // sidebar owns navigation there, not the app sidebar.
       await expect.poll(() => settingsSidebar.isVisible()).toBe(true);
       await expect.poll(() => sidebar.isVisible()).toBe(false);
-      await expect
-        .poll(() => page.getByRole("button", { name: "Exit setup" }).isVisible())
-        .toBe(false);
       await page.goto(`${suite.server.baseUrl}chat`);
       await captureUiProof(page, "01-default-pinned.png");
 
@@ -522,8 +515,8 @@ suite.define(() => {
         .not.toContain("Workboard");
       const usageItem = menu.getByRole("menuitemcheckbox", { name: "Usage" });
       await expect.poll(() => usageItem.getAttribute("aria-checked")).toBe("false");
-      // Ask AgileClaw moved to Settings (#111686): custodian is not a sidebar
-      // nav route anymore, so the pin editor does not offer it.
+      // Ask AgileClaw was removed outright: no assistant nav route may return
+      // to the pin editor.
       await expect
         .poll(() => menu.getByRole("menuitemcheckbox", { name: "AgileClaw" }).count())
         .toBe(0);

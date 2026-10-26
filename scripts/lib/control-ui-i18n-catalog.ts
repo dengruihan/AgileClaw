@@ -155,7 +155,6 @@ export function loadControlUiSourceCatalog(): TranslationMap {
     // Preserve partial-fragment key order while keeping shared labels eager.
     {
       ...en,
-      custodian: { ...registerPluginManagementEnglish.catalog.custodian, ...en.custodian },
       chat: {
         ...en.chat,
         commands: registerCommandPaletteEnglish.catalog.chat.commands,

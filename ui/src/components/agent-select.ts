@@ -76,7 +76,6 @@ export class AgentSelect extends OpenClawLightDomElement {
   @property({ attribute: false }) disabled = false;
   @property({ attribute: false }) variant: "default" | "compact" = "default";
   @property({ attribute: false }) onSelect: (value: string) => void = () => {};
-  @property({ attribute: false }) onCreateAgent: (() => void) | null = null;
 
   private readonly avatarLoader = new IdentityAvatarController(this);
 
@@ -108,10 +107,6 @@ export class AgentSelect extends OpenClawLightDomElement {
       return;
     }
     const item = event.detail.item as HTMLElement & { value?: string };
-    if (item.hasAttribute("data-create-agent")) {
-      this.onCreateAgent?.();
-      return;
-    }
     const value = item.value ?? item.getAttribute("value");
     if (value === null || value === undefined) {
       return;
@@ -137,7 +132,7 @@ export class AgentSelect extends OpenClawLightDomElement {
         ? { value: this.value, label: this.value, agent: { id: this.value } }
         : null;
     const triggerOption = selectedOption ?? missingValueOption;
-    const unavailable = this.disabled || (this.options.length === 0 && !this.onCreateAgent);
+    const unavailable = this.disabled || this.options.length === 0;
     const triggerLabel = triggerOption?.label ?? (this.placeholder || t("agents.noAgents"));
     const selectedBadge = selectedOption?.badge;
     const triggerAccessibleLabel = selectedBadge
@@ -212,27 +207,6 @@ export class AgentSelect extends OpenClawLightDomElement {
             </wa-dropdown-item>
           `;
         })}
-        ${
-          this.onCreateAgent
-            ? html`
-                ${
-                  this.options.length > 0
-                    ? html`<div class="agent-select__separator" role="separator"></div>`
-                    : nothing
-                }
-                <wa-dropdown-item
-                  class="agent-select__option"
-                  data-create-agent
-                  ?disabled=${this.disabled}
-                >
-                  <span slot="icon" class="agent-select__footer-icon" aria-hidden="true"
-                    >${icons.users}</span
-                  >
-                  <span class="agent-select__option-label">${t("custodian.newAgent")}</span>
-                </wa-dropdown-item>
-              `
-            : nothing
-        }
       </wa-dropdown>
     `;
   }

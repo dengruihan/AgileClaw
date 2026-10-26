@@ -17,7 +17,6 @@ import { renderPluginCatalogResults } from "./catalog-results.ts";
 import { renderPluginConsentDialog } from "./consent-dialog.ts";
 import { pluginDetailLocation, type InstalledPluginDetailTab } from "./detail-tabs.ts";
 import type { PluginDiscoveryController } from "./plugin-discovery-controller.ts";
-import type { PluginHelpController } from "./plugin-help-controller.ts";
 import {
   pluginRowKey,
   renderPluginRowMessage,
@@ -80,7 +79,6 @@ export type PluginsPageViewModel = {
   mcpLoginBusy: boolean;
   canMcpLogin: boolean;
   renderCredential?: PluginSettingsEditor["renderCredential"];
-  help?: PluginHelpController;
   context: ApplicationContext;
   routeData?: PluginsRouteData;
   surface: "discovery" | "settings";
@@ -110,9 +108,6 @@ export type PluginsPageViewModel = {
 };
 
 export function renderPluginsPage(model: PluginsPageViewModel) {
-  model.help?.update(model);
-  const ask = model.help?.available ? model.help.ask : undefined;
-  const onAskPlugin = ask ? () => void ask() : undefined;
   const { actions, catalogDetail, consentController, context, detail, discovery } = model;
   const configState = context.runtimeConfig.state;
   const configAnalysis = analyzeConfigSchema(configState.configSchema);
@@ -164,8 +159,6 @@ export function renderPluginsPage(model: PluginsPageViewModel) {
     onConfigReadRetry: actions.retryConfigRead,
     onConfigWriteRetry: actions.retryConfigWrite,
     onRefresh: actions.refreshCatalog,
-    onAskPlugin,
-    onAskSetting: ask,
   };
 
   const renderInstalled = (pluginId: string) => {
@@ -251,7 +244,6 @@ export function renderPluginsPage(model: PluginsPageViewModel) {
                   ? detailPluginId && !activeCatalogInstall
                     ? renderInstalled(detailPluginId)
                     : renderPluginCatalogDetail({
-                        onAskPlugin,
                         connected: model.connected,
                         skillsSection: catalogSkillsSection,
                         result: catalogDetail.result,

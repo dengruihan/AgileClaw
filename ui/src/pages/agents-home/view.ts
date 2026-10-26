@@ -24,7 +24,6 @@ type AgentsHomeProps = {
   connected: boolean;
   loading: boolean;
   error: string | null;
-  canCreate: boolean;
   onRetry: () => void;
 };
 
@@ -46,13 +45,7 @@ export function renderAgentsHome(props: AgentsHomeProps) {
       ${renderSettingsPageHeader({
         title: titleForRoute("agents-home"),
         subtitle: subtitleForRoute("agents-home"),
-        actions: html`${manage}
-          <a
-            class="btn primary"
-            href=${props.canCreate ? `${pathForRoute("custodian", context.basePath)}?intent=new-agent` : pathForRoute("agents", context.basePath)}
-            @click=${(event: MouseEvent) => navigate(event, props.canCreate ? "custodian" : "agents", props.canCreate ? { search: "?intent=new-agent" } : undefined)}
-            >${t("agentsHome.create")}</a
-          >`,
+        actions: html`${manage}`,
       })}
     </div>
     <section class="agents-home" aria-label=${titleForRoute("agents-home")}>

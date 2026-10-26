@@ -40,11 +40,6 @@ export type UpdateFailureTriage = {
 
 type UpdateOutcomeRecord = { id: string | null; timestampMs: number | null };
 
-export type UpdateTriageAdmission = {
-  isCurrent: () => boolean;
-  admit: () => boolean;
-};
-
 const UPDATE_FAILURE_REASON_KEYS: Record<string, string> = {
   dirty: "updates.failureReasons.dirty",
   "no-upstream": "updates.failureReasons.noUpstream",
@@ -150,9 +145,6 @@ export function projectUpdateSentinel(sentinel: UpdateRestartStatusResponse["sen
         cause,
       })
     : null;
-  if (banner && outcome === "failed") {
-    banner.text += ` ${t("updates.triage.hostHint")}`;
-  }
   const record = {
     id:
       readUpdateAttemptId(sentinel) ??

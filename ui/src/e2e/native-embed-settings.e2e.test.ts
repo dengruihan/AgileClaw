@@ -17,7 +17,6 @@ import { installNativeEmbed, installNativeWebChrome } from "./native-nav.test-su
 
 const suite = createControlUiE2eSuite({ name: "Control UI native embed settings E2E" });
 const routes = [
-  "custodian",
   "profile",
   "appearance",
   "notifications",

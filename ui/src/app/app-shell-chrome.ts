@@ -13,7 +13,6 @@ import {
 import {
   BROWSER_PANEL_TOGGLE_EVENT,
   LINK_READER_PANEL_TOGGLE_EVENT,
-  CUSTODIAN_PANEL_TOGGLE_EVENT,
   HOME_PANEL_TOGGLE_EVENT,
   DEBUG_OVERLAY_REQUEST_EVENT,
   DESKTOP_PANEL_TOGGLE_EVENT,
@@ -24,7 +23,6 @@ import {
 } from "../components/panel-toggle-contract.ts";
 import { focusWithoutTooltip } from "../components/tooltip.ts";
 import type { BoardFace } from "../lib/board/settings.ts";
-import { canCallGatewayMethod } from "../lib/gateway-methods.ts";
 import {
   KEYBOARD_SHORTCUT_COMBOS,
   type KeyboardShortcutsDialogElement,
@@ -155,7 +153,6 @@ export class ShellChromeOwner {
       [BROWSER_PANEL_TOGGLE_EVENT, this.panels.handleDeferredBrowserToggle],
       [LINK_READER_PANEL_TOGGLE_EVENT, this.panels.handleDeferredLinkReaderToggle],
       [DESKTOP_PANEL_TOGGLE_EVENT, this.panels.handleDeferredDesktopToggle],
-      [CUSTODIAN_PANEL_TOGGLE_EVENT, this.handleAssistantToggleBeforeMount],
       [HOME_PANEL_TOGGLE_EVENT, this.handleAssistantToggleBeforeMount],
       [SHELL_APPROVALS_OPEN_EVENT, this.handleApprovalsOpen],
     ] as const) {
@@ -188,11 +185,7 @@ export class ShellChromeOwner {
     const host = this.host;
     const context = host.context;
     // Desktop settings takeover has no app nav; its mobile drawer still owns navigation.
-    if (
-      !context ||
-      host.onboardingMode ||
-      (isSettingsTakeover(host.routeState.routeId) && !isMobileNavLayout())
-    ) {
+    if (!context || (isSettingsTakeover(host.routeState.routeId) && !isMobileNavLayout())) {
       return;
     }
     if (isMobileNavLayout()) {
@@ -414,7 +407,6 @@ export class ShellChromeOwner {
       isTerminalPanelShortcut(event) &&
       !isSessionRouteId(host.routeState.routeId) &&
       !event.defaultPrevented &&
-      !host.onboardingMode &&
       !isSettingsTakeover(host.routeState.routeId) &&
       host.context &&
       isTerminalAvailable(
@@ -550,20 +542,12 @@ export class ShellChromeOwner {
     if (host.querySelector("openclaw-assistant-panel")) {
       return;
     }
-    const home = event.type === HOME_PANEL_TOGGLE_EVENT;
-    if (
-      home
-        ? !isHomePanelAvailable(host.context?.gateway)
-        : !canCallGatewayMethod(host.context?.gateway.snapshot, "openclaw.chat", "operator.admin")
-    ) {
+    if (!isHomePanelAvailable(host.context?.gateway)) {
       event.preventDefault();
       return;
     }
     // Native commands can arrive before the eager frame's first render.
-    const descriptor = lazyShellEvent(
-      home ? HOME_PANEL_TOGGLE_EVENT : CUSTODIAN_PANEL_TOGGLE_EVENT,
-      event,
-    );
+    const descriptor = lazyShellEvent(HOME_PANEL_TOGGLE_EVENT, event);
     this.pendingLazyAction = descriptor;
     persistLazyShellAction(descriptor);
     host.requestUpdate();
@@ -641,7 +625,6 @@ export class ShellChromeOwner {
       [BROWSER_PANEL_TOGGLE_EVENT]: host.browserPanelElement.tagName,
       [LINK_READER_PANEL_TOGGLE_EVENT]: host.linkReaderPanelElement.tagName,
       [DESKTOP_PANEL_TOGGLE_EVENT]: host.desktopPanelElement.tagName,
-      [CUSTODIAN_PANEL_TOGGLE_EVENT]: "openclaw-assistant-panel",
       [HOME_PANEL_TOGGLE_EVENT]: "openclaw-assistant-panel",
       [SHELL_APPROVALS_OPEN_EVENT]: host.execApprovalElement.tagName,
     };
@@ -741,7 +724,6 @@ export class ShellChromeOwner {
     const host = this.host;
     const mobileNavLayout = isMobileNavLayout();
     return (
-      host.onboardingMode ||
       mobileNavLayout ||
       (isSettingsTakeover(host.routeState.routeId) && !mobileNavLayout) ||
       (!host.navDrawerOpen &&

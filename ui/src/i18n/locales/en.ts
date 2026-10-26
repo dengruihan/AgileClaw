@@ -51,7 +51,6 @@ export const en: TranslationMap & {
   };
   connection: TranslationMap;
   configView: TranslationMap;
-  custodian: TranslationMap;
   debug: TranslationMap & {
     lanes: TranslationMap & Record<"lane" | "active" | "queued" | "blocked", string>;
     overlay: TranslationMap &
@@ -651,10 +650,6 @@ export const en: TranslationMap & {
       "Update completion was not confirmed. Run `openclaw triage` on the Gateway host and inspect the result before retrying.",
     outcomeUnknown:
       "The update outcome is unknown. Run `openclaw triage` on the Gateway host and inspect the result before retrying.",
-    triage: {
-      hostHint:
-        "If Ask AgileClaw is unavailable, run `openclaw triage` on the Gateway host to open a local coding agent for diagnosis and repair. Diagnose the cause before retrying.",
-    },
     report: {},
     failureReasons: {
       dirty: "Commit or stash changes, then retry.",
@@ -1597,7 +1592,6 @@ export const en: TranslationMap & {
     back: "Back",
     forward: "Forward",
     settings: "Settings",
-    askOpenClaw: "Ask AgileClaw",
     settingsGroupDevice: "This Mac",
     settingsGroupThisComputer: "This computer",
     settingsGroupThisIPhone: "This iPhone",
@@ -1750,7 +1744,6 @@ export const en: TranslationMap & {
     cloudWorkers: "Cloud workers",
     chat: "Chat",
     dashboards: "Dashboards",
-    custodian: "AgileClaw",
     profile: "Profile",
     communications: "Communications",
     appearance: "Appearance",
@@ -1798,7 +1791,6 @@ export const en: TranslationMap & {
     cloudWorkers: "Profiles and machine sizes for cloud sessions.",
     chat: "Gateway chat for quick interventions.",
     dashboards: "Tasks with saved dashboards.",
-    custodian: "System setup and care.",
     config: "Legacy settings route; opens Appearance.",
     profile: "Your display name, avatar, and identity on this gateway.",
     communications: "Messages, text-to-speech, and meeting capture settings.",
@@ -1975,27 +1967,6 @@ export const en: TranslationMap & {
     },
   },
   memoryImport: {},
-  onboarding: {
-    memoryImport: {
-      title: "Bring your assistant memory with you",
-      body: "AgileClaw found memory from other coding assistants. Import it into your agent workspace?",
-      plannedCount: "{count} ready to import",
-      alreadyImported: "Already imported: {count}",
-      sourceUnavailable: "Source path unavailable",
-      import: "Import",
-      skip: "Skip",
-      reviewDetails: "Review details",
-      importingProvider: "Importing…",
-      providerResult: "Migrated {migrated}, skipped {skipped}",
-      providerIncomplete:
-        "Migrated {migrated}, skipped {skipped}, {errors} failed, {conflicts} conflicts",
-      providerError: "Import failed: {error}",
-      connectionChanged: "Skipped: the Gateway connection changed during the import",
-      unknownError: "Request failed",
-      doneTitle: "Memory import finished",
-      doneBody: "Migrated {migrated}, skipped {skipped}. You can continue setting up AgileClaw.",
-    },
-  },
   assistantPanel: {
     title: "Assistant sidebar",
     home: "Home",
@@ -2012,70 +1983,6 @@ export const en: TranslationMap & {
     selection: "Selected text",
     attachSelection: "Attach selected text",
     removeSelection: "Remove selected text",
-  },
-  custodian: {
-    title: "AgileClaw",
-    subtitleCaretaker: "System setup and care.",
-    exitSetup: "Exit setup",
-    newAgent: "New agent",
-    hatchDraft: "Wake up, my friend!",
-    placeholder: "Message AgileClaw…",
-    sensitivePlaceholder: "Enter sensitive value…",
-    sensitiveReply: "Sensitive reply sent",
-    cancel: "Cancel",
-    send: "Send",
-    thinking: "AgileClaw is thinking",
-    earlier: "Earlier",
-    requestFailed: "AgileClaw could not reply. Try again.",
-    connectionChanged: "The Gateway connection changed. Retry to continue this setup.",
-    sessionRestarted:
-      "{error} AgileClaw started a fresh session; earlier messages remain for context.",
-    unsupportedGateway: "Update the Gateway to continue setup with AgileClaw.",
-    panel: {
-      title: "AgileClaw",
-      toggle: "Toggle Ask AgileClaw",
-      close: "Close Ask AgileClaw",
-      resize: "Resize Ask AgileClaw",
-      dockBottom: "Dock Ask AgileClaw at bottom",
-      dockRight: "Dock Ask AgileClaw at right",
-    },
-    history: {
-      button: "History",
-      title: "Recent changes",
-      description: "What changed on this system, newest first.",
-      loading: "Loading recent changes…",
-      empty: "No recorded changes yet.",
-      requestFailed: "AgileClaw could not load change history.",
-      loadMore: "Load more",
-      loadingMore: "Loading more…",
-      changedPaths: "Changed paths ({count})",
-      invalidEdit: "This manual edit did not pass configuration validation.",
-      opaqueChange: "Formatting or comments changed without visible configuration path changes.",
-      sources: {
-        systemAgent: "system-agent",
-        doctor: "doctor",
-        settings: "settings",
-        cli: "CLI",
-        pluginInstall: "plugin install",
-        manualEdit: "manual edit",
-        unknown: "unknown",
-      },
-    },
-    nudge: {
-      configReload: "Configuration reload stopped — ask me what happened",
-      channelAuth: "{channel} authentication degraded — ask me what happened",
-      channelDisconnected: "{channel} just disconnected — ask me what happened",
-      channelDegraded: "{channel} is degraded — ask me what happened",
-      channelFallback: "A channel",
-      dismiss: "Dismiss this update",
-      channelSetupTitle: "Reach AgileClaw outside this app",
-      channelSetupBody:
-        "The web app already works. Add a channel only if you want to message AgileClaw from another service.",
-      channelSetupAction: "Set up a channel",
-      channelSetupDismiss: "Keep using the web app",
-      channelStatusErrorTitle: "Channel status is unavailable",
-      channelStatusErrorBody: "Retry the check, or keep using the web app without a channel.",
-    },
   },
   mcpServers: {},
   mcpPage: {},
@@ -3228,7 +3135,6 @@ export const en: TranslationMap & {
     catalogOpenTargetViewer: "AgileClaw viewer",
     catalogOpenTargetTerminal: "Terminal",
     catalogOutputTruncated: "[Output truncated]",
-    onboardingDisabled: "Disabled during setup",
     commandPaletteTitle: "Search or jump to… (⌘K)",
     openCommandPalette: "Open command palette",
     updating: "Updating…",

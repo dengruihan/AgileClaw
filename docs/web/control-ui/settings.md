@@ -231,10 +231,9 @@ These describe the connection; account connection status is shown separately.
 Plugins can bundle multiple MCP servers. The metadata rail shows available release details, categories, repository, and
 documentation. Security audits link to ClawHub.
 
-Installed, disabled plugins put **Enable** first as the primary action, followed
-by **Ask OpenClaw**. Enabled plugins put primary **Ask OpenClaw** first, followed
-by **Disable**. Both rows then offer **Uninstall** when removable and an icon
-button for **Settings**. Uninstalled plugins put **Install** first. **Install**
+Installed, disabled plugins put **Enable** first as the primary action.
+Enabled plugins put **Disable** first. Both rows then offer **Uninstall** when
+removable and an icon button for **Settings**. Uninstalled plugins put **Install** first. **Install**
 starts installation immediately and accepts the staged plugin’s declared
 capabilities without changing your hook and model permissions. Configured
 install-policy warnings still require an explicit acknowledgment. Installing from
@@ -369,7 +368,7 @@ and [Linux](/platforms/linux) desktop apps, the
 
 ## Settings
 
-Inside **Settings**, the dedicated sidebar includes **Ask OpenClaw** and starts with a **Search settings** field for quickly finding settings sections.
+Inside **Settings**, the dedicated sidebar starts with a **Search settings** field for quickly finding settings sections.
 
 Form edits save automatically. If the connection changes while edits are pending,
 autosave pauses until you choose **Save** to keep them or **Reload Config** to
@@ -558,8 +557,8 @@ credentials through this page. Files are copied below `memory/imports/` in the
 selected workspace, where the active memory plugin can index them. Sources are
 never changed.
 
-For a narrower conversational path, open **Settings → Ask OpenClaw** and say
-`import memory`. The chat wizard copies only new detected memory into the
+For a CLI path, run `openclaw setup` and say
+`import memory`. The chat flow copies only new detected memory into the
 existing default agent workspace; it does not choose another destination agent
 or replace conflicts. It reports each source's confirmed copy count and warns
 when a failure may have happened after a partial copy. Use the dedicated Import

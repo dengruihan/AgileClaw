@@ -282,7 +282,6 @@ export function createApplicationOverlays(
     acknowledgeUpdateRun: updates.acknowledgeUpdateRun,
     runUpdate: updates.runUpdate,
     holdUpdate: updates.holdUpdate,
-    diagnoseUpdateFailure: updates.diagnoseUpdateFailure,
     reportUpdateFailure: updates.reportUpdateFailure,
     async decideApproval(decision, approvalId, projectedApproval) {
       const active = approvalId

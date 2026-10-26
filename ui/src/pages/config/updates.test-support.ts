@@ -22,7 +22,6 @@ export function createUpdatesViewProps(overrides: UpdatesViewOverrides = {}): Up
     canCheckStatus: true,
     canHoldUpdate: true,
     canReport: true,
-    canDiagnose: true,
     updateBusy: false,
     nowMs: 1_000,
     onChannelChange: vi.fn(),
@@ -32,7 +31,6 @@ export function createUpdatesViewProps(overrides: UpdatesViewOverrides = {}): Up
     onHoldUpdate: vi.fn(async () => true),
     onCheckStatus: vi.fn(async () => true),
     onReportFailure: vi.fn(async () => undefined),
-    onDiagnoseFailure: vi.fn(),
     ...overrides,
     update: {
       updateSchedule: {
@@ -53,7 +51,6 @@ export function createUpdatesViewProps(overrides: UpdatesViewOverrides = {}): Up
       updateRun: null,
       updateStatusRefreshing: false,
       reportableUpdateFailureId: null,
-      diagnosableUpdateFailureId: null,
       updateFailureReportBusy: false,
       updateFailureReportNotice: null,
       updateRunning: false,

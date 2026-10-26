@@ -10,7 +10,6 @@ import { renderNewSessionLink } from "../components/new-session-link.ts";
 import { renderLazySettingsSidebar } from "../components/settings-sidebar-lazy.ts";
 import type { ThemeModeChangeDetail } from "../components/theme-mode-toggle.ts";
 import { t } from "../i18n/index.ts";
-import { canCallGatewayMethod } from "../lib/gateway-methods.ts";
 import { resolveGatewayStatus } from "../lib/gateway-status.ts";
 import {
   formatKeyboardShortcutCombo,
@@ -63,16 +62,13 @@ export interface ShellViewHost
   extends DevicePairSetupHost, ShellLazyOverlayHost, SettingsSidebarHost {
   readonly runtime: ApplicationRuntime | undefined;
   readonly activeSessionKey: string;
-  readonly custodianMinimizeRequestId: number;
   readonly desktopNavigationExpanded: boolean;
   readonly execApprovalElement: OptionalCustomElement;
-  readonly onboardingMemoryImportElement: OptionalCustomElement;
   readonly nativeHistoryState: NativeHistoryState;
   readonly navDrawerOpen: boolean;
   navResizing: boolean;
   readonly shellLayout: ShellLayoutController;
   readonly navigationSidebar: HTMLElement;
-  readonly onboardingMode: boolean;
   readonly routeState: ShellRouteState;
   readonly settingsPreloadTimers: Map<EventTarget, ReturnType<typeof globalThis.setTimeout>>;
   readonly settingsSearchQuery: string;
@@ -136,9 +132,6 @@ export function renderApplicationShell(host: ShellViewHost) {
   const terminalAvailable = isTerminalAvailable(gatewaySnapshot, config.terminalEnabled ?? false);
   const desktopPanelAvailable = isDesktopPanelAvailable(gatewaySnapshot);
   const homePanelAvailable = isHomePanelAvailable(context.gateway);
-  const custodianPanelAvailable =
-    // Scope-aware to match the store: admin-only, never advertisement alone.
-    canCallGatewayMethod(gatewaySnapshot, "openclaw.chat", "operator.admin");
   const activeRoute = host.routeState.routeId ?? "chat";
   const sessionRoute = isSessionRouteId(activeRoute);
   // Session routes have an offline outbox, New Session keeps a local draft, and
@@ -172,25 +165,18 @@ export function renderApplicationShell(host: ShellViewHost) {
       isSettingsNavigationRoute(activeRoute) ||
       activeRoute === "skills" ||
       activeRoute === "cron");
-  const settingsTakeover = isSettingsTakeover(activeRoute) && !host.onboardingMode && !nativeEmbed;
+  const settingsTakeover = isSettingsTakeover(activeRoute) && !nativeEmbed;
   const runtimeConfig = context.runtimeConfig.state;
-  const onboarding = host.onboardingMode;
-  const memoryImportActive = onboarding && activeRoute !== "custodian";
-  host.lazyCustomElements.requestWhileActive(
-    host.onboardingMemoryImportElement,
-    memoryImportActive,
-  );
-  const navDrawerOpen = host.navDrawerOpen && !onboarding && !nativeEmbed;
+  const navDrawerOpen = host.navDrawerOpen && !nativeEmbed;
   const mobileNavLayout = isMobileNavLayout();
   const nativeWebChrome = isNativeWebChromeHost() && !nativeEmbed;
   // Native chrome is absent in browsers; the shell owns visible retry if its chunk fails.
-  if (nativeWebChrome && !onboarding) {
+  if (nativeWebChrome) {
     host.lazyCustomElements.preload(MACOS_TITLEBAR_ELEMENT, { reportError: true });
   }
   const mergedChatChrome = shouldMergeChatChrome({
     mobileNavLayout,
     routeId: activeRoute,
-    onboarding,
   });
   // Drawer navigation always opens expanded; the tab's desktop collapse state
   // stays in memory for when the viewport returns to the desktop layout.
@@ -202,7 +188,6 @@ export function renderApplicationShell(host: ShellViewHost) {
     !navDrawerOpen &&
     !settingsTakeover;
   const navigationSurfaceHidden = navigationSurfaceIsHidden({
-    onboarding,
     navCollapsed,
     navDrawerOpen,
     mobileNavLayout,
@@ -212,10 +197,9 @@ export function renderApplicationShell(host: ShellViewHost) {
     floatingSidebarAttentionVisible({
       navigationSurfaceHidden,
       mobileNavLayout,
-      onboarding,
       compact: mergedChatChrome,
     });
-  if (!nativeEmbed && (onboarding || floatingAttentionVisible)) {
+  if (!nativeEmbed && floatingAttentionVisible) {
     host.lazyCustomElements.preload(SIDEBAR_ATTENTION_ELEMENT, { reportError: true });
   }
   const shellWidth = Math.max(globalThis.innerWidth || 0, NAV_WIDTH_MAX);
@@ -278,22 +262,19 @@ export function renderApplicationShell(host: ShellViewHost) {
   }
   const embedNavigation =
     nativeEmbed && !(nativeEmbedHost()?.surface === "conversation" && activeRoute === "chat");
-  const collapsedControls =
-    !nativeEmbed && navCollapsed && !onboarding && !settingsTakeover && !mobileNavLayout;
+  const collapsedControls = !nativeEmbed && navCollapsed && !settingsTakeover && !mobileNavLayout;
   const shellConnectionStatus =
     (navigationSurfaceHidden ||
       (settingsTakeover
         ? host.settingsSidebarRenderer === null
         : !isOptionalElementDefined(APP_SIDEBAR_ELEMENT))) &&
     !nativeEmbed &&
-    !onboarding &&
     !initialConnection
       ? connectionStatus
       : null;
   const floatingUpdateCard = {
     navigationSurfaceHidden,
     mobileNavLayout,
-    onboarding,
     compact: mergedChatChrome && !controlUiRefreshRequired,
     statusBanner: overlaySnapshot.updateStatusBanner,
     updateRun: overlaySnapshot.updateRun,
@@ -370,15 +351,13 @@ export function renderApplicationShell(host: ShellViewHost) {
   // Optional tags stay mounted before definition. Lit replays their properties on upgrade,
   // and the upgraded panels catch the first toggle instead of dropping the event.
   const workspace = html`
-    ${renderShellLazyOverlays(host, desktopPanelAvailable, custodianPanelAvailable, nativeEmbed)}
+    ${renderShellLazyOverlays(host, desktopPanelAvailable, nativeEmbed)}
     <div
       class="shell ${chatLikeRoute ? "shell--chat" : ""} ${
         navCollapsed ? "shell--nav-collapsed" : ""
       } ${mobileNavLayout ? "shell--mobile-nav" : ""} ${
         mergedChatChrome ? "shell--merged-chat-chrome" : ""
-      } ${navDrawerOpen ? "shell--nav-drawer-open" : ""} ${
-        onboarding ? "shell--onboarding" : ""
-      } ${nativeEmbed ? "shell--embed" : ""} ${embedSettings ? "shell--embed-settings" : ""} ${settingsTakeover ? "shell--settings" : ""} ${
+      } ${navDrawerOpen ? "shell--nav-drawer-open" : ""} ${nativeEmbed ? "shell--embed" : ""} ${embedSettings ? "shell--embed-settings" : ""} ${settingsTakeover ? "shell--settings" : ""} ${
         collapsedControls && homePanelAvailable ? "shell--home-control" : ""
       } ${shellConnectionStatus ? "shell--connection-status" : ""} ${
         floatingSidebarAttentionVisible(floatingUpdateCard) ? "shell--floating-attention" : ""
@@ -390,7 +369,7 @@ export function renderApplicationShell(host: ShellViewHost) {
         ${t("common.skipToMainContent")}
       </a>
       ${
-        nativeWebChrome && !onboarding
+        nativeWebChrome
           ? html`
               <openclaw-macos-titlebar-controls
                 ?inert=${navDrawerOpen}
@@ -490,7 +469,7 @@ export function renderApplicationShell(host: ShellViewHost) {
               </div>`
       }
       ${
-        !nativeEmbed && !navCollapsed && !onboarding && !settingsTakeover
+        !nativeEmbed && !navCollapsed && !settingsTakeover
           ? html`
               <resizable-divider
                 class="sidebar-resizer"
@@ -515,10 +494,8 @@ export function renderApplicationShell(host: ShellViewHost) {
       <main
         id="control-ui-main"
         class="content ${chatLikeRoute ? "content--chat" : ""} ${
-          activeRoute === "custodian" ? "content--custodian" : ""
-        } ${activeRoute === "workboard" ? "content--workboard" : ""} ${
-          pageActionsBlocked ? "content--actions-blocked" : ""
-        } ${host.shellLayout.className}"
+          activeRoute === "workboard" ? "content--workboard" : ""
+        } ${pageActionsBlocked ? "content--actions-blocked" : ""} ${host.shellLayout.className}"
         ${ref(host.shellLayout.contentRef)}
         .tabIndex=${-1}
         @mousedown=${beginNativeWindowDragFromTopInset}
@@ -577,14 +554,11 @@ export function renderApplicationShell(host: ShellViewHost) {
       ${sessionRoute ? nothing : renderShellDocks(context, navDrawerOpen, settingsTakeover || nativeEmbed, selectedAgentId, activeRoute)}
       <openclaw-assistant-panel
         ?inert=${navDrawerOpen}
-        .custodianAvailable=${custodianPanelAvailable && !nativeEmbed}
         .homeAvailable=${homePanelAvailable && !nativeEmbed}
-        .custodianSuppressed=${activeRoute === "custodian"}
         .pageSessionKey=${host.activeSessionKey}
         .pageAgentId=${selectedAgentId}
         .pageRouteId=${activeRoute}
         .pageRouteFailed=${host.routeState.routeFailed === true}
-        .minimizeRequestId=${host.custodianMinimizeRequestId}
       ></openclaw-assistant-panel>
       ${
         isOptionalElementDefined(host.execApprovalElement)
@@ -619,14 +593,6 @@ export function renderApplicationShell(host: ShellViewHost) {
           host.navigate("apps");
         },
       })}
-      ${
-        memoryImportActive && isOptionalElementDefined(host.onboardingMemoryImportElement)
-          ? html`<openclaw-onboarding-memory-import
-              .active=${true}
-              .context=${context}
-            ></openclaw-onboarding-memory-import>`
-          : nothing
-      }
       <openclaw-toast-host></openclaw-toast-host>
     </div>
   `;

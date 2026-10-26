@@ -85,7 +85,6 @@ import {
   resolveApplicationStartupSettings,
 } from "./startup-settings.ts";
 import { bindUpdateConfigWriteInterlock } from "./update-config-interlock.ts";
-import { openUpdateFailureTriage } from "./update-triage.ts";
 import { createWebPushCapability } from "./web-push.ts";
 
 export type ApplicationRuntime = {
@@ -309,8 +308,6 @@ export function bootstrapApplication(): ApplicationRuntime {
     connectionBootstrap,
     getActiveSessionKey: () => gateway.snapshot.sessionKey || undefined,
     drainConfigWrites: () => runtimeConfig.waitForPendingWrites(),
-    onUpdateFailure: (failure, admission) =>
-      void openUpdateFailureTriage(context, failure, admission),
   });
   const sidebarAttention = createSidebarAttentionStore({
     gateway,

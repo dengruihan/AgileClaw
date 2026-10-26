@@ -100,9 +100,7 @@ describe("ModelSetupPage first-run activation ownership", () => {
       expect(context.navigate).not.toHaveBeenCalled();
       if (configured) {
         page.querySelector<HTMLButtonElement>(".model-setup__recovery .btn.primary")!.click();
-        await waitForFast(() =>
-          expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" }),
-        );
+        await waitForFast(() => expect(context.navigate).toHaveBeenCalledWith("chat"));
         expect(request.mock.calls.map(([method]) => method)).toEqual([
           "openclaw.setup.auth.start",
           "wizard.next",
@@ -160,9 +158,7 @@ describe("ModelSetupPage first-run activation ownership", () => {
       expect(request).toHaveBeenCalledOnce();
       expect(localStorage.getItem("openclaw.modelSetup.pendingActivation.v1")).toBe(receipt);
       response.resolve(success);
-      await waitForFast(() =>
-        expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" }),
-      );
+      await waitForFast(() => expect(context.navigate).toHaveBeenCalledWith("chat"));
       expect(request).toHaveBeenCalledOnce();
     } finally {
       response.resolve(success);
@@ -262,9 +258,7 @@ describe("ModelSetupPage first-run activation ownership", () => {
       ).toHaveLength(0);
       expect(context.navigate).not.toHaveBeenCalled();
       page.querySelector<HTMLButtonElement>(".model-setup__recovery .btn.primary")!.click();
-      await waitForFast(() =>
-        expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" }),
-      );
+      await waitForFast(() => expect(context.navigate).toHaveBeenCalledWith("chat"));
       releaseActivation?.({
         done: true,
         status: "done",

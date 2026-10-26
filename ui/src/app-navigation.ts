@@ -190,7 +190,7 @@ export function settingsSearchTextMatches(value: string, query: string): boolean
 // Management surfaces (sessions, worktrees, activity, memory import) are
 // workspace destinations, not settings; model setup is a subpage of Models.
 const SETTINGS_NAVIGATION_GROUPS = [
-  { labelKey: null, routes: ["custodian", "profile", "appearance", "notifications"] },
+  { labelKey: null, routes: ["profile", "appearance", "notifications"] },
   { labelKey: "nav.settingsGroupDevice", routes: ["device", "device-permissions"] },
   {
     labelKey: "nav.settingsGroupConnections",
@@ -355,7 +355,6 @@ const NAVIGATION_PRESENTATION: Record<NavigationRouteId, NavigationPresentation>
   terminal: ["terminal", "terminal.title", "terminal.open"],
   dashboard: navigationPresentation("layoutDashboard", "chat"),
   dashboards: navigationPresentation("layoutDashboard", "dashboards"),
-  custodian: navigationPresentation("lobster", "custodian"),
   config: ["settings", "nav.settings", "subtitles.config"],
   profile: navigationPresentation("circleUser", "profile"),
   communications: navigationPresentation("send", "communications"),
@@ -454,16 +453,13 @@ export function titleForRoute(routeId: NavigationRouteId): string {
 
 /** Window/tab title, markers leftmost because tabs truncate from the right.
  * A disconnected Gateway replaces the approval count (a stale queue is not
- * actionable); titles already ending in the brand
- * ("Ask AgileClaw") skip the suffix so it never reads "… AgileClaw — AgileClaw". */
+ * actionable). */
 export function formatDocumentTitle(options: {
   context: string;
   attentionCount?: number;
   gatewayDisconnected?: boolean;
 }): string {
-  const base = options.context.endsWith("AgileClaw")
-    ? options.context
-    : `${options.context} — AgileClaw`;
+  const base = `${options.context} — AgileClaw`;
   if (options.gatewayDisconnected) {
     return `(${t("connection.disconnectedTitle")}) ${base}`;
   }
@@ -479,9 +475,6 @@ export function settingsNavigationLabelForRoute(
 ): string {
   if (routeId === "device" && snapshot) {
     return t(deviceSettingsGroupLabelKey(snapshot));
-  }
-  if (routeId === "custodian") {
-    return t("nav.askOpenClaw");
   }
   return titleForRoute(routeId);
 }

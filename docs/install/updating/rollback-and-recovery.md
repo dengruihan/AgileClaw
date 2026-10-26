@@ -241,10 +241,10 @@ or stopped from the latest service observation, even when the new version is run
 not pass verification. A restored Gateway must pass its own verification checks
 before the run can finish as `rolled-back`.
 
-In the Control UI, open **Settings → Updates** and choose **Diagnose update** to
-ask OpenClaw to investigate the recorded failure. Loading the dashboard,
-reconnecting, or receiving an update failure does not start diagnosis. Each
-diagnostic request requires a button press; it does not retry the update.
+To investigate a recorded failure, run `openclaw triage` on the Gateway host.
+Loading the dashboard, reconnecting, or receiving an update failure never
+starts diagnosis. Each diagnostic request requires an explicit invocation; it
+does not retry the update.
 
 Automatic CLI triage never follows a verified rollback; it runs only when the update
 ends failed. In an interactive terminal, you can choose **Diagnose update failure**,

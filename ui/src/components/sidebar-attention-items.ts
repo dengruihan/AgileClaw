@@ -2,7 +2,7 @@ import type { CronJob, ModelAuthStatusResult } from "../api/types.ts";
 import { t } from "../i18n/index.ts";
 import { registerSidebarAttentionEnglish } from "../i18n/locales/en-sidebar-attention.ts";
 import { isCronJobActiveFailure, isCronJobRunning } from "../lib/cron-status.ts";
-import { clampText, formatTimeAgo } from "../lib/format.ts";
+import { formatTimeAgo } from "../lib/format.ts";
 import { isMonitoredAuthProvider, listEffectiveModelAuthProviders } from "../lib/model-auth.ts";
 import type { SidebarAttentionItem } from "./sidebar-attention-entries.ts";
 
@@ -11,7 +11,6 @@ registerSidebarAttentionEnglish();
 // A cron job counts as overdue when its next planned run is this far in the
 // past; mirrors the threshold the Overview attention list used.
 const CRON_OVERDUE_GRACE_MS = 300_000;
-const ALERT_QUESTION_MAX_LENGTH = 1_000;
 
 export type CronAttentionJob = Pick<
   CronJob,
@@ -68,7 +67,6 @@ export function buildSidebarAttentionEntries(params: {
     const signature = params.modelAuthAgentId
       ? `agent:${params.modelAuthAgentId}\n${provider.provider}`
       : provider.provider;
-    const fact = `${provider.displayName}: ${provider.status}`;
     const scope =
       provider.profiles.find(
         (profile) => profile.status === "expired" || profile.status === "missing",
@@ -80,7 +78,6 @@ export function buildSidebarAttentionEntries(params: {
     const detail = scope
       ? t("attention.modelAuthExpiredWithScope", { scope, time })
       : t("attention.modelAuthExpiredState", { time });
-    const alertTitle = t("attention.modelAuthExpired", { providers: provider.displayName });
     entries.push(
       attentionEntry(
         {
@@ -99,22 +96,7 @@ export function buildSidebarAttentionEntries(params: {
             routeId: "model-providers",
           },
           signature,
-          action: {
-            kind: "askCustodian",
-            alert: {
-              id: `modelAuthExpired:${signature}`,
-              title: alertTitle,
-              facts: [fact],
-              question: clampText(
-                t("attention.alerts.modelAuthExpiredQuestion", { facts: fact }),
-                ALERT_QUESTION_MAX_LENGTH,
-              ),
-              action: {
-                label: t("routeTitles.modelProviders"),
-                target: { kind: "navigate", routeId: "model-providers" },
-              },
-            },
-          },
+          action: { kind: "navigate", routeId: "model-providers" },
         },
         "system",
       ),

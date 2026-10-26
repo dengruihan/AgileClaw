@@ -121,7 +121,7 @@ suite.define(() => {
     );
   });
 
-  it("hands first-run model setup to the custodian in onboarding chrome", async () => {
+  it("completes first-run model setup into the chat workspace", async () => {
     await suite.withPage(
       {
         ...(artifactDir
@@ -139,7 +139,6 @@ suite.define(() => {
             "openclaw.setup.detect",
             "openclaw.setup.activate.start",
             "wizard.next",
-            "openclaw.chat",
           ],
           methodResponses: {
             "openclaw.setup.detect": {
@@ -168,22 +167,6 @@ suite.define(() => {
               status: "done",
               modelActivation: { modelRef: "openai/gpt-5" },
             },
-            "openclaw.chat": {
-              sessionId: "e2e-custodian",
-              reply: "## Hi, I'm AgileClaw",
-              action: "none",
-              question: {
-                id: "onboarding-next-step",
-                header: "Next step",
-                question: "What would you like to do first?",
-                options: [
-                  { label: "Talk to my agent", reply: "talk to agent", recommended: true },
-                  { label: "Connect WhatsApp", reply: "connect whatsapp" },
-                ],
-                isOther: true,
-                skipAction: "exit",
-              },
-            },
           },
         });
 
@@ -203,36 +186,18 @@ suite.define(() => {
           modelRef: "openai/gpt-5",
         });
 
-        await expect.poll(() => new URL(page.url()).pathname).toBe("/custodian");
-        expect(new URL(page.url()).searchParams.get("onboarding")).toBe("1");
-        // Onboarding chrome keeps only the header actions; no identity heading.
-        await page.locator(".custodian__header--minimal").waitFor();
-        await page.getByRole("button", { name: "Exit setup" }).waitFor();
-        await expect
-          .poll(() => page.locator(".shell").getAttribute("class"))
-          .toContain("shell--onboarding");
-        expect(await page.locator(".shell-nav").isVisible()).toBe(false);
-        if (artifactDir) {
-          await page.screenshot({
-            path: path.join(artifactDir, "custodian-onboarding-handoff.png"),
-          });
-        }
-
-        const chatRequest = await gateway.waitForRequest("openclaw.chat");
-        expect(chatRequest.params).toMatchObject({
-          sessionId: expect.stringMatching(/^control-ui-onboarding-/u),
-          welcomeVariant: "onboarding",
-        });
-        await page.getByRole("button", { name: "Skip for now" }).click();
         await expect.poll(() => new URL(page.url()).pathname).toBe("/chat/main");
+        expect(new URL(page.url()).searchParams.has("onboarding")).toBe(false);
+        // Completion lands in the standard shell; no onboarding chrome remains.
         await expect
           .poll(() => page.locator(".shell").getAttribute("class"))
           .not.toContain("shell--onboarding");
-        const userTurns = (await gateway.getRequests("openclaw.chat")).filter((request) => {
-          const params = request.params;
-          return typeof params === "object" && params !== null && "message" in params;
-        });
-        expect(userTurns).toHaveLength(0);
+        await page.locator(".shell-nav").waitFor();
+        if (artifactDir) {
+          await page.screenshot({
+            path: path.join(artifactDir, "first-run-chat-handoff.png"),
+          });
+        }
       },
     );
   });

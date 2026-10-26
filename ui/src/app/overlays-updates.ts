@@ -33,7 +33,6 @@ import {
   type UpdateRestartStatusResponse,
   type UpdateRunResponse,
   type UpdateFailureTriage,
-  type UpdateTriageAdmission,
 } from "./update-overlay-helpers.ts";
 import { createUpdateRunReceipts } from "./update-run-receipts.ts";
 import { readUpdateScheduleValue } from "./update-schedule-dto.ts";
@@ -49,7 +48,6 @@ export type ApplicationUpdateOverlayHooks = {
   /** Barrier awaited after update-running is published and before update.run
    * is issued, so in-flight config writes cannot overlap the install. */
   drainConfigWrites?: () => Promise<void>;
-  onUpdateFailure?: (failure: UpdateFailureTriage, admission: UpdateTriageAdmission) => void;
 };
 
 type UpdateHistory = { kind: "unknown" } | { kind: "known"; runId: string | null };
@@ -71,7 +69,6 @@ export function createApplicationUpdateOverlays(
     updateStatusBanner: null,
     updateStatusCheckBanner: null,
     recordedUpdateAttempt: null,
-    diagnosableUpdateFailureId: null,
     reportableUpdateFailureId: null,
     updateFailureReportBusy: false,
     updateFailureReportNotice: null,
@@ -97,7 +94,6 @@ export function createApplicationUpdateOverlays(
   let updateHistory: UpdateHistory = { kind: "unknown" };
   let updateAttempt: UpdateAdmissionAttempt | null = null;
   let currentFailure: UpdateFailureTriage | null = null;
-  let diagnosticGeneration = 0;
 
   const updateFailureReporter = createUpdateFailureReportController({
     getClient: () => gateway.snapshot.client,
@@ -140,48 +136,6 @@ export function createApplicationUpdateOverlays(
     gateway.snapshot.phase === "connected" &&
     readGatewayOperatorAccess(gateway.snapshot).canAdmin;
 
-  function diagnoseUpdateFailure(attemptId: string) {
-    const owned = currentFailure;
-    const scope = updateGatewayScope;
-    const profile = profileId;
-    const client = activeClient;
-    const epoch = connectedEpoch;
-    if (
-      !owned ||
-      owned.id !== attemptId ||
-      !client ||
-      !isCurrentClient(client) ||
-      snapshot.updateRunning ||
-      snapshot.updateFailureReportBusy ||
-      snapshot.updateReconciliationPending
-    ) {
-      return;
-    }
-    const generation = ++diagnosticGeneration;
-    const isCurrent = () =>
-      generation === diagnosticGeneration &&
-      epoch === connectedEpoch &&
-      isCurrentClient(client) &&
-      currentFailure === owned &&
-      gatewayCredentialScope(gateway.connection.gatewayUrl) === scope &&
-      (gateway.snapshot.selfUser?.id ?? null) === profile &&
-      !snapshot.updateRunning &&
-      !snapshot.updateReconciliationPending;
-    // Consent belongs to this click. Loading, refreshing, or reconnecting never
-    // creates an admission, and a delayed panel cannot reuse an earlier click.
-    let admitted = false;
-    hooks.onUpdateFailure?.(owned, {
-      isCurrent,
-      admit: () => {
-        if (admitted || !isCurrent()) {
-          return false;
-        }
-        admitted = true;
-        return true;
-      },
-    });
-  }
-
   function publish() {
     const campaign = snapshot.updateSchedule?.campaign;
     const applying =
@@ -197,15 +151,6 @@ export function createApplicationUpdateOverlays(
     }
     snapshot = {
       ...snapshot,
-      diagnosableUpdateFailureId:
-        currentFailure &&
-        snapshot.updateRun?.target.installationMethod !== "ocm" &&
-        activeClient &&
-        isCurrentClient(activeClient) &&
-        !snapshot.updateRunning &&
-        !snapshot.updateReconciliationPending
-          ? currentFailure.id
-          : null,
       reportableUpdateFailureId:
         snapshot.updateRunning ||
         snapshot.updateReconciliationPending ||
@@ -567,7 +512,6 @@ export function createApplicationUpdateOverlays(
       }
     },
     refreshUpdateStatus,
-    diagnoseUpdateFailure,
     acknowledgeUpdateRun(this: void) {
       const run = snapshot.updateRun;
       if (run && run.status !== "running") {

@@ -1,6 +1,5 @@
 import { html } from "lit";
 import { AgentRosterElement } from "../../lib/agents/roster-element.ts";
-import { canCallGatewayMethod } from "../../lib/gateway-methods.ts";
 import { renderAgentsHome } from "./view.ts";
 
 export class AgentsHomePage extends AgentRosterElement {
@@ -20,11 +19,6 @@ export class AgentsHomePage extends AgentRosterElement {
         loading: this.roster.loading,
         error: this.roster.error ?? this.roster.subscriptionError,
         onRetry: () => void this.refresh(),
-        canCreate: canCallGatewayMethod(
-          this.context.gateway.snapshot,
-          "openclaw.chat",
-          "operator.admin",
-        ),
       });
     });
   }

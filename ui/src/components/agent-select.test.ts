@@ -32,7 +32,6 @@ type AgentSelectElement = HTMLElement & {
   identityById: Record<string, AgentIdentityResult>;
   disabled: boolean;
   onSelect: (value: string) => void;
-  onCreateAgent: (() => void) | null;
   updateComplete: Promise<boolean>;
 };
 
@@ -64,7 +63,6 @@ async function createAgentSelect(
   const element = document.createElement(AGENT_SELECT_TEST_TAG) as AgentSelectElement;
   element.options = options;
   element.value = "alpha";
-  element.onCreateAgent = vi.fn();
   Object.assign(element, overrides);
   document.body.append(element);
   await element.updateComplete;
@@ -715,36 +713,8 @@ it("selects an empty-string special option and exposes radio semantics", async (
   }
 });
 
-it("opens the new-agent flow from the footer item", async () => {
-  const onCreateAgent = vi.fn();
-  const element = await createAgentSelect({ onCreateAgent });
-
-  try {
-    const item = element.querySelector("[data-create-agent]");
-    element
-      .querySelector("wa-dropdown")
-      ?.dispatchEvent(new CustomEvent("wa-select", { detail: { item }, bubbles: true }));
-
-    expect(onCreateAgent).toHaveBeenCalledOnce();
-  } finally {
-    element.remove();
-  }
-});
-
-it("keeps the new-agent footer reachable with an empty roster", async () => {
+it("keeps an empty picker reachable for external actions", async () => {
   const element = await createAgentSelect({ options: [], value: "" });
-
-  try {
-    const trigger = element.querySelector<HTMLButtonElement>(".agent-select__trigger");
-    expect(trigger?.disabled).toBe(false);
-    expect(element.querySelector(".agent-select__label")?.textContent?.trim()).toBe("No agents");
-  } finally {
-    element.remove();
-  }
-});
-
-it("disables an empty picker when no footer action is available", async () => {
-  const element = await createAgentSelect({ options: [], value: "", onCreateAgent: null });
 
   try {
     expect(element.querySelector<HTMLButtonElement>(".agent-select__trigger")?.disabled).toBe(true);

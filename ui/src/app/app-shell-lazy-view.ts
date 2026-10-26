@@ -35,7 +35,6 @@ export interface ShellLazyOverlayHost extends DebugOverlayFrameHost, ShellNewSes
 export function renderShellLazyOverlays(
   host: ShellLazyOverlayHost,
   desktopPanelAvailable: boolean,
-  custodianPanelAvailable: boolean,
   nativeEmbed: boolean,
 ) {
   const lazyElementState = host.lazyCustomElements.visibleState;
@@ -55,7 +54,6 @@ export function renderShellLazyOverlays(
       isOptionalElementDefined(host.commandPaletteElement)
         ? html`<openclaw-command-palette
             .desktopAvailable=${desktopPanelAvailable}
-            .custodianAvailable=${custodianPanelAvailable}
             .onNavigate=${(routeId: RouteId, options?: ApplicationNavigationOptions) =>
               host.navigate(routeId, options)}
             .onSelectSession=${(sessionKey: string) => host.selectChatSession(sessionKey)}

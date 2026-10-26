@@ -1,8 +1,6 @@
 import { consume } from "@lit/context";
-import { asNullableRecord } from "@openclaw/normalization-core/record-coerce";
 import { html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
-import { isSettingsTakeover } from "../app-navigation.ts";
 import { isSessionRouteId, type RouteId } from "../app-route-paths.ts";
 import type { AssistantDockOwner } from "../app/assistant-dock.ts";
 import { chatInputOwnerForContext } from "../app/chat-input-owner.ts";
@@ -25,24 +23,17 @@ import {
 } from "../lib/sessions/session-key.ts";
 import { OpenClawLightDomElement } from "../lit/openclaw-element.ts";
 import { SubscriptionsController } from "../lit/subscriptions-controller.ts";
-import { getSafeLocalStorage } from "../local-storage.ts";
 import {
   CHAT_ROUTE_READY_EVENT,
   CHAT_TRANSCRIPT_LOADING_CHANGED_EVENT,
 } from "../pages/chat/chat-history-events.ts";
 import type { ChatPaneElement } from "../pages/chat/route-draft-focus-handoff.ts";
-import type { CustodianSessionStore } from "../pages/custodian/custodian-session-store.ts";
-import {
-  consumePluginHelpAutoOpen,
-  dismissPluginHelpAutoOpen,
-  subscribePluginHelp,
-} from "../pages/custodian/plugin-help-state.ts";
 import { renderAssistantPanelLoading } from "./assistant-panel-loading.ts";
 import { DockLayoutController } from "./dock-layout-controller.ts";
 import { assistantPanelLayout } from "./dock-panel-layout.ts";
 import { icons } from "./icons.ts";
 import { renderLazyElementState } from "./lazy-view-error.ts";
-import { CUSTODIAN_PANEL_TOGGLE_EVENT, HOME_PANEL_TOGGLE_EVENT } from "./panel-toggle-contract.ts";
+import { HOME_PANEL_TOGGLE_EVENT } from "./panel-toggle-contract.ts";
 import "../styles/rail-header.css";
 import "../styles/assistant-panel.css";
 
@@ -56,7 +47,6 @@ const ASSISTANT_CONTENT_ELEMENT = {
 
 type AssistantDestination =
   | "home"
-  | "custodian"
   | {
       kind: "session";
       params: Parameters<AssistantDockOwner["openSession"]>[0];
@@ -67,22 +57,18 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
   @consume({ context: applicationContext, subscribe: true })
   @property({ attribute: false })
   context: ApplicationContext | undefined;
-  @property({ type: Boolean }) custodianAvailable = false;
   @property({ type: Boolean }) homeAvailable = false;
-  @property({ type: Boolean }) custodianSuppressed = false;
   @property() pageSessionKey = "";
   @property() pageAgentId = "";
   @property() pageRouteId: RouteId = "chat";
   @property({ type: Boolean }) pageRouteFailed = false;
   @state() private homeStarted = false;
   private pendingPrimaryPane: ChatPaneElement | null = null;
-  @state() private destination: AssistantDestination = "custodian";
+  @state() private destination: AssistantDestination = "home";
   /** Built-in target a plugin dock replaced; restored when that dock closes. */
-  private builtInDestination: "home" | "custodian" = "custodian";
+  private builtInDestination: "home" = "home";
   private publishedSessionKey: string | null = null;
   private readonly contentLoader = new LazyCustomElementRequestController(this);
-  @property({ type: Number }) minimizeRequestId = 0;
-  @property({ attribute: false }) store: CustodianSessionStore | undefined;
 
   private readonly dockLayout = new DockLayoutController(this, {
     layout: assistantPanelLayout,
@@ -90,7 +76,6 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
     isAvailable: () => this.available,
   });
   private readonly onToggleRequest = (event: Event) => this.handleToggleRequest(event);
-  private handledMinimizeRequestId = 0;
   private targetScope = "";
   private homeDefaults: {
     agentsList?: ApplicationContext["agents"]["state"]["agentsList"];
@@ -104,11 +89,6 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
         () => this.context?.assistantDock,
         (dock) => dock.attach(this),
       )
-      .watch(
-        () => this.context,
-        (context, notify) => subscribePluginHelp(context, notify),
-      )
-      .watchStore(() => this.store)
       .watchStore(() => this.context?.agentSelection)
       .watchStore(() => this.context?.agents)
       .watchStore(() => this.context?.gateway);
@@ -121,7 +101,6 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
       CHAT_TRANSCRIPT_LOADING_CHANGED_EVENT,
       this.startHomeAfterPrimaryChat,
     );
-    window.addEventListener(CUSTODIAN_PANEL_TOGGLE_EVENT, this.onToggleRequest);
     window.addEventListener(HOME_PANEL_TOGGLE_EVENT, this.onToggleRequest);
     this.dockLayout.setSuppressed(this.restoreSuppressed);
   }
@@ -133,7 +112,6 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
       this.startHomeAfterPrimaryChat,
     );
     this.pendingPrimaryPane = null;
-    window.removeEventListener(CUSTODIAN_PANEL_TOGGLE_EVENT, this.onToggleRequest);
     window.removeEventListener(HOME_PANEL_TOGGLE_EVENT, this.onToggleRequest);
     if (typeof this.destination !== "string") {
       this.closeSession();
@@ -150,14 +128,8 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
       this.homeStarted = false;
       this.pendingPrimaryPane = null;
       this.homeDefaults = {};
-      let saved: Record<string, unknown> | null = null;
-      try {
-        saved = asNullableRecord(
-          JSON.parse(getSafeLocalStorage()?.getItem(this.targetStorageKey) ?? "null"),
-        );
-      } catch {}
-      this.destination = saved?.destination === "home" ? "home" : "custodian";
-      this.builtInDestination = this.destination;
+      this.destination = "home";
+      this.builtInDestination = "home";
     }
     if (this.context?.gateway.snapshot.phase === "connected") {
       // Roster/hello disappear during reconnect; keep the captured Home identity with its outbox.
@@ -167,17 +139,6 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
       };
     }
     this.dockLayout.setSuppressed(this.restoreSuppressed);
-    if (
-      this.minimizeRequestId > 0 &&
-      this.minimizeRequestId !== this.handledMinimizeRequestId &&
-      this.custodianAvailable &&
-      this.store
-    ) {
-      this.handledMinimizeRequestId = this.minimizeRequestId;
-      if (typeof this.destination === "string" && this.store.hasRealUserTurn()) {
-        this.openDestination("custodian");
-      }
-    }
     if (!this.available) {
       this.dockLayout.hideWithoutPersisting();
     } else {
@@ -186,21 +147,10 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
     if (wasOpen && !this.dockLayout.open) {
       this.claimInput("page");
     }
-    if (
-      typeof this.destination === "string" &&
-      this.context &&
-      this.custodianAvailable &&
-      !this.custodianSuppressed &&
-      window.innerWidth > 1100 &&
-      consumePluginHelpAutoOpen(this.context)
-    ) {
-      this.openDestination("custodian");
-    }
     this.startHomeAfterPrimaryChat();
     this.contentLoader.requestWhileActive(
       ASSISTANT_CONTENT_ELEMENT,
-      (this.dockLayout.open && (this.destination !== "home" || this.homeStarted)) ||
-        (this.custodianAvailable && this.minimizeRequestId > this.handledMinimizeRequestId),
+      this.dockLayout.open && (this.destination !== "home" || this.homeStarted),
     );
     this.dockLayout.syncReservation();
     this.publishSessionKey();
@@ -254,23 +204,6 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
       });
   };
 
-  private get targetStorageKey(): string {
-    return `openclaw.assistant.panel.target.v1:${this.targetScope}`;
-  }
-
-  private persistTarget(): void {
-    // Plugin targets belong to their activation, never to browser persistence.
-    if (typeof this.destination !== "string") {
-      return;
-    }
-    try {
-      getSafeLocalStorage()?.setItem(
-        this.targetStorageKey,
-        JSON.stringify({ destination: this.destination }),
-      );
-    } catch {}
-  }
-
   private get homeTarget() {
     const defaults = this.homeDefaults;
     const agents = listSelectableAgents(defaults.agentsList?.agents ?? []);
@@ -297,10 +230,7 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
   private availableFor(destination: AssistantDestination): boolean {
     // The chat pane owns access errors and read-only composition. Always show
     // explicitly requested sessions so a denied read has its normal visible outcome.
-    return (
-      typeof destination !== "string" ||
-      (destination === "home" ? this.homeAvailable : this.custodianAvailable)
-    );
+    return typeof destination !== "string" || this.homeAvailable;
   }
 
   private get available(): boolean {
@@ -308,9 +238,6 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
   }
 
   private get suppressed(): boolean {
-    if (this.destination === "custodian") {
-      return this.custodianSuppressed;
-    }
     const context = this.context;
     const sessionPage =
       this.destination === "home"
@@ -345,10 +272,7 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
   }
 
   private get restoreSuppressed(): boolean {
-    // Home follows the visible Settings context; automatic diagnostic restores yield to it.
-    return (
-      this.suppressed || (this.destination === "custodian" && isSettingsTakeover(this.pageRouteId))
-    );
+    return this.suppressed;
   }
 
   openSession(params: Parameters<AssistantDockOwner["openSession"]>[0], activation: object): void {
@@ -414,18 +338,14 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
   }
 
   private setOpen(open: boolean): void {
-    if (!open && this.destination !== "home" && this.context) {
-      dismissPluginHelpAutoOpen(this.context);
-    }
     if (open && this.destination === "home") {
       this.homeStarted = true;
     }
-    this.persistTarget();
     this.dockLayout.setOpen(open);
     this.claimInput(open ? "dock" : "page");
     if (!open && typeof this.destination !== "string") {
       // Closing discards the activation-owned target without reopening a dock; the
-      // operator's built-in Home/Ask choice and its persisted value stay untouched.
+      // operator's built-in Home choice and its persisted value stay untouched.
       this.destination = this.builtInDestination;
     }
     this.publishSessionKey();
@@ -445,21 +365,23 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
   }
 
   handleToggleRequest(event: Event): void {
-    const destination = event.type === HOME_PANEL_TOGGLE_EVENT ? "home" : "custodian";
-    if (!this.availableFor(destination)) {
+    if (!this.availableFor("home")) {
       return;
     }
-    const detail = asNullableRecord(event instanceof CustomEvent ? event.detail : null);
+    const detail = (event instanceof CustomEvent ? event.detail : null) as {
+      dock?: "right" | "bottom";
+      open?: boolean;
+    } | null;
     const dock = detail?.dock;
     if (dock === "right" || dock === "bottom") {
       this.dockLayout.setDock(dock, false);
     }
     if (detail?.open === false) {
-      if (this.destination === destination) {
+      if (this.destination === "home") {
         this.setOpen(false);
       }
-    } else if (this.destination !== destination || detail?.open === true) {
-      this.openDestination(destination);
+    } else if (this.destination !== "home" || detail?.open === true) {
+      this.openDestination("home");
     } else {
       this.toggle();
     }
@@ -490,23 +412,8 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
         ${this.dockLayout.renderResizer("assistant-panel", t("assistantPanel.resize"))}
         <header class="rail-header assistant-panel-header" @mousedown=${beginNativeWindowDrag}>
           <div class="assistant-panel-title">
-            <openclaw-mascot
-              .mood=${this.destination === "custodian" && this.store?.sending ? "thinking" : "idle"}
-              .size=${16}
-            ></openclaw-mascot>
-            ${session ? html`<button type="button" class="assistant-panel-tab rail-header__title" aria-pressed="true" title=${session.label}>${session.label}</button>` : nothing}
-            ${(["home", "custodian"] as const).map((destination) =>
-              this.availableFor(destination)
-                ? html`<button
-                    type="button"
-                    class="assistant-panel-tab"
-                    aria-pressed=${this.destination === destination}
-                    @click=${() => this.openDestination(destination)}
-                  >
-                    ${t(destination === "home" ? "assistantPanel.home" : "nav.askOpenClaw")}
-                  </button>`
-                : nothing,
-            )}
+            <openclaw-mascot .size=${16}></openclaw-mascot>
+            ${session ? html`<button type="button" class="assistant-panel-tab rail-header__title" aria-pressed="true" title=${session.label}>${session.label}</button>` : html`<span class="assistant-panel-tab rail-header__title">${t("assistantPanel.home")}</span>`}
           </div>
           <div class="rail-header__actions assistant-panel-actions">
             ${
@@ -554,10 +461,6 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
                 .pageRouteId=${this.pageRouteId}
                 .pageSessionKey=${this.pageSessionKey}
                 .pageAgentId=${this.pageAgentId}
-                .store=${this.store}
-                @assistant-custodian-store=${(event: CustomEvent<CustodianSessionStore>) => {
-                  this.store = event.detail;
-                }}
               ></openclaw-assistant-panel-content>`
             : nothing
         }

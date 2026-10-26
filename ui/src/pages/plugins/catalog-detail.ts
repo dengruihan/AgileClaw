@@ -19,12 +19,10 @@ import {
   renderPluginMetadata,
   renderPluginMcpServers,
   renderPluginPublisher,
-  renderPluginAskAction,
 } from "./overview.ts";
 import { renderPluginRowMessage, type PluginRowMessage } from "./plugin-row-message.ts";
 
 export type PluginCatalogDetailProps = {
-  onAskPlugin?: () => void;
   busy?: boolean;
   installProgress?: PluginInstallProgress;
   message?: PluginRowMessage;
@@ -96,7 +94,7 @@ function renderDetail(result: PluginDiscoveryDetailResult, props: PluginCatalogD
             ></openclaw-plugin-install-action>`,
           )
         : nothing
-    }${renderPluginAskAction(props.onAskPlugin, plugin.local.action !== "install" && !installing)}`,
+    }`,
     identity: renderPluginPublisher(result),
     sidebar: renderPluginMetadata(result),
     panel: html`${renderPluginRowMessage(props.message, { busy: props.busy, onContinue: props.canInstall ? props.onContinueInstall : undefined })}

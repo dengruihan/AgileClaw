@@ -18,12 +18,9 @@ import {
 } from "./command-palette.test-support.ts";
 import "./command-palette.ts";
 import {
-  CUSTODIAN_PANEL_TOGGLE_EVENT,
   DESKTOP_PANEL_TOGGLE_EVENT,
   type DesktopPanelToggleDetail,
 } from "./panel-toggle-contract.ts";
-
-type CustodianPanelToggleDetail = { open?: boolean };
 
 describe("CommandPalette search", () => {
   let restoreDialogPolyfill: () => void;
@@ -984,7 +981,7 @@ describe("CommandPalette search", () => {
     expect(events[0]?.detail).toEqual({ open: true });
   });
 
-  it("hides Ask AgileClaw when unavailable", async () => {
+  it("offers no Ask AgileClaw panel action", async () => {
     const { gateway } = createGateway(true);
     const { palette } = await mountPalette(
       createContext(
@@ -992,37 +989,10 @@ describe("CommandPalette search", () => {
         vi.fn(async () => createSessionResult("agent:main:test", "Test")),
       ),
     );
-    palette.custodianAvailable = false;
     await enterQuery(palette, "openclaw");
     await vi.advanceTimersByTimeAsync(200);
     await palette.updateComplete;
 
     expect(findPaletteOption(palette, "Ask AgileClaw", true)).toBeUndefined();
-  });
-
-  it("opens Ask AgileClaw from its palette action", async () => {
-    const { gateway } = createGateway(true);
-    const { palette } = await mountPalette(
-      createContext(
-        gateway,
-        vi.fn(async () => createSessionResult("agent:main:test", "Test")),
-      ),
-    );
-    palette.custodianAvailable = true;
-    await enterQuery(palette, "openclaw");
-    await vi.advanceTimersByTimeAsync(200);
-    await palette.updateComplete;
-    const events: CustomEvent<CustodianPanelToggleDetail>[] = [];
-    const listener = (event: Event) =>
-      events.push(event as CustomEvent<CustodianPanelToggleDetail>);
-    window.addEventListener(CUSTODIAN_PANEL_TOGGLE_EVENT, listener);
-    try {
-      findPaletteOption(palette, "Ask AgileClaw", true)?.click();
-    } finally {
-      window.removeEventListener(CUSTODIAN_PANEL_TOGGLE_EVENT, listener);
-    }
-
-    expect(events).toHaveLength(1);
-    expect(events[0]?.detail).toEqual({ open: true });
   });
 });

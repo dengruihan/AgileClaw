@@ -133,10 +133,9 @@ experimental Claws surface enabled, the equivalent source path from a source
 checkout is `openclaw claws add docs/reference/templates/roles/<role>`; follow
 the [Claw preview and consent flow](/cli/claws#inspect-and-preview).
 
-You can also create the chief of staff or the full team from the Control UI:
-choose **New agent** in the sidebar or Agents home, then select the role or
-small-team recommendation in the custodian chat. Creation uses the same role
-templates and waits for your approval.
+You can also create the chief of staff or the full team through the
+interactive `openclaw setup` chat, which uses the same role templates and
+waits for your approval.
 
 The relevant per-agent delegation fragment is:
 

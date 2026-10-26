@@ -3,20 +3,6 @@ import { en } from "./en.ts";
 
 // Plugin management and its lazy sibling surfaces register this shared copy on use.
 const enPluginManagement = {
-  custodian: {
-    pluginPlaceholder: "Ask AgileClaw about {plugin}",
-    pluginIntroTitle: "Ask about {plugin}",
-    pluginStarterPurpose: "What does it do?",
-    pluginStarterTools: "What tools does it have?",
-    pluginStarterSetup: "How do I set it up?",
-    pluginPromptPurpose: "What does {plugin} do?",
-    pluginPromptTools: "What tools does {plugin} provide?",
-    pluginPromptSetup: "How do I set up {plugin}?",
-    pluginHelpQuestion: "Explain {setting}",
-    pluginHelpFailed: "Could not prepare the setting question. Try Ask AgileClaw again.",
-    pluginHelpUnset: "Not set",
-    pluginHelpValue: "Current value: {value}",
-  },
   pluginsPage: {
     installProgress: {
       title: "Installation progress",
@@ -84,7 +70,6 @@ const enPluginManagement = {
       permissions: "Permissions",
       actions: "Actions for {name}",
       reset: "Reset value",
-      ask: "Ask AgileClaw",
     },
     credentials: {
       stored: "••••••••",
@@ -422,7 +407,6 @@ const enPluginManagement = {
 
 export const registerPluginManagementEnglish = Object.assign(
   () => {
-    Object.assign(en.custodian, enPluginManagement.custodian);
     en.pluginsPage = enPluginManagement.pluginsPage;
   },
   { catalog: enPluginManagement },

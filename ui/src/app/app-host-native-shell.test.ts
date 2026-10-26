@@ -22,7 +22,6 @@ type ShellNavigationState = {
   handleNativeToggleSearch: (event: Event) => void;
   handleNativeNewSession: () => void;
   handleNativeNavigate: (event: Event) => void;
-  onboarding: boolean;
   updated: (changedProperties: Map<string, unknown>) => void;
 };
 
@@ -371,7 +370,7 @@ describe("AgileClaw native shell", () => {
     },
   );
 
-  it.each(["modal", "onboarding", "read-only", "unavailable", "offline"])(
+  it.each(["modal", "read-only", "unavailable", "offline"])(
     "leaves the New Session shortcut unhandled during %s",
     (guard) => {
       const platformSpy = vi.spyOn(navigator, "platform", "get").mockReturnValue("MacIntel");
@@ -383,7 +382,6 @@ describe("AgileClaw native shell", () => {
         ...(guard === "unavailable" ? { methods: [] } : {}),
       });
       shell.runtime = { context };
-      shell.onboarding = guard === "onboarding";
       if (guard === "offline") {
         context.gateway.snapshot.phase = "offline";
       }
@@ -579,13 +577,13 @@ describe("AgileClaw native shell", () => {
       };
       const event = new CustomEvent("openclaw:native-navigate", {
         cancelable: true,
-        detail: { path: "/custodian", search },
+        detail: { path: "/chat", search },
       });
 
       shell.handleNativeNavigate(event);
 
       expect(event.defaultPrevented).toBe(true);
-      expect(navigate).toHaveBeenCalledExactlyOnceWith("custodian", { pathname: "/custodian" });
+      expect(navigate).toHaveBeenCalledExactlyOnceWith("chat", { pathname: "/chat" });
     },
   );
 
@@ -610,22 +608,6 @@ describe("AgileClaw native shell", () => {
       expect(navigate).not.toHaveBeenCalled();
     },
   );
-
-  it("does not start a native session during onboarding", () => {
-    const navigate = vi.fn();
-    const shell = document.createElement("openclaw-app-shell") as unknown as ShellNavigationState;
-    shell.runtime = {
-      context: {
-        navigate,
-        agentSelection: { state: { selectedId: "main" } },
-      } as unknown as ApplicationContext,
-    };
-    shell.onboarding = true;
-
-    shell.handleNativeNewSession();
-
-    expect(navigate).not.toHaveBeenCalled();
-  });
 
   it("deduplicates native nav state reports", () => {
     const postMessage = vi.fn();
@@ -679,12 +661,10 @@ describe("AgileClaw shell update affordance", () => {
     document.body.append(container);
     const shared = {
       mobileNavLayout: false,
-      onboarding: false,
       refreshRequired: false,
       onRefresh: vi.fn(),
     };
     const collapsed = navigationSurfaceIsHidden({
-      onboarding: false,
       navCollapsed: true,
       navDrawerOpen: false,
       mobileNavLayout: false,
@@ -711,7 +691,6 @@ describe("AgileClaw shell update affordance", () => {
     expect(shared.onRefresh).toHaveBeenCalledOnce();
 
     const visible = navigationSurfaceIsHidden({
-      onboarding: false,
       navCollapsed: false,
       navDrawerOpen: false,
       mobileNavLayout: false,
@@ -733,7 +712,6 @@ describe("AgileClaw shell update affordance", () => {
     document.body.append(container);
     try {
       const navigationSurfaceHidden = navigationSurfaceIsHidden({
-        onboarding: false,
         navCollapsed: false,
         navDrawerOpen: false,
         mobileNavLayout: true,
@@ -742,7 +720,6 @@ describe("AgileClaw shell update affordance", () => {
       const shared = {
         navigationSurfaceHidden,
         mobileNavLayout: true,
-        onboarding: false,
         refreshRequired: false,
         onRefresh: vi.fn(),
       };
@@ -761,45 +738,5 @@ describe("AgileClaw shell update affordance", () => {
     } finally {
       container.remove();
     }
-  });
-
-  it("keeps the stale-client refresh visible during onboarding", () => {
-    const container = document.createElement("div");
-    const shared = {
-      mobileNavLayout: false,
-      onboarding: true,
-      refreshRequired: true,
-      onRefresh: vi.fn(),
-    };
-    expect(
-      navigationSurfaceIsHidden({
-        onboarding: true,
-        navCollapsed: false,
-        navDrawerOpen: false,
-        mobileNavLayout: false,
-      }),
-    ).toBe(true);
-
-    for (const navigationSurfaceHidden of [false, true]) {
-      render(renderFloatingUpdateCard({ ...shared, navigationSurfaceHidden }), container);
-      expect(
-        container.querySelector("openclaw-sidebar-attention.sidebar-attention--floating"),
-      ).toBeNull();
-      const cards = container.querySelectorAll<HTMLElement & { refreshRequired: boolean }>(
-        "openclaw-sidebar-update-card",
-      );
-      expect(cards).toHaveLength(1);
-      expect(cards[0]?.refreshRequired).toBe(true);
-    }
-
-    render(
-      renderFloatingUpdateCard({
-        ...shared,
-        navigationSurfaceHidden: true,
-        refreshRequired: false,
-      }),
-      container,
-    );
-    expect(container.querySelector("openclaw-sidebar-update-card")).toBeNull();
   });
 });

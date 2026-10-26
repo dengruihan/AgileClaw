@@ -28,7 +28,6 @@ import {
   renderPluginMetadata,
   renderPluginMcpServers,
   renderPluginPublisher,
-  renderPluginAskAction,
 } from "./overview.ts";
 import { renderPluginStateStatus } from "./plugin-card.ts";
 import {
@@ -38,11 +37,7 @@ import {
 } from "./plugin-row-message.ts";
 import { matchesPluginQuery } from "./plugin-state-presentation.ts";
 import type { PluginMutationAction } from "./plugins-page-model.ts";
-import {
-  flattenPluginSettingsFields,
-  type PluginSettingsEditor,
-  type PluginSettingsField,
-} from "./settings-editor.ts";
+import { flattenPluginSettingsFields, type PluginSettingsEditor } from "./settings-editor.ts";
 import { renderPluginLifecycle } from "./settings-lifecycle.ts";
 import { pluginEntryValue, type PluginSettingsEditorModel } from "./settings-model.ts";
 import type { PluginToolPreview } from "./tool-preview.ts";
@@ -81,13 +76,11 @@ type InventoryProps = SharedProps & {
 export type DetailProps = SharedProps &
   PluginSettingsEditorModel & {
     renderCredential?: PluginSettingsEditor["renderCredential"];
-    onAskPlugin?: () => void;
     mcpLoginBusy?: boolean;
     canMcpLogin?: boolean;
     onMcpLogin?: (serverName: string) => void;
     onEditMcp?: () => void;
     installProgress?: PluginInstallProgress;
-    onAskSetting?: (field: PluginSettingsField) => void;
     skillsSection?: TemplateResult;
     tools?: PluginToolPreview[];
     onOpenTool?: (name: string) => void;
@@ -391,7 +384,6 @@ export function renderPluginSettingsDetail(props: DetailProps): TemplateResult {
         <openclaw-plugin-settings-editor
           .model=${props}
           .renderCredential=${props.renderCredential}
-          .onAskSetting=${props.onAskSetting}
           .permissions=${permissionSettings(props)}
         ></openclaw-plugin-settings-editor>
       `,
@@ -435,11 +427,10 @@ export function renderPluginSettingsDetail(props: DetailProps): TemplateResult {
       identity: renderPluginPublisher(catalog, props.inspection?.overview?.publisherName),
       titleAction: props.installProgress
         ? html`<openclaw-plugin-install-action
-              .buttonClass=${"btn oc-action plugin-catalog-detail__install"}
-              .primary=${true}
-              .progress=${props.installProgress}
-            ></openclaw-plugin-install-action
-            >${renderPluginAskAction(props.onAskPlugin, false)}`
+            .buttonClass=${"btn oc-action plugin-catalog-detail__install"}
+            .primary=${true}
+            .progress=${props.installProgress}
+          ></openclaw-plugin-install-action>`
         : renderPluginLifecycle(
             {
               ...props,

@@ -3,7 +3,6 @@ import type { ApplicationContext } from "./context.ts";
 
 export interface ShellNewSessionHost extends HTMLElement {
   readonly context: ApplicationContext | undefined;
-  readonly onboardingMode: boolean;
   pendingNativeNewSession: boolean;
   openNewSession(agentId: string): void;
 }
@@ -15,10 +14,8 @@ export function openShellNewSession(
 ): boolean {
   const context = host.context;
   if (
-    host.onboardingMode ||
-    (source === "shortcut" &&
-      (document.openClawModalLayers?.size ||
-        document.querySelector(".shell-nav[aria-modal='true']")))
+    source === "shortcut" &&
+    (document.openClawModalLayers?.size || document.querySelector(".shell-nav[aria-modal='true']"))
   ) {
     return false;
   }

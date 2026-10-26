@@ -4655,18 +4655,12 @@ describeBrowserLayout.concurrent("chat responsive browser layout", () => {
             </div>
           </div>
         </div>
-        <section class="custodian-surface">
-          <div class="chat-bubble"><div class="chat-text">Custodian output</div></div>
-        </section>
         <div class="chat-notice"><div class="chat-text chat-notice__body">Compact notice</div></div>
         <div class="cron-run-entry__body chat-text">Cron output</div>
       </body></html>`);
 
       const transcriptLetterSpacing = await page
         .locator(".chat-thread .chat-bubble .chat-text")
-        .evaluate((element) => getComputedStyle(element).letterSpacing);
-      const custodianLetterSpacing = await page
-        .locator(".custodian-surface .chat-bubble .chat-text")
         .evaluate((element) => getComputedStyle(element).letterSpacing);
       const noticeLetterSpacing = await page
         .locator(".chat-notice .chat-text")
@@ -4678,7 +4672,6 @@ describeBrowserLayout.concurrent("chat responsive browser layout", () => {
         .locator("body")
         .evaluate((element) => getComputedStyle(element).letterSpacing);
       expect(transcriptLetterSpacing).toBe("normal");
-      expect(custodianLetterSpacing).toBe(bodyLetterSpacing);
       expect(noticeLetterSpacing).toBe(bodyLetterSpacing);
       expect(cronLetterSpacing).toBe(bodyLetterSpacing);
     });

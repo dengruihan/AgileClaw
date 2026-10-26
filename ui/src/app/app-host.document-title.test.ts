@@ -142,15 +142,11 @@ describe("AgileClaw shell document title", () => {
     expect(read).not.toHaveBeenCalled();
   });
 
-  it("appends the configured environment to route and custodian titles", () => {
+  it("appends the configured environment to route titles", () => {
     const shell = createShell(createContext({ environment: { label: "edge", color: "amber" } }));
     shell.routeState = { routeId: "usage" };
     shell.syncDocumentTitle();
     expect(document.title).toBe("Usage — AgileClaw · edge");
-
-    shell.routeState = { routeId: "custodian" };
-    shell.syncDocumentTitle();
-    expect(document.title).toBe("Ask AgileClaw · edge");
   });
 
   it("uses the active session's derived title for a non-main chat", () => {
@@ -298,14 +294,5 @@ describe("AgileClaw shell document title", () => {
     shell.syncDocumentTitle();
 
     expect(document.title).toBe("(Disconnected) Usage — AgileClaw");
-  });
-
-  it("uses the meaningful custodian label without a brand suffix", () => {
-    const shell = createShell(createContext({}));
-    shell.routeState = { routeId: "custodian" };
-
-    shell.syncDocumentTitle();
-
-    expect(document.title).toBe("Ask AgileClaw");
   });
 });

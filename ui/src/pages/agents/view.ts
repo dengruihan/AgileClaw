@@ -40,7 +40,6 @@ const AGENTS_DOCS_URL = "https://docs.openclaw.ai/concepts/multi-agent";
 
 type AgentsProps = {
   access: {
-    canCreateAgent: boolean;
     canPatchConfig: boolean;
     canUpdateConfig: boolean;
     canUpdateIdentity: boolean;
@@ -108,7 +107,6 @@ type AgentsProps = {
   pinnedAgentIds: readonly string[];
   onTogglePinnedAgent: (agentId: string) => void;
   onRefresh: () => void;
-  onCreateAgent: () => void;
   onSelectPanel: (panel: AgentsPanel) => void;
   onLoadFiles: (agentId: string) => void;
   onSelectFile: (name: string) => void;
@@ -352,19 +350,6 @@ export function renderAgents(props: AgentsProps) {
       <section class="agents-toolbar">
         <div class="agents-toolbar-row">
           <div class="agents-toolbar-actions">
-            ${
-              props.access.canCreateAgent
-                ? html`
-                    <button
-                      class="btn btn--sm btn--ghost agents-create-btn"
-                      ?disabled=${props.loading}
-                      @click=${props.onCreateAgent}
-                    >
-                      ${t("custodian.newAgent")}
-                    </button>
-                  `
-                : nothing
-            }
             ${
               selectedAgent
                 ? html`

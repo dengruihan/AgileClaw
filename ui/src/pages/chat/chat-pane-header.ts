@@ -561,7 +561,6 @@ export abstract class ChatPaneHeader extends ChatPaneDiscussion {
           ? html`<openclaw-chat-header-session-menu
               .session=${this.headerSessionMenuData(row, pinnable)}
               .worktreePath=${row.execNode || !isNativeLocalGateway() ? null : workspace.root}
-              .onboarding=${this.onboarding}
               .preferencesBrowserOnly=${
                 this.context.runtimeConfig?.state.connected &&
                 this.context.runtimeConfig.canPatch === false
@@ -587,7 +586,7 @@ export abstract class ChatPaneHeader extends ChatPaneDiscussion {
               .forkDisabled=${this.state.sessionsLoading || row.modelSelectionLocked === true}
               .forkFromLastCompleted=${row.hasActiveRun === true}
               .archiveAllowed=${archiveAllowed}
-              .archiveShortcut=${this.active && this.presented && !this.onboarding}
+              .archiveShortcut=${this.active && this.presented}
               .deleteAllowed=${deleteAllowed}
               .onOpen=${this.onHeaderMenuOpen}
               .onOpenCommandPalette=${this.onHeaderCommandPalette}

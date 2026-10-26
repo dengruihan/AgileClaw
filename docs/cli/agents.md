@@ -87,7 +87,7 @@ skip the identity ceremony: no `BOOTSTRAP.md` is created. The bundled roles
 leave skills unchanged.
 Role delegation settings are also applied. A standalone chief of staff targets the
 standard specialist ids; use the team command to create and wire all four agents.
-When creating an agent through Ask OpenClaw, you can give a display name separately
+When creating an agent through the `openclaw setup` chat, you can give a display name separately
 from its id, such as “QA Writer” with id `qa-writer`. The approval includes both.
 An explicit display name replaces the role's default name while keeping its
 emoji, theme, and operating instructions.
