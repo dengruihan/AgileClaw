@@ -40,6 +40,18 @@ function reasoningTravelCss(fillPercent: number): string {
   return `calc(${fillPercent}% + ${offset.toFixed(2)}px)`;
 }
 
+// The flow animation runs at one CSS duration; ultra accelerates it via
+// playbackRate because changing animation-duration skips the gradient's
+// phase. 6s base x 1.5 equals the intended 4s ultra cycle.
+function syncBoostFlowRate(track: Element | null, boost: string): void {
+  const boostLayer = track?.querySelector(".chat-controls__reasoning-boost");
+  for (const animation of boostLayer?.getAnimations() ?? []) {
+    if (animation instanceof CSSAnimation && animation.animationName === "chat-effort-flow") {
+      animation.playbackRate = boost === "ultra" ? 1.5 : 1;
+    }
+  }
+}
+
 /** Reasoning-effort panel for the combined picker menu: slider, preview, commit. */
 export function renderChatEffortPanel(params: ChatEffortPanelParams) {
   const sliderStops = params.thinking.options;
@@ -75,7 +87,9 @@ export function renderChatEffortPanel(params: ChatEffortPanelParams) {
     const fillPercent = sliderFillPercent(index);
     track?.style.setProperty("--reasoning-fill", `${fillPercent}%`);
     track?.style.setProperty("--reasoning-travel", reasoningTravelCss(fillPercent));
-    input.dataset.effortBoost = preview ? sliderBoost(index) : committedBoost;
+    const boost = preview ? sliderBoost(index) : committedBoost;
+    input.dataset.effortBoost = boost;
+    syncBoostFlowRate(track, boost);
     input.setAttribute(
       "aria-valuetext",
       preview ? formatEffortLabel(preview.label) : reasoningValueLabel,
