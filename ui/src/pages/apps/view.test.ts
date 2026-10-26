@@ -22,7 +22,6 @@ const EXPECTED_EXTERNAL_HREFS = [
   "https://chromewebstore.google.com/detail/openclaw/kcdjddhmeafeomebliikmbpblkmkfoig",
   "https://docs.openclaw.ai/tools/chrome-extension",
   "https://clawhub.ai",
-  "https://discord.gg/clawd",
   "https://docs.openclaw.ai",
 ];
 

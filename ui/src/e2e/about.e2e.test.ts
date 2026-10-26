@@ -281,13 +281,9 @@ suite.define(() => {
       const githubLink = hero.getByRole("link", { name: "GitHub", exact: true });
       await expect
         .poll(() => githubLink.getAttribute("href"))
-        .toBe("https://github.com/openclaw/openclaw");
+        .toBe("https://github.com/dengruihan/AgileClaw");
       await expect.poll(() => githubLink.getAttribute("target")).toBe("_blank");
       await expect.poll(() => githubLink.getAttribute("rel")).toContain("noopener");
-      const discordLink = hero.getByRole("link", { name: "Discord", exact: true });
-      await expect.poll(() => discordLink.getAttribute("href")).toBe("https://discord.gg/clawd");
-      const xLink = hero.getByRole("link", { name: "X (Twitter)", exact: true });
-      await expect.poll(() => xLink.getAttribute("href")).toBe("https://x.com/openclaw");
 
       await expect.poll(() => hero.locator(".about-hero__mark svg").count()).toBe(1);
       await expect

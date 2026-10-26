@@ -36,7 +36,7 @@ describe("renderAbout", () => {
     await i18n.setLocale("en");
   });
 
-  it("renders the brand mark, identity, community links, and license", () => {
+  it("renders the brand mark, identity, project link, and license", () => {
     const container = document.createElement("div");
     render(renderAbout(createProps()), container);
 
@@ -48,12 +48,7 @@ describe("renderAbout", () => {
 
     const links = Array.from(hero?.querySelectorAll<HTMLAnchorElement>(".about-hero__link") ?? []);
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "https://openclaw.ai",
-      "https://docs.openclaw.ai",
-      "https://github.com/openclaw/openclaw",
-      "https://discord.gg/clawd",
-      "https://x.com/openclaw",
-      "https://docs.openclaw.ai/releases",
+      "https://github.com/dengruihan/AgileClaw",
     ]);
     for (const link of links) {
       expect(link.getAttribute("target")).toBe("_blank");

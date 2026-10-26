@@ -13,7 +13,6 @@ import { i18n, t } from "../../i18n/index.ts";
 import { buildExternalLinkRel, EXTERNAL_LINK_TARGET } from "../../lib/external-link.ts";
 import { formatRelativeTimestamp } from "../../lib/format.ts";
 import "../../styles/about.css";
-import { COMMUNITY_DISCORD_URL } from "../../lib/product-links.ts";
 
 export type AboutCommitCopyState = "idle" | "copying" | "copied" | "error";
 
@@ -26,30 +25,14 @@ type AboutProps = {
 
 const SHORT_COMMIT_LENGTH = 12;
 
-// Docs-first where a docs page exists; GitHub/Discord match the native
-// macOS/iOS About screens (AboutSettings.swift, SettingsProTabSections.swift).
+// GitHub is the project home until an AgileClaw website ships; the former
+// Website/Docs/Discord/X/Changelog entries pointed at upstream OpenClaw
+// resources and return alongside that site.
 const ABOUT_LINKS: ReadonlyArray<{ href: string; icon: TemplateResult; label: () => string }> = [
-  { href: "https://openclaw.ai", icon: icons.globe, label: () => t("aboutPage.linkWebsite") },
-  { href: "https://docs.openclaw.ai", icon: icons.book, label: () => t("aboutPage.linkDocs") },
   {
-    href: "https://github.com/openclaw/openclaw",
+    href: "https://github.com/dengruihan/AgileClaw",
     icon: brandIcons.github,
     label: () => t("aboutPage.linkGitHub"),
-  },
-  {
-    href: COMMUNITY_DISCORD_URL,
-    icon: brandIcons.discord,
-    label: () => t("aboutPage.linkDiscord"),
-  },
-  {
-    href: "https://x.com/openclaw",
-    icon: brandIcons.x,
-    label: () => t("aboutPage.linkX"),
-  },
-  {
-    href: "https://docs.openclaw.ai/releases",
-    icon: icons.scrollText,
-    label: () => t("aboutPage.linkChangelog"),
   },
 ];
 
@@ -134,7 +117,7 @@ function renderCommit(props: AboutProps) {
 function renderHero(props: AboutProps) {
   return html`
     <section class="about-hero">
-      <span class="about-hero__mark" aria-hidden="true">${icons.mark}</span>
+      <span class="about-hero__mark" aria-hidden="true">${icons.lobster}</span>
       <h2 class="about-hero__name">${t("aboutPage.productName")}</h2>
       <p class="about-hero__tagline">${t("aboutPage.tagline")}</p>
       ${
