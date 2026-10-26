@@ -249,6 +249,7 @@ export function renderChatPaneComposerControls(params: {
           modelCatalog: state.chatModelCatalog,
           customModelRefs,
           modelCatalogState,
+          modelAuthStatusResult: state.modelAuthStatusResult,
           modelOverrides: state.sessions.state.modelOverrides,
           thinkingSession: settingsSession,
           contextWindowTarget: settingsPreview

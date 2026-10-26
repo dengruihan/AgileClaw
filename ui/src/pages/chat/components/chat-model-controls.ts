@@ -1,6 +1,10 @@
 import { html } from "lit";
 import { resolveModelRuntimeRoute } from "../../../../../src/shared/model-runtime-route.js";
-import type { ModelCatalogEntry, SessionsListResult } from "../../../api/types.ts";
+import type {
+  ModelAuthStatusResult,
+  ModelCatalogEntry,
+  SessionsListResult,
+} from "../../../api/types.ts";
 import { t } from "../../../i18n/index.ts";
 import { registerModelControlsEnglish } from "../../../i18n/locales/en-model-controls.ts";
 import {
@@ -46,6 +50,8 @@ type ChatModelControlsProps = {
   /** Authored model refs the picker lists; null keeps catalog rows unfiltered. */
   customModelRefs?: ReadonlySet<string> | null;
   modelCatalogState?: ChatModelCatalogState;
+  /** Provider access pills for the picker; absent hides them. */
+  modelAuthStatusResult?: ModelAuthStatusResult | null;
   modelOverrides?: Readonly<Record<string, string | null | undefined>>;
   modelSelectionLocked?: boolean;
   modelSelectionTarget?: SessionsListResult["defaults"]["modelSelectionTarget"];
@@ -548,6 +554,7 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
         disabled: modelDisabled,
         disabledReason: props.modelMutationDisabledReason,
         modelCatalogState: managedCatalog,
+        modelAuthStatusResult: props.modelAuthStatusResult,
         open: props.modelPickerOpen,
         modelSelectionLocked: props.modelSelectionLocked === true,
         selectionScopeDescription: policy?.restricted

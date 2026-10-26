@@ -1213,7 +1213,8 @@
   }
 
   .agent-chat__input .chat-controls__model-menu,
-  .agent-chat__input .chat-controls__combined-menu {
+  .agent-chat__input .chat-controls__combined-menu,
+  .agent-chat__input .chat-controls__provider-menu {
     width: calc(
       100vw - var(--safe-area-left) - var(--safe-area-right) - 2 * var(--shell-popup-inline-gutter)
     );
@@ -2053,14 +2054,14 @@ html[dir="rtl"] .chat-attachment-loading > span {
   background: var(--chat-composer-menu-selected);
 }
 
-/* Model and effort are independent surfaces so either choice stays one focused
-   interaction without hiding the other pill's effective state. */
+/* The model menu hosts the provider window's floating popup; clipping here
+   would cut that layer, so the body list scrolls on its own instead. */
 .chat-controls__model-menu {
   display: flex;
   flex-direction: column;
   gap: 0;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
   width: min(340px, calc(100vw - 24px));
   max-height: min(400px, var(--auto-size-available-height, calc(100vh - 96px)));
 }
@@ -2113,6 +2114,11 @@ html[dir="rtl"] .chat-attachment-loading > span {
   transform: rotate(90deg);
 }
 
+/* The provider flyout opens beside the window, so its chevron points left. */
+.chat-controls__provider-window[open] .chat-controls__inline-select-chevron {
+  transform: rotate(180deg);
+}
+
 .chat-controls__combined-divider {
   height: 1px;
   margin: 0 12px;
@@ -2127,12 +2133,103 @@ html[dir="rtl"] .chat-attachment-loading > span {
   font-weight: 650;
 }
 
+/* Provider trigger row inside the model window: opens the provider flyout. */
+.chat-controls__provider-row {
+  margin: 4px 4px 0;
+  padding: 5px 8px;
+}
+
+/* Provider flyout (third level): catalog providers anchored beside the model
+   window's provider row. Nothing floats out of this menu, so it still clips. */
+.chat-controls__provider-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  width: min(280px, calc(100vw - 24px));
+  max-height: min(340px, var(--auto-size-available-height, calc(100vh - 96px)));
+  overflow: hidden;
+}
+
+.chat-controls__provider-menu-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  min-height: 0;
+  padding: 6px 7px 7px;
+  overflow: hidden auto;
+  overscroll-behavior: none;
+}
+
+.chat-controls__provider-option {
+  justify-content: flex-start;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.chat-controls__provider-option-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Access pill beside a provider: the plan or API credential kind, never the
+   "sign-in needed" state — that reads as an error, not an identity. */
+.chat-controls__provider-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 108px;
+  overflow: hidden;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-controls__provider-manage {
+  display: flex;
+  align-items: center;
+  gap: var(--chat-composer-menu-row-gap);
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: var(--cursor-action);
+}
+
+.chat-controls__provider-manage:hover,
+.chat-controls__provider-manage:focus-visible {
+  background: var(--bg-hover);
+  color: var(--text);
+  outline: none;
+}
+
 .chat-controls__provider-heading-icon {
   display: inline-flex;
   width: 16px;
   height: 16px;
   flex: 0 0 16px;
   color: var(--muted);
+}
+
+/* Icon-less "Model" label: inside the options gutter its text sits on the same
+   stem as the model names below (7px gutter + 9px row padding). */
+.chat-controls__model-section-heading {
+  padding: 10px 9px 3px;
 }
 
 .chat-controls__permission-picker::part(menu) {
@@ -2434,7 +2531,6 @@ html[dir="rtl"] .chat-attachment-loading > span {
   max-height: none;
   padding: 12px 12px 11px;
   border: 0;
-  background: color-mix(in srgb, var(--card) 78%, transparent);
   overflow: visible;
 }
 
@@ -2536,18 +2632,22 @@ html[dir="rtl"] .chat-attachment-loading > span {
    here must match REASONING_KNOB_WIDTH_PX in chat-effort-picker.ts because
    --reasoning-travel compensates for half of it. */
 .chat-controls__reasoning-slider {
-  --chat-effort-knob-width: 28px;
+  --chat-effort-knob-width: 32px;
   position: relative;
   height: 26px;
   margin: 0 6px;
 }
 
+/* The ring is a box-shadow, not a border: the fill and knob both resolve
+   --reasoning-travel percentages against this box, and a real border would
+   shrink the fill's base by 2px and desync it from the knob's center. Boost
+   states replace the shadow wholesale, so the ring fades with the glow. */
 .chat-controls__reasoning-groove {
   position: absolute;
   inset: 0;
   z-index: 1;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--text) 7%, transparent);
   pointer-events: none;
@@ -2589,7 +2689,8 @@ html[dir="rtl"] .chat-attachment-loading > span {
   top: 50%;
   left: var(--reasoning-travel, calc(var(--chat-effort-knob-width) / 2));
   width: var(--chat-effort-knob-width);
-  height: 20px;
+  /* Slightly taller than the 26px track: the knob overhangs it symmetrically. */
+  height: 30px;
   margin-left: calc(var(--chat-effort-knob-width) / -2);
   transform: translateY(-50%);
   border-radius: var(--radius-full);
@@ -2737,8 +2838,8 @@ html[dir="rtl"] .chat-attachment-loading > span {
 .chat-controls__reasoning-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: var(--chat-effort-knob-width);
-  height: 20px;
-  margin-top: 3px;
+  height: 30px;
+  margin-top: -2px;
   border: none;
   border-radius: var(--radius-full);
   background: transparent;
@@ -2753,7 +2854,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
 
 .chat-controls__reasoning-range::-moz-range-thumb {
   width: var(--chat-effort-knob-width);
-  height: 20px;
+  height: 30px;
   border: none;
   border-radius: var(--radius-full);
   background: transparent;

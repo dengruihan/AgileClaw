@@ -222,13 +222,20 @@ export function restorePointerOpenedChatComposerTrigger(event: Event): void {
   }
 }
 
-export function syncChatPickerOverlay(details: HTMLDetailsElement): void {
+export function syncChatPickerOverlay(
+  details: HTMLDetailsElement,
+  placement: { side?: "top" | "bottom" | "left" | "right"; alignment?: "start" | "end" } = {},
+): void {
   // Mobile panels span the composer, so anchor to that stable box; desktop
-  // panels stay attached to the individual trigger.
+  // panels stay attached to the individual trigger. Submenus that fly out
+  // sideways (the provider window) pass their own preferred side.
   const composerAnchor =
     typeof window.matchMedia === "function" &&
     window.matchMedia(MOBILE_COMPOSER_OVERLAY_QUERY).matches
       ? (details.closest(".agent-chat__input") ?? undefined)
       : undefined;
-  syncAnchoredOverlay(details, "top", { alignment: "end", anchor: composerAnchor });
+  syncAnchoredOverlay(details, placement.side ?? "top", {
+    alignment: placement.alignment ?? "end",
+    anchor: composerAnchor,
+  });
 }

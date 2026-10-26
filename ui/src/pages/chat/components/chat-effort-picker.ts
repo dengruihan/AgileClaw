@@ -33,7 +33,7 @@ export function chatEffortTriggerTitle(thinking: ChatThinkingSelectState): strin
 
 // Keep in sync with --chat-effort-knob-width in composer.css: the travel calc
 // centers the knob on the stop position and ends the fill at that center.
-const REASONING_KNOB_WIDTH_PX = 28;
+const REASONING_KNOB_WIDTH_PX = 32;
 
 function reasoningTravelCss(fillPercent: number): string {
   const offset = REASONING_KNOB_WIDTH_PX / 2 - (REASONING_KNOB_WIDTH_PX * fillPercent) / 100;
