@@ -119,7 +119,7 @@ export function ensureCronRunReceiptSchema(database: DatabaseSync): void {
   database.exec(
     extractSqliteTableSchema(OPENCLAW_STATE_SCHEMA_SQL, "cron_run_receipts", {
       endMarker: "ON cron_run_receipts(store_key, job_id, started_at_ms DESC, receipt_id DESC);",
-      errorMessage: "OpenClaw cron run receipt schema marker is missing.",
+      errorMessage: "AgileClaw cron run receipt schema marker is missing.",
     }),
   );
 }

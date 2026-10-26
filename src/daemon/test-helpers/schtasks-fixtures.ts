@@ -67,7 +67,7 @@ export async function writeGatewayScript(
 }
 
 export function resolveStartupFixturePath(env: Record<string, string>, extension = "cmd") {
-  const taskName = env.OPENCLAW_WINDOWS_TASK_NAME ?? "OpenClaw Gateway";
+  const taskName = env.OPENCLAW_WINDOWS_TASK_NAME ?? "AgileClaw Gateway";
   return path.join(
     expectDefined(env.APPDATA, "env.APPDATA test invariant"),
     "Microsoft",

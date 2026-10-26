@@ -1,4 +1,4 @@
-// Loads node:sqlite with OpenClaw warning handling.
+// Loads node:sqlite with AgileClaw warning handling.
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -77,7 +77,7 @@ function assertSqliteWalResetSafeVersion(version: string, nodeVersion: string): 
     ? "Upgrade the system SQLite library to one of those safe versions, or use a Node build embedding a safe version."
     : "Upgrade to Node 24.16.0+ or 26.1.0+ before retrying.";
   throw new Error(
-    `OpenClaw requires SQLite 3.51.3+, 3.50.7+ within 3.50.x, or 3.44.6+ within 3.44.x for WAL safety; ` +
+    `AgileClaw requires SQLite 3.51.3+, 3.50.7+ within 3.50.x, or 3.44.6+ within 3.44.x for WAL safety; ` +
       `Node ${nodeVersion} ${wording} SQLite ${version}, which is affected by the upstream WAL-reset ` +
       `database corruption bug. ${remediation}`,
   );
@@ -137,7 +137,7 @@ export function supportsNodeSqliteJsonb(): boolean {
   return jsonbSupported;
 }
 
-/** Open node:sqlite through OpenClaw's runtime and filesystem-location boundary. */
+/** Open node:sqlite through AgileClaw's runtime and filesystem-location boundary. */
 export function openNodeSqliteDatabase(
   location: string,
   options?: NodeSqliteDatabaseOptions,

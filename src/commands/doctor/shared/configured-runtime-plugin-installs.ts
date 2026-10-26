@@ -19,7 +19,7 @@ type ConfiguredRuntimePluginInstallCandidate = {
   trustedSourceLinkedOfficialInstall?: boolean;
   /** Default installer choice when multiple official sources are available. */
   defaultChoice?: PluginPackageInstall["defaultChoice"];
-  /** Keep this official runtime package on the same release cohort as OpenClaw. */
+  /** Keep this official runtime package on the same release cohort as AgileClaw. */
   versionBoundToOpenClaw?: boolean;
 };
 

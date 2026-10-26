@@ -298,7 +298,7 @@ export async function requestCliNativeToolApproval(params: {
       return { kind: "deny", reason: "unavailable" };
     }
     if ((decision === "allow-once" || decision === "allow-always") && mutableFileBinding) {
-      // This control response is OpenClaw's last boundary before the CLI owns
+      // This control response is AgileClaw's last boundary before the CLI owns
       // spawn, so reject bytes that changed during the approval wait.
       const binding = await revalidateSystemRunMutableFileBinding({
         binding: mutableFileBinding,

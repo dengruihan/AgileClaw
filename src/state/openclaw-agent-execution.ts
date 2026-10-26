@@ -142,7 +142,7 @@ function captureFileAgentDatabaseExecution(
   }
   if (existing.agentId !== agentId) {
     throw new Error(
-      `OpenClaw agent database ${pathname} is already open for agent ${existing.agentId}; requested agent ${agentId}.`,
+      `AgileClaw agent database ${pathname} is already open for agent ${existing.agentId}; requested agent ${agentId}.`,
     );
   }
   const env =

@@ -248,7 +248,7 @@ describe("system agent operations", () => {
         ),
       );
       expect(lines.join("\n")).toContain("searchable");
-      expect(lines.join("\n")).toContain("Use searchable to defer OpenClaw dynamic tools");
+      expect(lines.join("\n")).toContain("Use searchable to defer AgileClaw dynamic tools");
     } finally {
       clearRuntimeConfigSnapshot();
     }
@@ -316,7 +316,7 @@ describe("system agent operations", () => {
       model: "openai/gpt-5.5",
       error: "Retry without `model`; the new agent inherits",
     },
-    { agentId: "OpenClaw", error: 'Agent id "openclaw" is reserved' },
+    { agentId: "AgileClaw", error: 'Agent id "openclaw" is reserved' },
   ])(
     "rejects unsafe agent creation for $agentId before any write or audit",
     async ({ agentId, model, error }) => {

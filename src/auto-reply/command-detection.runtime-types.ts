@@ -4,7 +4,7 @@ import type {
   shouldComputeCommandAuthorized,
 } from "./command-detection.js";
 
-/** Runtime-injected predicate for deciding whether visible text is an OpenClaw command. */
+/** Runtime-injected predicate for deciding whether visible text is an AgileClaw command. */
 export type IsControlCommandMessage = typeof isControlCommandMessage;
 
 /** Runtime-injected predicate for deciding whether command authorization must be computed. */

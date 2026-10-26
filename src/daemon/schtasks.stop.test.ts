@@ -115,7 +115,7 @@ describe("Scheduled Task stop/restart cleanup", () => {
           ),
         ).resolves.toMatchObject({ outcome: "completed" });
 
-        expect(schtasksCalls).toContainEqual(["/Run", "/TN", "OpenClaw Gateway"]);
+        expect(schtasksCalls).toContainEqual(["/Run", "/TN", "AgileClaw Gateway"]);
         expect(schtasksCalls.filter(([action]) => action === "/End")).toHaveLength(
           taskState === 4 ? 1 : 0,
         );
@@ -180,7 +180,7 @@ describe("Scheduled Task stop/restart cleanup", () => {
           if (failClose) {
             expect(errors).toContain(cleanupFailure);
           }
-          expect(schtasksCalls).not.toContainEqual(["/Run", "/TN", "OpenClaw Gateway"]);
+          expect(schtasksCalls).not.toContainEqual(["/Run", "/TN", "AgileClaw Gateway"]);
           if (failClose) {
             expect(() => admission.assertCurrent()).toThrow("undergoing offline maintenance");
           } else {
@@ -232,8 +232,8 @@ describe("Scheduled Task stop/restart cleanup", () => {
         await expect(stopped).resolves.toBeUndefined();
         expect(schtasksCalls).toEqual([
           ["/Query"],
-          ["/Query", "/TN", "OpenClaw Gateway"],
-          ["/End", "/TN", "OpenClaw Gateway"],
+          ["/Query", "/TN", "AgileClaw Gateway"],
+          ["/End", "/TN", "AgileClaw Gateway"],
         ]);
         expect(onMutation).toHaveBeenCalledWith({ mode: "schtasks-stop" });
       } else {
@@ -614,7 +614,7 @@ describe("Scheduled Task stop/restart cleanup", () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(schtasksCalls).toContainEqual(["/Run", "/TN", "OpenClaw Gateway"]);
+    expect(schtasksCalls).toContainEqual(["/Run", "/TN", "AgileClaw Gateway"]);
     expect(onMutation).toHaveBeenCalledWith({ mode: "schtasks-start" });
     expect(
       expectDefined(onMutation.mock.invocationCallOrder[0], "start audit call order"),
@@ -696,7 +696,7 @@ describe("Scheduled Task stop/restart cleanup", () => {
       const restart = action === "restart";
       pushSuccessfulSchtasksResponses(restart ? 4 : 3);
       env.OPENCLAW_SERVICE_KIND = "node";
-      env.OPENCLAW_WINDOWS_TASK_NAME = "OpenClaw Node";
+      env.OPENCLAW_WINDOWS_TASK_NAME = "AgileClaw Node";
       findVerifiedGatewayListenerPidsOnPortSync.mockReturnValue([4242]);
       inspectPortUsageMock.mockResolvedValue(busyPortUsage(4242));
 
@@ -713,9 +713,9 @@ describe("Scheduled Task stop/restart cleanup", () => {
       expect(killProcessTreeMock).not.toHaveBeenCalled();
       expect(schtasksCalls).toEqual([
         ["/Query"],
-        ["/Query", "/TN", "OpenClaw Node"],
-        ["/End", "/TN", "OpenClaw Node"],
-        ...(restart ? [["/Run", "/TN", "OpenClaw Node"]] : []),
+        ["/Query", "/TN", "AgileClaw Node"],
+        ["/End", "/TN", "AgileClaw Node"],
+        ...(restart ? [["/Run", "/TN", "AgileClaw Node"]] : []),
       ]);
     },
   );
@@ -733,7 +733,7 @@ describe("Scheduled Task stop/restart cleanup", () => {
         outcome: "completed",
         taskSettlement: {
           status: "settled",
-          taskName: "OpenClaw Gateway",
+          taskName: "AgileClaw Gateway",
           lastRunResult: "0",
           ended: false,
         },
@@ -749,8 +749,8 @@ describe("Scheduled Task stop/restart cleanup", () => {
       expect(onMutation).toHaveBeenCalledWith({ mode: "schtasks-restart" });
       expect(schtasksCalls).toEqual([
         ["/Query"],
-        ["/Query", "/TN", "OpenClaw Gateway"],
-        ["/Run", "/TN", "OpenClaw Gateway"],
+        ["/Query", "/TN", "AgileClaw Gateway"],
+        ["/Run", "/TN", "AgileClaw Gateway"],
       ]);
     }, '2>&1 >> "gateway output.log" < NUL');
   });
@@ -782,7 +782,7 @@ describe("Scheduled Task stop/restart cleanup", () => {
       expect(schtasksCalls.filter(([action]) => action === "/End" || action === "/Run")).toEqual(
         stage === "routing" || process.platform === "win32"
           ? []
-          : [["/End", "/TN", "OpenClaw Gateway"]],
+          : [["/End", "/TN", "AgileClaw Gateway"]],
       );
       expect(killProcessTreeMock).not.toHaveBeenCalled();
     },
@@ -800,6 +800,6 @@ describe("Scheduled Task stop/restart cleanup", () => {
     );
     expect(onMutation).toHaveBeenCalledWith({ mode: "schtasks-end" });
     expect(onMutation).not.toHaveBeenCalledWith({ mode: "schtasks-restart" });
-    expect(schtasksCalls.at(-1)).toEqual(["/Run", "/TN", "OpenClaw Gateway"]);
+    expect(schtasksCalls.at(-1)).toEqual(["/Run", "/TN", "AgileClaw Gateway"]);
   });
 });

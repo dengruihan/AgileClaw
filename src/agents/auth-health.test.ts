@@ -184,7 +184,7 @@ describe("buildAuthHealthSummary", () => {
     );
   });
 
-  it("does not replace missing OpenClaw auth with a native Codex login", () => {
+  it("does not replace missing AgileClaw auth with a native Codex login", () => {
     mockFreshCodexCliCredentials();
     const store = {
       version: 1,

@@ -26,7 +26,7 @@ export function resolveGatewayRestartIntentOptions(
   return opts.wait === undefined ? undefined : { waitMs: parseDurationMs(opts.wait) };
 }
 
-/** Request an OpenClaw-aware restart through the running Gateway. */
+/** Request an AgileClaw-aware restart through the running Gateway. */
 type SafeRestartTarget = { pid: number; ownerId: string; port: number };
 
 export async function runSafeGatewayRestart(

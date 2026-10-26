@@ -26,7 +26,7 @@ describe("Git source acquisition", () => {
         await git(
           sourceDir,
           "-c",
-          "user.name=OpenClaw Test",
+          "user.name=AgileClaw Test",
           "-c",
           "user.email=test@openclaw.invalid",
           "-c",

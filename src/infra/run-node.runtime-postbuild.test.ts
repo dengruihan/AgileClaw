@@ -292,7 +292,7 @@ describe("run-node script", () => {
       checkClean: false,
     },
     {
-      label: "OpenClaw SDK alias outputs",
+      label: "AgileClaw SDK alias outputs",
       setup: {
         files: {
           [ROOT_SRC]: "export const value = 1;\n",
@@ -468,7 +468,7 @@ describe("run-node script", () => {
     removeExtensions: boolean;
   }>([
     {
-      label: "OpenClaw SDK alias outputs when dist extensions are absent",
+      label: "AgileClaw SDK alias outputs when dist extensions are absent",
       setup: {
         files: {
           [DIST_PLUGIN_SDK_CORE]: "export const core = true;\n",
@@ -479,7 +479,7 @@ describe("run-node script", () => {
       removeExtensions: true,
     },
     {
-      label: "private OpenClaw SDK dist files that package exports omit",
+      label: "private AgileClaw SDK dist files that package exports omit",
       setup: {
         files: {
           [ROOT_PACKAGE]: JSON.stringify(

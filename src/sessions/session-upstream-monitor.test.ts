@@ -1016,7 +1016,7 @@ describe("session upstream monitor", () => {
     );
   });
 
-  it("records an external prompt five seconds after OpenClaw activity", async () => {
+  it("records an external prompt five seconds after AgileClaw activity", async () => {
     const database = createDatabaseOptions();
     const sessionKey = "agent:main:adopted:recent-external";
     await createLink(sessionKey, "claude", database);
@@ -1037,7 +1037,7 @@ describe("session upstream monitor", () => {
       ],
       loadEntry: () => ({ sessionId: "session-external", lastActivityAt: 5_000 }) as never,
       isRunActive: () => false,
-      loadOwnRecentUserTexts: async () => ["OpenClaw prompt"],
+      loadOwnRecentUserTexts: async () => ["AgileClaw prompt"],
     });
 
     expect(

@@ -104,7 +104,7 @@ describe("gateway plugin HTTP auth boundary", () => {
           });
           expect(response.res.statusCode).toBe(controlUiEnabled ? 200 : 404);
           expect(response.getBody()).toContain(
-            controlUiEnabled ? 'content="OpenClaw dashboard"' : "Not Found",
+            controlUiEnabled ? 'content="AgileClaw dashboard"' : "Not Found",
           );
           for (const path of ["/control/share", "/control/share/api/private"]) {
             expect((await sendRequest(server, { path })).res.statusCode).toBe(404);

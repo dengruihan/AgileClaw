@@ -51,7 +51,7 @@ describe("image ops Rastermill adapter", () => {
       expect(photonModuleFactory).not.toHaveBeenCalled();
     });
 
-    it("configures Rastermill with OpenClaw limits, temp root, and command resolution", async () => {
+    it("configures Rastermill with AgileClaw limits, temp root, and command resolution", async () => {
       const actualRastermill = await vi.importActual<typeof import("rastermill")>("rastermill");
       const encode = vi.fn(async () => ({ data: Buffer.from("jpeg") }));
       const createRastermill = vi.fn((_options: unknown) => ({ encode }));

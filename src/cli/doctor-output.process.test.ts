@@ -143,7 +143,7 @@ describe("Doctor report process output", () => {
     expect(fs.readFileSync(configPath)).toEqual(configBefore);
     expect(result.code, `${result.stderr}\n${result.stdout}`).toBe(1);
     expect(`${result.stderr}\n${result.stdout}`).toContain(
-      "Doctor refused update-time schema repair driven by OpenClaw 2026.9.2",
+      "Doctor refused update-time schema repair driven by AgileClaw 2026.9.2",
     );
   });
 

@@ -577,7 +577,7 @@ function resolveDashscopeVideoDownloadTimeoutMs(
 }
 
 // Downloads task result URLs into generated video assets. The byte limit comes
-// from OpenClaw media config so provider URLs cannot overfill memory.
+// from AgileClaw media config so provider URLs cannot overfill memory.
 export async function downloadDashscopeGeneratedVideos(params: {
   providerLabel: string;
   urls: string[];

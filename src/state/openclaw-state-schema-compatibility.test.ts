@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getOpenClawStateRuntimeSchema } from "./openclaw-state-schema-compatibility.js";
 
-describe("OpenClaw state runtime schema projection", () => {
+describe("AgileClaw state runtime schema projection", () => {
   it.each([false, true])(
     "preserves first-use exclusions with version-lazy tables enabled: %s",
     (includeVersionLazyAdditiveTables) => {

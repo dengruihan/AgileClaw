@@ -42,7 +42,7 @@ describe("cloud-synced state directories", () => {
       } else {
         fs.mkdirSync(syncedDir);
       }
-      const stateDir = path.join(syncedDir, "OpenClaw", ".openclaw");
+      const stateDir = path.join(syncedDir, "AgileClaw", ".openclaw");
       expect(fs.existsSync(stateDir)).toBe(false);
       expect(detectMacCloudSyncedStateDir(stateDir, { platform: "darwin", homedir: home })).toEqual(
         local ? null : { path: stateDir, storage: "CloudStorage provider" },
@@ -53,7 +53,7 @@ describe("cloud-synced state directories", () => {
   it("detects a missing OneDrive business leaf case-insensitively and explains service relocation", () => {
     const personal = path.resolve("/Users/tester/OneDrive");
     const business = path.resolve("/Users/tester/OneDrive - Contoso");
-    const root = path.join(business, "OpenClaw").toUpperCase();
+    const root = path.join(business, "AgileClaw").toUpperCase();
     const stateDir = path.join(root, ".openclaw");
     const result = detectWindowsCloudSyncedStateDir(stateDir, {
       platform: "win32",
@@ -80,7 +80,7 @@ describe("cloud-synced state directories", () => {
   });
 
   it("follows a junction out of OneDrive when the state leaf is absent", () => {
-    const root = path.resolve("/Users/tester/OneDrive/OpenClaw");
+    const root = path.resolve("/Users/tester/OneDrive/AgileClaw");
     expect(
       detectWindowsCloudSyncedStateDir(path.join(root, ".openclaw"), {
         platform: "win32",

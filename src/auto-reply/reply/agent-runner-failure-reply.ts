@@ -197,7 +197,7 @@ export function buildPreflightCompactionFailureText(
   const reasonSuffix = options?.includeDetails && reason && !isTimeout ? ` Reason: ${reason}.` : "";
   const summary = isTimeout
     ? "⚠️ This conversation is too long, and shortening it took too long."
-    : "⚠️ This conversation is too long, and OpenClaw couldn't shorten it.";
+    : "⚠️ This conversation is too long, and AgileClaw couldn't shorten it.";
   return `${summary}${reasonSuffix} Try again, use /compact, or use /new to start a fresh session.`;
 }
 

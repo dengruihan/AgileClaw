@@ -80,7 +80,7 @@ it
     const label = "ai.openclaw.native-stop-test";
     // Each case needs its own process: successful bootout must prove actual exit,
     // while refusal cases must leave that same serving identity alive.
-    // The child imports no OpenClaw code and never opens a handoff database.
+    // The child imports no AgileClaw code and never opens a handoff database.
     const child = spawn(
       process.execPath,
       ["-e", "process.stdout.write('ready\\n'); process.stdin.resume()"],

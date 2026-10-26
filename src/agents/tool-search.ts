@@ -1,4 +1,4 @@
-/** Tool Search catalog compaction for large OpenClaw, MCP, and client tool inventories. */
+/** Tool Search catalog compaction for large AgileClaw, MCP, and client tool inventories. */
 import { normalizeStringEntries } from "@openclaw/normalization-core/string-normalization";
 import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import { Type } from "typebox";
@@ -308,7 +308,7 @@ export function createToolSearchTools(ctx: ToolSearchToolContext): AnyAgentTool[
     {
       name: TOOL_CALL_RAW_TOOL_NAME,
       label: "Tool Call",
-      description: "Call an exact Tool Search result id or name through OpenClaw.",
+      description: "Call an exact Tool Search result id or name through AgileClaw.",
       parameters: Type.Object({
         id: Type.String({ description: "Tool search result id or tool name." }),
         args: Type.Optional(

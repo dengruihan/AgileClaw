@@ -484,13 +484,13 @@ describe("tui command handlers", () => {
     expect(addSystem).not.toHaveBeenCalledWith("Active sessions: 2");
   });
 
-  it("returns to OpenClaw with an optional request", async () => {
+  it("returns to AgileClaw with an optional request", async () => {
     const { handleCommand, addSystem, requestExit, sendChat } = createTuiCommandHandlersHarness();
 
     await handleCommand("/openclaw restart gateway");
 
     expect(sendChat).not.toHaveBeenCalled();
-    expect(addSystem).toHaveBeenCalledWith("returning to OpenClaw with request: restart gateway");
+    expect(addSystem).toHaveBeenCalledWith("returning to AgileClaw with request: restart gateway");
     expect(requestExit).toHaveBeenCalledWith({
       exitReason: "return-to-system-agent",
       systemAgentMessage: "restart gateway",

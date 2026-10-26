@@ -18,7 +18,7 @@ type ShellLifecycle = {
 
 afterEach(resetAppHostTestGlobals);
 
-describe("OpenClaw shell event lifecycle", () => {
+describe("AgileClaw shell event lifecycle", () => {
   it("refreshes the existing connection indicator for recovery and removed panes only while mounted", () => {
     const shell = document.createElement("openclaw-app-shell") as ShellChromeHost & ShellLifecycle;
     shell.connectedCallback();

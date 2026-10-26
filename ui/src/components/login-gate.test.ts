@@ -90,7 +90,7 @@ describe("login gate failure recovery", () => {
   it("explains a pasted setup code before connecting and clears the hint when replaced", async () => {
     const element = await mountFailure("", null, setupCode);
     const hint = element.querySelector("#login-gate-secret-hint");
-    expect(hint?.textContent).toContain("device setup code for the OpenClaw mobile app");
+    expect(hint?.textContent).toContain("device setup code for the AgileClaw mobile app");
     expect(hint?.textContent).toContain("openclaw gateway auth-token --show");
     expect(element.querySelector("#login-gate-credential")?.getAttribute("aria-describedby")).toBe(
       hint?.id,
@@ -189,11 +189,11 @@ describe("login gate failure recovery", () => {
       "Couldn't verify your account",
     );
     expect(failure?.querySelector(".login-gate__failure-summary")?.textContent).toBe(
-      "OpenClaw couldn't check your account right now. Please try again shortly.",
+      "AgileClaw couldn't check your account right now. Please try again shortly.",
     );
     expect(failure?.querySelector(".login-gate__failure-steps")?.textContent).toContain("Retry");
     expect(failure?.querySelector(".login-gate__failure-steps")?.textContent).toContain(
-      "person who manages OpenClaw",
+      "person who manages AgileClaw",
     );
     expect(failure?.querySelectorAll(".login-gate__failure-steps code")).toHaveLength(0);
     expect(failure?.querySelector(".login-gate__failure-raw")?.textContent).toBe(error);

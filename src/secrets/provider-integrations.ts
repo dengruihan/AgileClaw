@@ -95,7 +95,7 @@ function resolveNodeEntrypointArg(params: {
       if (!isSecurePosixPathStat(opened.stat)) {
         return undefined;
       }
-      // fs-safe owns alias admission; OpenClaw retains executable-parent trust policy.
+      // fs-safe owns alias admission; AgileClaw retains executable-parent trust policy.
       if (process.platform !== "win32") {
         for (let directory = path.dirname(opened.path); ; directory = path.dirname(directory)) {
           const stat = fs.lstatSync(directory);

@@ -47,7 +47,7 @@ function reprojectLegacyCronJson(db: DatabaseSync): void {
       typeof row.job_json !== "string" ||
       typeof row.state_json !== "string"
     ) {
-      throw new Error("OpenClaw v12 cron job row is not canonical");
+      throw new Error("AgileClaw v12 cron job row is not canonical");
     }
     const job = asNullableRecord(safeParseJson(row.job_json));
     const state = asNullableRecord(safeParseJson(row.state_json));
@@ -99,7 +99,7 @@ function reprojectLegacyCronJson(db: DatabaseSync): void {
 function rebuildJsonCanonicalTable(db: DatabaseSync, tableName: string): void {
   const migrationTable = `${tableName}_migration_v13`;
   if (tableExists(db, migrationTable)) {
-    throw new Error(`OpenClaw v13 migration table already exists: ${migrationTable}`);
+    throw new Error(`AgileClaw v13 migration table already exists: ${migrationTable}`);
   }
   const migrationSchema = extractSqliteTableSchema(OPENCLAW_STATE_SCHEMA_SQL, tableName, {
     errorMessage: `Canonical ${tableName} schema block is missing`,

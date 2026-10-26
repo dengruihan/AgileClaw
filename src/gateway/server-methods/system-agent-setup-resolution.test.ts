@@ -1,4 +1,4 @@
-// OpenClaw setup resolution tests cover terminal provider guidance.
+// AgileClaw setup resolution tests cover terminal provider guidance.
 import { expectDefined } from "@openclaw/normalization-core";
 import { Compile } from "typebox/compile";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

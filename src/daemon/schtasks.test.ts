@@ -43,7 +43,7 @@ afterEach(() => vi.restoreAllMocks());
 describe("readScheduledTaskCommand", () => {
   it.each([
     {
-      path: "C:\\OpenClaw\\openclaw.exe",
+      path: "C:\\AgileClaw\\openclaw.exe",
       arguments: 'gateway run --label "literal ^! label"',
       argv: ["gateway", "run", "--label", "literal ^! label"],
     },
@@ -56,7 +56,7 @@ describe("readScheduledTaskCommand", () => {
         stdout: JSON.stringify({
           taskPath: taskName,
           state: 4,
-          actions: [{ type: 0, ...action, workingDirectory: "C:\\OpenClaw" }],
+          actions: [{ type: 0, ...action, workingDirectory: "C:\\AgileClaw" }],
         }),
       });
       const readFile = vi.spyOn(fs, "readFile");
@@ -67,7 +67,7 @@ describe("readScheduledTaskCommand", () => {
         ),
       ).resolves.toEqual({
         programArguments: [action.path, ...action.argv],
-        workingDirectory: "C:\\OpenClaw",
+        workingDirectory: "C:\\AgileClaw",
       });
       await expect(
         readScheduledTaskRuntime(
@@ -89,8 +89,8 @@ describe("readScheduledTaskCommand", () => {
           kind === "environment expansion"
             ? '"%OPENCLAW_HOME%\\openclaw.mjs" gateway'
             : kind === "ambiguous quotes"
-              ? '"C:\\OpenClaw\\openclaw.mjs gateway'
-              : '"C:\\OpenClaw\\openclaw.mjs" gateway',
+              ? '"C:\\AgileClaw\\openclaw.mjs gateway'
+              : '"C:\\AgileClaw\\openclaw.mjs" gateway',
         workingDirectory: "",
       };
       const task = { taskPath: "\\Custom\\Gateway", state: 4, actions: [action] };
@@ -113,7 +113,7 @@ describe("readScheduledTaskCommand", () => {
   it.each(["cmd", "current vbs", "published vbs", "legacy vbs"] as const)(
     "reads the registered custom task action instead of the canonical launcher (%s)",
     async (kind) => {
-      const taskName = "\\OpenClaw Gateway Backup";
+      const taskName = "\\AgileClaw Gateway Backup";
       const scriptPath = "C:\\Services\\Backup\\gateway.cmd";
       const launcherPath = kind === "cmd" ? scriptPath : "C:\\Services\\Backup\\gateway.vbs";
       const programArguments = [
@@ -152,7 +152,7 @@ describe("readScheduledTaskCommand", () => {
                 ? [
                     "@echo off",
                     'set "OPENCLAW_PROFILE=default"',
-                    'set "OPENCLAW_WINDOWS_TASK_NAME=OpenClaw Gateway Backup"',
+                    'set "OPENCLAW_WINDOWS_TASK_NAME=AgileClaw Gateway Backup"',
                     'set "OPENCLAW_STATE_DIR=C:\\Services\\Backup"',
                     'set "OPENCLAW_CONFIG_PATH=C:\\Services\\Backup\\openclaw.json"',
                     'cd /d "C:\\Services\\Backup"',
@@ -368,7 +368,7 @@ describe("readScheduledTaskCommand", () => {
               : {
                   status: 0,
                   stdout: JSON.stringify({
-                    taskPath: "\\OpenClaw Gateway",
+                    taskPath: "\\AgileClaw Gateway",
                     state: 3,
                     actions: [
                       {
@@ -470,7 +470,7 @@ describe("readScheduledTaskCommand", () => {
     const found = {
       status: 0,
       stdout: JSON.stringify({
-        taskPath: "\\OpenClaw Gateway Backup",
+        taskPath: "\\AgileClaw Gateway Backup",
         state: 3,
         actions: kind === "multiple actions" ? [action, action] : [action],
       }),
@@ -480,7 +480,7 @@ describe("readScheduledTaskCommand", () => {
       spawnSync.mockReturnValueOnce(found).mockReturnValue({
         status: 0,
         stdout: JSON.stringify({
-          taskPath: "\\OpenClaw Gateway Backup",
+          taskPath: "\\AgileClaw Gateway Backup",
           state: 3,
           actions: [{ ...action, path: "C:\\Other\\gateway.cmd" }],
         }),
@@ -493,7 +493,7 @@ describe("readScheduledTaskCommand", () => {
           ? `${buildHiddenLauncherScript({ scriptPath })}WScript.Echo "extra executable statement"\r\n`
           : [
               "@echo off",
-              `set "OPENCLAW_WINDOWS_TASK_NAME=${kind === "saved name changed" ? "Other Task" : "OpenClaw Gateway Backup"}"`,
+              `set "OPENCLAW_WINDOWS_TASK_NAME=${kind === "saved name changed" ? "Other Task" : "AgileClaw Gateway Backup"}"`,
               `set "OPENCLAW_PROFILE=${kind === "saved profile changed" ? "other" : "default"}"`,
               "node gateway.js",
             ].join("\r\n"),
@@ -504,7 +504,7 @@ describe("readScheduledTaskCommand", () => {
         {
           USERPROFILE: "C:\\Users\\test",
           OPENCLAW_PROFILE: "default",
-          OPENCLAW_WINDOWS_TASK_NAME: "OpenClaw Gateway Backup",
+          OPENCLAW_WINDOWS_TASK_NAME: "AgileClaw Gateway Backup",
         },
         { requireEffective: true, requireLoaded: true },
       ),
@@ -518,7 +518,7 @@ describe("readScheduledTaskCommand", () => {
     spawnSync.mockReturnValue({
       status: 0,
       stdout: JSON.stringify({
-        taskPath: "\\OpenClaw Gateway",
+        taskPath: "\\AgileClaw Gateway",
         state: 3,
         actions: [{ type: 0, path: launcherPath, arguments: "", workingDirectory: "" }],
       }),
@@ -552,7 +552,7 @@ describe("readScheduledTaskCommand", () => {
       spawnSync.mockReturnValue({
         status: 0,
         stdout: JSON.stringify({
-          taskPath: "\\OpenClaw Gateway",
+          taskPath: "\\AgileClaw Gateway",
           state: 3,
           actions: [{ type: 0, path: launcherPath, arguments: "", workingDirectory: "" }],
         }),
@@ -586,7 +586,7 @@ describe("readScheduledTaskCommand", () => {
       const found = {
         status: 0,
         stdout: JSON.stringify({
-          taskPath: "\\OpenClaw Gateway",
+          taskPath: "\\AgileClaw Gateway",
           state: 3,
           actions: [
             { type: 0, path: "C:\\Services\\gateway.cmd", arguments: "", workingDirectory: "" },
@@ -634,18 +634,18 @@ describe("readScheduledTaskCommand", () => {
         env: (tmpDir) => ({ OPENCLAW_STATE_DIR: path.join(tmpDir, "custom-state") }),
         scriptLines: [
           "@echo off",
-          "rem OpenClaw Gateway",
+          "rem AgileClaw Gateway",
           'cd /d "C:\\Users\\苗振\\.openclaw"',
           "set NODE_ENV=production",
           "set OPENCLAW_PORT=18789",
-          '"\\\\fileserver\\OpenClaw Share\\node.exe" "C:\\Program Files\\OpenClaw\\gateway.js" --verbose',
+          '"\\\\fileserver\\AgileClaw Share\\node.exe" "C:\\Program Files\\AgileClaw\\gateway.js" --verbose',
         ],
       },
       async (env) => {
         expect(await readScheduledTaskCommand(env)).toEqual({
           programArguments: [
-            "\\\\fileserver\\OpenClaw Share\\node.exe",
-            "C:\\Program Files\\OpenClaw\\gateway.js",
+            "\\\\fileserver\\AgileClaw Share\\node.exe",
+            "C:\\Program Files\\AgileClaw\\gateway.js",
             "--verbose",
           ],
           workingDirectory: "C:\\Users\\苗振\\.openclaw",
@@ -664,7 +664,7 @@ describe("readScheduledTaskCommand", () => {
         {
           scriptLines: [
             "@echo off",
-            'cd /d "C:\\OpenClaw fixture"',
+            'cd /d "C:\\AgileClaw fixture"',
             'set "OPENCLAW_TEST_VALUE=retained"',
             `node gateway.js --port 18789 --msg "a >b & c" ${suffix}`,
           ],
@@ -673,7 +673,7 @@ describe("readScheduledTaskCommand", () => {
           const result = await readScheduledTaskCommand(env, { requireEffective: true });
           expect(result).toMatchObject({
             programArguments: ["node", "gateway.js", "--port", "18789", "--msg", "a >b & c"],
-            workingDirectory: "C:\\OpenClaw fixture",
+            workingDirectory: "C:\\AgileClaw fixture",
             environment: { OPENCLAW_TEST_VALUE: "retained" },
           });
         },
@@ -757,7 +757,7 @@ it.each([false])("retains observed Task Scheduler enable policy %s", (enabled) =
     stdout: JSON.stringify({ state: 3, enabled }),
     stderr: "",
   });
-  expect(probeScheduledTaskState("OpenClaw Gateway")).toMatchObject({
+  expect(probeScheduledTaskState("AgileClaw Gateway")).toMatchObject({
     status: "found",
     state: 3,
     enabled,

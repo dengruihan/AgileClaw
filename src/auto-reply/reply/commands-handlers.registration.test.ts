@@ -75,7 +75,7 @@ describe("command handler registration", () => {
     expect(await dispatch("/login ignored")).toMatchObject({
       shouldContinue: false,
       reply: {
-        text: "No chat owner is configured. Ask the OpenClaw owner to add your chat account to `commands.ownerAllowFrom` in the OpenClaw configuration, then send `/login` again.",
+        text: "No chat owner is configured. Ask the AgileClaw owner to add your chat account to `commands.ownerAllowFrom` in the AgileClaw configuration, then send `/login` again.",
       },
     });
     expect(plugin).toHaveBeenCalledTimes(1);

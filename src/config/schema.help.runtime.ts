@@ -7,7 +7,7 @@ export const RUNTIME_FIELD_HELP: Record<string, string> = {
   "browser.enabled":
     "Enables browser capability wiring in the gateway so browser tools and CDP-driven workflows can run. Disable when browser automation is not needed to reduce surface area and startup work.",
   "browser.allowSystemProfileImport":
-    "Allows macOS hosts to import cookies from a local Chrome-family system profile into a managed OpenClaw browser profile. Disable this to prevent browser profile cookie import and its macOS Keychain consent prompt.",
+    "Allows macOS hosts to import cookies from a local Chrome-family system profile into a managed AgileClaw browser profile. Disable this to prevent browser profile cookie import and its macOS Keychain consent prompt.",
   "browser.cdpUrl":
     "CDP/DevTools endpoint URL used to attach to an externally managed browser instance. Use this for centralized browser hosts, tunnels, or existing-session attachment, and keep URL access restricted to trusted network paths.",
   "browser.executablePath":
@@ -109,9 +109,9 @@ export const RUNTIME_FIELD_HELP: Record<string, string> = {
   "tools.exec.reviewer.model":
     "Optional provider/model override for the exec reviewer agent. Omit to reuse the configured primary model for the target agent.",
   "tools.exec.reviewer.thinking":
-    "Optional reasoning effort for OpenClaw model-backed approval reviews: minimal, low, medium, high, xhigh, or max. Omit to preserve provider defaults. Supported levels are normalized for the selected model. Does not configure native Codex Guardian.",
+    "Optional reasoning effort for AgileClaw model-backed approval reviews: minimal, low, medium, high, xhigh, or max. Omit to preserve provider defaults. Supported levels are normalized for the selected model. Does not configure native Codex Guardian.",
   "tools.exec.reviewer.fastMode":
-    "Optional Fast mode for OpenClaw approval reviews: true requests priority processing on supported OpenAI Responses and ChatGPT/OAuth routes; false requests standard processing. Omit to preserve provider defaults. Fast mode may cost more and is subject to provider availability. Does not configure native Codex Guardian.",
+    "Optional Fast mode for AgileClaw approval reviews: true requests priority processing on supported OpenAI Responses and ChatGPT/OAuth routes; false requests standard processing. Omit to preserve provider defaults. Fast mode may cost more and is subject to provider availability. Does not configure native Codex Guardian.",
   "tools.exec.reviewer.timeoutMs":
     "Per-stage exec reviewer timeout in milliseconds for model preparation and completion before falling back to human approval (default: 30000).",
   "tools.exec.node":
@@ -125,9 +125,9 @@ export const RUNTIME_FIELD_HELP: Record<string, string> = {
   "tools.updatePlan":
     "Unified `progress_card` status tool for durable plans and narrative notes in parent sessions. Enabled by default; set false to opt out. Always unavailable to subagents.",
   "tools.toolSearch":
-    "Compact large OpenClaw, MCP, and client tool catalogs. OpenClaw runtimes use structured Tool Search automatically when unset; engaged Code Mode takes precedence and Codex uses its native search. Set false to disable it, true for structured search, or use the object form to choose a mode.",
+    "Compact large AgileClaw, MCP, and client tool catalogs. AgileClaw runtimes use structured Tool Search automatically when unset; engaged Code Mode takes precedence and Codex uses its native search. Set false to disable it, true for structured search, or use the object form to choose a mode.",
   "tools.toolSearch.enabled":
-    "Enables Tool Search. When on, OpenClaw hides large tool catalogs behind structured search/describe/call tools during embedded runtime runs.",
+    "Enables Tool Search. When on, AgileClaw hides large tool catalogs behind structured search/describe/call tools during embedded runtime runs.",
   "tools.toolSearch.mode":
     'Choose the model-facing surface: "tools" (default) exposes structured search/describe/call tools; "directory" keeps a bounded tool directory visible, exposes a bounded set of likely or required schemas, and defers the rest behind search/describe/call.',
   "tools.toolSearch.searchDefaultLimit":
@@ -135,9 +135,9 @@ export const RUNTIME_FIELD_HELP: Record<string, string> = {
   "tools.toolSearch.maxSearchLimit":
     "Maximum number of Tool Search results a model can request. Runtime clamps values to the supported 1..50 range.",
   "tools.codeMode":
-    'Generic OpenClaw Code Mode. When omitted globally, defaults to `"auto"`; an authored object without `enabled` remains off. Engaged agent runs expose only `exec` and `wait` to the model and access normal tools through the catalog bridge.',
+    'Generic AgileClaw Code Mode. When omitted globally, defaults to `"auto"`; an authored object without `enabled` remains off. Engaged agent runs expose only `exec` and `wait` to the model and access normal tools through the catalog bridge.',
   "tools.codeMode.enabled":
-    'Global OpenClaw Code Mode activation. A completely absent global setting defaults to `"auto"`; an authored object without `enabled` remains off. `"auto"` engages catalog-preferred models, while `true` engages tool-capable runs. Agent and model activation overrides take precedence. An engaged run fails closed if the runtime is unavailable instead of exposing the full tool list.',
+    'Global AgileClaw Code Mode activation. A completely absent global setting defaults to `"auto"`; an authored object without `enabled` remains off. `"auto"` engages catalog-preferred models, while `true` engages tool-capable runs. Agent and model activation overrides take precedence. An engaged run fails closed if the runtime is unavailable instead of exposing the full tool list.',
   "tools.codeMode.executor":
     'JavaScript executor: "node" (default) uses Node vm for trusted code and is not a security sandbox; "quickjs" uses the bundled QuickJS WASM plugin for hardened guest execution. Tool permissions apply to both. A missing selected executor fails closed.',
   "tools.codeMode.mode":
@@ -256,7 +256,7 @@ export const RUNTIME_FIELD_HELP: Record<string, string> = {
   "gateway.push.apns":
     "APNs delivery settings for iOS devices paired to this gateway. Use relay settings for official App Store builds that register through the external push relay.",
   "gateway.push.apns.relay":
-    "External relay settings for relay-backed APNs sends. The gateway uses the hosted OpenClaw relay by default, or this custom relay for push.test, wake nudges, and reconnect wakes after a paired official iOS build publishes a relay-backed registration.",
+    "External relay settings for relay-backed APNs sends. The gateway uses the hosted AgileClaw relay by default, or this custom relay for push.test, wake nudges, and reconnect wakes after a paired official iOS build publishes a relay-backed registration.",
   "gateway.push.apns.relay.baseUrl":
     "Optional custom base HTTPS URL for the external APNs relay service used by official App Store iOS builds. Keep this aligned with the relay URL baked into the iOS build so registration and send traffic hit the same deployment.",
   "gateway.push.apns.relay.timeoutMs":
@@ -308,7 +308,7 @@ export const RUNTIME_FIELD_HELP: Record<string, string> = {
   "nodeHost.agentRuns.claude.enabled":
     "Advertise paired-node Claude session continuation when the local claude binary is available (default: false). Runs still require node exec approval.",
   "nodeHost.workerRuns":
-    "Opt in to full OpenClaw worker session hosting from Gateway-managed bundles. Disabled by default.",
+    "Opt in to full AgileClaw worker session hosting from Gateway-managed bundles. Disabled by default.",
   "nodeHost.workerRuns.enabled":
     "Allow this paired node to host sessions from exact bundles installed by its Gateway (default: false).",
   "nodeHost.workerRuns.capacity":
@@ -322,7 +322,7 @@ export const RUNTIME_FIELD_HELP: Record<string, string> = {
   "nodeHost.browserProxy.enabled":
     "Expose the local browser control server through node proxy routing so remote clients can use this host's browser capabilities. Keep disabled unless remote automation explicitly depends on it.",
   "nodeHost.browserProxy.allowProfiles":
-    "Optional allowlist of browser profile names exposed through node proxy routing. Leave empty to preserve the default full profile surface, including profile create/delete routes. When set, OpenClaw enforces least-privilege profile access and blocks persistent profile create/delete through the proxy.",
+    "Optional allowlist of browser profile names exposed through node proxy routing. Leave empty to preserve the default full profile surface, including profile create/delete routes. When set, AgileClaw enforces least-privilege profile access and blocks persistent profile create/delete through the proxy.",
   "nodeHost.mcp":
     "Use MCP servers started by the headless node host and published to its paired gateway as agent tools. Restart the node host after changing this section.",
   "nodeHost.mcp.servers":
@@ -408,7 +408,7 @@ export const RUNTIME_FIELD_HELP: Record<string, string> = {
   "diagnostics.otel.serviceName":
     "Service name reported in telemetry resource attributes to identify this gateway instance in observability backends. Use stable names so dashboards and alerts remain consistent over deployments.",
   "diagnostics.otel.metricNamePrefix":
-    'Replaces the default "openclaw." prefix on OpenClaw-owned metric names. Use an empty string to remove the prefix, or up to 128 ASCII letters, digits, underscores, dots, hyphens, and slashes starting with a letter. Include any separator you need, for example "acme."; standard gen_ai.* metric names are unchanged. Changing this value requires updating dashboards and alerts that query the old names.',
+    'Replaces the default "openclaw." prefix on AgileClaw-owned metric names. Use an empty string to remove the prefix, or up to 128 ASCII letters, digits, underscores, dots, hyphens, and slashes starting with a letter. Include any separator you need, for example "acme."; standard gen_ai.* metric names are unchanged. Changing this value requires updating dashboards and alerts that query the old names.',
   "diagnostics.otel.traces":
     "Enable trace signal export to the configured OpenTelemetry collector endpoint. Keep enabled when latency/debug tracing is needed, and disable if you only want metrics/logs.",
   "diagnostics.otel.metrics":
@@ -522,7 +522,7 @@ export const RUNTIME_FIELD_HELP: Record<string, string> = {
   "tools.media.video.attachments":
     "Choose which matching video attachments are processed. Use first-only handling unless multi-video analysis is intentional.",
   "skills.load.extraDirs":
-    "Additional shared skill roots to scan at lowest precedence. Use this for sibling repos or shared skill packs that should be available without copying them into the OpenClaw workspace.",
+    "Additional shared skill roots to scan at lowest precedence. Use this for sibling repos or shared skill packs that should be available without copying them into the AgileClaw workspace.",
   "skills.load.allowSymlinkTargets":
     "Trusted real target roots that skill symlinks may resolve into when they sit outside their configured source root. Keep this narrow, such as a sibling repo skills directory.",
   "skills.load.watch":

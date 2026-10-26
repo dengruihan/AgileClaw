@@ -11,7 +11,7 @@ import {
 import type { MemoryProviderHandle } from "../plugins/memory-provider-types.js";
 import { prepareProjectMemoryBootstrap } from "./project-memory-bootstrap.js";
 
-const PROJECT_KEY = "github.com/OpenClaw/OpenClaw";
+const PROJECT_KEY = "github.com/AgileClaw/AgileClaw";
 
 it.each([
   ["stays current", undefined],

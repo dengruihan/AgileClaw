@@ -1234,7 +1234,7 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
               // A plugin stopAccount that never settles must not wedge every
               // stop-driven flow (health monitor sweeps, thaw recovery, reload).
               // Ordinary recovery retains the timed-out owner; explicit handoff
-              // retires its slots after revoking OpenClaw runtime authority.
+              // retires its slots after revoking AgileClaw runtime authority.
               const retainedCleanup = store.stops.get(id)?.cleanup;
               let stopAccountStarted = retainedCleanup !== undefined;
               const stopAccountAttempt =

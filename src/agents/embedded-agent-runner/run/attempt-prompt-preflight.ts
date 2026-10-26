@@ -41,7 +41,7 @@ type PreflightRecoveryBudgetSnapshot = Pick<
 
 // Carries the measured prompt budget into the outer recovery loop. The synthetic
 // precheck error is only a routing signal, so compaction engines need these
-// fields to compact against the prompt OpenClaw actually rendered.
+// fields to compact against the prompt AgileClaw actually rendered.
 function buildPreflightRecoveryBudgetSnapshot(snapshot: PreflightRecoveryBudgetSnapshot) {
   return {
     estimatedPromptTokens: snapshot.estimatedPromptTokens,

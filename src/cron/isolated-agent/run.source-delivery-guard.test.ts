@@ -86,7 +86,7 @@ describe("cron source delivery policy", () => {
     ).toThrow("Cron source delivery requires the message tool");
   });
 
-  it("honors an explicit OpenClaw runtime override during cron execution", async () => {
+  it("honors an explicit AgileClaw runtime override during cron execution", async () => {
     resolveConfiguredModelRefMock.mockReturnValue({ provider: "openai", model: "gpt-5.6-luna" });
     resolveCronSessionMock.mockReturnValue(
       makeCronSession({

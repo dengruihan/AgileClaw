@@ -596,7 +596,7 @@ describe("provider local service", () => {
     }
   });
 
-  it("restarts an OpenClaw-managed local service when its health endpoint is down", async () => {
+  it("restarts an AgileClaw-managed local service when its health endpoint is down", async () => {
     const port = await fixture.claimPort();
     const healthUrl = `http://127.0.0.1:${port}/v1/models`;
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-local-service-restart-"));

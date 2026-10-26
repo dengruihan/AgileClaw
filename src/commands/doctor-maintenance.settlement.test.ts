@@ -275,7 +275,7 @@ it("does not suggest an unsafe manual stop after a reported write-custody refusa
   const error = await begin().catch((reason: unknown) => reason);
   expect(error).toBeInstanceOf(Error);
   expect(String(error)).toContain(refusal.message);
-  expect(String(error)).not.toContain("Stop the Gateway service and other OpenClaw processes");
+  expect(String(error)).not.toContain("Stop the Gateway service and other AgileClaw processes");
   expect(boundary.restart).not.toHaveBeenCalled();
 });
 
@@ -489,7 +489,7 @@ it.each([false, true])(
     });
 
     if (expires) {
-      await expect(begin()).rejects.toThrow("OpenClaw state database is busy at");
+      await expect(begin()).rejects.toThrow("AgileClaw state database is busy at");
       expect(elapsed).toBe(GATEWAY_SERVICE_STOP_TIMEOUT_MS);
       expect(boundary.log).toHaveBeenCalledWith(
         expect.stringMatching(/Warning:.*state ownership.*openclaw doctor --fix/),
@@ -664,7 +664,7 @@ it.each([false, true])(
     if (stopFailed) {
       expect(collectNestedErrorCandidates(refusal)).toContain(stopError);
     } else {
-      expect(String(refusal)).toContain("OpenClaw state database is busy at");
+      expect(String(refusal)).toContain("AgileClaw state database is busy at");
     }
     expect(elapsed).toBe(GATEWAY_SERVICE_STOP_TIMEOUT_MS);
     expect(boundary.ownerAssert).not.toHaveBeenCalled();

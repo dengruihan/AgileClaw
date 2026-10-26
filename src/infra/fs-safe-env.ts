@@ -58,14 +58,14 @@ export function clearFsSafeEnvFallback(env: NodeJS.ProcessEnv): void {
   }
 }
 
-/** Preserve OpenClaw's retired Python mode env contract below both native names. */
+/** Preserve AgileClaw's retired Python mode env contract below both native names. */
 export function normalizeFsSafeNativeEnv(env: NodeJS.ProcessEnv = process.env): void {
   clearFsSafeEnvFallback(env);
   const configured = legacyKeys.filter((key) => env[key] !== undefined);
   if (configured.length && env === process.env && !warned) {
     warned = true;
     process.emitWarning(
-      `${configured.join(", ")} is deprecated. OpenClaw maps legacy mode values to native ` +
+      `${configured.join(", ")} is deprecated. AgileClaw maps legacy mode values to native ` +
         "mode only when neither FS_SAFE_NATIVE_MODE nor OPENCLAW_FS_SAFE_NATIVE_MODE selects " +
         "a mode. Replace Python mode variables with native mode variables; interpreter " +
         "path settings are ignored.",

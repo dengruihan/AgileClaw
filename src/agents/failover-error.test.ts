@@ -422,7 +422,7 @@ describe("failover diagnostic isolation", () => {
     "normalizes local-profile HTTP status from a %s error without changing its owner",
     (shape) => {
       const message =
-        'Codex app-server auth profile "openai:default" was not found. Select an existing OpenAI profile or sign in again with OpenClaw, then retry.';
+        'Codex app-server auth profile "openai:default" was not found. Select an existing OpenAI profile or sign in again with AgileClaw, then retry.';
       const cause = new Error("profile store lookup missed");
       const context = {
         provider: "openai",
@@ -592,7 +592,7 @@ describe("isNonProviderRuntimeCoordinationError", () => {
     ).toBe(true);
     expectReason(
       new Error(
-        "OpenClaw recorded a native Codex tool.call without a matching tool.result before the turn completed.",
+        "AgileClaw recorded a native Codex tool.call without a matching tool.result before the turn completed.",
       ),
       null,
     );

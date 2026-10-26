@@ -245,7 +245,7 @@ export function createManagedLinuxAudio(params: {
       }
       const runtimeDir = path.join(params.tempDir, "pulse");
       await fs.mkdir(runtimeDir, { recursive: true, mode: 0o700 });
-      // Client/server startup files are external-tool contracts, not OpenClaw state.
+      // Client/server startup files are external-tool contracts, not AgileClaw state.
       await fs.writeFile(path.join(runtimeDir, "client.conf"), "autospawn = no\n", { mode: 0o600 });
       await fs.writeFile(path.join(runtimeDir, "daemon.conf"), "local-server-type = user\n", {
         mode: 0o600,

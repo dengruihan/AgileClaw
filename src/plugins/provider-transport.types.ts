@@ -21,7 +21,7 @@ export type ProviderCreateStreamFnContext = {
 };
 
 /**
- * Provider-owned stream wrapper hook after OpenClaw applies its generic
+ * Provider-owned stream wrapper hook after AgileClaw applies its generic
  * transport-independent wrappers.
  *
  * Use this for provider-specific payload/header/model mutations that still run
@@ -142,7 +142,7 @@ export type ProviderCreateEmbeddingProviderContext = {
 /**
  * Provider-owned prompt-cache eligibility.
  *
- * Return `true` or `false` to override OpenClaw's built-in provider cache TTL
+ * Return `true` or `false` to override AgileClaw's built-in provider cache TTL
  * detection for this provider. Return `undefined` to fall back to core rules.
  */
 export type ProviderCacheTtlEligibilityContext = {
@@ -156,7 +156,7 @@ export type ProviderCacheTtlEligibilityContext = {
 /**
  * Provider-owned missing-auth message override.
  *
- * Runs only after OpenClaw exhausts normal env/profile/config auth resolution
+ * Runs only after AgileClaw exhausts normal env/profile/config auth resolution
  * for the requested provider. Return a custom message to replace the generic
  * "No API key found" error.
  */
@@ -173,7 +173,7 @@ export type ProviderBuildMissingAuthMessageContext = {
  * Provider-owned unknown-model hint override.
  *
  * Runs after catalog/runtime lookup misses for the requested provider. Return a
- * hint suffix that OpenClaw should append to the generic `Unknown model`
+ * hint suffix that AgileClaw should append to the generic `Unknown model`
  * error.
  */
 export type ProviderBuildUnknownModelHintContext = {

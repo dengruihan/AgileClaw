@@ -95,7 +95,7 @@ describe("cli json stdout contract", () => {
             ]);
           }
           if (tty && format === "text") {
-            expect(result.stdout).toContain("OpenClaw");
+            expect(result.stdout).toContain("AgileClaw");
             expect(result.stderr).toContain("\u001B[?25h");
             expect(result.stderr).not.toContain("TELEMETRY_NETWORK_FORBIDDEN");
           } else {
@@ -578,25 +578,25 @@ describe("cli json stdout contract", () => {
     {
       name: "unknown root",
       args: ["pairng"],
-      diagnostic: 'OpenClaw does not know the command "pairng".',
+      diagnostic: 'AgileClaw does not know the command "pairng".',
       suggestion: "openclaw pairing",
     },
     {
       name: "unknown nested command",
       args: ["sessions", "lst"],
-      diagnostic: 'OpenClaw sessions has no command "lst".',
+      diagnostic: 'AgileClaw sessions has no command "lst".',
       suggestion: "openclaw sessions list",
     },
     {
       name: "unknown nested command with a later argument",
       args: ["config", "gett", "gateway.port"],
-      diagnostic: 'OpenClaw config has no command "gett".',
+      diagnostic: 'AgileClaw config has no command "gett".',
       suggestion: "openclaw config get",
     },
     {
       name: "unknown root before help",
       args: ["pairng", "--help"],
-      diagnostic: 'OpenClaw does not know the command "pairng".',
+      diagnostic: 'AgileClaw does not know the command "pairng".',
       suggestion: "openclaw pairing",
     },
   ])("renders $name as actionable guidance", async (testCase) => {
@@ -626,13 +626,13 @@ describe("cli json stdout contract", () => {
     {
       name: "unknown root",
       args: ["pairng", "--json"],
-      diagnostic: 'OpenClaw does not know the command "pairng".',
+      diagnostic: 'AgileClaw does not know the command "pairng".',
       suggestion: "openclaw pairing",
     },
     {
       name: "unknown nested command",
       args: ["sessions", "lst", "--json"],
-      diagnostic: 'OpenClaw sessions has no command "lst".',
+      diagnostic: 'AgileClaw sessions has no command "lst".',
       suggestion: "openclaw sessions list",
     },
   ])("reports $name once with structured JSON guidance", async (testCase) => {
@@ -677,7 +677,7 @@ describe("cli json stdout contract", () => {
           error: { message: string };
         };
         expect(payload.error.message).toBe(
-          'OpenClaw sessions has no command "lst".\nDid you mean this?\n  openclaw sessions list\nTry: openclaw sessions --help\nDocs: https://docs.openclaw.ai/cli',
+          'AgileClaw sessions has no command "lst".\nDid you mean this?\n  openclaw sessions list\nTry: openclaw sessions --help\nDocs: https://docs.openclaw.ai/cli',
         );
         expect(payload.error.message).not.toContain("\u001B");
         expect(payload.error.message).not.toContain("\u0007");

@@ -229,7 +229,7 @@ describe("post-install doctor result IPC", () => {
     await expect(consumeUpdatePostInstallDoctorResult(resultPath)).resolves.toBeNull();
   });
 
-  it("rejects result paths outside the secure OpenClaw temp root", async () => {
+  it("rejects result paths outside the secure AgileClaw temp root", async () => {
     const tempRoot = resolvePreferredOpenClawTmpDir();
     const resultPath = path.join(
       `${tempRoot}-outside`,

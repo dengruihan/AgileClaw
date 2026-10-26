@@ -46,7 +46,7 @@ describe("formatCliBannerLine", () => {
       mode: "default",
     });
 
-    expect(line).toBe("🦞 OpenClaw 2026.3.7 (abc1234) — All your chats, one OpenClaw.");
+    expect(line).toBe("💎 AgileClaw 2026.3.7 (abc1234) — All your chats, one AgileClaw.");
   });
 
   it("drops decorative emoji for generic Linux terminals", () => {
@@ -56,7 +56,7 @@ describe("formatCliBannerLine", () => {
       platform: "linux",
     });
 
-    expect(line).toBe("OpenClaw 2026.3.7 (abc1234)");
+    expect(line).toBe("AgileClaw 2026.3.7 (abc1234)");
   });
 });
 
@@ -82,7 +82,7 @@ describe("emitCliBanner", () => {
 
     emitCliBanner("2026.3.7", bannerOptions);
 
-    expect(writeSpy).toHaveBeenCalledWith("\n🦞 OpenClaw 2026.3.7 (abc1234)\n\n");
+    expect(writeSpy).toHaveBeenCalledWith("\n💎 AgileClaw 2026.3.7 (abc1234)\n\n");
     expect(hasEmittedCliBanner()).toBe(true);
   });
 
@@ -99,7 +99,7 @@ describe("emitCliBanner", () => {
     });
 
     const written = writeSpy.mock.calls.map(([chunk]) => String(chunk)).join("");
-    expect(written).toContain("( o.o )");
+    expect(written).toContain("(__)");
   });
 
   it.each([
@@ -118,7 +118,7 @@ describe("emitCliBanner", () => {
     });
 
     const written = writeSpy.mock.calls.map(([chunk]) => String(chunk)).join("");
-    expect(written).not.toContain("( o.o )");
+    expect(written).not.toContain("(__)");
   });
 
   it("emits only once per module instance", async () => {

@@ -41,7 +41,7 @@ function query(database: DatabaseSync) {
 const turnSchema = createSqliteSchemaEnsurer(() =>
   extractSqliteTableSchema(OPENCLAW_STATE_SCHEMA_SQL, "node_worker_turns", {
     endMarker: "\n  WHERE state = 'running';",
-    errorMessage: "OpenClaw node worker turn schema marker is missing.",
+    errorMessage: "AgileClaw node worker turn schema marker is missing.",
   }),
 );
 

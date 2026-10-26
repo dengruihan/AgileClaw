@@ -92,7 +92,7 @@ export async function resolveNonInteractiveApiKey(params: {
       return envVarName ? { key, source, envVarName } : { key, source };
     }
     const envHint = source === "env" ? ` Check ${envVarName ?? params.envVar}.` : "";
-    return reject(`Paste the API key value, not an OpenClaw onboarding command.${envHint}`);
+    return reject(`Paste the API key value, not an AgileClaw onboarding command.${envHint}`);
   };
 
   const useSecretRefMode = params.secretInputMode === "ref"; // pragma: allowlist secret

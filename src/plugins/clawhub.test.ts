@@ -166,7 +166,7 @@ function clawHubSecurityResponse(
 function mockClawHubSecurity(
   trust: Record<string, unknown>,
   releaseVersion = "2026.3.22",
-  overview = "The plugin can modify local OpenClaw state.",
+  overview = "The plugin can modify local AgileClaw state.",
 ) {
   fetchClawHubPackageSecurityMock.mockResolvedValueOnce(
     clawHubSecurityResponse("demo", releaseVersion, trust, overview),
@@ -878,7 +878,7 @@ describe("installPluginFromClawHub", () => {
     const failure = expectInstallFailure(result);
     expect(failure.code).toBe(CLAWHUB_INSTALL_ERROR_CODE.INCOMPATIBLE_PLUGIN_API);
     expect(failure.error).toBe(
-      'Plugin "demo" requires plugin API *, but this OpenClaw runtime exposes invalid.',
+      'Plugin "demo" requires plugin API *, but this AgileClaw runtime exposes invalid.',
     );
     expect(downloadClawHubPackageArchiveMock).not.toHaveBeenCalled();
     expect(installPluginFromArchiveMock).not.toHaveBeenCalled();
@@ -1328,7 +1328,7 @@ describe("installPluginFromClawHub", () => {
         ok: false,
         code: CLAWHUB_INSTALL_ERROR_CODE.UNKNOWN_GATEWAY_VERSION,
         error:
-          'Plugin "demo" requires OpenClaw >=2026.3.22, but this host version could not be determined. Re-run from a released build or set OPENCLAW_VERSION and retry.',
+          'Plugin "demo" requires AgileClaw >=2026.3.22, but this host version could not be determined. Re-run from a released build or set OPENCLAW_VERSION and retry.',
       },
     },
     {

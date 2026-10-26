@@ -1,4 +1,4 @@
-// OpenClaw state database tests cover state DB migrations and persistence.
+// AgileClaw state database tests cover state DB migrations and persistence.
 import { deepStrictEqual } from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -4089,7 +4089,7 @@ INSERT INTO device_identities VALUES (
     });
     expect(repairOpenClawStateDatabaseSchema(options)).toEqual({
       changes: [
-        "Migrated shared state operator approvals → OpenClaw system changes",
+        "Migrated shared state operator approvals → AgileClaw system changes",
         expect.stringMatching(/^Rebuilt canonical shared-state SQLite indexes \(\d+\)$/u),
       ],
       warnings: [],

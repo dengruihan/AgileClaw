@@ -62,7 +62,7 @@ describe("proxy stream wrappers", () => {
       {
         headers: {
           "HTTP-Referer": "https://openclaw.ai",
-          "X-OpenRouter-Title": "OpenClaw",
+          "X-OpenRouter-Title": "AgileClaw",
           "X-OpenRouter-Categories": "personal-agent,cli-agent",
           "X-Custom": "1",
         },
@@ -182,7 +182,7 @@ describe("proxy stream wrappers", () => {
               ...(hasUser ? [{ role: "user" as const, content: "Question", timestamp: 1 }] : []),
               {
                 role: "user",
-                content: "OpenClaw runtime context:\nRuntime",
+                content: "AgileClaw runtime context:\nRuntime",
                 timestamp: 2,
                 runtimeContext: {},
               },
@@ -200,7 +200,7 @@ describe("proxy stream wrappers", () => {
             expect(payload.messages).toEqual([
               { role: "system", content: `${stable}\nVOLATILE` },
               ...(hasUser ? [{ role: "user", content: "Question" }] : []),
-              { role: "system", content: "OpenClaw runtime context:\nRuntime" },
+              { role: "system", content: "AgileClaw runtime context:\nRuntime" },
             ]);
           }
           expect(wire.includes('"ttl":"1h"')).toBe(

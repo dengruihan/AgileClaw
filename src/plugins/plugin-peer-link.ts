@@ -209,7 +209,7 @@ export async function auditOpenClawPeerDependencyLink(
   return auditOpenClawPeerDependencyLinkSync(params);
 }
 
-/** Audit the installed host only when the package actually declares an OpenClaw dependency. */
+/** Audit the installed host only when the package actually declares an AgileClaw dependency. */
 export async function auditDeclaredOpenClawHostDependency(params: {
   packageDir: string;
   packageName?: string;

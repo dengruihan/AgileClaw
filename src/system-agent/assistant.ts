@@ -1,4 +1,4 @@
-// OpenClaw assistant planning converts fuzzy user text into one safe command.
+// AgileClaw assistant planning converts fuzzy user text into one safe command.
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -152,7 +152,7 @@ async function runConfiguredSystemAgentText(params: {
     );
     const shared = {
       sessionId: `${runId}-session`,
-      // OpenClaw is the planner surface, but the configured roster owner supplies runtime policy.
+      // AgileClaw is the planner surface, but the configured roster owner supplies runtime policy.
       agentId: route.agentId,
       trigger: "manual" as const,
       sessionFile: `in-memory:${runId}`,

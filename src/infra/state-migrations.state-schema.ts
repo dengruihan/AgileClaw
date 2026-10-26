@@ -32,7 +32,7 @@ const STATE_SCHEMA_MIGRATION_DESCRIPTIONS: Record<
     "prepared workers → one-use capacity and fixed workspace ownership",
   "github-publication-requester-authority-v18":
     "GitHub publication receipts → original requesting authority",
-  "operator-approvals-system-agent": "operator approvals → OpenClaw system changes",
+  "operator-approvals-system-agent": "operator approvals → AgileClaw system changes",
   "session-watch-cursor-provenance-v4": "session watch cursors → provenance column",
   "strict-tables-v3": "tables → SQLite STRICT typing",
 };

@@ -48,7 +48,7 @@ describe("buildCliAgentSystemPrompt", () => {
     });
   });
 
-  it("includes the OpenClaw skills prompt in CLI system prompts", () => {
+  it("includes the AgileClaw skills prompt in CLI system prompts", () => {
     const preparedModelRuntime = {
       isCurrent: vi.fn(() => true),
       configuredModelAliases: [{ alias: "Current", provider: "fixture", model: "current" }],
@@ -117,7 +117,7 @@ describe("buildCliAgentSystemPrompt", () => {
     expect(prompt).toContain("## Delegation");
   });
 
-  it("uses CLI backend tool fallback instead of OpenClaw tool assumptions", () => {
+  it("uses CLI backend tool fallback instead of AgileClaw tool assumptions", () => {
     const prompt = buildCliAgentSystemPrompt({
       workspaceDir: "/tmp/openclaw",
       docsPath: "/tmp/openclaw/docs",
@@ -125,7 +125,7 @@ describe("buildCliAgentSystemPrompt", () => {
       modelDisplay: "test/model",
     });
 
-    expect(prompt).toContain("No OpenClaw tool list is injected");
+    expect(prompt).toContain("No AgileClaw tool list is injected");
     expect(prompt).not.toContain("exec approval-pending");
   });
 
@@ -195,7 +195,7 @@ describe("buildCliAgentSystemPrompt", () => {
 
   it("includes CLI-scoped plugin command guidance", () => {
     // Plugin command guidance is surface-filtered; CLI prompts must not leak
-    // OpenClaw-main command text into external CLI backends.
+    // AgileClaw-main command text into external CLI backends.
     registerPluginCommand("demo-plugin", {
       name: "demo_cli",
       description: "Demo CLI command",
@@ -205,7 +205,7 @@ describe("buildCliAgentSystemPrompt", () => {
           surfaces: ["cli_backend"],
         },
         {
-          text: "OpenClaw-only command guidance.",
+          text: "AgileClaw-only command guidance.",
           surfaces: ["openclaw_main"],
         },
       ],
@@ -219,7 +219,7 @@ describe("buildCliAgentSystemPrompt", () => {
     });
 
     expect(prompt).toContain("CLI-only command guidance.");
-    expect(prompt).not.toContain("OpenClaw-only command guidance.");
+    expect(prompt).not.toContain("AgileClaw-only command guidance.");
   });
 
   it("includes session identity in runtime when provided", () => {

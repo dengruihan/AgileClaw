@@ -30,7 +30,7 @@ export function createRuntimeUpdateRecoverySteps(params: {
     return [
       {
         kind: "deployment",
-        instruction: `Pull or build an OpenClaw image with version ${targetVersion} and Node ${nodeVersion}, then recreate or redeploy the container with the same state/config mounts. In-container package changes are not durable.`,
+        instruction: `Pull or build an AgileClaw image with version ${targetVersion} and Node ${nodeVersion}, then recreate or redeploy the container with the same state/config mounts. In-container package changes are not durable.`,
       },
     ];
   }
@@ -91,7 +91,7 @@ export function formatUpdateActivationTimeoutGuidance(
 
 export const UPDATE_INSTALL_SKIP_GUIDANCE: Readonly<Record<string, string>> = {
   "external-supervisor-update-required":
-    "This Gateway is managed by an external supervisor. Use your server or deployment's update workflow to update OpenClaw and restart the Gateway. The Control UI and `openclaw update` cannot update this installation. No package changes or Gateway restart were attempted.",
+    "This Gateway is managed by an external supervisor. Use your server or deployment's update workflow to update AgileClaw and restart the Gateway. The Control UI and `openclaw update` cannot update this installation. No package changes or Gateway restart were attempted.",
   "container-image-install":
     "Pull or build the target Docker/container image, then redeploy it with the same state/config mounts. No package changes or Gateway restart were attempted.",
   "unmanaged-package-install":

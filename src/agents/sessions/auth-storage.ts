@@ -2,7 +2,7 @@
  * Credential storage facade for API keys and OAuth tokens.
  * Canonical persistence is the per-agent SQLite auth-profile store.
  *
- * The backend contract keeps the upstream session SDK shape while OpenClaw
+ * The backend contract keeps the upstream session SDK shape while AgileClaw
  * projects provider-default profiles into it.
  */
 

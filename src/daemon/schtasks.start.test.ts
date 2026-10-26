@@ -24,7 +24,7 @@ const native = vi.hoisted(() => ({
   enabledAvailable: true,
   running: false,
   scriptPath: "",
-  taskName: "OpenClaw Gateway",
+  taskName: "AgileClaw Gateway",
   failure: undefined as "enable" | "run" | undefined,
   afterEnable: undefined as (() => void | Promise<void>) | undefined,
   files: new Map<string, string>(),
@@ -123,7 +123,7 @@ async function fixture(program?: string, kind = "gateway") {
     file,
     `@echo off\r\n${program ?? `"C:\\Node\\node.exe" "${entry}" ${kind === "node" ? "node run" : "gateway"}`}\r\n`,
   );
-  native.taskName = kind === "node" ? "OpenClaw Node" : "OpenClaw Gateway";
+  native.taskName = kind === "node" ? "AgileClaw Node" : "AgileClaw Gateway";
   const env: Record<string, string> = {
     USERPROFILE: root,
     APPDATA: path.join(root, "appdata"),
@@ -190,7 +190,7 @@ it.each(["owned", "foreign", "missing launcher"] as const)(
       expect(note).toHaveBeenCalledWith(
         expect.stringMatching(
           scenario === "foreign"
-            ? /Gateway service start failed: .*not the requested OpenClaw service/
+            ? /Gateway service start failed: .*not the requested AgileClaw service/
             : /Gateway service start failed: .*service command could not be inspected/,
         ),
         "Gateway",

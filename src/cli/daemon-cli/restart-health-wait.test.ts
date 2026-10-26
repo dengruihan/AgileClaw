@@ -66,7 +66,7 @@ describe("restart health", () => {
         startedAt: 1000,
         port: 18789,
         mode: "supervised",
-        supervisor: { kind: "schtasks", name: "OpenClaw Gateway" },
+        supervisor: { kind: "schtasks", name: "AgileClaw Gateway" },
         state: "live",
         expired,
       });
@@ -104,7 +104,7 @@ describe("restart health", () => {
         startedAt: replacement ? 2000 : 1000,
         port: 18789,
         mode: "supervised",
-        supervisor: { kind: "schtasks", name: "OpenClaw Gateway" },
+        supervisor: { kind: "schtasks", name: "AgileClaw Gateway" },
         state: replacement ? "live" : "dead",
         expired: !replacement,
       };
@@ -135,7 +135,7 @@ describe("restart health", () => {
         startedAt: 1000,
         port: 18789,
         mode: "supervised",
-        supervisor: { kind: "schtasks", name: "OpenClaw Gateway" },
+        supervisor: { kind: "schtasks", name: "AgileClaw Gateway" },
         state: monotonicClock.nowMs === 0 ? initialState : "dead",
         expired: false,
       }));

@@ -631,7 +631,7 @@ describe("update-cli", () => {
 
     await expect(updateCommand({ tag })).rejects.toEqual(new ExitError(1));
 
-    expect(getLogOutput()).toContain("OpenClaw update skipped: downgrade-confirmation-required.");
+    expect(getLogOutput()).toContain("AgileClaw update skipped: downgrade-confirmation-required.");
     expect(getLogOutput()).toContain(
       "Downgrade confirmation required.\nDowngrading can break configuration. Re-run in a TTY to confirm.",
     );

@@ -218,7 +218,7 @@ it(
           expect(abandoned).toMatchObject({ done: false, step: { id: expect.any(String) } });
           await expect(
             client.request("openclaw.setup.auth.start", { ...auth, sessionId: "different-owner" }),
-          ).rejects.toThrow("OpenClaw setup is already in progress");
+          ).rejects.toThrow("AgileClaw setup is already in progress");
           expect(await owner.request("wizard.next", { sessionId: "abandoned-signin" })).toEqual(
             abandoned,
           );

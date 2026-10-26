@@ -19,7 +19,7 @@ import type { CronToolOptions } from "./tools/cron-tool.types.js";
 import type { QuestionPromptDelivery } from "./tools/question-prompt-send.js";
 import type { SessionsYieldCallback } from "./tools/sessions-yield-tool.js";
 
-/** Options shared by the coding-tool factory and its OpenClaw tool surface. */
+/** Options shared by the coding-tool factory and its AgileClaw tool surface. */
 export type OpenClawSharedToolsOptions = {
   /** Complete model-discoverable catalog, prepared by the current host. */
   installedSkills?: readonly InstalledSkill[];

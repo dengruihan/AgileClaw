@@ -109,7 +109,7 @@ describe("update-cli", () => {
   it("rejects a conflicting Windows task selector before mutation", async () => {
     const platform = "win32";
     const envKey = "OPENCLAW_WINDOWS_TASK_NAME";
-    const value = "OpenClaw Gateway";
+    const value = "AgileClaw Gateway";
     vi.spyOn(process, "platform", "get").mockReturnValue(platform);
     const tempDir = fixture.tempDirs.make(`openclaw-update-${platform}-selector-`);
     const home = path.join(tempDir, "home");

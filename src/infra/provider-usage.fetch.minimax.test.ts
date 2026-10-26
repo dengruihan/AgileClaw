@@ -18,7 +18,7 @@ const model = (fields: Record<string, unknown>) => ({
 async function fetchUsage(payload: unknown, baseUrl?: string) {
   const fetch = createProviderUsageFetch(async (_url, init) => {
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer key");
-    expect(new Headers(init?.headers).get("MM-API-Source")).toBe("OpenClaw");
+    expect(new Headers(init?.headers).get("MM-API-Source")).toBe("AgileClaw");
     return makeResponse(200, payload);
   });
   return { result: await fetchMinimaxUsage("key", 5000, fetch, { baseUrl }), fetch };

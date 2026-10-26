@@ -85,7 +85,7 @@ function routingFixture(extraOptions: { afterAudioRoutingSource?: string } = {})
       autoJoin: false,
       captureCaptions: false,
       expectedIdentity: "test:meeting",
-      guestName: "OpenClaw",
+      guestName: "AgileClaw",
       meetingSessionId: "session-1",
       pageIdentitySource: 'const meetingIdentity = () => "test:meeting";',
       selectors: "{}",

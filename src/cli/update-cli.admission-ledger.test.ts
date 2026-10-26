@@ -499,7 +499,7 @@ describe("update-cli", () => {
           "Phase: verifying",
           "Phase: finished",
         ]);
-        expect(output.indexOf("OpenClaw updated")).toBeGreaterThan(
+        expect(output.indexOf("AgileClaw updated")).toBeGreaterThan(
           output.indexOf("Phase: finished"),
         );
       } finally {

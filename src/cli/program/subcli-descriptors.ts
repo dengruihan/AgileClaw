@@ -100,7 +100,7 @@ const subCliCommandDescriptors = [
   },
   {
     name: "connect",
-    description: "Connect this machine to an OpenClaw Gateway as a node",
+    description: "Connect this machine to an AgileClaw Gateway as a node",
     hasSubcommands: false,
   },
   {
@@ -170,7 +170,7 @@ const subCliCommandDescriptors = [
   },
   {
     name: "docs",
-    description: "Search the live OpenClaw docs",
+    description: "Search the live AgileClaw docs",
     hasSubcommands: false,
   },
   {
@@ -180,7 +180,7 @@ const subCliCommandDescriptors = [
   },
   {
     name: "proxy",
-    description: "Run the OpenClaw debug proxy and inspect captured traffic",
+    description: "Run the AgileClaw debug proxy and inspect captured traffic",
     hasSubcommands: true,
     machineOutput: ({ argv }) => isProxyMachineOutput(argv),
   },
@@ -211,7 +211,7 @@ const subCliCommandDescriptors = [
   },
   {
     name: "plugins",
-    description: "Manage OpenClaw plugins and extensions",
+    description: "Manage AgileClaw plugins and extensions",
     hasSubcommands: true,
     parentDefaultHelp: true,
   },
@@ -244,7 +244,7 @@ const subCliCommandDescriptors = [
   },
   {
     name: "update",
-    description: "Update OpenClaw and inspect update channel status",
+    description: "Update AgileClaw and inspect update channel status",
     hasSubcommands: true,
   },
   {

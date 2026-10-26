@@ -683,7 +683,7 @@ export function resolveModelFallbackError(
   if (err instanceof AgentHarnessSessionSupersededError) {
     return { kind: "coordination", error: err };
   }
-  // Prepared-owner publication is an OpenClaw runtime fact, not a provider
+  // Prepared-owner publication is an AgileClaw runtime fact, not a provider
   // failure. Changing models cannot republish the current owner (#156975).
   if (hasPreparedModelRuntimeOwnerNotPublished(err)) {
     return { kind: "coordination", error: err };

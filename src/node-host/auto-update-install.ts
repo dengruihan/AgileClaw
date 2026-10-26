@@ -51,7 +51,7 @@ export async function prepareNodeRuntimeUpdate(params: {
 }): Promise<PreparedNodeRuntimeUpdate> {
   const version = params.targetVersion.trim();
   if (!isExactSemverVersion(version) || /[\\/]/u.test(version)) {
-    throw new Error("Node auto-update requires an exact published OpenClaw version.");
+    throw new Error("Node auto-update requires an exact published AgileClaw version.");
   }
   params.signal?.throwIfAborted();
   const spec = `openclaw@${version}`;

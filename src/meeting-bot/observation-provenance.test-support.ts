@@ -51,7 +51,7 @@ export const TEST_MEETING_PLATFORM_ADAPTER = MeetingPlatformAdapter.create<
     workingResponseLabel: "participant",
     extraSystemPrompt: "",
   },
-  session: { idPrefix: "test", participantIdentity: () => "OpenClaw" },
+  session: { idPrefix: "test", participantIdentity: () => "AgileClaw" },
   urls: {
     validateAndNormalize: (input) => String(input),
     normalizeForReuse: (url) => url,

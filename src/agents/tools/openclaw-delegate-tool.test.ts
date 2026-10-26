@@ -33,7 +33,7 @@ describe("openclaw delegation tool", () => {
       execSession: { permissionMode: "guarded" },
     })[0];
     if (!tool) {
-      throw new Error("expected OpenClaw delegation tool");
+      throw new Error("expected AgileClaw delegation tool");
     }
     expect(tool.description).toContain("Gateway restart");
 
@@ -105,7 +105,7 @@ describe("openclaw delegation tool", () => {
       ...options,
     });
     if (!tool) {
-      throw new Error("expected OpenClaw delegation tool");
+      throw new Error("expected AgileClaw delegation tool");
     }
 
     expect(tool.catalogMode).toBe("direct-only");
@@ -152,7 +152,7 @@ describe("openclaw delegation tool", () => {
       runSessionKey: "agent:main:main",
     })[0];
     if (!tool) {
-      throw new Error("expected OpenClaw delegation tool");
+      throw new Error("expected AgileClaw delegation tool");
     }
 
     await tool.execute("call-1", { message: "First." });

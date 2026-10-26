@@ -131,8 +131,8 @@ describe("applyCliProfileEnv", () => {
         ? `openclaw-gateway-${inheritedProfile}.service`
         : "openclaw-gateway.service",
       OPENCLAW_WINDOWS_TASK_NAME: inheritedProfile
-        ? `OpenClaw Gateway (${inheritedProfile})`
-        : "OpenClaw Gateway",
+        ? `AgileClaw Gateway (${inheritedProfile})`
+        : "AgileClaw Gateway",
       OPENCLAW_SERVICE_MARKER: "openclaw",
       OPENCLAW_SERVICE_KIND: "gateway",
     };
@@ -156,7 +156,7 @@ describe("applyCliProfileEnv", () => {
       OPENCLAW_GATEWAY_PORT: "18789",
       OPENCLAW_LAUNCHD_LABEL: "ai.openclaw.main",
       OPENCLAW_SYSTEMD_UNIT: "openclaw-gateway-main.service",
-      OPENCLAW_WINDOWS_TASK_NAME: "OpenClaw Gateway (main)",
+      OPENCLAW_WINDOWS_TASK_NAME: "AgileClaw Gateway (main)",
       OPENCLAW_SERVICE_MARKER: "openclaw",
       OPENCLAW_SERVICE_KIND: "gateway",
     };
@@ -190,7 +190,7 @@ describe("applyCliProfileEnv", () => {
       OPENCLAW_GATEWAY_PORT: "19999",
       OPENCLAW_LAUNCHD_LABEL: "ai.openclaw.node",
       OPENCLAW_SYSTEMD_UNIT: "openclaw-node.service",
-      OPENCLAW_WINDOWS_TASK_NAME: "OpenClaw Node",
+      OPENCLAW_WINDOWS_TASK_NAME: "AgileClaw Node",
       OPENCLAW_SERVICE_MARKER: "openclaw",
       OPENCLAW_SERVICE_KIND: "node",
     };
@@ -200,7 +200,7 @@ describe("applyCliProfileEnv", () => {
     expect(env.OPENCLAW_GATEWAY_PORT).toBe("19999");
     expect(env.OPENCLAW_LAUNCHD_LABEL).toBe("ai.openclaw.node");
     expect(env.OPENCLAW_SYSTEMD_UNIT).toBe("openclaw-node.service");
-    expect(env.OPENCLAW_WINDOWS_TASK_NAME).toBe("OpenClaw Node");
+    expect(env.OPENCLAW_WINDOWS_TASK_NAME).toBe("AgileClaw Node");
   });
 
   it.each([
@@ -259,7 +259,7 @@ describe("applyCliProfileEnv", () => {
         OPENCLAW_CONFIG_PATH: "/home/peter/.openclaw-main/openclaw.json",
         OPENCLAW_LAUNCHD_LABEL: "ai.openclaw.main",
         OPENCLAW_SYSTEMD_UNIT: systemdUnit,
-        OPENCLAW_WINDOWS_TASK_NAME: "OpenClaw Gateway (main)",
+        OPENCLAW_WINDOWS_TASK_NAME: "AgileClaw Gateway (main)",
       };
 
       applyCliProfileEnv({ profile: "work", env, homedir: () => "/home/peter" });

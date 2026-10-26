@@ -103,7 +103,7 @@ describe("claws inspect extensions", () => {
     expect(runtime.exit).not.toHaveBeenCalled();
   });
 
-  it("rejects a plugin declared by both the portable manifest and OpenClaw profile", async () => {
+  it("rejects a plugin declared by both the portable manifest and AgileClaw profile", async () => {
     const { root, values, runtime } = await createInspectFixture("openclaw", [
       { kind: "plugin", source: "clawhub", ref: "@owner/audit", version: "2.0.1" },
     ]);

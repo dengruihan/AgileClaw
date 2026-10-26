@@ -77,7 +77,7 @@ it.each([
       await expect(handleGatewayStartupMaintenance(refusal)).rejects.toBe(exited);
       const output = runtimeError.mock.calls.flat().join("\n");
       expect(output).toContain(facts);
-      expect(output).toContain("Refused by OpenClaw");
+      expect(output).toContain("Refused by AgileClaw");
       expect(output).toContain("Run a build at least as new as the writer");
       expect(output).toContain("restore your pre-upgrade backup");
       const doctor = new OpenClawDatabaseSchemaPreflightError(

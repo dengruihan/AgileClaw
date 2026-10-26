@@ -1,4 +1,4 @@
-/** Adapts the generic gateway service manager for OpenClaw node-host services. */
+/** Adapts the generic gateway service manager for AgileClaw node-host services. */
 import { resolveNodeServiceIdentityEnvironment } from "./constants.js";
 import type { GatewayService, GatewayServiceInstallArgs } from "./service.js";
 import { resolveGatewayService } from "./service.js";

@@ -312,7 +312,7 @@ describe("status update ledger evidence", () => {
         );
       } else {
         expect(rows[0]?.Value).toContain(
-          "⚠️ OpenClaw update failed: post-update-failed. Gateway did not settle; startup phase: waiting for managed service",
+          "⚠️ AgileClaw update failed: post-update-failed. Gateway did not settle; startup phase: waiting for managed service",
         );
         if (detail) {
           expect(rows[0]?.Value).toContain(detail);
@@ -329,7 +329,7 @@ describe("status update ledger evidence", () => {
     const rows = await buildStatusUpdateRows(null, { localGatewayHealthy: true });
     expect(rows[0]).toEqual({
       Item: "Update run",
-      Value: "⬆️ OpenClaw update in progress: verifying.",
+      Value: "⬆️ AgileClaw update in progress: verifying.",
     });
   });
 

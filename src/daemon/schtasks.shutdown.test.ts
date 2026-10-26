@@ -392,7 +392,7 @@ describe("Scheduled Task shutdown and SQLite handle release", () => {
           ...(exhausted ? { restartRecovery: "sqlite-owner-read" } : {}),
           taskSettlement: {
             status: "settled",
-            taskName: "OpenClaw Gateway",
+            taskName: "AgileClaw Gateway",
             lastRunResult: "0",
             ended: false,
           },
@@ -401,7 +401,7 @@ describe("Scheduled Task shutdown and SQLite handle release", () => {
         if (exhausted) {
           expect(warn).toHaveBeenCalledWith(expect.stringContaining("SQLite"));
         }
-        expect(schtasksCalls).toContainEqual(["/Run", "/TN", "OpenClaw Gateway"]);
+        expect(schtasksCalls).toContainEqual(["/Run", "/TN", "AgileClaw Gateway"]);
       });
     },
   );

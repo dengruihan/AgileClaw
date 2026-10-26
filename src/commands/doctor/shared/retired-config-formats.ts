@@ -178,7 +178,7 @@ export function findRetiredConfigUpgradeRequirement(
   return {
     message: `Config contains retired pre-July-2026 settings: ${retired.join(", ")}. Doctor cannot remove these settings safely.`,
     nextAction:
-      `Install OpenClaw ${bridgeVersion}, run "${formatCliCommand("openclaw doctor --fix")}", then upgrade to latest. ` +
+      `Install AgileClaw ${bridgeVersion}, run "${formatCliCommand("openclaw doctor --fix")}", then upgrade to latest. ` +
       "See https://docs.openclaw.ai/install/updating#upgrading-very-old-versions.",
   };
 }

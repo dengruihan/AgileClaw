@@ -186,7 +186,7 @@ export const TOOL_DISPLAY_CONFIG: ToolDisplayConfig = {
     suggest_task: displayTool("✨", "Suggest Task", ["title", "tldr", "cwd"]),
     dismiss_task: displayTool("🗑️", "Dismiss Task", ["task_id", "reason"]),
     skill_workshop: displayTool("🧰", "Skill Workshop", ["action", "name", "proposal_id"]),
-    openclaw: displayTool("🦀", "OpenClaw", ["action", "path", "model"]),
+    openclaw: displayTool("🦀", "AgileClaw", ["action", "path", "model"]),
     gateway: displayTool("🔌", "Gateway", ["action", "path"]),
     plugins: displayTool("🧩", "Plugins", ["action", "pluginId", "packageName", "query"]),
     exec: displayTool("🛠️", "Exec", ["command"]),

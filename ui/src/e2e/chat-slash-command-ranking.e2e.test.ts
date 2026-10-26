@@ -89,16 +89,16 @@ suite.define(() => {
       await page.getByRole("button", { name: "Send message" }).click();
       const download = await downloadPromise;
 
-      expect(download.suggestedFilename()).toMatch(/^chat-OpenClaw-.+\.md$/);
+      expect(download.suggestedFilename()).toMatch(/^chat-AgileClaw-.+\.md$/);
       const stream = await download.createReadStream();
       if (!stream) {
         throw new Error("chat export did not provide a readable download");
       }
       const markdown = await text(stream);
-      expect(markdown).toContain("# Chat with OpenClaw");
+      expect(markdown).toContain("# Chat with AgileClaw");
       expect(markdown).toContain("## Message");
       expect(markdown).toContain(question);
-      expect(markdown).toContain("## OpenClaw");
+      expect(markdown).toContain("## AgileClaw");
       expect(markdown).toContain(answer);
       expect(await gateway.getRequests("chat.send")).toHaveLength(0);
     });
@@ -126,7 +126,7 @@ suite.define(() => {
           methodResponses: {
             "chat.startup": {
               agentsList: {
-                agents: [{ id: "main", name: "OpenClaw" }],
+                agents: [{ id: "main", name: "AgileClaw" }],
                 defaultId: "main",
                 mainKey: "main",
                 scope: "agent",
@@ -251,7 +251,7 @@ suite.define(() => {
           methodResponses: {
             "chat.startup": {
               agentsList: {
-                agents: [{ id: "main", name: "OpenClaw" }],
+                agents: [{ id: "main", name: "AgileClaw" }],
                 defaultId: "main",
                 mainKey: "main",
                 scope: "agent",

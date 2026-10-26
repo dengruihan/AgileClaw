@@ -1352,7 +1352,7 @@ describe("buildCachedChatItems", () => {
     });
   });
 
-  it("deduplicates relay-labeled assistant copies by OpenClaw metadata before surface ids", () => {
+  it("deduplicates relay-labeled assistant copies by AgileClaw metadata before surface ids", () => {
     const groups = messageGroups({
       messages: [
         assistantMessage([{ type: "text", text: "Parzival Ship it." }], 1, {

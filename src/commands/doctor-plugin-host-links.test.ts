@@ -124,7 +124,7 @@ describe.each(["npm", "clawhub", "archive"] as const)("registered %s host links"
 
       expect(fs.lstatSync(staleHostDir).isSymbolicLink()).toBe(true);
       expect(fs.realpathSync(staleHostDir)).toBe(fs.realpathSync(process.cwd()));
-      expect(vi.mocked(note).mock.calls.join("\n")).toContain("OpenClaw host peer link");
+      expect(vi.mocked(note).mock.calls.join("\n")).toContain("AgileClaw host peer link");
     },
   );
 

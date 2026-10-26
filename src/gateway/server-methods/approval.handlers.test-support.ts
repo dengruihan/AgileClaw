@@ -127,7 +127,7 @@ export async function registerSystemAgent(
 ) {
   const record = manager.create(
     {
-      title: "OpenClaw change",
+      title: "AgileClaw change",
       description: "Set gateway.port to 19001",
       command: "Set gateway.port to 19001",
       proposalHash: "a".repeat(64),

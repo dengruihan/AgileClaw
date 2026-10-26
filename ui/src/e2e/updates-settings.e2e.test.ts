@@ -486,7 +486,7 @@ suite.define(() => {
           finishedAtMs: 500,
         });
         const body =
-          "# OpenClaw update failure report\n\nFailed phase: build\nNo private logs are included.";
+          "# AgileClaw update failure report\n\nFailed phase: build\nNo private logs are included.";
         const title = "Update failure: build-failed";
         const fallbackUrl = `https://github.com/openclaw/openclaw/issues/new?${new URLSearchParams({ body, title })}`;
         const config = { update: { auto: { enabled: false }, channel: "stable" } };

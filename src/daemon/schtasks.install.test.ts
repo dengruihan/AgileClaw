@@ -128,11 +128,11 @@ describe("installScheduledTask", () => {
     });
   }
 
-  function expectInitialTaskQuery(taskName = "OpenClaw Gateway"): void {
+  function expectInitialTaskQuery(taskName = "AgileClaw Gateway"): void {
     expect(schtasksCalls[0]).toEqual(["/Query", "/TN", taskName, "/XML"]);
   }
 
-  function expectTaskRunCall(index: number, taskName = "OpenClaw Gateway"): void {
+  function expectTaskRunCall(index: number, taskName = "AgileClaw Gateway"): void {
     expect(schtasksCalls[index]).toEqual(["/Run", "/TN", taskName]);
   }
 
@@ -171,13 +171,13 @@ describe("installScheduledTask", () => {
         "!token!",
       ],
       workingDirectory: "C:\\temp\\poc&calc",
-      description: "OpenClaw fixture",
+      description: "AgileClaw fixture",
       environment: {
         OC_INJECT: "safe & whoami | calc",
         OC_CARET: "a^b",
         OC_PERCENT: "%TEMP%",
         OC_BANG: "!token!",
-        OC_SOURCE_PATH: "C:\\OpenClaw source & ^ %USERPROFILE%!",
+        OC_SOURCE_PATH: "C:\\AgileClaw source & ^ %USERPROFILE%!",
         OC_QUOTE: 'he said "hi"',
         OC_EMPTY: "",
         PATH: "C:\\Windows\\System32",
@@ -194,13 +194,13 @@ describe("installScheduledTask", () => {
     expect(script).toContain('set "OC_CARET=a^^b"');
     expect(script).toContain('set "OC_PERCENT=%%TEMP%%"');
     expect(script).toContain('set "OC_BANG=^!token^!"');
-    expect(script).toContain('set "OC_SOURCE_PATH=C:\\OpenClaw source & ^^ %%USERPROFILE%%^!"');
+    expect(script).toContain('set "OC_SOURCE_PATH=C:\\AgileClaw source & ^^ %%USERPROFILE%%^!"');
     expect(script).toContain('set "OC_QUOTE=he said ^"hi^""');
     expect(script).not.toContain('set "OC_EMPTY=');
     expect(script).toContain('set "NODE_OPTIONS="');
     expect(script).not.toContain("set OC_INJECT=");
     expect(script).not.toContain('set "PATH=');
-    expect(script).toContain("rem OpenClaw fixture");
+    expect(script).toContain("rem AgileClaw fixture");
 
     const parsed = await readScheduledTaskCommand(env);
     expect(parsed).toStrictEqual({
@@ -220,7 +220,7 @@ describe("installScheduledTask", () => {
         OC_CARET: "a^b",
         OC_PERCENT: "%TEMP%",
         OC_BANG: "!token!",
-        OC_SOURCE_PATH: "C:\\OpenClaw source & ^ %USERPROFILE%!",
+        OC_SOURCE_PATH: "C:\\AgileClaw source & ^ %USERPROFILE%!",
         OC_QUOTE: 'he said "hi"',
         NODE_OPTIONS: "",
       },
@@ -236,17 +236,17 @@ describe("installScheduledTask", () => {
       sourcePath: scriptPath,
     });
 
-    expect(schtasksCalls[0]).toEqual(["/Query", "/TN", "OpenClaw Gateway", "/XML"]);
+    expect(schtasksCalls[0]).toEqual(["/Query", "/TN", "AgileClaw Gateway", "/XML"]);
     expect(schtasksCalls[1]?.[0]).toBe("/Change");
     // Battery-flag XML re-apply runs between /Change and /Run on upgrades.
     expect(schtasksCalls[2]?.slice(0, 5)).toEqual([
       "/Create",
       "/F",
       "/TN",
-      "OpenClaw Gateway",
+      "AgileClaw Gateway",
       "/XML",
     ]);
-    expect(schtasksCalls[4]).toEqual(["/Run", "/TN", "OpenClaw Gateway"]);
+    expect(schtasksCalls[4]).toEqual(["/Run", "/TN", "AgileClaw Gateway"]);
   });
 
   it("rejects line breaks in command arguments, env vars, and descriptions", async ({
@@ -301,7 +301,7 @@ describe("installScheduledTask", () => {
     expect(schtasksCalls[1]).toEqual([
       "/Change",
       "/TN",
-      "OpenClaw Gateway",
+      "AgileClaw Gateway",
       "/TR",
       expect.stringContaining("gateway.vbs"),
     ]);
@@ -312,7 +312,7 @@ describe("installScheduledTask", () => {
       "/Create",
       "/F",
       "/TN",
-      "OpenClaw Gateway",
+      "AgileClaw Gateway",
       "/XML",
     ]);
     expect(schtasksCalls[2]).not.toContain("/RU");
@@ -350,7 +350,7 @@ describe("installScheduledTask", () => {
       HOME: env.USERPROFILE,
       USERDOMAIN: "WORKSTATION",
       USERNAME: "alice",
-      OPENCLAW_WINDOWS_TASK_NAME: "OpenClaw Custom Gateway",
+      OPENCLAW_WINDOWS_TASK_NAME: "AgileClaw Custom Gateway",
     };
     const gatewayEnv = buildServiceEnvironment({
       env: callerEnv,
@@ -360,7 +360,7 @@ describe("installScheduledTask", () => {
 
     expect(callerEnv.OPENCLAW_WINDOWS_TASK_HIDDEN_LAUNCHER).toBeUndefined();
     expect(gatewayEnv.OPENCLAW_WINDOWS_TASK_HIDDEN_LAUNCHER).toBe("1");
-    expect(gatewayEnv.OPENCLAW_WINDOWS_TASK_NAME).toBe("OpenClaw Gateway");
+    expect(gatewayEnv.OPENCLAW_WINDOWS_TASK_NAME).toBe("AgileClaw Gateway");
 
     const { scriptPath } = await installScheduledTask({
       env: callerEnv,
@@ -380,7 +380,7 @@ describe("installScheduledTask", () => {
       "/Create",
       "/F",
       "/TN",
-      "OpenClaw Custom Gateway",
+      "AgileClaw Custom Gateway",
       "/XML",
     ]);
     expect(schtasksCalls[1]).not.toContain("/RU");
@@ -393,14 +393,14 @@ describe("installScheduledTask", () => {
     await expect(readScheduledTaskCommand(callerEnv)).resolves.toMatchObject({
       programArguments: ["node", "gateway.js"],
     });
-    expect(script).toContain('set "OPENCLAW_WINDOWS_TASK_NAME=OpenClaw Custom Gateway"');
+    expect(script).toContain('set "OPENCLAW_WINDOWS_TASK_NAME=AgileClaw Custom Gateway"');
     expect(script).not.toContain('set "OPENCLAW_WINDOWS_TASK_HIDDEN_LAUNCHER=');
     expect(launcher).toContain(
       'shell.Environment("Process")("OPENCLAW_WINDOWS_TASK_HIDDEN_LAUNCHER") = "wscript"',
     );
     expect(launcher).toContain("WScript.Shell");
     expect(launcher).toContain(`WScript.Quit shell.Run("""${scriptPath}""", 0, True)`);
-    expectTaskRunCall(3, "OpenClaw Custom Gateway");
+    expectTaskRunCall(3, "AgileClaw Custom Gateway");
   });
 
   it("removes a generated hidden launcher when the caller env lacks its marker", async ({
@@ -459,7 +459,13 @@ describe("installScheduledTask", () => {
       expectInitialTaskQuery();
       expect(schtasksCalls.map((call) => call[0])).toEqual(commands);
       const createCall = schtasksCalls[xmlIndex];
-      expect(createCall?.slice(0, 5)).toEqual(["/Create", "/F", "/TN", "OpenClaw Gateway", "/XML"]);
+      expect(createCall?.slice(0, 5)).toEqual([
+        "/Create",
+        "/F",
+        "/TN",
+        "AgileClaw Gateway",
+        "/XML",
+      ]);
       expect(createCall).not.toContain("/RU");
       expect(createCall).not.toContain("/NP");
       expectTaskRunCall(xmlIndex + 2);

@@ -186,7 +186,7 @@ describe("candidate service capability startup", () => {
         expect(JSON.parse(locked.stdout)).toEqual(JSON.parse(result.stdout));
         const version = await fixture.run(["--version"]);
         expect(version.code, version.stderr).toBe(0);
-        expect(version.stdout).toMatch(/^OpenClaw /u);
+        expect(version.stdout).toMatch(/^AgileClaw /u);
         expect(fixture.probeOperations()).toEqual(["ready", "ready", "ready"]);
         expect(snapshotState(fixture.stateDir)).toEqual(before);
         const database = new DatabaseSync(fixture.databasePath, { readOnly: true });
@@ -215,7 +215,7 @@ describe("candidate service capability startup", () => {
         error: {
           type: "cli_error",
           message: expect.stringContaining(
-            `OpenClaw state database is busy at ${fixture.databasePath}.`,
+            `AgileClaw state database is busy at ${fixture.databasePath}.`,
           ),
         },
       });

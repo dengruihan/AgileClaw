@@ -49,9 +49,9 @@ async function readChatHistory(params: AugmentCliHistoryParams) {
 }
 
 const CLAUDE_RESUME_DRIFT_NOTES = [
-  "OpenClaw resumed this CLI session after prompt content changed. Follow the current turn's instructions; changed=system-prompt.",
-  "OpenClaw resumed this CLI session after prompt content changed. Follow the current turn's instructions; changed=prompt-tools.",
-  "OpenClaw resumed this CLI session after prompt content changed. Follow the current turn's instructions; changed=system-prompt,prompt-tools.",
+  "AgileClaw resumed this CLI session after prompt content changed. Follow the current turn's instructions; changed=system-prompt.",
+  "AgileClaw resumed this CLI session after prompt content changed. Follow the current turn's instructions; changed=prompt-tools.",
+  "AgileClaw resumed this CLI session after prompt content changed. Follow the current turn's instructions; changed=system-prompt,prompt-tools.",
 ] as const;
 
 function expectFields(value: unknown, expected: Record<string, unknown>): void {

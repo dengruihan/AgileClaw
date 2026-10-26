@@ -53,7 +53,7 @@ describe("retired sandbox registry files", () => {
       fs.writeFileSync(contentPath, bytes);
 
       await maybeRepairSandboxRegistryFiles({ shouldRepair: false });
-      expect(note).toHaveBeenCalledWith(expect.stringContaining("OpenClaw 2026.9.7"), "Sandbox");
+      expect(note).toHaveBeenCalledWith(expect.stringContaining("AgileClaw 2026.9.7"), "Sandbox");
       const issues = await detectLegacySandboxRegistryFileIssues();
       expect(issues).toHaveLength(1);
       const finding = legacySandboxRegistryInspectionToHealthFinding(issues[0]!);
@@ -80,7 +80,7 @@ describe("retired sandbox registry files", () => {
     fs.symlinkSync(target, source);
 
     await expect(maybeRepairSandboxRegistryFiles({ shouldRepair: true })).rejects.toThrow(
-      /retired files.*containers\.json.*OpenClaw 2026\.9\.7/,
+      /retired files.*containers\.json.*AgileClaw 2026\.9\.7/,
     );
     expect(fs.readlinkSync(source)).toBe(target);
   });

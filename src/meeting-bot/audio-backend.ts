@@ -20,7 +20,7 @@ export type MeetingAudioCommandResult = {
 const PIPEWIRE_SINK_NAME = "openclaw_meeting_audio";
 const PIPEWIRE_MONITOR_NAME = `${PIPEWIRE_SINK_NAME}.monitor`;
 const PIPEWIRE_SOURCE_NAME = PIPEWIRE_SINK_NAME;
-const PIPEWIRE_MEETING_AUDIO_DEVICE_LABEL = "OpenClaw Meeting Audio";
+const PIPEWIRE_MEETING_AUDIO_DEVICE_LABEL = "AgileClaw Meeting Audio";
 const BLACKHOLE_MEETING_AUDIO_DEVICE_LABEL = "BlackHole 2ch";
 
 function resolveMeetingAudioBackend(
@@ -156,7 +156,7 @@ export async function ensureMeetingAudioBackend(params: {
     if (loaded.code !== 0) {
       const refreshed = await params.run(["pactl", "list", "short", `${kind}s`], params.timeoutMs);
       if (!pulseListContains(refreshed.stdout ?? "", name)) {
-        assertCommandSucceeded(loaded, `Could not create the OpenClaw PipeWire-Pulse ${kind}`);
+        assertCommandSucceeded(loaded, `Could not create the AgileClaw PipeWire-Pulse ${kind}`);
       }
     }
   };
@@ -184,6 +184,6 @@ export async function ensureMeetingAudioBackend(params: {
     !pulseListContains(sinks.stdout ?? "", PIPEWIRE_SINK_NAME) ||
     !pulseListContains(sources.stdout ?? "", PIPEWIRE_SOURCE_NAME)
   ) {
-    throw new Error("OpenClaw PipeWire-Pulse sink or monitor source was not created.");
+    throw new Error("AgileClaw PipeWire-Pulse sink or monitor source was not created.");
   }
 }

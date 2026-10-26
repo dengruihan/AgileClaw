@@ -1,5 +1,5 @@
 // Whimsical long-wait status word ("Clawing…") for the chat working row.
-// Silent for the first stretch of a run, then rotates through crab-themed
+// Silent for the first stretch of a run, then rotates through mascot-themed
 // gerunds so long quiet runs feel alive without claiming progress data the
 // UI does not have. Decorative only — the row keeps its sr-only "Working…".
 import { html, nothing, type PropertyValues } from "lit";
@@ -24,7 +24,7 @@ const PHRASE_KEYS = [
   "nautiling",
   "krilling",
   "barnacling",
-  "lobstering",
+  "polishing",
   "tidepooling",
   "pearling",
   "snapping",

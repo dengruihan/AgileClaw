@@ -11,7 +11,7 @@ it("renders the external-link preference off by default and applies a personal c
   const row = Array.from(container.querySelectorAll<HTMLElement>(".settings-row")).find(
     (candidate) =>
       candidate.querySelector(".settings-row__title")?.textContent?.trim() ===
-      "Open links outside OpenClaw",
+      "Open links outside AgileClaw",
   );
   const toggle = row?.querySelector<HTMLElement & { checked: boolean }>("wa-switch");
   expect(toggle?.checked).toBe(false);

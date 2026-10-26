@@ -284,7 +284,7 @@ describe("direct CLI command continuity", () => {
       );
       expect(first.params.transcriptPrompt).toBe("first ask");
       expect(second.params.prompt).toContain(
-        "OpenClaw delivers your final response automatically.",
+        "AgileClaw delivers your final response automatically.",
       );
       expect(second.params.prompt).not.toContain(
         "Visible source replies are not automatically delivered for this run.",

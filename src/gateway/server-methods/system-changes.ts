@@ -161,7 +161,7 @@ function configWriteSummary(
         : source === "plugin-install"
           ? "Plugin installation updated configuration"
           : source === "system-agent"
-            ? "OpenClaw updated configuration"
+            ? "AgileClaw updated configuration"
             : source === "cli"
               ? "CLI updated configuration"
               : "Configuration updated";
@@ -200,7 +200,7 @@ function toConfigCandidate(
         at: parseDateStringTimestampMs(value.ts) ?? record.createdAt,
         kind: "external-edit",
         source: "external",
-        summary: summarizePaths("Configuration edited outside OpenClaw", changedPaths),
+        summary: summarizePaths("Configuration edited outside AgileClaw", changedPaths),
         ...(changedPaths ? { changedPaths } : {}),
         ...(!value.valid ? { invalid: true } : {}),
         ...(value.opaqueChange ? { opaqueChange: true } : {}),

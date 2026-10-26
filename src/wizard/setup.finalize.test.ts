@@ -514,7 +514,7 @@ describe("finalizeSetupWizard", () => {
     expect(stop).toHaveBeenCalledOnce();
     expectNoteContains(prompter, "Web UI: http://127.0.0.1:18789", "Control UI");
     expect(prompter.outro).toHaveBeenCalledWith(
-      "Onboarding complete. Use the dashboard link above to control OpenClaw.",
+      "Onboarding complete. Use the dashboard link above to control AgileClaw.",
     );
     expect(runTui).toHaveBeenCalledOnce();
     expect(vi.mocked(prompter.outro).mock.invocationCallOrder[0]).toBeLessThan(
@@ -542,7 +542,7 @@ describe("finalizeSetupWizard", () => {
     expectNoteNotContains(prompter, "Web UI:");
     expectNoteNotContains(prompter, gatewayToken);
     expect(prompter.outro).toHaveBeenCalledWith(
-      "OpenClaw is ready. When you're ready: openclaw dashboard",
+      "AgileClaw is ready. When you're ready: openclaw dashboard",
     );
     expect(runTui).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -573,7 +573,7 @@ describe("finalizeSetupWizard", () => {
     expect(resolveControlUiHandoffTarget).not.toHaveBeenCalled();
     expect(waitForControlUiDocument).not.toHaveBeenCalled();
     expectNoteNotContains(prompter, "Web UI:");
-    expect(prompter.outro).toHaveBeenCalledWith("OpenClaw is ready.");
+    expect(prompter.outro).toHaveBeenCalledWith("AgileClaw is ready.");
   });
 
   it("probes the canonical loopback dashboard for custom TLS Gateway paths", async () => {
@@ -1112,7 +1112,7 @@ describe("finalizeSetupWizard", () => {
         expectNoteNotContains(prompter, "openclaw gateway run");
         expectNoteNotContains(prompter, "openclaw onboard --install-daemon");
         expect(prompter.outro).toHaveBeenCalledWith(
-          "Gateway not detected yet. OpenClaw gateway lifecycle is managed by an external " +
+          "Gateway not detected yet. AgileClaw gateway lifecycle is managed by an external " +
             "supervisor (OPENCLAW_SUPERVISOR_MODE=external). Use that supervisor to start the " +
             "gateway.",
         );

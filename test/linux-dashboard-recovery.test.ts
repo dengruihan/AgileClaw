@@ -106,7 +106,7 @@ async function mountDashboard(search: string, openReleasePage = () => Promise.re
 test("missing CLI mode offers installation without retrying bootstrap", async () => {
   const { element, invoked } = await mountDashboard("?mode=missingCli");
 
-  assert.equal(element("#title").textContent, "OpenClaw needs the CLI");
+  assert.equal(element("#title").textContent, "AgileClaw needs the CLI");
   assert.equal(element("#install-controls").classList.contains("hidden"), false);
   assert.equal(invoked.includes("bootstrap"), false);
 });
@@ -400,7 +400,7 @@ test.each(
       } else {
         assert.equal(
           description,
-          "Most people choose this computer. OpenClaw installs everything and keeps your assistant running in the background.",
+          "Most people choose this computer. AgileClaw installs everything and keeps your assistant running in the background.",
         );
         assert.equal(subtitle, "Private to this computer. Installs and starts automatically.");
       }
@@ -410,7 +410,7 @@ test.each(
         elements.get("#install-hint")?.textContent,
         externalService
           ? "Installs the CLI in ~/.openclaw using your system Node.js and npm."
-          : "Installs OpenClaw and its managed runtime in ~/.openclaw.",
+          : "Installs AgileClaw and its managed runtime in ~/.openclaw.",
       );
       if (phase === "unconfigured") {
         assert.deepEqual(
@@ -436,7 +436,7 @@ test.each(
         await actions.install();
       }
       if (phase === "missingCli") {
-        assert.equal(elements.get("#title")?.textContent, "OpenClaw needs attention");
+        assert.equal(elements.get("#title")?.textContent, "AgileClaw needs attention");
         assert.equal(elements.get("#description")?.textContent, installFailure);
         assert.equal(elements.get("#log-status")?.textContent, "FAILED");
         assert.equal(elements.get("#install-controls")?.classList.contains("hidden"), false);

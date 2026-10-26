@@ -98,7 +98,7 @@ export async function runInstalledLifecycle(
   samePath(path.dirname(proofPath), cellEvidence(inputPath, key));
   await fs.mkdir(path.dirname(proofPath), { recursive: true });
   const admissions: Array<Record<string, unknown>> = [];
-  const defaultBefore = await owners.readTaskDefinitionSnapshot("OpenClaw Gateway");
+  const defaultBefore = await owners.readTaskDefinitionSnapshot("AgileClaw Gateway");
   const admissionPath = path.join(path.dirname(proofPath), "installed-cleanup.json");
   const rootDir = path.join(input.stateRoot, key);
   await fs.mkdir(rootDir);
@@ -670,7 +670,7 @@ export async function runInstalledLifecycle(
     assert.equal(remaining.ok, true);
     assert.equal(remaining.truncated, false);
     assert.deepEqual(remaining.processes, []);
-    assert.deepEqual(await owners.readTaskDefinitionSnapshot("OpenClaw Gateway"), defaultBefore);
+    assert.deepEqual(await owners.readTaskDefinitionSnapshot("AgileClaw Gateway"), defaultBefore);
     await recordCapacityBoundary(inputPath, input, key, "after-native-cleanup");
   } catch (error) {
     cellFailure = new AggregateError(

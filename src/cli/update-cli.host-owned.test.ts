@@ -29,8 +29,8 @@ it.each([
     const installOwner = {
       schemaVersion: 1,
       owner: "macos-app",
-      displayName: "OpenClaw.app",
-      updateHint: "Update OpenClaw.app to update this Gateway.",
+      displayName: "AgileClaw.app",
+      updateHint: "Update AgileClaw.app to update this Gateway.",
     };
     await fs.writeFile(
       path.join(root, "openclaw-install-owner.json"),
@@ -54,7 +54,7 @@ it.each([
       reason: "host-owned-install",
       installKind: "host",
       installOwner,
-      message: "Managed by OpenClaw.app. Update OpenClaw.app to update this Gateway.",
+      message: "Managed by AgileClaw.app. Update AgileClaw.app to update this Gateway.",
       steps: [],
     });
     expect(subprocess).not.toHaveBeenCalled();

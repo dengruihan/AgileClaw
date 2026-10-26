@@ -236,7 +236,7 @@ async function observeScenario(scenario: Scenario, json: boolean) {
       expect(output.endsWith(`\n${guidance}`)).toBe(true);
       message = output.slice(0, -guidance.length - 1);
     }
-    expect(message.startsWith("OpenClaw requires working inference: ")).toBe(true);
+    expect(message.startsWith("AgileClaw requires working inference: ")).toBe(true);
     expect(message).not.toContain(syntheticToken);
     expect(message).not.toContain(syntheticStructuredValue);
     expect(message).not.toContain(syntheticCustomValue);

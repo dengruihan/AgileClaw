@@ -17,7 +17,7 @@ it.each(["omitted", "disabled-task", "disabled-trigger", "native-defaults", "mis
   async (kind) => {
     const f = await fixture("win32");
     const xml = buildScheduledTaskXml({
-      taskDescription: "OpenClaw Gateway",
+      taskDescription: "AgileClaw Gateway",
       taskUser: kind === "missing-trigger" ? null : "operator",
       launchPath: f.sourcePath,
     });

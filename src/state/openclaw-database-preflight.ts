@@ -234,7 +234,7 @@ export async function preflightOpenClawStateDatabasePath(
     foundVersion = readSqliteUserVersion(database);
     if (!Number.isSafeInteger(foundVersion) || foundVersion < 0) {
       throw new Error(
-        `OpenClaw state database ${resolvedPath} has invalid schema version metadata.`,
+        `AgileClaw state database ${resolvedPath} has invalid schema version metadata.`,
       );
     }
     contentVersion =
@@ -402,7 +402,7 @@ export async function preflightOpenClawDatabaseSchemas(
           );
           if (blockingIssues.length > 0) {
             throw new SqliteSchemaMismatchError(
-              `OpenClaw state database ${statePath} requires repair: ${blockingIssues.map((issue) => issue.message).join("; ")}; run openclaw doctor --fix.`,
+              `AgileClaw state database ${statePath} requires repair: ${blockingIssues.map((issue) => issue.message).join("; ")}; run openclaw doctor --fix.`,
             );
           }
         } else {

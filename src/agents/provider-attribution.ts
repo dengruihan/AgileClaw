@@ -147,7 +147,7 @@ function readCompatBoolean(
   return asBoolean((compat as Record<string, unknown>)[key]);
 }
 
-const OPENCLAW_ATTRIBUTION_PRODUCT = "OpenClaw";
+const OPENCLAW_ATTRIBUTION_PRODUCT = "AgileClaw";
 const OPENCLAW_ATTRIBUTION_ORIGINATOR = "openclaw";
 // OpenRouter honors at most two recognized categories per request and silently drops the rest.
 const OPENROUTER_ATTRIBUTION_CATEGORIES = "personal-agent,cli-agent";
@@ -431,7 +431,7 @@ export function resolveProviderRequestPolicy(
     endpointClass === "opencode-go-native"
   ) {
     // The documented identification contract belongs to Go's native endpoint.
-    // A custom baseUrl is a proxy and must not inherit OpenClaw attribution.
+    // A custom baseUrl is a proxy and must not inherit AgileClaw attribution.
     attributionProvider = "opencode-go";
   }
   // OpenRouter and Vercel AI Gateway attribution follows the endpoint, so custom provider

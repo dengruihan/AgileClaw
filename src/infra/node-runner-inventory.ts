@@ -22,7 +22,7 @@ export const NODE_WORKER_HOST_DISABLED_REASON_MAX_LENGTH = 1_024;
 // Couples the lease owner with foreground tree ownership; neither rolls out alone.
 export const NODE_WORKER_WORKSPACE_QUIESCENCE_VERSION = 1;
 
-// Supervisors predating launchToolNames admit this closed vocabulary: OpenClaw 2026.9.6
+// Supervisors predating launchToolNames admit this closed vocabulary: AgileClaw 2026.9.6
 // is the only published release that passes the worker-turn launch gate. Retire with the next dialect.
 const LEGACY_NODE_WORKER_LAUNCH_TOOL_NAMES = Object.freeze([
   "read",

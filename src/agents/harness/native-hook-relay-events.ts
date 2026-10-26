@@ -199,7 +199,7 @@ async function runNativeHookRelayPreToolUse(
   ) {
     // Native execution must not retain custody of rewritten inputs it will not use.
     return codexNativeHookRelayResponseCodec.renderPreToolUseBlockResponse(
-      "OpenClaw tool policy rewrote Codex app-server approval params; refusing original request.",
+      "AgileClaw tool policy rewrote Codex app-server approval params; refusing original request.",
     );
   }
   try {

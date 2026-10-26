@@ -60,7 +60,7 @@ export function startNodeHostAutoUpdate(params: {
     const snapshot = await configIO.readConfigFileSnapshot();
     signal.throwIfAborted();
     if (!snapshot.valid) {
-      throw new Error("Node auto-update deferred: fix the invalid OpenClaw configuration first.");
+      throw new Error("Node auto-update deferred: fix the invalid AgileClaw configuration first.");
     }
     const channel = resolveEffectiveUpdateChannel({
       configChannel: snapshot.config.update?.channel,

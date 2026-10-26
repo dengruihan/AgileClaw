@@ -19,12 +19,12 @@ type PluginCommandSessionTarget = {
 export type PluginCommandDiagnosticsSession = {
   /** Stable host session key when available. */
   sessionKey?: string;
-  /** Ephemeral OpenClaw session id when available. */
+  /** Ephemeral AgileClaw session id when available. */
   sessionId?: string;
   /** Canonical SQLite identity for active transcript access. */
   sessionTarget?: PluginCommandSessionTarget;
   /**
-   * Deprecated transcript locator for this OpenClaw session when available.
+   * Deprecated transcript locator for this AgileClaw session when available.
    *
    * SQLite-backed sessions use a `sqlite:<agentId>:<sessionId>:<storePath>`
    * marker, not a filesystem path. Use session id/key plus transcript-runtime
@@ -71,7 +71,7 @@ export type PluginCommandContext = {
   /** Canonical SQLite identity for active transcript access. */
   sessionTarget?: PluginCommandSessionTarget;
   /**
-   * Deprecated transcript locator for the active OpenClaw session when available.
+   * Deprecated transcript locator for the active AgileClaw session when available.
    *
    * SQLite-backed sessions use a `sqlite:<agentId>:<sessionId>:<storePath>`
    * marker, not a filesystem path. Use session id/key plus transcript-runtime
@@ -84,7 +84,7 @@ export type PluginCommandContext = {
   args?: string;
   /** The full normalized command body */
   commandBody: string;
-  /** Current OpenClaw configuration */
+  /** Current AgileClaw configuration */
   config: OpenClawConfig;
   /** Raw "From" value (channel-scoped id) */
   from?: string;

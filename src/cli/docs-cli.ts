@@ -8,7 +8,7 @@ import { parseStrictPositiveIntOption } from "./program/helpers.js";
 export function registerDocsCli(program: Command) {
   program
     .command("docs")
-    .description("Search the live OpenClaw docs")
+    .description("Search the live AgileClaw docs")
     .argument("[query...]", "Search query")
     .option("--json", "Output JSON", false)
     .option("--limit <count>", "Maximum results to return", (value: string) =>

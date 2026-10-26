@@ -407,7 +407,7 @@ export async function withSystemdDefinitionMutation<T>(
           await options?.definitionTransaction?.filePrepared(file, temporary);
         }
         await refresh(true);
-        // Locks coordinate OpenClaw writers, not external editors: POSIX rename
+        // Locks coordinate AgileClaw writers, not external editors: POSIX rename
         // has no expected-inode check. Quiesce administrative edits during installation.
         assertGatewayServiceUpdateCurrent();
         options?.definitionTransaction?.assertCurrent();

@@ -195,7 +195,7 @@ describe("retained plugin state checks", () => {
         .filter(doctor.isTrustedForDurableStores);
       const check = migrationResources.assertPluginStateRetention(records, params);
       if (refuses) {
-        await expect(check).rejects.toThrow("Install OpenClaw 2026.9.7");
+        await expect(check).rejects.toThrow("Install AgileClaw 2026.9.7");
       } else {
         await expect(check).resolves.toBeUndefined();
       }

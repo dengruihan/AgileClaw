@@ -20,7 +20,7 @@ const historyMessages = [
   {
     role: "assistant",
     content:
-      "Start with the [Field guide](https://example.com/field-guide) for a practical introduction.\n\nExplore the [OpenClaw repository](https://github.com/openclaw/openclaw). The [project update](https://github.com/openclaw/openclaw/pull/42) has the implementation details.\n\nYou can also read the [reference notes](https://example.org/notes).",
+      "Start with the [Field guide](https://example.com/field-guide) for a practical introduction.\n\nExplore the [AgileClaw repository](https://github.com/openclaw/openclaw). The [project update](https://github.com/openclaw/openclaw/pull/42) has the implementation details.\n\nYou can also read the [reference notes](https://example.org/notes).",
     timestamp: 2000,
   },
 ];
@@ -42,7 +42,7 @@ function socialImage() {
   }
 }
 const preview = {
-  title: "OpenClaw field guide",
+  title: "AgileClaw field guide",
   description:
     "A practical introduction to your personal assistant. Explore the guide, follow the examples, and make it your own.",
   imageDataUrl: socialImage(),
@@ -153,7 +153,7 @@ suite.define(() => {
           ),
         ).toBe(false);
         expect(await link.evaluate((element) => element === document.activeElement)).toBe(true);
-        const repository = page.getByRole("link", { name: "OpenClaw repository", exact: true });
+        const repository = page.getByRole("link", { name: "AgileClaw repository", exact: true });
         await repository.hover();
         await card.getByText(preview.title, { exact: true }).waitFor();
         await card

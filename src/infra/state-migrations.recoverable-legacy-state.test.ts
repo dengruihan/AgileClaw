@@ -174,7 +174,7 @@ describe("recoverable legacy state", () => {
             "Doctor stopped because a state migration refused",
           );
           expect(warnings).toContain(
-            `Discord retired model preferences and thread bindings uses a retired pre-July 2026 format: ${retiredPath}. Install OpenClaw 2026.9.5. Run openclaw doctor --fix before upgrading to latest. Retired files were left untouched.`,
+            `Discord retired model preferences and thread bindings uses a retired pre-July 2026 format: ${retiredPath}. Install AgileClaw 2026.9.5. Run openclaw doctor --fix before upgrading to latest. Retired files were left untouched.`,
           );
           await expect(fs.readFile(retiredPath, "utf8")).resolves.toBe("{}");
         } else {

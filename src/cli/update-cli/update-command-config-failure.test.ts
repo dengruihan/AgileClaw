@@ -43,7 +43,7 @@ describe("update config failure guidance", () => {
           "configuration contains retired fields that current Doctor cannot migrate",
         );
         expect(failure.nextAction).toMatch(
-          /Install OpenClaw 2026\.9\.5[\s\S]*openclaw doctor --fix/,
+          /Install AgileClaw 2026\.9\.5[\s\S]*openclaw doctor --fix/,
         );
         expect(failure.nextAction).not.toContain("consolidate");
       } else if (manual) {

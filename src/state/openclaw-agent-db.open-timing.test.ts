@@ -129,7 +129,7 @@ describe("agent database open timings", () => {
     const { options, pathname, advance } = createTimedOpen(690);
     const database = openOpenClawAgentDatabase(options);
     expect(database.db.isOpen).toBe(true);
-    expect(logger.warn).toHaveBeenCalledExactlyOnceWith("slow OpenClaw agent database open", {
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith("slow AgileClaw agent database open", {
       agentId: options.agentId,
       elapsedMs: 1_000,
       path: pathname,
@@ -190,7 +190,7 @@ describe("agent database open timings", () => {
     );
     expect(logger.warn).toHaveBeenNthCalledWith(
       2,
-      "slow OpenClaw agent database open",
+      "slow AgileClaw agent database open",
       expect.objectContaining({
         elapsedMs: 1_150,
         integrityGateOutcome: "cached",
@@ -229,7 +229,7 @@ describe("agent database open timings", () => {
 
     expect(isOpen).toBe(true);
     expect(admissions).toBe(2);
-    expect(logger.warn).toHaveBeenCalledExactlyOnceWith("slow OpenClaw agent database open", {
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith("slow AgileClaw agent database open", {
       agentId: options.agentId,
       elapsedMs: 1_430,
       path: pathname,
@@ -306,7 +306,7 @@ describe("agent database open timings", () => {
       expect(databases).toHaveLength(2);
       expect(databases[1]).toBe(databases[0]);
       expect(databases[0]?.db.isOpen).toBe(true);
-      expect(logger.warn).toHaveBeenCalledExactlyOnceWith("slow OpenClaw agent database open", {
+      expect(logger.warn).toHaveBeenCalledExactlyOnceWith("slow AgileClaw agent database open", {
         agentId: options.agentId,
         elapsedMs: 1_310,
         path: pathname,

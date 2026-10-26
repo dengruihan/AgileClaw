@@ -7,7 +7,7 @@ import { renderStreamGroupParts } from "./chat-message-stream.ts";
 import { renderSidebarPanel } from "./chat-sidebar-content.ts";
 
 const text =
-  "Original ClawSweeper PR **#1558 merged**; Follow-up ClawSweeper PR **#1576 opened**; OpenClaw PR #1576.";
+  "Original ClawSweeper PR **#1558 merged**; Follow-up ClawSweeper PR **#1576 opened**; AgileClaw PR #1576.";
 const context: MarkdownRenderOptions = {
   githubRepo: { owner: "openclaw", repo: "openclaw" },
   githubRepositories: [{ owner: "openclaw", repo: "clawsweeper", aliases: ["ClawSweeper"] }],

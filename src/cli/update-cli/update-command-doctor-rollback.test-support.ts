@@ -45,7 +45,7 @@ async function createGitRollbackFixture(base: string) {
   const root = path.join(base, "checkout");
   await fs.mkdir(remote);
   await runFixtureGit(remote, "init", "--initial-branch=main");
-  await runFixtureGit(remote, "config", "user.name", "OpenClaw Test");
+  await runFixtureGit(remote, "config", "user.name", "AgileClaw Test");
   await runFixtureGit(remote, "config", "user.email", "openclaw@example.com");
   await fs.writeFile(
     path.join(remote, "package.json"),
@@ -56,7 +56,7 @@ async function createGitRollbackFixture(base: string) {
   await runFixtureGit(remote, "add", ".");
   await runFixtureGit(remote, "commit", "-m", "fixture");
   await runFixtureGit(base, "clone", "--quiet", remote, root);
-  await runFixtureGit(root, "config", "user.name", "OpenClaw Test");
+  await runFixtureGit(root, "config", "user.name", "AgileClaw Test");
   await runFixtureGit(root, "config", "user.email", "openclaw@example.com");
   await fs.writeFile(path.join(root, "local-commit.txt"), "retained local commit\n");
   await runFixtureGit(root, "add", ".");

@@ -24,7 +24,7 @@ describe("plugin install provenance", () => {
     "brave",
     "npm:@openclaw/brave-plugin",
     "clawhub:openclaw-demo",
-  ])("trusts OpenClaw-owned install source %s", (spec) => {
+  ])("trusts AgileClaw-owned install source %s", (spec) => {
     expect(isOpenClawTrustedPluginInstallSpec(spec, bundledSources)).toBe(true);
   });
 

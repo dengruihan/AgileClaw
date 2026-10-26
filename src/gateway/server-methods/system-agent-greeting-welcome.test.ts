@@ -127,7 +127,7 @@ beforeEach(() => {
     auditSequence: 0,
   });
   greetingMocks.resolveSystemAgentGreeting.mockResolvedValue({
-    text: "I'm OpenClaw. All systems nominal.",
+    text: "I'm AgileClaw. All systems nominal.",
     source: "model",
   });
   greetingMocks.buildSystemAgentGreetingQuestion.mockReturnValue(quickActions);
@@ -298,7 +298,7 @@ describe("openclaw.chat caretaker welcome", () => {
   it("does not plan a greeting when a fresh session is created with a message", async () => {
     const sessions = new Map<string, SystemAgentChatSession>();
     greetingMocks.resolveSystemAgentGreeting.mockResolvedValueOnce({
-      text: "Hi, I'm OpenClaw — caretaker of this gateway, config, channels, and agents.",
+      text: "Hi, I'm AgileClaw — caretaker of this gateway, config, channels, and agents.",
       source: "template",
     });
 
@@ -318,7 +318,7 @@ describe("openclaw.chat caretaker welcome", () => {
     expect(sessions.get("fresh-with-message")?.welcomeAuditSequence).toBe(0);
     const welcome = await callChat(context, { sessionId: "fresh-with-message" });
     expect(welcome.payload).toMatchObject({
-      reply: "Hi, I'm OpenClaw — caretaker of this gateway, config, channels, and agents.",
+      reply: "Hi, I'm AgileClaw — caretaker of this gateway, config, channels, and agents.",
     });
     expect(greetingMocks.acknowledgeSystemAgentGreetingDelivery).toHaveBeenCalledWith({
       auditSequence: 0,
@@ -417,7 +417,7 @@ describe("openclaw.chat caretaker welcome", () => {
     expect(greetingMocks.resolveSystemAgentGreeting).not.toHaveBeenCalled();
     expect(greetingMocks.acknowledgeSystemAgentGreetingDelivery).not.toHaveBeenCalled();
     expect(call.payload).toMatchObject({
-      reply: expect.stringContaining("你好，我是 OpenClaw — 我們來孵化你的智慧代理吧。"),
+      reply: expect.stringContaining("你好，我是 AgileClaw — 我們來孵化你的智慧代理吧。"),
       question: {
         options: expect.arrayContaining([
           expect.objectContaining({ label: "是的 — 開始設定", reply: "yes" }),

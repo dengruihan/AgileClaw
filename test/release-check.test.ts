@@ -172,7 +172,7 @@ describe("packed CLI smoke", () => {
     expect(env).not.toHaveProperty("OPENAI_API_KEY");
   });
 
-  it("isolates bundled plugin activation from ambient OpenClaw state", () => {
+  it("isolates bundled plugin activation from ambient AgileClaw state", () => {
     const env = createPackedBundledPluginActivationSmokeEnv(
       {
         HOME: "/tmp/operator-home",
@@ -330,7 +330,7 @@ describe("resolveReleaseNpmCommand", () => {
         existsSync: () => false,
         platform: "win32",
       }),
-    ).toThrow("OpenClaw refuses to shell out to bare npm on Windows");
+    ).toThrow("AgileClaw refuses to shell out to bare npm on Windows");
   });
 });
 
@@ -484,12 +484,12 @@ describe("collectForbiddenPackPaths", () => {
     expect(
       collectForbiddenPackPaths([
         "dist/index.js",
-        "dist/extensions/browser/.OpenClaw-Install-Stage/package.json",
+        "dist/extensions/browser/.AgileClaw-Install-Stage/package.json",
         "dist/extensions/codex/.openclaw-runtime-deps-backup-node_modules-old/zod/index.js",
         "dist/extensions/discord/.openclaw-runtime-deps-stamp.json",
       ]),
     ).toEqual([
-      "dist/extensions/browser/.OpenClaw-Install-Stage/package.json",
+      "dist/extensions/browser/.AgileClaw-Install-Stage/package.json",
       "dist/extensions/codex/.openclaw-runtime-deps-backup-node_modules-old/zod/index.js",
       "dist/extensions/discord/.openclaw-runtime-deps-stamp.json",
     ]);

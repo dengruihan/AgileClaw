@@ -81,7 +81,7 @@ function resolveRequestedField<TValue extends string>(params: {
   if (params.globalValue !== undefined) {
     return { value: params.globalValue, source: params.globalSource };
   }
-  return { value: params.fallback, source: `OpenClaw default (${params.fallback})` };
+  return { value: params.fallback, source: `AgileClaw default (${params.fallback})` };
 }
 
 type ExecPolicyField = "security" | "ask" | "askFallback";
@@ -174,7 +174,7 @@ function formatHostFieldSource(params: {
     return params.hostDefaultSource;
   }
   if (params.field === "askFallback") {
-    return `OpenClaw default (${DEFAULT_EXEC_APPROVAL_ASK_FALLBACK})`;
+    return `AgileClaw default (${DEFAULT_EXEC_APPROVAL_ASK_FALLBACK})`;
   }
   return "inherits requested tool policy";
 }

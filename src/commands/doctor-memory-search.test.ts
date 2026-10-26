@@ -61,7 +61,7 @@ const getMissingLocalMemoryEmbeddingProviderMessage = vi.hoisted(() =>
       "Unknown memory embedding provider: local.\n" +
       "Local GGUF embeddings are provided by the official llama.cpp provider plugin.\n" +
       "Install it with: openclaw plugins install @openclaw/llama-cpp-provider\n" +
-      "Then restart OpenClaw and retry: openclaw memory status --deep",
+      "Then restart AgileClaw and retry: openclaw memory status --deep",
   ),
 );
 

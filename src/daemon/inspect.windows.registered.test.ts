@@ -53,7 +53,7 @@ it.each([
     }
     if (pathname === gateway && kind.startsWith("later")) {
       return Buffer.from(
-        '@echo off\r\n"C:\\Node\\node.exe" "C:\\OpenClaw\\openclaw.mjs" --profile rescue gateway run\r\n',
+        '@echo off\r\n"C:\\Node\\node.exe" "C:\\AgileClaw\\openclaw.mjs" --profile rescue gateway run\r\n',
       );
     }
     if (pathname !== first && pathname !== gateway) {
@@ -74,7 +74,7 @@ it.each([
 });
 
 it("excludes a static non-Gateway runtime command without admitting its missing profile", async () => {
-  const taskName = "\\OpenClaw Helper (non-gateway)";
+  const taskName = "\\AgileClaw Helper (non-gateway)";
   const scriptPath = "C:\\openclaw-schtasks\\non-gateway\\non-gateway.cmd";
   const task = {
     taskPath: taskName,
@@ -114,12 +114,12 @@ it.each(["direct executable", "Node runtime", "CMD launcher"])(
     const direct = kind === "direct executable";
     const launcher = kind === "CMD launcher";
     const argv = direct
-      ? ["C:\\OpenClaw\\openclaw.exe", "--profile=rescue", "gateway"]
+      ? ["C:\\AgileClaw\\openclaw.exe", "--profile=rescue", "gateway"]
       : [
           "C:\\Node\\node.exe",
           "--import",
           "bootstrap.mjs",
-          "C:\\OpenClaw\\openclaw.mjs",
+          "C:\\AgileClaw\\openclaw.mjs",
           "--profile=rescue",
           "gateway",
         ];

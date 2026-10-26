@@ -2,7 +2,7 @@ import type { ChannelSetupMetadata } from "../channels/plugins/setup-contract.js
 import type { MANIFEST_KEY } from "../compat/legacy-names.js";
 import type { PluginManifestChannelCommandDefaults } from "./manifest-types.js";
 
-/** package.json OpenClaw metadata used for plugin setup and catalog discovery. */
+/** package.json AgileClaw metadata used for plugin setup and catalog discovery. */
 export type PluginPackageChannel = {
   id?: string;
   label?: string;

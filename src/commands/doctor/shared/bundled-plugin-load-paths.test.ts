@@ -62,7 +62,7 @@ describe("bundled plugin load path repair", () => {
     expect(result.config.plugins?.load?.paths).toStrictEqual([]);
   });
 
-  it("removes available bundled aliases from old versioned OpenClaw package roots", () => {
+  it("removes available bundled aliases from old versioned AgileClaw package roots", () => {
     const currentPackageRoot = path.resolve("node_modules", "openclaw");
     const stalePackageRoot = path.resolve(
       "pnpm-global",
@@ -85,7 +85,7 @@ describe("bundled plugin load path repair", () => {
     expect(result.config.plugins?.load?.paths).toStrictEqual(["/custom/path", "/custom/path"]);
   });
 
-  it("removes available legacy aliases from old versioned OpenClaw package roots", () => {
+  it("removes available legacy aliases from old versioned AgileClaw package roots", () => {
     const currentPackageRoot = path.resolve("node_modules", "openclaw");
     const stalePackageRoot = path.resolve(
       "pnpm-global",
@@ -106,7 +106,7 @@ describe("bundled plugin load path repair", () => {
     expect(result.config.plugins?.load?.paths).toStrictEqual([]);
   });
 
-  it("preserves custom paths outside installed OpenClaw package roots", () => {
+  it("preserves custom paths outside installed AgileClaw package roots", () => {
     const currentPackageRoot = path.resolve("node_modules", "openclaw");
     const customPath = path.resolve("elsewhere", "dist", "extensions", "feishu");
     mockBundledSource("feishu", bundledDistPluginRootAt(currentPackageRoot, "feishu"));
@@ -196,7 +196,7 @@ describe("bundled plugin load path repair", () => {
     });
 
     expect(warnings).toEqual([
-      `- plugins.load.paths: bundled plugin path "${legacyPath}" still aliases feishu; OpenClaw loads the packaged bundled plugin from "${bundledPath}".`,
+      `- plugins.load.paths: bundled plugin path "${legacyPath}" still aliases feishu; AgileClaw loads the packaged bundled plugin from "${bundledPath}".`,
       '- Run "openclaw doctor --fix" to remove these redundant bundled plugin paths.',
     ]);
   });

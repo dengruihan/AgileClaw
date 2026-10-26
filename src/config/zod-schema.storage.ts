@@ -54,7 +54,7 @@ export const StorageConfigSchema = z
   .optional()
   .register(configUiMetadata, {
     label: "Storage",
-    help: "Reusable storage locations for OpenClaw artifacts. Core storage owns location identity, encryption, and health; providers transport objects and consumers decide what to retain.",
+    help: "Reusable storage locations for AgileClaw artifacts. Core storage owns location identity, encryption, and health; providers transport objects and consumers decide what to retain.",
   });
 
 export const { labels: STORAGE_FIELD_LABELS, help: STORAGE_FIELD_HELP } =

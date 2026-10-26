@@ -27,7 +27,7 @@ function classifyLockReason(reason: string | undefined): LockState {
     return { kind: "foreign", reason };
   }
   const pid = Number(match[1]);
-  // A cross-user (EPERM) OpenClaw lock is treated as live so a run's checkout is
+  // A cross-user (EPERM) AgileClaw lock is treated as live so a run's checkout is
   // never removed under it; only an ESRCH/zombie owner counts as dead.
   return isPidDefinitelyDead(pid) ? { kind: "dead", pid } : { kind: "live", pid };
 }

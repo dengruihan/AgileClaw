@@ -47,7 +47,7 @@ export async function noteMainSessionRecoveryIntegrity(
   params.warnings.push(
     [
       `- Found ${wedgedCount} with automatic restart recovery tombstoned.`,
-      "  OpenClaw will not auto-resume these sessions again; inspect the failed turn, then use /new or reset to replace the session.",
+      "  AgileClaw will not auto-resume these sessions again; inspect the failed turn, then use /new or reset to replace the session.",
       `  Examples: ${wedged
         .slice(0, 3)
         .map(({ key }) => key)

@@ -585,7 +585,7 @@ describe("prepareEmbeddedRunTerminal", () => {
       attempt: attemptResult({
         lastToolError: {
           toolName: "gateway_exec",
-          error: "OpenClaw dynamic tool call aborted.",
+          error: "AgileClaw dynamic tool call aborted.",
         },
       }),
       terminalState: {

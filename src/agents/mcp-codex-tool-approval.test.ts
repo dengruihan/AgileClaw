@@ -22,7 +22,7 @@ describe("Codex MCP tool approval projection", () => {
     expect(requiresMcpCodexToolApproval({ mode: undefined })).toBe(true);
   });
 
-  it("preserves explicit modes and the loopback OpenClaw approval exception", () => {
+  it("preserves explicit modes and the loopback AgileClaw approval exception", () => {
     expect(
       resolveProjectedMcpCodexToolApprovalMode("example", {
         command: "example-mcp",

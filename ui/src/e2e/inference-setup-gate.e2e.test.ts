@@ -200,7 +200,7 @@ suite.define(() => {
       });
       const page = await context.newPage();
       const runtimeError =
-        "OpenClaw requires working inference: The configured runtime could not start. Repair the launcher and retry.";
+        "AgileClaw requires working inference: The configured runtime could not start. Repair the launcher and retry.";
       const gateway = await installMockGateway(page, {
         sessionKey: "agent:main:work",
         deferredMethods: ["openclaw.chat"],
@@ -235,7 +235,7 @@ suite.define(() => {
           await page.locator(".sidebar-footer-bar__home").click();
           await page
             .locator("openclaw-assistant-panel")
-            .getByRole("button", { name: "Ask OpenClaw", exact: true })
+            .getByRole("button", { name: "Ask AgileClaw", exact: true })
             .click();
         }
         const chat = page.locator("openclaw-custodian-surface");

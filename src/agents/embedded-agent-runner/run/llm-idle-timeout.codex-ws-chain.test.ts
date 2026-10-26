@@ -10,7 +10,7 @@ import {
 } from "../../../../packages/ai/src/providers/openai-chatgpt-responses.js";
 import { createDiagnosticTraceContext } from "../../../infra/diagnostic-trace-context.js";
 import type { Model } from "../../../llm/types.js";
-// Installs the OpenClaw transport host exactly like the runtime does.
+// Installs the AgileClaw transport host exactly like the runtime does.
 import "../../../llm/stream.js";
 import { createDeferredCore } from "../../../shared/deferred.js";
 import type { StreamFn } from "../../runtime/index.js";

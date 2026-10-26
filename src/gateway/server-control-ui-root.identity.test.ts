@@ -145,7 +145,7 @@ describe("source-selected Control UI identity preparation", () => {
       if (kind === "macOS") {
         fixture.selectedRoot = path.join(
           fixture.root,
-          "OpenClaw.app",
+          "AgileClaw.app",
           "Contents",
           "Resources",
           "control-ui",
@@ -192,7 +192,7 @@ describe("source-selected Control UI identity preparation", () => {
       await writeUi(fixture.selectedRoot, fixture.buildId);
       fixture.selectedRoot = path.join(
         fixture.root,
-        "OpenClaw.app",
+        "AgileClaw.app",
         "Contents",
         "Resources",
         "control-ui",
@@ -207,7 +207,7 @@ describe("source-selected Control UI identity preparation", () => {
       await lifecycle.stop();
       expect(lifecycle.state).toEqual({ kind: "failed" });
       expect(warn).toHaveBeenCalledWith(expect.stringContaining(fixture.selectedRoot));
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining("Reinstall OpenClaw"));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("Reinstall AgileClaw"));
       expect(fixture.build).not.toHaveBeenCalled();
     },
   );

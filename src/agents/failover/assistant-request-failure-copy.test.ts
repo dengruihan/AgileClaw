@@ -13,7 +13,7 @@ import { isAuthErrorMessage } from "./message-patterns.js";
 describe("renderAssistantRequestFailureCopy", () => {
   const target = { provider: "openai", model: "test-model" };
   const runFailure =
-    "⚠️ OpenClaw couldn't finish this reply. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow` in your terminal.";
+    "⚠️ AgileClaw couldn't finish this reply. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow` in your terminal.";
 
   it.each(["", " | INVALID_REQUEST"])(
     "preserves approval-expiry guidance in assistant history with suffix %j",
@@ -35,7 +35,7 @@ describe("renderAssistantRequestFailureCopy", () => {
   it.each([
     [
       "Invalid session transcript entry: model_change PRIVATE_CANARY",
-      "OpenClaw couldn't read this conversation's history. Try /compact, or start a new conversation with /new.",
+      "AgileClaw couldn't read this conversation's history. Try /compact, or start a new conversation with /new.",
     ],
     [
       "invalid session",

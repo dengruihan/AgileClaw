@@ -406,14 +406,14 @@ describe("generic link hovercards", () => {
     anchor.href = href;
     const imageDataUrl = "data:image/png;base64,AAAA";
     request.mockResolvedValue({
-      title: "OpenClaw repository",
+      title: "AgileClaw repository",
       description: "Your own personal assistant.",
       imageDataUrl,
     });
     await prefetchLinkReader(anchor, new AbortController().signal);
     expect(request).not.toHaveBeenCalled();
     await hover(anchor);
-    expect(card()?.textContent).toContain("OpenClaw repository");
+    expect(card()?.textContent).toContain("AgileClaw repository");
     expect(card()?.textContent).toContain("Your own personal assistant.");
     expect(card()?.querySelector(".link-hovercard__image")?.getAttribute("src")).toBe(imageDataUrl);
     expect(card()?.querySelector("a")?.href).toBe(href);

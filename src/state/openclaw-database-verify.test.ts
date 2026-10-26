@@ -140,7 +140,7 @@ function preparedVerificationResults(
   return targets.map((target) => terminalVerificationResult(target.path));
 }
 
-describe("OpenClaw database integrity verifier", () => {
+describe("AgileClaw database integrity verifier", () => {
   it("verifies an absent additive transcript eligibility projection without installing it", async () => {
     const stateDir = tempDirs.make("openclaw-database-verify-eligibility-");
     const agent = openOpenClawAgentDatabase({
@@ -188,7 +188,7 @@ describe("OpenClaw database integrity verifier", () => {
       const targets: OpenClawDatabaseVerifyTarget[] = [
         {
           kind: "agent",
-          label: "OpenClaw agent database worker-1",
+          label: "AgileClaw agent database worker-1",
           path: agent.path,
           check: "quick",
         },
@@ -338,7 +338,12 @@ describe("OpenClaw database integrity verifier", () => {
     fs.copyFileSync(agentPath, healthyReplacementPath);
     createUnsafeIndexDrift(agentPath);
     const targets: OpenClawDatabaseVerifyTarget[] = [
-      { kind: "agent", label: "OpenClaw agent database worker-1", path: agentPath, check: "quick" },
+      {
+        kind: "agent",
+        label: "AgileClaw agent database worker-1",
+        path: agentPath,
+        check: "quick",
+      },
     ];
     const results = preparedVerificationResults(targets);
 
@@ -363,7 +368,7 @@ describe("OpenClaw database integrity verifier", () => {
       const targets: OpenClawDatabaseVerifyTarget[] = [
         {
           kind: "agent",
-          label: "OpenClaw agent database worker-1",
+          label: "AgileClaw agent database worker-1",
           path: agent.path,
           check: "quick",
         },
@@ -391,7 +396,7 @@ describe("OpenClaw database integrity verifier", () => {
       await copyHealthyDatabase(state.path, healthyReplacementPath);
       createUnsafeIndexDrift(state.path);
       const targets: OpenClawDatabaseVerifyTarget[] = [
-        { kind: "state", label: "OpenClaw state database", path: state.path, check: "quick" },
+        { kind: "state", label: "AgileClaw state database", path: state.path, check: "quick" },
       ];
       const results = preparedVerificationResults(targets);
 
@@ -413,7 +418,12 @@ describe("OpenClaw database integrity verifier", () => {
     closeOpenClawStateDatabaseForTest();
     createUnsafeIndexDrift(agentPath);
     const targets: OpenClawDatabaseVerifyTarget[] = [
-      { kind: "agent", label: "OpenClaw agent database worker-1", path: agentPath, check: "quick" },
+      {
+        kind: "agent",
+        label: "AgileClaw agent database worker-1",
+        path: agentPath,
+        check: "quick",
+      },
     ];
     const results = preparedVerificationResults(targets);
 
@@ -467,7 +477,12 @@ describe("OpenClaw database integrity verifier", () => {
     closeOpenClawStateDatabaseForTest();
     createUnsafeIndexDrift(agentPath);
     const targets: OpenClawDatabaseVerifyTarget[] = [
-      { kind: "agent", label: "OpenClaw agent database worker-1", path: agentPath, check: "quick" },
+      {
+        kind: "agent",
+        label: "AgileClaw agent database worker-1",
+        path: agentPath,
+        check: "quick",
+      },
     ];
     const results = preparedVerificationResults(targets);
 
@@ -487,10 +502,10 @@ describe("OpenClaw database integrity verifier", () => {
     const state = openOpenClawStateDatabase({ env });
     const agent = openOpenClawAgentDatabase({ agentId: "worker-1", env });
     const targets: OpenClawDatabaseVerifyTarget[] = [
-      { kind: "state", label: "OpenClaw state database", path: state.path, check: "quick" },
+      { kind: "state", label: "AgileClaw state database", path: state.path, check: "quick" },
       {
         kind: "agent",
-        label: "OpenClaw agent database worker-1",
+        label: "AgileClaw agent database worker-1",
         path: agent.path,
         check: "quick",
       },
@@ -529,7 +544,7 @@ describe("OpenClaw database integrity verifier", () => {
     const targets: OpenClawDatabaseVerifyTarget[] = [
       {
         kind: "agent",
-        label: "OpenClaw agent database worker-1",
+        label: "AgileClaw agent database worker-1",
         path: agent.path,
         check: "quick",
       },
@@ -842,7 +857,12 @@ describe("OpenClaw database integrity verifier", () => {
     closeOpenClawAgentDatabasesForTest();
     closeOpenClawStateDatabaseForTest();
     const targets: OpenClawDatabaseVerifyTarget[] = [
-      { kind: "agent", label: "OpenClaw agent database worker-1", path: agentPath, check: "quick" },
+      {
+        kind: "agent",
+        label: "AgileClaw agent database worker-1",
+        path: agentPath,
+        check: "quick",
+      },
     ];
 
     await applyOpenClawDatabaseVerificationResults({

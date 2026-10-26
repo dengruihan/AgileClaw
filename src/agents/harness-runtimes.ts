@@ -16,7 +16,7 @@ import { splitTrailingAuthProfile } from "./model-ref-profile.js";
 import { resolveModelRuntimePolicy } from "./model-runtime-policy.js";
 
 // Harness runtime discovery feeds plugin preloading/setup. Only plugin runtimes
-// are selectable here; built-in OpenClaw/default runtime ids are excluded.
+// are selectable here; built-in AgileClaw/default runtime ids are excluded.
 function isSelectablePluginRuntime(runtime: string | undefined): runtime is string {
   return (
     Boolean(runtime) &&

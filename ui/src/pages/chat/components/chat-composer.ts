@@ -119,7 +119,7 @@ export function renderChatComposer(props: ChatComposerProps) {
   if (state.composerTextarea?.isConnected && state.composerTextarea.value !== visibleDraft) {
     scheduleTextareaHeightAdjustment(state.composerTextarea);
   }
-  const assistantName = props.assistantName || "OpenClaw";
+  const assistantName = props.assistantName || "AgileClaw";
   const inProgressLabel = props.waitingApproval
     ? t("chat.waitingForApproval")
     : submittedProgress?.sendState === "waiting-model"

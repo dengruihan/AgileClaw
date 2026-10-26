@@ -244,7 +244,7 @@ export async function createClawProject(
     `  id: ${JSON.stringify(agentId)}`,
     `  name: ${JSON.stringify(displayName(agentId))}`,
     "---",
-    `You are ${displayName(agentId)}, a purpose-built OpenClaw agent.`,
+    `You are ${displayName(agentId)}, a purpose-built AgileClaw agent.`,
     "",
   ].join("\n");
 

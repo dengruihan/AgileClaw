@@ -38,7 +38,7 @@ function importedSessionCatalogMessage(params: {
   }
   const text = importedText || "[Unsupported catalog transcript item]";
   if (params.item.type === "userMessage") {
-    // Imported native rows are not OpenClaw-authored; mirrorOrigin excludes them
+    // Imported native rows are not AgileClaw-authored; mirrorOrigin excludes them
     // from self-echo provenance so a repeated external prompt stays observable.
     return {
       role: "user",

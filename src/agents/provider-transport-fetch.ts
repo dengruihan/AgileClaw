@@ -627,7 +627,7 @@ function withModelProviderNetworkRemediation(
   }
   return new SsrFBlockedError(
     `Configured model provider ${params.providerId} uses local-use NAT64 origin ` +
-      `${baseOrigin}, which OpenClaw blocks by default. Move the provider to a ` +
+      `${baseOrigin}, which AgileClaw blocks by default. Move the provider to a ` +
       `loopback, LAN, or tailnet address, or set ` +
       `models.providers.${params.providerId}.request.allowPrivateNetwork=true only for an ` +
       `operator-controlled endpoint. Original block: ${error.message}`,

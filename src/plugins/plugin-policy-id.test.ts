@@ -53,7 +53,7 @@ describe("mixed-case plugin policy ids", () => {
     const result = loadPluginManifest(dir);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toContain("reserved by OpenClaw core");
+      expect(result.error).toContain("reserved by AgileClaw core");
     }
   });
 });

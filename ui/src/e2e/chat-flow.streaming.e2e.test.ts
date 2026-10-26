@@ -194,14 +194,14 @@ suite.define(() => {
       await expect
         .poll(() => actionOpacities(activeGroup))
         .toEqual(mobile ? ["1", "1"] : ["0", "0"]);
-      expect(await footer.locator(".chat-sender-name").textContent()).toBe("OpenClaw");
+      expect(await footer.locator(".chat-sender-name").textContent()).toBe("AgileClaw");
       const timestamp = requireString(
         await footer.locator(".chat-group-timestamp").textContent(),
         "assistant timestamp",
       ).trim();
       expect(timestamp).toBeTruthy();
       const accessibleFooter = await footer.ariaSnapshot();
-      expect(accessibleFooter).toContain("OpenClaw");
+      expect(accessibleFooter).toContain("AgileClaw");
       expect(accessibleFooter).toContain(timestamp);
       expect(
         await footer.evaluate((element) => element.getBoundingClientRect().height),

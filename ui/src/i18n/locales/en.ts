@@ -653,7 +653,7 @@ export const en: TranslationMap & {
       "The update outcome is unknown. Run `openclaw triage` on the Gateway host and inspect the result before retrying.",
     triage: {
       hostHint:
-        "If Ask OpenClaw is unavailable, run `openclaw triage` on the Gateway host to open a local coding agent for diagnosis and repair. Diagnose the cause before retrying.",
+        "If Ask AgileClaw is unavailable, run `openclaw triage` on the Gateway host to open a local coding agent for diagnosis and repair. Diagnose the cause before retrying.",
     },
     report: {},
     failureReasons: {
@@ -662,7 +662,7 @@ export const en: TranslationMap & {
       notGitInstall:
         "Not a git checkout. Run `openclaw update` from the CLI for a global reinstall.",
       notOpenclawRoot:
-        "Run the update from an OpenClaw checkout or use the CLI global reinstall path.",
+        "Run the update from an AgileClaw checkout or use the CLI global reinstall path.",
       depsInstallFailed: "Dependency install failed. Fix the install error and retry.",
       buildFailed: "Build failed. Fix the build error and retry.",
       buildDirty:
@@ -675,7 +675,7 @@ export const en: TranslationMap & {
       restartUnavailable:
         "This global install cannot be safely replaced while restarts are disabled and no supervisor is present.",
       externalSupervisorUpdateRequired:
-        "This Gateway is managed by an external supervisor. Use your server or deployment's update workflow to update OpenClaw and restart the Gateway. The Control UI and `openclaw update` cannot update this installation. No package changes or Gateway restart were attempted.",
+        "This Gateway is managed by an external supervisor. Use your server or deployment's update workflow to update AgileClaw and restart the Gateway. The Control UI and `openclaw update` cannot update this installation. No package changes or Gateway restart were attempted.",
       restartUnhealthy:
         "The replacement process never became healthy. The previous process stayed up so you can recover.",
       restartRevisionMismatch:
@@ -723,7 +723,7 @@ export const en: TranslationMap & {
     ownerSession: "Session",
     ownerWorkboard: "Workboard",
     title: "Managed Worktrees",
-    subtitle: "Isolated repository checkouts owned by OpenClaw.",
+    subtitle: "Isolated repository checkouts owned by AgileClaw.",
     cleanNow: "Clean up now",
     name: "Name",
     namePlaceholder: "auto",
@@ -784,7 +784,7 @@ export const en: TranslationMap & {
       "owner-mismatch": "owned elsewhere",
       busy: "live run or cleanup active",
       "foreign-lock": "foreign Git lock",
-      "snapshot-failed": "OpenClaw could not create a safety snapshot",
+      "snapshot-failed": "AgileClaw could not create a safety snapshot",
       "cleanup-failed": "cleanup failed",
     },
     draftCleanupFailed: "Session deleted; browser draft remains. Clear site data.",
@@ -1011,7 +1011,7 @@ export const en: TranslationMap & {
     moveSessionTitle: "Move session",
     moveSessionDescription: 'Choose where "{session}" should continue.',
     moveSessionNoReplayWarning:
-      "OpenClaw safely reconciles the current workspace before moving. Active work is never replayed.",
+      "AgileClaw safely reconciles the current workspace before moving. Active work is never replayed.",
     moveSessionActiveRunWarning:
       "The active turn will be interrupted. Partial output is not replayed; send the next turn again after the move.",
     moveSessionAction: "Move session",
@@ -1526,7 +1526,7 @@ export const en: TranslationMap & {
     },
   },
   approvalPage: {
-    brandName: "OpenClaw",
+    brandName: "AgileClaw",
     eyebrow: "Operator approval",
     loadingTitle: "Loading approval",
     loadingDescription: "Checking the current approval state with the Gateway.",
@@ -1535,7 +1535,7 @@ export const en: TranslationMap & {
       "This approval could not be found or this device is not authorized to review it.",
     connectionErrorTitle: "Connection interrupted",
     connectionErrorDescription:
-      "OpenClaw cannot confirm or record a decision while disconnected. Reconnect to check the current status.",
+      "AgileClaw cannot confirm or record a decision while disconnected. Reconnect to check the current status.",
     retry: "Retry",
     execTitle: "Command approval",
     pending: "Waiting for your decision",
@@ -1597,7 +1597,7 @@ export const en: TranslationMap & {
     back: "Back",
     forward: "Forward",
     settings: "Settings",
-    askOpenClaw: "Ask OpenClaw",
+    askOpenClaw: "Ask AgileClaw",
     settingsGroupDevice: "This Mac",
     settingsGroupThisComputer: "This computer",
     settingsGroupThisIPhone: "This iPhone",
@@ -1681,7 +1681,7 @@ export const en: TranslationMap & {
     moreActions: "More actions",
     copyUrl: "Copy URL",
     openNewTab: "Open in new tab",
-    openWithinOpenClaw: "Open in OpenClaw",
+    openWithinOpenClaw: "Open in AgileClaw",
     toggle: "Toggle browser panel",
     close: "Close browser panel",
     resize: "Resize browser panel",
@@ -1750,7 +1750,7 @@ export const en: TranslationMap & {
     cloudWorkers: "Cloud workers",
     chat: "Chat",
     dashboards: "Dashboards",
-    custodian: "OpenClaw",
+    custodian: "AgileClaw",
     profile: "Profile",
     communications: "Communications",
     appearance: "Appearance",
@@ -1836,7 +1836,7 @@ export const en: TranslationMap & {
     commandHint: "Try /models or /help.",
     heading: "Connect a verified AI model",
     intro:
-      "OpenClaw discovers AI access on this Gateway. Choose a provider to begin; nothing is selected, tested, installed, or saved automatically.",
+      "AgileClaw discovers AI access on this Gateway. Choose a provider to begin; nothing is selected, tested, installed, or saved automatically.",
     required: {
       title: "No AI provider configured",
       body: "Connect a provider and choose a model to send messages.",
@@ -1855,7 +1855,7 @@ export const en: TranslationMap & {
     verify: {},
     access: {
       adminRequired: "Model setup requires operator.admin access.",
-      gatewayTooOld: "The Gateway is running an older OpenClaw version",
+      gatewayTooOld: "The Gateway is running an older AgileClaw version",
     },
     candidates: {
       title: "Found on this Gateway",
@@ -1911,7 +1911,7 @@ export const en: TranslationMap & {
       accessValueFor: "{provider} API key or token",
       accessValuePlaceholder: "Paste an API key or token",
       connectAndVerify: "Connect & verify",
-      verifyHint: "OpenClaw verifies a real model reply before marking the connection ready.",
+      verifyHint: "AgileClaw verifies a real model reply before marking the connection ready.",
       required: "Choose a provider and enter an API key or token.",
     },
     success: {},
@@ -1978,7 +1978,7 @@ export const en: TranslationMap & {
   onboarding: {
     memoryImport: {
       title: "Bring your assistant memory with you",
-      body: "OpenClaw found memory from other coding assistants. Import it into your agent workspace?",
+      body: "AgileClaw found memory from other coding assistants. Import it into your agent workspace?",
       plannedCount: "{count} ready to import",
       alreadyImported: "Already imported: {count}",
       sourceUnavailable: "Source path unavailable",
@@ -1993,7 +1993,7 @@ export const en: TranslationMap & {
       connectionChanged: "Skipped: the Gateway connection changed during the import",
       unknownError: "Request failed",
       doneTitle: "Memory import finished",
-      doneBody: "Migrated {migrated}, skipped {skipped}. You can continue setting up OpenClaw.",
+      doneBody: "Migrated {migrated}, skipped {skipped}. You can continue setting up AgileClaw.",
     },
   },
   assistantPanel: {
@@ -2014,30 +2014,30 @@ export const en: TranslationMap & {
     removeSelection: "Remove selected text",
   },
   custodian: {
-    title: "OpenClaw",
+    title: "AgileClaw",
     subtitleCaretaker: "System setup and care.",
     exitSetup: "Exit setup",
     newAgent: "New agent",
     hatchDraft: "Wake up, my friend!",
-    placeholder: "Message OpenClaw…",
+    placeholder: "Message AgileClaw…",
     sensitivePlaceholder: "Enter sensitive value…",
     sensitiveReply: "Sensitive reply sent",
     cancel: "Cancel",
     send: "Send",
-    thinking: "OpenClaw is thinking",
+    thinking: "AgileClaw is thinking",
     earlier: "Earlier",
-    requestFailed: "OpenClaw could not reply. Try again.",
+    requestFailed: "AgileClaw could not reply. Try again.",
     connectionChanged: "The Gateway connection changed. Retry to continue this setup.",
     sessionRestarted:
-      "{error} OpenClaw started a fresh session; earlier messages remain for context.",
-    unsupportedGateway: "Update the Gateway to continue setup with OpenClaw.",
+      "{error} AgileClaw started a fresh session; earlier messages remain for context.",
+    unsupportedGateway: "Update the Gateway to continue setup with AgileClaw.",
     panel: {
-      title: "OpenClaw",
-      toggle: "Toggle Ask OpenClaw",
-      close: "Close Ask OpenClaw",
-      resize: "Resize Ask OpenClaw",
-      dockBottom: "Dock Ask OpenClaw at bottom",
-      dockRight: "Dock Ask OpenClaw at right",
+      title: "AgileClaw",
+      toggle: "Toggle Ask AgileClaw",
+      close: "Close Ask AgileClaw",
+      resize: "Resize Ask AgileClaw",
+      dockBottom: "Dock Ask AgileClaw at bottom",
+      dockRight: "Dock Ask AgileClaw at right",
     },
     history: {
       button: "History",
@@ -2045,7 +2045,7 @@ export const en: TranslationMap & {
       description: "What changed on this system, newest first.",
       loading: "Loading recent changes…",
       empty: "No recorded changes yet.",
-      requestFailed: "OpenClaw could not load change history.",
+      requestFailed: "AgileClaw could not load change history.",
       loadMore: "Load more",
       loadingMore: "Loading more…",
       changedPaths: "Changed paths ({count})",
@@ -2068,9 +2068,9 @@ export const en: TranslationMap & {
       channelDegraded: "{channel} is degraded — ask me what happened",
       channelFallback: "A channel",
       dismiss: "Dismiss this update",
-      channelSetupTitle: "Reach OpenClaw outside this app",
+      channelSetupTitle: "Reach AgileClaw outside this app",
       channelSetupBody:
-        "The web app already works. Add a channel only if you want to message OpenClaw from another service.",
+        "The web app already works. Add a channel only if you want to message AgileClaw from another service.",
       channelSetupAction: "Set up a channel",
       channelSetupDismiss: "Keep using the web app",
       channelStatusErrorTitle: "Channel status is unavailable",
@@ -2161,7 +2161,7 @@ export const en: TranslationMap & {
     workerDesktop: {},
   },
   aboutPage: {
-    productName: "OpenClaw",
+    productName: "AgileClaw",
     tagline: "Your personal AI assistant, running on your own devices.",
     linksLabel: "Community and resources",
     linkWebsite: "Website",
@@ -2170,7 +2170,7 @@ export const en: TranslationMap & {
     linkDiscord: "Discord",
     linkX: "X (Twitter)",
     linkChangelog: "Changelog",
-    license: "© 2026 OpenClaw Foundation — MIT License.",
+    license: "© 2026 AgileClaw Contributors — MIT License.",
     artifactTitle: "Control UI",
     artifactSubtitle: "Identity embedded when this browser artifact was built.",
     artifactDetails: "Control UI build details",
@@ -2819,7 +2819,7 @@ export const en: TranslationMap & {
     cloudWorkerFailed: "Runner failed: {error}",
     errorDetails: "Error details",
     errorReplySummary: "Couldn't finish this reply. Check the conversation before trying again.",
-    errorBusySummary: "OpenClaw is busy. Check status before trying again.",
+    errorBusySummary: "AgileClaw is busy. Check status before trying again.",
     errorSignInSummary: "Couldn't sign in to the AI service. Sign in again under Models.",
     errorStartSummary: "Couldn't start this conversation. Open Settings → Logs for details.",
     checkStatus: "Check status",
@@ -3145,8 +3145,8 @@ export const en: TranslationMap & {
       remoteViewOnly: "This session is on a paired device and is view-only.",
       unsupportedViewOnly: "This external session source is view-only.",
       sessionMenu: "External session actions",
-      openInOpenClaw: "Open in OpenClaw",
-      importToOpenClaw: "Import to OpenClaw",
+      openInOpenClaw: "Open in AgileClaw",
+      importToOpenClaw: "Import to AgileClaw",
       importComplete: "Imported {count} transcript items.",
       importUnchanged: "The imported transcript is up to date.",
       importIncomplete:
@@ -3155,7 +3155,7 @@ export const en: TranslationMap & {
       openInTerminal: "Open in terminal",
       deleteSession: "Delete",
       deleteSessionConfirm:
-        "Delete this external session from OpenClaw? Make sure no other runner is using it. Beamed sessions are deleted permanently. Sessions kept by another tool, such as Codex, are archived there and may be restorable.",
+        "Delete this external session from AgileClaw? Make sure no other runner is using it. Beamed sessions are deleted permanently. Sessions kept by another tool, such as Codex, are archived there and may be restorable.",
       terminalUnavailable: "Terminal opening is unavailable for this session.",
     },
     taskSuggestions: {
@@ -3230,7 +3230,7 @@ export const en: TranslationMap & {
     followUpModeOverriding: "Overriding server default ({mode})",
     followUpModeReset: "Reset to server default",
     catalogOpenTarget: "Open external sessions in",
-    catalogOpenTargetViewer: "OpenClaw viewer",
+    catalogOpenTargetViewer: "AgileClaw viewer",
     catalogOpenTargetTerminal: "Terminal",
     catalogOutputTruncated: "[Output truncated]",
     onboardingDisabled: "Disabled during setup",
@@ -3264,7 +3264,7 @@ export const en: TranslationMap & {
       titleOne: "1 cloud workspace conflict",
       titleMany: "{count} cloud workspace conflicts",
       description:
-        "OpenClaw kept your local versions and applied the other cloud changes. Inspect the staged result or take its version for a conflicted path.",
+        "AgileClaw kept your local versions and applied the other cloud changes. Inspect the staged result or take its version for a conflicted path.",
       summary: "Local versions kept; inspect or take the cloud version.",
       showCommands: "Show commands",
       morePaths: "+{count} more paths",
@@ -3277,7 +3277,7 @@ export const en: TranslationMap & {
       commandHelp:
         "Run these in Bash or zsh (Git Bash on Windows). If inspect says the path does not exist, the cloud deleted it; verify and remove the local path manually. If checkout reports a file/directory conflict, move or remove the blocking local path, then retry. If the staged ref is missing, the notice is stale; do not change the local path.",
       commandsUnavailable:
-        "This filename contains terminal control characters, so OpenClaw will not build a copyable shell command for it. Inspect the staged ref directly and enter the path manually with care.",
+        "This filename contains terminal control characters, so AgileClaw will not build a copyable shell command for it. Inspect the staged ref directly and enter the path manually with care.",
       dismiss: "Dismiss workspace conflict notice",
       eventSender: "Cloud workspace",
       eventTitleOne: "Cloud result applied with 1 conflict",
@@ -3399,7 +3399,7 @@ export const en: TranslationMap & {
       nautiling: "Nautiling",
       krilling: "Krilling",
       barnacling: "Barnacling",
-      lobstering: "Lobstering",
+      polishing: "Polishing",
       tidepooling: "Tidepooling",
       pearling: "Pearling",
       snapping: "Snapping",
@@ -3978,7 +3978,7 @@ export const en: TranslationMap & {
       video: "Video",
     },
     voice: {
-      asking: "Asking OpenClaw...",
+      asking: "Asking AgileClaw...",
       preparing: "Preparing voice session...",
       connecting: "Connecting voice input...",
       listening: "Listening...",
@@ -4284,7 +4284,7 @@ export const en: TranslationMap & {
     detail: {
       tabsLabel: "Automation details",
       newTitle: "New automation",
-      newSubtitle: "Describe what OpenClaw should do, then pick when it runs.",
+      newSubtitle: "Describe what AgileClaw should do, then pick when it runs.",
       back: "All automations",
       settingsTab: "Settings",
       historyTitle: "Run history",
@@ -4378,7 +4378,7 @@ export const en: TranslationMap & {
       descriptionPlaceholder: "Optional context for this task",
       agentPlaceholder: "main or ops",
       agentHelp: "Start typing to pick a known agent, or enter a custom one.",
-      promptPlaceholder: "Describe what OpenClaw should do...",
+      promptPlaceholder: "Describe what AgileClaw should do...",
       repeat: "Repeat",
       repeatInterval: "Interval",
       repeatOnce: "Once",

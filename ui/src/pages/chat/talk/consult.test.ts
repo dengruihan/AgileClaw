@@ -352,7 +352,7 @@ describe("RealtimeTalkSession consult handoff", () => {
         timeoutMs: 120_000,
       });
       expect(submit).toHaveBeenCalledWith("call-1", {
-        result: "OpenClaw finished with no text.",
+        result: "AgileClaw finished with no text.",
       });
     } finally {
       vi.useRealTimers();
@@ -485,7 +485,7 @@ describe("RealtimeTalkSession consult handoff", () => {
       sessionKey: "agent:main:main",
       active: true,
       aborted: true,
-      message: "Cancelled the active OpenClaw run.",
+      message: "Cancelled the active AgileClaw run.",
       speak: true,
       show: true,
       suppress: false,

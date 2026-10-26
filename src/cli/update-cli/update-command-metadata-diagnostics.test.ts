@@ -271,7 +271,7 @@ it.each([
     result: { status: "error", mode: "unknown", steps: [], durationMs: 0 },
   });
   if (entry.kind === "graph") {
-    expect(printed.markdown).toContain("OpenClaw update failed");
+    expect(printed.markdown).toContain("AgileClaw update failed");
     for (const text of ["EACCES", "ECONNRESET", "Transport failed", "Connection refused"]) {
       expect(report.body).toContain(text);
     }

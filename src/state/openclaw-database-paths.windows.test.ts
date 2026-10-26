@@ -55,7 +55,7 @@ function createDeepStateEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-describe("OpenClaw database paths on Windows", () => {
+describe("AgileClaw database paths on Windows", () => {
   it.runIf(process.platform === "win32")(
     "migrates legacy namespace collisions through startup and Doctor",
     () => {

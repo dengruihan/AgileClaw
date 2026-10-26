@@ -19,7 +19,7 @@ import "../../components/app-sidebar.ts";
 await import("../../components/viewer-facepile.ts");
 
 describe("AppSidebar update card wiring", () => {
-  it("keeps OpenClaw out of the workspace sidebar", async () => {
+  it("keeps AgileClaw out of the workspace sidebar", async () => {
     const gateway = createGateway({} as GatewayBrowserClient);
     const { sidebar } = await mountSidebar(gateway, createSessions("main", ["agent:main:main"]));
 
@@ -540,7 +540,7 @@ describe("AppSidebar agent chip", () => {
           {
             key,
             kind: scope === "global" ? "global" : "direct",
-            label: "[OpenClaw heartbeat poll]",
+            label: "[AgileClaw heartbeat poll]",
             category: "Team",
             pinned,
             updatedAt: 5,

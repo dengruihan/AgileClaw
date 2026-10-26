@@ -231,7 +231,7 @@ suite.define(() => {
                   provider: "openai",
                   id: "gpt-5.6-luna",
                   runtime: "openclaw",
-                  runtimeLabel: "OpenClaw",
+                  runtimeLabel: "AgileClaw",
                 },
                 route: {
                   kind: "managed",

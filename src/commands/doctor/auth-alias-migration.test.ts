@@ -80,7 +80,7 @@ describe("Doctor stored auth alias migration", () => {
                   env: fixture.env,
                   doctorFixCommand: "openclaw doctor --fix",
                 });
-          await expect(pending).rejects.toThrow("Upgrade through OpenClaw 2026.9.7");
+          await expect(pending).rejects.toThrow("Upgrade through AgileClaw 2026.9.7");
           expect(fs.readFileSync(sourcePath)).toEqual(sourceBytes);
           expect(fs.readFileSync(sidecar, "utf8")).toBe("unparsed historical bytes");
           expect(fs.readdirSync(path.dirname(sourcePath))).toEqual(["auth-profiles.json"]);

@@ -222,7 +222,7 @@ it.each(["missing-index", "wrong-index", "missing-table"] as const)(
             [
               "Doctor could not complete repair because persisted database readiness could not be verified:",
               `state ${initial.path}: SQLite schema is incomplete or noncanonical for ${initial.path}: missing table task_runs; run openclaw doctor --fix to repair it.`,
-              "Stop OpenClaw processes, then restore the affected database from a verified backup.",
+              "Stop AgileClaw processes, then restore the affected database from a verified backup.",
             ].join("\n"),
           );
           expect(mocks.outro).not.toHaveBeenCalledWith("Doctor complete.");

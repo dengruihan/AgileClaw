@@ -80,7 +80,7 @@ export const en = {
       bindTailnetHint: "Reachable over Tailscale and local loopback",
       existingPasswordConfirm: "Use existing gateway password ({password})?",
       passwordPrompt: "Gateway password",
-      plaintextPasswordHint: "Stores the password directly in OpenClaw config",
+      plaintextPasswordHint: "Stores the password directly in AgileClaw config",
       plaintextPasswordLabel: "Enter password now",
       plaintextTokenHint: "Default",
       plaintextTokenLabel: "Generate/store plaintext secret",
@@ -91,7 +91,7 @@ export const en = {
       tailscaleExposure: "Tailscale exposure",
       tokenPrompt: "Gateway token",
       tokenStoreProvisioned:
-        "Generated a Gateway secret and stored it in the OpenClaw secret store as {name}. Config keeps only a reference; inspect it with `openclaw secrets store list`.",
+        "Generated a Gateway secret and stored it in the AgileClaw secret store as {name}. Config keeps only a reference; inspect it with `openclaw secrets store list`.",
       trustedProxyAllowLoopback: "Allow loopback trusted-proxy authentication?",
       trustedProxyLoopbackTitle: "Loopback proxy security warning",
       trustedProxyLoopbackWarning:
@@ -143,7 +143,7 @@ export const en = {
     memoryImport: {
       applyFailed:
         "{label} memory import failed: {reason}\nRetry from the dashboard's Memory import page (Settings → Import Memory).",
-      confirm: "Import these memories into your OpenClaw workspace?",
+      confirm: "Import these memories into your AgileClaw workspace?",
       conflictSuffix: ", {count} already imported",
       errorTitle: "Memory import failed",
       failureLine: "{label} failed: {reason}. Retry from the Memory import page.",
@@ -260,7 +260,7 @@ export const en = {
       loopbackSshHint:
         "If your gateway is loopback-only, choose SSH tunnel and keep ws://127.0.0.1:18789.",
       noGatewaysFound: "No gateways found",
-      plaintextTokenHint: "Stores the secret directly in OpenClaw config",
+      plaintextTokenHint: "Stores the secret directly in AgileClaw config",
       plaintextTokenLabel: "Enter secret now",
       searchProgress: "Searching for gateways...",
       selectGateway: "Select gateway",
@@ -287,8 +287,8 @@ export const en = {
       applyYes: "Yes — set it up",
       inspectChanges: "What will you change?",
       askBeforeWriting: "Ask before anything is written.",
-      hatchIntro: "Hi, I'm OpenClaw — let's hatch your agent.",
-      setupIntro: "Hi, I'm OpenClaw — let's get you set up.",
+      hatchIntro: "Hi, I'm AgileClaw — let's hatch your agent.",
+      setupIntro: "Hi, I'm AgileClaw — let's get you set up.",
       machineIntro:
         "No menus here: tell me what you want and I'll do the configuring. I looked around this machine:",
       verifiedAi:
@@ -321,7 +321,7 @@ export const en = {
     guided: {
       laneQuestion: "How would you like to start?",
       laneSecurityLine:
-        "OpenClaw runs an AI agent with real access to this machine. Security guide: https://docs.openclaw.ai/gateway/security",
+        "AgileClaw runs an AI agent with real access to this machine. Security guide: https://docs.openclaw.ai/gateway/security",
       laneQuickLabel: "Quick start (recommended)",
       laneQuickHint: "Find AI access, choose a connection to verify, then open the web dashboard.",
       laneCustomLabel: "Custom setup",
@@ -357,7 +357,7 @@ export const en = {
       codingAgentQuip:
         "I can see {labels} on this machine — good taste. Once your AI works I can bring their memories along too.",
       controlUiPreparing: "Preparing the Control UI…",
-      custodianIntro: "Hi — I'm OpenClaw. I keep this system running. Let's get you set up.",
+      custodianIntro: "Hi — I'm AgileClaw. I keep this system running. Let's get you set up.",
       findMeLater:
         "You can always find me later — run `openclaw` in a terminal, or open Settings in the dashboard.",
       hatchingNow: "Hatching your agent now…",
@@ -369,8 +369,8 @@ export const en = {
       setupFailed: "Setup failed",
       workspaceSetupFailed: "Workspace setup failed",
       gatewaySetupFailed: "Gateway setup failed",
-      complete: "OpenClaw is ready.",
-      completeWithoutAi: "OpenClaw setup is saved. Connect AI before opening chat.",
+      complete: "AgileClaw is ready.",
+      completeWithoutAi: "AgileClaw setup is saved. Connect AI before opening chat.",
       detected: "AI detection complete.",
       detectedCandidate: "{label} — {detail}{recommended}",
       detectedGroupLabel: "Detected on this machine",
@@ -391,7 +391,7 @@ export const en = {
       recommendedInstall: "{label} — {hint}\n  {website}",
       recommendedInstallsTitle: "Recommended installs",
       intro: "Connect your AI",
-      invalidConfigDetails: "OpenClaw config {path} is invalid:\n{issues}",
+      invalidConfigDetails: "AgileClaw config {path} is invalid:\n{issues}",
       invalidConfigRepair:
         "Nothing was changed. Repair with {fixCommand}, inspect with {inspectCommand}, then retry onboarding.",
       invalidConfigUnknown: "- The config could not be parsed.",
@@ -434,7 +434,7 @@ export const en = {
       flowKeepModelHint: "Skip model/auth setup and keep the current default model.",
       flowQuickstart: "QuickStart (recommended)",
       flowQuickstartHint: "Recommended local setup. Change details later with {command}.",
-      intro: "OpenClaw setup",
+      intro: "AgileClaw setup",
       invalidConfigTitle: "Invalid config",
       keepCurrent: "Keep current values",
       localGateway: "Local gateway (this machine)",
@@ -496,7 +496,7 @@ export const en = {
       askForHelp:
         "Ask someone experienced to help before enabling tools or exposing it to the internet.",
       attribution:
-        "OpenClaw is an open-source assistant that learns and grows with you, by the OpenClaw Foundation (a non-profit).",
+        "AgileClaw is an open-source assistant that learns and grows with you, by the AgileClaw Foundation (a non-profit).",
       baselineDmSessions:
         "Shared inboxes: isolate DM sessions (session.dmScope: per-channel-peer) and keep tool access minimal.",
       baselinePairing: "Use pairing or allowlists; require mentions in group chats.",
@@ -509,10 +509,10 @@ export const en = {
       confirm:
         "I understand this is personal-by-default and shared/multi-user use requires lock-down. Continue?",
       hardeningRequired:
-        "If you're not comfortable managing access controls and security hardening, don't run OpenClaw without help.",
+        "If you're not comfortable managing access controls and security hardening, don't run AgileClaw without help.",
       learnMore: "Learn more at",
-      notMultitenant: "OpenClaw is not designed to safely separate multiple users by default.",
-      personalAgent: "By default, OpenClaw is a personal agent for one operator.",
+      notMultitenant: "AgileClaw is not designed to safely separate multiple users by default.",
+      personalAgent: "By default, AgileClaw is a personal agent for one operator.",
       promptRisk: "A bad prompt can trick it into doing unsafe things.",
       recommendedBaseline: "Recommended safer setup",
       runRegularly: "Run regularly",
@@ -526,7 +526,7 @@ export const en = {
       decline: "No thanks",
       description:
         "Share which features you use (channels, providers, plugin count) as part of the daily update check. Never messages, never identifiers. See exactly what is sent: `openclaw telemetry show`. Change anytime: `openclaw telemetry on|off`.",
-      title: "Help make OpenClaw better?",
+      title: "Help make AgileClaw better?",
     },
     skills: {
       configure: "Configure skills now? (recommended)",
@@ -560,7 +560,7 @@ export const en = {
       account: "{label} account",
       commandOwnerTitle: "Administration from chat",
       commandOwnerHelp:
-        "Chat access lets someone talk to your agent. A command owner can also update OpenClaw, restart the Gateway, change configuration, and approve commands. Choose only your own trusted operator account. This works in servers and groups without DM pairing; it does not grant chat access or change channel access rules.",
+        "Chat access lets someone talk to your agent. A command owner can also update AgileClaw, restart the Gateway, change configuration, and approve commands. Choose only your own trusted operator account. This works in servers and groups without DM pairing; it does not grant chat access or change channel access rules.",
       commandOwnerSetup: "Set up administration from your own chat account?",
       commandOwnerOwnAccount: "Set up my operator account",
       commandOwnerChannel: "Which channel has your operator account?",
@@ -815,7 +815,7 @@ export const en = {
       connected: "Connected as @{handle} — workspace {workspace} resolved.",
       envPrompt: "CLICKCLACK_BOT_TOKEN detected. Use env var?",
       helpCreateToken:
-        "In ClickClack: Workspace settings → Integrations → OpenClaw → create bot → copy token",
+        "In ClickClack: Workspace settings → Integrations → AgileClaw → create bot → copy token",
       invalidToken:
         "ClickClack rejected the bot token (401). Copy a current token and rerun setup.",
       validationWarningTitle: "ClickClack connection check",
@@ -840,7 +840,7 @@ export const en = {
       helpEnableRoom: "4) Enable the bot in your Nextcloud Talk room settings",
       helpEnvTip: "Tip: you can also set NEXTCLOUD_TALK_BOT_SECRET in your env.",
       helpInstallCommand:
-        '2) Run: ./occ talk:bot:install "OpenClaw" "<shared-secret>" "<webhook-url>" --feature webhook --feature response --feature reaction',
+        '2) Run: ./occ talk:bot:install "AgileClaw" "<shared-secret>" "<webhook-url>" --feature webhook --feature response --feature reaction',
       helpSsh: "1) SSH into your Nextcloud server",
       instanceUrlPrompt: "Enter Nextcloud instance URL (e.g., https://cloud.example.com)",
       setupTitle: "Nextcloud Talk bot setup",
@@ -898,7 +898,7 @@ export const en = {
       linkNowPrompt: "Link WhatsApp now (QR)?",
       linkingTitle: "WhatsApp linking",
       numberTitle: "WhatsApp number",
-      ownerNumberNote: "We need the sender/owner number so OpenClaw can allowlist you.",
+      ownerNumberNote: "We need the sender/owner number so AgileClaw can allowlist you.",
       personalNumberPrompt: "Your personal WhatsApp number (the phone you will message from)",
       personalPhoneLabel: "This is my personal phone number",
       personalPhoneModeEnabled: "Personal phone mode enabled.",
@@ -906,7 +906,7 @@ export const en = {
       phoneSetupPrompt: "WhatsApp phone setup",
       relinkPrompt: "WhatsApp already linked. Re-link now?",
       scanQr: "Scan the QR with WhatsApp on your phone.",
-      separatePhoneLabel: "Separate phone just for OpenClaw",
+      separatePhoneLabel: "Separate phone just for AgileClaw",
       setAllowFromNumbers: "Set allowFrom to specific numbers",
       unsetAllowFromDefault: "Unset allowFrom (default)",
       unsetAllowFromPairing: "Unset allowFrom (use pairing approvals only)",
@@ -999,7 +999,7 @@ export const en = {
       helpIncomingWebhook: "1) Create an incoming webhook in Synology Chat and copy its URL",
       helpOutgoingWebhook: "2) Create an outgoing webhook and copy its secret token",
       helpPointWebhook: "3) Point the outgoing webhook to https://<gateway-host>{path}",
-      incomingWebhookHelpReplies: "This is the URL OpenClaw uses to send replies back to Chat.",
+      incomingWebhookHelpReplies: "This is the URL AgileClaw uses to send replies back to Chat.",
       incomingWebhookHelpUseUrl: "Use the incoming webhook URL from Synology Chat integrations.",
       incomingWebhookKeep: "Incoming webhook URL already configured. Keep it?",
       incomingWebhookTitle: "Synology Chat incoming webhook",
@@ -1015,7 +1015,7 @@ export const en = {
       publicWebhookUrlKeep: "Public attachment webhook URL already configured. Keep it?",
       publicWebhookUrlPrompt: "Public attachment webhook URL (optional)",
       publicWebhookUrlScope:
-        "Expose only this webhook route; OpenClaw uses it for short-lived attachment downloads.",
+        "Expose only this webhook route; AgileClaw uses it for short-lived attachment downloads.",
       publicWebhookUrlTitle: "Synology Chat public attachment route",
       setupTitle: "Synology Chat webhook setup",
       tokenEnvPrompt: "SYNOLOGY_CHAT_TOKEN detected. Use env var?",
@@ -1032,7 +1032,7 @@ export const en = {
       examples: "Examples:",
       installPrompt: "signal-cli not found. Install now?",
       multipleEntries: "Multiple entries: comma-separated.",
-      nextLinkDevice: 'Link device with: signal-cli link -n "OpenClaw"',
+      nextLinkDevice: 'Link device with: signal-cli link -n "AgileClaw"',
       nextScanQr: "Scan QR in Signal -> Linked Devices",
       nextStepsTitle: "Signal next steps",
       reinstallPrompt: "signal-cli detected. Reinstall/update now?",
@@ -1147,7 +1147,7 @@ export const en = {
         qqbot: "Connect to QQ via official QQ Bot API",
         signal: 'signal-cli linked device; more setup (David Reagans: "Hop on Discord.").',
         slack: "supported (Socket Mode).",
-        synologyChat: "Connect your Synology NAS Chat to OpenClaw with full agent capabilities.",
+        synologyChat: "Connect your Synology NAS Chat to AgileClaw with full agent capabilities.",
         telegram: "simplest way to get started — register a bot with @BotFather and get going.",
         tlon: "decentralized messaging on Urbit; install the plugin to enable.",
         twitch: "Twitch chat integration",
@@ -1182,8 +1182,8 @@ export const en = {
       codexNativeSearchTitle: "Codex native search",
       controlUiTitle: "Control UI",
       controlUiDocs: "Docs: https://docs.openclaw.ai/web/control-ui",
-      dashboardCopyPaste: "Copy/paste this URL in a browser on this machine to control OpenClaw.",
-      dashboardOpened: "Opened in your browser. Keep that tab to control OpenClaw.",
+      dashboardCopyPaste: "Copy/paste this URL in a browser on this machine to control AgileClaw.",
+      dashboardOpened: "Opened in your browser. Keep that tab to control AgileClaw.",
       dashboardOpenAnytime: "Open the dashboard anytime: {command}",
       dashboardTitle: "Dashboard",
       dashboardReady: "Dashboard ready",
@@ -1237,9 +1237,9 @@ export const en = {
       nodeIos: "iOS app (camera/canvas)",
       nodeMac: "macOS app (system + notifications)",
       optionalApps: "Optional apps",
-      outroDashboardLink: "Onboarding complete. Use the dashboard link above to control OpenClaw.",
+      outroDashboardLink: "Onboarding complete. Use the dashboard link above to control AgileClaw.",
       outroDashboardOpened:
-        "Onboarding complete. Dashboard opened; keep that tab to control OpenClaw.",
+        "Onboarding complete. Dashboard opened; keep that tab to control AgileClaw.",
       outroHealthCheckFailed:
         "Onboarding complete, but the gateway health check failed. Fix the issue above, then verify with {command}.",
       outroSeeded:
@@ -1251,7 +1251,7 @@ export const en = {
       restart: "Restart",
       containerRuntimeTitle: "Container runtime",
       containerSystemdUnavailable:
-        "Systemd user services are not available inside this container. OpenClaw is skipping only the background service install; run the Gateway in the foreground or use your container supervisor.",
+        "Systemd user services are not available inside this container. AgileClaw is skipping only the background service install; run the Gateway in the foreground or use your container supervisor.",
       securityReminder:
         "Running agents on your computer is risky — harden your setup: https://docs.openclaw.ai/security",
       secretRefAuthFailed: "Could not resolve {field} SecretRef for setup auth.",

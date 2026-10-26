@@ -1101,7 +1101,7 @@ describe("sessions_send gating", () => {
     const details = requireDetails(result);
     expect(details.status).toBe("forbidden");
     expect(String(details.error)).toBe(
-      "Session send denied because spawned-session ownership lookup failed (transient); retry once, then ask the operator to inspect OpenClaw logs.",
+      "Session send denied because spawned-session ownership lookup failed (transient); retry once, then ask the operator to inspect AgileClaw logs.",
     );
     expect(String(details.error)).not.toContain(
       "Session not visible from this sandboxed agent session",

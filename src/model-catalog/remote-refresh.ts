@@ -58,7 +58,7 @@ function assertCompatibleMinVersion(bundle: RemoteModelCatalogWireBundle): void 
   }
   if (comparison < 0) {
     throw new Error(
-      `remote catalog requires OpenClaw ${bundle.minVersion} or newer (current ${VERSION})`,
+      `remote catalog requires AgileClaw ${bundle.minVersion} or newer (current ${VERSION})`,
     );
   }
 }

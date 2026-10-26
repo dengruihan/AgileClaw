@@ -151,7 +151,7 @@ describe("rendered skills diagnostics", () => {
     "## Details",
     "# Project Context",
     "## Workspace Files (injected)",
-    "## Workspace Files (injected)\nUser-editable; OpenClaw loads below as Project Context.",
+    "## Workspace Files (injected)\nUser-editable; AgileClaw loads below as Project Context.",
   ])("keeps %s inside a rendered skill description", (heading) => {
     const skillsPrompt = catalog.replace(
       "Weather reports",

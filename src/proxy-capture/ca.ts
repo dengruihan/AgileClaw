@@ -128,7 +128,7 @@ async function ensureLocalProxyCa(
         }
         fs.chmodSync(stagedKeyPath, LOCAL_PROXY_PRIVATE_KEY_MODE);
         fs.chmodSync(stagedCertPath, 0o644);
-        // All OpenClaw writers hold this lock. Same-directory renames replace each
+        // All AgileClaw writers hold this lock. Same-directory renames replace each
         // file atomically; validation repairs a pair interrupted between renames.
         fs.renameSync(stagedKeyPath, keyPath);
         fs.renameSync(stagedCertPath, certPath);
@@ -147,7 +147,7 @@ export async function ensureDebugProxyCa(certDir: string): Promise<{
   keyPath: string;
 }> {
   return await ensureLocalProxyCa(certDir, {
-    commonName: "OpenClaw Debug Proxy",
+    commonName: "AgileClaw Debug Proxy",
     purpose: "debug proxy",
     validityDays: 7,
   });
@@ -156,7 +156,7 @@ export async function ensureDebugProxyCa(certDir: string): Promise<{
 /** Generates the root CA for one Gateway-lifetime secret egress proxy. */
 export async function ensureSecretEgressProxyCa(certDir: string): Promise<LocalProxyCaPair> {
   return await ensureLocalProxyCa(certDir, {
-    commonName: "OpenClaw Secret Egress Proxy",
+    commonName: "AgileClaw Secret Egress Proxy",
     purpose: "secret egress proxy",
     // Trust is loaded once by subprocesses. Key retention is still limited to
     // this Gateway process; certificate expiry must not impose daily restarts.

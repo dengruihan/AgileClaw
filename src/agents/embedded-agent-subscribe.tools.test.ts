@@ -211,9 +211,9 @@ describe("extractToolResultText", () => {
   it("normalizes top-level CLI result arrays and objects", () => {
     expect(
       extractToolResultText([
-        { type: "web_search_result", title: "OpenClaw", url: "https://example.com" },
+        { type: "web_search_result", title: "AgileClaw", url: "https://example.com" },
       ]),
-    ).toContain('"title":"OpenClaw"');
+    ).toContain('"title":"AgileClaw"');
     expect(extractToolResultText([{ type: "text", text: "hello" }])).toBe("hello");
     expect(
       extractToolResultText({

@@ -108,7 +108,7 @@ async function verifyPluginSdkExports(root: string): Promise<void> {
   const exports = asNullableRecord(manifest?.exports);
   const sdk = Object.entries(exports ?? {}).filter(([key]) => key.startsWith("./plugin-sdk/"));
   if (manifest?.name !== "openclaw" || sdk.length === 0) {
-    throw new Error("Immutable generation has no OpenClaw plugin SDK exports.");
+    throw new Error("Immutable generation has no AgileClaw plugin SDK exports.");
   }
   const verifyTarget = async (target: unknown): Promise<void> => {
     if (typeof target === "string") {

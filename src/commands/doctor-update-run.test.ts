@@ -197,13 +197,13 @@ it.each([
   {
     reason: "global-install-foreign-destination",
     nextAction:
-      "Selected npm destination /other-prefix is occupied by another OpenClaw installation: launcher /other-prefix/bin/openclaw. No selected managed service claims this destination. Switch the runtime back and run `node /original/openclaw/openclaw.mjs update`.",
+      "Selected npm destination /other-prefix is occupied by another AgileClaw installation: launcher /other-prefix/bin/openclaw. No selected managed service claims this destination. Switch the runtime back and run `node /original/openclaw/openclaw.mjs update`.",
   },
   { reason: "global-install-foreign-destination", nextAction: undefined },
   {
     reason: "global-install-permission-denied",
     nextAction:
-      "Cannot write /opt/openclaw-prefix/lib/node_modules (owned by root); run the package update as the directory's owning account. Pull or build an OpenClaw image with the target version, then recreate or redeploy the container with the same state/config mounts.",
+      "Cannot write /opt/openclaw-prefix/lib/node_modules (owned by root); run the package update as the directory's owning account. Pull or build an AgileClaw image with the target version, then recreate or redeploy the container with the same state/config mounts.",
   },
 ])("keeps $reason remediation visible until a later successful update", async (failure) => {
   let latest: UpdateRunRecord = {
@@ -239,7 +239,7 @@ it.each([
     expect.stringContaining(
       failure.reason === "node-runtime-preflight"
         ? `Reason code: ${failure.reason}`
-        : `OpenClaw update failed: ${failure.reason}.`,
+        : `AgileClaw update failed: ${failure.reason}.`,
     ),
     "Update history",
   );

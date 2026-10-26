@@ -265,9 +265,9 @@ describe("gateway codex harness live helpers", () => {
     ).toBe(false);
   });
 
-  it("requires the harness session for OpenClaw status prose", () => {
+  it("requires the harness session for AgileClaw status prose", () => {
     const text =
-      "OpenClaw is running on `openai/gpt-5.5`. Context is at `22k/272k`, no compactions, and the current session is `agent:dev:live-codex-harness`.";
+      "AgileClaw is running on `openai/gpt-5.5`. Context is at `22k/272k`, no compactions, and the current session is `agent:dev:live-codex-harness`.";
     expect(isExpectedCodexStatusCommandText(text)).toBe(true);
     expect(isExpectedCodexStatusCommandText(text.replace("live-codex-harness", "other"))).toBe(
       false,

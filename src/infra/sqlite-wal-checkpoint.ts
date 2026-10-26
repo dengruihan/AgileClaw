@@ -147,7 +147,7 @@ export function truncateSqliteWal(database: DatabaseSync, sqlitePath: string): v
   }
   if (busy !== 0) {
     throw new SqliteWalCheckpointBusyError(
-      `SQLite checkpoint remained busy for ${sqlitePath}. Stop OpenClaw and retry.`,
+      `SQLite checkpoint remained busy for ${sqlitePath}. Stop AgileClaw and retry.`,
     );
   }
 }

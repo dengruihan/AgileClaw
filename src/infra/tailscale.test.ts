@@ -388,7 +388,7 @@ describe("tailscale helpers", () => {
       useTailscaleSudoFixture("conflict");
 
       await expect(claimTailscaleRoute("serve", 18789, 18789, vi.fn())).rejects.toThrow(
-        "ownership OpenClaw cannot prove; it was not modified",
+        "ownership AgileClaw cannot prove; it was not modified",
       );
     },
   );

@@ -116,7 +116,7 @@ describeLive("subagent continuation live", () => {
         );
       await runParent(
         [
-          "Delegate this fictional release review through native OpenClaw tools.",
+          "Delegate this fictional release review through native AgileClaw tools.",
           `Call sessions_spawn exactly once with ${JSON.stringify({
             task: [
               "You are checking fictional release evidence and need approval from your parent.",

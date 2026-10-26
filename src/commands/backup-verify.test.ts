@@ -295,7 +295,7 @@ describe("backupVerifyCommand", () => {
         return archivePath;
       },
       detail:
-        "Archive is not a valid OpenClaw backup. Unrecognized archive format. Choose another archive or create a new one with `openclaw backup create`.",
+        "Archive is not a valid AgileClaw backup. Unrecognized archive format. Choose another archive or create a new one with `openclaw backup create`.",
     },
   ])("reports an actionable failure for $name", async ({ prepare, detail }) => {
     const tempDir = tempDirs.make("openclaw-backup-verify-input-");
@@ -350,7 +350,7 @@ describe("backupVerifyCommand", () => {
     });
 
     expect(runtime.error).toHaveBeenCalledWith(
-      `Backup archive verification failed: ${archivePath}. Archive is not a valid OpenClaw backup. ${detail}. Choose another archive or create a new one with \`openclaw backup create\`.`,
+      `Backup archive verification failed: ${archivePath}. Archive is not a valid AgileClaw backup. ${detail}. Choose another archive or create a new one with \`openclaw backup create\`.`,
     );
     expect(runtime.exit).toHaveBeenCalledWith(1);
     expect(runtime.log).not.toHaveBeenCalled();
@@ -599,7 +599,7 @@ describe("backupVerifyCommand", () => {
   it.runIf(process.platform === "win32")(
     "verifies a canonical global SQLite backup beyond MAX_PATH",
     async () => {
-      const stateDir = String.raw`C:\Users\OpenClaw\.openclaw`;
+      const stateDir = String.raw`C:\Users\AgileClaw\.openclaw`;
       const stateAssetArchivePath = buildBackupArchivePath(TEST_ARCHIVE_ROOT, stateDir);
       const sqliteArchivePath = `${stateAssetArchivePath}/state/openclaw.sqlite`;
       const sqlitePayload = await createSqlitePayload((database) => {
@@ -883,7 +883,7 @@ describe("backupVerifyCommand", () => {
 
   it("rejects case-mangled canonical SQLite paths", async () => {
     const stateAssetArchivePath = `${TEST_ARCHIVE_ROOT}/payload/posix/tmp/.openclaw`;
-    const sqliteArchivePath = `${stateAssetArchivePath}/State/OpenClaw.SQLITE`;
+    const sqliteArchivePath = `${stateAssetArchivePath}/State/AgileClaw.SQLITE`;
     const sqlitePayload = await createSqlitePayload((database) => {
       database.exec(`
         CREATE TABLE schema_meta (
@@ -909,7 +909,7 @@ describe("backupVerifyCommand", () => {
       async (archivePath) => {
         const runtime = createTestRuntime();
         await expect(backupVerifyCommand(runtime, { archive: archivePath })).rejects.toThrow(
-          /case-mangled canonical SQLite path.*State\/OpenClaw\.SQLITE/u,
+          /case-mangled canonical SQLite path.*State\/AgileClaw\.SQLITE/u,
         );
       },
     );
@@ -1445,21 +1445,21 @@ describe("backupVerifyCommand", () => {
       name: "Windows drive state and agent roots",
       platform: "win32",
       includeAgentPayloads: true,
-      stateDir: String.raw`C:\OpenClaw\state`,
-      agentRoots: [{ agentId: "main", sourcePath: String.raw`D:\OpenClaw\agent` }],
+      stateDir: String.raw`C:\AgileClaw\state`,
+      agentRoots: [{ agentId: "main", sourcePath: String.raw`D:\AgileClaw\agent` }],
     },
     {
       name: "UNC state root",
       platform: "win32",
       includeAgentPayloads: true,
-      stateDir: String.raw`\\server\share\OpenClaw`,
+      stateDir: String.raw`\\server\share\AgileClaw`,
       agentRoots: [],
     },
     {
       name: "UNC agent root",
       platform: "win32",
       includeAgentPayloads: true,
-      stateDir: String.raw`C:\OpenClaw\state`,
+      stateDir: String.raw`C:\AgileClaw\state`,
       agentRoots: [{ agentId: "main", sourcePath: String.raw`\\server\share\agent` }],
     },
     {
@@ -1567,7 +1567,7 @@ describe("backupVerifyCommand", () => {
     },
     {
       name: "extended drive namespace metadata",
-      agentRoots: [{ agentId: "main", sourcePath: String.raw`\\?\C:\OpenClaw\agent` }],
+      agentRoots: [{ agentId: "main", sourcePath: String.raw`\\?\C:\AgileClaw\agent` }],
       error: /must be absolute and normalized/u,
     },
     {
@@ -1588,7 +1588,7 @@ describe("backupVerifyCommand", () => {
     {
       name: "case-insensitive Windows drive ownership",
       agentRoots: [
-        { agentId: "main", sourcePath: String.raw`C:\OpenClaw\Agent` },
+        { agentId: "main", sourcePath: String.raw`C:\AgileClaw\Agent` },
         { agentId: "other", sourcePath: String.raw`c:\openclaw\agent` },
       ],
       error: /duplicate agent root ownership/u,

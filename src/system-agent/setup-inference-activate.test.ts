@@ -177,7 +177,7 @@ describe("setup activation credentials and configuration", () => {
     expect(await fs.readFile(setup.configPath, "utf8")).toBe(setup.before);
   });
 
-  it("reuses an existing OpenClaw credential for detected Codex without another login", async () => {
+  it("reuses an existing AgileClaw credential for detected Codex without another login", async () => {
     const setup = await fixture({ codex: true });
     await persistProviderAuthProfilesAfterLogin({
       config: setup.config,

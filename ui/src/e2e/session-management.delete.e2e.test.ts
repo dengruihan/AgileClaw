@@ -574,7 +574,7 @@ suite.define(() => {
       const worktreeModal = await waitForConfirmModal(page);
       await expect
         .poll(() => worktreeModal.textContent())
-        .toContain("OpenClaw could not create a safety snapshot");
+        .toContain("AgileClaw could not create a safety snapshot");
       await expect.poll(() => worktreeModal.textContent()).toContain("Remove?");
       await captureUiProof(
         suite,

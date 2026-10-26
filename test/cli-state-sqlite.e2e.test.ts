@@ -170,7 +170,7 @@ describe("SQLite CLI maintenance ownership", () => {
 
         expect(result.status).not.toBe(0);
         expect(`${result.stderr}\n${result.stdout}`).toContain(
-          "outside the active OpenClaw state directory",
+          "outside the active AgileClaw state directory",
         );
         expect(fs.existsSync(externalStorePath)).toBe(false);
       },
@@ -370,7 +370,7 @@ describe("SQLite CLI maintenance ownership", () => {
               runCli(["backup", "git", "init", "--repository", repository, "--remote", remote]),
               0,
             );
-            await requireGit(repository, ["config", "user.name", "OpenClaw Backup Test"]);
+            await requireGit(repository, ["config", "user.name", "AgileClaw Backup Test"]);
             await requireGit(repository, ["config", "user.email", "backup@example.invalid"]);
             fs.mkdirSync(hooks);
             const username = ["synthetic", "cli", "user"].join("-");

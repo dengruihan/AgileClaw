@@ -28,7 +28,7 @@ afterEach(async () => {
   resetAppHostTestGlobals();
 });
 
-describe("OpenClaw shell dock suppression", () => {
+describe("AgileClaw shell dock suppression", () => {
   it("applies route ownership to shell panels without session-gating desktop", () => {
     vi.stubGlobal("localStorage", createStorageMock());
     vi.stubGlobal(

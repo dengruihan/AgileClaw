@@ -1,4 +1,4 @@
-// V8 compiler tiering for OpenClaw process entrypoints that end in process.exit().
+// V8 compiler tiering for AgileClaw process entrypoints that end in process.exit().
 import { setFlagsFromString } from "node:v8";
 
 // process.exit() joins V8's platform workers without disposing the isolate. A
@@ -15,7 +15,7 @@ const EXIT_COMPILER_FLAGS = new Set<string>(
   EXIT_UNSAFE_COMPILERS.flatMap(({ disable, enable }) => [disable, enable]),
 );
 
-/** Preserve explicit compiler policy in OpenClaw-owned Node child processes. */
+/** Preserve explicit compiler policy in AgileClaw-owned Node child processes. */
 export function resolveForwardedExitCompilerArgs(
   execArgv: readonly string[] = process.execArgv,
 ): string[] {

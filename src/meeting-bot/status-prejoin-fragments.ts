@@ -168,11 +168,11 @@ ${afterRoutedSource}  } else if (canMutateSession && identityVerified && ${muteI
   if (committedOwnerConflict && !canMutateSession) {
     manualAction = manualActionFor("${manualActionReasonPrefix}-session-conflict", "This ${displayName} tab is owned by another active meeting session.");
   } else if (!inCall && loginRequired) {
-    manualAction = manualActionFor("${manualActionReasonPrefix}-login-required", tenantLoginRequired ? "This ${displayName} tenant requires sign-in or email verification. Complete it in the OpenClaw browser profile, then retry." : "Sign in to ${loginDisplayName} in the OpenClaw browser profile, then retry the meeting join.");
+    manualAction = manualActionFor("${manualActionReasonPrefix}-login-required", tenantLoginRequired ? "This ${displayName} tenant requires sign-in or email verification. Complete it in the AgileClaw browser profile, then retry." : "Sign in to ${loginDisplayName} in the AgileClaw browser profile, then retry the meeting join.");
   } else if (!inCall && lobbyWaiting) {
-    manualAction = manualActionFor("${manualActionReasonPrefix}-admission-required", "Admit the OpenClaw guest from the ${loginDisplayName} lobby, then retry speech.");
+    manualAction = manualActionFor("${manualActionReasonPrefix}-admission-required", "Admit the AgileClaw guest from the ${loginDisplayName} lobby, then retry speech.");
   } else if (!inCall && permissionRequired) {
-    manualAction = manualActionFor("${manualActionReasonPrefix}-permission-required", allowMicrophone ? "Allow microphone permission for ${displayName} in the OpenClaw browser profile, then retry." : "Dismiss the ${displayName} device-permission prompt or continue without devices, then retry.");
+    manualAction = manualActionFor("${manualActionReasonPrefix}-permission-required", allowMicrophone ? "Allow microphone permission for ${displayName} in the AgileClaw browser profile, then retry." : "Dismiss the ${displayName} device-permission prompt or continue without devices, then retry.");
   } else if (${inCallControls ? "" : "!inCall && "}controlManualAction) {
     manualAction = controlManualAction;
   }

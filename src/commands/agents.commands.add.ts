@@ -218,7 +218,7 @@ export async function agentsAddCommand(
     ? { ...runtime, log: (...args) => runtime.error(...args) }
     : runtime;
   try {
-    await prompter.intro("Add OpenClaw agent");
+    await prompter.intro("Add AgileClaw agent");
     const name =
       nameInput ??
       (await prompter.text({

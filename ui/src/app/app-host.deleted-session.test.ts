@@ -107,7 +107,7 @@ afterEach(() => {
   resetAppHostTestGlobals();
 });
 
-describe("OpenClaw shell deleted-session recovery", () => {
+describe("AgileClaw shell deleted-session recovery", () => {
   it.each([
     "initial readiness",
     "reconnect",

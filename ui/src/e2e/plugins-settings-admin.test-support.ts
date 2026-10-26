@@ -39,7 +39,7 @@ export const brokenPlugin = {
   installed: true,
   enabled: false,
   state: "error",
-  error: "Dependency check failed. Reinstall the plugin and restart OpenClaw.",
+  error: "Dependency check failed. Reinstall the plugin and restart AgileClaw.",
   removable: true,
 } satisfies PluginCatalogItem;
 
@@ -106,7 +106,7 @@ export const inspection = {
     detail: {
       origin: "clawhub",
       packageName: "@openclaw/workboard",
-      author: { handle: "openclaw", displayName: "OpenClaw" },
+      author: { handle: "openclaw", displayName: "AgileClaw" },
       topics: ["planning"],
       updatedAt: 1_788_000_000_000,
       readme: "# Workboard\n\nCoordinate agent work in one place.",

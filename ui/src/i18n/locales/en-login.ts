@@ -4,13 +4,13 @@ import { en } from "./en.ts";
 // Recovery copy follows the lazy login and plugin views; the loader label stays eager.
 const enLogin = {
   login: {
-    heading: "Connect to OpenClaw",
+    heading: "Connect to AgileClaw",
     lede: "Enter the Gateway URL and secret, or open the one-time link that openclaw dashboard prints on the Gateway host.",
     gatewayUrl: "Gateway URL",
     gatewaySettings: "Gateway settings",
     secret: "Gateway secret",
     setupCodeHint:
-      "This is a device setup code for the OpenClaw mobile app, not the Gateway secret. Paste it in the app's Gateway settings instead; the Gateway secret comes from openclaw gateway auth-token --show on the Gateway host.",
+      "This is a device setup code for the AgileClaw mobile app, not the Gateway secret. Paste it in the app's Gateway settings instead; the Gateway secret comes from openclaw gateway auth-token --show on the Gateway host.",
     secretPlaceholder: "Paste the token or type the password",
     runOnHost: "Run on the Gateway host",
     connection: {
@@ -33,10 +33,10 @@ const enLogin = {
       },
       profileUnavailable: {
         title: "Couldn't verify your account",
-        summary: "OpenClaw couldn't check your account right now. Please try again shortly.",
+        summary: "AgileClaw couldn't check your account right now. Please try again shortly.",
         stepRetry: "Retry shortly.",
         stepAdmin:
-          "If this continues, ask the person who manages OpenClaw to check account access.",
+          "If this continues, ask the person who manages AgileClaw to check account access.",
       },
       verifiedUserRequired: {
         title: "Verified identity required",
@@ -147,7 +147,7 @@ const enLogin = {
         stepDevUi:
           "If using pnpm ui:dev, rebuild or restart the dev UI against the current checkout.",
         stepRestart:
-          "Restart the Gateway after updating OpenClaw so it serves the current protocol.",
+          "Restart the Gateway after updating AgileClaw so it serves the current protocol.",
       },
       network: {
         title: "Gateway unreachable",

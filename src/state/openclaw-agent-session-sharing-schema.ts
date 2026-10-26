@@ -11,12 +11,12 @@ const sessionSharingSchema = extractSqliteTableSchema(
   {
     endMarker: "CREATE TABLE IF NOT EXISTS heartbeat_outcomes (",
     includeEndMarker: false,
-    errorMessage: "OpenClaw agent session-sharing schema markers are missing.",
+    errorMessage: "AgileClaw agent session-sharing schema markers are missing.",
   },
 );
 const sessionSuggestionsStart = sessionSharingSchema.indexOf(SUGGESTIONS_SCHEMA_START);
 if (sessionSuggestionsStart === -1) {
-  throw new Error("OpenClaw agent session-suggestions schema marker is missing.");
+  throw new Error("AgileClaw agent session-suggestions schema marker is missing.");
 }
 export const AGENT_V14_SESSION_SHARING_SCHEMA_SQL = sessionSharingSchema.slice(
   0,

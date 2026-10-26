@@ -89,7 +89,7 @@ export async function resolvePackageRuntimePreflight(params: {
       const version = normalizeOptionalString(manifest?.version);
       if (!version) {
         return resultError(
-          "Cannot inspect the installed OpenClaw runtime requirement; repair its package.json before retrying openclaw update.",
+          "Cannot inspect the installed AgileClaw runtime requirement; repair its package.json before retrying openclaw update.",
         );
       }
       target = {
@@ -297,8 +297,8 @@ export async function resolvePackageRuntimePreflight(params: {
     const upgrade = recoverySteps
       ? `Recovery:\n${formatUpdateRecoverySteps(recoverySteps)}`
       : recommendation
-        ? "Select a published OpenClaw version before installing it under a supported Node runtime."
-        : `No Node version satisfies both this range and this updater's supported range (${SUPPORTED_NODE_VERSION_RANGE}). This candidate version cannot be run by this updater with a supported Node release; install a supported Node and select a compatible OpenClaw target.`;
+        ? "Select a published AgileClaw version before installing it under a supported Node runtime."
+        : `No Node version satisfies both this range and this updater's supported range (${SUPPORTED_NODE_VERSION_RANGE}). This candidate version cannot be run by this updater with a supported Node release; install a supported Node and select a compatible AgileClaw target.`;
     return {
       ...(recoverySteps ? { recoverySteps } : {}),
       ...resultError<PackageRuntimePreflight, string>(

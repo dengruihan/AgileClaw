@@ -205,7 +205,7 @@ const BLOCKED_WORKSPACE_DOTENV_PREFIXES = [
   "OPENAI_API_KEY_",
   // OCM launch identity and executable selection belong to the trusted launcher.
   "OCM_",
-  // Workspace .env is untrusted; reserve the full OpenClaw runtime namespace
+  // Workspace .env is untrusted; reserve the full AgileClaw runtime namespace
   // for shell/global config so new OPENCLAW_* controls are fail-closed by default.
   "OPENCLAW_",
 ];

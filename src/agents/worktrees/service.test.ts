@@ -570,7 +570,7 @@ describe("ManagedWorktreeService", () => {
     expect(await git(restored.path, "branch", "--show-current")).toBe(created.branch);
     expect(await git(restored.path, "rev-parse", "HEAD")).toBe(originalHead);
     expect(await git(restored.path, "log", "--format=%s", created.branch)).not.toContain(
-      "OpenClaw worktree snapshot",
+      "AgileClaw worktree snapshot",
     );
     for (const file of [
       "README.md",

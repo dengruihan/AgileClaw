@@ -49,7 +49,7 @@ function isBunTargetRuntime(execPath: string): boolean {
   return execPath === process.execPath ? Boolean(process.versions.bun) : isBunRuntime(execPath);
 }
 
-/** Disable implicit package installation in OpenClaw-owned Bun processes. */
+/** Disable implicit package installation in AgileClaw-owned Bun processes. */
 export function resolveRuntimeArgs(execPath = process.execPath): string[] {
   return isBunTargetRuntime(execPath) ? ["--no-install"] : [];
 }

@@ -72,7 +72,7 @@ describe("reference source candidate preparation", () => {
     }
     root = await fs.realpath(temporary.make("reference-source-preflight-"));
     await git(root, "init", "--initial-branch=main");
-    await git(root, "config", "user.name", "OpenClaw Test");
+    await git(root, "config", "user.name", "AgileClaw Test");
     await git(root, "config", "user.email", "openclaw@example.com");
     await git(root, "config", "commit.gpgsign", "false");
     await fs.writeFile(

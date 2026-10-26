@@ -1,4 +1,4 @@
-// OpenClaw test instance tests cover spawned test instance lifecycle.
+// AgileClaw test instance tests cover spawned test instance lifecycle.
 import { AsyncLocalStorage, createHook } from "node:async_hooks";
 import { execFile, spawn } from "node:child_process";
 import { EventEmitter, once } from "node:events";
@@ -41,14 +41,14 @@ import { runQaGatewayFixture } from "./qa-gateway-cleanup.js";
 const WRITER_CLEANUP_HANG_GUARD_MS = 5_000;
 const RESISTANT_PROCESS_CLEANUP_HANG_GUARD_MS = 500;
 const MIGRATION_CONVERGENCE_REFUSAL =
-  "OpenClaw plugin migration inputs changed during startup convergence;";
+  "AgileClaw plugin migration inputs changed during startup convergence;";
 const RESTART_MARKER =
   "[openclaw-test-instance] restarting gateway after migration convergence refusal";
 const LEGACY_STORE_PATH = "/fixture/sessions/sessions.json";
-const LEGACY_MIGRATION_REFUSAL = `Legacy session store requires migration: ${LEGACY_STORE_PATH}. Run "openclaw doctor --fix" against the same state/config before starting OpenClaw.`;
-const PROFILED_LEGACY_MIGRATION_REFUSAL = `Legacy session store requires migration: ${LEGACY_STORE_PATH}. Run "openclaw --profile qa-fixture doctor --fix" against the same state/config before starting OpenClaw.`;
+const LEGACY_MIGRATION_REFUSAL = `Legacy session store requires migration: ${LEGACY_STORE_PATH}. Run "openclaw doctor --fix" against the same state/config before starting AgileClaw.`;
+const PROFILED_LEGACY_MIGRATION_REFUSAL = `Legacy session store requires migration: ${LEGACY_STORE_PATH}. Run "openclaw --profile qa-fixture doctor --fix" against the same state/config before starting AgileClaw.`;
 const LEGACY_STARTUP_FAILURE = [
-  "OpenClaw startup migrations did not complete cleanly; refusing to report the gateway ready.",
+  "AgileClaw startup migrations did not complete cleanly; refusing to report the gateway ready.",
   `- Legacy sessions store unreadable; left in place at ${LEGACY_STORE_PATH}`,
   '- Migration step "agent-dir" was not run because prior step "sessions" refused execution.',
   'Run "openclaw doctor --fix" against the same state/config, then restart the gateway.',

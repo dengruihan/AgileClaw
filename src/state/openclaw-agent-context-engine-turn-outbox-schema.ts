@@ -9,7 +9,7 @@ const schema = createSqliteSchemaEnsurer(() =>
   extractSqliteTableSchema(OPENCLAW_AGENT_SCHEMA_SQL, CONTEXT_ENGINE_TURN_OUTBOX_TABLE, {
     endMarker: "CREATE TABLE IF NOT EXISTS cache_entries (",
     includeEndMarker: false,
-    errorMessage: "OpenClaw context-engine turn outbox schema markers are missing.",
+    errorMessage: "AgileClaw context-engine turn outbox schema markers are missing.",
   }),
 );
 

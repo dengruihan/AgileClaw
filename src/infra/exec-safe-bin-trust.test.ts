@@ -56,7 +56,7 @@ describe("exec safe bin trust", () => {
   });
 
   it("matches trusted dirs through path-local case folding on case-insensitive filesystems", async () => {
-    await withTestDir({ prefix: "OpenClaw-Safe-Bin-" }, async (dir) => {
+    await withTestDir({ prefix: "AgileClaw-Safe-Bin-" }, async (dir) => {
       const swapped = swapAsciiCase(dir);
       if (swapped === dir) {
         return;

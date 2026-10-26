@@ -449,14 +449,14 @@ export function pluginRegistryIssueToHealthFinding(
       );
     case "managed-npm-openclaw-peer-link":
       return finding(
-        `Managed npm package ${issue.packageName} has a broken OpenClaw peer link: ${issue.reason}.`,
+        `Managed npm package ${issue.packageName} has a broken AgileClaw peer link: ${issue.reason}.`,
         issue.packageDir,
         "Run `openclaw doctor --fix` to relink managed npm plugin packages.",
         issue.packageName,
       );
     case "registered-npm-openclaw-host-link":
       return finding(
-        `Registered plugin ${issue.packageName} has a broken OpenClaw host link: ${issue.reason}.`,
+        `Registered plugin ${issue.packageName} has a broken AgileClaw host link: ${issue.reason}.`,
         issue.packageDir,
         "Run `openclaw doctor --fix` to relink the installed plugin package.",
         issue.packageName,

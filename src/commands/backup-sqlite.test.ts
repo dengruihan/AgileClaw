@@ -266,7 +266,7 @@ describe("SQLite backup commands", () => {
     },
   );
 
-  it("requires exactly one named OpenClaw database source", async () => {
+  it("requires exactly one named AgileClaw database source", async () => {
     const runtime = createRuntimeCapture();
 
     await expect(

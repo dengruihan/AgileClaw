@@ -125,7 +125,7 @@ async function clearFinished(processTool: ProcessTool, sessionId: string): Promi
   expect(cleared.details).toMatchObject({ status: "completed" });
 }
 
-test("OpenClaw executes and controls the complete real process lifecycle", async ({
+test("AgileClaw executes and controls the complete real process lifecycle", async ({
   signal,
   onTestFinished,
 }) => {

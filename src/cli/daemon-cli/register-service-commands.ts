@@ -172,7 +172,7 @@ export function addGatewayServiceCommands(parent: Command, opts?: { statusDescri
     .option("--force", "Begin restart now; drain admitted work within the shutdown budget", false)
     .option(
       "--safe",
-      "Request an OpenClaw-aware restart after active work drains " +
+      "Request an AgileClaw-aware restart after active work drains " +
         "(bounded wait; may force after the timeout expires)",
       false,
     )

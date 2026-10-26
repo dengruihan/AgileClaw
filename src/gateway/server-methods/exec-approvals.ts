@@ -264,7 +264,7 @@ export const execApprovalsHandlers: GatewayRequestHandlers = {
     validate: validateExecApprovalsNodeSetParams,
     command: "system.execApprovals.set",
     // Host-native nodes own a different policy model. Preserve that model at
-    // the node boundary instead of pretending it is an OpenClaw approvals file.
+    // the node boundary instead of pretending it is an AgileClaw approvals file.
     commandParams: (parsedParams) =>
       "native" in parsedParams
         ? { ...parsedParams.native, baseHash: parsedParams.baseHash }

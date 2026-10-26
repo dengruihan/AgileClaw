@@ -23,13 +23,13 @@ describe("native tool output accumulation", () => {
     (mode) => {
       const output = new NativeToolOutputAccumulator("Codex");
       const literalNotice =
-        "...(OpenClaw truncated Codex native tool output is a literal line from the process)\n";
+        "...(AgileClaw truncated Codex native tool output is a literal line from the process)\n";
       const first =
         mode === "split surrogate"
           ? `${"a".repeat(9_886)}😀${"a".repeat(400)}`
           : mode === "literal notice"
             ? literalNotice
-            : "before user marker\n...(OpenClaw truncated Codex native tool output: original literal process text)\nsecond line must survive\n";
+            : "before user marker\n...(AgileClaw truncated Codex native tool output: original literal process text)\nsecond line must survive\n";
       const delta =
         mode === "split surrogate"
           ? "must not resurrect a split surrogate"
@@ -41,7 +41,7 @@ describe("native tool output accumulation", () => {
       if (mode === "literal notice") {
         expect(item.text).toBe(`${literalNotice}second line must survive\n`);
       } else {
-        expect(item.text).toContain("OpenClaw truncated Codex native tool output");
+        expect(item.text).toContain("AgileClaw truncated Codex native tool output");
         if (mode === "split surrogate") {
           expect(item.text).not.toMatch(/[\uD800-\uDFFF]/);
           expect(item.text).toContain("showing 10000");

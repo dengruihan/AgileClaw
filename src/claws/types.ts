@@ -1,4 +1,4 @@
-// Shared types for grouped OpenClaw Claw manifests and read-only add plans.
+// Shared types for grouped AgileClaw Claw manifests and read-only add plans.
 import type { AgentConfig } from "../config/types.agents.js";
 import type {
   CLAW_SCHEMA_VERSION,

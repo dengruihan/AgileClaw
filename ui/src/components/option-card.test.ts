@@ -24,7 +24,7 @@ describe("option card", () => {
       html`<openclaw-option-card
         .props=${{
           header: "Access",
-          question: "How should OpenClaw help?",
+          question: "How should AgileClaw help?",
           options: [
             { value: "guarded", label: "Ask first" },
             {

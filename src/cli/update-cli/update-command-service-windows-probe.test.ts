@@ -73,7 +73,7 @@ it.each([
       const stdout =
         response === "found"
           ? JSON.stringify({
-              taskPath: "\\OpenClaw Gateway",
+              taskPath: "\\AgileClaw Gateway",
               state: 4,
               actions: [{ type: 0, path: scriptPath, arguments: "", workingDirectory: "" }],
             })

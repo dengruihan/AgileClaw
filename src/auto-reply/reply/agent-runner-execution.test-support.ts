@@ -83,7 +83,7 @@ const state = vi.hoisted(() => ({
 }));
 
 export const GENERIC_RUN_FAILURE_TEXT =
-  "⚠️ OpenClaw couldn't finish this request. Check the conversation before trying again. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow`.";
+  "⚠️ AgileClaw couldn't finish this request. Check the conversation before trying again. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow`.";
 export function makeTestModel(id: string, contextTokens: number): ModelDefinitionConfig {
   return {
     id,

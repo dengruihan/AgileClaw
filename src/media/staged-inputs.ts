@@ -162,7 +162,7 @@ export async function ensureStagedInputDirectory(
   const ignorePath = `${directory}/.gitignore`;
   if (await root.exists(directory)) {
     if ((await root.readText(ignorePath, { maxBytes: 1024 })) !== STAGED_INPUT_GITIGNORE) {
-      throw new Error("Input staging directory is not owned by OpenClaw");
+      throw new Error("Input staging directory is not owned by AgileClaw");
     }
     return;
   }

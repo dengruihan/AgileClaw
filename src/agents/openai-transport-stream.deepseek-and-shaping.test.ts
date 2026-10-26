@@ -190,7 +190,7 @@ describe("openai transport stream", () => {
     },
   );
 
-  it("keeps Codex response shaping when simple completions use the OpenClaw transport alias", () => {
+  it("keeps Codex response shaping when simple completions use the AgileClaw transport alias", () => {
     const params = buildOpenAIResponsesParams(
       {
         id: "gpt-5.5",

@@ -141,7 +141,7 @@ async function readRetiredArmStates(env: NodeJS.ProcessEnv): Promise<{
   const databasePath = resolveOpenClawStateSqlitePath(env);
   const [legacyInspection, databaseInspection] = await Promise.all([
     inspectStatePath(legacyPath, "retired Phone Control lease state"),
-    inspectStatePath(databasePath, "OpenClaw state database"),
+    inspectStatePath(databasePath, "AgileClaw state database"),
   ]);
   const warnings: string[] = [];
   const inspectionUnsafe =
@@ -352,7 +352,7 @@ export async function finalizeRetiredPhoneControlCleanup(params: {
 
   const databaseInspection = await inspectStatePath(
     resolveOpenClawStateSqlitePath(env),
-    "OpenClaw state database",
+    "AgileClaw state database",
   );
   if (databaseInspection.status === "unsafe") {
     warnings.push(databaseInspection.warning);

@@ -322,7 +322,7 @@ suite.define(() => {
       await expectBrowser(checked.locator(":scope > .session-menu__text")).toHaveText("Me");
       await expectBrowser(
         assignTo.locator(':scope > wa-dropdown-item[slot="submenu"] > .session-menu__text'),
-      ).toHaveText(["Me", "OpenClaw", "Bob", "Carol"]);
+      ).toHaveText(["Me", "AgileClaw", "Bob", "Carol"]);
     });
   });
 
@@ -348,7 +348,7 @@ suite.define(() => {
         ':scope > wa-dropdown-item[slot="submenu"] > .session-menu__text',
       );
       await captureProof(page, "assignment-submenu");
-      await expectBrowser(ownerItems).toHaveText(["Me", "OpenClaw", "Bob", "Carol"]);
+      await expectBrowser(ownerItems).toHaveText(["Me", "AgileClaw", "Bob", "Carol"]);
       const selfAvatar = assignTo
         .getByRole("menuitemradio", { name: "Me", exact: true })
         .locator("openclaw-viewer-avatar img");
@@ -441,7 +441,7 @@ suite.define(() => {
           await captureProof(page, `archived-${surface.replaceAll(" ", "-")}`);
           await expectBrowser(
             page.getByRole("menuitemradio").locator(":scope > .session-menu__text"),
-          ).toHaveText(["Me", "OpenClaw", "Bob", "Carol", ...extraNames]);
+          ).toHaveText(["Me", "AgileClaw", "Bob", "Carol", ...extraNames]);
           await expectAssignmentAvatarLayout(page);
           const target = extraNames.at(-1) ?? "Carol";
           if (extraNames.length > 0) {

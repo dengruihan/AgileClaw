@@ -153,7 +153,7 @@ describe("tools.catalog handler", () => {
         {
           id: "openclaw",
           label: "openclaw",
-          description: "Delegate OpenClaw setup and repair",
+          description: "Delegate AgileClaw setup and repair",
           source: "core",
           defaultProfiles: [],
         },

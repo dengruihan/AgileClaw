@@ -238,7 +238,7 @@ it("refuses retired cron files before repairing their custom locator or recoveri
     await fs.writeFile(storePath, retired);
 
     await expect(runDoctorConfigPreflight(repairOptions)).rejects.toThrow(
-      /Upgrade through OpenClaw 2026\.9\.7/,
+      /Upgrade through AgileClaw 2026\.9\.7/,
     );
 
     expect(await fs.readFile(configPath, "utf8")).toBe(original);

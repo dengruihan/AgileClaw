@@ -2,7 +2,7 @@
  * Shared provider HTTP error normalization helpers.
  *
  * Transport adapters use this module to turn provider-specific response bodies,
- * request ids, and binary payload guardrails into stable OpenClaw error shapes.
+ * request ids, and binary payload guardrails into stable AgileClaw error shapes.
  */
 import { mediaKindFromMime } from "@openclaw/media-core/constants";
 import {

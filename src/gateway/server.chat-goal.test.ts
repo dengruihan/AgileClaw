@@ -479,7 +479,7 @@ describe("Goal chat admission and continuation", () => {
       expect.objectContaining({
         code: "INVALID_REQUEST",
         message:
-          "Error: Goal start or resume requires the built-in OpenClaw runtime and an idle local session with recoverable history. This action is unavailable for native Codex and other external runtimes.",
+          "Error: Goal start or resume requires the built-in AgileClaw runtime and an idle local session with recoverable history. This action is unavailable for native Codex and other external runtimes.",
       }),
     );
     expect(loadSessionEntry(scope())?.goal).toBeUndefined();

@@ -63,7 +63,7 @@ it.each([
   async ({ control }) => {
     await withWindowsEnv("openclaw-win-redirect-", async ({ env }) => {
       const commandLine =
-        '"C:\\Program Files\\nodejs\\node.exe" "C:\\OpenClaw\\gateway.js" gateway --port 18789';
+        '"C:\\Program Files\\nodejs\\node.exe" "C:\\AgileClaw\\gateway.js" gateway --port 18789';
       const scriptPath = resolveTaskScriptPath(env);
       await fs.mkdir(path.dirname(scriptPath), { recursive: true });
       await fs.writeFile(

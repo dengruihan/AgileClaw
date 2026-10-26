@@ -14,7 +14,7 @@ describe("isCurrentProcessLaunchdServiceLabel", () => {
     ).toBe(true);
   });
 
-  it("falls back to OpenClaw service markers when XPC_SERVICE_NAME is inherited", () => {
+  it("falls back to AgileClaw service markers when XPC_SERVICE_NAME is inherited", () => {
     expect(
       isCurrentProcessLaunchdServiceLabel("ai.openclaw.gateway", {
         XPC_SERVICE_NAME: "0",

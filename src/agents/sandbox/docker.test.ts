@@ -489,7 +489,7 @@ describe("ensureContainerImage", () => {
       engine: "docker",
       image: DEFAULT_SANDBOX_IMAGE,
       stderr: "",
-      error: `Sandbox image not found: ${DEFAULT_SANDBOX_IMAGE}. Build it with scripts/sandbox-setup.sh before enabling Docker sandboxing. The default image includes python3 for sandbox write/edit helpers; OpenClaw will not substitute plain debian:bookworm-slim.`,
+      error: `Sandbox image not found: ${DEFAULT_SANDBOX_IMAGE}. Build it with scripts/sandbox-setup.sh before enabling Docker sandboxing. The default image includes python3 for sandbox write/edit helpers; AgileClaw will not substitute plain debian:bookworm-slim.`,
     },
     {
       engine: "podman",

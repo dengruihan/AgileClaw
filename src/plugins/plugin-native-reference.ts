@@ -92,7 +92,7 @@ export function createPluginNativeReferenceValidator(boundary: string) {
         placements.add(placement);
       }
       if (expectedHost && resolveNativeHost(target) !== expectedHost) {
-        throw new Error("The native companion directory resolves a different OpenClaw host");
+        throw new Error("The native companion directory resolves a different AgileClaw host");
       }
     } catch (cause) {
       throw new Error(

@@ -65,7 +65,7 @@ export async function createGitFixtureCheckout(
   const remote = path.join(directory, "remote");
   await fs.mkdir(remote);
   await runFixtureGit(remote, "init", "--initial-branch=main");
-  await runFixtureGit(remote, "config", "user.name", "OpenClaw Test");
+  await runFixtureGit(remote, "config", "user.name", "AgileClaw Test");
   await runFixtureGit(remote, "config", "user.email", "openclaw@example.com");
   await writeGitFixtureManifest(remote, manifest);
   await fs.writeFile(path.join(remote, "openclaw.mjs"), "export {};\n");
@@ -82,7 +82,7 @@ export async function createGitFixtureCheckout(
   await runFixtureGit(remote, "commit", "-m", "base");
   const beforeSha = await runFixtureGit(remote, "rev-parse", "HEAD");
   await runFixtureGit(directory, "clone", "--quiet", remote, root);
-  await runFixtureGit(root, "config", "user.name", "OpenClaw Test");
+  await runFixtureGit(root, "config", "user.name", "AgileClaw Test");
   await runFixtureGit(root, "config", "user.email", "openclaw@example.com");
   return { root, remote, beforeSha };
 }

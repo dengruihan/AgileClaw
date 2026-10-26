@@ -137,7 +137,7 @@ export const LEGACY_CONFIG_MIGRATIONS_RUNTIME_MCP: LegacyConfigMigrationSpec[] =
         (server) => typeof server.disabled === "boolean",
       ),
       ...mcpServerRules(
-        'entries use OpenClaw transport names; CLI-native type aliases are legacy here. Run "openclaw doctor --fix".',
+        'entries use AgileClaw transport names; CLI-native type aliases are legacy here. Run "openclaw doctor --fix".',
         (server) => isKnownCliMcpTypeAlias(server.type),
       ),
       ...mcpServerRules(

@@ -501,7 +501,7 @@ async function sendFollowupPayloads(params: {
   ) {
     await dispatchPayload({
       text:
-        "Follow-up completed, but OpenClaw could not deliver it to the originating channel. " +
+        "Follow-up completed, but AgileClaw could not deliver it to the originating channel. " +
         "The reply content was not forwarded to this channel to avoid cross-channel misdelivery.",
       isError: true,
     });

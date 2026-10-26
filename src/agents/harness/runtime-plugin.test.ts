@@ -439,7 +439,7 @@ describe("harness runtime plugins", () => {
     );
   });
 
-  it("keeps the built-in OpenClaw harness independent from plugin registration", async () => {
+  it("keeps the built-in AgileClaw harness independent from plugin registration", async () => {
     const pluginRegistry = createEmptyPluginRegistry();
     attachPreparedPluginFacts(pluginRegistry, { plugins: { enabled: false } }, makeRegistry([]));
 

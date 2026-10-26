@@ -970,7 +970,7 @@ describe("prepareCliRunContext", () => {
     const agentDir = path.join(dir, "agents", "main", "agent");
     const authProfileId = "google-gemini-cli:legacy";
     const backendError = new CliBackendAuthProfilePreparationError(
-      "Gemini CLI OAuth profile is incomplete and cannot be repaired by OpenClaw.",
+      "Gemini CLI OAuth profile is incomplete and cannot be repaired by AgileClaw.",
     );
     fs.mkdirSync(agentDir, { recursive: true });
     saveAuthProfileStore(
@@ -1935,12 +1935,12 @@ describe("prepareCliRunContext", () => {
         message: makeUserMessage("prior room event", 1),
       });
       // Room resumes carry compact event text into the CLI prompt but keep the
-      // richer room context in OpenClaw history for reseed and audits.
+      // richer room context in AgileClaw history for reseed and audits.
       const context = await prepare({
         sessionKey: "agent:main:test",
         agentId: "main",
         trigger: "user",
-        prompt: "[OpenClaw room event]",
+        prompt: "[AgileClaw room event]",
         currentInboundEventKind: "room_event",
         currentInboundContext: {
           text: "Room context:\nAlice: lunch?\n\nCurrent event:\nBob: yes",
@@ -1956,12 +1956,12 @@ describe("prepareCliRunContext", () => {
 
       expect(context.reusableCliSession).toEqual({ mode: "reuse", sessionId: "cli-session" });
       expect(context.params.prompt).toMatch(
-        /^Current event:\nBob: yes\n\n\[OpenClaw room event\]\n\nFor the current source conversation,/,
+        /^Current event:\nBob: yes\n\n\[AgileClaw room event\]\n\nFor the current source conversation,/,
       );
       expect(context.params.prompt).toMatch(
         /\n\nCurrent active computer .*active_node=unknown active_node_identity=unknown$/,
       );
-      expect(context.params.transcriptPrompt).toBe("[OpenClaw room event]");
+      expect(context.params.transcriptPrompt).toBe("[AgileClaw room event]");
       expect(context.openClawHistoryPrompt).toContain("Room context:\nAlice: lunch?");
       expect(context.openClawHistoryPrompt).toContain("Current event:\nBob: yes");
     });
@@ -2548,7 +2548,7 @@ describe("prepareCliRunContext", () => {
     });
     expect(context.openClawHistoryPrompt).toBeUndefined();
     expect(context.params.prompt).toContain(
-      "OpenClaw resumed this CLI session after prompt content changed.",
+      "AgileClaw resumed this CLI session after prompt content changed.",
     );
     expect(context.params.prompt).toContain("changed=system-prompt");
     expect(context.params.prompt).toContain("latest ask");
@@ -2572,7 +2572,7 @@ describe("prepareCliRunContext", () => {
       invalidatedReason: "system-prompt",
     });
     expect(context.params.prompt).not.toContain(
-      "OpenClaw resumed this CLI session after prompt content changed.",
+      "AgileClaw resumed this CLI session after prompt content changed.",
     );
   });
 
@@ -3260,7 +3260,7 @@ describe("prepareCliRunContext", () => {
       toolsAllow: ["read", "web_search"],
     });
     await expect(run).rejects.toThrow(
-      `CLI backend "test-cli" cannot enforce this run's tool cap. Upgrade its plugin and retry; if current, ask its maintainer to add exact-cap support. OpenClaw did not start the run.`,
+      `CLI backend "test-cli" cannot enforce this run's tool cap. Upgrade its plugin and retry; if current, ask its maintainer to add exact-cap support. AgileClaw did not start the run.`,
     );
 
     expect(getActiveMcpLoopbackRuntime).not.toHaveBeenCalled();
@@ -3739,7 +3739,7 @@ describe("prepareCliRunContext", () => {
     ).rejects.toMatchObject({
       code: "unsupported",
       message:
-        'CLI backend "external-cli" does not support isolated completion; OpenClaw did not start the run.',
+        'CLI backend "external-cli" does not support isolated completion; AgileClaw did not start the run.',
     });
     expect(cleanup).toHaveBeenCalledOnce();
   });
@@ -4440,7 +4440,7 @@ describe("prepareCliRunContext", () => {
       });
 
       // Candidate is invalidated (no native --resume) yet reseed still fires:
-      // prepare hands the prior OpenClaw conversation forward as history.
+      // prepare hands the prior AgileClaw conversation forward as history.
       expect(context.reusableCliSession).toEqual({
         mode: "invalidate",
         invalidatedReason: "missing-transcript",
@@ -5219,10 +5219,10 @@ describe("prepareCliRunContext", () => {
       expect(context.openClawHistoryPrompt).toBeDefined();
       expect(context.openClawHistoryPrompt).toContain("RESEED_RETAINED_PREFIX");
       if (testCase.expectsTruncation) {
-        expect(context.openClawHistoryPrompt).toContain("OpenClaw reseed history truncated");
+        expect(context.openClawHistoryPrompt).toContain("AgileClaw reseed history truncated");
       } else {
         expect(context.openClawHistoryPrompt).toContain(testCase.marker);
-        expect(context.openClawHistoryPrompt).not.toContain("OpenClaw reseed history truncated");
+        expect(context.openClawHistoryPrompt).not.toContain("AgileClaw reseed history truncated");
       }
     });
   });
@@ -5280,7 +5280,7 @@ describe("prepareCliRunContext", () => {
       expect(context.openClawHistoryPrompt).toBeDefined();
       expect(context.openClawHistoryPrompt).toContain(recentMarker);
       expect(context.openClawHistoryPrompt).toContain("EARLIEST_USER");
-      expect(context.openClawHistoryPrompt).not.toContain("OpenClaw reseed history truncated");
+      expect(context.openClawHistoryPrompt).not.toContain("AgileClaw reseed history truncated");
     });
   });
 });

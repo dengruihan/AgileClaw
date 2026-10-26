@@ -63,7 +63,7 @@ export function resolveNpmGlobalPrefixLayoutFromGlobalRoot(
 
 /**
  * Derives npm's global package and bin directories from a prefix root.
- * Used for staged installs where OpenClaw creates the prefix itself.
+ * Used for staged installs where AgileClaw creates the prefix itself.
  */
 export function resolveNpmGlobalPrefixLayoutFromPrefix(prefix: string): NpmGlobalPrefixLayout {
   const resolvedPrefix = path.resolve(prefix);

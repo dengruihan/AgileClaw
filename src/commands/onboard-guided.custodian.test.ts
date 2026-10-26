@@ -55,7 +55,7 @@ describe("runGuidedOnboarding", () => {
 
     expect(deps.runBrowserHandoff).not.toHaveBeenCalled();
     expect(deps.launchHatchTui).not.toHaveBeenCalled();
-    expect(prompter.outro).toHaveBeenCalledWith("OpenClaw is ready.");
+    expect(prompter.outro).toHaveBeenCalledWith("AgileClaw is ready.");
   });
 
   it("launches the guided terminal hatch through the running Gateway", async () => {

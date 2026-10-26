@@ -1,4 +1,4 @@
-// Host-owned authorization for exact delegated OpenClaw changes.
+// Host-owned authorization for exact delegated AgileClaw changes.
 import { createHash } from "node:crypto";
 import { stableStringify } from "@openclaw/normalization-core";
 import type { SystemAgentOperation } from "./operation-types.js";

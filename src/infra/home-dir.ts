@@ -1,4 +1,4 @@
-// Resolves OpenClaw home and platform-specific config directories.
+// Resolves AgileClaw home and platform-specific config directories.
 import { AsyncLocalStorage } from "node:async_hooks";
 import os from "node:os";
 import path from "node:path";
@@ -32,7 +32,7 @@ export function resolveRequiredHomeDir(
     return path.resolve(resolved);
   }
   throw new Error(
-    "Unable to resolve an OpenClaw home: set OPENCLAW_HOME, HOME, or USERPROFILE, or run from an existing directory.",
+    "Unable to resolve an AgileClaw home: set OPENCLAW_HOME, HOME, or USERPROFILE, or run from an existing directory.",
   );
 }
 

@@ -276,7 +276,7 @@ async function runConfigValidate(opts: { json?: boolean; runtime?: RuntimeEnv } 
       const issues = normalizeConfigIssues(snapshot.issues);
       if (opts.json) {
         writeRuntimeJson(runtime, {
-          ...formatCliJsonFailure(`OpenClaw config is invalid: ${shortPath}`),
+          ...formatCliJsonFailure(`AgileClaw config is invalid: ${shortPath}`),
           valid: false,
           path: outputPath,
           issues,

@@ -84,8 +84,8 @@ function finalEvent(runId: string, key = sessionKey) {
 
 async function expectNotice(h: ReturnType<typeof harness>, accepted: boolean) {
   const text = accepted
-    ? "[OpenClaw interruption] The Gateway disconnected after accepting this message, so its final outcome is unknown. Check the session before retrying."
-    : "[OpenClaw interruption] The Gateway disconnected before OpenClaw could confirm whether this message was accepted, so its final outcome is unknown. Check the session before retrying.";
+    ? "[AgileClaw interruption] The Gateway disconnected after accepting this message, so its final outcome is unknown. Check the session before retrying."
+    : "[AgileClaw interruption] The Gateway disconnected before AgileClaw could confirm whether this message was accepted, so its final outcome is unknown. Check the session before retrying.";
   expect(h.sessionUpdate).toHaveBeenCalledWith({
     sessionId,
     update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
@@ -142,7 +142,7 @@ describe("acp translator stop reason mapping", () => {
         sessionUpdate: "agent_message_chunk",
         content: {
           type: "text",
-          text: "[OpenClaw interruption] Tool validation failed: command contains unsupported flag",
+          text: "[AgileClaw interruption] Tool validation failed: command contains unsupported flag",
         },
       },
     });

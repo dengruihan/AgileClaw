@@ -50,7 +50,7 @@ export async function prepareWorkspaceAttachments(
       const result = await bridge.createFileExclusive({ filePath, data, mkdir: true, signal });
       assertCurrent();
       if (result === "exists" && (await root.readText(filePath, { maxBytes: 1024 })) !== data) {
-        throw new Error("Input staging directory is not owned by OpenClaw");
+        throw new Error("Input staging directory is not owned by AgileClaw");
       }
     },
   };

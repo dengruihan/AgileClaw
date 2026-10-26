@@ -20,10 +20,10 @@ describe("preserved session worktree presentation", () => {
     };
 
     expect(formatPreservedWorktreeConfirmation(snapshot)).toBe(
-      "Session needs attention: openclaw/snapshot-task — OpenClaw could not create a safety snapshot. Remove?",
+      "Session needs attention: openclaw/snapshot-task — AgileClaw could not create a safety snapshot. Remove?",
     );
     expect(formatPreservedWorktreesNotice([busy, snapshot])).toBe(
-      "Managed Worktrees:\nopenclaw/busy-task — live run or cleanup active\nopenclaw/snapshot-task — OpenClaw could not create a safety snapshot",
+      "Managed Worktrees:\nopenclaw/busy-task — live run or cleanup active\nopenclaw/snapshot-task — AgileClaw could not create a safety snapshot",
     );
   });
 });

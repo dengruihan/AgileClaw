@@ -77,7 +77,7 @@ export function createConnectedContext(
     config: {
       current: {
         assistantIdentity: {
-          name: "OpenClaw",
+          name: "AgileClaw",
           avatar: null,
           avatarSource: null,
           avatarStatus: null,

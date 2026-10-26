@@ -190,7 +190,7 @@ export type ProviderAuthMethod = {
    * Optional wizard/onboarding metadata for this specific auth method.
    *
    * Use this when one provider exposes multiple setup entries (for example API
-   * key + OAuth, or region-specific login flows). OpenClaw uses this to expose
+   * key + OAuth, or region-specific login flows). AgileClaw uses this to expose
    * method-specific auth choices while keeping the provider id stable.
    */
   wizard?: ProviderPluginWizardSetup;
@@ -271,7 +271,7 @@ export type ProviderOAuthProfileIdRepair = {
   /**
    * Legacy OAuth profile id to migrate away from.
    *
-   * When omitted, OpenClaw falls back to `<provider>:default`.
+   * When omitted, AgileClaw falls back to `<provider>:default`.
    */
   legacyProfileId?: string;
   /**

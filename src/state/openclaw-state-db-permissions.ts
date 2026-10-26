@@ -43,7 +43,7 @@ export function ensureOpenClawStatePermissions(
   const isDefaultStateDatabase =
     path.resolve(pathname) === path.resolve(resolveOpenClawStateSqlitePath(env));
   if (isDefaultStateDatabase && dir !== defaultDir) {
-    throw new Error(`OpenClaw state database path resolved outside its state dir: ${pathname}`);
+    throw new Error(`AgileClaw state database path resolved outside its state dir: ${pathname}`);
   }
   const dirExisted = existsSync(dir);
   if (options.createDirectory) {

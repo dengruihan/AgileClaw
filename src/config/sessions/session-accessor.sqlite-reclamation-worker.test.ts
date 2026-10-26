@@ -331,7 +331,7 @@ test.each(["established", "first-created"] as const)(
             forceInProcess: false,
             plan,
           }),
-        ).rejects.toThrow("OpenClaw state database read admission changed");
+        ).rejects.toThrow("AgileClaw state database read admission changed");
         expect(revoked).toBe(true);
         expect(admission.assertCurrent).toThrow("read admission changed");
         expect(admission.identity.key).toBe(readDatabasePathIdentitySync(sharedPath).key);

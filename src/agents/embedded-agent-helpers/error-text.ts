@@ -60,7 +60,7 @@ const RUNTIME_FAILURE_COPY: Partial<
   callback_validation:
     "The sign-in link wasn't accepted. Try signing in again. If asked for a link, paste the full link from your browser.",
   auth_scope:
-    "This login doesn't have the access OpenClaw needs. Sign in again under Models in the Control UI.",
+    "This login doesn't have the access AgileClaw needs. Sign in again under Models in the Control UI.",
   auth_html:
     "Couldn't sign in to the AI service. Sign in again under Models in the Control UI or run `openclaw configure`.",
   auth_invalid_token: AUTH_INVALID_TOKEN_USER_TEXT,

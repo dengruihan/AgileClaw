@@ -12,7 +12,7 @@ import { stripCliSessionDriftNote } from "../agents/cli-session.js";
 import { isOpenClawCliImageCachePath } from "../agents/embedded-agent-runner/run/images.media-refs.js";
 import { stripInboundMetadata } from "../auto-reply/reply/strip-inbound-meta.js";
 // Imported CLI history merge helpers.
-// Deduplicates external history messages against local OpenClaw transcripts.
+// Deduplicates external history messages against local AgileClaw transcripts.
 import {
   enableNodeSqliteKyselyStatementCache,
   executeSqliteQuerySync,

@@ -1699,8 +1699,8 @@ describe("deliverSubagentAnnouncement completion delivery", () => {
     expect(queueEmbeddedAgentMessageWithOutcome).toHaveBeenCalledTimes(2);
     const calls = queueEmbeddedAgentMessageWithOutcome.mock.calls;
     expect(calls.map(([session, prompt]) => [session, prompt])).toEqual([
-      ["requester-session-4", "Continue the OpenClaw runtime event."],
-      ["requester-session-4", "Continue the OpenClaw runtime event."],
+      ["requester-session-4", "Continue the AgileClaw runtime event."],
+      ["requester-session-4", "Continue the AgileClaw runtime event."],
     ]);
     for (const call of calls) {
       expect(call[2]).toMatchObject({
@@ -1814,7 +1814,7 @@ describe("deliverSubagentAnnouncement completion delivery", () => {
       expect(rawMessages).toEqual([
         expect.objectContaining({
           role: "user",
-          content: "Continue the OpenClaw runtime event.",
+          content: "Continue the AgileClaw runtime event.",
           provenance: expect.objectContaining({
             kind: "inter_session",
             sourceTool: "subagent_announce",

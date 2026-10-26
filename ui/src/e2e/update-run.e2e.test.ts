@@ -75,7 +75,7 @@ suite.define(() => {
         });
         const runView = dialog.locator("openclaw-update-run-view");
         await runView
-          .getByText("⬆️ OpenClaw update in progress: staging.", { exact: true })
+          .getByText("⬆️ AgileClaw update in progress: staging.", { exact: true })
           .waitFor();
         await runView
           .locator(".update-run-view__details")
@@ -220,7 +220,7 @@ suite.define(() => {
           status: run.status,
           updatedAtMs: run.updatedAtMs,
         });
-        const headline = "✅ OpenClaw updated to 2.0.0 (from 1.0.0).";
+        const headline = "✅ AgileClaw updated to 2.0.0 (from 1.0.0).";
         await runView.getByText(headline, { exact: true }).first().waitFor();
         await runView.getByText("Gateway downtime: 1s.", { exact: false }).waitFor();
         expect(await runView.locator('[data-oracle][data-state="pass"]').count()).toBe(4);

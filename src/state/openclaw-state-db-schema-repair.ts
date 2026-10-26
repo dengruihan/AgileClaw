@@ -90,7 +90,7 @@ export function migrateWorkerPlacementExecutionModeSchema(
     currentColumns.length !== canonicalColumns.length ||
     currentColumns.some((column) => !expected.has(column))
   ) {
-    throw new Error("OpenClaw v7 worker placement columns are not canonical");
+    throw new Error("AgileClaw v7 worker placement columns are not canonical");
   }
   const unexpectedObjects = db
     .prepare(
@@ -106,11 +106,11 @@ export function migrateWorkerPlacementExecutionModeSchema(
     )
     .all();
   if (unexpectedObjects.length > 0) {
-    throw new Error("OpenClaw v7 worker placement schema has unsupported attached objects");
+    throw new Error("AgileClaw v7 worker placement schema has unsupported attached objects");
   }
   const migrationTable = "worker_session_placements_migration_v8";
   if (tableExists(db, migrationTable)) {
-    throw new Error(`OpenClaw worker placement migration table already exists: ${migrationTable}`);
+    throw new Error(`AgileClaw worker placement migration table already exists: ${migrationTable}`);
   }
   const migrationSchema = placementSchema.replace(
     "CREATE TABLE IF NOT EXISTS worker_session_placements",
@@ -177,7 +177,7 @@ export function migrateAgentDatabaseRelativePaths(
     const agentId = row.agent_id;
     const registeredPath = row.path;
     if (typeof agentId !== "string" || typeof registeredPath !== "string") {
-      throw new Error("OpenClaw v8 agent database registry paths are not canonical");
+      throw new Error("AgileClaw v8 agent database registry paths are not canonical");
     }
     if (!path.isAbsolute(registeredPath)) {
       continue;
@@ -248,7 +248,7 @@ export function assertCanonicalAgentDatabasesPrimaryKey(db: DatabaseSync, pathna
   const primaryKey = tablePrimaryKeyColumns(db, "agent_databases");
   if (primaryKey.length !== 2 || primaryKey[0] !== "agent_id" || primaryKey[1] !== "path") {
     throw new SqliteSchemaMismatchError(
-      `OpenClaw state database ${pathname} has an unsupported agent database registry schema. Upgrades from pre-July-2026 state are no longer migrated; restore a backup produced by a July 2026 or newer release before retrying.`,
+      `AgileClaw state database ${pathname} has an unsupported agent database registry schema. Upgrades from pre-July-2026 state are no longer migrated; restore a backup produced by a July 2026 or newer release before retrying.`,
     );
   }
 }
@@ -286,7 +286,7 @@ export function assertCanonicalStateSchemaShape(db: DatabaseSync, pathname: stri
       throw new OpenClawStateDatabaseSchemaMigrationRequiredError("audit-events-v2", pathname);
     }
     throw new SqliteSchemaMismatchError(
-      `OpenClaw state database ${pathname} has a noncanonical audit event schema that cannot be repaired automatically; restore the canonical audit_events shape before retrying.`,
+      `AgileClaw state database ${pathname} has a noncanonical audit event schema that cannot be repaired automatically; restore the canonical audit_events shape before retrying.`,
     );
   }
 }

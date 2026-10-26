@@ -52,10 +52,10 @@ export function getSystemAgentChatInputError(params: SystemAgentChatParams): str
     return "Send either message or wizardAnswer, not both.";
   }
   if (params.wizardAnswer !== undefined && params.delegation !== undefined) {
-    return "Delegated OpenClaw sessions cannot submit structured wizard answers.";
+    return "Delegated AgileClaw sessions cannot submit structured wizard answers.";
   }
   if (params.wizardAnswer !== undefined && params.reset === true) {
-    return "A wizard answer cannot reset its OpenClaw chat session.";
+    return "A wizard answer cannot reset its AgileClaw chat session.";
   }
   if (
     params.wizardCancel !== undefined &&
@@ -64,10 +64,10 @@ export function getSystemAgentChatInputError(params: SystemAgentChatParams): str
     return "Send wizardCancel without a message or wizardAnswer.";
   }
   if (params.wizardCancel !== undefined && params.delegation !== undefined) {
-    return "Delegated OpenClaw sessions cannot cancel hosted wizards.";
+    return "Delegated AgileClaw sessions cannot cancel hosted wizards.";
   }
   if (params.wizardCancel !== undefined && params.reset === true) {
-    return "A wizard cancel cannot reset its OpenClaw chat session.";
+    return "A wizard cancel cannot reset its AgileClaw chat session.";
   }
   return undefined;
 }

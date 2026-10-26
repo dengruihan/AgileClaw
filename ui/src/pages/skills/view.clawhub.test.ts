@@ -83,7 +83,7 @@ describe("renderSkills ClawHub", () => {
           installRef: "@openclaw/github",
           registry: "https://clawhub.ai",
           displayName: "GitHub",
-          summary: "GitHub integration for OpenClaw",
+          summary: "GitHub integration for AgileClaw",
           icon: `https://clawhub.ai/api/v1/skill-icons/${"a".repeat(64)}`,
           version: "1.2.3",
         },
@@ -112,7 +112,7 @@ describe("renderSkills ClawHub", () => {
     expect(resultItem?.querySelector(".plugin-card-author")?.textContent?.trim()).toBe(
       "@openclaw/github",
     );
-    expect(resultItem?.textContent).toContain("GitHub integration for OpenClaw");
+    expect(resultItem?.textContent).toContain("GitHub integration for AgileClaw");
     expect(resultItem?.querySelector<HTMLImageElement>("img")?.src).toBe(
       "blob:clawhub-search-icon",
     );
@@ -137,7 +137,7 @@ describe("renderSkills ClawHub", () => {
         skill: {
           slug: "github",
           displayName: "GitHub",
-          summary: "GitHub integration for OpenClaw",
+          summary: "GitHub integration for AgileClaw",
           icon: `https://clawhub.ai/api/v1/skill-icons/${"b".repeat(64)}`,
           createdAt: 1_700_000_000,
           updatedAt: 1_700_000_100,
@@ -151,7 +151,7 @@ describe("renderSkills ClawHub", () => {
           os: ["macos", "linux"],
         },
         owner: {
-          displayName: "OpenClaw",
+          displayName: "AgileClaw",
           handle: "openclaw",
         },
       },
@@ -167,7 +167,7 @@ describe("renderSkills ClawHub", () => {
       Array.from(container.querySelectorAll(".callout")).map((node) => normalizeText(node)),
     ).toEqual(["rate limited Retry", "Installed github"]);
     expect(normalizeText(container.querySelector(".skill-reader-dialog__body")!)).toBe(
-      "GitHub integration for OpenClaw By OpenClaw (@openclaw) · Latest: v1.2.3 Added search support Platforms: macos, linux Install GitHub",
+      "GitHub integration for AgileClaw By AgileClaw (@openclaw) · Latest: v1.2.3 Added search support Platforms: macos, linux Install GitHub",
     );
     expect(container.querySelector<HTMLImageElement>(".clawhub-skill-icon--detail")?.src).toBe(
       "blob:clawhub-detail-icon",

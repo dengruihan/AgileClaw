@@ -93,8 +93,8 @@ it.each<HintCase>([
   ],
   [
     "Windows task inspection without removal",
-    [task("\\OpenClaw Gateway Backup")],
-    ['schtasks /Query /TN "\\OpenClaw Gateway Backup" /V /FO LIST'],
+    [task("\\AgileClaw Gateway Backup")],
+    ['schtasks /Query /TN "\\AgileClaw Gateway Backup" /V /FO LIST'],
   ],
   ...["$(Start-Process calc)", "%OPENCLAW_GATEWAY_TASK%", "unsafe&task", "task`name"].map(
     (label): HintCase => [`rejects expandable Windows label ${label}`, [task(label)], []],

@@ -130,7 +130,7 @@ describe("buildStatusAllReportLines", () => {
     expect(output).toContain("gateway.port: invalid");
     expect(output).toContain("Fix: openclaw doctor --fix");
     expect(output.indexOf("Config diagnostics:")).toBeLessThan(
-      output.indexOf("OpenClaw status --all"),
+      output.indexOf("AgileClaw status --all"),
     );
     expect(output).not.toContain(String.fromCharCode(0xd83d));
     expect(

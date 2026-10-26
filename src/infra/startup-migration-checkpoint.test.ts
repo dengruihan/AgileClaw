@@ -177,7 +177,7 @@ describe("startup migration lease", () => {
         timeoutMs: 0,
       }),
     ).rejects.toThrow(
-      `OpenClaw startup migrations are already running for this state directory; retry after the other OpenClaw process finishes or after 1970-01-01T00:05:01.000Z. (held by pid ${process.pid})`,
+      `AgileClaw startup migrations are already running for this state directory; retry after the other AgileClaw process finishes or after 1970-01-01T00:05:01.000Z. (held by pid ${process.pid})`,
     );
 
     lease.release();
@@ -350,7 +350,7 @@ describe("startup migration lease", () => {
           },
         }),
       ).rejects.toThrow(
-        `OpenClaw startup migrations are already running for this state directory; retry after the other OpenClaw process finishes or after 1970-01-01T00:05:01.000Z. (held by pid ${process.pid})`,
+        `AgileClaw startup migrations are already running for this state directory; retry after the other AgileClaw process finishes or after 1970-01-01T00:05:01.000Z. (held by pid ${process.pid})`,
       );
       expect(elapsedMs).toBe(500);
       expect(hasActiveStartupMigrationLease({ env, nowMs })).toBe(true);
@@ -491,7 +491,7 @@ describe("startup migration lease", () => {
         owner: "second",
         timeoutMs: 0,
       }),
-    ).rejects.toThrow("OpenClaw startup migrations are already running");
+    ).rejects.toThrow("AgileClaw startup migrations are already running");
 
     lease.release();
     expect(hasActiveStartupMigrationLease({ env, nowMs: 301_002, onActivity })).toBe(false);

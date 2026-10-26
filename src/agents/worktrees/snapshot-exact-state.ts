@@ -49,9 +49,9 @@ export type ExactStateSnapshot = z.infer<typeof metadataSchema>;
 const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 export const exactSnapshotPrefix = "refs/openclaw/snapshots/exact-v1/";
 const identity = {
-  GIT_AUTHOR_NAME: "OpenClaw",
+  GIT_AUTHOR_NAME: "AgileClaw",
   GIT_AUTHOR_EMAIL: "openclaw@localhost",
-  GIT_COMMITTER_NAME: "OpenClaw",
+  GIT_COMMITTER_NAME: "AgileClaw",
   GIT_COMMITTER_EMAIL: "openclaw@localhost",
 };
 const assertSnapshotCurrent = () =>
@@ -360,7 +360,7 @@ export async function writeExactStateCommit(
       "-p",
       captured.metadata.branchHead,
       "-m",
-      "OpenClaw worktree exact state v1",
+      "AgileClaw worktree exact state v1",
     ],
     { env: identity },
   );

@@ -1010,7 +1010,7 @@ export function collectExposureMatrixFindings(cfg: OpenClawConfig): SecurityAudi
       detail:
         `Found inbound policy="open" at:\n${openInboundPolicies.map((p) => `- ${p}`).join("\n")}\n` +
         `Control-plane tool exposure contexts:\n${controlPlaneContexts.map((line) => `- ${line}`).join("\n")}\n` +
-        "Prompt injection in open conversations can trigger OpenClaw updates, plugin changes, or scheduled automation.",
+        "Prompt injection in open conversations can trigger AgileClaw updates, plugin changes, or scheduled automation.",
       remediation: `For open groups or DMs, deny control-plane tools (${GATEWAY_CONTROL_PLANE_TOOLS.map((tool) => `\`${tool}\``).join(", ")}) and prefer tools.profile="messaging". Tighten dmPolicy/groupPolicy to pairing or allowlist when possible.`,
     });
   }
@@ -1067,7 +1067,7 @@ export function collectLikelyMultiUserSetupFindings(cfg: OpenClawConfig): Securi
       "Heuristic signals indicate this gateway may be reachable by multiple users:\n" +
       signals.map((signal) => `- ${signal}`).join("\n") +
       `\n${impactLine}\n${riskyContextsDetail}\n` +
-      "OpenClaw's default security model is personal-assistant (one trusted operator boundary), not hostile multi-tenant isolation on one shared gateway. For multiple users or organizations, run one isolated Gateway cell per tenant: https://docs.openclaw.ai/gateway/multi-tenant-hosting",
+      "AgileClaw's default security model is personal-assistant (one trusted operator boundary), not hostile multi-tenant isolation on one shared gateway. For multiple users or organizations, run one isolated Gateway cell per tenant: https://docs.openclaw.ai/gateway/multi-tenant-hosting",
     remediation:
       'If users may be mutually untrusted, split trust boundaries (separate gateways + credentials, ideally separate OS users/hosts). If you intentionally run shared-user access, set agents.defaults.sandbox.mode="all", keep tools.fs.workspaceOnly=true, deny runtime/fs/web tools unless required, and keep personal/private identities + credentials off that runtime.',
   });

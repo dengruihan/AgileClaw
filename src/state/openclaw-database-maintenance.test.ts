@@ -18,7 +18,7 @@ import { assertOpenClawStateDatabaseForMaintenance } from "./openclaw-state-db.j
 import { OPENCLAW_STATE_MAINTENANCE_SCHEMA_COMPATIBILITY } from "./openclaw-state-schema-compatibility.js";
 import { OPENCLAW_STATE_SCHEMA_SQL } from "./openclaw-state-schema.js";
 
-describe("OpenClaw database maintenance schema validation", () => {
+describe("AgileClaw database maintenance schema validation", () => {
   it("keeps standing-grant generations compatible with the previous schema", () => {
     const companionSchema = `CREATE TABLE IF NOT EXISTS operator_approval_standing_grant_generations (
   grant_id TEXT NOT NULL PRIMARY KEY

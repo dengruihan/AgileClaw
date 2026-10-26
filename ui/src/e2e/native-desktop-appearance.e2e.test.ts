@@ -221,7 +221,7 @@ suite.define(() => {
         async ({ page }) => {
           const native = await installNative(page);
           await page.goto(`${suite.server.baseUrl}companion/index.html`);
-          await page.getByRole("heading", { name: "Welcome to OpenClaw" }).waitFor();
+          await page.getByRole("heading", { name: "Welcome to AgileClaw" }).waitFor();
           await expectAppearance(page, colorScheme);
           await page.getByRole("button", { name: "Get started" }).click();
           await page.getByRole("button", { name: /On another computer/ }).click();
@@ -346,12 +346,12 @@ suite.define(() => {
         async ({ page }) => {
           const native = await installNative(page);
           await page.goto(`${suite.server.baseUrl}companion/index.html?mode=missingCli`);
-          await page.getByRole("heading", { name: "OpenClaw needs the CLI" }).waitFor();
+          await page.getByRole("heading", { name: "AgileClaw needs the CLI" }).waitFor();
           await page.getByLabel("Release channel", { exact: true }).selectOption("beta");
           await expectAppearance(page, colorScheme);
           await expectControlsFit(page);
-          await page.getByRole("button", { name: "Install OpenClaw", exact: true }).click();
-          await page.getByRole("heading", { name: "OpenClaw needs attention" }).waitFor();
+          await page.getByRole("button", { name: "Install AgileClaw", exact: true }).click();
+          await page.getByRole("heading", { name: "AgileClaw needs attention" }).waitFor();
           expect(await native.requests("install_cli")).toEqual([
             { command: "install_cli", params: { channel: "beta" } },
           ]);
@@ -359,7 +359,7 @@ suite.define(() => {
             "beta",
           );
           expect(
-            await page.getByRole("button", { name: "Install OpenClaw", exact: true }).isEnabled(),
+            await page.getByRole("button", { name: "Install AgileClaw", exact: true }).isEnabled(),
           ).toBe(true);
           await expectAppearance(page, colorScheme);
           await page.goto(`${suite.server.baseUrl}companion/index.html?mode=stopped`);

@@ -413,7 +413,7 @@ export async function sendApnsExecApprovalAlert(
       approvalId: params.approvalId,
       gatewayDeviceId: params.gatewayDeviceId,
       title: "Exec approval required",
-      body: "Open OpenClaw to review this request.",
+      body: "Open AgileClaw to review this request.",
       category: EXEC_APPROVAL_NOTIFICATION_CATEGORY,
     }),
     pushType: "alert",

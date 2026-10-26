@@ -18,7 +18,7 @@ it.each([
   ["prompt reached the tenant maximum", "The agent run failed before producing a reply."],
   [
     "database is locked",
-    "⚠️ OpenClaw is busy saving your conversation. Wait a moment, then check the conversation before trying again. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow` in your terminal.",
+    "⚠️ AgileClaw is busy saving your conversation. Wait a moment, then check the conversation before trying again. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow` in your terminal.",
   ],
 ])("projects recorded failures without discovering provider policy: %s", (error, text) => {
   expect(failure(error)).toMatchObject({ content: [{ type: "text", text }] });

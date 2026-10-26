@@ -6,7 +6,7 @@ import { findGatewayPidsOnPortSync as findUnixGatewayPidsOnPortSync } from "./re
 import { readWindowsListeningPidsOnPortSync } from "./windows-port-pids.js";
 
 // Verify argv or current recorded ownership before signaling or reporting
-// listener PIDs so stale port owners cannot be mistaken for OpenClaw.
+// listener PIDs so stale port owners cannot be mistaken for AgileClaw.
 
 type GatewayProcessContext = { env?: NodeJS.ProcessEnv; port?: number };
 

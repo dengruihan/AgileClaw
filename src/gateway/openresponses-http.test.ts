@@ -326,12 +326,12 @@ describe("OpenResponses HTTP API (e2e)", () => {
             textDeltas.push(event.delta);
           }
         }
-        expect(textDeltas.join("")).toBe("No response from OpenClaw.");
+        expect(textDeltas.join("")).toBe("No response from AgileClaw.");
         expect(eventTypes).toContain("response.completed");
       } else {
         const response = await client.responses.create({ ...request, stream: false });
         expect(response.status).toBe("completed");
-        expect(response.output_text).toBe("No response from OpenClaw.");
+        expect(response.output_text).toBe("No response from AgileClaw.");
       }
 
       expect(agentCommandMock).toHaveBeenCalledTimes(1);

@@ -334,7 +334,7 @@ it.each([1440, 390])(
     };
     // A found original without renderable text (image-only, etc.) still names its author.
     const foundWithoutText = createReplyPreviewResolver(new Map(), {
-      assistantName: "OpenClaw",
+      assistantName: "AgileClaw",
       replyMessageAccess: {
         read: () => ({
           role: "user",

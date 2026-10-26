@@ -7,7 +7,7 @@ export function assertSupportedSessionStoreEntry(entry: unknown): void {
   }
   if (typeof entry.room === "string" && typeof entry.groupChannel !== "string") {
     throw new SessionStoreMigrationRequiredError(
-      'Session field "room" predates July 2026 and is no longer supported. Preserve the original state, install OpenClaw 2026.9.5 and run "openclaw doctor --fix", then upgrade again.',
+      'Session field "room" predates July 2026 and is no longer supported. Preserve the original state, install AgileClaw 2026.9.5 and run "openclaw doctor --fix", then upgrade again.',
     );
   }
 }

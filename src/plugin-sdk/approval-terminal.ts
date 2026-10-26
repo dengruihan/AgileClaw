@@ -53,15 +53,16 @@ export function formatChannelApprovalResolvedLabel(
 export function buildSystemAgentApprovalResolvedText(view: SystemAgentResolvedView): string {
   const outcome = interpretApprovalTerminalOutcome(view, "denial");
   return outcome === "cancelled"
-    ? "⚠️ OpenClaw change was cancelled because its run ended. No change was made. Retry."
+    ? "⚠️ AgileClaw change was cancelled because its run ended. No change was made. Retry."
     : outcome === "deny"
-      ? "❌ OpenClaw change denied. No change was made."
+      ? "❌ AgileClaw change denied. No change was made."
       : outcome === "applied"
-        ? `✅ OpenClaw change approved and applied: ${view.operationSummary}`
+        ? `✅ AgileClaw change approved and applied: ${view.operationSummary}`
         : outcome === "not-applied"
-          ? "⚠️ OpenClaw change approved, but completion could not be confirmed. Check the current settings before retrying."
-          : `✅ OpenClaw change approved. Applying: ${view.operationSummary}`;
+          ? "⚠️ AgileClaw change approved, but completion could not be confirmed. Check the current settings before retrying."
+          : `✅ AgileClaw change approved. Applying: ${view.operationSummary}`;
 }
 
 /** Terminal copy for a system change approval that expired before a decision. */
-export const SYSTEM_AGENT_APPROVAL_EXPIRED_TEXT = "⏱️ OpenClaw change expired. No change was made.";
+export const SYSTEM_AGENT_APPROVAL_EXPIRED_TEXT =
+  "⏱️ AgileClaw change expired. No change was made.";

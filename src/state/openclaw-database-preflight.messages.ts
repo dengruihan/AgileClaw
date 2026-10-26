@@ -39,7 +39,7 @@ function formatIncompatibleDatabaseSchemas(
         ? "Gateway refused restart"
         : "Gateway refused startup";
   return (
-    `${prefix} because ${incompatibleDatabases.length} OpenClaw database schema(s) are newer than this build. ` +
+    `${prefix} because ${incompatibleDatabases.length} AgileClaw database schema(s) are newer than this build. ` +
     `${incompatibleDatabases.map(formatIncompatibleDatabase).join(" ")} ` +
     `Refused by ${describeRunningOpenClawBuild()}. ` +
     "Run a build at least as new as the writer that supports these schemas, or stop the service and restore your pre-upgrade backup created with openclaw backup create. " +
@@ -63,7 +63,7 @@ export function formatIndeterminateDatabaseReadiness(
       : operation === "gateway-startup"
         ? "Gateway refused startup"
         : "Gateway refused restart";
-  return `${action} because persisted database readiness could not be verified:\n${shown.join("\n")}\n${operation === "doctor" ? "Stop OpenClaw processes, then restore the affected database from a verified backup." : "Stop the Gateway and other OpenClaw processes, run openclaw doctor --fix, then retry."}`;
+  return `${action} because persisted database readiness could not be verified:\n${shown.join("\n")}\n${operation === "doctor" ? "Stop AgileClaw processes, then restore the affected database from a verified backup." : "Stop the Gateway and other AgileClaw processes, run openclaw doctor --fix, then retry."}`;
 }
 
 export function describeDeferredStateSchemaPublication(

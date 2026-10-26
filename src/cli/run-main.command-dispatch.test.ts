@@ -353,7 +353,7 @@ describe("runCli exit behavior", () => {
     const primary = "bad\u001b[31m-red\u001b[0m\nforged\tline";
 
     await expect(runCli(cliArgs(primary))).rejects.toThrow(
-      'OpenClaw does not know the command "bad-red\\nforged\\tline".',
+      'AgileClaw does not know the command "bad-red\\nforged\\tline".',
     );
 
     expect(startProxyMock).not.toHaveBeenCalled();
@@ -376,7 +376,7 @@ describe("runCli exit behavior", () => {
     const message = (error as Error).message;
     const displayPrimary = `${"🦞".repeat(63)}…`;
     expect(displayPrimary.length).toBeLessThanOrEqual(128);
-    expect(message).toContain(`OpenClaw does not know the command "${displayPrimary}".`);
+    expect(message).toContain(`AgileClaw does not know the command "${displayPrimary}".`);
     expect(message).not.toContain("�");
     expect(message.length).toBeLessThan(500);
     expect(startProxyMock).not.toHaveBeenCalled();
@@ -483,7 +483,7 @@ describe("runCli exit behavior", () => {
 
   it("rejects unowned command roots even when --help is appended (regression for #81077)", async () => {
     await expect(runCli(cliArgs("foo", "--help"))).rejects.toThrow(
-      'OpenClaw does not know the command "foo".',
+      'AgileClaw does not know the command "foo".',
     );
 
     expect(startProxyMock).not.toHaveBeenCalled();
@@ -682,7 +682,7 @@ describe("runCli exit behavior", () => {
     await runCli(["node", "openclaw", "config"]);
 
     expect(createCliProgressMock).toHaveBeenCalledWith({
-      label: "Loading OpenClaw CLI…",
+      label: "Loading AgileClaw CLI…",
       indeterminate: true,
       delayMs: 0,
     });
@@ -706,7 +706,7 @@ describe("runCli exit behavior", () => {
     await runCli(["node", "openclaw", "models", "aliases", "list", "--plain"]);
 
     expect(createCliProgressMock).toHaveBeenCalledWith({
-      label: "Loading OpenClaw CLI…",
+      label: "Loading AgileClaw CLI…",
       indeterminate: true,
       delayMs: 0,
       enabled: false,

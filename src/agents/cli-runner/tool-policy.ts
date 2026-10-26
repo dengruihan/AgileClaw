@@ -1,6 +1,6 @@
 import { normalizeToolPolicyName } from "../tool-policy.js";
 
-/** Transport prefix CLI harnesses use for loopback OpenClaw MCP tool names. */
+/** Transport prefix CLI harnesses use for loopback AgileClaw MCP tool names. */
 const OPENCLAW_MCP_TOOL_PREFIX = "mcp__openclaw__";
 const GEMINI_OPENCLAW_MCP_TOOL_PREFIX = "mcp_openclaw_";
 

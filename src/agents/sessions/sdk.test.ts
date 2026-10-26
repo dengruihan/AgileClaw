@@ -502,7 +502,7 @@ describe("createAgentSession attribution headers", () => {
       expect(proxyOptions.headers).toBeUndefined();
       expect(endpointOptions.headers).toMatchObject({
         "HTTP-Referer": "https://openclaw.ai",
-        "X-OpenRouter-Title": "OpenClaw",
+        "X-OpenRouter-Title": "AgileClaw",
         "X-OpenRouter-Categories": "personal-agent,cli-agent",
       });
     } finally {
@@ -617,7 +617,7 @@ describe("createAgentSession tool defaults", () => {
       noTools: "builtin",
       customTools: [customTool],
     });
-    const systemPrompt = "You are a personal assistant running inside OpenClaw.";
+    const systemPrompt = "You are a personal assistant running inside AgileClaw.";
 
     session.setBaseSystemPrompt(systemPrompt);
     session.setActiveToolsByName(["bash", "custom_lookup"]);

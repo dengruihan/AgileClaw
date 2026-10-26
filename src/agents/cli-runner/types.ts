@@ -98,7 +98,7 @@ export type RunCliAgentParams = {
   outputTextPolicy?: AgentHarnessIsolatedCompletionParamsV2["outputTextPolicy"];
   /** Internal backend control command: reuse the native session without recording a conversation turn. */
   controlOperation?: "compact";
-  /** Persist the successful CLI assistant reply into the OpenClaw session transcript. */
+  /** Persist the successful CLI assistant reply into the AgileClaw session transcript. */
   persistAssistantTranscript?: boolean;
   /** Session store path used when assistant transcript persistence is enabled. */
   storePath?: string;
@@ -154,7 +154,7 @@ export type RunCliAgentParams = {
   skillLibraryAuthoring?: import("../../skills/library/authoring.js").SkillLibraryAuthoringCapability;
   /** Server-authored origin for fresh automation mutations from this CLI run. */
   cronCreatorCallerOrigin?: CronScheduledToolCallerOrigin;
-  /** Exact native plus canonical OpenClaw surface for a selectable CLI backend. */
+  /** Exact native plus canonical AgileClaw surface for a selectable CLI backend. */
   cliToolAvailability?: {
     native: string[];
     openClaw: string[];

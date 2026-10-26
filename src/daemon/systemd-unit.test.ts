@@ -54,7 +54,7 @@ it("round-trips escaped and quoted Environment values", () => {
 it("round-trips escaped and quoted ExecStart arguments", () => {
   const programArguments = ["/usr/bin/openclaw", "gateway", ...values];
   const unit = buildSystemdUnit({
-    description: "OpenClaw Gateway",
+    description: "AgileClaw Gateway",
     programArguments,
     environment: {},
   });
@@ -80,7 +80,7 @@ it("preserves explicit NODE_OPTIONS while omitting other empty values", () => {
 
 it("renders the gateway unit with safe lifecycle policy and ordered environment directives", () => {
   const unit = buildSystemdUnit({
-    description: "OpenClaw Gateway",
+    description: "AgileClaw Gateway",
     programArguments: ["/usr/bin/openclaw", "gateway", "--name", "My Bot"],
     environmentFiles: ["/home/test/.openclaw/.env"],
     environment: { OPENCLAW_GATEWAY_PORT: "18789" },
@@ -109,7 +109,7 @@ it("renders the gateway unit with safe lifecycle policy and ordered environment 
 it("rejects environment values with line breaks", () => {
   expect(() =>
     buildSystemdUnit({
-      description: "OpenClaw Gateway",
+      description: "AgileClaw Gateway",
       programArguments: ["/usr/bin/openclaw", "gateway", "start"],
       environment: { INJECT: "ok\nExecStartPre=/bin/touch /tmp/oc15789_rce" },
     }),
@@ -129,9 +129,9 @@ it("splits command arguments using the platform's escaping rules", () => {
       ["openclaw", "--name", 'My "Bot"', "--foo", "bar"],
     ],
     [
-      'openclaw --path "C:\\\\Program Files\\\\OpenClaw"',
+      'openclaw --path "C:\\\\Program Files\\\\AgileClaw"',
       "backslash-quote-only",
-      ["openclaw", "--path", "C:\\\\Program Files\\\\OpenClaw"],
+      ["openclaw", "--path", "C:\\\\Program Files\\\\AgileClaw"],
     ],
     [
       'openclaw --label "My \\"Quoted\\" Name"',

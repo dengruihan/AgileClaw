@@ -78,7 +78,7 @@ it("preserves a rewritten process title with emptied original argument slots", (
   expect(readDarwinProcessCommand(12, uid)).toEqual({ argv });
 });
 
-it("retains only the OpenClaw service marker from the native environment", () => {
+it("retains only the AgileClaw service marker from the native environment", () => {
   const argv = ["node", "dist/index.js"];
   reply = argumentsReply(
     argv,

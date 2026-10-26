@@ -201,7 +201,7 @@ async function activateScheduledTask(
     definitionTransaction?: GatewayServiceInstallArgs["definitionTransaction"];
   } & ScheduledTaskInstallRecovery,
 ): Promise<ScheduledTaskActivation | "startup-fallback"> {
-  const taskDescription = params.description ?? "OpenClaw Gateway";
+  const taskDescription = params.description ?? "AgileClaw Gateway";
   const taskName = resolveTaskName(params.env);
   const quotedLaunchPath = quoteSchtasksArg(params.taskLaunchPath);
   let expectedXml = buildScheduledTaskXml({

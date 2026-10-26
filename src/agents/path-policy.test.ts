@@ -24,7 +24,7 @@ describe("toRelativeWorkspacePath (windows semantics)", () => {
 
   it("preserves candidate case when the root itself is spelled with different case", () => {
     withMockedWindowsPlatform(() => {
-      const root = "C:\\Users\\User\\OpenClaw";
+      const root = "C:\\Users\\User\\AgileClaw";
       const candidate = "c:/users/user/openclaw/Memory/Log.txt";
       expect(toRelativeWorkspacePath(root, candidate)).toBe("Memory\\Log.txt");
     });
@@ -32,15 +32,15 @@ describe("toRelativeWorkspacePath (windows semantics)", () => {
 
   it("accepts extended-length prefixed windows paths", () => {
     withMockedWindowsPlatform(() => {
-      const root = "C:\\Users\\User\\OpenClaw";
-      const candidate = "\\\\?\\C:\\Users\\User\\OpenClaw\\Memory\\Log.txt";
+      const root = "C:\\Users\\User\\AgileClaw";
+      const candidate = "\\\\?\\C:\\Users\\User\\AgileClaw\\Memory\\Log.txt";
       expect(toRelativeWorkspacePath(root, candidate)).toBe("Memory\\Log.txt");
     });
   });
 
   it("rejects windows paths outside workspace root", () => {
     withMockedWindowsPlatform(() => {
-      const root = "C:\\Users\\User\\OpenClaw";
+      const root = "C:\\Users\\User\\AgileClaw";
       const candidate = "C:\\Users\\User\\Other\\log.txt";
       expect(() => toRelativeWorkspacePath(root, candidate)).toThrow("Path escapes workspace root");
     });
@@ -48,7 +48,7 @@ describe("toRelativeWorkspacePath (windows semantics)", () => {
 
   it("rejects windows escapes that differ from the root only by case", () => {
     withMockedWindowsPlatform(() => {
-      const root = "C:\\Users\\User\\OpenClaw";
+      const root = "C:\\Users\\User\\AgileClaw";
       const candidate = "c:\\users\\USER\\openclaw\\..\\Other\\log.txt";
       expect(() => toRelativeWorkspacePath(root, candidate)).toThrow("Path escapes workspace root");
     });
@@ -56,7 +56,7 @@ describe("toRelativeWorkspacePath (windows semantics)", () => {
 
   it("treats a differently-cased root as the root itself", () => {
     withMockedWindowsPlatform(() => {
-      const root = "C:\\Users\\User\\OpenClaw";
+      const root = "C:\\Users\\User\\AgileClaw";
       const candidate = "c:\\users\\USER\\openclaw";
       expect(toRelativeWorkspacePath(root, candidate, { allowRoot: true })).toBe("");
     });

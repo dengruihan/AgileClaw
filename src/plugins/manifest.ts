@@ -1,4 +1,4 @@
-/** Loads and normalizes OpenClaw plugin manifests, including contracts and config schemas. */
+/** Loads and normalizes AgileClaw plugin manifests, including contracts and config schemas. */
 import path from "node:path";
 import { normalizeModelCatalog } from "@openclaw/model-catalog-core/model-catalog-normalize";
 import { validatePluginUiCapabilities } from "../../packages/gateway-protocol/src/plugin-ui-capabilities.js";
@@ -197,7 +197,7 @@ export function loadPluginManifest(
   if (isCoreReservedPluginId(id)) {
     return cacheResult({
       ok: false,
-      error: `plugin manifest id "${id}" is reserved by OpenClaw core`,
+      error: `plugin manifest id "${id}" is reserved by AgileClaw core`,
       manifestPath,
     });
   }
@@ -344,7 +344,7 @@ export function loadPluginManifest(
   return cacheResult({
     ok: true,
     // Older readers ignored this advisory field; invalid display metadata must
-    // not prevent an installed plugin from loading after an OpenClaw update.
+    // not prevent an installed plugin from loading after an AgileClaw update.
     ...(!uiCapabilities.ok
       ? { warnings: [`ignoring invalid plugin manifest uiCapabilities: ${uiCapabilities.error}`] }
       : {}),

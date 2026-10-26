@@ -31,7 +31,7 @@ export function registerOpenClawAgentDatabaseIdentity(db: DatabaseSync): void {
   const filename = normalizeDatabasePath(db.location() ?? "");
   const file = filename ? readDatabasePathIdentitySync(filename) : undefined;
   if (file && !file.key.startsWith("file:")) {
-    throw new Error("OpenClaw agent database disappeared before identity registration");
+    throw new Error("AgileClaw agent database disappeared before identity registration");
   }
   const identity = file ? file.key.slice("file:".length) : Symbol("incognito-agent-database");
   identities.set(db, {
@@ -47,7 +47,7 @@ export function registerOpenClawAgentDatabaseIdentity(db: DatabaseSync): void {
 export function readOpenClawAgentDatabaseIdentity(database: AgentDatabaseOwner) {
   const prepared = findOpenClawAgentDatabaseIdentity(database);
   if (prepared === undefined) {
-    throw new Error("OpenClaw agent database identity was not prepared at open");
+    throw new Error("AgileClaw agent database identity was not prepared at open");
   }
   return prepared;
 }
@@ -111,7 +111,7 @@ export function createOpenClawAgentDatabaseClaim(
     isCurrent,
     assertCurrent: () => {
       if (!isCurrent()) {
-        throw new Error("OpenClaw agent database claim is no longer current");
+        throw new Error("AgileClaw agent database claim is no longer current");
       }
     },
     release: () => {

@@ -405,7 +405,7 @@ describe("exec approval forwarder", () => {
       },
     );
 
-    describe("OpenClaw change approvals", () => {
+    describe("AgileClaw change approvals", () => {
       // No approvals.* forwarding config: the requesting chat is the reply path.
       const unconfigured = {
         channels: {
@@ -415,7 +415,7 @@ describe("exec approval forwarder", () => {
       const systemAgentRequest = {
         id: "system-agent:req-1",
         request: {
-          title: "OpenClaw change",
+          title: "AgileClaw change",
           description: "set agents.defaults.memorySearch.provider to openai",
           command: "set agents.defaults.memorySearch.provider to openai",
           proposalHash: "hash-1",

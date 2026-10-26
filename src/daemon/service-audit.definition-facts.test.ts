@@ -167,8 +167,8 @@ it.each([
     (unit) =>
       description
         ? unit.replace(
-            "Description=OpenClaw Gateway",
-            `Description=${kind === "description" ? "operator-secret" : "OpenClaw Gateway (v2026.9.4)"}`,
+            "Description=AgileClaw Gateway",
+            `Description=${kind === "description" ? "operator-secret" : "AgileClaw Gateway (v2026.9.4)"}`,
           )
         : kind === "base"
           ? unit.replace("[Service]", "[Service]\nExecStartPre=/private/operator-secret")
@@ -344,7 +344,7 @@ it.each([
     expect(native.task).toHaveBeenCalledExactlyOnceWith([
       "/Query",
       "/TN",
-      "OpenClaw Gateway",
+      "AgileClaw Gateway",
       "/XML",
     ]);
   },
@@ -596,7 +596,7 @@ it.each(["canonical-wrapper", "legacy-wrapper", "malformed-args", "wrapper", "me
             }
           : {}),
         label: "ai.openclaw.gateway",
-        comment: kind === "metadata" ? "operator-private" : "OpenClaw Gateway",
+        comment: kind === "metadata" ? "operator-private" : "AgileClaw Gateway",
         stdoutPath,
         stderrPath: stdoutPath,
       }),
@@ -694,7 +694,7 @@ it.each([
     (kind === "script" ? "echo operator-private\r\n" : "");
   const launcher =
     (releasedWaiting
-      ? `' OpenClaw Gateway (v2026.9.3)\r\nWScript.Quit CreateObject("WScript.Shell").Run("""${scriptPath.replaceAll('"', '""')}""", 0, True)\r\n`
+      ? `' AgileClaw Gateway (v2026.9.3)\r\nWScript.Quit CreateObject("WScript.Shell").Run("""${scriptPath.replaceAll('"', '""')}""", 0, True)\r\n`
       : buildHiddenLauncherScript({ scriptPath, taskSupervisor: true })) +
     (kind === "launcher" || kind === "planned-launcher" || kind === "released-waiting-custom"
       ? 'WScript.Echo "operator-private"\r\n'
@@ -707,7 +707,7 @@ it.each([
     code: 0,
     stderr: "",
     stdout: buildScheduledTaskXml({
-      taskDescription: kind === "metadata" ? "operator-private" : "OpenClaw Gateway",
+      taskDescription: kind === "metadata" ? "operator-private" : "AgileClaw Gateway",
       taskUser: "fixture",
       launchPath:
         kind === "planned-launcher" || kind === "missing-launcher" ? scriptPath : hiddenPath,

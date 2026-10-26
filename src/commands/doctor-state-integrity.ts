@@ -1312,7 +1312,7 @@ export async function noteStateIntegrity(
         warnings.push(
           [
             `- Found ${wedgedCount} with automatic restart recovery tombstoned.`,
-            "  OpenClaw will not auto-resume these child sessions on restart; use Doctor to repair stale native subagent recovery state.",
+            "  AgileClaw will not auto-resume these child sessions on restart; use Doctor to repair stale native subagent recovery state.",
             `  Examples: ${wedgedSubagentSessions
               .slice(0, 3)
               .map(({ key }) => key)

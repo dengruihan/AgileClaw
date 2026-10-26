@@ -426,7 +426,7 @@ export function resolveGatewayPort(
     return DEFAULT_GATEWAY_PORT;
   }
   // Keep byte-for-byte aligned with AppProfile.defaultGatewayPort in
-  // apps/macos/Sources/OpenClaw/AppProfile.swift so both surfaces connect to the same Gateway.
+  // apps/macos/Sources/AgileClaw/AppProfile.swift so both surfaces connect to the same Gateway.
   let hash = 2_166_136_261;
   for (const byte of Buffer.from(profile, "utf8")) {
     hash = Math.imul(hash ^ byte, 16_777_619) >>> 0;

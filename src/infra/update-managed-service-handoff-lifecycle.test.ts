@@ -690,7 +690,7 @@ describe("managed service update handoff", () => {
       const serviceIdentityEnv = {
         OPENCLAW_LAUNCHD_LABEL: "com.example.openclaw.test",
         OPENCLAW_SYSTEMD_UNIT: "openclaw-test.service",
-        OPENCLAW_WINDOWS_TASK_NAME: "OpenClaw Test Gateway",
+        OPENCLAW_WINDOWS_TASK_NAME: "AgileClaw Test Gateway",
       } satisfies NodeJS.ProcessEnv;
       const supervisorEnv = Object.fromEntries(
         SUPERVISOR_HINT_ENV_VARS.map((key) => [key, "supervised"]),
@@ -721,7 +721,7 @@ describe("managed service update handoff", () => {
           : supervisor === "launchd"
             ? { OPENCLAW_LAUNCHD_LABEL: "test.gateway", HOME: "/Users/test" }
             : supervisor === "schtasks"
-              ? { OPENCLAW_WINDOWS_TASK_NAME: "OpenClaw Test Gateway" }
+              ? { OPENCLAW_WINDOWS_TASK_NAME: "AgileClaw Test Gateway" }
               : { ...supervisorEnv, ...serviceIdentityEnv, KEEP_ME: "1" };
         const result = await startManagedServiceUpdateHandoff({
           root: MOCK_INSTALL_ROOT,
@@ -823,7 +823,7 @@ describe("managed service update handoff", () => {
                     "test.gateway.plist",
                   ),
                 }
-              : { kind: "schtasks", taskName: "OpenClaw Test Gateway" },
+              : { kind: "schtasks", taskName: "AgileClaw Test Gateway" },
           );
           const child = spawnMock.mock.results.at(-1)?.value as
             | ReturnType<typeof createSpawnMock>

@@ -29,7 +29,7 @@ function hasExtension(filePosix: string, extensions: readonly string[]): boolean
   return extensions.includes(ext);
 }
 
-/** Transient names apply to every selected backup root, not just OpenClaw state. */
+/** Transient names apply to every selected backup root, not just AgileClaw state. */
 export function isTransientBackupPath(filePath: string): boolean {
   return /.+\.(?:sock$|pid$|tmp(?:\.|$))/iu.test(path.posix.basename(normalizePosix(filePath)));
 }

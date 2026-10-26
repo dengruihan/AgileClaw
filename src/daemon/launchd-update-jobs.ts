@@ -1,4 +1,4 @@
-/** Discovery and shutdown of stale OpenClaw launchd updater jobs. */
+/** Discovery and shutdown of stale AgileClaw launchd updater jobs. */
 import path from "node:path";
 import {
   parseStrictInteger,

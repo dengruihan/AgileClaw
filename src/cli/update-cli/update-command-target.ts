@@ -105,7 +105,7 @@ function printManagedServicePackageUpdatePlan(params: {
     );
     defaultRuntime.log(
       theme.warn(
-        `Shell OpenClaw root differs from the managed gateway service root: ${rootRedirect.previousRoot}`,
+        `Shell AgileClaw root differs from the managed gateway service root: ${rootRedirect.previousRoot}`,
       ),
     );
     defaultRuntime.log(

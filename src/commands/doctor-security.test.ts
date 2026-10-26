@@ -594,7 +594,7 @@ describe("noteSecurityWarnings gateway exposure", () => {
     expect(message).toContain('tools.exec.mode="full"');
     expect(message).toContain('defaults.security="allowlist"');
     expect(message).toContain("stricter side wins");
-    expect(message).not.toContain("OpenClaw default");
+    expect(message).not.toContain("AgileClaw default");
   });
 
   it("attributes broader host policy warnings to wildcard agent entries", async () => {

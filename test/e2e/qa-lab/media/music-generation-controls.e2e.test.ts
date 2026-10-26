@@ -227,7 +227,7 @@ describe("music generation controls QA product proof", () => {
     await withEnvAsync({ OPENCLAW_STATE_DIR: stateDir }, async () => {
       const vocalResult = (await fixture.tool.execute("music-vocal-fallback", {
         prompt: "bright QA chorus",
-        lyrics: "OpenClaw keeps the signal clear",
+        lyrics: "AgileClaw keeps the signal clear",
         instrumental: false,
         durationSeconds: 45,
         format: "wav",
@@ -238,7 +238,7 @@ describe("music generation controls QA product proof", () => {
         "qa-fallback/beat-v2",
       ]);
       expect(fixture.calls[0]?.request).toMatchObject({
-        lyrics: "OpenClaw keeps the signal clear",
+        lyrics: "AgileClaw keeps the signal clear",
         instrumental: false,
         durationSeconds: 45,
         format: "wav",
@@ -266,7 +266,7 @@ describe("music generation controls QA product proof", () => {
           },
         ],
         ignoredOverrides: [
-          { key: "lyrics", value: "OpenClaw keeps the signal clear" },
+          { key: "lyrics", value: "AgileClaw keeps the signal clear" },
           { key: "format", value: "wav" },
         ],
         normalization: {
@@ -279,7 +279,7 @@ describe("music generation controls QA product proof", () => {
       expect(vocalDetails).not.toHaveProperty("requestedLyrics");
       expect(vocalDetails).not.toHaveProperty("format");
       expect(textOf(vocalResult)).toContain(
-        "Warning: Ignored unsupported overrides for qa-fallback/beat-v2: lyrics=OpenClaw keeps the signal clear, format=wav.",
+        "Warning: Ignored unsupported overrides for qa-fallback/beat-v2: lyrics=AgileClaw keeps the signal clear, format=wav.",
       );
       expect(textOf(vocalResult)).toContain("Duration normalized: requested 45s; used 30s.");
 

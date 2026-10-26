@@ -79,7 +79,7 @@ const config = {
     bargeInCooldownMs: 0,
     bargeInPeakThreshold: 0,
     bargeInRmsThreshold: 0,
-    guestName: "OpenClaw",
+    guestName: "AgileClaw",
     joinTimeoutMs: 1_000,
     launch: true,
     reuseExistingTab: true,

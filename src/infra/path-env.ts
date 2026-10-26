@@ -132,7 +132,7 @@ function candidateBinDirs(
   const append: string[] = [];
 
   // Keep the active runtime directory ahead of PATH hardening so shebang-based
-  // subprocesses keep using the same Node/Bun the current OpenClaw process is on.
+  // subprocesses keep using the same Node/Bun the current AgileClaw process is on.
   const execDir = path.dirname(execPath);
   if (isExecutable(execPath)) {
     prepend.push(execDir);

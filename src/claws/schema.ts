@@ -162,7 +162,7 @@ const openClawProfileSchema = z
             profile: nonEmptyString
               .refine(
                 (value) => resolveToolProfilePolicy(value) !== undefined,
-                "Tool profile must name a registered OpenClaw built-in profile.",
+                "Tool profile must name a registered AgileClaw built-in profile.",
               )
               .optional(),
             allow: z
@@ -255,7 +255,7 @@ const openClawProfileSchema = z
                     code: "custom",
                     path: ["rememberAcrossConversations"],
                     message:
-                      "The sessions source requires rememberAcrossConversations: true in the OpenClaw profile.",
+                      "The sessions source requires rememberAcrossConversations: true in the AgileClaw profile.",
                   });
                 }
               })

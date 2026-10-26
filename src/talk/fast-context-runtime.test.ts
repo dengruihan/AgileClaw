@@ -355,7 +355,7 @@ describe("resolveRealtimeVoiceFastContextConsult", () => {
         logger: {},
         labels: {
           audienceLabel: "caller",
-          contextName: "OpenClaw memory or session context",
+          contextName: "AgileClaw memory or session context",
         },
       });
 
@@ -386,7 +386,9 @@ describe("resolveRealtimeVoiceFastContextConsult", () => {
       await expect(releasedVoiceCallConsult(true)).resolves.toEqual({ handled: false });
       await expect(releasedVoiceCallConsult(false)).resolves.toEqual({
         handled: true,
-        result: { text: expect.stringContaining("No relevant OpenClaw memory or session context") },
+        result: {
+          text: expect.stringContaining("No relevant AgileClaw memory or session context"),
+        },
       });
       expect(mocks.getActiveMemoryProviderCore).not.toHaveBeenCalled();
     });

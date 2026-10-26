@@ -24,17 +24,17 @@ afterEach(() => vi.restoreAllMocks());
 const directories = useAutoCleanupTempDirTracker(afterEach);
 
 it.each([
-  { name: "drive", runtimePath: String.raw`C:\OpenClaw\agents\main\agent.sqlite` },
-  { name: "UNC", runtimePath: String.raw`\\Server\Share\OpenClaw\agents\main\agent.sqlite` },
+  { name: "drive", runtimePath: String.raw`C:\AgileClaw\agents\main\agent.sqlite` },
+  { name: "UNC", runtimePath: String.raw`\\Server\Share\AgileClaw\agents\main\agent.sqlite` },
   {
     name: "junction",
-    runtimePath: String.raw`C:\OpenClaw\agents\main\agent.sqlite`,
+    runtimePath: String.raw`C:\AgileClaw\agents\main\agent.sqlite`,
     openedPath: String.raw`C:\agent-alias\agent.sqlite`,
   },
   {
     name: "long drive",
     runtimePath: path.win32.join(
-      "C:\\OpenClaw",
+      "C:\\AgileClaw",
       ...Array(20).fill("long-directory"),
       "agent.sqlite",
     ),

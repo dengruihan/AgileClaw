@@ -61,14 +61,14 @@ describe("inter-session activity", () => {
       "3 updates from Visualize tool icons",
     );
     const expansions = new Map<string, boolean>();
-    const index = projectTranscriptIndex(projection, expansions, { assistantName: "OpenClaw" });
+    const index = projectTranscriptIndex(projection, expansions, { assistantName: "AgileClaw" });
     expect([...index.messageRowKeysById.values()]).toEqual([group.key, group.key, group.key]);
     expect(index.loadedReplySources.get("second")?.message).toBe(messages[1]);
     expect(index.positionIndex.markers).toHaveLength(0);
     expandReplyTargetWork(projection.transcriptItems, expansions, "second");
     expect(expansions.get("inter-session:" + group.key)).toBe(true);
     expect(
-      projectTranscriptIndex(projection, expansions, { assistantName: "OpenClaw" }).positionIndex
+      projectTranscriptIndex(projection, expansions, { assistantName: "AgileClaw" }).positionIndex
         .markers,
     ).toHaveLength(1);
   });
@@ -106,7 +106,7 @@ describe("inter-session activity", () => {
         renderMessageGroup(group, {
           showReasoning: false,
           showToolCalls: false,
-          assistantName: "OpenClaw",
+          assistantName: "AgileClaw",
           agentId: "main",
           isToolMessageExpanded: (id) => expanded.get(id),
           onToggleToolMessageExpanded: (id, previous) => {

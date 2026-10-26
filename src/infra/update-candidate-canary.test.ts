@@ -677,7 +677,7 @@ describe("update candidate canary", () => {
           child.stdout.write(
             JSON.stringify({
               ok: false,
-              error: { message: "OpenClaw config is invalid" },
+              error: { message: "AgileClaw config is invalid" },
               valid: false,
               issues: [
                 { path: "gateway.port", message: "Expected number; token=synthetic-secret" },

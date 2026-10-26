@@ -100,7 +100,7 @@ export type MessagePresentationAction =
       type: "web-app";
       /** External web app URL for channels that launch web apps by URL. */
       url: string;
-      /** OpenClaw hosted-widget ID whose launch mechanics are owned by the channel. */
+      /** AgileClaw hosted-widget ID whose launch mechanics are owned by the channel. */
       widgetId?: string;
     }
   | {
@@ -108,7 +108,7 @@ export type MessagePresentationAction =
       type: "web-app";
       /** External web app URL for channels that launch web apps by URL. */
       url?: string;
-      /** OpenClaw hosted-widget ID whose launch mechanics are owned by the channel. */
+      /** AgileClaw hosted-widget ID whose launch mechanics are owned by the channel. */
       widgetId: string;
     };
 

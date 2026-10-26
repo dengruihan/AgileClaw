@@ -374,7 +374,7 @@ describe("memory.search gateway method", () => {
     );
   });
 
-  it("preserves OpenClaw index ownership and configured provider intent", async () => {
+  it("preserves AgileClaw index ownership and configured provider intent", async () => {
     const cfg = createConfig(testState.workspaceDir);
     const manager = createStubManager();
     manager.status.mockReturnValue({

@@ -62,7 +62,7 @@ describe("WebSocket message handler load failures", () => {
       123,
     );
     expect(logWsControl.error).toHaveBeenCalledWith(
-      expect.stringContaining("OpenClaw installation changed while the Gateway was running"),
+      expect.stringContaining("AgileClaw installation changed while the Gateway was running"),
     );
     expect(logWsControl.error).toHaveBeenCalledWith(
       expect.stringContaining("openclaw --profile r13 gateway restart"),

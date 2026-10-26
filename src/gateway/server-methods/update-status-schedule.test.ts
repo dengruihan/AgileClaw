@@ -304,17 +304,17 @@ it("omits app-owned install and stale package targets from the protocol schedule
     },
   });
   install.mockResolvedValue({
-    root: "/opt/OpenClaw.app/openclaw",
+    root: "/opt/AgileClaw.app/openclaw",
     installReceipt: null,
     status: {
-      root: "/opt/OpenClaw.app/openclaw",
+      root: "/opt/AgileClaw.app/openclaw",
       installKind: "host",
       packageManager: "unknown",
       installOwner: {
         schemaVersion: 1,
         owner: "macos-app",
-        displayName: "OpenClaw.app",
-        updateHint: "Update OpenClaw.app to update this Gateway.",
+        displayName: "AgileClaw.app",
+        updateHint: "Update AgileClaw.app to update this Gateway.",
       },
     },
   });

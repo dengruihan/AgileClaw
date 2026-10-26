@@ -258,7 +258,7 @@ const CONFIGURED_PLUGIN_INSTALL_ISSUE_DETAILS = {
   },
   "stale-version-bound-runtime": {
     message: (pluginId: string) =>
-      `Configured runtime plugin ${pluginId} is older than this OpenClaw version.`,
+      `Configured runtime plugin ${pluginId} is older than this AgileClaw version.`,
     fixHint: "Run `openclaw doctor --fix` to refresh the configured runtime plugin.",
     action: "would-refresh-configured-runtime-plugin",
   },

@@ -28,7 +28,7 @@ import type { AuthChoice, OnboardOptions } from "../../onboard-types.js";
 import { resolveNonInteractiveApiKey } from "../api-keys.js";
 import { applyNonInteractivePluginProviderChoice } from "./auth-choice.plugin-providers.js";
 
-/** Applies a local non-interactive auth choice to the pending OpenClaw config. */
+/** Applies a local non-interactive auth choice to the pending AgileClaw config. */
 export async function applyNonInteractiveAuthChoice(params: {
   nextConfig: OpenClawConfig;
   authChoice: AuthChoice;

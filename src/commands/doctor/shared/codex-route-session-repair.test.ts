@@ -348,7 +348,7 @@ describe("repairCodexSessionStoreRoutes", () => {
     expect(getSession(store, "ordinary").agentHarnessId).toBeUndefined();
   });
 
-  it("preserves explicit OpenClaw runtime pins while repairing legacy session routes", () => {
+  it("preserves explicit AgileClaw runtime pins while repairing legacy session routes", () => {
     const store: Record<string, SessionEntry> = {
       main: {
         sessionId: "s1",

@@ -66,7 +66,7 @@ describe("tool name allowlists", () => {
     ).toEqual(["exec"]);
   });
 
-  it("pins the reserved OpenClaw built-in tool namespace used by client conflict checks", () => {
+  it("pins the reserved AgileClaw built-in tool namespace used by client conflict checks", () => {
     expect(AGENT_RESERVED_TOOL_NAMES).toEqual([
       "bash",
       "edit",

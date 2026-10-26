@@ -230,7 +230,7 @@ function resolveFacadeBoundaryOpenParams(boundaryRoot: string): {
     return checked;
   }
   if (isPathAtOrInside(boundaryRoot, getOpenClawPackageRoot())) {
-    return { boundaryLabel: "OpenClaw package root", rejectHardlinks: false };
+    return { boundaryLabel: "AgileClaw package root", rejectHardlinks: false };
   }
   const bundledDir = resolveBundledPluginsDir();
   if (bundledDir && isPathAtOrInside(boundaryRoot, bundledDir)) {

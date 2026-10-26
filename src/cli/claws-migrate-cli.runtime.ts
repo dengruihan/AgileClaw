@@ -42,7 +42,7 @@ function logMigrationPlan(
   runtime.log(`Local Claw package: ${plan.packageRoot}`);
   runtime.log(`Portable identity: ${JSON.stringify(plan.agent)}`);
   if (plan.openClawProfile) {
-    runtime.log(`OpenClaw profile: ${JSON.stringify(plan.openClawProfile.agent)}`);
+    runtime.log(`AgileClaw profile: ${JSON.stringify(plan.openClawProfile.agent)}`);
   }
   runtime.log("Generated local Claw package files:");
   for (const file of plan.generatedPackageFiles) {

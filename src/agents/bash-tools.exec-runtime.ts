@@ -430,7 +430,7 @@ function formatExecFailureReason(params: {
           : "Command timed out.";
       const retryGuidance = appendExecTimeoutRetryGuidance(timeoutText, params.failureKind);
       return params.processContinuationAvailable
-        ? `${retryGuidance}\n\nIf it should keep running, start it with exec background=true or yieldMs so OpenClaw can register a pollable process session. Do not rely on shell backgrounding with a trailing &.`
+        ? `${retryGuidance}\n\nIf it should keep running, start it with exec background=true or yieldMs so AgileClaw can register a pollable process session. Do not rely on shell backgrounding with a trailing &.`
         : retryGuidance;
     }
     case "no-output-timeout":

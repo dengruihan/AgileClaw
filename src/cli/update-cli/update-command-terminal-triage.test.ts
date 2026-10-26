@@ -227,7 +227,7 @@ it.each([
     ).length;
     const recorded = getUpdateRun(run.runId, { env });
     expect(exit).toBeInstanceOf(ExitError);
-    expect(savedAtPublication).toContain("OpenClaw update failed");
+    expect(savedAtPublication).toContain("AgileClaw update failed");
     const unsettled = trial.revoked || trial.releaseDenied;
     expect(exit).toMatchObject({ code: unsettled ? 1 : 7 });
     expect(statusAtPublication).toBe("running");

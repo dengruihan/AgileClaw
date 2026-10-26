@@ -75,7 +75,7 @@ export async function loadAndMaybeMigrateDoctorConfig(params: {
   const shouldRepair = params.options.repair === true || params.options.yes === true;
   const preflight = await withProgress(
     {
-      label: "Checking OpenClaw state…",
+      label: "Checking AgileClaw state…",
       enabled: params.options.nonInteractive !== true && params.options.json !== true,
       delayMs: 200,
     },

@@ -183,7 +183,7 @@ describe("resolveCanonicalConfiguredSecretInputWithFallback", () => {
         });
 
         expect(resolved.unresolvedRefReason).toBe(
-          "gateway.auth.token SecretRef is unresolved (file:filemain:value). Windows path security could not be verified. Restore Windows path security verification, or use an existing secret file whose owner and ACLs OpenClaw can verify.",
+          "gateway.auth.token SecretRef is unresolved (file:filemain:value). Windows path security could not be verified. Restore Windows path security verification, or use an existing secret file whose owner and ACLs AgileClaw can verify.",
         );
         expect(resolved.unresolvedRefReason).not.toContain(filePath);
       },

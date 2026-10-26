@@ -241,7 +241,7 @@ export async function navigateToControlUiSession(page: Page, sessionKey: string)
       };
     };
     if (!app.runtime) {
-      throw new Error("OpenClaw application runtime is unavailable");
+      throw new Error("AgileClaw application runtime is unavailable");
     }
     const pathname = `${app.runtime.context.basePath}${sessionPath}`;
     const url = new URL(window.location.href);
@@ -918,7 +918,7 @@ function normalizeScenario(
     agentModel:
       scenario.agentModel === undefined ? "openai/gpt-5.5" : scenario.agentModel?.trim() || null,
     assistantAgentId: scenario.assistantAgentId?.trim() || defaultAgentId,
-    assistantName: scenario.assistantName?.trim() || "OpenClaw",
+    assistantName: scenario.assistantName?.trim() || "AgileClaw",
     basePath,
     controlUiTabs: scenario.controlUiTabs ?? [],
     controlUiWidgetKinds: scenario.controlUiWidgetKinds ?? [],
@@ -2373,7 +2373,7 @@ function installControlUiMockGateway(
       typeof response.sessionId === "string"
     ) {
       session = terminalSessions.get(response.sessionId);
-      data = "OpenClaw mock terminal\r\nType anything and the mock Gateway will echo it.\r\n$ ";
+      data = "AgileClaw mock terminal\r\nType anything and the mock Gateway will echo it.\r\n$ ";
     } else if (method === "terminal.input" && isRecord(params)) {
       session =
         typeof params.sessionId === "string" ? terminalSessions.get(params.sessionId) : undefined;

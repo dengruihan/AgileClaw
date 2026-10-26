@@ -146,9 +146,9 @@ export const AgentDefaultsBaseSchema = z.strictObject({
        * the built-in summarizeInStages(). Falls back to built-in on failure.
        */
       provider: z.string().optional(),
-      /** Thinking level for embedded OpenClaw compaction summaries. Default: low. */
+      /** Thinking level for embedded AgileClaw compaction summaries. Default: low. */
       thinkingLevel: z.union([AgentThinkingLevelSchema, z.literal("inherit")]).optional(),
-      /** Embedded OpenClaw keepRecentTokens budget used for cut-point selection. */
+      /** Embedded AgileClaw keepRecentTokens budget used for cut-point selection. */
       keepRecentTokens: z.number().int().positive().optional(),
       /** Identifier-preservation instruction policy for compaction summaries. */
       identifierPolicy: z.union([z.literal("strict"), z.literal("off")]).optional(),

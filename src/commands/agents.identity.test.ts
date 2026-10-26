@@ -142,7 +142,7 @@ describe("agents set-identity command", () => {
   it("overrides identity file values with explicit flags", async () => {
     const { workspace } = await createIdentityWorkspace();
     await writeIdentityFile(workspace, [
-      "- Name: OpenClaw",
+      "- Name: AgileClaw",
       "- Theme: space lobster",
       "- Emoji: :)",
       "- Avatar: avatars/openclaw.png",

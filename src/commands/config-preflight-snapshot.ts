@@ -52,7 +52,7 @@ function throwPluginRegistryPersistenceFailed(
   repair = 'Run "openclaw doctor --fix" and retry.',
 ): never {
   throw new Error(
-    `OpenClaw refreshed the plugin registry but could not verify the persisted replacement (${reason}); refusing to accept the plugin registry. ${repair}`,
+    `AgileClaw refreshed the plugin registry but could not verify the persisted replacement (${reason}); refusing to accept the plugin registry. ${repair}`,
   );
 }
 

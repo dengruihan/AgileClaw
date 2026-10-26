@@ -32,7 +32,7 @@ function renderAssistantMessage(
     renderMessageGroup(createMessageGroup(message, "assistant"), {
       showReasoning: false,
       showToolCalls: false,
-      assistantName: "OpenClaw",
+      assistantName: "AgileClaw",
       assistantAvatar: null,
       ...options,
     }),

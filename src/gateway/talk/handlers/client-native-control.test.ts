@@ -151,7 +151,7 @@ describe("native Talk through the public OpenAI plugin registration", () => {
           idle.socket.serverEvent(transcript);
           const idleReply =
             text === "cancel"
-              ? "There is no active OpenClaw run to cancel."
+              ? "There is no active AgileClaw run to cancel."
               : "I'm not working on an active request right now.";
           await vi.waitFor(() => expect(idle.socket.sent.join("\n")).toContain(idleReply));
           expect(abortSignal.aborted).toBe(false);
@@ -160,8 +160,8 @@ describe("native Talk through the public OpenAI plugin registration", () => {
           const preControlSocketIndex = socket.sent.length;
           const reply =
             text === "cancel"
-              ? "Cancelled the active OpenClaw run."
-              : "OpenClaw is working on the current voice request.";
+              ? "Cancelled the active AgileClaw run."
+              : "AgileClaw is working on the current voice request.";
           const waitForControlReply = () =>
             vi.waitFor(() => {
               expect(socket.sent.slice(preControlSocketIndex).join("\n")).toContain(reply);
@@ -189,7 +189,7 @@ describe("native Talk through the public OpenAI plugin registration", () => {
           expect(
             socket.sent
               .slice(preControlSocketIndex)
-              .filter((frame) => frame.includes("Internal OpenClaw voice control result.")),
+              .filter((frame) => frame.includes("Internal AgileClaw voice control result.")),
           ).toHaveLength(1);
           expect(
             readSessionTranscriptMessageEvents({ agentId: AGENT_ID, sessionId: SESSION_ID }),
@@ -214,7 +214,7 @@ describe("native Talk through the public OpenAI plugin registration", () => {
 
   it.each([
     ["Status?", "I'm not working on an active request right now."],
-    ["cancel", "There is no active OpenClaw run to cancel."],
+    ["cancel", "There is no active AgileClaw run to cancel."],
   ])("answers idle native %s without starting a consult", async (text, reply) => {
     await withNativePlugin(async ({ create, offer }) => {
       const { socket, result } = await connectNativeSession({ create, offer });
@@ -317,7 +317,7 @@ describe("native Talk through the public OpenAI plugin registration", () => {
                 content: [
                   expect.objectContaining({
                     type: "input_text",
-                    text: expect.stringContaining("Cancelled the active OpenClaw run."),
+                    text: expect.stringContaining("Cancelled the active AgileClaw run."),
                   }),
                 ],
               }),

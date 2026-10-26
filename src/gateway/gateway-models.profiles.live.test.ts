@@ -1776,7 +1776,7 @@ describe("resolveGatewayLiveModelThinkingLevel", () => {
   });
 
   it.each(["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"])(
-    "preserves OpenClaw Ultra for openai/%s",
+    "preserves AgileClaw Ultra for openai/%s",
     (id) => {
       expect(
         resolveGatewayLiveModelThinkingLevel({
@@ -5883,11 +5883,11 @@ async function runGatewayModelSuite(params: GatewayModelSuiteParams) {
                     idempotencyKey: `idem-${runIdTool}-tool-${toolReadAttempt + 1}`,
                     modelKey,
                     message: strictReply
-                      ? "OpenClaw live tool probe (local, safe): " +
+                      ? "AgileClaw live tool probe (local, safe): " +
                         "Follow the advertised tool interface; if tools are behind Code Mode, invoke them through Code Mode. " +
                         `read the local file ${JSON.stringify(toolProbePath)} using the available file-reading tool. ` +
                         "Then reply with exactly the two test marker values from that file, separated by one space. No extra text."
-                      : "OpenClaw live tool probe (local, safe): " +
+                      : "AgileClaw live tool probe (local, safe): " +
                         "Follow the advertised tool interface; if tools are behind Code Mode, invoke them through Code Mode. " +
                         `read the local file ${JSON.stringify(toolProbePath)} using the available file-reading tool. ` +
                         "Then reply with the two test marker values you read (include both).",
@@ -5981,13 +5981,13 @@ async function runGatewayModelSuite(params: GatewayModelSuiteParams) {
                     idempotencyKey: `idem-${runIdTool}-exec-read-${execReadAttempt + 1}`,
                     modelKey,
                     message: strictReply
-                      ? "OpenClaw live tool probe (local, safe): " +
+                      ? "AgileClaw live tool probe (local, safe): " +
                         "Follow the advertised tool interface; if tools are behind Code Mode, invoke them through Code Mode. " +
                         "use the available shell-execution tool to run this command: " +
                         `mkdir -p "${tempDir}" && printf '%s' '${nonceC}' > "${toolWritePath}". ` +
                         `Then read the local file ${JSON.stringify(toolWritePath)} using the available file-reading tool. ` +
                         "Then reply with exactly the nonce text from that file. No extra text."
-                      : "OpenClaw live tool probe (local, safe): " +
+                      : "AgileClaw live tool probe (local, safe): " +
                         "Follow the advertised tool interface; if tools are behind Code Mode, invoke them through Code Mode. " +
                         "use the available shell-execution tool to run this command: " +
                         `mkdir -p "${tempDir}" && printf '%s' '${nonceC}' > "${toolWritePath}". ` +

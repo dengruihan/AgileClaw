@@ -227,7 +227,7 @@ function targetsLiveStateSqliteDatabase(
   if (!stateDir) {
     return false;
   }
-  // External SQLite clients bypass OpenClaw's runtime/version guard and can join the live WAL.
+  // External SQLite clients bypass AgileClaw's runtime/version guard and can join the live WAL.
   // Resolve existing ancestors so an alias outside the state root cannot hide that ownership.
   const canonicalStateDir = resolvePathViaExistingAncestorSync(stateDir);
   return parseSqliteDatabaseTokens(argv).some((databaseToken) => {
@@ -310,7 +310,7 @@ export async function rejectUnsafeExecControlShellCommand(command: string): Prom
   if (unsafeKind === "channel-login") {
     throw new Error(
       [
-        "exec cannot run interactive OpenClaw channel login commands.",
+        "exec cannot run interactive AgileClaw channel login commands.",
         "Run `openclaw channels login` in a terminal on the gateway host, or use the channel-specific login agent tool when available (for WhatsApp: `whatsapp_login`).",
       ].join(" "),
     );
@@ -328,8 +328,8 @@ export async function rejectUnsafeExecLiveStateSqliteShellCommand(
   }
   throw new Error(
     [
-      "external sqlite3 cannot open databases under the active OpenClaw state directory.",
-      "Use OpenClaw commands for live state, or inspect a private backup copy outside `OPENCLAW_STATE_DIR`.",
+      "external sqlite3 cannot open databases under the active AgileClaw state directory.",
+      "Use AgileClaw commands for live state, or inspect a private backup copy outside `OPENCLAW_STATE_DIR`.",
     ].join(" "),
   );
 }

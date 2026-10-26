@@ -47,7 +47,7 @@ describe("command owner health", () => {
     expect(note).toHaveBeenCalledWith(
       [
         "No command owner is configured.",
-        "A command owner is your trusted human operator account, allowed to update OpenClaw with /update, restart the Gateway, change configuration, and approve commands. Chat allowlists do not grant this authority.",
+        "A command owner is your trusted human operator account, allowed to update AgileClaw with /update, restart the Gateway, change configuration, and approve commands. Chat allowlists do not grant this authority.",
         "Run openclaw channels add and complete a channel's setup to choose your operator account, including servers and groups without DM pairing.",
         "CLI pairing approval records the first command owner. Control UI pairing approval has a separate owner checkbox.",
         "Fix: set commands.ownerAllowFrom to your channel user id, for example openclaw config set commands.ownerAllowFrom '[\"telegram:123456789\"]'",

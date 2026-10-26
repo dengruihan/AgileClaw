@@ -408,7 +408,7 @@ it.for(["identity scopes", "dispose", "source", "integrity confirmation"] as con
             targets: [
               {
                 kind: "state",
-                label: "OpenClaw state database",
+                label: "AgileClaw state database",
                 path: verifiedDatabase!.path,
                 check: "quick",
               },

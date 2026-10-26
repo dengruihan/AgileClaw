@@ -465,7 +465,7 @@ describe("doctor SQLite session transcript label migration", () => {
       "",
       // Fenced but NON-enumerated heading: the ```json fence does not prove provenance, so an
       // arbitrary user heading must NOT be marked (marking it would let the marker-only strippers
-      // hide the user's own JSON). Only the fixed OpenClaw labels in rule 1 are migrated.
+      // hide the user's own JSON). Only the fixed AgileClaw labels in rule 1 are migrated.
       "Here is my own data:",
       "Notes (untrusted metadata):",
       "```json",

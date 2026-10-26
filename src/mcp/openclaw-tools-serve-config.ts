@@ -48,7 +48,7 @@ export function resolveOpenClawToolsMcpToolSelection(
   return selection;
 }
 
-/** Parse the OpenClaw surface for served openclaw tools; defaults to cli. */
+/** Parse the AgileClaw surface for served openclaw tools; defaults to cli. */
 export function resolveOpenClawToolsMcpSystemAgentSurface(
   env: NodeJS.ProcessEnv = process.env,
 ): SystemAgentToolOptions["surface"] {
@@ -97,7 +97,7 @@ function resolveOpenClawToolsServeCommand(): { command: string; args: string[] }
     cwd: process.cwd(),
   });
   if (!packageRoot) {
-    throw new Error("openclaw-tools MCP: could not resolve the OpenClaw package root");
+    throw new Error("openclaw-tools MCP: could not resolve the AgileClaw package root");
   }
   const distEntry = path.join(packageRoot, "dist", "mcp", "openclaw-tools-serve.js");
   if (fs.existsSync(distEntry)) {
@@ -118,7 +118,7 @@ function resolveOpenClawToolsServeCommand(): { command: string; args: string[] }
 }
 
 /**
- * OpenClaw CLI-harness runs get exactly one MCP server: this stdio entry
+ * AgileClaw CLI-harness runs get exactly one MCP server: this stdio entry
  * serving the ring-zero openclaw tool. The server keeps the "openclaw" name
  * so backend tool pre-approvals (e.g. Claude's --allowedTools mcp__openclaw__*)
  * apply without per-backend argument surgery.

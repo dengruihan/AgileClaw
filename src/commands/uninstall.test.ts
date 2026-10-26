@@ -128,7 +128,7 @@ describe("uninstallCommand", () => {
         code: 1,
       });
       expect(removePath).toHaveBeenCalledWith(
-        "/Applications/OpenClaw.app",
+        "/Applications/AgileClaw.app",
         runtime,
         expect.any(Object),
       );
@@ -289,7 +289,7 @@ describe("uninstallCommand", () => {
 
         expect(removeStateAndLinkedPaths).toHaveBeenCalledOnce();
         expect(removePath).toHaveBeenCalledWith(
-          "/Applications/OpenClaw.app",
+          "/Applications/AgileClaw.app",
           runtime,
           expect.any(Object),
         );

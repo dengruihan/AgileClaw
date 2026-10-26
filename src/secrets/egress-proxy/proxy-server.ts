@@ -39,7 +39,7 @@ import {
 } from "./stream-substitution.js";
 
 const PROXY_AUTH_USERNAME = "openclaw";
-const PROXY_AUTH_REALM = "OpenClaw secret egress";
+const PROXY_AUTH_REALM = "AgileClaw secret egress";
 
 export type SecretEgressProxyAuditEvent = {
   kind: "forwarded" | "refused";

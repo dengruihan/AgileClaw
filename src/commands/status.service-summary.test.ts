@@ -97,7 +97,7 @@ describe("readServiceStatusSummary", () => {
       expect(aligned.installationDrift).toBeUndefined();
       expect(
         getStatusOverviewRowValue("Gateway service", { gatewayService: aligned }),
-      ).not.toContain("different OpenClaw install");
+      ).not.toContain("different AgileClaw install");
     },
   );
   it.each(["system"] as const)("labels the observed %s manager", async (scope) => {

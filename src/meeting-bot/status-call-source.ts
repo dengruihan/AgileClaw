@@ -286,7 +286,7 @@ export function createMeetingStatusCallSource(options: MeetingStatusCallSourceOp
         } else {
           audioOutputRouted = false;
           if (canMutateSession) suspendOwnedAudioBridges();
-          notes.push("The OpenClaw virtual audio speaker output was not visible to ${options.platform.displayName}.");
+          notes.push("The AgileClaw virtual audio speaker output was not visible to ${options.platform.displayName}.");
         }
       } catch (error) {${ownershipCheck(8)}
         audioOutputRouted = false;
@@ -294,7 +294,7 @@ export function createMeetingStatusCallSource(options: MeetingStatusCallSourceOp
         if (canMutateSession) suspendOwnedAudioBridges();
       }
       if (!audioOutputRouted && audioOutputRouteError) {
-        notes.push("Could not route ${options.platform.displayName} speaker output to the OpenClaw virtual audio device: " + audioOutputRouteError);
+        notes.push("Could not route ${options.platform.displayName} speaker output to the AgileClaw virtual audio device: " + audioOutputRouteError);
       }
     } else {
       audioOutputRouted = false;
@@ -309,7 +309,7 @@ export function createMeetingStatusCallSource(options: MeetingStatusCallSourceOp
           audioOutputRouteRetryable = true;
           audioOutputDeviceLabel = output.label || "Virtual audio device";
         } else {
-          notes.push("The OpenClaw virtual audio speaker output was not visible to ${options.platform.displayName}.");
+          notes.push("The AgileClaw virtual audio speaker output was not visible to ${options.platform.displayName}.");
         }
       } catch (error) {${ownershipCheck(8)}
         audioOutputRouteError = error?.message || String(error);
@@ -639,7 +639,7 @@ ${withLiveOwnership("  }\n")}${
   }
   if (inCall && allowMicrophone && !manualAction) {
     if (audioInputRouted !== true || audioOutputRouted !== true) {
-      manualAction = manualActionFor("${options.platform.manualActionReasonPrefix}-audio-choice-required", "Verify the OpenClaw virtual audio device is selected as both the ${options.platform.displayName} microphone and speaker before starting talk-back.");
+      manualAction = manualActionFor("${options.platform.manualActionReasonPrefix}-audio-choice-required", "Verify the AgileClaw virtual audio device is selected as both the ${options.platform.displayName} microphone and speaker before starting talk-back.");
     } else if (micMuted !== false) {
       manualAction = manualActionFor("${options.platform.manualActionReasonPrefix}-microphone-required", "Unmute the ${options.platform.displayName} microphone and verify the microphone control shows it is on before starting talk-back.");
     }

@@ -345,7 +345,7 @@ export async function inspectLocalAudioSelection(
       resolvedCommand: sherpaCommand ?? undefined,
       ready: sherpaReady,
       requestedBackend: "cpu",
-      evidence: "OpenClaw auto args omit --provider, so sherpa-onnx uses its CPU default",
+      evidence: "AgileClaw auto args omit --provider, so sherpa-onnx uses its CPU default",
       reason: sherpaReady ? undefined : "SHERPA_ONNX_MODEL_DIR is missing required model files",
       args: sherpaArgs,
     },

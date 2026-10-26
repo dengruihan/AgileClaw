@@ -115,7 +115,7 @@ describe("getServiceActionPreflightFailure", () => {
           'openclaw.json:3 — gateway.mode: Invalid input (allowed: "local", "remote"), got: "nope"',
         );
         expect(failure?.message).toContain(
-          "Config was last written by OpenClaw 9999.1.1, but you are running",
+          "Config was last written by AgileClaw 9999.1.1, but you are running",
         );
       });
     },

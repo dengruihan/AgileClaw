@@ -1,4 +1,4 @@
-/** Inspects installed platform services for extra OpenClaw or legacy gateway jobs. */
+/** Inspects installed platform services for extra AgileClaw or legacy gateway jobs. */
 import fs from "node:fs/promises";
 import path from "node:path";
 import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
@@ -651,7 +651,7 @@ async function scanGatewayServices(
             recordDeadline();
             break;
           }
-          // Native liveness alone does not make a foreign task an OpenClaw owner.
+          // Native liveness alone does not make a foreign task an AgileClaw owner.
           if (knownTask || recognizableLauncher) {
             errors.push({
               source: name,

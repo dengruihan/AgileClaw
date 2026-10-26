@@ -343,7 +343,7 @@ describe("buildOfficialChannelCatalog", () => {
       ),
     ).toEqual({
       name: "openclaw-plugin-yuanbao",
-      description: "OpenClaw Yuanbao channel plugin by the Tencent Yuanbao team.",
+      description: "AgileClaw Yuanbao channel plugin by the Tencent Yuanbao team.",
       source: "external",
       plugin: {
         id: "openclaw-plugin-yuanbao",
@@ -705,7 +705,7 @@ describe("buildOfficialChannelCatalog", () => {
     }
   });
 
-  it("allows official OpenClaw channel npm specs without integrity during launch", () => {
+  it("allows official AgileClaw channel npm specs without integrity during launch", () => {
     const repoRoot = makeRepoRoot("openclaw-official-channel-catalog-openclaw-policy-");
     writeChannelPackage(
       repoRoot,

@@ -51,7 +51,7 @@ describe("git install target ownership", () => {
   beforeAll(async () => {
     sourceSeed = tempDirs.make("openclaw-git-install-seed-");
     await git(sourceSeed, "init", "--initial-branch=main");
-    await git(sourceSeed, "config", "user.name", "OpenClaw Test");
+    await git(sourceSeed, "config", "user.name", "AgileClaw Test");
     await git(sourceSeed, "config", "user.email", "test@openclaw.invalid");
     await commitPluginAt(sourceSeed, "demo", "1.0.0");
   });

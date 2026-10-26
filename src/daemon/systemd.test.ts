@@ -1589,7 +1589,7 @@ describe("stageSystemdService", () => {
       unitPath,
       [
         "[Unit]",
-        "Description=OpenClaw Gateway (v2026.7.1-2)",
+        "Description=AgileClaw Gateway (v2026.7.1-2)",
         "",
         "[Service]",
         comment,
@@ -1607,7 +1607,7 @@ describe("stageSystemdService", () => {
     await expect(refreshLegacySystemdServiceMetadata(env, 5_000)).resolves.toBe(true);
 
     const unit = await fs.readFile(unitPath, "utf8");
-    expect(unit).toContain("Description=OpenClaw Gateway\n");
+    expect(unit).toContain("Description=AgileClaw Gateway\n");
     expect(unit.split("\n")).toContain("ExecStart=/usr/bin/openclaw gateway run");
     expect(unit).not.toContain("OPENCLAW_SERVICE_VERSION");
     expect(unit).toContain('Environment="OTHER_SETTING=kept value %h/%%h"');
@@ -1645,7 +1645,7 @@ describe("stageSystemdService", () => {
     const { env, unitPath } = await createSystemdFixture("gateway");
     const previous = [
       "[Unit]",
-      "Description=OpenClaw Gateway (v2026.7.1-2)",
+      "Description=AgileClaw Gateway (v2026.7.1-2)",
       "",
       "[Service]",
       ...environment,
@@ -1666,7 +1666,7 @@ describe("stageSystemdService", () => {
       const { env, unitPath } = await createSystemdFixture("gateway");
       const previous = [
         "[Unit]",
-        "Description=OpenClaw Gateway (v2026.7.1-2)",
+        "Description=AgileClaw Gateway (v2026.7.1-2)",
         "",
         "[Service]",
         "Environment=OPENCLAW_SERVICE_MARKER=openclaw",
@@ -2092,7 +2092,7 @@ describe("stageSystemdService", () => {
       programArguments: ["/usr/bin/openclaw", "gateway", "run"],
       workingDirectory: "/tmp",
       // Staging manages OPENCLAW_GATEWAY_TOKEN inline; OPENCLAW_SERVICE_MANAGED_ENV_KEYS
-      // marks it as an OpenClaw-managed key so the stale env-file copy is cleared.
+      // marks it as an AgileClaw-managed key so the stale env-file copy is cleared.
       environment: {
         OPENCLAW_GATEWAY_TOKEN: "fresh-gateway-token",
         LLM_API_KEY: "dotenv-key",
@@ -2206,7 +2206,7 @@ describe("systemd service install and uninstall", () => {
     await installSystemdService(
       nodeSystemdServiceFixture(env, {
         preserveAutoStart: true,
-        description: "OpenClaw Node Host",
+        description: "AgileClaw Node Host",
         environment: {
           OPENCLAW_SYSTEMD_UNIT: "openclaw-node",
         },
@@ -2215,7 +2215,7 @@ describe("systemd service install and uninstall", () => {
 
     const unit = await fs.readFile(unitPath, "utf8");
     expect(unitPath).toMatch(/openclaw-node\.service$/);
-    expect(unit).toContain("Description=OpenClaw Node Host");
+    expect(unit).toContain("Description=AgileClaw Node Host");
     expect(unit).toContain("openclaw node run");
     expect(unit).not.toContain("OPENCLAW_SERVICE_VERSION");
     expect(execFileMock).toHaveBeenCalledTimes(3);
@@ -2402,7 +2402,7 @@ describe("systemd service install and uninstall", () => {
     "Unit unrelated.service is not active.",
   ])("refuses to remove the unit when systemctl disable fails: %s", async (detail) => {
     const { env, unitPath, nodeEnvFilePath } = await createSystemdFixture("node");
-    await writeUnitFixture(unitPath, "[Unit]\nDescription=OpenClaw Node\n");
+    await writeUnitFixture(unitPath, "[Unit]\nDescription=AgileClaw Node\n");
     await fs.writeFile(nodeEnvFilePath, "OPENCLAW_GATEWAY_TOKEN=preserved-token\n", {
       encoding: "utf8",
       mode: 0o600,
@@ -2423,7 +2423,7 @@ describe("systemd service install and uninstall", () => {
     await expect(uninstallSystemdService({ env, stdout })).rejects.toThrow(
       `systemctl disable failed: ${detail}`,
     );
-    await expect(fs.readFile(unitPath, "utf8")).resolves.toContain("OpenClaw Node");
+    await expect(fs.readFile(unitPath, "utf8")).resolves.toContain("AgileClaw Node");
     await expect(fs.readFile(nodeEnvFilePath, "utf8")).resolves.toContain("preserved-token");
   });
 
@@ -2451,8 +2451,8 @@ describe("systemd service install and uninstall", () => {
 
   it("disables the OPENCLAW_SYSTEMD_UNIT override during uninstall", async () => {
     const { env, unitPath, nodeEnvFilePath } = await createSystemdFixture("node");
-    await writeUnitFixture(unitPath, "[Unit]\nDescription=OpenClaw Node\n");
-    await fs.writeFile(`${unitPath}.bak`, "[Unit]\nDescription=Previous OpenClaw Node\n", {
+    await writeUnitFixture(unitPath, "[Unit]\nDescription=AgileClaw Node\n");
+    await fs.writeFile(`${unitPath}.bak`, "[Unit]\nDescription=Previous AgileClaw Node\n", {
       mode: 0o644,
     });
     await fs.writeFile(
@@ -2498,7 +2498,7 @@ describe("systemd service install and uninstall", () => {
 
   it("removes a password-only node environment file during uninstall", async () => {
     const { env, unitPath, nodeEnvFilePath } = await createSystemdFixture("node");
-    await writeUnitFixture(unitPath, "[Unit]\nDescription=OpenClaw Node\n");
+    await writeUnitFixture(unitPath, "[Unit]\nDescription=AgileClaw Node\n");
     await fs.writeFile(nodeEnvFilePath, "OPENCLAW_GATEWAY_PASSWORD=stale-password\n", {
       encoding: "utf8",
       mode: 0o600,
@@ -2517,8 +2517,8 @@ describe("systemd service install and uninstall", () => {
 
   it("preserves node env file values when unit removal fails during uninstall", async () => {
     const { env, unitPath, nodeEnvFilePath } = await createSystemdFixture("node");
-    await writeUnitFixture(unitPath, "[Unit]\nDescription=OpenClaw Node\n");
-    await fs.writeFile(`${unitPath}.bak`, "[Unit]\nDescription=Previous OpenClaw Node\n", {
+    await writeUnitFixture(unitPath, "[Unit]\nDescription=AgileClaw Node\n");
+    await fs.writeFile(`${unitPath}.bak`, "[Unit]\nDescription=Previous AgileClaw Node\n", {
       mode: 0o644,
     });
     await fs.writeFile(
@@ -2540,9 +2540,9 @@ describe("systemd service install and uninstall", () => {
       "EACCES: permission denied",
     );
 
-    await expect(fs.readFile(unitPath, "utf8")).resolves.toContain("OpenClaw Node");
+    await expect(fs.readFile(unitPath, "utf8")).resolves.toContain("AgileClaw Node");
     await expect(fs.readFile(`${unitPath}.bak`, "utf8")).resolves.toContain(
-      "Previous OpenClaw Node",
+      "Previous AgileClaw Node",
     );
     await expect(fs.readFile(nodeEnvFilePath, "utf8")).resolves.toBe(
       "OPENCLAW_GATEWAY_TOKEN=stale-node-token\nOPENROUTER_API_KEY=operator-key\n",
@@ -2707,7 +2707,7 @@ describe("uninstallUserSystemdGatewayUnit", () => {
 
   it("removes the unit file only when systemctl is unavailable", async () => {
     const { env, unitPath } = await createSystemdFixture("user");
-    await fs.writeFile(unitPath, "[Unit]\nDescription=OpenClaw Gateway\n", {
+    await fs.writeFile(unitPath, "[Unit]\nDescription=AgileClaw Gateway\n", {
       encoding: "utf8",
       mode: 0o644,
     });
@@ -2729,7 +2729,7 @@ describe("uninstallUserSystemdGatewayUnit", () => {
 
   it("preserves the unit after interrupted discovery and refused disable", async () => {
     const { env, unitPath } = await createSystemdFixture("user");
-    await fs.writeFile(unitPath, "[Unit]\nDescription=OpenClaw Gateway\n", {
+    await fs.writeFile(unitPath, "[Unit]\nDescription=AgileClaw Gateway\n", {
       encoding: "utf8",
       mode: 0o644,
     });
@@ -2764,7 +2764,7 @@ describe("uninstallUserSystemdGatewayUnit", () => {
     const env = { HOME: home, OPENCLAW_PROFILE: "lisa" };
     const unitPath = path.join(home, ".config", "systemd", "user", "openclaw-lisa.service");
     await fs.mkdir(path.dirname(unitPath), { recursive: true, mode: 0o755 });
-    await fs.writeFile(unitPath, "[Unit]\nDescription=OpenClaw Gateway (profile: lisa)\n", {
+    await fs.writeFile(unitPath, "[Unit]\nDescription=AgileClaw Gateway (profile: lisa)\n", {
       encoding: "utf8",
       mode: 0o644,
     });
@@ -2789,7 +2789,7 @@ describe("uninstallUserSystemdGatewayUnit", () => {
 
   it("surfaces daemon-reload failure after removing the disabled unit", async () => {
     const { env, unitPath } = await createSystemdFixture("user");
-    await fs.writeFile(unitPath, "[Unit]\nDescription=OpenClaw Gateway\n", {
+    await fs.writeFile(unitPath, "[Unit]\nDescription=AgileClaw Gateway\n", {
       encoding: "utf8",
       mode: 0o644,
     });

@@ -102,7 +102,7 @@ function resolveAgentHarnessExecutionRestriction(
     return {
       reason: "tool-policy",
       message:
-        label + " uses its own tools and cannot enforce this chat's OpenClaw tool restrictions.",
+        label + " uses its own tools and cannot enforce this chat's AgileClaw tool restrictions.",
     };
   }
   return undefined;
@@ -466,7 +466,7 @@ export function resolvePluginHarnessToolPolicies(
       requestedToolPolicy,
     ],
     safeDeniedToolNames: collectHarnessSafeDeniedToolNames(explicitPolicies, safeDenyToolNameSet),
-    // Native tools bypass the collector's noninteractive OpenClaw wrappers.
+    // Native tools bypass the collector's noninteractive AgileClaw wrappers.
     // Keep policy-allowed host replacements, without ambient input or approval surfaces.
     toolPolicyRestricted:
       params.swarmCollector === true ||

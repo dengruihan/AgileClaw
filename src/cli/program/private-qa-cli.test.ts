@@ -44,14 +44,14 @@ describe("private-qa-cli", () => {
 
   it("rejects non-source package roots even when private QA is enabled", () => {
     expect(() => loadPrivateQaCliModule()).toThrow(
-      "Private QA CLI is only available from an OpenClaw source checkout.",
+      "Private QA CLI is only available from an AgileClaw source checkout.",
     );
   });
 
   it("rejects when the private QA env flag is disabled", () => {
     vi.stubEnv("OPENCLAW_ENABLE_PRIVATE_QA_CLI", undefined);
     expect(() => loadPrivateQaCliModule()).toThrow(
-      "Private QA CLI is only available from an OpenClaw source checkout.",
+      "Private QA CLI is only available from an AgileClaw source checkout.",
     );
   });
 });

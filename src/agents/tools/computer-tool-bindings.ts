@@ -38,7 +38,7 @@ export type ComputerBinding = {
 };
 
 export const NOT_COMPUTER_CAPABLE_HINT =
-  "enable Computer Control in the OpenClaw app and approve the pairing update";
+  "enable Computer Control in the AgileClaw app and approve the pairing update";
 const COMPUTER_NODE_MESSAGES: EligibleNodeMessages<NodeListNode> = {
   ineligibleExact: (query, eligibleIds) =>
     `node "${query}" is not computer-capable (needs a connected node advertising ${COMPUTER_ACT_COMMAND} and ${SCREEN_SNAPSHOT_COMMAND}; ${NOT_COMPUTER_CAPABLE_HINT}; ` +

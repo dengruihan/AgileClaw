@@ -206,7 +206,7 @@ it("retains an untracked plugin across Control UI rebuilds, not declaration chan
         registry.diagnostics.filter(
           (entry) =>
             entry.pluginId === plugin.id &&
-            entry.message.startsWith("OpenClaw can't verify where this plugin came from."),
+            entry.message.startsWith("AgileClaw can't verify where this plugin came from."),
         ),
       )
       .toHaveLength(1);

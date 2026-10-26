@@ -20,7 +20,7 @@ async function git(root: string, ...args: string[]) {
 async function initialize(root: string) {
   await fs.mkdir(root, { recursive: true });
   await git(root, "init", "--initial-branch=main");
-  await git(root, "config", "user.name", "OpenClaw Test");
+  await git(root, "config", "user.name", "AgileClaw Test");
   await git(root, "config", "user.email", "test@openclaw.invalid");
 }
 
@@ -159,7 +159,7 @@ it("honors a non-force fetch mapping into a local branch", async () => {
     await initialize(source);
     await commit(source, "initial");
     await git(base, "clone", pathToFileURL(source).href, receiver);
-    await git(receiver, "config", "user.name", "OpenClaw Test");
+    await git(receiver, "config", "user.name", "AgileClaw Test");
     await git(receiver, "config", "user.email", "test@openclaw.invalid");
     await git(receiver, "switch", "--create", "protected");
     await commit(receiver, "local protected work");

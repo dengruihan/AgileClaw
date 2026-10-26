@@ -19,7 +19,7 @@ function createGitFixture(base: string) {
   fs.mkdirSync(source);
   git(base, "init", "--bare", "--initial-branch=main", remote);
   git(source, "init", "--initial-branch=main");
-  git(source, "config", "user.name", "OpenClaw Test");
+  git(source, "config", "user.name", "AgileClaw Test");
   git(source, "config", "user.email", "openclaw@example.com");
   fs.writeFileSync(
     path.join(source, "package.json"),

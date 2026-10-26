@@ -49,7 +49,7 @@ it.each([
       await fs.writeFile(path.join(root, "openclaw.mjs"), "export {};\n");
       await fs.writeFile(path.join(root, ".gitignore"), "dist/\nnode_modules/\n.artifacts/\n");
       await git(root, "init", "--initial-branch=main");
-      await git(root, "config", "user.name", "OpenClaw Test");
+      await git(root, "config", "user.name", "AgileClaw Test");
       await git(root, "config", "user.email", "openclaw@example.com");
       await git(root, "add", ".");
       await git(root, "commit", "-m", "fixture");

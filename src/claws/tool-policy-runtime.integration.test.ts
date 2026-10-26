@@ -345,7 +345,7 @@ describe("Claw tool policy consent provenance", () => {
     {
       profile: "full" as const,
       message:
-        "Add an explicit tools.allow list to its package OpenClaw profile, then run `openclaw claws update worker`",
+        "Add an explicit tools.allow list to its package AgileClaw profile, then run `openclaw claws update worker`",
     },
   ])("rejects legacy $profile authority with a repair path", async ({ profile, message }) => {
     const root = tempDirs.make("openclaw-legacy-tool-consent-");

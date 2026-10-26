@@ -68,13 +68,13 @@ async function assertMaintenancePathsOwnedByStateDir(
       }
       resolveRootPathSync({
         absolutePath,
-        boundaryLabel: "OpenClaw state directory",
+        boundaryLabel: "AgileClaw state directory",
         rootCanonicalPath: stateCanonicalDir,
         rootPath: stateDir,
       });
     } catch (error) {
       throw new Error(
-        `Cannot run ${operation} for a path outside the active OpenClaw state directory: ${protectedPath}. Set OPENCLAW_STATE_DIR to the owning state directory and retry.`,
+        `Cannot run ${operation} for a path outside the active AgileClaw state directory: ${protectedPath}. Set OPENCLAW_STATE_DIR to the owning state directory and retry.`,
         { cause: error },
       );
     }
@@ -199,7 +199,7 @@ export async function withDoctorSqliteMaintenanceLock<T>(
     throw error;
   }
   if (!lock) {
-    throw new Error(`Cannot run ${params.operation} without exclusive OpenClaw state ownership.`);
+    throw new Error(`Cannot run ${params.operation} without exclusive AgileClaw state ownership.`);
   }
 
   let active = true;

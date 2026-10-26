@@ -181,7 +181,7 @@ describe("runDoctorConfigPreflight", () => {
           async () => {
             for (let pass = 0; pass < 2; pass += 1) {
               await expect(runDoctorConfigPreflight(doctorRepairOptions)).rejects.toThrow(
-                "Upgrade through OpenClaw 2026.9.7",
+                "Upgrade through AgileClaw 2026.9.7",
               );
               expect(await fs.readFile(configPath, "utf8")).toBe(originalConfig);
               expect(await fs.readFile(backupPath, "utf8")).toBe(backupBytes);

@@ -55,7 +55,7 @@ suite.define(() => {
         });
         expect(connect.params).toMatchObject({ locale: "zh-CN" });
         await page
-          .getByRole("heading", { name: "你好，我是 OpenClaw — 我们来孵化你的智能体吧。" })
+          .getByRole("heading", { name: "你好，我是 AgileClaw — 我们来孵化你的智能体吧。" })
           .waitFor();
         await page.getByRole("radio", { name: /是的 — 开始设置/ }).click();
         const answer = await gateway.waitForRequest("openclaw.chat", { match: { message: "yes" } });

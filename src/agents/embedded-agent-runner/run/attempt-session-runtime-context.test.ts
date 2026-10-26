@@ -135,7 +135,7 @@ describe("runtime-context session compatibility", () => {
       runtimeContext: { retained: true },
     });
     expect(serialized).toContain(JSON.stringify(legacyText).slice(1, -1));
-    expect(serialized).not.toContain("OpenClaw runtime context:");
+    expect(serialized).not.toContain("AgileClaw runtime context:");
     expect(serialized).toContain("signature");
   });
 });

@@ -72,7 +72,7 @@ export async function resolveNativeSessionBindingWithAuthority<TBinding>(
   return { binding, authority };
 }
 
-/** Let the authoritative OpenClaw generation adopt its predecessor or reclaim a stale row. */
+/** Let the authoritative AgileClaw generation adopt its predecessor or reclaim a stale row. */
 export async function reclaimNativeSessionGenerationWithAuthority(
   params: NativeSessionGenerationParams & {
     generation: NativeSessionGenerationOperationsV2;

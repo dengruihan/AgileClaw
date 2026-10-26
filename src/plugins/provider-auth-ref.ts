@@ -136,7 +136,7 @@ async function promptEnvSecretRefForSetup(params: {
   };
   await params.prompter.note(
     params.copy?.envValidatedMessage?.(envVar) ??
-      `Validated environment variable ${envVar}. OpenClaw will store a reference, not the key value.`,
+      `Validated environment variable ${envVar}. AgileClaw will store a reference, not the key value.`,
     "Reference validated",
   );
   return { ref, resolvedValue };
@@ -262,7 +262,7 @@ async function promptProviderSecretRefForSetup(params: {
     });
     await params.prompter.note(
       params.copy?.providerValidatedMessage?.(selectedProvider, id, providerEntry.source) ??
-        `Validated ${providerEntry.source} reference ${selectedProvider}:${id}. OpenClaw will store a reference, not the key value.`,
+        `Validated ${providerEntry.source} reference ${selectedProvider}:${id}. AgileClaw will store a reference, not the key value.`,
       "Reference validated",
     );
     return { ref, resolvedValue };
@@ -304,7 +304,7 @@ export async function promptSecretRefForSetup(params: {
         },
         {
           value: "store",
-          label: "OpenClaw secret store",
+          label: "AgileClaw secret store",
           hint: "Reference a team-scoped value in the shared state database",
         },
         {
@@ -349,7 +349,7 @@ export async function promptSecretRefForSetup(params: {
         env: params.env ?? process.env,
       });
       await params.prompter.note(
-        `Validated store reference ${ref.provider}:${id}. OpenClaw will store a reference, not the value.`,
+        `Validated store reference ${ref.provider}:${id}. AgileClaw will store a reference, not the value.`,
         "Reference validated",
       );
       return { ref, resolvedValue };

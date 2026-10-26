@@ -72,7 +72,7 @@ vi.mock("../infra/ports-inspect.js", async (importOriginal) => ({
 }));
 
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
-const ownerHint = "Managed by OpenClaw.app. Update OpenClaw.app to update this Gateway.";
+const ownerHint = "Managed by AgileClaw.app. Update AgileClaw.app to update this Gateway.";
 async function hostRoot() {
   const root = tempDirs.make("openclaw-doctor-host-runtime-");
   await fs.writeFile(path.join(root, "package.json"), JSON.stringify({ name: "openclaw" }));
@@ -82,8 +82,8 @@ async function hostRoot() {
     JSON.stringify({
       schemaVersion: 1,
       owner: "macos-app",
-      displayName: "OpenClaw.app",
-      updateHint: "Update OpenClaw.app to update this Gateway.",
+      displayName: "AgileClaw.app",
+      updateHint: "Update AgileClaw.app to update this Gateway.",
     }),
   );
   return root;

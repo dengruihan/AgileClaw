@@ -647,7 +647,7 @@ describe("tool-card outcomes", () => {
     { name: "progress_card", args: { markdown: "Preparing release" } },
     {
       name: "tool_call",
-      args: { id: "web_search", args: { query: "OpenClaw release notes" } },
+      args: { id: "web_search", args: { query: "AgileClaw release notes" } },
     },
   ])("shows skipped $name calls without claiming failure or success", ({ name, args }) => {
     const container = document.createElement("div");
@@ -663,7 +663,7 @@ describe("tool-card outcomes", () => {
     for (const expanded of [false, true]) {
       mountCard(card, { expanded }, container);
       if (name === "tool_call") {
-        expect(textOf(container, ".chat-tool-msg-summary")).toContain("OpenClaw release notes");
+        expect(textOf(container, ".chat-tool-msg-summary")).toContain("AgileClaw release notes");
       }
       expect(container.textContent?.toLowerCase()).toContain("skipped");
       expect(container.textContent).not.toMatch(/failed|Completed|updated|Tool error/);
@@ -674,8 +674,8 @@ describe("tool-card outcomes", () => {
   it.each([
     {
       name: "web_search",
-      args: { query: "OpenClaw release notes" },
-      text: "OpenClaw release notes",
+      args: { query: "AgileClaw release notes" },
+      text: "AgileClaw release notes",
     },
     { name: "read", args: { path: "/workspace/CHANGELOG.md" }, text: "CHANGELOG.md" },
     {
@@ -716,7 +716,7 @@ describe("tool-card outcomes", () => {
   );
 
   it("passes the raw Tool Search invocation to tool-result plugin replacements", () => {
-    const input = { id: "web_search", args: { query: "OpenClaw release notes" } };
+    const input = { id: "web_search", args: { query: "AgileClaw release notes" } };
     const card: ToolCard = {
       id: "search-release",
       callId: "search-release",

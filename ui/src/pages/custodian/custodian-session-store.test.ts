@@ -322,7 +322,7 @@ describe("CustodianSessionStore", () => {
     const request = vi.fn().mockRejectedValue(
       new GatewayRequestError({
         code: "INVALID_REQUEST",
-        message: "OpenClaw session belongs to another caller.",
+        message: "AgileClaw session belongs to another caller.",
         details: buildSystemAgentSessionInvalidatedErrorDetails(),
       }),
     );
@@ -346,7 +346,7 @@ describe("CustodianSessionStore", () => {
       .mockRejectedValueOnce(
         new GatewayRequestError({
           code: "UNAVAILABLE",
-          message: "OpenClaw session expired.",
+          message: "AgileClaw session expired.",
           details: buildSystemAgentSessionInvalidatedErrorDetails(),
         }),
       )
@@ -408,7 +408,7 @@ describe("CustodianSessionStore", () => {
         question: {
           id: "repair",
           header: "Repair",
-          question: "What should OpenClaw repair?",
+          question: "What should AgileClaw repair?",
           options: [{ label: "Gateway" }, { label: "Channel" }],
           isOther: false,
         },

@@ -38,7 +38,7 @@ export type SecurityAuditSuppression = NonNullable<
 
 export type SurfaceConfigEntry = NonNullable<z.input<typeof OpenClawSchemaShape.surfaces>>[string];
 
-/** Top-level OpenClaw config as read from user/project config files. */
+/** Top-level AgileClaw config as read from user/project config files. */
 export type OpenClawConfig = {
   /** @deprecated Doctor-only legacy input. */
   audit?: AuditConfig;

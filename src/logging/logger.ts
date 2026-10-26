@@ -538,7 +538,7 @@ function buildLogger(): TsLogger<LogObj> {
   inheritLogLevel(logger, () => levelToMinLevel(getRuntimeSettings().level));
   let activeFile: string | undefined;
   logger.attachTransport({
-    // OpenClaw owns redacted serialization; tslog's formatted line is unused.
+    // AgileClaw owns redacted serialization; tslog's formatted line is unused.
     format: () => "",
     write: (logObj: LogObj) => {
       try {

@@ -158,7 +158,7 @@ describe("getReplyFromConfig fast test bootstrap", () => {
         resolvedThinkLevel?: string;
         resolveDefaultThinkingLevel: () => Promise<string | undefined>;
       }) => ({
-        text: `OpenClaw\nThink: ${status.resolvedThinkLevel ?? (await status.resolveDefaultThinkingLevel()) ?? "off"}`,
+        text: `AgileClaw\nThink: ${status.resolvedThinkLevel ?? (await status.resolveDefaultThinkingLevel()) ?? "off"}`,
       }),
     );
     mocks.handleCommands.mockImplementation(
@@ -264,7 +264,7 @@ describe("getReplyFromConfig fast test bootstrap", () => {
     const cfg = config();
     const reply = await getReplyFromConfig(nativeCtx("/status"), undefined, cfg);
     const payload = expectDefined(Array.isArray(reply) ? undefined : reply, "single status reply");
-    expect(payload.text).toContain("OpenClaw");
+    expect(payload.text).toContain("AgileClaw");
     expect(payload.text).toContain("Think: xhigh");
     expect(getReplyPayloadMetadata(payload)?.deliverDespiteSourceReplySuppression).toBe(true);
     expect(mocks.loadModelCatalog).toHaveBeenCalledExactlyOnceWith({

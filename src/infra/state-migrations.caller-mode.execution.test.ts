@@ -170,7 +170,7 @@ describe("legacy state migration caller execution", () => {
               doctorOnlyStateMigrations: mode === "doctor",
               legacySessionSurfaces: EMPTY_LEGACY_SESSION_SURFACES,
             });
-        await expect(migration).rejects.toThrow("Upgrade through OpenClaw 2026.9.7");
+        await expect(migration).rejects.toThrow("Upgrade through AgileClaw 2026.9.7");
         expect(snapshotSqliteArtifacts(stateDatabasePath)).toEqual(before);
         expect(fs.readFileSync(sidecarPath, "utf8")).toBe(sidecarBytes);
       }

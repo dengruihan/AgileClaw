@@ -1,5 +1,5 @@
 /**
- * Materializes selected OpenClaw skills as a temporary Claude CLI plugin.
+ * Materializes selected AgileClaw skills as a temporary Claude CLI plugin.
  */
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
@@ -100,7 +100,7 @@ export async function prepareClaudeCliSkillsPlugin(params: {
   const manifest = {
     name: OPENCLAW_CLAUDE_PLUGIN_NAME,
     version: "0.0.0",
-    description: "Session-scoped OpenClaw skills selected for this agent run.",
+    description: "Session-scoped AgileClaw skills selected for this agent run.",
     skills: "./skills",
   };
   await fs.writeFile(

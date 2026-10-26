@@ -27,7 +27,7 @@ it("returns protected provider guidance through the channel command without a pe
         await handleSystemAgentCommand(buildCommandTestParams("/openclaw yes", cfg, context), true),
       ).toMatchObject({
         shouldContinue: false,
-        reply: { text: "No pending OpenClaw rescue change is waiting for approval." },
+        reply: { text: "No pending AgileClaw rescue change is waiting for approval." },
       });
       expect(JSON.parse(await fs.readFile(state.configPath, "utf8"))).toEqual(cfg);
     },

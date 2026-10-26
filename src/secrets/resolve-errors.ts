@@ -140,8 +140,8 @@ export function describeSecretResolutionOperatorRecovery(value: unknown): string
     return undefined;
   }
   return value.source === "exec"
-    ? "Restore Windows path security verification, or use an existing provider command whose owner and ACLs OpenClaw can verify"
-    : "Restore Windows path security verification, or use an existing secret file whose owner and ACLs OpenClaw can verify";
+    ? "Restore Windows path security verification, or use an existing provider command whose owner and ACLs AgileClaw can verify"
+    : "Restore Windows path security verification, or use an existing secret file whose owner and ACLs AgileClaw can verify";
 }
 
 export function providerResolutionError(params: {

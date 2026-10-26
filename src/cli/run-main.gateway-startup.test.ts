@@ -68,7 +68,7 @@ describe("runCli exit behavior", () => {
     "parks the managed Gateway when a newer schema blocks %s",
     async (phase) => {
       const error = createNewerSqliteSchemaVersionError(
-        "OpenClaw state database",
+        "AgileClaw state database",
         "/tmp/openclaw-startup/state/openclaw.sqlite",
         14,
         13,
@@ -103,7 +103,7 @@ describe("runCli exit behavior", () => {
     { label: "another command", args: ["status"] },
   ])("does not park the Gateway for a newer-schema failure during $label", async ({ args }) => {
     const error = createNewerSqliteSchemaVersionError(
-      "OpenClaw state database",
+      "AgileClaw state database",
       "/tmp/openclaw-startup/state/openclaw.sqlite",
       14,
       13,

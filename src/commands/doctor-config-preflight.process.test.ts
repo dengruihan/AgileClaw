@@ -33,7 +33,7 @@ import {
 import { doctorConfigRuntimeEntrypoints } from "./doctor-config-runtime.test-support.js";
 
 const STARTUP_REFUSAL =
-  "OpenClaw startup migrations did not complete cleanly; refusing to report the gateway ready.";
+  "AgileClaw startup migrations did not complete cleanly; refusing to report the gateway ready.";
 const STARTUP_RECOVERY =
   'Run "openclaw doctor --fix" against the same state/config, then restart the gateway.';
 const tempDirs = createFixtureLifetime();

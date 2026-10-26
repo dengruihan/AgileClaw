@@ -615,14 +615,14 @@ async function verifyAndActivateCandidate(
     try {
       await appendSystemAgentAuditEntry({
         operation: "openclaw.setup",
-        summary: "Verified an AI access candidate through OpenClaw setup",
+        summary: "Verified an AI access candidate through AgileClaw setup",
         configPath: after?.path ?? snapshot.path,
         configHashBefore: hashConfigRaw(snapshot.raw),
         configHashAfter: after ? hashConfigRaw(after.raw) : null,
         details: { modelRef: staged.modelRef, inferenceKind: params.kind },
       });
     } catch (error) {
-      const warning = `Inference was verified, but OpenClaw could not record its audit entry: ${formatErrorMessage(error)}`;
+      const warning = `Inference was verified, but AgileClaw could not record its audit entry: ${formatErrorMessage(error)}`;
       params.runtime.error?.(warning);
       lines.push(warning);
     }

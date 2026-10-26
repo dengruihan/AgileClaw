@@ -18,7 +18,7 @@ function createOpenClawStateSnapshotOwnerRegistry() {
           owner: "openclaw-state",
           assertCurrent: () => {
             if (getCurrent() !== database || !database.db.isOpen) {
-              throw new Error("OpenClaw state snapshot owner is no longer current");
+              throw new Error("AgileClaw state snapshot owner is no longer current");
             }
           },
         }),

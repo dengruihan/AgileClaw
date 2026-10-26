@@ -75,7 +75,7 @@ export const detected: SystemAgentSetupDetectResult = {
       id: "llama-cpp",
       brandId: "llama-cpp",
       label: "llama.cpp",
-      hint: "Install a verified llama.cpp server and run a private GGUF model managed by OpenClaw",
+      hint: "Install a verified llama.cpp server and run a private GGUF model managed by AgileClaw",
       actionLabel: "Set up model",
     },
   ],

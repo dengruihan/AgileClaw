@@ -15,7 +15,7 @@ export const StateSchemaMutationConflictError = resolveGlobalSingleton(
     class SchemaMutationConflictError extends Error {
       constructor(databasePath: string, cause: unknown) {
         super(
-          `OpenClaw refused shared state schema mutation at ${databasePath} because another Gateway owns that state directory. Stop that Gateway or perform the update through its managed restart path, then retry.`,
+          `AgileClaw refused shared state schema mutation at ${databasePath} because another Gateway owns that state directory. Stop that Gateway or perform the update through its managed restart path, then retry.`,
           { cause },
         );
         this.name = "StateSchemaMutationConflictError";

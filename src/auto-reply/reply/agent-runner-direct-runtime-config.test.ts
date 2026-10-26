@@ -720,7 +720,7 @@ describe("runReplyAgent runtime config", () => {
       if (!result || Array.isArray(result)) {
         throw new Error("expected a single preflight compaction failure reply payload");
       }
-      expect(result.text).toContain("OpenClaw couldn't shorten it.");
+      expect(result.text).toContain("AgileClaw couldn't shorten it.");
       expect(getReplyPayloadMetadata(result)?.deliverDespiteSourceReplySuppression).toBe(true);
       expect(followupRun.run.sessionId).toBe(sessionSnapshot.sessionId);
       expect(sessionEntry).toEqual(sessionSnapshot);
@@ -861,7 +861,7 @@ describe("runReplyAgent runtime config", () => {
       throw new Error("expected a single preflight compaction failure reply payload");
     }
     expect(result.text).toContain("This conversation is too long");
-    expect(result.text).toContain("OpenClaw couldn't shorten it.");
+    expect(result.text).toContain("AgileClaw couldn't shorten it.");
     expect(result.text).toContain("/compact");
     expect(result.text).toContain("/new");
     const metadata = getReplyPayloadMetadata(result);

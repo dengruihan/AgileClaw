@@ -71,7 +71,7 @@ describe("resolveUtilityCompletionRuntimeForAgent", () => {
       pin: { agentRuntime: { id: "claude-cli" } },
       expected: { id: "claude-cli", kind: "cli", label: "Claude CLI" },
     },
-    { pin: undefined, expected: { id: "openclaw", kind: "api", label: "OpenClaw Default" } },
+    { pin: undefined, expected: { id: "openclaw", kind: "api", label: "AgileClaw Default" } },
   ])("reports the selected $expected.kind owner", async ({ pin, expected }) => {
     await expect(resolveUtilityCompletionRuntimeForAgent(prepared(pin))).resolves.toEqual(expected);
   });
@@ -147,7 +147,7 @@ describe("automatic utility runtime prepared-generation composition", () => {
         const runtime = await resolveUtilityCompletionRuntimeForAgent(params);
         expect(runtime).toEqual(
           hasApiCredential
-            ? { id: "openclaw", kind: "api", label: "OpenClaw Default" }
+            ? { id: "openclaw", kind: "api", label: "AgileClaw Default" }
             : { id: "claude-cli", kind: "cli", label: "Claude CLI" },
         );
         expect(credentialLookup).not.toHaveBeenCalled();

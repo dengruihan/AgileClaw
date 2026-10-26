@@ -360,7 +360,7 @@ async function resolveReadOnlyToolsEffectiveInventory(
       );
     }
     // A native owner has a distinct MCP runtime. Never substitute an in-process
-    // catalog under the same OpenClaw session identity when its catalog is unavailable.
+    // catalog under the same AgileClaw session identity when its catalog is unavailable.
     return maybeAppendMcpNotice(base, mcpConfig.serverNames, "not-connected");
   }
   // UI panel loads call `tools.effective`, so this path must not create MCP

@@ -182,7 +182,7 @@ it("refuses state removal while a peer owns a cached database, then removes afte
     );
     expect(ready).toMatchObject({ ready: true });
     await expect(removeStateAndLinkedPaths(plan, runtime)).rejects.toThrow(
-      "Cannot remove OpenClaw state directory while another SQLite connection is active",
+      "Cannot remove AgileClaw state directory while another SQLite connection is active",
     );
     expect(fs.readFileSync(configPath, "utf8")).toBe("{}\n");
     expect(fs.existsSync(path.join(stateDir, "state", "openclaw.sqlite"))).toBe(true);

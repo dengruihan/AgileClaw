@@ -1,4 +1,4 @@
-// Verifies state-dir migrations preserve existing OpenClaw runtime data.
+// Verifies state-dir migrations preserve existing AgileClaw runtime data.
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -69,7 +69,7 @@ describe("legacy state dir auto-migration", () => {
 
         for (let attempt = 0; attempt < 2; attempt += 1) {
           await expect(autoMigrateLegacyStateDir({ env, homedir: () => root })).rejects.toThrow(
-            "Upgrade through OpenClaw 2026.9.7",
+            "Upgrade through AgileClaw 2026.9.7",
           );
           expect(fs.lstatSync(legacyDir).isSymbolicLink()).toBe(false);
           expect(fs.existsSync(targetDir)).toBe(location === "target");
@@ -215,7 +215,7 @@ describe("legacy state dir auto-migration", () => {
           await expect(migration).rejects.toMatchObject({
             message: expect.stringContaining(sourcePath),
           });
-          await expect(migration).rejects.toThrow(/July 1, 2026.*OpenClaw 2026\.9\.7/);
+          await expect(migration).rejects.toThrow(/July 1, 2026.*AgileClaw 2026\.9\.7/);
           expect(fs.readFileSync(sourcePath)).toEqual(sourceBytes);
           expect(fs.readdirSync(path.dirname(sourcePath))).toEqual([path.basename(sourcePath)]);
           expect(fs.lstatSync(legacyDir).isSymbolicLink()).toBe(false);

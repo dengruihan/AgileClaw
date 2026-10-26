@@ -173,7 +173,7 @@ describe("stripInternalRuntimeScaffolding", () => {
     ["ordinary XML", "<note>keep this</note>", "<note>keep this</note>"],
     [
       "runtime prefaces",
-      `OpenClaw runtime event.\n${OPENCLAW_RUNTIME_CONTEXT_NOTICE}\nVisible reply`,
+      `AgileClaw runtime event.\n${OPENCLAW_RUNTIME_CONTEXT_NOTICE}\nVisible reply`,
       "Visible reply",
     ],
     [

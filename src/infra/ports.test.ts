@@ -185,7 +185,7 @@ describe("ports helpers", () => {
       ).catch(() => {});
 
       const messages = runtime.error.mock.calls.map((call) => stripAnsi(String(call[0] ?? "")));
-      expect(messages.join("\n").includes("another OpenClaw instance is already running")).toBe(
+      expect(messages.join("\n").includes("another AgileClaw instance is already running")).toBe(
         openclaw,
       );
     },
@@ -1013,7 +1013,7 @@ describe("inspectPortUsage on Windows", () => {
     expect(result.connections[0]?.commandLine).toContain("openclaw");
   });
 
-  it("uses PowerShell process command lines to classify OpenClaw listeners", async () => {
+  it("uses PowerShell process command lines to classify AgileClaw listeners", async () => {
     const root = tempDirs.make("openclaw-port-listener-");
     const script = path.join(root, "dist", "index.js");
     mkdirSync(path.dirname(script), { recursive: true });

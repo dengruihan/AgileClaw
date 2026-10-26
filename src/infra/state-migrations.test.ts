@@ -3147,7 +3147,7 @@ describe("state migrations", () => {
 
     await expect(
       detectLegacyStateMigrations({ cfg: createConfig(), env, homedir: () => root }),
-    ).rejects.toThrow("Upgrade through OpenClaw 2026.9.7");
+    ).rejects.toThrow("Upgrade through AgileClaw 2026.9.7");
     await expect(fs.readFile(sourcePath, "utf8")).resolves.toBe(original);
     await expect(fs.stat(path.join(stateDir, "state", "openclaw.sqlite"))).rejects.toMatchObject({
       code: "ENOENT",

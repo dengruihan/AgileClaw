@@ -1054,7 +1054,7 @@ describe("gatherDaemonStatus", () => {
     expect(status.rpc?.server).toBeUndefined();
     const output = capturePrintedDaemonStatus(status, { json: false });
     expect(output.logs).toContain("Gateway version: 2026.5.7");
-    expect(output.errors).toContain(`this OpenClaw command is version ${VERSION}`);
+    expect(output.errors).toContain(`this AgileClaw command is version ${VERSION}`);
   });
 
   it("uses raw explicit URLs for probes but redacts them from status diagnostics", async () => {
@@ -1294,7 +1294,7 @@ describe("gatherDaemonStatus", () => {
       expect(output).toContain(`schema ${OPENCLAW_STATE_SCHEMA_VERSION + 1}`);
       expect(output).toContain(`this build supports ${OPENCLAW_STATE_SCHEMA_VERSION}`);
       expect(output).toContain("writer build 2026.9.4");
-      expect(output).toContain(`Refused by OpenClaw ${VERSION}`);
+      expect(output).toContain(`Refused by AgileClaw ${VERSION}`);
       expect(output).toContain("pre-upgrade backup");
       expect(exit).toHaveBeenCalledWith(1);
       expect(createConfigIOCalls).not.toHaveBeenCalled();

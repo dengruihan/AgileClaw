@@ -60,7 +60,7 @@ export async function runHostedSetup(params: {
       const snapshot = await readSetupConfigFileSnapshot();
       if (!snapshot.exists || !snapshot.valid || !snapshot.hash) {
         throw new Error(
-          `${params.label} requires a valid saved config snapshot. On the machine running OpenClaw, run \`openclaw doctor --fix\` and resolve any remaining validation errors; then retry.`,
+          `${params.label} requires a valid saved config snapshot. On the machine running AgileClaw, run \`openclaw doctor --fix\` and resolve any remaining validation errors; then retry.`,
         );
       }
       const baseConfig = snapshot.sourceConfig ?? snapshot.config;

@@ -26,11 +26,11 @@ describe("attachment reply previews", () => {
       const resolve = createReplyPreviewResolver(
         new Map<string, LoadedReplySource>(
           location === "loaded"
-            ? [[sourceId, { message: source, messageId: sourceId, senderLabel: "OpenClaw" }]]
+            ? [[sourceId, { message: source, messageId: sourceId, senderLabel: "AgileClaw" }]]
             : [],
         ),
         {
-          assistantName: "OpenClaw",
+          assistantName: "AgileClaw",
           userId: null,
           userName: null,
           replyMessageAccess: {
@@ -41,7 +41,7 @@ describe("attachment reply previews", () => {
 
       expect(resolve(sourceId)).toMatchObject({
         sourceMessageId: sourceId,
-        senderLabel: "OpenClaw",
+        senderLabel: "AgileClaw",
         text: "report.pdf",
       });
     },
@@ -66,7 +66,7 @@ describe("text-less reply previews", () => {
             : [],
         ),
         {
-          assistantName: "OpenClaw",
+          assistantName: "AgileClaw",
           replyMessageAccess: { read: () => (location === "fetched" ? source : undefined) },
         },
       );
@@ -81,7 +81,7 @@ describe("text-less reply previews", () => {
 
   it("does not describe an unpersisted original without text", () => {
     const resolve = createReplyPreviewResolver(new Map(), {
-      assistantName: "OpenClaw",
+      assistantName: "AgileClaw",
       replyMessageAccess: { read: () => ({ role: "user", content: [] }) },
     });
     expect(resolve("photo")).toBeUndefined();
@@ -190,7 +190,7 @@ describe("quoted agent identity", () => {
         __openclaw: { id: "research-answer" },
       };
       const resolve = createReplyPreviewResolver(new Map(), {
-        assistantName: "OpenClaw",
+        assistantName: "AgileClaw",
         currentAgentId: "main",
         agents: [{ id: "research", identity: roster }],
         replyMessageAccess: { read: () => source },
@@ -232,7 +232,7 @@ describe("quoted agent identity", () => {
         __openclaw: { id: "agent-answer" },
       };
       const resolve = createReplyPreviewResolver(new Map(), {
-        assistantName: "OpenClaw",
+        assistantName: "AgileClaw",
         currentAgentId: "main",
         assistantAvatarUrl: "/avatars/current.png",
         agents: roster,

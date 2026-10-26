@@ -33,7 +33,7 @@ function isOpenClawNodeModulesPackageRoot(packageRoot: string): boolean {
   return packageDir === "openclaw" && parentDir === "node_modules";
 }
 
-/** Find configured plugin load paths that alias bundled plugins already shipped by OpenClaw. */
+/** Find configured plugin load paths that alias bundled plugins already shipped by AgileClaw. */
 export function scanBundledPluginLoadPathMigrations(
   cfg: OpenClawConfig,
   env: NodeJS.ProcessEnv = process.env,
@@ -99,7 +99,7 @@ export function scanBundledPluginLoadPathMigrations(
       const oldPackageRoot = oldPackaged?.packageRoot ?? oldLegacy?.packageRoot;
       const oldBundledLeaf = oldPackaged?.bundledLeaf ?? oldLegacy?.bundledLeaf;
       match =
-        // Only rewrite paths rooted in the installed OpenClaw package; user plugin paths stay intact.
+        // Only rewrite paths rooted in the installed AgileClaw package; user plugin paths stay intact.
         oldPackageRoot && oldBundledLeaf && isOpenClawNodeModulesPackageRoot(oldPackageRoot)
           ? packagedBundledLeafMap.get(normalizeBundledLookupPath(oldBundledLeaf))
           : undefined;
@@ -128,7 +128,7 @@ export function collectBundledPluginLoadPathWarnings(params: {
   }
   const lines = params.hits.map(
     (hit) =>
-      `- ${hit.pathLabel}: bundled plugin path "${hit.fromPath}" still aliases ${hit.pluginId}; OpenClaw loads the packaged bundled plugin from "${hit.toPath}".`,
+      `- ${hit.pathLabel}: bundled plugin path "${hit.fromPath}" still aliases ${hit.pluginId}; AgileClaw loads the packaged bundled plugin from "${hit.toPath}".`,
   );
   lines.push(`- Run "${params.doctorFixCommand}" to remove these redundant bundled plugin paths.`);
   return lines.map((line) => sanitizeForLog(line));

@@ -793,7 +793,7 @@ module.exports = { stateMigrations: [{
           },
           env: fixture.env,
         }),
-      ).rejects.toThrow("OpenClaw 2026.9.7");
+      ).rejects.toThrow("AgileClaw 2026.9.7");
       const targetDiscovery = vi.fn(() => {
         throw new Error("target discovery after refusal");
       });
@@ -806,7 +806,7 @@ module.exports = { stateMigrations: [{
           homedir: () => fixture.homeDir,
           legacySessionSurfaces: EMPTY_LEGACY_SESSION_SURFACES,
         }),
-      ).rejects.toThrow("OpenClaw 2026.9.7");
+      ).rejects.toThrow("AgileClaw 2026.9.7");
       expect(targetDiscovery).not.toHaveBeenCalled();
       expect(fs.readFileSync(sourcePath, "utf8")).toBe("{invalid");
       expect(fs.readFileSync(databasePath)).toEqual(databaseBytes);

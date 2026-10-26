@@ -1,4 +1,4 @@
-// Safe loader for the conventional package-local OpenClaw profile.
+// Safe loader for the conventional package-local AgileClaw profile.
 import { asOptionalRecord as record } from "@openclaw/normalization-core/record-coerce";
 import type { ToolProfileId } from "../agents/tool-policy-shared.js";
 import { FsSafeError, root as fsSafeRoot } from "../infra/fs-safe.js";
@@ -95,7 +95,7 @@ function migrateLegacyDynamicToolProfile(value: unknown): {
 }
 
 /**
- * Resolves the OpenClaw profile for a package.
+ * Resolves the AgileClaw profile for a package.
  *
  * `profiles/openclaw.yml` is the conventional location. The retired
  * `metadata.openclaw.config` pointer is still read for compatibility with
@@ -191,9 +191,9 @@ export async function readClawOpenClawProfile(params: {
               ? "openclaw_profile_too_large"
               : "openclaw_profile_read_failed",
           unsafe
-            ? "The OpenClaw profile must be a regular, non-symlinked, non-hardlinked file."
+            ? "The AgileClaw profile must be a regular, non-symlinked, non-hardlinked file."
             : tooLarge
-              ? `The OpenClaw profile exceeds ${MAX_PROFILE_BYTES} bytes.`
+              ? `The AgileClaw profile exceeds ${MAX_PROFILE_BYTES} bytes.`
               : `Could not read ${declaredPath}: ${(error as Error).message}`,
           diagnosticPath,
         ),

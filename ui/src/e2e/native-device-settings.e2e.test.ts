@@ -82,7 +82,7 @@ suite.define(() => {
       async ({ page }) => {
         await installMockGateway(page, { operatorScopes: ["operator.read"] });
         await page.goto(`${suite.server.baseUrl}settings/device`);
-        await page.getByText(/only available inside the OpenClaw app/).waitFor();
+        await page.getByText(/only available inside the AgileClaw app/).waitFor();
         await page.screenshot({
           animations: "disabled",
           path: path.join(artifactDir, "before.png"),
@@ -335,7 +335,7 @@ suite.define(() => {
         });
         for (const route of ["device", "device/permissions"]) {
           expect((await page.goto(`${suite.server.baseUrl}settings/${route}`))?.status()).toBe(200);
-          await page.getByText(/only available inside the OpenClaw app/).waitFor();
+          await page.getByText(/only available inside the AgileClaw app/).waitFor();
           await page.locator('.settings-sidebar__item[href="/settings/devices"]').waitFor();
           expect(
             await page

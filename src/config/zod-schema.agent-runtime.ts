@@ -715,7 +715,7 @@ export const ToolsSchema = z
       })
       .optional(),
     loopDetection: ToolLoopDetectionSchema,
-    /** Compact large OpenClaw, MCP, and client tool catalogs behind search/call tools. */
+    /** Compact large AgileClaw, MCP, and client tool catalogs behind search/call tools. */
     toolSearch: ToolSearchSchema,
     /** Global Code Mode defaults and limits; agent/model settings can override activation. */
     codeMode: CodeModeSchema,

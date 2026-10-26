@@ -80,8 +80,8 @@ describe("Doctor source update delegation", () => {
         JSON.stringify({
           schemaVersion: 1,
           owner: "macos-app",
-          displayName: "OpenClaw.app",
-          updateHint: "Update OpenClaw.app to update this Gateway.",
+          displayName: "AgileClaw.app",
+          updateHint: "Update AgileClaw.app to update this Gateway.",
         }),
       );
 
@@ -93,7 +93,7 @@ describe("Doctor source update delegation", () => {
       expect(mocks.confirm).not.toHaveBeenCalled();
       expect(mocks.updateCommand).not.toHaveBeenCalled();
       expect(mocks.note).toHaveBeenCalledExactlyOnceWith(
-        "Managed by OpenClaw.app. Update OpenClaw.app to update this Gateway.",
+        "Managed by AgileClaw.app. Update AgileClaw.app to update this Gateway.",
         "Update",
       );
     },
@@ -146,7 +146,7 @@ describe("Doctor source update delegation", () => {
     mocks.confirm.mockResolvedValue(false);
     await expect(offer()).resolves.toEqual({ updated: false });
     expect(mocks.confirm).toHaveBeenCalledWith({
-      message: "Update OpenClaw from git before running doctor?",
+      message: "Update AgileClaw from git before running doctor?",
       initialValue: true,
     });
     expect(mocks.updateCommand).not.toHaveBeenCalled();

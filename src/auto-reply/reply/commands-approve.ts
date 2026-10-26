@@ -1,5 +1,5 @@
 import { expectDefined } from "@openclaw/normalization-core";
-// Implements approval commands for pending exec, plugin, and OpenClaw change requests.
+// Implements approval commands for pending exec, plugin, and AgileClaw change requests.
 import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
 import {
   getChannelPlugin,
@@ -161,7 +161,7 @@ export async function handleApproveCommandFromContext(
   }
 
   // Channels with reviewer custody let the Gateway judge the actor; elsewhere an
-  // OpenClaw change needs the current configured owner, like the tool that proposed it.
+  // AgileClaw change needs the current configured owner, like the tool that proposed it.
   const systemAgentNeedsOwner = !approvalCapability?.authorizeActorAction;
   const commandBehaviors = new Map<ChannelApprovalKind, ApproveCommandBehavior | undefined>();
   for (const approvalKind of approvalKinds) {
@@ -190,7 +190,7 @@ export async function handleApproveCommandFromContext(
 
   const resolvedBy = `${params.command.channel}:${params.command.senderId ?? "unknown"}`;
   const callApprovalMethod = async (approvalKind: ChannelApprovalKind): Promise<void> => {
-    // Channel senders deciding an OpenClaw change carry their identity so the
+    // Channel senders deciding an AgileClaw change carry their identity so the
     // Gateway's final decision guard rechecks live custody (channel approvers,
     // or else configured owner). Gateway clients are authorized by their scopes.
     const reviewer =
@@ -246,7 +246,7 @@ export async function handleApproveCommandFromContext(
     !params.command.senderIsOwner &&
     authorizations["system-agent"].authorized;
   const ownerOnlyResult = commandReply(
-    "❌ Only the owner can approve OpenClaw changes in this chat.",
+    "❌ Only the owner can approve AgileClaw changes in this chat.",
   );
   const methods = approvalKinds.filter((approvalKind) => {
     if (approvalKind === "system-agent" && systemAgentRefusedForOwner) {

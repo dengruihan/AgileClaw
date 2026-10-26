@@ -1,4 +1,4 @@
-// Re-exports fs-safe helpers with OpenClaw defaults and wrappers.
+// Re-exports fs-safe helpers with AgileClaw defaults and wrappers.
 import fs from "node:fs/promises";
 import path from "node:path";
 import {

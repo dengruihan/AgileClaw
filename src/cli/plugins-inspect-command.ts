@@ -229,7 +229,7 @@ export async function runPluginsInspectCommand(
       // An explicit multi-agent roster has no single default diagnostic owner.
       const agentIds = listAgentIds(cfg);
       const lines = [
-        "Skill Workshop is built into OpenClaw, not a plugin; configure it under skills.workshop.",
+        "Skill Workshop is built into AgileClaw, not a plugin; configure it under skills.workshop.",
       ];
       for (const agentId of agentIds.length > 0 ? agentIds : [undefined]) {
         const diagnostic = detectSkillWorkshopToolPolicyDiagnostic({

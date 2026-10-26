@@ -42,7 +42,7 @@ function resolvePrivateQaSourceModuleSpecifier(): string | null {
 export function loadPrivateQaCliModule(): Promise<Record<string, unknown>> {
   const specifier = resolvePrivateQaSourceModuleSpecifier();
   if (!specifier) {
-    throw new Error("Private QA CLI is only available from an OpenClaw source checkout.");
+    throw new Error("Private QA CLI is only available from an AgileClaw source checkout.");
   }
   return import(specifier);
 }

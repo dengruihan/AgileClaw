@@ -55,7 +55,7 @@ function createState() {
   return { env, statePath };
 }
 
-describe("OpenClaw database schema preflight", () => {
+describe("AgileClaw database schema preflight", () => {
   it("keeps package schema support metadata aligned", () => {
     expect(packageJson.openclaw.schemaVersions).toEqual({
       state: OPENCLAW_STATE_SCHEMA_VERSION,

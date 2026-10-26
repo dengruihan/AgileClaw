@@ -36,7 +36,7 @@ export async function maybeResolveDuelingSystemdGatewayScopes(
   const { user, system } = installation;
   note(
     [
-      "Both a user-scope and a system-scope OpenClaw gateway unit are installed:",
+      "Both a user-scope and a system-scope AgileClaw gateway unit are installed:",
       `- user:   ${user.unitPath}`,
       `- system: ${system.unitPath}`,
       "They bind the same port and will SIGTERM each other in a restart loop.",

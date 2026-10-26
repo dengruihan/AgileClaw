@@ -138,7 +138,7 @@ function verifyOwnerLock(owner: ProcessOwner, lock: StateOwnerFile | undefined):
   if (!lock.verifyStillHeld()) {
     loseOwner(
       owner,
-      new Error(`OpenClaw state ownership is no longer current at ${lock.lockPath}`),
+      new Error(`AgileClaw state ownership is no longer current at ${lock.lockPath}`),
     );
     return false;
   }
@@ -212,7 +212,7 @@ export const GatewayStateOwnerContentionError = resolveGlobalSingleton(
         public override readonly cause?: unknown,
       ) {
         super(
-          `OpenClaw state database is busy at ${databasePath}. Wait for the other OpenClaw process to finish, then retry. If it persists, run \`openclaw gateway status\` and check for other OpenClaw processes using the same state directory. A running Gateway can hold this ownership until it stops; stop it through its service manager or original terminal before retrying.`,
+          `AgileClaw state database is busy at ${databasePath}. Wait for the other AgileClaw process to finish, then retry. If it persists, run \`openclaw gateway status\` and check for other AgileClaw processes using the same state directory. A running Gateway can hold this ownership until it stops; stop it through its service manager or original terminal before retrying.`,
         );
         this.name = "GatewayStateOwnerContentionError";
       }
@@ -264,7 +264,7 @@ export function resolveGatewayStateOwnerPath(databasePath: string): string {
           os.homedir(),
           "AppData",
           "Local",
-          "OpenClaw",
+          "AgileClaw",
           "locks",
           uid === undefined ? "openclaw-state-owners" : `openclaw-state-owners-${uid}`,
         )
@@ -369,7 +369,7 @@ function leaseForFile(
     path: pathname,
     assertCurrent() {
       if (released || !holdsPhysicalLease()) {
-        throw new Error("OpenClaw state ownership is no longer current");
+        throw new Error("AgileClaw state ownership is no longer current");
       }
     },
     assertDatabaseAccess(databasePath) {
@@ -379,7 +379,7 @@ function leaseForFile(
         resolveGatewayStateOwnerPath(databasePath) !== pathname ||
         !holdsPhysicalLease()
       ) {
-        throw new Error("OpenClaw state maintenance does not own this database");
+        throw new Error("AgileClaw state maintenance does not own this database");
       }
     },
     run(operation) {
@@ -465,7 +465,7 @@ export function acquireGatewayStateOwner(params: {
     assertCurrent() {
       owner.lost.signal.throwIfAborted();
       if (!owner.accepting || owners.get(pathname) !== owner) {
-        throw new Error("OpenClaw state process owner is no longer current");
+        throw new Error("AgileClaw state process owner is no longer current");
       }
       lease.assertCurrent();
     },
@@ -691,7 +691,7 @@ export function assertStateDatabaseReadAllowed(databasePath: string): void {
     (owner.getProjection && !owner.getProjection()?.verifyStillHeld())
   ) {
     throw new Error(
-      `OpenClaw state ownership at ${databasePath} could not be verified; retry after maintenance finishes.`,
+      `AgileClaw state ownership at ${databasePath} could not be verified; retry after maintenance finishes.`,
     );
   }
   readOwnerPaths.set(key, { pathname, owner, expiresAt: now + READ_OWNERSHIP_MAX_AGE_MS });
@@ -714,14 +714,14 @@ export function assertStateDatabaseAccessAllowed(
     const scope = captured ? captured.maintenanceScope : getOpenClawDatabaseMaintenanceScope();
     if (!scope) {
       throw new Error(
-        `OpenClaw state at ${databasePath} is undergoing offline maintenance; retry when it finishes.`,
+        `AgileClaw state at ${databasePath} is undergoing offline maintenance; retry when it finishes.`,
       );
     }
     scope.assertDatabaseAccess(databasePath);
   };
   const pathname = resolveGatewayStateOwnerPath(databasePath);
   const local = owners.get(pathname);
-  const unavailable = `OpenClaw state ownership at ${databasePath} could not be verified; retry after maintenance finishes.`;
+  const unavailable = `AgileClaw state ownership at ${databasePath} could not be verified; retry after maintenance finishes.`;
   if (local) {
     if (!hasPhysicalOwnership(local)) {
       throw new Error(unavailable);

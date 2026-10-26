@@ -26,7 +26,7 @@ describe("Apps English loading", () => {
       expect(manager.t(key)).toBe(value);
     }
     expect(manager.t("common.health")).toBe("Gesundheit");
-    expect(manager.t("appsPage.heroTitle")).toBe("Take OpenClaw everywhere");
+    expect(manager.t("appsPage.heroTitle")).toBe("Take AgileClaw everywhere");
     expect(manager.t("appsPage.cards.ios.title")).toBe("iPhone");
     expect(manager.t("appsPage.ctaChromeWebStore")).toBe("Chrome Web Store");
   });

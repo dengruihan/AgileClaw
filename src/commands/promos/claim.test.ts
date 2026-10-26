@@ -335,7 +335,7 @@ describe("promosClaimCommand", () => {
     mocks.resolveProviderInstallCatalogEntry.mockReturnValue(undefined);
 
     await expect(promosClaimCommand("spring-models", {}, makeRuntime())).rejects.toThrow(
-      /Update OpenClaw/,
+      /Update AgileClaw/,
     );
     expect(mocks.replaceConfigFile).not.toHaveBeenCalled();
   });

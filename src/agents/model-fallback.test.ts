@@ -647,7 +647,7 @@ describe("runWithModelFallback", () => {
       "missing tool result",
       () =>
         new Error(
-          "OpenClaw recorded a native Codex tool.call without a matching tool.result before the turn completed.",
+          "AgileClaw recorded a native Codex tool.call without a matching tool.result before the turn completed.",
         ),
     ],
     ["missing strict harness", () => new MissingAgentHarnessError("codex")],

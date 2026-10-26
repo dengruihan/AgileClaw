@@ -166,7 +166,7 @@ describe("post-plugin update readiness", () => {
     async ({ phase, kind, reason }) => {
       const refusal = { kind, reason };
       const warning =
-        "Doctor maintenance is deferred; stop other OpenClaw processes and run openclaw doctor --fix.";
+        "Doctor maintenance is deferred; stop other AgileClaw processes and run openclaw doctor --fix.";
       const childFailure = Object.assign(new Error("Doctor exited with unsafe maintenance."), {
         exitCode: 1,
       });

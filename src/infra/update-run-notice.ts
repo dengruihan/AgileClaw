@@ -10,28 +10,28 @@ export function renderUpdateRunSummary(
   let headline: string;
   switch (run.status) {
     case "succeeded":
-      headline = "✅ OpenClaw updated.";
+      headline = "✅ AgileClaw updated.";
       break;
     case "failed":
-      headline = "⚠️ OpenClaw couldn't finish updating.";
+      headline = "⚠️ AgileClaw couldn't finish updating.";
       break;
     case "rolled-back":
-      headline = "↩️ The update couldn't finish. OpenClaw returned to the previous version.";
+      headline = "↩️ The update couldn't finish. AgileClaw returned to the previous version.";
       break;
     case "running":
-      headline = "⬆️ OpenClaw is updating.";
+      headline = "⬆️ AgileClaw is updating.";
       break;
     case "skipped":
       headline =
         run.reason === "already-current"
-          ? "✅ OpenClaw is already up to date."
+          ? "✅ AgileClaw is already up to date."
           : run.reason === "still-starting"
-            ? "⏳ OpenClaw is installed and still starting."
+            ? "⏳ AgileClaw is installed and still starting."
             : run.reason === "gateway-readiness-unverified"
-              ? "⚠️ OpenClaw is installed, but we couldn't confirm it's ready."
+              ? "⚠️ AgileClaw is installed, but we couldn't confirm it's ready."
               : run.reason === "managed-service-handoff-already-running"
-                ? "⬆️ OpenClaw is already updating."
-                : "ℹ️ OpenClaw wasn't updated.";
+                ? "⬆️ AgileClaw is already updating."
+                : "ℹ️ AgileClaw wasn't updated.";
       break;
   }
   const nextStep = options.manualCommand
@@ -54,10 +54,10 @@ export function renderUpdateRunNotice(
     return null;
   }
   if (kind === "ack") {
-    return "⬆️ Updating OpenClaw… You'll get a message here when it's done.";
+    return "⬆️ Updating AgileClaw… You'll get a message here when it's done.";
   }
   if (kind === "activating" || kind === "parking") {
-    return "⏳ Restarting OpenClaw…";
+    return "⏳ Restarting AgileClaw…";
   }
-  return "🔁 Checking that OpenClaw is ready…";
+  return "🔁 Checking that AgileClaw is ready…";
 }

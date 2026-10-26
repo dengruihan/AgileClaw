@@ -1,5 +1,5 @@
 // OpenAI-compatible error helpers.
-// Converts OpenClaw failover/sampling errors to OpenAI-style HTTP responses.
+// Converts AgileClaw failover/sampling errors to OpenAI-style HTTP responses.
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { describeFailoverError, resolveFailoverStatus } from "../agents/failover-error.js";
 import type { FailoverReason } from "../agents/failover/signal.js";

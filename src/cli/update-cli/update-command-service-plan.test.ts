@@ -431,7 +431,7 @@ describe("package runtime compatibility guidance", () => {
         {
           kind: "deployment",
           instruction:
-            "Pull or build an OpenClaw image with version 2026.9.4 and Node 90.0.0, then recreate or redeploy the container with the same state/config mounts. In-container package changes are not durable.",
+            "Pull or build an AgileClaw image with version 2026.9.4 and Node 90.0.0, then recreate or redeploy the container with the same state/config mounts. In-container package changes are not durable.",
         },
       ],
     });
@@ -664,7 +664,7 @@ describe("package runtime compatibility guidance", () => {
         `openclaw@${version} requires Node ${engine}; selected runtime is Node ${process.versions.node}.\n${
           minimum
             ? expectedPlainRecovery(version, minimum)
-            : "No Node version satisfies both this range and this updater's supported range (>=24.16.0 <25 || >=26.1.0). This candidate version cannot be run by this updater with a supported Node release; install a supported Node and select a compatible OpenClaw target."
+            : "No Node version satisfies both this range and this updater's supported range (>=24.16.0 <25 || >=26.1.0). This candidate version cannot be run by this updater with a supported Node release; install a supported Node and select a compatible AgileClaw target."
         }`,
       );
     });

@@ -41,8 +41,8 @@ function formatCliMachineOutput(humanOutput: string): string {
 
 function formatUnknownCommandMessage(command: string, commandPath: readonly string[]): string {
   return commandPath.length > 0
-    ? `OpenClaw ${commandPath.join(" ")} has no command "${command}".`
-    : `OpenClaw does not know the command "${command}".`;
+    ? `AgileClaw ${commandPath.join(" ")} has no command "${command}".`
+    : `AgileClaw does not know the command "${command}".`;
 }
 
 function formatCliUnknownCommandOutput(
@@ -98,7 +98,7 @@ export function createCliUnknownCommandError(
 
 function formatOrdinaryCliParseErrorMessage(message: string): string {
   for (const [pattern, prefix] of [
-    [/^unknown option ['"`](.+?)['"`]/i, "OpenClaw does not recognize option"],
+    [/^unknown option ['"`](.+?)['"`]/i, "AgileClaw does not recognize option"],
     [/^missing required argument ['"`](.+?)['"`]/i, "Missing required argument"],
     [/^required option ['"`](.+?)['"`] not specified/i, "Missing required option"],
   ] as const) {
@@ -112,10 +112,10 @@ function formatOrdinaryCliParseErrorMessage(message: string): string {
     return "Too many arguments for this command.";
   }
 
-  return `OpenClaw could not parse this command: ${message}`;
+  return `AgileClaw could not parse this command: ${message}`;
 }
 
-/** Convert Commander parse errors into OpenClaw-specific help and docs guidance. */
+/** Convert Commander parse errors into AgileClaw-specific help and docs guidance. */
 export function formatCliParseErrorOutput(
   raw: string,
   options: FormatCliParseErrorOptions = {},

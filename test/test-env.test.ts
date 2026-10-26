@@ -591,7 +591,7 @@ describe("installTestEnv", () => {
         INVOCATION_ID: "test-invocation",
         SYSTEMD_EXEC_PID: "1234",
         JOURNAL_STREAM: "8:1234",
-        OPENCLAW_WINDOWS_TASK_NAME: "OpenClaw Gateway",
+        OPENCLAW_WINDOWS_TASK_NAME: "AgileClaw Gateway",
         OPENCLAW_SUPERVISOR_MODE: "external",
         OPENCLAW_WRAPPER: "/fixture/operator-wrapper",
         OPENCLAW_GATEWAY_SERVICE_PID: "4321",

@@ -285,7 +285,7 @@ describeControlUiE2e("GitHub link hover cards", () => {
                   "Synthetic cross-repository reproduction",
                   `Original ${projectName} PR **#1558 merged**`,
                   `Follow-up ${projectName} PR **#1576 opened**`,
-                  "Same checkout: OpenClaw PR #1576.",
+                  "Same checkout: AgileClaw PR #1576.",
                 ].join("\n\n"),
               },
             ],
@@ -297,7 +297,7 @@ describeControlUiE2e("GitHub link hover cards", () => {
             projects: [
               {
                 id: "openclaw",
-                displayName: "OpenClaw",
+                displayName: "AgileClaw",
                 originUrl: "https://github.com/openclaw/openclaw",
                 source: "registered",
               },
@@ -321,7 +321,7 @@ describeControlUiE2e("GitHub link hover cards", () => {
                   title:
                     repo.repo === "clawsweeper"
                       ? "Synthetic ClawSweeper pull request"
-                      : "Synthetic OpenClaw pull request",
+                      : "Synthetic AgileClaw pull request",
                 },
               })),
             ),
@@ -372,7 +372,7 @@ describeControlUiE2e("GitHub link hover cards", () => {
           card,
           repo.repo === "clawsweeper"
             ? "Synthetic ClawSweeper pull request"
-            : "Synthetic OpenClaw pull request",
+            : "Synthetic AgileClaw pull request",
         );
       }
       const requests = (await gateway.getRequests("forge.preview")).map(({ params }) => {

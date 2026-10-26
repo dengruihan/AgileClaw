@@ -9,7 +9,7 @@ export const AGENT_PROGRESS_CARD_SCHEMA_SQL = extractSqliteTableSchema(
   {
     endMarker: "CREATE TABLE IF NOT EXISTS heartbeat_outcomes (",
     includeEndMarker: false,
-    errorMessage: "OpenClaw agent progress-card schema markers are missing.",
+    errorMessage: "AgileClaw agent progress-card schema markers are missing.",
   },
 );
 export const AGENT_SCHEMA_WITHOUT_PROGRESS_CARD_SQL =

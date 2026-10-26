@@ -24,8 +24,8 @@ it("refuses an app-owned Gateway update before delegation, history, or restart e
   const installOwner = {
     schemaVersion: 1,
     owner: "macos-app",
-    displayName: "OpenClaw.app",
-    updateHint: "Update OpenClaw.app to update this Gateway.",
+    displayName: "AgileClaw.app",
+    updateHint: "Update AgileClaw.app to update this Gateway.",
   };
   await fs.writeFile(path.join(root, "openclaw-install-owner.json"), JSON.stringify(installOwner));
   vi.spyOn(packageRoot, "resolveOpenClawPackageRoot").mockResolvedValue(root);
@@ -37,7 +37,7 @@ it("refuses an app-owned Gateway update before delegation, history, or restart e
 
   expect(respond).toHaveBeenCalledExactlyOnceWith(false, undefined, {
     code: "UNAVAILABLE",
-    message: "Managed by OpenClaw.app. Update OpenClaw.app to update this Gateway.",
+    message: "Managed by AgileClaw.app. Update AgileClaw.app to update this Gateway.",
     details: { reason: "host-owned-install", installOwner },
     retryable: false,
   });

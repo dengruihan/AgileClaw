@@ -628,7 +628,7 @@ describeLive("gateway live (cli backend)", () => {
             sessionKey,
           });
           if (!history.sessionId) {
-            throw new Error("Claude CLI cache probe could not resolve its OpenClaw session");
+            throw new Error("Claude CLI cache probe could not resolve its AgileClaw session");
           }
           cacheProbeOwner = {
             backendId: providerId,
@@ -748,7 +748,9 @@ describeLive("gateway live (cli backend)", () => {
             expect(continuitySessionId).toBeTruthy();
             expect(continuityEntry?.sessionId).toBe(continuitySessionId);
             if (!continuitySessionId) {
-              throw new Error("Claude CLI continuity probe could not resolve its OpenClaw session");
+              throw new Error(
+                "Claude CLI continuity probe could not resolve its AgileClaw session",
+              );
             }
             // chat.history also displays native CLI imports. Check the canonical replay
             // source so recall cannot pass by reseeding the hook-only context from SQLite.

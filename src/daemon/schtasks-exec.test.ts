@@ -72,7 +72,7 @@ describe("execSchtasks", () => {
     runCommandWithTimeout.mockRejectedValue(new Error("synthetic spawn failure"));
     await expect(isRegisteredScheduledTask({})).resolves.toBe(false);
     expect(runCommandWithTimeout).toHaveBeenCalledExactlyOnceWith(
-      ["schtasks", "/Query", "/TN", "OpenClaw Gateway"],
+      ["schtasks", "/Query", "/TN", "AgileClaw Gateway"],
       expect.objectContaining({ timeoutMs: 15_000, noOutputTimeoutMs: 30_000 }),
     );
   });

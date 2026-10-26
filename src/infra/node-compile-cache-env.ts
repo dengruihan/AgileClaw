@@ -14,7 +14,7 @@ function compileCacheOwner() {
   return resolveGlobalSingleton<{ baseDirectory?: string }>(COMPILE_CACHE_BASE_KEY, () => ({}));
 }
 
-/** Enable through OpenClaw, retaining only the input to a successful first enable. */
+/** Enable through AgileClaw, retaining only the input to a successful first enable. */
 export function enableOwnedNodeCompileCache(directory: string): void {
   const baseDirectory = path.resolve(directory);
   const result = module.enableCompileCache(directory);

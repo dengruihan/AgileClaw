@@ -122,7 +122,7 @@ export function inspectOtherOpenClawProcesses(handoff?: HandoffReferences) {
   try {
     if (process.platform === "linux" && isContainerEnvironment()) {
       throw new Error(
-        "Host process visibility cannot be established from this container. Run Doctor on the host after stopping OpenClaw containers that share its temporary directory.",
+        "Host process visibility cannot be established from this container. Run Doctor on the host after stopping AgileClaw containers that share its temporary directory.",
       );
     }
     const windows = process.platform === "win32";
@@ -150,7 +150,7 @@ export function inspectOtherOpenClawProcesses(handoff?: HandoffReferences) {
           (entry) => !entry.command || (process.platform === "linux" && !("argv" in entry.command)),
         ))
     ) {
-      throw new Error("OpenClaw process census is incomplete.");
+      throw new Error("AgileClaw process census is incomplete.");
     }
     const directories = native
       ? new Map(native.map(({ pid, cwd }) => [pid, cwd]))
@@ -165,7 +165,7 @@ export function inspectOtherOpenClawProcesses(handoff?: HandoffReferences) {
         if (handoff) {
           break;
         }
-        throw new Error("OpenClaw process ancestry is incomplete.");
+        throw new Error("AgileClaw process ancestry is incomplete.");
       }
       const parentStart = nativeByPid.get(parentPid)?.startIdentity;
       const childStart = nativeByPid.get(child.pid)?.startIdentity;
@@ -262,7 +262,7 @@ export function inspectOtherOpenClawProcesses(handoff?: HandoffReferences) {
     }
     result.error = handoff
       ? "Host process census is incomplete; verify process-inspection permissions and retry update repair."
-      : `Could not inspect OpenClaw processes: ${String(error)}`;
+      : `Could not inspect AgileClaw processes: ${String(error)}`;
   }
   return handoff ? result : result.error ? { error: result.error } : { pids: result.matchingPids };
 }

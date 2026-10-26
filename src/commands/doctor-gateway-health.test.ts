@@ -194,7 +194,7 @@ describe("checkGatewayHealth", () => {
       config: cfg,
     });
     expect(sharedRuntime.error).not.toHaveBeenCalled();
-    expect(note.mock.calls.map(([, title]) => title)).not.toContain("OpenClaw version mismatch");
+    expect(note.mock.calls.map(([, title]) => title)).not.toContain("AgileClaw version mismatch");
   });
 
   it.each([
@@ -622,10 +622,10 @@ describe("checkGatewayHealth", () => {
     });
 
     const mismatchNotes = note.mock.calls
-      .filter(([, title]) => title === "OpenClaw version mismatch")
+      .filter(([, title]) => title === "AgileClaw version mismatch")
       .map(([message]) => String(message));
     const mismatchOutput = mismatchNotes.join("\n");
-    expect(mismatchOutput).toContain("the running Gateway is OpenClaw 2026.4.23");
+    expect(mismatchOutput).toContain("the running Gateway is AgileClaw 2026.4.23");
     expect(mismatchOutput).not.toContain("That usually means");
     expect(mismatchOutput).toContain("Check `openclaw --version`, `which openclaw`");
     expect(mismatchOutput).toContain(

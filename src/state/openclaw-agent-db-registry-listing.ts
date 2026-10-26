@@ -372,7 +372,7 @@ export function readRegisteredAgentDatabases(
   const finish = (entries: OpenClawRegisteredAgentDatabase[] | undefined) => {
     if (entries === undefined) {
       if (hasUnavailableMissingSqlitePath(pathname)) {
-        throw new Error(`OpenClaw state database ${pathname} is unavailable.`);
+        throw new Error(`AgileClaw state database ${pathname} is unavailable.`);
       }
       return [];
     }
@@ -392,7 +392,7 @@ export async function inspectOpenClawRegisteredAgentDatabases(
   return readRegisteredAgentDatabases(options, true);
 }
 
-/** List agent databases recorded in the shared OpenClaw state registry. */
+/** List agent databases recorded in the shared AgileClaw state registry. */
 export function listOpenClawRegisteredAgentDatabases(
   options: AgentDatabaseRegistryListOptions = {},
 ): OpenClawRegisteredAgentDatabase[] {

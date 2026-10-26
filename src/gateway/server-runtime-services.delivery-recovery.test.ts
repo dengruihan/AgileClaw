@@ -175,7 +175,7 @@ it("recovers a watcher-owned update notice on its runtime state after ambient ro
     lastError: expect.stringContaining("Synthetic transport did not dispatch"),
   });
   expect(attempts).toEqual([
-    { text: expect.stringContaining("✅ OpenClaw updated"), stateDir: rootA },
+    { text: expect.stringContaining("✅ AgileClaw updated"), stateDir: rootA },
   ]);
   const firstAttempt = expectDefined(attempts[0], "Expected failed transport attempt");
   expect(receipts).toEqual([]);

@@ -9,7 +9,7 @@ describe("Tool Search display input", () => {
     ["client:client:exec", "exec"],
     ["custom:tool", "custom:tool"],
   ])("resolves %s without changing the original call", (id, name) => {
-    const args = Object.freeze({ query: "OpenClaw release notes" });
+    const args = Object.freeze({ query: "AgileClaw release notes" });
     const call = Object.freeze({ name: "tool_call", args: Object.freeze({ id, args }) });
     expect(unwrapToolCallForDisplay(call)).toEqual({ name, args });
     expect(call.args).toEqual({ id, args });

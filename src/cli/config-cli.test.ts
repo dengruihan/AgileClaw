@@ -753,7 +753,7 @@ describe("config cli", () => {
             ok: false,
             error: {
               type: "cli_error",
-              message: expect.stringContaining("OpenClaw config is invalid"),
+              message: expect.stringContaining("AgileClaw config is invalid"),
             },
             issues: [{ path: "gateway.bind", message: "Invalid enum value" }],
           });
@@ -869,7 +869,7 @@ describe("config cli", () => {
           ok: false,
           error: {
             type: "cli_error",
-            message: expect.stringContaining("OpenClaw config is invalid"),
+            message: expect.stringContaining("AgileClaw config is invalid"),
           },
           valid: false,
           path: "/tmp/openclaw.json",

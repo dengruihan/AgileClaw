@@ -463,7 +463,7 @@ describe("update plugin lifecycle lease boundaries", () => {
         const body = vi
           .mocked(defaultRuntime.log)
           .mock.calls.map(([value]) => String(value))
-          .find((value) => value.startsWith("# OpenClaw update failure report"));
+          .find((value) => value.startsWith("# AgileClaw update failure report"));
         expect(body).toBeDefined();
         expect(body).toContain("Reason code: doctor-failed");
         expect(body).toContain("Update mode: package");

@@ -18,7 +18,7 @@ import {
 
 // Preface of carriers persisted before the stable system prompt explained the markers.
 const LEGACY_NEXT_TURN_RUNTIME_CONTEXT_HEADER =
-  "OpenClaw runtime context for the active user request in this turn. Do not reply to or describe this context. Use it to continue answering the active user request now. Do not wait for another message.";
+  "AgileClaw runtime context for the active user request in this turn. Do not reply to or describe this context. Use it to continue answering the active user request now. Do not wait for another message.";
 
 type TestMessage = {
   role: string;
@@ -57,16 +57,16 @@ describe("internal runtime context codec", () => {
   it("strips the current delimiter-free carrier without matching inline mentions", () => {
     expect(
       stripInternalRuntimeContext(
-        "Visible intro\n\nOpenClaw runtime context:\nprivate current-turn facts\nEnd OpenClaw runtime context.\n\nVisible outro",
+        "Visible intro\n\nOpenClaw runtime context:\nprivate current-turn facts\nEnd AgileClaw runtime context.\n\nVisible outro",
       ),
     ).toBe("Visible intro\n\nVisible outro");
     expect(
-      stripInternalRuntimeContext("The phrase OpenClaw runtime context: is ordinary text."),
-    ).toBe("The phrase OpenClaw runtime context: is ordinary text.");
+      stripInternalRuntimeContext("The phrase AgileClaw runtime context: is ordinary text."),
+    ).toBe("The phrase AgileClaw runtime context: is ordinary text.");
   });
 
   it("strips every current carrier block from one response", () => {
-    const block = "OpenClaw runtime context:\nprivate facts\nEnd OpenClaw runtime context.";
+    const block = "AgileClaw runtime context:\nprivate facts\nEnd AgileClaw runtime context.";
     expect(
       stripInternalRuntimeContext(`Visible before\n\n${block}\n\n${block}\n\nVisible after`),
     ).toBe("Visible before\n\nVisible after");
@@ -79,7 +79,7 @@ describe("internal runtime context codec", () => {
   });
 
   it("strips an unfinished current carrier from previews and final output", () => {
-    const text = "OpenClaw runtime context:\nThis phrase is part of the answer.";
+    const text = "AgileClaw runtime context:\nThis phrase is part of the answer.";
     expect(stripInternalRuntimeContext(text)).toBe("");
     expect(stripInternalRuntimeContext(text, { streaming: true })).toBe("");
   });
@@ -89,7 +89,7 @@ describe("internal runtime context codec", () => {
       "Visible intro",
       "",
       INTERNAL_RUNTIME_CONTEXT_BEGIN,
-      "OpenClaw runtime context (internal):",
+      "AgileClaw runtime context (internal):",
       "This context is runtime-generated, not user-authored. Keep internal details private.",
       "",
       "[Internal task completion event]",
@@ -163,9 +163,9 @@ describe("internal runtime context codec", () => {
     ["current turn", LEGACY_NEXT_TURN_RUNTIME_CONTEXT_HEADER],
     [
       "previous current turn",
-      "OpenClaw runtime context for the immediately preceding user message.",
+      "AgileClaw runtime context for the immediately preceding user message.",
     ],
-    ["runtime event", "OpenClaw runtime event."],
+    ["runtime event", "AgileClaw runtime event."],
   ])("detects and strips the %s prompt preface", (_name, header) => {
     const preface = [header, OPENCLAW_RUNTIME_CONTEXT_NOTICE].join("\n");
     const input = [
@@ -205,7 +205,7 @@ describe("internal runtime context codec", () => {
 
   it("strips a whitespace-wrapped runtime event preface", () => {
     const input = [
-      "OpenClaw\n runtime event.",
+      "AgileClaw\n runtime event.",
       OPENCLAW_RUNTIME_CONTEXT_NOTICE,
       "",
       "Visible reply",
@@ -230,7 +230,9 @@ describe("internal runtime context codec", () => {
   it("preserves text when the runtime-context header or notice does not match", () => {
     for (const input of [
       [LEGACY_NEXT_TURN_RUNTIME_CONTEXT_HEADER, "Ordinary user text"].join("\n"),
-      ["OpenClaw runtime context for another message.", OPENCLAW_RUNTIME_CONTEXT_NOTICE].join("\n"),
+      ["AgileClaw runtime context for another message.", OPENCLAW_RUNTIME_CONTEXT_NOTICE].join(
+        "\n",
+      ),
       OPENCLAW_RUNTIME_CONTEXT_NOTICE,
     ]) {
       expect(hasInternalRuntimeContext(input)).toBe(false);

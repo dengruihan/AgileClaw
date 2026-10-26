@@ -35,7 +35,7 @@ export function isExplicitGatewayConnection(params: {
   );
 }
 
-/** Returns true when url/auth flags are sufficient and loading OpenClaw config is unnecessary. */
+/** Returns true when url/auth flags are sufficient and loading AgileClaw config is unnecessary. */
 export function canSkipGatewayConfigLoad(params: {
   config?: OpenClawConfig;
   urlOverride?: string;

@@ -708,7 +708,7 @@ describe("post-activation failure settlement without inference", () => {
             exitCode: 1,
             termination: migration ? "exit" : "timeout",
             stderrTail: migration
-              ? "Doctor config promotion refused: authority-check-failed: OpenClaw state is undergoing offline maintenance; retry when it finishes."
+              ? "Doctor config promotion refused: authority-check-failed: AgileClaw state is undergoing offline maintenance; retry when it finishes."
               : "Doctor timed out while repairing state.",
             failureFacts: migration
               ? [{ check: "config-write", code: "authority-check-failed" }]

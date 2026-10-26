@@ -22,7 +22,7 @@ export function startGatewayStateOwnerHeartbeat(
   for (const lock of heldLocks) {
     locks[lock.lockPath] = fs.readFileSync(lock.lockPath, "utf8");
     if (!lock.verifyStillHeld()) {
-      throw new Error("OpenClaw state ownership is no longer current");
+      throw new Error("AgileClaw state ownership is no longer current");
     }
   }
   return runInDetachedAsyncContext(() => {

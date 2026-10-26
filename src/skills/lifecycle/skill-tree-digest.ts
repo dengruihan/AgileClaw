@@ -11,7 +11,7 @@ type SkillTreeEntry = {
   type: "directory" | "file";
 };
 
-/** Digests every installed skill file except OpenClaw's own provenance metadata. */
+/** Digests every installed skill file except AgileClaw's own provenance metadata. */
 export async function digestClawHubSkillTree(skillDir: string): Promise<string> {
   const scoped = await root(skillDir);
   const collected: SkillTreeEntry[] = [];

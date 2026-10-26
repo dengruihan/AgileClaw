@@ -137,7 +137,7 @@ describe("restart log conventions", () => {
       platform: "darwin",
       env,
       systemdServiceName: "openclaw-gateway",
-      windowsTaskName: "OpenClaw Gateway",
+      windowsTaskName: "AgileClaw Gateway",
     });
     const advertised = hints.find((hint) => hint.startsWith("Restart attempts: "));
     expect(advertised).toBe(`Restart attempts: ${resolveGatewayRestartLogPath(env)}`);

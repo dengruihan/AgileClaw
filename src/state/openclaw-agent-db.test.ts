@@ -1,4 +1,4 @@
-// OpenClaw agent database tests cover agent-scoped DB storage and migrations.
+// AgileClaw agent database tests cover agent-scoped DB storage and migrations.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";

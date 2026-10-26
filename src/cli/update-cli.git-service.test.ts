@@ -765,7 +765,7 @@ describe("update-cli", () => {
       [serviceEntrypoint, "config", "validate", "--json"],
       expect.objectContaining({ env: { OPENCLAW_UPDATE_IN_PROGRESS: "0" } }),
     );
-    expect(getLogOutput()).toContain("OpenClaw update failed: post-update-plugins.");
+    expect(getLogOutput()).toContain("AgileClaw update failed: post-update-plugins.");
     expect(getErrorOutput()).not.toContain("Update failed during plugin post-update sync.");
   });
 

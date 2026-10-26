@@ -51,7 +51,7 @@ export {
 } from "./http-auth-utils.js";
 
 export const OPENCLAW_MODEL_ID = "openclaw";
-/** Default OpenAI-compatible model alias that targets the default OpenClaw agent. */
+/** Default OpenAI-compatible model alias that targets the default AgileClaw agent. */
 export const OPENCLAW_DEFAULT_MODEL_ID = "openclaw/default";
 const AGENT_MODEL_PATTERN = /^(?:openclaw[:/]|agent:)(?<agentId>[a-z0-9][a-z0-9_-]{0,63})$/i;
 
@@ -137,7 +137,7 @@ export function resolveAgentIdFromModel(
   return normalizeAgentId(agentId);
 }
 
-/** Checks OpenClaw routing-model syntax without resolving fleet ownership. */
+/** Checks AgileClaw routing-model syntax without resolving fleet ownership. */
 export function isOpenClawAgentModelId(model: string | undefined): boolean {
   const raw = model?.trim();
   if (!raw) {

@@ -11,7 +11,7 @@ import {
 const dirs = useAutoCleanupTempDirTracker(afterEach);
 afterEach(() => vi.restoreAllMocks());
 
-it.each([String.raw`C:\OpenClaw\agent.sqlite`, String.raw`\\Server\Share\agent.sqlite`])(
+it.each([String.raw`C:\AgileClaw\agent.sqlite`, String.raw`\\Server\Share\agent.sqlite`])(
   "services a held write lock across native namespace aliases of %s",
   async (plain) => {
     const filename = path.join(dirs.make("sqlite-windows-admission-"), "agent.sqlite");

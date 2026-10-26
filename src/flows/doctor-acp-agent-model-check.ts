@@ -40,7 +40,7 @@ function collectAcpAgentModelFindings(cfg: OpenClawConfig): HealthFinding[] {
       source: "doctor",
       target: displayAgentId,
       path,
-      message: `Agent "${displayAgentId}" uses ACP harness model "${harnessModel}" from ${path}. Its OpenClaw native default is "${nativeRef}". Explicit native session, utility, and subagent model selections still apply.`,
+      message: `Agent "${displayAgentId}" uses ACP harness model "${harnessModel}" from ${path}. Its AgileClaw native default is "${nativeRef}". Explicit native session, utility, and subagent model selections still apply.`,
     });
   }
   return findings;
@@ -50,7 +50,7 @@ export function createAcpAgentModelCheck(): HealthCheck {
   return {
     id: CHECK_ID,
     kind: "core",
-    description: "ACP harness models and OpenClaw native defaults are shown separately.",
+    description: "ACP harness models and AgileClaw native defaults are shown separately.",
     source: "doctor",
     async detect(ctx) {
       return collectAcpAgentModelFindings(ctx.cfg);

@@ -129,7 +129,7 @@ export function resolvePluginVersionDriftRegistryLag(
 
 /**
  * ClawHub publishes plugins on its own release train, so its latest version can sit
- * below the running OpenClaw version. Resolve the upgrade target from ClawHub instead
+ * below the running AgileClaw version. Resolve the upgrade target from ClawHub instead
  * of assuming the host version is available there.
  */
 async function fetchClawHubLatestVersion(
@@ -227,7 +227,7 @@ async function resolveClawHubTarget(
     };
   }
   // A withdrawn latest release must not turn diagnostic repair advice into a downgrade.
-  // Share the updater's release ordering, including OpenClaw correction versions.
+  // Share the updater's release ordering, including AgileClaw correction versions.
   if (isPackageVersionDowngrade(entry.installedVersion, latestVersion)) {
     return {
       status: "unresolved",

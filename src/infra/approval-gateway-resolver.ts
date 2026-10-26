@@ -205,7 +205,7 @@ export async function resolveApprovalOverGateway(
 }
 
 /**
- * Whether an approval id is a pending OpenClaw change this chat approval client
+ * Whether an approval id is a pending AgileClaw change this chat approval client
  * can see. The approval runtime is device-less, so it reads the pending list it
  * already replays rather than the device-bound `approval.get` projection.
  */

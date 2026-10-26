@@ -69,7 +69,7 @@ describe("host-owned update notices", () => {
         (event) => asOptionalRecord(event)?.type === "message",
       );
       const headline =
-        status === "failed" ? "⚠️ OpenClaw couldn't finish updating." : "✅ OpenClaw updated.";
+        status === "failed" ? "⚠️ AgileClaw couldn't finish updating." : "✅ AgileClaw updated.";
       expect(messages).toMatchObject([
         {
           message: {

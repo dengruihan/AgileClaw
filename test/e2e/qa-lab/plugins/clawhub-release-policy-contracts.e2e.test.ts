@@ -86,7 +86,7 @@ function createPluginRepo(options: FixtureOptions = {}) {
   git(repoDir, ["add", "."]);
   git(repoDir, [
     "-c",
-    "user.name=OpenClaw Test",
+    "user.name=AgileClaw Test",
     "-c",
     "user.email=test@example.invalid",
     "commit",
@@ -100,7 +100,7 @@ function commitFixture(repoDir: string, message: string) {
   git(repoDir, ["add", "."]);
   git(repoDir, [
     "-c",
-    "user.name=OpenClaw Test",
+    "user.name=AgileClaw Test",
     "-c",
     "user.email=test@example.invalid",
     "commit",

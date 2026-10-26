@@ -119,7 +119,7 @@ suite.define(() => {
               })
             | null;
           if (!app?.runtime) {
-            throw new Error("OpenClaw application runtime is unavailable");
+            throw new Error("AgileClaw application runtime is unavailable");
           }
           const pathname = `${app.runtime.context.basePath}${options.pathname}`;
           app.runtime.context.navigate("chat", { ...options, pathname });
@@ -173,7 +173,7 @@ suite.define(() => {
               })
             | null;
           if (!app?.runtime) {
-            throw new Error("OpenClaw application runtime is unavailable");
+            throw new Error("AgileClaw application runtime is unavailable");
           }
           void app.runtime.context.sessions.refreshList({ force: true });
         });

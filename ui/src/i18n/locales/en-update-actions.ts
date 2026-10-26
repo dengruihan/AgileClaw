@@ -8,15 +8,15 @@ const enUpdateActions = {
     run: {
       stepWarning: "Warning: {step}",
       prepareUpdaterDetails:
-        "Keeping a copy of the current updater so it can finish safely while OpenClaw is replaced.",
+        "Keeping a copy of the current updater so it can finish safely while AgileClaw is replaced.",
       stepLabel: {
         snapshotSpace: "Checking space for the recovery backup",
         prepareUpdater: "Preparing the updater",
         snapshot: "Saving the recovery backup",
         fetch: "Downloading update revisions",
         install: "Installing dependencies",
-        update: "Installing OpenClaw",
-        build: "Building OpenClaw",
+        update: "Installing AgileClaw",
+        build: "Building AgileClaw",
         buildUi: "Building the Control UI",
         doctor: "Checking configuration and data",
       },
@@ -24,7 +24,7 @@ const enUpdateActions = {
     confirm: {
       message: "Installs the available update on the connected Gateway and restarts it.",
       macMessage:
-        "Hands this update to the OpenClaw Mac app, which installs it and restarts the Gateway it manages.",
+        "Hands this update to the AgileClaw Mac app, which installs it and restarts the Gateway it manages.",
       impact:
         "Running sessions are interrupted and this Control UI disconnects until the Gateway is back.",
       versions: "Installed {installed} · Available {available}",
@@ -54,7 +54,7 @@ const enUpdateActions = {
     report: {
       title: "Report update failure",
       message:
-        "Review the sanitized report below. Named administrators receive a prefilled issue to review and submit with their own GitHub account in their browser. Gateway owners authorize submission with the host's GitHub CLI account when available; otherwise OpenClaw offers a browser handoff or saves the sanitized report locally.",
+        "Review the sanitized report below. Named administrators receive a prefilled issue to review and submit with their own GitHub account in their browser. Gateway owners authorize submission with the host's GitHub CLI account when available; otherwise AgileClaw offers a browser handoff or saves the sanitized report locally.",
       submit: "Continue",
       cancel: "Cancel",
     },
