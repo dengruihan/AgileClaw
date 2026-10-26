@@ -158,7 +158,7 @@ describe("effort bar colour and flow", () => {
 
   it("crossfades the boost effects between max and ultra", async () => {
     const { input } = await fixture(["off", "low", "max", "ultra"], "max");
-    const { boost } = sliderLayers(input);
+    const { boost, slider } = sliderLayers(input);
     const boostStyle = getComputedStyle(boost);
     // Registered highlight + transitioned inset sheen: every max→ultra delta
     // interpolates instead of snapping.
@@ -169,12 +169,25 @@ describe("effort bar colour and flow", () => {
     // unregistered one would echo the raw color-mix()/var() declaration.
     expect(maxHighlight).not.toContain("color-mix");
     expect(maxHighlight).not.toContain("var(");
+    // Ultra's floating motes exist but stay dark outside ultra.
+    const particles = slider.querySelector<HTMLElement>(".chat-controls__reasoning-particles")!;
+    expect(particles.querySelectorAll(".chat-controls__reasoning-particle")).toHaveLength(7);
+    expect(getComputedStyle(particles).opacity).toBe("0");
     const ultra = await fixture(["off", "low", "max", "ultra"], "ultra");
     await settledAppearance(ultra.input);
-    const ultraHighlight = getComputedStyle(sliderLayers(ultra.input).boost).getPropertyValue(
+    const ultraLayers = sliderLayers(ultra.input);
+    const ultraHighlight = getComputedStyle(ultraLayers.boost).getPropertyValue(
       "--reasoning-boost-highlight",
     );
     expect(ultraHighlight).not.toBe(maxHighlight);
+    await expect
+      .poll(
+        () =>
+          getComputedStyle(
+            ultraLayers.slider.querySelector<HTMLElement>(".chat-controls__reasoning-particles")!,
+          ).opacity,
+      )
+      .toBe("1");
   });
 
   it("previews colour without committing and restores the committed level on cancel or blur", async () => {
