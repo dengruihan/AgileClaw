@@ -40,6 +40,10 @@ function reasoningTravelCss(fillPercent: number): string {
   return `calc(${fillPercent}% + ${offset.toFixed(2)}px)`;
 }
 
+// Keep in sync with the .chat-controls__reasoning-particle nth-child rules in
+// composer.css: each span takes its position, drift, and timing from CSS.
+const ULTRA_PARTICLE_COUNT = 7;
+
 // The flow animation runs at one CSS duration; ultra accelerates it via
 // playbackRate because changing animation-duration skips the gradient's
 // phase. 6s base x 1.5 equals the intended 4s ultra cycle.
@@ -170,6 +174,12 @@ export function renderChatEffortPanel(params: ChatEffortPanelParams) {
                       class="chat-controls__reasoning-dot"
                       data-stop=${stop.value}
                     ></span>`,
+                  )}
+                </div>
+                <div class="chat-controls__reasoning-particles" aria-hidden="true">
+                  ${Array.from(
+                    { length: ULTRA_PARTICLE_COUNT },
+                    () => html`<span class="chat-controls__reasoning-particle"></span>`,
                   )}
                 </div>
                 <div class="chat-controls__reasoning-knob" aria-hidden="true"></div>

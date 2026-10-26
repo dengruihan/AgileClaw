@@ -2710,6 +2710,67 @@ html[dir="rtl"] .chat-attachment-loading > span {
   background: color-mix(in srgb, var(--text) 28%, transparent);
 }
 
+/* Ultra-only floating motes: tiny lights rise through the groove, clipped to
+   its pill shape. The layer rides the same 300ms fade as the other boost
+   effects; each mote's motion is assigned under prefers-reduced-motion so
+   reduced-motion keeps them dark. */
+.chat-controls__reasoning-particles {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chat-controls__reasoning-particle {
+  position: absolute;
+  bottom: 3px;
+  width: 3px;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent);
+  opacity: 0;
+}
+
+.chat-controls__reasoning-particle:nth-child(odd) {
+  background: color-mix(in srgb, var(--accent-2) 75%, white);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--accent-2) 45%, transparent);
+}
+
+.chat-controls__reasoning-particle:nth-child(1) {
+  left: 8%;
+  --particle-drift: 3px;
+}
+.chat-controls__reasoning-particle:nth-child(2) {
+  left: 22%;
+  width: 2px;
+  height: 2px;
+  --particle-drift: -2px;
+}
+.chat-controls__reasoning-particle:nth-child(3) {
+  left: 35%;
+  --particle-drift: 2px;
+}
+.chat-controls__reasoning-particle:nth-child(4) {
+  left: 48%;
+  --particle-drift: -3px;
+}
+.chat-controls__reasoning-particle:nth-child(5) {
+  left: 60%;
+  width: 2px;
+  height: 2px;
+  --particle-drift: 2px;
+}
+.chat-controls__reasoning-particle:nth-child(6) {
+  left: 73%;
+  --particle-drift: -2px;
+}
+.chat-controls__reasoning-particle:nth-child(7) {
+  left: 86%;
+  --particle-drift: 3px;
+}
+
 .chat-controls__reasoning-range {
   -webkit-appearance: none;
   appearance: none;
@@ -2750,6 +2811,28 @@ html[dir="rtl"] .chat-attachment-loading > span {
     0 0 18px color-mix(in srgb, var(--accent) 48%, transparent);
 }
 
+.chat-controls__reasoning-slider:has([data-effort-boost="ultra"]:not(:disabled))
+  .chat-controls__reasoning-particles {
+  opacity: 1;
+}
+
+@keyframes chat-effort-particle-rise {
+  from {
+    transform: translate(0, 0) scale(0.6);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.9;
+  }
+  70% {
+    opacity: 0.55;
+  }
+  to {
+    transform: translate(var(--particle-drift, 0px), -14px) scale(1);
+    opacity: 0;
+  }
+}
+
 @keyframes chat-effort-flow {
   from {
     background-position: 0% 50%;
@@ -2775,6 +2858,43 @@ html[dir="rtl"] .chat-attachment-loading > span {
       opacity 300ms ease,
       box-shadow 300ms ease,
       --reasoning-boost-highlight 300ms ease;
+  }
+
+  .chat-controls__reasoning-particles {
+    transition: opacity 300ms ease;
+  }
+
+  .chat-controls__reasoning-particle {
+    animation: chat-effort-particle-rise 3s linear infinite;
+  }
+
+  .chat-controls__reasoning-particle:nth-child(1) {
+    animation-duration: 3.4s;
+    animation-delay: -0.6s;
+  }
+  .chat-controls__reasoning-particle:nth-child(2) {
+    animation-duration: 2.4s;
+    animation-delay: -1.6s;
+  }
+  .chat-controls__reasoning-particle:nth-child(3) {
+    animation-duration: 3.8s;
+    animation-delay: -0.2s;
+  }
+  .chat-controls__reasoning-particle:nth-child(4) {
+    animation-duration: 2.8s;
+    animation-delay: -2.1s;
+  }
+  .chat-controls__reasoning-particle:nth-child(5) {
+    animation-duration: 3.1s;
+    animation-delay: -1.1s;
+  }
+  .chat-controls__reasoning-particle:nth-child(6) {
+    animation-duration: 4s;
+    animation-delay: -0.4s;
+  }
+  .chat-controls__reasoning-particle:nth-child(7) {
+    animation-duration: 2.6s;
+    animation-delay: -1.9s;
   }
 
   .chat-controls__reasoning-groove {
