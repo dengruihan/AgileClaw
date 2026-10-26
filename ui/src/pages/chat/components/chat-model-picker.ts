@@ -76,16 +76,6 @@ type ChatModelPickerParams = {
   onRequestUpdate?: () => void;
 };
 
-function closeModelPickerAfterSelection(event: MouseEvent) {
-  const details = (event.currentTarget as HTMLElement).closest<HTMLDetailsElement>("details");
-  if (details) {
-    details.open = false;
-    if (event.detail === 0) {
-      details.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
-    }
-  }
-}
-
 function providerAuthLabel(
   result: ModelAuthStatusResult | null | undefined,
   provider: string,
@@ -180,6 +170,8 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
       event.preventDefault();
       return;
     }
+    // The card stays open after a model commit so the effort slider below
+    // stays reachable; the moved check mark is the selection feedback.
     void params
       .onModelSelect(
         entry.commitValue,
@@ -189,7 +181,6 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
       )
       .finally(() => params.onRequestUpdate?.());
     params.onRequestUpdate?.();
-    closeModelPickerAfterSelection(event);
   };
   const selectTarget = (groupId: string, value: string, event: MouseEvent) => {
     event.stopPropagation();
@@ -198,18 +189,25 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
       return;
     }
     params.onTargetSelect?.(groupId, value);
-    closeModelPickerAfterSelection(event);
   };
   const selectProvider = (provider: string, event: MouseEvent) => {
     const options = providerGroups.get(provider) ?? [];
     // A provider switch commits its leading usable model (ZCode-style): the
-    // window below re-renders onto the new provider without extra picker state.
+    // card re-renders onto the new provider without extra picker state. Only
+    // the flyout closes; the card stays open showing the refreshed list.
     const entry =
       options.find((option) => !option.disabled && !option.isDefault) ??
       options.find((option) => !option.disabled);
     if (!entry) {
       event.preventDefault();
       return;
+    }
+    const flyout = (event.currentTarget as HTMLElement).closest<HTMLDetailsElement>("details");
+    if (flyout) {
+      flyout.open = false;
+      if (event.detail === 0) {
+        flyout.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
+      }
     }
     selectModel(entry, event);
   };
@@ -227,7 +225,6 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
     }
     params.onModelSetup?.();
   };
-  const modelRowLabel = params.triggerStatusLabel ?? params.triggerModelLabel;
   const renderProviderBadge = (provider: string) => {
     const label = providerAuthLabel(params.modelAuthStatusResult, provider);
     return label
@@ -308,156 +305,160 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
       }
     </div>
   `;
-  const modelMenu = html`
-    <div
-      class="chat-controls__inline-select-menu chat-controls__model-menu"
-      aria-label=${t("chat.selectors.model")}
-    >
-      ${renderChatModelCatalogState(
-        params.modelCatalogState,
-        params.modelOptions.length > 0,
-        hasSelectableModelOptions,
-        params.onModelSetup,
-      )}
-      ${
-        leadingProvider !== undefined && leadingGroupOptions !== undefined
-          ? html`
-              <details
-                class="chat-controls__inline-select chat-controls__provider-window"
-                @toggle=${(event: Event) => {
-                  const details = event.currentTarget as HTMLDetailsElement;
-                  handleChatComposerDetailsToggle(event);
-                  // Beside the window, not above it: the composer sits near the
-                  // viewport's right edge, so the flyout prefers the left side.
-                  syncChatPickerOverlay(details, { side: "left", alignment: "start" });
+  // Card body for the unlocked picker: provider row, that provider's model
+  // list, and the context footer rows. The locked state replaces all of it.
+  const cardBody = html`
+    ${renderChatModelCatalogState(
+      params.modelCatalogState,
+      params.modelOptions.length > 0,
+      hasSelectableModelOptions,
+      params.onModelSetup,
+    )}
+    ${
+      leadingProvider !== undefined && leadingGroupOptions !== undefined
+        ? html`
+            <details
+              class="chat-controls__inline-select chat-controls__provider-window"
+              @toggle=${(event: Event) => {
+                const details = event.currentTarget as HTMLDetailsElement;
+                handleChatComposerDetailsToggle(event);
+                // Beside the card, not above it: the composer sits near the
+                // viewport's right edge, so the flyout prefers the left side.
+                syncChatPickerOverlay(details, { side: "left", alignment: "start" });
+              }}
+            >
+              <summary
+                class="chat-controls__combined-model-row chat-controls__provider-row"
+                aria-disabled=${params.disabled ? "true" : "false"}
+                aria-label=${t("chat.modelControls.providerModels", {
+                  provider: providerDisplayLabel(leadingProvider),
+                })}
+                @click=${(event: MouseEvent) => {
+                  if (params.disabled) {
+                    event.preventDefault();
+                  }
                 }}
               >
-                <summary
-                  class="chat-controls__combined-model-row chat-controls__provider-row"
-                  aria-label=${t("chat.modelControls.providerModels", {
-                    provider: providerDisplayLabel(leadingProvider),
-                  })}
-                >
-                  <span class="chat-controls__provider-heading-icon" aria-hidden="true"
-                    >${renderChatModelProviderIcon(leadingProvider)}</span
-                  >
-                  <span class="chat-controls__combined-model-value"
-                    >${providerDisplayLabel(leadingProvider)}</span
-                  >
-                  ${renderProviderBadge(leadingProvider)}
-                  <span class="chat-controls__inline-select-chevron" aria-hidden="true"
-                    >${icons.chevronRight}</span
-                  >
-                </summary>
-                <wa-popup data-anchored-overlay>${providerMenu}</wa-popup>
-              </details>
-            `
-          : nothing
-      }
-      <div class="chat-controls__model-options">
-        ${
-          leadingGroupOptions
-            ? html`
-                <div class="chat-controls__provider-heading chat-controls__model-section-heading">
-                  <span class="chat-controls__provider-label"
-                    >${t("chat.selectors.modelSection")}</span
-                  >
-                </div>
-                <div
-                  class="chat-controls__provider-model-list"
-                  data-chat-model-list="true"
-                  data-chat-model-provider=${leadingProvider ?? nothing}
-                  role="listbox"
-                  aria-label=${t("chat.modelControls.providerModels", {
-                    provider: providerDisplayLabel(leadingProvider ?? ""),
-                  })}
-                >
-                  ${repeat(leadingGroupOptions, modelPickerOptionKey, (entry) =>
-                    renderChatModelPickerOption({
-                      disabled: params.disabled,
-                      entry,
-                      index: optionIndex.get(modelPickerOptionKey(entry)) ?? 0,
-                      selectedModelValue: params.selectedModelValue,
-                      selectedAgentRuntime: params.selectedAgentRuntime,
-                      sessionModelPinned: params.sessionModelPinned,
-                      onSelect: selectModel,
-                      onModelSetup: params.onModelSetup,
-                    }),
-                  )}
-                </div>
-              `
-            : nothing
-        }
-        ${repeat(
-          targetGroups,
-          (group) => group.id,
-          (group) => html`
-            <section
-              class="chat-controls__provider-model-group"
-              data-chat-model-target-group=${group.id}
-              aria-label=${group.label}
-            >
-              <div class="chat-controls__provider-heading">
                 <span class="chat-controls__provider-heading-icon" aria-hidden="true"
-                  >${icons.terminal}</span
+                  >${renderChatModelProviderIcon(leadingProvider)}</span
                 >
-                <span class="chat-controls__provider-label">${group.label}</span>
+                <span class="chat-controls__combined-model-value"
+                  >${providerDisplayLabel(leadingProvider)}</span
+                >
+                ${renderProviderBadge(leadingProvider)}
+                <span class="chat-controls__inline-select-chevron" aria-hidden="true"
+                  >${icons.chevronRight}</span
+                >
+              </summary>
+              <wa-popup data-anchored-overlay>${providerMenu}</wa-popup>
+            </details>
+            <div class="chat-controls__combined-divider" aria-hidden="true"></div>
+          `
+        : nothing
+    }
+    <div class="chat-controls__model-options">
+      ${
+        leadingGroupOptions
+          ? html`
+              <div class="chat-controls__provider-heading chat-controls__model-section-heading">
+                <span class="chat-controls__provider-label"
+                  >${t("chat.selectors.modelSection")}</span
+                >
               </div>
-              ${
-                group.status === "ready"
-                  ? nothing
-                  : renderChatModelCatalogState(
-                      { hasSnapshot: false, status: group.status },
-                      false,
-                      false,
-                      undefined,
-                      group.errorLabel,
-                      params.onTargetRetry
-                        ? {
-                            disabled: params.disabled,
-                            groupId: group.id,
-                            onRetry: params.onTargetRetry,
-                          }
-                        : undefined,
-                    )
-              }
               <div
                 class="chat-controls__provider-model-list"
                 data-chat-model-list="true"
+                data-chat-model-provider=${leadingProvider ?? nothing}
                 role="listbox"
-                aria-label=${group.label}
+                aria-label=${t("chat.modelControls.providerModels", {
+                  provider: providerDisplayLabel(leadingProvider ?? ""),
+                })}
               >
-                ${repeat(
-                  group.options,
-                  (entry) => entry.value,
-                  (entry, targetIndex) =>
-                    renderChatModelPickerTargetOption({
-                      disabled: params.disabled,
-                      entry,
-                      groupId: group.id,
-                      groupLabel: group.label,
-                      index: orderedOptions.length + targetIndex,
-                      onSelect: selectTarget,
-                    }),
+                ${repeat(leadingGroupOptions, modelPickerOptionKey, (entry) =>
+                  renderChatModelPickerOption({
+                    disabled: params.disabled,
+                    entry,
+                    index: optionIndex.get(modelPickerOptionKey(entry)) ?? 0,
+                    selectedModelValue: params.selectedModelValue,
+                    selectedAgentRuntime: params.selectedAgentRuntime,
+                    sessionModelPinned: params.sessionModelPinned,
+                    onSelect: selectModel,
+                    onModelSetup: params.onModelSetup,
+                  }),
                 )}
               </div>
-            </section>
-          `,
-        )}
-      </div>
-      ${
-        params.contextWindow
-          ? renderContextWindowControl(params.contextWindow, params.sessionKey)
+            `
           : nothing
       }
-      ${
-        params.modelCatalogState?.modelSelectionPolicy?.restricted
-          ? html`<div class="chat-controls__model-catalog-state" data-chat-model-policy>
-              ${t("chat.modelControls.restrictedModelsHelp")}
-            </div>`
-          : nothing
-      }
+      ${repeat(
+        targetGroups,
+        (group) => group.id,
+        (group) => html`
+          <section
+            class="chat-controls__provider-model-group"
+            data-chat-model-target-group=${group.id}
+            aria-label=${group.label}
+          >
+            <div class="chat-controls__provider-heading">
+              <span class="chat-controls__provider-heading-icon" aria-hidden="true"
+                >${icons.terminal}</span
+              >
+              <span class="chat-controls__provider-label">${group.label}</span>
+            </div>
+            ${
+              group.status === "ready"
+                ? nothing
+                : renderChatModelCatalogState(
+                    { hasSnapshot: false, status: group.status },
+                    false,
+                    false,
+                    undefined,
+                    group.errorLabel,
+                    params.onTargetRetry
+                      ? {
+                          disabled: params.disabled,
+                          groupId: group.id,
+                          onRetry: params.onTargetRetry,
+                        }
+                      : undefined,
+                  )
+            }
+            <div
+              class="chat-controls__provider-model-list"
+              data-chat-model-list="true"
+              role="listbox"
+              aria-label=${group.label}
+            >
+              ${repeat(
+                group.options,
+                (entry) => entry.value,
+                (entry, targetIndex) =>
+                  renderChatModelPickerTargetOption({
+                    disabled: params.disabled,
+                    entry,
+                    groupId: group.id,
+                    groupLabel: group.label,
+                    index: orderedOptions.length + targetIndex,
+                    onSelect: selectTarget,
+                  }),
+              )}
+            </div>
+          </section>
+        `,
+      )}
     </div>
+    ${
+      params.contextWindow
+        ? renderContextWindowControl(params.contextWindow, params.sessionKey)
+        : nothing
+    }
+    ${
+      params.modelCatalogState?.modelSelectionPolicy?.restricted
+        ? html`<div class="chat-controls__model-catalog-state" data-chat-model-policy>
+            ${t("chat.modelControls.restrictedModelsHelp")}
+          </div>`
+        : nothing
+    }
   `;
   return html`
     <details
@@ -469,8 +470,8 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
         handleChatComposerDetailsToggle(event);
         syncChatPickerOverlay(details);
         if (!details.open) {
-          // The model window must not survive hidden inside a closed popup.
-          details.querySelector("details.chat-controls__model-window")?.removeAttribute("open");
+          // The provider flyout must not survive hidden inside a closed popup.
+          details.querySelector("details.chat-controls__provider-window")?.removeAttribute("open");
           return;
         }
         void params.onOpen?.();
@@ -484,7 +485,7 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
             details.ownerDocument.activeElement === active
           ) {
             details
-              .querySelector<HTMLElement>(".chat-controls__combined-model-row")
+              .querySelector<HTMLElement>(".chat-controls__provider-row")
               ?.focus({ preventScroll: true });
           }
         });
@@ -584,41 +585,7 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
                     </span>
                   </div>
                 `
-              : html`
-                  <details
-                    class="chat-controls__inline-select chat-controls__model-window"
-                    @toggle=${(event: Event) => {
-                      const details = event.currentTarget as HTMLDetailsElement;
-                      handleChatComposerDetailsToggle(event);
-                      syncChatPickerOverlay(details);
-                      if (!details.open) {
-                        // The provider window must not survive its parent popup.
-                        details
-                          .querySelector("details.chat-controls__provider-window")
-                          ?.removeAttribute("open");
-                      }
-                    }}
-                  >
-                    <summary
-                      class="chat-controls__combined-model-row"
-                      aria-disabled=${params.disabled ? "true" : "false"}
-                      @click=${(event: MouseEvent) => {
-                        if (params.disabled) {
-                          event.preventDefault();
-                        }
-                      }}
-                    >
-                      <span class="chat-controls__inline-select-section-label">
-                        ${t("chat.selectors.modelSection")}
-                      </span>
-                      <span class="chat-controls__combined-model-value">${modelRowLabel}</span>
-                      <span class="chat-controls__inline-select-chevron" aria-hidden="true"
-                        >${icons.chevronRight}</span
-                      >
-                    </summary>
-                    <wa-popup data-anchored-overlay>${modelMenu}</wa-popup>
-                  </details>
-                `
+              : cardBody
           }
           ${
             showEffort
