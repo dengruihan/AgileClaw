@@ -52,7 +52,7 @@ function expectUnreachableGatewayTransportFailure(
     return;
   }
   expect(result.stderr).toBe(
-    "Couldn't connect to OpenClaw.\n" +
+    "Couldn't connect to AgileClaw.\n" +
       "Check the Control UI or run `openclaw gateway status` in your terminal.\n",
   );
   expect(result.stderr).not.toContain("gateway timeout");

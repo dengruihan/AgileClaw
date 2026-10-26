@@ -295,7 +295,7 @@ describe("launchd runtime state", () => {
 });
 
 describe("launchctl list detection", () => {
-  it("discovers stale OpenClaw updater jobs from launchctl list", async () => {
+  it("discovers stale AgileClaw updater jobs from launchctl list", async () => {
     vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
     state.listOutput = [
       "123 0 ai.openclaw.gateway",

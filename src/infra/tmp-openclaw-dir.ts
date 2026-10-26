@@ -1,6 +1,6 @@
 import { getSealedRuntimeSecureTempRoot } from "./sealed-runtime-registry.js";
 
-/** Preferred shared OpenClaw temp root on POSIX systems when ownership and permissions are safe. */
+/** Preferred shared AgileClaw temp root on POSIX systems when ownership and permissions are safe. */
 export const DEFAULT_POSIX_TMP_ROOT = "/tmp/openclaw";
 
 type SecureDirStat = {
@@ -62,7 +62,7 @@ function loadResolveSecureTempRoot(): ResolveSecureTempRoot {
   return resolveSecureTempRootRuntime;
 }
 
-/** Resolves a safe OpenClaw temp root, falling back to user-scoped os.tmpdir paths when needed. */
+/** Resolves a safe AgileClaw temp root, falling back to user-scoped os.tmpdir paths when needed. */
 export function resolvePreferredOpenClawTmpDir(
   options: ResolvePreferredOpenClawTmpDirOptions = {},
 ): string {
@@ -71,7 +71,7 @@ export function resolvePreferredOpenClawTmpDir(
     preferredDir: options.preferredDir ?? DEFAULT_POSIX_TMP_ROOT,
     fallbackPrefix: "openclaw",
     warningPrefix: "[openclaw]",
-    unsafeFallbackLabel: "OpenClaw temp dir",
+    unsafeFallbackLabel: "AgileClaw temp dir",
     skipPreferredOnWindows: true,
   });
 }

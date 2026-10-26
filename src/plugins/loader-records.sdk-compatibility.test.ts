@@ -124,7 +124,7 @@ it.each([
     },
   });
   const action = nestedSdk
-    ? "this plugin bundles an incompatible OpenClaw SDK; update it or contact its author"
+    ? "this plugin bundles an incompatible AgileClaw SDK; update it or contact its author"
     : pluginId
       ? "update this plugin or contact its author"
       : "run `openclaw plugins update whatsapp`";

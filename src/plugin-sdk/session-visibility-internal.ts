@@ -288,10 +288,10 @@ export function classifyLookupFailure(error: unknown): LookupFailureKind {
 
 function lookupFailureGuidance(kind: LookupFailureKind): string {
   return kind === "transient"
-    ? "retry once, then ask the operator to inspect OpenClaw logs"
+    ? "retry once, then ask the operator to inspect AgileClaw logs"
     : kind === "credentials"
       ? "ask the operator to check gateway configuration and credentials"
-      : "ask the operator to inspect OpenClaw logs";
+      : "ask the operator to inspect AgileClaw logs";
 }
 
 export function lookupFailedDenialSuffix(kind: LookupFailureKind): string {

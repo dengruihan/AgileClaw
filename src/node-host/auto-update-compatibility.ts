@@ -24,7 +24,7 @@ import { OPENCLAW_STATE_SCHEMA_VERSION } from "../state/openclaw-state-db-contra
 import { resolveOpenClawStateSqlitePath } from "../state/openclaw-state-db.paths.js";
 
 const MANUAL_UPDATE_GUIDANCE =
-  "Update OpenClaw manually with openclaw update, then restart the node.";
+  "Update AgileClaw manually with openclaw update, then restart the node.";
 
 export function assertNodeRuntimeSchemaVersions(
   schemaVersions: OpenClawSchemaVersions | undefined,
@@ -51,7 +51,7 @@ export async function readNodeRuntimeUpdateManifest(packageRoot: string): Promis
   );
   const version = normalizeNullableString(manifest?.version);
   if (manifest?.name !== "openclaw" || !version) {
-    throw new Error("Node auto-update candidate has no valid OpenClaw package manifest.");
+    throw new Error("Node auto-update candidate has no valid AgileClaw package manifest.");
   }
   const schemaVersions = parsePackageOpenClawSchemaVersions(manifest);
   assertNodeRuntimeSchemaVersions(schemaVersions);

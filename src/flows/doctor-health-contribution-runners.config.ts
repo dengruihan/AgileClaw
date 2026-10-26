@@ -577,7 +577,7 @@ export async function collectWriteConfigHealthFindings(
       checkId: "core/doctor/write-config",
       severity: "warning",
       message: isNixMode
-        ? "Doctor config writes are disabled because OpenClaw is running in Nix mode."
+        ? "Doctor config writes are disabled because AgileClaw is running in Nix mode."
         : "Doctor config writes are disabled because config is externally managed.",
       ...(configPath ? { path: configPath } : {}),
       requirement: "mutable-config-write-path",

@@ -9,7 +9,7 @@ describe("tool detail kinds", () => {
   it.each([
     ["tool_call", { id: "client:client:exec", args: { command: "pwd" } }, "command"],
     ["tool_call", { id: "openclaw:core:read", args: { path: "file.ts" } }, "read"],
-    ["tool_call", { id: "web_search", args: { query: "OpenClaw" } }, "generic"],
+    ["tool_call", { id: "web_search", args: { query: "AgileClaw" } }, "generic"],
     ["exec", undefined, "command"],
     ["Read", { path: "file.ts" }, "read"],
     ["read_file", { path: "file.ts" }, "read"],

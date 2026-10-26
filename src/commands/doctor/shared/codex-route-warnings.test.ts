@@ -141,13 +141,13 @@ function disabledCodexPluginWarning(...routes: string[]): string {
   return [
     "- Codex runtime is selected, but the Codex plugin is disabled.",
     ...routes,
-    "- Enable plugins.entries.codex and plugin loading, and remove `codex` from plugins.deny; or set the affected OpenAI models to an OpenClaw runtime policy.",
+    "- Enable plugins.entries.codex and plugin loading, and remove `codex` from plugins.deny; or set the affected OpenAI models to an AgileClaw runtime policy.",
   ].join("\n");
 }
 
 function codexCompactionWarning(...details: string[]): string {
   return [
-    "- Codex runtime uses native server-side compaction and ignores OpenClaw compaction summarizer overrides.",
+    "- Codex runtime uses native server-side compaction and ignores AgileClaw compaction summarizer overrides.",
     ...details,
   ].join("\n");
 }
@@ -274,7 +274,7 @@ describe("collectCodexRouteWarnings", () => {
       appServer: { command },
     });
     expect(repaired.warnings.join("\n")).toContain(
-      "Custom Codex app-server command bypasses OpenClaw's managed exact-version binary.",
+      "Custom Codex app-server command bypasses AgileClaw's managed exact-version binary.",
     );
     expect(repaired.warnings.join("\n")).toContain("agents.defaults.params.temperature");
     expect(repaired.warnings.join("\n")).toContain(

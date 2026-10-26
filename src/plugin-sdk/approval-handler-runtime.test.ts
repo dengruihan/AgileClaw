@@ -16,7 +16,7 @@ function systemAgentView(state: Partial<SystemAgentView> = {}): SystemAgentView 
     approvalKind: "system-agent",
     approvalId: "system-agent:change",
     phase: "resolved",
-    title: "OpenClaw change",
+    title: "AgileClaw change",
     metadata: [],
     commandText: "restart the Gateway",
     operationSummary: "restart the Gateway",
@@ -29,42 +29,42 @@ const cases: Array<{ state: Partial<SystemAgentView>; label: string; text: strin
   {
     state: {},
     label: "Allowed once",
-    text: "✅ OpenClaw change approved. Applying: restart the Gateway",
+    text: "✅ AgileClaw change approved. Applying: restart the Gateway",
   },
   {
     state: { decision: "allow-always" },
     label: "Allowed always",
-    text: "✅ OpenClaw change approved. Applying: restart the Gateway",
+    text: "✅ AgileClaw change approved. Applying: restart the Gateway",
   },
   {
     state: { decision: "deny" },
     label: "Denied",
-    text: "❌ OpenClaw change denied. No change was made.",
+    text: "❌ AgileClaw change denied. No change was made.",
   },
   {
     state: { applicationStatus: "applied" },
     label: "Applied",
-    text: "✅ OpenClaw change approved and applied: restart the Gateway",
+    text: "✅ AgileClaw change approved and applied: restart the Gateway",
   },
   {
     state: { applicationStatus: "not-applied" },
     label: "Completion unconfirmed",
-    text: "⚠️ OpenClaw change approved, but completion could not be confirmed. Check the current settings before retrying.",
+    text: "⚠️ AgileClaw change approved, but completion could not be confirmed. Check the current settings before retrying.",
   },
   {
     state: { decision: "deny", applicationStatus: "not-applied" },
     label: "Denied",
-    text: "❌ OpenClaw change denied. No change was made.",
+    text: "❌ AgileClaw change denied. No change was made.",
   },
   {
     state: { decision: "deny", applicationStatus: "applied" },
     label: "Applied",
-    text: "❌ OpenClaw change denied. No change was made.",
+    text: "❌ AgileClaw change denied. No change was made.",
   },
   {
     state: { decision: "deny", applicationStatus: "applied", terminalStatus: "cancelled" },
     label: "Cancelled",
-    text: "⚠️ OpenClaw change was cancelled because its run ended. No change was made. Retry.",
+    text: "⚠️ AgileClaw change was cancelled because its run ended. No change was made. Retry.",
   },
 ];
 
@@ -93,7 +93,7 @@ describe("approval terminal presentation", () => {
       approvalKind: "system-agent",
       id: "system-agent:change",
       request: {
-        title: "OpenClaw change",
+        title: "AgileClaw change",
         description: "restart the Gateway",
         command: "restart the Gateway",
         proposalHash: "a".repeat(64),
@@ -109,6 +109,6 @@ describe("approval terminal presentation", () => {
         resolved: { id: request.id, decision: "deny", ts: 1 },
         view: systemAgentView({ applicationStatus: "applied" }),
       }),
-    ).toBe("❌ OpenClaw change denied. No change was made.");
+    ).toBe("❌ AgileClaw change denied. No change was made.");
   });
 });

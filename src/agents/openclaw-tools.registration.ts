@@ -1,5 +1,5 @@
 /**
- * OpenClaw-owned tool registration filters.
+ * AgileClaw-owned tool registration filters.
  *
  * Keeps optional tool gating separate from tool construction so config and execution contracts decide exposure.
  */
@@ -58,7 +58,7 @@ export function applyNodesToolWorkspaceGuard(
   );
 }
 
-/** Decides whether progress_card should be included in the assembled OpenClaw tool set. */
+/** Decides whether progress_card should be included in the assembled AgileClaw tool set. */
 export function shouldIncludeProgressCardToolForOpenClawTools(params: {
   agentId?: string;
   agentSessionKey?: string;

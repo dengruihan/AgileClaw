@@ -2793,10 +2793,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   cursor: pointer;
 }
 
-.chat-controls__reasoning-slider:has(
-    [data-effort-boost="max"],
-    [data-effort-boost="ultra"]
-  )
+.chat-controls__reasoning-slider:has([data-effort-boost="max"], [data-effort-boost="ultra"])
   .chat-controls__reasoning-boost {
   opacity: 1;
 }
@@ -2929,9 +2926,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   outline: none;
 }
 
-.chat-controls__reasoning-slider:has(
-    .chat-controls__reasoning-range:focus-visible
-  )
+.chat-controls__reasoning-slider:has(.chat-controls__reasoning-range:focus-visible)
   .chat-controls__reasoning-knob {
   box-shadow: var(--focus-ring);
 }
@@ -3173,13 +3168,15 @@ html[dir="rtl"] .chat-attachment-loading > span {
     content: "";
   }
 
-  .agent-chat__input--mobile-toolbar .chat-controls__model-picker[open]
+  .agent-chat__input--mobile-toolbar
+    .chat-controls__model-picker[open]
     > .chat-controls__model-trigger,
   .agent-chat__input--mobile-toolbar .chat-controls__model-trigger:hover {
     background: var(--chat-effort-tint, transparent);
   }
 
-  .agent-chat__input--mobile-toolbar .chat-controls__model-picker[open]
+  .agent-chat__input--mobile-toolbar
+    .chat-controls__model-picker[open]
     > .chat-controls__model-trigger::before,
   .agent-chat__input--mobile-toolbar .chat-controls__model-trigger:hover::before {
     background: color-mix(in srgb, var(--text) 7%, transparent);

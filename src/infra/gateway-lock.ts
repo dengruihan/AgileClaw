@@ -581,7 +581,7 @@ export async function acquireGatewayLock(
           }
           if (!waited && deadlineMs > startedAt && role === "gateway") {
             log.warn(
-              `waiting for Gateway state ownership held by another OpenClaw process, up to ${Math.ceil((deadlineMs - startedAt) / 1000)} s`,
+              `waiting for Gateway state ownership held by another AgileClaw process, up to ${Math.ceil((deadlineMs - startedAt) / 1000)} s`,
             );
           }
           waited = true;
@@ -596,7 +596,7 @@ export async function acquireGatewayLock(
     const message = `failed to acquire gateway state ownership${waitHint}`;
     const detail =
       error instanceof GatewayStateOwnerContentionError
-        ? `${message}: ${error.message}. Stop the Gateway or wait for the current OpenClaw operation to finish, then retry.`
+        ? `${message}: ${error.message}. Stop the Gateway or wait for the current AgileClaw operation to finish, then retry.`
         : error instanceof GatewayLockNamespaceError
           ? error.message
           : message;
@@ -611,7 +611,7 @@ export async function acquireGatewayLock(
     }
     stateOwner.assertCurrent();
     if (projection && !projection.verifyStillHeld()) {
-      throw new Error("OpenClaw Gateway ownership projection is no longer current");
+      throw new Error("AgileClaw Gateway ownership projection is no longer current");
     }
     if (assertPolicy) {
       // Synchronous policy reads borrow storage custody without transferring resource ownership.

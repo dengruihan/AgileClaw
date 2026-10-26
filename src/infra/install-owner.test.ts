@@ -20,8 +20,8 @@ afterEach(() => {
 const owner = {
   schemaVersion: 1,
   owner: "macos-app",
-  displayName: "OpenClaw.app",
-  updateHint: "Update OpenClaw.app to update this Gateway.",
+  displayName: "AgileClaw.app",
+  updateHint: "Update AgileClaw.app to update this Gateway.",
 };
 
 it("discovers host ownership before any Git, package manager, or registry probe", async () => {

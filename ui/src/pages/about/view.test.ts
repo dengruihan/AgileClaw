@@ -41,7 +41,7 @@ describe("renderAbout", () => {
     render(renderAbout(createProps()), container);
 
     const hero = container.querySelector(".about-hero");
-    expect(hero?.querySelector(".about-hero__name")?.textContent).toBe("OpenClaw");
+    expect(hero?.querySelector(".about-hero__name")?.textContent).toBe("AgileClaw");
     expect(hero?.querySelector(".about-hero__version")?.textContent).toBe("v2026.7.10");
     expect(hero?.querySelector(".about-hero__mark svg")).not.toBeNull();
     expect(hero?.querySelector(".about-hero__clawd")).toBeNull();

@@ -832,7 +832,7 @@ function validateClawHubPluginPackage(params: {
     !satisfiesPluginApiRange(runtimeVersion, compatibility.pluginApiRange)
   ) {
     return buildClawHubInstallFailure(
-      `Plugin "${pkg.name}" requires plugin API ${compatibility.pluginApiRange}, but this OpenClaw runtime exposes ${runtimeVersion}.`,
+      `Plugin "${pkg.name}" requires plugin API ${compatibility.pluginApiRange}, but this AgileClaw runtime exposes ${runtimeVersion}.`,
       CLAWHUB_INSTALL_ERROR_CODE.INCOMPATIBLE_PLUGIN_API,
     );
   }
@@ -855,12 +855,12 @@ function validateClawHubPluginPackage(params: {
     }
     if (minGatewayVersionCheck.kind === "unknown_host_version") {
       return buildClawHubInstallFailure(
-        `Plugin "${pkg.name}" requires OpenClaw >=${minGatewayVersionCheck.requirement.minimumLabel}, but this host version could not be determined. Re-run from a released build or set OPENCLAW_VERSION and retry.`,
+        `Plugin "${pkg.name}" requires AgileClaw >=${minGatewayVersionCheck.requirement.minimumLabel}, but this host version could not be determined. Re-run from a released build or set OPENCLAW_VERSION and retry.`,
         CLAWHUB_INSTALL_ERROR_CODE.UNKNOWN_GATEWAY_VERSION,
       );
     }
     return buildClawHubInstallFailure(
-      `Plugin "${pkg.name}" requires OpenClaw >=${minGatewayVersionCheck.requirement.minimumLabel}, but this host is ${minGatewayVersionCheck.currentVersion}.`,
+      `Plugin "${pkg.name}" requires AgileClaw >=${minGatewayVersionCheck.requirement.minimumLabel}, but this host is ${minGatewayVersionCheck.currentVersion}.`,
       CLAWHUB_INSTALL_ERROR_CODE.INCOMPATIBLE_GATEWAY,
     );
   }

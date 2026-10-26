@@ -21,7 +21,7 @@ import {
 } from "./workspace.js";
 
 const REALTIME_VOICE_AGENT_CONTEXT_INSTRUCTIONS =
-  "Agent context: You speak for an OpenClaw agent that can run many sessions at once, such as direct chats, channel conversations, background work, subagents, and scheduled jobs. This voice call is attached to one of those sessions. You cannot see the other sessions directly, but they belong to the same agent, so never claim you are only in this conversation, have no other work, or are not the one running it. For questions about other sessions, what is running, progress, or priorities, delegate to OpenClaw instead of guessing.";
+  "Agent context: You speak for an AgileClaw agent that can run many sessions at once, such as direct chats, channel conversations, background work, subagents, and scheduled jobs. This voice call is attached to one of those sessions. You cannot see the other sessions directly, but they belong to the same agent, so never claim you are only in this conversation, have no other work, or are not the one running it. For questions about other sessions, what is running, progress, or priorities, delegate to AgileClaw instead of guessing.";
 
 /** Default ordered profile files included in realtime bootstrap context. */
 export const REALTIME_BOOTSTRAP_CONTEXT_FILE_NAMES = [
@@ -38,7 +38,7 @@ const REALTIME_BOOTSTRAP_CONTEXT_FILE_NAME_SET: ReadonlySet<string> = new Set(
   REALTIME_BOOTSTRAP_CONTEXT_FILE_NAMES,
 );
 const DEFAULT_REALTIME_BOOTSTRAP_CONTEXT_MAX_CHARS = 12_000;
-const REALTIME_BOOTSTRAP_CONTEXT_TITLE = "OpenClaw realtime voice profile context:";
+const REALTIME_BOOTSTRAP_CONTEXT_TITLE = "AgileClaw realtime voice profile context:";
 const REALTIME_BOOTSTRAP_CONTEXT_GUIDANCE =
   "Use these profile files for identity, persona, and user grounding; do not mention them unless asked.";
 

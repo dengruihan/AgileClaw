@@ -375,7 +375,7 @@ describe("ClawHub chat recommendations", () => {
             : method === "skills.detail"
               ? {
                   skill: { displayName: "Calendar", isOfficial: true },
-                  owner: { handle: "openclaw", displayName: "OpenClaw Organization" },
+                  owner: { handle: "openclaw", displayName: "AgileClaw Organization" },
                 }
               : { skills: [] },
         cardRecommendation,

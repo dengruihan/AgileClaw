@@ -909,7 +909,7 @@ describe("collectPluginNpmGitRangeSelection", () => {
       "git",
       [
         "-c",
-        "user.name=OpenClaw Tests",
+        "user.name=AgileClaw Tests",
         "-c",
         "user.email=tests@openclaw.invalid",
         "commit",
@@ -929,7 +929,7 @@ describe("collectPluginNpmGitRangeSelection", () => {
       "git",
       [
         "-c",
-        "user.name=OpenClaw Tests",
+        "user.name=AgileClaw Tests",
         "-c",
         "user.email=tests@openclaw.invalid",
         "commit",

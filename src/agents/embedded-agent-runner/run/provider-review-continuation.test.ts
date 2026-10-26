@@ -270,7 +270,7 @@ describe("explicit direct Responses continuation", () => {
           content: [
             {
               type: "input_text",
-              text: `OpenClaw runtime context:\n${carrier.content}\nEnd OpenClaw runtime context.`,
+              text: `AgileClaw runtime context:\n${carrier.content}\nEnd AgileClaw runtime context.`,
             },
           ],
         },
@@ -721,7 +721,7 @@ describe("explicit direct Responses continuation", () => {
         ...context.messages,
         {
           role: "user",
-          content: "OpenClaw runtime context:\nRuntime context",
+          content: "AgileClaw runtime context:\nRuntime context",
           timestamp: 3,
           runtimeContext: {},
         },

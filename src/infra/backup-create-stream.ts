@@ -51,7 +51,7 @@ export type PreparedBackupArchive = BackupArchiveCleanupReceipt & {
   identity: Stats;
 };
 
-// OpenClaw's one-user trust model treats hostile same-UID pathname rewrites as
+// AgileClaw's one-user trust model treats hostile same-UID pathname rewrites as
 // trusted host mutation. Keep the check and unlink synchronous so cooperative
 // processes cannot interleave through an in-process await boundary.
 export function removePreparedBackupArchive(prepared: PreparedBackupArchive): boolean {

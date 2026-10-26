@@ -638,7 +638,7 @@ export function getOpenClawAgentDatabaseIfOpen(
     isIncognitoOpenClawAgentSqlitePath(pathname, options) &&
     readAgentDeletionJournal(agentId, { env: options.env }, "runtime")
   ) {
-    throw new Error(`OpenClaw agent database is unavailable while agent ${agentId} is deleted.`);
+    throw new Error(`AgileClaw agent database is unavailable while agent ${agentId} is deleted.`);
   }
   const database = cache.databases.get(pathname);
   if (!database?.db.isOpen) {
@@ -651,7 +651,7 @@ export function getOpenClawAgentDatabaseIfOpen(
   }
   if (database.agentId !== agentId) {
     throw new Error(
-      `OpenClaw agent database ${pathname} is already open for agent ${database.agentId}; requested agent ${agentId}.`,
+      `AgileClaw agent database ${pathname} is already open for agent ${database.agentId}; requested agent ${agentId}.`,
     );
   }
   assertAgentDeletionDatabaseCleanupAccess(database, options);

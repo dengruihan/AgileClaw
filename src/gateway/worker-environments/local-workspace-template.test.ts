@@ -77,7 +77,7 @@ beforeAll(async () => {
   env = { ...process.env, OPENCLAW_STATE_DIR: path.join(root, "state") };
   await fs.mkdir(source);
   await git(source, "init", "--quiet", "--template=", "-b", "main");
-  await git(source, "config", "user.name", "OpenClaw Test");
+  await git(source, "config", "user.name", "AgileClaw Test");
   await git(source, "config", "user.email", "test@example.invalid");
   await write(source, "source.ts", sourceText);
   await write(source, "pnpm-lock.yaml", firstLock);

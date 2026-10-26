@@ -1,4 +1,4 @@
-// OpenClaw gateway tests cover activation serialization and chat sessions.
+// AgileClaw gateway tests cover activation serialization and chat sessions.
 import "./system-agent.mocks.test-support.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -187,7 +187,7 @@ describe("openclaw.setup", () => {
           payload: undefined,
           error: {
             code: "UNAVAILABLE",
-            message: "OpenClaw setup is already in progress; try again when it finishes.",
+            message: "AgileClaw setup is already in progress; try again when it finishes.",
             details: { code: "SETUP_ADMISSION_BUSY" },
             retryable: true,
           },
@@ -226,7 +226,7 @@ describe("openclaw.setup", () => {
           payload: undefined,
           error: {
             code: "UNAVAILABLE",
-            message: "OpenClaw setup is already in progress; try again when it finishes.",
+            message: "AgileClaw setup is already in progress; try again when it finishes.",
             details: { code: "SETUP_ADMISSION_BUSY" },
             retryable: true,
           },
@@ -266,7 +266,7 @@ describe("openclaw.chat", () => {
       ok: false,
       error: {
         code: "UNAVAILABLE",
-        message: "OpenClaw requires working inference: no configured model",
+        message: "AgileClaw requires working inference: no configured model",
         details: {
           code: "system_agent_inference_unavailable",
         },

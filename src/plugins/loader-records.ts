@@ -196,12 +196,12 @@ function resolvePluginImportHint(
       };
       // Plugin ids need not be shell-safe; keep unsafe ids out of copy-paste commands.
       const repair = sdkCompatibility.nestedSdk
-        ? "this plugin bundles an incompatible OpenClaw SDK; update it or contact its author"
+        ? "this plugin bundles an incompatible AgileClaw SDK; update it or contact its author"
         : /^[a-z0-9_][a-z0-9_.-]*$/i.test(record.id)
           ? `run \`openclaw plugins update ${record.id}\``
           : "update this plugin or contact its author";
       return {
-        hint: `Plugin ${record.id} cannot import ${sdkCompatibility.seam} (built with OpenClaw ${record.builtWithOpenClawVersion ?? "unknown"}; running core ${VERSION}); ${repair}`,
+        hint: `Plugin ${record.id} cannot import ${sdkCompatibility.seam} (built with AgileClaw ${record.builtWithOpenClawVersion ?? "unknown"}; running core ${VERSION}); ${repair}`,
         sdkCompatibility,
       };
     }
@@ -351,7 +351,7 @@ export function recordBundleDiagnostics(params: {
       !isBundleCapabilitySupported(params.record.bundleFormat, capability),
   );
   for (const capability of unsupportedCapabilities) {
-    warn(`bundle capability detected but not wired into OpenClaw yet: ${capability}`);
+    warn(`bundle capability detected but not wired into AgileClaw yet: ${capability}`);
   }
   if (
     params.record.enabled &&

@@ -1,4 +1,4 @@
-// OpenClaw agent turns run the real embedded agent loop with the ring-zero tool.
+// AgileClaw agent turns run the real embedded agent loop with the ring-zero tool.
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -28,7 +28,7 @@ import {
 } from "./verified-inference.js";
 
 /**
- * OpenClaw is a real agent: same loop, session transcript, and tool pipeline
+ * AgileClaw is a real agent: same loop, session transcript, and tool pipeline
  * as regular agents — restricted to the single ring-zero `openclaw` tool.
  * Embedded runtimes enforce that restriction with toolsAllow. CLI harnesses
  * must explicitly support per-run native-tool selection, then receive the tool
@@ -155,7 +155,7 @@ function resolveSystemAgentCliBackend(
   route: SystemAgentConfiguredRoute,
 ): ResolvedCliBackend | null {
   // The helper owns the executable/session identity even though its model and
-  // auth come from the configured default agent. OpenClaw also forces a
+  // auth come from the configured default agent. AgileClaw also forces a
   // process per turn so each approval gets fresh MCP authority; fingerprint
   // that effective execution identity rather than the configured live mode.
   const backend = resolveCliBackendConfig(route.provider, route.runConfig, {
@@ -182,7 +182,7 @@ function resolveSystemAgentCliToolAvailability(
     return { native: [], openClaw: [SYSTEM_AGENT_TOOL_NAME] };
   }
   const backendId = backend?.id ?? "unknown";
-  throw new Error(`CLI backend ${backendId} cannot enforce OpenClaw's exact tool availability`);
+  throw new Error(`CLI backend ${backendId} cannot enforce AgileClaw's exact tool availability`);
 }
 
 /**
@@ -234,7 +234,7 @@ async function mirrorSystemAgentToolStateFromEvents(params: {
 }
 
 /**
- * Run one OpenClaw turn through the embedded agent loop. Route, runner, and
+ * Run one AgileClaw turn through the embedded agent loop. Route, runner, and
  * output failures are typed so callers may try another inference path without
  * mistaking the failure for deterministic setup authority.
  */

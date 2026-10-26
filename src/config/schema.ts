@@ -1,4 +1,4 @@
-// Builds and validates the canonical OpenClaw configuration schema.
+// Builds and validates the canonical AgileClaw configuration schema.
 import crypto from "node:crypto";
 import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
 import { uniqueStrings } from "@openclaw/normalization-core/string-normalization";

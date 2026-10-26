@@ -7,7 +7,7 @@ export async function initializeScriptGitWorkspace(workspace: string, stagedPath
     ["add", stagedPath],
     [
       "-c",
-      "user.name=OpenClaw Test",
+      "user.name=AgileClaw Test",
       "-c",
       "user.email=test@openclaw.invalid",
       "commit",

@@ -20,7 +20,7 @@ export const ERROR_PREFIX_RE =
 export const PROVIDER_SCHEMA_REJECTION_USER_TEXT =
   "The AI service couldn't accept this request. Try a new conversation with /new, or choose another model in the Control UI.";
 const GATEWAY_SESSION_TRANSCRIPT_VALIDATION_USER_TEXT =
-  "OpenClaw couldn't read this conversation's history. Try /compact, or start a new conversation with /new.";
+  "AgileClaw couldn't read this conversation's history. Try /compact, or start a new conversation with /new.";
 const PROVIDER_OUTPUT_TOKEN_LIMIT_RE =
   /^['"]?max_(?:tokens|output_tokens|completion_tokens|new_tokens)['"]?\s*(?:[:=]\s*)?\(?(\d[\d,]*)\)?\s+exceeds?\b.{0,120}?\b(?:maximum|max|limit)\b(?:\s+(?:output\s+)?tokens?)?(?:\s+(?:is|of)|\s*[:=])?\s*\(?(\d[\d,]*)\)?(?:\D|$)/i;
 const PROVIDER_CACHE_CONTROL_LIMIT_RE =
@@ -40,17 +40,17 @@ export const ERROR_DETAILS_HINT =
 
 const STORAGE_FAILURE_COPY: Record<GatewayStorageFailure, string> = {
   SQLITE_BUSY:
-    "OpenClaw is busy saving your conversation. Wait a moment, then check the conversation before trying again.",
+    "AgileClaw is busy saving your conversation. Wait a moment, then check the conversation before trying again.",
   SQLITE_LOCKED:
-    "OpenClaw is busy saving your conversation. Wait a moment, then check the conversation before trying again.",
+    "AgileClaw is busy saving your conversation. Wait a moment, then check the conversation before trying again.",
   SQLITE_FULL:
-    "OpenClaw couldn't save your conversation because the disk is full. Free up space on the computer running OpenClaw before continuing.",
+    "AgileClaw couldn't save your conversation because the disk is full. Free up space on the computer running AgileClaw before continuing.",
   SQLITE_READONLY:
-    "OpenClaw doesn't have permission to save your conversation. Check folder permissions on the computer running OpenClaw.",
+    "AgileClaw doesn't have permission to save your conversation. Check folder permissions on the computer running AgileClaw.",
   SQLITE_IOERR:
-    "OpenClaw couldn't save your conversation. Check the storage on the computer running OpenClaw before continuing.",
+    "AgileClaw couldn't save your conversation. Check the storage on the computer running AgileClaw before continuing.",
   transcript_writer_fenced:
-    "This conversation changed while OpenClaw was working. Check its latest messages before continuing.",
+    "This conversation changed while AgileClaw was working. Check its latest messages before continuing.",
 };
 
 const RUNTIME_COORDINATION_FAILURE_CODE_COPY: Readonly<Record<string, string>> = {
@@ -112,7 +112,7 @@ export function renderAssistantRequestFailureCopy(
   if (!hasStatus && !facts.provider?.trim() && !facts.model?.trim()) {
     return undefined;
   }
-  return `⚠️ OpenClaw couldn't finish this reply. ${ERROR_DETAILS_HINT}`;
+  return `⚠️ AgileClaw couldn't finish this reply. ${ERROR_DETAILS_HINT}`;
 }
 
 /** Render already-classified coordination facts without loading provider runtime. */

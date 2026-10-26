@@ -337,7 +337,7 @@ export async function migrateLegacyMcpOAuthStores(params: {
         } catch (error) {
           const staleGuidance =
             (error as { code?: unknown }).code === "file_lock_stale"
-              ? " Verify no older OpenClaw process is running, remove the retired .lock sidecar, and rerun Doctor."
+              ? " Verify no older AgileClaw process is running, remove the retired .lock sidecar, and rerun Doctor."
               : "";
           warnings.push(
             `Failed locking legacy MCP OAuth store ${path.basename(sourcePath)}: ${String(error)}.${staleGuidance}`,

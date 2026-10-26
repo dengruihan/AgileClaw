@@ -133,7 +133,7 @@ it.each(["runtime", "missing updater"] as const)(
       .map(([value]) => value)
       .filter(
         (value): value is string =>
-          typeof value === "string" && value.startsWith("# OpenClaw update failure report\n"),
+          typeof value === "string" && value.startsWith("# AgileClaw update failure report\n"),
       );
     expect(previews).toHaveLength(1);
     expect(previews[0]).toContain(message);

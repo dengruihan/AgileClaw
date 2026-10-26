@@ -89,8 +89,8 @@ describe("Control UI doctor repair owner", () => {
       JSON.stringify({
         schemaVersion: 1,
         owner: "macos-app",
-        displayName: "OpenClaw.app",
-        updateHint: "Update OpenClaw.app to update this Gateway.",
+        displayName: "AgileClaw.app",
+        updateHint: "Update AgileClaw.app to update this Gateway.",
       }),
     );
     const prompter = createPrompter();
@@ -99,7 +99,7 @@ describe("Control UI doctor repair owner", () => {
 
     expect(mocks.note).toHaveBeenCalledWith(
       expect.stringContaining(
-        "Managed by OpenClaw.app. Update OpenClaw.app to update this Gateway.",
+        "Managed by AgileClaw.app. Update AgileClaw.app to update this Gateway.",
       ),
       "UI",
     );
@@ -157,7 +157,7 @@ describe("Control UI doctor repair owner", () => {
         expect(mocks.note).not.toHaveBeenCalled();
       } else {
         expect(mocks.note).toHaveBeenCalledWith(
-          expect.stringContaining("Reinstall OpenClaw to restore bundled Control UI assets."),
+          expect.stringContaining("Reinstall AgileClaw to restore bundled Control UI assets."),
           expect.any(String),
         );
       }

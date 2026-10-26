@@ -60,7 +60,7 @@ async function initializeRepository(root: string): Promise<string> {
   const remote = path.join(root, "origin.git");
   await fs.mkdir(repo, { recursive: true });
   await git(repo, "init", "-b", "main");
-  await git(repo, "config", "user.name", "OpenClaw Test");
+  await git(repo, "config", "user.name", "AgileClaw Test");
   await git(repo, "config", "user.email", "openclaw-test@example.invalid");
   await fs.writeFile(path.join(repo, "README.md"), "base\n");
   await git(repo, "add", "README.md");

@@ -715,7 +715,7 @@ describe("service definition backup receipts", () => {
             )
             .replace(
               "<RegistrationInfo>",
-              "<RegistrationInfo><Date>2026-09-04T00:00:00Z</Date><Author>operator</Author><URI>\\OpenClaw Gateway</URI>",
+              "<RegistrationInfo><Date>2026-09-04T00:00:00Z</Date><Author>operator</Author><URI>\\AgileClaw Gateway</URI>",
             )
             .replace(/(<Settings>[\s\S]*?)<Enabled>true<\/Enabled>/u, "$1<Enabled>false</Enabled>"),
         );

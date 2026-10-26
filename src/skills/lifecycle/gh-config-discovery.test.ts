@@ -205,11 +205,11 @@ describe("formatGhConfigDirMismatchHint", () => {
       suggestedEnvValue: "/root/.config/gh",
     };
     expect(formatGhConfigDirMismatchHint(mismatch)).toEqual([
-      "GitHub CLI auth was found at a different HOME than the one this OpenClaw process uses.",
+      "GitHub CLI auth was found at a different HOME than the one this AgileClaw process uses.",
       "  Process gh config dir: /agent/home/.config/gh",
       "  Authenticated config:  /root/.config/gh (contains hosts.yml)",
       "  Authenticated HOME:    /root",
-      "  Fix: set GH_CONFIG_DIR=/root/.config/gh on the OpenClaw service environment, then restart the gateway.",
+      "  Fix: set GH_CONFIG_DIR=/root/.config/gh on the AgileClaw service environment, then restart the gateway.",
     ]);
   });
 
@@ -223,7 +223,7 @@ describe("formatGhConfigDirMismatchHint", () => {
     const lines = formatGhConfigDirMismatchHint(mismatch);
     expect(lines.join("\n")).not.toContain("Authenticated HOME");
     expect(lines).toContain(
-      "  Fix: set GH_CONFIG_DIR=/srv/automation/.config/gh on the OpenClaw service environment, then restart the gateway.",
+      "  Fix: set GH_CONFIG_DIR=/srv/automation/.config/gh on the AgileClaw service environment, then restart the gateway.",
     );
   });
 });

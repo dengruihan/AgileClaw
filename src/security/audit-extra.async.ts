@@ -291,7 +291,7 @@ function buildSandboxBrowserDockerProbeTimeoutFinding(timeoutMs: number): Securi
     title: "Sandbox browser Docker audit probe timed out",
     detail:
       `Docker did not answer within ${timeoutMs}ms while checking sandbox browser containers. ` +
-      "OpenClaw skipped any remaining sandbox browser container drift checks for this status run.",
+      "AgileClaw skipped any remaining sandbox browser container drift checks for this status run.",
     remediation:
       "Retry after Docker is responsive, or recreate sandbox browser containers if drift is suspected.",
   };

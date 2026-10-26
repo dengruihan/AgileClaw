@@ -418,7 +418,7 @@ async function gatherDaemonStatusImpl(
               pluginVersionRestartReadiness = {
                 status: "unresolved",
                 reason:
-                  "Gateway service command is unavailable, so the post-restart OpenClaw version is unknown.",
+                  "Gateway service command is unavailable, so the post-restart AgileClaw version is unknown.",
                 ...(runningGatewayVersion ? { runningGatewayVersion } : {}),
               };
             } else {
@@ -427,7 +427,7 @@ async function gatherDaemonStatusImpl(
                 pluginVersionRestartReadiness = {
                   status: "unresolved",
                   reason:
-                    "Gateway service package version is unavailable, so the post-restart OpenClaw version is unknown.",
+                    "Gateway service package version is unavailable, so the post-restart AgileClaw version is unknown.",
                   ...(runningGatewayVersion ? { runningGatewayVersion } : {}),
                 };
               } else {

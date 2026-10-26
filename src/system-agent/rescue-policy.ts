@@ -1,10 +1,10 @@
 import { resolveAgentEntry } from "../agents/agent-scope-config.js";
-// OpenClaw rescue policy gates remote writes by owner, DM, sandbox, and YOLO posture.
+// AgileClaw rescue policy gates remote writes by owner, DM, sandbox, and YOLO posture.
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { resolveExecModePolicy } from "../infra/exec-approvals.js";
 
 /**
- * Policy checks for remote OpenClaw rescue commands.
+ * Policy checks for remote AgileClaw rescue commands.
  *
  * Rescue intentionally opens only for owner-controlled, non-sandboxed YOLO host
  * posture because remote commands can write local state.
@@ -91,28 +91,28 @@ export function resolveSystemAgentRescuePolicy(
       ...denied,
       reason: "sandbox-active",
       message:
-        "OpenClaw rescue is blocked because OpenClaw sandboxing is active. Fix the install locally or disable sandboxing before using remote rescue.",
+        "AgileClaw rescue is blocked because AgileClaw sandboxing is active. Fix the install locally or disable sandboxing before using remote rescue.",
     };
   }
   if (!enabled) {
     return {
       ...denied,
       reason: "disabled",
-      message: "OpenClaw rescue requires YOLO host posture with sandboxing off.",
+      message: "AgileClaw rescue requires YOLO host posture with sandboxing off.",
     };
   }
   if (!input.senderIsOwner) {
     return {
       ...denied,
       reason: "not-owner",
-      message: "OpenClaw rescue only accepts commands from an OpenClaw owner.",
+      message: "AgileClaw rescue only accepts commands from an AgileClaw owner.",
     };
   }
   if (ownerDmOnly && !input.isDirectMessage) {
     return {
       ...denied,
       reason: "not-direct-message",
-      message: "OpenClaw rescue is restricted to owner DMs by default.",
+      message: "AgileClaw rescue is restricted to owner DMs by default.",
     };
   }
   return {

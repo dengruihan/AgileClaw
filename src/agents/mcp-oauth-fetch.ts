@@ -33,7 +33,7 @@ async function toFetchInit(request: Request): Promise<RequestInit> {
 
 /**
  * Own native OAuth retries above the MCP SDK transport. The SDK otherwise runs
- * refresh outside OpenClaw's cross-process OAuth lease on every 401/403.
+ * refresh outside AgileClaw's cross-process OAuth lease on every 401/403.
  */
 export function withMcpOAuthBearer(params: {
   fetchFn: FetchLike;

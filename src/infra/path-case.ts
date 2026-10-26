@@ -1,4 +1,4 @@
-// Shares path-local case observations and keeps OpenClaw's fallback policy.
+// Shares path-local case observations and keeps AgileClaw's fallback policy.
 import type { Stats } from "node:fs";
 import { probePathCaseInsensitiveSync } from "@openclaw/fs-safe/advanced";
 

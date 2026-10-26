@@ -27,7 +27,7 @@ export function sameFileMutationFingerprint(
   );
 }
 
-/** Maps the borrowed-descriptor digest to OpenClaw's persisted artifact fields. */
+/** Maps the borrowed-descriptor digest to AgileClaw's persisted artifact fields. */
 export function hashFileDescriptorSync(
   fd: number,
   maxBytes?: number,

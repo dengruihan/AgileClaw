@@ -1,4 +1,4 @@
-// OpenClaw audit tests cover SQLite-backed rescue audit scenarios.
+// AgileClaw audit tests cover SQLite-backed rescue audit scenarios.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as sqliteQueries from "../infra/kysely-sync.js";
 import {
@@ -9,7 +9,7 @@ import { withTestDir } from "../test-helpers/temp-dir.js";
 import { appendSystemAgentAuditEntry, SYSTEM_AGENT_AUDIT_STORE_LABEL } from "./audit.js";
 import { listSystemAgentAuditEntriesForTests } from "./audit.test-support.js";
 
-describe("OpenClaw audit log", () => {
+describe("AgileClaw audit log", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();

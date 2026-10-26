@@ -21,7 +21,7 @@ const { begin, boundary, cleanupBarrier, tempDirs } =
   await import("./doctor-maintenance.settlement.test-support.js");
 
 const leaseGuidance =
-  "Doctor could not enter maintenance. An agent database is in use. Stop other OpenClaw processes using this state, then retry the update.";
+  "Doctor could not enter maintenance. An agent database is in use. Stop other AgileClaw processes using this state, then retry the update.";
 const leaseCode = "agent-database-lease-active";
 const privateCause =
   "private-lease-class /synthetic/private-state/private.db token=fixture-only-token alice@example.invalid";
@@ -38,7 +38,7 @@ it("refuses an external active agent lease before serving-Gateway coordinator co
     },
   ]);
   boundary.gatewayAcquire.mockImplementation(() => {
-    throw new Error("another OpenClaw process owns gateway-lifecycle");
+    throw new Error("another AgileClaw process owns gateway-lifecycle");
   });
   const refusal: unknown = await begin().catch((error: unknown) => error);
   expect(refusal).toBeInstanceOf(UpdateDoctorError);
@@ -62,7 +62,7 @@ it("refuses an external active agent lease before serving-Gateway coordinator co
 
 it("does not use an empty external lease observation to bypass coordinator contention", async () => {
   boundary.external.mockReturnValue(true);
-  const contention = new Error("another OpenClaw process owns gateway-lifecycle");
+  const contention = new Error("another AgileClaw process owns gateway-lifecycle");
   boundary.gatewayAcquire.mockImplementation(() => {
     throw contention;
   });

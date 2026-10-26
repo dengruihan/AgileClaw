@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { resolveRequiredHomeDir, resolveUserPath } from "./home-dir.js";
 
-/** Resolves the OpenClaw config directory from state/config env overrides or home. */
+/** Resolves the AgileClaw config directory from state/config env overrides or home. */
 export function resolveConfigDir(
   env: NodeJS.ProcessEnv = process.env,
   homedir: () => string = os.homedir,

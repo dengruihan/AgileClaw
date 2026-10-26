@@ -23,7 +23,7 @@ function textOf(result: Awaited<ReturnType<AnyAgentTool["execute"]>>): string {
   return result.content.find((part) => part.type === "text")?.text ?? "";
 }
 
-test("OpenClaw applies and edits exact workspace bytes while rejecting escapes", async () => {
+test("AgileClaw applies and edits exact workspace bytes while rejecting escapes", async () => {
   const root = tempDirs.make("openclaw-workspace-mutation-");
   const workspace = path.join(root, "workspace");
   const sentinel = path.join(root, "outside-sentinel");

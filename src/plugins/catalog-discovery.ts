@@ -300,7 +300,7 @@ export function joinLocalPluginDetail(params: {
     detail: {
       origin: "local",
       ...(plugin.catalog.official
-        ? { author: { handle: "openclaw", displayName: "OpenClaw", official: true } }
+        ? { author: { handle: "openclaw", displayName: "AgileClaw", official: true } }
         : inspection?.overview?.publisherName
           ? { author: { displayName: inspection.overview.publisherName } }
           : {}),

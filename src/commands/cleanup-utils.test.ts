@@ -706,7 +706,7 @@ describe("cleanup path removals", () => {
           },
           runtime,
         ),
-      ).rejects.toThrow(/Failed to remove non-preserved OpenClaw state/);
+      ).rejects.toThrow(/Failed to remove non-preserved AgileClaw state/);
 
       await expect(fs.readFile(configPath, "utf8")).resolves.toBe("{}\n");
       await expect(fs.readFile(oauthPath, "utf8")).resolves.toBe("keep me");

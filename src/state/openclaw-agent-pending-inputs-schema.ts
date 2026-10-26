@@ -39,7 +39,7 @@ export function ensureSessionPendingInputsSchema(db: DatabaseSync): void {
     `CREATE TABLE IF NOT EXISTS ${SESSION_PENDING_INPUTS_TABLE} (`,
   );
   if (start < 0) {
-    throw new Error("OpenClaw pending-input schema marker is missing.");
+    throw new Error("AgileClaw pending-input schema marker is missing.");
   }
   const nested = db.isTransaction;
   runSqliteImmediateTransactionSync(db, () => {
@@ -68,7 +68,7 @@ export function ensureSessionInputCompletionsSchema(db: DatabaseSync): void {
     "CREATE TABLE IF NOT EXISTS session_input_completions (",
   );
   if (start < 0) {
-    throw new Error("OpenClaw input-completion schema marker is missing.");
+    throw new Error("AgileClaw input-completion schema marker is missing.");
   }
   const nested = db.isTransaction;
   runSqliteImmediateTransactionSync(db, () => {

@@ -25,7 +25,7 @@ const stoppedChannel = {
 const closedQuestion = {
   id: "access",
   header: "Access",
-  question: "How should OpenClaw work?",
+  question: "How should AgileClaw work?",
   options: [{ label: "Full access" }, { label: "Ask first" }],
   isOther: false,
 };

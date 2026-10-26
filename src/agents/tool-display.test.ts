@@ -44,14 +44,14 @@ describe("tool display details", () => {
     expect(
       resolveToolDisplay({
         name: "tool_call",
-        args: { id: "openclaw:search:web_search", args: { query: "OpenClaw release notes" } },
+        args: { id: "openclaw:search:web_search", args: { query: "AgileClaw release notes" } },
       }),
     ).toMatchObject({
       name: "web_search",
       emoji: "🔎",
       label: "Web Search",
       verb: "search",
-      detail: 'for "OpenClaw release notes"',
+      detail: 'for "AgileClaw release notes"',
     });
   });
 
@@ -179,10 +179,10 @@ describe("tool display details", () => {
   it("formats web_search query with quotes", () => {
     const detail = detailFor({
       name: "web_search",
-      args: { query: "OpenClaw docs", count: 3 },
+      args: { query: "AgileClaw docs", count: 3 },
     });
 
-    expect(detail).toBe('for "OpenClaw docs" (top 3)');
+    expect(detail).toBe('for "AgileClaw docs" (top 3)');
   });
 
   it("formats web_search provider query shapes", () => {
@@ -213,13 +213,13 @@ describe("tool display details", () => {
       detailFor({
         name: "web_search",
         args: {
-          objective: "Find the OpenClaw repository on GitHub",
+          objective: "Find the AgileClaw repository on GitHub",
           search_queries: ["openclaw github", "openclaw repository"],
           count: 5,
         },
       }),
     ).toBe(
-      'for "Find the OpenClaw repository on GitHub", "openclaw github", "openclaw repository" (top 5)',
+      'for "Find the AgileClaw repository on GitHub", "openclaw github", "openclaw repository" (top 5)',
     );
   });
 
@@ -520,10 +520,10 @@ describe("tool display details", () => {
       formatToolSummary(
         resolveToolDisplay({
           name: "web_search",
-          args: { query: "OpenClaw docs" },
+          args: { query: "AgileClaw docs" },
         }),
       ),
-    ).toBe('🔎 Web Search: for "OpenClaw docs"');
+    ).toBe('🔎 Web Search: for "AgileClaw docs"');
   });
 
   it("moves cd path to context suffix with || separator", () => {

@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-// Hugging Face local-app CLI contract tests cover OpenClaw's snippet-facing commands.
+// Hugging Face local-app CLI contract tests cover AgileClaw's snippet-facing commands.
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
@@ -42,7 +42,7 @@ afterEach(async () => {
   await Promise.allSettled(fakeServers.splice(0).map((server) => server.close()));
 });
 
-describe("Hugging Face OpenClaw local-app CLI contract", () => {
+describe("Hugging Face AgileClaw local-app CLI contract", () => {
   it.each(HF_LOCAL_APP_CASES)(
     "runs onboard and local agent commands for $name",
     async ({ providerId, modelId }) => {

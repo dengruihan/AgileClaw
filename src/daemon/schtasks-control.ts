@@ -547,7 +547,7 @@ export async function startScheduledTask({
           selectedCommand !== serviceKind
         ) {
           throw new Error(
-            "Selected Scheduled Task is not the requested OpenClaw service; refusing to enable it.",
+            "Selected Scheduled Task is not the requested AgileClaw service; refusing to enable it.",
           );
         }
         await resolveOpenClawWrapperPath(wrapper);

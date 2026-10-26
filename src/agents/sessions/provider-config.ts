@@ -44,7 +44,7 @@ export interface ProviderModelConfig {
   baseUrl?: string;
   /** Whether the model supports extended thinking. */
   reasoning: boolean;
-  /** Maps OpenClaw thinking levels to provider/model-specific values; null marks a level unsupported. */
+  /** Maps AgileClaw thinking levels to provider/model-specific values; null marks a level unsupported. */
   thinkingLevelMap?: Model["thinkingLevelMap"];
   /** Supported input types. */
   input: ("text" | "image")[];

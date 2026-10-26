@@ -26,7 +26,7 @@ export class PackageLifecycleOwnershipError extends Error {
   constructor(packageRoot: string, reason: string, cause?: unknown) {
     const lockPath = path.join(packageRoot, PACKAGE_LIFECYCLE_LOCK_RELATIVE_PATH);
     super(
-      `OpenClaw package lifecycle ownership is uncertain (${reason}). Preserved package: ${packageRoot}. ` +
+      `AgileClaw package lifecycle ownership is uncertain (${reason}). Preserved package: ${packageRoot}. ` +
         `Wait for its lifecycle writers to settle before retrying or recovering ${lockPath}; lock age or a dead parent alone does not establish settlement.`,
       { cause },
     );
@@ -277,7 +277,7 @@ function runPackageLifecycleScript(
   }
   if (result.status !== 0) {
     throw new Error(
-      `OpenClaw package ${script.name} failed${result.signal ? ` with ${result.signal}` : ` with exit code ${result.status ?? "unknown"}`}`,
+      `AgileClaw package ${script.name} failed${result.signal ? ` with ${result.signal}` : ` with exit code ${result.status ?? "unknown"}`}`,
     );
   }
 }
@@ -435,7 +435,7 @@ export async function completePendingPackageLifecycle(params: {
       await fs.rm(paths.pending, { force: true });
     }
     if (await isPackageLifecyclePending(paths, packageDirectory)) {
-      throw new Error("OpenClaw package postinstall did not complete its lifecycle marker");
+      throw new Error("AgileClaw package postinstall did not complete its lifecycle marker");
     }
     return true;
   };

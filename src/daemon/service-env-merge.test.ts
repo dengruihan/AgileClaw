@@ -139,7 +139,7 @@ describe("mergeGatewayServiceEnv", () => {
                 OPENCLAW_PROFILE: "saved",
                 OPENCLAW_STATE_DIR: path.join(home, ".openclaw-saved"),
                 OPENCLAW_CONFIG_PATH: path.join(home, ".openclaw-saved", "openclaw.json"),
-                OPENCLAW_WINDOWS_TASK_NAME: "OpenClaw Gateway (saved)",
+                OPENCLAW_WINDOWS_TASK_NAME: "AgileClaw Gateway (saved)",
                 OPENCLAW_LAUNCHD_LABEL: "ai.openclaw.saved",
                 OPENCLAW_SYSTEMD_UNIT: "openclaw-gateway-saved.service",
                 OPENCLAW_SERVICE_MARKER: "openclaw",

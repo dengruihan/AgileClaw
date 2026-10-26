@@ -76,20 +76,20 @@ export function compileStructuredInputForm(params: {
   const properties = schema ? ownRecord(schema, "properties") : undefined;
   if (!schema || ownString(schema, "type") !== "object" || !properties) {
     return unsupported(
-      `OpenClaw cannot show this ${protocol} form because its schema is not an object with properties.`,
+      `AgileClaw cannot show this ${protocol} form because its schema is not an object with properties.`,
     );
   }
   if (!structuredInputEntries(schema, MAX_SCHEMA_KEYS)) {
-    return unsupported(`OpenClaw declined an over-limit ${protocol} form schema.`);
+    return unsupported(`AgileClaw declined an over-limit ${protocol} form schema.`);
   }
   const propertyEntries = structuredInputEntries(properties, MAX_FORM_FIELDS);
   if (!propertyEntries) {
     return unsupported(
-      `OpenClaw supports at most ${MAX_FORM_FIELDS} fields in one ${protocol} form.`,
+      `AgileClaw supports at most ${MAX_FORM_FIELDS} fields in one ${protocol} form.`,
     );
   }
   if (propertyEntries.length === 0 && options.allowEmptyForm !== true) {
-    return unsupported(`OpenClaw cannot show an empty ${protocol} form.`);
+    return unsupported(`AgileClaw cannot show an empty ${protocol} form.`);
   }
   const required = readRequired(schema, properties, protocol);
   if (typeof required === "string") {
@@ -103,7 +103,7 @@ export function compileStructuredInputForm(params: {
   );
   if (!intro) {
     return unsupported(
-      `OpenClaw declined ${protocol} form display text that is invalid or over-limit.`,
+      `AgileClaw declined ${protocol} form display text that is invalid or over-limit.`,
     );
   }
 
@@ -121,14 +121,14 @@ export function compileStructuredInputForm(params: {
     if (fieldMetadata.otherAnswer) {
       const target = fieldMetadata.otherQuestionId;
       if (!target || otherFields.has(target)) {
-        return unsupported(`OpenClaw declined invalid ${protocol} Other-field metadata.`);
+        return unsupported(`AgileClaw declined invalid ${protocol} Other-field metadata.`);
       }
       otherFields.set(target, { fieldId, secret: fieldMetadata.secret });
     }
   }
   for (const target of otherFields.keys()) {
     if (!Object.hasOwn(properties, target)) {
-      return unsupported(`OpenClaw declined ${protocol} Other-field metadata without its target.`);
+      return unsupported(`AgileClaw declined ${protocol} Other-field metadata without its target.`);
     }
   }
 
@@ -160,7 +160,9 @@ export function compileStructuredInputForm(params: {
     fields.push(field);
   }
   if (fields.length === 0 && propertyEntries.length > 0) {
-    return unsupported(`OpenClaw cannot show a ${protocol} form containing only synthetic fields.`);
+    return unsupported(
+      `AgileClaw cannot show a ${protocol} form containing only synthetic fields.`,
+    );
   }
   return { kind: "ready", plan: { kind: "form", intro, fields } };
 }
@@ -189,21 +191,21 @@ export function compileStructuredInputUrl(params: {
     !message
   ) {
     return unsupported(
-      `OpenClaw declined an invalid or over-limit ${params.protocolName} elicitation URL.`,
+      `AgileClaw declined an invalid or over-limit ${params.protocolName} elicitation URL.`,
     );
   }
   const parsed = URL.parse(url);
   if (!parsed) {
-    return unsupported(`OpenClaw declined an invalid ${params.protocolName} elicitation URL.`);
+    return unsupported(`AgileClaw declined an invalid ${params.protocolName} elicitation URL.`);
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     return unsupported(
-      `OpenClaw only presents http or https ${params.protocolName} elicitation URLs.`,
+      `AgileClaw only presents http or https ${params.protocolName} elicitation URLs.`,
     );
   }
   if (parsed.username || parsed.password) {
     return unsupported(
-      `OpenClaw does not present ${params.protocolName} elicitation URLs containing credentials.`,
+      `AgileClaw does not present ${params.protocolName} elicitation URLs containing credentials.`,
     );
   }
   return {
@@ -234,12 +236,12 @@ function readRequired(
     return new Set();
   }
   if (!Array.isArray(value) || value.length > MAX_FORM_FIELDS) {
-    return `OpenClaw declined a ${protocol} form with an invalid required list.`;
+    return `AgileClaw declined a ${protocol} form with an invalid required list.`;
   }
   const required = new Set<string>();
   for (const entry of value) {
     if (typeof entry !== "string" || !Object.hasOwn(properties, entry)) {
-      return `OpenClaw declined a ${protocol} form with an invalid required field.`;
+      return `AgileClaw declined a ${protocol} form with an invalid required field.`;
     }
     required.add(entry);
   }

@@ -8,37 +8,37 @@ describe("update conversation notices", () => {
     reason: string | null;
     headline: string;
   }>([
-    { status: "succeeded", reason: null, headline: "✅ OpenClaw updated." },
-    { status: "running", reason: null, headline: "⬆️ OpenClaw is updating." },
+    { status: "succeeded", reason: null, headline: "✅ AgileClaw updated." },
+    { status: "running", reason: null, headline: "⬆️ AgileClaw is updating." },
     {
       status: "failed",
       reason: "state-migrated-no-rollback",
-      headline: "⚠️ OpenClaw couldn't finish updating.",
+      headline: "⚠️ AgileClaw couldn't finish updating.",
     },
     {
       status: "rolled-back",
       reason: "restart-unhealthy",
-      headline: "↩️ The update couldn't finish. OpenClaw returned to the previous version.",
+      headline: "↩️ The update couldn't finish. AgileClaw returned to the previous version.",
     },
     {
       status: "skipped",
       reason: "container-image-install",
-      headline: "ℹ️ OpenClaw wasn't updated.",
+      headline: "ℹ️ AgileClaw wasn't updated.",
     },
     {
       status: "skipped",
       reason: "already-current",
-      headline: "✅ OpenClaw is already up to date.",
+      headline: "✅ AgileClaw is already up to date.",
     },
     {
       status: "skipped",
       reason: "still-starting",
-      headline: "⏳ OpenClaw is installed and still starting.",
+      headline: "⏳ AgileClaw is installed and still starting.",
     },
     {
       status: "skipped",
       reason: "gateway-readiness-unverified",
-      headline: "⚠️ OpenClaw is installed, but we couldn't confirm it's ready.",
+      headline: "⚠️ AgileClaw is installed, but we couldn't confirm it's ready.",
     },
   ])("explains $status ($reason) without suggesting a repair", ({ status, reason, headline }) => {
     const record = {
@@ -73,7 +73,7 @@ describe("update conversation notices", () => {
 
   it("only announces the current milestone", () => {
     const requested = { status: "running" as const, phase: "requested" as const, reason: null };
-    expect(renderUpdateRunNotice(requested, "parking")).toBe("⏳ Restarting OpenClaw…");
+    expect(renderUpdateRunNotice(requested, "parking")).toBe("⏳ Restarting AgileClaw…");
     expect(renderUpdateRunNotice(requested, "activating")).toBeNull();
     expect(renderUpdateRunNotice(requested, "verifying")).toBeNull();
     expect(renderUpdateRunNotice(requested, "finished")).toBeNull();

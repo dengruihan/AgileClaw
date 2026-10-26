@@ -873,7 +873,7 @@ export async function runBtwSideQuestion(
           ? runtimeAuthPreparation.attempts[0].plan
           : undefined;
       // A native harness owns this deferred auth decision. Resolving it through
-      // OpenClaw would incorrectly require a host credential before handoff.
+      // AgileClaw would incorrectly require a host credential before handoff.
       const resolvedAttempt = implicitHarnessAuthPlan
         ? { plan: implicitHarnessAuthPlan, model: runtime.model }
         : await resolveBtwPreparedRuntimeAuth({

@@ -67,7 +67,7 @@ type CommandOutput<OptionsType extends Options, Stream extends OutputStream> = B
   >
 >;
 
-/** The result fields consumed by OpenClaw's command callers, independent of execa helpers. */
+/** The result fields consumed by AgileClaw's command callers, independent of execa helpers. */
 type CommandResult<OptionsType extends Options = Options> = {
   stdout: CommandOutput<OptionsType, "stdout">;
   stderr: CommandOutput<OptionsType, "stderr">;

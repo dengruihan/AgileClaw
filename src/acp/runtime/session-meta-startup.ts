@@ -27,7 +27,7 @@ import { resolveSessionStorePathForAcp } from "./session-meta-store.js";
 
 function migrationRequired(source: string): never {
   throw new SessionStoreMigrationRequiredError(
-    `ACP metadata requires offline migration at ${source}. Stop the Gateway and run "openclaw doctor --fix" against the same state/config before starting OpenClaw.`,
+    `ACP metadata requires offline migration at ${source}. Stop the Gateway and run "openclaw doctor --fix" against the same state/config before starting AgileClaw.`,
   );
 }
 

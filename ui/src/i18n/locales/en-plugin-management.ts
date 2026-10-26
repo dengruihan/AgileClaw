@@ -4,7 +4,7 @@ import { en } from "./en.ts";
 // Plugin management and its lazy sibling surfaces register this shared copy on use.
 const enPluginManagement = {
   custodian: {
-    pluginPlaceholder: "Ask OpenClaw about {plugin}",
+    pluginPlaceholder: "Ask AgileClaw about {plugin}",
     pluginIntroTitle: "Ask about {plugin}",
     pluginStarterPurpose: "What does it do?",
     pluginStarterTools: "What tools does it have?",
@@ -13,7 +13,7 @@ const enPluginManagement = {
     pluginPromptTools: "What tools does {plugin} provide?",
     pluginPromptSetup: "How do I set up {plugin}?",
     pluginHelpQuestion: "Explain {setting}",
-    pluginHelpFailed: "Could not prepare the setting question. Try Ask OpenClaw again.",
+    pluginHelpFailed: "Could not prepare the setting question. Try Ask AgileClaw again.",
     pluginHelpUnset: "Not set",
     pluginHelpValue: "Current value: {value}",
   },
@@ -84,7 +84,7 @@ const enPluginManagement = {
       permissions: "Permissions",
       actions: "Actions for {name}",
       reset: "Reset value",
-      ask: "Ask OpenClaw",
+      ask: "Ask AgileClaw",
     },
     credentials: {
       stored: "••••••••",
@@ -129,8 +129,8 @@ const enPluginManagement = {
     },
     detailCapabilities: "Capabilities",
     uiCapabilities: {
-      page: { name: "Pages", description: "Adds pages to OpenClaw." },
-      navigation: { name: "Navigation", description: "Adds links to OpenClaw navigation." },
+      page: { name: "Pages", description: "Adds pages to AgileClaw." },
+      navigation: { name: "Navigation", description: "Adds links to AgileClaw navigation." },
       panel: { name: "Panels", description: "Adds interface panels." },
       action: { name: "Actions", description: "Adds buttons or menu actions." },
       accessory: {
@@ -191,7 +191,10 @@ const enPluginManagement = {
         name: "Transcripts",
         description: "Capture or import transcripts from supported sources.",
       },
-      migrationProviders: { name: "Migration", description: "Bring supported data into OpenClaw." },
+      migrationProviders: {
+        name: "Migration",
+        description: "Bring supported data into AgileClaw.",
+      },
     },
     breadcrumb: "Breadcrumb",
     settingsDescription: "Configure installed plugins, access, and lifecycle.",
@@ -311,7 +314,7 @@ const enPluginManagement = {
     detailSensitive: "Sensitive",
     detailMinimumGateway: "Minimum Gateway version",
     detailPluginApi: "Plugin API",
-    detailBuiltWith: "Built with OpenClaw",
+    detailBuiltWith: "Built with AgileClaw",
     detailSdkVersion: "Plugin SDK",
     detailSourceCommit: "Source commit",
     detailSourcePath: "Source path",
@@ -384,7 +387,7 @@ const enPluginManagement = {
     detailPackage: "Package",
     detailPluginId: "Plugin ID",
     offlineBody: "Connect to browse installed and recommended plugins.",
-    optionalCapability: "Optional OpenClaw capability.",
+    optionalCapability: "Optional AgileClaw capability.",
     enabled: "Enabled",
     disabled: "Disabled",
     available: "Available",

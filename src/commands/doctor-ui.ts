@@ -128,7 +128,7 @@ export function uiProtocolFreshnessIssueToHealthFinding(
         ? issue.kind === "missing-assets"
           ? "Run `openclaw doctor --fix` to build Control UI assets."
           : `Run \`openclaw doctor --fix --force\` to rebuild Control UI assets, or run \`${formatControlUiSourceCommand(issue.root, "build")}\`.`
-        : "Reinstall OpenClaw to restore bundled Control UI assets.",
+        : "Reinstall AgileClaw to restore bundled Control UI assets.",
   };
 }
 
@@ -162,7 +162,7 @@ function formatUiProtocolFreshnessIssue(issue: UiProtocolFreshnessIssue): string
       ? formatInstallOwnerMessage(issue.installOwner)
       : issue.canBuild
         ? `- Run: ${formatControlUiSourceCommand(issue.root, "build")}`
-        : "- Reinstall OpenClaw to restore bundled Control UI assets.",
+        : "- Reinstall AgileClaw to restore bundled Control UI assets.",
   ].join("\n");
 }
 

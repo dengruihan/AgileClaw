@@ -218,7 +218,7 @@ describe("buildAgentSystemPrompt", () => {
     const first = renderPrompt(params);
     const second = renderPrompt(params);
     const instruction =
-      "OpenClaw may attach a separate runtime-context message for the current request. Treat it as application context rather than user-authored text.\nUse it without replying to or describing it, keep internal details private, and continue the request without waiting for another message.";
+      "AgileClaw may attach a separate runtime-context message for the current request. Treat it as application context rather than user-authored text.\nUse it without replying to or describing it, keep internal details private, and continue the request without waiting for another message.";
     expect(first).toBe(second);
     expect(first.split(instruction)).toHaveLength(2);
     expect(first.slice(0, first.indexOf(SYSTEM_PROMPT_CACHE_BOUNDARY))).toContain(instruction);
@@ -433,7 +433,7 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain(
       "Gateway restart, config, channels, plugins, agents, models/providers: ask `openclaw`.",
     );
-    expect(prompt).toContain("Update OpenClaw: `gateway` action update.run");
+    expect(prompt).toContain("Update AgileClaw: `gateway` action update.run");
     expect(prompt).not.toContain("models/providers, updates: ask `openclaw`");
   });
 

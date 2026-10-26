@@ -246,7 +246,7 @@ describe("buildStatusAllReportData", () => {
         "npm update 9999.1.1",
       );
       expect(report.overviewRows.find((row) => row.Item === "Update")?.Value).toContain("behind 2");
-      const success = "✅ OpenClaw updated to 2026.9.2 (from 2026.9.1).";
+      const success = "✅ AgileClaw updated to 2026.9.2 (from 2026.9.1).";
       expect(
         report.overviewRows.filter((row) => ["Update run", "Update restart"].includes(row.Item)),
       ).toEqual([
@@ -256,7 +256,7 @@ describe("buildStatusAllReportData", () => {
                 Item: "Update run",
                 Value:
                   history === "active"
-                    ? "⬆️ OpenClaw update in progress: verifying."
+                    ? "⬆️ AgileClaw update in progress: verifying."
                     : history === "failed-healthy"
                       ? "Last update run failed (post-update-failed) — Gateway is serving 2026.9.2; run `openclaw update` to clear the record."
                       : success,
@@ -269,7 +269,7 @@ describe("buildStatusAllReportData", () => {
                 Item: "Update restart",
                 Value:
                   history === "mixed-sentinel"
-                    ? "⚠️ OpenClaw update failed: restart-unhealthy."
+                    ? "⚠️ AgileClaw update failed: restart-unhealthy."
                     : success,
               },
             ]

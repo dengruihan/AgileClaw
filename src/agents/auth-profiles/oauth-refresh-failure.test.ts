@@ -144,7 +144,7 @@ it.each([
     "google-gemini-cli",
     "session_expired",
     "google-gemini-cli:legacy",
-    "Gemini CLI OAuth cannot be repaired by OpenClaw. Connect Google with an AI Studio API key using `openclaw models auth login --provider google`, then select that Google profile for the Gemini CLI runtime.",
+    "Gemini CLI OAuth cannot be repaired by AgileClaw. Connect Google with an AI Studio API key using `openclaw models auth login --provider google`, then select that Google profile for the Gemini CLI runtime.",
   ],
 ] as const)(
   "gives provider-specific recovery guidance for %s / %s",

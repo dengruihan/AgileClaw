@@ -148,7 +148,7 @@ const SIMPLE_COMMANDS: ReadonlyArray<readonly [readonly string[] | RegExp, Syste
       { kind: "model-accounts" },
     ],
     [["tui", "open tui", "chat"], { kind: "open-tui" }],
-    [["quit", "exit"], { kind: "none", message: "OpenClaw retracts into shell. Bye." }],
+    [["quit", "exit"], { kind: "none", message: "AgileClaw retracts into shell. Bye." }],
     [/^(?:(?:plugins?|clawhub)\s+list|list\s+plugins?)$/i, { kind: "plugin-list" }],
     [/^(?:channels|list\s+channels|show\s+channels)$/i, { kind: "channel-list" }],
     [/^(?:configure|set\s*up|setup)\s+skills$/i, { kind: "skills-setup" }],
@@ -287,7 +287,7 @@ export function secretStoreNameForConfigPath(path: string): string {
 }
 
 /**
- * Parse one user command into OpenClaw's closed operation union. Anything
+ * Parse one user command into AgileClaw's closed operation union. Anything
  * that does not match the anchored grammar exactly returns kind "none" so the
  * caller can route it to the system agent (or show guidance).
  */
@@ -520,11 +520,11 @@ export function describeSystemAgentPersistentOperation(operation: SystemAgentOpe
         ? `set config ${redactSystemAgentConfigPath(operation.path)} to ${operation.source} SecretRef <redacted>`
         : `save the provided secret in the secret store and point config ${redactSystemAgentConfigPath(operation.path)} at it`;
     case "setup":
-      return `bootstrap OpenClaw setup for workspace ${shortenHomePath(resolveUserPath(operation.workspace ?? process.cwd()))}`;
+      return `bootstrap AgileClaw setup for workspace ${shortenHomePath(resolveUserPath(operation.workspace ?? process.cwd()))}`;
     case "model-setup":
       return "configure a model provider and default model";
     case "doctor-fix":
-      return "run openclaw doctor --fix on the machine running OpenClaw, with OpenClaw stopped";
+      return "run openclaw doctor --fix on the machine running AgileClaw, with AgileClaw stopped";
     case "plugin-install":
       return `install plugin ${operation.spec}`;
     case "plugin-activate-artifact":
@@ -569,7 +569,7 @@ export const SYSTEM_AGENT_OPERATOR_APPROVAL_HANDOFF =
   "The host applies the requesting session's permission policy to this exact proposal and returns the final outcome. Do not request conversational approval or claim the change was applied before that outcome.";
 
 export const SYSTEM_AGENT_OPERATOR_NAVIGATION_HANDOFF =
-  "Channel, model, and setup flows need a human operator in the OpenClaw app; they cannot run from a delegated agent request. Open `openclaw dashboard` or run `openclaw setup` on the Gateway host.";
+  "Channel, model, and setup flows need a human operator in the AgileClaw app; they cannot run from a delegated agent request. Open `openclaw dashboard` or run `openclaw setup` on the Gateway host.";
 
 export function formatSystemAgentPersistentPlan(
   operation: SystemAgentOperation,

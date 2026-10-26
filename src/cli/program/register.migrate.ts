@@ -104,7 +104,7 @@ export function registerMigrateCommand(program: Command) {
     .option("--yes", "Apply without prompting after preview", false);
   addMigrationSelectionOptions(migrate)
     .option("--backup-output <path>", "Pre-migration backup archive path or directory")
-    .option("--no-backup", "Skip the pre-migration OpenClaw backup")
+    .option("--no-backup", "Skip the pre-migration AgileClaw backup")
     .option("--force", "Allow dangerous options such as --no-backup", false)
     .option("--json", "Output JSON", false);
   addVerifyPluginAppsOption(migrate)
@@ -154,7 +154,7 @@ export function registerMigrateCommand(program: Command) {
   addMigrationOptions(
     migrate
       .command("plan <provider>")
-      .description("Preview a migration without changing OpenClaw state"),
+      .description("Preview a migration without changing AgileClaw state"),
   ).action(async (provider, opts, command) => {
     await runCommandWithRuntime(defaultRuntime, async () => {
       await migratePlanCommand(defaultRuntime, {
@@ -169,7 +169,7 @@ export function registerMigrateCommand(program: Command) {
   )
     .option("--yes", "Apply without prompting", false)
     .option("--backup-output <path>", "Pre-migration backup archive path or directory")
-    .option("--no-backup", "Skip the pre-migration OpenClaw backup")
+    .option("--no-backup", "Skip the pre-migration AgileClaw backup")
     .option("--force", "Allow dangerous options such as --no-backup", false)
     .action(async (provider, opts, command) => {
       await runCommandWithRuntime(defaultRuntime, async () => {

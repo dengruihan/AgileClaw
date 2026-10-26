@@ -255,11 +255,11 @@ describe("publication stage input", () => {
       const commit = await gitRaw(root, ["cat-file", "commit", newRef]);
       const separator = commit.indexOf("\n\n");
       expect(commit.slice(0, separator)).toMatch(
-        /^tree [a-f0-9]{40}\nauthor OpenClaw <openclaw@localhost> 0 \+0000\ncommitter OpenClaw <openclaw@localhost> 0 \+0000$/u,
+        /^tree [a-f0-9]{40}\nauthor OpenClaw <openclaw@localhost> 0 \+0000\ncommitter AgileClaw <openclaw@localhost> 0 \+0000$/u,
       );
       expect(commit.slice(separator + 2)).toBe(
         [
-          "OpenClaw worker workspace result",
+          "AgileClaw worker workspace result",
           "version 2",
           `base-ref ${legacy.baseManifestRef}`,
           `current-ref ${legacy.currentManifestRef}`,

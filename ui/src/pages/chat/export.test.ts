@@ -33,8 +33,8 @@ describe("exportChatMarkdown", () => {
     const createObjectURL = vi.spyOn(URL, "createObjectURL");
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click");
 
-    expect(buildChatMarkdown(messages, "OpenClaw")).toBeNull();
-    expect(exportChatMarkdown(messages, "OpenClaw")).toBe("empty");
+    expect(buildChatMarkdown(messages, "AgileClaw")).toBeNull();
+    expect(exportChatMarkdown(messages, "AgileClaw")).toBe("empty");
     expect(createObjectURL).not.toHaveBeenCalled();
     expect(click).not.toHaveBeenCalled();
   });
@@ -51,7 +51,7 @@ describe("exportChatMarkdown", () => {
           { role: "user", content: "What can you export?", timestamp: 1_000 },
           { role: "assistant", content: "A readable conversation.", timestamp: 2_000 },
         ],
-        "OpenClaw",
+        "AgileClaw",
       ),
     ).toBe("downloaded");
 
@@ -62,10 +62,10 @@ describe("exportChatMarkdown", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:chat-export");
     expect((createObjectURL.mock.calls[0]![0] as Blob).type).toBe("text/markdown");
     const markdown = await (createObjectURL.mock.calls[0]![0] as Blob).text();
-    expect(markdown).toContain("# Chat with OpenClaw");
+    expect(markdown).toContain("# Chat with AgileClaw");
     expect(markdown).toContain("## Message");
     expect(markdown).toContain("What can you export?");
-    expect(markdown).toContain("## OpenClaw");
+    expect(markdown).toContain("## AgileClaw");
     expect(markdown).toContain("A readable conversation.");
   });
 
@@ -98,11 +98,11 @@ describe("exportChatMarkdown", () => {
         { role: "tool_result", toolCallId: "call-1", content: "  exit 0\n" },
         { role: "assistant", content: "NO_REPLY" },
       ],
-      "OpenClaw",
+      "AgileClaw",
     );
 
     expect(markdown).toBe(
-      "# Chat with OpenClaw\n\n" +
+      "# Chat with AgileClaw\n\n" +
         "## Kai\n\nPlease check the build.\n\n" +
         "## Build assistant (1970-01-01T00:00:01.000Z)\n\nThe build passed.\n\n" +
         "## Tool\n\n  exit 0\n\n",
@@ -126,11 +126,11 @@ describe("exportChatMarkdown", () => {
     {
       name: "non-string tool envelope",
       message: { role: "assistant", toolCallId: 0, content: "Visible body" },
-      speaker: "OpenClaw",
+      speaker: "AgileClaw",
     },
   ])("keeps canonical speaker classification for $name", ({ message, speaker }) => {
-    expect(buildChatMarkdown([message], "OpenClaw")).toBe(
-      `# Chat with OpenClaw\n\n## ${speaker}\n\nVisible body\n`,
+    expect(buildChatMarkdown([message], "AgileClaw")).toBe(
+      `# Chat with AgileClaw\n\n## ${speaker}\n\nVisible body\n`,
     );
   });
 
@@ -153,8 +153,8 @@ describe("exportChatMarkdown", () => {
       };
       const original = structuredClone(message);
 
-      expect(buildChatMarkdown([message], "OpenClaw")).toBe(
-        `# Chat with OpenClaw\n\n## Imported assistant\n\n${body}\n`,
+      expect(buildChatMarkdown([message], "AgileClaw")).toBe(
+        `# Chat with AgileClaw\n\n## Imported assistant\n\n${body}\n`,
       );
       expect(message).toEqual(original);
     },

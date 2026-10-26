@@ -169,7 +169,7 @@ it.each([true, false])(
     const details = notice?.querySelector("details");
     expect(details?.open).toBe(false);
     expect(details?.querySelector("strong")?.textContent).toBe(
-      "OpenClaw is busy. Check status before trying again.",
+      "AgileClaw is busy. Check status before trying again.",
     );
     expect(details?.querySelector("pre")?.textContent).toBe(diagnostic);
     expect(notice?.querySelector("img")).toBeNull();

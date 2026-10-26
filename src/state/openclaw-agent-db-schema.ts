@@ -318,7 +318,7 @@ function ensureAgentSchema(
       }
       if (previousVersion > targetVersion) {
         throw new Error(
-          `OpenClaw agent database ${pathname} uses schema version ${previousVersion}; expected at most ${targetVersion} for this migration.`,
+          `AgileClaw agent database ${pathname} uses schema version ${previousVersion}; expected at most ${targetVersion} for this migration.`,
         );
       }
       if (previousVersion < targetVersion) {

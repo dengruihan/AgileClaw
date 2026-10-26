@@ -56,7 +56,7 @@ export function normalizeE164(number: string): string {
 // to preserve the historical `utils.ts` import surface.
 export { sliceUtf16Safe, truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 
-/** Resolves the effective OpenClaw home directory, if one can be determined. */
+/** Resolves the effective AgileClaw home directory, if one can be determined. */
 export function resolveHomeDir(): string | undefined {
   return resolveEffectiveHomeDir(process.env, os.homedir);
 }

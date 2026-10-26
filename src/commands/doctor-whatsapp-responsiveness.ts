@@ -37,7 +37,7 @@ function parsePsPidLine(line: string) {
   return { pid, command };
 }
 
-/** Lists local OpenClaw TUI processes without inferring their Gateway or activity. */
+/** Lists local AgileClaw TUI processes without inferring their Gateway or activity. */
 function listLocalTuiProcesses(): LocalTuiProcess[] {
   if (process.platform === "win32") {
     return [];

@@ -38,7 +38,7 @@ export function prepareApprovalChannelCustody(params: {
   }
   const authorizeActorAction = capability?.authorizeActorAction;
   if (!authorizeActorAction) {
-    // Without channel approver settings, an OpenClaw change needs a configured
+    // Without channel approver settings, an AgileClaw change needs a configured
     // owner. The final decision guard re-prepares custody from current config.
     if (params.approvalKind !== "system-agent") {
       return null;

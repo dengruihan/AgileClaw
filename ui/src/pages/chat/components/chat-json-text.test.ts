@@ -269,7 +269,7 @@ function renderJsonMessageGroup(
     renderMessageGroup(group, {
       showReasoning: true,
       showToolCalls: true,
-      assistantName: "OpenClaw",
+      assistantName: "AgileClaw",
       assistantAvatar: null,
       ...opts,
     }),

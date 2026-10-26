@@ -433,7 +433,7 @@ describe("createOpenClawCodingTools", () => {
     expect(names.has("read")).toBe(true);
   });
 
-  it("keeps Tool Search controls when core OpenClaw tools are not materialized", () => {
+  it("keeps Tool Search controls when core AgileClaw tools are not materialized", () => {
     const createOpenClawToolsMock = vi.mocked(createOpenClawTools);
     createOpenClawToolsMock.mockClear();
 
@@ -466,13 +466,13 @@ describe("createOpenClawCodingTools", () => {
   it("keeps the injected ring-zero tool under policy and rejects a same-name replacement", () => {
     const injectedTool = {
       ...stubTool("openclaw"),
-      label: "OpenClaw",
+      label: "AgileClaw",
       description: "trusted ring-zero tool",
       execute: async () => ({ content: [], details: {} }),
     };
     const duplicateTool = {
       ...stubTool("openclaw"),
-      label: "OpenClaw",
+      label: "AgileClaw",
       description: "duplicate plugin tool",
       execute: async () => ({ content: [], details: {} }),
     };

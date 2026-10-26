@@ -165,7 +165,7 @@ export async function withClaudeProjectsDir<T>(
 
 export function buildLegacyReseedPrompt(current = "current"): string {
   return [
-    "Continue this conversation using the OpenClaw transcript below as prior session history.",
+    "Continue this conversation using the AgileClaw transcript below as prior session history.",
     "Treat it as authoritative context for this fresh CLI session.",
     "",
     "<conversation_history>",

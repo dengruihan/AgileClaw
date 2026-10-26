@@ -216,7 +216,7 @@ describe("plugin inventory install health", () => {
     } else if (scenario === "canonical-host") {
       const hostRoot = resolveOpenClawPackageRootSync({ moduleUrl: import.meta.url });
       if (!hostRoot) {
-        throw new Error("Expected the running OpenClaw package root");
+        throw new Error("Expected the running AgileClaw package root");
       }
       fs.mkdirSync(path.join(packageDir, "node_modules"), { recursive: true });
       fs.symlinkSync(hostRoot, path.join(packageDir, "node_modules", "openclaw"), "junction");

@@ -92,7 +92,7 @@ describe("shared/node-match", () => {
     { clientIds: ["openclaw-macos", undefined] },
     { clientIds: ["openclaw-macos", "clawdbot-macos", "node-host"] },
     { clientIds: ["clawdbot-macos", undefined] },
-    { clientIds: ["clawdbot-macos", "moldbot-macos", " OpenClaw-MacOS "] },
+    { clientIds: ["clawdbot-macos", "moldbot-macos", " AgileClaw-MacOS "] },
   ])("keeps equally strong client ties ambiguous for $clientIds", ({ clientIds }) => {
     for (const connected of [true, false, undefined]) {
       const nodes = clientIds.map((clientId, index) => ({

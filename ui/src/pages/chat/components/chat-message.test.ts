@@ -131,7 +131,7 @@ function renderTestMessageGroup(
   return renderMessageGroup(group, {
     showReasoning: true,
     showToolCalls: true,
-    assistantName: "OpenClaw",
+    assistantName: "AgileClaw",
     assistantAvatar: null,
     ...opts,
   });
@@ -674,7 +674,7 @@ describe("grouped chat rendering", () => {
 
     expect(onReply).toHaveBeenCalledWith({
       messageId: "assistant-message",
-      senderLabel: "OpenClaw",
+      senderLabel: "AgileClaw",
       sourceMessageId: "assistant-entry-1",
       text: "Reply with this context.",
     });
@@ -2687,7 +2687,7 @@ describe("grouped chat rendering", () => {
         {
           type: "openclaw_pairing_qr",
           image_url: "data:image/png;base64,cXJwbmc=",
-          alt: "OpenClaw pairing QR code",
+          alt: "AgileClaw pairing QR code",
           expiresAtMs: Date.now() + 1_000,
         },
       ]),
@@ -2696,7 +2696,7 @@ describe("grouped chat rendering", () => {
 
     const image = view.querySelector<HTMLImageElement>(".chat-message-image");
     expect(image?.getAttribute("src")).toBe("data:image/png;base64,cXJwbmc=");
-    expect(image?.getAttribute("alt")).toBe("OpenClaw pairing QR code");
+    expect(image?.getAttribute("alt")).toBe("AgileClaw pairing QR code");
     await vi.advanceTimersByTimeAsync(999);
     expect(onRequestUpdate).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
@@ -2707,7 +2707,7 @@ describe("grouped chat rendering", () => {
         {
           type: "openclaw_pairing_qr",
           image_url: "data:image/png;base64,ZXhwaXJlZA==",
-          alt: "OpenClaw pairing QR code",
+          alt: "AgileClaw pairing QR code",
           expiresAtMs: Date.now() - 1,
         },
       ]),

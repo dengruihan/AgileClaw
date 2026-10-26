@@ -102,7 +102,7 @@ describe("resolveAgentRuntimeLabel", () => {
         },
         resolvedHarness: "codex",
       },
-      expected: "OpenAI Codex (previous runtime: OpenClaw Default)",
+      expected: "OpenAI Codex (previous runtime: AgileClaw Default)",
     },
     {
       name: "a retired codex-cli pin still reports a real transition",
@@ -129,7 +129,7 @@ describe("resolveAgentRuntimeLabel", () => {
         fallbackProvider: "anthropic",
         classifyCliProvider: () => false,
       },
-      expected: "OpenClaw Default (previous runtime: OpenAI Codex)",
+      expected: "AgileClaw Default (previous runtime: OpenAI Codex)",
     },
     {
       name: "an unmapped pin is reported by its sanitized id",

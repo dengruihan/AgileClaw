@@ -104,7 +104,7 @@ export function defineSessionPlacementModuleBoundaryTests(
             projects: [
               {
                 id: "openclaw",
-                displayName: "OpenClaw",
+                displayName: "AgileClaw",
                 repoRoot: TARGET_REPO,
                 source: "registered",
               },
@@ -274,7 +274,7 @@ export function defineSessionPlacementModuleBoundaryTests(
             project.evaluate((element) => (element as HTMLElement & { open: boolean }).open),
           )
           .toBe(true);
-        await project.getByRole("button", { name: "OpenClaw", exact: true }).click();
+        await project.getByRole("button", { name: "AgileClaw", exact: true }).click();
         await expect.poll(() => projectTrigger.getAttribute("data-project-id")).toBe("openclaw");
         await expect.poll(() => trigger.getAttribute("data-cloud-profile")).toBe("aws");
         await checkoutTrigger.click();
@@ -285,7 +285,7 @@ export function defineSessionPlacementModuleBoundaryTests(
           .toBe(true);
         await checkout.getByLabel("Name", { exact: true }).fill("cloud-e2e");
         await pollLocatorText(checkout.locator(".new-session-page__menu-note").last()).toContain(
-          "Syncs OpenClaw to the selected runner",
+          "Syncs AgileClaw to the selected runner",
         );
         await captureUiProof(suite, page, "01-cloud-worker-target.png", {
           surface: checkout.locator(".new-session-page__picker-root"),

@@ -172,7 +172,7 @@ export const modelsAuthLoginHandlers: GatewayRequestHandlers = {
               modelAccessOutcome.application !== "applied"
             ) {
               throw new ProviderCredentialsSavedError(
-                "Your sign-in and model access were saved, but OpenClaw has not confirmed that model access is active. Close this dialog. Open Settings and select Apply changes, then send /models.",
+                "Your sign-in and model access were saved, but AgileClaw has not confirmed that model access is active. Close this dialog. Open Settings and select Apply changes, then send /models.",
               );
             }
             if (result.authRefresh !== "refreshed") {

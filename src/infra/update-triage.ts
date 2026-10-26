@@ -184,7 +184,7 @@ async function runPreparedUpdateFailureTriage(
         return { status: "cancelled" };
       }
       if (!entryPath) {
-        throw new Error("The installed OpenClaw entrypoint is unavailable.");
+        throw new Error("The installed AgileClaw entrypoint is unavailable.");
       }
       const args = [
         entryPath,

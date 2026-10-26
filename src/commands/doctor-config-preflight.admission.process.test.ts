@@ -152,7 +152,7 @@ describe("startup admission before persistent writes", () => {
       config: "local",
       consolidated: true,
       unavailablePlugin: true,
-      reason: "OpenClaw config is invalid",
+      reason: "AgileClaw config is invalid",
     },
     {
       name: "malformed plugin entry without an existing WAL",
@@ -161,7 +161,7 @@ describe("startup admission before persistent writes", () => {
       config: "local",
       consolidated: true,
       invalidPlugin: true,
-      reason: "OpenClaw config is invalid",
+      reason: "AgileClaw config is invalid",
     },
     {
       name: "missing gateway.mode",

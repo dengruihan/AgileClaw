@@ -91,7 +91,7 @@ export function startOpenClawDatabaseIntegrityVerifier(options: { env: NodeJS.Pr
       }
       const targets: OpenClawDatabaseVerifyTarget[] = quickPaths.map((pathname) => ({
         kind: "agent",
-        label: "OpenClaw agent database",
+        label: "AgileClaw agent database",
         path: pathname,
         check: "quick",
       }));

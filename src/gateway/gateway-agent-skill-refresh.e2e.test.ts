@@ -552,7 +552,7 @@ async function initializeGitWorkspace(workspace: string, signal: AbortSignal): P
   signal.throwIfAborted();
   await execFileAsync("git", ["init", "-b", "main", workspace]);
   signal.throwIfAborted();
-  await execFileAsync("git", ["-C", workspace, "config", "user.name", "OpenClaw Tests"]);
+  await execFileAsync("git", ["-C", workspace, "config", "user.name", "AgileClaw Tests"]);
   signal.throwIfAborted();
   await execFileAsync("git", ["-C", workspace, "config", "user.email", "tests@openclaw.invalid"]);
   signal.throwIfAborted();

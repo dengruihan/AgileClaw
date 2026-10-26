@@ -11,10 +11,10 @@ const NIX_STORE_ROOT = "/nix/store";
 // with a file created elsewhere, which weakens the root-boundary checks used
 // before loading plugin code.
 // Update retention copies boundary-checked files instead of adding links. A retention
-// directory's name alone cannot prove that every other link is OpenClaw-owned.
+// directory's name alone cannot prove that every other link is AgileClaw-owned.
 //
 // Two roots are allowed:
-// - bundled: plugins shipped with OpenClaw itself, not user-installed code.
+// - bundled: plugins shipped with AgileClaw itself, not user-installed code.
 // - /nix/store in OPENCLAW_NIX_MODE: immutable Nix package outputs, where
 //   hardlinked files are normal package-store layout rather than user mutation.
 /** Returns true when a plugin root resolves inside the immutable Nix store. */

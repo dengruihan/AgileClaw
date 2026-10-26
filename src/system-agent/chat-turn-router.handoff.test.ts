@@ -8,7 +8,7 @@ import {
 
 describe.each([
   ["cli", "Use /openclaw to come back."],
-  ["gateway", "You can return through Settings → Ask OpenClaw."],
+  ["gateway", "You can return through Settings → Ask AgileClaw."],
 ] as const)("SystemAgentChatEngine %s handoff", (surface, returnHint) => {
   it.each(["command", "tool"] as const)(
     "hands personal accounts to the human from a %s",

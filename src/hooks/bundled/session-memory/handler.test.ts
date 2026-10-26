@@ -20,7 +20,7 @@ import {
 } from "../../internal-hooks.js";
 import { generateSlugViaLLM } from "../../llm-slug-generator.js";
 
-// Avoid calling the embedded OpenClaw agent (global command lane); keep this unit test deterministic.
+// Avoid calling the embedded AgileClaw agent (global command lane); keep this unit test deterministic.
 vi.mock("../../llm-slug-generator.js", () => ({
   generateSlugViaLLM: vi.fn().mockResolvedValue("simple-math"),
 }));

@@ -31,7 +31,7 @@ export function inspectCurrentStateStartupSchema(
   const metadata = assertOpenClawStateDatabaseOwner(database, { pathname: databasePath });
   if (metadata?.schema_version !== foundVersion) {
     throw new SqliteSchemaMismatchError(
-      `OpenClaw state database ${databasePath} metadata schema version ${typeof metadata?.schema_version === "number" ? metadata.schema_version : "invalid"} does not match ${foundVersion}.`,
+      `AgileClaw state database ${databasePath} metadata schema version ${typeof metadata?.schema_version === "number" ? metadata.schema_version : "invalid"} does not match ${foundVersion}.`,
     );
   }
   // Both policies inspect the same private or immutable snapshot; later opens read fresh facts.

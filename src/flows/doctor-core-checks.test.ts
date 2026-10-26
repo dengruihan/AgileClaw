@@ -277,7 +277,7 @@ describe("CORE_HEALTH_CHECKS", () => {
       expect.arrayContaining([
         expect.stringContaining("Codex plugin is disabled by config"),
         "Codex app-server command override includes inline arguments.",
-        "Custom Codex app-server command bypasses OpenClaw's managed exact-version binary.",
+        "Custom Codex app-server command bypasses AgileClaw's managed exact-version binary.",
         "Explicit native Codex model routes cannot reproduce authored request transport parameters.",
       ]),
     );
@@ -286,7 +286,7 @@ describe("CORE_HEALTH_CHECKS", () => {
       target: "openai/gpt-5.5",
       requirement: "Codex plugin enabled for routes that use the Codex runtime.",
       fixHint:
-        "Enable plugins.entries.codex and plugin loading, and remove codex from plugins.deny; or set the affected OpenAI models to an OpenClaw runtime policy.",
+        "Enable plugins.entries.codex and plugin loading, and remove codex from plugins.deny; or set the affected OpenAI models to an AgileClaw runtime policy.",
     });
   });
 

@@ -18,7 +18,7 @@ export const toolPluginMetadataSymbol = Symbol.for("openclaw.plugin-sdk.tool-plu
 
 /** Runtime context supplied to a concrete tool plugin execution handler. */
 export type ToolPluginExecutionContext = {
-  /** Plugin runtime API for tool implementations that need OpenClaw services. */
+  /** Plugin runtime API for tool implementations that need AgileClaw services. */
   api: OpenClawPluginApi;
   /** Abort signal for the current tool call. */
   signal?: AbortSignal;

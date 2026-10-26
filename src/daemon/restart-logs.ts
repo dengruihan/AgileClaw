@@ -53,7 +53,7 @@ export function resolveGatewaySupervisorLogPaths(
   options?: { platform?: NodeJS.Platform },
 ): GatewayLogPaths {
   // launchd supervisors write to ~/Library/Logs; systemd and schtasks use the
-  // OpenClaw state dir so generated service users can create the directory.
+  // AgileClaw state dir so generated service users can create the directory.
   return (options?.platform ?? process.platform) === "darwin"
     ? resolveMacLaunchAgentLogPaths(env)
     : resolveGatewayLogPaths(env);

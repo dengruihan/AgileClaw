@@ -162,7 +162,7 @@ beforeEach(async () => {
     OPENCLAW_CONFIG_PATH: path.join(root, "service.json"),
   };
   fs.writeFileSync(effectiveEnv.OPENCLAW_CONFIG_PATH!, "{}");
-  // This fixture child never imports OpenClaw or opens a handoff store; only the test parent does.
+  // This fixture child never imports AgileClaw or opens a handoff store; only the test parent does.
   child = spawn(
     process.execPath,
     ["-e", "process.stdout.write('ready\\n'); setInterval(()=>{}, 60000)"],

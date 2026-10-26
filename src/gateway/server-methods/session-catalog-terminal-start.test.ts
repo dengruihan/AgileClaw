@@ -308,7 +308,7 @@ describe("sessions.catalog.startTerminal", () => {
     );
   });
 
-  it("reuses terminal.open admission and ownership without an OpenClaw model target", async () => {
+  it("reuses terminal.open admission and ownership without an AgileClaw model target", async () => {
     const cwd = process.cwd();
     const resolveCreateSession = vi.fn(() => undefined);
     const startTerminalSession = vi.fn(async () => ({

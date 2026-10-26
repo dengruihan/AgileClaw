@@ -23,9 +23,9 @@ describe("tool display", () => {
       name: "Tool Search inner query",
       params: {
         name: "tool_call",
-        args: { id: "web_search", args: { query: "OpenClaw release notes" } },
+        args: { id: "web_search", args: { query: "AgileClaw release notes" } },
       },
-      detail: 'with for "OpenClaw release notes"',
+      detail: 'with for "AgileClaw release notes"',
     },
     {
       name: "trimmed action with a false first detail",

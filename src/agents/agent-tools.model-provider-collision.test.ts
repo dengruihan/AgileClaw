@@ -40,7 +40,7 @@ function toolNames(tools: { name: string }[]): string[] {
 }
 
 describe("applyModelProviderToolPolicy", () => {
-  it("keeps web_search for OpenRouter xAI model ids so OpenClaw tool routing stays authoritative", () => {
+  it("keeps web_search for OpenRouter xAI model ids so AgileClaw tool routing stays authoritative", () => {
     const filtered = selectedTools(baseTools, {
       modelCompat: {
         toolSchemaProfile: "xai",

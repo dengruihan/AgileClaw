@@ -231,7 +231,7 @@ describe("diagnostic heap profile owner", () => {
   it.each([
     "/fixture/node_modules/openclaw",
     "/fixture/node_modules/.pnpm/openclaw@1.0.0/node_modules/openclaw",
-  ])("preserves OpenClaw code attribution when installed at %s", async (root) => {
+  ])("preserves AgileClaw code attribution when installed at %s", async (root) => {
     native.resolveRoot.mockResolvedValue(root);
     const value = profile({ ...frame(), url: `${root}/dist/rows.js` }, `${root}/private/secret.js`);
     native.post.mockResolvedValue({ profile: value });

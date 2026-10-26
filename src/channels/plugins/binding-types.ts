@@ -16,7 +16,7 @@ import type { ChannelId } from "./types.public.js";
 export type ConfiguredBindingChannel = ChannelId;
 
 /**
- * Raw binding config entry from OpenClaw config.
+ * Raw binding config entry from AgileClaw config.
  */
 export type ConfiguredBindingRuleConfig = AgentBinding;
 

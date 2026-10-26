@@ -345,7 +345,7 @@ describe("printDaemonStatus", () => {
       report,
       testCase.warning
         ? "Foreign launchd jobs detected (macOS)."
-        : "Other OpenClaw launchd jobs (macOS)",
+        : "Other AgileClaw launchd jobs (macOS)",
     );
     expectMockLineContains(report, job.label);
     expectMockLineContains(report, job.program);
@@ -375,7 +375,7 @@ describe("printDaemonStatus", () => {
       gateway,
     });
 
-    expectMockLineContains(runtime.error, "Stale OpenClaw updater launchd job(s) detected.");
+    expectMockLineContains(runtime.error, "Stale AgileClaw updater launchd job(s) detected.");
     expectMockLineContains(runtime.error, "ai.openclaw.update.2026.5.12");
     expectMockLineContains(runtime.error, "ai.openclaw.manual-update.1717168800");
     expectMockLineContains(runtime.error, "launchctl remove <label>");
@@ -449,7 +449,7 @@ describe("printDaemonStatus", () => {
           runtime: { status: "stopped", state: "Disabled" },
           command: {
             programArguments: [],
-            environment: { OPENCLAW_WINDOWS_TASK_NAME: "OpenClaw Custom Gateway" },
+            environment: { OPENCLAW_WINDOWS_TASK_NAME: "AgileClaw Custom Gateway" },
           },
         },
       });
@@ -458,11 +458,13 @@ describe("printDaemonStatus", () => {
     }
 
     const errors = output(runtime.error);
-    expect(errors).toContain("Scheduled Task 'OpenClaw Custom Gateway' is registered but DISABLED");
+    expect(errors).toContain(
+      "Scheduled Task 'AgileClaw Custom Gateway' is registered but DISABLED",
+    );
     expect(errors).toContain("openclaw gateway start");
     expect(errors).toContain("openclaw doctor --fix");
     expect(errors).toContain("to re-enable it");
-    expect(errors).toContain('schtasks /Query /TN "OpenClaw Custom Gateway"');
+    expect(errors).toContain('schtasks /Query /TN "AgileClaw Custom Gateway"');
     expect(errors).not.toContain("likely exited immediately");
   });
 

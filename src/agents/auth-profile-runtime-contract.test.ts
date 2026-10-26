@@ -87,7 +87,7 @@ function providerRuntimeConfig(provider: string, runtime: string): OpenClawConfi
   } as OpenClawConfig;
 }
 
-describe("Auth profile runtime contract - embedded OpenClaw and CLI adapter", () => {
+describe("Auth profile runtime contract - embedded AgileClaw and CLI adapter", () => {
   beforeEach(() => {
     clearPluginMetadataLifecycleCaches();
     pluginMetadataMocks.getCurrentPluginMetadataSnapshot.mockClear();
@@ -141,7 +141,7 @@ describe("Auth profile runtime contract - embedded OpenClaw and CLI adapter", ()
     expect(plan.forwardedAuthProfileId).toBeUndefined();
   });
 
-  it("forwards a legacy OpenAI Codex auth profile through the embedded OpenClaw plan", () => {
+  it("forwards a legacy OpenAI Codex auth profile through the embedded AgileClaw plan", () => {
     const { plan } = resolveContractPlan({
       provider: AUTH_PROFILE_RUNTIME_CONTRACT.openAiCodexProvider,
       authProfileProvider: AUTH_PROFILE_RUNTIME_CONTRACT.openAiCodexProvider,
@@ -161,7 +161,7 @@ describe("Auth profile runtime contract - embedded OpenClaw and CLI adapter", ()
     expect(plan.forwardedAuthProfileId).toBe(AUTH_PROFILE_RUNTIME_CONTRACT.openAiCodexProfileId);
   });
 
-  it("forwards an OpenAI auth profile through an explicit OpenClaw plan", () => {
+  it("forwards an OpenAI auth profile through an explicit AgileClaw plan", () => {
     const { embeddedProvider, plan } = resolveContractPlan({
       provider: AUTH_PROFILE_RUNTIME_CONTRACT.openAiProvider,
       authProfileProvider: AUTH_PROFILE_RUNTIME_CONTRACT.openAiProvider,

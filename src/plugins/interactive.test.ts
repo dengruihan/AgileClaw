@@ -452,7 +452,7 @@ describe("plugin interactive handlers", () => {
     const registry = createEmptyPluginRegistry();
     registry.plugins.push({
       id: "openclaw-code-agent",
-      name: "OpenClaw Code Agent",
+      name: "AgileClaw Code Agent",
       status: "loaded",
     } as never);
     registry.interactiveHandlers = [
@@ -460,7 +460,7 @@ describe("plugin interactive handlers", () => {
         channel: "telegram",
         namespace: "code-agent",
         pluginId: "openclaw-code-agent",
-        pluginName: "OpenClaw Code Agent",
+        pluginName: "AgileClaw Code Agent",
         pluginRoot: "/plugins/openclaw-code-agent",
         handler: handler as never,
       },
@@ -474,7 +474,7 @@ describe("plugin interactive handlers", () => {
           handler: handler as never,
         },
         {
-          pluginName: "OpenClaw Code Agent",
+          pluginName: "AgileClaw Code Agent",
           pluginRoot: "/plugins/openclaw-code-agent",
         },
       ),

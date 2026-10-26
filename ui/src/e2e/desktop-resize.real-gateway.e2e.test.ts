@@ -648,7 +648,7 @@ suite.define(() => {
             "xdotool",
             "search",
             "--name",
-            "^OpenClaw resize proof$",
+            "^AgileClaw resize proof$",
             "windowactivate",
             "--sync",
           ]);

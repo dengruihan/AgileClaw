@@ -954,7 +954,7 @@ describe("runEmbeddedAttempt context engine sessionKey forwarding", () => {
       });
 
       if (runtimeOnly) {
-        expect(seen.prompt).toBe("Continue the OpenClaw runtime event.");
+        expect(seen.prompt).toBe("Continue the AgileClaw runtime event.");
       } else {
         expect(seen.prompt).toBe("what does this mean?");
       }
@@ -969,7 +969,7 @@ describe("runEmbeddedAttempt context engine sessionKey forwarding", () => {
       expect(runtimeContext.content).toContain("secret runtime context");
       expect(hoisted.detectAndLoadPromptImagesMock).toHaveBeenCalledTimes(1);
       expect(mockParams(hoisted.detectAndLoadPromptImagesMock).prompt).toBe(
-        runtimeOnly ? "Continue the OpenClaw runtime event." : "what does this mean?",
+        runtimeOnly ? "Continue the AgileClaw runtime event." : "what does this mean?",
       );
       const trajectoryEvents = await readTrajectoryEvents(tempPaths);
       const promptSubmitted = trajectoryEvents.find((event) => event.type === "prompt.submitted");
@@ -1315,7 +1315,7 @@ describe("runEmbeddedAttempt context engine sessionKey forwarding", () => {
 
       attemptOverrides: {
         currentInboundEventKind: "room_event",
-        currentInboundContext: { text: "[OpenClaw room event]" },
+        currentInboundContext: { text: "[AgileClaw room event]" },
         suppressNextUserMessagePersistence: true,
         transcriptPrompt: "",
       },

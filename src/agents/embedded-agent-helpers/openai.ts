@@ -107,7 +107,7 @@ function rewriteAssistantContent(
  * `function_call.id`, and matching `function_call_output.call_id` values
  * that exceed its 64-char `call_*` / `fc_*` shape. pi-ai skips its own
  * normalizer for same-model replay, then splits persisted `call_id|fc_id`
- * pairs directly into the provider payload, so OpenClaw must normalize here.
+ * pairs directly into the provider payload, so AgileClaw must normalize here.
  */
 export function normalizeOpenAIResponsesToolCallIds(messages: AgentMessage[]): AgentMessage[] {
   const resolveId = createOpenAIResponsesToolCallIdResolver();

@@ -204,7 +204,7 @@ const enDevices = {
         "This Gateway URL uses plaintext ws://. Use wss:// or Tailscale Serve, then create a new code for full access.",
       failed: "Could not create a setup code.",
       statusFailed: "Could not verify whether pairing completed.",
-      qrAlt: "OpenClaw mobile pairing QR code",
+      qrAlt: "AgileClaw mobile pairing QR code",
       qrUnavailable: "QR unavailable. Copy the setup code instead.",
       copySetupCode: "Copy setup code",
       nodeExpiresIn: "This setup link expires in {time}.",
@@ -213,7 +213,7 @@ const enDevices = {
       showSetupCode: "Show setup code",
       pending: "Device requests waiting for review: {count}",
       review: "Review",
-      waiting: "Official OpenClaw mobile apps connect automatically after scanning.",
+      waiting: "Official AgileClaw mobile apps connect automatically after scanning.",
       pairedTitle: "Device paired",
       deliveryUncertainTitle: "Pairing delivery could not be confirmed",
       deliveryUncertainHint:

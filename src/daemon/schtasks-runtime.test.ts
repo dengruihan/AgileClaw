@@ -57,8 +57,8 @@ describe("scheduled task runtime derivation", () => {
         state: name,
         lastRunResult: typeof result === "number" ? String(result) : undefined,
       });
-      expect(probeScheduledTaskExists("OpenClaw Gateway")).toBe(true);
-      expect(isScheduledTaskDefinitelyNotRunning("OpenClaw Gateway")).toBe(status === "stopped");
+      expect(probeScheduledTaskExists("AgileClaw Gateway")).toBe(true);
+      expect(isScheduledTaskDefinitelyNotRunning("AgileClaw Gateway")).toBe(status === "stopped");
     },
   );
 
@@ -78,7 +78,7 @@ describe("scheduled task runtime derivation", () => {
       const runtime = await readRuntime();
       if (missing) {
         expect(runtime).toEqual({ status: "stopped", missingUnit: true });
-        expect(isScheduledTaskDefinitelyNotRunning("OpenClaw Gateway")).toBe(false);
+        expect(isScheduledTaskDefinitelyNotRunning("AgileClaw Gateway")).toBe(false);
       } else {
         expect(runtime).toMatchObject({
           status: "unknown",
@@ -86,7 +86,7 @@ describe("scheduled task runtime derivation", () => {
           inspectionFailure: { code: "service-runtime-inspection-failed" },
         });
       }
-      expect(probeScheduledTaskExists("OpenClaw Gateway")).toBe(missing ? false : null);
+      expect(probeScheduledTaskExists("AgileClaw Gateway")).toBe(missing ? false : null);
     },
   );
 
@@ -118,7 +118,7 @@ describe("scheduled task runtime derivation", () => {
         : { status: 0, stdout: JSON.stringify({ state: 3 }) };
     });
     try {
-      expect(isScheduledTaskDefinitelyNotRunning("OpenClaw Gateway")).toBe(task.expected);
+      expect(isScheduledTaskDefinitelyNotRunning("AgileClaw Gateway")).toBe(task.expected);
       expect(Date.now()).toBe(Math.min(task.responseAfterMs, 5_000));
     } finally {
       vi.useRealTimers();

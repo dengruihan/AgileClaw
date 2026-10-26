@@ -8,7 +8,7 @@ const enBrowser = {
       "Browser control is unavailable for this connection. Reconnect with browser access.",
     navigationBlocked:
       "The current browser navigation rules block this address. Select another tab or enter an allowed address.",
-    navigationCheckFailed: "OpenClaw couldn’t verify this tab’s address. Refresh to try again.",
+    navigationCheckFailed: "AgileClaw couldn’t verify this tab’s address. Refresh to try again.",
     tabUnavailable: "This tab is no longer available. Select another tab.",
     noChatTarget: "Open a chat session first so the annotation has somewhere to go.",
     annotationLimitReached:

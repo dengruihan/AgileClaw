@@ -106,7 +106,7 @@ export async function validatePnpmIsolatedUpdate(params: {
     return {
       globalBinDir: null,
       failedStep: failedStep(
-        `OpenClaw shares a pnpm ${owner.layoutVersion} global install group with ${siblingPackages.join(", ")}. Automatic update stopped before mutation; update the group manually to preserve its sibling packages.`,
+        `AgileClaw shares a pnpm ${owner.layoutVersion} global install group with ${siblingPackages.join(", ")}. Automatic update stopped before mutation; update the group manually to preserve its sibling packages.`,
       ),
     };
   }
@@ -123,7 +123,7 @@ export async function validatePnpmIsolatedUpdate(params: {
     return {
       globalBinDir: null,
       failedStep: failedStep(
-        `Expected exactly one active pnpm ${owner.layoutVersion} OpenClaw install owned by the invoking project; found ${activePackageRoots.length} active installs and ${ownerMatchCount} owner matches. Automatic update stopped before mutation.`,
+        `Expected exactly one active pnpm ${owner.layoutVersion} AgileClaw install owned by the invoking project; found ${activePackageRoots.length} active installs and ${ownerMatchCount} owner matches. Automatic update stopped before mutation.`,
       ),
     };
   }
@@ -146,7 +146,7 @@ export async function validatePnpmIsolatedUpdate(params: {
     return {
       globalBinDir: null,
       failedStep: failedStep(
-        `The active pnpm command owns ${reportedGlobalRoot || "an unknown global root"}, not the invoking OpenClaw install at ${expectedGlobalRoot ?? "an unknown root"}. Automatic update stopped before mutation.`,
+        `The active pnpm command owns ${reportedGlobalRoot || "an unknown global root"}, not the invoking AgileClaw install at ${expectedGlobalRoot ?? "an unknown root"}. Automatic update stopped before mutation.`,
         `${params.installTarget.command} root -g`,
         expectedGlobalRoot ?? process.cwd(),
         rootProbe.result.stdout || null,

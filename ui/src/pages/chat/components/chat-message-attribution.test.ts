@@ -85,7 +85,7 @@ it.each([
 it.each(["loaded", "fetched"] as const)(
   "labels %s reply previews without borrowing the viewer",
   (location) => {
-    const props = { ...viewers[0], assistantName: "OpenClaw" };
+    const props = { ...viewers[0], assistantName: "AgileClaw" };
     const chain = projectTranscriptChain([groupFor(message)], {
       sessionKey: "agent:main:historical",
       runWorking: false,

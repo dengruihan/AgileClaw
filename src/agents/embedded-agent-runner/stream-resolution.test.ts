@@ -106,7 +106,7 @@ describe("prepared embedded stream strategy", () => {
     ).toBe("boundary-aware:openai-responses");
   });
 
-  it("describes default Codex fallback as OpenClaw native", () => {
+  it("describes default Codex fallback as AgileClaw native", () => {
     expect(
       resolveEmbeddedAgentStream({
         sessionId: "session-1",
@@ -325,8 +325,8 @@ describe("resolveEmbeddedAgentStream", () => {
     expect(innerStreamFn).toHaveBeenCalledTimes(1);
   });
 
-  it("routes Codex responses fallbacks through OpenClaw native transport", async () => {
-    // Codex OAuth models use the OpenClaw native transport, with prompt-cache
+  it("routes Codex responses fallbacks through AgileClaw native transport", async () => {
+    // Codex OAuth models use the AgileClaw native transport, with prompt-cache
     // markers stripped before the harness sees system prompt text.
     const nativeStreamFn = vi.fn(async (_model, context, options) => ({ context, options }));
     useNativeStreamFn(nativeStreamFn as never);
@@ -574,7 +574,7 @@ describe("resolveEmbeddedAgentStream", () => {
     expect(innerStreamFn).toHaveBeenCalledTimes(2);
   });
 
-  it("routes OpenClaw native OpenAI-compatible provider streams through boundary-aware transports", async () => {
+  it("routes AgileClaw native OpenAI-compatible provider streams through boundary-aware transports", async () => {
     const nativeStreamFn = getApiProvider("openai-completions")?.streamSimple;
     if (!nativeStreamFn) {
       throw new Error("expected native OpenAI-compatible stream function");
@@ -834,7 +834,7 @@ describe("resolveEmbeddedAgentStream", () => {
     },
   );
 
-  it("injects the resolved run api key into the OpenClaw native Codex Responses fallback", async () => {
+  it("injects the resolved run api key into the AgileClaw native Codex Responses fallback", async () => {
     const nativeStreamFn = vi.fn(async (_model, _context, options) => options);
     useNativeStreamFn(nativeStreamFn as never);
     const { streamFn } = resolveEmbeddedAgentStream({
@@ -856,7 +856,7 @@ describe("resolveEmbeddedAgentStream", () => {
     expect(nativeStreamFn).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to authStorage when no resolved api key is available for OpenClaw native fallback", async () => {
+  it("falls back to authStorage when no resolved api key is available for AgileClaw native fallback", async () => {
     const nativeStreamFn = vi.fn(async (_model, _context, options) => options);
     const authStorage = {
       getApiKey: vi.fn(async () => "stored-bearer-token"),
@@ -881,7 +881,7 @@ describe("resolveEmbeddedAgentStream", () => {
     expect(authStorage.getApiKey).toHaveBeenCalledWith("openai");
   });
 
-  it("forwards the run abort signal into the OpenClaw native fallback when callers omit one", async () => {
+  it("forwards the run abort signal into the AgileClaw native fallback when callers omit one", async () => {
     const nativeStreamFn = vi.fn(async (_model, _context, options) => options);
     const runSignal = new AbortController().signal;
     useNativeStreamFn(nativeStreamFn as never);
@@ -906,7 +906,7 @@ describe("resolveEmbeddedAgentStream", () => {
   });
 
   it.each(["run", "caller"] as const)(
-    "cancels the authenticated OpenClaw native fallback when the %s signal aborts",
+    "cancels the authenticated AgileClaw native fallback when the %s signal aborts",
     async (signalOwner) => {
       const nativeStreamFn = vi.fn(async (_model, _context, options) => options);
       const runController = new AbortController();
@@ -936,7 +936,7 @@ describe("resolveEmbeddedAgentStream", () => {
     },
   );
 
-  it("forwards the run signal on the sync OpenClaw native fallback path without auth credentials", async () => {
+  it("forwards the run signal on the sync AgileClaw native fallback path without auth credentials", async () => {
     const nativeStreamFn = vi.fn(async (_model, _context, options) => options);
     const runSignal = new AbortController().signal;
     useNativeStreamFn(nativeStreamFn as never);
@@ -958,7 +958,7 @@ describe("resolveEmbeddedAgentStream", () => {
     expect(result.signal).toBe(runSignal);
   });
 
-  it("strips cache boundary markers on the OpenClaw native fallback path", async () => {
+  it("strips cache boundary markers on the AgileClaw native fallback path", async () => {
     const nativeStreamFn = vi.fn(async (_model, context, _options) => context);
     useNativeStreamFn(nativeStreamFn as never);
     const { streamFn } = resolveEmbeddedAgentStream({

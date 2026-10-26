@@ -1,4 +1,4 @@
-// Bridges ACP transcript events into persisted OpenClaw session transcripts.
+// Bridges ACP transcript events into persisted AgileClaw session transcripts.
 import { resolveAcpSessionCwd } from "@openclaw/acp-core/runtime/session-identifiers";
 import type { AgentRunTerminalOutcome } from "../../agents/agent-run-terminal-outcome.js";
 import { persistAcpTurnTranscript } from "../../agents/command/transcript-persistence.js";

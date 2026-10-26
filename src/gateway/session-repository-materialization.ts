@@ -157,7 +157,7 @@ export async function materializeSessionRepositoryWorkspaceOnGateway(params: {
       ancestor.code !== 0 ||
       tree !== published.workspace_tree ||
       parent !== (published.previous_head_commit ?? repository.baseCommit) ||
-      !message.includes(`OpenClaw-Publication: ${published.request_id}`)
+      !message.includes(`AgileClaw-Publication: ${published.request_id}`)
     ) {
       throw new Error(
         "Recorded repository publication commit could not be verified; review publication before retrying the Gateway move",

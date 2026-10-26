@@ -217,14 +217,14 @@ describeControlUiE2e("Control UI Plugins mocked Gateway E2E", () => {
         (await gateway.getRequests("plugins.catalog.get")).map((request) => request.params),
       ).toContainEqual({ id: matrixDiscoveryPlugin.id });
       expect(
-        await page.getByText("Connect OpenClaw to Matrix rooms and direct messages.").count(),
+        await page.getByText("Connect AgileClaw to Matrix rooms and direct messages.").count(),
       ).toBe(1);
       const detailPanel = page.locator(".plugin-catalog-detail__panel");
       const detailReadme = page.locator(".plugin-catalog-detail__readme");
       const detailSidebar = page.locator(".plugin-catalog-detail__sidebar");
       await detailPanel.getByText("Matrix messaging", { exact: true }).waitFor();
       await detailReadme
-        .getByText("Connect OpenClaw to Matrix rooms and direct messages.")
+        .getByText("Connect AgileClaw to Matrix rooms and direct messages.")
         .waitFor();
       expect(await page.locator(".plugin-catalog-detail [role=tablist]").count()).toBe(0);
       const [panelBox, readmeBox, sidebarBox] = await Promise.all([

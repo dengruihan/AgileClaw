@@ -140,7 +140,7 @@ describe("update-cli", () => {
     const localAppData = createCaseDir("openclaw-localappdata");
     const portableGitMingw = path.join(
       localAppData,
-      "OpenClaw",
+      "AgileClaw",
       "deps",
       "portable-git",
       "mingw64",
@@ -148,7 +148,7 @@ describe("update-cli", () => {
     );
     const portableGitUsr = path.join(
       localAppData,
-      "OpenClaw",
+      "AgileClaw",
       "deps",
       "portable-git",
       "usr",

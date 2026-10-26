@@ -515,7 +515,7 @@ describe("Doctor maintenance admission", () => {
                 check: "doctor",
                 code: "agent-database-lease-active",
                 message:
-                  "Doctor could not enter maintenance. An agent database is in use. Stop other OpenClaw processes using this state, then retry the update.",
+                  "Doctor could not enter maintenance. An agent database is in use. Stop other AgileClaw processes using this state, then retry the update.",
               },
             ]);
           } else {

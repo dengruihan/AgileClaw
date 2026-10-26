@@ -332,7 +332,7 @@ describe("agent harness registry", () => {
     );
   });
 
-  it("honors explicit provider OpenClaw runtime policy", () => {
+  it("honors explicit provider AgileClaw runtime policy", () => {
     registerAgentHarness(makeHarness("plugin-harness", { priority: 200 }), {
       ownerPluginId: "plugin-a",
     });

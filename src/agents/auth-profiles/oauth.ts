@@ -389,7 +389,7 @@ export async function resolveApiKeyForProfile(
     return null;
   }
   // Claude owns this native login slot. Legacy persisted copies must never
-  // resolve, refresh, or leave OpenClaw as bearer tokens.
+  // resolve, refresh, or leave AgileClaw as bearer tokens.
   if (profileId === CLAUDE_CLI_PROFILE_ID) {
     return null;
   }

@@ -96,7 +96,7 @@ async function writeFixtures(workspaceDir: string): Promise<void> {
     "page.html": "<!doctype html><title>Artifact proof</title><h1>Ready</h1>\n",
     "vector.svg":
       '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#2563eb"/></svg>',
-    "report.pdf": "%PDF-1.4\n% OpenClaw artifact proof\n",
+    "report.pdf": "%PDF-1.4\n% AgileClaw artifact proof\n",
     "worker.py": "def ready():\n    return True\n",
     "script.js": "export const ready = true;\n",
     "settings.toml": 'name = "media-artifacts"\n',
@@ -109,7 +109,7 @@ async function writeFixtures(workspaceDir: string): Promise<void> {
     ),
   );
   const archive = new JSZip();
-  archive.file("README.txt", "OpenClaw artifact proof\n");
+  archive.file("README.txt", "AgileClaw artifact proof\n");
   await fs.writeFile(
     path.join(workspaceDir, "bundle.zip"),
     await archive.generateAsync({ type: "nodebuffer" }),

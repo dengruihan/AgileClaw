@@ -1579,7 +1579,7 @@ describe("runGatewayLoop", () => {
 
   it("returns the supervisor-owned restart code after releasing the lock", async () => {
     peekGatewayRestartReason.mockReturnValue(undefined);
-    process.env.OPENCLAW_WINDOWS_TASK_NAME = "OpenClaw Gateway";
+    process.env.OPENCLAW_WINDOWS_TASK_NAME = "AgileClaw Gateway";
 
     try {
       await withIsolatedSignals(async ({ captureSignal }) => {

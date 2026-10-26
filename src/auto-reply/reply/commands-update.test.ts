@@ -148,7 +148,7 @@ describe("handleUpdateCommand", () => {
     });
     const result = await handleUpdateCommand(updateCommandParams(), true);
     expect(result?.reply?.text).toBe(
-      "⚠️ OpenClaw couldn't finish updating.\nFor details, open Settings → Updates in the Control UI or run `openclaw update status` in your terminal.",
+      "⚠️ AgileClaw couldn't finish updating.\nFor details, open Settings → Updates in the Control UI or run `openclaw update status` in your terminal.",
     );
   });
 
@@ -243,7 +243,7 @@ describe("handleUpdateCommand", () => {
     expect(await handleUpdateCommand(params, true)).toEqual({
       shouldContinue: false,
       reply: {
-        text: "⬆️ OpenClaw is updating.\nFor details, open Settings → Updates in the Control UI or run `openclaw update status` in your terminal.",
+        text: "⬆️ AgileClaw is updating.\nFor details, open Settings → Updates in the Control UI or run `openclaw update status` in your terminal.",
       },
     });
     expect(dispatch).toHaveBeenCalledTimes(1);
@@ -279,7 +279,7 @@ describe("handleUpdateCommand", () => {
     const result = await handleUpdateCommand(params, true);
 
     expect(result?.reply?.text).toBe(
-      "⚠️ OpenClaw couldn't finish updating.\nFor details, open Settings → Updates in the Control UI or run `openclaw update status` in your terminal.",
+      "⚠️ AgileClaw couldn't finish updating.\nFor details, open Settings → Updates in the Control UI or run `openclaw update status` in your terminal.",
     );
     expect(dispatch).toHaveBeenCalledTimes(2);
     expect(dispatch.mock.calls[1]?.slice(0, 2)).toEqual([
@@ -311,7 +311,7 @@ describe("handleUpdateCommand", () => {
   it.each([true, false])(
     "preserves queued ack custody without a duplicate reply (%s)",
     async (ackQueued) => {
-      const acknowledgement = "⬆️ Updating OpenClaw… You'll get a message here when it's done.";
+      const acknowledgement = "⬆️ Updating AgileClaw… You'll get a message here when it's done.";
       dispatch.mockResolvedValueOnce({
         ok: true,
         runId,
@@ -355,7 +355,9 @@ describe("handleUpdateCommand", () => {
 
     expect(result?.shouldContinue).toBe(false);
     const headline =
-      status === "error" ? "⚠️ OpenClaw couldn't finish updating." : "ℹ️ OpenClaw wasn't updated.";
+      status === "error"
+        ? "⚠️ AgileClaw couldn't finish updating."
+        : "ℹ️ AgileClaw wasn't updated.";
     expect(result?.reply?.text).toBe(
       `${headline}\nOpen Settings → Updates in the Control UI for details. To continue, run \`${command}\` in your terminal.`,
     );

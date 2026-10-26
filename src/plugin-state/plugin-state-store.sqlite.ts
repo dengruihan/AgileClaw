@@ -1,4 +1,4 @@
-// Plugin state SQLite helpers persist plugin state in the OpenClaw state database.
+// Plugin state SQLite helpers persist plugin state in the AgileClaw state database.
 import type { DatabaseSync } from "node:sqlite";
 import { err, ok, type Result } from "@openclaw/normalization-core/result";
 import type { ExpressionBuilder } from "kysely";

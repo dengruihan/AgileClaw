@@ -69,27 +69,27 @@ describe("findExtraGatewayServices (win32)", () => {
 
   it("keeps verified Node and legacy services while rejecting an unrelated branded monitor", async () => {
     listScheduledTasksMock.mockReturnValue([
-      task("\\OpenClaw Gateway", "C:\\OpenClaw\\openclaw.exe", "gateway run"),
-      task("\\OpenClaw Gateway (dev)", "C:\\OpenClaw\\openclaw.exe", "gateway run --profile dev"),
-      task("\\OpenClaw Gateway Backup", "C:\\OpenClaw\\openclaw.exe", "gateway run"),
+      task("\\AgileClaw Gateway", "C:\\AgileClaw\\openclaw.exe", "gateway run"),
+      task("\\AgileClaw Gateway (dev)", "C:\\AgileClaw\\openclaw.exe", "gateway run --profile dev"),
+      task("\\AgileClaw Gateway Backup", "C:\\AgileClaw\\openclaw.exe", "gateway run"),
       task(
-        "\\OpenClaw Node",
+        "\\AgileClaw Node",
         "C:\\Program Files\\nodejs\\node.exe",
-        '"C:\\OpenClaw\\dist\\entry.js" node run',
+        '"C:\\AgileClaw\\dist\\entry.js" node run',
       ),
       task("\\Clawdbot Legacy", "C:\\clawdbot\\clawdbot.exe", "run"),
       task(
-        "\\OpenClaw Gateway Monitor",
+        "\\AgileClaw Gateway Monitor",
         "C:\\tools\\monitor.exe",
         "--gateway-url http://127.0.0.1:18789",
       ),
       {
-        taskPath: "\\OpenClaw CrossAction",
+        taskPath: "\\AgileClaw CrossAction",
         state: null,
         actions: [
           {
             type: 0,
-            path: "C:\\OpenClaw\\openclaw.exe",
+            path: "C:\\AgileClaw\\openclaw.exe",
             arguments: "node run",
             workingDirectory: "",
           },
@@ -108,14 +108,14 @@ describe("findExtraGatewayServices (win32)", () => {
     expect(result.errors).toEqual([]);
     expect(result.services).toEqual([
       expect.objectContaining({
-        label: "\\OpenClaw Gateway Backup",
+        label: "\\AgileClaw Gateway Backup",
         marker: "openclaw",
         legacy: false,
       }),
-      expect.objectContaining({ label: "\\OpenClaw Node", marker: "openclaw", legacy: false }),
+      expect.objectContaining({ label: "\\AgileClaw Node", marker: "openclaw", legacy: false }),
       expect.objectContaining({ label: "\\Clawdbot Legacy", marker: "clawdbot", legacy: true }),
       expect.objectContaining({
-        label: "\\OpenClaw CrossAction",
+        label: "\\AgileClaw CrossAction",
         marker: "openclaw",
         legacy: false,
       }),
@@ -124,9 +124,9 @@ describe("findExtraGatewayServices (win32)", () => {
     const managed = await listManagedOpenClawGatewayServices(nativeEnv);
     expect(managed.errors).toEqual([]);
     expect(managed.services.map((service) => service.label)).toEqual([
-      "\\OpenClaw Gateway",
-      "\\OpenClaw Gateway (dev)",
-      "\\OpenClaw Gateway Backup",
+      "\\AgileClaw Gateway",
+      "\\AgileClaw Gateway (dev)",
+      "\\AgileClaw Gateway Backup",
     ]);
     for (const service of result.services) {
       expect(service).not.toHaveProperty("windowsProfile");
@@ -197,20 +197,20 @@ describe("findExtraGatewayServices (win32)", () => {
     message?: string;
     exact?: boolean;
   };
-  const knownLabels = ["\\OpenClaw Gateway (dev)", "\\Clawdbot Gateway"];
+  const knownLabels = ["\\AgileClaw Gateway (dev)", "\\Clawdbot Gateway"];
   const missingLabels = [...knownLabels, "\\Custom Service"];
   const custom = "\\Custom Assistant";
   it.each<IncompleteCase>([
     ...[undefined, []].map((actions) => ({
       name: `known selectors with ${actions ? "empty" : "missing"} actions`,
-      tasks: ["\\OpenClaw Gateway", "\\Selected Custom"].map((taskPath) => ({
+      tasks: ["\\AgileClaw Gateway", "\\Selected Custom"].map((taskPath) => ({
         taskPath,
         state: null,
         actions,
       })),
       selected: "\\Selected Custom",
       projection: "both" as const,
-      sources: ["\\OpenClaw Gateway", "\\Selected Custom"],
+      sources: ["\\AgileClaw Gateway", "\\Selected Custom"],
     })),
     ...knownLabels.map((label) => ({
       name: `unreadable known launcher ${label}`,
@@ -228,7 +228,7 @@ describe("findExtraGatewayServices (win32)", () => {
         }
         if (fault === "multiple actions") {
           selected.actions = [0, 1].map(
-            () => task(custom, "C:\\OpenClaw\\openclaw.exe", "gateway run").actions[0]!,
+            () => task(custom, "C:\\AgileClaw\\openclaw.exe", "gateway run").actions[0]!,
           );
         }
         return {
@@ -250,8 +250,8 @@ describe("findExtraGatewayServices (win32)", () => {
       sources: [],
     },
     {
-      name: "disappeared OpenClaw launchers with unknown native state",
-      tasks: missingLabels.map((label) => task(label, "C:\\OpenClaw\\gateway.cmd", "")),
+      name: "disappeared AgileClaw launchers with unknown native state",
+      tasks: missingLabels.map((label) => task(label, "C:\\AgileClaw\\gateway.cmd", "")),
       read: "missing",
       sources: missingLabels,
       exact: true,
@@ -263,7 +263,7 @@ describe("findExtraGatewayServices (win32)", () => {
           ...task("\\Mixed Assistant", "C:\\clawdbot\\clawdbot.exe", "run"),
           actions: [
             task(custom, "C:\\clawdbot\\clawdbot.exe", "run").actions[0]!,
-            task(custom, "C:\\OpenClaw\\openclaw.exe", "gateway run").actions[0]!,
+            task(custom, "C:\\AgileClaw\\openclaw.exe", "gateway run").actions[0]!,
           ],
         },
       ],
@@ -341,7 +341,7 @@ describe("findExtraGatewayServices (win32)", () => {
       await fs.writeFile(entry, "export {};\n");
       await fs.writeFile(executable, "synthetic executable bytes; never launched\n");
       const script = entryKind === "relative script" ? path.join("dist", "entry.js") : entry;
-      const labels = ["\\OpenClaw Gateway (dev)", "\\Custom Modern"];
+      const labels = ["\\AgileClaw Gateway (dev)", "\\Custom Modern"];
       listScheduledTasksMock.mockReturnValue(
         labels.map((label) => ({
           taskPath: label,

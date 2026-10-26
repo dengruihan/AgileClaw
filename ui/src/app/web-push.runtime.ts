@@ -58,7 +58,7 @@ function requirePushManager(registration: ServiceWorkerRegistration): PushManage
   const manager = pushManagerFor(registration);
   if (!manager || typeof manager.subscribe !== "function") {
     throw new Error(
-      "Web Push is unavailable in this browser. On iPhone or iPad, add OpenClaw to the Home Screen and open the installed app.",
+      "Web Push is unavailable in this browser. On iPhone or iPad, add AgileClaw to the Home Screen and open the installed app.",
     );
   }
   return manager;

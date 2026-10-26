@@ -1,4 +1,4 @@
-// Verifies the read-only OpenClaw gateway tool schema and config reads.
+// Verifies the read-only AgileClaw gateway tool schema and config reads.
 import { expectDefined } from "@openclaw/normalization-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { REDACTED_SENTINEL, redactConfigSnapshot } from "../config/redact-snapshot.js";

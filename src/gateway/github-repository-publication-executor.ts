@@ -217,7 +217,7 @@ export async function executeRepositoryGitHubPublication(params: {
         value.parents.length !== 1 ||
         objectSha(value.parents[0]) !== (row.previous_head_commit ?? snapshot.baseCommit) ||
         typeof value.message !== "string" ||
-        !value.message.split(/\r?\n/u).includes("OpenClaw-Publication: " + row.request_id)
+        !value.message.split(/\r?\n/u).includes("AgileClaw-Publication: " + row.request_id)
       ) {
         throw new GitHubPublicationWorkspaceChangedError(
           "GitHub publication commit does not match its accepted checkpoint.",
@@ -365,7 +365,7 @@ export async function executeRepositoryGitHubPublication(params: {
       !hasGitHubPublicationMessageFooter(
         preparedCommitMessage ?? "",
         attribution?.trailers ?? [],
-        "OpenClaw-Publication: " + row.request_id,
+        "AgileClaw-Publication: " + row.request_id,
       )
     ) {
       throw new GitHubPublicationCreditChangedError();
@@ -433,7 +433,7 @@ export async function executeRepositoryGitHubPublication(params: {
         message:
           appendGitHubPublicationMessage(credit ? title + "\n\nWorked on by:\n" + credit : title, [
             ...(attribution?.trailers ?? []),
-            "OpenClaw-Publication: " + row.request_id,
+            "AgileClaw-Publication: " + row.request_id,
           ]) + "\n",
       });
       headCommit = verifyCommit(commit);
@@ -502,7 +502,7 @@ export async function executeRepositoryGitHubPublication(params: {
         "\n\n" +
         marker +
         (sessionUrl?.startsWith("https://")
-          ? "\n\n---\n[View the OpenClaw team session](" + sessionUrl + ")"
+          ? "\n\n---\n[View the AgileClaw team session](" + sessionUrl + ")"
           : "");
       identity = await refreshIdentity();
       assertAction();

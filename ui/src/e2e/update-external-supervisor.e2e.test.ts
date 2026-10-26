@@ -61,7 +61,7 @@ suite.define(() => {
         await gateway.waitForRequest("update.run");
         const report = dialog.locator(".update-run-view__report");
         await report
-          .getByText(`ℹ️ OpenClaw update skipped: ${reason}.`, { exact: false })
+          .getByText(`ℹ️ AgileClaw update skipped: ${reason}.`, { exact: false })
           .waitFor();
         await page.screenshot({
           path: path.join(proofDir, "refused-update.png"),

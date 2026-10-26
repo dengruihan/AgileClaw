@@ -7,7 +7,7 @@ import { isPluginInPackageBundledRoots, isSourceCheckoutRoot } from "./bundled-d
 import { pluginCacheExistsSync, pluginCacheRealpathSync } from "./plugin-cache-files.js";
 import { getPluginCache } from "./plugin-cache.js";
 
-/** Env var that points bundled-plugin lookup at an OpenClaw source checkout. */
+/** Env var that points bundled-plugin lookup at an AgileClaw source checkout. */
 const OPENCLAW_DEV_SOURCE_ROOT_ENV = "OPENCLAW_DEV_SOURCE_ROOT";
 
 function readPackageName(packageJsonPath: string): string | null {
@@ -19,7 +19,7 @@ function readPackageName(packageJsonPath: string): string | null {
   }
 }
 
-/** Resolves and validates the configured OpenClaw development source root. */
+/** Resolves and validates the configured AgileClaw development source root. */
 export function resolveOpenClawDevSourceRoot(env: NodeJS.ProcessEnv = process.env): string | null {
   const rawRoot = env[OPENCLAW_DEV_SOURCE_ROOT_ENV]?.trim();
   if (!rawRoot) {
@@ -54,7 +54,7 @@ export function resolveBundledPluginSourceRoot(
 }
 
 export function formatSourceBundledPluginNotice(pluginId: string): string {
-  return `Kept bundled plugin "${pluginId}" from the OpenClaw source build; the registry artifact has no matching host SDK build identity. Matching version strings do not establish SDK compatibility.`;
+  return `Kept bundled plugin "${pluginId}" from the AgileClaw source build; the registry artifact has no matching host SDK build identity. Matching version strings do not establish SDK compatibility.`;
 }
 
 /** Prioritizes already-bundled candidates; the selector itself never grants provenance. */

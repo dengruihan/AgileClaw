@@ -1,4 +1,4 @@
-// Covers preferred OpenClaw temp directory resolution.
+// Covers preferred AgileClaw temp directory resolution.
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -194,7 +194,7 @@ describe.skipIf(process.platform === "win32")("POSIX preferred temp directory se
         lstatSync,
         fallbackLstatSync,
       }),
-    ).toThrow(/Unsafe fallback OpenClaw temp dir/);
+    ).toThrow(/Unsafe fallback AgileClaw temp dir/);
   });
 
   it("uses an unscoped fallback suffix when process uid is unavailable", () => {
@@ -244,7 +244,7 @@ describe.skipIf(process.platform === "win32")("POSIX preferred temp directory se
         tmpdir: vi.fn(() => "/var/fallback"),
         warn: vi.fn(),
       }),
-    ).toThrow(/Unable to create fallback OpenClaw temp dir/);
+    ).toThrow(/Unable to create fallback AgileClaw temp dir/);
   });
 
   it("still uses the POSIX preferred path on non-Windows platforms when available", () => {
@@ -478,7 +478,7 @@ describe.skipIf(process.platform === "win32")("POSIX temp directory admission an
           expect(f.resolve()).toBe(f.fallbackDir);
           expectPrivateDirectory(f.fallbackDir, f.uid);
         } else {
-          expect(f.resolve).toThrow(/Unsafe fallback OpenClaw temp dir/);
+          expect(f.resolve).toThrow(/Unsafe fallback AgileClaw temp dir/);
         }
         expect(fs.lstatSync(f.candidate, { bigint: true })).toMatchObject({
           dev: admitted.dev,

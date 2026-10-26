@@ -145,7 +145,9 @@ describe("Claw projects", () => {
     expect(validated.ok).toBe(true);
     if (validated.ok) {
       expect(validated.claw.manifest.agent.id).toBe("research-assistant");
-      expect(validated.claw.clawMarkdownBody?.toString()).toContain("purpose-built OpenClaw agent");
+      expect(validated.claw.clawMarkdownBody?.toString()).toContain(
+        "purpose-built AgileClaw agent",
+      );
     }
   });
 
@@ -234,7 +236,7 @@ describe("Claw projects", () => {
     expect(entries).not.toContain("package/not-packed.txt");
   });
 
-  it("preserves the canonical metadata-selected OpenClaw profile path", async () => {
+  it("preserves the canonical metadata-selected AgileClaw profile path", async () => {
     const project = tempDirs.make("openclaw-claw-custom-profile-");
     const output = join(tempDirs.make("openclaw-claw-custom-profile-output-"), "claw.tgz");
     await writeRichProject(project);

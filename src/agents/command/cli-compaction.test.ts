@@ -331,7 +331,7 @@ describe("runCliTurnCompactionLifecycle", () => {
     expect(maintenanceCall?.sessionKey).toBe(sessionKey);
     expect(maintenanceCall?.sessionFile).toBe(sessionKey);
     expect(updatedEntry?.compactionCount).toBe(1);
-    // Once OpenClaw rewrites the transcript, external CLI resume ids are stale
+    // Once AgileClaw rewrites the transcript, external CLI resume ids are stale
     // and must be cleared so the next turn starts from the compacted prompt.
     expect(updatedEntry?.cliSessionBindings?.["claude-cli"]).toBeUndefined();
     expect(updatedEntry?.cliSessionIds?.["claude-cli"]).toBeUndefined();

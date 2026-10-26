@@ -53,8 +53,8 @@ it.each(["stable", "beta", "dev", "extended-stable"] as const)(
       JSON.stringify({
         schemaVersion: 1,
         owner: "macos-app",
-        displayName: "OpenClaw.app",
-        updateHint: "Update OpenClaw.app to update this Gateway.",
+        displayName: "AgileClaw.app",
+        updateHint: "Update AgileClaw.app to update this Gateway.",
       }),
     );
     vi.mocked(resolveOpenClawPackageRoot).mockResolvedValue(root);

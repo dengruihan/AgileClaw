@@ -26,7 +26,7 @@ type ReadyThread = {
 };
 
 const RECOVERY_FAILURE_TEXT =
-  "⚠️ OpenClaw couldn't finish this reply. Check the conversation before trying again. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow` in your terminal.";
+  "⚠️ AgileClaw couldn't finish this reply. Check the conversation before trying again. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow` in your terminal.";
 const UNLOAD_FAILURE_DETAIL =
   "Codex did not confirm unloading its previous configuration. The thread is preserved; stop competing native work and reconnect before retrying.";
 const SHUTDOWN_FAILURE_DETAIL =

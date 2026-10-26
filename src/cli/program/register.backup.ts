@@ -239,10 +239,10 @@ function registerBackupGitCommands(backup: Command): void {
 
   git
     .command("create")
-    .description("Dump selected OpenClaw databases and commit one Git revision")
+    .description("Dump selected AgileClaw databases and commit one Git revision")
     .requiredOption("--repository <path>", "Git backup repository directory")
     .option("--all", "Back up the shared database and every registered agent database", false)
-    .option("--global", "Back up the shared OpenClaw state database", false)
+    .option("--global", "Back up the shared AgileClaw state database", false)
     .option("--agent <id>", "Back up an agent database (repeatable)", collectOption, [])
     .option("--push", "Push the current branch to origin", false)
     .option("--exclude-secrets", "Omit credential-bearing database tables", false)
@@ -316,9 +316,9 @@ function registerBackupSqliteCommands(backup: Command): void {
 
   sqlite
     .command("create")
-    .description("Create a compact, verified snapshot of an OpenClaw SQLite database")
-    .option("--global", "Snapshot the shared OpenClaw state database", false)
-    .option("--agent <id>", "Snapshot one per-agent OpenClaw database")
+    .description("Create a compact, verified snapshot of an AgileClaw SQLite database")
+    .option("--global", "Snapshot the shared AgileClaw state database", false)
+    .option("--agent <id>", "Snapshot one per-agent AgileClaw database")
     .requiredOption("--repository <path>", "Snapshot repository directory")
     .option("--json", "Output JSON", false)
     .addHelpText(

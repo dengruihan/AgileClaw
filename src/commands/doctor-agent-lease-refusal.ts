@@ -9,7 +9,7 @@ function createDoctorAgentLeaseRefusal(
   cause?: unknown,
 ): DoctorMaintenanceRefusalError {
   const message =
-    "Doctor could not enter maintenance. An agent database is in use. Stop other OpenClaw processes using this state, then retry the update.";
+    "Doctor could not enter maintenance. An agent database is in use. Stop other AgileClaw processes using this state, then retry the update.";
   return new DoctorMaintenanceRefusalError(
     message,
     { kind: "deferred", reason: "agent-database-in-use" },

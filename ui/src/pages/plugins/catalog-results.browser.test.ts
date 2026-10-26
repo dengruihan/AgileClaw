@@ -246,7 +246,7 @@ it.each([390, 768, 1366, 1440])(
               transport: "streamable-http",
               auth: "oauth",
               scope: "documents.read documents.write",
-              setup: "Connect your workspace in OpenClaw.",
+              setup: "Connect your workspace in AgileClaw.",
             },
           ],
         ),
@@ -267,7 +267,7 @@ it.each([390, 768, 1366, 1440])(
     const server = page.getByText("workspace", { exact: true });
     await server.click();
     await expect.element(page.getByText("OAuth", { exact: true })).toBeVisible();
-    await expect.element(page.getByText("Connect your workspace in OpenClaw.")).toBeVisible();
+    await expect.element(page.getByText("Connect your workspace in AgileClaw.")).toBeVisible();
     expect(gap()).toBeLessThanOrEqual(32);
     const authLabel = [...container.querySelectorAll("dt")].find(
       (label) => label.textContent === "Authentication",

@@ -23,20 +23,20 @@ describe("status-overview-surface", () => {
   it("shows the app owner and its update hint without offering a package update", () => {
     const update = buildStatusUpdateSurface({
       update: {
-        root: "/Applications/OpenClaw.app/Contents/Resources/openclaw",
+        root: "/Applications/AgileClaw.app/Contents/Resources/openclaw",
         installKind: "host",
         packageManager: "unknown",
         installOwner: {
           schemaVersion: 1,
           owner: "macos-app",
-          displayName: "OpenClaw.app",
-          updateHint: "Update OpenClaw.app to update this Gateway.",
+          displayName: "AgileClaw.app",
+          updateHint: "Update AgileClaw.app to update this Gateway.",
         },
       },
     });
 
     expect(update.updateLine).toBe(
-      "Managed by OpenClaw.app. Update OpenClaw.app to update this Gateway.",
+      "Managed by AgileClaw.app. Update AgileClaw.app to update this Gateway.",
     );
     expect(update.updateAvailable).toBe(false);
     expect(update.gitLabel).toBeNull();

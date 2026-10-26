@@ -402,7 +402,7 @@ describe("config mutate helpers", () => {
       const snapshot = createSnapshot({ hash: "hash-1", path: configPath, sourceConfig: {} });
 
       await expect(replaceConfigFile({ snapshot, nextConfig: {} })).rejects.toMatchObject({
-        message: `OpenClaw cannot write to the config directory ${configuredDir}. Fix its ownership or permissions, then try again. Underlying error: ${failure.message}`,
+        message: `AgileClaw cannot write to the config directory ${configuredDir}. Fix its ownership or permissions, then try again. Underlying error: ${failure.message}`,
         cause: failure,
       });
     },

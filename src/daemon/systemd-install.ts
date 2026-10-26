@@ -158,7 +158,7 @@ function removeSystemdInlineEnvironmentKeys(content: string, keys: ReadonlySet<s
 
 function removeLegacyGatewayVersionMetadata(content: string): string {
   const description =
-    /^Description=OpenClaw Gateway \((?:(profile: [^,)\r\n]+), )?v([^)\r\n]+)\)$/mu.exec(content);
+    /^Description=AgileClaw Gateway \((?:(profile: [^,)\r\n]+), )?v([^)\r\n]+)\)$/mu.exec(content);
   if (!description) {
     return content;
   }
@@ -190,8 +190,8 @@ function removeLegacyGatewayVersionMetadata(content: string): string {
     return content;
   }
   const replacement = description[1]
-    ? `Description=OpenClaw Gateway (${description[1]})`
-    : "Description=OpenClaw Gateway";
+    ? `Description=AgileClaw Gateway (${description[1]})`
+    : "Description=AgileClaw Gateway";
   const refreshed =
     content.slice(0, description.index) +
     replacement +

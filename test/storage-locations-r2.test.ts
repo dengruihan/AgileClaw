@@ -103,13 +103,13 @@ describe("R2 storage publication", () => {
           .putObject("backup.tar.gz", archive(), {
             precondition: async () => {
               if (owner !== "installation-a") {
-                throw new Error("Backup namespace belongs to another OpenClaw installation.");
+                throw new Error("Backup namespace belongs to another AgileClaw installation.");
               }
             },
           })
           .catch((error: unknown) => error);
         expect(failure).toBeInstanceOf(Error);
-        expect(String(failure)).toContain("belongs to another OpenClaw installation");
+        expect(String(failure)).toContain("belongs to another AgileClaw installation");
         if (cleanupFails) {
           expect(String(failure)).toContain(
             "Multipart cleanup also failed; remove incomplete uploads in bucket test-bucket.",

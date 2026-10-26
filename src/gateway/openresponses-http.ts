@@ -520,7 +520,7 @@ export async function handleOpenResponsesHttpRequest(
         output.push(
           createAssistantOutputItem({
             id: outputItemId,
-            text: assistantText || "No response from OpenClaw.",
+            text: assistantText || "No response from AgileClaw.",
             phase: toolCalls ? "commentary" : "final_answer",
             status,
           }),
@@ -601,7 +601,7 @@ export async function handleOpenResponsesHttpRequest(
       const status = finalizeRequested.status === "failed" ? "failed" : finalOutputStatus;
       const finalText = textStream.complete(
         finalResultText,
-        finalToolCalls ? "" : "No response from OpenClaw.",
+        finalToolCalls ? "" : "No response from AgileClaw.",
       );
       if (!finalText.startsWith(textStream.streamedText)) {
         finalizeUnrepresentableAssistantReplacement();

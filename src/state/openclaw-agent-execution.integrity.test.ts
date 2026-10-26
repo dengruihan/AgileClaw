@@ -494,7 +494,7 @@ it.each([
   try {
     if (proof === "failed") {
       await expect(generation.run(source, async () => "opened")).rejects.toThrow(
-        "OpenClaw agent database claim is no longer current",
+        "AgileClaw agent database claim is no longer current",
       );
       expect(getOpenClawAgentDatabaseValidation(database)).toBeUndefined();
       expect(Array.from(new Int32Array(counter.checks))).toEqual([0, 0]);

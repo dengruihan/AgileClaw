@@ -19,7 +19,7 @@ it("respects another migration owner even when the state database is already ope
     try {
       await expect(
         migrateLegacySkillWorkshopProposals({ config: {}, env: state.env }),
-      ).rejects.toThrow("OpenClaw state database is busy at");
+      ).rejects.toThrow("AgileClaw state database is busy at");
     } finally {
       otherOwner?.release();
     }
@@ -77,7 +77,7 @@ it("preserves legacy Workshop files while a published Gateway marker owns the st
     try {
       await expect(
         migrateLegacySkillWorkshopProposals({ config: {}, env: state.env }),
-      ).rejects.toThrow("OpenClaw state database is busy at");
+      ).rejects.toThrow("AgileClaw state database is busy at");
       expect(await fs.readFile(manifest, "utf8")).toBe("[]\n");
       expect(await fs.readFile(lockPath, "utf8")).toBe(marker);
       const releasedOwner = tryAcquireGatewayStateOwner(database.path);

@@ -135,7 +135,7 @@ it("allows deprecated plugin SQL checks once before dispatch while typed guards 
     }
     expect(warning).toHaveBeenCalledExactlyOnceWith(
       expect.stringMatching(
-        /before dispatch.*synchronous OpenClaw DB access.*deprecated.*guard.assertHost/,
+        /before dispatch.*synchronous AgileClaw DB access.*deprecated.*guard.assertHost/,
       ),
       { code: "DEP_WORKSPACE_MUTATION_GUARD", type: "DeprecationWarning" },
     );

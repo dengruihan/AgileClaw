@@ -300,7 +300,7 @@ function normalizeGreetingText(text: string): string | null {
  * Appending deterministically removes that class instead of validating it.
  */
 export const SYSTEM_AGENT_EXTERNAL_EDIT_ALERT =
-  "Heads up: the config was edited outside OpenClaw while I was away — open History to review it.";
+  "Heads up: the config was edited outside AgileClaw while I was away — open History to review it.";
 
 function withHostOwnedAlerts(text: string, facts: SystemAgentGreetingFacts): string {
   if (!facts.recentExternalEdit) {
@@ -562,7 +562,7 @@ export function buildSystemAgentGreetingQuestion(
 ): SystemAgentChatQuestion {
   const exceptional: SystemAgentChatQuestion["options"] = [];
   if (!overview.config.exists) {
-    exceptional.push({ label: "Set up OpenClaw", reply: "setup" });
+    exceptional.push({ label: "Set up AgileClaw", reply: "setup" });
   } else if (!overview.config.valid) {
     exceptional.push({ label: "Inspect config", reply: "doctor" });
   } else if (!overview.defaultModel) {

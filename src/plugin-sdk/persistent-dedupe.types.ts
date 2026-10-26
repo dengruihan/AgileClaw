@@ -27,7 +27,7 @@ export type PersistentDedupePluginStateOptions = PersistentDedupeBaseOptions & {
   namespacePrefix?: string;
   /** Maximum persisted entries retained per namespace. */
   stateMaxEntries: number;
-  /** Test/runtime env used to resolve the shared OpenClaw state database. */
+  /** Test/runtime env used to resolve the shared AgileClaw state database. */
   env?: NodeJS.ProcessEnv;
   resolveFilePath?: undefined;
   fileMaxEntries?: undefined;
@@ -43,7 +43,7 @@ export type PersistentDedupeLegacyPathOptions = PersistentDedupeBaseOptions & {
   fileMaxEntries: number;
   /** Maps a namespace to the retired JSON path; used only to derive a stable SQLite namespace. */
   resolveFilePath: (namespace: string) => string;
-  /** Test/runtime env used to resolve the shared OpenClaw state database. */
+  /** Test/runtime env used to resolve the shared AgileClaw state database. */
   env?: NodeJS.ProcessEnv;
   /** @deprecated File locks are ignored because persistence is SQLite-backed. */
   lockOptions?: Partial<FileLockOptions>;

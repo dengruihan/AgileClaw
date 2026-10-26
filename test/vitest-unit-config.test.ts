@@ -140,7 +140,7 @@ describe("unit vitest config", () => {
     expect(testConfig.passWithNoTests).toBe(true);
   });
 
-  it("adds the OpenClaw runtime setup hooks on top of the base setup", () => {
+  it("adds the AgileClaw runtime setup hooks on top of the base setup", () => {
     const unitConfig = createUnitVitestConfig({});
     const testConfig = requireTestConfig(unitConfig);
     expect(normalizeConfigPaths(testConfig.setupFiles)).toEqual([

@@ -336,13 +336,13 @@ export const bufferedReplacementCases: BufferedReplacementCase[] = [
     name: "an empty snapshot",
     replacement: { text: "", delta: "" },
     finalText: "",
-    expected: "No response from OpenClaw.",
+    expected: "No response from AgileClaw.",
   },
   {
     name: "an empty replacement snapshot",
     replacement: { text: "", delta: "", replace: true },
     finalText: "",
-    expected: "No response from OpenClaw.",
+    expected: "No response from AgileClaw.",
   },
   {
     name: "an empty delta without a snapshot",

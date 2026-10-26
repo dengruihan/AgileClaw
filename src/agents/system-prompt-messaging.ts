@@ -42,7 +42,7 @@ export function buildMessagingSection(params: {
     : `- Current-session final text normally routes to source.${messageToolAvailable ? " If turn says final private, visible output uses `message(action=send)`." : ""}`;
   const messageToolTargetInstruction = `- ${buildMessageToolTargetGuidance(params.requireExplicitMessageTarget === true)}`;
   const routingGuidance = [
-    "- OpenClaw messaging: use available messaging tools, never shell commands, the CLI, curl, or direct RPC. Missing messaging tools are not permission to use another route.",
+    "- AgileClaw messaging: use available messaging tools, never shell commands, the CLI, curl, or direct RPC. Missing messaging tools are not permission to use another route.",
     "- Subagents return results through their accepted completion path; parents relay required coordination. Do not send acknowledgments or duplicate completion reports.",
     "- Other services (e.g. email): user-authorized CLI/API use is allowed; normal tool permissions and approvals still apply.",
   ];

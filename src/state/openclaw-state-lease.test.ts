@@ -18,7 +18,7 @@ afterEach(() => {
   closeOpenClawStateDatabaseForTest();
 });
 
-describe("OpenClaw state lease", () => {
+describe("AgileClaw state lease", () => {
   it.each([
     { heartbeat: undefined, termination: "exit", processBound: false },
     { heartbeat: "worker", termination: "exit", processBound: false },

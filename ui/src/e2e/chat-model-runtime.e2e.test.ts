@@ -152,7 +152,7 @@ suite.define(() => {
         "GPT-5.6 Sol",
       );
       expect(await codex.textContent()).toContain("200k · Codex");
-      expect(await embedded.textContent()).toContain("1M · OpenClaw");
+      expect(await embedded.textContent()).toContain("1M · AgileClaw");
       await selectChatModelOption(codex);
       if (route === "new") {
         await expect.poll(() => codex.getAttribute("aria-selected")).toBe("true");

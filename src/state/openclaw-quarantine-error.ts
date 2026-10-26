@@ -18,7 +18,7 @@ export const OpenClawQuarantineReadCleanupError = resolveGlobalSingleton(
         errors: unknown[],
         readonly quarantine?: OpenClawDatabaseQuarantine,
       ) {
-        super(errors, "OpenClaw quarantine reader cleanup failed.", { cause: errors[0] });
+        super(errors, "AgileClaw quarantine reader cleanup failed.", { cause: errors[0] });
         this.name = DATABASE_QUARANTINE_READ_CLEANUP_ERROR_NAME;
       }
     },

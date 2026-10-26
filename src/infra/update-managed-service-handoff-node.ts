@@ -12,7 +12,7 @@ import { resolveRuntimeArgs } from "./runtime-worker-url.js";
 import type { RespawnSupervisor } from "./supervisor-markers.js";
 
 const RUNTIME_RECOVERY_ACTION =
-  "Inspect the service with `openclaw gateway status --deep` and refresh its definition under the installation owner (for a standard OpenClaw-managed service: `openclaw gateway install --force`). Then retry the update. The serving Gateway has not been stopped.";
+  "Inspect the service with `openclaw gateway status --deep` and refresh its definition under the installation owner (for a standard AgileClaw-managed service: `openclaw gateway install --force`). Then retry the update. The serving Gateway has not been stopped.";
 
 class ManagedHandoffNodeUnavailableError extends UpdatePreMutationError {
   constructor() {

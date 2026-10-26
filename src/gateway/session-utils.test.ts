@@ -1292,8 +1292,8 @@ describe("gateway session utils", () => {
   test.each<[string, Partial<SessionEntry>, string]>([
     [
       "explicit rename",
-      { label: "  OpenClaw App · Release planning · 1234567890ab  " },
-      "OpenClaw App · Release planning · 1234567890ab",
+      { label: "  AgileClaw App · Release planning · 1234567890ab  " },
+      "AgileClaw App · Release planning · 1234567890ab",
     ],
     ["empty automatic name", { displayName: undefined, autoLabel: "" }, ""],
   ])("buildGatewaySessionRow preserves title precedence for %s", (_name, overrides, expected) => {
@@ -1302,7 +1302,7 @@ describe("gateway session utils", () => {
     const entry: SessionEntry = {
       sessionId: "node-1",
       updatedAt: 1,
-      autoLabel: "OpenClaw App · Pixel · 1234567890ab",
+      autoLabel: "AgileClaw App · Pixel · 1234567890ab",
       displayName: "Release Planning",
       ...overrides,
     };

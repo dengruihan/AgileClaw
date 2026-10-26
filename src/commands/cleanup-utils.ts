@@ -102,7 +102,7 @@ export async function moveToTrash(
 }
 
 /**
- * Allowed Trash roots for OpenClaw-owned paths: each declared path's own parent, plus the
+ * Allowed Trash roots for AgileClaw-owned paths: each declared path's own parent, plus the
  * resolved parent when the moved path is a symlink (fs-safe checks the link target, and
  * moving a link never touches the directory behind it). fs-safe's default roots (home + tmp)
  * alone refuse every path of a state dir on a volume such as `/data`.
@@ -230,14 +230,14 @@ async function acquireStateCleanupOwnership(
   } catch (error) {
     if (error instanceof GatewayLockError) {
       throw new Error(
-        "Cannot remove OpenClaw state while the Gateway or another state maintenance command owns this state directory. Stop the Gateway and retry.",
+        "Cannot remove AgileClaw state while the Gateway or another state maintenance command owns this state directory. Stop the Gateway and retry.",
         { cause: error },
       );
     }
     throw error;
   }
   if (!lock) {
-    throw new Error("Cannot remove OpenClaw state without exclusive state ownership.");
+    throw new Error("Cannot remove AgileClaw state without exclusive state ownership.");
   }
   return lock;
 }
@@ -319,7 +319,7 @@ type CleanupDirectoryIdentity = { path: string; dev: bigint; ino: bigint };
 
 function stateCleanupInterrupted(): Error {
   return new Error(
-    "OpenClaw state cleanup was interrupted by a new state operation. Stop other OpenClaw commands and retry.",
+    "AgileClaw state cleanup was interrupted by a new state operation. Stop other AgileClaw commands and retry.",
   );
 }
 
@@ -334,7 +334,7 @@ async function captureStateCleanupAncestors(
         const observed = await fs.lstat(current, { bigint: true });
         if (!observed.isDirectory()) {
           throw new Error(
-            `Cannot remove OpenClaw state because its active lock directory is redirected or not a real directory: ${shortenHomeInString(current)}. Restore a real lock directory and retry.`,
+            `Cannot remove AgileClaw state because its active lock directory is redirected or not a real directory: ${shortenHomeInString(current)}. Restore a real lock directory and retry.`,
           );
         }
         directories.set(current, { path: current, dev: observed.dev, ino: observed.ino });
@@ -474,7 +474,7 @@ export async function removeStateAndLinkedPaths(
     });
     if (resolveIdentityPathViaExistingAncestorSync(databasePath) !== databasePath) {
       throw new Error(
-        "Cannot remove OpenClaw state because its active database path is redirected. Select the actual state directory before retrying cleanup.",
+        "Cannot remove AgileClaw state because its active database path is redirected. Select the actual state directory before retrying cleanup.",
       );
     }
     // Deleting a lexical link would let startup select a different owner while
@@ -503,7 +503,7 @@ export async function removeStateAndLinkedPaths(
     );
     if (overlappingPreservePath) {
       throw new Error(
-        `Cannot remove OpenClaw state while preserving ${shortenHomeInString(overlappingPreservePath)} because it overlaps the active state lock. Move the workspace outside the lock directory and retry.`,
+        `Cannot remove AgileClaw state while preserving ${shortenHomeInString(overlappingPreservePath)} because it overlaps the active state lock. Move the workspace outside the lock directory and retry.`,
       );
     }
     removalAdmission.assertCurrent();
@@ -514,7 +514,7 @@ export async function removeStateAndLinkedPaths(
       { label: cleanup.stateDir },
     );
     if (!stateRemoval.ok) {
-      throw new Error("Failed to remove non-preserved OpenClaw state while ownership was held.");
+      throw new Error("Failed to remove non-preserved AgileClaw state while ownership was held.");
     }
 
     removalAdmission.assertCurrent();

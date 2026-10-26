@@ -1029,7 +1029,7 @@ describe("dispatchReplyFromConfig", () => {
     }
   });
 
-  it("falls back to OpenClaw when the bound plugin is loaded but has no inbound_claim handler", async () => {
+  it("falls back to AgileClaw when the bound plugin is loaded but has no inbound_claim handler", async () => {
     setNoAbort();
     mockPluginBindingClaim({
       status: "no_handler",

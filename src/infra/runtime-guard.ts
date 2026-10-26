@@ -1,4 +1,4 @@
-// Validates the current runtime before OpenClaw startup.
+// Validates the current runtime before AgileClaw startup.
 import process from "node:process";
 import { format } from "node:util";
 import { expectDefined } from "@openclaw/normalization-core/expect";
@@ -104,7 +104,7 @@ async function detectCurrentRuntimeSqlite(): Promise<{
   }
 }
 
-/** Returns whether a detected runtime meets OpenClaw's minimum runtime contract. */
+/** Returns whether a detected runtime meets AgileClaw's minimum runtime contract. */
 function runtimeSatisfies(details: RuntimeDetails): boolean {
   if (details.sqliteSelectionError) {
     return false;
@@ -125,12 +125,12 @@ function runtimeSatisfies(details: RuntimeDetails): boolean {
   return false;
 }
 
-/** Returns whether the current process runtime satisfies OpenClaw's engine contract. */
+/** Returns whether the current process runtime satisfies AgileClaw's engine contract. */
 export async function isCurrentRuntimeSupported(): Promise<boolean> {
   return runtimeSatisfies(await detectRuntime());
 }
 
-/** Checks a Bun version label against OpenClaw's minimum supported release. */
+/** Checks a Bun version label against AgileClaw's minimum supported release. */
 export function isSupportedBunVersion(version: string | null): boolean {
   return isNodeVersionAtLeast(parseSemver(version), MINIMUM_BUN_VERSION);
 }
@@ -252,7 +252,7 @@ export async function assertSupportedRuntime(
         "openclaw requires Node >=24.16.0 <25, or >=26.1.0.";
   const retryHint =
     details.kind === "bun"
-      ? "Upgrade Bun or run OpenClaw with a supported Node release."
+      ? "Upgrade Bun or run AgileClaw with a supported Node release."
       : "Upgrade Node and re-run openclaw.";
 
   runtime.error(

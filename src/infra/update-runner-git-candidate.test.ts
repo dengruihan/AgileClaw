@@ -716,7 +716,7 @@ describe("Git candidate activation", () => {
       if (localCommit) {
         expect(await fs.readFile(path.join(root, "local.txt"), "utf8")).toBe("operator change\n");
         const committer = await git(root, "log", "-1", "--format=%cn <%ce>");
-        expect.soft(committer).toBe("OpenClaw Test <openclaw@example.com>");
+        expect.soft(committer).toBe("AgileClaw Test <openclaw@example.com>");
       }
       await expectRuntime(root, current);
       const manifest: { virtualStoreDir: string } = JSON.parse(

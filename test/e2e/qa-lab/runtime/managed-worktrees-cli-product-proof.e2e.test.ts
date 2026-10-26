@@ -58,7 +58,7 @@ async function initializeRepository(root: string): Promise<{ baseCommit: string;
   await fs.mkdir(path.join(repo, ".openclaw"), { recursive: true });
   await fs.mkdir(path.join(repo, "generated"), { recursive: true });
   await git(repo, "init", "-b", "main");
-  await git(repo, "config", "user.name", "OpenClaw Test");
+  await git(repo, "config", "user.name", "AgileClaw Test");
   await git(repo, "config", "user.email", "openclaw-test@example.invalid");
   await fs.writeFile(path.join(repo, "README.md"), "base\n");
   await fs.writeFile(path.join(repo, ".gitignore"), ".env.local\ngenerated/\n");

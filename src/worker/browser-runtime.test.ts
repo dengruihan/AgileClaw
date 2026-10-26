@@ -54,7 +54,7 @@ describe("worker Browser runtime", () => {
 
   it.each([
     { launcherArgs: undefined },
-    { launcherArgs: ["-File", "C:\\ProgramData\\OpenClaw\\browser.ps1", "literal;$(text)"] },
+    { launcherArgs: ["-File", "C:\\ProgramData\\AgileClaw\\browser.ps1", "literal;$(text)"] },
   ])(
     "launches the provider executable with fixed args $launcherArgs without a shell",
     async ({ launcherArgs }) => {

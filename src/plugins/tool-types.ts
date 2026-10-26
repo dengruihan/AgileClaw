@@ -42,7 +42,7 @@ type OpenClawPluginToolContextBase = {
   /**
    * Runtime-supplied active model metadata for informational use, diagnostics,
    * and plugin-owned policy decisions. This is not a security boundary against
-   * the local operator, installed plugin code, or a modified OpenClaw runtime.
+   * the local operator, installed plugin code, or a modified AgileClaw runtime.
    */
   activeModel?: OpenClawPluginActiveModelContext;
   browser?: {

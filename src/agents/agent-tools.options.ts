@@ -76,7 +76,7 @@ export type OpenClawCodingToolsOptions = {
   modelBaseUrl?: string;
   /** Resolved runtime model compatibility hints. */
   modelCompat?: ModelCompatConfig;
-  /** If false, keep OpenClaw web_search even when a provider-native search tool is active. */
+  /** If false, keep AgileClaw web_search even when a provider-native search tool is active. */
   suppressManagedWebSearch?: boolean;
   /**
    * Auth mode for the current provider. We only need this for Anthropic OAuth
@@ -115,7 +115,7 @@ export type OpenClawCodingToolsOptions = {
   codeModeSkills?: ToolSearchToolContext["codeModeSkills"];
   /** Limits which tool families are materialized before the shared policy pipeline runs. */
   toolConstructionPlan?: OpenClawCodingToolConstructionPlan;
-  /** Ring-zero OpenClaw tool; set only by the OpenClaw agent runner. */
+  /** Ring-zero AgileClaw tool; set only by the AgileClaw agent runner. */
   systemAgentTool?: import("./tools/system-agent-tool.js").SystemAgentToolOptions;
   /** Live observer called after wrapped tool outcomes are recorded. */
   onToolOutcome?: ToolOutcomeObserver;

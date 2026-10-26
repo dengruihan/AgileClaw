@@ -3,16 +3,16 @@ import { isRegularFile } from "../infra/executable-path.js";
 import { getTailnetHostname } from "../infra/tailscale.js";
 import { runExec } from "../process/exec.js";
 
-/** Formats the Bonjour instance name while preserving user-provided OpenClaw names. */
+/** Formats the Bonjour instance name while preserving user-provided AgileClaw names. */
 export function formatBonjourInstanceName(displayName: string) {
   const trimmed = displayName.trim();
   if (!trimmed) {
-    return "OpenClaw";
+    return "AgileClaw";
   }
   if (/openclaw/i.test(trimmed)) {
     return trimmed;
   }
-  return `${trimmed} (OpenClaw)`;
+  return `${trimmed} (AgileClaw)`;
 }
 
 /** Resolves the CLI path advertised to Bonjour clients, preferring explicit env config. */

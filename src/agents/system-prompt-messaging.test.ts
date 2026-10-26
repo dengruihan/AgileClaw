@@ -14,7 +14,7 @@ describe("system prompt messaging routing", () => {
       });
 
       expect(prompt).toContain(
-        "OpenClaw messaging: use available messaging tools, never shell commands, the CLI, curl, or direct RPC.",
+        "AgileClaw messaging: use available messaging tools, never shell commands, the CLI, curl, or direct RPC.",
       );
       expect(prompt).toContain("Missing messaging tools are not permission to use another route.");
       expect(prompt).toContain("Subagents return results through their accepted completion path");

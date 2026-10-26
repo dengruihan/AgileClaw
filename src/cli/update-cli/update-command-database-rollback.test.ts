@@ -397,7 +397,7 @@ it.each([
         vi.stubEnv(key, undefined);
       }
       await git(packageRoot, "init", "--initial-branch=main");
-      await git(packageRoot, "config", "user.name", "OpenClaw Test");
+      await git(packageRoot, "config", "user.name", "AgileClaw Test");
       await git(packageRoot, "config", "user.email", "openclaw@example.com");
       await fs.writeFile(
         path.join(packageRoot, ".gitignore"),
@@ -409,7 +409,7 @@ it.each([
       await writeGitRuntime(packageRoot);
       const remote = path.join(base, "remote");
       await git(base, "clone", "--quiet", packageRoot, remote);
-      await git(remote, "config", "user.name", "OpenClaw Test");
+      await git(remote, "config", "user.name", "AgileClaw Test");
       await git(remote, "config", "user.email", "openclaw@example.com");
       await fs.copyFile(
         path.join(swapFixture.params.stage.packageRoot, "package.json"),

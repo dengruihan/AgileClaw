@@ -99,7 +99,7 @@ describe("handleEmbeddedPromptFailure", () => {
 
   it("records local profile absence without an HTTP status in the fallback trace", async () => {
     const code = "selected_auth_profile_unavailable";
-    const message = 'Selected auth profile "openai:work" was not found in OpenClaw.';
+    const message = 'Selected auth profile "openai:work" was not found in AgileClaw.';
     const params = makeParams({
       promptError: Object.assign(new Error(message), { code }),
       failover: {
@@ -448,7 +448,7 @@ describe("handleEmbeddedPromptFailure", () => {
         resolvedVerboseLevel: "off",
       }),
     ).toMatchObject({
-      text: "OpenClaw couldn't read this conversation's history. Try /compact, or start a new conversation with /new.",
+      text: "AgileClaw couldn't read this conversation's history. Try /compact, or start a new conversation with /new.",
       isError: true,
     });
   });

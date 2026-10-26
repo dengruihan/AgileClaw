@@ -479,7 +479,7 @@ describe("handleApproveCommand", () => {
     });
   });
 
-  it("resolves an OpenClaw change approval with its canonical owner", async () => {
+  it("resolves an AgileClaw change approval with its canonical owner", async () => {
     const notFound = () => new Error("unknown or expired approval id");
     resolveApprovalOverGatewayMock
       .mockRejectedValueOnce(notFound())
@@ -524,7 +524,7 @@ describe("handleApproveCommand", () => {
     expect(approvalResolverRequest(1).approvalKind).toBeUndefined();
   });
 
-  describe("OpenClaw change approvals on channels without reviewer custody", () => {
+  describe("AgileClaw change approvals on channels without reviewer custody", () => {
     const approveOnSlack = (owner: { senderIsOwner: boolean; assertOwnerCurrent?: () => void }) => {
       const params = buildApproveParams(
         "/approve system-agent:abc allow-once",
@@ -547,7 +547,7 @@ describe("handleApproveCommand", () => {
     it("rejects a command-authorized non-owner before any canonical decision", async () => {
       const result = await approveOnSlack({ senderIsOwner: false });
 
-      expect(result?.reply?.text).toContain("Only the owner can approve OpenClaw changes");
+      expect(result?.reply?.text).toContain("Only the owner can approve AgileClaw changes");
       const canonicalCalls = resolveApprovalOverGatewayMock.mock.calls.filter(
         ([request]) => (request as { approvalKind?: string }).approvalKind === "system-agent",
       );

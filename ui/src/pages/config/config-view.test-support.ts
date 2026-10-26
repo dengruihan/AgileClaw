@@ -108,7 +108,7 @@ export const baseProps = () => ({
   catalogOpenTarget: "viewer" as const,
   setCatalogOpenTarget: vi.fn(),
   gatewayUrl: "",
-  assistantName: "OpenClaw",
+  assistantName: "AgileClaw",
 });
 
 export function renderConfigView(overrides: Partial<ConfigProps> = {}): {

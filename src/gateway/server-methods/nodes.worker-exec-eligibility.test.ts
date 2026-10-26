@@ -34,7 +34,7 @@ vi.mock("../../infra/device-pairing-node-facts.js", () => ({
 
 const CODEX_COMMAND = "codex.exec-server.stdio.v1";
 
-it("scopes an outdated v6 host to OpenClaw and refreshes eligibility from current inventory", async () => {
+it("scopes an outdated v6 host to AgileClaw and refreshes eligibility from current inventory", async () => {
   const previousRegistry = getActivePluginRegistry();
   setActivePluginRegistry(createEmptyPluginRegistry(), "node-exec-eligibility-test", "default");
   registerAgentHarness({

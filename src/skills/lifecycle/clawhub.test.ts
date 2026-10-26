@@ -1265,7 +1265,7 @@ describe("skills-clawhub", () => {
         ok: false,
         code: "force_required",
         error:
-          'Skill "weather" was installed before OpenClaw recorded file fingerprints, so local changes cannot be detected. Updating replaces the installed skill directory.',
+          'Skill "weather" was installed before AgileClaw recorded file fingerprints, so local changes cannot be detected. Updating replaces the installed skill directory.',
       },
     ]);
 

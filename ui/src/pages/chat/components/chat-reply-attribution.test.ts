@@ -151,7 +151,7 @@ it.each([
     role: "user",
     sender: jordan,
     original: agentAnswer,
-    strip: "OpenClaw",
+    strip: "AgileClaw",
     senderName: "Jordan",
   },
   {
@@ -159,7 +159,7 @@ it.each([
     role: "assistant",
     sender: undefined,
     original: agentAnswer,
-    strip: "OpenClaw",
+    strip: "AgileClaw",
     senderName: null,
   },
   {
@@ -172,12 +172,12 @@ it.each([
       __openclaw: {
         id: "earlier",
         senderId: "namesake",
-        senderName: "OpenClaw",
+        senderName: "AgileClaw",
         senderIdentity: { type: "profile", id: "namesake" },
       },
     },
-    strip: "OpenClaw",
-    senderName: "OpenClaw",
+    strip: "AgileClaw",
+    senderName: "AgileClaw",
   },
   {
     // A peer's strip sits on the message itself, so the footer keeps their name.
@@ -203,7 +203,7 @@ it.each([
     container = document.body.appendChild(document.createElement("div"));
     const resolveReplyPreview = createReplyPreviewResolver(
       new Map([["earlier", { message: original, messageId: "earlier-key", senderLabel: strip }]]),
-      { assistantName: "OpenClaw", userId: "alice" },
+      { assistantName: "AgileClaw", userId: "alice" },
     );
     render(
       renderMessageGroup(
@@ -233,7 +233,7 @@ it.each([
           showToolCalls: false,
           avatarPlacement: "none",
           userId: "alice",
-          assistantName: "OpenClaw",
+          assistantName: "AgileClaw",
           resolveReplyPreview,
         },
       ),
@@ -719,8 +719,8 @@ it.each([
   {
     role: "assistant",
     identity: { type: "agent", id: "main" },
-    name: "OpenClaw",
-    label: "OpenClaw",
+    name: "AgileClaw",
+    label: "AgileClaw",
   },
   { role: "user", identity: { type: "profile", id: "alice" }, name: "Alice", label: "You" },
   { role: "user", identity: { type: "profile", id: "jordan" }, name: "Jordan", label: "Jordan" },
@@ -742,7 +742,7 @@ it.each([
       new Map([
         ["inline-source", { message: source, messageId: "inline-source", senderLabel: name }],
       ]),
-      { assistantName: "OpenClaw", userId: "alice", userName: "Alice" },
+      { assistantName: "AgileClaw", userId: "alice", userName: "Alice" },
     );
     const onOpenReply = vi.fn();
     render(
@@ -801,7 +801,7 @@ function drawOwnReply(
 ) {
   container = document.body.appendChild(document.createElement("div"));
   const resolveReplyPreview = createReplyPreviewResolver(new Map(), {
-    assistantName: "OpenClaw",
+    assistantName: "AgileClaw",
     userId: "alice",
     replyMessageAccess: {
       read: (id) => (id === "older" ? original : undefined),

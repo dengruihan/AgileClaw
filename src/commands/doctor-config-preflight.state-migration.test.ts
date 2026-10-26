@@ -144,7 +144,7 @@ describe("runDoctorConfigPreflight state migration", () => {
   });
 
   it("keeps missing plugins deferred and reports host-link repair warnings", async () => {
-    const hostWarning = "Failed to repair installed OpenClaw host peer links: EACCES";
+    const hostWarning = "Failed to repair installed AgileClaw host peer links: EACCES";
     const snapshot = makePreflightConfigSnapshot({
       gateway: { mode: "local", port: 19091 },
       plugins: { entries: { discord: { enabled: true } } },

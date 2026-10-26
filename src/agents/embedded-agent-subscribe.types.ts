@@ -140,7 +140,7 @@ export type SubscribeEmbeddedAgentSessionParams = {
   /** Agent identity for hook context — resolved from session config in attempt.ts. */
   agentId?: string;
   /**
-   * Exact raw names of OpenClaw tools registered for this run.
+   * Exact raw names of AgileClaw tools registered for this run.
    */
   builtinToolNames?: ReadonlySet<string>;
   /** Exact raw names of core-owned tools registered for this run. */

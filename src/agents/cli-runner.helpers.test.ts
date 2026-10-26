@@ -46,7 +46,7 @@ describe("prepareCliPromptImagePayload prompt references", () => {
     vi.restoreAllMocks();
   });
 
-  it("does not reload OpenClaw CLI image cache paths from prior prompt text", async () => {
+  it("does not reload AgileClaw CLI image cache paths from prior prompt text", async () => {
     const detectAndLoadPromptImagesSpy = vi.spyOn(promptImageUtils, "detectAndLoadPromptImages");
     const sanitizeImageBlocksSpy = vi.spyOn(toolImages, "sanitizeImageBlocks");
 

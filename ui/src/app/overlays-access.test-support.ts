@@ -6,7 +6,7 @@ import { createApplicationOverlays } from "./overlays.ts";
 
 export type RequestFn = (...args: Parameters<GatewayBrowserClient["request"]>) => Promise<unknown>;
 
-const SYSTEM_APPROVAL_TITLE = "OpenClaw change";
+const SYSTEM_APPROVAL_TITLE = "AgileClaw change";
 const SYSTEM_APPROVAL_COMMAND = "Set gateway.port to 19001";
 
 export function approval(id: string, createdAtMs: number) {

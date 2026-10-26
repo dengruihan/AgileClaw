@@ -25,7 +25,7 @@ export async function validateTriageDoctor(params: {
   const entrypoint = await resolveGatewayInstallEntrypoint(installRoot);
   signal.throwIfAborted();
   if (!entrypoint) {
-    throw new Error("The installed OpenClaw entrypoint is unavailable.");
+    throw new Error("The installed AgileClaw entrypoint is unavailable.");
   }
   // A fresh child reads the repaired installation and can be cancelled without
   // leaving Doctor's temporary process-global state active in this CLI.

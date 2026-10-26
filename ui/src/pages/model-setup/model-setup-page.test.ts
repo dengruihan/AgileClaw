@@ -238,7 +238,7 @@ describe("ModelSetupPage catalog icons", () => {
           id: choiceId,
           brandId: "llama-cpp",
           label: "llama.cpp",
-          hint: "Install a verified llama.cpp server and run a private GGUF model managed by OpenClaw",
+          hint: "Install a verified llama.cpp server and run a private GGUF model managed by AgileClaw",
         },
       ],
     };

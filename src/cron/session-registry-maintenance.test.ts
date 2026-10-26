@@ -224,7 +224,7 @@ describe("runSessionRegistryMaintenance", () => {
         writeAgentDeletion(state, "retired", false);
         closeOpenClawAgentDatabasesForTest();
         await expect(runSessionRegistryMaintenance({ apply: false })).rejects.toThrow(
-          "OpenClaw agent database is unavailable while agent retired is deleted.",
+          "AgileClaw agent database is unavailable while agent retired is deleted.",
         );
       } else {
         openOpenClawStateDatabase();

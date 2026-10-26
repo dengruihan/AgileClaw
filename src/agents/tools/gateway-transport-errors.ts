@@ -40,7 +40,7 @@ export function isStaleGatewayNodeInvokeTurnSourceRejection(error: unknown): boo
 export function staleGatewayAgentRuntimeIdentityError(cause: unknown): Error {
   return new Error(
     [
-      "The running Gateway is from an older OpenClaw build and rejected current agent runtime connection metadata.",
+      "The running Gateway is from an older AgileClaw build and rejected current agent runtime connection metadata.",
       "Restart the Gateway with `openclaw gateway restart`, then retry.",
     ].join(" "),
     { cause },

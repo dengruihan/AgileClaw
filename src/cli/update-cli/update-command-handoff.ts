@@ -122,7 +122,7 @@ ${GATEWAY_ANCESTRY_SHELL_GUIDANCE}`,
 
 const ANCESTRY_BLOCK_MARKER = "inside the gateway process tree";
 const UPDATE_CHAT_HANDOFF_GUIDANCE =
-  "From chat, the OpenClaw owner can start the update with the gateway update action or /update, which hands it to a managed helper.";
+  "From chat, the AgileClaw owner can start the update with the gateway update action or /update, which hands it to a managed helper.";
 
 /** Update-specific follow-up for an ancestry block: the chat path hands off to the managed helper. */
 export function formatUpdateAncestryBlockMessage(blockMessage: string): string {

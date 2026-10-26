@@ -52,7 +52,7 @@ vi.mock("../infra/update-run-reader.js", async (importOriginal) => ({
 const activationReason =
   "The update parent must stop the managed Gateway before Doctor maintenance; Doctor left the service unchanged.";
 const maintenanceSuffix =
-  " Stop the Gateway service and other OpenClaw processes using this state, then run openclaw doctor --fix from an independent shell.";
+  " Stop the Gateway service and other AgileClaw processes using this state, then run openclaw doctor --fix from an independent shell.";
 const runtime = { log: vi.fn(), error: vi.fn(), exit: vi.fn() };
 const quote = process.platform === "win32" ? quotePowerShellArg : quoteCliArg;
 
@@ -337,7 +337,7 @@ describe("Doctor refusal recovery under the released Git update driver", () => {
           .slice(-10)
           .join("\n");
         const reason =
-          "[openclaw] Reason: Doctor refused update-time schema repair driven by OpenClaw 2026.9.2:";
+          "[openclaw] Reason: Doctor refused update-time schema repair driven by AgileClaw 2026.9.2:";
         expect(message).toContain(reason);
         expect(message.indexOf(reason)).toBeLessThan(
           message.indexOf("The previous source is intact in Git."),
@@ -383,7 +383,7 @@ describe("Doctor refusal recovery under the released Git update driver", () => {
   it("retains npm schema recovery and omits direct Doctor recovery for an update child", async () => {
     await withFixture("npm", async ({ root, schemas, state }) => {
       const expectedSchema =
-        "Doctor refused update-time schema repair driven by OpenClaw 2026.9.2: this updater reopens the ledger with old code after migration, and version publication could not be deferred safely.\n" +
+        "Doctor refused update-time schema repair driven by AgileClaw 2026.9.2: this updater reopens the ledger with old code after migration, and version publication could not be deferred safely.\n" +
         `agent database ${state.path("agent.sqlite")}: on-disk schema 1, this build's schema 2. ` +
         "The blocked schema change was not applied.\nLet the updater restore the previous package and exit. Then use an independent shell with the original service account, package prefix, profile, and state/config overrides.\n" +
         `Manual update: openclaw gateway stop && npm install -g openclaw@${VERSION} --allow-scripts=openclaw && openclaw doctor --fix && openclaw gateway start.\n` +

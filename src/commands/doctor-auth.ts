@@ -266,7 +266,7 @@ async function resolveAuthIssueHint(
     return "Invalid token expires metadata. Set a future Unix ms timestamp or remove expires.";
   }
   if (issue.reasonCode === "malformed_api_key") {
-    return "Paste the API key value, not an OpenClaw onboarding command.";
+    return "Paste the API key value, not an AgileClaw onboarding command.";
   }
   const providerHint = await formatAuthDoctorHint({
     cfg,

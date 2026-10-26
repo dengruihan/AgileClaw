@@ -593,7 +593,7 @@ const pluginApprovalStrategy = {
   buildResolvedPayload: buildForwardedPluginResolvedPayload,
 } satisfies ApprovalStrategy<PluginApprovalRequest, PluginApprovalResolved>;
 
-// A delegated OpenClaw change blocks the requesting tool until someone decides,
+// A delegated AgileClaw change blocks the requesting tool until someone decides,
 // so the requesting messaging chat always gets a reply path. A native card for
 // the same target suppresses this text through the shared fallback check.
 const SYSTEM_AGENT_FORWARDING: ExecApprovalForwardingConfig = { enabled: true, mode: "session" };

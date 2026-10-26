@@ -45,12 +45,12 @@ describe("provider failover hook structured signals", () => {
     },
     {
       errorMessage: "opaque provider refusal",
-      copy: "⚠️ OpenClaw couldn't finish this reply. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow` in your terminal.",
+      copy: "⚠️ AgileClaw couldn't finish this reply. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow` in your terminal.",
       runtimeKind: "unclassified",
     },
     {
       errorMessage: "model input limit reached",
-      copy: "⚠️ OpenClaw couldn't finish this reply. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow` in your terminal.",
+      copy: "⚠️ AgileClaw couldn't finish this reply. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow` in your terminal.",
       runtimeKind: "unclassified",
     },
     {

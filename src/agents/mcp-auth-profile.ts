@@ -27,7 +27,7 @@ export function resolveMcpAuthProfileId(rawServer: unknown): string | undefined 
   return normalizeOptionalString(rawServer.oauth.authProfileId);
 }
 
-/** Returns whether a server needs an OpenClaw-managed bearer projected externally. */
+/** Returns whether a server needs an AgileClaw-managed bearer projected externally. */
 export function requiresMcpBearerProjection(rawServer: unknown): boolean {
   if (!isRecord(rawServer) || rawServer.auth !== "oauth") {
     return false;

@@ -53,12 +53,12 @@ afterEach(async () => {
 function environment() {
   return {
     APPDATA: path.join(root, "appdata"),
-    OPENCLAW_WINDOWS_TASK_NAME: "OpenClaw Gateway",
+    OPENCLAW_WINDOWS_TASK_NAME: "AgileClaw Gateway",
     OPENCLAW_PROFILE: "default",
   };
 }
 
-async function startup(form: "cmd" | "9.2/9.3" | "9.4", taskName = "OpenClaw Gateway (rescue)") {
+async function startup(form: "cmd" | "9.2/9.3" | "9.4", taskName = "AgileClaw Gateway (rescue)") {
   const env = { ...environment(), OPENCLAW_WINDOWS_TASK_NAME: taskName };
   const startupPath = resolveStartupEntryPath(env, form === "cmd" ? "cmd" : "vbs");
   const scriptPath = path.join(root, path.basename(startupPath), "gateway.cmd");
@@ -71,7 +71,7 @@ async function startup(form: "cmd" | "9.2/9.3" | "9.4", taskName = "OpenClaw Gat
       'set "OPENCLAW_SERVICE_MARKER=openclaw"',
       'set "OPENCLAW_SERVICE_KIND=gateway"',
       `set "OPENCLAW_WINDOWS_TASK_NAME=${taskName}"`,
-      `set "OPENCLAW_PROFILE=${taskName === "OpenClaw Gateway" ? "default" : "rescue"}"`,
+      `set "OPENCLAW_PROFILE=${taskName === "AgileClaw Gateway" ? "default" : "rescue"}"`,
       `set "OPENCLAW_STATE_DIR=${path.dirname(scriptPath)}"`,
       '"C:/Node/node.exe" "C:/Applications/openclaw/dist/index.js" gateway --port 19789 < NUL',
       "",
@@ -94,14 +94,19 @@ async function startup(form: "cmd" | "9.2/9.3" | "9.4", taskName = "OpenClaw Gat
 
 describe("Windows Startup service inventory", () => {
   it.each([
-    { form: "cmd", taskName: "OpenClaw Gateway", legacy: true, scheduler: "missing" },
+    { form: "cmd", taskName: "AgileClaw Gateway", legacy: true, scheduler: "missing" },
     { form: "cmd", taskName: "Legacy recovery", legacy: true, scheduler: "missing" },
-    { form: "cmd", taskName: "OpenClaw Gateway (rescue)", legacy: false, scheduler: "missing" },
-    { form: "9.2/9.3", taskName: "OpenClaw Gateway (rescue)", legacy: false, scheduler: "missing" },
-    { form: "9.4", taskName: "OpenClaw Gateway (rescue)", legacy: false, scheduler: "missing" },
+    { form: "cmd", taskName: "AgileClaw Gateway (rescue)", legacy: false, scheduler: "missing" },
     {
       form: "9.2/9.3",
-      taskName: "OpenClaw Gateway (rescue)",
+      taskName: "AgileClaw Gateway (rescue)",
+      legacy: false,
+      scheduler: "missing",
+    },
+    { form: "9.4", taskName: "AgileClaw Gateway (rescue)", legacy: false, scheduler: "missing" },
+    {
+      form: "9.2/9.3",
+      taskName: "AgileClaw Gateway (rescue)",
       legacy: false,
       scheduler: "unavailable",
     },
@@ -416,7 +421,7 @@ describe("Windows Startup service inventory", () => {
   it.each([false, true])(
     "reports Startup entries through Doctor (selected Task exists=%s)",
     async (taskExists) => {
-      const selected = await startup("9.4", "OpenClaw Gateway");
+      const selected = await startup("9.4", "AgileClaw Gateway");
       const sibling = await startup("9.4");
       if (taskExists) {
         const task = {
@@ -493,8 +498,8 @@ describe("Windows Startup service inventory", () => {
   });
 
   it.each([
-    { late: false, taskName: "OpenClaw Gateway (rescue)" },
-    { late: true, taskName: "OpenClaw Gateway (rescue)" },
+    { late: false, taskName: "AgileClaw Gateway (rescue)" },
+    { late: true, taskName: "AgileClaw Gateway (rescue)" },
     { late: true, taskName: "Recovery" },
   ])(
     "shares the inventory deadline with Startup launcher reads ($taskName, late=$late)",
@@ -580,11 +585,11 @@ describe("Windows Startup service inventory", () => {
     await fs.mkdir(directory, { recursive: true });
     const selected = resolveStartupEntryPath(env, "vbs");
     const branded = path.join(directory, "Private Alias.vbs");
-    const unreadable = path.join(directory, "OpenClaw Gateway Broken.cmd");
+    const unreadable = path.join(directory, "AgileClaw Gateway Broken.cmd");
     await fs.writeFile(selected, "unrecognized");
     await fs.writeFile(branded, "node C:\\openclaw\\dist\\entry.js gateway\r\nunrecognized");
     await fs.mkdir(unreadable);
-    await fs.writeFile(path.join(directory, "Other.vbs"), "' OpenClaw Gateway\r\nunrecognized");
+    await fs.writeFile(path.join(directory, "Other.vbs"), "' AgileClaw Gateway\r\nunrecognized");
     const inventory = await findExtraGatewayServices(env, { deep: true });
     expect(inventory.services).toEqual([]);
     expect(inventory.errors.map(({ source }) => source).toSorted()).toEqual(

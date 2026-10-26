@@ -256,7 +256,7 @@ describe("findMissingRequiredPluginDependencies", () => {
       moduleUrl: import.meta.url,
     });
     if (!hostRoot) {
-      throw new Error("Expected the running OpenClaw package root");
+      throw new Error("Expected the running AgileClaw package root");
     }
     fs.mkdirSync(rootDir, { recursive: true });
     fs.writeFileSync(path.join(rootDir, "package.json"), JSON.stringify({ name: pluginName }));
@@ -277,7 +277,7 @@ describe("findMissingRequiredPluginDependencies", () => {
     "linked-node-modules",
     "hoisted-host",
     "unknown-host",
-  ] as const)("audits a required OpenClaw host with a %s layout", async (layout) => {
+  ] as const)("audits a required AgileClaw host with a %s layout", async (layout) => {
     const { parent, projectRoot, rootDir, hostRoot } = createHostFixture();
     if (layout === "canonical" || layout === "unknown-host") {
       linkHost(rootDir, hostRoot);

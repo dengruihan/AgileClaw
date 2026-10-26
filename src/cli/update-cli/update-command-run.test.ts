@@ -401,7 +401,7 @@ it.each([
     const reportPath = path.join(env.OPENCLAW_STATE_DIR, "update-reports", `${run.runId}.md`);
     let savedAtPublication: string | undefined;
     const log = vi.spyOn(defaultRuntime, "log").mockImplementation((value) => {
-      if (String(value).includes("OpenClaw update failed")) {
+      if (String(value).includes("AgileClaw update failed")) {
         savedAtPublication = fs.readFileSync(reportPath, "utf8");
       }
     });
@@ -452,7 +452,7 @@ it.each([
       );
     }
     expect(savedAtPublication).toContain("Candidate validation unexpectedly stopped.");
-    expect(savedAtPublication).toContain("OpenClaw update failed");
+    expect(savedAtPublication).toContain("AgileClaw update failed");
     if (json) {
       expect(output).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ status: "error", runId: run.runId, reportPath }),
@@ -462,7 +462,7 @@ it.each([
       );
     } else {
       const text = log.mock.calls.flat().join("\n");
-      expect(text).toContain("OpenClaw update failed");
+      expect(text).toContain("AgileClaw update failed");
       expect(text).toContain("Candidate validation unexpectedly stopped.");
       expect(text).toContain(`Report: ${reportPath}`);
     }
@@ -541,7 +541,7 @@ it.each(["ok", "error"] as const)(
     }
     expect(JSON.stringify(savedAtPublication)).not.toContain(secret);
     expect(savedAtPublication?.markdown).toContain(
-      status === "error" ? "doctor-failed" : "OpenClaw updated",
+      status === "error" ? "doctor-failed" : "AgileClaw updated",
     );
   },
 );

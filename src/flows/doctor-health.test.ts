@@ -290,7 +290,7 @@ describe("runDoctorHealthFlow", () => {
         const runtime = { log: vi.fn(), error: vi.fn(), exit: vi.fn() };
         await expect(
           runDoctorHealthFlow(runtime, { repair: true, nonInteractive: true }),
-        ).rejects.toThrow("different OpenClaw installation");
+        ).rejects.toThrow("different AgileClaw installation");
         expect(service.stop).not.toHaveBeenCalled();
         expect(service.restart).not.toHaveBeenCalled();
         expect(service.install).not.toHaveBeenCalled();
@@ -342,7 +342,7 @@ describe("runDoctorHealthFlow", () => {
           );
           expect(runtime.exit).toHaveBeenCalledExactlyOnceWith(1);
           expect(runtime.error).toHaveBeenCalledWith(
-            "Doctor could not enter maintenance. An agent database is in use. Stop other OpenClaw processes using this state, then retry the update.",
+            "Doctor could not enter maintenance. An agent database is in use. Stop other AgileClaw processes using this state, then retry the update.",
           );
           expect(maintenanceOutcome()).toEqual({ outcome: "startup_failed" });
           expect(mocks.writeUpdatePostInstallDoctorResult).toHaveBeenCalledWith({
@@ -355,7 +355,7 @@ describe("runDoctorHealthFlow", () => {
                   check: "doctor",
                   code: "agent-database-lease-active",
                   message:
-                    "Doctor could not enter maintenance. An agent database is in use. Stop other OpenClaw processes using this state, then retry the update.",
+                    "Doctor could not enter maintenance. An agent database is in use. Stop other AgileClaw processes using this state, then retry the update.",
                 },
               ],
             },
@@ -434,8 +434,8 @@ describe("runDoctorHealthFlow", () => {
         expect(runtime.error).toHaveBeenCalledWith(
           [
             "Doctor could not complete repair because persisted database readiness could not be verified:",
-            `agent ${initial.path}: OpenClaw agent database ${initial.path} uses schema version 17; run openclaw doctor --fix before compacting it.`,
-            "Stop OpenClaw processes, then restore the affected database from a verified backup.",
+            `agent ${initial.path}: AgileClaw agent database ${initial.path} uses schema version 17; run openclaw doctor --fix before compacting it.`,
+            "Stop AgileClaw processes, then restore the affected database from a verified backup.",
           ].join("\n"),
         );
         expect(mocks.outro).not.toHaveBeenCalledWith("Doctor complete.");

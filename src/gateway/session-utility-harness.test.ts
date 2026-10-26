@@ -92,7 +92,7 @@ describe("utility completion with an unavailable implicit harness", () => {
     await state.cleanup();
   });
 
-  it("publishes the observer digest through OpenClaw without inheriting session harness state", async () => {
+  it("publishes the observer digest through AgileClaw without inheriting session harness state", async () => {
     const transport = vi
       .spyOn(simpleCompletionExecution, "completeWithPreparedSimpleCompletionModel")
       .mockResolvedValue(
@@ -138,7 +138,7 @@ describe("utility completion with an unavailable implicit harness", () => {
     }
   });
 
-  it("persists an Activity recap through the same OpenClaw utility completion", async () => {
+  it("persists an Activity recap through the same AgileClaw utility completion", async () => {
     const text = "Finished checking the requested fix.";
     const transport = vi
       .spyOn(simpleCompletionExecution, "completeWithPreparedSimpleCompletionModel")

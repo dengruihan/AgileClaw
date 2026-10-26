@@ -87,7 +87,7 @@ export async function classifyPartialCloneGitFailure(params: {
   return {
     ...params.result,
     stderr:
-      "Git reported an object-database inconsistency, but OpenClaw did not verify repository " +
+      "Git reported an object-database inconsistency, but AgileClaw did not verify repository " +
       "corruption with git fsck. Retry the update; if it recurs, inspect the repository with " +
       "git fsck before attempting repair.",
   };

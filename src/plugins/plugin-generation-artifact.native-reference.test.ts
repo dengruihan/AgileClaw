@@ -307,7 +307,7 @@ it.each([
           }
           const selectedHost = hosts[hoisted ? 0 : 1]!;
           expect(() => successor!.linkHost(selectedHost)).toThrow(
-            `does not resolve the selected OpenClaw host ${selectedHost}: ${peer} resolves to ${hosts[hoisted ? 1 : 0]}`,
+            `does not resolve the selected AgileClaw host ${selectedHost}: ${peer} resolves to ${hosts[hoisted ? 1 : 0]}`,
           );
           expect(fs.realpathSync(path.join(fixture.installRoot, "node_modules", "openclaw"))).toBe(
             fs.realpathSync(hosts[0]!),

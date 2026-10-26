@@ -138,7 +138,7 @@ describeControlUiE2e("Control UI composer pointer controls", () => {
     try {
       const page = await context.newPage();
       const gateway = await installMockGateway(page, {
-        assistantName: "OpenClaw",
+        assistantName: "AgileClaw",
         deferredMethods: ["chat.send"],
       });
       await page.goto(`${server.baseUrl}chat`);
@@ -230,7 +230,7 @@ describeControlUiE2e("Control UI composer pointer controls", () => {
     try {
       const page = await context.newPage();
       const gateway = await installMockGateway(page, {
-        assistantName: "OpenClaw",
+        assistantName: "AgileClaw",
         deferredMethods: ["chat.send"],
       });
       await page.goto(`${server.baseUrl}chat`);
@@ -310,7 +310,7 @@ describeControlUiE2e("Control UI composer pointer controls", () => {
     try {
       const page = await context.newPage();
       const gateway = await installMockGateway(page, {
-        assistantName: "OpenClaw",
+        assistantName: "AgileClaw",
         deferredMethods: ["chat.send"],
       });
       await page.goto(`${server.baseUrl}chat`);
@@ -388,7 +388,7 @@ describeControlUiE2e("Control UI composer pointer controls", () => {
     });
     try {
       const page = await context.newPage();
-      const gateway = await installMockGateway(page, { assistantName: "OpenClaw" });
+      const gateway = await installMockGateway(page, { assistantName: "AgileClaw" });
       await page.goto(`${server.baseUrl}chat`);
       await gateway.waitForRequest("chat.startup");
       const protocol = await context.newCDPSession(page);

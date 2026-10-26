@@ -86,6 +86,6 @@ export async function buildNodeInstallPlan(params: {
       CF_ACCESS_CLIENT_ID: "file",
       CF_ACCESS_CLIENT_SECRET: "file", // pragma: allowlist secret
     },
-    description: "OpenClaw Node Host",
+    description: "AgileClaw Node Host",
   };
 }

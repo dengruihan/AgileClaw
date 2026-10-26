@@ -564,7 +564,7 @@ describe("runCli exit behavior", () => {
 
   it("rejects configured bare root TUI startup without an interactive TTY", async () => {
     await expectNonInteractiveBareCliError(
-      "OpenClaw TUI needs an interactive TTY. Use `openclaw agent --local ...` for automation.",
+      "AgileClaw TUI needs an interactive TTY. Use `openclaw agent --local ...` for automation.",
       () => expect(runTuiMock).not.toHaveBeenCalled(),
     );
   });
@@ -590,7 +590,7 @@ describe("runCli exit behavior", () => {
       sourceConfig: { gateway: { mode: "local" } },
     });
     await expectNonInteractiveBareCliError(
-      "OpenClaw config is invalid. Run `openclaw doctor --fix` before onboarding.",
+      "AgileClaw config is invalid. Run `openclaw doctor --fix` before onboarding.",
       () => expect(setupWizardCommandMock).not.toHaveBeenCalled(),
     );
   });

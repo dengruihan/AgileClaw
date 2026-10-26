@@ -459,7 +459,7 @@ suite.define(() => {
     await page.goto(`${suite.server.baseUrl}custodian?onboarding=1`);
 
     expect(
-      await page.getByText("Update the Gateway to continue setup with OpenClaw.").count(),
+      await page.getByText("Update the Gateway to continue setup with AgileClaw.").count(),
     ).toBe(0);
     const onboardingInbox = page.locator(
       ".custodian__header-actions > openclaw-sidebar-attention:not(.sidebar-attention--floating)",

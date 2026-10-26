@@ -39,7 +39,7 @@ export function parsePackageOpenClawSchemaVersions(
       return parseOpenClawSchemaVersions(schemaVersions);
     }
   }
-  // Published OpenClaw stable releases through 2026.7.1 used schema 1 before
+  // Published AgileClaw stable releases through 2026.7.1 used schema 1 before
   // declaring it in package metadata. Unknown versions and replacement packages
   // cannot inherit that shipped contract. See database-schemas/integrity-and-recovery.
   if (packageJson.name !== "openclaw" || typeof packageJson.version !== "string") {

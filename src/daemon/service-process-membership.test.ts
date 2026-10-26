@@ -336,6 +336,6 @@ describe("systemd process membership", () => {
 });
 
 it("does not invent Windows Job membership from environment hints", () => {
-  vi.stubEnv("OPENCLAW_WINDOWS_TASK_NAME", "OpenClaw Gateway");
+  vi.stubEnv("OPENCLAW_WINDOWS_TASK_NAME", "AgileClaw Gateway");
   expect(inspectServiceProcessMembershipSync(gatewayPid, "win32")).toBe("unknown");
 });

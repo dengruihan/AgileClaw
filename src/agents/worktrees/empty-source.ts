@@ -9,7 +9,7 @@ import { listRegistryWorktrees } from "./registry.js";
 import type { ManagedWorktreeRecord } from "./types.js";
 
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
-const INITIAL_COMMIT = `tree ${EMPTY_TREE}\nauthor OpenClaw <openclaw@localhost> 0 +0000\ncommitter OpenClaw <openclaw@localhost> 0 +0000\n\nEmpty workspace\n`;
+const INITIAL_COMMIT = `tree ${EMPTY_TREE}\nauthor AgileClaw <openclaw@localhost> 0 +0000\ncommitter AgileClaw <openclaw@localhost> 0 +0000\n\nEmpty workspace\n`;
 const INITIAL_COMMIT_ID = createHash("sha1")
   .update(`commit ${Buffer.byteLength(INITIAL_COMMIT)}\0${INITIAL_COMMIT}`)
   .digest("hex");
@@ -117,7 +117,7 @@ export async function ensureEmptyWorktreeSource(params: {
     params.signal?.throwIfAborted();
     commitGuard();
     throw new Error(
-      `Empty workspace source is unavailable or modified: ${sourceRoot}. Restore its original Git metadata and keep existing session files; OpenClaw will not recreate it over existing data.`,
+      `Empty workspace source is unavailable or modified: ${sourceRoot}. Restore its original Git metadata and keep existing session files; AgileClaw will not recreate it over existing data.`,
       { cause },
     );
   }

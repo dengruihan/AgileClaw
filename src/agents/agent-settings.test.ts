@@ -343,8 +343,8 @@ describe("isSilentOverflowProneModel", () => {
   // family name so direct gateway deployments hit the guard regardless of
   // what `provider` field the user picked — gateways relabel the upstream
   // identity, so `provider` here can be anything from `openai` to a custom
-  // string. False positives only disable OpenClaw runtime's secondary compaction path;
-  // OpenClaw's preemptive compaction continues to handle real overflow.
+  // string. False positives only disable AgileClaw runtime's secondary compaction path;
+  // AgileClaw's preemptive compaction continues to handle real overflow.
   it("flags bare glm- model ids without a namespace prefix, regardless of provider", () => {
     expect(isSilentOverflowProneModel({ provider: "custom", modelId: "glm-5.1" })).toBe(true);
     expect(isSilentOverflowProneModel({ provider: "custom", modelId: "glm-4.7" })).toBe(true);
@@ -413,8 +413,8 @@ describe("applyAgentAutoCompactionGuard", () => {
     });
   });
 
-  // Default-mode runs against ordinary providers must keep OpenClaw runtime's auto-compaction
-  // enabled. Disabling it across the board would silently remove OpenClaw runtime's
+  // Default-mode runs against ordinary providers must keep AgileClaw runtime's auto-compaction
+  // enabled. Disabling it across the board would silently remove AgileClaw runtime's
   // overflow-recovery path inside Session.prompt() for users who are not
   // affected by z.ai's silent-overflow accounting.
   it("leaves embedded auto-compaction alone for non-z.ai providers without engine ownership", () => {

@@ -505,7 +505,7 @@ describe("triage --run", () => {
     expect(mocks.prepareUpdateRepairInference).not.toHaveBeenCalled();
     expect(mocks.runUpdateRepairTurn).not.toHaveBeenCalled();
     expect(runtime.log.mock.calls.flat().join("\n")).toContain(
-      "the embedded OpenClaw agent using your configured model",
+      "the embedded AgileClaw agent using your configured model",
     );
     expect(runtime.log.mock.calls.flat().join("\n")).not.toContain("gpt-5.6-luna");
     expect(runtime.log).toHaveBeenCalledWith("No repair agent was started.");

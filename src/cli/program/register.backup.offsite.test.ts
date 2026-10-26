@@ -145,10 +145,10 @@ describe("offsite backup CLI", () => {
         status: "failed",
         target: "archive",
         namespace: "test-host",
-        error: expect.stringContaining("belongs to another OpenClaw installation"),
+        error: expect.stringContaining("belongs to another AgileClaw installation"),
       });
       expect(fixture.errors.mock.calls.flat().join(" ")).toContain(
-        "belongs to another OpenClaw installation",
+        "belongs to another AgileClaw installation",
       );
       fixture.useNewOwner();
       const created = (await create()) as OffsiteBackupResult;
@@ -218,7 +218,7 @@ describe("offsite backup CLI", () => {
       expect((await readBackupRuns(process.env))[0]).toMatchObject({
         status: "failed",
         namespace: "test-host",
-        error: expect.stringContaining("belongs to another OpenClaw installation"),
+        error: expect.stringContaining("belongs to another AgileClaw installation"),
       });
       expect(await fs.readdir(fixture.scratchRoot)).toEqual([]);
     });
@@ -330,7 +330,7 @@ describe("offsite backup CLI", () => {
         ),
       ).rejects.toThrow();
       const collisionMessage =
-        'Backup namespace "test-host" in archive belongs to another OpenClaw installation (test-host, device another-inst). Pass --namespace <name> to use a separate namespace, or --claim-namespace to take it over deliberately (for example after moving to new hardware).';
+        'Backup namespace "test-host" in archive belongs to another AgileClaw installation (test-host, device another-inst). Pass --namespace <name> to use a separate namespace, or --claim-namespace to take it over deliberately (for example after moving to new hardware).';
       expect(errors.mock.calls.flat().join(" ")).toContain(collisionMessage);
       expect((await readBackupRuns(process.env))[0]).toMatchObject({
         status: "failed",

@@ -49,7 +49,7 @@ describe("AppSidebar agent roster", () => {
     const header = sidebar.querySelector(".sidebar-workspace-header");
     expect(header?.querySelector(".sidebar-workspace-header__mark--neutral svg")).not.toBeNull();
     expect(header?.querySelector("img")).toBeNull();
-    expect(header?.textContent).toContain("OpenClaw");
+    expect(header?.textContent).toContain("AgileClaw");
     patchSettings({ theme: "claw" });
     context.theme.refresh();
     await sidebar.updateComplete;
@@ -73,7 +73,7 @@ describe("AppSidebar agent roster", () => {
           expect(sidebar.querySelector(".sidebar-workspace-header__main")).not.toBeNull(),
         );
         const header = sidebar.querySelector(".sidebar-workspace-header");
-        expect(header?.textContent).toContain(name?.trim() || "OpenClaw");
+        expect(header?.textContent).toContain(name?.trim() || "AgileClaw");
         expect(header?.querySelector(".sidebar-agent-card__avatar")).toBeNull();
         expect(header?.querySelector("img")?.getAttribute("src")).toBe("/favicon.svg");
         expect(sidebar.querySelector("openclaw-sidebar-agent-card")).toBeNull();
@@ -294,7 +294,7 @@ describe("AppSidebar agent roster", () => {
       expect.objectContaining({ pathname: "/chat/working/recent" }),
     );
     expect(sidebar.querySelector(".sidebar-workspace-header__main")?.textContent).toContain(
-      "OpenClaw",
+      "AgileClaw",
     );
     expect(sidebar.querySelector("openclaw-sidebar-agent-card")).toBeNull();
     sidebar

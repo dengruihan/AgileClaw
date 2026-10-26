@@ -246,7 +246,7 @@ describe("runGlobalPackageUpdateSteps", () => {
         const prefix = path.join(base, "prefix");
         const globalRoot = path.join(prefix, "lib", "node_modules");
         const packageRoot = path.join(globalRoot, "openclaw");
-        const sourceSpec = "OpenClaw@github:openclaw/openclaw#release/2026.5.12";
+        const sourceSpec = "AgileClaw@github:openclaw/openclaw#release/2026.5.12";
         await writePackageRoot(packageRoot, "1.0.0");
 
         let packDir: string | undefined;

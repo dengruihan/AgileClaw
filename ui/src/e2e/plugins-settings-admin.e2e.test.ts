@@ -514,7 +514,7 @@ suite.define(() => {
         await page
           .getByRole("alert")
           .filter({
-            hasText: "Dependency check failed. Reinstall the plugin and restart OpenClaw.",
+            hasText: "Dependency check failed. Reinstall the plugin and restart AgileClaw.",
           })
           .waitFor();
         expect(

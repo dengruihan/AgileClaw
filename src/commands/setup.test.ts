@@ -683,7 +683,7 @@ describe("setupCommand", () => {
             ok: false,
             error: {
               type: "cli_error",
-              message: "OpenClaw config is invalid: ~/.openclaw/openclaw.json",
+              message: "AgileClaw config is invalid: ~/.openclaw/openclaw.json",
             },
             issues: expect.arrayContaining([
               expect.objectContaining({ path: "<root>", message: expect.any(String) }),

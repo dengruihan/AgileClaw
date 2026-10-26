@@ -157,7 +157,7 @@ describe("Git-backed SQLite snapshots", () => {
       path.join(stateAlias, "backup"),
     ]) {
       await expect(initializeGitBackupRepository({ repositoryPath, stateDir })).rejects.toThrow(
-        `Git backup repository must be outside the OpenClaw state directory: ${stateDir}`,
+        `Git backup repository must be outside the AgileClaw state directory: ${stateDir}`,
       );
     }
   });
@@ -324,7 +324,7 @@ describe("Git-backed SQLite snapshots", () => {
     const { stateDir, database } = createStateDatabaseFixture(root);
     const repositoryPath = path.join(root, "repository");
     await initializeGitBackupRepository({ repositoryPath, stateDir });
-    await requireGit(repositoryPath, ["config", "user.name", "OpenClaw Backup Test"]);
+    await requireGit(repositoryPath, ["config", "user.name", "AgileClaw Backup Test"]);
     await requireGit(repositoryPath, ["config", "user.email", "backup@example.invalid"]);
     await fs.writeFile(path.join(repositoryPath, "unrelated.txt"), "operator-owned\n");
     await requireGit(repositoryPath, ["add", "unrelated.txt"]);
@@ -371,7 +371,7 @@ describe("Git-backed SQLite snapshots", () => {
 
     await expect(
       createGitBackup({ repositoryPath, stateDir, databases: [database] }),
-    ).rejects.toThrow(/repository must be dedicated to OpenClaw backups/u);
+    ).rejects.toThrow(/repository must be dedicated to AgileClaw backups/u);
     await expect(fs.readFile(operatorFile, "utf8")).resolves.toBe("operator-owned\n");
   });
 
@@ -401,7 +401,7 @@ describe("Git-backed SQLite snapshots", () => {
 
     await expect(
       createGitBackup({ repositoryPath, stateDir, databases: [database], all: true }),
-    ).rejects.toThrow(/repository must be dedicated to OpenClaw backups/u);
+    ).rejects.toThrow(/repository must be dedicated to AgileClaw backups/u);
     await expect(fs.readFile(unownedFile, "utf8")).resolves.toBe("operator-owned\n");
     await expect(
       fs.readFile(path.join(ownedAgentPath, "manifest.json"), "utf8"),
@@ -456,7 +456,7 @@ describe("Git-backed SQLite snapshots", () => {
       await fs.mkdir(stateDir);
 
       await initializeGitBackupRepository({ repositoryPath, stateDir });
-      await requireGit(repositoryPath, ["config", "user.name", "OpenClaw Backup Test"]);
+      await requireGit(repositoryPath, ["config", "user.name", "AgileClaw Backup Test"]);
       await requireGit(repositoryPath, ["config", "user.email", "backup@example.invalid"]);
       await fs.writeFile(path.join(repositoryPath, "README.md"), "backup\n");
       await requireGit(repositoryPath, ["add", "README.md"]);
@@ -490,7 +490,7 @@ describe("Git-backed SQLite snapshots", () => {
     expect(result.commit).toMatch(/^[a-f0-9]{40}$/u);
     expect(
       await requireGit(repositoryPath, ["log", "-1", "--format=%an <%ae>"], { env: gitEnv }),
-    ).toBe("OpenClaw <backup@openclaw.local>");
+    ).toBe("AgileClaw <backup@openclaw.local>");
     expect(
       await requireGit(repositoryPath, ["config", "--local", "--get", "user.email"], {
         env: gitEnv,
@@ -517,7 +517,7 @@ describe("Git-backed SQLite snapshots", () => {
       ].join("\n"),
     };
     await initializeGitBackupRepository({ repositoryPath, stateDir, remote });
-    await requireGit(repositoryPath, ["config", "user.name", "OpenClaw Backup Test"]);
+    await requireGit(repositoryPath, ["config", "user.name", "AgileClaw Backup Test"]);
     await requireGit(repositoryPath, ["config", "user.email", "backup@example.invalid"]);
 
     await withBackupStateEnv({ OPENCLAW_STATE_DIR: stateDir }, async () => {
@@ -577,7 +577,7 @@ describe("Git-backed SQLite snapshots", () => {
     await requireGit(root, ["init", repositoryPath]);
     await requireGit(repositoryPath, [
       "-c",
-      "user.name=OpenClaw Backup Test",
+      "user.name=AgileClaw Backup Test",
       "-c",
       "user.email=backup@example.invalid",
       "commit",
@@ -633,7 +633,7 @@ describe("Git-backed SQLite snapshots", () => {
       repositoryPath,
       [
         "-c",
-        "user.name=OpenClaw Backup Test",
+        "user.name=AgileClaw Backup Test",
         "-c",
         "user.email=backup@example.invalid",
         "commit-tree",
@@ -693,7 +693,7 @@ describe("Git-backed SQLite snapshots", () => {
     const remotePath = path.join(root, "remote.git");
     await requireGit(root, ["init", "--bare", remotePath]);
     await initializeGitBackupRepository({ repositoryPath, stateDir, remote: remotePath });
-    await requireGit(repositoryPath, ["config", "user.name", "OpenClaw Backup Test"]);
+    await requireGit(repositoryPath, ["config", "user.name", "AgileClaw Backup Test"]);
     await requireGit(repositoryPath, ["config", "user.email", "backup@example.invalid"]);
     await fs.writeFile(path.join(repositoryPath, "unrelated.txt"), "operator-owned\n");
     await requireGit(repositoryPath, ["add", "unrelated.txt"]);
@@ -726,7 +726,7 @@ describe("Git-backed SQLite snapshots", () => {
     const remotePath = path.join(root, "remote.git");
     await requireGit(root, ["init", "--bare", remotePath]);
     await initializeGitBackupRepository({ repositoryPath, stateDir, remote: remotePath });
-    await requireGit(repositoryPath, ["config", "user.name", "OpenClaw Backup Test"]);
+    await requireGit(repositoryPath, ["config", "user.name", "AgileClaw Backup Test"]);
     await requireGit(repositoryPath, ["config", "user.email", "backup@example.invalid"]);
 
     const result = await createGitBackup({

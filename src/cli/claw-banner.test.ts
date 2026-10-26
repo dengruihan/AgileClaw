@@ -34,17 +34,17 @@ async function runStatic() {
     .filter((row) => row.length > 0);
 }
 
+// The jade disc's first and last rows are blank, so the non-empty-row
+// projection below lists only the eight ring rows.
 const EXPECTED_MASCOT = [
-  " •●●:.        .:●●•",
-  ":●●●●:        :●●●●:",
-  ".●●●●:.:•●●•:.:●●●●.",
-  " .●●●: •●●●●• :●●●.",
-  " ..:••●●●●●●●●••:..",
-  ".::••••●●●●●●••••::.",
-  " . .:  •●●●●•  :. .",
-  "    .  :●●●●:  .",
-  "      .●●●●●●.",
-  "       :••••:",
+  "     •●●●●●●●●•",
+  "   ●●●●●●●●●●●●●●",
+  "  ●●●●●●    ●●●●●●",
+  " •●●●●        ●●●●•",
+  " •●●●●        ●●●●•",
+  "  ●●●●●●    ●●●●●●",
+  "   ●●●●●●●●●●●●●●",
+  "     •●●●●●●●●•",
 ] as const;
 
 describe("printClawBanner", () => {
@@ -54,7 +54,7 @@ describe("printClawBanner", () => {
     const output = stripAnsi(String(log.mock.calls[0]?.[0]));
     const rows = output.split("\n").filter((row) => row.length > 0);
     expect(rows.map((row) => row.slice(0, 20).trimEnd())).toEqual(EXPECTED_MASCOT);
-    expect(output).toContain("█▀▀▀█ █▀▀▀█ █▀▀▀▀ █▄  █");
+    expect(output).toContain("█▀▀▀█ █▀▀▀▀   █   █");
   });
 
   it("stays static under CI even on a rich TTY", async () => {
@@ -67,11 +67,11 @@ describe("printClawBanner", () => {
     const { runtime, log } = runtimeStub();
     await printClawBanner(runtime, { columns: 50, isTty: true, rich: true, env: {} });
     const output = String(log.mock.calls[0]?.[0]);
-    expect(output).toContain("OPENCLAW");
+    expect(output).toContain("AGILECLAW");
     expect(output).not.toContain("█");
   });
 
-  it("wipes, shimmers once, and snips once within the startup pause budget", async () => {
+  it("wipes, shimmers once, and pulses once within the startup pause budget", async () => {
     const staticRows = await runStatic();
     const { chunks, pauses, result } = await runAnimated();
     expect(result).toBe("completed");
@@ -84,8 +84,7 @@ describe("printClawBanner", () => {
     expect(
       frames.flatMap((frame, index) => {
         const [first = "", second = ""] = stripAnsi(frame).split("\n");
-        return first.slice(0, 20).trimEnd() === "•●•.:.        .:.•●•" &&
-          second.slice(0, 20).trimEnd() === ":●●●•:        :•●●●:"
+        return first.trim() === "" && second.slice(0, 20).trimEnd() === "     ●●●●●●●●●●"
           ? [index]
           : [];
       }),

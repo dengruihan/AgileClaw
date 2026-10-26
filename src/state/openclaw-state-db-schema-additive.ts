@@ -76,7 +76,7 @@ export function ensureGitHubPublicationSessionLifecycleSchema(database: Database
 export function ensureSecretStoreSchema(database: DatabaseSync): void {
   ensureTable(database, "secret_store_entries", {
     endMarker: "ON secret_store_entries (scope_kind, scope_id, name) WHERE deleted_at_ms IS NULL;",
-    errorMessage: "OpenClaw secret store schema marker is missing.",
+    errorMessage: "AgileClaw secret store schema marker is missing.",
   });
   ensureColumn(database, "secret_store_entries", "allowed_hosts TEXT");
 }
@@ -84,21 +84,21 @@ export function ensureSecretStoreSchema(database: DatabaseSync): void {
 /** Lazily install durable MCP OAuth callback correlation on first feature use. */
 export function ensureMcpOAuthPendingSchema(database: DatabaseSync): void {
   ensureTable(database, "mcp_oauth_pending_authorizations", {
-    errorMessage: "OpenClaw MCP OAuth pending schema marker is missing.",
+    errorMessage: "AgileClaw MCP OAuth pending schema marker is missing.",
   });
 }
 
 /** Lazily install the additive device join-code table on first mint or redemption. */
 export function ensureDevicePairingJoinCodeSchema(database: DatabaseSync): void {
   ensureTable(database, "device_pairing_join_codes", {
-    errorMessage: "OpenClaw device pairing join-code schema marker is missing.",
+    errorMessage: "AgileClaw device pairing join-code schema marker is missing.",
   });
 }
 
 /** Lazily installs the Gateway's installation-local config revision key owner. */
 export function ensureConfigRevisionKeySchema(database: DatabaseSync): void {
   ensureTable(database, "config_revision_keys", {
-    errorMessage: "OpenClaw config revision key schema marker is missing.",
+    errorMessage: "AgileClaw config revision key schema marker is missing.",
   });
 }
 

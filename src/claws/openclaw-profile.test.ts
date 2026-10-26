@@ -22,7 +22,7 @@ async function profileFixture(pointer?: string) {
   return { root, path };
 }
 
-describe("OpenClaw profile schema", () => {
+describe("AgileClaw profile schema", () => {
   it("rejects disabled host filesystem confinement", () => {
     const result = parseClawOpenClawProfile({
       schemaVersion: 1,
@@ -73,7 +73,7 @@ describe("OpenClaw profile schema", () => {
   });
 });
 
-describe("OpenClaw profile reader", () => {
+describe("AgileClaw profile reader", () => {
   it.each([
     ["anchor", "agent: &agent {}", "anchors"],
     ["alias", "agent: *agent", "aliases"],
@@ -95,7 +95,7 @@ describe("OpenClaw profile reader", () => {
             phase: "parse",
             path: "$",
             code: "unsupported_openclaw_profile_yaml_feature",
-            message: `profiles/openclaw.yml uses ${feature}; OpenClaw profile YAML must map directly to JSON data.`,
+            message: `profiles/openclaw.yml uses ${feature}; AgileClaw profile YAML must map directly to JSON data.`,
           },
         ],
       });
@@ -176,7 +176,7 @@ describe("OpenClaw profile reader", () => {
       },
     });
     if (!first.ok) {
-      throw new Error("expected OpenClaw profile to parse");
+      throw new Error("expected AgileClaw profile to parse");
     }
 
     await writeFile(
@@ -187,7 +187,7 @@ describe("OpenClaw profile reader", () => {
     const second = await readClawManifestFile(root);
     expect(second.ok).toBe(true);
     if (!second.ok) {
-      throw new Error("expected changed OpenClaw profile to parse");
+      throw new Error("expected changed AgileClaw profile to parse");
     }
     expect(second.source.integrity).not.toBe(first.source.integrity);
   });

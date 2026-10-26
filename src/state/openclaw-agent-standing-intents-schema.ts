@@ -65,7 +65,7 @@ export function ensureOpenClawAgentStandingIntentsSchema(db: DatabaseSync): void
   const schemaSql = extractSqliteTableSchema(OPENCLAW_AGENT_SCHEMA_SQL, STANDING_INTENTS_TABLE, {
     endMarker: "CREATE TABLE IF NOT EXISTS session_transcript_index_state (",
     includeEndMarker: false,
-    errorMessage: "OpenClaw standing-intents schema markers are missing.",
+    errorMessage: "AgileClaw standing-intents schema markers are missing.",
   });
   const ensure = () => {
     // sqlite-allow-raw -- Canonical additive DDL only.

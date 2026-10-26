@@ -5,7 +5,7 @@ import { assertSqliteFlipStartupRefusal } from "./sqlite-sessions-transcripts-fl
 function startupRefusal(command: string) {
   return {
     message: `gateway refused startup: legacy migration required (code=78 signal=null)
-Legacy session store requires migration: /qa/state/agents/main/sessions/sessions.json. Run "${command}" against the same state/config before starting OpenClaw.`,
+Legacy session store requires migration: /qa/state/agents/main/sessions/sessions.json. Run "${command}" against the same state/config before starting AgileClaw.`,
     preservedSourceFiles: [
       "agents/main/sessions/sessions.json",
       "agents/main/sessions/archive-fixture/cold-archive.jsonl",

@@ -866,7 +866,7 @@ async function ensureAgentWorkspaceOwned(
       (await workspaceProfileLooksConfigured({
         dir,
         // A preexisting Git repository is user evidence. Git metadata left by
-        // an expired, wiped OpenClaw workspace is not completion evidence.
+        // an expired, wiped AgileClaw workspace is not completion evidence.
         includeGitEvidence: !reseedingExpiredWorkspaceState,
       }))
     ) {

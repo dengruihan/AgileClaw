@@ -87,11 +87,11 @@ export function assertPluginNativeNamespaceHost(
       continue;
     }
     throw new Error(
-      `Retained native directory ${fact.sourceDirectory} does not resolve the selected OpenClaw host ${hostRoot}: ` +
+      `Retained native directory ${fact.sourceDirectory} does not resolve the selected AgileClaw host ${hostRoot}: ` +
         (candidate
           ? `${candidate} resolves to ${resolvedHost}`
-          : `no OpenClaw peer resolves from ${directory}`) +
-        ". Run openclaw doctor --fix with the selected host to repair the installed plugin's OpenClaw peer link, then reload the plugin.",
+          : `no AgileClaw peer resolves from ${directory}`) +
+        ". Run openclaw doctor --fix with the selected host to repair the installed plugin's AgileClaw peer link, then reload the plugin.",
     );
   }
 }

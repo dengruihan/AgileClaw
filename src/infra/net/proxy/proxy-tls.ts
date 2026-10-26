@@ -4,7 +4,7 @@ import { normalizeOptionalString } from "@openclaw/normalization-core/string-coe
 import type { ProxyConfig } from "../../../config/zod-schema.proxy.js";
 import { formatErrorMessage } from "../../errors.js";
 
-/** TLS trust material passed to proxy clients for OpenClaw-managed HTTPS proxies. */
+/** TLS trust material passed to proxy clients for AgileClaw-managed HTTPS proxies. */
 export type ManagedProxyTlsOptions = Readonly<{
   ca?: string;
 }>;

@@ -382,7 +382,7 @@ function runSqliteForeignKeyCheck(
     const argument = table ? `('${table.replaceAll("'", "''")}')` : "";
     const statement = database.prepare(`PRAGMA foreign_key_check${argument};`);
     statement.setReadBigInts(true);
-    // OpenClaw's Node >=24.16.0 floor includes iterate(), added in Node 22.13.
+    // AgileClaw's Node >=24.16.0 floor includes iterate(), added in Node 22.13.
     for (const violation of statement.iterate() as Iterable<SqliteForeignKeyViolation>) {
       violationCount += 1;
       retainSortedForeignKeyViolation(violations, violation);

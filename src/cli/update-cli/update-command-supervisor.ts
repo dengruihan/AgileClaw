@@ -7,7 +7,7 @@ export async function hasLoadedLaunchdKeepAliveSupervisor(params: {
   if (process.platform !== "darwin") {
     return false;
   }
-  // OpenClaw's loaded LaunchAgent has canonical KeepAlive policy. Read this once before
+  // AgileClaw's loaded LaunchAgent has canonical KeepAlive policy. Read this once before
   // polling so an unloaded agent can still reach the existing recovery path promptly.
   return await params.service.isLoaded({ env: params.env }).catch(() => false);
 }

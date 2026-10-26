@@ -23,7 +23,7 @@ async function stageWorkerDeployArtifact(params: {
     expectedRealPath = await fs.realpath(sourcePath);
   } catch (error) {
     throw new Error(
-      `OpenClaw worker deploy artifact is missing; build the running package at ${params.sourceRoot}`,
+      `AgileClaw worker deploy artifact is missing; build the running package at ${params.sourceRoot}`,
       { cause: error },
     );
   }
@@ -73,7 +73,7 @@ export async function collectWorkerBundleManifest(
     fs.readdir(path.join(sourceRoot, "dist/worker")),
   ]).catch((error: unknown) => {
     throw new Error(
-      `OpenClaw worker deploy artifact is missing; build the running package at ${sourceRoot}`,
+      `AgileClaw worker deploy artifact is missing; build the running package at ${sourceRoot}`,
       { cause: error },
     );
   });

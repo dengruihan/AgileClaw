@@ -578,7 +578,7 @@ describe("client tool name conflict checks", () => {
     ).toEqual(["Weather", "weather"]);
   });
 
-  it("detects collisions with reserved OpenClaw built-in tool names", () => {
+  it("detects collisions with reserved AgileClaw built-in tool names", () => {
     expect(
       findClientToolNameConflicts({
         tools: [makeClientTool("Bash"), makeClientTool("grep")],

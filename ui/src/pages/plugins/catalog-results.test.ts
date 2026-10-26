@@ -134,7 +134,7 @@ describe("renderPluginCatalogResults", () => {
   it("groups mixed search results by official status without truncating or changing each group's rank", () => {
     const official = Array.from({ length: 10 }, (_, index) => plugin(`official-${index}`));
     const community = ["community-first", "community-second"].map((id) =>
-      plugin(id, { catalog: { name: "OpenClaw integration", official: false, categories: [] } }),
+      plugin(id, { catalog: { name: "AgileClaw integration", official: false, categories: [] } }),
     );
     const onLoadMore = vi.fn();
     const container = mount(

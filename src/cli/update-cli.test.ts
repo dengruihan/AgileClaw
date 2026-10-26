@@ -202,7 +202,7 @@ describe("update-cli", () => {
 
   it("renders update status as a table", async () => {
     await updateStatusCommand({ json: false });
-    expect(getLogOutput()).toContain("OpenClaw update status");
+    expect(getLogOutput()).toContain("AgileClaw update status");
     expect(checkUpdateStatus).toHaveBeenCalledWith(
       expect.objectContaining({ useDetachedDevUpstream: false }),
     );
@@ -230,7 +230,7 @@ describe("update-cli", () => {
         });
       } else {
         const output = getLogOutput();
-        expect(output).toContain("OpenClaw update status");
+        expect(output).toContain("AgileClaw update status");
         expect(output).toContain(`Warning: ${issue}`);
         expect(output).toContain("openclaw doctor --fix");
         expect(output.indexOf(`Warning: ${issue}`)).toBeGreaterThan(output.indexOf("Channel"));
@@ -829,7 +829,7 @@ describe("update-cli", () => {
     await expect(updateCommand({ channel: "dev" })).rejects.toEqual(new ExitError(1));
 
     const logs = getLogOutput();
-    expect(logs).toContain(`OpenClaw update ${status === "error" ? "failed" : "skipped"}: dirty.`);
+    expect(logs).toContain(`AgileClaw update ${status === "error" ? "failed" : "skipped"}: dirty.`);
     expect(logs).toContain(
       "Local changes prevented this update before installation. Your checkout was preserved.",
     );

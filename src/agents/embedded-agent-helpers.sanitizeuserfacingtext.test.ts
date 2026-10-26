@@ -124,7 +124,7 @@ describe("sanitizeUserFacingText", () => {
 
   it.each(["disk full"])("rewrites disk-space failures with errorContext: %s", (input) => {
     expect(renderUserFacingText(input, { errorContext: true })).toBe(
-      "OpenClaw could not write local session data because the disk is full. Free some disk space and try again.",
+      "AgileClaw could not write local session data because the disk is full. Free some disk space and try again.",
     );
   });
 
@@ -204,12 +204,12 @@ describe("sanitizeUserFacingText", () => {
     const input = [
       markInboundContextLabel("Conversation info:"),
       "```json",
-      '{"chat_id":"channel:123","sender":"OpenClaw"}',
+      '{"chat_id":"channel:123","sender":"AgileClaw"}',
       "```",
       "",
       markInboundContextLabel("Sender:"),
       "```json",
-      '{"label":"OpenClaw (123)"}',
+      '{"label":"AgileClaw (123)"}',
       "```",
       "",
       "Pong",
@@ -284,7 +284,7 @@ describe("sanitizeUserFacingText", () => {
 
   it("drops an undelimited current runtime header when it leaks into user-facing text", () => {
     const input = [
-      "OpenClaw runtime context (internal):",
+      "AgileClaw runtime context (internal):",
       "This context is runtime-generated, not user-authored. Keep internal details private.",
       "",
       "[Internal task completion event]",
@@ -299,7 +299,7 @@ describe("sanitizeUserFacingText", () => {
       "Visible intro.",
       "",
       "<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>",
-      "OpenClaw runtime context (internal):",
+      "AgileClaw runtime context (internal):",
       "This context is runtime-generated, not user-authored. Keep internal details private.",
       "",
       "[Internal task completion event]",
@@ -327,7 +327,7 @@ describe("sanitizeUserFacingText", () => {
 
   it("strips copied next-turn runtime context prefaces from user-facing text", () => {
     const input = [
-      "OpenClaw runtime context for the immediately preceding user message.",
+      "AgileClaw runtime context for the immediately preceding user message.",
       "This context is runtime-generated, not user-authored. Keep internal details private.",
       "",
       "<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>",
@@ -342,7 +342,7 @@ describe("sanitizeUserFacingText", () => {
 
   it("strips copied runtime event prefaces when no visible text remains", () => {
     const input = [
-      "OpenClaw runtime event.",
+      "AgileClaw runtime event.",
       "This context is runtime-generated, not user-authored. Keep internal details private.",
     ].join("\n");
 

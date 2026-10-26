@@ -1,4 +1,4 @@
-// Real provider discovery through the admitted OpenClaw runner; no response or tool-choice mocks.
+// Real provider discovery through the admitted AgileClaw runner; no response or tool-choice mocks.
 import fs from "node:fs/promises";
 import path from "node:path";
 import { configureAiTransportHost, getAiTransportHost } from "@openclaw/ai";

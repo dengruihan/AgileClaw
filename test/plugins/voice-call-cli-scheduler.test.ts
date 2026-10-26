@@ -52,7 +52,7 @@ it.each([
     },
     output: "live-call: started call-1",
     to: "+15550009999",
-    options: { message: "OpenClaw voice call smoke test.", mode: "notify" },
+    options: { message: "AgileClaw voice call smoke test.", mode: "notify" },
   },
 ])("Voice Call CLI $name with its registered owner", async (scenario) => {
   vi.stubEnv("OPENCLAW_CLI", "1");

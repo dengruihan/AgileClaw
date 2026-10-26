@@ -47,7 +47,7 @@ it.each([false, true])(
 
 it("explains an empty exit-2 result", () => {
   vi.mocked(spawnSync).mockReturnValue(nativeResult(" \r\n", 2));
-  expect(probeScheduledTaskState("OpenClaw Gateway")).toEqual({
+  expect(probeScheduledTaskState("AgileClaw Gateway")).toEqual({
     status: "unknown",
     detail: "Scheduled Task probe failed (exit 2): no output from PowerShell.",
     diagnostic: { kind: "native", exitCode: 2 },
@@ -82,7 +82,7 @@ it.each([
     if (inventory) {
       expect(() => listScheduledTasks(budget)).toThrow(ScheduledTaskInspectionError);
     } else {
-      expect(probeScheduledTaskState("OpenClaw Gateway", budget)).toEqual({
+      expect(probeScheduledTaskState("AgileClaw Gateway", budget)).toEqual({
         status: "unknown",
         detail:
           expected === 0
@@ -93,7 +93,7 @@ it.each([
       });
     }
     if (expected === 0) {
-      expect(probeScheduledTaskExists("OpenClaw Gateway", budget)).toBeNull();
+      expect(probeScheduledTaskExists("AgileClaw Gateway", budget)).toBeNull();
       expect(spawnSync).not.toHaveBeenCalled();
     } else {
       expect(vi.mocked(spawnSync).mock.calls[0]?.[2]?.timeout).toBe(expected);

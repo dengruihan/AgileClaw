@@ -44,7 +44,7 @@ export type GuidedOnboardingDeps = GuidedOnboardingHandoffDeps & {
   /**
    * "hatch" (default) runs the local custodian flow: discovery consent,
    * explicit provider selection, deterministic setup apply, then the agent TUI.
-   * "chat" preserves the legacy handoff into the OpenClaw system-agent chat —
+   * "chat" preserves the legacy handoff into the AgileClaw system-agent chat —
    * remote-gateway onboarding requires it because setup must apply remotely.
    */
   handoffMode?: "hatch" | "chat";
@@ -209,8 +209,8 @@ async function runGuidedOnboardingFlow(
     await (deps.persistAccessMode ?? persistGuidedAccessMode)(accessMode);
   }
 
-  // Inference is the only prerequisite for OpenClaw. Use the caller's or
-  // current default workspace as isolated probe context; OpenClaw owns any
+  // Inference is the only prerequisite for AgileClaw. Use the caller's or
+  // current default workspace as isolated probe context; AgileClaw owns any
   // workspace choice and persistence after the live completion succeeds.
   const workspace = resolveUserPath(
     opts.workspace?.trim() ||
@@ -498,7 +498,7 @@ async function runGuidedOnboardingFlow(
     }
   } else {
     // Announced default: apply the same setup plan the conversational "yes"
-    // would, then hand off to the hatch instead of parking in the OpenClaw chat.
+    // would, then hand off to the hatch instead of parking in the AgileClaw chat.
     const applyProgress = prompter.progress(t("wizard.guided.settingUp"));
     let failureTitle = t("wizard.guided.setupFailed");
     try {
@@ -569,7 +569,7 @@ async function runGuidedOnboardingFlow(
             })
           : await readConfigFileSnapshot();
       if (!appliedSnapshot.valid) {
-        throw new Error("Setup wrote an invalid OpenClaw config.");
+        throw new Error("Setup wrote an invalid AgileClaw config.");
       }
       persistedConfig = appliedSnapshot.sourceConfig ?? appliedSnapshot.config;
       applyProgress.stop(t("wizard.guided.setupDone"));
@@ -689,7 +689,7 @@ async function runGuidedOnboardingFlow(
     }
   }
   if (setupOnly) {
-    await prompter.outro("Continuing with the OpenClaw setup assistant.");
+    await prompter.outro("Continuing with the AgileClaw setup assistant.");
     return { workspace: hatchWorkspace, next: "chat" };
   }
   await prompter.note(t("wizard.guided.findMeLater"), t("wizard.guided.welcomeTitle"));

@@ -813,7 +813,7 @@ describe("SystemAgentChatEngine approval", () => {
     expect(runAgentTurn).toHaveBeenCalledOnce();
     expect(reply.text).toContain("requesting session's permission policy");
     expect(reply.text).toContain("returns the final outcome");
-    expect(reply.text).not.toContain("OpenClaw operator UI");
+    expect(reply.text).not.toContain("AgileClaw operator UI");
     expect(reply.text).not.toContain("ask the user to reply yes");
     expect(reply.action).toBe("none");
     expect(engine.getPendingOperatorProposal()?.operation).toEqual({

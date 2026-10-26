@@ -4,7 +4,7 @@ import { readRemoteMediaBuffer } from "./fetch.js";
 
 it("readRemoteMediaBuffer preserves extensionless bytes with a prototype-named Content-Type", async () => {
   const contentType = "__proto__";
-  const bytes = Buffer.from("OpenClaw MIME attachment probe\n");
+  const bytes = Buffer.from("AgileClaw MIME attachment probe\n");
   const server = createServer((_request, response) => {
     response.writeHead(200, { "Content-Type": contentType }).end(bytes);
   });

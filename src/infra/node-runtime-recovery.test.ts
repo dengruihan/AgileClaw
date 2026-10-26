@@ -525,7 +525,7 @@ describe("runtime recovery discovery", () => {
         const script = path.join(home, "gateway.cmd");
         mocks.encoding = encoding;
         const content = buildTaskScript({
-          programArguments: [candidate, "C:\\OpenClaw\\dist\\index.js", "gateway"],
+          programArguments: [candidate, "C:\\AgileClaw\\dist\\index.js", "gateway"],
         });
         let bytes = encodeWindowsLauncherScript({
           format: format.startsWith("utf16") ? "vbs" : "cmd",
@@ -675,7 +675,7 @@ describe("runtime recovery discovery", () => {
   );
 
   it.each([
-    [0, "cached OpenClaw runtime"],
+    [0, "cached AgileClaw runtime"],
     [1, "managed Gateway service"],
     [7, "Homebrew node@24"],
   ] as const)("selects the first admissible runtime: %s %s", async (index, source) => {

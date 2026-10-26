@@ -184,7 +184,7 @@ const currentModel = (timestamp: number) =>
 const metadata = [
   markInboundContextLabel("Conversation info:"),
   "```json",
-  '{"chat_id":"channel:123","sender":"OpenClaw"}',
+  '{"chat_id":"channel:123","sender":"AgileClaw"}',
   "```",
 ].join("\n");
 

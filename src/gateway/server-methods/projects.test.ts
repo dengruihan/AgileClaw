@@ -825,7 +825,7 @@ test("projects.add returns an existing project for the same canonical remote", a
     const repo = await initializeRepository(
       state.root,
       "existing",
-      "git@github.com:OpenClaw/OpenClaw.git",
+      "git@github.com:AgileClaw/AgileClaw.git",
     );
     const existing = await registerProjectRegistry({ path: repo, name: "Existing" });
 

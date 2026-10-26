@@ -226,7 +226,7 @@ describe("managed npm root", () => {
     });
   });
 
-  it("syncs OpenClaw-owned overrides without dropping unrelated local overrides", async () => {
+  it("syncs AgileClaw-owned overrides without dropping unrelated local overrides", async () => {
     const npmRoot = await makeTempRoot();
     await writeFixtureJson(path.join(npmRoot, "package.json"), {
       private: true,

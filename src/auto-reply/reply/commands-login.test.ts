@@ -52,7 +52,7 @@ describe("handleLoginCommand", () => {
       senderIsOwner: false,
       chatType: "direct",
       message:
-        "Only an OpenClaw owner can sign in here. Ask the owner to connect this provider or grant you owner access.",
+        "Only an AgileClaw owner can sign in here. Ask the owner to connect this provider or grant you owner access.",
       refreshCount: 0,
     },
     {
@@ -60,7 +60,7 @@ describe("handleLoginCommand", () => {
       senderIsOwner: true,
       chatType: "group",
       message:
-        "Provider login requires a private chat or Control UI session. Open a private chat with OpenClaw and send `/login` there.",
+        "Provider login requires a private chat or Control UI session. Open a private chat with AgileClaw and send `/login` there.",
       refreshCount: 0,
     },
     {
@@ -606,7 +606,7 @@ describe("handleLoginCommand", () => {
       expect(result).toEqual({
         shouldContinue: false,
         reply: {
-          text: "Provider login requires a private chat or Control UI session. Open a private chat with OpenClaw and send `/login` there.",
+          text: "Provider login requires a private chat or Control UI session. Open a private chat with AgileClaw and send `/login` there.",
         },
       });
       expect(onBlockReply).not.toHaveBeenCalled();
@@ -1028,7 +1028,7 @@ describe("handleLoginCommand", () => {
     expect(result).toEqual({
       shouldContinue: false,
       reply: {
-        text: "Only an OpenClaw owner can sign in here. Ask the owner to connect this provider or grant you owner access.",
+        text: "Only an AgileClaw owner can sign in here. Ask the owner to connect this provider or grant you owner access.",
       },
     });
     expect(runModelsAuthLoginFlowMock).not.toHaveBeenCalled();
@@ -1051,7 +1051,7 @@ describe("handleLoginCommand", () => {
     expect(result).toEqual({
       shouldContinue: false,
       reply: {
-        text: "No chat owner is configured. Ask the OpenClaw owner to add your chat account to `commands.ownerAllowFrom` in the OpenClaw configuration, then send `/login` again.",
+        text: "No chat owner is configured. Ask the AgileClaw owner to add your chat account to `commands.ownerAllowFrom` in the AgileClaw configuration, then send `/login` again.",
       },
     });
     expect(runModelsAuthLoginFlowMock).not.toHaveBeenCalled();

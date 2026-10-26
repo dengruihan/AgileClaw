@@ -235,7 +235,7 @@ export async function prepareSystemAgentPluginArtifact(
   await assertArtifactConfigPublicationSupported();
   if (await isPluginBackingDefaultInferenceRoute(review.pluginId)) {
     throw new Error(
-      "This plugin backs OpenClaw's active inference route. Stop OpenClaw and install the artifact from a trusted shell.",
+      "This plugin backs AgileClaw's active inference route. Stop AgileClaw and install the artifact from a trusted shell.",
     );
   }
   return await withArtifactImports(async (files, assertOwned) => {
@@ -295,7 +295,7 @@ export async function executePluginArtifactActivation(
             await assertArtifactConfigPublicationSupported();
             if (await isPluginBackingDefaultInferenceRoute(review.pluginId)) {
               throw new Error(
-                "Artifact activation stopped: this plugin now backs the active inference route. Stop OpenClaw and install it from a trusted shell.",
+                "Artifact activation stopped: this plugin now backs the active inference route. Stop AgileClaw and install it from a trusted shell.",
               );
             }
             assertPersistentApply();

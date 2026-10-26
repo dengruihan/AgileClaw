@@ -150,7 +150,7 @@ export async function resolveCurrentTurnImages(params: {
     const resolvedIndexes = resolved.attachmentIndexes ?? [];
     if (images.length < undescribedImageAttachments.length) {
       logVerbose(
-        `agent-runner: native OpenClaw media resolution produced ${images.length}/${undescribedImageAttachments.length} current image attachment(s); retaining resolved images`,
+        `agent-runner: native AgileClaw media resolution produced ${images.length}/${undescribedImageAttachments.length} current image attachment(s); retaining resolved images`,
       );
     }
     const imageByResolvedIndex = new Map(

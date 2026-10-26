@@ -459,7 +459,7 @@ describe("resolveGatewayStartupPluginPlanFromRegistry", () => {
       ["demo-channel", "browser", "anthropic", "openai", "codex", "memory-core"],
     ],
     [
-      "does not include Codex when an OpenAI model is manually pinned to OpenClaw",
+      "does not include Codex when an OpenAI model is manually pinned to AgileClaw",
       {
         agents: {
           defaults: {

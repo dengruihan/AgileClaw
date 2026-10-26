@@ -59,7 +59,7 @@ import { mainSessionRecoveryLog as log } from "./main-session-restart-recovery-s
 
 const RESTART_RECOVERY_RESUME_MESSAGE = formatSystemTurnPrompt(
   "Your previous turn was interrupted by a gateway restart while " +
-    "OpenClaw was waiting on tool/model work. The restart did not cancel the user's task. " +
+    "AgileClaw was waiting on tool/model work. The restart did not cancel the user's task. " +
     "Continue from the existing transcript: check the current state, recover interrupted work, " +
     "and finish the task without asking the user to repeat the request. " +
     `${SUBAGENT_RESTART_RECOVERY_INSTRUCTION} Treat a tool result ` +

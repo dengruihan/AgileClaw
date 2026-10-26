@@ -328,7 +328,7 @@ describe("Report action from the authoritative update ledger", () => {
       const body =
         runtime.log.mock.calls
           .map(([text]) => String(text))
-          .find((text) => text.startsWith("# OpenClaw update failure report")) ?? "";
+          .find((text) => text.startsWith("# AgileClaw update failure report")) ?? "";
       expect(runtime.error).not.toHaveBeenCalled();
       if (mode === "other-scope") {
         expect(body).not.toContain("Failed phase activating");

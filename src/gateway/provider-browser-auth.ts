@@ -192,7 +192,7 @@ function respond(res: ServerResponse, status: number, message: string): void {
     renderOAuthPage({
       title: "Provider sign-in",
       heading: message,
-      message: "Return to OpenClaw for the sign-in result.",
+      message: "Return to AgileClaw for the sign-in result.",
     }),
   );
 }

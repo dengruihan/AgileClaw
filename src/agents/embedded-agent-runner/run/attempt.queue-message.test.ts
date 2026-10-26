@@ -69,7 +69,7 @@ function fixture(queue: Message[] = [], target = queue[0]) {
   };
 }
 
-describe("embedded OpenClaw queued steering cancellation", () => {
+describe("embedded AgileClaw queued steering cancellation", () => {
   it.each(["message_end", "agent_settled", "agent_handoff"])(
     "keeps admission-only steering owned until %s",
     async (terminal) => {

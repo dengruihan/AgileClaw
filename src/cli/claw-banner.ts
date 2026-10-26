@@ -1,4 +1,4 @@
-// Shared OpenClaw banner: the dot-matrix lobster mascot beside the OPENCLAW
+// Shared AgileClaw banner: the dot-matrix jade disc mascot beside the AGILECLAW
 // wordmark, with a short startup animation on rich interactive terminals.
 // Used by the wizard flows (doctor/onboard/configure) and the foreground
 // gateway run; non-TTY and CI paths always get the plain static banner.
@@ -12,32 +12,32 @@ import type { RuntimeEnv } from "../runtime.js";
 import { sleep as defaultSleep } from "../utils/sleep.js";
 
 // Mascot and wordmark are separate so they can be tinted independently; the
-// wordmark starts on mascot row 3, keeping the claws above the text line.
+// wordmark starts on mascot row 3, sitting beside the disc's rim.
 const MASCOT_ART = [
-  " •●●:.        .:●●•",
-  ":●●●●:        :●●●●:",
-  ".●●●●:.:•●●•:.:●●●●.",
-  " .●●●: •●●●●• :●●●.",
-  " ..:••●●●●●●●●••:..",
-  ".::••••●●●●●●••••::.",
-  " . .:  •●●●●•  :. .",
-  "    .  :●●●●:  .",
-  "      .●●●●●●.",
-  "       :••••:",
+  "",
+  "     •●●●●●●●●•",
+  "   ●●●●●●●●●●●●●●",
+  "  ●●●●●●    ●●●●●●",
+  " •●●●●        ●●●●•",
+  " •●●●●        ●●●●•",
+  "  ●●●●●●    ●●●●●●",
+  "   ●●●●●●●●●●●●●●",
+  "     •●●●●●●●●•",
+  "",
 ] as const;
-// Claw tips with the pincer notch widened; swapping the top two rows in and
-// out produces the "snip".
-const MASCOT_OPEN_ROWS = ["•●•.:.        .:.•●•", ":●●●•:        :•●●●:"] as const;
+// The rim's top arc at full density; swapping the top two rows in and out
+// produces a one-beat glow pulse.
+const MASCOT_OPEN_ROWS = ["", "     ●●●●●●●●●●"] as const;
 const MASCOT_WIDTH = 20;
 const WORDMARK_ROW_OFFSET = 3;
 
 const WORDMARK_ART = [
-  "█▀▀▀█ █▀▀▀█ █▀▀▀▀ █▄  █ █▀▀▀▀ █     █▀▀▀█ █   █",
-  "█   █ █▀▀▀▀ █▀▀▀  █ ▀▄█ █     █     █▀▀▀█ █▄▀▄█",
-  "▀▀▀▀▀ ▀     ▀▀▀▀▀ ▀   ▀ ▀▀▀▀▀ ▀▀▀▀▀ ▀   ▀ ▀   ▀",
+  "█▀▀▀█ █▀▀▀▀   █   █     █▀▀▀▀ █▀▀▀▀ █     █▀▀▀█ █   █",
+  "█▀▀▀█ █   █   █   █     █▀▀▀  █     █     █▀▀▀█ █▄▀▄█",
+  "▀   ▀ ▀▀▀▀▀   ▀   ▀▀▀▀▀ ▀▀▀▀▀ ▀▀▀▀▀ ▀▀▀▀▀ ▀   ▀ ▀   ▀",
 ] as const;
 const GAP = 3;
-const BANNER_WIDTH = MASCOT_WIDTH + GAP + 48;
+const BANNER_WIDTH = MASCOT_WIDTH + GAP + 53;
 const ROWS = MASCOT_ART.length;
 
 type ClawBannerOptions = {
@@ -88,12 +88,12 @@ function composeFrame(params: {
 }
 
 function plainTitleLine(): string {
-  const icon = decorativeEmoji("🦞");
-  return supportsDecorativeEmoji() && icon ? `${icon} OPENCLAW ${icon}` : "OPENCLAW";
+  const icon = decorativeEmoji("💎");
+  return supportsDecorativeEmoji() && icon ? `${icon} AGILECLAW ${icon}` : "AGILECLAW";
 }
 
-// One combined entrance: a left-to-right molt wipe reveals the color, a
-// shimmer band sweeps the wordmark, and the claws snip once. The 330ms sequence
+// One combined entrance: a left-to-right wipe reveals the color, a shimmer
+// band sweeps the wordmark, and the disc's rim pulses once. The 330ms sequence
 // ends on the exact static banner.
 async function animateBanner(opts: {
   settleWhen?: PromiseLike<unknown>;
@@ -166,7 +166,7 @@ async function animateBanner(opts: {
         return "settled";
       }
     }
-    // Snip: claws open and close once.
+    // Pulse: the rim's top arc lights at full density and settles.
     draw(composeFrame({ mascotRows: [...MASCOT_OPEN_ROWS, ...MASCOT_ART.slice(2)] }));
     if (!(await pause(35))) {
       return "settled";
@@ -193,7 +193,7 @@ async function animateBanner(opts: {
 }
 
 /**
- * Prints the OpenClaw banner: animated on rich interactive terminals, static
+ * Prints the AgileClaw banner: animated on rich interactive terminals, static
  * otherwise, plain title on terminals too narrow for the art.
  */
 export async function printClawBanner(

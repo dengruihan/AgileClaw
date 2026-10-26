@@ -83,7 +83,7 @@ async function createConnectedSessionShell() {
   return { ...harness, shell, context, active, background, deletion, replace };
 }
 
-describe("OpenClaw shell document title", () => {
+describe("AgileClaw shell document title", () => {
   function createShell(context?: ApplicationContext): ShellDocumentTitleState {
     const shell = document.createElement(
       "openclaw-app-shell",
@@ -123,11 +123,11 @@ describe("OpenClaw shell document title", () => {
 
   it("keeps the boot title before a route commits", () => {
     const shell = createShell();
-    document.title = "OpenClaw Control";
+    document.title = "AgileClaw Control";
 
     shell.routeState = {};
     shell.syncDocumentTitle();
-    expect(document.title).toBe("OpenClaw Control");
+    expect(document.title).toBe("AgileClaw Control");
   });
 
   it("does not read stored outboxes for a connected document title", () => {
@@ -138,7 +138,7 @@ describe("OpenClaw shell document title", () => {
 
     shell.syncDocumentTitle();
 
-    expect(document.title).toBe("Usage — OpenClaw");
+    expect(document.title).toBe("Usage — AgileClaw");
     expect(read).not.toHaveBeenCalled();
   });
 
@@ -146,11 +146,11 @@ describe("OpenClaw shell document title", () => {
     const shell = createShell(createContext({ environment: { label: "edge", color: "amber" } }));
     shell.routeState = { routeId: "usage" };
     shell.syncDocumentTitle();
-    expect(document.title).toBe("Usage — OpenClaw · edge");
+    expect(document.title).toBe("Usage — AgileClaw · edge");
 
     shell.routeState = { routeId: "custodian" };
     shell.syncDocumentTitle();
-    expect(document.title).toBe("Ask OpenClaw · edge");
+    expect(document.title).toBe("Ask AgileClaw · edge");
   });
 
   it("uses the active session's derived title for a non-main chat", () => {
@@ -166,7 +166,7 @@ describe("OpenClaw shell document title", () => {
 
     shell.syncDocumentTitle();
 
-    expect(document.title).toBe("Quarterly launch plan — OpenClaw");
+    expect(document.title).toBe("Quarterly launch plan — AgileClaw");
   });
 
   it("updates the active title without rendering the shell for session publications", async () => {
@@ -185,7 +185,7 @@ describe("OpenClaw shell document title", () => {
       await settleLitElement(shell);
     }
 
-    expect(document.title).toBe("(Disconnected) Revised launch plan — OpenClaw");
+    expect(document.title).toBe("(Disconnected) Revised launch plan — AgileClaw");
     expect(renderShell).not.toHaveBeenCalled();
   });
 
@@ -215,7 +215,7 @@ describe("OpenClaw shell document title", () => {
     replacement.sessions.patchRowLocal(background.key, { derivedTitle: "Replacement title" });
     await vi.advanceTimersByTimeAsync(20);
     await settleLitElement(shell);
-    expect(document.title).toBe("(Disconnected) Replacement title — OpenClaw");
+    expect(document.title).toBe("(Disconnected) Replacement title — AgileClaw");
 
     shell.remove();
     await settleLitElement(shell);
@@ -234,7 +234,7 @@ describe("OpenClaw shell document title", () => {
 
     shell.syncDocumentTitle();
 
-    expect(document.title).toBe("Molty — OpenClaw");
+    expect(document.title).toBe("Molty — AgileClaw");
   });
 
   it("uses the selected agent name for a global-scope main chat", () => {
@@ -249,7 +249,7 @@ describe("OpenClaw shell document title", () => {
 
     shell.syncDocumentTitle();
 
-    expect(document.title).toBe("Molty — OpenClaw");
+    expect(document.title).toBe("Molty — AgileClaw");
   });
 
   it("falls back to the session display name when the main agent is missing", () => {
@@ -267,7 +267,7 @@ describe("OpenClaw shell document title", () => {
 
     shell.syncDocumentTitle();
 
-    expect(document.title).toBe("Fallback thread — OpenClaw");
+    expect(document.title).toBe("Fallback thread — AgileClaw");
   });
 
   it("prefixes the pending approval count", () => {
@@ -276,7 +276,7 @@ describe("OpenClaw shell document title", () => {
 
     shell.syncDocumentTitle();
 
-    expect(document.title).toBe("(2) Usage — OpenClaw");
+    expect(document.title).toBe("(2) Usage — AgileClaw");
   });
 
   it("shows disconnected instead of a stale approval count", () => {
@@ -285,7 +285,7 @@ describe("OpenClaw shell document title", () => {
 
     shell.syncDocumentTitle();
 
-    expect(document.title).toBe("(Disconnected) Usage — OpenClaw");
+    expect(document.title).toBe("(Disconnected) Usage — AgileClaw");
   });
 
   it("keeps stored chat outbox counts out of the disconnected marker", () => {
@@ -297,7 +297,7 @@ describe("OpenClaw shell document title", () => {
 
     shell.syncDocumentTitle();
 
-    expect(document.title).toBe("(Disconnected) Usage — OpenClaw");
+    expect(document.title).toBe("(Disconnected) Usage — AgileClaw");
   });
 
   it("uses the meaningful custodian label without a brand suffix", () => {
@@ -306,6 +306,6 @@ describe("OpenClaw shell document title", () => {
 
     shell.syncDocumentTitle();
 
-    expect(document.title).toBe("Ask OpenClaw");
+    expect(document.title).toBe("Ask AgileClaw");
   });
 });

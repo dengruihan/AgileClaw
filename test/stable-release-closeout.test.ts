@@ -12,14 +12,14 @@ const release = {
   isDraft: false,
   isPrerelease: false,
   assets: [
-    { name: "OpenClaw-2026.6.8.zip", digest: `sha256:${"a".repeat(64)}` },
-    { name: "OpenClaw-2026.6.8.dmg", digest: `sha256:${"b".repeat(64)}` },
-    { name: "OpenClaw-2026.6.8.dSYM.zip", digest: `sha256:${"c".repeat(64)}` },
+    { name: "AgileClaw-2026.6.8.zip", digest: `sha256:${"a".repeat(64)}` },
+    { name: "AgileClaw-2026.6.8.dmg", digest: `sha256:${"b".repeat(64)}` },
+    { name: "AgileClaw-2026.6.8.dSYM.zip", digest: `sha256:${"c".repeat(64)}` },
   ],
 };
 const remainingAppAssets = [
-  "OpenClaw-Android-SHA256SUMS.txt",
-  "OpenClaw-Android.apk",
+  "AgileClaw-Android-SHA256SUMS.txt",
+  "AgileClaw-Android.apk",
   "OpenClawCompanion-SHA256SUMS.txt",
   "OpenClawCompanion-Setup-arm64.exe",
   "OpenClawCompanion-Setup-x64.exe",
@@ -33,7 +33,7 @@ const validCloseoutParams = {
   mainChangelog: changelog,
   tagChangelog: changelog,
   mainAppcast:
-    "https://github.com/openclaw/openclaw/releases/download/v2026.6.8/OpenClaw-2026.6.8.zip\n",
+    "https://github.com/openclaw/openclaw/releases/download/v2026.6.8/AgileClaw-2026.6.8.zip\n",
   release,
   releaseTagSha: "tag-sha",
   mainSha: "main-sha",
@@ -52,11 +52,11 @@ function shippedReplayFixture(version: string, mainVersion: string, complete: bo
   const tag = `v${version}`;
   const changelogSection = `## ${version}\n\n- Shipped release.`;
   const replayChangelog = `# Changelog\n\n${changelogSection}`;
-  const mainAppcast = `https://github.com/openclaw/openclaw/releases/download/${tag}/OpenClaw-${version}.zip\n`;
+  const mainAppcast = `https://github.com/openclaw/openclaw/releases/download/${tag}/AgileClaw-${version}.zip\n`;
   const githubReleaseAssets = [
-    `OpenClaw-${version}.zip`,
-    `OpenClaw-${version}.dmg`,
-    `OpenClaw-${version}.dSYM.zip`,
+    `AgileClaw-${version}.zip`,
+    `AgileClaw-${version}.dmg`,
+    `AgileClaw-${version}.dSYM.zip`,
     ...(complete ? remainingAppAssets : []),
   ].map((name, index) => ({
     name,
@@ -215,7 +215,7 @@ describe("stable release closeout", () => {
     });
 
     expect(first.manifest?.githubReleaseAssets[0]).toEqual({
-      name: "OpenClaw-2026.6.8.zip",
+      name: "AgileClaw-2026.6.8.zip",
       digest: null,
     });
     expect(replay.errors).toEqual([]);
@@ -244,7 +244,7 @@ describe("stable release closeout", () => {
     expect(JSON.stringify(result.manifest)).toBe(serializedReceipt);
     expect(
       result.manifest?.githubReleaseAssets.map((asset: { name: string }) => asset.name),
-    ).toEqual(["OpenClaw-2026.9.5.zip", "OpenClaw-2026.9.5.dmg", "OpenClaw-2026.9.5.dSYM.zip"]);
+    ).toEqual(["AgileClaw-2026.9.5.zip", "AgileClaw-2026.9.5.dmg", "AgileClaw-2026.9.5.dSYM.zip"]);
   });
 
   it("rejects replay with a noncanonical recorded appcast hash", () => {
@@ -291,7 +291,7 @@ describe("stable release closeout", () => {
       tagChangelog: changelog.replaceAll("2026.6.8", "2026.6.8-2"),
       release: correctionRelease,
       mainAppcast:
-        "https://github.com/openclaw/openclaw/releases/download/v2026.6.8-2/OpenClaw-2026.6.8-2.zip\n",
+        "https://github.com/openclaw/openclaw/releases/download/v2026.6.8-2/AgileClaw-2026.6.8-2.zip\n",
       nowMs: Date.parse("2026-06-17T00:00:00Z"),
     });
 
@@ -313,7 +313,7 @@ describe("stable release closeout", () => {
         tagName: "v2026.6.8-2",
       },
       mainAppcast:
-        "https://github.com/openclaw/openclaw/releases/download/v2026.6.8-2/OpenClaw-2026.6.8.zip\n",
+        "https://github.com/openclaw/openclaw/releases/download/v2026.6.8-2/AgileClaw-2026.6.8.zip\n",
       nowMs: Date.parse("2026-06-17T00:00:00Z"),
     });
 
@@ -349,7 +349,7 @@ describe("stable release closeout", () => {
     const version = "2026.9.6";
     const tag = `v${version}`;
     const macAssets = ["", "-arm64", "-x86_64"].flatMap((suffix) =>
-      ["zip", "dmg", "dSYM.zip"].map((extension) => `OpenClaw-${version}${suffix}.${extension}`),
+      ["zip", "dmg", "dSYM.zip"].map((extension) => `AgileClaw-${version}${suffix}.${extension}`),
     );
     const futureChangelog = `# Changelog\n\n## ${version}\n\n- Shipped thin macOS releases.\n`;
     const result = verifyStableMainCloseout({
@@ -368,14 +368,14 @@ describe("stable release closeout", () => {
           digest: `sha256:${index.toString(16).repeat(64)}`,
         })),
       },
-      mainAppcast: `https://github.com/openclaw/openclaw/releases/download/${tag}/OpenClaw-${version}.zip`,
-      mainArm64Appcast: `https://github.com/openclaw/openclaw/releases/download/${tag}/OpenClaw-${version}-arm64.zip`,
+      mainAppcast: `https://github.com/openclaw/openclaw/releases/download/${tag}/AgileClaw-${version}.zip`,
+      mainArm64Appcast: `https://github.com/openclaw/openclaw/releases/download/${tag}/AgileClaw-${version}-arm64.zip`,
       mainX86_64Appcast: "<rss>stale Intel feed</rss>",
       nowMs: Date.parse("2026-09-21T00:00:00Z"),
     });
 
     expect(result.errors).toContain(
-      `main appcast-x86_64.xml does not point at OpenClaw-${version}-x86_64.zip from ${tag}.`,
+      `main appcast-x86_64.xml does not point at AgileClaw-${version}-x86_64.zip from ${tag}.`,
     );
     expect(result.manifest).toBeNull();
   });
@@ -387,10 +387,10 @@ describe("stable release closeout", () => {
     const olderFeed =
       "<rss><sparkle:shortVersionString>2026.9.5</sparkle:shortVersionString></rss>";
     const thinFeed = (asset: string) =>
-      `https://github.com/openclaw/openclaw/releases/download/${tag}/OpenClaw-${version}${asset}.zip`;
+      `https://github.com/openclaw/openclaw/releases/download/${tag}/AgileClaw-${version}${asset}.zip`;
     const changelogSection = `# Changelog\n\n## ${version}\n\n- Shipped thin macOS releases.\n`;
     const macAssets = ["", "-arm64", "-x86_64"].flatMap((suffix) =>
-      ["zip", "dmg", "dSYM.zip"].map((extension) => `OpenClaw-${version}${suffix}.${extension}`),
+      ["zip", "dmg", "dSYM.zip"].map((extension) => `AgileClaw-${version}${suffix}.${extension}`),
     );
     const params = {
       ...validCloseoutParams,
@@ -468,7 +468,7 @@ describe("stable release closeout", () => {
       });
 
       expect(result.errors).toEqual([
-        `main appcast.xml does not point at OpenClaw-${version}.zip from ${tag}.`,
+        `main appcast.xml does not point at AgileClaw-${version}.zip from ${tag}.`,
       ]);
       expect(result.manifest).toBeNull();
     });
@@ -533,19 +533,19 @@ describe("stable release closeout", () => {
       ...validCloseoutParams,
       mainAppcast: "<rss>stale main feed</rss>",
       publishedAppcast:
-        "https://github.com/openclaw/openclaw/releases/download/v2026.6.8/OpenClaw-2026.6.8.zip",
+        "https://github.com/openclaw/openclaw/releases/download/v2026.6.8/AgileClaw-2026.6.8.zip",
       nowMs: Date.parse("2026-06-17T00:00:00Z"),
     });
 
     expect(result.errors).toContain(
-      "main appcast.xml does not point at OpenClaw-2026.6.8.zip from v2026.6.8.",
+      "main appcast.xml does not point at AgileClaw-2026.6.8.zip from v2026.6.8.",
     );
     expect(result.manifest).toBeNull();
   });
 
   it.each([
-    ["OpenClaw-2026.6.8.zip", null, "macos", "pending"],
-    ["OpenClaw-Android.apk", `sha256:${"D".repeat(64)}`, "android", "verified"],
+    ["AgileClaw-2026.6.8.zip", null, "macos", "pending"],
+    ["AgileClaw-Android.apk", `sha256:${"D".repeat(64)}`, "android", "verified"],
     ["OpenClawCompanion-Setup-x64.exe", `sha256:${"d".repeat(63)}`, "windows", "verified"],
     ["OpenClawCompanion-SHA256SUMS.txt", `sha256:${"d".repeat(64)}\n`, "windows", "verified"],
   ])("keeps noncanonical %s evidence pending", (assetName, digest, platform, appcast) => {
@@ -584,7 +584,7 @@ describe("stable release closeout", () => {
       nowMs: Date.parse("2026-06-17T00:00:00Z"),
     });
     const invalidAssets = assets.map((asset) =>
-      asset.name === "OpenClaw-Android.apk"
+      asset.name === "AgileClaw-Android.apk"
         ? { name: asset.name, digest: asset.digest.toUpperCase() }
         : asset,
     );
@@ -671,13 +671,13 @@ describe("stable release closeout", () => {
     });
 
     expect(result.errors).toContain(
-      "main package.json version is 2026.6.7, expected shipped version 2026.6.8 or a later stable OpenClaw CalVer.",
+      "main package.json version is 2026.6.7, expected shipped version 2026.6.8 or a later stable AgileClaw CalVer.",
     );
     expect(result.errors).toContain(
       "main CHANGELOG.md ## 2026.6.8 does not exactly match the shipped release section.",
     );
     expect(result.errors).toContain(
-      "main appcast.xml does not point at OpenClaw-2026.6.8.zip from v2026.6.8.",
+      "main appcast.xml does not point at AgileClaw-2026.6.8.zip from v2026.6.8.",
     );
     expect(result.errors).toContain(
       "rollback drill is older than 90 days: 2026-03-01. Run the private rollback drill before stable closeout.",
@@ -729,7 +729,7 @@ describe("stable release closeout", () => {
     });
 
     expect(result.errors).toContain(
-      "main package.json version is 2026.6.9-beta.1, expected shipped version 2026.6.8 or a later stable OpenClaw CalVer.",
+      "main package.json version is 2026.6.9-beta.1, expected shipped version 2026.6.8 or a later stable AgileClaw CalVer.",
     );
   });
 });

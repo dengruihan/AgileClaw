@@ -108,7 +108,7 @@ describe("fs-safe defaults", () => {
   });
 
   it.each(["FS_SAFE_PYTHON_MODE", "OPENCLAW_FS_SAFE_PYTHON_MODE"])(
-    "maps deprecated %s at OpenClaw startup without overriding native configuration",
+    "maps deprecated %s at AgileClaw startup without overriding native configuration",
     (key) => {
       expect(inspectNativeDefaults({ env: { [key]: "require" }, afterImport: "off" })).toEqual({
         before: "require",

@@ -395,7 +395,7 @@ describe("applyPluginAutoEnable core", () => {
   });
 
   it.each([
-    { name: "OpenClaw preference", runtime: "openclaw", api: undefined, codexEnabled: false },
+    { name: "AgileClaw preference", runtime: "openclaw", api: undefined, codexEnabled: false },
     {
       name: "implicit subscription route with legacy Completions",
       runtime: undefined,

@@ -2010,7 +2010,7 @@ describe("dispatchCronDelivery", () => {
     });
     expect(state.disposition).toMatchObject({
       error: expect.stringContaining(
-        "the agent used the message tool, but OpenClaw could not verify",
+        "the agent used the message tool, but AgileClaw could not verify",
       ),
     });
   });
@@ -2038,7 +2038,7 @@ describe("dispatchCronDelivery", () => {
       },
     });
 
-    const params = makeBaseParams({ synthesizedText: "Delivered outside OpenClaw" });
+    const params = makeBaseParams({ synthesizedText: "Delivered outside AgileClaw" });
     params.resolvedDelivery = makeResolvedDelivery({
       channel: "whatsapp",
       to: "+15551234567",

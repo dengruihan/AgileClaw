@@ -137,7 +137,7 @@ export function createGatewayTool(options?: {
     name: "gateway",
     description: allowConfigReads
       ? "Read gateway config/schema. update.run: owner request or operator schedule; automatic restart + completion notice. Never via shell."
-      : "Update OpenClaw with update.run on an explicit owner request or an operator-scheduled automation. Restart and completion notice are automatic. Never via shell.",
+      : "Update AgileClaw with update.run on an explicit owner request or an operator-scheduled automation. Restart and completion notice are automatic. Never via shell.",
     parameters: allowConfigReads ? GatewayToolSchema : GatewayUpdateToolSchema,
     execute: async (_toolCallId, args, signal) => {
       const params = args as Record<string, unknown>;

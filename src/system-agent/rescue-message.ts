@@ -1,4 +1,4 @@
-// OpenClaw rescue messages expose approved setup-helper commands over message channels.
+// AgileClaw rescue messages expose approved setup-helper commands over message channels.
 import { createHash } from "node:crypto";
 import {
   asDateTimestampMs,
@@ -22,7 +22,7 @@ import { classifySystemAgentApprovalText } from "./operator-approval.js";
 import { resolveSystemAgentRescuePolicy } from "./rescue-policy.js";
 
 /**
- * Message-channel rescue command handling for OpenClaw.
+ * Message-channel rescue command handling for AgileClaw.
  *
  * Rescue mode accepts `/openclaw` commands from approved message contexts,
  * stores pending persistent operations for explicit confirmation, and captures
@@ -76,7 +76,7 @@ function createCaptureRuntime(): { runtime: RuntimeEnv; read: () => string } {
       log: push,
       error: push,
       exit: (code) => {
-        throw new Error(`OpenClaw operation exited with code ${code}`);
+        throw new Error(`AgileClaw operation exited with code ${code}`);
       },
     },
     read: () => lines.join("\n").trim(),
@@ -192,31 +192,31 @@ function formatPersistentPlan(operation: SystemAgentOperation): string {
 function formatUnsupportedRemoteOperation(operation: SystemAgentOperation): string | null {
   if (operation.kind === "open-tui") {
     return [
-      "OpenClaw rescue cannot open the local TUI from a message channel.",
+      "AgileClaw rescue cannot open the local TUI from a message channel.",
       "Use local `openclaw` for agent handoff, or ask for status, doctor, config, gateway, agents, or models.",
     ].join(" ");
   }
   if (operation.kind === "channel-setup") {
     return [
-      "OpenClaw rescue cannot host the interactive channel setup from a message channel.",
+      "AgileClaw rescue cannot host the interactive channel setup from a message channel.",
       "Run `openclaw setup` locally and say `connect " + operation.channel + "` instead.",
     ].join(" ");
   }
   if (operation.kind === "config-unset") {
     return [
-      "OpenClaw rescue cannot remove configuration settings.",
+      "AgileClaw rescue cannot remove configuration settings.",
       "Ask your regular agent to remove the setting, or run `openclaw config unset <path>` locally.",
     ].join(" ");
   }
   if (operation.kind === "doctor-fix") {
     return [
-      "OpenClaw rescue cannot run doctor repairs from a message channel because they can change the inference route powering this session.",
-      "On the machine running OpenClaw, with OpenClaw stopped, run `openclaw doctor --fix`.",
+      "AgileClaw rescue cannot run doctor repairs from a message channel because they can change the inference route powering this session.",
+      "On the machine running AgileClaw, with AgileClaw stopped, run `openclaw doctor --fix`.",
     ].join(" ");
   }
   if (operation.kind === "plugin-install") {
     return [
-      "OpenClaw rescue cannot install plugins from a message channel by default because plugin install downloads executable code.",
+      "AgileClaw rescue cannot install plugins from a message channel by default because plugin install downloads executable code.",
       "Use local `openclaw setup` or `openclaw plugins install` instead.",
     ].join(" ");
   }
@@ -251,7 +251,7 @@ export async function runSystemAgentRescueMessage(
     // capability, and a failed execution cannot leave a replayable write.
     const operation = parsePendingOperation(pendingStore.consume(pendingKey));
     if (!operation) {
-      return "No pending OpenClaw rescue change is waiting for approval.";
+      return "No pending AgileClaw rescue change is waiting for approval.";
     }
     const unsupported = formatUnsupportedRemoteOperation(operation);
     if (unsupported) {
@@ -263,14 +263,14 @@ export async function runSystemAgentRescueMessage(
       auditDetails: buildAuditDetails(input),
       deps: input.deps,
     });
-    return capture.read() || "OpenClaw rescue change applied.";
+    return capture.read() || "AgileClaw rescue change applied.";
   }
 
   if (approvalIntent === "decline") {
     const pending = parsePendingOperation(pendingStore.consume(pendingKey));
     return pending
-      ? "Dropped the pending OpenClaw rescue change."
-      : "No pending OpenClaw rescue change is waiting for approval.";
+      ? "Dropped the pending AgileClaw rescue change."
+      : "No pending AgileClaw rescue change is waiting for approval.";
   }
 
   // Any fresh command revokes the previous capability for this exact route.
@@ -292,7 +292,7 @@ export async function runSystemAgentRescueMessage(
         ? undefined
         : resolveExpiresAtMsFromDurationMs(policy.pendingTtlMinutes * 60_000, { nowMs });
     if (nowMs === undefined || expiresAtMs === undefined) {
-      return "OpenClaw rescue could not create a pending approval because the expiry clock is invalid.";
+      return "AgileClaw rescue could not create a pending approval because the expiry clock is invalid.";
     }
     const ttlMs = expiresAtMs - nowMs;
     pendingStore.register(
@@ -312,5 +312,5 @@ export async function runSystemAgentRescueMessage(
     auditDetails: buildAuditDetails(input),
     deps: input.deps,
   });
-  return capture.read() || "OpenClaw listened, clicked a claw, and found nothing to change.";
+  return capture.read() || "AgileClaw listened, clicked a claw, and found nothing to change.";
 }

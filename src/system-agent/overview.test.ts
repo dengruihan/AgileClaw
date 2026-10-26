@@ -1,4 +1,4 @@
-// OpenClaw overview tests cover summary output for rescue diagnostics.
+// AgileClaw overview tests cover summary output for rescue diagnostics.
 import { describe, expect, it } from "vitest";
 import { makeProviderModelFixture } from "../agents/test-helpers/provider-model-fixture.js";
 import type { ConfigFileSnapshot, OpenClawConfig } from "../config/config.js";
@@ -107,7 +107,7 @@ describe("loadSystemAgentOverview", () => {
       'Next: run "gateway status" or "restart gateway"',
     );
     const startup = formatSystemAgentStartupMessage(overview);
-    expect(startup).toContain("Hi, I'm OpenClaw — caretaker");
+    expect(startup).toContain("Hi, I'm AgileClaw — caretaker");
     expect(startup).toContain("Model: openai/gpt-5.2");
     expect(startup).toContain("Gateway: not reachable");
     expect(startup).not.toContain("`gateway status`");

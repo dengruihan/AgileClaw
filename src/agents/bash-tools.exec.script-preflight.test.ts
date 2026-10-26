@@ -71,7 +71,7 @@ it("blocks interactive channel login commands from exec", async () => {
     "env -S 'openclaw channels' login --channel whatsapp",
   ]) {
     await expect(runExecPreflight(command)).rejects.toThrow(
-      /exec cannot run interactive OpenClaw channel login commands/,
+      /exec cannot run interactive AgileClaw channel login commands/,
     );
   }
 });

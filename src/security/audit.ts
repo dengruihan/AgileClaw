@@ -318,14 +318,14 @@ async function collectFilesystemFindings(params: {
         checkId: "fs.state_dir.perms_world_writable",
         severity: "critical",
         title: "State dir is world-writable",
-        detail: `${formatPermissionDetail(params.stateDir, stateDirPerms)}; other users can write into your OpenClaw state.`,
+        detail: `${formatPermissionDetail(params.stateDir, stateDirPerms)}; other users can write into your AgileClaw state.`,
       };
     } else if (stateDirPerms.groupWritable) {
       permissionFinding = {
         checkId: "fs.state_dir.perms_group_writable",
         severity: "warn",
         title: "State dir is group-writable",
-        detail: `${formatPermissionDetail(params.stateDir, stateDirPerms)}; group users can write into your OpenClaw state.`,
+        detail: `${formatPermissionDetail(params.stateDir, stateDirPerms)}; group users can write into your AgileClaw state.`,
       };
     } else if (stateDirPerms.groupReadable || stateDirPerms.worldReadable) {
       permissionFinding = {
@@ -964,7 +964,7 @@ async function collectAgentSkillMcpBoundaryFindings(params: {
       `\nMCP server registries visible to the gateway configuration/state:\n${sources
         .map((source) => `- ${source.label}: ${formatNamesPreview(source.names)}`)
         .join("\n")}\n` +
-      "agents.*.skills filters OpenClaw skill visibility and snapshots; it is not a shell-time authorization boundary. " +
+      "agents.*.skills filters AgileClaw skill visibility and snapshots; it is not a shell-time authorization boundary. " +
       "A host exec process can run external MCP clients or read a global mcporter registry unless sandbox, filesystem, network, or MCP credential boundaries block it.",
     remediation:
       'For agents that need per-agent MCP isolation, set their exec policy to security="deny" or a tight allowlist, run them in sandbox/container/OS-user isolation where the global MCP registry is not readable, split sensitive MCP servers into a separate gateway/trust boundary, or require per-agent MCP credentials at the server layer.',

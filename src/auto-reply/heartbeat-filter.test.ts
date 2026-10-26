@@ -177,11 +177,11 @@ describe("isHeartbeatOkResponse", () => {
 
 describe("filterHeartbeatTranscriptArtifacts", () => {
   it.each([
-    "[OpenClaw heartbeat poll]",
-    "[OpenClaw exec completion]",
-    "[OpenClaw exec completion]\nDisable automatic completion turns with tools.exec.notifyOnExit=false; check per-agent overrides. Background exec and process poll remain available.",
-    "[OpenClaw cron wake]",
-    "[OpenClaw session event]",
+    "[AgileClaw heartbeat poll]",
+    "[AgileClaw exec completion]",
+    "[AgileClaw exec completion]\nDisable automatic completion turns with tools.exec.notifyOnExit=false; check per-agent overrides. Background exec and process poll remain available.",
+    "[AgileClaw cron wake]",
+    "[AgileClaw session event]",
   ])("removes no-op wake pairs for %s", (marker) => {
     const messages = [
       user("Hello"),
@@ -619,7 +619,7 @@ describe("filterHeartbeatTranscriptArtifacts", () => {
       },
       { type: "text", text: "what model are you" },
     ]);
-    const assistantMessage = assistant("I am OpenClaw.");
+    const assistantMessage = assistant("I am AgileClaw.");
     const messages = [
       user(INTERNAL_WAKE_TRANSCRIPT_PROMPTS.heartbeat),
       assistant([

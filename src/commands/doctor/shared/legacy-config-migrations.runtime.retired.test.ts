@@ -531,7 +531,7 @@ it.each([
     ui: { seamColor: "#ff4500", assistant: { name: "UI name", avatar: "avatars/ui.png" } },
     expected: { ui: { seamColor: "#ff4500" } },
   },
-  { ui: { assistant: { name: "OpenClaw", avatar: "🦞" } }, expected: {} },
+  { ui: { assistant: { name: "AgileClaw", avatar: "🦞" } }, expected: {} },
 ])("removes UI identity without creating or changing agent identity: $ui", ({ ui, expected }) => {
   const migration = LEGACY_CONFIG_MIGRATIONS_RUNTIME_RETIRED.filter(
     (entry) => entry.id === "runtime.ui-assistant-identity",

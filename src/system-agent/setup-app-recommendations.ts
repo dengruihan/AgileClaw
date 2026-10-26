@@ -166,7 +166,7 @@ function officialCandidate(
   return {
     id,
     displayName: resolveOfficialExternalPluginLabel(entry),
-    summary: entry.description?.trim() || "Official OpenClaw plugin",
+    summary: entry.description?.trim() || "Official AgileClaw plugin",
     source,
   };
 }
@@ -271,7 +271,7 @@ function parseMatcherJson(text: string): unknown {
 
 function buildMatcherPrompt(groups: SetupAppCandidateGroup[]): string {
   return [
-    "Match installed applications to genuinely related OpenClaw plugins or skills.",
+    "Match installed applications to genuinely related AgileClaw plugins or skills.",
     "Reject coincidental substring, brand, or name overlaps.",
     "Use tier recommended for messaging-channel integrations; otherwise choose recommended or optional by usefulness.",
     "Give a reason of at most 12 words.",

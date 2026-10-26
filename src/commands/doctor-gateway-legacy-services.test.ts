@@ -153,8 +153,8 @@ describe("maybeScanExtraGatewayServices", () => {
       services: [
         {
           platform: "win32",
-          label: "\\OpenClaw Node",
-          detail: "task: \\OpenClaw Node, run: C:\\OpenClaw\\openclaw.exe node run",
+          label: "\\AgileClaw Node",
+          detail: "task: \\AgileClaw Node, run: C:\\AgileClaw\\openclaw.exe node run",
           scope: "system",
           marker: "openclaw",
           legacy: false,
@@ -165,8 +165,8 @@ describe("maybeScanExtraGatewayServices", () => {
 
     await maybeScanExtraGatewayServices({ deep: true }, makeDoctorIo(), makeDoctorPrompts());
 
-    expectNoteContaining("\\OpenClaw Node", "Other gateway-like services detected");
-    expectNoteContaining('schtasks /Query /TN "\\OpenClaw Node" /V /FO LIST', "Inspection hints");
+    expectNoteContaining("\\AgileClaw Node", "Other gateway-like services detected");
+    expectNoteContaining('schtasks /Query /TN "\\AgileClaw Node" /V /FO LIST', "Inspection hints");
     expectNoNoteContaining("/Delete", "Cleanup hints");
     expect(mocks.uninstallLegacySystemdUnits).not.toHaveBeenCalled();
     expect(mocks.execLaunchctl).not.toHaveBeenCalled();
@@ -227,7 +227,7 @@ describe("maybeScanExtraGatewayServices", () => {
     expect(mocks.uninstallLegacySystemdUnits).not.toHaveBeenCalled();
   });
 
-  it("skips structured host-service discovery in containers without an OpenClaw service", async () => {
+  it("skips structured host-service discovery in containers without an AgileClaw service", async () => {
     mocks.isContainerEnvironment.mockReturnValue(true);
 
     await expect(detectExtraGatewayServiceIssues({ deep: true })).resolves.toEqual({
@@ -297,7 +297,7 @@ describe("maybeScanExtraGatewayServices", () => {
         }
       }
       expect(runtime.log).not.toHaveBeenCalledWith(
-        expect.stringContaining("Installing OpenClaw gateway next."),
+        expect.stringContaining("Installing AgileClaw gateway next."),
       );
     },
   );
@@ -351,7 +351,7 @@ describe("maybeScanExtraGatewayServices", () => {
         expectNoNoteContaining(LEGACY_MAC_LABEL, "Legacy gateway cleanup skipped");
       }
       expect(runtime.log).not.toHaveBeenCalledWith(
-        expect.stringContaining("Installing OpenClaw gateway next."),
+        expect.stringContaining("Installing AgileClaw gateway next."),
       );
     },
   );
@@ -399,7 +399,7 @@ describe("maybeScanExtraGatewayServices", () => {
     );
     expectNoNoteContaining(LEGACY_MAC_LABEL, "Legacy gateway removed");
     expect(runtime.log).not.toHaveBeenCalledWith(
-      "Legacy gateway services removed. Installing OpenClaw gateway next.",
+      "Legacy gateway services removed. Installing AgileClaw gateway next.",
     );
   });
 

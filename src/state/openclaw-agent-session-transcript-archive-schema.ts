@@ -9,7 +9,7 @@ const schema = createSqliteSchemaEnsurer(() =>
   extractSqliteTableSchema(OPENCLAW_AGENT_SCHEMA_SQL, SESSION_TRANSCRIPT_ARCHIVES_TABLE, {
     endMarker: "CREATE TABLE IF NOT EXISTS transcript_rewrite_watermarks (",
     includeEndMarker: false,
-    errorMessage: "OpenClaw session transcript archive schema markers are missing.",
+    errorMessage: "AgileClaw session transcript archive schema markers are missing.",
   }),
 );
 

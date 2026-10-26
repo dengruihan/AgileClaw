@@ -415,7 +415,7 @@ describeStandaloneMockServer("standalone Control UI mock server", () => {
         });
         const page = await context.newPage();
         await page.goto(`${origin}/chat`, { waitUntil: "networkidle" });
-        await page.getByText("OpenClaw work checkout", { exact: true }).click();
+        await page.getByText("AgileClaw work checkout", { exact: true }).click();
         await page.getByRole("button", { name: "Write a message to send." }).waitFor();
         await page.screenshot({ path: path.join(artifacts, "chat.png") });
         await page.goto(`${origin}/profile`, { waitUntil: "networkidle" });
@@ -926,7 +926,7 @@ describeStandaloneMockServer("standalone Control UI mock server", () => {
     const page = await browser.newPage();
     try {
       await page.goto(new URL("/chat", fixtureServer.url).toString(), { waitUntil: "networkidle" });
-      await page.getByText("OpenClaw work checkout", { exact: true }).click();
+      await page.getByText("AgileClaw work checkout", { exact: true }).click();
 
       await page.getByRole("button", { name: "Write a message to send." }).waitFor();
       expect(await page.getByText("Server updated", { exact: true }).count()).toBe(0);
@@ -962,7 +962,7 @@ describeStandaloneMockServer("standalone Control UI mock server", () => {
     const page = await browser.newPage();
     try {
       await page.goto(new URL("/chat", fixtureServer.url).toString(), { waitUntil: "networkidle" });
-      await page.getByText("OpenClaw work checkout", { exact: true }).click();
+      await page.getByText("AgileClaw work checkout", { exact: true }).click();
       await page.getByRole("button", { name: "Write a message to send." }).waitFor();
 
       const prompt = "generic mock send probe";

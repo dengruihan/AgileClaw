@@ -150,7 +150,7 @@ describe("handleMessageUpdate text signatures", () => {
     },
     {
       name: "split runtime-context header",
-      chunks: ["OpenClaw runtime cont", "ext:\nprivate\nEnd OpenClaw runtime context.\nVisible"],
+      chunks: ["AgileClaw runtime cont", "ext:\nprivate\nEnd AgileClaw runtime context.\nVisible"],
       updates: [{ text: "Visible", delta: "Visible" }],
     },
 

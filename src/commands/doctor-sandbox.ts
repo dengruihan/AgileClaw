@@ -245,8 +245,8 @@ export async function noteCodexBwrapNamespaceWarnings(
     `Probe command: ${probe.command}`,
     `Probe result: ${probe.reason}`,
     "",
-    "Fix the host namespace policy for the OpenClaw service user, then restart the gateway.",
-    "Prefer an AppArmor profile that grants the required namespaces to the OpenClaw service process.",
+    "Fix the host namespace policy for the AgileClaw service user, then restart the gateway.",
+    "Prefer an AppArmor profile that grants the required namespaces to the AgileClaw service process.",
     "`kernel.apparmor_restrict_unprivileged_userns=0` is a host-wide fallback with security tradeoffs; use it only when that host posture is acceptable.",
     "Do not add broad Docker container privileges just to satisfy nested bwrap; that weakens the outer sandbox.",
   ];
@@ -404,7 +404,7 @@ function formatLegacyRegistryInspectionLine(file: LegacySandboxRegistryInspectio
 }
 
 function legacySandboxRegistryUpgradeHint(): string {
-  return `Upgrade through OpenClaw 2026.9.7 and run ${formatCliCommand("openclaw doctor --fix")} on the original host before retrying. The retired files are left unchanged.`;
+  return `Upgrade through AgileClaw 2026.9.7 and run ${formatCliCommand("openclaw doctor --fix")} on the original host before retrying. The retired files are left unchanged.`;
 }
 
 export async function detectLegacySandboxRegistryFileIssues(): Promise<

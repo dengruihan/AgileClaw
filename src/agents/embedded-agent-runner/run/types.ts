@@ -110,7 +110,7 @@ type EmbeddedRunAttemptToolTerminalObservation = {
   replaySafe?: boolean;
   outcome: "success" | "failure";
   failure?: Omit<ToolErrorSummary, "toolName" | "meta" | "mutatingAction">;
-  /** Protocol-owned mutation facts for native tools that do not use OpenClaw definitions. */
+  /** Protocol-owned mutation facts for native tools that do not use AgileClaw definitions. */
   nativeMutation?: {
     mutatingAction: boolean;
     replaySafe: boolean;
@@ -210,7 +210,7 @@ export type EmbeddedRunAttemptParams = EmbeddedRunAttemptBase & {
   captureRuntimeArtifact?: boolean;
   /** Exact implementation that must own the attempt before it creates a native thread. */
   expectedRuntimeArtifact?: AgentHarnessRuntimeArtifactBinding;
-  /** OpenClaw-owned runtime policy prepared by the orchestrator for this attempt. */
+  /** AgileClaw-owned runtime policy prepared by the orchestrator for this attempt. */
   runtimePlan?: AgentRuntimePlan;
   /** Reports terminal tool facts to the host-owned attempt outcome accumulator. */
   observeToolTerminal?: EmbeddedRunAttemptToolTerminalObserver;
@@ -218,7 +218,7 @@ export type EmbeddedRunAttemptParams = EmbeddedRunAttemptBase & {
   agentHarnessCompletionScope?: AgentHarnessCompletionScope;
   /** Host-only originals retained across native image projection. */
   inputAttachmentMedia?: RunEmbeddedAgentParams["media"];
-  /** Storage-aware trajectory recorder owned by the OpenClaw host. */
+  /** Storage-aware trajectory recorder owned by the AgileClaw host. */
   trajectoryRecorder?: EmbeddedRunAttemptTrajectoryRecorder | null;
   /** Live observer called after wrapped tool outcomes are recorded. */
   onToolOutcome?: ToolOutcomeObserver;
@@ -259,7 +259,7 @@ export type EmbeddedRunAttemptParams = EmbeddedRunAttemptBase & {
   /** Auth profile store already resolved during startup for this attempt. */
   authProfileStore: AuthProfileStore;
   /**
-   * Full auth profile store for OpenClaw tool availability.
+   * Full auth profile store for AgileClaw tool availability.
    * Plugin-owned harnesses may scope `authProfileStore` to model transport credentials.
    */
   toolAuthProfileStore?: AuthProfileStore;

@@ -1,17 +1,17 @@
 import { expectDefined } from "@openclaw/normalization-core";
 // On roughly one day in sixteen, the interactive banner gains a tiny ASCII
-// lobster. The shared lobster-day hash keeps the banner deterministic.
+// jade disc. The shared lobster-day hash keeps the banner deterministic.
 import { isLobsterDay, lobsterDayHash } from "../shared/lobster-day.js";
 
 const LOBSTER_ARTS: readonly string[] = [
-  // Claws up, saying hi.
-  ["  (\\/)  (\\/)", "   \\_\\  /_/", "    ( o.o )", "    /|__|\\"].join("\n"),
-  // Just the eyestalks, watching from below the waterline.
-  ["     o   o", "     )   (", "  ~~~~~~~~~~~"].join("\n"),
+  // The jade disc held up, catching the light.
+  ["   .-==-.  ", "  /  __  \\ ", " |  (__)  |", "  \\      / ", "   '-..-'  "].join("\n"),
+  // The disc's reflection rippling on water.
+  ["    (  )   ", "  ~ (  ) ~ ", " ~~~~~~~~~~"].join("\n"),
 ] as const;
 
 /**
- * Return the ASCII lobster for `now`'s calendar day, or null on non-lobster
+ * Return the ASCII jade art for `now`'s calendar day, or null on non-art
  * days and in CI/test environments (banner tests assert exact bytes).
  */
 export function pickCliLobsterArt(now: Date, env: NodeJS.ProcessEnv = process.env): string | null {

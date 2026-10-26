@@ -821,7 +821,7 @@ describe("sidebar attention refresh ownership", () => {
       Array.from(
         panel.querySelectorAll("header button"),
         (button) => button.getAttribute("aria-label") ?? button.textContent,
-      ).some((label) => label?.includes("Ask OpenClaw")),
+      ).some((label) => label?.includes("Ask AgileClaw")),
     ).toBe(false);
 
     const { custodianAlertStore } = await import("../pages/custodian/custodian-alert-store.ts");
@@ -830,7 +830,7 @@ describe("sidebar attention refresh ownership", () => {
       const alertAction = panel.querySelector<HTMLButtonElement>(
         '[data-attention-kind="modelAuthExpired"] .sidebar-issues-panel__action:not(.sidebar-issues-panel__action--primary)',
       )!;
-      expect(alertAction.textContent?.trim()).toBe("Ask OpenClaw");
+      expect(alertAction.textContent?.trim()).toBe("Ask AgileClaw");
       alertAction.click();
       await waitForFast(() =>
         expect(dispatch).toHaveBeenCalledWith(

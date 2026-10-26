@@ -254,14 +254,14 @@ describe("registered project catalog", () => {
   });
 
   it.each([
-    ["https://github.com/OpenClaw/ClawSweeper.git", true],
-    ["git@github.com:OpenClaw/ClawSweeper.git", true],
-    ["github.com:OpenClaw/ClawSweeper.git", true],
-    ["ssh://git@github.com/OpenClaw/ClawSweeper.git", true],
-    ["ssh://github.com/OpenClaw/ClawSweeper.git", true],
-    ["ssh://github.com:22/OpenClaw/ClawSweeper.git", true],
-    ["ssh://github.com:2222/OpenClaw/ClawSweeper.git", false],
-    ["ssh://github.com.evil.test/OpenClaw/ClawSweeper.git", false],
+    ["https://github.com/AgileClaw/ClawSweeper.git", true],
+    ["git@github.com:AgileClaw/ClawSweeper.git", true],
+    ["github.com:AgileClaw/ClawSweeper.git", true],
+    ["ssh://git@github.com/AgileClaw/ClawSweeper.git", true],
+    ["ssh://github.com/AgileClaw/ClawSweeper.git", true],
+    ["ssh://github.com:22/AgileClaw/ClawSweeper.git", true],
+    ["ssh://github.com:2222/AgileClaw/ClawSweeper.git", false],
+    ["ssh://github.com.evil.test/AgileClaw/ClawSweeper.git", false],
     ["https://gitlab.com/openclaw/clawsweeper.git", false],
     ["https://user:secret@github.com/openclaw/clawsweeper.git", false],
     ["git@evil.test:openclaw/clawsweeper.git", false],

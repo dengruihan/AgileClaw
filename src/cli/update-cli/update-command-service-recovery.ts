@@ -165,7 +165,7 @@ export function formatPostUpdateGatewayRecoveryInstructions(
   const beforeVersion = normalizeOptionalString(result.before?.version);
   if (isPackageManagerUpdateMode(result.mode) && beforeVersion) {
     lines.push(
-      `Rollback: reinstall OpenClaw ${beforeVersion} with the same package manager, then rerun \`${installCommand}\`.`,
+      `Rollback: reinstall AgileClaw ${beforeVersion} with the same package manager, then rerun \`${installCommand}\`.`,
     );
   }
   return lines;

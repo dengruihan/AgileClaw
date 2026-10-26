@@ -157,7 +157,7 @@ it("keeps the notice when an authorized command ends without a reply", async () 
 });
 
 it.each([
-  { sender: "owner", body: "/status", expected: /OpenClaw/u },
+  { sender: "owner", body: "/status", expected: /AgileClaw/u },
   { sender: "member", body: "/new@bot", expected: /New session started/u },
   { sender: "member", body: "/new", expected: /New session started/u },
 ])("still answers $sender $body", async ({ sender, body, expected }) => {

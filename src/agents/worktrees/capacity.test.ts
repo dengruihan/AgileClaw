@@ -33,7 +33,7 @@ describe("worktree Git size estimates", () => {
     const origin = path.join(root, "origin.git");
     const clone = path.join(root, "clone");
     await git(root, "init", "--template=", "-b", "main", source);
-    await git(source, "config", "user.name", "OpenClaw Test");
+    await git(source, "config", "user.name", "AgileClaw Test");
     await git(source, "config", "user.email", "openclaw-test@example.invalid");
     await git(source, "config", "commit.gpgSign", "false");
     await fs.writeFile(path.join(source, "base.txt"), "base\n");
@@ -77,7 +77,7 @@ describe("worktree Git size estimates", () => {
     const root = tempDirs.make("openclaw-capacity-caller-git-");
     const repo = path.join(root, "repo");
     await git(root, "init", "--template=", "-b", "main", repo);
-    await git(repo, "config", "user.name", "OpenClaw Test");
+    await git(repo, "config", "user.name", "AgileClaw Test");
     await git(repo, "config", "user.email", "openclaw-test@example.invalid");
     await git(repo, "config", "commit.gpgSign", "false");
     await fs.writeFile(path.join(repo, "README.md"), "capacity\n");

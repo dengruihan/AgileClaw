@@ -268,7 +268,7 @@ describe("runAuthProbes", () => {
     });
   });
 
-  it("runs Codex-pinned auth probes through raw OpenClaw model-run mode", async () => {
+  it("runs Codex-pinned auth probes through raw AgileClaw model-run mode", async () => {
     await withProbeRuntime("profile", async ({ probe, runner }) => {
       runner.mockImplementation(async (params) => {
         if (params.agentHarnessRuntimeOverride !== "openclaw") {

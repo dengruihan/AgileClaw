@@ -65,7 +65,7 @@ describe("internal history display projection", () => {
           ...userTextMessage(
             [
               `[Inter-session message] sourceSession=agent:main:subagent:child sourceChannel=internal sourceTool=${sourceTool} isUser=false`,
-              "This content was routed by OpenClaw from another session or internal tool.",
+              "This content was routed by AgileClaw from another session or internal tool.",
               internalContext("subagent completion payload"),
             ].join("\n"),
           ),

@@ -236,7 +236,7 @@ describe("triageCommand", () => {
           await started.promise;
           expect(mocks.spawn).not.toHaveBeenCalled();
           expect(mocks.runUpdateRepairLoop).not.toHaveBeenCalled();
-          const agent = run ? "the embedded OpenClaw agent using your configured model" : "claude";
+          const agent = run ? "the embedded AgileClaw agent using your configured model" : "claude";
           expect(runtime.log).toHaveBeenCalledWith(
             `Agent: ${agent}. This will use your own account/tokens.`,
           );

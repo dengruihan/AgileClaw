@@ -23,7 +23,7 @@ export const DiagnosticsConfigSchema = z
         protocol: z.literal("http/protobuf").optional(),
         headers: z.record(z.string(), z.string()).optional(),
         serviceName: z.string().optional(),
-        /** Replacement prefix for OpenClaw-owned metric names. Empty removes the prefix; defaults to "openclaw.". */
+        /** Replacement prefix for AgileClaw-owned metric names. Empty removes the prefix; defaults to "openclaw.". */
         metricNamePrefix: MetricNamePrefixSchema.optional(),
         traces: z.boolean().optional(),
         metrics: z.boolean().optional(),

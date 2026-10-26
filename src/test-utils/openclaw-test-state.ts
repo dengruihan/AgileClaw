@@ -361,7 +361,7 @@ export async function createOpenClawTestState(
       },
       applyEnv: () => {
         if (releasePromise || cleanupPromise) {
-          throw new Error("Cannot apply a released OpenClaw test state");
+          throw new Error("Cannot apply a released AgileClaw test state");
         }
         resetConfigRuntimeStateForTest();
         // envVars is mutable; capture late keys before their first application.

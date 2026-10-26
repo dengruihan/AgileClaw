@@ -265,7 +265,7 @@ describe("status-runtime-shared", () => {
     });
   });
 
-  it("does not add Codex synthetic usage for OpenAI routes pinned to OpenClaw runtime", async () => {
+  it("does not add Codex synthetic usage for OpenAI routes pinned to AgileClaw runtime", async () => {
     await resolveStatusUsageSummary({
       ...createStatusGatewayProbeBudget(3456),
       config: {

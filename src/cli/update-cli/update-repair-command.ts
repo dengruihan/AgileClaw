@@ -154,7 +154,7 @@ export async function updateRepairCommand(opts: UpdateFinalizeOptions): Promise<
           reportRepairResult(
             opts,
             [lastRun.runId],
-            `OpenClaw ${currentVersion} satisfies the package target ${targetVersion}. Acknowledged the package-owner refusal; no maintenance or service restart was needed.`,
+            `AgileClaw ${currentVersion} satisfies the package target ${targetVersion}. Acknowledged the package-owner refusal; no maintenance or service restart was needed.`,
           );
           return;
         }

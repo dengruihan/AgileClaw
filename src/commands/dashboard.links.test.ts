@@ -166,7 +166,7 @@ describe("dashboardCommand", () => {
       "http://127.0.0.1:18789/#bootstrapToken=browser-bootstrap&bootstrapProfile=owner&gatewayUrl=ws%3A%2F%2F127.0.0.1%3A18789",
     );
     expect(runtime.log).toHaveBeenCalledWith(
-      "Opened in your browser. Keep that tab to control OpenClaw.",
+      "Opened in your browser. Keep that tab to control AgileClaw.",
     );
   });
 

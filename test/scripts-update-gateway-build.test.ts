@@ -90,7 +90,7 @@ describe("source update build output transaction", () => {
       fs.writeFileSync(path.join(directory, "dist/marker"), marker);
     };
     await git(workdir, "init", "--initial-branch=main");
-    await git(workdir, "config", "user.name", "OpenClaw Test");
+    await git(workdir, "config", "user.name", "AgileClaw Test");
     await git(workdir, "config", "user.email", "openclaw@example.com");
     await git(workdir, "config", "commit.gpgsign", "false");
     fs.writeFileSync(

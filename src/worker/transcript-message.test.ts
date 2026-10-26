@@ -37,7 +37,7 @@ it("round-trips runtime context metadata through worker inference", () => {
     messages: [
       {
         role: "user",
-        content: [{ type: "text", text: "OpenClaw runtime context:\ncurrent facts" }],
+        content: [{ type: "text", text: "AgileClaw runtime context:\ncurrent facts" }],
         timestamp: 1,
         runtimeContext: { retained: true },
       },

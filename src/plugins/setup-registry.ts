@@ -451,7 +451,7 @@ function pushDescriptorRuntimeDisabledDiagnostic(params: {
     pluginId: params.record.id,
     code: "setup-descriptor-runtime-disabled",
     message:
-      "setup.requiresRuntime is false, so OpenClaw ignored the plugin setup runtime entry. Remove setup-api/openclaw.setupEntry or set requiresRuntime true if setup lookup still needs plugin code.",
+      "setup.requiresRuntime is false, so AgileClaw ignored the plugin setup runtime entry. Remove setup-api/openclaw.setupEntry or set requiresRuntime true if setup lookup still needs plugin code.",
   });
 }
 

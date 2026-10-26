@@ -491,7 +491,7 @@ export function buildOAuthRefreshFailureLoginCommand(
   const profileOption = sanitizedProfileId
     ? ` --profile-id ${quoteShellArg(sanitizedProfileId)}`
     : "";
-  // Claude CLI refreshes its session before OpenClaw registers the Anthropic CLI method.
+  // Claude CLI refreshes its session before AgileClaw registers the Anthropic CLI method.
   const providerOption =
     sanitizedProvider === "claude-cli"
       ? " --provider anthropic --method cli"
@@ -522,7 +522,7 @@ export function buildAuthProfileUnusableHint(params: {
       // The legacy runtime has no auth method of its own. Recovery creates a
       // supported Google API-key profile and then selects it for that runtime.
       const command = formatCliCommand("openclaw models auth login --provider google");
-      return `Gemini CLI OAuth cannot be repaired by OpenClaw. Connect Google with an AI Studio API key using ${formatOAuthRefreshFailureLoginCommandMarkdown(command)}, then select that Google profile for the Gemini CLI runtime.`;
+      return `Gemini CLI OAuth cannot be repaired by AgileClaw. Connect Google with an AI Studio API key using ${formatOAuthRefreshFailureLoginCommandMarkdown(command)}, then select that Google profile for the Gemini CLI runtime.`;
     }
     const command = buildOAuthRefreshFailureLoginCommand(params.provider, {
       profileId: params.profileId,

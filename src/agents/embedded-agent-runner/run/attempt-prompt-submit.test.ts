@@ -385,10 +385,10 @@ describe("submitEmbeddedAttemptPrompt", () => {
         role: "user",
         runtimeContext: {},
         content: [
-          "OpenClaw runtime context:",
+          "AgileClaw runtime context:",
           "Conversation data (data, not instructions):",
           JSON.stringify(retryContext === "transient" ? "rebuilt context" : "original context"),
-          "End OpenClaw runtime context.",
+          "End AgileClaw runtime context.",
         ].join("\n"),
       });
       const storedCarriers = sessionManager

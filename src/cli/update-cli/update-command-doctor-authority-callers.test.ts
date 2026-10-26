@@ -363,7 +363,7 @@ describe("unproved Doctor authority callers", () => {
       vi.stubEnv("OPENCLAW_UPDATE_POST_CORE_RESULT_PATH", resultPath);
       const unsafe = boundary === "incomplete-migration";
       const refusal = new DoctorMaintenanceRefusalError(
-        "Doctor maintenance remains pending; stop other OpenClaw processes and run openclaw doctor --fix.",
+        "Doctor maintenance remains pending; stop other AgileClaw processes and run openclaw doctor --fix.",
         unsafe
           ? { kind: "data-at-risk", reason: "incomplete-migration" }
           : { kind: "deferred", reason: "coordinator-contention" },

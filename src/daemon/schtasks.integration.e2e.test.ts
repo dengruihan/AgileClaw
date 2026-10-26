@@ -553,7 +553,7 @@ describe.runIf(nativeSchtasksIntegrationEnabled)("schtasks Windows integration",
           rootDir,
           runtimeModuleUrl: moduleUrls.startupFallback,
         });
-        const defaultTaskBefore = await readTaskDefinitionSnapshot("OpenClaw Gateway");
+        const defaultTaskBefore = await readTaskDefinitionSnapshot("AgileClaw Gateway");
         const service = resolveGatewayService();
         const readRuntime = () => service.readRuntime(env);
         const expectRunningProbe = (
@@ -583,7 +583,7 @@ describe.runIf(nativeSchtasksIntegrationEnabled)("schtasks Windows integration",
           env,
           stdout,
           ...installedCommand,
-          description: `OpenClaw CI Scheduled Task integration ${id}`,
+          description: `AgileClaw CI Scheduled Task integration ${id}`,
         });
 
         const failedProcesses = await waitForGatewayTaskSupervisorProcesses({
@@ -878,7 +878,7 @@ describe.runIf(nativeSchtasksIntegrationEnabled)("schtasks Windows integration",
         await expect(fs.access(scriptPath)).rejects.toThrow();
         await expect(fs.access(launcherPath)).rejects.toThrow();
         expect(await canBindLoopbackPort(gatewayPort)).toBe(true);
-        expect(await readTaskDefinitionSnapshot("OpenClaw Gateway")).toEqual(defaultTaskBefore);
+        expect(await readTaskDefinitionSnapshot("AgileClaw Gateway")).toEqual(defaultTaskBefore);
 
         // Startup-folder recovery launches the same persisted Gateway command outside
         // Task Scheduler. Prove control resolves the inner child, then extinguishes its tree.

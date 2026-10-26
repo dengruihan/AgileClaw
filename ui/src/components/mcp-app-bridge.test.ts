@@ -26,7 +26,7 @@ it("confirms file paths in the pane before requesting or opening a file", async 
   const [hostTransport, appTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new OpenClawAppBridge(
     null,
-    { name: "OpenClaw", version: "test" },
+    { name: "AgileClaw", version: "test" },
     buildMcpAppHostCapabilities(undefined, false, false, false, { openFiles: true }),
   );
   const app = new App({ name: "file-proof", version: "1" }, {}, { autoResize: false });
@@ -121,7 +121,7 @@ it("negotiates extension capabilities and preserves rich request metadata over t
   const [hostTransport, appTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new OpenClawAppBridge(
     null,
-    { name: "OpenClaw", version: "test" },
+    { name: "AgileClaw", version: "test" },
     buildMcpAppHostCapabilities(undefined, true, true, true, {
       richMessage: true,
       richModelContext: true,
@@ -248,7 +248,7 @@ it("routes vendor links through the real view handler and AppBridge only for its
   const [hostTransport, appTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new OpenClawAppBridge(
     null,
-    { name: "OpenClaw", version: "test" },
+    { name: "AgileClaw", version: "test" },
     { openLinks: {} },
   );
   const app = new App({ name: "link-proof", version: "1" }, {}, { autoResize: false });
@@ -372,7 +372,7 @@ it("forwards resource metadata and keeps subscriptions with the extracted bridge
   const [hostTransport, appTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new OpenClawAppBridge(
     null,
-    { name: "OpenClaw", version: "test" },
+    { name: "AgileClaw", version: "test" },
     buildMcpAppHostCapabilities(undefined, true, false, true, { fileResources: true }),
   );
   const app = new App({ name: "resources-proof", version: "1" }, {}, { autoResize: false });

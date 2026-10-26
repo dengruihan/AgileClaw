@@ -8,7 +8,7 @@ import {
   type LegacyDoctorMigrationOptions,
 } from "./legacy-config-compat.js";
 
-/** Apply legacy migrations and validate the resulting OpenClaw config shape when possible. */
+/** Apply legacy migrations and validate the resulting AgileClaw config shape when possible. */
 export function migrateLegacyConfig(
   raw: unknown,
   options: LegacyDoctorMigrationOptions,

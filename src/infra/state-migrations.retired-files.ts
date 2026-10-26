@@ -36,6 +36,6 @@ export function assertNoRetiredStateFiles(label: string, paths: readonly string[
   }
   throw new RetiredStateFormatError(
     `${label}: retired files whose last writer predates July 1, 2026: ${existing.join(", ")}. ` +
-      `The files were left unchanged. Upgrade through OpenClaw 2026.9.7, run "${formatCliCommand("openclaw doctor --fix")}" on the original host, then retry this upgrade.`,
+      `The files were left unchanged. Upgrade through AgileClaw 2026.9.7, run "${formatCliCommand("openclaw doctor --fix")}" on the original host, then retry this upgrade.`,
   );
 }

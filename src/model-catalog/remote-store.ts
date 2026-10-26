@@ -120,7 +120,7 @@ export function markRemoteModelCatalogChecked(
       )?.value_json;
       let legacy: RemoteModelCatalogSnapshot | undefined;
       if (legacyJson !== undefined) {
-        // SAFETY: Only OpenClaw catalog stores write this key, always as a catalog snapshot.
+        // SAFETY: Only AgileClaw catalog stores write this key, always as a catalog snapshot.
         legacy = JSON.parse(legacyJson) as RemoteModelCatalogSnapshot;
       }
       updateConfigMachineStateInDatabase<RemoteModelCatalogSnapshot>(

@@ -62,7 +62,7 @@ export async function runUpdateRepairMaintenance(params: {
   params.signal.throwIfAborted();
   params.assertCurrent();
   if (!entrypoint) {
-    throw new Error("The installed OpenClaw entrypoint is unavailable.");
+    throw new Error("The installed AgileClaw entrypoint is unavailable.");
   }
   const args =
     params.request.operation === "update-repair"

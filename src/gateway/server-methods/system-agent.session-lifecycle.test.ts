@@ -161,7 +161,7 @@ describe("openclaw.chat session lifecycle", () => {
       payload: undefined,
       error: {
         code: "INVALID_REQUEST",
-        message: "OpenClaw session belongs to another caller.",
+        message: "AgileClaw session belongs to another caller.",
         details: buildSystemAgentSessionInvalidatedErrorDetails(),
       },
     });

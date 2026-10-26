@@ -470,7 +470,7 @@ it.each(["jobs.json", "jobs-state.json", "runs/old-job.jsonl"])(
       const quarantineBytes = await fs.readFile(quarantinePath, "utf8");
       const cfg = { cron: { store: storePath } } as OpenClawConfig;
       await expect(repairLegacyCronStoreWithoutPrompt({ cfg })).rejects.toThrow(
-        /Upgrade through OpenClaw 2026\.9\.7/,
+        /Upgrade through AgileClaw 2026\.9\.7/,
       );
       expect(await fs.readFile(sourcePath, "utf8")).toBe(source);
       expect(await fs.readFile(quarantinePath, "utf8")).toBe(quarantineBytes);
@@ -499,7 +499,7 @@ it("refuses a retired source created during confirmation before consuming quaran
           },
         },
       }),
-    ).rejects.toThrow(/Upgrade through OpenClaw 2026\.9\.7/);
+    ).rejects.toThrow(/Upgrade through AgileClaw 2026\.9\.7/);
     expect(await fs.readFile(quarantinePath, "utf8")).toBe(original);
     expect(await fs.readFile(storePath, "utf8")).toBe("new retired source");
     expect(await loadCronQuarantinedJobs(storePath)).toEqual([]);
@@ -514,7 +514,7 @@ it("preserves a broken retired cron source link and refuses repair", async () =>
     await fs.symlink(missingTarget, storePath, "file");
 
     await expect(loadLegacyCronRepairState({ cfg: {}, storePath })).rejects.toThrow(
-      /Upgrade through OpenClaw 2026\.9\.7/,
+      /Upgrade through AgileClaw 2026\.9\.7/,
     );
 
     expect((await fs.lstat(storePath)).isSymbolicLink()).toBe(true);

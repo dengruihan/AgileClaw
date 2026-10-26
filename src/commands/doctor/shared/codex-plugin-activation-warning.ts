@@ -14,6 +14,6 @@ export function collectCodexPluginActivationWarnings(config: OpenClawConfig): st
     return [];
   }
   return [
-    'plugins.entries.codex contains only enabled=true and the session catalog privacy opt-out. This may be left over from machine auto-enablement in OpenClaw 2026.9.3/2026.9.4; Doctor cannot determine whether you enabled it intentionally. If you did not enable Codex, set plugins.entries.codex.enabled=false and remove "codex" from plugins.allow if present. No automatic repair was applied to this selection.',
+    'plugins.entries.codex contains only enabled=true and the session catalog privacy opt-out. This may be left over from machine auto-enablement in AgileClaw 2026.9.3/2026.9.4; Doctor cannot determine whether you enabled it intentionally. If you did not enable Codex, set plugins.entries.codex.enabled=false and remove "codex" from plugins.allow if present. No automatic repair was applied to this selection.',
   ];
 }

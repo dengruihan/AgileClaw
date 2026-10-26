@@ -8,7 +8,7 @@ import {
 } from "./stale-subagent-allowlist.js";
 
 describe("stale subagent allowlist doctor repair", () => {
-  it("keeps wildcard, configured OpenClaw agents, and configured ACP targets", () => {
+  it("keeps wildcard, configured AgileClaw agents, and configured ACP targets", () => {
     const cfg = {
       acp: {
         defaultAgent: "claude",

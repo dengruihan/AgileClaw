@@ -123,7 +123,7 @@ export function formatDiskSpaceErrorCopy(raw: string): string | undefined {
   return /\benospc\b/i.test(raw) ||
     lower.includes("no space left on device") ||
     lower.includes("disk full")
-    ? "OpenClaw could not write local session data because the disk is full. Free some disk space and try again."
+    ? "AgileClaw could not write local session data because the disk is full. Free some disk space and try again."
     : undefined;
 }
 
@@ -266,7 +266,7 @@ export function renderSanitizedUserFacingText(
 }
 
 export const GENERIC_EXTERNAL_RUN_FAILURE_TEXT =
-  "⚠️ OpenClaw couldn't finish this request. Check the conversation before trying again. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow`.";
+  "⚠️ AgileClaw couldn't finish this request. Check the conversation before trying again. For details, open Settings → Logs in the Control UI or run `openclaw logs --follow`.";
 // A failed background turn can have partial effects; it does not establish chat health.
 const HEARTBEAT_FAILURE_LEAD = "⚠️ The background check did not complete.";
 const HEARTBEAT_FAILURE_LOG_HINT = "Troubleshooting: run `openclaw logs --follow` in a terminal.";
@@ -581,7 +581,7 @@ export function renderAuthProfileFailoverCopy(params: AuthProfileFailureCopyPara
 }
 
 export function renderControlUiAgentFailureCopy(): string {
-  return `⚠️ OpenClaw couldn't finish this reply. Check the conversation before trying again. ${ERROR_DETAILS_HINT}`;
+  return `⚠️ AgileClaw couldn't finish this reply. Check the conversation before trying again. ${ERROR_DETAILS_HINT}`;
 }
 
 export function replaceGenericExternalRunFailureText(text: string): {

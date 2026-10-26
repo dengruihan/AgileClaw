@@ -9,7 +9,7 @@ const SCHTASKS_COMMAND_TIMEOUT_MS = 5_000;
 it.skipIf(process.platform !== "win32")(
   "reads real Windows PowerShell task presence without an unknown result",
   () => {
-    const taskName = `OpenClaw probe test ${randomUUID()}`;
+    const taskName = `AgileClaw probe test ${randomUUID()}`;
     const missing = probeScheduledTaskState(taskName);
     console.log("Unregistered task probe:", missing);
     expect(missing).toEqual({ status: "missing" });

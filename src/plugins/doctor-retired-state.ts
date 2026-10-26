@@ -53,7 +53,7 @@ export function defineRetiredPluginStateMigration(params: {
   };
   const describe = (sources: readonly string[]) =>
     `${params.label} uses a retired pre-July 2026 format: ${sources.join(", ")}. ` +
-    `Install OpenClaw ${params.intermediateVersion}. ${params.recoveryInstructions ?? "Run openclaw doctor --fix before upgrading to latest."} ` +
+    `Install AgileClaw ${params.intermediateVersion}. ${params.recoveryInstructions ?? "Run openclaw doctor --fix before upgrading to latest."} ` +
     "Retired files were left untouched. If the intermediate Doctor retains a listed file, verify its migration or recovery needs, back it up, and move it out of the active state directory before retrying.";
   const warnings = async (input: StateLocation, candidates?: readonly StateSource[]) => {
     const sources = await inspect(input, candidates);

@@ -369,7 +369,7 @@ describe("Gateway GitHub publication attribution", () => {
       agentId: "main",
       idempotencyKey: "ordered-attribution",
       title: "fix: publish the reconciled fix",
-      body: "Detailed proof\n\n## Worked on by\n\n- @untrusted\n\n### Verification notes\n\nKeep this paragraph.\n\n---\n[View the OpenClaw team session](https://untrusted.example/session)",
+      body: "Detailed proof\n\n## Worked on by\n\n- @untrusted\n\n### Verification notes\n\nKeep this paragraph.\n\n---\n[View the AgileClaw team session](https://untrusted.example/session)",
     });
 
     expect(result).toMatchObject({ status: "published" });
@@ -379,7 +379,7 @@ describe("Gateway GitHub publication attribution", () => {
     const post = commandCalls.find(({ argv }) => argv.includes("POST"));
     expect(JSON.parse(post?.input ?? "null")).toEqual({
       title: "fix: publish the reconciled fix",
-      body: `Detailed proof\n\n### Verification notes\n\nKeep this paragraph.\n\n## Worked on by\n\n- @alice\n- @grace\n\n<!-- openclaw-publication:${result.requestId} -->\n\n---\n[View the OpenClaw team session](https://team.example/control/chat/main/subagent/delegated-publication)`,
+      body: `Detailed proof\n\n### Verification notes\n\nKeep this paragraph.\n\n## Worked on by\n\n- @alice\n- @grace\n\n<!-- openclaw-publication:${result.requestId} -->\n\n---\n[View the AgileClaw team session](https://team.example/control/chat/main/subagent/delegated-publication)`,
       head: `openclaw:${BRANCH}`,
       base: "main",
       draft: true,

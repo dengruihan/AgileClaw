@@ -294,7 +294,7 @@ export function createOpenClawStateDatabaseAsyncLifecycle() {
   const assertOpen = (record: IdentityRecord) => {
     if (isSealed(record)) {
       throw new StateDatabaseReadAdmissionInvalidatedError(
-        "OpenClaw state database read admission is closed",
+        "AgileClaw state database read admission is closed",
       );
     }
   };
@@ -436,7 +436,7 @@ export function createOpenClawStateDatabaseAsyncLifecycle() {
           record.admissions.get(databasePath) !== admission
         ) {
           throw new StateDatabaseReadAdmissionInvalidatedError(
-            "OpenClaw state database read admission changed",
+            "AgileClaw state database read admission changed",
           );
         }
       },
@@ -584,7 +584,7 @@ export function createOpenClawStateDatabaseAsyncLifecycle() {
               }),
             );
           }
-          throwSqliteLifecycleErrors(errors, "OpenClaw state resource drainage failed");
+          throwSqliteLifecycleErrors(errors, "AgileClaw state resource drainage failed");
           const retired = await retireNative(record?.identity);
           attempts.delete(record);
           seals.delete(current.seal);

@@ -671,7 +671,7 @@ describe("skills gateway handlers (clawhub)", () => {
         ok: false,
         error: "ClawHub blocked this release; update was not started.",
         code: "clawhub_download_blocked",
-        warning: "Latest skill version is marked malicious; OpenClaw will not download it.",
+        warning: "Latest skill version is marked malicious; AgileClaw will not download it.",
       },
     ]);
 
@@ -691,7 +691,7 @@ describe("skills gateway handlers (clawhub)", () => {
             ok: false,
             error: "ClawHub blocked this release; update was not started.",
             code: "clawhub_download_blocked",
-            warning: "Latest skill version is marked malicious; OpenClaw will not download it.",
+            warning: "Latest skill version is marked malicious; AgileClaw will not download it.",
           },
         ],
       },
@@ -705,10 +705,10 @@ describe("skills gateway handlers (clawhub)", () => {
             ok: false,
             error: "ClawHub blocked this release; update was not started.",
             code: "clawhub_download_blocked",
-            warning: "Latest skill version is marked malicious; OpenClaw will not download it.",
+            warning: "Latest skill version is marked malicious; AgileClaw will not download it.",
           },
         ],
-        warnings: ["Latest skill version is marked malicious; OpenClaw will not download it."],
+        warnings: ["Latest skill version is marked malicious; AgileClaw will not download it."],
       },
     });
   });

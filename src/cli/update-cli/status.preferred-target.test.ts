@@ -51,7 +51,7 @@ it("reports fresh native release preferences without changing the source checkou
     return result.stdout.trim();
   };
   await git(base, "init", "--initial-branch=main", source);
-  await git(source, "config", "user.name", "OpenClaw Test");
+  await git(source, "config", "user.name", "AgileClaw Test");
   await git(source, "config", "user.email", "test@openclaw.invalid");
   await git(source, "commit", "--allow-empty", "-m", "original release");
   await git(source, "tag", "v2026.9.1");

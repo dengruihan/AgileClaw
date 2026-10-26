@@ -121,7 +121,7 @@ function expectPolicyHandoff(
         content: [
           {
             type: "input_text",
-            text: expect.stringContaining(body || "current OpenClaw generic policy is empty"),
+            text: expect.stringContaining(body || "current AgileClaw generic policy is empty"),
           },
         ],
       },

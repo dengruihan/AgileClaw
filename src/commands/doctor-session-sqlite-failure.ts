@@ -125,7 +125,7 @@ export function createSessionSqliteMigrationFailureIssue(
       ),
     );
   const body = [
-    "OpenClaw doctor generated this sanitized report from a local session SQLite migration recovery.",
+    "AgileClaw doctor generated this sanitized report from a local session SQLite migration recovery.",
     "",
     reportBody,
   ].join("\n");
@@ -259,7 +259,7 @@ function renderFailureMarkdown(payload: ReturnType<typeof createFailureReportPay
     `- Run: ${payload.runId}`,
     `- Failed: ${payload.failedAt ?? "not recorded"}`,
     `- Generated: ${payload.generatedAt}`,
-    `- OpenClaw version: ${payload.version}`,
+    `- AgileClaw version: ${payload.version}`,
     `- Reason: ${sanitizeFailureReportText(payload.reason)}`,
     `- Restore status: ${payload.restoreStatus}`,
     `- Recovery command: \`${payload.recoveryCommand}\``,

@@ -93,7 +93,7 @@ export function injectClaudeMcpConfigArgs(
   return mergeClaudeDisallowedTools(next, deniedTools.toSorted());
 }
 
-/** Writes the active per-attempt capture token into OpenClaw's generated Claude MCP config. */
+/** Writes the active per-attempt capture token into AgileClaw's generated Claude MCP config. */
 export async function writeClaudeMcpCaptureConfig(params: {
   mcpConfigPath: string;
   captureKey: string;

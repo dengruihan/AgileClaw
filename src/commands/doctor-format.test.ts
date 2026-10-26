@@ -4,14 +4,14 @@ import { buildGatewayRuntimeHints } from "./doctor-format.js";
 
 describe("buildGatewayRuntimeHints", () => {
   it.each([
-    { env: {}, task: "OpenClaw Gateway", command: "openclaw", status: "stopped" },
+    { env: {}, task: "AgileClaw Gateway", command: "openclaw", status: "stopped" },
     {
       env: { OPENCLAW_PROFILE: "work" },
-      task: "OpenClaw Gateway (work)",
+      task: "AgileClaw Gateway (work)",
       command: "openclaw --profile work",
       status: "stopped",
     },
-    { env: {}, task: "OpenClaw Gateway", command: "openclaw", status: "running" },
+    { env: {}, task: "AgileClaw Gateway", command: "openclaw", status: "running" },
   ])(
     "names the disabled Scheduled Task and recovery for $task ($status)",
     ({ env, task, command, status }) => {

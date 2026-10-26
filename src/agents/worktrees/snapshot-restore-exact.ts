@@ -137,14 +137,14 @@ async function createReceipt(
   });
   const commit = await requireGit(
     record.repoRoot,
-    ["commit-tree", tree, "-p", snapshot, "-m", "OpenClaw exact restore v1"],
+    ["commit-tree", tree, "-p", snapshot, "-m", "AgileClaw exact restore v1"],
     {
       ...options,
       env: {
         ...options?.env,
-        GIT_AUTHOR_NAME: "OpenClaw",
+        GIT_AUTHOR_NAME: "AgileClaw",
         GIT_AUTHOR_EMAIL: "openclaw@localhost",
-        GIT_COMMITTER_NAME: "OpenClaw",
+        GIT_COMMITTER_NAME: "AgileClaw",
         GIT_COMMITTER_EMAIL: "openclaw@localhost",
       },
     },

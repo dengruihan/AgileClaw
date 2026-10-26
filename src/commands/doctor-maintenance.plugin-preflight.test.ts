@@ -131,7 +131,7 @@ module.exports = {
       runtime: { log: vi.fn(), error: vi.fn(), exit: vi.fn() },
     });
   try {
-    await expect(begin()).rejects.toThrow("OpenClaw state database is busy at");
+    await expect(begin()).rejects.toThrow("AgileClaw state database is busy at");
     expect(markers()).toEqual([false, false, false, false]);
     expect(fs.readFileSync(databasePath)).toEqual(databaseBefore);
   } finally {

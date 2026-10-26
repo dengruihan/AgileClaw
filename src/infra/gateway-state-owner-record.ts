@@ -46,7 +46,7 @@ export function assertPersistedStateDatabaseAccessAllowed(params: {
   assertMaintenance: () => void;
 }): void {
   const { databasePath, ownerPath, assertMaintenance } = params;
-  const unavailable = `OpenClaw state ownership at ${databasePath} could not be verified; retry after maintenance finishes.`;
+  const unavailable = `AgileClaw state ownership at ${databasePath} could not be verified; retry after maintenance finishes.`;
   let raw: string;
   try {
     raw = fs.readFileSync(ownerPath, "utf8");
@@ -86,10 +86,10 @@ export function assertPersistedStateDatabaseAccessAllowed(params: {
   if (owner.stateOwnerKind === "schema" && owner.role === "sqlite-maintenance") {
     throw new StateDatabaseAdmissionPendingError(
       databasePath,
-      `OpenClaw state at ${databasePath} is undergoing offline maintenance; retry when it finishes.`,
+      `AgileClaw state at ${databasePath} is undergoing offline maintenance; retry when it finishes.`,
     );
   }
   throw new Error(
-    `OpenClaw state at ${databasePath} is undergoing offline maintenance; retry when it finishes.`,
+    `AgileClaw state at ${databasePath} is undergoing offline maintenance; retry when it finishes.`,
   );
 }

@@ -101,7 +101,7 @@ function writeStartupMigrationCheckpointDatabase<T>(
 function assertStartupMigrationLeaseOwned(expiresAt: number | undefined): void {
   if (expiresAt === undefined) {
     throw new Error(
-      "OpenClaw startup migration lease was lost before startup migrations completed; retry so migrations can run under a fresh lease.",
+      "AgileClaw startup migration lease was lost before startup migrations completed; retry so migrations can run under a fresh lease.",
     );
   }
 }
@@ -201,7 +201,7 @@ function acquireStartupMigrationLeaseFromDatabase(
           const existingOwner = parseStateLeaseProcessOwner(existing.payloadJson);
           const ownerHint = existingOwner ? ` (held by pid ${existingOwner.pid})` : "";
           throw new StartupMigrationLeaseConflictError(
-            `OpenClaw startup migrations are already running for this state directory; retry after the other OpenClaw process finishes or after ${new Date(existing.expiresAt ?? expiresAt).toISOString()}.${ownerHint}`,
+            `AgileClaw startup migrations are already running for this state directory; retry after the other AgileClaw process finishes or after ${new Date(existing.expiresAt ?? expiresAt).toISOString()}.${ownerHint}`,
           );
         }
         acquire();

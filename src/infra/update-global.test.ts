@@ -329,14 +329,14 @@ describe("update global helpers", () => {
         const trustedLocalAppData = path.join(base, "trusted-local-app-data");
         const injectedGitDir = path.join(
           injectedLocalAppData,
-          "OpenClaw",
+          "AgileClaw",
           "deps",
           "portable-git",
           "cmd",
         );
         const trustedGitDir = path.join(
           trustedLocalAppData,
-          "OpenClaw",
+          "AgileClaw",
           "deps",
           "portable-git",
           "cmd",

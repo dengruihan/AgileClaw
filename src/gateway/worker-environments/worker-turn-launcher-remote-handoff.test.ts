@@ -98,7 +98,7 @@ describe("worker turn launcher remote handoff", () => {
     await manager.appendMessageAsync(makeTextToolResult("call-1", "read", "result", false, 12));
     let descriptor: WorkerLaunchDescriptor | undefined;
     const environment = browserEnvironment();
-    environment.desktop!.apps![0]!.args = ["-File", "C:\\ProgramData\\OpenClaw\\browser.ps1"];
+    environment.desktop!.apps![0]!.args = ["-File", "C:\\ProgramData\\AgileClaw\\browser.ps1"];
     const bootstrapReceipt = environment.bootstrapReceipt;
     if (!bootstrapReceipt) {
       throw new Error("expected bootstrap receipt");
@@ -303,7 +303,7 @@ describe("worker turn launcher remote handoff", () => {
     expect(descriptor?.assignment.browser).toEqual({
       cdpUrl: "http://127.0.0.1:9222",
       launcherPath: "/usr/local/bin/openclaw-worker-browser",
-      launcherArgs: ["-File", "C:\\ProgramData\\OpenClaw\\browser.ps1"],
+      launcherArgs: ["-File", "C:\\ProgramData\\AgileClaw\\browser.ps1"],
     });
     expect(descriptor?.assignment.initialMessages).toEqual([
       {

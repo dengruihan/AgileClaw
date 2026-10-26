@@ -2238,7 +2238,7 @@ describe("loadChatHistory retry handling", () => {
     expect(getChatHistoryLoadState(state)).toMatchObject({
       phase: "failed",
       message:
-        "You don't have permission to view existing chat history. Ask the person who manages OpenClaw for access.",
+        "You don't have permission to view existing chat history. Ask the person who manages AgileClaw for access.",
       retryable: false,
     });
     expect(state.lastError).toBeNull();

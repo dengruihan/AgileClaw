@@ -145,7 +145,7 @@ suite.define(() => {
           )?.trim(),
         ).toBe("");
         expect(await panel.locator(".sidebar-issues-panel__dismiss-help").count()).toBe(0);
-        await update.getByRole("button", { name: /^Dismiss .*OpenClaw updated/ }).click();
+        await update.getByRole("button", { name: /^Dismiss .*AgileClaw updated/ }).click();
         await update.waitFor({ state: "hidden" });
         expect(await gateway.getRequests("update.run")).toHaveLength(0);
 

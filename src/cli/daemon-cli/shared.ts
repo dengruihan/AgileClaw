@@ -58,7 +58,7 @@ export function resolveDaemonInstallBlockMessage(
   if (process.platform === "linux" && hasSudoToRootSystemdUserManagerMismatch(env)) {
     return (
       "Gateway install blocked: Refusing a sudo-to-root systemd user-service install because " +
-      "OpenClaw state and service files would belong to root while systemctl targets the " +
+      "AgileClaw state and service files would belong to root while systemctl targets the " +
       "invoking user's manager. Rerun the same command without sudo. If [unsafe-permissions] " +
       "blocked the non-sudo command, repair the reported directory with `chmod go-w <path>` " +
       "and retry; do not use sudo or --force to bypass it. " +
@@ -99,7 +99,7 @@ export function formatGatewayServiceInstallationDrift(
   service?: { stopped?: boolean; port?: number },
 ): string {
   const { serviceRoot, serviceVersion, activeRoot, activeVersion } = drift;
-  const facts = `Gateway service targets a different OpenClaw install: ${serviceRoot} (${serviceVersion ?? "version unknown"}); active CLI: ${activeRoot} (${activeVersion ?? "version unknown"}).`;
+  const facts = `Gateway service targets a different AgileClaw install: ${serviceRoot} (${serviceVersion ?? "version unknown"}); active CLI: ${activeRoot} (${activeVersion ?? "version unknown"}).`;
   const guidance = resolveDaemonServiceInstallGuidance(targetRole, env, service);
   return guidance ? `${facts} ${guidance}` : facts;
 }

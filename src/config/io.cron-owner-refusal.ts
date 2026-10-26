@@ -99,7 +99,7 @@ async function assertSafe(
   }
   if (active && active.pid !== process.pid && active.cronOwnerProjection !== "dynamic-default-v1") {
     throw createCronOwnerWriteRefusalError(
-      `Config write refused: live external Gateway pid ${active.pid} does not prove compatibility with the current cron ownership projection. Restart it with this OpenClaw version, or stop it, then retry.`,
+      `Config write refused: live external Gateway pid ${active.pid} does not prove compatibility with the current cron ownership projection. Restart it with this AgileClaw version, or stop it, then retry.`,
     );
   }
 }

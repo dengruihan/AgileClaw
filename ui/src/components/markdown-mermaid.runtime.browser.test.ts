@@ -110,7 +110,7 @@ G --> S`;
     ["sequence", "sequenceDiagram\nAlice->>Bob: Hello\nBob-->>Alice: Ready", "Alice"],
     ["class", "classDiagram\nVehicle <|-- Car\nVehicle : +move()", "Vehicle"],
     ["state", "stateDiagram-v2\n[*] --> Ready\nReady --> Running\nRunning --> [*]", "Running"],
-    ["mindmap", "mindmap\n  root((OpenClaw))\n    Gateway\n    Runtime", "Gateway"],
+    ["mindmap", "mindmap\n  root((AgileClaw))\n    Gateway\n    Runtime", "Gateway"],
     [
       "swimlane",
       "swimlane-beta LR\n  subgraph Gateway\n    Admit[Admit]\n  end\n  subgraph Runtime\n    Execute[Execute]\n  end\n  Admit --> Execute",
@@ -132,7 +132,7 @@ G --> S`;
   it("preserves diagram-specific mindmap and swimlane layouts", async () => {
     const mindmap = parseSvg(
       await renderMermaidSvg(
-        "mindmap\n  root((OpenClaw))\n    Gateway\n      Admission\n    Runtime\n      Execution",
+        "mindmap\n  root((AgileClaw))\n    Gateway\n      Admission\n    Runtime\n      Execution",
         theme,
       ),
     );

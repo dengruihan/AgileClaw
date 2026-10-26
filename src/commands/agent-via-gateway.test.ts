@@ -822,7 +822,7 @@ describe("agentCliCommand", () => {
         );
         await expect(secondRun).rejects.toBeInstanceOf(GatewayLockError);
         await expect(secondRun).rejects.toMatchObject({
-          message: expect.stringContaining("wait for the current OpenClaw operation to finish"),
+          message: expect.stringContaining("wait for the current AgileClaw operation to finish"),
           cause: expect.any(GatewayStateOwnerContentionError),
         });
         await expect(secondRun).rejects.toMatchObject({

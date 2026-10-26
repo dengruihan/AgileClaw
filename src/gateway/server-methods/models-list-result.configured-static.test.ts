@@ -140,7 +140,7 @@ describe("models.list configured static entries", () => {
         );
         expect(result.defaultModels).toEqual({
           automaticUtilityModel: "openai/gpt-5.6-luna",
-          utilityRuntime: { id: "openclaw", kind: "api", label: "OpenClaw Default" },
+          utilityRuntime: { id: "openclaw", kind: "api", label: "AgileClaw Default" },
         });
         // The same real registration must also respect native, missing, and exhausted auth.
         const pinnedConfig: OpenClawConfig = {

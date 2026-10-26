@@ -269,7 +269,7 @@ export async function probeRfbServer(params: {
   return { kind: "rfb", securityTypes: result.securityTypes };
 }
 
-/** Maps standard RFB security numbers into the credential UX supported by OpenClaw. */
+/** Maps standard RFB security numbers into the credential UX supported by AgileClaw. */
 export function classifyRfbSecurity(
   securityTypes: readonly number[],
 ): "none" | "vnc-password" | "ard-account" | "unsupported" {
@@ -287,7 +287,7 @@ export function classifyRfbSecurity(
       return "ard-account";
     }
     if ([6, 16, 19, 22, 113].includes(securityType)) {
-      // noVNC supports these schemes and stops here, but OpenClaw has no matching credential UX.
+      // noVNC supports these schemes and stops here, but AgileClaw has no matching credential UX.
       // Scanning onward would make the probe choose a route the browser never selects.
       return "unsupported";
     }

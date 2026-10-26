@@ -78,7 +78,7 @@ export function resolveExplicitSessionStorePath(params: {
       applicationTables.length > 0 &&
       !applicationTables.some((row) => row.name === "schema_meta")
     ) {
-      throw new Error("the SQLite file has application tables but no OpenClaw schema metadata");
+      throw new Error("the SQLite file has application tables but no AgileClaw schema metadata");
     }
   } catch (error) {
     databaseFailure = { error };

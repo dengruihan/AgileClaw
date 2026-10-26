@@ -314,10 +314,10 @@ describe("resolveResponsePrefixTemplate", () => {
           modelFull: "openai/gpt-5.4",
           provider: "openai",
           thinkingLevel: "high",
-          identityName: "OpenClaw",
+          identityName: "AgileClaw",
         },
       ),
-    ).toBe("gpt-5.4 openai/gpt-5.4 openai high/high OpenClaw/OpenClaw");
+    ).toBe("gpt-5.4 openai/gpt-5.4 openai high/high AgileClaw/AgileClaw");
   });
 
   it("preserves unresolved/unknown placeholders and handles static inputs", () => {

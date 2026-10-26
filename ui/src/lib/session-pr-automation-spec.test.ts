@@ -32,7 +32,7 @@ describe("PR automation recipes", () => {
     const prefix = ciAutomationDeclarationKey(target, "autoMerge");
     expect(ciAutomationDeclarationKey({ ...target }, "autoMerge")).toBe(prefix);
     expect(
-      ciAutomationDeclarationKey({ ...target, owner: "OpenClaw", repo: "OpenClaw" }, "autoMerge"),
+      ciAutomationDeclarationKey({ ...target, owner: "AgileClaw", repo: "AgileClaw" }, "autoMerge"),
     ).toBe(prefix);
     const variants: CiAutomationTarget[] = [
       { ...target, agentId: "other" },

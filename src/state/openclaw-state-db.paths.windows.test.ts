@@ -22,7 +22,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("Windows agent database inventory paths", () => {
-  it.each([String.raw`C:\OpenClaw`, String.raw`\\Server\Share\OpenClaw`])(
+  it.each([String.raw`C:\AgileClaw`, String.raw`\\Server\Share\AgileClaw`])(
     "uses one relative registration across namespace spellings under %s",
     (stateDir) => {
       const relative = String.raw`agents\main\agent\openclaw-agent.sqlite`;
@@ -37,9 +37,9 @@ describe("Windows agent database inventory paths", () => {
   );
 
   it.each([
-    [String.raw`C:\OpenClaw`, String.raw`C:\External\openclaw-agent.sqlite`],
-    [String.raw`C:\OpenClaw`, String.raw`D:\External\openclaw-agent.sqlite`],
-    [String.raw`\\Server\Share\OpenClaw`, String.raw`\\Server\Other\openclaw-agent.sqlite`],
+    [String.raw`C:\AgileClaw`, String.raw`C:\External\openclaw-agent.sqlite`],
+    [String.raw`C:\AgileClaw`, String.raw`D:\External\openclaw-agent.sqlite`],
+    [String.raw`\\Server\Share\AgileClaw`, String.raw`\\Server\Other\openclaw-agent.sqlite`],
   ])("preserves an external native locator outside %s", (stateDir, external) => {
     const registry = path.join(stateDir, "state", "openclaw.sqlite");
     const namespaced = path.toNamespacedPath(external);
@@ -48,29 +48,29 @@ describe("Windows agent database inventory paths", () => {
 
   it.each([
     {
-      stateDir: String.raw`\\kost\share\OpenClaw`,
-      canonicalRoot: String.raw`\\kost\share\OpenClaw`,
-      agentPath: String.raw`\\Kost\share\OpenClaw\agents\main\agent.sqlite`,
+      stateDir: String.raw`\\kost\share\AgileClaw`,
+      canonicalRoot: String.raw`\\kost\share\AgileClaw`,
+      agentPath: String.raw`\\Kost\share\AgileClaw\agents\main\agent.sqlite`,
     },
     {
-      stateDir: String.raw`\\server\share\OpenClaw`,
-      canonicalRoot: String.raw`\\server\share\OpenClaw`,
-      agentPath: String.raw`\\?\UNC\server\share\..\..\server\share\OpenClaw\agent.sqlite`,
+      stateDir: String.raw`\\server\share\AgileClaw`,
+      canonicalRoot: String.raw`\\server\share\AgileClaw`,
+      agentPath: String.raw`\\?\UNC\server\share\..\..\server\share\AgileClaw\agent.sqlite`,
     },
     {
-      stateDir: String.raw`C:\OpenClaw`,
-      canonicalRoot: String.raw`C:\OpenClaw`,
+      stateDir: String.raw`C:\AgileClaw`,
+      canonicalRoot: String.raw`C:\AgileClaw`,
       agentPath: String.raw`\\.\C:\..\UNC\server\share\agent.sqlite`,
     },
     {
       stateDir: String.raw`C:\Alias`,
-      canonicalRoot: String.raw`\\kost\share\OpenClaw`,
-      agentPath: String.raw`\\Kost\share\OpenClaw\agents\main\agent.sqlite`,
+      canonicalRoot: String.raw`\\kost\share\AgileClaw`,
+      agentPath: String.raw`\\Kost\share\AgileClaw\agents\main\agent.sqlite`,
     },
     {
       stateDir: String.raw`C:\Alias`,
-      canonicalRoot: String.raw`\\server\share\OpenClaw`,
-      agentPath: String.raw`\\?\UNC\server\share\..\..\server\share\OpenClaw\agent.sqlite`,
+      canonicalRoot: String.raw`\\server\share\AgileClaw`,
+      agentPath: String.raw`\\?\UNC\server\share\..\..\server\share\AgileClaw\agent.sqlite`,
     },
   ])(
     "retains raw locator identity for $agentPath under $stateDir",
@@ -111,7 +111,7 @@ describe("Windows agent database inventory paths", () => {
   );
 
   it("preserves a raw in-root suffix instead of collapsing link traversal", () => {
-    const stateDir = String.raw`C:\OpenClaw`;
+    const stateDir = String.raw`C:\AgileClaw`;
     const registry = path.join(stateDir, "state", "openclaw.sqlite");
     const suffix = String.raw`linked\..\openclaw-agent.sqlite`;
     expect(resolveOpenClawAgentDatabaseStoredPath(registry, `${stateDir}\\${suffix}`)).toBe(suffix);
@@ -121,7 +121,7 @@ describe("Windows agent database inventory paths", () => {
   });
 
   it("preserves a device namespace without a plain drive/share spelling", () => {
-    const registry = String.raw`C:\OpenClaw\state\openclaw.sqlite`;
+    const registry = String.raw`C:\AgileClaw\state\openclaw.sqlite`;
     const device = String.raw`\\?\Volume{00000000-0000-0000-0000-000000000001}\agent.sqlite`;
     expect(resolveOpenClawAgentDatabaseStoredPath(registry, device)).toBe(device);
   });

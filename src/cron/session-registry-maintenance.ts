@@ -130,7 +130,7 @@ export async function runSessionRegistryMaintenance(params: {
     if (deletion) {
       // The former writable listing refused incomplete deletion; read-only workers must too.
       throw new Error(
-        `OpenClaw agent database is unavailable while agent ${target.agentId} is deleted.`,
+        `AgileClaw agent database is unavailable while agent ${target.agentId} is deleted.`,
       );
     }
     if (retained) {

@@ -194,7 +194,7 @@ export function buildPluginDependencyStatus(params: {
   };
 }
 
-/** Checks managed required dependencies, using the host audit for the OpenClaw SDK link. */
+/** Checks managed required dependencies, using the host audit for the AgileClaw SDK link. */
 export function buildManagedPluginDependencyStatus(params: {
   rootDir: string;
   dependencyRootDir: string;

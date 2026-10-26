@@ -1,4 +1,4 @@
-/** Tests merging user OpenClaw MCP server config into Claude bundle-MCP overlays. */
+/** Tests merging user AgileClaw MCP server config into Claude bundle-MCP overlays. */
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
@@ -121,7 +121,7 @@ describe("prepareCliBundleMcpConfig user mcp.servers", () => {
     authMocks.resolveMcpOAuthAccessToken.mockReset();
   });
 
-  it("translates OpenClaw transport field on user mcp.servers into Claude type", async () => {
+  it("translates AgileClaw transport field on user mcp.servers into Claude type", async () => {
     const workspaceDir = await cliBundleMcpHarness.tempHarness.createTempDir(
       "openclaw-cli-bundle-mcp-user-servers-transport-",
     );
@@ -314,7 +314,7 @@ describe("prepareCliBundleMcpConfig user mcp.servers", () => {
   });
 
   it("user mcp.servers do not override the loopback additionalConfig", async () => {
-    // The OpenClaw loopback server is generated runtime state and must win over
+    // The AgileClaw loopback server is generated runtime state and must win over
     // user config with the same server name.
     const workspaceDir = await cliBundleMcpHarness.tempHarness.createTempDir(
       "openclaw-cli-bundle-mcp-user-servers-loopback-",

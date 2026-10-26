@@ -351,7 +351,7 @@ describe("runSystemAgentTurn", () => {
     expect(runEmbeddedAgent).toHaveBeenCalledOnce();
   });
 
-  it("uses the default agent CLI route while keeping OpenClaw session identity", async () => {
+  it("uses the default agent CLI route while keeping AgileClaw session identity", async () => {
     const stateDir = useTempStateDir();
     const agentDir = path.join(stateDir, "ops-agent");
     const config = {
@@ -411,12 +411,12 @@ describe("runSystemAgentTurn", () => {
       openClaw: ["openclaw"],
     });
     expect(call.toolsAllow).toBeUndefined();
-    expect(expectDefined(call.systemAgentTool, "missing CLI OpenClaw tool").proposalRef).toBe(
+    expect(expectDefined(call.systemAgentTool, "missing CLI AgileClaw tool").proposalRef).toBe(
       session.proposalRef,
     );
   });
 
-  it("rejects an always-on CLI backend before launching OpenClaw", async () => {
+  it("rejects an always-on CLI backend before launching AgileClaw", async () => {
     useTempStateDir();
     cliBackendsTesting.setDepsForTest({
       resolveRuntimeCliBackends: () => [
@@ -463,7 +463,7 @@ describe("runSystemAgentTurn", () => {
     expect((failure as SystemAgentInferenceUnavailableError).failures).toEqual([
       expect.objectContaining({
         message: expect.stringContaining(
-          "CLI backend google-gemini-cli cannot enforce OpenClaw's exact tool availability",
+          "CLI backend google-gemini-cli cannot enforce AgileClaw's exact tool availability",
         ),
       }),
     ]);
@@ -704,7 +704,7 @@ describe("runSystemAgentTurn", () => {
           },
           entries: {
             ops: {
-              // Keep the model owner's policy stable. OpenClaw executes with
+              // Keep the model owner's policy stable. AgileClaw executes with
               // its own identity and therefore follows the changing global policy.
               tools: { exec: { mode: "ask" } },
             },
@@ -879,7 +879,7 @@ describe("runSystemAgentTurn", () => {
       params: { temperature: 0.2 },
       tools: { allow: ["read"], deny: ["exec"] },
     });
-    expect(expectDefined(call.systemAgentTool, "missing embedded OpenClaw tool").proposalRef).toBe(
+    expect(expectDefined(call.systemAgentTool, "missing embedded AgileClaw tool").proposalRef).toBe(
       session.proposalRef,
     );
   });
@@ -932,7 +932,7 @@ describe("runSystemAgentTurn", () => {
     );
     expect(reply?.text).toContain("requesting session's permission policy");
     expect(reply?.text).toContain("returns the final outcome");
-    expect(reply?.text).not.toContain("OpenClaw operator UI");
+    expect(reply?.text).not.toContain("AgileClaw operator UI");
     expect(reply?.text).not.toContain("ask the user to reply yes");
     // Staging still registers the exact proposal for host authorization.
     expect(session.proposalRef.current).toBeDefined();

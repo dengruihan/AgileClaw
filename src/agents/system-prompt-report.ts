@@ -102,7 +102,7 @@ function resolveRenderedSkillsPrompt(systemPrompt: string, skillsPrompt: string)
   // Use the renderer's workspace preamble; provider guidance can use the same
   // heading names. Workspace examples are not the injected skills catalog.
   const workspaceStart = systemPrompt.indexOf(
-    "\n## Workspace Files (injected)\nUser-editable; OpenClaw loads below as Project Context.\n",
+    "\n## Workspace Files (injected)\nUser-editable; AgileClaw loads below as Project Context.\n",
   );
   for (const heading of systemPrompt.matchAll(/(?:^|\n)## Skills\n/g)) {
     const sectionStart = heading.index + heading[0].length;

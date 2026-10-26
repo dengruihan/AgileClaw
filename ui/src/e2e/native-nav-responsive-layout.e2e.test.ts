@@ -123,7 +123,7 @@ suite.define(() => {
     const page = await openPage({ width: 1440 });
     const sidebarBrand = page.locator(".sidebar-brand");
     const agentName = sidebarBrand.locator(".sidebar-agent-card__name-text");
-    await expect.poll(() => agentName.textContent()).toBe("OpenClaw");
+    await expect.poll(() => agentName.textContent()).toBe("AgileClaw");
 
     await expect
       .poll(() =>

@@ -305,7 +305,7 @@ describeControlUiE2e("Control UI chat message actions", () => {
           role,
           content:
             kind === "image"
-              ? [{ type: "image", url: imageUrl, fileName, alt: "OpenClaw banner" }]
+              ? [{ type: "image", url: imageUrl, fileName, alt: "AgileClaw banner" }]
               : role === "user"
                 ? []
                 : [

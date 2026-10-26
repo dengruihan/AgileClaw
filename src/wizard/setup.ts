@@ -275,7 +275,7 @@ async function runSetupWizardOnce(
     const migratedSnapshot = await readSetupConfigFileSnapshot();
     if (!migratedSnapshot.valid) {
       throw new Error(
-        "Migration produced an invalid OpenClaw config. Run `openclaw doctor --fix` to apply supported repairs.",
+        "Migration produced an invalid AgileClaw config. Run `openclaw doctor --fix` to apply supported repairs.",
       );
     }
     currentSetupSnapshot = migratedSnapshot;

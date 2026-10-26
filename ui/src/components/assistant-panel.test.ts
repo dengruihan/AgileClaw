@@ -702,7 +702,7 @@ describe("assistant panel", () => {
     expect(panel.assistantPanelOpen).toBe(false);
   });
 
-  it("suppresses automatic Ask OpenClaw restores in Settings while keeping explicit opens usable", async () => {
+  it("suppresses automatic Ask AgileClaw restores in Settings while keeping explicit opens usable", async () => {
     const { panel } = await mountPanel();
     panel.custodianSuppressed = false;
     await panel.updateComplete;

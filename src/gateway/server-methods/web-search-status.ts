@@ -250,7 +250,7 @@ export async function prepareWebSearchStatus(
           label: `${status.model.runtimeLabel} controls search`,
           testable: false,
           reason:
-            "The selected harness determines native search availability when the turn starts. A configured OpenClaw provider does not prove which tool that harness will use. Test search in a chat with this model.",
+            "The selected harness determines native search availability when the turn starts. A configured AgileClaw provider does not prove which tool that harness will use. Test search in a chat with this model.",
         };
         return { status, config, agentDir: scope.agentDir };
       }

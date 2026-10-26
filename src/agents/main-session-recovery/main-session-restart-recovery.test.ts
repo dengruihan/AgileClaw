@@ -4786,7 +4786,7 @@ describe("main-session-restart-recovery", () => {
           role: "user",
           provenance: { kind: "internal_system", sourceTool: "main_session_restart_recovery" },
           content:
-            "[System] Your previous turn was interrupted by a gateway restart while OpenClaw was waiting on tool/model work. Continue from the existing transcript and finish the interrupted response.",
+            "[System] Your previous turn was interrupted by a gateway restart while AgileClaw was waiting on tool/model work. Continue from the existing transcript and finish the interrupted response.",
         },
         { role: "assistant", content: [{ type: "text", text: "Finished that recovery." }] },
         { role: "user", content: "a later request" },

@@ -210,7 +210,7 @@ describe("[commands] registered /login minimax-global-oauth", () => {
               expect(result.reply?.text).toMatch(/credentials are saved|login complete/);
             } else {
               expect(revoked).toBe(true);
-              expect((await dispatch("/login")).reply?.text).toContain("Only an OpenClaw owner");
+              expect((await dispatch("/login")).reply?.text).toContain("Only an AgileClaw owner");
               expect(tokenRequests).toEqual(scenario === "during browser failure" ? [] : [false]);
               expect(tokensIssued).toBe(0);
               expect(save).not.toHaveBeenCalled();

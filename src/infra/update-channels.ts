@@ -48,7 +48,7 @@ export function normalizeUpdateChannel(value?: string | null): UpdateChannel | n
   return null;
 }
 
-/** Maps an OpenClaw update channel to the npm dist-tag used for package lookups. */
+/** Maps an AgileClaw update channel to the npm dist-tag used for package lookups. */
 export function channelToNpmTag(channel: UpdateChannel): string {
   return channel === "extended-stable" || channel === "beta" || channel === "dev"
     ? channel

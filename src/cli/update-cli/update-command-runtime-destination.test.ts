@@ -270,7 +270,7 @@ it.each([
       expect(result).toMatchObject({
         failedStep: {
           stderrTail: expect.stringContaining(
-            `Selected npm destination ${selected} is occupied by another OpenClaw installation: package ${newRoot}; launcher ${launcher} -> ${entry}. No selected managed service could be verified as owning this destination. No installation was attempted. Switch the runtime back and run \`node ${quote(path.join(oldRoot, "openclaw.mjs"))} update\`. Alternatively, ask the destination's deployment owner to resolve its package/launcher and select it for the intended service using their deployment procedure. Do not overwrite it.`,
+            `Selected npm destination ${selected} is occupied by another AgileClaw installation: package ${newRoot}; launcher ${launcher} -> ${entry}. No selected managed service could be verified as owning this destination. No installation was attempted. Switch the runtime back and run \`node ${quote(path.join(oldRoot, "openclaw.mjs"))} update\`. Alternatively, ask the destination's deployment owner to resolve its package/launcher and select it for the intended service using their deployment procedure. Do not overwrite it.`,
           ),
         },
       });
@@ -285,7 +285,7 @@ it.each([
       expect(result).toMatchObject({
         failedStep: {
           stderrTail: expect.stringContaining(
-            `Selected npm destination ${selected} is occupied by another OpenClaw installation: package ${newRoot}; launcher ${launcher} -> ${entry}. The selected service (${path.join(base, "selected-gateway.service")}) uses ${path.join(oldRoot, "openclaw.mjs")}; it does not own this destination. No installation was attempted. Switch the runtime back and run \`node ${quote(path.join(oldRoot, "openclaw.mjs"))} update\`. ${alternative}`,
+            `Selected npm destination ${selected} is occupied by another AgileClaw installation: package ${newRoot}; launcher ${launcher} -> ${entry}. The selected service (${path.join(base, "selected-gateway.service")}) uses ${path.join(oldRoot, "openclaw.mjs")}; it does not own this destination. No installation was attempted. Switch the runtime back and run \`node ${quote(path.join(oldRoot, "openclaw.mjs"))} update\`. ${alternative}`,
           ),
         },
       });

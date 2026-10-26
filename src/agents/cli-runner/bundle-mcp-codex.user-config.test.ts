@@ -1,4 +1,4 @@
-/** Tests projecting OpenClaw user MCP servers into Codex app-server config. */
+/** Tests projecting AgileClaw user MCP servers into Codex app-server config. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { buildCodexUserMcpServersThreadConfigPatchForRuntime } from "./bundle-mcp-codex.js";
@@ -193,7 +193,7 @@ describe("buildCodexUserMcpServersThreadConfigPatchForRuntime", () => {
     });
   });
 
-  it("projects exact OpenClaw MCP tool filters into Codex-native tool filters", async () => {
+  it("projects exact AgileClaw MCP tool filters into Codex-native tool filters", async () => {
     const patch = await buildCodexUserMcpServersThreadConfigPatchForRuntime({
       mcp: {
         servers: {
@@ -219,7 +219,7 @@ describe("buildCodexUserMcpServersThreadConfigPatchForRuntime", () => {
     });
   });
 
-  it("rejects wildcard OpenClaw MCP tool filters that Codex cannot project exactly", async () => {
+  it("rejects wildcard AgileClaw MCP tool filters that Codex cannot project exactly", async () => {
     await expect(
       buildCodexUserMcpServersThreadConfigPatchForRuntime({
         mcp: {
@@ -259,8 +259,8 @@ describe("buildCodexUserMcpServersThreadConfigPatchForRuntime", () => {
     });
   });
 
-  it("filters Codex-scoped user MCP servers by OpenClaw agent id", async () => {
-    // Agent-scoped MCP servers should follow the active OpenClaw agent, while
+  it("filters Codex-scoped user MCP servers by AgileClaw agent id", async () => {
+    // Agent-scoped MCP servers should follow the active AgileClaw agent, while
     // unscoped servers remain global.
     const cfg = {
       mcp: {
@@ -408,7 +408,7 @@ describe("buildCodexUserMcpServersThreadConfigPatchForRuntime", () => {
     });
   });
 
-  it("omits scoped Codex MCP servers when no OpenClaw agent id is available", async () => {
+  it("omits scoped Codex MCP servers when no AgileClaw agent id is available", async () => {
     const patch = await buildCodexUserMcpServersThreadConfigPatchForRuntime({
       mcp: {
         servers: {

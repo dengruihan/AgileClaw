@@ -1,5 +1,5 @@
 /**
- * OpenClaw plugin tool resolver.
+ * AgileClaw plugin tool resolver.
  *
  * This module builds runtime plugin tools from config/options, delivery context,
  * auth profiles, and the current runtime config snapshot.

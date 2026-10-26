@@ -674,7 +674,7 @@ export class SqliteReclamationWorker {
         (!this.cleanup?.settled || (transport.kind === "pooled" && !this.taskCustodyReleased))
       ) {
         throw new Error(
-          "SQLite reclamation Worker cleanup is uncertain; restart OpenClaw before deleting the owning agent",
+          "SQLite reclamation Worker cleanup is uncertain; restart AgileClaw before deleting the owning agent",
         );
       }
       if (this.cleanup?.cleanupWarnings.length) {

@@ -15,9 +15,9 @@ import { getRegistryWorktree } from "./registry.js";
 import { ManagedWorktreeService, SNAPSHOT_RETENTION_MS } from "./service.js";
 
 const identity = {
-  GIT_AUTHOR_NAME: "OpenClaw Test",
+  GIT_AUTHOR_NAME: "AgileClaw Test",
   GIT_AUTHOR_EMAIL: "openclaw-test@example.invalid",
-  GIT_COMMITTER_NAME: "OpenClaw Test",
+  GIT_COMMITTER_NAME: "AgileClaw Test",
   GIT_COMMITTER_EMAIL: "openclaw-test@example.invalid",
 };
 

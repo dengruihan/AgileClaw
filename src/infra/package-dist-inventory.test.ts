@@ -194,10 +194,10 @@ describe("package dist inventory", () => {
   });
 
   it.each([
-    { exclusion: "!dist/OpenClaw.app/**", app: "dist/OpenClaw.app" },
-    { exclusion: "!dist/**/*.app/**", app: "dist/.stage/OpenClaw.app" },
-    { exclusion: "!dist/OpenClaw.app", app: "dist/OpenClaw.app" },
-    { exclusion: "!dist/**/*.app", app: "dist/.stage/OpenClaw.app" },
+    { exclusion: "!dist/AgileClaw.app/**", app: "dist/AgileClaw.app" },
+    { exclusion: "!dist/**/*.app/**", app: "dist/.stage/AgileClaw.app" },
+    { exclusion: "!dist/AgileClaw.app", app: "dist/AgileClaw.app" },
+    { exclusion: "!dist/**/*.app", app: "dist/.stage/AgileClaw.app" },
   ])(
     "honors package files exclusions ($exclusion) when writing the dist inventory",
     async ({ exclusion, app }) => {
@@ -315,7 +315,7 @@ describe("package dist inventory", () => {
     ).toBe(true);
     expect(
       isLegacyPluginDependencyInstallStagePath(
-        "Dist/Extensions/browser/.OpenClaw-Install-Stage/package.json",
+        "Dist/Extensions/browser/.AgileClaw-Install-Stage/package.json",
       ),
     ).toBe(true);
     expect(

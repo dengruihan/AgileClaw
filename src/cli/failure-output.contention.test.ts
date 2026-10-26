@@ -34,9 +34,9 @@ it.each(["nested", "message-only"])(
     expect(formatCliFailureLines({ title: "The CLI command failed.", error, env: {} })).toEqual([
       "[openclaw] The CLI command failed.",
       kind === "nested"
-        ? "[openclaw] Another OpenClaw process is using your data. Wait for it to finish before trying again."
+        ? "[openclaw] Another AgileClaw process is using your data. Wait for it to finish before trying again."
         : "[openclaw] For help, run `openclaw doctor`.",
     ]);
-    expect(error.message).toContain("Wait for the other OpenClaw process to finish, then retry.");
+    expect(error.message).toContain("Wait for the other AgileClaw process to finish, then retry.");
   },
 );

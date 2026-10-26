@@ -1,4 +1,4 @@
-// Verifies OpenClaw tool registration, availability, and construction policy.
+// Verifies AgileClaw tool registration, availability, and construction policy.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import { setEmbeddedMode } from "../infra/embedded-mode.js";

@@ -134,7 +134,7 @@ describe("executeAgentTurn: conversation failures", () => {
 
     expect(result.kind).toBe("final");
     if (result.kind === "final") {
-      expect(result.payload.text).toContain("OpenClaw couldn't finish this reply.");
+      expect(result.payload.text).toContain("AgileClaw couldn't finish this reply.");
       expect(result.payload.text).not.toContain(providerError);
       expect(result.payload.text).toContain("openclaw logs --follow");
       expect(result.payload.text).toMatch(/terminal/i);

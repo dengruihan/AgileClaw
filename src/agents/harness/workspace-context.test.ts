@@ -31,7 +31,7 @@ describe("agent workspace context preparation", () => {
     expect(context.instructionSnapshot.files[0]?.content).toContain("truncated");
     expect(context.instructionSnapshot.files[0]?.content.length).toBeLessThanOrEqual(300);
     expect(context.instructionSnapshot.instructions).toContain(
-      "OpenClaw Agent Workspace Instructions",
+      "AgileClaw Agent Workspace Instructions",
     );
   });
 

@@ -745,7 +745,7 @@ describe("update-cli", () => {
             ...(blocked ? { code: "clawhub_download_blocked", warning: trustWarning } : {}),
             message: blocked
               ? "Skipped demo ClawHub update: ClawHub blocked this release; update was not started. Existing installed plugin left unchanged."
-              : 'Disabled "demo" after plugin update failure; OpenClaw will continue without it. Failed to update demo: registry timeout',
+              : 'Disabled "demo" after plugin update failure; AgileClaw will continue without it. Failed to update demo: registry timeout',
           },
         ],
         !blocked,

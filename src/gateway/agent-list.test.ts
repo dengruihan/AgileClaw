@@ -103,13 +103,13 @@ describe("listGatewayAgentsBasic", () => {
       agents: {
         ownership: "explicit",
         defaults: { systemAgent: { agentId: "main" } },
-        entries: { main: {}, openclaw: { name: "OpenClaw" } },
+        entries: { main: {}, openclaw: { name: "AgileClaw" } },
       },
     };
 
     expect((await listGatewayAgentsBasic(cfg)).agents).toEqual([
       { id: "main", kind: "agent", name: undefined },
-      { id: "openclaw", kind: "agent", name: "OpenClaw" },
+      { id: "openclaw", kind: "agent", name: "AgileClaw" },
     ]);
   });
 

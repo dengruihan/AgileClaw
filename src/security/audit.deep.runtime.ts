@@ -172,7 +172,7 @@ export async function collectPluginsCodeSafetyFindings(params: {
           `Could not parse plugin manifest: ${String(manifestErr)}.\n` +
           "The extension entrypoint list is unavailable. Deep scan will cover the plugin directory but may miss entries declared via `openclaw.extensions`.",
         remediation:
-          "Inspect the plugin package.json for syntax errors. If the plugin is untrusted, remove it from your OpenClaw extensions state directory.",
+          "Inspect the plugin package.json for syntax errors. If the plugin is untrusted, remove it from your AgileClaw extensions state directory.",
       });
       // Continue — getCodeSafetySummary below still scans the plugin directory
     }
@@ -250,7 +250,7 @@ export async function collectPluginsCodeSafetyFindings(params: {
         title: `Plugin "${pluginName}" contains ${critical ? "dangerous" : "suspicious"} code patterns`,
         detail: `Found ${summary[severity]} ${critical ? "critical issue(s)" : "warning(s)"} in ${summary.scannedFiles} scanned file(s):\n${details}`,
         remediation: critical
-          ? "Review the plugin source code carefully before use. If untrusted, remove the plugin from your OpenClaw extensions state directory."
+          ? "Review the plugin source code carefully before use. If untrusted, remove the plugin from your AgileClaw extensions state directory."
           : "Review the flagged code to ensure it is intentional and safe.",
       });
     }

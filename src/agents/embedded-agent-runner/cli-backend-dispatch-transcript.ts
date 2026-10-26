@@ -18,7 +18,7 @@ type CliDispatchTranscriptToolEvent = {
   resultContentSource?: "network";
 };
 
-// The CLI writes no OpenClaw transcript. Mirror tools immediately for live readers,
+// The CLI writes no AgileClaw transcript. Mirror tools immediately for live readers,
 // but batch assistant deltas until abort or finalization for partial-text salvage.
 export function createCliDispatchTranscriptRecorder(params: {
   sessionId: string;

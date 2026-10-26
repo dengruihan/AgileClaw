@@ -24,7 +24,7 @@ export {
   type ExtractArchiveOptions,
 } from "@openclaw/fs-safe/archive";
 
-/** Retain OpenClaw's durable publication default; disposable extraction opts out explicitly. */
+/** Retain AgileClaw's durable publication default; disposable extraction opts out explicitly. */
 export async function extractArchive(params: ExtractArchiveOptions): Promise<void> {
   // Read declared fields so inherited options and class getters survive this adapter.
   return await extractArchiveWithFsSafe({

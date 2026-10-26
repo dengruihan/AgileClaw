@@ -218,7 +218,7 @@ describe("formatCliParseErrorOutput", () => {
       args: ["system", "heartbeat", "last", "--unknown"],
       root: "system",
       children: ["heartbeat", "last"],
-      message: 'OpenClaw does not recognize option "--unknown".',
+      message: 'AgileClaw does not recognize option "--unknown".',
       machineOutput: isSystemMachineOutput,
     },
   ])("keeps $name parse failures machine-readable by default", async (testCase) => {
@@ -524,9 +524,9 @@ describe("formatCliParseErrorOutput", () => {
       argv: ["node", "openclaw", "pairng", "--json"],
     });
 
-    expect(error.message).toBe('OpenClaw does not know the command "pairng".');
+    expect(error.message).toBe('AgileClaw does not know the command "pairng".');
     expect(error.humanOutput).toBe(
-      'OpenClaw does not know the command "pairng".\nDid you mean this?\n  openclaw pairing\nTry: openclaw --help\nPlugin command? openclaw plugins list\nDocs: https://docs.openclaw.ai/cli\n',
+      'AgileClaw does not know the command "pairng".\nDid you mean this?\n  openclaw pairing\nTry: openclaw --help\nPlugin command? openclaw plugins list\nDocs: https://docs.openclaw.ai/cli\n',
     );
   });
 
@@ -537,7 +537,7 @@ describe("formatCliParseErrorOutput", () => {
       commandNames: ["list"],
     });
 
-    expect(error.message).toBe('OpenClaw sessions has no command "lst".');
+    expect(error.message).toBe('AgileClaw sessions has no command "lst".');
     expect(error.message).not.toMatch(/^error:/i);
     expect(error.humanOutput).toContain("Did you mean this?\n  openclaw sessions list\n");
   });
@@ -548,7 +548,7 @@ describe("formatCliParseErrorOutput", () => {
     });
 
     expect(output).toBe(
-      'OpenClaw does not know the command "wat".\nTry: openclaw --help\nPlugin command? openclaw plugins list\nDocs: https://docs.openclaw.ai/cli\n',
+      'AgileClaw does not know the command "wat".\nTry: openclaw --help\nPlugin command? openclaw plugins list\nDocs: https://docs.openclaw.ai/cli\n',
     );
   });
 
@@ -559,7 +559,7 @@ describe("formatCliParseErrorOutput", () => {
     });
 
     expect(output).toBe(
-      'OpenClaw webhooks has no command "list".\nTry: openclaw webhooks --help\nDocs: https://docs.openclaw.ai/cli\n',
+      'AgileClaw webhooks has no command "list".\nTry: openclaw webhooks --help\nDocs: https://docs.openclaw.ai/cli\n',
     );
   });
 
@@ -571,7 +571,7 @@ describe("formatCliParseErrorOutput", () => {
     });
 
     expect(output).toBe(
-      'OpenClaw webhooks has no command "gmial".\nDid you mean this?\n  openclaw webhooks gmail\nTry: openclaw webhooks --help\nDocs: https://docs.openclaw.ai/cli\n',
+      'AgileClaw webhooks has no command "gmial".\nDid you mean this?\n  openclaw webhooks gmail\nTry: openclaw webhooks --help\nDocs: https://docs.openclaw.ai/cli\n',
     );
   });
 
@@ -584,7 +584,7 @@ describe("formatCliParseErrorOutput", () => {
 
     expect(error.code).toBe("commander.unknownCommand");
     expect(output).toBe(
-      'OpenClaw sessions has no command "lst".\nDid you mean this?\n  openclaw sessions list\nTry: openclaw sessions --help\nDocs: https://docs.openclaw.ai/cli\n',
+      'AgileClaw sessions has no command "lst".\nDid you mean this?\n  openclaw sessions list\nTry: openclaw sessions --help\nDocs: https://docs.openclaw.ai/cli\n',
     );
   });
 
@@ -597,7 +597,7 @@ describe("formatCliParseErrorOutput", () => {
 
     expect(error.code).toBe("commander.unknownCommand");
     expect(output).toBe(
-      'OpenClaw config has no command "gett".\nDid you mean this?\n  openclaw config get\nTry: openclaw config --help\nDocs: https://docs.openclaw.ai/cli\n',
+      'AgileClaw config has no command "gett".\nDid you mean this?\n  openclaw config get\nTry: openclaw config --help\nDocs: https://docs.openclaw.ai/cli\n',
     );
   });
 
@@ -612,7 +612,7 @@ describe("formatCliParseErrorOutput", () => {
     expect(error.exitCode).toBe(1);
     expect(stdout).toBe("");
     expect(output).toBe(
-      'OpenClaw sessions has no command "lst".\nDid you mean this?\n  openclaw sessions list\nTry: openclaw sessions --help\nDocs: https://docs.openclaw.ai/cli\n',
+      'AgileClaw sessions has no command "lst".\nDid you mean this?\n  openclaw sessions list\nTry: openclaw sessions --help\nDocs: https://docs.openclaw.ai/cli\n',
     );
   });
 
@@ -659,7 +659,7 @@ describe("formatCliParseErrorOutput", () => {
     });
 
     expect(output).toBe(
-      'OpenClaw does not know the command "upate".\nDid you mean this?\n  openclaw update\nTry: openclaw --help\nPlugin command? openclaw plugins list\nDocs: https://docs.openclaw.ai/cli\n',
+      'AgileClaw does not know the command "upate".\nDid you mean this?\n  openclaw update\nTry: openclaw --help\nPlugin command? openclaw plugins list\nDocs: https://docs.openclaw.ai/cli\n',
     );
   });
 
@@ -695,7 +695,7 @@ describe("formatCliParseErrorOutput", () => {
     });
 
     expect(output).toBe(
-      'OpenClaw does not recognize option "--wat".\nTry: openclaw channels status --help\n',
+      'AgileClaw does not recognize option "--wat".\nTry: openclaw channels status --help\n',
     );
   });
 
@@ -718,7 +718,7 @@ describe("formatCliParseErrorOutput", () => {
     {
       name: "unclassified Commander diagnostic",
       raw: "error: option '--timeout <ms>' argument missing\n",
-      message: "OpenClaw could not parse this command: option '--timeout <ms>' argument missing",
+      message: "AgileClaw could not parse this command: option '--timeout <ms>' argument missing",
     },
   ])("preserves the complete ordinary $name diagnostic", ({ raw, message }) => {
     expect(
@@ -736,7 +736,7 @@ describe("formatCliParseErrorOutput", () => {
     });
 
     expect(output).toBe(
-      'OpenClaw does not recognize option "--wat".\nTry: openclaw plugins list --help\n',
+      'AgileClaw does not recognize option "--wat".\nTry: openclaw plugins list --help\n',
     );
   });
 });

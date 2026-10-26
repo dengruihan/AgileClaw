@@ -278,7 +278,7 @@ describe("private Tailscale Serve claims", () => {
     queueOwner();
     const failure = claimTailscaleServePort(18789, 18790, () => {});
     const next = claimTailscaleServePort(18789, 24443, () => {});
-    await expect(failure).rejects.toThrow(/ownership OpenClaw cannot prove; it was not modified/);
+    await expect(failure).rejects.toThrow(/ownership AgileClaw cannot prove; it was not modified/);
     const claim = await next;
     await claim.stop();
     expect(forkMock).toHaveBeenCalledTimes(2);

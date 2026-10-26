@@ -68,7 +68,7 @@ function createChannelPlugin(overrides: Partial<PluginCatalogItem> = {}): Plugin
   return {
     id: "slack",
     name: "Slack",
-    description: "OpenClaw Slack channel plugin for channels, DMs, commands, and app events.",
+    description: "AgileClaw Slack channel plugin for channels, DMs, commands, and app events.",
     origin: "bundled",
     installed: true,
     enabled: false,
@@ -108,7 +108,7 @@ describe("channels plugin presentation metadata", () => {
     const row = container.querySelector(".channels-item");
     expect(row?.querySelector(".settings-row__title")?.textContent).toBe("Slack");
     expect(row?.querySelector(".settings-row__desc")?.textContent).toBe(
-      "OpenClaw Slack channel plugin for channels, DMs, commands, and app events.",
+      "AgileClaw Slack channel plugin for channels, DMs, commands, and app events.",
     );
     expect(row?.querySelector("img")?.getAttribute("src")).toBe("blob:slack-plugin-icon");
     const detailIcon = container.querySelector(

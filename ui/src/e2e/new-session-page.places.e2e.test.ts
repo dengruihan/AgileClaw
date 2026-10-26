@@ -582,7 +582,7 @@ suite.define(() => {
             },
             {
               id: "recorded-openclaw",
-              displayName: "Recorded OpenClaw",
+              displayName: "Recorded AgileClaw",
               repoRoot: "/recorded/openclaw",
               source: "registered",
             },
@@ -607,9 +607,9 @@ suite.define(() => {
       const trigger = page.locator("#new-session-project-trigger");
       const place = page.locator("wa-popover.new-session-page__project-popover");
       await trigger.click();
-      await place.getByRole("button", { name: "Recorded OpenClaw", exact: true }).click();
+      await place.getByRole("button", { name: "Recorded AgileClaw", exact: true }).click();
       await pollLocatorText(trigger.locator(".new-session-page__trigger-label")).toBe(
-        "Recorded OpenClaw",
+        "Recorded AgileClaw",
       );
       expect(await trigger.getAttribute("data-project-id")).toBe("recorded-openclaw");
       await expect

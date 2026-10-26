@@ -914,7 +914,7 @@ describe("materializeRequesterScopedMcpToolsForHarnessRunCore", () => {
     // Fail open by explicit caller-compatibility decision: callers that pass no
     // approval callback keep their pre-gate behavior — the tool stays exposed
     // and dispatches ungated, so a caller's tool surface never loses
-    // availability across upgrades. OpenClaw's own requester turns always pass
+    // availability across upgrades. AgileClaw's own requester turns always pass
     // an approval callback, so this branch is foreign-SDK-caller only.
     expect(result!.tools.map((tool) => tool.name)).toEqual(["user-mail__inbox"]);
     expect(result!.advertisedTools.map((tool) => tool.name)).toEqual(["user-mail__inbox"]);

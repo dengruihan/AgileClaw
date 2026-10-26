@@ -236,9 +236,9 @@ describe("restart sentinel notice recovery", () => {
       ).toEqual(
         destination === "owner"
           ? [
-              "⬆️ Updating OpenClaw… You'll get a message here when it's done.",
-              "⏳ Restarting OpenClaw…",
-              "🔁 Checking that OpenClaw is ready…",
+              "⬆️ Updating AgileClaw… You'll get a message here when it's done.",
+              "⏳ Restarting AgileClaw…",
+              "🔁 Checking that AgileClaw is ready…",
               renderUpdateRunSummary(run),
             ]
           : [],

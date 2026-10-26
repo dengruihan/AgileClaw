@@ -133,7 +133,7 @@ describe("live tool probe utils", () => {
       {
         name: "retries anthropic refusal output",
         params: {
-          text: "This isn't a real OpenClaw probe; I won't parrot back nonce values.",
+          text: "This isn't a real AgileClaw probe; I won't parrot back nonce values.",
           provider: "anthropic",
         },
         expected: true,
@@ -141,7 +141,7 @@ describe("live tool probe utils", () => {
       {
         name: "does not special-case anthropic refusals for other providers",
         params: {
-          text: "This isn't a real OpenClaw probe; I won't parrot back nonce values.",
+          text: "This isn't a real AgileClaw probe; I won't parrot back nonce values.",
         },
         expected: false,
       },

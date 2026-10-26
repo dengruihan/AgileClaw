@@ -25,8 +25,8 @@ describe("Scheduled Task stop/restart cleanup", () => {
       await expect(suspendScheduledTaskAutoStartForUpdate(env)).resolves.toBe(true);
 
       expect(schtasksCalls).toEqual([
-        ["/Query", "/TN", "OpenClaw Gateway", "/XML"],
-        ["/Change", "/TN", "OpenClaw Gateway", "/DISABLE"],
+        ["/Query", "/TN", "AgileClaw Gateway", "/XML"],
+        ["/Change", "/TN", "AgileClaw Gateway", "/DISABLE"],
       ]);
     });
   });
@@ -41,7 +41,7 @@ describe("Scheduled Task stop/restart cleanup", () => {
 
       await expect(suspendScheduledTaskAutoStartForUpdate(env)).resolves.toBe(false);
 
-      expect(schtasksCalls).toEqual([["/Query", "/TN", "OpenClaw Gateway", "/XML"]]);
+      expect(schtasksCalls).toEqual([["/Query", "/TN", "AgileClaw Gateway", "/XML"]]);
     });
   });
 
@@ -57,7 +57,7 @@ describe("Scheduled Task stop/restart cleanup", () => {
         "schtasks XML query failed: ERROR: The system cannot find the file specified.",
       );
 
-      expect(schtasksCalls).toEqual([["/Query", "/TN", "OpenClaw Gateway", "/XML"]]);
+      expect(schtasksCalls).toEqual([["/Query", "/TN", "AgileClaw Gateway", "/XML"]]);
       expect(spawnSync).toHaveBeenCalledOnce();
     });
   });
@@ -80,7 +80,7 @@ describe("Scheduled Task stop/restart cleanup", () => {
 
       await expect(suspendScheduledTaskAutoStartForUpdate(env)).resolves.toBe(false);
 
-      expect(schtasksCalls).toEqual([["/Query", "/TN", "OpenClaw Gateway", "/XML"]]);
+      expect(schtasksCalls).toEqual([["/Query", "/TN", "AgileClaw Gateway", "/XML"]]);
       expect(spawnSync).toHaveBeenCalledOnce();
     });
   });
@@ -111,9 +111,9 @@ describe("Scheduled Task stop/restart cleanup", () => {
       );
 
       expect(schtasksCalls).toEqual([
-        ["/Query", "/TN", "OpenClaw Gateway", "/XML"],
-        ["/Change", "/TN", "OpenClaw Gateway", "/DISABLE"],
-        ["/Change", "/TN", "OpenClaw Gateway", "/ENABLE"],
+        ["/Query", "/TN", "AgileClaw Gateway", "/XML"],
+        ["/Change", "/TN", "AgileClaw Gateway", "/DISABLE"],
+        ["/Change", "/TN", "AgileClaw Gateway", "/ENABLE"],
       ]);
     });
   });
@@ -127,7 +127,7 @@ describe("Scheduled Task stop/restart cleanup", () => {
         "Start Menu",
         "Programs",
         "Startup",
-        "OpenClaw Gateway.cmd",
+        "AgileClaw Gateway.cmd",
       );
       await fs.mkdir(path.dirname(startupEntry), { recursive: true });
       await fs.writeFile(startupEntry, "@echo off\r\n", "utf8");
@@ -147,7 +147,7 @@ describe("Scheduled Task stop/restart cleanup", () => {
 
       await expect(suspendScheduledTaskAutoStartForUpdate(env)).resolves.toBe(false);
 
-      expect(schtasksCalls).toEqual([["/Query", "/TN", "OpenClaw Gateway", "/XML"]]);
+      expect(schtasksCalls).toEqual([["/Query", "/TN", "AgileClaw Gateway", "/XML"]]);
       expect(spawnSync).toHaveBeenCalledOnce();
     });
   });
@@ -161,7 +161,7 @@ describe("Scheduled Task stop/restart cleanup", () => {
         "Start Menu",
         "Programs",
         "Startup",
-        "OpenClaw Gateway.cmd",
+        "AgileClaw Gateway.cmd",
       );
       await fs.mkdir(path.dirname(startupEntry), { recursive: true });
       await fs.writeFile(startupEntry, "@echo off\r\n", "utf8");
@@ -192,7 +192,7 @@ describe("Scheduled Task stop/restart cleanup", () => {
 
       await expect(resumeScheduledTaskAutoStartAfterUpdate(env)).resolves.toBe(true);
 
-      expect(schtasksCalls).toEqual([["/Change", "/TN", "OpenClaw Gateway", "/ENABLE"]]);
+      expect(schtasksCalls).toEqual([["/Change", "/TN", "AgileClaw Gateway", "/ENABLE"]]);
     });
   });
 

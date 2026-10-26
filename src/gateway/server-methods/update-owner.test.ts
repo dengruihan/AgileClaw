@@ -173,7 +173,7 @@ describe("update.run current owner authority", () => {
         "hosting Gateway guidance",
       );
       const action = expectDefined(
-        guidance.match(/Update OpenClaw: `gateway` action ([\w.]+)/u)?.[1],
+        guidance.match(/Update AgileClaw: `gateway` action ([\w.]+)/u)?.[1],
         "prompt-advertised update action",
       );
       const result = await tool.execute("update", {
@@ -477,7 +477,7 @@ describe("update.run chat restart permission", () => {
       expect(sendGatewayLifecycleNoticeMock).toHaveBeenLastCalledWith(
         expect.objectContaining({
           message:
-            "ℹ️ OpenClaw wasn't updated.\nFor details, open Settings → Updates in the Control UI or run `openclaw update status` in your terminal.",
+            "ℹ️ AgileClaw wasn't updated.\nFor details, open Settings → Updates in the Control UI or run `openclaw update status` in your terminal.",
         }),
         expect.any(Object),
       );

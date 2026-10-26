@@ -15,7 +15,7 @@ import {
 } from "./verified-inference.js";
 
 /**
- * Dialogue helpers for turning user text into OpenClaw operations.
+ * Dialogue helpers for turning user text into AgileClaw operations.
  *
  * Direct command parsing wins; the assistant planner is only consulted for
  * non-empty text that did not parse into a known operation.
@@ -32,7 +32,7 @@ export function approvalQuestion(operation: SystemAgentOperation): string {
   return `Apply this operation: ${describeSystemAgentPersistentOperation(operation)}?`;
 }
 
-/** Resolve user input to an OpenClaw operation, optionally using the assistant planner. */
+/** Resolve user input to an AgileClaw operation, optionally using the assistant planner. */
 export async function resolveSystemAgentOperation(
   input: string,
   runtime: RuntimeEnv,

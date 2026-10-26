@@ -21,7 +21,7 @@ vi.mock("./status.daemon.js", () => ({
 }));
 
 const installationDrift =
-  "Gateway service targets a different OpenClaw install: /prefix-a/lib/node_modules/openclaw (2026.9.4); active CLI: /prefix-b/lib/node_modules/openclaw (2026.9.17). Run `openclaw doctor --fix` or `openclaw gateway install --force` from the active CLI.";
+  "Gateway service targets a different AgileClaw install: /prefix-a/lib/node_modules/openclaw (2026.9.4); active CLI: /prefix-b/lib/node_modules/openclaw (2026.9.17). Run `openclaw doctor --fix` or `openclaw gateway install --force` from the active CLI.";
 
 describe.each([
   { mode: "text", timeoutMs: undefined },
@@ -35,7 +35,7 @@ describe.each([
 
   async function runFailure(unavailable: boolean) {
     const original = new Error(
-      "OpenClaw agent database /state/agents/main/agent.sqlite uses schema version 19; stop active agents and run openclaw doctor --fix to migrate session identities before using it.",
+      "AgileClaw agent database /state/agents/main/agent.sqlite uses schema version 19; stop active agents and run openclaw doctor --fix to migrate session identities before using it.",
     );
     mocks.scan.mockRejectedValue(original);
     mocks.overview.mockRejectedValue(original);

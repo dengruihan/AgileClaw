@@ -211,7 +211,7 @@ describe("renderModelSetup", () => {
     expect(admin.querySelector(".settings-section")).toBeNull();
 
     const old = mount(props({ gatewayTooOld: true }));
-    expect(text(old)).toContain("The Gateway is running an older OpenClaw version");
+    expect(text(old)).toContain("The Gateway is running an older AgileClaw version");
     expect(old.querySelector(".settings-section")).toBeNull();
   });
 

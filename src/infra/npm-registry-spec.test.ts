@@ -107,7 +107,7 @@ describe("npm registry spec parsing helpers", () => {
     ["2026.5.3-0", "2026.5.3", null],
     ["2026.5.3+build", "2026.5.3", null],
     ["1.2.3-1", "1.2.3", null],
-  ])("compares OpenClaw release versions for %s and %s", (left, right, expected) => {
+  ])("compares AgileClaw release versions for %s and %s", (left, right, expected) => {
     expect(compareOpenClawReleaseVersions(left, right)).toBe(expected);
   });
 
@@ -116,7 +116,7 @@ describe("npm registry spec parsing helpers", () => {
     ["2026.7.1", "2026.7.1"],
     ["2026.7.1-beta.3", "2026.7.1-beta.3"],
     ["1.2.3-1", "1.2.3-1"],
-  ])("resolves the OpenClaw release cohort for %s", (version, expected) => {
+  ])("resolves the AgileClaw release cohort for %s", (version, expected) => {
     expect(resolveOpenClawReleaseCohortVersion(version)).toBe(expected);
   });
 });

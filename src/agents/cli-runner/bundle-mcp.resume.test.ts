@@ -26,7 +26,7 @@ function prepareLoopbackConfig(url: string) {
 }
 
 describe("prepareCliBundleMcpConfig resume hash", () => {
-  it("stabilizes the resume hash when only the OpenClaw loopback port changes", async () => {
+  it("stabilizes the resume hash when only the AgileClaw loopback port changes", async () => {
     // Loopback ports are volatile per gateway run and should not force CLI
     // session abandonment when stable MCP semantics are unchanged.
     const first = await prepareLoopbackConfig("http://127.0.0.1:23119/mcp");
@@ -49,7 +49,7 @@ describe("prepareCliBundleMcpConfig resume hash", () => {
     await second.cleanup?.();
   });
 
-  it("keeps OpenClaw approval state out of the resume identity", async () => {
+  it("keeps AgileClaw approval state out of the resume identity", async () => {
     const prepare = async (options: Parameters<typeof buildSystemAgentToolsMcpServerConfig>[0]) =>
       await prepareCliBundleMcpConfig({
         enabled: true,

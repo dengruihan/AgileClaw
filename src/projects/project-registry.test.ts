@@ -62,7 +62,7 @@ async function initializeRepository(
   const repo = path.join(root, name);
   await fs.mkdir(repo, { recursive: true });
   await execFileAsync("git", ["init", "-b", "main", `--object-format=${objectFormat}`, repo]);
-  await git(repo, "config", "user.name", "OpenClaw Tests");
+  await git(repo, "config", "user.name", "AgileClaw Tests");
   await git(repo, "config", "user.email", "tests@openclaw.invalid");
   await commitFile(repo, "README.md", `${name}\n`);
   return await fs.realpath(repo);
@@ -102,10 +102,10 @@ async function closeServer(server: http.Server) {
 
 describe("project registry", () => {
   it.each([
-    "https://github.com/OpenClaw/OpenClaw",
-    "git@github.com:OpenClaw/OpenClaw.git",
-    "ssh://git@github.com/OpenClaw/OpenClaw.git",
-    "ssh://git@github.com:22/OpenClaw/OpenClaw",
+    "https://github.com/AgileClaw/AgileClaw",
+    "git@github.com:AgileClaw/AgileClaw.git",
+    "ssh://git@github.com/AgileClaw/AgileClaw.git",
+    "ssh://git@github.com:22/AgileClaw/AgileClaw",
   ])("canonicalizes accepted GitHub clone URL %s", (input) => {
     expect(parseProjectGitUrl(input)?.url).toBe("https://github.com/openclaw/openclaw.git");
   });
@@ -184,11 +184,11 @@ describe("project registry", () => {
     await fs.symlink(repo, alias, "dir");
     const options = { path: path.join(root, "state.sqlite") };
 
-    const first = await registerProjectRegistry({ path: alias, name: "OpenClaw" }, options);
-    const second = await registerProjectRegistry({ path: repo, name: "OpenClaw" }, options);
+    const first = await registerProjectRegistry({ path: alias, name: "AgileClaw" }, options);
+    const second = await registerProjectRegistry({ path: repo, name: "AgileClaw" }, options);
     expect(first).toMatchObject({
       id: "openclaw",
-      displayName: "OpenClaw",
+      displayName: "AgileClaw",
       repoRoot: repo,
       source: "registered",
     });
@@ -203,7 +203,7 @@ describe("project registry", () => {
       },
     } as OpenClawConfig;
     expect((await listProjectRegistry(cfg, options)).map((project) => project.displayName)).toEqual(
-      ["alpha", "OpenClaw", "zeta"],
+      ["alpha", "AgileClaw", "zeta"],
     );
     const sharedWorkspaceCfg = {
       agents: {

@@ -370,7 +370,7 @@ describe("noteWorkspaceStatus", () => {
       );
       expect(driftCalls).toHaveLength(1);
       const [body] = expectDefined(driftCalls[0], "(driftCalls)[0] test invariant");
-      expect(body).toContain("1 active official plugin not on post-restart OpenClaw 2026.6.1");
+      expect(body).toContain("1 active official plugin not on post-restart AgileClaw 2026.6.1");
       expect(body).toContain("codex: 2026.5.30-beta.1 (npm) -> expected 2026.6.1");
       expect(body).toContain("openclaw plugins update codex");
       expect(body).toContain("openclaw gateway restart");

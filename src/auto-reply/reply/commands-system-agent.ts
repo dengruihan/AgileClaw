@@ -42,7 +42,7 @@ export const handleSystemAgentCommand: CommandHandler = async (params, allowText
                 }),
             },
           },
-        })) ?? "OpenClaw did not find a rescue request.",
+        })) ?? "AgileClaw did not find a rescue request.",
     },
   };
 };

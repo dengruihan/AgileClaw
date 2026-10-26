@@ -353,7 +353,7 @@ async function addModelSelectOption(params: {
       baseUrl: params.entry.baseUrl,
     });
     if (route) {
-      hints.push(route === "codex" ? "Codex runtime route" : "OpenClaw runtime route");
+      hints.push(route === "codex" ? "Codex runtime route" : "AgileClaw runtime route");
     }
   }
   if (
