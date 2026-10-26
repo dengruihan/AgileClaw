@@ -2724,25 +2724,25 @@ html[dir="rtl"] .chat-attachment-loading > span {
 
 /* Near-white cores with accent-tinted halos: same palette as the flowing
    gradient, but bright enough to read against both of its stops. The tight
-   2px inner glow plus the softer 5px halo gives each mote a hot center. */
+   3px inner glow plus the softer 7px halo gives each mote a hot center. */
 .chat-controls__reasoning-particle {
   position: absolute;
   bottom: 3px;
-  width: 3px;
-  height: 3px;
+  width: 5px;
+  height: 5px;
   border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--accent) 35%, white);
   box-shadow:
-    0 0 2px color-mix(in srgb, var(--accent) 90%, transparent),
-    0 0 5px color-mix(in srgb, var(--accent) 75%, transparent);
+    0 0 3px color-mix(in srgb, var(--accent) 90%, transparent),
+    0 0 7px color-mix(in srgb, var(--accent) 75%, transparent);
   opacity: 0;
 }
 
 .chat-controls__reasoning-particle:nth-child(odd) {
   background: color-mix(in srgb, var(--accent-2) 45%, white);
   box-shadow:
-    0 0 2px color-mix(in srgb, var(--accent-2) 90%, transparent),
-    0 0 5px color-mix(in srgb, var(--accent-2) 75%, transparent);
+    0 0 3px color-mix(in srgb, var(--accent-2) 90%, transparent),
+    0 0 7px color-mix(in srgb, var(--accent-2) 75%, transparent);
 }
 
 .chat-controls__reasoning-particle:nth-child(1) {
@@ -2751,8 +2751,8 @@ html[dir="rtl"] .chat-attachment-loading > span {
 }
 .chat-controls__reasoning-particle:nth-child(2) {
   left: 22%;
-  width: 2px;
-  height: 2px;
+  width: 4px;
+  height: 4px;
   --particle-drift: -2px;
 }
 .chat-controls__reasoning-particle:nth-child(3) {
@@ -2765,8 +2765,8 @@ html[dir="rtl"] .chat-attachment-loading > span {
 }
 .chat-controls__reasoning-particle:nth-child(5) {
   left: 60%;
-  width: 2px;
-  height: 2px;
+  width: 4px;
+  height: 4px;
   --particle-drift: 2px;
 }
 .chat-controls__reasoning-particle:nth-child(6) {
