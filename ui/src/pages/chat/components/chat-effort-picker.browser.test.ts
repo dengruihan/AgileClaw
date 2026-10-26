@@ -75,16 +75,22 @@ function appearance(input: HTMLInputElement) {
 // The boost wash and glow fade between states; wait for the layer to reach the
 // state the input's data-effort-boost attribute asks for before comparing.
 // The groove's ring/glow fades in parallel and may finish a tick later, so its
-// shadow must also stop changing before equality comparisons read it.
+// shadow must also stop changing before equality comparisons read it; the
+// highlight hue crossfades the same way through its registered property.
 async function settledAppearance(input: HTMLInputElement) {
   const { boost, groove } = sliderLayers(input);
   const boosted = input.dataset.effortBoost === "max" || input.dataset.effortBoost === "ultra";
   await vi.waitFor(() => expect(getComputedStyle(boost).opacity).toBe(boosted ? "1" : "0"));
   let lastShadow = "";
+  let lastHighlight = "";
   await vi.waitFor(() => {
-    const current = getComputedStyle(groove).boxShadow;
-    const stable = current === lastShadow;
-    lastShadow = current;
+    const currentShadow = getComputedStyle(groove).boxShadow;
+    const currentHighlight = getComputedStyle(boost).getPropertyValue(
+      "--reasoning-boost-highlight",
+    );
+    const stable = currentShadow === lastShadow && currentHighlight === lastHighlight;
+    lastShadow = currentShadow;
+    lastHighlight = currentHighlight;
     expect(stable).toBe(true);
   });
   return appearance(input);
@@ -148,6 +154,27 @@ describe("effort bar colour and flow", () => {
         expect(Math.abs(knobCenter - (sliderLeft + expected))).toBeLessThanOrEqual(1.5);
       });
     }
+  });
+
+  it("crossfades the boost effects between max and ultra", async () => {
+    const { input } = await fixture(["off", "low", "max", "ultra"], "max");
+    const { boost } = sliderLayers(input);
+    const boostStyle = getComputedStyle(boost);
+    // Registered highlight + transitioned inset sheen: every max→ultra delta
+    // interpolates instead of snapping.
+    expect(boostStyle.transitionProperty).toContain("--reasoning-boost-highlight");
+    expect(boostStyle.transitionProperty).toContain("box-shadow");
+    const maxHighlight = boostStyle.getPropertyValue("--reasoning-boost-highlight");
+    // A registered <color> property resolves to a concrete color; an
+    // unregistered one would echo the raw color-mix()/var() declaration.
+    expect(maxHighlight).not.toContain("color-mix");
+    expect(maxHighlight).not.toContain("var(");
+    const ultra = await fixture(["off", "low", "max", "ultra"], "ultra");
+    await settledAppearance(ultra.input);
+    const ultraHighlight = getComputedStyle(sliderLayers(ultra.input).boost).getPropertyValue(
+      "--reasoning-boost-highlight",
+    );
+    expect(ultraHighlight).not.toBe(maxHighlight);
   });
 
   it("previews colour without committing and restores the committed level on cancel or blur", async () => {

@@ -2647,6 +2647,14 @@ html[dir="rtl"] .chat-attachment-loading > span {
   background: color-mix(in srgb, var(--text) 18%, transparent);
 }
 
+/* Registered so the highlight can transition: max and ultra differ only in
+   this color, and an unregistered custom property would swap it in one frame. */
+@property --reasoning-boost-highlight {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: white;
+}
+
 /* Max/ultra boost washes the whole groove with the flowing accent gradient;
    it fades in and out instead of swapping backgrounds. */
 .chat-controls__reasoning-boost {
@@ -2654,6 +2662,8 @@ html[dir="rtl"] .chat-attachment-loading > span {
   position: absolute;
   inset: 0;
   opacity: 0;
+  /* Resting inner glow: ultra's inset sheen fades in and out from here. */
+  box-shadow: inset 0 0 12px transparent;
   background-image: linear-gradient(
     105deg,
     color-mix(in srgb, var(--accent) 70%, var(--card)) 0%,
@@ -2759,7 +2769,12 @@ html[dir="rtl"] .chat-attachment-loading > span {
   }
 
   .chat-controls__reasoning-boost {
-    transition: opacity 300ms ease;
+    /* Highlight hue, inset sheen, and opacity all crossfade between boost
+       states; the groove ring shadows crossfade via its own rule below. */
+    transition:
+      opacity 300ms ease,
+      box-shadow 300ms ease,
+      --reasoning-boost-highlight 300ms ease;
   }
 
   .chat-controls__reasoning-groove {
@@ -2772,11 +2787,6 @@ html[dir="rtl"] .chat-attachment-loading > span {
     )
     .chat-controls__reasoning-boost {
     animation: chat-effort-flow 6s ease-in-out infinite alternate;
-  }
-
-  .chat-controls__reasoning-slider:has([data-effort-boost="ultra"]:not(:disabled))
-    .chat-controls__reasoning-boost {
-    animation-duration: 4s;
   }
 }
 
