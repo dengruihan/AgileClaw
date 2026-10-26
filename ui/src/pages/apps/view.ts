@@ -1,14 +1,12 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { RouteId } from "../../app-route-paths.ts";
 import { inferControlUiPublicAssetPath } from "../../app/public-assets.ts";
-import { brandIcons } from "../../components/brand-icons.ts";
 import { icons } from "../../components/icons.ts";
 import { t } from "../../i18n/index.ts";
 import { registerAppsEnglish } from "../../i18n/locales/en-apps.ts";
 import { buildExternalLinkRel, EXTERNAL_LINK_TARGET } from "../../lib/external-link.ts";
 import "../../styles/apps.css";
 import "../../components/native-chrome-setup.ts";
-import { COMMUNITY_DISCORD_URL } from "../../lib/product-links.ts";
 import { appsBrandIcons } from "./brand-icons.ts";
 
 registerAppsEnglish();
@@ -174,11 +172,6 @@ const APP_SECTIONS: readonly AppSection[] = [
 ];
 
 const COMMUNITY_LINKS: ReadonlyArray<{ href: string; icon: TemplateResult; labelKey: string }> = [
-  {
-    href: COMMUNITY_DISCORD_URL,
-    icon: brandIcons.discord,
-    labelKey: "appsPage.linkDiscord",
-  },
   { href: "https://docs.openclaw.ai", icon: icons.book, labelKey: "appsPage.linkDocs" },
 ];
 
