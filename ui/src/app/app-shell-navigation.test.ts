@@ -67,7 +67,6 @@ describe("Settings return navigation", () => {
         activeSessionKey: "",
         routeState: {},
         lastWorkspaceLocation: null,
-        custodianMinimizeRequestId: 0,
         lastConcreteRouteId: undefined,
         didConsiderNativeRouteRestore: false,
         settingsSearchQuery: "",
@@ -88,7 +87,6 @@ describe("Settings return navigation", () => {
             sessionItems: [],
             catalogItems: [],
             desktopAvailable: false,
-            custodianAvailable: false,
           })[0];
           const routeId = item?.action.slice(4);
           if (!routeId || !isRouteId(routeId)) {

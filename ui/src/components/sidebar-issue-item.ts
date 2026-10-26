@@ -332,7 +332,6 @@ export function renderSidebarIssueItem(
       </div>
     </div>`;
   }
-  const visibleFacts = item.action.alert.facts.filter((fact) => fact !== item.label);
   const inlineAction = item.inlineAction;
   return html`<details
     class="sidebar-issues-panel__details sidebar-issues-panel__details--${item.severity}"
@@ -343,13 +342,6 @@ export function renderSidebarIssueItem(
       <span class="sidebar-issues-panel__chevron" aria-hidden="true">${icons.chevronRight}</span>
     </summary>
     <div class="sidebar-issues-panel__body">
-      ${
-        visibleFacts.length
-          ? html`<ul class="sidebar-issues-panel__facts">
-              ${visibleFacts.map((fact) => html`<li>${fact}</li>`)}
-            </ul>`
-          : nothing
-      }
       <div class="sidebar-issues-panel__actions">
         ${
           inlineAction
@@ -362,15 +354,19 @@ export function renderSidebarIssueItem(
               </button>`
             : nothing
         }
-        <button
-          type="button"
-          class="sidebar-issues-panel__action ${
-            inlineAction ? "" : "sidebar-issues-panel__action--primary"
-          }"
-          @click=${() => handlers.onOpen(item)}
-        >
-          ${t("nav.askOpenClaw")}
-        </button>
+        ${
+          !inlineAction || item.action.routeId !== inlineAction.routeId
+            ? html`<button
+                type="button"
+                class="sidebar-issues-panel__action ${
+                  inlineAction ? "" : "sidebar-issues-panel__action--primary"
+                }"
+                @click=${() => handlers.onOpen(item)}
+              >
+                ${t("attention.view")}
+              </button>`
+            : nothing
+        }
       </div>
     </div>
   </details>`;

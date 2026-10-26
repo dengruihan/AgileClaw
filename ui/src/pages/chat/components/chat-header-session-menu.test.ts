@@ -65,7 +65,6 @@ async function mountMenu(
   options: {
     session?: Partial<SessionMenuData>;
     worktreePath?: string | null;
-    onboarding?: boolean;
     preferencesBrowserOnly?: boolean;
     compact?: boolean;
     navigationAllowed?: boolean;
@@ -109,7 +108,6 @@ async function mountMenu(
         ...options.session,
       }}
       .worktreePath=${options.worktreePath ?? null}
-      .onboarding=${options.onboarding ?? false}
       .preferencesBrowserOnly=${options.preferencesBrowserOnly ?? false}
       .compact=${options.compact ?? false}
       .navigationAllowed=${options.navigationAllowed ?? true}
@@ -747,22 +745,6 @@ describe("chat header session menu", () => {
     ).toBe(true);
     select(compact, "visibility:read-only");
     expect(onVisibilityChange).toHaveBeenCalledWith("read-only");
-  });
-
-  it("pins and disables onboarding view preferences", async () => {
-    const onSettingsChange = vi.fn<(patch: Partial<UiSettings>) => void>();
-    const menu = await mountMenu({ onboarding: true, onSettingsChange });
-    const viewItems = Array.from(
-      item(menu, "View").querySelectorAll<MenuItemElement>("wa-dropdown-item[slot='submenu']"),
-    );
-
-    expect(viewItems.map((entry) => entry.checked)).toEqual([false, true, true]);
-    expect(viewItems.every((entry) => entry.disabled)).toBe(true);
-    expect(
-      viewItems.every((entry) => entry.getAttribute("title") === "Disabled during setup"),
-    ).toBe(true);
-    select(menu, "view:reasoning");
-    expect(onSettingsChange).not.toHaveBeenCalled();
   });
 
   it("honors action gating and bare-letter shortcuts", async () => {

@@ -30,16 +30,10 @@ function hasNativeShellClass(): boolean {
 export function shouldMergeChatChrome(params: {
   mobileNavLayout: boolean;
   routeId: RouteId;
-  onboarding: boolean;
 }): boolean {
-  return (
-    params.mobileNavLayout &&
-    isSessionRouteId(params.routeId) &&
-    !params.onboarding &&
-    !hasNativeShellClass()
-  );
+  return params.mobileNavLayout && isSessionRouteId(params.routeId) && !hasNativeShellClass();
 }
 
-export function mergeChatPageChrome(mobileNavLayout: boolean, onboarding: boolean): boolean {
-  return shouldMergeChatChrome({ mobileNavLayout, routeId: "chat", onboarding });
+export function mergeChatPageChrome(mobileNavLayout: boolean): boolean {
+  return shouldMergeChatChrome({ mobileNavLayout, routeId: "chat" });
 }

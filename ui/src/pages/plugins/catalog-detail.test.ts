@@ -76,7 +76,6 @@ it.each([
   { installed: false, canInstall: true, busy: false, primary: "Install" },
   { installed: false, canInstall: false, busy: false, primary: "Install" },
   { installed: false, canInstall: true, busy: true, primary: "Installing" },
-  { installed: true, canInstall: false, busy: false, primary: "Ask AgileClaw" },
 ])(
   "prioritizes $primary with installed=$installed, canInstall=$canInstall, busy=$busy",
   async ({ installed, canInstall, busy, primary }) => {
@@ -84,8 +83,7 @@ it.each([
     result.plugin.local.installed = installed;
     result.plugin.local.action = installed ? "manage" : "install";
     const onInstall = vi.fn();
-    const onAskPlugin = vi.fn();
-    const container = mount(result, { canInstall, busy, onInstall, onAskPlugin });
+    const container = mount(result, { canInstall, busy, onInstall });
     document.body.append(container);
     await container.querySelector("openclaw-plugin-install-action")?.updateComplete;
     const actions = container.querySelector(".plugin-catalog-detail__actions")!;
@@ -97,13 +95,18 @@ it.each([
     expect(onInstall).toHaveBeenCalledTimes(canInstall && !busy ? 1 : 0);
     expect(primaryButton.querySelector(".btn__spinner") !== null).toBe(busy);
     expect(primaryButton.getAttribute("aria-busy")).toBe(busy ? "true" : null);
-    const ask = [...actions.querySelectorAll<HTMLButtonElement>("button")].find(
-      (button) => button.textContent?.trim() === "Ask AgileClaw",
-    )!;
-    ask.click();
-    expect(onAskPlugin).toHaveBeenCalledTimes(installed ? 2 : 1);
   },
 );
+
+it("renders no install action for an installed plugin without install progress", async () => {
+  const result = createDiscoveryDetail();
+  result.plugin.local.installed = true;
+  result.plugin.local.action = "manage";
+  const container = mount(result, { canInstall: false });
+  document.body.append(container);
+  const actions = container.querySelector(".plugin-catalog-detail__actions")!;
+  expect(actions.querySelector("button")).toBeNull();
+});
 
 it.each([false, true])(
   "renders user capabilities before tools without redundant provider or channel lists (mixed=%s)",

@@ -19,11 +19,9 @@ async function fixture(
     { value: "main", label: "Main" },
     { value: "research", label: "Research" },
   ],
-  onCreateAgent: (() => void) | null = null,
 ) {
   const select = new OpeningAgentSelect();
   select.options = options;
-  select.onCreateAgent = onCreateAgent;
   select.value = value;
   document.body.append(select);
   await select.updateComplete;
@@ -84,25 +82,25 @@ describe("Agent select opening focus", () => {
     expect(document.activeElement).toBe(f.items[1]);
   });
 
-  it.each(["missing", "disabled", "create"] as const)(
+  it.each(["missing", "disabled"] as const)(
     "uses the first enabled item for a %s selection",
     async (kind) => {
       const f = await fixture(
         kind === "missing" ? "absent" : "main",
-        kind === "create"
-          ? []
+        kind === "missing"
+          ? [
+              { value: "main", label: "Main", disabled: true },
+              { value: "research", label: "Research" },
+            ]
           : [
               { value: "main", label: "Main", disabled: true },
               { value: "research", label: "Research" },
             ],
-        kind === "create" ? () => {} : null,
       );
       f.dropdown.open = true;
       await expect.poll(f.shown).toBe(true);
-      expect(document.activeElement).toBe(kind === "create" ? f.items[0] : f.items[1]);
-      expect(f.items.filter((item) => item.active)).toEqual([
-        kind === "create" ? f.items[0] : f.items[1],
-      ]);
+      expect(document.activeElement).toBe(f.items[1]);
+      expect(f.items.filter((item) => item.active)).toEqual([f.items[1]]);
     },
   );
 

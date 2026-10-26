@@ -37,10 +37,7 @@ import { icons } from "./icons.ts";
 import { renderKbd, renderKeyboardShortcut, renderShortcutText } from "./kbd.ts";
 import "./modal-dialog.ts";
 import "./tooltip.ts";
-import {
-  CUSTODIAN_PANEL_TOGGLE_EVENT,
-  DESKTOP_PANEL_TOGGLE_EVENT,
-} from "./panel-toggle-contract.ts";
+import { DESKTOP_PANEL_TOGGLE_EVENT } from "./panel-toggle-contract.ts";
 
 registerCommandPaletteEnglish();
 
@@ -87,7 +84,6 @@ type CommandPaletteProps = {
   pluginIconUrls: Readonly<Record<string, string>>;
   onPluginIconError: (pluginId: string) => void;
   desktopAvailable: boolean;
-  custodianAvailable: boolean;
   onInputRef: (element: Element | undefined) => void;
   draft: PaletteSessionDraft;
 };
@@ -133,8 +129,6 @@ function selectItem(item: CommandPaletteItem, props: CommandPaletteProps) {
     props.onSelectSession?.(item.action.slice(SESSION_ACTION_PREFIX.length));
   } else if (item.action === "panel:desktop") {
     window.dispatchEvent(new CustomEvent(DESKTOP_PANEL_TOGGLE_EVENT, { detail: { open: true } }));
-  } else if (item.action === "panel:custodian") {
-    window.dispatchEvent(new CustomEvent(CUSTODIAN_PANEL_TOGGLE_EVENT, { detail: { open: true } }));
   } else {
     props.onSlashCommand?.(item.action);
   }

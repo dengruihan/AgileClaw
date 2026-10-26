@@ -268,7 +268,13 @@ suite.define(() => {
 
   it("groups meetings, marks silent captures, and opens shareable notes without duplicate transcripts", async () => {
     await suite.withPage(
-      { viewport: { width: 1440, height: 1000 }, timezoneId: "UTC", colorScheme: "light" },
+      // Pin the locale: day headings format through the browser default.
+      {
+        viewport: { width: 1440, height: 1000 },
+        timezoneId: "UTC",
+        locale: "en-US",
+        colorScheme: "light",
+      },
       async ({ page }) => {
         const gateway = await installMockGateway(page, {
           methodResponses: {

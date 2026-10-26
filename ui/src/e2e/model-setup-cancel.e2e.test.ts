@@ -79,11 +79,12 @@ suite.define(() => {
         async ({ page }) => {
           const gateway = await installMockGateway(page, {
             featureMethods: [
+              "chat.metadata",
+              "chat.startup",
               "openclaw.setup.detect",
               "openclaw.setup.activate.start",
               "wizard.next",
               "wizard.cancel",
-              "openclaw.chat",
             ],
             methodResponses: {
               "openclaw.setup.detect": {
@@ -144,11 +145,6 @@ suite.define(() => {
                 ],
               },
               "wizard.cancel": { status: "cancelled" },
-              "openclaw.chat": {
-                sessionId: "consent-onboarding",
-                reply: "Your reviewed model is ready.",
-                action: "none",
-              },
             },
           });
           await page.goto(`${suite.server.baseUrl}settings/model-setup?firstRun=1`);
@@ -185,8 +181,7 @@ suite.define(() => {
           }
           await dialog.getByRole("button", { name: decision, exact: true }).click();
           if (decision === "Yes") {
-            await expect.poll(() => new URL(page.url()).pathname).toBe("/custodian");
-            await page.getByText("Your reviewed model is ready.", { exact: true }).waitFor();
+            await expect.poll(() => new URL(page.url()).pathname).toBe("/chat/main");
           } else {
             if (decision === "No") {
               await dialog

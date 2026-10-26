@@ -33,12 +33,6 @@ function connectParams(value: unknown) {
   return value;
 }
 
-const onboardingWelcome = {
-  sessionId: "e2e-first-run",
-  reply: "Your model is ready. Let's finish setting up AgileClaw.",
-  action: "none",
-};
-
 function detection(modelRef: string) {
   return {
     candidates: [],
@@ -64,11 +58,12 @@ suite.define(() => {
       };
       const gateway = await installMockGateway(page, {
         featureMethods: [
+          "chat.metadata",
+          "chat.startup",
           "openclaw.setup.detect",
           "openclaw.setup.auth.start",
           "openclaw.setup.verify",
           "wizard.next",
-          "openclaw.chat",
         ],
         methodResponses: {
           "openclaw.setup.detect": initialDetection,
@@ -79,7 +74,6 @@ suite.define(() => {
             step: { id: "endpoint", type: "text", message: "API Base URL" },
           },
           "openclaw.setup.verify": { ok: true, modelRef },
-          "openclaw.chat": onboardingWelcome,
         },
       });
       await page.goto(`${suite.server.baseUrl}settings/model-setup?firstRun=1`);
@@ -104,7 +98,7 @@ suite.define(() => {
       await page.getByText("saved-model", { exact: true }).waitFor();
       expect(await gateway.getRequests("openclaw.setup.verify")).toHaveLength(0);
       await page.getByRole("button", { name: "Verify & use selected model", exact: true }).click();
-      await expect.poll(() => new URL(page.url()).pathname).toBe("/custodian");
+      await expect.poll(() => new URL(page.url()).pathname).toBe("/chat/main");
       expect(await gateway.getRequests("openclaw.setup.auth.start")).toHaveLength(1);
       expect(await gateway.getRequests("openclaw.setup.activate.start")).toHaveLength(0);
       expect(await gateway.getRequests("openclaw.setup.verify")).toHaveLength(1);
@@ -129,10 +123,8 @@ suite.define(() => {
             "openclaw.setup.activate.start",
             "wizard.next",
             "openclaw.setup.verify",
-            "openclaw.chat",
           ],
           methodResponses: {
-            "openclaw.chat": onboardingWelcome,
             "openclaw.setup.detect": {
               ...detection(modelRef),
               configuredModel: undefined,
@@ -193,9 +185,13 @@ suite.define(() => {
           await page.close();
           destination = await context.newPage();
           reconnectedGateway = await installMockGateway(destination, {
-            featureMethods: ["openclaw.setup.detect", "openclaw.setup.verify", "openclaw.chat"],
+            featureMethods: [
+              "chat.metadata",
+              "chat.startup",
+              "openclaw.setup.detect",
+              "openclaw.setup.verify",
+            ],
             methodResponses: {
-              "openclaw.chat": onboardingWelcome,
               "openclaw.setup.detect": detection(modelRef),
               "openclaw.setup.verify": pendingVerification,
             },
@@ -216,7 +212,6 @@ suite.define(() => {
         await reconnectedGateway.waitForRequest("openclaw.setup.verify");
         await destination.getByText(pendingVerification.error, { exact: false }).waitFor();
         expect(new URL(destination.url()).pathname).toBe("/settings/model-setup");
-        expect(await reconnectedGateway.getRequests("openclaw.chat")).toHaveLength(0);
         if (captureUiProofEnabled) {
           await destination.screenshot({
             animations: "disabled",
@@ -229,7 +224,7 @@ suite.define(() => {
           latencyMs: 31,
         });
         await destination.getByRole("button", { name: "Verify & use selected model" }).click();
-        await expect.poll(() => new URL(destination.url()).pathname).toBe("/custodian");
+        await expect.poll(() => new URL(destination.url()).pathname).toBe("/chat/main");
         if (restart === "reconnect") {
           expect(await gateway.getRequests("openclaw.setup.activate.start")).toHaveLength(2);
           const connections = await gateway.getRequests("connect");
@@ -244,17 +239,12 @@ suite.define(() => {
             await reconnectedGateway.getRequests("openclaw.setup.activate.start"),
           ).toHaveLength(0);
         }
-        await destination.getByText(onboardingWelcome.reply, { exact: true }).waitFor();
-        const welcomeRequest = await reconnectedGateway.waitForRequest("openclaw.chat");
-        expect(welcomeRequest.params).toMatchObject({ welcomeVariant: "onboarding" });
         if (captureUiProofEnabled) {
-          await destination.locator(".custodian__header--minimal").waitFor();
           await destination.screenshot({
             animations: "disabled",
             path: path.join(artifactDir, `manual-first-run-${restart}-fixed.png`),
           });
         }
-        expect(new URL(destination.url()).searchParams.get("onboarding")).toBe("1");
       });
     },
   );
@@ -267,16 +257,16 @@ suite.define(() => {
         const activation = { modelRef, gatewayRestartRequired: true };
         const gateway = await installMockGateway(page, {
           featureMethods: [
+            "chat.metadata",
+            "chat.startup",
             "openclaw.setup.detect",
             "openclaw.setup.activate.start",
             "openclaw.setup.verify",
             "openclaw.setup.auth.start",
             "openclaw.setup.prepare.start",
             "wizard.next",
-            "openclaw.chat",
           ],
           methodResponses: {
-            "openclaw.chat": onboardingWelcome,
             "openclaw.setup.detect": {
               ...detection(modelRef),
               configuredModel: undefined,
@@ -360,9 +350,7 @@ suite.define(() => {
         await gateway.setMethodResponse("openclaw.setup.detect", detection(modelRef));
         await gateway.closeLatest(1012, "activation refresh restart");
         await gateway.waitForRequest("openclaw.setup.verify");
-        await expect.poll(() => new URL(page.url()).pathname).toBe("/custodian");
-        expect(new URL(page.url()).searchParams.get("onboarding")).toBe("1");
-        await page.getByText(onboardingWelcome.reply, { exact: true }).waitFor();
+        await expect.poll(() => new URL(page.url()).pathname).toBe("/chat/main");
         expect(await gateway.getRequests("openclaw.setup.activate.start")).toHaveLength(
           entry === "provider sign-in" ? 0 : 1,
         );

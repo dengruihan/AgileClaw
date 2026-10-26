@@ -555,26 +555,9 @@ export class FirstRunSetup {
     return outcome;
   }
 
-  continueSetup(modelTarget?: "utility"): void {
+  continueSetup(): void {
     if (!this.pending) {
-      const page = this.host.pageState();
-      const activation = this.host.activationState();
-      if (
-        modelTarget === "utility" ||
-        (activation.phase === "success" && activation.modelTarget === "utility") ||
-        (page.phase === "ready" && page.result.setupModel)
-      ) {
-        this.host
-          .context()
-          .navigate(
-            "custodian",
-            page.phase === "ready" && !page.result.configuredModel
-              ? { search: "?onboarding=1" }
-              : {},
-          );
-      } else {
-        this.host.context().navigate("chat");
-      }
+      this.host.context().navigate("chat");
     } else if (this.pending.outcome === "verified" && this.ownsActivation()) {
       this.completeNavigation();
     }
@@ -583,7 +566,7 @@ export class FirstRunSetup {
   private completeNavigation(): void {
     this.clearPending();
     this.host.setRefreshWarning(null);
-    this.host.context().navigate("custodian", { search: "?onboarding=1" });
+    this.host.context().navigate("chat");
   }
 
   private showUnresolved(): void {

@@ -62,12 +62,10 @@ import {
   EXEC_APPROVAL_ELEMENT,
   LazyCustomElementRequestController,
   LINK_READER_PANEL_ELEMENT,
-  type OptionalCustomElement,
   TERMINAL_PANEL_ELEMENT,
 } from "./lazy-custom-element.ts";
 import { postNativeNavState, type NativeNavState } from "./native-nav-state.ts";
 import { readNativeHistoryState, type NativeHistoryState } from "./native-web-chrome.ts";
-import { resolveOnboardingMode } from "./onboarding-mode.ts";
 import "./router-outlet.ts";
 import { changedServerUiPrefs } from "./server-prefs-intent.ts";
 import { isApplyingServerUiPrefs, pushServerUiPrefs } from "./server-prefs.ts";
@@ -95,7 +93,6 @@ class OpenClawShell
   implements ShellChromeHost, ShellGatewayHost, ShellNavigationHost, ShellViewHost
 {
   @property({ attribute: false }) runtime: ApplicationRuntime | undefined;
-  @property({ attribute: false }) onboarding = false;
 
   @state() navDrawerOpen = false;
   @state() navResizing = false;
@@ -111,11 +108,6 @@ class OpenClawShell
   readonly linkReaderPanelElement = LINK_READER_PANEL_ELEMENT;
   readonly desktopPanelElement = DESKTOP_PANEL_ELEMENT;
   readonly execApprovalElement = EXEC_APPROVAL_ELEMENT;
-  readonly onboardingMemoryImportElement = {
-    tagName: "openclaw-onboarding-memory-import",
-    label: t("onboarding.memoryImport.title"),
-    loadModule: () => import("../components/onboarding-memory-import.ts"),
-  } satisfies OptionalCustomElement;
   readonly lazyCustomElements = new LazyCustomElementRequestController(
     this,
     () => this.shellChrome.cancelPendingLazyAction(),
@@ -137,7 +129,6 @@ class OpenClawShell
   // Where "Back to app" / Escape leaves the settings takeover; falls back to
   // chat (the app default route) when settings was the entry point.
   lastWorkspaceLocation: ShellNavigationHost["lastWorkspaceLocation"] = null;
-  custodianMinimizeRequestId = 0;
   lastConcreteRouteId: RouteId | undefined;
   agentsListClient: GatewayBrowserClient | null = null;
   agentsListSource: ApplicationContext["agents"] | null = null;
@@ -235,15 +226,10 @@ class OpenClawShell
     return this.runtime?.context;
   }
 
-  get onboardingMode(): boolean {
-    const routeSearch = this.routeState.location?.search;
-    return routeSearch === undefined ? this.onboarding : resolveOnboardingMode(routeSearch);
-  }
-
   private get workspaceChromeVisible(): boolean {
     const routeId = this.routeState.routeId;
     // Hidden workspace chrome must not preload its sidebar and panel graphs.
-    return routeId !== undefined && !isSettingsNavigationRoute(routeId) && !this.onboardingMode;
+    return routeId !== undefined && !isSettingsNavigationRoute(routeId);
   }
 
   storedOutboxScopeHost(context: ApplicationContext): StoredOutboxScopeHost {
@@ -628,7 +614,7 @@ class OpenClawShell
       return;
     }
     const outboxScopeHost = this.storedOutboxScopeHost(context);
-    let primaryContext = routeId === "custodian" ? t("nav.askOpenClaw") : titleForRoute(routeId);
+    let primaryContext = titleForRoute(routeId);
     if (isSessionRouteId(routeId) && this.activeSessionKey) {
       primaryContext = this.chatTitleContext(context, outboxScopeHost) || primaryContext;
     }
@@ -665,7 +651,7 @@ class OpenClawShell
     }
     const chatPage = this.querySelector<ChatPage>("openclaw-chat-page");
     if (chatPage) {
-      chatPage.navDrawerOpen = this.navDrawerOpen && !this.onboardingMode;
+      chatPage.navDrawerOpen = this.navDrawerOpen;
     }
     const context = this.context;
     if (!context) {

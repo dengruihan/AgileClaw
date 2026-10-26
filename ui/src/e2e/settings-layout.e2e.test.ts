@@ -14,7 +14,6 @@ import {
   createControlUiE2eContextOptions,
   createControlUiE2eSuite,
 } from "./control-ui-e2e-suite.test-support.ts";
-import { openModelSetup } from "./model-setup.test-support.ts";
 
 const suite = createControlUiE2eSuite({
   name: "Control UI settings layout mocked Gateway E2E",
@@ -240,14 +239,14 @@ suite.define(() => {
         const settingsResponses: Response[] = [];
         const stopCapturing: Array<() => void> = [];
         const settingsOnlyCopy = [
-          "Global model defaults and provider access for your agents.",
+          "Manage model defaults, provider access, and custom model configuration in one place.",
           "Find existing connections or prepare a local model for {agent}.",
         ];
         // Keep each cold-boot document alive through the final assertions: replacing
         // an observed document cancels its idle imports and creates test-owned failures.
-        for (const pathname of ["new", "chat", "settings/model-providers"]) {
+        for (const pathname of ["new", "chat", "settings/model-providers?connect=1"]) {
           const page = pathname === "new" ? firstPage : await context.newPage();
-          const isSettings = pathname === "settings/model-providers";
+          const isSettings = pathname.startsWith("settings/model-providers");
           const responses = isSettings ? settingsResponses : startupResponses;
           page.on("pageerror", (error) => errors.push(error.message));
           page.on("console", (message) => {
@@ -275,14 +274,18 @@ suite.define(() => {
 
           await page.goto(`${suite.server.baseUrl}${pathname}`);
           const ready = isSettings
-            ? page.getByRole("heading", { name: /^Provider access\b/ })
+            ? page.getByRole("heading", { name: /^Model providers\b/ })
             : page.locator(".agent-chat__composer-combobox textarea");
           await ready.waitFor();
           if (isSettings) {
             expect(await page.locator(".model-providers__defaults").textContent()).toContain(
               "Utility Model",
             );
-            await openModelSetup(page);
+            // The saved setup link's connect intent opens the login picker in
+            // place; discovery reveals the same-Gateway setup copy without a
+            // navigation that would invalidate the captured script bodies.
+            await page.locator("[data-models-login-discover]").click();
+            await page.getByRole("heading", { name: "On this Gateway", exact: true }).waitFor();
             await page.getByText(/Find existing connections or prepare a local model/).waitFor();
           }
           if (recordVisuals) {
@@ -478,31 +481,22 @@ suite.define(() => {
         .poll(() => page.locator(".shell").getAttribute("class"))
         .toContain("shell--nav-drawer-open");
       const settingsSidebar = page.locator(".settings-sidebar");
-      await settingsSidebar.getByRole("link", { name: "Ask AgileClaw" }).click();
-      await waitForControlUiRoute(page, { pathname: "/custodian", routeId: "custodian" });
-      const custodianInsets = await page.evaluate(() => {
+      await settingsSidebar.getByRole("link", { name: "Profile" }).click();
+      await waitForControlUiRoute(page, { pathname: "/settings/profile", routeId: "profile" });
+      const profileInsets = await page.evaluate(() => {
         const content = document.querySelector<HTMLElement>("main.content");
-        const column = document.querySelector<HTMLElement>(".custodian__column");
         const topbar = document.querySelector<HTMLElement>(".topbar");
-        if (!content || !column || !topbar) {
-          throw new Error("Custodian settings route did not render");
+        if (!content || !topbar) {
+          throw new Error("Profile settings route did not render");
         }
-        const columnBox = column.getBoundingClientRect();
         return {
-          columnLeft: Math.round(columnBox.left),
-          columnRightInset: Math.round(document.documentElement.clientWidth - columnBox.right),
           contentPaddingInline: Math.round(
             Number.parseFloat(getComputedStyle(content).paddingLeft),
           ),
           topbarPaddingInline: Math.round(Number.parseFloat(getComputedStyle(topbar).paddingLeft)),
         };
       });
-      expect(custodianInsets).toEqual({
-        columnLeft: 12,
-        columnRightInset: 12,
-        contentPaddingInline: 0,
-        topbarPaddingInline: 12,
-      });
+      expect(profileInsets).toEqual({ contentPaddingInline: 12, topbarPaddingInline: 12 });
 
       await page.setViewportSize({ height: 900, width: 1440 });
       await page.goto(`${suite.server.baseUrl}settings/appearance`);

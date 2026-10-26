@@ -87,7 +87,6 @@ it("keeps disconnected plugin settings from dispatching enablement", () => {
 it("gives host permissions the setting menu and preserves configured, inherited, and read-only values", async () => {
   const onPatch = vi.fn();
   const onRemove = vi.fn();
-  const onAsk = vi.fn();
   const props: Partial<DetailProps> = {
     tab: "configuration",
     inspection: createInspectResult(),
@@ -116,7 +115,6 @@ it("gives host permissions the setting menu and preserves configured, inherited,
     },
     onConfigPatch: onPatch,
     onConfigRemove: onRemove,
-    onAskSetting: onAsk,
   };
   const container = mount(props);
   const editor = container.querySelector("openclaw-plugin-settings-editor") as HTMLElement & {
@@ -127,16 +125,7 @@ it("gives host permissions the setting menu and preserves configured, inherited,
   expect(row).not.toBeNull();
   expect(row.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(true);
   expect(row.querySelector("wa-dropdown-item[value=reset]")?.hasAttribute("disabled")).toBe(true);
-  row
-    .querySelector("wa-dropdown")!
-    .dispatchEvent(new CustomEvent("wa-select", { detail: { item: { value: "ask" } } }));
-  expect(onAsk).toHaveBeenCalledWith(
-    expect.objectContaining({
-      path: ["plugins", "entries", "workboard", "hooks", "allowPromptInjection"],
-      value: true,
-      label: "Add context to prompts",
-    }),
-  );
+  expect(row.querySelector("wa-dropdown-item[value=ask]")).toBeNull();
   row.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
   expect(onPatch).toHaveBeenCalledWith(
     ["plugins", "entries", "workboard", "hooks", "allowPromptInjection"],

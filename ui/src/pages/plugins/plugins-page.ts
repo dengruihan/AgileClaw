@@ -32,7 +32,6 @@ import {
   type InstalledPluginDetailTab,
 } from "./detail-tabs.ts";
 import { PluginDiscoveryController } from "./plugin-discovery-controller.ts";
-import { PluginHelpController } from "./plugin-help-controller.ts";
 import { confirmPluginUninstall } from "./plugin-lifecycle-confirmation.ts";
 import { PluginMcpLoginController } from "./plugin-mcp-login-controller.ts";
 import { pluginRowKey, type PluginRowMessage } from "./plugin-row-message.ts";
@@ -74,7 +73,6 @@ class PluginsPage extends OpenClawLightDomElement {
   @state() private catalogDetail: PluginsPageCatalogDetail | null = null;
   @state() private installedDetailTab: InstalledPluginDetailTab = "readme";
   private installRequestGeneration = 0;
-  private readonly help = new PluginHelpController(this);
   private configAutoSaveStatus = this.context?.runtimeConfig.state.configAutoSaveStatus ?? "idle";
   private pluginConfigEditPending = false;
   private routeDataConsumed = false;
@@ -625,7 +623,6 @@ class PluginsPage extends OpenClawLightDomElement {
       mcpLogin: this.mcpLogin.render(),
       mcpLoginBusy: this.mcpLogin.busy,
       canMcpLogin: canCallGatewayMethod(this.gateway.snapshot, "mcp.authLogin", "operator.admin"),
-      help: this.help,
       context: this.context,
       routeData: this.routeData,
       surface: this.surface,

@@ -1022,7 +1022,6 @@ const enSettings = {
       failedStep: "Failure details",
       viewDetails: "View details",
       recoveryActions: "Recovery",
-      diagnoseFailure: "Diagnose update",
       checkStatus: "Check status",
       retryUpdate: "Retry update",
       reportFailure: "Report update failure",
@@ -1041,6 +1040,8 @@ const enSettings = {
       savedReport: "Saved report",
       troubleshoot: "Troubleshoot updates",
       cliFallback: "CLI fallback",
+      cliFallbackDescription:
+        "Run `openclaw triage` on the Gateway host to open a local coding agent for diagnosis and repair.",
       showCliFallback: "Show terminal commands",
     },
   },

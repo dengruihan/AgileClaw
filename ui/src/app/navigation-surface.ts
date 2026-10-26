@@ -111,31 +111,25 @@ export function visibleNavDrawerToggle(host: HTMLElement): HTMLElement | undefin
 }
 
 export function navigationSurfaceIsHidden(params: {
-  onboarding: boolean;
   navCollapsed: boolean;
   navDrawerOpen: boolean;
   mobileNavLayout: boolean;
 }): boolean {
-  return (
-    params.onboarding || (params.mobileNavLayout ? !params.navDrawerOpen : params.navCollapsed)
-  );
+  return params.mobileNavLayout ? !params.navDrawerOpen : params.navCollapsed;
 }
 
 export function floatingSidebarAttentionVisible(params: {
   navigationSurfaceHidden: boolean;
   mobileNavLayout: boolean;
-  onboarding: boolean;
   compact?: boolean;
 }): boolean {
-  const attentionNeedsFloating =
-    params.navigationSurfaceHidden && !params.mobileNavLayout && !params.onboarding;
+  const attentionNeedsFloating = params.navigationSurfaceHidden && !params.mobileNavLayout;
   return attentionNeedsFloating && !params.compact;
 }
 
 export function renderFloatingUpdateCard(params: {
   navigationSurfaceHidden: boolean;
   mobileNavLayout: boolean;
-  onboarding: boolean;
   compact?: boolean;
   updateRun?: ApplicationContext["overlays"]["snapshot"]["updateRun"];
   statusBanner?: ApplicationContext["overlays"]["snapshot"]["updateStatusBanner"];

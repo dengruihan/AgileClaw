@@ -81,7 +81,6 @@ export abstract class ChatPaneSessionMenu extends ChatPaneContext {
       !state?.connected ||
       !this.active ||
       !this.presented ||
-      this.onboarding ||
       document.openClawModalLayers?.size ||
       document.querySelector(".shell-nav[aria-modal='true']")
     ) {

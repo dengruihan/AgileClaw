@@ -42,7 +42,6 @@ const APP_ROUTE_DEFINITIONS = {
   terminal: { path: "/terminal" },
   dashboard: { path: "/dashboard" },
   dashboards: { path: "/dashboards" },
-  custodian: { path: "/custodian" },
   "new-session": { path: "/new" },
   activity: { path: "/activity" },
   meetings: { path: "/meetings" },
@@ -518,7 +517,7 @@ export function routeIdFromPath(pathname: string, basePath = ""): RouteId | null
   );
 }
 
-// A candidate mount base that is a registered route ("/custodian"), or that
+// A candidate mount base that is a registered route ("/settings"), or that
 // sits at or below a multi-segment route namespace ("/settings", including
 // "/settings/other"), is really a root-mounted deep link whose suffix happens
 // to match a route path or alias. Descendants of leaf routes stay valid mount

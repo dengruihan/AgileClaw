@@ -44,7 +44,6 @@ import {
   SHELL_APPROVALS_OPEN_EVENT,
 } from "./lazy-shell-action.ts";
 import { shouldMergeChatChrome } from "./mobile-nav-layout.ts";
-import { resolveOnboardingMode } from "./onboarding-mode.ts";
 import { resetServerUiPrefsSync } from "./server-prefs.ts";
 import { loadSettings } from "./settings.ts";
 import { scheduleStaleChunkReload } from "./stale-chunk-reload.ts";
@@ -204,11 +203,6 @@ type ShellRouteCommitState = {
   activeSessionKey: string;
   didConsiderNativeRouteRestore: boolean;
   updateRouteState: (state: ReturnType<typeof selectShellRouteState>) => void;
-};
-
-type ShellCustodianRouteState = {
-  custodianMinimizeRequestId: number;
-  updateRouteState: (state: { routeId?: RouteId }) => void;
 };
 
 type ShellSessionNavigationState = {
@@ -527,19 +521,6 @@ describe("AgileClaw shell route session commits", () => {
     expect(setSessionKey).toHaveBeenCalledExactlyOnceWith("agent:main:session-b");
     expect(calls).toEqual(["agent:main", "session:agent:main:session-b"]);
   });
-
-  it("retains the custodian leave transition through an unresolved route state", () => {
-    const shell = document.createElement(
-      "openclaw-app-shell",
-    ) as unknown as ShellCustodianRouteState;
-
-    shell.updateRouteState({ routeId: "custodian" });
-    shell.updateRouteState({});
-    expect(shell.custodianMinimizeRequestId).toBe(0);
-
-    shell.updateRouteState({ routeId: "appearance" });
-    expect(shell.custodianMinimizeRequestId).toBe(1);
-  });
 });
 
 describe("AgileClaw shell server preferences", () => {
@@ -670,31 +651,13 @@ describe("AgileClaw shell settings search", () => {
 });
 
 describe("AgileClaw shell keyboard shortcuts", () => {
-  it("resolves onboarding mode from the active route search", () => {
-    expect(resolveOnboardingMode("?onboarding=1")).toBe(true);
-    expect(resolveOnboardingMode("?onboarding=true")).toBe(true);
-    expect(resolveOnboardingMode("?onboarding=0")).toBe(false);
-    expect(resolveOnboardingMode("")).toBe(false);
-  });
-
   it("merges shell chrome only for plain-browser mobile chat", () => {
-    expect(
-      shouldMergeChatChrome({ mobileNavLayout: true, routeId: "chat", onboarding: false }),
-    ).toBe(true);
-    expect(
-      shouldMergeChatChrome({ mobileNavLayout: false, routeId: "chat", onboarding: false }),
-    ).toBe(false);
-    expect(
-      shouldMergeChatChrome({ mobileNavLayout: true, routeId: "sessions", onboarding: false }),
-    ).toBe(false);
-    expect(
-      shouldMergeChatChrome({ mobileNavLayout: true, routeId: "chat", onboarding: true }),
-    ).toBe(false);
+    expect(shouldMergeChatChrome({ mobileNavLayout: true, routeId: "chat" })).toBe(true);
+    expect(shouldMergeChatChrome({ mobileNavLayout: false, routeId: "chat" })).toBe(false);
+    expect(shouldMergeChatChrome({ mobileNavLayout: true, routeId: "sessions" })).toBe(false);
 
     document.documentElement.classList.add("openclaw-native-nav");
-    expect(
-      shouldMergeChatChrome({ mobileNavLayout: true, routeId: "chat", onboarding: false }),
-    ).toBe(false);
+    expect(shouldMergeChatChrome({ mobileNavLayout: true, routeId: "chat" })).toBe(false);
   });
 
   it("prevents unhandled window file drops without overriding accepted targets", () => {

@@ -35,7 +35,6 @@ type ChatPagePaneRenderOptions = {
   mergedChrome: boolean;
   narrow: boolean;
   navDrawerOpen: boolean;
-  onboarding: boolean;
   onClosePane?: (paneId: string) => void;
   onFaceChange: (paneId: string, sessionKey: string, face: BoardFace) => void;
   onFocusPane: (paneId: string, intent?: "review-edit") => void;
@@ -192,7 +191,6 @@ export function renderChatPagePaneCell(options: ChatPagePaneRenderOptions) {
               .narrow=${options.narrow}
               .mergedChrome=${options.mergedChrome && active}
               .navDrawerOpen=${options.navDrawerOpen && active}
-              .onboarding=${options.onboarding}
               .onOpenSplitView=${options.onOpenSplitView}
               .onSplitDown=${options.onSplitDown}
               .onSplitRight=${options.onSplitRight}

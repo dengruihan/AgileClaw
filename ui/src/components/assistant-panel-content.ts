@@ -9,18 +9,13 @@ import {
   subscribeChatWorkContext,
   type ChatWorkContext,
 } from "../pages/chat/chat-work-context.ts";
-import {
-  custodianSessionStore,
-  type CustodianSessionStore,
-} from "../pages/custodian/custodian-session-store.ts";
-import "../pages/custodian/custodian-surface.ts";
 import "./home-session.runtime.ts";
 import "../styles/assistant-panel-content.css";
 
 /** Conversation runtimes load inside the already-open dock. */
 export class OpenClawAssistantPanelContent extends OpenClawLightDomElement {
   @property({ type: Boolean }) active = false;
-  @property() destination: "home" | "custodian" | "session" = "custodian";
+  @property() destination: "home" | "session" = "home";
   @property() sessionKey = "";
   @property() agentId = "";
   @property({ attribute: false }) sessionContext: ChatWorkContext | undefined;
@@ -28,14 +23,10 @@ export class OpenClawAssistantPanelContent extends OpenClawLightDomElement {
   @property() pageRouteId: RouteId = "chat";
   @property() pageSessionKey = "";
   @property() pageAgentId = "";
-  @property({ attribute: false }) store: CustodianSessionStore | undefined;
-
-  private custodianVisible = false;
 
   constructor() {
     super();
     void new SubscriptionsController(this)
-      .watchStore(() => this.store ?? custodianSessionStore)
       .watch(
         () => this.context,
         (context, notify) => subscribeChatWorkContext(context, notify),
@@ -45,53 +36,25 @@ export class OpenClawAssistantPanelContent extends OpenClawLightDomElement {
       .watchStore(() => this.context?.gateway);
   }
 
-  override connectedCallback(): void {
-    super.connectedCallback();
-    // The lightweight frame uses the existing store for minimize and mascot
-    // state, without importing its conversation runtime during application boot.
-    this.dispatchEvent(
-      new CustomEvent("assistant-custodian-store", {
-        detail: this.store ?? custodianSessionStore,
-        bubbles: true,
-      }),
-    );
-  }
-
-  override willUpdate(): void {
-    const visible = this.active && this.destination === "custodian";
-    if (visible && !this.custodianVisible) {
-      void (this.store ?? custodianSessionStore).refreshTranscriptIfIdle();
-    }
-    this.custodianVisible = visible;
-  }
-
   override render() {
     if (!this.active) {
       return nothing;
     }
-    const store = this.store ?? custodianSessionStore;
-    return this.destination !== "custodian"
-      ? html`<openclaw-home-session
-          .sessionKey=${this.sessionKey}
-          .agentId=${this.agentId}
-          .workContext=${
-            this.sessionContext ??
-            (this.context
-              ? buildHomeWorkContext(
-                  this.context,
-                  this.pageRouteId,
-                  this.pageSessionKey,
-                  this.pageAgentId,
-                )
-              : undefined)
-          }
-        ></openclaw-home-session>`
-      : html`<openclaw-custodian-surface
-          .store=${store}
-          .onboarding=${store.activeVariant === "onboarding"}
-          .newAgentIntent=${store.activeVariant === "new-agent"}
-          compact
-        ></openclaw-custodian-surface>`;
+    return html`<openclaw-home-session
+      .sessionKey=${this.sessionKey}
+      .agentId=${this.agentId}
+      .workContext=${
+        this.sessionContext ??
+        (this.context
+          ? buildHomeWorkContext(
+              this.context,
+              this.pageRouteId,
+              this.pageSessionKey,
+              this.pageAgentId,
+            )
+          : undefined)
+      }
+    ></openclaw-home-session>`;
   }
 }
 

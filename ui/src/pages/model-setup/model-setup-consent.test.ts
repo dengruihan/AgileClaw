@@ -107,9 +107,7 @@ describe("ModelSetupPage activation consent", () => {
       expect(context.navigate).not.toHaveBeenCalled();
       button(decision === "accept" ? "Yes" : decision === "decline" ? "No" : "Cancel").click();
       if (decision === "accept") {
-        await waitForFast(() =>
-          expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" }),
-        );
+        await waitForFast(() => expect(context.navigate).toHaveBeenCalledWith("chat"));
         expect(answers.at(-1)).toEqual({ stepId: "consent", value: true });
       } else {
         await waitForFast(() =>

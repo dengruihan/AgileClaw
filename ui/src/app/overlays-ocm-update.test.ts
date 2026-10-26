@@ -93,7 +93,6 @@ it("polls an OCM job through disconnect and failure without native recovery acti
     await flushMicrotasks();
     expect(overlays.snapshot.updateRun).toEqual(run);
     expect(overlays.snapshot.updateRunning).toBe(false);
-    expect(overlays.snapshot.diagnosableUpdateFailureId).toBeNull();
     expect(overlays.snapshot.reportableUpdateFailureId).toBeNull();
     expect(renderUpdateRunReport(run).markdown).toContain("Check this update through OCM.");
     expect(renderUpdateRunReport(run).markdown).not.toContain("openclaw triage");

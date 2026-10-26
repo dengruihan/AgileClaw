@@ -52,7 +52,7 @@ If a narration subscription encounters a retryable failure or times out, it retr
 
 Failed narration releases use the same backoff, including while the tab is hidden. If a session is needed again, its queued release is canceled and its subscription is renewed safely. Closing the Gateway connection cancels release retries.
 
-Closed Terminal, Browser, and Desktop panels initialize when you open them rather than during initial navigation. Home/Ask OpenClaw and System busyness keep lightweight frames ready and defer their conversation or diagnostic contents until opened. Home preserves its saved dock position and size throughout loading. Panels saved as open still restore after a reload. Settings does not automatically reopen Ask OpenClaw; its control and diagnostic actions can still open it explicitly.
+Closed Terminal, Browser, and Desktop panels initialize when you open them rather than during initial navigation. Home and System busyness keep lightweight frames ready and defer their conversation or diagnostic contents until opened. Home preserves its saved dock position and size throughout loading. Panels saved as open still restore after a reload.
 
 Hidden retained chats defer command and model metadata refreshes until you return to them. Returning to a recently opened chat reuses its completed metadata on the same connection until a Gateway change invalidates it. Concurrent readers share the same request. Ordinary session patches and command changes wait for a 2.5-second quiet period before refreshing commands and session facts. They reuse the model catalog unless the returned metadata indicates a changed model or account projection. Explicit model, account, and runtime selections refresh promptly. Configuration, catalog, and session lifecycle changes still invalidate the full metadata bundle. Repeated changes during a request share one trailing refresh instead of issuing overlapping requests.
 
@@ -132,22 +132,15 @@ name the child session that failed, even when its parent has finished or continu
 working. Select the warning to open the child session and acknowledge its failure;
 a subagent chat opens without adding a sidebar row.
 
-Choose **New agent** in the sidebar or Agents home to open the custodian chat.
-It recommends a chief of staff, researcher, writer, reviewer, or a small team
-with all four. Reply with a choice, or describe custom work and a name. Role
-choices use the same [role templates](/cli/agents#role-templates) as the CLI;
-creation waits for operator approval. For custom work, the approved purpose is
-saved in the new workspace's `AGENTS.md`; the normal identity ceremony still runs.
+Create agents with the CLI: `openclaw agents add` uses the same
+[role templates](/cli/agents#role-templates) and writes the approved purpose
+into the new workspace's `AGENTS.md`.
 With `skipBootstrap` enabled, only these requested instructions are seeded, without
 the generic identity or bootstrap files.
 Existing workspace instructions are never overwritten. If `AGENTS.md` already
 contains different instructions, choose a new workspace for the custom agent.
 Created agents appear in Agents home and
 the agent switcher.
-Opening **New agent** keeps your existing Ask OpenClaw conversation. Finish any
-pending wizard or approval before opening the creation choices.
-If team creation stops partway through, the custodian reports the retained
-agents so you can inspect them before creating the missing members.
 
 ## Take a photo in chat
 
@@ -288,7 +281,7 @@ is absent from the window, its agent's most recent session supplies the preview.
 - [Sessions and sidebar](/web/control-ui/sessions-and-sidebar) — sidebar zones, session menus, and the New session page.
 - [Systems workspace](/web/control-ui/sessions-and-sidebar#systems-workspace) — contextual machine navigation and a desktop-first workspace.
 - [Chat](/web/control-ui/chat) — composer controls, the session rail, transcript rendering, and hosted embeds.
-- [Panels and docks](/web/control-ui/panels) — Ask OpenClaw, the Home dock, the operator terminal, and the browser panel.
+- [Panels and docks](/web/control-ui/panels) — the Home dock, the operator terminal, and the browser panel.
 - [Settings](/web/control-ui/settings) — identity, appearance, plugins, updates, MCP, activity, and meetings.
 - [Feature and RPC reference](/web/control-ui/feature-reference) — every capability with the Gateway RPC behind it.
 - [Offline and reconnect](/web/control-ui/offline-and-reconnect) — what survives a dropped connection.

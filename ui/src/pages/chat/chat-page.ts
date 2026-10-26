@@ -307,7 +307,7 @@ export class ChatPage extends OpenClawLightDomElement implements SessionSplitHos
 
   private resolveMergedChrome(mobileNavLayout: boolean): boolean {
     const webNavigation = mobileNavLayout && !this.nativeConversation;
-    return mergeChatPageChrome(webNavigation, this.closest(".shell--onboarding") !== null);
+    return mergeChatPageChrome(webNavigation);
   }
 
   private readonly handleMobileNavViewportChange = (event: MediaQueryListEvent) => {
@@ -662,7 +662,6 @@ export class ChatPage extends OpenClawLightDomElement implements SessionSplitHos
           mergedChrome: this.mergedChrome,
           narrow: this.narrow,
           navDrawerOpen: this.navDrawerOpen,
-          onboarding: this.closest(".shell--onboarding") !== null,
           onClosePane: splitMode ? this.handleClosePane : undefined,
           onFaceChange: this.handlePaneFaceChange,
           onFocusPane: this.handleFocusPane,

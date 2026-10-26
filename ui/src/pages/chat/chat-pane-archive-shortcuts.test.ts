@@ -125,14 +125,11 @@ describe("direct session archive shortcuts", () => {
     },
   );
 
-  it.each(["modal", "onboarding", "offline", "read-only", "unavailable", "missing-row"])(
+  it.each(["modal", "offline", "read-only", "unavailable", "missing-row"])(
     "does not act during %s",
     async (guard) => {
       const { pane, state, patch } = fixture();
       const modal = document.createElement("div");
-      if (guard === "onboarding") {
-        pane.onboarding = true;
-      }
       if (guard === "offline") {
         state.connected = false;
       }

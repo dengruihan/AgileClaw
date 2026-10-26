@@ -335,9 +335,6 @@ export function renderSidebarAgentMenu(params: SidebarAgentMenuParams) {
           case `${COMMAND_VALUE_PREFIX}all-agents`:
             params.onNavigate("agents-home");
             break;
-          case `${COMMAND_VALUE_PREFIX}new-agent`:
-            params.onNavigate("custodian", { search: "?intent=new-agent" });
-            break;
           case `${COMMAND_VALUE_PREFIX}capabilities`:
             params.onAskCapabilities(activeId);
             break;
@@ -395,7 +392,6 @@ export function renderSidebarAgentMenu(params: SidebarAgentMenuParams) {
         !params.rosterMode
           ? html`
               ${renderSidebarMenuAction("command:all-agents", t("agentChip.allAgents"), "bot")}
-              ${renderSidebarMenuAction("command:new-agent", t("custodian.newAgent"), "users")}
               ${
                 activeId
                   ? renderSidebarMenuAction(

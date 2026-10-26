@@ -78,7 +78,6 @@ export function applyCommandPaletteTargetEvent(
 }
 
 export type CommandPaletteElement = HTMLElement & {
-  custodianAvailable: boolean;
   desktopAvailable: boolean;
   isOpen: boolean;
   openPalette: (input?: CommandPaletteOpenInput | CommandPaletteInputHandoff) => void;

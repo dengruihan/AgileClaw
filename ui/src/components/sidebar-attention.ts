@@ -8,13 +8,11 @@ import type { MentionsCapability } from "../app/mentions.ts";
 import type { UpdateProgress } from "../app/update-confirmation.ts";
 import { t } from "../i18n/index.ts";
 import { registerSidebarAttentionEnglish } from "../i18n/locales/en-sidebar-attention.ts";
-import { canCallGatewayMethod } from "../lib/gateway-methods.ts";
 import { createIdleImport } from "../lib/idle-import.ts";
 import { OpenClawLightDomElement } from "../lit/openclaw-element.ts";
 import { SubscriptionsController } from "../lit/subscriptions-controller.ts";
 import "../styles/sidebar-attention-floating.css";
 import { icons } from "./icons.ts";
-import { CUSTODIAN_PANEL_TOGGLE_EVENT } from "./panel-toggle-contract.ts";
 import { sidebarInboxTabCounts, type SidebarAttentionItem } from "./sidebar-attention-entries.ts";
 import type { SidebarAttentionPanelPosition } from "./sidebar-attention-panel.runtime.ts";
 import { SidebarAttentionStoreController } from "./sidebar-attention-store.ts";
@@ -200,21 +198,10 @@ class SidebarAttention extends OpenClawLightDomElement {
     });
   }
 
-  private async open(item: SidebarAttentionItem) {
+  private open(item: SidebarAttentionItem) {
     this.closePanel(false);
     if (item.action.kind === "navigate") {
       this.onNavigate?.(item.action.routeId);
-      return;
-    }
-    const { custodianAlertStore } = await import("../pages/custodian/custodian-alert-store.ts");
-    custodianAlertStore.present(item.action.alert);
-    const snapshot = this.context?.gateway.snapshot;
-    if (canCallGatewayMethod(snapshot, "openclaw.chat", "operator.admin")) {
-      window.dispatchEvent(
-        new CustomEvent(CUSTODIAN_PANEL_TOGGLE_EVENT, { detail: { open: true } }),
-      );
-    } else {
-      (this.onNavigate ?? ((routeId) => this.context?.navigate(routeId)))("custodian");
     }
   }
 

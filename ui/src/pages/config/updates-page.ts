@@ -40,7 +40,6 @@ export function renderUpdatesPage({
     canCheckStatus: canCallGatewayMethod(gatewaySnapshot, "update.status", "operator.admin"),
     canHoldUpdate: canCallGatewayMethod(gatewaySnapshot, "update.hold", "operator.admin"),
     canReport: canReportUpdateFailure(gatewaySnapshot),
-    canDiagnose: canCallGatewayMethod(gatewaySnapshot, "openclaw.chat", "operator.admin"),
     updateBusy,
     onChannelChange: (channel) => runtimeConfig.patchForm(["update", "channel"], channel),
     onUpdateChecksChange: (enabled) => runtimeConfig.patchForm(["update", "checkOnStart"], enabled),
@@ -62,6 +61,5 @@ export function renderUpdatesPage({
     onHoldUpdate: () => context.overlays.holdUpdate(),
     onCheckStatus: () => context.overlays.refreshUpdateStatus(),
     onReportFailure: (attemptId) => context.overlays.reportUpdateFailure(attemptId),
-    onDiagnoseFailure: (attemptId) => context.overlays.diagnoseUpdateFailure(attemptId),
   });
 }

@@ -582,10 +582,6 @@ with a sticky header. If copying fails, the button clears any earlier success ch
 file and session links work in either view, including Enter and Space keyboard
 activation. Following a link closes the expanded view so you can use its destination.
 
-The **Ask OpenClaw** panel supports table scrolling, copying, expansion, and web
-links. Its session links open with a click or Enter. Space does not activate
-those links, and workspace-file references do not open a preview.
-
 ### Mermaid diagrams
 
 Use a `mermaid` fenced code block in chat. The Control UI renders it as a diagram

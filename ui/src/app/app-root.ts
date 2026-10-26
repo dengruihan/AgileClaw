@@ -32,7 +32,6 @@ import {
 } from "./lazy-custom-element.ts";
 import { availableLinkReaders, availableLinkPreviewReaders } from "./link-reader-routing.ts";
 import { nativeEmbedHost, isNativeWebChromeHost } from "./native-web-chrome.ts";
-import { resolveOnboardingMode } from "./onboarding-mode.ts";
 import { isDesktopPanelAvailable } from "./panel-availability.ts";
 import { resolveGatewayCredentialsForUrlEdit } from "./settings.ts";
 import { connectShellViewport } from "./shell-viewport.ts";
@@ -62,7 +61,6 @@ export class OpenClawApp extends OpenClawLightDomElement {
   @state() private loginPassword = "";
   @state() private loginShowGatewaySecret = false;
   @state() private pendingGatewayUrl: string | null = null;
-  @state() private onboarding = resolveOnboardingMode(globalThis.location?.search ?? "");
   @state() private focusDashboardRoute: FocusDashboardRouteState = { kind: "loading" };
 
   private runtime: ApplicationRuntime | undefined;
@@ -706,10 +704,7 @@ export class OpenClawApp extends OpenClawLightDomElement {
           .context=${context}
           .gateway=${context.gateway}
         >
-          <openclaw-app-shell
-            .runtime=${runtime}
-            .onboarding=${this.onboarding}
-          ></openclaw-app-shell>
+          <openclaw-app-shell .runtime=${runtime}></openclaw-app-shell>
         </openclaw-session-progress-hovercard-provider>
       </openclaw-link-reader-hovercard-provider>
     `;

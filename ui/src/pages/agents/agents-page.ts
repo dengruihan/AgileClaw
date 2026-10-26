@@ -984,7 +984,6 @@ class AgentsPage
     const agentsState = this.context.agents.state;
     const selectedAgentId = this.agentsSelectedId;
     const access = {
-      canCreateAgent: this.canCall("openclaw.chat", "operator.admin"),
       canPatchConfig: this.canCall("config.patch", "operator.admin"),
       canUpdateConfig: this.canCall("config.set", "operator.admin"),
       canUpdateIdentity: this.canCall("agents.update", "operator.admin"),
@@ -1029,11 +1028,6 @@ class AgentsPage
             pinnedAgentIds: this.context.navigation.snapshot.pinnedAgentIds,
             onTogglePinnedAgent: (agentId) => togglePinnedAgent(this.context.navigation, agentId),
             onRefresh: () => void this.refreshAgents(),
-            onCreateAgent: () => {
-              if (this.canCall("openclaw.chat", "operator.admin")) {
-                this.context.navigate("custodian", { search: "?intent=new-agent" });
-              }
-            },
             onSelectPanel: (panel) =>
               navigateToAgentPanel(this.context, selectedAgentId, this.agentsPanel, panel),
             onLoadFiles: (agentId) => void this.loadAgentFiles(agentId, true),

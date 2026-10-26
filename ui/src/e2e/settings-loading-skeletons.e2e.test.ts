@@ -287,59 +287,6 @@ suite.define(() => {
     });
   });
 
-  it("renders the Custodian history load as a skeleton", async () => {
-    await withPage(async (page) => {
-      const gateway = await installMockGateway(page, {
-        featureMethods: [...defaultControlUiFeatureMethods, "openclaw.changes.list"],
-        heldMethods: ["openclaw.changes.list"],
-      });
-      await page.goto(`${suite.server.baseUrl}custodian`);
-      await waitForControlUiRoute(page, { pathname: "/custodian", routeId: "custodian" });
-      await page.getByRole("button", { name: "History", exact: true }).click();
-      await gateway.waitForRequest("openclaw.changes.list");
-      await captureLoadingState(page.locator(".custodian__history"), "custodian-history");
-    });
-  });
-
-  it("uses a compact spinner when Custodian refreshes existing history", async () => {
-    await withPage(async (page) => {
-      const gateway = await installMockGateway(page, {
-        featureMethods: [...defaultControlUiFeatureMethods, "openclaw.changes.list"],
-        methodResponses: {
-          "openclaw.changes.list": {
-            entries: [
-              {
-                at: Date.now() - 5_000,
-                id: "system-agent-audit:3",
-                kind: "operation",
-                source: "system-agent",
-                summary: "Set config gateway.port",
-              },
-            ],
-          },
-        },
-      });
-      await page.goto(`${suite.server.baseUrl}custodian`);
-      await waitForControlUiRoute(page, { pathname: "/custodian", routeId: "custodian" });
-      const historyToggle = page.getByRole("button", { name: "History", exact: true });
-      await historyToggle.click();
-      await gateway.waitForRequest("openclaw.changes.list");
-      await page.locator(".custodian__change-card").waitFor();
-
-      const requestCount = (await gateway.getRequests("openclaw.changes.list")).length;
-      await gateway.deferNext("openclaw.changes.list");
-      await historyToggle.click();
-      await historyToggle.click();
-      await gateway.waitForRequest("openclaw.changes.list", { after: requestCount });
-
-      const history = page.locator(".custodian__history");
-      const spinner = history.locator(".custodian__history-spinner");
-      await spinner.waitFor({ state: "visible" });
-      expect(await history.locator(".settings-loading-skeleton").count()).toBe(0);
-      await captureScreenshot(history, "custodian-refresh");
-    });
-  });
-
   it("renders the Approvals history load as a skeleton", async () => {
     await withPage(async (page) => {
       const gateway = await installMockGateway(page, {

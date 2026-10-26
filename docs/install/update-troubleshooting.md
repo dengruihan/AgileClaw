@@ -25,17 +25,11 @@ the checks finished. When automatic repair cannot find a usable inference route
 before starting a repair turn, it is recorded as skipped; the original update
 check remains the reported failure.
 
-In the Control UI, a failed attempt opens **Ask OpenClaw** with its recorded
-details and asks it to investigate before retrying. A lost connection or
-verification timeout is presented as an unknown outcome. The tab remembers the
-latest 32 investigated attempt identities, scoped to their Gateway and profile.
-Status checks, switching between those scopes, and reloading the same tab do not
-automatically send those investigations again. If the browser cannot read or
-save that history, the failure details remain visible without an automatic
-diagnostic request. Ask OpenClaw manually or run `openclaw triage` on the host.
-If the Gateway or agent is
-unavailable, use `openclaw triage` on the Gateway host. Automatic diagnosis keeps
-your unsent composer draft, including when its conversation session must restart.
+In the Control UI, a failed attempt keeps its recorded details visible on the
+Updates page. A lost connection or verification timeout is presented as an
+unknown outcome. To investigate before retrying, run `openclaw triage` on the
+Gateway host. The CLI diagnosis is read-only first and keeps unsent drafts
+untouched.
 
 **Control UI → Settings → Updates** keeps the latest recorded attempt visible,
 including its time, before/after identities, reason code, failing step, and
@@ -46,8 +40,8 @@ same attempt reports its final failure or cancellation. A newer recorded attempt
 can also replace it. Intentional cancellations, already-current installs, and
 updates still in progress do not start triage.
 
-For a final failed attempt, **Report update failure** is separate from **Retry**
-and **Ask OpenClaw**. It previews a bounded report containing the OpenClaw
+For a final failed attempt, **Report update failure** is separate from **Retry**.
+It previews a bounded report containing the OpenClaw
 version, platform, update target, failed phase, sanitized diagnostics, and
 verified rollback outcome. The report excludes secrets, tokens, chat content,
 raw logs, private absolute paths, and recovery commands. Nothing is submitted

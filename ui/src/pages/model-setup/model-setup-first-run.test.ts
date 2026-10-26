@@ -231,7 +231,7 @@ describe("ModelSetupPage first-run inference", () => {
           },
         ],
       ]);
-      expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" });
+      expect(context.navigate).toHaveBeenCalledWith("chat");
     });
   });
 
@@ -424,7 +424,7 @@ describe("ModelSetupPage first-run inference", () => {
           },
         ],
       ]);
-      expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" });
+      expect(context.navigate).toHaveBeenCalledWith("chat");
     });
   });
 
@@ -575,7 +575,7 @@ describe("ModelSetupPage first-run inference", () => {
         "openclaw.setup.detect",
         "openclaw.setup.verify",
       ]);
-      expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" });
+      expect(context.navigate).toHaveBeenCalledWith("chat");
     });
   });
 
@@ -634,9 +634,8 @@ describe("ModelSetupPage first-run inference", () => {
         "openclaw.setup.detect",
         "openclaw.setup.verify",
       ]);
-      expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" });
+      expect(context.navigate).toHaveBeenCalledWith("chat");
     });
-    expect(context.navigate).not.toHaveBeenCalledWith("chat");
     resolveActivation?.({
       done: true,
       status: "done",
@@ -889,8 +888,6 @@ describe("ModelSetupPage first-run inference", () => {
         ],
       ]);
     });
-    await waitForFast(() =>
-      expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" }),
-    );
+    await waitForFast(() => expect(context.navigate).toHaveBeenCalledWith("chat"));
   });
 });

@@ -707,7 +707,7 @@ export class ModelSetupPage extends OpenClawLightDomElement {
       onMoreSignInToggle: (open) => (this.moreSignInOpen = open),
       onIconError: (iconUrl) => this.iconLoader.invalidate(iconUrl),
       onOpenChat: () => (this.embedded ? this.onClose?.() : this.firstRun.continueSetup()),
-      onOpenSetupAssistant: () => this.firstRun.continueSetup("utility"),
+      onOpenSetupAssistant: () => this.firstRun.continueSetup(),
       onSuccessClose: () => {
         if (this.embedded) {
           this.onClose?.();

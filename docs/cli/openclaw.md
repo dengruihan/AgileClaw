@@ -193,7 +193,7 @@ Approval is given in your own words: unambiguous replies ("yes", "sure", "go ahe
 
 ### Change history
 
-The Ask OpenClaw page can show recent applied system-agent operations, Doctor
+The interactive setup chat can show recent applied system-agent operations, Doctor
 migrations, Settings and CLI config writes, and manual edits to
 `openclaw.json`. The config journal detects external edits while the Gateway
 is watching, during an OpenClaw-owned write, or at the next startup after an

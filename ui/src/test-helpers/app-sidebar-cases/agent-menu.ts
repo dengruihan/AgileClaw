@@ -271,7 +271,6 @@ describe("AppSidebar agent chip", () => {
       "agent:research",
       "command:sidebar-agents",
       "command:all-agents",
-      "command:new-agent",
       "command:capabilities",
       "command:agent-settings",
     ]);
@@ -461,7 +460,6 @@ describe("AppSidebar agent chip", () => {
       ).toEqual([
         "command:sidebar-agents",
         "command:all-agents",
-        "command:new-agent",
         ...(count ? ["command:capabilities"] : []),
         "command:agent-settings",
       ]);

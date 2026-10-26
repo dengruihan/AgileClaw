@@ -2,7 +2,6 @@ import type { MentionInboxItem } from "../../../packages/gateway-protocol/src/in
 import type { NavigationRouteId } from "../app-navigation.ts";
 import type { ScopeUpgradeState } from "../app/device-scope-upgrade-availability.ts";
 import type { ExecApprovalRequest } from "../app/exec-approval.ts";
-import type { CustodianAlert } from "./custodian-alert-contract.ts";
 import type { IconName } from "./icons.ts";
 import {
   resolveScopeUpgradeDismissal,
@@ -33,9 +32,7 @@ export type SidebarAttentionItem = SidebarInboxEntryBase<"automations" | "system
   label: string;
   detail: string;
   meta?: { context?: string; status: string; time: string };
-  action:
-    | { kind: "navigate"; routeId: NavigationRouteId }
-    | { kind: "askCustodian"; alert: CustodianAlert };
+  action: { kind: "navigate"; routeId: NavigationRouteId };
   inlineAction?: { label: string; routeId: NavigationRouteId };
   signature: string;
 };

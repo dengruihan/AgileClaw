@@ -226,9 +226,7 @@ describe("ModelSetupPage first-run application recovery", () => {
       await waitForFast(() => expect(relaunched.request).toHaveResolved());
       await restored.updateComplete;
       if (receiptState === "valid") {
-        expect(relaunched.context.navigate).toHaveBeenCalledWith("custodian", {
-          search: "?onboarding=1",
-        });
+        expect(relaunched.context.navigate).toHaveBeenCalledWith("chat");
       } else {
         expect(relaunched.context.navigate).not.toHaveBeenCalled();
         expect(restored.querySelector(".model-setup__verified")).toBeNull();
@@ -315,9 +313,7 @@ describe("ModelSetupPage first-run application recovery", () => {
         "openclaw.setup.detect",
         "openclaw.setup.activate.start",
       ]);
-      expect(relaunched.context.navigate).toHaveBeenCalledWith("custodian", {
-        search: "?onboarding=1",
-      });
+      expect(relaunched.context.navigate).toHaveBeenCalledWith("chat");
     });
     expect(original.request).toHaveBeenCalledOnce();
   });
@@ -480,7 +476,7 @@ describe("ModelSetupPage first-run application recovery", () => {
 
     await waitForFast(() => {
       expect(activationCount).toBe(2);
-      expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" });
+      expect(context.navigate).toHaveBeenCalledWith("chat");
     });
     resolveFirstActivation?.({
       done: true,

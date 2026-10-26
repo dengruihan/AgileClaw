@@ -77,15 +77,12 @@ describe("ModelSetupPage utility roles", () => {
           .click();
       }
 
-      await waitForFast(() =>
-        expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" }),
-      );
+      await waitForFast(() => expect(context.navigate).toHaveBeenCalledWith("chat"));
       expect(request.mock.calls[0]?.[1]).toMatchObject({
         kind: utility.kind,
         modelRef: utility.modelRef,
         modelTarget: "utility",
       });
-      expect(context.navigate).not.toHaveBeenCalledWith("chat");
     },
   );
 
@@ -111,10 +108,7 @@ describe("ModelSetupPage utility roles", () => {
       );
       const buttons = [...page.querySelectorAll<HTMLButtonElement>(".model-setup__utility button")];
       buttons.find((button) => button.textContent?.includes("Open setup assistant"))!.click();
-      expect(context.navigate).toHaveBeenCalledWith(
-        "custodian",
-        primary ? {} : { search: "?onboarding=1" },
-      );
+      expect(context.navigate).toHaveBeenCalledWith("chat");
       expect(request).not.toHaveBeenCalled();
       buttons.find((button) => button.textContent?.includes("Recheck & repair"))!.click();
       await waitForFast(() =>
@@ -155,9 +149,7 @@ describe("ModelSetupPage utility roles", () => {
         expect.anything(),
       ),
     );
-    await waitForFast(() =>
-      expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" }),
-    );
+    await waitForFast(() => expect(context.navigate).toHaveBeenCalledWith("chat"));
   });
 
   it("preserves utility acknowledgement and pending intent for OAuth setup", async () => {
@@ -190,9 +182,7 @@ describe("ModelSetupPage utility roles", () => {
       ],
     });
     page.querySelector<HTMLButtonElement>('[data-auth-choice="utility-login"] button')!.click();
-    await waitForFast(() =>
-      expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" }),
-    );
+    await waitForFast(() => expect(context.navigate).toHaveBeenCalledWith("chat"));
     expect(request.mock.calls.map(([method]) => method)).toEqual([
       "openclaw.setup.auth.start",
       "wizard.next",
@@ -219,9 +209,7 @@ describe("ModelSetupPage utility roles", () => {
       prepareOptions: [{ id: "local", label: "Utility model", modelTarget: "utility" }],
     });
     page.querySelector<HTMLButtonElement>('[data-prepare-choice="local"] button')!.click();
-    await waitForFast(() =>
-      expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" }),
-    );
+    await waitForFast(() => expect(context.navigate).toHaveBeenCalledWith("chat"));
     expect(request.mock.calls.map(([method]) => method)).toEqual([
       "openclaw.setup.prepare.start",
       "openclaw.setup.activate.start",
@@ -313,7 +301,7 @@ describe("ModelSetupPage utility roles", () => {
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
       if (expected) {
-        expect(context.navigate).toHaveBeenCalledWith("custodian", { search: "?onboarding=1" });
+        expect(context.navigate).toHaveBeenCalledWith("chat");
       } else {
         expect(context.navigate).not.toHaveBeenCalled();
         expect(page.querySelector(".model-setup__verified")).toBeNull();

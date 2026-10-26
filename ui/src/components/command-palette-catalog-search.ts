@@ -93,10 +93,7 @@ function navigationItem(
   };
 }
 
-function getCommandPaletteBaseItems(
-  desktopAvailable: boolean,
-  custodianAvailable: boolean,
-): CommandPaletteItem[] {
+function getCommandPaletteBaseItems(desktopAvailable: boolean): CommandPaletteItem[] {
   return [
     navigationItem("new-session", t("newSession.title"), "plus"),
     navigationItem("sessions", t("palette.items.sessions"), "fileText"),
@@ -128,17 +125,6 @@ function getCommandPaletteBaseItems(
           },
         ]
       : []),
-    ...(custodianAvailable
-      ? [
-          {
-            id: "panel-custodian",
-            label: t("nav.askOpenClaw"),
-            icon: "lobster" as const,
-            category: "navigation" as const,
-            action: "panel:custodian",
-          },
-        ]
-      : []),
   ];
 }
 
@@ -148,13 +134,11 @@ export function filterCommandPaletteItems(params: {
   sessionItems: readonly CommandPaletteItem[];
   catalogItems: readonly CommandPaletteItem[];
   desktopAvailable: boolean;
-  custodianAvailable: boolean;
   primaryModelSearch?: boolean;
 }): CommandPaletteItem[] {
-  const baseItems = getCommandPaletteBaseItems(
-    params.desktopAvailable,
-    params.custodianAvailable,
-  ).filter((item) => params.includeSlashCommands || item.category !== "search");
+  const baseItems = getCommandPaletteBaseItems(params.desktopAvailable).filter(
+    (item) => params.includeSlashCommands || item.category !== "search",
+  );
   if (!params.query) {
     return baseItems;
   }

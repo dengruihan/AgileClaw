@@ -61,7 +61,6 @@ export class CommandPalette extends OpenClawLightDomContentsElement {
   @property({ attribute: false }) onSelectSession?: (sessionKey: string) => void;
   @property({ attribute: false }) onSlashCommand?: (command: string) => void;
   @property({ attribute: false }) desktopAvailable = false;
-  @property({ attribute: false }) custodianAvailable = false;
   @consume({ context: applicationContext, subscribe: true })
   private context?: ApplicationContext;
   @state() private open = false;
@@ -649,7 +648,6 @@ export class CommandPalette extends OpenClawLightDomContentsElement {
       sessionSearchIndexing: this.sessionSearchIndexing,
       archivedTranscriptsExcluded: this.archivedTranscriptsExcluded,
       desktopAvailable: this.desktopAvailable,
-      custodianAvailable: this.custodianAvailable,
       onToggle: this.togglePalette,
       onQueryChange: (query, event) => {
         this.draft.setMessage(

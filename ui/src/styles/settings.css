@@ -926,7 +926,7 @@ textarea.settings-input {
     padding-inline: var(--space-3);
   }
 
-  .shell--settings .content:not(.content--custodian),
+  .shell--settings .content,
   .content.content--hub-header {
     --content-inline-padding: var(--space-3);
     --settings-header-inline-padding: 0;

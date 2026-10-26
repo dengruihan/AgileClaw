@@ -27,7 +27,6 @@ export function createAgentViewTestProps(
 ): AgentsViewProps {
   return {
     access: {
-      canCreateAgent: true,
       canPatchConfig: true,
       canUpdateConfig: true,
       canUpdateIdentity: true,
@@ -119,7 +118,6 @@ export function createAgentViewTestProps(
     modelCatalogStatus: { error: null, hasLoaded: false, stale: false, awaitingGateway: false },
     pinnedAgentIds: [],
     onRefresh: () => undefined,
-    onCreateAgent: () => undefined,
     onSelectPanel: () => undefined,
     onLoadFiles: () => undefined,
     onSelectFile: () => undefined,
