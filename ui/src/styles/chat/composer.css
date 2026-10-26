@@ -1212,7 +1212,6 @@
     min-width: 44px;
   }
 
-  .agent-chat__input .chat-controls__model-menu,
   .agent-chat__input .chat-controls__combined-menu,
   .agent-chat__input .chat-controls__provider-menu {
     width: calc(
@@ -2054,31 +2053,19 @@ html[dir="rtl"] .chat-attachment-loading > span {
   background: var(--chat-composer-menu-selected);
 }
 
-/* The model menu hosts the provider window's floating popup; clipping here
+/* The picker card hosts the provider flyout's floating popup; clipping here
    would cut that layer, so the body list scrolls on its own instead. */
-.chat-controls__model-menu {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 0;
-  overflow: visible;
-  width: min(340px, calc(100vw - 24px));
-  max-height: min(400px, var(--auto-size-available-height, calc(100vh - 96px)));
-}
-
-/* The combined menu hosts the model window's floating popup; clipping here
-   would cut that layer, so the menu itself never scrolls as a whole. */
 .chat-controls__combined-menu {
   display: flex;
   flex-direction: column;
   gap: 0;
   padding: 0;
-  width: min(330px, calc(100vw - 24px));
-  max-height: min(320px, var(--auto-size-available-height, calc(100vh - 120px)));
+  width: min(340px, calc(100vw - 24px));
+  max-height: min(430px, var(--auto-size-available-height, calc(100vh - 96px)));
   overflow: visible;
 }
 
-/* Level-2 trigger row: opens the provider-grouped model window above itself. */
+/* Level-2 trigger row base: the provider row that opens the flyout. */
 .chat-controls__combined-model-row {
   display: flex;
   align-items: center;
@@ -2110,11 +2097,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   white-space: nowrap;
 }
 
-.chat-controls__model-window[open] .chat-controls__inline-select-chevron {
-  transform: rotate(90deg);
-}
-
-/* The provider flyout opens beside the window, so its chevron points left. */
+/* The provider flyout opens beside the card, so its chevron points left. */
 .chat-controls__provider-window[open] .chat-controls__inline-select-chevron {
   transform: rotate(180deg);
 }
