@@ -6,15 +6,14 @@ import type {
   ControlUiEnvironment,
 } from "../../../src/gateway/control-ui-bootstrap-contract.js";
 import "../components/app-topbar.ts";
-import "../components/sidebar-agent-card.ts";
+import "../components/app-sidebar.ts";
 import { setupSidebarTest } from "../test-helpers/app-sidebar-setup.ts";
+import { createGateway, createSessions, mountSidebar } from "../test-helpers/app-sidebar.ts";
+import { createTestGatewayClient } from "../test-helpers/gateway-client.ts";
 import { createApplicationConfigCapability } from "./config.ts";
 
 type EnvironmentElement = HTMLElement & {
   environment?: ControlUiEnvironment | null;
-  subtitle?: string;
-  agentName?: string;
-  avatarText?: string;
   updateComplete: Promise<boolean>;
 };
 
@@ -33,7 +32,7 @@ afterEach(() => {
 describe("Control UI environment presentation", () => {
   setupSidebarTest();
 
-  it("renders a matching stripe, favicon, avatar ring, and sidebar/topbar pills only when configured", async () => {
+  it("renders a matching stripe, favicon, and sidebar/topbar pills only when configured", async () => {
     const favicon = document.createElement("link");
     favicon.rel = "icon";
     favicon.type = "image/svg+xml";
@@ -41,12 +40,12 @@ describe("Control UI environment presentation", () => {
     document.head.append(favicon);
     document.documentElement.style.setProperty("--control-ui-environment-amber", "#f59e0b");
 
-    const sidebar = document.createElement("openclaw-sidebar-agent-card") as EnvironmentElement;
-    sidebar.agentName = "AgileClaw";
-    sidebar.avatarText = "O";
-    sidebar.subtitle = "Assistant";
+    const { sidebar, context } = await mountSidebar(
+      createGateway(createTestGatewayClient()),
+      createSessions("main", ["agent:main:main"]),
+    );
     const topbar = document.createElement("openclaw-app-topbar") as EnvironmentElement;
-    document.body.append(sidebar, topbar);
+    document.body.append(topbar);
     await Promise.all([sidebar.updateComplete, topbar.updateComplete]);
 
     expect(document.querySelector(".control-ui-environment-stripe")).toBeNull();
@@ -65,10 +64,10 @@ describe("Control UI environment presentation", () => {
       "fetch",
       vi.fn(async () => new Response(JSON.stringify(payload))),
     );
-    const config = createApplicationConfigCapability({ resourceBasePath: "" });
+    const config = context.config;
     await config.refresh();
     await vi.dynamicImportSettled();
-    sidebar.environment = config.current.environment;
+    sidebar.requestUpdate();
     topbar.environment = config.current.environment;
     await Promise.all([sidebar.updateComplete, topbar.updateComplete]);
 
@@ -78,7 +77,6 @@ describe("Control UI environment presentation", () => {
     );
     expect(document.documentElement.style.getPropertyValue("--ring")).toBe("#123456");
     expect(sidebar.querySelector(".control-ui-environment-pill")?.textContent).toBe("edge");
-    expect(sidebar.querySelector(".sidebar-agent-card__avatar--environment")).not.toBeNull();
     expect(topbar.querySelector(".control-ui-environment-pill")?.textContent).toBe("edge");
     expect(favicon.href).toContain("data:image/svg+xml,");
     expect(decodeURIComponent(favicon.href)).toContain("#f59e0b");

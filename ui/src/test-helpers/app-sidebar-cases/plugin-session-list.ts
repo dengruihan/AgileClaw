@@ -100,7 +100,7 @@ describe("AppSidebar session-list replacement", () => {
       await vi.waitFor(() => expect(keys()).toEqual(["agent:main:main", "agent:main:next"]));
       await toggleRoster(sidebar);
       await vi.waitFor(() =>
-        expect(sidebar.querySelector(".sidebar-agent-card__main")).not.toBeNull(),
+        expect(sidebar.querySelector(".sidebar-workspace-header")).not.toBeNull(),
       );
       expect(keys()).toEqual(["agent:main:main", "agent:main:next"]);
     } finally {

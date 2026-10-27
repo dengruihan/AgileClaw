@@ -50,7 +50,7 @@ export function renderAgentSelectAvatar(
   );
 }
 
-export function renderAgentSelectCopy(option: AgentSelectOption) {
+function renderAgentSelectCopy(option: AgentSelectOption) {
   return html`
     <span class="agent-select__option-copy">
       <span class="agent-select__option-heading">

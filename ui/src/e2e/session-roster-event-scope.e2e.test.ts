@@ -1,5 +1,6 @@
 import path from "node:path";
 import { expect, it } from "vitest";
+import { controlUiBundledSettingsStorageKey } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 import {
   captureUiProof,
@@ -22,6 +23,11 @@ suite.define(() => {
       viewport: { height: 900, width: 1280 },
     });
     const page = await context.newPage();
+    await page.addInitScript((settingsKey) => {
+      if (!localStorage.getItem(settingsKey)) {
+        localStorage.setItem(settingsKey, JSON.stringify({ sidebarAgentsMode: "roster" }));
+      }
+    }, controlUiBundledSettingsStorageKey(suite.server.baseUrl));
     const gateway = await installMockGateway(page, {
       methodResponses: { "sessions.list": sessionsListResponse([row]) },
       sessionKey: key,
@@ -34,8 +40,6 @@ suite.define(() => {
       const sidebar = page.locator("openclaw-app-sidebar");
       const selectedRow = sidebar.locator(`[data-session-key="${key}"]`);
       await expect.poll(() => selectedRow.textContent()).toContain("Weekly report");
-      await sidebar.locator(".sidebar-agent-card__main").click();
-      await sidebar.locator('wa-dropdown-item[value="command:sidebar-agents"]').click();
       await expect.poll(() => sidebar.locator(".sidebar-agent-roster__row").count()).toBe(1);
 
       const activityQuery = {

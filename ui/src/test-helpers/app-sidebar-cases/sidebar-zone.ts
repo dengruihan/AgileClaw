@@ -206,13 +206,13 @@ describe("AppSidebar interleaved zone", () => {
         ),
       },
     });
-    sidebar.sidebarEntries = ["route:usage", "session:agent:main:alpha", "route:plugins"];
+    sidebar.sidebarEntries = ["route:usage", "session:agent:main:alpha", "route:systems"];
     await sidebar.updateComplete;
 
     const labels = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-zone-entry")].map((entry) =>
       entry.querySelector(".nav-item__text, .sidebar-recent-session__name")?.textContent?.trim(),
     );
-    expect(labels).toEqual(["Usage", "Alpha", "Plugins"]);
+    expect(labels).toEqual(["Usage", "Alpha", "Systems"]);
     expect(sidebar.querySelector('[data-session-section="pinned"]')).toBeNull();
     const pinnedRow = sidebar.querySelector('[data-session-key="agent:main:alpha"]');
     const pinnedTree = pinnedRow?.closest(".sidebar-session-tree");
@@ -448,7 +448,7 @@ describe("AppSidebar interleaved zone", () => {
 
   it("writes reordered entries after a route drop", async () => {
     const { sidebar } = await mountZone();
-    sidebar.sidebarEntries = ["route:usage", "route:plugins", "route:cron"];
+    sidebar.sidebarEntries = ["route:usage", "route:systems", "route:cron"];
     const onUpdate = vi.fn();
     sidebar.onUpdateSidebarEntries = onUpdate;
     await sidebar.updateComplete;
@@ -464,17 +464,17 @@ describe("AppSidebar interleaved zone", () => {
     dispatchDragEvent(target, "dragover", dataTransfer, 11);
     dispatchDragEvent(target, "drop", dataTransfer, 11);
 
-    expect(onUpdate).toHaveBeenCalledWith(["route:cron", "route:usage", "route:plugins"]);
+    expect(onUpdate).toHaveBeenCalledWith(["route:cron", "route:usage", "route:systems"]);
   });
 
   it("pins and inserts a session dropped from Threads", async () => {
     const { sidebar, sessions } = await mountZone();
-    sidebar.sidebarEntries = ["route:usage", "route:plugins"];
+    sidebar.sidebarEntries = ["route:usage", "route:systems"];
     const onUpdate = vi.fn();
     sidebar.onUpdateSidebarEntries = onUpdate;
     await sidebar.updateComplete;
     const source = sidebar.querySelector('[data-session-key="agent:main:alpha"]');
-    const target = zoneEntry(sidebar, "route:plugins");
+    const target = zoneEntry(sidebar, "route:systems");
     if (!source) {
       throw new Error("expected Alpha session row");
     }
@@ -500,7 +500,7 @@ describe("AppSidebar interleaved zone", () => {
       expect(onUpdate).toHaveBeenCalledWith([
         "route:usage",
         "session:agent:main:alpha",
-        "route:plugins",
+        "route:systems",
       ]),
     );
   });
@@ -522,7 +522,7 @@ describe("AppSidebar interleaved zone", () => {
         sessions: result.sessions.map((row) => (row === alpha ? promoted : row)),
       },
     });
-    sidebar.sidebarEntries = ["route:usage", "route:plugins"];
+    sidebar.sidebarEntries = ["route:usage", "route:systems"];
     const onUpdate = vi.fn();
     sidebar.onUpdateSidebarEntries = onUpdate;
     await sidebar.updateComplete;
@@ -530,7 +530,7 @@ describe("AppSidebar interleaved zone", () => {
     if (!source) {
       throw new Error("expected promoted child session row");
     }
-    const target = zoneEntry(sidebar, "route:plugins");
+    const target = zoneEntry(sidebar, "route:systems");
     const dataTransfer = createDataTransferStub();
     dispatchDragEvent(source, "dragstart", dataTransfer);
     dispatchDragEvent(target, "dragover", dataTransfer);
@@ -544,7 +544,7 @@ describe("AppSidebar interleaved zone", () => {
 
   it("hides a route dropped into the session-list region", async () => {
     const { sidebar } = await mountZone();
-    sidebar.sidebarEntries = ["route:usage", "route:plugins"];
+    sidebar.sidebarEntries = ["route:usage", "route:systems"];
     const onUpdate = vi.fn();
     sidebar.onUpdateSidebarEntries = onUpdate;
     await sidebar.updateComplete;
@@ -559,7 +559,7 @@ describe("AppSidebar interleaved zone", () => {
     dispatchDragEvent(target, "dragover", dataTransfer);
     dispatchDragEvent(target, "drop", dataTransfer);
 
-    expect(onUpdate).toHaveBeenCalledWith(["route:plugins"]);
+    expect(onUpdate).toHaveBeenCalledWith(["route:systems"]);
   });
 
   it.each([false, true])(

@@ -1,6 +1,9 @@
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { reconnectMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import {
+  navigateToControlUiSession,
+  reconnectMockGateway,
+} from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 import { expectRequestCountStable } from "./chat-flow.test-support.ts";
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
@@ -218,11 +221,10 @@ suite.define(() => {
         const rowFor = (key: string) =>
           sidebar.locator(`.sidebar-recent-session[data-session-key="${key}"]`);
         const switchAgent = async (name: string) => {
-          await sidebar.getByRole("button", { name: /Switch agent/ }).click();
-          await sidebar
-            .locator("wa-dropdown.sidebar-agent-menu")
-            .getByRole("menuitemradio", { name, exact: true })
-            .click();
+          await navigateToControlUiSession(
+            page,
+            `agent:${name === "Research" ? "research" : "main"}:main`,
+          );
         };
         await rowFor(archived.key).waitFor({ state: "visible" });
         await captureUiProof(suite, page, "cross-agent-initial.png");

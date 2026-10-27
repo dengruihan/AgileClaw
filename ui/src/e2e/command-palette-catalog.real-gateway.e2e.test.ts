@@ -15,6 +15,7 @@ import { createRequireRecord } from "../../../test/helpers/record.js";
 import type { ApplicationContext } from "../app/context.ts";
 import { waitForControlUiGatewayReady } from "../test-helpers/control-ui-e2e-readiness.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
+import { navigateToControlUiSession } from "../test-helpers/control-ui-e2e.ts";
 import { pickerValue } from "../test-helpers/select-picker-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
@@ -638,11 +639,7 @@ suite.define(() => {
           await page.goBack();
           await settings.waitFor({ state: "hidden" });
           rejectCatalogReplies = true;
-          const sidebar = page.locator("openclaw-app-sidebar");
-          await sidebar.getByRole("button", { name: /Switch agent/ }).click();
-          await sidebar
-            .getByRole("menuitemradio", { name: "Reviewer fixture", exact: true })
-            .click();
+          await navigateToControlUiSession(page, "agent:reviewer:main");
           await expect.poll(() => new URL(page.url()).pathname).toBe("/chat/reviewer");
           const requestsBeforeOpen = catalogParams.length;
           await page.keyboard.press("ControlOrMeta+K");

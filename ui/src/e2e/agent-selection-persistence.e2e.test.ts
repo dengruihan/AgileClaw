@@ -8,6 +8,7 @@ import {
   controlUiBundledGatewayUrl,
   controlUiBundledSettingsStorageKey,
   installMockGateway,
+  navigateToControlUiSession,
   type ControlUiMockGatewayScenario,
   type MockGatewayControls,
   waitForControlUiRoute,
@@ -84,15 +85,18 @@ async function screenshot(page: Page, name: string) {
   await writeFile(
     path.join(proofDir, name),
     await takeControlUiViewportScreenshot(page, page.locator(".shell"), [
-      page.locator(".sidebar-agent-card__name"),
+      page.locator(".sidebar-workspace-header__name"),
     ]),
   );
 }
 
-async function selectedAgentName(page: Page): Promise<string> {
-  const text =
-    (await page.locator("openclaw-app-sidebar .sidebar-agent-card__name").textContent()) ?? "";
-  return text.trim();
+async function selectedAgentId(page: Page): Promise<string> {
+  return page.locator("openclaw-app").evaluate((element) => {
+    const app = element as HTMLElement & {
+      runtime: { context: { agentSelection: { state: { selectedId: string } } } };
+    };
+    return app.runtime.context.agentSelection.state.selectedId;
+  });
 }
 
 async function hasOpenClawStartup(gateway: MockGatewayControls): Promise<boolean> {
@@ -152,18 +156,13 @@ suite.define(() => {
     try {
       const first = await openPage(context);
       const firstPage = first.page;
-      const sidebar = firstPage.locator("openclaw-app-sidebar");
       await first.gateway.waitForRequest("chat.startup");
-      await expect.poll(() => selectedAgentName(firstPage)).toBe("Dummy");
+      await expect.poll(() => selectedAgentId(firstPage)).toBe("dummy");
       await screenshot(firstPage, "01-default-agent.png");
 
-      await sidebar.getByRole("button", { name: /Switch agent/ }).click();
-      await sidebar
-        .locator("wa-dropdown.sidebar-agent-menu")
-        .getByRole("menuitemradio", { name: "AgileClaw" })
-        .click();
+      await navigateToControlUiSession(firstPage, "agent:openclaw:main");
       await waitForControlUiRoute(firstPage, { pathname: "/chat/openclaw", routeId: "chat" });
-      await expect.poll(() => selectedAgentName(firstPage)).toBe("AgileClaw");
+      await expect.poll(() => selectedAgentId(firstPage)).toBe("openclaw");
       await expect
         .poll(() => firstPage.getByRole("heading", { name: "AgileClaw" }).isVisible())
         .toBe(true);
@@ -183,7 +182,7 @@ suite.define(() => {
       });
       await screenshot(reopenedPage, "03-reopened-agent.png");
       await expect.poll(() => hasOpenClawStartup(reopened.gateway)).toBe(true);
-      await expect.poll(() => selectedAgentName(reopenedPage)).toBe("AgileClaw");
+      await expect.poll(() => selectedAgentId(reopenedPage)).toBe("openclaw");
       await expect
         .poll(() => reopenedPage.getByRole("heading", { name: "AgileClaw" }).isVisible())
         .toBe(true);

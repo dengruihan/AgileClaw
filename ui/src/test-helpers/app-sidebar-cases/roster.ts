@@ -56,68 +56,6 @@ describe("AppSidebar agent roster", () => {
     expect(header?.querySelector("img")?.getAttribute("src")).toBe("/favicon.svg");
   });
 
-  it.each([undefined, "Studio workspace", "   "])(
-    "shows workspace identity for configured name %s and restores the agent chip",
-    async (name) => {
-      if (name !== undefined) {
-        vi.stubGlobal("__OPENCLAW_NATIVE_WEB_CHROME__", true);
-        vi.stubGlobal("__OPENCLAW_NATIVE_GATEWAYS__", {
-          currentId: "studio",
-          gateways: [{ id: "studio", name, isPrimary: true, health: "ok" }],
-        });
-      }
-      try {
-        const { sidebar } = await mountRoster();
-        await toggleRoster(sidebar);
-        await vi.waitFor(() =>
-          expect(sidebar.querySelector(".sidebar-workspace-header__main")).not.toBeNull(),
-        );
-        const header = sidebar.querySelector(".sidebar-workspace-header");
-        expect(header?.textContent).toContain(name?.trim() || "AgileClaw");
-        expect(header?.querySelector(".sidebar-agent-card__avatar")).toBeNull();
-        expect(header?.querySelector("img")?.getAttribute("src")).toBe("/favicon.svg");
-        expect(sidebar.querySelector("openclaw-sidebar-agent-card")).toBeNull();
-        sidebar.querySelector<HTMLButtonElement>(".sidebar-workspace-header__main")?.click();
-        await vi.waitFor(() => expect(sidebar.querySelector(".sidebar-agent-menu")).not.toBeNull());
-        const menu = sidebar.querySelector(".sidebar-agent-menu");
-        expect(
-          [...(menu?.querySelectorAll(":scope > wa-dropdown-item") ?? [])].map((item) =>
-            item.textContent?.trim(),
-          ),
-        ).toEqual(["Show one agent", "Agent settings", expect.stringContaining("Help")]);
-        expect(menu?.querySelector(".sidebar-agent-menu__agent-grid")).toBeNull();
-        expect(
-          [...(menu?.querySelectorAll("a") ?? [])].map((link) => link.getAttribute("href")),
-        ).toEqual([
-          "https://docs.openclaw.ai",
-          "https://docs.openclaw.ai/help",
-          "https://discord.gg/clawd",
-          "https://docs.openclaw.ai/releases",
-        ]);
-        menu?.dispatchEvent(
-          new CustomEvent("wa-select", {
-            detail: { item: menu.querySelector('[value="command:sidebar-agents"]') },
-            bubbles: true,
-          }),
-        );
-        await vi.waitFor(() =>
-          expect(sidebar.querySelector(".sidebar-agent-card__main")?.textContent).toContain(
-            "Harbor",
-          ),
-        );
-        expect(sidebar.querySelector(".sidebar-workspace-header")).toBeNull();
-        sidebar.querySelector<HTMLButtonElement>(".sidebar-agent-card__main")?.click();
-        await vi.waitFor(() =>
-          expect(sidebar.querySelector('[value="command:sidebar-agents"]')?.textContent).toContain(
-            "Show all agents",
-          ),
-        );
-      } finally {
-        vi.unstubAllGlobals();
-      }
-    },
-  );
-
   it.each(["active", "all", "archived"] as const)(
     "preserves archived Home children under the %s filter",
     async (status) => {
@@ -259,7 +197,6 @@ describe("AppSidebar agent roster", () => {
     expect(
       sidebar.querySelector('[data-session-key="agent:main:recent"] .session-unread-dot'),
     ).not.toBeNull();
-    expect(sidebar.querySelector("openclaw-sidebar-agent-card")).toBeNull();
     result.sessions = result.sessions.map((row) =>
       Object.assign({}, row, {
         hasActiveRun: row.agentId === "recent",
@@ -293,10 +230,7 @@ describe("AppSidebar agent roster", () => {
       "chat",
       expect.objectContaining({ pathname: "/chat/working/recent" }),
     );
-    expect(sidebar.querySelector(".sidebar-workspace-header__main")?.textContent).toContain(
-      "AgileClaw",
-    );
-    expect(sidebar.querySelector("openclaw-sidebar-agent-card")).toBeNull();
+    expect(sidebar.querySelector(".sidebar-workspace-header")?.textContent).toContain("AgileClaw");
     sidebar
       .querySelector<HTMLAnchorElement>('[data-agent-group="recent"] .sidebar-agent-roster__row')
       ?.click();
@@ -554,7 +488,6 @@ describe("AppSidebar agent roster", () => {
     expect(sessionKeys(sidebar)).toEqual(["agent:main:pinned", "agent:main:recent"]);
     await toggleRoster(sidebar);
     await vi.waitFor(() => expect(agentIds(sidebar)).toHaveLength(3));
-    expect(loadSettings().sidebarAgentsMode).toBe("roster");
     sidebar.querySelector<HTMLButtonElement>('[data-agent-collapse="working"]')?.click();
     await vi.waitFor(() => expect(sessionKeys(sidebar)).not.toContain("agent:working:recent"));
     expect(
@@ -563,7 +496,7 @@ describe("AppSidebar agent roster", () => {
     expect(loadSettings().sidebarCollapsedAgentIds).toEqual(["working"]);
     provider.remove();
     const remounted = await mountRoster();
-    remounted.sidebar.sidebarAgentsMode = loadSettings().sidebarAgentsMode ?? "chip";
+    remounted.sidebar.sidebarAgentsMode = "roster";
     await vi.waitFor(() => expect(agentIds(remounted.sidebar)).toHaveLength(3));
     expect(
       remounted.sidebar
@@ -579,7 +512,6 @@ describe("AppSidebar agent roster", () => {
     await vi.waitFor(() =>
       expect(remounted.sidebar.querySelector(".sidebar-agent-roster")).toBeNull(),
     );
-    expect(loadSettings().sidebarAgentsMode).toBe("chip");
     expect(sessionKeys(remounted.sidebar)).toEqual(["agent:main:pinned", "agent:main:recent"]);
   });
 

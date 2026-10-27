@@ -410,9 +410,9 @@ describe("AppSidebar session attention", () => {
         ?.querySelector(".sidebar-session-attention-tooltip__preview")?.textContent,
     ).toBe("git status");
 
-    expect(
-      sidebar.querySelector(".sidebar-agent-card__main")?.getAttribute("aria-label"),
-    ).not.toContain("pending approval");
+    expect(sidebar.querySelector(".sidebar-workspace-header")?.textContent).not.toContain(
+      "pending approval",
+    );
   });
 
   it("keeps a read failure dismissed after the sessions list refreshes", async () => {

@@ -134,7 +134,7 @@ suite.define(() => {
             await sidebar.evaluate((el) => el.parentElement?.getBoundingClientRect().width),
           ).toBe(width);
           const workspaceName = sidebar.locator(
-            ".sidebar-workspace-header .sidebar-agent-card__name-text",
+            ".sidebar-workspace-header .sidebar-workspace-header__name",
           );
           expect(await workspaceName.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
           const headerControls = await sidebar

@@ -3,14 +3,6 @@ openclaw-sidebar-agent-roster {
   width: 100%;
 }
 
-.sidebar-workspace-header__main {
-  gap: 4px;
-  padding-inline: 0;
-}
-.sidebar-workspace-header .sidebar-agent-card__name-text {
-  padding-inline-end: 0;
-}
-
 .sidebar-agent-roster__header {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) auto;

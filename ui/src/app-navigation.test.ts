@@ -34,6 +34,8 @@ const ALL_ROUTES: RouteId[] = Array.from(
     "chat",
     ...SIDEBAR_NAV_ROUTES,
     "workboard",
+    "agents-home",
+    "plugins",
     "skills",
     "skill-workshop",
     // Hub tabs and settings subpages route without their own nav entry.
@@ -446,7 +448,6 @@ describe("plugin tabs route", () => {
 describe("SIDEBAR_NAV_ROUTES", () => {
   it("keeps the canonical sidebar route order", () => {
     expect(SIDEBAR_NAV_ROUTES).toEqual([
-      "agents-home",
       "dashboards",
       "usage",
       "cron",
@@ -454,7 +455,6 @@ describe("SIDEBAR_NAV_ROUTES", () => {
       "systems",
       "activity",
       "meetings",
-      "plugins",
       "apps",
       "portals",
     ]);

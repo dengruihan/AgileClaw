@@ -167,9 +167,6 @@ suite.define(() => {
         await waitForControlUiRoute(page, { routeId: "chat" });
         const startup = await gateway.waitForRequest("chat.startup");
         expect(startup.params).toMatchObject({ sessionKey: "agent:main:main" });
-        await expect
-          .poll(async () => (await page.locator(".sidebar-agent-card__name").textContent())?.trim())
-          .toBe("Clawd");
         expect(pageErrors).toEqual([]);
       },
     );

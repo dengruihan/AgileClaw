@@ -5,7 +5,6 @@ import type { SessionObserverDigest } from "../../../packages/gateway-protocol/s
 import type { GatewaySessionRow, SessionsListResult } from "../api/types.ts";
 import { serializeSidebarEntry } from "../app-navigation.ts";
 import { isSessionRouteId } from "../app-route-paths.ts";
-import { t } from "../i18n/index.ts";
 import { shouldHandleNavigationClick } from "../lib/navigation-click.ts";
 import {
   collectKnownSessionGroups,
@@ -13,13 +12,11 @@ import {
 } from "../lib/sessions/grouping.ts";
 import { runSessionNavigationIntent } from "../lib/sessions/navigation-handoff.ts";
 import {
-  composerDraftSearch,
   resolveSessionPreferredFace,
   sessionNavigationTarget,
 } from "../lib/sessions/route-navigation.ts";
 import {
   areUiSessionKeysEquivalent,
-  buildAgentMainSessionKey,
   normalizeAgentId,
   resolveUiDefaultAgentId,
   resolveUiSessionRowAgentId,
@@ -41,8 +38,6 @@ import {
   collectKnownSidebarSessionCatalogIds,
   extendSidebarSessionSelection,
   findProjectedSidebarSession,
-  resolveActiveSidebarAgent,
-  resolveLatestSidebarAgentSession,
   resolveSidebarMainSessionKey,
   toggleSidebarSessionSelection,
   type SidebarSessionNavigationState,
@@ -545,71 +540,6 @@ export class AppSidebarSessionNavigationElement extends AppSidebarBase {
     return normalizeAgentId(selected || this.getSessionNavigationState().selectedAgentId);
   }
 
-  activeChipAgent() {
-    return resolveActiveSidebarAgent({
-      activeId: this.expandedAgentId(),
-      roster: this.context?.agents.state.agentsList?.agents ?? [],
-      identities: this.context?.agentIdentity.entries() ?? [],
-    });
-  }
-
-  private agentResumeKey(agentId: string): string {
-    const latest = resolveLatestSidebarAgentSession({
-      agentId,
-      sessionData: this.sessionData,
-      context: this.context,
-    });
-    return latest?.key ?? buildAgentMainSessionKey({ agentId, mainKey: this.sessionMainKey() });
-  }
-
-  /** Offline routes to Settings instead of a dead chat load. */
-  private openAgentConversation(agentId: string) {
-    if (!this.connected) {
-      this.onNavigate?.("appearance");
-      return;
-    }
-    this.selectSession(this.agentResumeKey(agentId));
-  }
-
-  switchChipAgent(agentId: string) {
-    this.sidebarMenus.closeAgentMenu();
-    this.expandAgent(agentId);
-    // Skills uses the shared agent selection in place; opening chat would
-    // discard the discovery page instead of updating its workspace scope.
-    if (this.activeRouteId !== "skills") {
-      this.openAgentConversation(agentId);
-    }
-  }
-
-  askAgentCapabilities(agentId: string) {
-    this.sidebarMenus.closeAgentMenu();
-    if (!this.connected) {
-      return;
-    }
-    const key = this.agentResumeKey(agentId);
-    const target = sessionNavigationTarget({
-      face: "chat",
-      sessionKey: key,
-      fallbackAgentId: agentId,
-      basePath: this.basePath,
-      row: this.findSidebarSessionByKey(key),
-      mainKey: this.sessionMainKey(),
-    });
-    runSessionNavigationIntent(this, {
-      sessionKey: key,
-      agentId,
-      face: "chat",
-      commit: () => {
-        this.setApplicationSession(key, agentId);
-        this.onNavigate?.("chat", {
-          ...target.options,
-          search: composerDraftSearch(t("chat.welcome.suggestions.whatCanYouDo")),
-        });
-        return true;
-      },
-    });
-  }
-
   knownSessionGroups(): string[] {
     return collectKnownSessionGroups(
       this.context?.sessions.state.groups ?? [],
@@ -762,10 +692,5 @@ export class AppSidebarSessionNavigationElement extends AppSidebarBase {
   showMoreChildren(sessionKey: string) {
     this.sessionProjection.showMoreChildren(sessionKey);
     this.requestUpdate();
-  }
-
-  agentUnreadCount(agentId: string): number {
-    const rows = this.sessionData.sessionResultsByAgent[normalizeAgentId(agentId)]?.sessions ?? [];
-    return rows.filter((row) => row.unread === true && row.archived !== true).length;
   }
 }

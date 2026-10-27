@@ -5,7 +5,7 @@ import { reconcileSidebarZone } from "./sidebar-zone.ts";
 describe("reconcileSidebarZone", () => {
   it("preserves route and pinned-session interleaving", () => {
     const result = reconcileSidebarZone(
-      ["route:usage", "session:agent:main:alpha", "route:plugins"],
+      ["route:usage", "session:agent:main:alpha", "route:systems"],
       [{ key: "agent:main:alpha" }],
       SIDEBAR_NAV_ROUTES,
     );
@@ -13,12 +13,12 @@ describe("reconcileSidebarZone", () => {
     expect(result.entries).toEqual([
       { type: "route", route: "usage" },
       { type: "session", key: "agent:main:alpha" },
-      { type: "route", route: "plugins" },
+      { type: "route", route: "systems" },
     ]);
     expect(result.sidebarEntries).toEqual([
       "route:usage",
       "session:agent:main:alpha",
-      "route:plugins",
+      "route:systems",
     ]);
   });
 
@@ -60,7 +60,7 @@ describe("reconcileSidebarZone", () => {
 
   it("drops routes outside the supplied valid route set", () => {
     expect(
-      reconcileSidebarZone(["route:usage", "route:plugins"], [], ["usage"]).sidebarEntries,
+      reconcileSidebarZone(["route:usage", "route:systems"], [], ["usage"]).sidebarEntries,
     ).toEqual(["route:usage"]);
   });
 

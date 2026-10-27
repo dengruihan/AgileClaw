@@ -14,7 +14,7 @@ import {
   consumeSidebarMenuSelection,
   moveSidebarMenuFocus,
   renderSidebarHelpMenu,
-} from "./app-sidebar-agent-menu.ts";
+} from "./app-sidebar-identity-menu-support.ts";
 import { renderSidebarMenuAction, renderSidebarMenuTrigger } from "./app-sidebar-nav-menus.ts";
 import { icons } from "./icons.ts";
 import { renderKbd, renderKeyboardShortcut } from "./kbd.ts";

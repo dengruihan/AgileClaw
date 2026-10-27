@@ -122,7 +122,7 @@ suite.define(() => {
   it("keeps browser sidebar header geometry aligned in LTR and RTL", async () => {
     const page = await openPage({ width: 1440 });
     const sidebarBrand = page.locator(".sidebar-brand");
-    const agentName = sidebarBrand.locator(".sidebar-agent-card__name-text");
+    const agentName = sidebarBrand.locator(".sidebar-workspace-header__name");
     await expect.poll(() => agentName.textContent()).toBe("AgileClaw");
 
     await expect
@@ -146,7 +146,7 @@ suite.define(() => {
       .toEqual([0, 0]);
     await expect
       .poll(() =>
-        sidebarBrand.locator(".sidebar-agent-card__avatar").evaluate((avatar) => {
+        sidebarBrand.locator(".sidebar-workspace-header__mark").evaluate((avatar) => {
           const style = getComputedStyle(avatar);
           return [style.width, style.height];
         }),
@@ -237,28 +237,19 @@ suite.define(() => {
         ? Math.round(actionsBox.x - brandBox.x)
         : Math.round(brandBox.x + brandBox.width - (actionsBox.x + actionsBox.width));
     };
-    const nameFade = () =>
-      agentName.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return [style.paddingLeft, style.paddingRight, style.maskImage];
-      });
-
     await expect.poll(() => actionInset("ltr")).toBe(2);
-    await expect.poll(nameFade).toEqual(["0px", "8px", "none"]);
     await page.evaluate(() => {
       document.documentElement.dir = "rtl";
     });
     await expect.poll(() => actionInset("rtl")).toBe(0);
     await expect.poll(controlGaps).toEqual([0, 0]);
-    // The fitting Latin name keeps its own direction in RTL page chrome.
-    await expect.poll(nameFade).toEqual(["0px", "8px", "none"]);
   });
 
   it("keeps the native sidebar avatar larger", async () => {
     const page = await openPage({ webChrome: true, width: 1440 });
     await expect
       .poll(() =>
-        page.locator(".sidebar-agent-card__avatar").evaluate((avatar) => {
+        page.locator(".sidebar-workspace-header__mark").evaluate((avatar) => {
           const style = getComputedStyle(avatar);
           return [style.width, style.height];
         }),

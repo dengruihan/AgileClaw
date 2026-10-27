@@ -2817,9 +2817,8 @@ ui/src/app/startup-settings.ts	1
 ui/src/app/user-profile.ts	2
 ui/src/app/web-push.runtime.ts	1
 ui/src/components/agent-select.ts	2
-ui/src/components/app-sidebar-agent-menu.ts	2
 ui/src/components/app-sidebar-nav-menus.ts	2
-ui/src/components/app-sidebar-render.ts	4
+ui/src/components/app-sidebar-render.ts	3
 ui/src/components/app-sidebar-session-catalog-render.ts	4
 ui/src/components/app-sidebar-session-list-render.ts	1
 ui/src/components/app-sidebar-session-menu-renderers.ts	3
@@ -2861,7 +2860,6 @@ ui/src/components/mcp-app-theme.ts	1
 ui/src/components/mcp-app-view.ts	5
 ui/src/components/mcp-server-form.ts	1
 ui/src/components/model-picker.ts	2
-ui/src/components/onboarding-memory-import.ts	1
 ui/src/components/panel-tab-strip.ts	4
 ui/src/components/select-picker.ts	2
 ui/src/components/sensitive-input.ts	2
@@ -2928,7 +2926,7 @@ ui/src/pages/chat/components/chat-audio-player.ts	1
 ui/src/pages/chat/components/chat-composer-plus-menu.ts	1
 ui/src/pages/chat/components/chat-composer-view.ts	1
 ui/src/pages/chat/components/chat-composer.ts	5
-ui/src/pages/chat/components/chat-effort-picker.ts	6
+ui/src/pages/chat/components/chat-effort-picker.ts	5
 ui/src/pages/chat/components/chat-header-session-menu.ts	1
 ui/src/pages/chat/components/chat-message-attachment-availability.ts	1
 ui/src/pages/chat/components/chat-message-bubble.ts	1
@@ -2976,8 +2974,6 @@ ui/src/pages/config/view.ts	3
 ui/src/pages/connection/view.ts	3
 ui/src/pages/cron/view-runs.ts	3
 ui/src/pages/cron/view.ts	4
-ui/src/pages/custodian/custodian-surface.ts	2
-ui/src/pages/custodian/session-lifecycle.ts	1
 ui/src/pages/debug/view.ts	3
 ui/src/pages/devices/devices-page.ts	1
 ui/src/pages/devices/view-exec-approvals.ts	4

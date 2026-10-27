@@ -4,10 +4,8 @@ import { DEFAULT_SIDEBAR_ENTRIES, serializeSidebarEntry } from "../app-navigatio
 import { pathForRoute } from "../app-route-paths.ts";
 import { gatewayPresentationScope } from "../app/gateway-presentation-scope.ts";
 import { isMobileNavLayout } from "../app/mobile-nav-layout.ts";
-import { patchSettings } from "../app/settings.ts";
 import { isUpdateActionable } from "../app/update-schedule-projection.ts";
 import { t } from "../i18n/index.ts";
-import { normalizeAgentLabel } from "../lib/agents/display.ts";
 import { openEditor } from "../lib/editor-links.ts";
 import { isGatewayMethodAdvertised } from "../lib/gateway-methods.ts";
 import { openExternalUrlSafe } from "../lib/open-external-url.ts";
@@ -29,7 +27,6 @@ import {
   pluginSessionMenuActions,
   runControlUiPluginAction,
 } from "../plugins/control-ui-actions.ts";
-import { renderSidebarAgentMenu } from "./app-sidebar-agent-menu.ts";
 import { renderSidebarIdentityMenu } from "./app-sidebar-identity-menu.ts";
 import { renderSidebarCustomizeMenu, renderSidebarMoreMenu } from "./app-sidebar-nav-menus.ts";
 import { formatSidebarTimestamp } from "./app-sidebar-session-catalogs.ts";
@@ -94,53 +91,6 @@ export function renderSidebarCustomizeMenuForController(controller: SidebarMenus
       host.onUpdateSidebarEntries?.([...DEFAULT_SIDEBAR_ENTRIES, ...sessions]);
       controller.closePositionedMenu("customize", { restoreFocus: true });
     },
-  });
-}
-
-export function renderSidebarAgentMenuForController(controller: SidebarMenusController) {
-  const { host } = controller;
-  const position = controller.agentMenuPosition;
-  if (!position) {
-    return nothing;
-  }
-  const trigger = controller.agentMenuTrigger;
-  const { activeId, agent, agents, identity, identities } = host.activeChipAgent();
-  return renderSidebarAgentMenu({
-    position,
-    basePath: host.basePath,
-    activeId: agent ? activeId : "",
-    activeName: agent ? normalizeAgentLabel(agent, identity) : "",
-    agents,
-    identities,
-    pinnedAgentIds: host.pinnedAgentIds,
-    rosterMode: host.sidebarAgentsMode === "roster",
-    onToggleRoster: () => {
-      host.sidebarAgentsMode = host.sidebarAgentsMode === "roster" ? "chip" : "roster";
-      patchSettings({ sidebarAgentsMode: host.sidebarAgentsMode });
-      void host.updateComplete.then(() => {
-        host
-          .querySelector<HTMLElement>(".sidebar-workspace-header__main, .sidebar-agent-card__main")
-          ?.focus();
-      });
-    },
-    connected: host.connected,
-    resolveAvatarUrl: (url) => controller.agentMenuAvatars.resolve(url),
-    avatarErrorHandler: (url) => controller.agentMenuAvatars.imageErrorHandler(url),
-    openMode: controller.agentMenuInteractionState === "open-hover" ? "hover" : "click",
-    agentUnreadCount: (agentId) => host.agentUnreadCount(agentId),
-    onPointerEnter: () => controller.handleAgentMenuPointerEnter(),
-    onPointerLeave: () => controller.handleAgentMenuPointerLeave(),
-    onAfterShow: () => controller.restoreFocusAfterAgentMenuHoverOpen(),
-    onSwitchAgent: (agentId) => host.switchChipAgent(agentId),
-    onAskCapabilities: (agentId) => host.askAgentCapabilities(agentId),
-    onTabAway: () => trigger?.focus(),
-    onClose: (restoreFocus) => {
-      if (controller.agentMenuPosition !== position) {
-        return;
-      }
-      controller.closeAgentMenu({ restoreFocus });
-    },
-    onNavigate: (routeId, options) => host.onNavigate?.(routeId, options),
   });
 }
 

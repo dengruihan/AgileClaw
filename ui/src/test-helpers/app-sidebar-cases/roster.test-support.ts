@@ -1,5 +1,5 @@
 import type { LitElement } from "lit";
-import { expect, vi } from "vitest";
+import { vi } from "vitest";
 import type { AgentsListResult, GatewaySessionRow, SessionsListResult } from "../../api/types.ts";
 import { patchSettings } from "../../app/settings.ts";
 import { activateSessionMenuValue } from "../app-sidebar-menu.ts";
@@ -160,21 +160,10 @@ export function sessionKeys(sidebar: HTMLElement) {
   );
 }
 
-export async function toggleRoster(sidebar: HTMLElement) {
-  const trigger = sidebar.querySelector<HTMLButtonElement>(
-    ".sidebar-agent-card__main, .sidebar-workspace-header__main",
-  );
-  if (!trigger) {
-    throw new Error("Missing agent switch control");
-  }
-  trigger.click();
-  await vi.waitFor(() => {
-    expect(sidebar.querySelector('[value="command:sidebar-agents"]')).not.toBeNull();
-  });
-  const item = sidebar.querySelector('[value="command:sidebar-agents"]');
-  sidebar
-    .querySelector(".sidebar-agent-menu")
-    ?.dispatchEvent(new CustomEvent("wa-select", { detail: { item }, bubbles: true }));
+export async function toggleRoster(sidebar: SidebarLifecycleState) {
+  sidebar.sidebarAgentsMode = sidebar.sidebarAgentsMode === "roster" ? "chip" : "roster";
+  patchSettings({ sidebarAgentsMode: sidebar.sidebarAgentsMode });
+  await sidebar.updateComplete;
 }
 
 export async function selectFilter(sidebar: SidebarLifecycleState, value: string) {

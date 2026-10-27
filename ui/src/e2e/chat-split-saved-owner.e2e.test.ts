@@ -245,15 +245,6 @@ suite.define(() => {
         expect(await cells.count()).toBe(1);
         expect(await cells.first().locator("openclaw-chat-pane").count()).toBe(0);
         expect(await cells.first().textContent()).toContain("Choose a conversation");
-        const sidebar = page.locator("openclaw-app-sidebar");
-        await sidebar.locator(".sidebar-agent-card__main").click();
-        await sidebar
-          .locator('wa-dropdown.sidebar-agent-menu wa-dropdown-item[value="command:capabilities"]')
-          .click();
-        await expect.poll(() => cells.first().locator("openclaw-chat-pane").count()).toBe(1);
-        await expect
-          .poll(() => cells.first().locator(".agent-chat__composer-combobox textarea").inputValue())
-          .toBe("What can you do?");
         expect(await gateway.getRequests("chat.send")).toHaveLength(0);
         expect(errors).toEqual([]);
       });

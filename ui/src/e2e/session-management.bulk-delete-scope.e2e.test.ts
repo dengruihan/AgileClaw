@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import { SIDEBAR_SESSION_ROSTER_LIMIT } from "../../../src/shared/session-list-limits.ts";
 import type { AppSidebarSessionNavigationElement } from "../components/app-sidebar-session-navigation.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { pauseVirtualClock } from "../test-helpers/control-ui-e2e.ts";
+import { navigateToControlUiSession, pauseVirtualClock } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 import {
@@ -177,11 +177,7 @@ suite.define(() => {
       const confirmation = await waitForConfirmModal(page);
       await confirmation.getByRole("button", { name: "Delete", exact: true }).click();
       await gateway.waitForRequest("sessions.delete", { match: { key: targets[0]!.key } });
-      await sidebar.getByRole("button", { name: /Switch agent/ }).click();
-      await sidebar
-        .locator("wa-dropdown.sidebar-agent-menu")
-        .getByRole("menuitemradio", { name: "Research", exact: true })
-        .click();
+      await navigateToControlUiSession(page, "agent:research:main");
       await rowFor(research[0]!.key).waitFor({ state: "visible" });
       const loadMore = sidebar.locator(".sidebar-session-pagination--roster > button");
       await loadMore.waitFor({ state: "visible" });

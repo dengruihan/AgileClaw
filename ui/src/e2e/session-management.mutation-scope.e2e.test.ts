@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import { SIDEBAR_SESSION_ROSTER_LIMIT } from "../../../src/shared/session-list-limits.ts";
 import type { SessionDataController } from "../components/session-data-controller.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { pauseVirtualClock } from "../test-helpers/control-ui-e2e.ts";
+import { navigateToControlUiSession, pauseVirtualClock } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 import {
@@ -167,11 +167,7 @@ suite.define(() => {
             })),
           });
         }
-        await sidebar.getByRole("button", { name: /Switch agent/ }).click();
-        await sidebar
-          .locator("wa-dropdown.sidebar-agent-menu")
-          .getByRole("menuitemradio", { name: "Research", exact: true })
-          .click();
+        await navigateToControlUiSession(page, "agent:research:main");
         await rowFor(researchRows[1]!.key).waitFor({ state: "visible" });
         await sidebar
           .getByRole("button", { name: "Load more sessions", exact: true })
@@ -241,11 +237,7 @@ suite.define(() => {
         });
         await rowFor(researchRows[2]!.key).waitFor({ state: "visible" });
         await capture("after-pagination");
-        await sidebar.getByRole("button", { name: /Switch agent/ }).click();
-        await sidebar
-          .locator("wa-dropdown.sidebar-agent-menu")
-          .getByRole("menuitemradio", { name: "Main", exact: true })
-          .click();
+        await navigateToControlUiSession(page, "agent:main:main");
         if (operation === "rename") {
           await expect.poll(() => rowFor(original.key).textContent()).toContain("Renamed original");
         } else if (filter === "Active") {
@@ -264,11 +256,7 @@ suite.define(() => {
         });
         const readsBeforeReturn = (await gateway.getRequests("sessions.list", researchMatch))
           .length;
-        await sidebar.getByRole("button", { name: /Switch agent/ }).click();
-        await sidebar
-          .locator("wa-dropdown.sidebar-agent-menu")
-          .getByRole("menuitemradio", { name: "Research", exact: true })
-          .click();
+        await navigateToControlUiSession(page, "agent:research:main");
         const returnedList = await gateway.waitForRequest("sessions.list", {
           match: researchMatch,
           after: readsBeforeReturn,

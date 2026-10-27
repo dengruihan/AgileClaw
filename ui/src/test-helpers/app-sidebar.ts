@@ -72,7 +72,6 @@ export type SidebarLifecycleState = HTMLElement & {
   navigationVisible: boolean;
   sidebarLiveActivity: boolean;
   onUpdateSidebarEntries?: (entries: string[]) => void;
-  pinnedAgentIds: readonly string[];
   readonly sessionOwnerFilterId: string | null;
   setSessionOwnerFilter: AppSidebarSessionNavigationElement["setSessionOwnerFilter"];
   sessionKey: string;
@@ -661,14 +660,6 @@ export const TWO_AGENTS = {
   scope: "per-sender",
   agents: [{ id: "main", identity: { name: "Molty" } }, { id: "research" }],
 } as AgentsListResult;
-
-export const manyAgents = (count: number) =>
-  ({
-    defaultId: "agent-1",
-    mainKey: "main",
-    scope: "per-sender",
-    agents: Array.from({ length: count }, (_, index) => ({ id: `agent-${index + 1}` })),
-  }) as AgentsListResult;
 
 export const catalogPage = (
   sessions: Array<{ threadId: string; name: string; sessionKey?: string; color?: string }>,

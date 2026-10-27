@@ -2,12 +2,10 @@ import type { Page } from "playwright";
 import { expect, it } from "vitest";
 import { CONTROL_UI_BOOTSTRAP_CONFIG_PATH } from "../../../src/gateway/control-ui-bootstrap-contract.js";
 import {
-  controlUiSessionPath,
   controlUiSessionUrl,
   createControlUiMockBootstrapConfig,
   createControlUiMockGatewayInitScript,
   defaultControlUiFeatureMethods,
-  installMockGateway,
   waitForControlUiRoute,
   type ControlUiMockGatewayScenario,
   type MockGatewayRequest,
@@ -197,132 +195,6 @@ suite.define(() => {
     }
   });
 
-  async function openCapabilitiesPrompt(reducedMotion: "no-preference" | "reduce") {
-    const context = await suite.newBrowserContext({
-      locale: "en-US",
-      reducedMotion,
-      serviceWorkers: "block",
-      viewport: { height: 900, width: 1440 },
-    });
-    const page = await context.newPage();
-    await installMockGateway(page);
-    await page.goto(`${suite.server.baseUrl}chat`);
-
-    // Record the 600ms cue before clicking; a host-side poll can arrive after it expires.
-    const observedCue = await page.evaluateHandle(() => {
-      const state = {
-        active: false,
-        background: "",
-        boxShadow: "",
-        duration: "",
-        focused: false,
-        name: "",
-        value: "",
-      };
-      const observer = new MutationObserver(() => {
-        const textarea = document.querySelector<HTMLTextAreaElement>(
-          ".agent-chat__composer-combobox > textarea",
-        );
-        const input = textarea?.closest<HTMLElement>(".agent-chat__input");
-        if (!textarea || !input?.classList.contains("agent-chat__input--prefill-attention")) {
-          return;
-        }
-        const style = getComputedStyle(input);
-        Object.assign(state, {
-          active: true,
-          background: style.backgroundColor,
-          boxShadow: style.boxShadow,
-          duration: style.animationDuration,
-          focused: textarea === document.activeElement,
-          name: style.animationName,
-          value: textarea.value,
-        });
-        observer.disconnect();
-      });
-      observer.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ["class"],
-        childList: true,
-        subtree: true,
-      });
-      return { state, disconnect: () => observer.disconnect() };
-    });
-
-    try {
-      const sidebar = page.locator("openclaw-app-sidebar");
-      await sidebar.locator(".sidebar-agent-card__main").click();
-      await sidebar
-        .locator('wa-dropdown.sidebar-agent-menu wa-dropdown-item[value="command:capabilities"]')
-        .click();
-
-      const textarea = page.locator(".agent-chat__composer-combobox > textarea");
-      const input = textarea.locator("xpath=ancestor::*[contains(@class, 'agent-chat__input')][1]");
-      let cueStyle = { background: "", boxShadow: "", duration: "", name: "" };
-      await expect
-        .poll(async () => {
-          const state = await observedCue.evaluate((cue) => cue.state);
-          cueStyle = {
-            background: state.background,
-            boxShadow: state.boxShadow,
-            duration: state.duration,
-            name: state.name,
-          };
-          return { active: state.active, focused: state.focused, value: state.value };
-        })
-        .toEqual({ active: true, focused: true, value: "What can you do?" });
-      await expect
-        .poll(() =>
-          textarea.evaluate((element: HTMLTextAreaElement) => ({
-            focused: element === document.activeElement,
-            value: element.value,
-          })),
-        )
-        .toEqual({ focused: true, value: "What can you do?" });
-      return { context, cueStyle, input, page };
-    } finally {
-      await observedCue.evaluate((cue) => cue.disconnect());
-      await observedCue.dispose();
-    }
-  }
-
-  it("focuses and highlights the composer from the agent capabilities action", async () => {
-    const { context, cueStyle, input, page } = await openCapabilitiesPrompt("no-preference");
-
-    try {
-      expect(cueStyle).toMatchObject({
-        duration: "0.6s",
-        name: "chat-composer-prefill-attention",
-      });
-      await captureSidebarUiProof(suite, page, "capabilities-composer-focus.png");
-      await expect
-        .poll(() => input.getAttribute("class"))
-        .not.toContain("agent-chat__input--prefill-attention");
-      expect(await input.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe(
-        cueStyle.background,
-      );
-    } finally {
-      await suite.closeBrowserContext(context);
-    }
-  });
-
-  it("keeps a static composer cue when reduced motion is requested", async () => {
-    const { context, cueStyle, input, page } = await openCapabilitiesPrompt("reduce");
-
-    try {
-      expect(cueStyle.name).toBe("none");
-      expect(cueStyle.boxShadow).not.toBe("none");
-      await captureSidebarUiProof(suite, page, "capabilities-composer-reduced-motion.png");
-      await expect
-        .poll(() => input.getAttribute("class"))
-        .not.toContain("agent-chat__input--prefill-attention");
-      expect(await input.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe(
-        cueStyle.background,
-      );
-    } finally {
-      await suite.closeBrowserContext(context);
-    }
-  });
-
   it("restores focus to the Pages edit button after closing the pin editor with Escape", async () => {
     const { context, page } = await openSidebarCustomizationPage(suite);
 
@@ -332,9 +204,7 @@ suite.define(() => {
       const moreMenu = await openSidebarMoreMenu(page);
       await moreMenu.getByRole("menuitem", { name: "Edit pinned items" }).click();
       const pinItems = sidebar
-        .locator(
-          "wa-dropdown.sidebar-customize-menu:not(.sidebar-more-menu):not(.sidebar-agent-menu)",
-        )
+        .locator("wa-dropdown.sidebar-pin-editor-menu")
         .locator('[role="menuitem"], [role="menuitemcheckbox"]');
       // The pin editor installs roving focus after the outgoing More menu yields.
       await expect
@@ -379,9 +249,7 @@ suite.define(() => {
         )
         .toBe(true);
       await moreMenu.getByRole("menuitem", { name: "Edit pinned items" }).click();
-      const menu = sidebar.locator(
-        "wa-dropdown.sidebar-customize-menu:not(.sidebar-more-menu):not(.sidebar-agent-menu)",
-      );
+      const menu = sidebar.locator("wa-dropdown.sidebar-pin-editor-menu");
       const menuItems = menu.locator('[role="menuitem"], [role="menuitemcheckbox"]');
       await expect
         .poll(() =>
@@ -410,232 +278,6 @@ suite.define(() => {
       await expect
         .poll(() => homeLink.evaluate((element) => element === document.activeElement))
         .toBe(true);
-    } finally {
-      await suite.closeBrowserContext(context);
-    }
-  });
-
-  it("shows one row per agent and reaches agent switches with menu keys", async () => {
-    const context = await suite.newBrowserContext({
-      locale: "en-US",
-      serviceWorkers: "block",
-      viewport: { height: 900, width: 1440 },
-    });
-    const page = await context.newPage();
-    const agentsList = {
-      agents: [{ id: "main" }, { id: "research" }, { id: "forge" }],
-      defaultId: "main",
-      mainKey: "main",
-      scope: "agent",
-    };
-    await installMockGateway(page, {
-      methodResponses: {
-        "agent.identity.get": {
-          cases: [
-            {
-              match: { agentId: "main" },
-              response: {
-                agentId: "main",
-                avatar: "",
-                emoji: "🦞",
-                name: "Scheduled Automations",
-              },
-            },
-            {
-              match: { agentId: "research" },
-              response: {
-                agentId: "research",
-                avatar:
-                  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-                name: "Research",
-              },
-            },
-            {
-              match: { agentId: "forge" },
-              response: { agentId: "forge", avatar: "", emoji: "🔧", name: "Forge" },
-            },
-          ],
-        },
-        "agents.list": agentsList,
-        "chat.startup": {
-          agentsList,
-          messages: [],
-          metadata: { models: [] },
-          sessionId: "session:agent:main:main",
-          thinkingLevel: null,
-        },
-      },
-    });
-
-    try {
-      await page.goto(`${suite.server.baseUrl}chat`);
-      const sidebar = page.locator("openclaw-app-sidebar");
-      await sidebar.getByRole("button", { name: /Switch agent/ }).click();
-      const menu = sidebar.locator("wa-dropdown.sidebar-agent-menu");
-      const mainSwitch = menu.getByRole("menuitemradio", { name: "Scheduled Automations" });
-      const researchSwitch = menu.getByRole("menuitemradio", { name: "Research" });
-      await expect
-        .poll(() =>
-          researchSwitch.evaluate(
-            (element) => element.parentElement?.matches(".sidebar-agent-menu__agent-grid") ?? false,
-          ),
-        )
-        .toBe(true);
-      await expect
-        .poll(() => researchSwitch.locator(".agent-select__avatar img").getAttribute("src"))
-        .toContain("data:image/png;base64,");
-      await expect.poll(() => menu.getByText(/^New session —/).count()).toBe(0);
-      const gridLayout = await menu.evaluate((dropdown) => {
-        const center = (element: Element | null | undefined) => {
-          const rect = element?.getBoundingClientRect();
-          return rect ? Math.round(rect.x + rect.width / 2) : Number.NaN;
-        };
-        const grid = dropdown.querySelector(".sidebar-agent-menu__agent-grid");
-        const agentRows = [
-          ...dropdown.querySelectorAll("wa-dropdown-item.sidebar-agent-menu__agent-switch"),
-        ].slice(0, 3);
-        return {
-          columns: grid ? getComputedStyle(grid).gridTemplateColumns.split(" ").length : 0,
-          bottomGap:
-            grid && agentRows.length > 0
-              ? Math.round(
-                  grid.getBoundingClientRect().bottom -
-                    Math.max(...agentRows.map((row) => row.getBoundingClientRect().bottom)),
-                )
-              : Number.NaN,
-          widths: agentRows.map((row) => Math.round(row.getBoundingClientRect().width)),
-          avatarOffsets: agentRows.map(
-            (row) => center(row.querySelector(".sidebar-agent-menu__agent-avatar")) - center(row),
-          ),
-          labelOffsets: agentRows.map(
-            (row) => center(row.querySelector(".agent-select__option-copy")) - center(row),
-          ),
-        };
-      });
-      expect(gridLayout.columns).toBe(3);
-      expect(gridLayout.bottomGap).toBe(0);
-      expect(new Set(gridLayout.widths).size).toBe(1);
-      expect(gridLayout.avatarOffsets).toEqual([0, 0, 0]);
-      expect(gridLayout.labelOffsets).toEqual([0, 0, 0]);
-      const capabilities = menu.getByRole("menuitem", {
-        name: "What can Scheduled Automations do?",
-        exact: true,
-      });
-      for (const scale of [1, 1.4]) {
-        await page.evaluate((value) => {
-          document.documentElement.style.setProperty("--control-ui-text-scale", String(value));
-        }, scale);
-        await captureSidebarUiProof(suite, page, `agent-menu-long-label-${scale}.png`);
-        await expect
-          .poll(() =>
-            capabilities.evaluate((item) => {
-              const label = item.querySelector(".sidebar-customize-menu__text");
-              if (!label) {
-                throw new Error("Capabilities label is missing");
-              }
-              return label.getBoundingClientRect().right - item.getBoundingClientRect().right;
-            }),
-          )
-          .toBeLessThanOrEqual(0);
-      }
-      await expect
-        .poll(() =>
-          menu.evaluate((dropdown) => {
-            const grid = dropdown.querySelector(".sidebar-agent-menu__agent-grid");
-            const rows = [
-              ...dropdown.querySelectorAll("wa-dropdown-item.sidebar-agent-menu__agent-switch"),
-            ];
-            if (!grid || rows.length === 0) {
-              return Number.NaN;
-            }
-            return Math.round(
-              grid.getBoundingClientRect().bottom -
-                Math.max(...rows.map((row) => row.getBoundingClientRect().bottom)),
-            );
-          }),
-        )
-        .toBe(0);
-      await expect
-        .poll(() => mainSwitch.evaluate((element) => element === document.activeElement))
-        .toBe(true);
-      await page.keyboard.press("End");
-      await expect
-        .poll(() =>
-          menu
-            .getByRole("menuitem", { name: "Agent settings" })
-            .evaluate((element) => element === document.activeElement),
-        )
-        .toBe(true);
-      await page.keyboard.press("Home");
-      await expect
-        .poll(() => mainSwitch.evaluate((element) => element === document.activeElement))
-        .toBe(true);
-      await page.keyboard.press("r");
-      await expect
-        .poll(() => researchSwitch.evaluate((element) => element === document.activeElement))
-        .toBe(true);
-      await page.keyboard.press("Home");
-      await page.keyboard.press("ArrowDown");
-      await expect
-        .poll(() => researchSwitch.evaluate((element) => element === document.activeElement))
-        .toBe(true);
-      await captureSidebarUiProof(suite, page, "agent-menu-without-new-session-rows.png");
-      await page.keyboard.press("Enter");
-      await expect
-        .poll(() => new URL(page.url()).pathname)
-        .toBe(controlUiSessionPath("agent:research:main"));
-    } finally {
-      await suite.closeBrowserContext(context);
-    }
-  });
-
-  it("shows a workspace identity avatar in the sidebar agent card", async () => {
-    const context = await suite.newBrowserContext({
-      locale: "en-US",
-      serviceWorkers: "block",
-      viewport: { height: 900, width: 1440 },
-    });
-    const page = await context.newPage();
-    const agentsList = {
-      agents: [{ id: "main" }],
-      defaultId: "main",
-      mainKey: "main",
-      scope: "agent",
-    };
-    const avatar =
-      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
-    const gateway = await installMockGateway(page, {
-      methodResponses: {
-        "agent.identity.get": {
-          agentId: "main",
-          avatar,
-          avatarStatus: "data",
-          name: "Workspace Molty",
-        },
-        "agents.list": agentsList,
-        "chat.startup": {
-          agentsList,
-          messages: [],
-          metadata: { models: [] },
-          sessionId: "session:agent:main:main",
-          thinkingLevel: null,
-        },
-      },
-    });
-
-    try {
-      await page.goto(`${suite.server.baseUrl}chat`);
-      await gateway.waitForRequest("agent.identity.get");
-      const card = page.locator("openclaw-app-sidebar openclaw-sidebar-agent-card");
-      await expect
-        .poll(() => card.locator(".sidebar-agent-card__name").textContent())
-        .toContain("Workspace Molty");
-      const image = card.locator(".sidebar-agent-card__avatar img");
-      await expect.poll(() => image.getAttribute("src")).toBe(avatar);
-      await expect
-        .poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth))
-        .toBe(1);
-      await captureSidebarUiProof(suite, page, "workspace-agent-avatar.png");
     } finally {
       await suite.closeBrowserContext(context);
     }

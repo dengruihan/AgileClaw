@@ -157,13 +157,7 @@ describe("sidebar entries", () => {
     }
   });
   it("keeps operational destinations visible by default", () => {
-    expect(DEFAULT_SIDEBAR_ENTRIES).toEqual([
-      "route:agents-home",
-      "route:dashboards",
-      "route:systems",
-      "route:cron",
-      "route:plugins",
-    ]);
+    expect(DEFAULT_SIDEBAR_ENTRIES).toEqual(["route:dashboards", "route:systems", "route:cron"]);
     expect(isSettingsNavigationRoute("agents-home")).toBe(false);
   });
 
@@ -244,7 +238,7 @@ describe("sidebar entries", () => {
       type: "plugin",
       key: "workboard/board-ops",
     });
-    expect(serializeSidebarEntry({ type: "route", route: "plugins" })).toBe("route:plugins");
+    expect(serializeSidebarEntry({ type: "route", route: "systems" })).toBe("route:systems");
     expect(serializeSidebarEntry({ type: "session", key: "agent:main:test" })).toBe(
       "session:agent:main:test",
     );
@@ -267,6 +261,8 @@ describe("sidebar entries", () => {
         "session:agent:main:test",
         "route:cron",
         "route:tasks",
+        "route:agents-home",
+        "route:plugins",
         "route:usage",
         "route:worktrees",
         "session:",

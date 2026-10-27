@@ -277,16 +277,6 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
     ["ui/src/components/agent-select-registration.ts"],
   ),
   pageWatch("ui/src/e2e/agent-selection-persistence.e2e.test.ts", ["chat"]),
-  pageWatch(
-    "ui/src/e2e/agent-switch-roster.e2e.test.ts",
-    ["chat"],
-    [
-      "ui/src/components/modal-dialog.ts",
-      "ui/src/components/session-menu.ts",
-      "ui/src/lib/sessions/session-capability.ts",
-      "ui/src/pages/chat/components/chat-header-session-menu.ts",
-    ],
-  ),
   pageWatch("ui/src/e2e/agents-set-default-persistence.e2e.test.ts", [
     "agents-home",
     "agents",
@@ -2290,7 +2280,7 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
   pageWatch(
     "ui/src/e2e/sidebar-interactions.e2e.test.ts",
     ["chat", "new-session"],
-    ["ui/src/components/sidebar-agent-card.ts"],
+    ["ui/src/components/app-sidebar-render.ts"],
   ),
   pageWatch("ui/src/e2e/sidebar-name-marquee.e2e.test.ts", ["chat"]),
   pageWatch(

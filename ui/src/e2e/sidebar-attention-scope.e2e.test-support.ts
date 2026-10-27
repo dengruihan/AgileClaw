@@ -3,6 +3,7 @@ import type { Browser, Page } from "playwright";
 import { expect } from "vitest";
 import type { CronJob } from "../api/types.ts";
 import {
+  navigateToControlUiSession,
   captureControlUiE2eFailureDiagnostics,
   installMockGateway,
   waitForControlUiRoute,
@@ -202,10 +203,7 @@ export async function runSidebarAttentionScopeFlow(params: SidebarAttentionScope
     await page.goBack();
     await waitForControlUiRoute(page, { pathname: "/new", routeId: "new-session" });
 
-    await sidebar.getByRole("button", { name: /Switch agent/ }).click();
-    await sidebar
-      .locator('wa-dropdown.sidebar-agent-menu wa-dropdown-item[value="agent:writer"]')
-      .click();
+    await navigateToControlUiSession(page, "agent:writer:main");
     await waitForCronScope("writer");
     // The agent's cron refresh can precede the Chat route commit that closes Inbox.
     await waitForControlUiRoute(page, { pathname: "/chat/writer", routeId: "chat" });
