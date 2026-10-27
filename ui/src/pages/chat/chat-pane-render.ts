@@ -470,6 +470,7 @@ export class ChatPane extends ChatPaneLayoutRender {
           : undefined,
       modelCatalog: state.chatModelCatalog,
       modelSwitching: Boolean(state.chatModelSwitchPromises[state.sessionKey]),
+      modelOverrides: state.sessions.state.modelOverrides,
       queue: state.chatQueue,
       queuedOutboxCount: state.chatQueue.filter((item) => !item.pendingRunId).length,
       realtimeTalkActive: state.realtimeTalkActive,

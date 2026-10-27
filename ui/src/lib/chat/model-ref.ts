@@ -24,7 +24,7 @@ export function buildQualifiedChatModelValue(model: string, provider?: string | 
 
 export function normalizeChatModelOverrideValue(
   value: string | null | undefined,
-  catalog: ModelCatalogEntry[],
+  catalog: readonly ModelCatalogEntry[],
 ): string {
   const trimmed = value?.trim();
   if (!trimmed) {
@@ -35,7 +35,7 @@ export function normalizeChatModelOverrideValue(
     : resolveUniqueCatalogValueById(trimmed, catalog) || trimmed;
 }
 
-function hasCatalogQualifiedValue(catalog: ModelCatalogEntry[], value: string): boolean {
+function hasCatalogQualifiedValue(catalog: readonly ModelCatalogEntry[], value: string): boolean {
   const normalized = value.trim().toLowerCase();
   if (!normalized) {
     return false;
@@ -43,7 +43,10 @@ function hasCatalogQualifiedValue(catalog: ModelCatalogEntry[], value: string): 
   return catalog.some((entry) => createQualifiedCatalogKey(entry) === normalized);
 }
 
-function resolveUniqueCatalogValueById(model: string, catalog: ModelCatalogEntry[]): string {
+function resolveUniqueCatalogValueById(
+  model: string,
+  catalog: readonly ModelCatalogEntry[],
+): string {
   const normalizedModel = model.trim().toLowerCase();
   if (!normalizedModel) {
     return "";
@@ -70,7 +73,7 @@ function resolveUniqueCatalogValueById(model: string, catalog: ModelCatalogEntry
 export function resolvePreferredServerChatModelValue(
   model: string | null | undefined,
   provider: string | null | undefined,
-  catalog: ModelCatalogEntry[],
+  catalog: readonly ModelCatalogEntry[],
 ): string {
   if (typeof model !== "string") {
     return "";

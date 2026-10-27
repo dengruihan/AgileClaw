@@ -10,7 +10,7 @@ import {
   replaceSlashCommands,
   SLASH_COMMANDS,
 } from "../../lib/chat/commands.ts";
-import { createSessionsListResult } from "../../test-helpers/chat-model.ts";
+import { createModelCatalog, createSessionsListResult } from "../../test-helpers/chat-model.ts";
 import { resetChatViewState } from "./chat-view-state.ts";
 import {
   createReactiveDraftHarness,
@@ -276,9 +276,36 @@ describe("chat composer suggestion accessibility", () => {
     expect(container.querySelector(".slash-menu")).toBeNull();
   });
 
-  it("suppresses thinking arguments while the active model is switching", () => {
+  it("offers the pending model's thinking arguments while the active model is switching", () => {
+    const { container } = createReactiveDraftHarness({
+      ...thinkingSession(["low", "high"]),
+      modelCatalog: createModelCatalog({
+        id: "claude-opus",
+        name: "Claude Opus",
+        provider: "anthropic",
+        thinkingLevels: [
+          { id: "minimal", label: "minimal" },
+          { id: "max", label: "max" },
+        ],
+      }),
+      modelOverrides: { main: "anthropic/claude-opus" },
+      modelSwitching: true,
+    });
+
+    inputDraft(container, "/think");
+    keydownComposer(container, "Tab");
+
+    expect(
+      Array.from(container.querySelectorAll<HTMLElement>(".slash-menu [role='option']")).map(
+        (option) => option.querySelector(".slash-menu-name")?.textContent?.trim(),
+      ),
+    ).toEqual(["default", "minimal", "max"]);
+  });
+
+  it("suppresses thinking arguments when the pending model has no locally-known levels", () => {
     const { container } = createReactiveDraftHarness({
       ...thinkingSession(),
+      modelOverrides: { main: "anthropic/claude-unknown" },
       modelSwitching: true,
     });
 

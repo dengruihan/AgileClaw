@@ -57,6 +57,7 @@ type ChatModelControlsProps = {
   modelSelectionTarget?: SessionsListResult["defaults"]["modelSelectionTarget"];
   modelPickerTargetGroups?: readonly ChatModelPickerTargetGroup[];
   modelPickerOpen?: boolean;
+  /** Guards stale row-scoped facts (context tokens/windows) during a switch; pickers stay usable. */
   modelSwitching: boolean;
   modelsLoading?: boolean;
   modelMutationDisabledReason?: string;
@@ -515,8 +516,10 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
         )
       : resolveCatalogTriggerStatus(managedCatalog, modelOptions.length, selectionKnown);
   const busy = props.sending || Boolean(props.activeRunId) || props.stream !== null;
-  const modelControlsDisabled =
-    !props.connected || busy || props.modelSwitching || !props.gatewayAvailable;
+  // A model switch stays optimistic: pickers remain usable while the patch is in
+  // flight, and a rejected patch surfaces through the standard error path with
+  // the optimistic selection rolled back.
+  const modelControlsDisabled = !props.connected || busy || !props.gatewayAvailable;
   const commonDisabled = modelControlsDisabled || props.loading;
   const effortMutationDisabled = Boolean(props.effortMutationDisabledReason);
   // Loading owns the menu contents, not the trigger. Keeping the trigger
@@ -545,7 +548,10 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
                 options: contextWindows,
                 selected: selectedContextWindow,
                 ...(defaultContextWindow ? { defaultId: defaultContextWindow } : {}),
-                disabled: commonDisabled || Boolean(props.contextWindowMutationDisabledReason),
+                disabled:
+                  commonDisabled ||
+                  props.modelSwitching ||
+                  Boolean(props.contextWindowMutationDisabledReason),
                 onSelect: async (next, targetSessionKey) => {
                   await props.onContextWindowSelect?.(next, targetSessionKey);
                 },

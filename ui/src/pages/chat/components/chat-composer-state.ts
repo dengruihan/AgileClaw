@@ -41,6 +41,7 @@ function createChatComposerState(): ChatComposerState {
     composerDraftScopeKey: null,
     dictationError: null,
     dictationSelection: null,
+    prevModelSwitching: false,
   };
 }
 
