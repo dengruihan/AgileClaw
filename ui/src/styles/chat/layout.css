@@ -969,6 +969,115 @@ openclaw-pending-session-create {
   stroke-linecap: round;
 }
 
+.context-ring__hit {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+/* The click popover owns the ring while open; keep the hover card from stacking on it. */
+.context-usage details[open] .context-ring__hit {
+  pointer-events: none;
+}
+
+.context-usage__hover {
+  --openclaw-tooltip-max-width: 248px;
+  --openclaw-tooltip-padding: 10px 12px;
+}
+
+.context-usage__card {
+  display: block;
+  min-width: 200px;
+  font-size: 12px;
+}
+
+.context-usage__card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.context-usage__card-title {
+  color: var(--muted);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.context-usage__card-value {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.context-usage__card-rows {
+  display: grid;
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.context-usage__card-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  line-height: 1.3;
+}
+
+.context-usage__card-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.context-usage__card-dot--systemTools,
+.context-usage__card-dot--tools {
+  background: var(--warn);
+}
+
+.context-usage__card-dot--mcpTools {
+  background: color-mix(in srgb, var(--warn) 45%, var(--accent));
+}
+
+.context-usage__card-dot--systemPrompt {
+  background: var(--accent);
+}
+
+.context-usage__card-dot--skills {
+  background: var(--info);
+}
+
+.context-usage__card-dot--other {
+  background: var(--ok);
+}
+
+.context-usage__card-dot--messages {
+  background: var(--muted);
+}
+
+.context-usage__card-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-usage__card-pct {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.context-usage__card-note,
+.context-usage__card-empty {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 .context-usage__popover {
   width: min(300px, calc(100vw - 42px));
   max-height: var(--auto-size-available-height, calc(100dvh - 16px));

@@ -14,6 +14,7 @@ import { scopedAgentParamsForSession } from "../../lib/sessions/index.ts";
 import { resolveUiConversationIdentity } from "../../lib/sessions/session-key.ts";
 import { resolveSessionWorkspace } from "../../lib/sessions/workspace.ts";
 import { livePresentation, presentedContent } from "../../lit/presentation-binding.ts";
+import { ChatContextUsageController } from "./chat-context-usage-controller.ts";
 import { ChatPaneBrowserAnnotationRender } from "./chat-pane-browser-annotation-render.ts";
 import {
   availableSidebarSlots,
@@ -25,6 +26,7 @@ import type { createChatPaneRails } from "./chat-pane-rails.ts";
 import type { ResolvedBoardView } from "./chat-pane-shared.ts";
 import { renderSidebarRegion, sidebarRegionCallbacks } from "./chat-pane-sidebar-layout.ts";
 import type { ChatPageHost } from "./chat-state-host.ts";
+import { selectedChatSessionRow } from "./chat-state-route.ts";
 import { ChatToolIconController } from "./chat-tool-icon-controller.ts";
 import { renderChat, type ChatProps } from "./chat-view.ts";
 import { publishChatWorkContext } from "./chat-work-context.ts";
@@ -70,6 +72,28 @@ export abstract class ChatPaneLayoutRender extends ChatPaneBrowserAnnotationRend
     this,
     () => this.context,
     () => (this.state && !this.catalogHost ? this.resolveChatReadTarget() : undefined),
+  );
+  protected readonly contextUsage = new ChatContextUsageController(
+    this,
+    () => this.context.gateway,
+    () => {
+      const state = this.state;
+      if (!state || this.catalogHost) {
+        return undefined;
+      }
+      const identity = this.resolveChatReadTarget();
+      if (!identity) {
+        return undefined;
+      }
+      const row = selectedChatSessionRow(state);
+      return {
+        sessionKey: identity.sessionKey,
+        agentId: identity.agentId ?? row?.agentId,
+        sessionId: row?.sessionId,
+        createdAt: row?.createdAt,
+        totalTokens: row?.totalTokens,
+      };
+    },
   );
   private desktopFocus: {
     key: string;

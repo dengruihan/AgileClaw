@@ -155,7 +155,12 @@ export function renderChatComposerView(context: ChatComposerViewContext) {
   const contextNotice = renderContextNotice(
     activeSession,
     props.sessions?.defaults?.contextTokens ?? null,
-    { messages: props.messages, providerUsage: props.providerUsage },
+    {
+      messages: props.messages,
+      providerUsage: props.providerUsage,
+      usageDetail: props.contextUsageDetail,
+      onUsageDetailIntent: props.onContextUsageIntent,
+    },
   );
   const composerControls = props.composerControls ?? nothing;
   const composerLeadControl = props.permissionPicker

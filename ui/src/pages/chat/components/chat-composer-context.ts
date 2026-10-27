@@ -17,6 +17,12 @@ import {
   type QuotaLimitSummary,
 } from "../../../lib/provider-quota-summary.ts";
 import { resolveSessionContextLimit } from "../../../lib/sessions/context-budget.ts";
+import type { ChatContextUsageDetail } from "../chat-context-usage-controller.ts";
+import {
+  buildContextUsageBreakdown,
+  formatContextUsagePercent,
+  type ContextUsageBreakdownRowId,
+} from "./chat-composer-context-breakdown.ts";
 import { handleChatComposerDetailsToggle, syncChatPickerOverlay } from "./chat-picker-overlay.ts";
 
 const CONTEXT_NOTICE_RATIO = 0.85;
@@ -24,6 +30,8 @@ const CONTEXT_NOTICE_RATIO = 0.85;
 type ContextNoticeOptions = {
   messages?: unknown[];
   providerUsage?: ProviderUsageDisplayProps;
+  usageDetail?: ChatContextUsageDetail;
+  onUsageDetailIntent?: () => void;
 };
 
 type ProviderCostStats = {
@@ -150,6 +158,85 @@ function formatBudgetAmount(amount: number, unit: string): string {
     }
   }
   return `${amount.toFixed(2)} ${unit}`;
+}
+
+const BREAKDOWN_ROW_LABEL_KEYS: Record<ContextUsageBreakdownRowId, string> = {
+  systemTools: "chat.composer.contextUsage.systemTools",
+  mcpTools: "chat.composer.contextUsage.mcpTools",
+  tools: "usage.details.tools",
+  systemPrompt: "chat.composer.contextUsage.systemPrompt",
+  skills: "usage.details.skills",
+  other: "chat.composer.contextUsage.other",
+  messages: "chat.composer.contextUsage.messages",
+};
+
+type ContextNoticeModel = NonNullable<ReturnType<typeof getContextNoticeViewModel>>;
+
+// Hover intent loads the breakdown; until it lands the card orients with the
+// capacity the session row already carries.
+function renderContextUsageCard(
+  model: ContextNoticeModel,
+  detail: ChatContextUsageDetail | undefined,
+) {
+  const breakdown =
+    detail?.report && detail.status === "ready"
+      ? buildContextUsageBreakdown(detail.report, detail.toolsEffective ?? null, model.used)
+      : null;
+  const percentage = `${model.approximate ? "~" : ""}${model.pct}%`;
+  return html`
+    <div class="context-usage__card-head">
+      <span class="context-usage__card-title"
+        >${t(model.fromLastPrompt ? "chat.composer.contextUsage.promptBudget" : "chat.composer.contextUsage.contextWindow")}</span
+      >
+      <strong class="context-usage__card-value">${model.detail} · ${percentage}</strong>
+    </div>
+    <div
+      class="context-usage__bar"
+      role="progressbar"
+      aria-label=${t("chat.composer.contextUsage.summary", {
+        used: `${model.approximate ? "~" : ""}${formatCompactTokenCount(model.used)}`,
+        limit: formatCompactTokenCount(model.limit),
+        pct: `${model.approximate ? "~" : ""}${model.pct}`,
+      })}
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow=${model.pct}
+    >
+      <span style="width: ${model.pct}%"></span>
+    </div>
+    ${
+      breakdown
+        ? html`
+            <div class="context-usage__card-rows">
+              ${breakdown.rows.map(
+                (row) => html`
+                  <div class="context-usage__card-row">
+                    <span class="context-usage__card-dot context-usage__card-dot--${row.id}"></span>
+                    <span class="context-usage__card-label"
+                      >${t(BREAKDOWN_ROW_LABEL_KEYS[row.id])}</span
+                    >
+                    <span class="context-usage__card-pct"
+                      >${formatContextUsagePercent(row.percent)}</span
+                    >
+                  </div>
+                `,
+              )}
+            </div>
+            <div class="context-usage__card-note">
+              ${t("chat.composer.contextUsage.estimateNote")}
+            </div>
+          `
+        : html`
+            <div class="context-usage__card-empty">
+              ${
+                detail && detail.status !== "ready" && detail.status !== "error"
+                  ? t("usage.loading.badge")
+                  : t("usage.details.noContextData")
+              }
+            </div>
+          `
+    }
+  `;
 }
 
 function renderLimitBar(usedPercent: number, ariaLabel: string) {
@@ -297,6 +384,25 @@ export function renderContextNotice(
           </div>
         `;
   const hasProviderCosts = providerCosts && Object.values(providerCosts).some((value) => value > 0);
+  const contextDial = html`
+    <svg class="context-ring__dial" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <circle class="context-ring__track" cx="8" cy="8" r=${RING_RADIUS} />
+      <circle
+        class="context-ring__fill"
+        cx="8"
+        cy="8"
+        r=${RING_RADIUS}
+        stroke-dasharray=${RING_CIRCUMFERENCE.toFixed(2)}
+        stroke-dashoffset=${dashOffset.toFixed(2)}
+      />
+    </svg>
+  `;
+  // Touch taps keep the click-only popover path; hover intent loads the card.
+  const handleUsageDetailIntent = (event: PointerEvent) => {
+    if (event.pointerType !== "touch") {
+      options.onUsageDetailIntent?.();
+    }
+  };
   return html`
     <div
       class="context-usage"
@@ -314,25 +420,25 @@ export function renderContextNotice(
         <summary
           class="context-ring ${model?.warning ? "context-ring--warning" : ""}"
           aria-label=${summary}
-          title=${t("chat.composer.contextUsage.open")}
         >
-          <svg
-            class="context-ring__dial"
-            viewBox="0 0 16 16"
-            width="16"
-            height="16"
-            aria-hidden="true"
-          >
-            <circle class="context-ring__track" cx="8" cy="8" r=${RING_RADIUS} />
-            <circle
-              class="context-ring__fill"
-              cx="8"
-              cy="8"
-              r=${RING_RADIUS}
-              stroke-dasharray=${RING_CIRCUMFERENCE.toFixed(2)}
-              stroke-dashoffset=${dashOffset.toFixed(2)}
-            />
-          </svg>
+          ${
+            model
+              ? html`
+                  <openclaw-tooltip
+                    class="context-usage__hover"
+                    placement="top-start"
+                    .describe=${false}
+                  >
+                    <span class="context-ring__hit" @pointerenter=${handleUsageDetailIntent}>
+                      ${contextDial}
+                    </span>
+                    <div slot="content" class="context-usage__card">
+                      ${renderContextUsageCard(model, options.usageDetail)}
+                    </div>
+                  </openclaw-tooltip>
+                `
+              : contextDial
+          }
         </summary>
         <wa-popup data-anchored-overlay>
           <section
