@@ -209,9 +209,11 @@ function renderContextUsageCard(
         ? html`
             <div class="context-usage__card-rows">
               ${breakdown.rows.map(
-                (row) => html`
+                (row, index) => html`
                   <div class="context-usage__card-row">
-                    <span class="context-usage__card-dot context-usage__card-dot--${row.id}"></span>
+                    <span
+                      class="context-usage__card-dot context-usage__card-dot--r${index + 1}"
+                    ></span>
                     <span class="context-usage__card-label"
                       >${t(BREAKDOWN_ROW_LABEL_KEYS[row.id])}</span
                     >

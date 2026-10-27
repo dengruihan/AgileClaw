@@ -501,12 +501,25 @@ describe("renderChatComposer context usage", () => {
         row.textContent?.replace(/\s+/g, " ").trim(),
       ),
     ).toEqual([
-      "System tools 15%",
       "MCP tools 45%",
+      "Messages 27%",
+      "System tools 15%",
       "System prompt 10%",
       "Skills 3%",
       "Other 0%",
-      "Messages 27%",
+    ]);
+    // Dot darkness follows the rank, not the category.
+    expect(
+      [...(card?.querySelectorAll(".context-usage__card-dot") ?? [])].map((dot) =>
+        dot.classList.item(1),
+      ),
+    ).toEqual([
+      "context-usage__card-dot--r1",
+      "context-usage__card-dot--r2",
+      "context-usage__card-dot--r3",
+      "context-usage__card-dot--r4",
+      "context-usage__card-dot--r5",
+      "context-usage__card-dot--r6",
     ]);
     expect(card?.querySelector(".context-usage__card-note")?.textContent).toContain(
       "estimated from the last run",

@@ -1030,32 +1030,32 @@ openclaw-pending-session-create {
   height: 7px;
   flex-shrink: 0;
   border-radius: var(--radius-full);
-  background: var(--muted);
+  background: color-mix(in srgb, var(--ctx-color, var(--accent)) 30%, transparent);
 }
 
-.context-usage__card-dot--systemTools,
-.context-usage__card-dot--tools {
-  background: var(--warn);
+/* One hue shared with the ring and bar; darker dots mark higher shares. */
+.context-usage__card-dot--r1 {
+  background: var(--ctx-color, var(--accent));
 }
 
-.context-usage__card-dot--mcpTools {
-  background: color-mix(in srgb, var(--warn) 45%, var(--accent));
+.context-usage__card-dot--r2 {
+  background: color-mix(in srgb, var(--ctx-color, var(--accent)) 84%, transparent);
 }
 
-.context-usage__card-dot--systemPrompt {
-  background: var(--accent);
+.context-usage__card-dot--r3 {
+  background: color-mix(in srgb, var(--ctx-color, var(--accent)) 68%, transparent);
 }
 
-.context-usage__card-dot--skills {
-  background: var(--info);
+.context-usage__card-dot--r4 {
+  background: color-mix(in srgb, var(--ctx-color, var(--accent)) 52%, transparent);
 }
 
-.context-usage__card-dot--other {
-  background: var(--ok);
+.context-usage__card-dot--r5 {
+  background: color-mix(in srgb, var(--ctx-color, var(--accent)) 38%, transparent);
 }
 
-.context-usage__card-dot--messages {
-  background: var(--muted);
+.context-usage__card-dot--r6 {
+  background: color-mix(in srgb, var(--ctx-color, var(--accent)) 24%, transparent);
 }
 
 .context-usage__card-label {

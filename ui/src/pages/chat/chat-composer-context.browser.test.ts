@@ -138,13 +138,17 @@ describe("context usage popup geometry", () => {
         row.textContent?.replace(/\s+/g, " ").trim(),
       ),
     ).toEqual([
-      "System tools 7.4%",
+      "Messages 64%",
       "MCP tools 22.2%",
+      "System tools 7.4%",
       "System prompt 4.9%",
       "Skills 1.5%",
       "Other 0%",
-      "Messages 64%",
     ]);
+    // The first row carries the darkest dot of the rank ladder.
+    expect(card.querySelector(".context-usage__card-dot")?.classList.item(1)).toBe(
+      "context-usage__card-dot--r1",
+    );
     const box = card.getBoundingClientRect();
     expect(box.left).toBeGreaterThanOrEqual(0);
     expect(box.right).toBeLessThanOrEqual(1280);

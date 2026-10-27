@@ -114,6 +114,8 @@ export function buildContextUsageBreakdown(
   for (const row of rows) {
     row.percent = denominator > 0 ? Math.round((row.tokens / denominator) * 1000) / 10 : 0;
   }
+  // Highest share reads first; the stable sort keeps category order on ties.
+  rows.sort((left, right) => right.tokens - left.tokens);
   return { rows, combinedTools: mcpToolNames === null };
 }
 

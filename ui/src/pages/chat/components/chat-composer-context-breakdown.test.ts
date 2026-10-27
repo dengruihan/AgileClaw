@@ -75,13 +75,14 @@ describe("buildContextUsageBreakdown", () => {
     // Provider-reported usage minus the estimates is the message history.
     expect(rows.get("messages")?.tokens).toBe(2_700);
     expect(breakdown.combinedTools).toBe(false);
+    // Rows read highest share first.
     expect(breakdown.rows.map((row) => row.id)).toEqual([
-      "systemTools",
       "mcpTools",
+      "messages",
+      "systemTools",
       "systemPrompt",
       "skills",
       "other",
-      "messages",
     ]);
   });
 
