@@ -2,12 +2,15 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { contextBudgetStatusFixture } from "../../../../src/config/sessions/context-budget.test-support.js";
+import type { SessionSystemPromptReport } from "../../../../src/config/sessions/session-system-prompt-report.js";
 import type {
   GatewaySessionRow,
   ModelAuthStatusProfile,
   ModelAuthStatusProvider,
+  ToolsEffectiveResult,
 } from "../../api/types.ts";
 import { renderComposerFixture, resetComposerFixture } from "./chat-composer.test-support.ts";
+import type { ChatContextUsageDetail } from "./chat-context-usage-controller.ts";
 
 type ComposerOverrides = Parameters<typeof renderComposerFixture>[0];
 
@@ -35,6 +38,59 @@ function planUsage(providers: ModelAuthStatusProvider[], basePath?: string) {
   return {
     ...(basePath ? { basePath } : {}),
     modelAuthStatusResult: { ts: Date.now(), providers },
+  };
+}
+
+const usageReport: SessionSystemPromptReport = {
+  source: "run",
+  generatedAt: 1,
+  systemPrompt: { chars: 4_000, projectContextChars: 0, nonProjectContextChars: 4_000 },
+  injectedWorkspaceFiles: [],
+  skills: { promptChars: 1_200, entries: [] },
+  tools: {
+    listChars: 8_000,
+    schemaChars: 0,
+    entries: [
+      { name: "bash", summaryChars: 2_000, schemaChars: 2_000 },
+      { name: "mcp__db__query", summaryChars: 4_000, schemaChars: 8_000 },
+    ],
+  },
+};
+
+const usageCatalog: ToolsEffectiveResult = {
+  agentId: "main",
+  profile: "full",
+  groups: [
+    {
+      id: "core",
+      label: "Core",
+      source: "core",
+      tools: [{ id: "bash", label: "bash", description: "", rawDescription: "", source: "core" }],
+    },
+    {
+      id: "mcp",
+      label: "MCP",
+      source: "mcp",
+      tools: [
+        {
+          id: "mcp__db__query",
+          label: "query",
+          description: "",
+          rawDescription: "",
+          source: "mcp",
+        },
+      ],
+    },
+  ],
+};
+
+function usageDetail(overrides: Partial<ChatContextUsageDetail> = {}): ChatContextUsageDetail {
+  return {
+    status: "ready",
+    report: usageReport,
+    toolsEffective: usageCatalog,
+    error: null,
+    ...overrides,
   };
 }
 
@@ -424,5 +480,114 @@ describe("renderChatComposer context usage", () => {
     expect(container.querySelector(".context-ring")?.classList).not.toContain(
       "context-ring--warning",
     );
+  });
+
+  it("renders the hover card breakdown without a click", () => {
+    const container = renderComposer({
+      selectedSession: sessionRow({ totalTokens: 10_000, contextTokens: 200_000 }),
+      sessions: {
+        sessions: [],
+        defaults: { contextTokens: 200_000 },
+      } as never,
+      contextUsageDetail: usageDetail(),
+    });
+
+    expect(container.querySelector(".context-ring")?.getAttribute("title")).toBeNull();
+    const card = container.querySelector(".context-usage__card");
+    expect(card?.textContent).toContain("Context window");
+    expect(card?.textContent).toContain("10k / 200k · 5%");
+    expect(
+      [...(card?.querySelectorAll(".context-usage__card-row") ?? [])].map((row) =>
+        row.textContent?.replace(/\s+/g, " ").trim(),
+      ),
+    ).toEqual([
+      "System tools 15%",
+      "MCP tools 45%",
+      "System prompt 10%",
+      "Skills 3%",
+      "Other 0%",
+      "Messages 27%",
+    ]);
+    expect(card?.querySelector(".context-usage__card-note")?.textContent).toContain(
+      "estimated from the last run",
+    );
+  });
+
+  it("shows the prompt budget title on the hover card when the limit comes from the last prompt", () => {
+    const container = renderComposer({
+      selectedSession: sessionRow({
+        totalTokens: 160_000,
+        contextTokens: 200_000,
+        contextBudgetStatus: contextBudgetStatusFixture(),
+      }),
+      contextUsageDetail: usageDetail(),
+    });
+
+    expect(container.querySelector(".context-usage__card-title")?.textContent).toBe(
+      "Prompt budget",
+    );
+  });
+
+  it("keeps loading and no-data states visible on the hover card", () => {
+    const loading = renderComposer({
+      selectedSession: sessionRow({ totalTokens: 10_000, contextTokens: 200_000 }),
+      contextUsageDetail: usageDetail({
+        status: "loading",
+        report: null,
+        toolsEffective: null,
+      }),
+    });
+    expect(loading.querySelector(".context-usage__card-empty")?.textContent).toContain("Loading");
+
+    const empty = renderComposer({
+      selectedSession: sessionRow({ totalTokens: 10_000, contextTokens: 200_000 }),
+      contextUsageDetail: usageDetail({ report: null, toolsEffective: null }),
+    });
+    expect(empty.querySelector(".context-usage__card-empty")?.textContent).toContain(
+      "No context data",
+    );
+
+    const failed = renderComposer({
+      selectedSession: sessionRow({ totalTokens: 10_000, contextTokens: 200_000 }),
+      contextUsageDetail: usageDetail({ status: "error", report: null, toolsEffective: null }),
+    });
+    expect(failed.querySelector(".context-usage__card-empty")?.textContent).toContain(
+      "No context data",
+    );
+  });
+
+  it("requests the breakdown on pointer intent but not for touch", () => {
+    const onContextUsageIntent = vi.fn();
+    const container = renderComposer({
+      selectedSession: sessionRow({ totalTokens: 1_000, contextTokens: 200_000 }),
+      onContextUsageIntent,
+      contextUsageDetail: usageDetail({ status: "loading", report: null, toolsEffective: null }),
+    });
+    const hit = container.querySelector(".context-ring__hit");
+    expect(hit).not.toBeNull();
+
+    hit?.dispatchEvent(new Event("pointerenter"));
+    expect(onContextUsageIntent).toHaveBeenCalledTimes(1);
+
+    const touch = new Event("pointerenter");
+    Object.defineProperty(touch, "pointerType", { value: "touch" });
+    hit?.dispatchEvent(touch);
+    expect(onContextUsageIntent).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the plan-only ring without a hover card", () => {
+    const container = renderComposer({
+      sessions: null,
+      messages: [{ role: "assistant", content: "hello", provider: "openai" }],
+      providerUsage: planUsage([
+        planProvider("openai", "OpenAI", {
+          providerId: "openai",
+          windows: [{ label: "Week", usedPercent: 72 }],
+        }),
+      ]),
+    });
+
+    expect(container.querySelector(".context-usage__card")).toBeNull();
+    expect(container.querySelector(".context-ring__dial")).not.toBeNull();
   });
 });

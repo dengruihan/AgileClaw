@@ -7,6 +7,7 @@ import "../../styles/chat.ts";
 import "../../styles/chat/composer.css";
 import "../../styles/chat/composer-progress.css";
 import { createComposerProps } from "./chat-composer.test-support.ts";
+import type { ChatContextUsageDetail } from "./chat-context-usage-controller.ts";
 import { renderChatComposer, resetChatComposerState } from "./components/chat-composer.ts";
 import { installChatComposerPickerDismissal } from "./components/chat-picker-overlay.ts";
 
@@ -30,7 +31,57 @@ afterEach(async () => {
   await page.viewport(viewport.width, viewport.height);
 });
 
-function drawComposer(attachment = false, goal = false) {
+const hoverCardDetail: ChatContextUsageDetail = {
+  status: "ready",
+  report: {
+    source: "run",
+    generatedAt: 1,
+    systemPrompt: { chars: 4_000, projectContextChars: 0, nonProjectContextChars: 4_000 },
+    injectedWorkspaceFiles: [],
+    skills: { promptChars: 1_200, entries: [] },
+    tools: {
+      listChars: 8_000,
+      schemaChars: 0,
+      entries: [
+        { name: "bash", summaryChars: 2_000, schemaChars: 2_000 },
+        { name: "mcp__db__query", summaryChars: 4_000, schemaChars: 8_000 },
+      ],
+    },
+  },
+  toolsEffective: {
+    agentId: "main",
+    profile: "full",
+    groups: [
+      {
+        id: "core",
+        label: "Core",
+        source: "core",
+        tools: [{ id: "bash", label: "bash", description: "", rawDescription: "", source: "core" }],
+      },
+      {
+        id: "mcp",
+        label: "MCP",
+        source: "mcp",
+        tools: [
+          {
+            id: "mcp__db__query",
+            label: "query",
+            description: "",
+            rawDescription: "",
+            source: "mcp",
+          },
+        ],
+      },
+    ],
+  },
+  error: null,
+};
+
+function drawComposer(
+  attachment = false,
+  goal = false,
+  extraProps: Parameters<typeof createComposerProps>[0] = {},
+) {
   render(
     renderChatComposer(
       createComposerProps({
@@ -47,6 +98,7 @@ function drawComposer(attachment = false, goal = false) {
           inputTokens: 19_600,
           outputTokens: 126,
         },
+        ...extraProps,
       }),
     ),
     container,
@@ -54,7 +106,9 @@ function drawComposer(attachment = false, goal = false) {
   return {
     composer: container.querySelector<HTMLElement>(".agent-chat__input")!,
     trigger: container.querySelector<HTMLElement>(".context-ring")!,
+    hit: container.querySelector<HTMLElement>(".context-ring__hit")!,
     popover: container.querySelector<HTMLElement>(".context-usage__popover")!,
+    card: container.querySelector<HTMLElement>(".context-usage__card")!,
   };
 }
 
@@ -70,6 +124,43 @@ function isPainted(element: HTMLElement) {
 }
 
 describe("context usage popup geometry", () => {
+  it("paints the breakdown hover card and hands the ring off to the click popover", async () => {
+    await page.viewport(1280, 720);
+    container.style.cssText = "position:fixed;bottom:120px;left:600px";
+    const { trigger, hit, popover, card } = drawComposer(false, false, {
+      contextUsageDetail: hoverCardDetail,
+    });
+
+    await page.elementLocator(hit).hover();
+    await expect.poll(() => card.checkVisibility()).toBe(true);
+    expect(
+      [...card.querySelectorAll(".context-usage__card-row")].map((row) =>
+        row.textContent?.replace(/\s+/g, " ").trim(),
+      ),
+    ).toEqual([
+      "System tools 7.4%",
+      "MCP tools 22.2%",
+      "System prompt 4.9%",
+      "Skills 1.5%",
+      "Other 0%",
+      "Messages 64%",
+    ]);
+    const box = card.getBoundingClientRect();
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(1280);
+    expect(box.bottom).toBeLessThanOrEqual(trigger.getBoundingClientRect().top + 1);
+
+    // Clicking the ring dismisses the card and opens the full popover instead.
+    await page.elementLocator(trigger).click();
+    await expect.poll(() => popover.checkVisibility()).toBe(true);
+    await expect.poll(() => card.checkVisibility()).toBe(false);
+    // While the popover is open the ring suppresses hover cards.
+    expect(getComputedStyle(hit).pointerEvents).toBe("none");
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => popover.checkVisibility()).toBe(false);
+    expect(getComputedStyle(hit).pointerEvents).toBe("auto");
+  });
+
   it("paints the complete readout outside a clipped short split pane and dismisses it", async () => {
     await page.viewport(1280, 720);
     // Reproduce the bounded right conversation above Files; the renderer and

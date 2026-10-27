@@ -553,6 +553,8 @@ export class ChatPane extends ChatPaneLayoutRender {
         basePath: state.basePath,
         modelAuthStatusResult: state.modelAuthStatusResult,
       },
+      contextUsageDetail: this.contextUsage.detail,
+      onContextUsageIntent: () => this.contextUsage.intent(),
       composerControls: composerControls?.composerControls ?? nothing,
       permissionPicker: composerControls?.permissionPicker,
       ...this.suggestionChatProps(state.connected, selectedSessionArchived, multiIdentity),
