@@ -115,7 +115,7 @@ class HoverMarqueeDirective extends AsyncDirective {
       this.text = label.querySelector<HTMLElement>(".hover-marquee__text") ?? undefined;
       this.host =
         label.closest<HTMLElement>(
-          ".session-row-host, .sidebar-recent-sessions__head, .sidebar-identity-card, .sidebar-agent-card__main, .sidebar-workspace-header__main",
+          ".session-row-host, .sidebar-recent-sessions__head, .sidebar-identity-card",
         ) ?? undefined;
       if (!this.host || !this.text) {
         return undefined;

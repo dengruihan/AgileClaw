@@ -1,10 +1,8 @@
 // Control UI E2E tests cover chip-selected page scope and the all-agents escape.
-import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Page } from "playwright";
 import { beforeEach, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
   installMockGateway,
   waitForControlUiRoute,
@@ -54,6 +52,15 @@ async function screenshot(page: Page, name: string) {
     animations: "disabled",
     fullPage: true,
     path: path.join(proofDir, name),
+  });
+}
+
+function selectedAgentId(page: Page) {
+  return page.locator("openclaw-app").evaluate((element) => {
+    const app = element as HTMLElement & {
+      runtime: { context: { agentSelection: { state: { selectedId: string } } } };
+    };
+    return app.runtime.context.agentSelection.state.selectedId;
   });
 }
 
@@ -167,12 +174,7 @@ suite.define(() => {
             await gateway.resolveDeferred("connect");
           }
           await gateway.waitForRequest("agents.list");
-          const sidebar = page.locator("openclaw-app-sidebar");
-          await expect
-            .poll(async () =>
-              (await sidebar.locator(".sidebar-agent-card__name").textContent())?.trim(),
-            )
-            .toBe("Main");
+          await expect.poll(() => selectedAgentId(page)).toBe("main");
           await page.keyboard.press("ControlOrMeta+k");
           await page.locator(".cmd-palette__input").fill("Reviewer");
           const result = page.getByRole("option", { name: "Reviewer reviewer", exact: true });
@@ -212,11 +214,7 @@ suite.define(() => {
           await screenshot(page, "10-reloaded-reviewer.png");
           await page.goBack();
           await expect.poll(() => new URL(page.url()).pathname).toBe("/usage");
-          await expect
-            .poll(async () =>
-              (await sidebar.locator(".sidebar-agent-card__name").textContent())?.trim(),
-            )
-            .toBe("Main");
+          await expect.poll(() => selectedAgentId(page)).toBe("main");
         },
       );
     },
@@ -250,12 +248,7 @@ suite.define(() => {
           agents: [{ id: "research", name: "Research" }],
         });
 
-        const sidebar = page.locator("openclaw-app-sidebar");
-        await expect
-          .poll(async () =>
-            (await sidebar.locator(".sidebar-agent-card__name").textContent())?.trim(),
-          )
-          .toBe("Research");
+        await expect.poll(() => selectedAgentId(page)).toBe("research");
       },
     );
   });
@@ -293,9 +286,7 @@ suite.define(() => {
         await gateway.emitGatewayEvent("config.changed", { path: "agents.entries" });
         await gateway.waitForRequest("agents.list", { after: 1 });
 
-        const sidebar = page.locator("openclaw-app-sidebar");
-        const agentName = sidebar.locator(".sidebar-agent-card__name");
-        await expect.poll(async () => (await agentName.textContent())?.trim()).toBe("Research");
+        await expect.poll(() => selectedAgentId(page)).toBe("research");
 
         await gateway.resolveDeferred("chat.startup", {
           messages: [],
@@ -304,7 +295,7 @@ suite.define(() => {
           thinkingLevel: null,
         });
 
-        await expect.poll(async () => (await agentName.textContent())?.trim()).toBe("Research");
+        await expect.poll(() => selectedAgentId(page)).toBe("research");
         await expect
           .poll(() =>
             page.locator("openclaw-chat-pane").evaluate((pane) => {
@@ -328,115 +319,6 @@ suite.define(() => {
             ids: ["research", "writer"],
             selectedId: "research",
           });
-
-        await sidebar.getByRole("button", { name: /Switch agent/ }).click();
-        const agentMenu = sidebar.locator("wa-dropdown.sidebar-agent-menu");
-        await agentMenu.getByText("Research", { exact: true }).waitFor();
-        await agentMenu.getByText("Writer", { exact: true }).waitFor();
-        expect(await agentMenu.getByText("Stale Main", { exact: true }).count()).toBe(0);
-        if (captureUiProof) {
-          await writeFile(
-            path.join(proofDir, "00-refreshed-roster-wins.png"),
-            await takeControlUiViewportScreenshot(page, agentMenu.locator('[part="menu"]'), [
-              agentMenu.getByText("Research", { exact: true }),
-              agentMenu.getByText("Writer", { exact: true }),
-            ]),
-          );
-        }
-      },
-    );
-  });
-
-  it("scopes pages from the chip and keeps Agents settings independent", async () => {
-    await suite.withPage(
-      {
-        locale: "en-US",
-        serviceWorkers: "block",
-        viewport: { height: 900, width: 1440 },
-      },
-      async ({ page }) => {
-        const gateway = await installMockGateway(page, {
-          methodResponses: {
-            "agents.list": {
-              defaultId: "main",
-              mainKey: "main",
-              scope: "per-sender",
-              agents: multiAgentRoster,
-            },
-            "chat.startup": {
-              agentsList: {
-                defaultId: "main",
-                mainKey: "main",
-                scope: "per-sender",
-                agents: multiAgentRoster,
-              },
-              messages: [],
-              metadata: { models: [] },
-              sessionId: "session:agent:main:main",
-              thinkingLevel: null,
-            },
-            "sessions.list": {
-              count: 0,
-              defaults: { contextTokens: null, model: null, modelProvider: null },
-              path: "",
-              sessions: [],
-              ts: Date.now(),
-            },
-            "sessions.usage": emptyUsage,
-          },
-        });
-
-        await page.goto(`${suite.server.baseUrl}usage`);
-        await gateway.waitForRequest("agents.list");
-        const sidebar = page.locator("openclaw-app-sidebar");
-        await sidebar.getByRole("button", { name: /Switch agent/ }).click();
-        const agentMenu = sidebar.locator("wa-dropdown.sidebar-agent-menu");
-        // The card sits at the top of the sidebar: the menu drops below it so the
-        // agent you clicked (and its checkmark row) stays visible.
-        await expect
-          .poll(async () => {
-            const [card, menu] = await Promise.all([
-              sidebar.locator(".sidebar-agent-card__main").boundingBox(),
-              agentMenu.locator('[part~="menu"], .wa-dropdown__menu').first().boundingBox(),
-            ]);
-            if (!card || !menu) {
-              return null;
-            }
-            return { belowCard: menu.y >= card.y + card.height, leftAligned: menu.x <= card.x + 4 };
-          })
-          .toEqual({ belowCard: true, leftAligned: true });
-        await agentMenu.locator('wa-dropdown-item[value="agent:writer"]').click();
-        await waitForRequest(gateway, "sessions.list", (params) => params.agentId === "writer");
-        await expect
-          .poll(async () =>
-            (await sidebar.locator(".sidebar-agent-card__name").textContent())?.trim(),
-          )
-          .toBe("Writer");
-
-        await sidebar.getByRole("link", { name: "Home" }).click();
-        await expect.poll(() => new URL(page.url()).pathname).toBe("/chat/writer");
-        await sidebar.locator(".sidebar-identity-card").click();
-        await sidebar
-          .locator('wa-dropdown.sidebar-identity-menu wa-dropdown-item[value="command:usage"]')
-          .click();
-        await expect.poll(() => new URL(page.url()).pathname).toBe("/usage");
-        await waitForRequest(gateway, "sessions.usage", (params) => params.agentId === "writer");
-        const pageScope = page.locator(".agent-scope-control openclaw-agent-select");
-        await expect
-          .poll(() =>
-            pageScope.evaluate((picker) => (picker as HTMLElement & { value: string }).value),
-          )
-          .toBe("writer");
-        await screenshot(page, "01-writer-usage.png");
-
-        await sidebar.getByRole("button", { name: /Switch agent/ }).click();
-        await sidebar
-          .locator("wa-dropdown.sidebar-agent-menu")
-          .locator('wa-dropdown-item[value="command:agent-settings"]')
-          .click();
-        await expect.poll(() => new URL(page.url()).pathname).toBe("/settings/agents/writer");
-        expect(new URL(page.url()).searchParams.get("agent")).toBeNull();
-        await screenshot(page, "03-writer-settings.png");
       },
     );
   });

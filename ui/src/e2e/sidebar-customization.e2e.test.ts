@@ -230,7 +230,7 @@ suite.define(() => {
       );
       await expect
         .poll(() => trimmedTextContents(pinnedItems))
-        .toEqual(["Agents", "Dashboards", "Systems", "Automations", "Plugins"]);
+        .toEqual(["Dashboards", "Systems", "Automations"]);
       // Desktop renders no topbar row: the sidebar owns navigation.
       await expect.poll(() => page.locator(".topbar").isVisible()).toBe(false);
       const shellNav = page.locator(".shell-nav");
@@ -490,6 +490,10 @@ suite.define(() => {
       await expect.poll(() => moreButton.getAttribute("aria-expanded")).toBe("false");
       await openSidebarMoreMenu(page);
       await expect.poll(() => moreButton.getAttribute("aria-expanded")).toBe("true");
+      expect(await moreMenu.getByRole("menuitem", { name: "Agents", exact: true }).count()).toBe(0);
+      expect(await moreMenu.getByRole("menuitem", { name: "Plugins", exact: true }).count()).toBe(
+        0,
+      );
       // Enabled plugin tabs render directly in the sidebar body (#111995),
       // not inside the More menu.
       await expect
@@ -505,14 +509,18 @@ suite.define(() => {
         .not.toContain("Workboard");
 
       await moreMenu.getByRole("menuitem", { name: "Edit pinned items" }).click();
-      const menu = sidebar.locator(
-        "wa-dropdown.sidebar-customize-menu:not(.sidebar-more-menu):not(.sidebar-agent-menu)",
-      );
+      const menu = sidebar.locator("wa-dropdown.sidebar-pin-editor-menu");
       // The pin editor replaces the More menu in place.
       await expect.poll(() => moreMenu.count()).toBe(0);
       await expect
         .poll(() => trimmedTextContents(menu.getByRole("menuitemcheckbox")))
         .not.toContain("Workboard");
+      expect(
+        await menu.getByRole("menuitemcheckbox", { name: "Agents", exact: true }).count(),
+      ).toBe(0);
+      expect(
+        await menu.getByRole("menuitemcheckbox", { name: "Plugins", exact: true }).count(),
+      ).toBe(0);
       const usageItem = menu.getByRole("menuitemcheckbox", { name: "Usage" });
       await expect.poll(() => usageItem.getAttribute("aria-checked")).toBe("false");
       // Ask AgileClaw was removed outright: no assistant nav route may return
@@ -525,11 +533,11 @@ suite.define(() => {
       await usageItem.click();
       await expect
         .poll(() => trimmedTextContents(pinnedItems))
-        .toEqual(["Agents", "Dashboards", "Systems", "Automations", "Plugins", "Usage"]);
+        .toEqual(["Dashboards", "Systems", "Automations", "Usage"]);
       await page.reload();
       await expect
         .poll(() => trimmedTextContents(pinnedItems))
-        .toEqual(["Agents", "Dashboards", "Systems", "Automations", "Plugins", "Usage"]);
+        .toEqual(["Dashboards", "Systems", "Automations", "Usage"]);
       // The More menu is transient: closed after reload, unpinned routes inside.
       await expect.poll(() => moreButton.getAttribute("aria-expanded")).toBe("false");
       await openSidebarMoreMenu(page);
@@ -551,7 +559,7 @@ suite.define(() => {
       await menu.getByRole("menuitem", { name: "Reset pinned items" }).click();
       await expect
         .poll(() => trimmedTextContents(pinnedItems))
-        .toEqual(["Agents", "Dashboards", "Systems", "Automations", "Plugins"]);
+        .toEqual(["Dashboards", "Systems", "Automations"]);
 
       // The sidebar header search button is the command palette entry point.
       const searchButton = page.locator(".sidebar-brand__search");

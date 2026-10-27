@@ -7,6 +7,7 @@ import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-ar
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
   installMockGateway,
+  waitForControlUiRoute,
   type MockGatewayControls,
   type MockGatewayRequest,
 } from "../test-helpers/control-ui-e2e.ts";
@@ -230,12 +231,9 @@ suite.define(() => {
         hasText: "Deploy Helper",
       });
       await expect.poll(() => skillCard.getByRole("img", { name: "Ready" }).isVisible()).toBe(true);
-      const sidebar = page.locator("openclaw-app-sidebar");
-      await sidebar.getByRole("button", { name: /Switch agent/ }).click();
-      await sidebar
-        .locator("wa-dropdown.sidebar-agent-menu")
-        .getByRole("menuitemradio", { name: "Reviewer" })
-        .click();
+      await page.goto(`${suite.server.baseUrl}chat/reviewer`);
+      await waitForControlUiRoute(page, { routeId: "chat", pathname: "/chat/reviewer" });
+      await page.goto(`${suite.server.baseUrl}skills`);
       await waitForRequest(gateway, "skills.status", (params) => params.agentId === "reviewer");
       expect(new URL(page.url()).pathname).toBe("/skills");
       await expect

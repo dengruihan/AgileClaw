@@ -7,6 +7,7 @@ import { beforeEach, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
+  navigateToControlUiSession,
   controlUiE2eWaitTimeoutMs,
   controlUiSessionUrl,
   installMockGateway,
@@ -228,9 +229,7 @@ async function closeChat(fixture: { context: BrowserContext; page: Page }): Prom
 }
 
 async function setSelectedAgent(page: Page, name: string): Promise<void> {
-  const sidebar = page.locator("openclaw-app-sidebar");
-  await sidebar.getByRole("button", { name: /Switch agent/ }).click();
-  await sidebar.getByRole("menuitemradio", { name, exact: true }).click();
+  await navigateToControlUiSession(page, `agent:${name === "Main" ? "main" : "work"}:main`);
 }
 
 async function replyToAgentMetadata(gateway: MockGatewayControls, agentId: "main" | "work") {

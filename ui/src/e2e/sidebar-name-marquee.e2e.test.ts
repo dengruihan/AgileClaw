@@ -77,10 +77,7 @@ async function openNames(page: Page, name: string, workspace = false) {
   });
   await page.goto(`${suite.server.baseUrl}chat`);
   const sidebar = page.locator("openclaw-app-sidebar");
-  const labels = [
-    sidebar.locator(".sidebar-identity-card__name"),
-    sidebar.locator(".sidebar-agent-card__name-text"),
-  ];
+  const labels = [sidebar.locator(".sidebar-identity-card__name")];
   for (const label of labels) {
     await expect.poll(() => label.textContent()).toBe(name);
   }

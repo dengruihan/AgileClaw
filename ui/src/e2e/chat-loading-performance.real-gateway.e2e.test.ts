@@ -483,7 +483,7 @@ suite.define(() => {
         ]);
         const performanceAtReady = await readPerformanceSample(page);
         await page.waitForFunction(() =>
-          [...document.querySelectorAll<HTMLImageElement>(".sidebar-agent-card__avatar img")].some(
+          [...document.querySelectorAll<HTMLImageElement>("img.chat-avatar.assistant")].some(
             (image) => image.complete && image.naturalWidth > 0,
           ),
         );
@@ -495,14 +495,12 @@ suite.define(() => {
         await waitForStartupResponses();
         const startupMetrics = structuredClone(rpc);
         const startupIdentity = await page.evaluate(() => window.chatLoadingReadiness);
-        const images = await page
-          .locator(".sidebar-agent-card__avatar img")
-          .evaluateAll((elements) =>
-            elements.map((element) => {
-              const image = element as HTMLImageElement;
-              return { width: image.naturalWidth, height: image.naturalHeight };
-            }),
-          );
+        const images = await page.locator("img.chat-avatar.assistant").evaluateAll((elements) =>
+          elements.map((element) => {
+            const image = element as HTMLImageElement;
+            return { width: image.naturalWidth, height: image.naturalHeight };
+          }),
+        );
         const resources = await page.evaluate(() =>
           performance.getEntriesByType("resource").map((entry) => {
             const resource = entry as PerformanceResourceTiming;
@@ -831,7 +829,7 @@ suite.define(() => {
         expect(cache.revalidatedStatus).toBe(304);
 
         // Change identity only after the loading sample is frozen; exercise each
-        // format through the same authenticated HTTP loader used by the sidebar.
+        // format through the same authenticated HTTP loader used by the transcript.
         const percentPng = encodePngRgba(
           Buffer.from([0, 128, 0, 255, 0, 128, 0, 255, 0, 128, 0, 255, 0, 128, 0, 255]),
           2,
@@ -891,7 +889,7 @@ suite.define(() => {
           const response = await responseReady;
           expect(response.status()).toBe(200);
           expect(response.headers()["content-type"]).toBe(fixture.mime);
-          const avatarImage = page.locator(".sidebar-agent-card__avatar img");
+          const avatarImage = page.locator("img.chat-avatar.assistant").first();
           await expect
             .poll(() =>
               avatarImage.evaluate((image: HTMLImageElement) => ({

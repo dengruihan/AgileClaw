@@ -309,7 +309,7 @@ describe("gateway settings and layout persistence", () => {
     const gwUrl = expectedGatewayUrl("");
     saveSettings(
       makeUiSettings(gwUrl, {
-        sidebarEntries: ["route:tasks", "route:cron"],
+        sidebarEntries: ["route:plugins", "route:tasks", "route:cron", "route:agents-home"],
         textScale: 100,
       }),
     );
@@ -319,11 +319,9 @@ describe("gateway settings and layout persistence", () => {
     // Corrupt the persisted list; load falls back to the default pinned set.
     writeStored({ ...readStored(), sidebarEntries: "route:tasks", navWidth: 220 });
     expect(loadSettings().sidebarEntries).toEqual([
-      "route:agents-home",
       "route:dashboards",
       "route:systems",
       "route:cron",
-      "route:plugins",
     ]);
     expect(loadSettings().navWidth).toBe(258);
   });

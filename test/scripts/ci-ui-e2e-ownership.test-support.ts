@@ -109,7 +109,6 @@ export function assertControlUiE2eOwnership(
   expect(helperPrivateServerFiles.toSorted()).toEqual([
     "ui/src/e2e/activity-run-inspector.real-gateway.e2e.test.ts",
     "ui/src/e2e/agent-file-lifecycle.real-gateway.e2e.test.ts",
-    "ui/src/e2e/agent-switch-roster.e2e.test.ts",
     "ui/src/e2e/background-work.real-gateway.e2e.test.ts",
     "ui/src/e2e/boot-module-boundaries.e2e.test.ts",
     "ui/src/e2e/chat-agent-avatar.real-gateway.e2e.test.ts",

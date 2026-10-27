@@ -696,9 +696,7 @@ suite.define(() => {
         .locator("wa-dropdown.sidebar-more-menu")
         .getByRole("menuitem", { name: "Edit pinned items" })
         .click();
-      const customizeMenu = sidebar.locator(
-        "wa-dropdown.sidebar-customize-menu:not(.sidebar-more-menu):not(.sidebar-agent-menu)",
-      );
+      const customizeMenu = sidebar.locator("wa-dropdown.sidebar-pin-editor-menu");
       await expect
         .poll(() => customizeMenu.locator(".sidebar-customize-menu__provenance").textContent())
         .toContain("Stored in this browser only");

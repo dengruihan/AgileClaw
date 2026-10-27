@@ -206,7 +206,7 @@ suite.define(() => {
         const hero = page.locator(".agent-chat__welcome h2");
         const picker = page.locator(".new-session-page__select--agent openclaw-agent-select");
         const sidebar = page.locator("openclaw-app-sidebar");
-        await pollLocatorText(sidebar.locator(".sidebar-agent-card__name")).toContain("Pacino");
+        await pollLocatorText(sidebar.locator(".sidebar-workspace-header__name")).toBe("AgileClaw");
         await hero.waitFor();
         const welcomeEmoji = page.locator(".agent-chat__welcome-avatar .identity-avatar__text");
         await expect.poll(() => welcomeEmoji.getAttribute("data-avatar")).toBe("🎬");

@@ -1150,8 +1150,7 @@ openclaw-settings-save-indicator:empty {
      inside each 28px box is the only spacing. A per-button offset here reads
      as a hole in the rail once that button has no border to sit inside. */
   gap: 0;
-  /* Keep the action rail independent from the fit-content identity card so
-     short agent names never pull navigation controls away from the edge. */
+  /* Keep navigation controls at the edge as the brand label shrinks. */
   margin-inline-start: auto;
   flex: 0 0 auto;
 }
@@ -2811,13 +2810,6 @@ wa-dropdown-item.sidebar-customize-menu__item {
   text-decoration: none;
 }
 
-/* The agent switcher marks its selection in the trailing details rail
-   (.session-menu__check), so the native leading checkmark is layout-only: it
-   reserved a column that pushed avatar rows out of the command rows' gutter. */
-.sidebar-agent-menu .sidebar-customize-menu__item::part(checkmark) {
-  display: none;
-}
-
 .sidebar-customize-menu__text {
   display: block;
   flex: 1;
@@ -3409,57 +3401,13 @@ a:is(
   padding-right: 0;
 }
 
-/* The header identifies the active agent or the whole workspace. */
-.sidebar-brand > openclaw-sidebar-agent-card,
+/* Fixed product identity shares the header with the navigation controls. */
 .sidebar-workspace-header {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.sidebar-agent-card {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  max-width: 100%;
-  min-width: 0;
-  flex: 0 1 auto;
-}
-
-.sidebar-agent-card__main,
-.sidebar-workspace-header__main {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 1 1 auto;
   min-width: 0;
-  padding: 5px 6px;
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  text-align: left;
-  cursor: var(--cursor-action);
-  transition:
-    background var(--duration-fast) ease,
-    opacity var(--duration-fast) ease;
-}
-
-.sidebar-agent-card__main:hover,
-.sidebar-workspace-header__main:hover,
-.sidebar-workspace-header__main[aria-expanded="true"],
-.sidebar-agent-card--open .sidebar-agent-card__main {
-  background: color-mix(in srgb, var(--bg-hover) 84%, transparent);
-}
-
-.sidebar-agent-card__main:active,
-.sidebar-workspace-header__main:active {
-  background: color-mix(in srgb, var(--bg-hover) 96%, transparent);
-}
-
-.sidebar-agent-card__main:focus-visible,
-.sidebar-workspace-header__main:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 48%, transparent);
-  outline-offset: 1px;
+  flex: 1 1 auto;
 }
 
 .sidebar-workspace-header__mark {
@@ -3468,84 +3416,22 @@ a:is(
   flex: none;
 }
 
-.sidebar-agent-card__avatar {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--sidebar-agent-avatar-size);
-  height: var(--sidebar-agent-avatar-size);
-  flex: none;
-  border-radius: var(--radius-full);
-  background: var(--secondary);
-  color: var(--secondary-foreground);
-  font-size: 19px;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.sidebar-agent-card__avatar img {
-  width: 100%;
-  height: 100%;
-  border-radius: var(--radius-full);
-  object-fit: cover;
-}
-
-.sidebar-agent-card__avatar--environment {
-  box-shadow: 0 0 0 2px var(--control-ui-environment-color);
-}
-
-.sidebar-agent-card__text {
+.sidebar-workspace-header__text {
   display: flex;
   flex-direction: column;
-  min-width: 0;
-  flex: 1 1 auto;
   gap: 1px;
+  min-width: 0;
   overflow: hidden;
 }
 
-.sidebar-agent-card__name {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  min-width: 0;
+.sidebar-workspace-header__name {
+  overflow: hidden;
   color: var(--text-strong);
   font-size: var(--control-ui-text-md);
   font-weight: 650;
   line-height: 1.2;
+  text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.sidebar-agent-card__name-text {
-  min-width: 0;
-  overflow: hidden;
-  padding-inline-end: 8px;
-  white-space: nowrap;
-}
-
-.sidebar-agent-card__chevron {
-  display: inline-flex;
-  flex: none;
-  color: var(--muted);
-  opacity: 0.58;
-}
-
-.sidebar-agent-card__chevron svg {
-  width: 12px;
-  height: 12px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 1.5px;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.sidebar-agent-card__subtitle-row {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  max-width: 100%;
-  gap: 5px;
 }
 
 .sidebar-brand .control-ui-environment-pill {
@@ -3558,15 +3444,6 @@ a:is(
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.sidebar-agent-card__menu-unread {
-  position: absolute;
-  top: -1px;
-  left: -1px;
-  width: 6px;
-  height: 6px;
-  box-shadow: 0 0 0 2px var(--sidebar-bg);
 }
 
 /* "Pages" section head: zone-style label plus the pin-editor affordance. */
@@ -4057,189 +3934,6 @@ button.gateway-status:focus-visible {
 .sidebar-session-group-running {
   flex: none;
   margin-left: 4px;
-}
-
-.sidebar-agent-menu__agent-switch {
-  align-items: start !important;
-  min-height: var(--agent-tile-height);
-  min-width: 0;
-  width: auto;
-  justify-content: center;
-  /* Web Awesome's checkbox-adjacent host padding survives the hidden checkmark. */
-  padding: 0 !important;
-  color: var(--muted) !important;
-  text-align: center;
-  transition: color 120ms ease;
-}
-
-wa-dropdown-item.sidebar-agent-menu__agent-switch:hover,
-wa-dropdown-item.sidebar-agent-menu__agent-switch:focus-visible {
-  background: transparent !important;
-}
-
-wa-dropdown-item.sidebar-agent-menu__agent-switch:focus-visible {
-  outline: none !important;
-}
-
-.sidebar-agent-menu__agent-switch--active {
-  background: transparent;
-  color: var(--text-strong) !important;
-}
-
-.sidebar-agent-menu__agent-tile {
-  position: relative;
-  display: grid;
-  justify-items: center;
-  align-content: start;
-  gap: var(--agent-tile-gap);
-  width: 100%;
-  min-width: 0;
-  padding: var(--agent-tile-padding-block) 6px;
-}
-
-.sidebar-agent-menu__agent-avatar {
-  --agent-avatar-opacity: 0.55;
-  --agent-avatar-filter: saturate(0.4);
-
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--agent-avatar-size);
-  height: var(--agent-avatar-size);
-  border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--text-strong) 9%, var(--card));
-  color: var(--secondary-foreground);
-  box-shadow:
-    0 0 0 2px transparent,
-    0 0 0 4px transparent;
-  opacity: var(--agent-avatar-opacity);
-  filter: var(--agent-avatar-filter);
-  transition:
-    background-color 120ms ease,
-    box-shadow 120ms ease,
-    opacity 120ms ease,
-    filter 120ms ease;
-}
-
-.sidebar-agent-menu__agent-tile .sidebar-agent-menu__agent-avatar .agent-select__avatar {
-  width: var(--agent-avatar-size);
-  height: var(--agent-avatar-size);
-  font-size: var(--agent-avatar-glyph-size);
-  line-height: 1;
-}
-
-.sidebar-agent-menu__agent-switch--active .sidebar-agent-menu__agent-avatar {
-  --agent-avatar-opacity: 1;
-  --agent-avatar-filter: none;
-
-  box-shadow:
-    0 0 0 2px var(--bg-elevated),
-    0 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent);
-}
-
-.sidebar-agent-menu__agent-switch--active:hover .sidebar-agent-menu__agent-avatar {
-  background: color-mix(in srgb, var(--text-strong) 12%, var(--card));
-  box-shadow:
-    0 0 0 2px var(--bg-elevated),
-    0 0 0 4px color-mix(in srgb, var(--accent) 65%, transparent);
-}
-
-.sidebar-agent-menu__agent-switch:not(.sidebar-agent-menu__agent-switch--active):hover
-  .sidebar-agent-menu__agent-avatar,
-.sidebar-agent-menu__agent-switch:not(.sidebar-agent-menu__agent-switch--active):focus-visible
-  .sidebar-agent-menu__agent-avatar {
-  --agent-avatar-opacity: 0.85;
-  --agent-avatar-filter: saturate(0.8);
-}
-
-.sidebar-agent-menu__agent-switch:not(.sidebar-agent-menu__agent-switch--active):hover,
-.sidebar-agent-menu__agent-switch:not(.sidebar-agent-menu__agent-switch--active):focus-visible {
-  color: var(--text) !important;
-}
-
-.sidebar-agent-menu__agent-switch:not(.sidebar-agent-menu__agent-switch--active):focus-visible
-  .sidebar-agent-menu__agent-avatar {
-  box-shadow:
-    0 0 0 2px var(--bg-elevated),
-    0 0 0 4px color-mix(in srgb, var(--text-strong) 24%, transparent);
-}
-
-.sidebar-agent-menu__agent-tile .agent-select__option-copy {
-  display: block;
-  width: 100%;
-  min-height: var(--agent-label-height);
-  min-width: 0;
-  overflow: hidden;
-  text-align: center;
-}
-
-.sidebar-agent-menu__agent-tile .agent-select__option-label {
-  display: -webkit-box;
-  width: 100%;
-  overflow: hidden;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: normal;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  font-size: var(--control-ui-text-xs);
-  font-weight: 550;
-}
-
-.sidebar-agent-menu__agent-status {
-  position: absolute;
-  top: -2px;
-  inset-inline-end: 2px;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-
-/* The help flyout must escape the menu box, so the root stays
-   overflow-visible; the viewport bound moves to a flex column where only
-   the switcher list shrinks and scrolls (the action rows always fit). */
-.sidebar-agent-menu {
-  --agent-avatar-size: 48px;
-  --agent-avatar-glyph-size: 25px;
-  --agent-label-height: calc(30px * var(--control-ui-text-scale));
-  --agent-tile-gap: 10px;
-  --agent-grid-gap: 4px;
-  --agent-tile-padding-block: 8px;
-  --agent-tile-height: calc(
-    var(--agent-avatar-size) + var(--agent-label-height) + var(--agent-tile-gap) +
-      var(--agent-tile-padding-block) + var(--agent-tile-padding-block)
-  );
-
-  display: flex;
-  flex-direction: column;
-  overflow: visible;
-  max-height: calc(100vh - 16px);
-}
-
-wa-dropdown.sidebar-agent-menu::part(menu) {
-  display: flex;
-  flex-direction: column;
-  width: 264px;
-  max-height: calc(100vh - 16px);
-  overflow: visible;
-}
-
-.sidebar-agent-menu__agent-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-auto-rows: auto;
-  align-items: start;
-  gap: var(--agent-grid-gap);
-  flex: 0 1 auto;
-  max-height: calc(var(--agent-tile-height) + var(--agent-tile-height) + var(--agent-grid-gap));
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-color: color-mix(in srgb, var(--border) 72%, transparent) transparent;
-  scrollbar-width: thin;
-}
-
-.sidebar-agent-menu > .sidebar-customize-menu__separator {
-  border-top-color: var(--border);
 }
 
 .sidebar-identity-menu {

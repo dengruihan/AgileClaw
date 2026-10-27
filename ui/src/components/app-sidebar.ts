@@ -14,16 +14,16 @@ import { t } from "../i18n/index.ts";
 import { createIdleImport } from "../lib/idle-import.ts";
 import "./session-menu.ts";
 import "./mcp-app-catalog.ts";
-import "./sidebar-agent-card.ts";
 import "./sidebar-attention.ts";
 import { shouldHandleNavigationClick } from "../lib/navigation-click.ts";
 import {
   buildCatalogSessionKey,
   catalogSessionKeyFromSearch,
 } from "../lib/sessions/catalog-key.ts";
+import type { CatalogProjectGrouping } from "../lib/sessions/catalog-project-grouping.ts";
 import "./theme-mode-toggle.ts";
 import "./tooltip.ts";
-import type { CatalogProjectGrouping } from "../lib/sessions/catalog-project-grouping.ts";
+import { normalizeAgentId } from "../lib/sessions/session-key.ts";
 import { showToast } from "../lib/toast.ts";
 import { SubscriptionsController } from "../lit/subscriptions-controller.ts";
 import { SETTINGS_ROUTE_TARGETS } from "../pages/config/route-data.ts";
@@ -99,7 +99,12 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
   }
 
   async inspectSessionGroupRepository(path?: string): Promise<WorktreeRepositoryStatus> {
-    const requestedPath = path?.trim() || this.activeChipAgent().agent?.workspace?.trim();
+    const agentId = this.expandedAgentId();
+    const requestedPath =
+      path?.trim() ||
+      this.context?.agents.state.agentsList?.agents
+        .find((agent) => normalizeAgentId(agent.id) === agentId)
+        ?.workspace?.trim();
     if (!requestedPath) {
       return "unavailable";
     }
@@ -182,17 +187,6 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
     this.narration?.disconnect();
     this.catalogRendererImport.dispose();
     super.disconnectedCallback();
-  }
-
-  protected override willUpdate(changed: PropertyValues<this>) {
-    super.willUpdate(changed);
-    // An open switcher tracks roster/reconnect updates; otherwise only hydrate
-    // the active card and avoid background RPCs for every configured agent.
-    const identityIds =
-      this.sidebarMenus.agentMenuPosition === null
-        ? [this.expandedAgentId()]
-        : this.activeChipAgent().agents.map((agent) => agent.id);
-    this.ensureAgentIdentities(identityIds);
   }
 
   ensureAgentIdentities(agentIds: readonly string[]): void {

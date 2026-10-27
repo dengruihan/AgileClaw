@@ -3,12 +3,7 @@ import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import type { AgentsListResult } from "../../api/types.ts";
 import { sessionRefFromPath } from "../../app-session-route-paths.ts";
 import {
-  SESSION_FACE_PREFERENCE_PARAM,
-  SESSION_NAVIGATION_KEY_PARAM,
-} from "../../lib/sessions/route-navigation.ts";
-import {
   createGateway,
-  createGatewayHarness,
   createSessions,
   createSessionsHarness,
   mountSidebar,
@@ -208,112 +203,6 @@ describe("AppSidebar agent chip", () => {
     });
   });
 
-  it("resumes the newest session when the menu switches to an agent with cached rows", async () => {
-    const taskKey = "agent:main:dashboard:00000002-0000-4000-8000-000000000000";
-    const gatewayHarness = createGatewayHarness({} as GatewayBrowserClient);
-    const setSessionKey = vi.fn();
-    (gatewayHarness.gateway as { setSessionKey: (key: string) => void }).setSessionKey =
-      setSessionKey;
-    const { sidebar } = await mountSidebar(
-      gatewayHarness.gateway,
-      createSessions("main", ["agent:main:main", taskKey]),
-      "panel",
-      TWO_AGENTS,
-    );
-    const onNavigate = vi.fn();
-    sidebar.connected = true;
-    sidebar.onNavigate = onNavigate;
-    await sidebar.updateComplete;
-
-    sidebar.querySelector<HTMLButtonElement>(".sidebar-agent-card__main")?.click();
-    await sidebar.updateComplete;
-    const rows = [
-      ...sidebar.querySelectorAll<HTMLElement>(
-        ".sidebar-agent-menu wa-dropdown-item.sidebar-agent-menu__agent-switch",
-      ),
-    ];
-    rows.find((row) => row.textContent?.includes("Molty"))?.click();
-    // createSessionState stamps ascending updatedAt, so the last key is newest.
-    expect(setSessionKey).not.toHaveBeenCalled();
-    expect(onNavigate).toHaveBeenCalledWith("chat", {
-      pathname: "/chat/main/00000002000040008000000000000000",
-      search: `?${SESSION_NAVIGATION_KEY_PARAM}=${encodeURIComponent(taskKey)}`,
-    });
-  });
-
-  it("switches the Skills owner without opening an agent conversation", async () => {
-    const gateway = createGateway({} as GatewayBrowserClient);
-    const { sidebar, context } = await mountSidebar(
-      gateway,
-      createSessions("main", ["agent:main:main"]),
-      "panel",
-      TWO_AGENTS,
-    );
-    const onNavigate = vi.fn();
-    sidebar.activeRouteId = "skills";
-    sidebar.connected = true;
-    sidebar.onNavigate = onNavigate;
-    await sidebar.updateComplete;
-
-    sidebar.querySelector<HTMLButtonElement>(".sidebar-agent-card__main")!.click();
-    await sidebar.updateComplete;
-    sidebar
-      .querySelector<HTMLElement>('.sidebar-agent-menu wa-dropdown-item[value="agent:research"]')!
-      .click();
-    await sidebar.updateComplete;
-
-    expect(context.agentSelection.state).toEqual({
-      selectedId: "research",
-      scopeId: "research",
-    });
-    expect(sidebar.querySelector(".sidebar-agent-card__name")?.textContent).toContain("research");
-    expect(sidebar.querySelector(".sidebar-agent-menu")).toBeNull();
-    expect(onNavigate).not.toHaveBeenCalled();
-  });
-
-  it("keeps agent ids distinct from utility command values", async () => {
-    const gatewayHarness = createGatewayHarness({} as GatewayBrowserClient);
-    const setSessionKey = vi.fn();
-    (gatewayHarness.gateway as { setSessionKey: (key: string) => void }).setSessionKey =
-      setSessionKey;
-    const agents = {
-      defaultId: "main",
-      mainKey: "main",
-      scope: "per-sender",
-      agents: [{ id: "main" }, { id: "settings" }],
-    } as AgentsListResult;
-    const { sidebar } = await mountSidebar(
-      gatewayHarness.gateway,
-      createSessions("main", ["agent:main:main"]),
-      "panel",
-      agents,
-    );
-    const onNavigate = vi.fn();
-    sidebar.connected = true;
-    sidebar.onNavigate = onNavigate;
-    await sidebar.updateComplete;
-
-    sidebar.querySelector<HTMLButtonElement>(".sidebar-agent-card__main")?.click();
-    await sidebar.updateComplete;
-    const menu = sidebar.querySelector<HTMLElement>(".sidebar-agent-menu");
-    const settingsAgent = [
-      ...(menu?.querySelectorAll<HTMLElement>('wa-dropdown-item[type="checkbox"]') ?? []),
-    ].find((row) => row.textContent?.includes("settings"));
-    menu?.dispatchEvent(
-      new CustomEvent("wa-select", { detail: { item: settingsAgent }, bubbles: true }),
-    );
-    await sidebar.updateComplete;
-
-    // Uncached agent main session: the face is a guess, so the navigation carries the
-    // marker that lets the chat loader re-derive it from the gateway.
-    expect(setSessionKey).toHaveBeenCalledWith("agent:settings:main");
-    expect(onNavigate).toHaveBeenCalledWith("chat", {
-      pathname: "/chat/settings",
-      search: `?${SESSION_FACE_PREFERENCE_PARAM}=1`,
-    });
-    expect(onNavigate).not.toHaveBeenCalledWith("appearance");
-  });
-
   it("keeps the identity card available offline with reconnect and retry actions", async () => {
     const gateway = createGateway({} as GatewayBrowserClient);
     const { sidebar } = await mountSidebar(gateway, createSessions("main", ["agent:main:main"]));
@@ -323,10 +212,7 @@ describe("AppSidebar agent chip", () => {
     await sidebar.updateComplete;
 
     expect(sidebar.querySelector(".sidebar-identity-card__subtitle")).toBeNull();
-    expect(sidebar.querySelector(".sidebar-agent-card__main")).toBeNull();
-    expect(
-      sidebar.querySelector(".sidebar-workspace-header__main")?.getAttribute("aria-label"),
-    ).not.toContain("Online");
+    expect(sidebar.querySelector(".sidebar-workspace-header")?.textContent).not.toContain("Online");
 
     sidebar.connected = false;
     sidebar.connectionStatus = "reconnecting";
@@ -340,7 +226,6 @@ describe("AppSidebar agent chip", () => {
     ).toBe("polite");
     expect(connectionStatus?.textContent).not.toContain("Offline");
     expect(connectionStatus?.textContent).toContain("Reconnecting…");
-    expect(sidebar.querySelector(".sidebar-agent-card__subtitle-row")).toBeNull();
 
     card?.click();
     await sidebar.updateComplete;
@@ -380,7 +265,6 @@ describe("AppSidebar agent chip", () => {
     });
     await sidebar.updateComplete;
 
-    expect(sidebar.querySelector(".sidebar-agent-card__subtitle-row")).toBeNull();
     // Run state wraps the Home icon and suppresses its unread badge.
     const spinner = sidebar.querySelector(".nav-item--home .session-glyph__ring");
     expect(spinner).not.toBeNull();
@@ -443,18 +327,13 @@ describe("AppSidebar agent chip", () => {
     });
     await sidebar.updateComplete;
 
-    // No per-agent sections: the card switcher owns agent switching now, and
-    // the main session lives behind the identity card instead of the list.
-    expect(sidebar.querySelector(".sidebar-agent-card__subtitle-row")).toBeNull();
+    // Home stays outside the list; cached rows follow the selected conversation.
     expect(sidebar.querySelector(".sidebar-agent-section")).toBeNull();
     expect(sidebar.querySelectorAll(".sidebar-recent-session")).toHaveLength(0);
-    expect(
-      sidebar.querySelector(".sidebar-agent-card__avatar .sidebar-agent-card__menu-unread"),
-    ).not.toBeNull();
 
     // Mid-switch (selected agent != loaded result agent) the list renders the
     // target agent's cached rows instead of flashing empty until refresh.
-    // Chip switch and chat-pane both sync agentSelection with the route.
+    // Chat navigation syncs agentSelection with the route.
     context.agentSelection.state.selectedId = "research";
     sidebar.sessionKey = "agent:research:one";
     await sidebar.updateComplete;

@@ -5326,7 +5326,6 @@ const PR_EXEMPT_RUNTIME_TEST_FILES = [
   "ui/src/e2e/activity-session-subagents.e2e.test.ts",
   "ui/src/e2e/agent-file-lifecycle.e2e.test.ts",
   "ui/src/e2e/agent-page-scope.e2e.test.ts",
-  "ui/src/e2e/agent-switch-roster.e2e.test.ts",
   "ui/src/e2e/app-chrome-interaction.e2e.test.ts",
   "ui/src/e2e/avatar-initial-emoji.e2e.test.ts",
   "ui/src/e2e/board-mcp-app.e2e.test.ts",

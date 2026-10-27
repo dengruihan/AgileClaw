@@ -19,7 +19,6 @@ type NavigationPresentation = readonly [icon: IconName, titleKey: string, subtit
 // Worktrees is a tab of the Sessions hub, so it is not listed either.
 // Workboard is plugin-owned and enters the zone through its Control UI descriptor.
 export const SIDEBAR_NAV_ROUTES = [
-  "agents-home",
   "dashboards",
   "usage",
   "cron",
@@ -27,13 +26,11 @@ export const SIDEBAR_NAV_ROUTES = [
   "systems",
   "activity",
   "meetings",
-  "plugins",
   "apps",
   "portals",
 ] as const satisfies readonly NavigationRouteId[];
 
-// Routes presented as tabs of the Plugins hub. The sidebar highlights the
-// Plugins entry for all of them, mirroring how config covers settings routes.
+// Routes presented as tabs of the Plugins hub.
 export function isPluginsHubRoute(routeId: NavigationRouteId): boolean {
   return routeId === "plugins" || routeId === "skills" || routeId === "skill-workshop";
 }
@@ -58,9 +55,9 @@ export type SidebarZoneEntry =
 
 // Keep the highest-value operational destinations visible on first use. Users
 // can still replace this route set through the customize menu.
-export const DEFAULT_SIDEBAR_ENTRIES = (
-  ["agents-home", "dashboards", "systems", "cron", "plugins"] as const
-).map((route) => serializeSidebarEntry({ type: "route", route }));
+export const DEFAULT_SIDEBAR_ENTRIES = (["dashboards", "systems", "cron"] as const).map((route) =>
+  serializeSidebarEntry({ type: "route", route }),
+);
 
 /**
  * Parse the compact persisted representation used by browser and synced prefs.

@@ -158,7 +158,7 @@ function fixtureDocument(): string {
         <a class="sidebar-footer-build" href="/settings/about">Build</a>
       </aside>
       <div class="sidebar-more-menu"><div class="sidebar-customize-menu__item"><a href="/activity">Activity</a></div></div>
-      <div class="sidebar-agent-menu"><div class="sidebar-customize-menu__item"><a id="sidebar-help-link" href="https://example.com/docs" target="_blank">Docs</a></div></div>
+      <div class="sidebar-identity-menu"><div class="sidebar-customize-menu__item"><a id="sidebar-help-link" href="https://example.com/docs" target="_blank">Docs</a></div></div>
       <a id="new-tab-link" class="btn" href="https://example.com/docs" target="_blank">Docs</a>
       <button id="new-tab-button" class="btn" type="button" data-new-tab-action>New tab</button>
       <button id="disabled-new-tab-button" class="btn btn--ghost" type="button" data-new-tab-action disabled>Unavailable new tab</button>

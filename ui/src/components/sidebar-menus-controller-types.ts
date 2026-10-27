@@ -1,5 +1,4 @@
 import type { ControlUiNavigationItem } from "../../../src/plugin-sdk/control-ui.js";
-import type { AgentIdentityResult, GatewayAgentRow } from "../api/types.ts";
 import type { NavigationRouteId } from "../app-navigation.ts";
 import type { ApplicationContext, ApplicationNavigationOptions } from "../app/context.ts";
 import type { ThemeMode } from "../app/theme.ts";
@@ -36,7 +35,6 @@ export interface SidebarMenusControllerHost extends SessionOrganizerControllerHo
   readonly onRetryConnect?: () => void;
   readonly onPreloadRoute?: (routeId: NavigationRouteId) => Promise<void>;
   sidebarAgentsMode: "chip" | "roster";
-  readonly pinnedAgentIds: readonly string[];
   readonly preferencesBrowserOnly: boolean;
   readonly selectedSessionKeys: ReadonlySet<string>;
   readonly sessionData: SessionOrganizerControllerHost["sessionData"] &
@@ -75,17 +73,7 @@ export interface SidebarMenusControllerHost extends SessionOrganizerControllerHo
   readonly terminalAvailable: boolean;
   readonly themeMode: ThemeMode;
   pluginNavigation(): ControlUiRegistration<ControlUiNavigationItem>[];
-  activeChipAgent(): {
-    activeId: string;
-    agent: GatewayAgentRow | undefined;
-    agents: readonly GatewayAgentRow[];
-    identity: AgentIdentityResult | null;
-    identities: ReadonlyMap<string, AgentIdentityResult>;
-  };
-  agentUnreadCount(agentId: string): number;
-  askAgentCapabilities(agentId: string): void;
   getRouteSessionKey(): string;
   getSessionNavigationState(): { selectedAgentId: string };
   selectedVisibleSessions(): SidebarRecentSession[];
-  switchChipAgent(agentId: string): void;
 }

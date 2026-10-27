@@ -5,7 +5,6 @@ import type { GatewayControlUiPluginTab } from "../api/gateway.ts";
 import type { GatewaySessionRow, SessionsListResult } from "../api/types.ts";
 import { SIDEBAR_NAV_ROUTES } from "../app-navigation.ts";
 import type { ApplicationContext } from "../app/context.ts";
-import { listSelectableAgents } from "../lib/agents/display.ts";
 import { resolveSessionChannelPresentation } from "../lib/session-channel.ts";
 import {
   resolveChannelSessionInfo,
@@ -27,7 +26,6 @@ import {
   isSubagentSessionKey,
   isPinnableUiSessionRow,
   isUiGlobalScopeConfigured,
-  normalizeAgentId,
   readSessionDefaults,
   resolveUiConfiguredMainKey,
   resolveUiDefaultAgentId,
@@ -370,56 +368,6 @@ export function extendSidebarSessionSelection(input: {
     selectedKeys: new Set(input.rows.slice(start, end + 1).map((row) => row.key)),
     anchor,
   };
-}
-
-export function resolveActiveSidebarAgent(input: {
-  activeId: string;
-  roster: NonNullable<ApplicationContext["agents"]["state"]["agentsList"]>["agents"];
-  identities: ReturnType<ApplicationContext["agentIdentity"]["entries"]>;
-}) {
-  const identities = new Map(
-    input.identities.map((identity) => [identity.agentId, identity] as const),
-  );
-  return {
-    activeId: input.activeId,
-    agent: input.roster.find((entry) => normalizeAgentId(entry.id) === input.activeId),
-    agents: listSelectableAgents(input.roster),
-    identity: identities.get(input.activeId) ?? null,
-    identities,
-  };
-}
-
-export function resolveLatestSidebarAgentSession(input: {
-  agentId: string;
-  sessionData: {
-    sessionsAgentId: string | null;
-    sessionsResult: SessionsListResult | null;
-    sessionResultsByAgent: Readonly<Record<string, SessionsListResult>>;
-  };
-  context: ApplicationContext | undefined;
-}): SessionRow | null {
-  const { sessionData } = input;
-  const normalized = normalizeAgentId(input.agentId);
-  const rows =
-    normalized === normalizeAgentId(sessionData.sessionsAgentId ?? "")
-      ? (sessionData.sessionsResult?.sessions ?? [])
-      : (sessionData.sessionResultsByAgent[normalized]?.sessions ?? []);
-  // Unprefixed keys belong to the system default agent. Keeping them for
-  // another agent would resume the wrong conversation with the raw key.
-  const visible = filterVisibleSessionRows(rows, {
-    agentId: normalized,
-    defaultAgentId: resolveUiDefaultAgentId({
-      agentsList: input.context?.agents.state.agentsList,
-      hello: input.context?.gateway.snapshot.hello,
-    }),
-    filterByAgent: true,
-    archivedFilter: "active",
-  });
-  return visible.reduce<SessionRow | null>(
-    (latest, row) =>
-      latest !== null && compareSessionRowsByUpdatedAt(latest, row) <= 0 ? latest : row,
-    null,
-  );
 }
 
 export function collectSidebarSessionRowsByKey(input: {

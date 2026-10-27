@@ -597,7 +597,7 @@ describeBrowserLayout("app chrome interaction styles", () => {
               <span class="sidebar-session-catalog-project__label">Project</span>
               <span class="sidebar-session-catalog-project__count">100</span>
             </button>
-            <span class="sidebar-agent-card__name">Agent</span>
+            <span class="sidebar-workspace-header__name">Agent</span>
             <span class="settings-sidebar__item-label">Settings</span>
             <span class="sidebar-file-view__path">workspace/file.ts</span>
             <span class="chat-workspace-rail__file-badge">3 files</span>
@@ -628,7 +628,7 @@ describeBrowserLayout("app chrome interaction styles", () => {
         ".session-row-trail",
         ".sidebar-session-catalog-host__count",
         ".sidebar-session-catalog-project__count",
-        ".sidebar-agent-card__name",
+        ".sidebar-workspace-header__name",
         ".settings-sidebar__item-label",
         ".sidebar-file-view__path",
         ".chat-workspace-rail__file-badge",
