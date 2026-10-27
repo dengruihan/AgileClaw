@@ -28,7 +28,9 @@ import {
   formatThinkingCommandOptionsForSession,
   isThinkingLevelOptionForSession,
   resolveCurrentThinkingLevel,
+  resolvePendingModelThinkingTarget,
   resolveThinkingLevelInput,
+  type ChatThinkingTarget,
 } from "../../lib/chat/thinking.ts";
 import { formatUiError, formatUiExternalText } from "../../lib/format-error.ts";
 import { formatCompactTokenCount } from "../../lib/format.ts";
@@ -265,6 +267,25 @@ async function executeModel(
   );
 }
 
+/** /think reads the pending model's levels while an optimistic selection is in flight. */
+function resolveCommandThinkingSession(
+  context: SlashCommandContext,
+  session: GatewaySessionRow | undefined,
+  defaults: SessionsListResult["defaults"] | undefined,
+  catalog: readonly ModelCatalogEntry[],
+  sessionKey: string,
+): ChatThinkingTarget | undefined {
+  return (
+    resolvePendingModelThinkingTarget({
+      catalog,
+      defaults,
+      modelOverrides: context.sessions.state.modelOverrides,
+      session,
+      sessionKey,
+    }) ?? session
+  );
+}
+
 async function executeThink(
   client: GatewayBrowserClient,
   sessionKey: string,
@@ -280,12 +301,19 @@ async function executeThink(
         context,
         sessionKey,
       );
+      const thinkingSession = resolveCommandThinkingSession(
+        context,
+        session,
+        defaults,
+        models,
+        sessionKey,
+      );
       return {
         content: formatDirectiveOptions(
           t("chat.commandResults.thinking.current", {
-            level: resolveCurrentThinkingLevel(session, defaults, models),
+            level: resolveCurrentThinkingLevel(thinkingSession, defaults, models),
           }),
-          formatThinkingCommandOptionsForSession(session, defaults, models),
+          formatThinkingCommandOptionsForSession(thinkingSession, defaults, models),
         ),
       };
     } catch (err) {
@@ -306,20 +334,27 @@ async function executeThink(
   try {
     const { session, defaults } = await loadCurrentSessionState(context, sessionKey);
     const modelCatalog = context.chatModelCatalog ?? context.modelCatalog ?? [];
-    const level = resolveThinkingLevelInput(rawLevel, session, defaults, modelCatalog);
+    const thinkingSession = resolveCommandThinkingSession(
+      context,
+      session,
+      defaults,
+      modelCatalog,
+      sessionKey,
+    );
+    const level = resolveThinkingLevelInput(rawLevel, thinkingSession, defaults, modelCatalog);
     if (!level) {
       return {
         content: t("chat.commandResults.thinking.unrecognized", {
           level: rawLevel,
-          options: formatThinkingCommandOptionsForSession(session, defaults, modelCatalog),
+          options: formatThinkingCommandOptionsForSession(thinkingSession, defaults, modelCatalog),
         }),
       };
     }
-    if (isThinkingLevelOptionForSession(session, defaults, level, modelCatalog) === false) {
+    if (isThinkingLevelOptionForSession(thinkingSession, defaults, level, modelCatalog) === false) {
       return {
         content: t("chat.commandResults.thinking.unsupported", {
           level: rawLevel,
-          options: formatThinkingCommandOptionsForSession(session, defaults, modelCatalog),
+          options: formatThinkingCommandOptionsForSession(thinkingSession, defaults, modelCatalog),
         }),
       };
     }

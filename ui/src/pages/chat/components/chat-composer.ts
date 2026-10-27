@@ -613,7 +613,12 @@ export function renderChatComposer(props: ChatComposerProps) {
     onPrimaryActionPointerDown: (event) =>
       preserveComposerFocusOnPrimaryAction(event, state.composerTextarea),
   };
-  if (props.modelSwitching && state.slashMenuCommand?.key === "think") {
+  // A switch start swaps the think option set; only that edge retires an open
+  // menu. While the switch is in flight the menu stays usable with the pending
+  // model's catalog levels.
+  const modelSwitchStarted = props.modelSwitching && !state.prevModelSwitching;
+  state.prevModelSwitching = props.modelSwitching;
+  if (modelSwitchStarted && state.slashMenuCommand?.key === "think") {
     resetSlashMenuState(state);
   }
   if (

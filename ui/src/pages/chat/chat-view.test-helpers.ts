@@ -162,6 +162,7 @@ export function createChatProps(overrides: Partial<ChatProps> = {}): ChatProps {
     draft: "",
     modelCatalog: [],
     modelSwitching: false,
+    modelOverrides: {},
     queue: [],
     realtimeTalkActive: false,
     realtimeTalkStatus: "idle",

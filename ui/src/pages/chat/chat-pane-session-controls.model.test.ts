@@ -8,6 +8,7 @@ import {
   captureChatOutboxAdmission,
   storedChatOutboxScopeKey,
 } from "../../lib/chat/outbox-store.ts";
+import type { SessionPatchResult } from "../../lib/sessions/patch.ts";
 import {
   createGatewayHarness,
   createTestSessionCapability,
@@ -18,11 +19,13 @@ import {
   createTestGatewayClient,
 } from "../../test-helpers/gateway-client.ts";
 import { sessionMutationGatewayHello } from "../../test-helpers/gateway-methods.ts";
+import { makeChatHost } from "./chat-host.test-support.ts";
 import { renderChatPaneComposerControls } from "./chat-pane-session-controls.ts";
 import { createInitializationContext, createRenderTestChatPane } from "./chat-pane.test-support.ts";
 import { admitQueuedMessageForSession } from "./chat-queue.ts";
 import { steerQueuedChatMessage } from "./chat-send-actions.ts";
 import { handlePageGatewayEvent } from "./chat-state-events.ts";
+import { getThinkingSlider, getThinkingSliderValues } from "./chat-view.test-helpers.ts";
 import {
   getChatModelObservedRunId,
   getChatSessionProjection,
@@ -264,5 +267,74 @@ describe("chat pane model controls", () => {
     expect(trigger?.textContent).toContain("Primary");
     expect(trigger?.textContent).not.toContain("Model pending");
     expect(trigger?.dataset.chatSelectValue).toBe("example/primary");
+  });
+
+  it("offers the pending model's effort levels while its switch is in flight", async () => {
+    const selectedSession: GatewaySessionRow = {
+      key: "main",
+      kind: "direct",
+      model: "primary",
+      modelProvider: "openai",
+      thinkingLevels: [
+        { id: "low", label: "low" },
+        { id: "high", label: "high" },
+      ],
+    };
+    const sessionsResult = { ...createSessionsListResult(), sessions: [selectedSession] };
+    const modelPatch = createDeferred<SessionPatchResult | null>();
+    const state = makeChatHost({
+      sessionKey: "main",
+      sessionsResult,
+      chatModelCatalog: [
+        { id: "primary", name: "Primary", provider: "openai" },
+        {
+          id: "gpt-opus",
+          name: "GPT Opus",
+          provider: "openai",
+          thinkingLevels: [
+            { id: "minimal", label: "minimal" },
+            { id: "max", label: "max" },
+          ],
+          thinkingDefault: "max",
+        },
+      ],
+      chatModelSwitchPromises: {},
+      requestHandlers: {
+        "sessions.patch": () => modelPatch.promise,
+        "sessions.list": sessionsResult,
+      },
+    });
+    onTestFinished(() => state.sessions.dispose());
+    const container = document.createElement("div");
+    const draw = () => {
+      const controls = renderChatPaneComposerControls({
+        state: state as unknown as Parameters<typeof renderChatPaneComposerControls>[0]["state"],
+        selectedSession: state.sessionsResult?.sessions[0],
+        agentDefaultModel: "openai/primary",
+        modelAccess: { allowed: true, requiredScope: "operator.write" },
+        effortAccess: { allowed: true, requiredScope: "operator.write" },
+        contextWindowAccess: { allowed: true, requiredScope: "operator.write" },
+        permissionAccess: { allowed: true, requiredScope: "operator.write" },
+        canSelectFull: true,
+        onModelSetup: vi.fn(),
+      });
+      render(controls.composerControls, container);
+    };
+    draw();
+    const option = container.querySelector<HTMLButtonElement>(
+      '[data-chat-model-option="openai/gpt-opus"]',
+    );
+    expect(option).toBeInstanceOf(HTMLButtonElement);
+    option!.click();
+
+    draw();
+    const slider = getThinkingSlider(container);
+    expect(slider?.disabled).toBe(false);
+    expect(getThinkingSliderValues(container)).toEqual(["minimal", "max"]);
+    const trigger = container.querySelector<HTMLElement>("[data-chat-model-select]");
+    expect(trigger?.getAttribute("aria-disabled")).toBe("false");
+
+    modelPatch.resolve({ ok: true, key: "main", path: "", entry: { sessionId: "main" } });
+    await expect(state.chatModelSwitchPromises.main).resolves.toBe(true);
   });
 });

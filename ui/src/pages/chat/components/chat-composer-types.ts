@@ -122,6 +122,8 @@ export type ChatComposerProps = ChatAttachmentControlsProps & {
   mentionsUnsupported?: boolean;
   modelCatalog: readonly ModelCatalogEntry[];
   modelSwitching: boolean;
+  /** Optimistic model selections keyed by session; owned by the sessions capability. */
+  modelOverrides: Readonly<Record<string, string | null | undefined>>;
   sessions: SessionsListResult | null;
   /** The pane resolves aliases and agent ownership; absence must not reuse an unowned row. */
   selectedSession?: GatewaySessionRow;
@@ -229,4 +231,6 @@ export type ChatComposerState = SkillMenuState &
     composerDraftScopeKey: string | null;
     dictationError: string | null;
     dictationSelection: { start: number; end: number; value: string } | null;
+    /** Tracks the modelSwitching edge so only a switch start retires a think menu. */
+    prevModelSwitching: boolean;
   };

@@ -1,3 +1,4 @@
+import { expectDefined } from "@openclaw/normalization-core";
 import { describe, expect, it } from "vitest";
 import type { ModelCatalogEntry } from "../../api/types.ts";
 import {
@@ -5,6 +6,7 @@ import {
   isThinkingLevelOptionForSession,
   resolveChatThinkingSelectState,
   resolveCurrentThinkingLevel,
+  resolvePendingModelThinkingTarget,
   resolveThinkingCommandArgOptionsForSession,
   resolveThinkingLevelInput,
 } from "./thinking.ts";
@@ -310,4 +312,150 @@ describe("chat thinking helpers", () => {
       expect(state.inherited.value).toBe("ultra");
     },
   );
+});
+
+describe("pending model thinking targets", () => {
+  const row = {
+    model: "gpt-5.6-sol",
+    modelProvider: "openai",
+    thinkingLevels: [
+      { id: "low", label: "low" },
+      { id: "high", label: "high" },
+    ],
+    thinkingLevel: "high",
+  };
+  const pendingCatalog: ModelCatalogEntry[] = [
+    {
+      id: "claude-opus",
+      name: "Claude Opus",
+      provider: "anthropic",
+      thinkingLevels: [
+        { id: "minimal", label: "minimal" },
+        { id: "max", label: "max" },
+      ],
+      thinkingDefault: "max",
+    },
+  ];
+  const selectStateBase = {
+    catalog: pendingCatalog,
+    sessionKey: "main",
+    sessionsResult: null,
+  };
+
+  it("keeps the row authoritative without a pending selection", () => {
+    const target = resolvePendingModelThinkingTarget({
+      catalog: pendingCatalog,
+      modelOverrides: {},
+      session: row,
+      sessionKey: "main",
+    });
+    expect(target).toBeUndefined();
+  });
+
+  it("rebases options onto the pending model's catalog levels", () => {
+    const target = expectDefined(
+      resolvePendingModelThinkingTarget({
+        catalog: pendingCatalog,
+        modelOverrides: { main: "anthropic/claude-opus" },
+        session: row,
+        sessionKey: "main",
+      }),
+    );
+    expect(target.model).toBe("claude-opus");
+    expect(target.modelProvider).toBe("anthropic");
+    expect(resolveThinkingCommandArgOptionsForSession(target, undefined, pendingCatalog)).toEqual([
+      "default",
+      "minimal",
+      "max",
+    ]);
+  });
+
+  it("follows a null pending selection to the defaults model", () => {
+    const target = expectDefined(
+      resolvePendingModelThinkingTarget({
+        catalog: pendingCatalog,
+        defaults: { model: "claude-opus", modelProvider: "anthropic", contextTokens: null },
+        modelOverrides: { main: null },
+        session: row,
+        sessionKey: "main",
+      }),
+    );
+    expect(target.model).toBe("claude-opus");
+    expect(resolveThinkingCommandArgOptionsForSession(target, undefined, pendingCatalog)).toEqual([
+      "default",
+      "minimal",
+      "max",
+    ]);
+  });
+
+  it("fails closed when the pending model is not in the catalog", () => {
+    const target = expectDefined(
+      resolvePendingModelThinkingTarget({
+        catalog: pendingCatalog,
+        modelOverrides: { main: "anthropic/claude-unknown" },
+        session: row,
+        sessionKey: "main",
+      }),
+    );
+    expect(resolveThinkingCommandArgOptionsForSession(target, undefined, pendingCatalog)).toEqual(
+      [],
+    );
+    expect(resolveChatThinkingSelectState({ ...selectStateBase, session: target }).options).toEqual(
+      [],
+    );
+  });
+
+  it("prefers a qualified pending value over a router provider's same-text deep id", () => {
+    const target = expectDefined(
+      resolvePendingModelThinkingTarget({
+        catalog: [
+          {
+            id: "anthropic/claude-x",
+            name: "Claude X via router",
+            provider: "openrouter",
+            thinkingLevels: [{ id: "router-low", label: "router-low" }],
+          },
+          {
+            id: "claude-x",
+            name: "Claude X",
+            provider: "anthropic",
+            thinkingLevels: [
+              { id: "minimal", label: "minimal" },
+              { id: "max", label: "max" },
+            ],
+          },
+        ],
+        modelOverrides: { main: "anthropic/claude-x" },
+        session: row,
+        sessionKey: "main",
+      }),
+    );
+    expect(target.model).toBe("claude-x");
+    expect(target.modelProvider).toBe("anthropic");
+  });
+
+  it("keeps a null pending selection on the defaults row's own thinking facts", () => {
+    const defaults = {
+      model: "gpt-default",
+      modelProvider: "openai",
+      contextTokens: null,
+      thinkingLevels: [{ id: "low", label: "low" }],
+      thinkingDefault: "low",
+    };
+    const target = expectDefined(
+      resolvePendingModelThinkingTarget({
+        catalog: [],
+        defaults,
+        modelOverrides: { main: null },
+        session: row,
+        sessionKey: "main",
+      }),
+    );
+    expect(target.model).toBe("gpt-default");
+    expect(target.modelProvider).toBe("openai");
+    expect(resolveThinkingCommandArgOptionsForSession(target, defaults, [])).toEqual([
+      "default",
+      "low",
+    ]);
+  });
 });

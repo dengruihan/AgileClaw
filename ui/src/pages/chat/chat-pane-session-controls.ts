@@ -5,6 +5,7 @@ import { hasOperatorWriteAccess } from "../../app/operator-access.ts";
 import { t } from "../../i18n/index.ts";
 import { registerModelControlsEnglish } from "../../i18n/locales/en-model-controls.ts";
 import { storedChatOutboxScopeKey } from "../../lib/chat/outbox-store.ts";
+import { resolvePendingModelThinkingTarget } from "../../lib/chat/thinking.ts";
 import { resolveModelCatalogState } from "../../lib/model-catalog-store.ts";
 import {
   readSessionMethodAccess,
@@ -227,10 +228,20 @@ export function renderChatPaneComposerControls(params: {
   );
   const thinkingLevelOverride = state.sessions.think(sessionKey, agentScope.agentId);
   const settingsPreview = state.sessions.settingsPreview(sessionKey, agentScope.agentId);
+  // A pending user model selection rebases the thinking target onto the
+  // optimistic model; optimistic thinking claims are reapplied afterwards so an
+  // in-flight level choice stays visible through the switch.
+  const pendingModelThinkingTarget = resolvePendingModelThinkingTarget({
+    catalog: state.chatModelCatalog,
+    defaults: state.sessionsResult?.defaults,
+    modelOverrides: state.sessions.state.modelOverrides,
+    session: selectedSession,
+    sessionKey,
+  });
   const settingsSession =
-    thinkingLevelOverride || settingsPreview
+    pendingModelThinkingTarget || thinkingLevelOverride || settingsPreview
       ? {
-          ...selectedSession,
+          ...(pendingModelThinkingTarget ?? selectedSession),
           ...(thinkingLevelOverride ? { thinkingLevel: thinkingLevelOverride } : {}),
           ...settingsPreview,
         }

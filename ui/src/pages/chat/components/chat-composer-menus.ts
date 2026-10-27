@@ -1,5 +1,8 @@
 import type { SlashCommandDef } from "../../../lib/chat/commands.ts";
-import { resolveThinkingCommandArgOptionsForSession } from "../../../lib/chat/thinking.ts";
+import {
+  resolvePendingModelThinkingTarget,
+  resolveThinkingCommandArgOptionsForSession,
+} from "../../../lib/chat/thinking.ts";
 import { paneDomId } from "./chat-composer-dom.ts";
 import type { ComposerEmojiMenu } from "./chat-composer-emoji.ts";
 import type { HumanMentionMenu } from "./chat-composer-mention-menu.ts";
@@ -24,11 +27,18 @@ export function resolveChatSlashCommandArgOptions(
   if (command.key !== "think") {
     return command.argOptions ?? [];
   }
-  if (props.modelSwitching) {
-    return [];
-  }
+  // A pending model selection contributes its own catalog levels; the slash
+  // menu stays usable through the switch and fails closed when the pending
+  // model has no locally-known levels.
+  const pendingTarget = resolvePendingModelThinkingTarget({
+    catalog: props.modelCatalog,
+    defaults: props.sessions?.defaults,
+    modelOverrides: props.modelOverrides,
+    session: props.selectedSession,
+    sessionKey: props.sessionKey,
+  });
   return resolveThinkingCommandArgOptionsForSession(
-    props.selectedSession,
+    pendingTarget ?? props.selectedSession,
     props.sessions?.defaults,
     props.modelCatalog,
   );

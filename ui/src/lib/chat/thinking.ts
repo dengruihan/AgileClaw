@@ -11,6 +11,7 @@ import { resolveModelRuntimeEntry, type ModelRuntimeEntry } from "../model-runti
 import { pushUniqueTrimmedSelectOption } from "../select-options.ts";
 import { sessionModelMatchesDefaults } from "../session-model-defaults.ts";
 import { areUiSessionKeysEquivalent } from "../sessions/session-key.ts";
+import { buildQualifiedChatModelValue, normalizeChatModelOverrideValue } from "./model-ref.ts";
 
 type ThinkingSessionDefaults = SessionsListResult["defaults"] | undefined;
 
@@ -88,6 +89,91 @@ export function resolveThinkingProfileForSession(
     thinkingDefault: profile.thinkingDefault,
     reasoning: catalogEntry?.reasoning,
   };
+}
+
+/**
+ * While a user model selection is pending, the session row still carries the
+ * previous model's identity and thinking fields. Rebase the thinking target onto
+ * the optimistic selection so controls offer the pending model's levels from the
+ * local catalog instead of waiting for the patched row.
+ *
+ * The rebased target keeps the row's runtime pin; a pending selection whose
+ * catalog entry serves only a different runtime stays unmatched and fails closed
+ * until the patch lands (modelOverrides carries no runtime of its own).
+ *
+ * Returns undefined when no optimistic selection exists (the row target stays
+ * authoritative). A pending selection the catalog cannot identify keeps the
+ * pending model id without row thinking facts, so profile resolution finds no
+ * candidate and the control fails closed until the patch settles.
+ */
+export function resolvePendingModelThinkingTarget(params: {
+  catalog: readonly ModelCatalogEntry[];
+  defaults?: ThinkingSessionDefaults;
+  modelOverrides: Readonly<Record<string, string | null | undefined>>;
+  session: ChatThinkingTarget | undefined;
+  sessionKey: string;
+}): ChatThinkingTarget | undefined {
+  if (!Object.hasOwn(params.modelOverrides, params.sessionKey)) {
+    return undefined;
+  }
+  const override = params.modelOverrides[params.sessionKey];
+  const {
+    thinkingDefault: _thinkingDefault,
+    thinkingLevel: _thinkingLevel,
+    thinkingLevels: _thinkingLevels,
+    thinkingOptions: _thinkingOptions,
+    ...row
+  } = params.session ?? {};
+  if (override === null) {
+    // Clearing to the default keeps the defaults row's own identity verbatim so
+    // its thinking facts stay reachable even when the catalog lacks the model.
+    return {
+      ...row,
+      model: params.defaults?.model?.trim() ?? "",
+      modelProvider: params.defaults?.modelProvider ?? undefined,
+    };
+  }
+  const value = normalizeChatModelOverrideValue(override, params.catalog);
+  const identity = resolvePendingModelIdentity(value, params.catalog);
+  return {
+    ...row,
+    model: identity?.model ?? value,
+    modelProvider: identity?.provider,
+  };
+}
+
+function resolvePendingModelIdentity(
+  value: string,
+  catalog: readonly ModelCatalogEntry[],
+): { provider: string; model: string } | undefined {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  // A qualified value names provider/model directly; a router provider's deep
+  // id can carry the same text as another provider's qualified value, so the
+  // qualified match wins and bare ids only resolve when exactly one exists.
+  // Runtime variants share one provider/model identity; either supplies it.
+  const qualified = new Map<string, { provider: string; model: string }>();
+  const bare = new Map<string, { provider: string; model: string }>();
+  for (const entry of catalog) {
+    const identity = { provider: entry.provider, model: entry.id };
+    const key = `${entry.provider.trim().toLowerCase()}\0${entry.id.trim().toLowerCase()}`;
+    if (
+      buildQualifiedChatModelValue(entry.id, entry.provider).trim().toLowerCase() === normalized
+    ) {
+      qualified.set(key, identity);
+    } else if (entry.id.trim().toLowerCase() === normalized) {
+      bare.set(key, identity);
+    }
+  }
+  return pickUniqueIdentity(qualified) ?? pickUniqueIdentity(bare);
+}
+
+function pickUniqueIdentity(
+  identities: Map<string, { provider: string; model: string }>,
+): { provider: string; model: string } | undefined {
+  return identities.size === 1 ? [...identities.values()][0] : undefined;
 }
 
 export function resolveThinkingCommandArgOptionsForSession(

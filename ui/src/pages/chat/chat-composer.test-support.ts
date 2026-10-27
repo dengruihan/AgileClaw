@@ -20,6 +20,7 @@ export function createComposerProps(overrides: Partial<ComposerProps> = {}): Com
     draft: "",
     modelCatalog: [],
     modelSwitching: false,
+    modelOverrides: {},
     sessions: null,
     selectedSession: overrides.sessions?.sessions.find(
       (row) => row.key === (overrides.sessionKey ?? "main"),
