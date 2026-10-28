@@ -80,6 +80,49 @@ The deterministic trusted-trigger lane remains available in `off` mode.
 `rememberAcrossConversations` is unchanged: it still controls whether deep
 recall may search other private conversations.
 
+### Parallel execution (experimental)
+
+`config.execution` selects how recall runs:
+
+| Execution  | Behavior                                                            |
+| ---------- | ------------------------------------------------------------------- |
+| `blocking` | Default. The recall lanes above run before the reply starts.        |
+| `parallel` | A background sidecar extracts queries while the main agent answers. |
+
+With `execution: "parallel"`, eligible ordinary turns do not wait for the
+deterministic or deep-recall lanes. A small extractor model (configured via
+`parallel.extractorModel`, otherwise the required utility model) builds bounded
+search queries from the current request and the answer text so far, the
+selected memory provider runs its existing search, and eligible hits are added
+to the model's context at the next model call as a hidden
+`openclaw.background-context` message. If the main agent is about to finish
+while new material is still unconsumed, the turn gets one bounded same-turn
+continuation (at most one per user input, `parallel.terminalWaitMs` extra wait,
+default 2000 ms) so late memory can still produce a correction or addition.
+Already-visible answer text is never retracted.
+
+Parallel recall needs the built-in runtime's authorized prompt-build phase and
+an admitted read contract for the selected memory backend: a native provider
+declares its recall tools, a legacy backend (the default) uses its deterministic
+recall tool — both are checked against the turn's tool policy before the
+sidecar starts, and both search through the same neutral provider facade.
+Material is admitted whole against the model's context budget at the real
+model-call boundary; when headroom runs out entries are dropped rather than
+truncating history, and each accepted block carries a delivery receipt that
+distinguishes queued, leased, installed, submitted, dropped, and uncertain
+provider dispatches. Persisted blocks enter replay only with a submission
+receipt; revoked or uncertain material stays available as transcript evidence
+without entering later model requests. Each input has a 1,500 token ceiling for
+new material, including wrapping and the continuation instruction. When a new user input is
+admitted mid-run (steering), the previous input's sidecar stops and the new
+input gets its own sidecar and budgets along its preparation boundary.
+Turns that need protected Remember-across-conversations recall or run on
+unsupported harnesses keep the whole-turn blocking path, with the reason
+recorded in the log. A missing extractor model skips parallel recall and records
+the reason while the foreground reply continues. In parallel mode the
+`escalate` recall-intent gate does not apply to the sidecar (ordinary eligible
+turns extract too); `mode: "off"` disables the sidecar as well.
+
 ### Session types
 
 `config.allowedChatTypes` controls which kinds of conversations may run the

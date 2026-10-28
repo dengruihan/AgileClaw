@@ -138,6 +138,52 @@ Treat `toolAuthority` as an ephemeral capability:
 The host revalidates authority after each awaited handler and discards stale
 enrichment. A retained `toolAuthority` object fails closed after dispatch.
 
+#### Background turn-context contributions (experimental)
+
+On the built-in runtime, the authorized phase can also expose
+`ctx.turnContextContributions`. A plugin attaches at most one background
+material source per admitted input:
+
+```typescript
+api.on(
+  "before_prompt_build",
+  async (event, ctx) => {
+    const contributions = ctx.turnContextContributions;
+    if (!contributions) {
+      return; // runtime without background contribution support
+    }
+    contributions.attach(
+      { key: "my-plugin", terminalWaitMs: 2000, maxFinalContinuations: 1 },
+      (scope) => ({
+        onAssistantText(event) {
+          // append events carry the new delta; replace events the full snapshot.
+        },
+        async flush(deadlineAtMs) {
+          // bounded final work; obey the deadline and scope.signal
+        },
+        async dispose() {},
+      }),
+    );
+  },
+  { requiresToolAuthority: true },
+);
+```
+
+The host owns the lifecycle: it feeds `onAssistantText` projected visible answer
+text, installs published contributions (via `scope.publish({ id, text })`) at
+the next real model-call boundary as hidden `openclaw.background-context`
+messages that persist in the transcript, and at the natural end runs `flush`
+once under a bounded deadline. Material no model call consumed can trigger one
+same-turn continuation per source (host-clamped). `scope.assertCurrent()`
+rejects after the input, turn authority, or memory audience ends;
+`scope.publish` reports `"closed"` instead of erroring for late callbacks.
+`requiredTools` stays bound to the live callable tool surface. A source can also
+supply `signal` and `assertCurrent` for its own authority; the host combines
+these with the plugin instance and admitted input lifetime. Persisted
+contributions without a recorded submission remain excluded from replay.
+Attach is synchronous and cheap; extraction or network work belongs inside the
+source's own scheduling, never in the hook handler itself.
+
 This option requires a host that implements the post-policy phase. Published
 plugins must set `package.json` `openclaw.compat.pluginApi` to a range beginning
 with the first OpenClaw version they build against for this contract. Older

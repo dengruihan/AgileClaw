@@ -1,14 +1,15 @@
 import { expect, it, vi, type Mock } from "vitest";
 
 type MemoryProviderTestParams = {
+  readConfig: () => Record<string, unknown>;
+  writeConfig: (next: Record<string, unknown>) => void;
   memoryCapability: {
+    providerRuntime?: { open: () => unknown };
     deterministicRecallToolName: string | undefined;
     recallToolNames: readonly string[] | undefined;
   };
   getActiveMemoryProvider: Mock;
   getActiveMemorySearchManager: Mock;
-  /** Selects a slot owner that registers the provider-neutral runtime. */
-  useNativeProvider: () => void;
   runEmbeddedAgent: Mock;
   registerPluginConfig: (overrides: Record<string, unknown>) => void;
   runPromptBuild: (
@@ -24,8 +25,55 @@ type MemoryProviderTestParams = {
 
 /** Registers legacy and provider-neutral Active Memory recall, cache, authority, and tool-selection coverage. */
 export function registerActiveMemoryProviderTests(params: MemoryProviderTestParams): void {
+  const useNativeProvider = () => {
+    params.memoryCapability.providerRuntime = { open: vi.fn() };
+    params.memoryCapability.recallToolNames ??= ["memory_search"];
+  };
+  it.each([
+    { mode: "escalate", message: "Design a SQLite migration", parallel: true },
+    {
+      mode: "escalate",
+      message: "What did we decide about the SQLite migration?",
+      parallel: false,
+    },
+    { mode: "always", message: "Design a SQLite migration", parallel: false },
+  ])(
+    "selects parallel=$parallel for Remember-enabled $mode request: $message",
+    async ({ mode, message, parallel }) => {
+      const config = params.readConfig();
+      params.writeConfig({
+        ...config,
+        agents: {
+          defaults: { model: { primary: "github-copilot/gpt-5.4-mini" } },
+          entries: { main: { memory: { search: { rememberAcrossConversations: true } } } },
+        },
+      });
+      params.registerPluginConfig({ execution: "parallel", mode });
+      const attach = vi.fn(() => ({ status: "attached" }));
+      await params.runPromptBuild(
+        { prompt: message, currentUserMessage: message, currentUserMessageId: "input-remember" },
+        { turnContextContributions: { attach } },
+      );
+      expect(attach).toHaveBeenCalledTimes(parallel ? 1 : 0);
+      expect(params.runEmbeddedAgent).toHaveBeenCalledTimes(parallel ? 0 : 1);
+      if (parallel) {
+        expect(params.getActiveMemorySearchManager).not.toHaveBeenCalled();
+        expect(attach).toHaveBeenCalledWith(
+          expect.objectContaining({ requiredTools: ["memory_search"] }),
+          expect.any(Function),
+        );
+      } else {
+        expect(params.lastEmbeddedRunParams().conversationRecall).toEqual({
+          anchorSessionKey: "agent:main:main",
+          scope: "same-agent-private",
+          corpus: "configured",
+        });
+      }
+    },
+  );
+
   it("does not reuse trigger candidates or recall summaries across memory audiences", async () => {
-    params.useNativeProvider();
+    useNativeProvider();
     params.registerPluginConfig({ mode: "always", cacheTtlMs: 1_000 });
     const search = vi.fn(async () => ({ hits: [] }));
     params.getActiveMemoryProvider.mockResolvedValue({
@@ -75,7 +123,7 @@ export function registerActiveMemoryProviderTests(params: MemoryProviderTestPara
   });
 
   it("does not publish or cache recall after the turn's memory audience goes stale", async () => {
-    params.useNativeProvider();
+    useNativeProvider();
     params.registerPluginConfig({ mode: "always", cacheTtlMs: 1_000 });
     let audienceCurrent = true;
     // The host check for the parent turn's audience; a lineage reset during recall revokes it.
@@ -123,7 +171,7 @@ export function registerActiveMemoryProviderTests(params: MemoryProviderTestPara
   it.each([" \n "])(
     "does not recall historical text for an explicit empty request %j",
     async (currentUserMessage) => {
-      params.useNativeProvider();
+      useNativeProvider();
       params.registerPluginConfig({ mode: "always" });
       const search = vi.fn(async () => ({ hits: [] }));
       params.getActiveMemoryProvider.mockResolvedValue({
@@ -146,7 +194,7 @@ export function registerActiveMemoryProviderTests(params: MemoryProviderTestPara
   );
 
   it("reuses one trigger admission across history changes and keeps authority separate", async () => {
-    params.useNativeProvider();
+    useNativeProvider();
     params.registerPluginConfig({ mode: "escalate" });
     const search = vi.fn(async () => ({ hits: [] }));
     params.getActiveMemoryProvider.mockResolvedValue({
@@ -201,7 +249,7 @@ export function registerActiveMemoryProviderTests(params: MemoryProviderTestPara
   it("runs provider-direct trigger recall without a deterministic recall tool", async () => {
     params.memoryCapability.deterministicRecallToolName = undefined;
     params.memoryCapability.recallToolNames = ["record_find"];
-    params.useNativeProvider();
+    useNativeProvider();
     params.getActiveMemoryProvider.mockResolvedValueOnce({
       providerId: "records",
       provider: {
@@ -232,7 +280,7 @@ export function registerActiveMemoryProviderTests(params: MemoryProviderTestPara
   });
 
   it("serves native trigger recall under the turn's session authority and audience", async () => {
-    params.useNativeProvider();
+    useNativeProvider();
     const assertMemoryAudienceCurrent = vi.fn();
     const memoryAudience = { kind: "owner-private", agentId: "main" } as const;
     params.getActiveMemoryProvider.mockResolvedValueOnce({
@@ -286,7 +334,7 @@ export function registerActiveMemoryProviderTests(params: MemoryProviderTestPara
 
   it("skips native trigger recall when tool policy denies a declared recall tool", async () => {
     params.memoryCapability.recallToolNames = ["record_find", "record_get"];
-    params.useNativeProvider();
+    useNativeProvider();
     await params.runPromptBuild(
       { prompt: "Help when booking a flight" },
       {

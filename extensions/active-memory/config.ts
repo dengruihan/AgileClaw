@@ -17,12 +17,14 @@ import {
   ACTIVE_MEMORY_RESERVED_TOOLS_ALLOW,
   DEFAULT_ACTIVE_MEMORY_TOOLS_ALLOW,
   DEFAULT_ACTIVE_MEMORY_MODE,
+  DEFAULT_ACTIVE_MEMORY_EXECUTION,
   DEFAULT_CACHE_TTL_MS,
   DEFAULT_CIRCUIT_BREAKER_COOLDOWN_MS,
   DEFAULT_CLI_RUNTIME_RECALL_TIMEOUT_MS,
   DEFAULT_CIRCUIT_BREAKER_MAX_TIMEOUTS,
   DEFAULT_MAX_SUMMARY_CHARS,
   DEFAULT_MIN_TIMEOUT_MS,
+  DEFAULT_PARALLEL_TERMINAL_WAIT_MS,
   DEFAULT_QUERY_MODE,
   DEFAULT_RECENT_ASSISTANT_CHARS,
   DEFAULT_RECENT_ASSISTANT_TURNS,
@@ -33,6 +35,7 @@ import {
   DEFAULT_TRANSCRIPT_DIR,
   LANCEDB_ACTIVE_MEMORY_TOOLS_ALLOW,
   MAX_ACTIVE_MEMORY_TOOLS_ALLOW,
+  MAX_PARALLEL_TERMINAL_WAIT_MS,
   MAX_SETUP_GRACE_TIMEOUT_MS,
   MAX_TIMEOUT_MS,
   type ActiveMemoryChatType,
@@ -166,6 +169,12 @@ export function normalizePluginConfig(
   return {
     enabled: raw.enabled !== false,
     mode: resolveChoice(raw.mode, ["always", "off", "escalate"], DEFAULT_ACTIVE_MEMORY_MODE),
+    execution: resolveChoice(
+      raw.execution,
+      ["blocking", "parallel"],
+      DEFAULT_ACTIVE_MEMORY_EXECUTION,
+    ),
+    parallel: normalizeParallelConfig(raw.parallel),
     agents: Array.isArray(raw.agents) ? normalizeStringEntries(raw.agents) : [],
     model: normalizeOptionalString(raw.model),
     modelFallback: normalizeOptionalString(raw.modelFallback),
@@ -244,6 +253,19 @@ export function normalizePluginConfig(
     ),
     persistTranscripts: raw.persistTranscripts === true,
     transcriptDir: normalizeTranscriptDir(raw.transcriptDir),
+  };
+}
+
+function normalizeParallelConfig(value: unknown): ResolvedActiveRecallPluginConfig["parallel"] {
+  const raw = asOptionalRecord(value) ?? {};
+  const terminalWaitMs =
+    typeof raw.terminalWaitMs === "number" && Number.isFinite(raw.terminalWaitMs)
+      ? Math.min(Math.max(Math.floor(raw.terminalWaitMs), 0), MAX_PARALLEL_TERMINAL_WAIT_MS)
+      : DEFAULT_PARALLEL_TERMINAL_WAIT_MS;
+  const extractorModel = normalizeOptionalString(raw.extractorModel);
+  return {
+    ...(extractorModel ? { extractorModel } : {}),
+    terminalWaitMs,
   };
 }
 

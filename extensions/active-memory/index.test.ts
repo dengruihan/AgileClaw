@@ -626,13 +626,13 @@ describe("active-memory plugin", () => {
   };
 
   registerActiveMemoryProviderTests({
+    readConfig: () => configFile,
+    writeConfig: (next) => {
+      configFile = next;
+    },
     memoryCapability: hoisted.memoryCapability,
     getActiveMemoryProvider: hoisted.getActiveMemoryProvider,
     getActiveMemorySearchManager: hoisted.getActiveMemorySearchManager,
-    useNativeProvider: () => {
-      hoisted.memoryCapability.providerRuntime = { open: vi.fn() };
-      hoisted.memoryCapability.recallToolNames ??= ["memory_search"];
-    },
     runEmbeddedAgent,
     registerPluginConfig,
     runPromptBuild,

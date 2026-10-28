@@ -189,7 +189,10 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +4: owner-approved replay V2 types on core and plugin-entry (2026-10-01).
       // +11: ten service-lifetime type exports and the owner-bound scheduler resolver.
       // +1: owner-approved async watched-session preparation with retained sync compatibility.
-      3644,
+      // +5: approved by dengruihan (2026-10-28): turn-context contribution host types on
+      // plugin-entry so the bundled active-memory plugin consumes the host's
+      // parallel memory recall capability through the documented SDK contract.
+      3649,
       env,
     ),
     publicFunctionExports: readPluginSdkSurfaceBudgetEnv(

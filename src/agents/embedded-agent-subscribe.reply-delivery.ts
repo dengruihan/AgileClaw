@@ -153,6 +153,22 @@ export function createReplyDelivery({ params, state, log }: ReplyDeliveryParams)
         lastEmittedCommentaryByItem.set(itemId, commentarySignature);
       }
       publishAgentEvent(event);
+      if (eventData && params.onAssistantStreamText) {
+        const streamData = eventData;
+        const replace = streamData.replace === true;
+        const observed = replace ? streamData.text : streamData.delta;
+        if (observed) {
+          runBestEffortCallback({
+            label: "assistant stream text observation",
+            log,
+            callback: () =>
+              params.onAssistantStreamText?.({
+                text: observed,
+                kind: replace ? "replace" : "append",
+              }),
+          });
+        }
+      }
     }
     drainPartialReply(scope);
   };

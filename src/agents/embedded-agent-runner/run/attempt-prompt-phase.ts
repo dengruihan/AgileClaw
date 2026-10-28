@@ -166,6 +166,7 @@ export async function runEmbeddedAttemptPromptPhase(
       runtimeModel: runtimeInfo.model,
       systemPromptText,
       runAbortSignal: input.runAbortController.signal,
+      readCallableToolNames: () => promptToolPolicy.current.callableToolNames,
       setActiveSessionSystemPrompt,
       applyPromptBuildToolsAllow: (toolsAllow, decisionIsCurrent) => {
         // Hook authority follows reachable capabilities, not just provider-visible controls.
@@ -505,6 +506,7 @@ export async function runEmbeddedAttemptPromptPhase(
         promptActiveSession,
         toolResultPromptProjectionState,
         trajectoryRecorder,
+        turnContextRunId: attempt.runId,
       });
     } else {
       await releaseLeasedSteering(state.promptError ?? "prompt submission skipped");

@@ -35,6 +35,7 @@ import {
   type CurrentUserTimestampMatch,
   type UserTranscriptContext,
 } from "./attempt-history.js";
+import { retainSubmittedBackgroundContext } from "./attempt-turn-context-carriers.js";
 import {
   materializeSteeringRuntimeContext,
   type RuntimeContextCustomMessage,
@@ -148,7 +149,9 @@ export function normalizeMessagesForLlmBoundary(
 ): AgentMessage[] {
   const normalized = stripUnsafeBlockedRunMetadata(
     stripToolResultDetails(
-      normalizeAssistantReplayContent(materializeSteeringRuntimeContext(messages)),
+      normalizeAssistantReplayContent(
+        materializeSteeringRuntimeContext(retainSubmittedBackgroundContext(messages)),
+      ),
     ),
   );
   const userTranscriptMessages = resolveUserTranscriptMessages(

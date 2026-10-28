@@ -48,6 +48,8 @@ export function prepareCatalogExecutor(options?: {
   onAgentEvent?: (event: { stream: string; data: Record<string, unknown> }) => void;
   trustedLocalMediaToolNames?: ReadonlySet<string>;
   streamReplies?: boolean;
+  onBlockReply?: Parameters<typeof prepareEmbeddedAttemptStream>[0]["onBlockReply"];
+  onBlockReplyFlush?: Parameters<typeof prepareEmbeddedAttemptStream>[0]["onBlockReplyFlush"];
 }) {
   const runAbortController = options?.runAbortController ?? new AbortController();
   const nestedToolActivityState = createAttemptNestedToolActivityState();
@@ -102,8 +104,9 @@ export function prepareCatalogExecutor(options?: {
         timedOut: false,
         yieldDetected: false,
       })),
-    onBlockReply: options?.streamReplies === false ? undefined : vi.fn(),
-    onBlockReplyFlush: options?.streamReplies === false ? undefined : vi.fn(),
+    onBlockReply: options?.streamReplies === false ? undefined : (options?.onBlockReply ?? vi.fn()),
+    onBlockReplyFlush:
+      options?.streamReplies === false ? undefined : (options?.onBlockReplyFlush ?? vi.fn()),
   });
   return {
     ...prepared,

@@ -29,6 +29,18 @@ import {
   stripSessionsYieldArtifacts,
 } from "./attempt-sessions-yield.js";
 import { waitForEmbeddedAbortSettle } from "./attempt-subscription-cleanup.js";
+import {
+  admitBackgroundContextCarriers,
+  recordBackgroundContextSubmission,
+} from "./attempt-turn-context-carriers.js";
+import {
+  assertAttemptTurnContextCarriersCurrent,
+  drainAttemptTurnContextContributionsForModelRequest,
+  getAttemptTurnContextManager,
+  installBackgroundContextCarriers,
+  markAttemptTurnContextCarriers,
+  type BackgroundContextCarrier,
+} from "./attempt-turn-context.js";
 import { wrapStreamFnWithMessageTransform } from "./message-transform-stream-wrapper.js";
 import { isMidTurnPrecheckSignal, type MidTurnPrecheckRequest } from "./midturn-precheck.js";
 import type { RuntimeContextCustomMessage } from "./runtime-context-prompt.js";
@@ -95,6 +107,8 @@ export async function submitEmbeddedAttemptPrompt(input: {
   prependContext?: string;
   promptActiveSession: PromptActiveSession;
   runtimeContextMessage?: RuntimeContextCustomMessage;
+  /** Run identity for background turn-context contribution consumption. */
+  turnContextRunId?: string;
   runtimeOnly: boolean;
   systemPrompt: string;
   toolResultAggregateMaxChars: number;
@@ -124,7 +138,40 @@ export async function submitEmbeddedAttemptPrompt(input: {
   const installProviderPromptHistoryTransform = (): (() => void) => {
     const baseStreamFn = activeSession.agent.streamFn;
     const basePrepareNextTurn = activeSession.agent.prepareNextTurnWithContext;
-    const lateUpdates: RuntimeContextCustomMessage[] = [];
+    const turnContextManager = getAttemptTurnContextManager(input.turnContextRunId);
+    let latestRequest: {
+      systemPrompt?: string;
+      tools?: Parameters<typeof admitBackgroundContextCarriers>[0]["tools"];
+    } = {};
+    const admitCarriers = (
+      carriers: readonly BackgroundContextCarrier[],
+      messages: AgentMessage[],
+    ) =>
+      admitBackgroundContextCarriers({
+        ...latestRequest,
+        carriers,
+        messages,
+        tokenBudget: input.contextTokenBudget,
+        contributionBudget: turnContextManager?.remainingContributionTokens() ?? 0,
+      });
+    const releaseTerminalAdmission = turnContextManager?.bindTerminalAdmission(async (carriers) => {
+      const normalized = normalizeMessagesForLlmBoundary(activeSession.messages, {
+        inHistorySystemUpdates: true,
+        appendOnlyRuntimeContext: true,
+        includeTimestamp: false,
+      });
+      const admission = admitCarriers(carriers, normalized);
+      markAttemptTurnContextCarriers(
+        input.turnContextRunId,
+        admission.rejected,
+        "dropped",
+        "token-budget",
+      );
+      return admission.admitted;
+    });
+    // Runtime-context updates and background material carriers share one install
+    // path: splice into the live loop context before the answer they governed.
+    const lateUpdates: AgentMessage[] = [];
     const prepareNextTurn: NonNullable<Agent["prepareNextTurnWithContext"]> = async (
       turn,
       signal,
@@ -219,7 +266,128 @@ export async function submitEmbeddedAttemptPrompt(input: {
         primaryRequestObserved = true;
         input.onPrimaryModelRequest?.(requestContext.tools ?? []);
       }
-      const stream = await baseStreamFn(model, requestContext, options);
+      // Real next model-call boundary: atomically install background material
+      // after settled tool results, durable in the transcript, visible to this
+      // dispatch and to the live loop context from the next turn on.
+      latestRequest = { systemPrompt: requestContext.systemPrompt, tools: requestContext.tools };
+      const turnContextCarriers =
+        input.turnContextRunId && !activeSession.isCompacting
+          ? drainAttemptTurnContextContributionsForModelRequest(input.turnContextRunId)
+          : [];
+      let submittedCarriers: readonly BackgroundContextCarrier[] = [];
+      let contributionTokens = 0;
+      if (turnContextCarriers.length > 0) {
+        options?.signal?.throwIfAborted();
+        assertSteeringCurrent();
+        input.assertHostActive?.();
+        // Token admission at the real append point: whole entries only, in
+        // provider order, wrapping and hints included. History is never
+        // truncated or compacted to make room; unfittable entries drop.
+        const { admitted, rejected, tokens } = admitCarriers(
+          turnContextCarriers,
+          requestContext.messages,
+        );
+        markAttemptTurnContextCarriers(input.turnContextRunId, rejected, "dropped", "token-budget");
+        if (admitted.length > 0) {
+          if (!assertAttemptTurnContextCarriersCurrent(input.turnContextRunId, admitted)) {
+            markAttemptTurnContextCarriers(
+              input.turnContextRunId,
+              admitted,
+              "dropped",
+              "authority-revoked",
+            );
+            return await baseStreamFn(model, requestContext, options);
+          }
+          const assertCurrent = () => {
+            options?.signal?.throwIfAborted();
+            assertSteeringCurrent();
+            input.assertHostActive?.();
+            if (!assertAttemptTurnContextCarriersCurrent(input.turnContextRunId, admitted)) {
+              throw new Error("turn context source authority revoked");
+            }
+          };
+          try {
+            await installBackgroundContextCarriers({
+              activeSession,
+              carriers: admitted,
+              assertCurrent,
+            });
+          } catch (error) {
+            if (options?.signal?.aborted) {
+              throw error;
+            }
+            markAttemptTurnContextCarriers(
+              input.turnContextRunId,
+              admitted,
+              "dropped",
+              "installation-failed-or-revoked",
+            );
+            return await baseStreamFn(model, requestContext, options);
+          }
+          // Re-assert after the install await: revoked material stays recorded in
+          // the transcript but never joins the request or the live loop context.
+          if (!assertAttemptTurnContextCarriersCurrent(input.turnContextRunId, admitted)) {
+            markAttemptTurnContextCarriers(
+              input.turnContextRunId,
+              admitted,
+              "dropped",
+              "authority-revoked-after-install",
+            );
+            const stream = await baseStreamFn(model, requestContext, options);
+            return stream;
+          }
+          markAttemptTurnContextCarriers(input.turnContextRunId, admitted, "installed");
+          submittedCarriers = admitted;
+          contributionTokens = tokens;
+          // Terminal follow-ups already ride the loop context through their
+          // session-queue delivery; re-splicing those would duplicate the block.
+          for (const carrier of admitted) {
+            if (!carrier.installed) {
+              lateUpdates.push(carrier.message);
+            }
+          }
+          // Mirror convertToLlm's custom→user projection so this dispatch sees the
+          // same bytes the committed carrier produces on later calls; retention
+          // drops the queued copy until its receipt rides the loop context.
+          requestContext = {
+            ...requestContext,
+            messages: [
+              ...requestContext.messages,
+              ...admitted.map((carrier) => ({
+                role: "user" as const,
+                content:
+                  typeof carrier.message.content === "string"
+                    ? [{ type: "text" as const, text: carrier.message.content }]
+                    : carrier.message.content,
+                timestamp: carrier.message.timestamp,
+              })),
+            ],
+          };
+        }
+      }
+      let stream;
+      try {
+        stream = await baseStreamFn(model, requestContext, options);
+      } catch (error) {
+        markAttemptTurnContextCarriers(
+          input.turnContextRunId,
+          submittedCarriers,
+          "uncertain",
+          "provider-dispatch-failed",
+        );
+        throw error;
+      }
+      turnContextManager?.consumeContributionTokens(contributionTokens);
+      // The dispatch handed the installed material to the provider request
+      // owner; submitted proves submission, never model comprehension.
+      markAttemptTurnContextCarriers(input.turnContextRunId, submittedCarriers, "submitted");
+      const submissionReceipts = await recordBackgroundContextSubmission({
+        activeSession,
+        carriers: submittedCarriers,
+      });
+      // The receipt must ride the live loop context too: later dispatches drop
+      // a persisted carrier as unsubmitted material until its receipt arrives.
+      lateUpdates.push(...submissionReceipts);
       // Pre-prompt compaction has not consumed the deferred answer.
       if (foregroundRequest) {
         pendingSteering = undefined;
@@ -264,6 +432,7 @@ export async function submitEmbeddedAttemptPrompt(input: {
     );
     activeSession.agent.streamFn = providerPromptStreamFn;
     return () => {
+      releaseTerminalAdmission?.();
       if (activeSession.agent.prepareNextTurnWithContext === prepareNextTurn) {
         activeSession.agent.prepareNextTurnWithContext = basePrepareNextTurn;
       }

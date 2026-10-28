@@ -405,6 +405,15 @@ export class Agent {
     return this.steeringQueue.cancelFirst(predicate);
   }
 
+  /**
+   * Cancel a queued follow-up before the loop consumes it. A cancelled
+   * follow-up cannot become an empty continuation: the loop ends without a
+   * provider call. Follow-ups already admitted by a provider response stay.
+   */
+  cancelFollowUpMessage(predicate: (message: AgentMessage) => boolean): AgentMessage | undefined {
+    return this.followUpQueue.cancelFirst(predicate);
+  }
+
   /** Queue a message to run only after the agent would otherwise stop. */
   followUp(message: AgentMessage): void {
     this.followUpQueue.enqueue(message);

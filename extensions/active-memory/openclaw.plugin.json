@@ -14,7 +14,7 @@
       "id": "memory-recall",
       "title": "Memory recall",
       "order": 10,
-      "properties": ["enabled", "mode"]
+      "properties": ["enabled", "mode", "execution", "parallel"]
     },
     {
       "id": "conversations",
@@ -79,6 +79,18 @@
       "mode": {
         "type": "string",
         "enum": ["escalate", "always", "off"]
+      },
+      "execution": {
+        "type": "string",
+        "enum": ["blocking", "parallel"]
+      },
+      "parallel": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "extractorModel": { "type": "string" },
+          "terminalWaitMs": { "type": "integer", "minimum": 0, "maximum": 10000 }
+        }
       },
       "agents": {
         "type": "array",
@@ -163,6 +175,14 @@
     "mode": {
       "label": "Recall Mode",
       "help": "Escalate runs deep recall only for recall-intent messages without a strong deterministic hit. Always preserves blocking recall on every eligible turn. Off disables deep recall while keeping deterministic trigger recall available."
+    },
+    "execution": {
+      "label": "Execution",
+      "help": "Blocking keeps the pre-reply recall path. Parallel (experimental) attaches a background sidecar: a small extractor model builds search queries while the main agent answers, hits join the next model call, and a natural end gets one bounded same-turn continuation. Protected Remember-across-conversations requests and unsupported harnesses use blocking for the whole turn. Missing extractor models skip the sidecar without starting another recall strategy. With Remember enabled, always mode keeps deep recall on every eligible turn, while escalate mode keeps it for recall-intent requests."
+    },
+    "parallel": {
+      "label": "Parallel Recall",
+      "help": "extractorModel selects a Flash-class provider/model for query extraction (defaults to the configured utility model, which is required); terminalWaitMs (0-10000, default 2000) bounds the extra natural-end wait."
     },
     "agents": {
       "label": "Target Agents",
