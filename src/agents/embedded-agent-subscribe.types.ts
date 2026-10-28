@@ -78,6 +78,11 @@ export type SubscribeEmbeddedAgentSessionParams = {
     source?: string;
   }) => void;
   onAgentEvent?: (evt: EmbeddedAgentEvent) => void | Promise<void>;
+  /**
+   * Observes projected visible assistant text at the host stream chokepoint.
+   * Append events carry the new delta; replace events carry the full snapshot.
+   */
+  onAssistantStreamText?: (event: { text: string; kind: "append" | "replace" }) => void;
   onToolStreamBoundary?: () => void | Promise<void>;
   onHeartbeatToolResponse?: (response: HeartbeatToolResponse) => void | Promise<void>;
   /** "finishing" defers both success and error terminal ownership to the caller. */
@@ -103,6 +108,7 @@ export type SubscribeEmbeddedAgentSessionParams = {
   }) => void | Promise<void | {
     suppressTerminalDelivery?: boolean;
     continueCurrentTurn?: boolean;
+    preserveCompletedAnswer?: boolean;
   }>;
   /** Best-effort hook invoked immediately before the terminal lifecycle event is emitted. */
   onBeforeLifecycleTerminal?: () => void | Promise<void>;

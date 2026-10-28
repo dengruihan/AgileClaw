@@ -14,6 +14,11 @@ import {
   readActiveMemoryConfig,
 } from "./config.js";
 import { resolveRecallEscalationDecision } from "./escalation.js";
+import {
+  buildParallelRecentContext,
+  maybeAttachParallelMemorySource,
+  resolveParallelMemoryReadAdmission,
+} from "./parallel-source.js";
 import { buildPromptPrefix, buildRecallOutcomePrefix } from "./prompt.js";
 import { buildQuery, buildSearchQuery, extractRecentTurns, getModelRef } from "./query.js";
 import { forgetActiveRecallRun, toSingleLineErrorMessage } from "./recall-state.js";
@@ -385,6 +390,60 @@ export default definePluginEntry({
             const nativeRecallToolNames = memoryCapability?.providerRuntime
               ? (memoryCapability.recallToolNames ?? [])
               : undefined;
+            // Parallel sidecar strategy: one attach per admitted input, mutually
+            // exclusive with the blocking lanes below on the same input.
+            const parallelAttach = maybeAttachParallelMemorySource({
+              execution: invocationConfig.execution,
+              mode: invocationConfig.mode,
+              enabled: invocationConfig.enabled,
+              activeMemoryConfigured,
+              privateDestination,
+              chatIdAllowed,
+              turnContextContributions: ctx.turnContextContributions,
+              memoryReadAdmission: resolveParallelMemoryReadAdmission({
+                providerRuntime: Boolean(memoryCapability?.providerRuntime),
+                recallToolNames: memoryCapability?.recallToolNames,
+                deterministicRecallToolName: memoryCapability?.deterministicRecallToolName,
+                toolAllows: (toolName) => toolAuthority.allows(toolName),
+              }),
+              protectedTranscriptRecallNeeded: Boolean(
+                invocationConfig.enabled &&
+                effectiveAgentId &&
+                resolveRememberAcrossConversations(liveConfig, effectiveAgentId) &&
+                memoryCapability?.supportsPrivateTranscriptRecall === true &&
+                deterministicRecallToolName &&
+                authorityAllowedRecallTools.includes(deterministicRecallToolName) &&
+                resolveRecallEscalationDecision({
+                  mode: invocationConfig.mode,
+                  message: currentUserMessage,
+                  hasStrongLaneOneHit: false,
+                }) === "recall",
+              ),
+              sessionKey: resolvedSessionKey,
+              agentId: effectiveAgentId,
+              liveConfig,
+              parallel: invocationConfig.parallel,
+              userRequest: currentUserMessage,
+              recentContext: buildParallelRecentContext(recentTurns),
+              sessionId: ctx.sessionId,
+              sandboxed: ctx.sandboxed === true,
+              memoryAudience: ctx.memoryAudience,
+              activeProjectKeys: ctx.activeProjectKeys ?? [],
+              debug: (message) => api.logger.debug?.(message),
+              info: (message) => api.logger.info?.(message),
+            });
+            if (parallelAttach.status === "attached") {
+              // The sidecar owns this input; the blocking lanes do not also run.
+              api.logger.info?.(
+                "active-memory: requested=parallel effective=parallel status=attached",
+              );
+              return undefined;
+            }
+            if (parallelAttach.status === "declined") {
+              api.logger.info?.(
+                `active-memory: requested=parallel effective=blocking reason=${parallelAttach.reason}`,
+              );
+            }
             const laneOneSource: TriggerRecallSource | undefined = nativeRecallToolNames
               ? resolvedSessionKey &&
                 nativeRecallToolNames.length > 0 &&

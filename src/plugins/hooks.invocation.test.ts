@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { createDeferredCore } from "../shared/deferred.js";
+import type { TurnContextAttachOptions, TurnContextSource } from "./hook-agent-context.types.js";
 import type { PluginHookAgentContext, PluginHookRegistration } from "./hook-types.js";
 import { createHookRunner } from "./hooks.js";
+import { PluginInstance } from "./plugin-instance.js";
 import { createEmptyPluginRegistry } from "./registry-empty.js";
 
 type PromptPhase = "ordinary" | "authorized";
@@ -53,6 +55,55 @@ function dispatch(
 }
 
 describe("prompt hook invocation", () => {
+  it("binds background material to plugin lifetime after the prompt handler returns", async () => {
+    const instance = new PluginInstance("memory-source");
+    const dispose = vi.fn(async () => undefined);
+    const attachments: Array<{ options: TurnContextAttachOptions; source: TurnContextSource }> = [];
+    const runner = createRunner(
+      "authorized",
+      [
+        {
+          pluginId: "memory-source",
+          hookName: "before_prompt_build",
+          source: "test",
+          handler: instance.wrap((_event, context) => {
+            context.turnContextContributions?.attach(
+              { key: "recall", requiredTools: ["memory_search"] },
+              () => ({ flush: async () => undefined, dispose }),
+            );
+          }),
+        },
+      ],
+      { warn: vi.fn(), error: vi.fn() },
+    );
+    await dispatch(runner, "authorized", {
+      turnContextContributions: {
+        attach(options, factory) {
+          attachments.push({
+            options,
+            source: factory({
+              signal: options.signal ?? new AbortController().signal,
+              assertCurrent: () => undefined,
+              publish: () => ({ status: "queued", id: "synthetic-material" }),
+            }),
+          });
+          return { status: "attached" };
+        },
+      },
+    });
+    expect(attachments).toHaveLength(1);
+    const attached = attachments[0]!;
+    expect(attached.options.key).toBe("memory-source:recall");
+    expect(() => attached.options.assertCurrent?.()).not.toThrow();
+    instance.quiesce();
+    expect(() => attached.options.assertCurrent?.()).toThrow("retiring");
+    await expect(instance.dispose()).resolves.toEqual({ errors: [] });
+    expect(attached.options.signal?.aborted).toBe(true);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    await attached.source.dispose();
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     { phase: "ordinary", outcome: "returned" },
     { phase: "ordinary", outcome: "threw" },

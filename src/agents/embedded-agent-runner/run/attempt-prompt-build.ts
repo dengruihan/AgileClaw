@@ -48,6 +48,7 @@ import {
   truncateOversizedToolResultsInMessages,
 } from "../tool-result-truncation.js";
 import { buildEmbeddedAgentHookContext } from "./agent-hook-context.js";
+import { runEmbeddedAttemptAuthorizedPromptBuild } from "./attempt-authorized-prompt-build.js";
 import {
   evaluateAttemptDecisionToolPrefilter,
   type DecisionPrefilterResult,
@@ -94,6 +95,7 @@ export async function prepareEmbeddedAttemptPromptAssembly(input: {
   runtimeModel: string;
   systemPromptText: string;
   runAbortSignal?: AbortSignal;
+  readCallableToolNames?: () => readonly string[];
   applyPromptBuildToolsAllow: (
     toolsAllow: string[] | undefined,
     decisionIsCurrent?: () => boolean,
@@ -259,13 +261,39 @@ export async function prepareEmbeddedAttemptPromptAssembly(input: {
     }
   }
   const hookRunner = input.hookRunner;
+  const authorizedPromptBuildEligible =
+    !preserveExactPrompt &&
+    Boolean(hookRunner && attempt.toolAuthorityFingerprint && assertHostActive && attempt.runId);
+  // Background material sources bind to the admitted input, not the prompt-build
+  // invocation: authority is the admitted-run assertion plus the audience check.
+  const turnContextInputId =
+    !preserveExactPrompt && !attempt.skipPreparedUserTurnMessage
+      ? attempt.userTurnTranscriptRecorder?.getAdmissionReceipt()?.logicalTurnId
+      : undefined;
+  // Identity fields come from the turn's real admission receipt, never guessed
+  // from the last user-role message. User turns carry their request verbatim;
+  // other triggers keep the legacy event shape.
+  const authorizedPromptEvent = {
+    ...promptEvent,
+    ...(turnContextInputId && attempt.trigger === "user"
+      ? { currentUserMessage: attempt.prompt, currentUserMessageId: turnContextInputId }
+      : {}),
+  };
   const authorizedHookResult =
-    preserveExactPrompt || !hookRunner || !attempt.toolAuthorityFingerprint || !assertHostActive
+    !authorizedPromptBuildEligible || !hookRunner
       ? undefined
-      : await hookRunner.runAuthorizedPromptBuild(promptEvent, hookCtx, {
+      : await runEmbeddedAttemptAuthorizedPromptBuild({
+          hookRunner,
+          hookCtx,
+          event: authorizedPromptEvent,
+          activeSession: input.activeSession,
+          runId: attempt.runId,
+          inputId: turnContextInputId,
           toolAuthorityFingerprint: attempt.toolAuthorityFingerprint,
           activeToolNames: callableToolNames,
+          readCallableToolNames: input.readCallableToolNames,
           assertHostActive,
+          runAbortSignal: activeAbortSignal,
         });
   const promptBeforeResolvedToolFinalization = effectivePrompt;
   effectivePrompt = applyResolvedToolPromptFinalizer({

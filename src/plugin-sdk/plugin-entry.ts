@@ -200,6 +200,13 @@ export type {
   PluginHookSkillProposalEvaluationOutcome,
   PluginHookSkillProposalKind,
 } from "../plugins/hook-types.js";
+export type {
+  TurnContextAttachOptions,
+  TurnContextContributionInput,
+  TurnContextContributionsHost,
+  TurnContextSource,
+  TurnContextSourceScope,
+} from "../plugins/hook-agent-context.types.js";
 export type { ProviderRuntimeModel } from "../plugins/provider-runtime-model.types.js";
 export type {
   UnifiedModelCatalogEntry,

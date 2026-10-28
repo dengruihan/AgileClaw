@@ -75,6 +75,10 @@ import type {
   PluginHookSkillProposalEvaluateEvent,
   PluginHookSkillProposalEvaluationOutcome,
 } from "./hook-types.js";
+import {
+  buildHandlerContext,
+  createTurnContextContributionsContextForHandler,
+} from "./hooks-handler-context.js";
 import { getPluginValueInstance, runPluginCleanup } from "./plugin-instance-scope.js";
 import {
   type PluginSubagentRequesterContext,
@@ -159,6 +163,10 @@ type ModifyingHookPolicy<K extends PluginHookName> = {
   ) => HookResult<K>;
   isolateEventPerHandler?: boolean;
   eventForHandler?: (event: HookEvent<K>, result: HookResult<K> | undefined) => HookEvent<K>;
+  contextForHandler?: (
+    context: HookContext<K>,
+    registration: PluginHookRegistration<K>,
+  ) => HookContext<K>;
   mergeNullResults?: boolean;
   shouldStop?: (result: HookResult<K>) => boolean;
   terminalLabel?: string;
@@ -720,18 +728,7 @@ export function createHookRunner(
             ? cloneHookIsolationValue(hookName, dispatchEvent)
             : dispatchEvent;
         const invocation = hookName === "before_prompt_build" ? { active: true } : undefined;
-        const handlerContext = invocation
-          ? {
-              ...ctx,
-              hookInvocation: Object.freeze({
-                assertActive() {
-                  if (!invocation.active) {
-                    throw new Error("prompt hook invocation is no longer active");
-                  }
-                },
-              }),
-            }
-          : ctx;
+        const handlerContext = buildHandlerContext({ ctx, invocation, policy, hook });
         let handlerResult: HookResult<K> | undefined;
         try {
           const promise = Promise.resolve(handler(handlerEvent, handlerContext));
@@ -909,6 +906,7 @@ export function createHookRunner(
           mergeResults: mergeBeforePromptBuild,
           includeRegistration: (registration) => registration.requiresToolAuthority === true,
           assertHandlerBoundaryActive: assertActive,
+          contextForHandler: createTurnContextContributionsContextForHandler(assertActive),
         },
       );
       if (!result) {

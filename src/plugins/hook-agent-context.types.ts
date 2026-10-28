@@ -23,6 +23,62 @@ export type PluginHookToolAuthority = {
   assertActive(): void;
 };
 
+/** Bounded material contribution from a background source bound to the current admitted input. */
+export type TurnContextContributionInput = {
+  /** Source-stable identity; the host rejects duplicate ids on the same input. */
+  id: string;
+  /** Bounded, source-attributed material text. The host enforces a hard length cap. */
+  text: string;
+};
+
+export type TurnContextSourceScope = {
+  /** Aborts when the owning input, run, or plugin generation ends. */
+  signal: AbortSignal;
+  /** Rejects after the owning input, turn authority, or memory audience is no longer current. */
+  assertCurrent(): void;
+  publish(
+    contribution: TurnContextContributionInput,
+  ): { status: "queued"; id: string } | { status: "duplicate" | "closed" | "budget-exceeded" };
+};
+
+export type TurnContextSource = {
+  /**
+   * Synchronous, bounded observation of projected assistant text. Append events carry
+   * the new delta; replace events carry the full projected snapshot. Never await here.
+   */
+  onAssistantText?(event: { text: string; kind: "append" | "replace" }): void;
+  /** Called at most once at the natural-end gate; start remaining bounded work and settle in-flight work before the deadline. */
+  flush(deadlineAtMs: number): Promise<void>;
+  /** Clear timers, cancel work, and settle owned tasks; safe to call repeatedly. */
+  dispose(): Promise<void>;
+};
+
+export type TurnContextAttachOptions = {
+  /** Stable source key; one attach per key per admitted input. */
+  key: string;
+  /** Tools this source needs throughout its lifetime, checked against the live surface. */
+  requiredTools?: readonly string[];
+  /** Additional source lifetime; abort closes the source and rejects its queued material. */
+  signal?: AbortSignal;
+  /** Source owner authority, rechecked when publishing, installing, and submitting material. */
+  assertCurrent?: () => void;
+  /** Extra natural-end wait budget; host-clamped to [0, 10000] ms. */
+  terminalWaitMs?: number;
+  /** Same-turn continuations this source may request; host-clamped to [0, 1]. */
+  maxFinalContinuations?: number;
+};
+
+/**
+ * Host-owned background material contribution surface. Present only on the builtin
+ * runtime's authorized prompt-build phase; attach is synchronous and cheap.
+ */
+export type TurnContextContributionsHost = {
+  attach(
+    options: TurnContextAttachOptions,
+    factory: (scope: TurnContextSourceScope) => TurnContextSource,
+  ): { status: "attached" | "already-attached" | "unsupported" };
+};
+
 export type PluginHookAgentContext = PluginHookContextWindow & {
   runId?: string;
   jobId?: string;
@@ -60,6 +116,11 @@ export type PluginHookAgentContext = PluginHookContextWindow & {
   channelContext?: PluginHookChannelContext;
   /** Present only for post-policy prompt enrichment hooks that requested tool authority. */
   toolAuthority?: PluginHookToolAuthority;
+  /**
+   * Background material contribution surface bound to the current admitted input.
+   * Present only in the builtin runtime's authorized prompt-build phase.
+   */
+  turnContextContributions?: TurnContextContributionsHost;
   /** Checks this prompt hook handler's result-acceptance lifetime. */
   readonly hookInvocation?: Readonly<{ assertActive(): void }>;
 };

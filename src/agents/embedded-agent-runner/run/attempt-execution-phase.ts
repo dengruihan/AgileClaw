@@ -148,6 +148,7 @@ export async function runEmbeddedAttemptExecutionPhase(
     agentSession: sessionRuntime.agentSession,
     onModelUsage,
     applyPermissionMode: input.lifecycle.applyPermissionMode,
+    readCallableToolNames: () => input.prepared.promptToolPolicy.current.callableToolNames,
     runAbortController: input.runAbortController,
     abortRun,
     markExternalAbort: () => mergeTerminal({ kind: "aborted", source: "external" }),

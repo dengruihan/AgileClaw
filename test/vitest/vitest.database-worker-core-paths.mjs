@@ -947,6 +947,7 @@ export const databaseWorkerCoreTestFiles = [
   "src/plugins/services.cron.test.ts",
   "test/plugins/dreaming-cron-doctor.integration.test.ts",
   "test/plugins/memory-dreaming-cron.test.ts",
+  "test/plugins/parallel-active-memory.integration.test.ts",
   "test/plugins/workboard-automation-authority.test.ts",
   "src/state/creator-namespace-migration.test.ts",
   "src/agents/auth-profiles/store-owner-publication.test.ts",

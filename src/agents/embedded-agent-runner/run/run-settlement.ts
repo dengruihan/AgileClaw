@@ -8,6 +8,7 @@ import { recordAgentCleanupFailure, runAgentCleanupStep } from "../../run-cleanu
 import { log } from "../logger.js";
 import { clearProviderPromptState } from "../provider-prompt-state.js";
 import { forgetPromptBuildDrainCacheForRun } from "./attempt-prompt-helpers.js";
+import { forgetAttemptTurnContextManager } from "./attempt-turn-context.js";
 import type { EmbeddedRunContextRecoveryState } from "./context-recovery-state.js";
 import type { PreparedEmbeddedRunInput } from "./execution-context.js";
 import type { CompactionAccountingFact } from "./internal-params.js";
@@ -101,6 +102,7 @@ export async function settleEmbeddedRun(input: {
   }
   forgetPromptBuildDrainCacheForRun(params.runId);
   clearProviderPromptState(params.runId);
+  await forgetAttemptTurnContextManager(params.runId);
   runtime.stopRuntimeAuthRefreshTimer();
   await ownedContextEngineLease?.dispose();
   if (params.cleanupBundleMcpOnRunEnd === true) {

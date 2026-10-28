@@ -141,6 +141,9 @@ export type ActiveRecallPluginConfig = Partial<
 export type ResolvedActiveRecallPluginConfig = {
   enabled: boolean;
   mode: ActiveMemoryMode;
+  /** Blocking keeps the pre-reply deep-recall path; parallel uses the background sidecar. */
+  execution: ActiveMemoryExecution;
+  parallel: ActiveMemoryParallelConfig;
   agents: string[];
   model?: string;
   modelFallback?: string;
@@ -250,6 +253,18 @@ export type CachedActiveRecallResult = {
 
 export type ActiveMemoryChatType = "direct" | "group" | "channel" | "explicit";
 export type ActiveMemoryMode = "escalate" | "always" | "off";
+export type ActiveMemoryExecution = "blocking" | "parallel";
+
+export type ActiveMemoryParallelConfig = {
+  /** Explicit Flash-class extractor model ref; unset requires the utility model. */
+  extractorModel?: string;
+  /** Extra natural-end wait budget, 0–10000 ms. */
+  terminalWaitMs: number;
+};
+
+export const DEFAULT_ACTIVE_MEMORY_EXECUTION: ActiveMemoryExecution = "blocking";
+export const DEFAULT_PARALLEL_TERMINAL_WAIT_MS = 2_000;
+export const MAX_PARALLEL_TERMINAL_WAIT_MS = 10_000;
 
 export type ActiveMemoryToggleEntry = {
   sessionKey: string;

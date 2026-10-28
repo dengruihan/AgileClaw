@@ -86,6 +86,7 @@ export function handleAgentEnd(
   type BeforeTerminalDeliveryDecision = void | {
     suppressTerminalDelivery?: boolean;
     continueCurrentTurn?: boolean;
+    preserveCompletedAnswer?: boolean;
   };
   const lastAssistant = ctx.state.lastAssistant;
   const isError = isAssistantMessage(lastAssistant) && lastAssistant.stopReason === "error";
@@ -342,7 +343,15 @@ export function handleAgentEnd(
     finalizeAgentEnd();
   };
 
-  const continueCurrentTurn = () => {
+  const continueCurrentTurn = (preserveCompletedAnswer?: boolean) => {
+    if (preserveCompletedAnswer && isAssistantMessage(ctx.state.lastAssistant)) {
+      ctx.state.answerSegments.push({
+        textEnd: ctx.state.assistantTexts.length,
+        messageEnd: ctx.state.assistantMessageIndex,
+        finalMessageStart: ctx.state.assistantMessageStartIndex,
+        lastAssistant: ctx.state.lastAssistant,
+      });
+    }
     // Publish this checkpoint normally, but keep the run and its delivery owner
     // alive until the already-queued same-prompt follow-up settles.
     ctx.releaseDeferredReplies();
@@ -378,7 +387,7 @@ export function handleAgentEnd(
       return undefined;
     }
     if (decision?.continueCurrentTurn === true) {
-      return continueCurrentTurn();
+      return continueCurrentTurn(decision.preserveCompletedAnswer);
     }
     return deliverTerminalWithLifecycleErrorFallback();
   };
