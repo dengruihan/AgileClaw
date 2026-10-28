@@ -1,6 +1,7 @@
 import { normalizeProviderId } from "@openclaw/model-catalog-core/provider-id";
 
 const BUILT_IN_MODEL_PROVIDER_OVERLAY_IDS = new Set([
+  "alibaba",
   "amazon-bedrock",
   "amazon-bedrock-mantle",
   "anthropic",
