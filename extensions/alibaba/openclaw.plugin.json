@@ -5,6 +5,7 @@
     "onStartup": false
   },
   "enabledByDefault": true,
+  "providers": ["alibaba"],
   "setup": {
     "providers": [
       {
