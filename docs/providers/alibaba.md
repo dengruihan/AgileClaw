@@ -6,7 +6,7 @@ read_when:
   - You need Model Studio or DashScope API key setup for video generation
 ---
 
-The bundled `alibaba` plugin registers a video-generation provider for Wan models on Alibaba Model Studio (the international name for DashScope). It is enabled by default; only an API key is needed.
+The bundled `alibaba` plugin registers a video-generation provider for Wan models on Alibaba Model Studio (the international name for DashScope), plus a multimodal memory-embedding adapter. It is enabled by default; only an API key is needed.
 
 | Property         | Value                                                                           |
 | ---------------- | ------------------------------------------------------------------------------- |
@@ -17,6 +17,18 @@ The bundled `alibaba` plugin registers a video-generation provider for Wan model
 | Direct CLI flag  | `--alibaba-model-studio-api-key <key>`                                          |
 | Default model    | `alibaba/wan2.6-t2v`                                                            |
 | Default base URL | `https://dashscope-intl.aliyuncs.com`                                           |
+
+## Memory embeddings
+
+The same plugin registers an `alibaba` memory embedding adapter (default model
+`qwen3-vl-embedding`, base URL `https://dashscope.aliyuncs.com`). It serves
+plain-text memory indexing and, with
+[multimodal memory](/concepts/memory-search#multimodal-memory) enabled, fuses
+indexed image files with their text label into one vector via the model's
+`enable_fusion` mode. Set `memory.search.provider: "alibaba"` (and optionally
+`memory.search.model` / `memory.search.outputDimensionality`); the API key
+resolves from the same env vars or `memory.search.remote.apiKey`. See
+[Memory Search](/concepts/memory-search) for the full provider matrix.
 
 ## Getting started
 

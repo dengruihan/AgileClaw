@@ -48,19 +48,20 @@ chunks. Set these with `queryInputType` and `documentInputType`; see
 
 ## Supported providers
 
-| Provider          | ID                  | Needs API key | Notes                             |
-| ----------------- | ------------------- | ------------- | --------------------------------- |
-| Bedrock           | `bedrock`           | No            | Uses the AWS credential chain     |
-| DeepInfra         | `deepinfra`         | Yes           | Default model `BAAI/bge-m3`       |
-| Gemini            | `gemini`            | Yes           | Supports image/audio indexing     |
-| GitHub Copilot    | `github-copilot`    | No            | Uses your Copilot subscription    |
-| Local             | `local`             | No            | Managed llama.cpp GGUF, ~0.3 GB   |
-| LM Studio         | `lmstudio`          | No            | Local/self-hosted server          |
-| Mistral           | `mistral`           | Yes           | Default model `mistral-embed`     |
-| Ollama            | `ollama`            | No            | Local/self-hosted server          |
-| OpenAI            | `openai`            | Depends       | API key or eligible Codex OAuth   |
-| OpenAI-compatible | `openai-compatible` | Usually       | Generic `/v1/embeddings` endpoint |
-| Voyage            | `voyage`            | Yes           | Default model `voyage-4-large`    |
+| Provider             | ID                  | Needs API key | Notes                                                              |
+| -------------------- | ------------------- | ------------- | ------------------------------------------------------------------ |
+| Alibaba Model Studio | `alibaba`           | Yes           | DashScope multimodal; default `qwen3-vl-embedding`, image indexing |
+| Bedrock              | `bedrock`           | No            | Uses the AWS credential chain                                      |
+| DeepInfra            | `deepinfra`         | Yes           | Default model `BAAI/bge-m3`                                        |
+| Gemini               | `gemini`            | Yes           | Supports image/audio indexing                                      |
+| GitHub Copilot       | `github-copilot`    | No            | Uses your Copilot subscription                                     |
+| Local                | `local`             | No            | Managed llama.cpp GGUF, ~0.3 GB                                    |
+| LM Studio            | `lmstudio`          | No            | Local/self-hosted server                                           |
+| Mistral              | `mistral`           | Yes           | Default model `mistral-embed`                                      |
+| Ollama               | `ollama`            | No            | Local/self-hosted server                                           |
+| OpenAI               | `openai`            | Depends       | API key or eligible Codex OAuth                                    |
+| OpenAI-compatible    | `openai-compatible` | Usually       | Generic `/v1/embeddings` endpoint                                  |
+| Voyage               | `voyage`            | Yes           | Default model `voyage-4-large`                                     |
 
 ## How search works
 
@@ -177,12 +178,14 @@ run the hybrid MMR pass.
 
 ## Multimodal memory
 
-With `gemini-embedding-2`, you can index images and audio alongside
-Markdown. This only applies to files under `memory.search.extraPaths`; default
-memory roots (`MEMORY.md`, `memory/*.md`) stay Markdown-only. Search queries
-remain text, but they match against visual and audio content. See
+With `gemini-embedding-2` (Gemini) or `qwen3-vl-embedding` (Alibaba Model
+Studio), you can index images — and, on Gemini, audio — alongside Markdown.
+This only applies to files under `memory.search.extraPaths`; default memory
+roots (`MEMORY.md`, `memory/*.md`) stay Markdown-only. Search queries remain
+text, but they match against visual and audio content. See
 [Memory configuration reference](/reference/memory-config#multimodal-memory-gemini)
-for setup.
+for setup; for Alibaba, set `memory.search.provider: "alibaba"` (API key from
+`MODELSTUDIO_API_KEY` / `DASHSCOPE_API_KEY` or `memory.search.remote.apiKey`).
 
 ## Session memory search
 

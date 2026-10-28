@@ -1,5 +1,6 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { createProviderApiKeyAuthMethod } from "openclaw/plugin-sdk/provider-entry";
+import { alibabaMemoryEmbeddingProviderAdapter } from "./memory-embedding-adapter.js";
 import { alibabaVideoGenerationProvider } from "./video-generation-provider.js";
 
 export default definePluginEntry({
@@ -33,5 +34,6 @@ export default definePluginEntry({
       ],
     });
     api.registerVideoGenerationProvider(alibabaVideoGenerationProvider);
+    api.registerEmbeddingProvider(alibabaMemoryEmbeddingProviderAdapter);
   },
 });
