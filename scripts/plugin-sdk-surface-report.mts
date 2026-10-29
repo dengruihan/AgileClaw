@@ -190,7 +190,7 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +11: ten service-lifetime type exports and the owner-bound scheduler resolver.
       // +1: owner-approved async watched-session preparation with retained sync compatibility.
       // +5: approved by dengruihan (2026-10-28): turn-context contribution host types on
-      // plugin-entry so the bundled active-memory plugin consumes the host's
+      // plugin-entry so the active-memory plugin consumes the host's
       // parallel memory recall capability through the documented SDK contract.
       3649,
       env,

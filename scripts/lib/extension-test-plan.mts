@@ -3,7 +3,6 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { isAcpxExtensionRoot } from "../../test/vitest/vitest.extension-acpx-paths.mjs";
-import { isActiveMemoryExtensionRoot } from "../../test/vitest/vitest.extension-active-memory-paths.mjs";
 import { isBrowserExtensionRoot } from "../../test/vitest/vitest.extension-browser-paths.mjs";
 import { resolveSplitChannelExtensionShard } from "../../test/vitest/vitest.extension-channel-split-paths.mjs";
 import { isCodexExtensionRoot } from "../../test/vitest/vitest.extension-codex-paths.mjs";
@@ -144,7 +143,6 @@ const EXTENSION_TEST_JOB_FILE_LIMITS = new Map<string, number>([
   ["test/vitest/vitest.extension-telegram.config.ts", TELEGRAM_EXTENSION_TEST_JOB_FILE_LIMIT],
 ]);
 const EXTENSION_TEST_CONFIG_ROUTES: Array<[(root: string) => boolean, string]> = [
-  [isActiveMemoryExtensionRoot, "test/vitest/vitest.extension-active-memory.config.ts"],
   [isAcpxExtensionRoot, "test/vitest/vitest.extension-acpx.config.ts"],
   [isBrowserExtensionRoot, "test/vitest/vitest.extension-browser.config.ts"],
   [isCodexExtensionRoot, "test/vitest/vitest.extension-codex.config.ts"],

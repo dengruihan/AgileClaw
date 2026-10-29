@@ -30,7 +30,6 @@ const mockChannelPlugins = vi.hoisted(() => [
   },
 ]);
 const mockPluginRegistryIds = vi.hoisted(() => [
-  "active-memory",
   "anthropic",
   "brave",
   "discord",

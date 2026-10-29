@@ -261,8 +261,6 @@ export const CONTRACTS_PLUGIN_VITEST_CONFIG = "test/vitest/vitest.contracts-plug
 const CRON_VITEST_CONFIG = "test/vitest/vitest.cron.config.ts";
 const DAEMON_VITEST_CONFIG = "test/vitest/vitest.daemon.config.ts";
 export const E2E_VITEST_CONFIG = "test/vitest/vitest.e2e.config.ts";
-const EXTENSION_ACTIVE_MEMORY_VITEST_CONFIG =
-  "test/vitest/vitest.extension-active-memory.config.ts";
 const EXTENSION_ACPX_VITEST_CONFIG = "test/vitest/vitest.extension-acpx.config.ts";
 const EXTENSION_BROWSER_VITEST_CONFIG = "test/vitest/vitest.extension-browser.config.ts";
 const EXTENSION_CODEX_VITEST_CONFIG = "test/vitest/vitest.extension-codex.config.ts";
@@ -408,7 +406,6 @@ const FULL_SUITE_CONFIG_WEIGHT = new Map([
   [EXTENSION_SIGNAL_VITEST_CONFIG, 11],
   [EXTENSION_ACPX_VITEST_CONFIG, 10],
   [EXTENSION_DIFFS_VITEST_CONFIG, 8],
-  [EXTENSION_ACTIVE_MEMORY_VITEST_CONFIG, 7],
   [EXTENSION_MEMORY_VITEST_CONFIG, 6],
   [EXTENSION_MSTEAMS_VITEST_CONFIG, 4],
 ]);
@@ -582,7 +579,6 @@ const VITEST_CONFIG_BY_KIND: Record<string, string> = {
   utils: UTILS_VITEST_CONFIG,
   wizard: WIZARD_VITEST_CONFIG,
   e2e: E2E_VITEST_CONFIG,
-  extensionActiveMemory: EXTENSION_ACTIVE_MEMORY_VITEST_CONFIG,
   extensionAcpx: EXTENSION_ACPX_VITEST_CONFIG,
   extensionCodex: EXTENSION_CODEX_VITEST_CONFIG,
   extensionDiffs: EXTENSION_DIFFS_VITEST_CONFIG,

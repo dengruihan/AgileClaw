@@ -266,15 +266,13 @@ describe("bundled plugin build entries", () => {
     const entries = listBundledPluginBuildEntries({
       env: {
         ...process.env,
-        OPENCLAW_BUNDLED_PLUGIN_BUILD_IDS: "active-memory,acpx",
+        OPENCLAW_BUNDLED_PLUGIN_BUILD_IDS: "acpx,codex",
       },
     });
     const entryKeys = Object.keys(entries);
 
     expect(entryKeys).toEqual(expect.arrayContaining(["extensions/acpx/index"]));
-    expect(entryKeys.every((entry) => /^extensions\/(?:acpx|active-memory)\//u.test(entry))).toBe(
-      true,
-    );
+    expect(entryKeys.every((entry) => /^extensions\/(?:acpx|codex)\//u.test(entry))).toBe(true);
   });
 
   it("rejects unknown bounded bundled plugin build ids", () => {
@@ -479,14 +477,12 @@ describe("bundled plugin build entries", () => {
     const selectedEntries = listBundledPluginBuildEntries({
       env: {
         ...baselineEnv,
-        [DOCKER_SELECTED_PLUGIN_BUILD_IDS_ENV]: "active-memory",
+        [DOCKER_SELECTED_PLUGIN_BUILD_IDS_ENV]: "device-pair",
       },
     });
 
     expect(selectedEntries).toEqual(baselineEntries);
-    expect(selectedEntries["extensions/active-memory/index"]).toBe(
-      "extensions/active-memory/index.ts",
-    );
+    expect(selectedEntries["extensions/device-pair/index"]).toBe("extensions/device-pair/index.ts");
   });
 
   it("rejects unknown and invalid Docker plugin selections", () => {

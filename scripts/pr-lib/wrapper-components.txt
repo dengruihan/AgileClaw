@@ -1683,7 +1683,6 @@ test/vitest/vitest.commands-light-paths.mjs
 test/vitest/vitest.contracts-paths.mjs
 test/vitest/vitest.database-worker-core-paths.mjs
 test/vitest/vitest.extension-acpx-paths.mjs
-test/vitest/vitest.extension-active-memory-paths.mjs
 test/vitest/vitest.extension-browser-paths.mjs
 test/vitest/vitest.extension-channel-split-paths.mjs
 test/vitest/vitest.extension-codex-paths.mjs
