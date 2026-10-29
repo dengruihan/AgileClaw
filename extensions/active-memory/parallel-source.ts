@@ -201,13 +201,24 @@ export function createActiveMemoryParallelSource(
         debug: deps.debug,
       });
       assertCurrent();
-      if (outcome.status === "contribution" && publishContribution(outcome.id, outcome.text)) {
-        outcome.commitQueued();
-        deps.info?.(
-          `active-memory: parallel recall queued ${String(outcome.matchedCount)} hit(s) ` +
-            `(extraction ${String(extractionsUsed)}/${String(PARALLEL_MAX_EXTRACTIONS)}, ` +
-            `search ${String(budget.searchesUsed)}/${String(PARALLEL_MAX_SEARCHES)})`,
-        );
+      if (outcome.status === "contribution") {
+        let queuedCount = 0;
+        for (const contribution of outcome.contributions) {
+          if (publishContribution(contribution.id, contribution.text)) {
+            contribution.commitQueued();
+            queuedCount += 1;
+          }
+          if (stopped) {
+            break;
+          }
+        }
+        if (queuedCount > 0) {
+          deps.info?.(
+            `active-memory: parallel recall queued ${String(queuedCount)} hit(s) ` +
+              `(extraction ${String(extractionsUsed)}/${String(PARALLEL_MAX_EXTRACTIONS)}, ` +
+              `search ${String(budget.searchesUsed)}/${String(PARALLEL_MAX_SEARCHES)})`,
+          );
+        }
       }
     } catch (error) {
       if (signal.aborted) {

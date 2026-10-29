@@ -192,6 +192,26 @@ describe("buildPromptSection", () => {
     }
   });
 
+  it.each([
+    [[], false],
+    [["tool_search"], false],
+    [["tool_call"], false],
+    [["tool_search", "tool_call"], true],
+  ])("offers memory discovery only with enabled controls: %j", (controls, enabled) => {
+    const prompt = buildMemoryPromptSection({
+      availableTools: new Set(["memory_search", ...controls]),
+    }).join("\n");
+    if (enabled) {
+      expect(prompt).toContain('tool_search with query="memory_search"');
+      expect(prompt).toContain("tool_call with the returned exact id or name");
+      expect(prompt).toContain("Tool discovery does not search memory contents");
+    } else {
+      expect(prompt).not.toContain("tool_search");
+      expect(prompt).not.toContain("tool_call");
+    }
+    expect(buildMemoryPromptSection({ availableTools: new Set(controls) })).toEqual([]);
+  });
+
   it("includes citations-off instruction when citationsMode is off", () => {
     const result = buildMemoryPromptSection({
       availableTools: new Set(["memory_search"]),

@@ -81,11 +81,31 @@ describe("Tool Search metadata provenance", () => {
     },
   );
 
+  it.each([false, true])(
+    "distinguishes empty catalog matches from data searches with batch=%s",
+    async (batch) => {
+      const { tool, entry } = setup("mcp");
+      const result = await tool(TOOL_SEARCH_RAW_TOOL_NAME).execute(
+        "empty-catalog",
+        batch
+          ? { queries: [{ query: "示例项目 活动" }, { query: entry.id, limit: 1 }] }
+          : { query: "示例项目 活动" },
+      );
+      const text = modelText(result);
+      expect(text).toContain("No underlying data was searched");
+      expect(text).toContain("no matching tool");
+      expect(text).toContain("not that the data is absent");
+    },
+  );
+
   it("fits batch model text within 4000 characters after wrapping and token expansion", async () => {
     const { entry, tool } = setup("mcp");
     entry.description = "<|endoftext|> ".repeat(30);
     const result = await tool(TOOL_SEARCH_RAW_TOOL_NAME).execute("metadata-batch", {
-      queries: Array.from({ length: 10 }, () => ({ query: entry.id, limit: 1 })),
+      queries: [
+        { query: "示例项目 活动", limit: 1 },
+        ...Array.from({ length: 9 }, () => ({ query: entry.id, limit: 1 })),
+      ],
     });
     const text = modelText(result);
     expectProtected(text);

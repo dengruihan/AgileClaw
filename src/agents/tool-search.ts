@@ -72,6 +72,16 @@ type ToolSearchBatchGroup = {
   candidates: ToolSearchCandidate[];
   truncated?: true;
 };
+const EMPTY_TOOL_SEARCH_GUIDANCE =
+  "No underlying data was searched. Empty candidates mean no matching tool was returned from the enabled catalog, not that the data is absent. Search for a tool name or capability, then call the selected tool to search its data.";
+
+function withEmptySearchGuidance<T>(result: AgentToolResult<T>): AgentToolResult<T> {
+  return {
+    ...result,
+    content: [...result.content, { type: "text", text: EMPTY_TOOL_SEARCH_GUIDANCE }],
+  };
+}
+
 const MAX_BATCH_CANDIDATE_DESCRIPTION_CHARS = 180;
 const MAX_BATCH_CANDIDATE_DESCRIPTION_SCAN_CHARS = MAX_BATCH_CANDIDATE_DESCRIPTION_CHARS * 4;
 const MAX_BATCH_CANDIDATE_METADATA_CHARS = 2_000;
@@ -145,6 +155,8 @@ function formatToolSearchBatchResponse(
   results: ToolSearchBatchGroup[];
   truncated?: true;
 }> {
+  const hasEmptySearch = results.some((result) => result.candidates.length === 0);
+  const guidanceChars = hasEmptySearch ? EMPTY_TOOL_SEARCH_GUIDANCE.length : 0;
   const bounded: ToolSearchBatchGroup[] = results.map((result) => {
     const candidates = result.candidates
       .map(compactBatchCandidate)
@@ -160,7 +172,7 @@ function formatToolSearchBatchResponse(
   const render = () => ({ results: bounded, ...(truncated ? { truncated: true as const } : {}) });
   let payload = render();
   let { text } = renderToolSearchControlText(JSON.stringify(payload, null, 2), networkContent);
-  while (text.length > MAX_TOOL_SEARCH_BATCH_RESPONSE_CHARS) {
+  while (text.length + guidanceChars > MAX_TOOL_SEARCH_BATCH_RESPONSE_CHARS) {
     let removable: ToolSearchBatchGroup | undefined;
     for (const group of bounded) {
       if (group.candidates.length === 0) {
@@ -186,7 +198,8 @@ function formatToolSearchBatchResponse(
     payload = render();
     ({ text } = renderToolSearchControlText(JSON.stringify(payload, null, 2), networkContent));
   }
-  return textResult(text, payload);
+  const result = textResult(text, payload);
+  return hasEmptySearch ? withEmptySearchGuidance(result) : result;
 }
 
 function shouldExposeControlTool(name: string, mode: ToolSearchMode): boolean {
@@ -223,12 +236,12 @@ export function createToolSearchTools(ctx: ToolSearchToolContext): AnyAgentTool[
       name: TOOL_SEARCH_RAW_TOOL_NAME,
       label: "Tool Search",
       description:
-        "Search the effective Tool Search catalog. Pass query for one search or queries for several independent searches in one call; a non-empty query joins a non-empty batch first, with its own limit. Batch results stay grouped in request order. Queries must be in English: matching is lexical against tool names and descriptions, which are written in English, so another language will usually match nothing. Pass an exact result id or name to tool_call; use tool_describe only when you need its input schema.",
+        "Find tools in the enabled catalog by name or capability; this does not search the tools' underlying data or memory contents. Empty results mean no matching tool, not missing data. Pass query for one search or queries for several independent searches in one call; a non-empty query joins a non-empty batch first, with its own limit. Batch results stay grouped in request order. Queries must be in English: matching is lexical against tool names and descriptions, which are written in English, so another language will usually match nothing. Pass an exact result id or name to tool_call; use tool_describe only when you need its input schema.",
       parameters: Type.Object({
         query: Type.Optional(
           Type.Union([Type.String(), Type.Null()], {
             description:
-              "Single search query, in English. A non-empty query joins a non-empty batch first. Null or blank is ignored beside a non-empty batch.",
+              "Tool name or capability to discover, in English; not a query over underlying data. A non-empty query joins a non-empty batch first. Null or blank is ignored beside a non-empty batch.",
           }),
         ),
         limit: Type.Optional(
@@ -268,14 +281,14 @@ export function createToolSearchTools(ctx: ToolSearchToolContext): AnyAgentTool[
       execute: async (toolCallId: string, args: unknown): Promise<AgentToolResult<unknown>> => {
         const request = readToolSearchRequest(args, config);
         if (request.kind === "single") {
-          return formatToolSearchControlResult(
-            await runtime.search(request.search.query, {
-              limit: request.search.limit,
-              parentToolCallId: toolCallId,
-            }),
-            runtime,
-            { parentToolCallId: toolCallId },
-          );
+          const candidates = await runtime.search(request.search.query, {
+            limit: request.search.limit,
+            parentToolCallId: toolCallId,
+          });
+          const result = formatToolSearchControlResult(candidates, runtime, {
+            parentToolCallId: toolCallId,
+          });
+          return candidates.length === 0 ? withEmptySearchGuidance(result) : result;
         }
         const results = await Promise.all(
           request.searches.map(async (search) => ({

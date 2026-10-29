@@ -6,7 +6,7 @@ import type { CustomMessage } from "../../sessions/messages.js";
 
 export const TURN_CONTEXT_CUSTOM_TYPE = "openclaw.background-context";
 const RECEIPT_CUSTOM_TYPE = "openclaw.background-context-receipt";
-export const MAX_INPUT_CONTRIBUTION_TOKENS = 1_500;
+export const MAX_INPUT_CONTRIBUTION_TOKENS = 50_000;
 
 export type BackgroundContextCarrier = {
   message: CustomMessage;

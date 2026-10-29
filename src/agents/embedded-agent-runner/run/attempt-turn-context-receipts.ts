@@ -30,11 +30,25 @@ const RECEIPT_TRANSITIONS: Record<TurnContextReceiptStatus, readonly TurnContext
   dropped: [],
 };
 
+// Only host-owned categories cross the operational log boundary. Caller-supplied
+// reason strings may contain request material and must never become log keys.
+const LOGGED_DROP_REASONS = new Set([
+  "input-closed",
+  "source-closed",
+  "authority-revoked",
+  "token-budget",
+  "installation-failed-or-revoked",
+  "authority-revoked-after-install",
+  "run-settled",
+  "terminal-closed",
+]);
+
 export type TurnContextReceiptLedger = {
   recordQueued(contributionId: string): void;
   transition(contributionId: string, status: TurnContextReceiptStatus, reason?: string): void;
   dropPending(reason: string): void;
   counts(): Record<TurnContextReceiptStatus, number>;
+  droppedReasonCounts(): Map<string, number>;
 };
 
 /** Bounded by the source's accepted-contribution cap. */
@@ -69,6 +83,18 @@ export function createTurnContextReceiptLedger(): TurnContextReceiptLedger {
       };
       for (const receipt of receipts.values()) {
         counts[receipt.status] += 1;
+      }
+      return counts;
+    },
+    droppedReasonCounts() {
+      const counts = new Map<string, number>();
+      for (const receipt of receipts.values()) {
+        if (receipt.status !== "dropped") {
+          continue;
+        }
+        const reason =
+          receipt.reason && LOGGED_DROP_REASONS.has(receipt.reason) ? receipt.reason : "other";
+        counts.set(reason, (counts.get(reason) ?? 0) + 1);
       }
       return counts;
     },

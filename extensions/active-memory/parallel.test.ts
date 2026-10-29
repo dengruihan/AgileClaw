@@ -168,10 +168,10 @@ describe("parallel recall search", () => {
     });
     expect(outcome.status).toBe("contribution");
     if (outcome.status === "contribution") {
-      expect(outcome.matchedCount).toBe(1);
-      expect(outcome.text).toContain("eligible memory");
-      expect(outcome.text).not.toContain("manual memory");
-      expect(outcome.text).toContain(PARALLEL_MEMORY_DATA_CLOSE);
+      expect(outcome.contributions).toHaveLength(1);
+      expect(outcome.contributions[0]!.text).toContain("eligible memory");
+      expect(outcome.contributions[0]!.text).not.toContain("manual memory");
+      expect(outcome.contributions[0]!.text).toContain(PARALLEL_MEMORY_DATA_CLOSE);
     }
     expect(handle.close).toHaveBeenCalled();
   });
@@ -209,7 +209,7 @@ describe("parallel recall search", () => {
     });
     expect(first.status).toBe("contribution");
     if (first.status === "contribution") {
-      first.commitQueued();
+      first.contributions.forEach((contribution) => contribution.commitQueued());
     }
     const second: ParallelSearchOutcome = await runParallelSearch({
       cfg: {} as OpenClawConfig,
@@ -243,6 +243,11 @@ describe("parallel recall search", () => {
             excerpt: "Use the approved migration order",
             automaticRecall: { eligible: true },
           },
+          {
+            reference: { providerId: "p", id: "rollback" },
+            excerpt: "Keep the previous deployment available for rollback",
+            automaticRecall: { eligible: true },
+          },
         ],
       }),
     });
@@ -264,10 +269,17 @@ describe("parallel recall search", () => {
     const retry = await runParallelSearch({ ...params, query: "approved order", sequence: 2 });
     expect(retry.status).toBe("contribution");
     if (retry.status === "contribution") {
-      retry.commitQueued();
-      retry.commitQueued();
+      retry.contributions[0]!.commitQueued();
+      retry.contributions[0]!.commitQueued();
     }
     expect(budget.providedCount).toBe(1);
+    const remaining = await runParallelSearch({ ...params, query: "rollback plan", sequence: 3 });
+    expect(remaining.status).toBe("contribution");
+    if (remaining.status === "contribution") {
+      expect(remaining.contributions).toHaveLength(1);
+      expect(remaining.contributions[0]!.text).toContain("previous deployment");
+      expect(remaining.contributions[0]!.text).not.toContain("approved migration order");
+    }
   });
 
   it("escapes source labels as well as excerpts without dropping canonical references", async () => {
@@ -295,11 +307,11 @@ describe("parallel recall search", () => {
     });
     expect(result.status).toBe("contribution");
     if (result.status === "contribution") {
-      expect(result.text.match(/<\/memory_data>/g)).toHaveLength(1);
-      expect(result.text).not.toContain("<system>");
-      expect(result.text).not.toContain("<user>");
-      expect(result.text).toContain("memory.md");
-      expect(result.text).toContain("L2-L4");
+      expect(result.contributions[0]!.text.match(/<\/memory_data>/g)).toHaveLength(1);
+      expect(result.contributions[0]!.text).not.toContain("<system>");
+      expect(result.contributions[0]!.text).not.toContain("<user>");
+      expect(result.contributions[0]!.text).toContain("memory.md");
+      expect(result.contributions[0]!.text).toContain("L2-L4");
     }
   });
 
@@ -346,8 +358,10 @@ describe("parallel recall search", () => {
     });
     expect(outcome.status).toBe("contribution");
     if (outcome.status === "contribution") {
-      expect(outcome.matchedCount).toBeLessThanOrEqual(5);
-      expect(outcome.text.length).toBeLessThanOrEqual(PARALLEL_BLOCK_CHARS);
+      expect(outcome.contributions.length).toBeLessThanOrEqual(5);
+      expect(outcome.contributions.every((item) => item.text.length <= PARALLEL_BLOCK_CHARS)).toBe(
+        true,
+      );
     }
   });
 });

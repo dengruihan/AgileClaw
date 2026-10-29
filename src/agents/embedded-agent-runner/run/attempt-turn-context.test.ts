@@ -1,4 +1,6 @@
+import assert from "node:assert/strict";
 import { describe, expect, it, vi } from "vitest";
+import { log } from "../logger.js";
 import {
   MAX_TURN_CONTEXT_CONTRIBUTION_CHARS,
   assertAttemptTurnContextCarriersCurrent,
@@ -36,7 +38,7 @@ function attachHarness(
   options?: { terminalWaitMs?: number; publishDuringFlush?: string; inputId?: string },
 ): AttachedHarness {
   const onAssistantText = vi.fn();
-  const flush = vi.fn<() => Promise<void>>(async () => {});
+  const flush = vi.fn<(deadlineAtMs: number) => Promise<void>>(async () => {});
   const dispose = vi.fn(async () => {});
   let publish: Publish | undefined;
   const outcome = manager.attach(
@@ -63,10 +65,12 @@ function attachHarness(
 }
 
 async function withManager(
-  run: (manager: NonNullable<ReturnType<typeof ensureAttemptTurnContextManager>>) => Promise<void>,
+  run: (
+    manager: NonNullable<ReturnType<typeof ensureAttemptTurnContextManager>>,
+  ) => void | Promise<void>,
 ): Promise<void> {
   const manager = ensureAttemptTurnContextManager(RUN_ID, INPUT_ID);
-  expect(manager).toBeDefined();
+  assert(manager);
   try {
     await run(manager);
   } finally {
@@ -211,6 +215,7 @@ describe("attempt turn-context contributions", () => {
 
   it("closes publishes and disposes sources at run settlement", async () => {
     const manager = ensureAttemptTurnContextManager(RUN_ID, INPUT_ID);
+    assert(manager);
     const { publish, dispose } = attachHarness(manager, "bye");
     expect(publish({ id: "b1", text: "x" }).status).toBe("queued");
     await forgetAttemptTurnContextManager(RUN_ID);
@@ -253,66 +258,114 @@ describe("attempt turn-context contributions", () => {
     });
   });
 
-  it("drops revoked batches at the boundary and rejects their continuation", async () => {
-    await withManager(async (manager) => {
-      let authorized = true;
-      const flush = vi.fn(async () => {});
-      const dispose = vi.fn(async () => {});
-      let publishRef: Publish | undefined;
-      manager.attach(
-        {
-          key: "revoked",
-          inputId: INPUT_ID,
-          assertAuthority: () => {
-            if (!authorized) {
-              throw new Error("authority revoked");
-            }
-          },
-        },
-        (scope) => {
-          publishRef = (contribution) => scope.publish(contribution) as ReturnType<Publish>;
-          return {
-            async flush(deadlineAtMs: number) {
-              await flush(deadlineAtMs);
+  it.each(["queued", "terminal"] as const)(
+    "drops only revoked sources at the %s boundary",
+    async (stage) => {
+      await withManager(async (manager) => {
+        let authorized = true;
+        const flush = vi.fn<(deadlineAtMs: number) => Promise<void>>(async () => {});
+        const dispose = vi.fn(async () => {});
+        let publishRef: Publish | undefined;
+        if (stage === "terminal") {
+          const live = attachHarness(manager, "live");
+          live.publish({ id: "live", text: "still authorized" });
+        }
+        manager.attach(
+          {
+            key: "revoked",
+            inputId: INPUT_ID,
+            assertAuthority: () => {
+              if (!authorized) {
+                throw new Error("authority revoked");
+              }
             },
-            dispose,
-          };
-        },
-      );
-      expect(publishRef!({ id: "r1", text: "material" }).status).toBe("queued");
-      authorized = false;
-      // Boundary lease refuses revoked material entirely.
-      expect(drainAttemptTurnContextContributionsForModelRequest(RUN_ID)).toEqual([]);
-      // Re-authorized publish still works, but the source was stopped by the drop.
-      authorized = true;
-      expect(publishRef!({ id: "r2", text: "later" }).status).toBe("closed");
-      expect(dispose).not.toHaveBeenCalled();
-    });
-  });
+          },
+          (scope) => {
+            publishRef = (contribution) => scope.publish(contribution) as ReturnType<Publish>;
+            return {
+              async flush(deadlineAtMs: number) {
+                await flush(deadlineAtMs);
+              },
+              dispose,
+            };
+          },
+        );
+        expect(publishRef!({ id: "r1", text: "material" }).status).toBe("queued");
+        if (stage === "terminal") {
+          await resolveAttemptTurnContextTerminalContinuation({
+            runId: RUN_ID,
+            canContinue: () => true,
+            sendFollowUp: async () => {},
+          });
+        }
+        authorized = false;
+        const carriers = drainAttemptTurnContextContributionsForModelRequest(RUN_ID);
+        expect(carriers.map((carrier) => carrier.contributionId)).toEqual(
+          stage === "terminal" ? ["live"] : [],
+        );
+        expect(readAttemptTurnContextReceiptCounts(RUN_ID)).toMatchObject({ dropped: 1 });
+        // Re-authorized publish still works, but the source was stopped by the drop.
+        authorized = true;
+        expect(publishRef!({ id: "r2", text: "later" }).status).toBe("closed");
+        expect(dispose).not.toHaveBeenCalled();
+      });
+    },
+  );
 
-  it("records queued/leased/installed/submitted receipts and ignores stale transitions", async () => {
-    await withManager(async (manager) => {
-      const { publish } = attachHarness(manager, "receipts");
-      expect(publish({ id: "c1", text: "material" }).status).toBe("queued");
-      expect(readAttemptTurnContextReceiptCounts(RUN_ID)).toMatchObject({ queued: 1 });
-      const carriers = drainAttemptTurnContextContributionsForModelRequest(RUN_ID);
-      expect(readAttemptTurnContextReceiptCounts(RUN_ID)).toMatchObject({ leased: 1 });
-      markAttemptTurnContextCarriers(RUN_ID, carriers, "installed");
-      expect(readAttemptTurnContextReceiptCounts(RUN_ID)).toMatchObject({ installed: 1 });
-      markAttemptTurnContextCarriers(RUN_ID, carriers, "submitted");
-      expect(readAttemptTurnContextReceiptCounts(RUN_ID)).toMatchObject({ submitted: 1 });
-      // Submitted is terminal: a late drop or re-install cannot rewrite it.
-      markAttemptTurnContextCarriers(RUN_ID, carriers, "dropped", "late-revoke");
-      markAttemptTurnContextCarriers(RUN_ID, carriers, "installed");
-      expect(readAttemptTurnContextReceiptCounts(RUN_ID)).toMatchObject({ submitted: 1 });
-      // Unknown carriers for missing sources are inert.
-      markAttemptTurnContextCarriers(
-        RUN_ID,
-        [{ pluginKey: "missing", contributionId: "x", inputId: INPUT_ID }],
-        "installed",
-      );
-      expect(readAttemptTurnContextReceiptCounts(RUN_ID)).toMatchObject({ submitted: 1 });
-    });
+  it("reports settled receipts and drop reasons across input rotation without rewriting terminal receipts", async () => {
+    const info = vi.spyOn(log, "info").mockImplementation(() => {});
+    try {
+      await withManager(async (manager) => {
+        const { publish } = attachHarness(manager, "receipts");
+        expect(publish({ id: "c1", text: "material" }).status).toBe("queued");
+        expect(readAttemptTurnContextReceiptCounts(RUN_ID)).toMatchObject({ queued: 1 });
+        const carriers = drainAttemptTurnContextContributionsForModelRequest(RUN_ID);
+        expect(readAttemptTurnContextReceiptCounts(RUN_ID)).toMatchObject({ leased: 1 });
+        markAttemptTurnContextCarriers(RUN_ID, carriers, "installed");
+        expect(readAttemptTurnContextReceiptCounts(RUN_ID)).toMatchObject({ installed: 1 });
+        markAttemptTurnContextCarriers(RUN_ID, carriers, "submitted");
+        expect(readAttemptTurnContextReceiptCounts(RUN_ID)).toMatchObject({ submitted: 1 });
+        // Submitted is terminal: a late drop or re-install cannot rewrite it.
+        markAttemptTurnContextCarriers(RUN_ID, carriers, "dropped", "late-revoke");
+        markAttemptTurnContextCarriers(RUN_ID, carriers, "installed");
+        expect(readAttemptTurnContextReceiptCounts(RUN_ID)).toMatchObject({ submitted: 1 });
+        // Unknown carriers for missing sources are inert.
+        markAttemptTurnContextCarriers(
+          RUN_ID,
+          [{ ...carriers[0]!, pluginKey: "missing", contributionId: "x" }],
+          "installed",
+        );
+        expect(readAttemptTurnContextReceiptCounts(RUN_ID)).toMatchObject({ submitted: 1 });
+
+        publish({ id: "c2", text: "private rejected material" });
+        const rejected = drainAttemptTurnContextContributionsForModelRequest(RUN_ID);
+        markAttemptTurnContextCarriers(RUN_ID, rejected, "dropped", "token-budget");
+        publish({ id: "c-private", text: "private failure material" });
+        markAttemptTurnContextCarriers(
+          RUN_ID,
+          drainAttemptTurnContextContributionsForModelRequest(RUN_ID),
+          "dropped",
+          "private failure reason",
+        );
+        publish({ id: "c3", text: "private retired material" });
+        manager.rotateInput("input-b");
+        const next = attachHarness(manager, "receipts", { inputId: "input-b" });
+        next.publish({ id: "c4", text: "private unsettled material" });
+      });
+      expect(info).toHaveBeenCalledTimes(1);
+      const summary = String(info.mock.calls[0]?.[0]);
+      expect(summary).toContain("accepted=5");
+      expect(summary).toContain("submitted=1");
+      expect(summary).toContain("dropped=4");
+      expect(summary).toContain('"token-budget":1');
+      expect(summary).toContain('"input-closed":1');
+      expect(summary).toContain('"run-settled":1');
+      expect(summary).toContain('"other":1');
+      expect(summary).not.toContain("late-revoke");
+      expect(summary).not.toContain("private");
+    } finally {
+      info.mockRestore();
+    }
   });
 
   it("steering rotation with a real identity closes the old input and admits a new source", async () => {
