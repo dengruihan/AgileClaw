@@ -38,11 +38,10 @@ scenario:
     - The main request follows the helper chain, contains the user marker, Active Memory envelope, and recalled fact, and plans no tool.
     - Chat history records the recalled preference, Active Memory debug evidence, and no transient helper session remains.
   docsRefs:
-    - docs/concepts/active-memory.md
     - docs/concepts/memory-search.md
   codeRefs:
-    - extensions/active-memory/index.ts
-    - extensions/active-memory/doctor-contract-api.ts
+    - repos/active-memory/index.ts
+    - repos/active-memory/doctor-contract-api.ts
     - extensions/qa-lab/src/suite-runtime-agent-process.ts
     - extensions/qa-lab/src/providers/mock-openai/server.ts
   execution:

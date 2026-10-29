@@ -40,11 +40,10 @@ scenario:
     - Group destinations, the disabled setting, and a session-scoped pause do not start product recall.
     - The feature does not widen tools.sessions.visibility.
   docsRefs:
-    - docs/concepts/active-memory.md
     - docs/reference/memory-config.md
     - docs/concepts/session.md
   codeRefs:
-    - extensions/active-memory/index.ts
+    - repos/active-memory/index.ts
     - extensions/memory-core/src/session-search-visibility.ts
     - extensions/qa-lab/src/suite-runtime-flow.ts
     - extensions/qa-lab/src/providers/mock-openai/server.ts

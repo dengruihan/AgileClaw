@@ -233,7 +233,7 @@ the managed server endpoints before rebuilding the index.
 
 - [Memory overview](/concepts/memory)
 - [Memory architecture](/concepts/memory-architecture)
-- [Active memory](/concepts/active-memory)
+- [Active memory](https://github.com/dengruihan/AgileClaw_active-memory/blob/main/docs/concepts/active-memory.md)
 - [Builtin memory engine](/concepts/memory-builtin)
 - [Memory configuration reference](/reference/memory-config)
 - [Memory LanceDB](/plugins/memory-lancedb)

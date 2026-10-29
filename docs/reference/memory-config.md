@@ -23,7 +23,7 @@ This page lists every configuration knob for OpenClaw memory search. For concept
   <Card title="Memory search" href="/concepts/memory-search">
     Search pipeline and tuning.
   </Card>
-  <Card title="Active memory" href="/concepts/active-memory">
+  <Card title="Active memory" href="https://github.com/dengruihan/AgileClaw_active-memory/blob/main/docs/concepts/active-memory.md">
     Memory sub-agent for interactive sessions.
   </Card>
 </CardGroup>
@@ -35,7 +35,7 @@ For the recommended personal-agent workflow, use
 `memory.search.rememberAcrossConversations`. Advanced Active Memory targeting,
 model, prompt, and latency controls live under `plugins.entries.active-memory`.
 
-See [Active Memory](/concepts/active-memory) for both activation paths,
+See [Active Memory](https://github.com/dengruihan/AgileClaw_active-memory/blob/main/docs/concepts/active-memory.md) for both activation paths,
 transcript persistence, and safe rollout guidance.
 </Note>
 

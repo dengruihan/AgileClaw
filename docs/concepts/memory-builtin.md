@@ -382,4 +382,4 @@ knobs, see the
 
 - [Memory overview](/concepts/memory)
 - [Memory search](/concepts/memory-search)
-- [Active memory](/concepts/active-memory)
+- [Active memory](https://github.com/dengruihan/AgileClaw_active-memory/blob/main/docs/concepts/active-memory.md)

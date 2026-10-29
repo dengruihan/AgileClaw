@@ -34,10 +34,9 @@ scenario:
     - The first QA-channel direct turn produces one visible reply containing the trigger-tagged fact.
     - The sole main-model request contains the Active Memory envelope and fact without a memory search helper request.
   docsRefs:
-    - docs/concepts/active-memory.md
     - docs/channels/qa-channel.md
   codeRefs:
-    - extensions/active-memory/index.ts
+    - repos/active-memory/index.ts
     - extensions/qa-channel/src/inbound.ts
     - extensions/qa-lab/src/providers/mock-openai/server.ts
   execution:
