@@ -453,10 +453,6 @@
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/llama-cpp/**"
-"extensions: active-memory":
-  - changed-files:
-      - any-glob-to-any-file:
-          - "extensions/active-memory/**"
 "extensions: memory-core":
   - changed-files:
       - any-glob-to-any-file:

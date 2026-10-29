@@ -1384,10 +1384,6 @@ const policyTestWatches: readonly PolicyTestWatch[] = [
     watchGlobs: ["extensions/canvas/src/config-migration.ts"],
   },
   {
-    testFile: "src/gateway/gateway-active-memory.test.ts",
-    watchGlobs: ["extensions/active-memory/recall.ts"],
-  },
-  {
     testFile: "src/gateway/worker-environments/store-runtime-refresh.test.ts",
     watchGlobs: [
       "src/gateway/worker-environments/store-transitions.ts",

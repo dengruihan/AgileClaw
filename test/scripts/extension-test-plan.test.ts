@@ -150,31 +150,30 @@ describe("extension executable test plans", () => {
   });
 
   it.each([
-    { selection: "name", targetArg: "active-memory", cwd: process.cwd() },
-    { selection: "path", targetArg: "extensions/active-memory", cwd: process.cwd() },
-    { selection: "cwd", cwd: path.join(process.cwd(), "extensions/active-memory") },
-  ])("plans manifest-only Active Memory by $selection", ({ targetArg, cwd }) => {
-    expect(extensionTestPlan.resolveExtensionTestPlan({ targetArg, cwd })).toMatchObject({
-      extensionId: "active-memory",
-      extensionDir: "extensions/active-memory",
+    { selection: "name", targetArg: "acpx", cwd: process.cwd() },
+    { selection: "path", targetArg: "extensions/acpx", cwd: process.cwd() },
+    { selection: "cwd", cwd: path.join(process.cwd(), "extensions/acpx") },
+  ])("plans Acpx by $selection", ({ targetArg, cwd }) => {
+    const plan = extensionTestPlan.resolveExtensionTestPlan({ targetArg, cwd });
+    expect(plan).toMatchObject({
+      extensionId: "acpx",
+      extensionDir: "extensions/acpx",
       hasTests: true,
-      planGroups: [
-        {
-          config: "test/vitest/vitest.extension-active-memory.config.ts",
-          roots: ["extensions/active-memory"],
-        },
-        {
-          config: workerConfig,
-          roots: ["extensions/active-memory/index.test.ts"],
-        },
-      ],
     });
+    const configs = plan.planGroups.map((group) => group.config);
+    expect(configs).toContain("test/vitest/vitest.extension-acpx.config.ts");
+    expect(configs).toContain(workerConfig);
+    expect(
+      plan.planGroups
+        .find((group) => group.config === workerConfig)
+        ?.roots.every((root) => databaseWorkerExtensionTestFiles.includes(root)),
+    ).toBe(true);
   });
 
-  it("includes manifest-only Active Memory in default and changed discovery", () => {
-    expect(listAvailableExtensionIds()).toContain("active-memory");
-    expect(detectChangedExtensionIds(["extensions/active-memory/index.ts"])).toEqual([
-      "active-memory",
+  it("includes manifest-only Device Pair in default and changed discovery", () => {
+    expect(listAvailableExtensionIds()).toContain("device-pair");
+    expect(detectChangedExtensionIds(["extensions/device-pair/notify.test.ts"])).toEqual([
+      "device-pair",
     ]);
   });
 
