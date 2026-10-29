@@ -106,14 +106,18 @@ an admitted read contract for the selected memory backend: a native provider
 declares its recall tools, a legacy backend (the default) uses its deterministic
 recall tool — both are checked against the turn's tool policy before the
 sidecar starts, and both search through the same neutral provider facade.
-Material is admitted whole against the model's context budget at the real
-model-call boundary; when headroom runs out entries are dropped rather than
-truncating history, and each accepted block carries a delivery receipt that
+Each memory is queued as its own whole block and admitted against the model's
+context budget at the real model-call boundary. When headroom runs out, the
+host keeps the entries that fit and drops the rest without truncating history.
+Each accepted block carries a delivery receipt that
 distinguishes queued, leased, installed, submitted, dropped, and uncertain
 provider dispatches. Persisted blocks enter replay only with a submission
 receipt; revoked or uncertain material stays available as transcript evidence
-without entering later model requests. Each input has a 1,500 token ceiling for
-new material, including wrapping and the continuation instruction. When a new user input is
+without entering later model requests. Each input has a 50,000 token ceiling for
+new material, including wrapping and the continuation instruction; this ceiling
+does not increase the model's context window or the sidecar's existing hit and
+excerpt limits. Nonempty runs log accepted, submitted, and dropped contribution
+counts plus drop reasons without logging memory text. When a new user input is
 admitted mid-run (steering), the previous input's sidecar stops and the new
 input gets its own sidecar and budgets along its preparation boundary.
 Turns that need protected Remember-across-conversations recall or run on

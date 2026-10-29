@@ -148,7 +148,14 @@ catalog, without rerunning the hook or rewriting earlier conversation turns.
 ### Search
 
 `tool_search` searches the effective catalog for the current run. It accepts a
-query and an optional limit.
+query and an optional limit. It discovers tools; it does not search their
+underlying data, messages, or memory contents. No candidates means no matching
+tool was returned, not that the requested data is absent. Empty search results
+include this distinction in model-facing text while retaining their structured
+candidate shape. Discover the appropriate tool by name or capability, then call
+it with the data query. For example, when `memory_search` is enabled but deferred,
+find it with `query: "memory_search"`, then call its returned ID through `tool_call`
+with the memory query in `args`.
 
 Queries must be written in English. Ranking is lexical (Okapi BM25 over tool
 names, descriptions, and first-party parameter names and descriptions), with

@@ -25,6 +25,7 @@ import {
   streamMocks,
   testModel,
 } from "../../src/agents/sessions/agent-session-loop-correctness.test-support.js";
+import type { ToolDefinition } from "../../src/agents/sessions/extensions/types.js";
 import type { Context } from "../../src/llm/types.js";
 import type {
   PluginHookBeforePromptBuildEvent,
@@ -289,7 +290,7 @@ describe("parallel active-memory production composition", () => {
                     details: {},
                   };
                 },
-              },
+              } satisfies ToolDefinition,
             ]
           : []),
       ],
@@ -544,6 +545,48 @@ describe("parallel active-memory production composition", () => {
     );
   });
 
+  it.each([
+    { tool: true, tokenBudget: 1_000_000, partial: false },
+    { tool: false, tokenBudget: 1_000_000, partial: false },
+    { tool: true, tokenBudget: 1800, partial: true },
+    { tool: false, tokenBudget: 1800, partial: true },
+  ])(
+    "admits Chinese memory entries independently with tool=$tool and partial=$partial",
+    async ({ tool, tokenBudget, partial }) => {
+      const memoryFacts = Array.from(
+        { length: 4 },
+        (_, index) => `Alpha deployment 项目${index}：${"项目协作调研反馈执行记录".repeat(55)}`,
+      );
+      const test = await setup({ tool, memoryFacts, tokenBudget });
+      await test.execute();
+      expect(test.requests).toHaveLength(2);
+      expect(test.toolEffects).toBe(tool ? 1 : 0);
+      const submitted = test.receipts?.submitted ?? 0;
+      expect(submitted).toBeGreaterThan(0);
+      if (partial) {
+        expect(submitted).toBeLessThan(4);
+        expect(test.receipts?.dropped).toBe(4 - submitted);
+      } else {
+        expect(submitted).toBe(4);
+        expect(test.receipts?.dropped).toBe(0);
+      }
+      const memories = test.requests[1]!.messages.filter(
+        (message) => message.role === "user" && JSON.stringify(message).includes("<memory_data>"),
+      );
+      expect(memories).toHaveLength(submitted);
+      expect(memories.every((message) => JSON.stringify(message).includes("</memory_data>"))).toBe(
+        true,
+      );
+      expect(JSON.stringify(memories)).toContain("项目协作调研反馈执行记录");
+      if (!tool) {
+        expect(JSON.stringify(memories.at(-1))).toContain(
+          "Related material for the current request",
+        );
+      }
+      expect(test.terminal).toBe(1);
+    },
+  );
+
   it("honors an explicit empty extractor query without search or forced continuation", async () => {
     const test = await setup({ emptyQuery: true });
     await test.execute();
@@ -594,7 +637,10 @@ describe("parallel active-memory production composition", () => {
   );
 
   it("cancels the continuation follow-up when authority revokes before it is consumed", async () => {
-    const test = await setup({ revokeOnCarrierStart: true });
+    const test = await setup({
+      revokeOnCarrierStart: true,
+      memoryFacts: [marker, "Alpha deployment rollback keeps the previous database."],
+    });
     await test.execute();
     // The revoked material must not wake a second model call: the loop drops
     // the cancelled follow-up, the delivered answer stands, and the carrier

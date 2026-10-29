@@ -144,6 +144,12 @@ export function buildMemoryPromptSection({
         hasMemoryGet ? "; for memory-file hits, use memory_get to pull only the needed lines" : ""
       }. Use corpus=all only when compiled wiki supplements are needed. If low confidence after search, say you checked.`
     : "Before answering anything about prior work, decisions, dates, people, preferences, or todos that point to a specific memory file: run memory_get to pull only the needed lines. If low confidence after reading, say you checked.";
+  const discoveryGuidance =
+    hasMemorySearch && availableTools.has("tool_search") && availableTools.has("tool_call")
+      ? [
+          'If memory_search is deferred, discover it using tool_search with query="memory_search", then use tool_call with the returned exact id or name and your memory query in args. Tool discovery does not search memory contents; an empty tool catalog result does not mean no memories exist.',
+        ]
+      : [];
   const sessionGuidance = !hasMemorySearch
     ? []
     : [
@@ -164,5 +170,13 @@ export function buildMemoryPromptSection({
     citationsMode === "off"
       ? "Citations are disabled: do not mention file paths or line numbers in replies unless the user explicitly asks."
       : "Citations: include Source: <path#line> when it helps the user verify memory snippets.";
-  return ["## Memory Recall", guidance, ...sessionGuidance, outcomeGuidance, citationGuidance, ""];
+  return [
+    "## Memory Recall",
+    guidance,
+    ...discoveryGuidance,
+    ...sessionGuidance,
+    outcomeGuidance,
+    citationGuidance,
+    "",
+  ];
 }

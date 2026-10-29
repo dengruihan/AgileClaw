@@ -9,7 +9,7 @@ import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 /**
  * Provider-backed recall for the parallel sidecar: one bounded search per
  * accepted query, provider-owned ordering and thresholds, then eligibility,
- * dedup, and length admission into a single hidden material block.
+ * dedup, and length admission into independently admissible memory blocks.
  */
 
 export const PARALLEL_SEARCH_MAX_RESULTS = 8;
@@ -99,11 +99,12 @@ function isAutomaticRecallEligible(
 export type ParallelSearchOutcome =
   | {
       status: "contribution";
-      id: string;
-      text: string;
-      matchedCount: number;
-      /** Called only after the host accepts this candidate into its queue. */
-      commitQueued(): void;
+      contributions: Array<{
+        id: string;
+        text: string;
+        /** Called only after the host accepts this memory into its queue. */
+        commitQueued(): void;
+      }>;
     }
   | {
       status:
@@ -116,9 +117,8 @@ export type ParallelSearchOutcome =
     };
 
 /**
- * Runs one search and admits its best untouched hits into one contribution
- * block. The provider keeps its own ordering and thresholds; no rerank and no
- * summary model run here.
+ * Keeps provider ordering and thresholds while giving the host one whole
+ * memory per contribution, so a large batch cannot crowd out every hit.
  */
 export async function runParallelSearch(params: {
   cfg: OpenClawConfig;
@@ -194,8 +194,9 @@ export async function runParallelSearch(params: {
     providedCount: params.budget.providedCount,
     bodyChars: params.budget.bodyChars,
   };
-  const entries: string[] = [];
-  let matchedCount = 0;
+  const contributions: Extract<ParallelSearchOutcome, { status: "contribution" }>["contributions"] =
+    [];
+
   for (const hit of page.hits) {
     if (candidate.providedCount >= PARALLEL_MEMORY_LIMIT) {
       break;
@@ -225,36 +226,31 @@ export async function runParallelSearch(params: {
     if (candidate.bodyChars + entry.length > PARALLEL_BODY_CHARS) {
       continue;
     }
+    const text = `${PARALLEL_BLOCK_HEADER}\n\n${PARALLEL_MEMORY_DATA_OPEN}\n${entry}\n${PARALLEL_MEMORY_DATA_CLOSE}`;
+    if (text.length > PARALLEL_BLOCK_CHARS) {
+      continue;
+    }
     candidate.providedMemories.set(key, content);
     candidate.providedContents.add(content);
     candidate.providedCount += 1;
     candidate.bodyChars += entry.length;
-    entries.push(entry);
-    matchedCount += 1;
+    let committed = false;
+    contributions.push({
+      id: `parallel-${String(params.sequence)}-${String(contributions.length + 1)}`,
+      text,
+      commitQueued() {
+        if (committed) {
+          return;
+        }
+        committed = true;
+        params.budget.providedMemories.set(key, content);
+        params.budget.providedContents.add(content);
+        params.budget.providedCount += 1;
+        params.budget.bodyChars += entry.length;
+      },
+    });
   }
-  if (entries.length === 0) {
-    return { status: "no-new-eligible" };
-  }
-  const text = `${PARALLEL_BLOCK_HEADER}\n\n${PARALLEL_MEMORY_DATA_OPEN}\n${entries.join("\n")}\n${PARALLEL_MEMORY_DATA_CLOSE}`;
-  // Whole-block admission; the host cap is the final guard, never a truncation.
-  if (text.length > PARALLEL_BLOCK_CHARS) {
-    return { status: "budget-exceeded" };
-  }
-  let committed = false;
-  return {
-    status: "contribution",
-    id: `parallel-${String(params.sequence)}`,
-    text,
-    matchedCount,
-    commitQueued() {
-      if (committed) {
-        return;
-      }
-      committed = true;
-      params.budget.providedMemories = candidate.providedMemories;
-      params.budget.providedContents = candidate.providedContents;
-      params.budget.providedCount = candidate.providedCount;
-      params.budget.bodyChars = candidate.bodyChars;
-    },
-  };
+  return contributions.length > 0
+    ? { status: "contribution", contributions }
+    : { status: "no-new-eligible" };
 }

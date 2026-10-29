@@ -51,7 +51,7 @@ type AttachedSource = {
   /** Accepted here and not yet consumed by a model-request boundary. */
   queued: Map<string, QueuedContribution>;
   receipts: TurnContextReceiptLedger;
-  installed: Map<string, BackgroundContextCarrier>;
+  pendingCarriers: Map<string, BackgroundContextCarrier>;
   acceptedIds: Set<string>;
   acceptedCount: number;
   /** Continuation consumed or terminal gate completed; no further extraction input. */
@@ -146,6 +146,7 @@ export function createTurnContextManager(
     uncertain: 0,
     dropped: 0,
   };
+  const retiredDroppedReasons = new Map<string, number>();
   const pendingDisposals = new Set<Promise<void>>();
   let terminalAdmission:
     | ((carriers: BackgroundContextCarrier[]) => Promise<BackgroundContextCarrier[]>)
@@ -178,10 +179,13 @@ export function createTurnContextManager(
     for (const attached of sources.values()) {
       attached.receipts.dropPending("input-closed");
       attached.queued.clear();
-      attached.installed.clear();
+      attached.pendingCarriers.clear();
       const counts = attached.receipts.counts();
       for (const status of TURN_CONTEXT_RECEIPT_STATUSES) {
         retiredCounts[status] += counts[status];
+      }
+      for (const [reason, count] of attached.receipts.droppedReasonCounts()) {
+        retiredDroppedReasons.set(reason, (retiredDroppedReasons.get(reason) ?? 0) + count);
       }
       void disposeSource(attached);
     }
@@ -244,7 +248,7 @@ export function createTurnContextManager(
         finalContinuationsUsed: 0,
         queued: new Map(),
         receipts: createTurnContextReceiptLedger(),
-        installed: new Map(),
+        pendingCarriers: new Map(),
         acceptedIds: new Set(),
         acceptedCount: 0,
         stopped: false,
@@ -307,7 +311,7 @@ export function createTurnContextManager(
         const close = () => {
           attached.receipts.dropPending("source-closed");
           attached.queued.clear();
-          attached.installed.clear();
+          attached.pendingCarriers.clear();
           void disposeSource(attached);
         };
         options.signal.addEventListener("abort", close, { once: true });
@@ -345,11 +349,7 @@ export function createTurnContextManager(
       }
       const carriers: BackgroundContextCarrier[] = [];
       for (const attached of sources.values()) {
-        carriers.push(...attached.installed.values());
-        attached.installed.clear();
-      }
-      for (const attached of sources.values()) {
-        if (attached.queued.size === 0) {
+        if (attached.queued.size === 0 && attached.pendingCarriers.size === 0) {
           continue;
         }
         try {
@@ -359,12 +359,15 @@ export function createTurnContextManager(
         } catch (error) {
           attached.receipts.dropPending("authority-revoked");
           attached.queued.clear();
+          attached.pendingCarriers.clear();
           stopSource(attached, true);
           log.debug(
             `turn-context: dropped revoked batch key=${attached.key} runId=${runId}: ${String(error)}`,
           );
           continue;
         }
+        carriers.push(...attached.pendingCarriers.values());
+        attached.pendingCarriers.clear();
         const batch = [...attached.queued.values()];
         attached.queued.clear();
         for (const contribution of batch) {
@@ -437,7 +440,7 @@ export function createTurnContextManager(
         }
         attached.receipts.transition(carrier.contributionId, "dropped", "authority-revoked");
         attached.queued.delete(carrier.contributionId);
-        attached.installed.delete(carrier.contributionId);
+        attached.pendingCarriers.delete(carrier.contributionId);
         stopSource(attached, true);
       }
     },
@@ -532,13 +535,8 @@ export function createTurnContextManager(
         closeAll();
         return "finalize";
       }
-      const candidates = livePending.map(({ attached, contribution }, index) => ({
-        message: buildCarrierMessage(
-          attached.key,
-          attached.inputId,
-          contribution,
-          index === livePending.length - 1,
-        ),
+      const candidates = livePending.map(({ attached, contribution }) => ({
+        message: buildCarrierMessage(attached.key, attached.inputId, contribution, true),
         pluginKey: attached.key,
         inputId: attached.inputId,
         contributionId: contribution.id,
@@ -555,8 +553,25 @@ export function createTurnContextManager(
         closeAll();
         return "finalize";
       }
+      // Reserve the continuation hint on each candidate so the last retained
+      // memory always has room for it, even when later candidates do not fit.
+      for (const carrier of admitted.slice(0, -1)) {
+        const entry = livePending.find(
+          ({ attached, contribution }) =>
+            attached.key === carrier.pluginKey && contribution.id === carrier.contributionId,
+        )!;
+        carrier.message = buildCarrierMessage(
+          carrier.pluginKey,
+          carrier.inputId,
+          entry.contribution,
+          false,
+        );
+      }
+      const wakeUp = admitted[0]!;
       try {
-        await guards.sendFollowUp(admitted.map((carrier) => carrier.message));
+        // The follow-up queue can drain one message at a time. One carrier
+        // wakes the turn; the remaining memories install at the same dispatch.
+        await guards.sendFollowUp([wakeUp.message]);
       } catch (error) {
         log.warn(`turn-context: continuation follow-up failed runId=${runId}: ${String(error)}`);
         closeAll();
@@ -568,8 +583,13 @@ export function createTurnContextManager(
           continue;
         }
         attached.queued.delete(carrier.contributionId);
-        attached.receipts.transition(carrier.contributionId, "installed", "terminal-continuation");
-        attached.installed.set(carrier.contributionId, { ...carrier, installed: true });
+        const installed = carrier === wakeUp;
+        attached.receipts.transition(
+          carrier.contributionId,
+          installed ? "installed" : "leased",
+          "terminal-continuation",
+        );
+        attached.pendingCarriers.set(carrier.contributionId, { ...carrier, installed });
       }
       const consumers = new Set(livePending.map(({ attached }) => attached));
       for (const attached of consumers) {
@@ -588,6 +608,16 @@ export function createTurnContextManager(
         attached.receipts.dropPending("run-settled");
       }
       const counts = manager.receiptCounts();
+      const accepted = TURN_CONTEXT_RECEIPT_STATUSES.reduce(
+        (total, status) => total + counts[status],
+        0,
+      );
+      const droppedReasons = new Map(retiredDroppedReasons);
+      for (const attached of attachedSources) {
+        for (const [dropReason, count] of attached.receipts.droppedReasonCounts()) {
+          droppedReasons.set(dropReason, (droppedReasons.get(dropReason) ?? 0) + count);
+        }
+      }
       sources.clear();
       const continuations = attachedSources.reduce(
         (total, attached) => total + attached.finalContinuationsUsed,
@@ -601,12 +631,17 @@ export function createTurnContextManager(
         "dispose all",
         DISPOSE_SETTLE_MS,
       );
-      log.debug(
+      const summary =
         `turn-context: disposed runId=${runId} reason=${reason} ` +
-          `contributions queued=${String(counts.queued)} leased=${String(counts.leased)} ` +
-          `installed=${String(counts.installed)} submitted=${String(counts.submitted)} ` +
-          `uncertain=${String(counts.uncertain)} dropped=${String(counts.dropped)} continuations=${String(continuations)}`,
-      );
+        `contributions accepted=${String(accepted)} queued=${String(counts.queued)} leased=${String(counts.leased)} ` +
+        `installed=${String(counts.installed)} submitted=${String(counts.submitted)} ` +
+        `uncertain=${String(counts.uncertain)} dropped=${String(counts.dropped)} ` +
+        `droppedReasons=${JSON.stringify(Object.fromEntries(droppedReasons))} continuations=${String(continuations)}`;
+      if (accepted > 0) {
+        log.info(summary);
+      } else {
+        log.debug(summary);
+      }
     },
   };
   return manager;
