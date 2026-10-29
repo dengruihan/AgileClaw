@@ -371,7 +371,7 @@ openclaw memory index --force   # Rebuild the index
 - [Memory provenance and deletion](/concepts/memory-provenance): session lineage, admission policy, and `memory forget`.
 - [Memory configuration reference](/reference/memory-config): all config knobs.
 - [Compaction](/concepts/compaction): how compaction interacts with memory.
-- [Active memory](/concepts/active-memory): sub-agent memory for interactive chat sessions.
+- [Active memory](https://github.com/dengruihan/AgileClaw_active-memory/blob/main/docs/concepts/active-memory.md): sub-agent memory for interactive chat sessions.
 - [User model](/concepts/user-model): directive-based durable preferences and profile facts.
 - [Standing intents](/concepts/standing-intents): event-conditioned prospective memory.
 

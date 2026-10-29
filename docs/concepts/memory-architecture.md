@@ -21,7 +21,7 @@ Memory Core. See [Automatic memory flush](/concepts/memory#automatic-memory-flus
 
 If you want task-oriented guides instead, start with
 [Memory overview](/concepts/memory), [Dreaming](/concepts/dreaming),
-[Active memory](/concepts/active-memory),
+[Active memory](https://github.com/dengruihan/AgileClaw_active-memory/blob/main/docs/concepts/active-memory.md),
 [User model](/concepts/user-model), and
 [Standing intents](/concepts/standing-intents).
 
@@ -68,7 +68,7 @@ Active Memory rather than loaded at session start. With
 `memory.search.rememberAcrossConversations` enabled and Active Memory on,
 relevant excerpts from the same agent's other recognized private conversations
 can inform reply context before generation. See
-[Remember across conversations](/concepts/active-memory/enabling#remember-across-conversations)
+[Remember across conversations](https://github.com/dengruihan/AgileClaw_active-memory/blob/main/docs/concepts/active-memory/enabling.md#remember-across-conversations)
 for eligibility and privacy boundaries. Nothing crosses from episodic to curated
 without passing the promotion gates described below.
 
@@ -262,7 +262,7 @@ the prompt on ordinary turns.
 
 ### Lane 2: escalation
 
-The blocking recall sub-agent from [Active memory](/concepts/active-memory)
+The blocking recall sub-agent from [Active memory](https://github.com/dengruihan/AgileClaw_active-memory/blob/main/docs/concepts/active-memory.md)
 is the deep lane: a real agent turn that can search and read across
 conversation history, including cross-conversation transcript recall where
 `rememberAcrossConversations` allows it. By default it runs only when two
@@ -437,22 +437,22 @@ authority in a future session.
 Memory architecture is mostly convention over configuration; these are the
 knobs that exist:
 
-| Concern                         | Where                                                           | Reference                                                     |
-| ------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------- |
-| Dreaming enable, cadence, model | `plugins.entries.memory-core.config.dreaming`                   | [Dreaming](/concepts/dreaming)                                |
-| Session admission exclusions    | `plugins.entries.memory-core.config.memoryPolicy`               | [Provenance & deletion](/concepts/memory-provenance)          |
-| Search providers, hybrid tuning | `memory.search`                                                 | [Memory config](/reference/memory-config)                     |
-| Escalation lane mode, scope     | `plugins.entries.active-memory`                                 | [Active memory](/concepts/active-memory)                      |
-| Cross-conversation recall       | `agents.entries.<id>.memory.search.rememberAcrossConversations` | [Active memory](/concepts/active-memory)                      |
-| Flush behavior                  | `agents.defaults.compaction.memoryFlush`                        | [Memory overview](/concepts/memory)                           |
-| Memory plugin selection         | `plugins.slots.memory`                                          | [Builtin](/concepts/memory-builtin), [Plugins](/tools/plugin) |
+| Concern                         | Where                                                           | Reference                                                                                                       |
+| ------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Dreaming enable, cadence, model | `plugins.entries.memory-core.config.dreaming`                   | [Dreaming](/concepts/dreaming)                                                                                  |
+| Session admission exclusions    | `plugins.entries.memory-core.config.memoryPolicy`               | [Provenance & deletion](/concepts/memory-provenance)                                                            |
+| Search providers, hybrid tuning | `memory.search`                                                 | [Memory config](/reference/memory-config)                                                                       |
+| Escalation lane mode, scope     | `plugins.entries.active-memory`                                 | [Active memory](https://github.com/dengruihan/AgileClaw_active-memory/blob/main/docs/concepts/active-memory.md) |
+| Cross-conversation recall       | `agents.entries.<id>.memory.search.rememberAcrossConversations` | [Active memory](https://github.com/dengruihan/AgileClaw_active-memory/blob/main/docs/concepts/active-memory.md) |
+| Flush behavior                  | `agents.defaults.compaction.memoryFlush`                        | [Memory overview](/concepts/memory)                                                                             |
+| Memory plugin selection         | `plugins.slots.memory`                                          | [Builtin](/concepts/memory-builtin), [Plugins](/tools/plugin)                                                   |
 
 ## Related
 
 - [Memory overview](/concepts/memory)
 - [Memory provenance and deletion](/concepts/memory-provenance)
 - [Dreaming](/concepts/dreaming)
-- [Active memory](/concepts/active-memory)
+- [Active memory](https://github.com/dengruihan/AgileClaw_active-memory/blob/main/docs/concepts/active-memory.md)
 - [User model](/concepts/user-model)
 - [Standing intents](/concepts/standing-intents)
 - [Memory search](/concepts/memory-search)

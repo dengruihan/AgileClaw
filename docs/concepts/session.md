@@ -156,7 +156,7 @@ This setting does not change session keys, DM scope, routing, delivery, or
 `memory/*.md` also keeps its existing behavior. The current memory provider
 must support protected private transcript recall; context engines such as
 Lossless Claw remain independent and can run alongside it. See
-[Active Memory](/concepts/active-memory#remember-across-conversations) for setup
+[Active Memory](https://github.com/dengruihan/AgileClaw_active-memory/blob/main/docs/concepts/active-memory.md#remember-across-conversations) for setup
 and runtime details.
 
 ## Session lifecycle

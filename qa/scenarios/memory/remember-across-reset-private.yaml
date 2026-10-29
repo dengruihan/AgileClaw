@@ -52,11 +52,10 @@ scenario:
     - Active Memory recalls the pre-reset private fact in the same conversation after the current reset.
     - An indexed deleted private marker, shared marker, and independently indexed peer-agent marker are absent from accepted recall evidence.
   docsRefs:
-    - docs/concepts/active-memory.md
     - docs/reference/memory-config.md
     - docs/reference/session-management-compaction.md
   codeRefs:
-    - extensions/active-memory/index.ts
+    - repos/active-memory/index.ts
     - extensions/memory-core/src/session-search-visibility.ts
     - src/auto-reply/reply/session-reset-command.ts
     - extensions/qa-lab/src/suite-runtime-flow.ts

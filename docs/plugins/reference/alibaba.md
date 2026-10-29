@@ -1,5 +1,5 @@
 ---
-summary: "Adds video generation provider support."
+summary: "Adds Alibaba model provider support to OpenClaw."
 read_when:
   - You are installing, configuring, or auditing the alibaba plugin
 title: "Alibaba plugin reference"
@@ -10,7 +10,7 @@ Run `pnpm plugins:inventory:gen` to rebuild it. Hand-written text survives only
 between the openclaw-plugin-reference:manual-start and
 openclaw-plugin-reference:manual-end comment markers. -->
 
-Adds video generation provider support.
+Adds Alibaba model provider support to OpenClaw.
 
 ## Distribution
 
@@ -19,7 +19,8 @@ Adds video generation provider support.
 
 ## Surface
 
-- Contracts: `videoGenerationProviders`
+- Providers: `alibaba`
+- Contracts: `embeddingProviders`, `videoGenerationProviders`
 
 ## Related docs
 

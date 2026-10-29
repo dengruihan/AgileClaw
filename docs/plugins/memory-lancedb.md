@@ -35,7 +35,7 @@ but only one plugin owns the active memory slot at a time.
 LanceDB's `memory_recall` does not receive the protected private transcript
 authorization used by `memory.search.rememberAcrossConversations`. Use LanceDB's
 `autoRecall` or its `memory_recall` tool through
-[advanced Active Memory](/concepts/active-memory#lancedb-memory).
+[advanced Active Memory](https://github.com/dengruihan/AgileClaw_active-memory/blob/main/docs/concepts/active-memory.md#lancedb-memory).
 `openclaw doctor` reports when Remember across conversations is unavailable
 with the current memory provider.
 </Note>
@@ -432,7 +432,7 @@ does not store new ones automatically. Use the `memory_store` tool, or enable
 ## Related
 
 - [Memory overview](/concepts/memory)
-- [Active memory](/concepts/active-memory)
+- [Active memory](https://github.com/dengruihan/AgileClaw_active-memory/blob/main/docs/concepts/active-memory.md)
 - [Memory search](/concepts/memory-search)
 - [Memory Wiki](/plugins/memory-wiki)
 - [Ollama](/providers/ollama)
