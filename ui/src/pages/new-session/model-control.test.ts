@@ -53,35 +53,6 @@ describe("new-session model controls", () => {
     expect(changed).not.toHaveBeenCalled();
   });
 
-  it("selects a context window and clears it when switching draft models", async () => {
-    const { control, context, find } = setup([
-      luna,
-      {
-        id: "claude-fable-5",
-        name: "Claude Fable 5",
-        provider: "anthropic",
-        contextWindow: 1_000_000,
-        contextWindows: [
-          { id: "200k", label: "200K", contextWindow: 200_000 },
-          { id: "1m", label: "1M", contextWindow: 1_000_000 },
-        ],
-        contextWindowDefault: "1m",
-      },
-    ]);
-    control.load(context, "main", true);
-    await vi.waitFor(() =>
-      expect(find('[data-chat-model-option="anthropic/claude-fable-5"]')).not.toBeNull(),
-    );
-    find('[data-chat-model-option="anthropic/claude-fable-5"]')!.click();
-    const toggle = find('[data-chat-context-window-toggle="200k"]')!;
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-    toggle.click();
-    expect(control.contextWindow).toBe("200k");
-    find('[data-chat-model-option="openai/gpt-5.6-luna"]')!.click();
-    expect(control.contextWindow).toBe("");
-    expect(find("[data-chat-context-window-toggle]")).toBeNull();
-  });
-
   it("waits for selected-agent defaults after catalog hydration", async () => {
     const { control, context, find, draw } = setup([{ ...luna, reasoning: true }, sol]);
     control.load(context, "main", true);
@@ -166,35 +137,6 @@ describe("new-session model controls", () => {
     expect(control.selected).toBe("");
   });
 
-  it("renders an all-cold catalog as setup actions", async () => {
-    const { control, context, draw, navigate } = setup(
-      [luna, sol].map((model) =>
-        Object.assign({}, model, {
-          available: false,
-          unavailableReason: "missing-auth",
-        } satisfies Pick<ModelCatalogEntry, "available" | "unavailableReason">),
-      ),
-    );
-    control.load(context, "main", true);
-    await vi.waitFor(() =>
-      expect(draw().querySelector('[data-chat-model-catalog-state="ready"]')).not.toBeNull(),
-    );
-    const container = draw();
-    expect(container.querySelector("[data-chat-model-select]")?.textContent).toContain(luna.name);
-    expect(
-      control.modelUnavailableReason({ id: "main", model: { primary: "openai/gpt-5.6-luna" } }),
-    ).toBe("missing-auth");
-    const options = [...container.querySelectorAll<HTMLButtonElement>("[data-chat-model-option]")];
-    expect(options).toHaveLength(2);
-    expect(options[0]?.textContent).toContain("Sign-in needed");
-    expect(
-      options.every((option) => !option.disabled && option.dataset.chatModelSetup === "true"),
-    ).toBe(true);
-    expect(container.textContent).toContain("No models available");
-    container.querySelector<HTMLButtonElement>('[data-chat-model-setup="true"]')!.click();
-    expect(navigate).toHaveBeenCalledWith("model-setup");
-  });
-
   it("preserves the remembered pair when metadata validation fails", async () => {
     const { control, context, request } = setup([]);
     request.mockRejectedValueOnce(new Error("metadata unavailable"));
@@ -268,35 +210,6 @@ describe("new-session model controls", () => {
       expect(changed).toHaveBeenLastCalledWith({ model: "", thinkingLevel: "" });
     },
   );
-
-  it("clears xhigh when an interactive model switch targets a profile ending at high", async () => {
-    const { control, context, find, changed } = setup([
-      {
-        id: "k3",
-        name: "Kimi K3",
-        provider: "kimi",
-        reasoning: true,
-        thinkingLevels: levels(["off", "low", "medium", "high", "xhigh"]),
-        thinkingDefault: "high",
-      },
-      {
-        id: "limited",
-        name: "Limited",
-        provider: "demo",
-        reasoning: true,
-        thinkingLevels: levels(["off", "low", "medium", "high"]),
-        thinkingDefault: "medium",
-      },
-    ]);
-    control.load(context, "main", true);
-    await vi.waitFor(() => expect(find('[data-chat-model-option="demo/limited"]')).not.toBeNull());
-    control.selected = "kimi/k3";
-    control.thinkingLevel = "xhigh";
-    find('[data-chat-model-option="demo/limited"]')!.click();
-    expect(control.selected).toBe("demo/limited");
-    expect(control.thinkingLevel).toBe("");
-    expect(changed).toHaveBeenLastCalledWith({ model: "demo/limited", thinkingLevel: "" });
-  });
 });
 
 const catalog = (id: string, startTerminal = true) => ({

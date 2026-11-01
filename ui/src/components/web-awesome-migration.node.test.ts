@@ -36,10 +36,7 @@ describe("Web Awesome control ownership", () => {
     ).toEqual([]);
     expect(
       matchingFiles(/<details\b[^>]*class=["'][^"']*(?:menu|select|popover|dropdown)/u),
-    ).toEqual([
-      "pages/chat/components/chat-effort-picker.ts",
-      "pages/chat/components/chat-model-picker.ts",
-    ]);
+    ).toEqual(["pages/chat/components/chat-model-picker.ts"]);
   });
 
   it("limits custom comboboxes to approved searchable controls", () => {
@@ -50,7 +47,6 @@ describe("Web Awesome control ownership", () => {
       "components/composer-menu.ts",
       "components/multi-select.ts",
       "components/select-picker.ts",
-      "pages/chat/components/chat-model-account-control.ts",
       "pages/chat/components/chat-model-picker-options.ts",
       "pages/chat/components/chat-model-picker.ts",
       "pages/new-session/checkout-chip.ts",

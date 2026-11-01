@@ -1,35 +1,10 @@
 import { html, nothing } from "lit";
 import { icons } from "../../../components/icons.ts";
-import { providerDisplayLabel } from "../../../components/provider-icon.ts";
-import "../../../components/tooltip.ts";
 import { t } from "../../../i18n/index.ts";
 import { registerModelControlsEnglish } from "../../../i18n/locales/en-model-controls.ts";
 import type { ChatModelCatalogState } from "../../../lib/model-catalog-store.ts";
 
 registerModelControlsEnglish();
-
-export function renderChatModelCatalogRefresh(state: ChatModelCatalogState | undefined) {
-  if (
-    !state ||
-    (state.status !== "loading" && !(state.status === "ready" && state.pendingProviders?.length))
-  ) {
-    return nothing;
-  }
-  const providers = state.pendingProviders?.map(providerDisplayLabel).join(", ");
-  const label = providers
-    ? t("chat.modelControls.refreshingProviderModels", { providers })
-    : t("chat.modelControls.refreshingModels");
-  return html`
-    <span class="chat-controls__model-refresh" data-chat-model-refresh role="status">
-      <openclaw-tooltip .content=${label} .describe=${false} open-on-click>
-        <button class="chat-controls__model-refresh-details" type="button" aria-label=${label}>
-          <span class="btn__spinner" aria-hidden="true"></span>
-        </button>
-      </openclaw-tooltip>
-      <span class="sr-only">${label}</span>
-    </span>
-  `;
-}
 
 export function renderChatModelCatalogState(
   state: ChatModelCatalogState | undefined,

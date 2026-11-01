@@ -22,8 +22,8 @@ import {
 beforeEach(installTranscriptDomMocks);
 afterEach(resetTranscriptTestDom);
 
-type Setting = "thinking" | "speed" | "context";
-const settings: Setting[] = ["thinking", "speed", "context"];
+type Setting = "thinking" | "context";
+const settings: Setting[] = ["thinking", "context"];
 const model: ModelCatalogEntry = {
   id: "fixture-model",
   name: "Fixture model",
@@ -79,11 +79,7 @@ it.each(
       ...initial,
       sessionId: "settings-return-session",
       updatedAt: 2,
-      ...(setting === "thinking"
-        ? { thinkingLevel: "high" }
-        : setting === "speed"
-          ? { fastMode: true, effectiveFastMode: true }
-          : { contextWindow: "128k" }),
+      ...(setting === "thinking" ? { thinkingLevel: "high" } : { contextWindow: "128k" }),
     };
     const committed: GatewaySessionRow = {
       ...initial,
@@ -133,7 +129,6 @@ it.each(
         const effort = container.querySelector<HTMLElement>("[data-chat-thinking-select]");
         return {
           thinking: effort?.dataset.chatThinkingValue,
-          fast: effort?.dataset.chatFastMode,
           context: container
             .querySelector("[data-chat-context-window-toggle]")
             ?.getAttribute("aria-checked"),
@@ -173,8 +168,6 @@ it.each(
         );
         expect(control?.disabled).toBe(false);
         operation = Promise.resolve(props.onContextWindowSelect?.("128k", key));
-      } else if (setting === "speed") {
-        operation = Promise.resolve(props.onFastModeSelect?.("on", key));
       } else {
         operation = Promise.resolve(props.onThinkingSelect?.("high", key));
       }
@@ -184,28 +177,18 @@ it.each(
       const pendingProps = draw();
       expect
         .soft(controlValues())
-        .toMatchObject(
-          setting === "thinking"
-            ? { thinking: "high" }
-            : setting === "speed"
-              ? { fast: "true" }
-              : { context: "true" },
-        );
+        .toMatchObject(setting === "thinking" ? { thinking: "high" } : { context: "true" });
       expect(selectedChatSessionRow(pane.state)?.sessionId).toBeUndefined();
       expect(sessions.state.result?.sessions).toHaveLength(initialState === "placeholder" ? 1 : 0);
       if (returnToInitial) {
         latestOperation = Promise.resolve(
           setting === "thinking"
             ? pendingProps.onThinkingSelect?.(initialThinking, key)
-            : setting === "speed"
-              ? pendingProps.onFastModeSelect?.("off", key)
-              : pendingProps.onContextWindowSelect?.("64k", key),
+            : pendingProps.onContextWindowSelect?.("64k", key),
         );
         expect(patch).toHaveBeenCalledOnce();
         draw();
-        expect
-          .soft(controlValues())
-          .toEqual({ thinking: initialThinking, fast: "false", context: "false" });
+        expect.soft(controlValues()).toEqual({ thinking: initialThinking, context: "false" });
         // The first write creates the row; its ACK alone authorizes the queued target.
         rows.splice(0, rows.length, materialized);
         reply.resolve({ ok: true, key, path: "", entry: materialized });
@@ -217,9 +200,7 @@ it.each(
           expectedSessionId: materialized.sessionId,
           ...(setting === "thinking"
             ? { thinkingLevel: initialThinking || null }
-            : setting === "speed"
-              ? { fastMode: false }
-              : { contextWindow: "64k" }),
+            : { contextWindow: "64k" }),
         });
         latestReply.resolve({ ok: true, key, path: "", entry: committed });
         await expect(latestOperation).resolves.toBe(true);
@@ -229,11 +210,7 @@ it.each(
         await expect(operation).resolves.toBe(false);
       }
       draw();
-      expect(controlValues()).toEqual({
-        thinking: initialThinking,
-        fast: "false",
-        context: "false",
-      });
+      expect(controlValues()).toEqual({ thinking: initialThinking, context: "false" });
       if (returnToInitial) {
         expect(pane.state.chatError).toBeNull();
       } else {

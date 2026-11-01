@@ -2920,7 +2920,6 @@
       "ui/src/e2e/command-palette-first-open.e2e.test.ts": 20,
       "ui/src/e2e/command-palette-images.e2e.test.ts": 25,
       "ui/src/e2e/command-palette-mentions.e2e.test.ts": 10,
-      "ui/src/e2e/community-invite-showing.e2e.test.ts": 42,
       "ui/src/e2e/composer-draft-store.e2e.test.ts": 28,
       "ui/src/e2e/composer-recovery-fences.e2e.test.ts": 32,
       "ui/src/e2e/composer-text-readability.e2e.test.ts": 12,

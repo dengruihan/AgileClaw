@@ -41,7 +41,7 @@ describe("Control UI environment presentation", () => {
     document.documentElement.style.setProperty("--control-ui-environment-amber", "#f59e0b");
 
     const { sidebar, context } = await mountSidebar(
-      createGateway(createTestGatewayClient()),
+      createGateway(createTestGatewayClient(async () => ({}))),
       createSessions("main", ["agent:main:main"]),
     );
     const topbar = document.createElement("openclaw-app-topbar") as EnvironmentElement;

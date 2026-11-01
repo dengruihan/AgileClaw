@@ -485,11 +485,6 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
     ["chat"],
     ["ui/src/pages/chat/chat-pane.ts"],
   ),
-  pageWatch(
-    "ui/src/e2e/chat-composer-picker-layout.e2e.test.ts",
-    ["chat"],
-    ["ui/src/pages/chat/components/chat-header-session-menu.ts"],
-  ),
   pageWatch("ui/src/e2e/chat-composer-redesign.e2e.test.ts", ["chat"]),
   {
     testFile: "ui/src/e2e/chat-context-attachment.e2e.test.ts",
@@ -570,7 +565,6 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
     ["chat", "config", "model-providers"],
     ["ui/src/pages/chat/chat-pane.ts"],
   ),
-  pageWatch("ui/src/e2e/chat-flow.model-switch-reasoning.e2e.test.ts", ["chat"]),
   pageWatch(
     "ui/src/e2e/chat-flow.models-reasoning.e2e.test.ts",
     ["chat"],
@@ -666,12 +660,6 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
     ["ui/src/pages/chat/chat-pane.ts"],
   ),
   pageWatch("ui/src/e2e/chat-mobile-bubble-margin.e2e.test.ts", ["chat"]),
-  pageWatch("ui/src/e2e/chat-model-picker-composition.e2e.test.ts", ["chat"]),
-  pageWatch(
-    "ui/src/e2e/chat-model-selection-recovery.e2e.test.ts",
-    ["chat"],
-    ["ui/src/pages/chat/chat-pane.ts"],
-  ),
   pageWatch("ui/src/e2e/chat-motion.e2e.test.ts", ["chat"]),
   pageWatch(
     "ui/src/e2e/chat-native-runtime-recovery.e2e.test.ts",
@@ -694,7 +682,6 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
     ["chat"],
     ["ui/src/components/image-lightbox.ts"],
   ),
-  pageWatch("ui/src/e2e/chat-only-model.e2e.test.ts", ["chat"]),
   pageWatch("ui/src/e2e/chat-outbox-agent-scope.e2e.test.ts", ["chat"]),
   pageWatch(
     "ui/src/e2e/chat-outbox-capacity.e2e.test.ts",
