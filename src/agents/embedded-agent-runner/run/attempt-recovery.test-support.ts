@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
 import type { AssistantMessage } from "../../../llm/types.js";
+import { createModelRetryReporter } from "../../../sessions/model-retry.js";
 import type { PreparedProviderFailoverOwner } from "../../failover/provider-patterns.js";
 import {
   buildEmbeddedRunnerAssistant,
@@ -160,8 +161,14 @@ export async function recoverAfterTransportDrop(scenario: TransportDropScenario 
   }
   vi.spyOn(failoverRetryController, "maybeMarkAuthProfileFailure");
   const onAgentEvent = vi.fn();
+  const retryReporter = createModelRetryReporter({
+    runId: "run:transport-drop",
+    assertCurrent: () => {},
+    onAgentEvent,
+  });
   const recover = () =>
     recoverEmbeddedRunAttempt({
+      retryReporter,
       runInput: {
         runParams: {
           config: scenario.config ?? {},

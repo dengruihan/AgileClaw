@@ -1,5 +1,5 @@
 // Full-entry coverage for retrying empty errored assistant turns.
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadSessionEntry, replaceSessionEntry } from "../../config/sessions/session-accessor.js";
 import { writeSessionEntry } from "../../config/sessions/session-accessor.sqlite-entry-store.js";
 import {
@@ -93,14 +93,21 @@ describe("runEmbeddedAgent silent-error retry", () => {
   });
 
   it("retries server_error when the attempt is otherwise silent and side-effect-free", async () => {
+    const params = createOverflowRunParams(state);
+    await replaceSessionEntry(
+      { agentId: params.agentId, sessionKey: params.sessionKey },
+      { sessionId: params.sessionId, updatedAt: 1 },
+    );
     mockedClassifyAssistantFailoverReason.mockReturnValue("server_error");
     mockedRunEmbeddedAttempt.mockResolvedValueOnce(
       emptyErrorAttempt("anthropic", "claude-opus-4-8", 0, [], "Internal server error"),
     );
     mockedRunEmbeddedAttempt.mockResolvedValueOnce(successAttempt("anthropic", "claude-opus-4-8"));
 
+    const onAgentEvent = vi.fn();
     const result = await runEmbeddedAgent({
-      ...createOverflowRunParams(state),
+      ...params,
+      onAgentEvent,
       provider: "anthropic",
       model: "claude-opus-4-8",
       runId: "run-empty-error-retry-server-error",
@@ -108,6 +115,19 @@ describe("runEmbeddedAgent silent-error retry", () => {
 
     expect(mockedRunEmbeddedAttempt).toHaveBeenCalledTimes(2);
     expect(result.payloads).toBeUndefined();
+    expect(
+      onAgentEvent.mock.calls.flatMap(([event]) =>
+        event.stream === "run_status" && event.data.retry ? [event.data.retry] : [],
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        number: 1,
+        stage: "waiting",
+        errorMessage: "Internal server error",
+      }),
+      expect.objectContaining({ number: 1, stage: "requesting" }),
+      expect.objectContaining({ number: 1, stage: "recovered" }),
+    ]);
   });
 
   it("does not intercept concrete non-transient failover errors", async () => {

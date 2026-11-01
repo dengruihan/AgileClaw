@@ -477,6 +477,10 @@ describe("createEmbeddedRunFailoverRetryController", () => {
       expect(onRetry).toHaveBeenLastCalledWith(expect.objectContaining({ maxRetries: budget }));
     }
     await expect(controller.maybeRetryTransient({ reason, onRetry })).resolves.toBe(false);
+    expect(controller.transientRetryExhausted).toBe(true);
+    controller.observeAttempt({ providerRetryMaxRetries: budget });
+    await expect(controller.maybeRetryTransient({ reason: "auth" })).resolves.toBe(false);
+    expect(controller.transientRetryExhausted).toBe(false);
     expect(controller.transientRetryCount).toBe(budget);
     expect(onRetry).toHaveBeenCalledTimes(budget);
     expect(mocks.sleepWithAbort).toHaveBeenCalledTimes(budget);

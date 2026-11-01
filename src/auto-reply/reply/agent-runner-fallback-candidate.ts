@@ -278,6 +278,7 @@ export async function runAgentFallbackCandidates(params: AgentFallbackCycleParam
         );
         try {
           const common = {
+            modelRetryState: (params.state.modelRetryState ??= { count: 0 }),
             ...runOptions,
             preparedRunAdmission: params.preparedRunAdmission,
             messageActionTurnCapability,

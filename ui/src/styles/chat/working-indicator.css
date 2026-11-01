@@ -764,3 +764,25 @@
     content: none;
   }
 }
+
+.chat-retry-history__entries {
+  display: grid;
+  gap: 0.75rem;
+  padding-inline-start: 1.5rem;
+}
+
+.chat-retry-history__error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  color: var(--muted);
+}
+
+.chat-retry-details {
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.chat-working-indicator--retry {
+  align-items: flex-start;
+}

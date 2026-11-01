@@ -9,6 +9,7 @@ import {
 } from "../../lib/chat/message-visibility.ts";
 import { isSessionRunActive } from "../../lib/session-run-state.ts";
 import type { ChatHistoryResult } from "./chat-history-snapshot.ts";
+import { latestRetryFailure, modelRetryFailureMessage, modelRetryLabel } from "./chat-retry.ts";
 import { isChatRunStartupPhase, reconcileChatRunStartup } from "./chat-run-startup.ts";
 import type { ChatState } from "./chat-state-contract.ts";
 import {
@@ -208,8 +209,10 @@ export function applyHistoryRun(params: {
       const failureKind = failureDetails?.errorKind;
       const errorKind = failureKind === "state_contention" ? failureKind : undefined;
       const failureText = extractText(failureNotice?.message);
-      const failureMessage =
-        errorKind && failureText && typeof failureDetails?.diagnostic === "string"
+      const retryFailure = latestRetryFailure(state.chatMessages, terminalRunId);
+      const failureMessage = retryFailure
+        ? modelRetryFailureMessage(retryFailure)
+        : errorKind && failureText && typeof failureDetails?.diagnostic === "string"
           ? `${failureText}\n\n${failureDetails.diagnostic}`
           : failureText;
       const projection = reduceChatSessionProjection(state, {
@@ -236,6 +239,7 @@ export function applyHistoryRun(params: {
             terminal.errorMessage,
             terminalRunId,
             terminal.errorKind === "state_contention" ? terminal.errorKind : undefined,
+            retryFailure ? modelRetryLabel(retryFailure) : undefined,
           );
         }
       } else if (

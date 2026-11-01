@@ -47,6 +47,23 @@ When the macOS app embeds a single conversation beside its native sidebar, the
 chat header fills the window's titlebar row. Drag an empty area of the header to
 move the window; its buttons keep their normal actions.
 
+## Model request errors and retries
+
+When a model request can be retried, the working indicator shows the error
+category, the retry number, and whether it is waiting or requesting again.
+Expand **Error details** to read the redacted provider diagnostic and error code.
+The elapsed timer continues through retries, and any partial answer stays visible.
+
+Each turn keeps a collapsed **Retry history** with its error, retry transitions,
+and final outcome. Saved records survive refresh and Gateway restart without
+entering the model's conversation context. If saving a record fails, the live
+view identifies it as unsaved. Existing incognito and session deletion rules apply.
+
+When a request cannot be retried or its retry budget is exhausted, the turn ends
+with its specific error in the conversation. No additional popup is shown.
+Retry history describes host-controlled model request recovery; normal
+continuations and retries inside individual tools keep their existing progress.
+
 ## Collaborator drafts
 
 In a shared session, another person’s in-progress message stays visible when they pause typing. Draft previews update up to four times per second, keeping the latest text when input arrives faster. After 10 seconds without typing, its label changes from **is typing...** to **Draft** without removing the bubble or shifting the transcript. Typing again updates the same bubble. Sending, clearing the draft, leaving the composer, or leaving the session removes it. An idle preview fades out and smoothly closes its space during the final 300 milliseconds before its 30-second expiry, so an abandoned tab cannot leave it visible indefinitely. Typing again cancels the exit. With reduced motion enabled, the preview stays still and disappears at the same deadline without animation. Draft previews are temporary browser state, not saved messages; changing sessions or reconnecting clears them.

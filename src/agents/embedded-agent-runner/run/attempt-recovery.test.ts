@@ -634,7 +634,10 @@ describe("recoverEmbeddedRunAttempt", () => {
     expect(onAgentEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         stream: "run_status",
-        data: expect.objectContaining({ phase: "retrying", retryAttempt: 1 }),
+        data: expect.objectContaining({
+          phase: "retrying",
+          retry: expect.objectContaining({ number: 1 }),
+        }),
       }),
     );
   });
@@ -736,6 +739,7 @@ describe("recoverEmbeddedRunAttempt", () => {
     const setTerminalLifecycleMeta = vi.fn();
 
     const recovery = await recoverEmbeddedRunAttempt({
+      retryReporter: { retry: vi.fn(async () => {}) },
       runInput: {
         runParams: {
           sessionId: "session:hook-block",
@@ -844,6 +848,7 @@ describe("recoverEmbeddedRunAttempt", () => {
     const terminalState = resolveEmbeddedRunAttemptTerminalState({ attempt, assistant });
 
     const recovery = await recoverEmbeddedRunAttempt({
+      retryReporter: { retry: vi.fn(async () => {}) },
       runInput: {
         runParams: {
           config: {},

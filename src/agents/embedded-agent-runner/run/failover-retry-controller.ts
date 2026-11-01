@@ -100,6 +100,7 @@ export function createEmbeddedRunFailoverRetryController(input: {
   } = input;
   let rateLimitProfileRotations = 0;
   let transientRetryCount = 0;
+  let transientRetryExhausted = false;
   let outputLimitRetryCount = 0;
   let rateLimitSeen = false;
   let transientRetryBudget: number | undefined;
@@ -174,6 +175,9 @@ export function createEmbeddedRunFailoverRetryController(input: {
 
   return {
     overloadProfileRotationLimit: MAX_OVERLOAD_PROFILE_ROTATIONS,
+    get transientRetryExhausted() {
+      return transientRetryExhausted;
+    },
     get transientRetryCount() {
       return transientRetryCount;
     },
@@ -183,6 +187,7 @@ export function createEmbeddedRunFailoverRetryController(input: {
         "providerRetryMaxRetries" | "hasSuccessfulModelResponse"
       >,
     ) => {
+      transientRetryExhausted = false;
       transientRetryBudget = attempt.providerRetryMaxRetries;
       if (attempt.hasSuccessfulModelResponse) {
         transientRetryWindowStartMs = null;
@@ -278,7 +283,11 @@ export function createEmbeddedRunFailoverRetryController(input: {
           | "retry_delay_exceeds_cap"
           | "wait_interrupted"
           | "backoff_completed",
-      ) =>
+      ) => {
+        transientRetryExhausted =
+          decision === "rejected" &&
+          (reason === "retry_budget_exhausted" ||
+            (reason === "retry_delay_unavailable" && retry.retryAfterMs !== Infinity));
         emitDiagnosticsTimelineEvent(
           {
             type: "mark",
@@ -288,6 +297,7 @@ export function createEmbeddedRunFailoverRetryController(input: {
           },
           { config: params.config },
         );
+      };
       if (
         params.retryConnectionErrors === false &&
         retry.code !== undefined &&

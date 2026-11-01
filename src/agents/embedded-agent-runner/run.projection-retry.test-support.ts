@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { MODEL_RETRY_RECORD_TYPE } from "../../../packages/gateway-protocol/src/chat-retry.js";
 import type { OpenClawTestState } from "../../test-utils/openclaw-test-state.js";
 import { makeAttemptResult, makeCompactionSuccess } from "./run.overflow-compaction.fixture.js";
 import {
@@ -19,6 +20,7 @@ let sessionAccessor: typeof import("../../config/sessions/session-accessor.js");
 let activeEvents: typeof import("../../config/sessions/session-accessor.sqlite-active-events.js");
 let sqliteScope: typeof import("../../config/sessions/session-accessor.sqlite-scope.js");
 let reconcile: typeof import("../../config/sessions/session-transcript-reconcile.js");
+let modelContext: typeof import("../../config/sessions/session-accessor.sqlite-model-context.js");
 
 describe("runEmbeddedAgent transcript projection retry", () => {
   beforeAll(async () => {
@@ -29,6 +31,7 @@ describe("runEmbeddedAgent transcript projection retry", () => {
     activeEvents = await import("../../config/sessions/session-accessor.sqlite-active-events.js");
     sqliteScope = await import("../../config/sessions/session-accessor.sqlite-scope.js");
     reconcile = await import("../../config/sessions/session-transcript-reconcile.js");
+    modelContext = await import("../../config/sessions/session-accessor.sqlite-model-context.js");
   });
 
   beforeEach(async () => {
@@ -63,6 +66,11 @@ describe("runEmbeddedAgent transcript projection retry", () => {
       ],
       touchSessionEntry: false,
     });
+    const seedContext = modelContext.readSessionTranscriptContextMessages(
+      sessionTarget,
+      (messages) => [...messages],
+    );
+    expect(seedContext).toMatchObject([{ role: "user", content: "seed" }]);
     const databaseOptions = sqliteScope.toDatabaseOptions(
       sqliteScope.resolveSqliteTranscriptReadScope(sessionTarget),
     );
@@ -95,12 +103,27 @@ describe("runEmbeddedAgent transcript projection retry", () => {
         )
         .mockImplementationOnce(async () => {
           expect(ownedProjectionSettled).toBe(true);
+          const retryPage = activeEvents.readSessionTranscriptMessageEventPage(sessionTarget, {
+            maxMessages: 2,
+            offset: 0,
+            offsetFrom: "start",
+          });
+          expect(retryPage.totalMessages).toBe(2);
+          expect(retryPage.events.map(({ event }) => event)).toMatchObject([
+            { id: "seed", message: { role: "user", content: "seed" } },
+            {
+              message: {
+                customType: MODEL_RETRY_RECORD_TYPE,
+                excludeFromContext: true,
+                details: { number: 1, stage: "requesting", reason: "timeout" },
+              },
+            },
+          ]);
           expect(
-            activeEvents.readSessionTranscriptMessageEventPage(sessionTarget, {
-              maxMessages: 1,
-              offset: 0,
-            }).totalMessages,
-          ).toBe(1);
+            modelContext.readSessionTranscriptContextMessages(sessionTarget, (messages) => [
+              ...messages,
+            ]),
+          ).toEqual(seedContext);
           return makeAttemptResult({ sessionIdUsed: sessionId });
         });
       mockedCompactDirect.mockImplementationOnce(async () => {
@@ -147,12 +170,34 @@ describe("runEmbeddedAgent transcript projection retry", () => {
       agentDatabase.closeOpenClawAgentDatabaseByPath(
         agentDatabase.resolveOpenClawAgentSqlitePath(databaseOptions),
       );
+      const reopenedPage = activeEvents.readSessionTranscriptMessageEventPage(sessionTarget, {
+        maxMessages: 3,
+        offset: 0,
+        offsetFrom: "start",
+      });
+      expect(reopenedPage.totalMessages).toBe(3);
+      expect(reopenedPage.events.map(({ event }) => event)).toMatchObject([
+        { id: "seed", message: { role: "user", content: "seed" } },
+        {
+          message: {
+            customType: MODEL_RETRY_RECORD_TYPE,
+            excludeFromContext: true,
+            details: { number: 1, stage: "requesting" },
+          },
+        },
+        {
+          message: {
+            customType: MODEL_RETRY_RECORD_TYPE,
+            excludeFromContext: true,
+            details: { number: 1, stage: "recovered" },
+          },
+        },
+      ]);
       expect(
-        activeEvents.readSessionTranscriptMessageEventPage(sessionTarget, {
-          maxMessages: 1,
-          offset: 0,
-        }).totalMessages,
-      ).toBe(1);
+        modelContext.readSessionTranscriptContextMessages(sessionTarget, (messages) => [
+          ...messages,
+        ]),
+      ).toEqual(seedContext);
       const cancellation = new Error("caller stopped projection work");
       controller.abort(cancellation);
       expect(waitForProjection.mock.calls[0]?.[1]?.reason).toBe(cancellation);

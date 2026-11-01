@@ -49,6 +49,7 @@ export type PreparedEmbeddedRunInput = {
 };
 
 export type PreparedEmbeddedAttemptDispatchInput = {
+  onRetryRequest?: () => Promise<void>;
   runInput: PreparedEmbeddedRunInput;
   preparedRuntime: Awaited<ReturnType<typeof prepareEmbeddedRunRuntime>>;
   contextEngine: ContextEngine;

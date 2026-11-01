@@ -8,6 +8,7 @@ import {
 import { logVerbose } from "../../globals.js";
 import { emitAgentEvent } from "../../infra/agent-events.js";
 import { defaultRuntime } from "../../runtime.js";
+import { settleModelRetryState } from "../../sessions/model-retry.js";
 import { buildContextOverflowRecoveryText } from "./agent-runner-context-recovery.js";
 import { resolveSourceReplyPolicy } from "./agent-runner-core.js";
 import { markAgentRunFailureReplyPayload } from "./agent-runner-failure-reply.js";
@@ -49,6 +50,7 @@ export async function settleAgentFallbackCycle(params: {
   }
   const abortReason = resolveReplyOperationAbortReason(turn.replyOperation);
   if (abortReason) {
+    await settleModelRetryState(cycle.state.modelRetryState, "aborted");
     settledLifecycleTerminal?.emit("end", runResult, terminalMetadata);
     await drainPendingToolTasks({ tasks: turn.pendingToolTasks, onTimeout: logVerbose });
     return { kind: "aborted", reason: abortReason };
@@ -96,6 +98,12 @@ export async function settleAgentFallbackCycle(params: {
   };
   const isCompactionFailure = embeddedError && isContextOverflowError(embeddedError.message);
   if (isCompactionFailure || embeddedError?.kind === "role_ordering") {
+    await settleModelRetryState(
+      cycle.state.modelRetryState,
+      "failed",
+      embeddedError.message,
+      cycle.state.modelRetryState?.pendingFailure?.stopReason ?? "non_retryable",
+    );
     emitSettledLifecycleError(new Error(terminalErrorMessage ?? "Agent run failed"));
     if (isCompactionFailure) {
       defaultRuntime.error(
@@ -167,10 +175,19 @@ export async function settleAgentFallbackCycle(params: {
     ) {
       cycle.modelPatch.captureFailure(embeddedError ?? terminalError);
     }
+    await settleModelRetryState(
+      cycle.state.modelRetryState,
+      "failed",
+      cycle.state.modelRetryState?.pendingFailure?.error ?? terminalError,
+      fallbackExhausted
+        ? "exhausted"
+        : (cycle.state.modelRetryState?.pendingFailure?.stopReason ?? "non_retryable"),
+    );
     emitSettledLifecycleError(terminalError, terminalMetadata);
     turn.replyOperation?.retainFailureUntilComplete();
     turn.replyOperation?.fail("run_failed", terminalError);
   } else {
+    await settleModelRetryState(cycle.state.modelRetryState, "recovered");
     settledLifecycleTerminal?.emit(
       "end",
       runResult,

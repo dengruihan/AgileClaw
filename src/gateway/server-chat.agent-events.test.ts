@@ -639,45 +639,48 @@ describe("agent event handler", () => {
     nowSpy.mockRestore();
   });
 
-  it.each(["rate_limit", "timeout"])(
+  it.each(["rate_limit", "timeout", "server_error"])(
     "keeps %s retries transient through long backoff and subsequent assistant output",
     (reason) => {
       vi.useFakeTimers();
       const h = createHarness();
       h.registerNamed("retry");
+      const structured = reason === "server_error";
+      const expectedPayloads = [];
+      const finishing = { phase: "finishing", error: "retryable provider failure" };
       for (let attempt = 2; attempt <= 5; attempt++) {
-        h.emit(
-          "run-retry",
-          "lifecycle",
-          {
-            phase: "finishing",
-            error: "provider rate limit",
-          },
-          { seq: attempt * 2 },
-        );
+        const retry = structured
+          ? {
+              id: `attempt-${attempt}`,
+              number: attempt,
+              reason,
+              errorMessage: "HTTP 503",
+              status: 503,
+              at: attempt,
+              stage: attempt === 5 ? "recovered" : "waiting",
+            }
+          : undefined;
+        h.emit("run-retry", "lifecycle", finishing, { seq: attempt * 2 });
         h.emit(
           "run-retry",
           "run_status",
           {
-            phase: "retrying",
-            attempt,
-            maxAttempts: 10,
-            reason,
+            phase: retry?.stage === "recovered" ? "starting_model" : "retrying",
+            ...(retry ? { retry } : { attempt, maxAttempts: 10, reason }),
           },
           { seq: attempt * 2 + 1 },
         );
-        vi.advanceTimersByTime(30_000);
-      }
-      expect(h.chat().map(([, payload]) => payload)).toEqual(
-        [2, 3, 4, 5].map((attempt) =>
+        expectedPayloads.push(
           expect.objectContaining({
             runId: "client-retry",
             state: "status",
             phase: "starting_model",
-            ...(reason === "rate_limit" ? { retry: { attempt, maxAttempts: 10, reason } } : {}),
+            retry: retry ? { status: retry } : { attempt, maxAttempts: 10, reason },
           }),
-        ),
-      );
+        );
+        vi.advanceTimersByTime(30_000);
+      }
+      expect(h.chat().map(([, payload]) => payload)).toEqual(expectedPayloads);
       expect(h.clearAgentRunContext).not.toHaveBeenCalled();
       expect(persistGatewaySessionLifecycleEventMock).not.toHaveBeenCalled();
       h.emit("run-retry", "assistant", { text: "I", delta: "I" }, { seq: 12 });
@@ -685,10 +688,7 @@ describe("agent event handler", () => {
       h.emit("run-retry", "assistant", { text: "I agree", delta: " agree" }, { seq: 13 });
       h.end("run-retry", 14);
       expect(h.chat().map(([, payload]) => payload.state)).toEqual([
-        "status",
-        "status",
-        "status",
-        "status",
+        ...expectedPayloads.map(() => "status"),
         "delta",
         "delta",
         "final",

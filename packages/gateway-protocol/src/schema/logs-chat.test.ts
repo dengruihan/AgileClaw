@@ -11,6 +11,7 @@ import {
   ChatStartupParamsSchema,
   ChatSendParamsSchema,
   ChatStatusEventSchema,
+  ModelRetryStatusSchema,
   type ChatHistoryCursorResult,
   type ChatHistoryDeltaResult,
   type ChatHistoryParams,
@@ -136,6 +137,48 @@ describe("ChatStatusEventSchema", () => {
     expect(Value.Check(ChatStatusEventSchema, { ...statusEvent, detail: "Loading" })).toBe(false);
   });
 
+  it("accepts structured retries for every model failure and rejects unbounded diagnostics", () => {
+    const retryStatus: Static<typeof ModelRetryStatusSchema> = {
+      id: "run-1:retry:1",
+      number: 1,
+      stage: "waiting",
+      reason: "server_error",
+      errorMessage: "Service unavailable",
+      status: 503,
+      at: 1,
+    };
+    for (const reason of [
+      "rate_limit",
+      "server_error",
+      "timeout",
+      "output_limit",
+      "incomplete_response",
+      "harness_error",
+    ]) {
+      expect(
+        Value.Check(ChatEventSchema, {
+          ...statusEvent,
+          retry: { status: { ...retryStatus, reason } },
+        }),
+      ).toBe(true);
+    }
+    for (const invalid of [
+      { number: -1 },
+      { number: 1.5 },
+      { stage: "unknown" },
+      { status: 600 },
+      { errorMessage: "x".repeat(4001) },
+      { raw: "private" },
+    ]) {
+      expect(
+        Value.Check(ChatEventSchema, {
+          ...statusEvent,
+          retry: { status: { ...retryStatus, ...invalid } },
+        }),
+      ).toBe(false);
+    }
+  });
+
   it("accepts bounded retry details while preserving the required coarse phase", () => {
     const event = {
       runId: "run-1",
@@ -157,7 +200,7 @@ describe("ChatStatusEventSchema", () => {
       { maxAttempts: 0 },
       { maxAttempts: 2.5 },
       { maxAttempts: 11 },
-      { reason: "unknown" },
+      { reason: "" },
       { errorBody: "provider data" },
     ]) {
       expect(Value.Check(ChatEventSchema, { ...event, retry: { ...retry, ...invalid } })).toBe(

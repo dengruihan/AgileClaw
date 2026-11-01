@@ -71,6 +71,7 @@ import {
   prepareAgentWirePayload,
   scheduleLiveTextFlush,
 } from "./server-chat-live-text.js";
+import { projectAgentRunStatusToChat } from "./server-chat-run-status.js";
 import { isChatAbortMarkerCurrent } from "./server-chat-state.js";
 import type {
   BufferedAgentEvent,
@@ -1392,20 +1393,7 @@ export function createAgentEventHandler({
         ...(spawnedBy && { spawnedBy }),
         seq: evt.seq,
         state: "status" as const,
-        ...(evt.data.phase === "retrying"
-          ? {
-              phase: "starting_model",
-              ...(evt.data.reason === "rate_limit"
-                ? {
-                    retry: {
-                      attempt: evt.data.attempt,
-                      maxAttempts: evt.data.maxAttempts,
-                      reason: evt.data.reason,
-                    },
-                  }
-                : {}),
-            }
-          : { phase: evt.data.phase }),
+        ...projectAgentRunStatusToChat(evt.data),
       };
       if (Value.Check(ChatStatusEventSchema, payload)) {
         sendLivePayload("chat", sessionKey, payload, {

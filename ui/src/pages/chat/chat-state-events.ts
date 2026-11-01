@@ -32,6 +32,7 @@ import {
   retirePullRequestRefreshes,
 } from "./chat-pull-request-refresh.ts";
 import { clearPendingQueueItemsForRun, readDeliveredQueuedChatSendForRun } from "./chat-queue.ts";
+import { retainUnsavedModelRetry } from "./chat-retry.ts";
 import { flushChatQueueForEvent, resumeStoredChatOutboxes } from "./chat-send-actions.ts";
 import {
   requiresChatInputConsumption,
@@ -662,6 +663,10 @@ export function handlePageGatewayEvent(
   }
   if (event.event === "agent" || event.event === "session.tool") {
     if (handleAgentEvent(state as never, event.payload as never)) {
+      const retry = state.chatRunStartup?.retry;
+      if (retry?.persistenceError && state.chatRunStartup?.runId === state.chatRunId) {
+        retainUnsavedModelRetry(state, state.chatRunStartup.runId, retry);
+      }
       requestChatPageUpdate(state, "animation-frame");
     }
     return;

@@ -1,6 +1,7 @@
 import type { SessionTranscriptRuntimeTarget } from "../../../config/sessions/session-accessor.js";
 import type { InternalSessionEntry } from "../../../config/sessions/types.js";
 import type { Model } from "../../../llm/types.js";
+import type { ModelRetryReporterState } from "../../../sessions/model-retry.js";
 import type { AgentExecutionAuthBinding } from "../../execution-auth-binding.js";
 import type { ModelFallbackRouteResolution } from "../../model-fallback.types.js";
 import type { PreparedModelRuntimePluginGeneration } from "../../prepared-model-runtime.types.js";
@@ -36,6 +37,8 @@ export type CompactionAccountingFact = Readonly<
 >;
 
 export type RunEmbeddedAgentInternalParams = RunEmbeddedAgentParams & {
+  /** One logical turn keeps its retry sequence across model fallback candidates. */
+  modelRetryState?: ModelRetryReporterState;
   /** Fail-closed caller input admission against the actual prepared model, before dispatch. */
   assertModelInput?: (model: Pick<Model, "input">) => void;
   /** Reset deferred terminal facts when the host admits a new attempt, before preparation. */

@@ -1,5 +1,6 @@
 import type { HumanMention } from "@openclaw/gateway-protocol";
 import type { MediaKind } from "@openclaw/media-core/constants";
+import type { ModelRetryStatus } from "../../../../packages/gateway-protocol/src/chat-retry.ts";
 import type { ChatWorkContext } from "../../../../packages/gateway-protocol/src/chat-work-context.js";
 /**
  * Chat message types for the UI layer.
@@ -229,6 +230,7 @@ export type ChatItem =
       tone?: "danger";
       /** Collapse the body behind a disclosure; the label line stays visible. */
       collapsedBody?: true;
+      retryHistory?: readonly ModelRetryStatus[];
       sessionsYield?: "waiting" | "resumed";
     }
   | {

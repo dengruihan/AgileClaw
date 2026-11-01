@@ -8,6 +8,7 @@ import { t } from "../../../i18n/index.ts";
 import type { ChatItem } from "../../../lib/chat/chat-types.ts";
 import { formatSessionArchiveReason } from "../../../lib/sessions/session-archive-reason.ts";
 import { detectTextDirection } from "../../../lib/text-direction.ts";
+import { modelRetryErrorDetails, modelRetryLabel } from "../chat-retry.ts";
 import { renderChatTimestamp } from "./chat-message-timestamp.ts";
 
 export function buildChatArchiveNotice(activeSession: GatewaySessionRow | null | undefined) {
@@ -98,6 +99,30 @@ export function renderChatDivider(item: Extract<ChatItem, { kind: "divider" }>) 
 }
 
 export function renderChatNotice(item: Extract<ChatItem, { kind: "notice" }>) {
+  if (item.retryHistory) {
+    return html`<div
+      class="chat-notice chat-retry-history"
+      data-chat-row-key=${item.key}
+      data-ts=${String(item.timestamp)}
+    >
+      <details class="chat-notice__collapse">
+        <summary class="chat-notice__toggle">${item.label}</summary>
+        <ol class="chat-retry-history__entries">
+          ${item.retryHistory.map(
+            (status) => html` <li>
+              ${renderChatTimestamp(status.at)}
+              <span>${modelRetryLabel(status)}</span>
+              <details>
+                <summary>${t("chat.modelRetry.details")}</summary>
+                <pre class="chat-retry-history__error">${modelRetryErrorDetails(status)}</pre>
+              </details>
+              ${status.persistenceError ? html`<p role="alert">${t("chat.modelRetry.persistenceError", { error: status.persistenceError })}</p>` : nothing}
+            </li>`,
+          )}
+        </ol>
+      </details>
+    </div>`;
+  }
   if (item.sessionsYield) {
     return html`
       <div

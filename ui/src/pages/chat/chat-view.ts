@@ -95,6 +95,7 @@ export type ChatProps = Omit<
   | "runActive"
   | "runWorking"
   | "startupLabel"
+  | "startupRetry"
   | "questionPrompts"
   | "agents"
   | "queuedMessageAction"
@@ -294,6 +295,8 @@ export function renderChat(props: ChatProps) {
         runWorking,
         subagentSessions: props.swarm?.sessions,
         startupLabel: chatStartupStatusLabel(props.startupStatus, placementStartup),
+        startupRetry:
+          props.startupStatus?.phase === "retrying" ? props.startupStatus.retry : undefined,
         questionPrompts: props.gatewayQuestionPrompts,
         agents: props.agentsList?.agents,
         onOpenImage: openImage,
