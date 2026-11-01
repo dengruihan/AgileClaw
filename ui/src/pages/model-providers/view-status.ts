@@ -33,7 +33,7 @@ export function renderProviderStatus(card: ModelProviderCard) {
       label: t("chat.modelControls.checkingProviderModels", { providers: card.displayName }),
     });
   }
-  const ready = hasVerifiedProvider(card) && card.availableModelCount > 0;
+  const ready = hasVerifiedProvider(card) && card.hasAvailableModels;
   const hasCredentials = hasProviderCredentials(card);
   return renderSettingsStatus({
     kind: ready ? "ok" : hasCredentials ? "warn" : "muted",

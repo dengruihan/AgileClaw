@@ -570,8 +570,6 @@
 }
 
 .model-providers__nav-copy {
-  display: grid;
-  gap: var(--space-1);
   min-width: 0;
   flex: 1;
 }
@@ -582,7 +580,6 @@
   font-weight: 600;
 }
 
-.model-providers__nav-copy > span,
 .model-providers__nav-empty {
   color: var(--muted);
   font-size: var(--control-ui-text-xs);

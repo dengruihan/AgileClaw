@@ -13,8 +13,7 @@ export function card(overrides: Partial<ModelProviderCard> = {}): ModelProviderC
     profileProviderIds: {},
     credentialProviderIds: ["openai"],
     hasConfigApiKey: false,
-    modelCount: 1,
-    availableModelCount: 1,
+    hasAvailableModels: true,
     apiKey: { source: "env", envVar: "OPENAI_API_KEY" },
     ...overrides,
   };

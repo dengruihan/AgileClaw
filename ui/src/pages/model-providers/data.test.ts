@@ -113,7 +113,7 @@ describe("buildModelProviderCards", () => {
       expect(cards).toHaveLength(1);
       expect(firstCard(cards)).toMatchObject({
         id: "model-service",
-        modelCount: 0,
+        hasAvailableModels: false,
         apiKeySupported,
         apiKey: { source: "env", envVar: "MODEL_SERVICE_API_KEY" },
         credentialProviderIds: ["model-service"],
@@ -145,7 +145,7 @@ describe("buildModelProviderCards", () => {
       expect(cards).toHaveLength(1);
       expect(firstCard(cards)).toMatchObject({
         id: "anthropic",
-        modelCount: 0,
+        hasAvailableModels: false,
         profiles: [
           { profileId: "primary", type, status, logoutSupported: true },
           { profileId: "secondary", type: "api_key", status: "static" },
@@ -164,10 +164,10 @@ describe("buildModelProviderCards", () => {
       ],
     });
     expect(cards.map((card) => card.id)).toEqual(["anthropic", "mistral"]);
-    expect(cards[0]).toMatchObject({ modelCount: 2, availableModelCount: 1 });
+    expect(cards[0]).toMatchObject({ hasAvailableModels: true });
     // A configured API-key provider with a broken credential still shows up
     // so the page can report its unavailable state.
-    expect(cards[1]).toMatchObject({ modelCount: 1, availableModelCount: 0 });
+    expect(cards[1]).toMatchObject({ hasAvailableModels: false });
   });
 
   it("keeps provider-owned catalog failures when no model rows are usable", () => {
@@ -180,8 +180,7 @@ describe("buildModelProviderCards", () => {
     expect(firstCard(cards)).toMatchObject({
       id: "openai",
       catalogStatus: "auth-rejected",
-      modelCount: 0,
-      availableModelCount: 0,
+      hasAvailableModels: false,
     });
   });
 
@@ -293,7 +292,7 @@ describe("buildModelProviderCards", () => {
       credentialProviderIds: ["claude-cli"],
       displayName: "Claude",
       auth: { kind: "expired" },
-      availableModelCount: 1,
+      hasAvailableModels: true,
     });
   });
 

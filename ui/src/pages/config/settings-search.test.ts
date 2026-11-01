@@ -182,8 +182,8 @@ describe("findSettingsSearchBlocks", () => {
         expect.objectContaining({ routeId: "updates", label: "Updates" }),
       ]);
       expect(runtime.t("modelProviders.title")).toBe("Configured providers");
-      expect(runtime.t("modelProviders.modelsAvailable", { available: "2", count: "3" })).toBe(
-        "2 of 3 models available",
+      expect(runtime.t("modelProviders.credentials.envKeyNamed", { name: "EXAMPLE_API_KEY" })).toBe(
+        "API key from environment (EXAMPLE_API_KEY)",
       );
       expect(runtime.t("settings.missing.key")).toBe("settings.missing.key");
       await runtime.i18n.setLocale("en");

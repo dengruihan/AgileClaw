@@ -40,8 +40,7 @@ export type ModelProviderCard = {
   profileProviderIds: Record<string, string>;
   apiKey?: ModelAuthStatusProvider["apiKey"];
   hasConfigApiKey: boolean;
-  modelCount: number;
-  availableModelCount: number;
+  hasAvailableModels: boolean;
   catalogStatus?: ModelCatalogProviderOutcome["status"];
   checkingModels?: boolean;
   /** Auth-status revision used to invalidate inspected credentials without a config change. */
@@ -62,6 +61,7 @@ type CardDraft = {
   ids: Set<string>;
   card: ModelProviderCard;
   hasModelAuth: boolean;
+  hasModels: boolean;
   catalogOutcome?: ModelCatalogProviderOutcome;
 };
 
@@ -88,10 +88,10 @@ function ensureDraft(drafts: CardDraft[], id: string, displayName: string): Card
       profileProviderIds: {},
       credentialProviderIds: [],
       hasConfigApiKey: false,
-      modelCount: 0,
-      availableModelCount: 0,
+      hasAvailableModels: false,
     },
     hasModelAuth: false,
+    hasModels: false,
   };
   drafts.push(draft);
   return draft;
@@ -178,10 +178,8 @@ export function buildModelProviderCards(input: ModelProviderCardsInput): ModelPr
       continue;
     }
     const draft = ensureDraft(drafts, id, providerDisplayLabel(id));
-    draft.card.modelCount += 1;
-    if (entry.available === true) {
-      draft.card.availableModelCount += 1;
-    }
+    draft.hasModels = true;
+    draft.card.hasAvailableModels ||= entry.available === true;
   }
 
   for (const provider of input.authStatus?.providers ?? []) {
@@ -223,7 +221,7 @@ export function buildModelProviderCards(input: ModelProviderCardsInput): ModelPr
         (input.configProviderIds ?? []).some(
           (id) => canonicalModelAuthProviderId(id) === draft.card.id,
         ) ||
-        draft.card.modelCount > 0 ||
+        draft.hasModels ||
         Boolean(draft.catalogOutcome) ||
         draft.card.checkingModels,
     )

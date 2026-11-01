@@ -3,25 +3,12 @@ import { icons } from "../../components/icons.ts";
 import { renderProviderBrandIcon } from "../../components/provider-icon.ts";
 import { renderSettingsEmpty } from "../../components/settings-ui.ts";
 import { t } from "../../i18n/index.ts";
-import type { ModelProviderCard } from "./data.ts";
 import {
   configMutationDisabled,
   renderProviderRow,
   type ModelProvidersViewProps,
 } from "./view-provider-card.ts";
 import { renderProviderStatus } from "./view-status.ts";
-
-function modelCountLabel(card: ModelProviderCard): string {
-  if (card.availableModelCount < card.modelCount) {
-    return t("modelProviders.modelsAvailable", {
-      available: String(card.availableModelCount),
-      count: String(card.modelCount),
-    });
-  }
-  return card.modelCount === 1
-    ? t("modelProviders.modelOne")
-    : t("modelProviders.models", { count: String(card.modelCount) });
-}
 
 /** Provider navigation and the single editor share one selection owner. */
 export function renderProviderWorkspace(props: ModelProvidersViewProps) {
@@ -66,8 +53,7 @@ export function renderProviderWorkspace(props: ModelProvidersViewProps) {
                   >
                     ${renderProviderBrandIcon(card.id, { className: "model-providers__icon" })}
                     <span class="model-providers__nav-copy"
-                      ><strong>${card.displayName}</strong>
-                      <span>${modelCountLabel(card)}</span></span
+                      ><strong>${card.displayName}</strong></span
                     >
                     <span class="model-providers__nav-status">${renderProviderStatus(card)}</span>
                   </button>`,
