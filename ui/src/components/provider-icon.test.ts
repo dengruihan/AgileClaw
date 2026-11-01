@@ -59,3 +59,42 @@ describe("cloud provider presentation", () => {
     expect(actual.querySelector("[data-provider-icon]")).toBeNull();
   });
 });
+
+describe("model provider brand icons", () => {
+  it.each(["glm-4.6", "  ZHIPU-Chat  ", "vendor-ZAI-4"])(
+    "infers Z.AI from the model id substring %s",
+    (modelId) => {
+      const container = document.createElement("div");
+      render(renderProviderBrandIcon("custom-provider", { modelIds: [modelId] }), container);
+      expect(
+        container.querySelector("[data-provider-icon]")?.getAttribute("data-provider-icon"),
+      ).toBe("zai");
+    },
+  );
+
+  it.each([
+    { provider: "openai", icon: "codex" },
+    { provider: "anthropic", icon: "claude" },
+  ])(
+    "keeps the exact provider brand for $provider ahead of model keywords",
+    ({ provider, icon }) => {
+      const container = document.createElement("div");
+      render(renderProviderBrandIcon(provider, { modelIds: ["glm-4.6"] }), container);
+      expect(
+        container.querySelector("[data-provider-icon]")?.getAttribute("data-provider-icon"),
+      ).toBe(icon);
+    },
+  );
+
+  it.each([undefined, ["unrelated-model"]])(
+    "keeps the letter fallback without a matching model keyword",
+    (modelIds) => {
+      const container = document.createElement("div");
+      render(renderProviderBrandIcon("custom-provider", { modelIds }), container);
+      expect(container.querySelector("[data-provider-icon]")).toBeNull();
+      expect(container.querySelector(".provider-brand-icon--fallback")?.textContent?.trim()).toBe(
+        "C",
+      );
+    },
+  );
+});

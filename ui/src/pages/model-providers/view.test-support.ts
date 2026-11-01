@@ -9,6 +9,7 @@ export function card(overrides: Partial<ModelProviderCard> = {}): ModelProviderC
   return {
     id: "openai",
     displayName: "OpenAI",
+    modelIds: [],
     profiles: [],
     profileProviderIds: {},
     credentialProviderIds: ["openai"],

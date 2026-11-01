@@ -16,6 +16,7 @@ import {
   listEffectiveModelAuthProviders,
 } from "../../lib/model-auth.ts";
 import type { ModelCatalogPresentation } from "../../lib/model-catalog-store.ts";
+import { providerModels } from "./provider-model-config.ts";
 
 type ModelProviderAuthKind = "ok" | "expiring" | "expired" | "missing" | "api-key";
 
@@ -29,6 +30,8 @@ export type ModelProviderCard = {
   id: string;
   /** Exact config map key; provider ids are otherwise normalized for display/runtime use. */
   configKey?: string;
+  /** Configured model ids in config order for settings-page icon resolution. */
+  modelIds: string[];
   configAuthMode?: string;
   apiKeySupported?: boolean;
   /** Provider ids that own credentials merged into this card. */
@@ -53,6 +56,7 @@ type ModelProviderCardsInput = {
   providerOutcomes?: ModelCatalogProviderOutcome[];
   pendingProviders?: readonly string[];
   configProviderIds?: string[] | null;
+  configProviderModelIds?: Record<string, readonly string[]> | null;
   configApiKeyProviderIds?: string[] | null;
   configProviderAuthModes?: Record<string, string> | null;
 };
@@ -84,6 +88,7 @@ function ensureDraft(drafts: CardDraft[], id: string, displayName: string): Card
     card: {
       id,
       displayName,
+      modelIds: [],
       profiles: [],
       profileProviderIds: {},
       credentialProviderIds: [],
@@ -125,7 +130,9 @@ export function buildModelProviderCards(input: ModelProviderCardsInput): ModelPr
   for (const provider of input.configProviderIds ?? []) {
     const id = canonicalModelAuthProviderId(provider);
     if (id) {
-      ensureDraft(drafts, id, providerDisplayLabel(id)).card.configKey ??= provider;
+      const card = ensureDraft(drafts, id, providerDisplayLabel(id)).card;
+      card.configKey ??= provider;
+      card.modelIds.push(...(input.configProviderModelIds?.[provider] ?? []));
     }
   }
   for (const provider of input.configApiKeyProviderIds ?? []) {
@@ -342,12 +349,22 @@ function buildSelectableDefaultModels(
 
 export function readModelProviderConfig(config: Record<string, unknown> | null): {
   providerIds: string[];
+  providerModelIds: Record<string, string[]>;
   apiKeyProviderIds: string[];
   providerAuthModes: Record<string, string>;
   defaults: DefaultModelSelection;
 } {
   const models = asRecord(config?.models);
   const providers = asRecord(models?.providers);
+  const providerIds = Object.keys(providers ?? {});
+  const providerModelIds = Object.fromEntries(
+    providerIds.map((provider) => [
+      provider,
+      providerModels(config, provider).flatMap((model) =>
+        typeof model.id === "string" ? [model.id] : [],
+      ),
+    ]),
+  );
   const agents = asRecord(config?.agents);
   const defaults = asRecord(agents?.defaults);
   const model = defaults?.model;
@@ -362,7 +379,8 @@ export function readModelProviderConfig(config: Record<string, unknown> | null):
     ? modelObject.fallbacks.filter((entry): entry is string => typeof entry === "string")
     : [];
   return {
-    providerIds: Object.keys(providers ?? {}),
+    providerIds,
+    providerModelIds,
     apiKeyProviderIds: Object.entries(providers ?? {})
       .filter(([, value]) => {
         const provider = asRecord(value);

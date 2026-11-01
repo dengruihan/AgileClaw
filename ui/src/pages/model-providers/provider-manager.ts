@@ -465,6 +465,16 @@ export class ProviderManager extends OpenClawLightDomElement {
     const title = creating
       ? t("modelProviders.manager.customProvider")
       : (this.card?.displayName ?? this.providerId);
+    const draftModelId = typeof this.modelDraft?.id === "string" ? this.modelDraft.id : null;
+    const modelIds = providerModels(this.config, this.providerId).flatMap((model) => {
+      if (typeof model.id !== "string") {
+        return [];
+      }
+      return [model.id === this.originalModelId && draftModelId !== null ? draftModelId : model.id];
+    });
+    if (this.modelDraft && this.originalModelId === undefined && draftModelId !== null) {
+      modelIds.push(draftModelId);
+    }
     return html`${
         this.modelDraft
           ? providerModelDialog({
@@ -495,7 +505,10 @@ export class ProviderManager extends OpenClawLightDomElement {
       >
         <header class="provider-manager__header">
           <div class="provider-manager__identity">
-            ${renderProviderBrandIcon(this.providerId, { className: "model-providers__icon" })}
+            ${renderProviderBrandIcon(this.providerId, {
+              className: "model-providers__icon",
+              modelIds,
+            })}
             <div>
               <h2>${title}</h2>
               <span class="muted">${this.providerId}</span>

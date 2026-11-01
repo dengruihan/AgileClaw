@@ -170,6 +170,26 @@ describe("buildModelProviderCards", () => {
     expect(cards[1]).toMatchObject({ hasAvailableModels: false });
   });
 
+  it.each([
+    { name: "is unavailable", models: null },
+    {
+      name: "contains dynamically discovered models",
+      models: [catalogEntry({ provider: "custom-zai", id: "glm-discovery" })],
+    },
+  ])("uses configured model ids for icons when the catalog $name", ({ models }) => {
+    const config = readModelProviderConfig({
+      models: { providers: { "custom-zai": { models: [{ id: "glm-configured" }] } } },
+    });
+    const cards = buildModelProviderCards({
+      ...EMPTY_INPUT,
+      models,
+      configProviderIds: config.providerIds,
+      configProviderModelIds: config.providerModelIds,
+    });
+
+    expect(firstCard(cards).modelIds).toEqual(["glm-configured"]);
+  });
+
   it("keeps provider-owned catalog failures when no model rows are usable", () => {
     const cards = buildModelProviderCards({
       ...EMPTY_INPUT,
@@ -465,6 +485,7 @@ describe("model provider configuration data", () => {
       }),
     ).toEqual({
       providerIds: ["openai", "anthropic"],
+      providerModelIds: { openai: [], anthropic: [] },
       apiKeyProviderIds: ["openai"],
       providerAuthModes: {},
       defaults: {

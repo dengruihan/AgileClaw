@@ -69,6 +69,7 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
       : data.providerOutcomes,
     pendingProviders: catalog?.pendingProviders,
     configProviderIds: config.providerIds,
+    configProviderModelIds: config.providerModelIds,
     configApiKeyProviderIds: config.apiKeyProviderIds,
     configProviderAuthModes: config.providerAuthModes,
   });

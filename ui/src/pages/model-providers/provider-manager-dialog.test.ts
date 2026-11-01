@@ -498,4 +498,32 @@ describe("provider manager dialog forms", () => {
       },
     });
   });
+
+  it.each(["GLM-4.6", "zhipu-chat"])(
+    "updates the provider icon from the current model draft id %s",
+    async (modelId) => {
+      const { manager, input, setInput } = await openDialog(
+        {
+          providers: { "custom-lab": { baseUrl: "https://example.test/v1", models: [] } },
+          catalog: [],
+        },
+        "custom-lab",
+      );
+      expect(manager.querySelector(".provider-manager__identity [data-provider-icon]")).toBeNull();
+      const add = [...manager.querySelectorAll<HTMLButtonElement>("button")].find(
+        (candidate) => candidate.textContent?.trim() === "Add model",
+      );
+      expect(add).toBeDefined();
+      add!.click();
+      await waitForFast(() => expect(input("name")).not.toBeNull());
+      setInput("id", modelId);
+      await waitForFast(() =>
+        expect(
+          manager
+            .querySelector(".provider-manager__identity [data-provider-icon]")
+            ?.getAttribute("data-provider-icon"),
+        ).toBe("zai"),
+      );
+    },
+  );
 });

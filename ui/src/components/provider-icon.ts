@@ -167,11 +167,31 @@ export function providerIdFromModelRef(modelRef: string): string | null {
   return provider || null;
 }
 
-/** Icon asset name for a (normalized, lowercase) provider id, or null when no brand mark ships. */
-function resolveProviderIconName(provider: string): string | null {
+const MODEL_ID_ICON_KEYWORDS: Readonly<Record<string, string>> = {
+  glm: "zai",
+  zhipu: "zai",
+  zai: "zai",
+};
+
+/** Icon asset name for a provider id, optionally assisted by ordered model ids. */
+function resolveProviderIconName(
+  provider: string,
+  modelIds: readonly string[] = [],
+): string | null {
   const normalized = provider.trim().toLowerCase();
   const icon = PROVIDER_ICON_ALIASES[normalized] ?? normalized;
-  return PROVIDER_ICON_NAMES.has(icon) ? icon : null;
+  if (PROVIDER_ICON_NAMES.has(icon)) {
+    return icon;
+  }
+  for (const modelId of modelIds) {
+    const normalizedModelId = modelId.trim().toLowerCase();
+    for (const [keyword, modelIcon] of Object.entries(MODEL_ID_ICON_KEYWORDS)) {
+      if (normalizedModelId.includes(keyword)) {
+        return modelIcon;
+      }
+    }
+  }
+  return null;
 }
 
 /** Whether a provider identity has a bundled brand mark. */
@@ -265,11 +285,14 @@ export function renderProviderFallbackIcon(label: string, options?: { className?
 
 /**
  * Brand icon span for a provider id; falls back to a lettered badge when no
- * brand mark ships. `className` lets surfaces attach their sizing class.
+ * brand or model-keyword match ships. `className` lets surfaces attach sizing.
  */
-export function renderProviderBrandIcon(provider: string, options?: { className?: string }) {
+export function renderProviderBrandIcon(
+  provider: string,
+  options?: { className?: string; modelIds?: readonly string[] },
+) {
   const surfaceClass = options?.className ? ` ${options.className}` : "";
-  const icon = resolveProviderIconName(provider);
+  const icon = resolveProviderIconName(provider, options?.modelIds);
   if (!icon) {
     return renderProviderFallbackIcon(provider, options);
   }
