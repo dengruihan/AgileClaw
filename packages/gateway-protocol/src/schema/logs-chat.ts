@@ -3,6 +3,7 @@ import { asOptionalRecord } from "@openclaw/normalization-core/record-coerce";
 import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import type { Static } from "typebox";
 import { Type } from "typebox";
+import { MODEL_RETRY_ERROR_MAX_CHARS, MODEL_RETRY_STAGES } from "../chat-retry.js";
 import { CHAT_WORK_CONTEXT_DETAIL_LIMITS, CHAT_WORK_CONTEXT_LIMITS } from "../chat-work-context.js";
 import {
   CHAT_HISTORY_MAX_ENTRIES,
@@ -402,6 +403,19 @@ export const ChatRunStartupPhaseSchema = Type.Union([
   Type.Literal("starting_model"),
 ]);
 
+export const ModelRetryStatusSchema = closedObject({
+  id: Type.String({ minLength: 1, maxLength: 256 }),
+  number: Type.Integer({ minimum: 0 }),
+  stage: Type.Enum(MODEL_RETRY_STAGES),
+  reason: Type.String({ minLength: 1, maxLength: 64 }),
+  errorMessage: Type.String({ maxLength: MODEL_RETRY_ERROR_MAX_CHARS }),
+  at: Type.Number({ minimum: 0 }),
+  code: Type.Optional(Type.String({ maxLength: 128 })),
+  status: Type.Optional(Type.Integer({ minimum: 100, maximum: 599 })),
+  stopReason: Type.Optional(Type.Union([Type.Literal("non_retryable"), Type.Literal("exhausted")])),
+  persistenceError: Type.Optional(Type.String({ maxLength: 300 })),
+});
+
 /** Transient working status; only the run owner publishes terminal failures. */
 export const ChatStatusEventSchema = closedObject({
   ...ChatEventBaseSchema,
@@ -409,9 +423,10 @@ export const ChatStatusEventSchema = closedObject({
   phase: ChatRunStartupPhaseSchema,
   retry: Type.Optional(
     closedObject({
-      attempt: Type.Integer({ minimum: 1, maximum: 10 }),
-      maxAttempts: Type.Integer({ minimum: 1, maximum: 10 }),
-      reason: Type.Literal("rate_limit"),
+      attempt: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
+      maxAttempts: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
+      reason: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+      status: Type.Optional(ModelRetryStatusSchema),
     }),
   ),
 });

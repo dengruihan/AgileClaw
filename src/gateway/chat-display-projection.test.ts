@@ -634,3 +634,30 @@ it("keeps tool output whitespace and UTF-16 intact without adding a sentinel", (
     },
   ]);
 });
+
+it("retains only bounded model retry diagnostics in history", () => {
+  const message = {
+    role: "custom",
+    customType: "openclaw.model-retry",
+    display: true,
+    excludeFromContext: true,
+    content: "模型请求状态",
+    __openclaw: { runId: "retry-run" },
+    details: {
+      id: "retry-run:retry:1",
+      number: 1,
+      stage: "waiting",
+      reason: "server_error",
+      at: 1,
+      errorMessage: "HTTP 503 authorization: Bearer sk-synthetic1234567890abcdefghijklmnop",
+      status: 503,
+      privateRequest: "must not project",
+    },
+  };
+  const projected = projectChatDisplayMessages([message]);
+  expect(projected).toMatchObject([
+    { details: { number: 1, stage: "waiting", status: 503 }, __openclaw: { runId: "retry-run" } },
+  ]);
+  expect(JSON.stringify(projected)).not.toContain("privateRequest");
+  expect(JSON.stringify(projected)).not.toContain("sk-synthetic1234567890abcdefghijklmnop");
+});

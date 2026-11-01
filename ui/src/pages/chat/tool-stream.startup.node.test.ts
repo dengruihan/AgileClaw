@@ -1,10 +1,31 @@
-// @vitest-environment node
 import { describe, expect, it } from "vitest";
+// @vitest-environment node
+import type { ModelRetryStatus } from "../../../../packages/gateway-protocol/src/chat-retry.ts";
+import { modelRetrySummary } from "./chat-retry.ts";
 import { activeChatRunStartupStatus, chatStartupStatusLabel } from "./chat-run-startup.ts";
 import { createHost } from "./tool-stream.test-helpers.ts";
 import { handleAgentEvent } from "./tool-stream.ts";
 
 type AgentEvent = NonNullable<Parameters<typeof handleAgentEvent>[1]>;
+
+it.each([
+  { code: "ECONNRESET", summary: "Network error (ECONNRESET)" },
+  { code: "ECONNREFUSED", summary: "Network error (ECONNREFUSED)" },
+  { status: 503, summary: "Service temporarily unavailable (HTTP 503)" },
+  { code: "ETIMEDOUT", summary: "Request timed out (ETIMEDOUT)" },
+])("uses structured transport details for legacy timeout errors ($summary)", (details) => {
+  expect(
+    modelRetrySummary({
+      id: "retry-1",
+      number: 1,
+      stage: "waiting",
+      reason: "timeout",
+      errorMessage: "Synthetic provider diagnostic",
+      at: 1,
+      ...details,
+    }),
+  ).toBe(details.summary);
+});
 
 function createStartupHost() {
   return createHost({
@@ -98,4 +119,70 @@ describe("app-tool-stream startup status", () => {
       expect(retryLabel()).toBe(retry.data.message);
     },
   );
+});
+
+it("reconciles structured errors across transports without reviving an older retry", async () => {
+  const { handleChatGatewayEvent } = await import("./chat-gateway.ts");
+  const { makeChatHost } = await import("./chat-host.test-support.ts");
+  const host = makeChatHost({ sessionKey: "main" });
+  host.chatRunId = "run-1";
+  host.chatStreamStartedAt = 100;
+  host.chatStream = "Partial answer stays visible";
+  const retry = {
+    id: "retry-1",
+    number: 1,
+    stage: "waiting",
+    reason: "server_error",
+    status: 503,
+    errorMessage: "Upstream temporarily unavailable",
+    at: 200,
+  } satisfies ModelRetryStatus;
+  const label = () => chatStartupStatusLabel(activeChatRunStartupStatus(host.chatRunStartup), null);
+  handleChatGatewayEvent(host, {
+    sessionKey: "main",
+    runId: "run-1",
+    state: "status",
+    seq: 2,
+    retry: { status: retry },
+  });
+  expect(label()).toBe("Service temporarily unavailable (HTTP 503) · Retry 1 · Waiting to retry");
+  handleAgentEvent(host, {
+    sessionKey: "main",
+    runId: "run-1",
+    seq: 2,
+    ts: 200,
+    stream: "run_status",
+    data: {
+      phase: "retrying",
+      message: "English fallback must not replace the structured summary",
+      retry,
+    },
+  });
+  expect(label()).toContain("HTTP 503");
+  handleAgentEvent(host, {
+    sessionKey: "main",
+    runId: "run-1",
+    seq: 3,
+    ts: 201,
+    stream: "run_status",
+    data: { phase: "retrying", retry: { ...retry, stage: "requesting", at: 201 } },
+  });
+  expect(label()).toContain("Retry 1 · Retrying");
+  expect(host.chatStreamStartedAt).toBe(100);
+  expect(host.chatStream).toBe("Partial answer stays visible");
+  handleChatGatewayEvent(host, {
+    sessionKey: "main",
+    runId: "run-1",
+    state: "delta",
+    message: { role: "assistant", content: "Partial answer stays visible and resumes" },
+  });
+  expect(label()).toBeUndefined();
+  handleChatGatewayEvent(host, {
+    sessionKey: "main",
+    runId: "run-1",
+    state: "status",
+    seq: 2,
+    retry: { status: retry },
+  });
+  expect(label()).toBeUndefined();
 });

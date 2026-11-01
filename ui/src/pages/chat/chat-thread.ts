@@ -138,6 +138,7 @@ function sameChatItem(previous: RenderChatItem, next: RenderChatItem): boolean {
         previous.text === next.text &&
         previous.label === next.label &&
         previous.sessionsYield === next.sessionsYield &&
+        sameEntries(previous.retryHistory, next.retryHistory) &&
         previous.startsTurn === next.startsTurn &&
         previous.boundaryId === next.boundaryId &&
         previous.timestamp === next.timestamp

@@ -38,6 +38,7 @@ import {
   getPluginRuntimeGatewayRequestScope,
 } from "../../plugins/runtime/gateway-request-scope.js";
 import { progressCardRefreshRunProjection } from "../../sessions/input-provenance.js";
+import { settleModelRetryState } from "../../sessions/model-retry.js";
 import { isInternalMessageChannel } from "../../utils/message-channel.js";
 import { captureCommandOwnerAssertion } from "../command-owner-authority.js";
 import type { ReplyPayload } from "../types.js";
@@ -383,9 +384,16 @@ async function executeAgentTurnInternalLoop(
           resolveReplyFailureVisibility(params.resolveVisibleReplyDelivery, directBlockDeliveries),
       });
       if (action.kind === "aborted") {
+        await settleModelRetryState(fallbackCycleState.modelRetryState, "aborted");
         return action;
       }
       if (action.kind === "final") {
+        await settleModelRetryState(
+          fallbackCycleState.modelRetryState,
+          "failed",
+          err,
+          fallbackCycleState.modelRetryState?.pendingFailure?.stopReason ?? "non_retryable",
+        );
         return {
           ...action,
           resolved: {

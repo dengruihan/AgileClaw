@@ -1,5 +1,6 @@
-// @vitest-environment node
 import { expect, it, onTestFinished } from "vitest";
+// @vitest-environment node
+import type { ModelRetryStatus } from "../../../../packages/gateway-protocol/src/chat-retry.ts";
 import { createDeferred } from "../../../../test/helpers/promise.js";
 import type { GatewaySessionRow } from "../../api/types.ts";
 import { handleChatGatewayEvent } from "./chat-gateway.ts";
@@ -244,3 +245,52 @@ it("restores contention diagnostics separately from transcript text", async () =
   });
   expect(state.chatMessages).toContainEqual(expect.objectContaining({ content: summary }));
 });
+
+it.each(["live", "history"] as const)(
+  "retains the typed terminal retry diagnostic from %s without replacing it with a generic error",
+  async (source) => {
+    const retry = {
+      id: "retry-terminal",
+      number: 1,
+      stage: "failed",
+      reason: "server_error",
+      status: 503,
+      code: "UPSTREAM_BUSY",
+      errorMessage: "Synthetic upstream diagnostic",
+      stopReason: "exhausted",
+      at: 200,
+    } satisfies ModelRetryStatus;
+    const state = host({
+      messages: [notice("Retry", retry, "openclaw.model-retry")],
+      sessionInfo: row({ lastRunError: "Generic request failure" }),
+    });
+    if (source === "history") {
+      await loadChatHistory(state);
+    } else {
+      emit(state, "run", { state: "delta" });
+      emit(state, "run", {
+        state: "status",
+        seq: 2,
+        retry: { status: { ...retry, persistenceError: "Synthetic disk failure" } },
+      });
+      emit(state, "run", { state: "error", errorMessage: "Generic request failure" });
+      expect(state.chatRunError?.summary).toContain(
+        "Retry history could not be saved: Synthetic disk failure",
+      );
+      expect(state.chatMessages).toContainEqual(
+        expect.objectContaining({
+          customType: "openclaw.model-retry",
+          details: expect.objectContaining({ persistenceError: "Synthetic disk failure" }),
+        }),
+      );
+    }
+    expect(state.chatRunError?.summary).toContain(
+      "Service temporarily unavailable (HTTP 503) · Retries exhausted",
+    );
+    expect(state.chatRunError?.summary).toContain("Synthetic upstream diagnostic");
+    expect(state.chatRunError?.summary).not.toContain("Generic request failure");
+    expect(state.chatRunError?.title).toBe(
+      "Service temporarily unavailable (HTTP 503) · Retry 1 · Retries exhausted",
+    );
+  },
+);

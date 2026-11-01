@@ -1,6 +1,7 @@
 import { asOptionalRecord } from "@openclaw/normalization-core/record-coerce";
 import { html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
+import type { ModelRetryStatus } from "../../../../../packages/gateway-protocol/src/chat-retry.ts";
 import type { ThemeBranding } from "../../../../../packages/gateway-protocol/src/theme.ts";
 import type { QuestionPrompt } from "../../../app/question-prompt.ts";
 import { icons } from "../../../components/icons.ts";
@@ -72,6 +73,7 @@ export type StreamGroupOptions = StreamMessageOptions & {
   assistant?: Parameters<typeof renderChatAvatar>[1];
   showAssistantAvatar?: boolean;
   startupLabel?: string;
+  startupRetry?: ModelRetryStatus;
   waitingApproval?: boolean;
   runOutputTokens?: number | null;
   questionPrompts?: ReadonlyMap<string, QuestionPrompt>;
@@ -100,6 +102,7 @@ export function renderStreamGroupPart(
       workingPhrases: opts.branding?.workingPhrases,
       waitingApproval: opts.waitingApproval === true,
       startupLabel: opts.startupLabel,
+      startupRetry: opts.startupRetry,
       outputTokens: opts.runOutputTokens,
       presentation,
     });

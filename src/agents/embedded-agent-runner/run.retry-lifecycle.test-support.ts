@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { readModelRetryStatus } from "../../../packages/gateway-protocol/src/chat-retry.js";
 import { createDeferred } from "../../../test/helpers/promise.js";
 import { makeAssistantMessageFixture } from "../test-helpers/assistant-message-fixtures.js";
 import {
@@ -77,11 +78,19 @@ describe("direct embedded retry lifecycle", () => {
           onAgentEvent,
         });
         expect(mockedRunEmbeddedAttempt).toHaveBeenCalledTimes(expectedAttempts);
-        const retries = onAgentEvent.mock.calls
-          .map(([event]) => event)
-          .filter((event) => event.stream === "run_status" && event.data.phase === "retrying");
-        expect(retries.map((event) => event.data.retryAttempt)).toEqual(
-          expectedAttempts === 3 ? [1, 2] : [1],
+        const retries = onAgentEvent.mock.calls.flatMap(([event]) => {
+          const retry =
+            event.stream === "run_status" ? readModelRetryStatus(event.data.retry) : undefined;
+          return retry && (retry.stage === "waiting" || retry.stage === "requesting")
+            ? [retry]
+            : [];
+        });
+        const expectedRetryNumbers = expectedAttempts === 3 ? [1, 2] : [1];
+        expect(retries.map(({ number, stage }) => ({ number, stage }))).toEqual(
+          expectedRetryNumbers.flatMap((number) => [
+            { number, stage: "waiting" },
+            { number, stage: "requesting" },
+          ]),
         );
         if (expectedAttempts === 3) {
           expect(result.payloads).toEqual(

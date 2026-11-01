@@ -33,6 +33,7 @@ import {
   resolveWorkingProgress,
   shouldRenderQueuedSendInThread,
 } from "./chat-progress.ts";
+import { projectRetryNotices, readRetryMessage } from "./chat-retry.ts";
 import { hasSessionsYieldCall, projectSessionsYieldItems } from "./chat-sessions-yield.ts";
 import { projectChatSystemNotice } from "./chat-system-notice.ts";
 import { groupMessages } from "./chat-thread-grouping.ts";
@@ -159,6 +160,7 @@ export function buildChatItems(
             transcriptRunId(message) === activeCommentaryRunId)),
     ),
   );
+  const retryNotices = projectRetryNotices(history);
   const searchFiltering = props.searchOpen === true && Boolean(props.searchQuery?.trim());
   const hiddenHistoryKeys = new Set<string>();
   const persistedCanvasIdentities = new Set<string>();
@@ -204,6 +206,23 @@ export function buildChatItems(
     const itemKey = item.key;
     const raw = asRecord(msg) ?? {};
     const marker = asRecord(raw["__openclaw"]);
+    if (readRetryMessage(msg)) {
+      const runId = typeof marker?.runId === "string" ? marker.runId : "";
+      const retryNotice = retryNotices.get(runId);
+      if (
+        retryNotice &&
+        (!searchFiltering ||
+          retryNotice.retryHistory?.some((record) =>
+            `${record.errorMessage} ${record.code ?? ""} ${record.status ?? ""}`
+              .toLowerCase()
+              .includes((props.searchQuery ?? "").toLowerCase()),
+          ))
+      ) {
+        items.push(retryNotice);
+      }
+      retryNotices.delete(runId);
+      continue;
+    }
     if (marker?.kind === "compaction" || isContextCompactionMessage(msg)) {
       const matchesLive = compaction != null && matchesCompactionOperation(msg, compaction);
       const divider = buildCompactionDividerItem(

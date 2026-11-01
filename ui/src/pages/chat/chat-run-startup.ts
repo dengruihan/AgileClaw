@@ -1,16 +1,28 @@
+import {
+  readModelRetryStatus,
+  type ModelRetryStatus,
+} from "../../../../packages/gateway-protocol/src/chat-retry.ts";
 import type { ChatRunStartupPhase } from "../../../../packages/gateway-protocol/src/index.js";
 import type { ApplicationPlacementStartupStatus } from "../../app/session-placement-startup.ts";
 import { t } from "../../i18n/index.ts";
 import { registerNewSessionSetupEnglish } from "../../i18n/locales/en-new-session-setup.ts";
+import { modelRetryLabel } from "./chat-retry.ts";
 
 registerNewSessionSetupEnglish();
 
 export type { ChatRunStartupPhase } from "../../../../packages/gateway-protocol/src/index.js";
 
 export type ChatRunStartupState =
-  | { state: "status"; runId: string; phase: ChatRunStartupPhase; seq?: number }
-  | { state: "status"; runId: string; phase: "retrying"; message: string; seq: number }
-  | { state: "activity"; runId: string; seq?: number };
+  | { state: "status"; runId: string; phase: ChatRunStartupPhase; seq?: number; retry?: undefined }
+  | {
+      state: "status";
+      runId: string;
+      phase: "retrying";
+      message: string;
+      seq: number;
+      retry?: ModelRetryStatus;
+    }
+  | { state: "activity"; runId: string; seq?: number; retry?: ModelRetryStatus };
 
 export type ChatRunStartupStatus = Extract<ChatRunStartupState, { state: "status" }>;
 
@@ -62,7 +74,11 @@ export function chatStartupStatusLabel(
   placement: ApplicationPlacementStartupStatus | null | undefined,
 ): string | undefined {
   if (run) {
-    return run.phase === "retrying" ? run.message : t(STARTUP_LABEL_KEYS[run.phase]);
+    return run.phase === "retrying"
+      ? run.retry
+        ? modelRetryLabel(run.retry)
+        : run.message
+      : t(STARTUP_LABEL_KEYS[run.phase]);
   }
   switch (placement?.phase) {
     case "reconnecting":
@@ -87,4 +103,24 @@ export function activeChatRunStartupStatus(
   startup: ChatRunStartupState | null | undefined,
 ): ChatRunStartupStatus | null {
   return startup?.state === "status" ? startup : null;
+}
+
+/** Both transports carry the same agent sequence and structured retry fact. */
+export function reconcileChatModelRetry(
+  host: Parameters<typeof reconcileChatRunStartup>[0],
+  runId: string,
+  value: unknown,
+  seq: number,
+): boolean {
+  const retry = readModelRetryStatus(value);
+  if (!retry) {
+    return false;
+  }
+  reconcileChatRunStartup(
+    host,
+    retry.stage === "waiting" || retry.stage === "requesting"
+      ? { state: "status", phase: "retrying", runId, seq, message: modelRetryLabel(retry), retry }
+      : { state: "activity", runId, seq, retry },
+  );
+  return true;
 }

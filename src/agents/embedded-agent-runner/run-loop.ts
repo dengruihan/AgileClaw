@@ -10,6 +10,7 @@ import { resolveSessionAgentIds } from "../agent-scope.js";
 import type { ToolOutcomeObservation } from "../agent-tools.before-tool-call.js";
 import { isStrictAgenticExecutionContractActive } from "../execution-contract.js";
 import type { FailoverReason } from "../failover/signal.js";
+import { LiveSessionModelSwitchError } from "../live-model-switch-error.js";
 import { resolveToolLoopDetectionConfig } from "../tool-loop-detection-config.js";
 import { normalizeUsage } from "../usage.js";
 import { log } from "./logger.js";
@@ -31,6 +32,7 @@ import type { PreparedEmbeddedRunInput } from "./run/execution-context.js";
 import { resolveRunFailoverDecision } from "./run/failover-policy.js";
 import { createEmbeddedRunFailoverRetryController } from "./run/failover-retry-controller.js";
 import { buildErrorAgentMeta, resolveMaxRunRetryIterations } from "./run/helpers.js";
+import { createEmbeddedRunModelRetry } from "./run/model-retry.js";
 import { createEmbeddedRunPermissionChanges } from "./run/permission-change.js";
 import { measureEmbeddedAgentPreparation } from "./run/preparation-timing.js";
 import { createProviderReviewRun } from "./run/provider-review-run.js";
@@ -203,6 +205,19 @@ export async function runPreparedEmbeddedLoop(
     assertCurrent: assertAdmittedActive,
   });
   input.onInitialWriterPrepared(sessionPromptState);
+  const modelRetry = createEmbeddedRunModelRetry({
+    params,
+    session: sessionPromptState,
+    admittedRunContext: preparedRuntime.admittedRunContext,
+    assertCurrent: assertAdmittedActive,
+    abortSignal,
+    isTransientRetryExhausted: () => failoverRetryController.transientRetryExhausted,
+    canStartNextAttempt: () => !isRunRetryBudgetExhausted(runRetryBudget),
+    terminalRetryState,
+    getEmptyErrorRetries: () => emptyErrorRetries,
+    finish: (result) => providerReview.finish(result),
+  });
+  const { state: modelRetryState, reporter: retryReporter, finishResult } = modelRetry;
   const originalCompactionTarget = { ...sessionPromptState.sessionTarget };
   const durableCompactionAccounting =
     params.sessionPersistence !== "detached" &&
@@ -229,6 +244,9 @@ export async function runPreparedEmbeddedLoop(
   notifyExecutionPhase("context_engine", { provider, model: modelId });
   try {
     await providerReview.admit();
+    if (modelRetryState.pendingFailure) {
+      await retryReporter.retry(modelRetryState.pendingFailure);
+    }
     const compactionRuntime = createEmbeddedRunCompactionRuntime({
       runParams: params,
       contextEngine,
@@ -270,7 +288,7 @@ export async function runPreparedEmbeddedLoop(
           fallbackConfigured,
           failoverReason: lastRetryFailoverReason,
         });
-        return providerReview.finish(
+        return await finishResult(
           handleRetryLimitExhaustion({
             message,
             decision: retryLimitDecision,
@@ -333,6 +351,7 @@ export async function runPreparedEmbeddedLoop(
       try {
         dispatch = await sessionPromptState.withSessionWriterContext(() =>
           prepareAndDispatchEmbeddedRunAttempt({
+            onRetryRequest: retryReporter.requesting,
             permissionChange: permissionChanges.forAttempt(),
             runInput: attemptRunInput,
             preparedRuntime,
@@ -366,6 +385,7 @@ export async function runPreparedEmbeddedLoop(
         if (!retryTrace) {
           throw error;
         }
+        await modelRetry.retryFailure(error);
         traceAttempts.push(retryTrace);
         lastRetryFailoverReason = retryTrace.reason;
         continue;
@@ -400,15 +420,21 @@ export async function runPreparedEmbeddedLoop(
         turnTaintState.isTainted,
       );
       if (continuation) {
-        return providerReview.finish(continuation);
+        return await finishResult(continuation);
       }
       if (normalizedAttempt.action === "complete") {
-        return providerReview.finish(normalizedAttempt.result);
+        return await finishResult(normalizedAttempt.result);
       }
       bootstrapPromptWarningSignaturesSeen = normalizedAttempt.bootstrapPromptWarningSignaturesSeen;
       lastRunPromptUsage = normalizedAttempt.lastRunPromptUsage;
       accumulatedReplayState = normalizedAttempt.replayState;
       if (normalizedAttempt.action === "retry") {
+        if (normalizedAttempt.retryKind === "recovery") {
+          await retryReporter.retry({
+            reason: "context_overflow",
+            error: "Context exceeded the model limit; retrying with recovered context.",
+          });
+        }
         recordRunRetry(runRetryBudget, normalizedAttempt.retryKind);
         continue;
       }
@@ -434,6 +460,7 @@ export async function runPreparedEmbeddedLoop(
         resolveReplayInvalidForAttempt,
       } = normalizedAttempt;
       const recovery = await recoverEmbeddedRunAttempt({
+        retryReporter,
         runInput: admittedRunInput,
         preparedRuntime,
         normalizedAttempt,
@@ -470,7 +497,7 @@ export async function runPreparedEmbeddedLoop(
         sessionAgentId,
       });
       if (recovery.action === "complete") {
-        return providerReview.finish(recovery.result);
+        return await finishResult(recovery.result);
       }
       if (recovery.action === "retry") {
         authRetryPending = recovery.authRetryPending;
@@ -515,6 +542,7 @@ export async function runPreparedEmbeddedLoop(
       overloadProfileRotations = assistantFailureOutcome.overloadProfileRotations;
       lastRetryFailoverReason = assistantFailureOutcome.lastRetryFailoverReason;
       if (assistantFailureOutcome.action === "retry") {
+        await modelRetry.retryAssistant(attemptAssistant, lastRetryFailoverReason);
         continue;
       }
       let assistantProfileFailureReason = assistantFailureOutcome.assistantProfileFailureReason;
@@ -598,7 +626,7 @@ export async function runPreparedEmbeddedLoop(
         startedAtMs: started,
       });
       if (terminalTimeoutResult) {
-        return providerReview.finish(terminalTimeoutResult);
+        return await finishResult(terminalTimeoutResult);
       }
 
       const terminalAuthPlan = preparedRuntime.snapshot().activePreparedAuthPlan;
@@ -606,6 +634,8 @@ export async function runPreparedEmbeddedLoop(
         terminalAuthPlan.modelRoute?.requestTransportOverrides ??
         terminalAuthPlan.deferredRouteSupport?.requestTransportOverrides ??
         "none";
+      const beforeFinalizeRevisionAttempts = terminalRetryState.beforeFinalizeRevisionAttempts;
+      const compactionContinuationAttempts = terminalRetryState.compactionContinuationAttempts;
       const terminalResolution = await resolveEmbeddedRunTerminal({
         runParams: params,
         retryState: terminalRetryState,
@@ -654,10 +684,20 @@ export async function runPreparedEmbeddedLoop(
         contextRecoveryState,
       });
       if (terminalResolution.action === "retry") {
+        await modelRetry.retryIncompleteResponse(
+          beforeFinalizeRevisionAttempts,
+          compactionContinuationAttempts,
+        );
         continue;
       }
-      return providerReview.finish(terminalResolution.result);
+      return await finishResult(terminalResolution.result);
     }
+  } catch (error) {
+    if (error instanceof LiveSessionModelSwitchError) {
+      throw error;
+    }
+    await modelRetry.fail(error);
+    throw error;
   } finally {
     // Successful registration already cleared the marker; every earlier exit
     // must restore terminal suppression before asynchronous settlement begins.

@@ -1,6 +1,7 @@
 // Pane-local search, context menus, selection actions, and presentation resets.
 import { html, nothing, type TemplateResult } from "lit";
 import { ref } from "lit/directives/ref.js";
+import type { ModelRetryStatus } from "../../../../../packages/gateway-protocol/src/chat-retry.ts";
 import type { MessageReactionSummary } from "../../../../../packages/gateway-protocol/src/index.js";
 import type { ChatPendingInputsPage } from "../../../../../packages/gateway-protocol/src/schema/logs-chat.js";
 import type { ThemeBranding } from "../../../../../packages/gateway-protocol/src/theme.ts";
@@ -146,6 +147,7 @@ export type ChatThreadProps = ChatSendStatusActions & {
   runActive?: boolean;
   runWorking?: boolean;
   startupLabel?: string;
+  startupRetry?: ModelRetryStatus;
   waitingApproval?: boolean;
   subagentSessions?: readonly GatewaySessionRow[];
   questionPrompts?: readonly QuestionPrompt[];

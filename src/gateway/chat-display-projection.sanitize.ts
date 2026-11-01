@@ -4,6 +4,11 @@ import {
   asOptionalObjectRecord as readObjectRecord,
   asOptionalRecord as readRecord,
 } from "@openclaw/normalization-core/record-coerce";
+import {
+  MODEL_RETRY_RECORD_TYPE,
+  readModelRetryStatus,
+} from "../../packages/gateway-protocol/src/chat-retry.js";
+import { redactSensitiveText } from "../logging/redact.js";
 import { parseInboundMediaUri, buildInboundMediaUriFromPath } from "../media/media-reference.js";
 import { STATE_CONTENTION_DIAGNOSTIC } from "../sessions/session-run-error-presentation.js";
 import {
@@ -452,7 +457,23 @@ export function sanitizeChatHistoryMessage(
       readRecord(entry.details)?.errorKind === "state_contention"
         ? { errorKind: "state_contention", diagnostic: STATE_CONTENTION_DIAGNOSTIC }
         : undefined;
-    const projectedDetails = conflictDetails ?? toolResultDetails?.details ?? runFailureDetails;
+    const retryDetails =
+      entry.role === "custom" && entry.customType === MODEL_RETRY_RECORD_TYPE
+        ? readModelRetryStatus(entry.details)
+        : undefined;
+    if (retryDetails) {
+      retryDetails.errorMessage = redactSensitiveText(retryDetails.errorMessage, { mode: "tools" });
+      if (retryDetails.code) {
+        retryDetails.code = redactSensitiveText(retryDetails.code, { mode: "tools" });
+      }
+      if (retryDetails.persistenceError) {
+        retryDetails.persistenceError = redactSensitiveText(retryDetails.persistenceError, {
+          mode: "tools",
+        });
+      }
+    }
+    const projectedDetails =
+      retryDetails ?? conflictDetails ?? toolResultDetails?.details ?? runFailureDetails;
     if (projectedDetails) {
       entry.details = projectedDetails;
     } else {

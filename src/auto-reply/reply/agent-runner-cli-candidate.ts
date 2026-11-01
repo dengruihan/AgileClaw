@@ -11,13 +11,23 @@ import {
 import { shouldClearFailedCliSessionBinding } from "../../agents/cli-session.js";
 import { resolveDelegationCapability } from "../../agents/delegation-capability.js";
 import { withAdmittedCliCandidate } from "../../agents/embedded-agent-runner/run-entry-cli.js";
+import { describeFailoverError } from "../../agents/failover-error.js";
 import {
   getGeneratedMediaTaskIdsForSessionKey,
   hasNewGeneratedMediaTaskForSessionKey,
 } from "../../agents/media-generation-activity.js";
 import { findModelInCatalog } from "../../agents/model-catalog-lookup.js";
 import { normalizeChatType } from "../../channels/chat-type.js";
+import {
+  captureAgentRunTerminalWriteContext,
+  type CapturedAgentRunTerminalWriteContext,
+} from "../../infra/agent-run-terminal-writes.js";
 import { shouldPreserveUserFacingSessionStateForInputProvenance } from "../../sessions/input-provenance.js";
+import {
+  createModelRetryReporter,
+  settleModelRetryState,
+  type ModelRetryReporterState,
+} from "../../sessions/model-retry.js";
 import { createAgentLifecycleTerminalBackstop } from "./agent-lifecycle-terminal.js";
 import { resolveRunAuthProfile } from "./agent-runner-auth-profile.js";
 import {
@@ -178,6 +188,44 @@ export async function runCliFallbackCandidate(
         settleResult,
       }) => {
         let sessionEntry = initialSessionEntry;
+        const modelRetryState: ModelRetryReporterState = params.modelRetryState ?? { count: 0 };
+        // Retain the exact native writer for terminal corrections after placement releases.
+        let terminalWriteContext: CapturedAgentRunTerminalWriteContext | undefined;
+        const retryReporter = createModelRetryReporter({
+          state: modelRetryState,
+          runId: params.runId,
+          sessionKey,
+          assertCurrent: () => {
+            params.runAbortSignal?.throwIfAborted();
+            assertSettlementCurrent();
+          },
+          assertTerminalCurrent: () => {
+            if (terminalWriteContext) {
+              terminalWriteContext.assertCurrent();
+            } else {
+              assertSettlementCurrent();
+            }
+          },
+          withWriter: (write) => (terminalWriteContext ? terminalWriteContext.run(write) : write()),
+          getTarget: () =>
+            sessionTarget
+              ? {
+                  ...sessionTarget,
+                  expectedLifecycleRevision: initialSessionEntry?.lifecycleRevision,
+                }
+              : undefined,
+        });
+        modelRetryState.finish = retryReporter.finish;
+        const recordFailure = (error: unknown) => {
+          const described = describeFailoverError(error);
+          modelRetryState.pendingFailure = {
+            reason: described.reason ?? "unknown",
+            error,
+            code: described.code,
+            status: described.status,
+            stopReason: "non_retryable",
+          };
+        };
         // The CLI owner must see explicit pins before provider scoping can discard them.
         const authProfileId = allowCliAuthProfileForwarding
           ? resolveCliExecutionAuthProfileId({
@@ -218,6 +266,9 @@ export async function runCliFallbackCandidate(
           turn.followupRun.run.agentId,
         );
         let droppedCliSessionReplacement = false;
+        if (modelRetryState.pendingFailure) {
+          await retryReporter.retry(modelRetryState.pendingFailure);
+        }
         const candidateResult = await runCliAgentWithLifecycle({
           runId: params.runId,
           lifecycleGeneration: params.lifecycleGeneration,
@@ -260,6 +311,7 @@ export async function runCliFallbackCandidate(
             if (classified.skip || !classified.text) {
               return;
             }
+            await retryReporter.finish("recovered");
             const textForTyping = classified.text;
             const sanitized = params.presentation.sanitizeStreamingText(textForTyping, false);
             const onPartialReply = turn.opts?.onPartialReply;
@@ -482,7 +534,50 @@ export async function runCliFallbackCandidate(
             onExecutionPhase: params.signalExecutionPhaseForTyping,
             replyOperation: turn.replyOperation,
           },
+        }).catch(async (error: unknown) => {
+          terminalWriteContext = captureAgentRunTerminalWriteContext(params.runId);
+          recordFailure(error);
+          if (
+            params.runAbortSignal?.aborted ||
+            (error instanceof Error && error.name === "AbortError")
+          ) {
+            await settleModelRetryState(modelRetryState, "aborted");
+          } else if (params.isFinalFallbackAttempt !== false) {
+            await settleModelRetryState(modelRetryState, "failed", error, "non_retryable");
+          }
+          throw error;
         });
+        terminalWriteContext = captureAgentRunTerminalWriteContext(params.runId);
+        const classification = params.classifyResult(candidateResult);
+        const failure = classification
+          ? "error" in classification
+            ? classification.error
+            : {
+                ...classification,
+                message: classification.rawError ?? classification.message,
+              }
+          : (candidateResult.meta.error?.message ??
+            candidateResult.payloads?.find((payload) => payload.isError)?.text);
+        if (failure) {
+          recordFailure(failure);
+          if (classification && !("error" in classification) && modelRetryState.pendingFailure) {
+            modelRetryState.pendingFailure.reason = classification.reason ?? "unknown";
+          }
+        }
+        // Finish before placement releases; a captured native writer may refine the terminal reason later.
+        if (candidateResult.meta.aborted || params.runAbortSignal?.aborted) {
+          await retryReporter.finish("aborted");
+        } else if (failure) {
+          if (params.isFinalFallbackAttempt !== false) {
+            await retryReporter.finish(
+              "failed",
+              failure,
+              candidateResult.meta.error?.kind === "retry_limit" ? "exhausted" : "non_retryable",
+            );
+          }
+        } else {
+          await retryReporter.finish("recovered");
+        }
         if (droppedCliSessionReplacement) {
           // The room-event transform removed native continuity; only its guarded
           // invalidation remains, and failure must retain the returned turn.

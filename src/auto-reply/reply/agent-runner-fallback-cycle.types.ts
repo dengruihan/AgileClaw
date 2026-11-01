@@ -7,6 +7,7 @@ import type { FastModeAutoProgressState } from "../../agents/fast-mode.js";
 import type { CompactionRequestBudget } from "../../agents/sessions/compaction/request-budget.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import type { ModelRetryReporterState } from "../../sessions/model-retry.js";
 import type { ThinkLevel } from "../thinking.js";
 import type { AgentLifecycleTerminalBackstop } from "./agent-lifecycle-terminal.js";
 import type {
@@ -24,6 +25,7 @@ import type { DirectBlockDelivery } from "./reply-delivery.js";
 
 /** Inputs prepared once per fallback candidate and consumed by either runtime adapter. */
 export type AgentFallbackCandidateCommonParams = RunEntryCandidateOptions & {
+  modelRetryState?: ModelRetryReporterState;
   preparedRunAdmission: PreparedAgentRunAdmission;
   messageActionTurnCapability?: string;
   turn: AgentTurnParams;
@@ -56,6 +58,7 @@ export type AgentFallbackCandidateCommonParams = RunEntryCandidateOptions & {
 };
 
 export type AgentFallbackCycleState = {
+  modelRetryState?: ModelRetryReporterState;
   maintenanceAuthProfile?: CompletedAgentAuthSelection;
   compactionRequestBudget?: CompactionRequestBudget;
   deferredLifecycle: DeferredEmbeddedRunLifecycleManager;

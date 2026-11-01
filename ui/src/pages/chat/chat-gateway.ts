@@ -4,6 +4,7 @@ import {
   reduceSessionProjectionRunEvent,
 } from "@openclaw/gateway-client/browser";
 import { asNullableRecord as asRecord } from "@openclaw/normalization-core/record-coerce";
+import type { ModelRetryStatus } from "../../../../packages/gateway-protocol/src/chat-retry.ts";
 import { t } from "../../i18n/index.ts";
 import { isAssistantHeartbeatAckForDisplay } from "../../lib/chat/heartbeat-display.ts";
 import { extractText } from "../../lib/chat/message-extract.ts";
@@ -16,7 +17,13 @@ import { isUiGlobalSessionKey, resolveUiDefaultAgentId } from "../../lib/session
 import { chatScopedEventSessionMatches } from "./chat-history-state.ts";
 import { materializeVisibleAssistantStreamMessages } from "./chat-history-stream.ts";
 import type { ChatEventPayload } from "./chat-history.ts";
-import { reconcileChatRunStartup } from "./chat-run-startup.ts";
+import {
+  latestRetryFailure,
+  modelRetryFailureMessage,
+  modelRetryLabel,
+  retainUnsavedModelRetry,
+} from "./chat-retry.ts";
+import { reconcileChatModelRetry, reconcileChatRunStartup } from "./chat-run-startup.ts";
 import type { ChatState } from "./chat-state-contract.ts";
 import { transcriptRunId } from "./chat-thread-run-identity.ts";
 import {
@@ -79,7 +86,11 @@ function formatGatewayErrorDetail(payload: ChatEventPayload): string | null {
 function resolveGatewayErrorText(
   payload: ChatEventPayload,
   message: Record<string, unknown> | null,
+  retryFailure?: ModelRetryStatus,
 ): string {
+  if (retryFailure) {
+    return modelRetryFailureMessage(retryFailure);
+  }
   const errorText = payload.errorMessage?.trim();
   if (errorText) {
     if (
@@ -158,6 +169,15 @@ export function handleChatGatewayEvent(state: ChatState, incoming?: ChatEventPay
     }
     return null;
   }
+  const currentRetry =
+    state.chatRunStartup && state.chatRunStartup.runId === payload.runId
+      ? state.chatRunStartup.retry
+      : undefined;
+  const retryFailure =
+    currentRetry?.stage === "failed" && currentRetry.stopReason
+      ? currentRetry
+      : latestRetryFailure(state.chatMessages, payload.runId);
+  const retryFailureTitle = retryFailure ? modelRetryLabel(retryFailure) : undefined;
   const scope = readChatSessionProjectionScope(state);
   const publishVisibleTerminal = (
     message: Record<string, unknown>,
@@ -227,7 +247,7 @@ export function handleChatGatewayEvent(state: ChatState, incoming?: ChatEventPay
       outcome: terminalStatus === "completed" ? "done" : "interrupted",
       sessionStatus,
       errorMessage: payload.errorMessage?.trim()
-        ? resolveGatewayErrorText(payload, null)
+        ? resolveGatewayErrorText(payload, null, retryFailure)
         : undefined,
       runId: terminalRunId,
       sessionKey: state.sessionKey,
@@ -259,7 +279,13 @@ export function handleChatGatewayEvent(state: ChatState, incoming?: ChatEventPay
       ) {
         // Late diagnostics belong to the active, pending, or latest locally terminal run;
         // publishing them over a newer response falsely marks the new run failed.
-        setChatRunError(state, resolveGatewayErrorText(payload, null), payload.runId, errorKind);
+        setChatRunError(
+          state,
+          resolveGatewayErrorText(payload, null, retryFailure),
+          payload.runId,
+          errorKind,
+          retryFailureTitle,
+        );
       }
       if (payload.state === "error") {
         reconcileOwnedTerminalRun();
@@ -333,6 +359,16 @@ export function handleChatGatewayEvent(state: ChatState, incoming?: ChatEventPay
   if (payload.state === "status") {
     if (!payload.runId || payload.runId !== state.chatRunId) {
       return null;
+    }
+    if (
+      typeof payload.seq === "number" &&
+      reconcileChatModelRetry(state, payload.runId, payload.retry?.status, payload.seq)
+    ) {
+      const retry = state.chatRunStartup?.retry;
+      if (retry && state.chatRunStartup?.seq === payload.seq) {
+        retainUnsavedModelRetry(state, payload.runId, retry);
+      }
+      return payload.state;
     }
     const status = payload.retry
       ? typeof payload.seq === "number" && {
@@ -442,7 +478,13 @@ export function handleChatGatewayEvent(state: ChatState, incoming?: ChatEventPay
       publishInterruptedStream();
     }
     if (payload.errorMessage?.trim()) {
-      setChatRunError(state, resolveGatewayErrorText(payload, null), payload.runId, errorKind);
+      setChatRunError(
+        state,
+        resolveGatewayErrorText(payload, null, retryFailure),
+        payload.runId,
+        errorKind,
+        retryFailureTitle,
+      );
     }
     reconcileOwnedTerminalRun();
   } else if (payload.state === "error") {
@@ -488,9 +530,14 @@ export function handleChatGatewayEvent(state: ChatState, incoming?: ChatEventPay
     reconcileOwnedTerminalRun();
     setChatRunError(
       state,
-      resolveGatewayErrorText(payload, projectedErrorMessage ? visiblePayloadMessage : null),
+      resolveGatewayErrorText(
+        payload,
+        projectedErrorMessage ? visiblePayloadMessage : null,
+        retryFailure,
+      ),
       payload.runId,
       errorKind,
+      retryFailureTitle,
     );
   }
   if (payload.state !== "delta") {

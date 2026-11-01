@@ -52,6 +52,7 @@ export type ChatHistoryRunObservation = {
 export type ChatRunError = {
   kind?: "auth_refresh" | "state_contention" | "stop";
   summary: string;
+  title?: string;
   /** Display ownership only; the session reducer retains each run's diagnostic. */
   runId?: string;
 };
@@ -184,11 +185,13 @@ export function setChatRunError(
   summary: string,
   runId?: string,
   kind?: ChatRunError["kind"],
+  title?: string,
 ) {
   setChatRunOwner(state, runId);
   state.chatRunError = {
     ...(kind ? { kind } : {}),
     summary: redactToolDetail(summary.trim()),
+    ...(title ? { title: redactToolDetail(title.trim()) } : {}),
     ...(runId ? { runId } : {}),
   };
 }

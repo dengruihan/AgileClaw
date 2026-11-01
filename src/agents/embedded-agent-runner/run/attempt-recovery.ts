@@ -1,8 +1,8 @@
 import { isResponsesOutputLimitToolCallError } from "@openclaw/ai/diagnostics";
-import { emitAgentEvent } from "../../../infra/agent-events.js";
 import { emitDiagnosticsTimelineEvent } from "../../../infra/diagnostics-timeline.js";
 import { formatErrorMessage, toErrorObject } from "../../../infra/errors.js";
 import { isRetryableAssistantError, isTerminalAssistantError } from "../../../llm/utils/retry.js";
+import type { createModelRetryReporter } from "../../../sessions/model-retry.js";
 import { projectAgentRunAttemptTerminal } from "../../agent-run-terminal-outcome.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../../defaults.js";
 import { buildAssistantFailoverSignal } from "../../embedded-agent-helpers/assistant-message-failures.js";
@@ -51,6 +51,7 @@ type FailoverRetryController = ReturnType<typeof createEmbeddedRunFailoverRetryC
 type CompactionRuntime = ReturnType<typeof createEmbeddedRunCompactionRuntime>;
 
 export async function recoverEmbeddedRunAttempt(input: {
+  retryReporter: Pick<ReturnType<typeof createModelRetryReporter>, "retry">;
   runInput: PreparedEmbeddedRunInput;
   preparedRuntime: PreparedRuntime;
   normalizedAttempt: NormalizedAttempt;
@@ -382,6 +383,10 @@ export async function recoverEmbeddedRunAttempt(input: {
       lastRunPromptUsage: input.lastRunPromptUsage,
     }))
   ) {
+    await input.retryReporter.retry({
+      reason: "timeout",
+      error: promptError ?? assistantErrorText ?? "The model request timed out.",
+    });
     recordRecoveryDecision("accepted", "timeout_recovery");
     return retry();
   }
@@ -417,26 +422,16 @@ export async function recoverEmbeddedRunAttempt(input: {
       // Fallback and rotation both require a replay-safe attempt; without one the
       // only recovery left is to wait out the floor and continue the transcript.
       failoverEligible: currentAttemptReplaySafe,
-      onRetry: async ({ attempt: retryAttempt, maxRetries, delayMs, reason }) => {
-        const event = {
-          stream: "run_status",
-          data: {
-            phase: "retrying",
-            message:
-              reason === "rate_limit" || reason === "output_limit"
-                ? `Retrying… ${retryAttempt + 1}/${maxRetries + 1}`
-                : `Provider temporarily unavailable. Retrying in ${Math.ceil(delayMs / 1_000)}s (${retryAttempt}/${maxRetries}).`,
-            retryAttempt,
-            maxRetries,
-            delayMs,
-            attempt: retryAttempt + 1,
-            maxAttempts: maxRetries + 1,
-            reason,
-          },
-        };
-        emitAgentEvent({ runId: params.runId, sessionKey: params.sessionKey, ...event });
-        await params.onAgentEvent?.(event);
-      },
+      onRetry: ({ attempt: retryAttempt, maxRetries, delayMs, reason }) =>
+        input.retryReporter.retry({
+          reason,
+          error: promptError ?? recoveryAssistant?.errorMessage ?? assistantErrorText,
+          code: promptError ? getFailoverErrorCode(promptError) : assistantSignal?.code,
+          status: assistantSignal?.status,
+          delayMs,
+          attempt: retryAttempt + 1,
+          maxAttempts: maxRetries + 1,
+        }),
     }))
   ) {
     runInput.laneController.throwIfAborted();
@@ -493,6 +488,10 @@ export async function recoverEmbeddedRunAttempt(input: {
     markOwnedTranscriptRetry: sessionPromptState.markOwnedTranscriptRetry,
   });
   if (overflowRecovery.action === "retry") {
+    await input.retryReporter.retry({
+      reason: "context_overflow",
+      error: promptError ?? assistantErrorText ?? "The model context limit was exceeded.",
+    });
     recordRecoveryDecision("accepted", "overflow_recovery");
     return retry();
   }
@@ -526,6 +525,7 @@ export async function recoverEmbeddedRunAttempt(input: {
         `codex app-server replay-safe failure; retrying once failureKind=${attempt.codexAppServerFailure?.kind} ` +
           `runId=${params.runId} sessionId=${params.sessionId}`,
       );
+      await input.retryReporter.retry({ reason: "harness_error", error: promptError });
       recordRecoveryDecision("accepted", "harness_retry");
       return retry({ codexAppServerRecoveryRetries: input.codexAppServerRecoveryRetries + 1 });
     }
@@ -578,6 +578,11 @@ export async function recoverEmbeddedRunAttempt(input: {
       return { action: "complete", result: promptFailureOutcome.result };
     }
     preparedRuntime.setThinkLevel(promptFailureOutcome.thinkLevel);
+    await input.retryReporter.retry({
+      reason: promptFailureOutcome.lastRetryFailoverReason ?? failureReason ?? "unknown",
+      error: promptError,
+      code: getFailoverErrorCode(promptError),
+    });
     recordRecoveryDecision("accepted", "prompt_recovery");
     return retry({
       authRetryPending: promptFailureOutcome.authRetryPending,

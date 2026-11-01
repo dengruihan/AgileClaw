@@ -1,4 +1,5 @@
 import { html, nothing } from "lit";
+import type { ModelRetryStatus } from "../../../../../packages/gateway-protocol/src/chat-retry.ts";
 import type { ThemeMascot } from "../../../../../packages/gateway-protocol/src/theme.ts";
 import "../../../components/elapsed-time.ts";
 import "../../../components/working-phrase.ts";
@@ -8,6 +9,7 @@ import { i18n, t } from "../../../i18n/index.ts";
 import type { ChatItem } from "../../../lib/chat/chat-types.ts";
 import { formatCompactTokenCount } from "../../../lib/format.ts";
 import type { TurnRecap } from "../chat-progress.ts";
+import { modelRetryErrorDetails } from "../chat-retry.ts";
 import type { ChatSubagentWait } from "../chat-subagent-wait.ts";
 import { selectWorkingClawSurprise } from "./chat-working-indicator-surprise.ts";
 
@@ -60,6 +62,7 @@ export function renderChatWorkingIndicator(
     waitingSubagents?: ChatSubagentWait;
     onOpenSession?: (key: string) => void;
     startupLabel?: string;
+    startupRetry?: ModelRetryStatus;
     outputTokens?: number | null;
     presentation?: "standalone" | "continuation";
   } = {},
@@ -82,7 +85,7 @@ export function renderChatWorkingIndicator(
   // announcing every elapsed-time tick to screen readers.
   return html`
     <div
-      class="chat-working-indicator ${continuation ? "chat-working-indicator--continuation" : ""} ${waitingSubagents ? "chat-working-indicator--subagents" : ""}"
+      class="chat-working-indicator ${options.startupRetry ? "chat-working-indicator--retry" : ""} ${continuation ? "chat-working-indicator--continuation" : ""} ${waitingSubagents ? "chat-working-indicator--subagents" : ""}"
       role="status"
       aria-live="off"
     >
@@ -146,6 +149,16 @@ export function renderChatWorkingIndicator(
                   ></openclaw-working-phrase>
                 `
               : nothing
+        }
+        ${
+          options.startupRetry
+            ? html`<details class="chat-retry-details">
+                <summary>${t("chat.modelRetry.details")}</summary>
+                <pre class="chat-retry-history__error">
+${modelRetryErrorDetails(options.startupRetry)}</pre>
+                ${options.startupRetry.persistenceError ? html`<p role="alert">${t("chat.modelRetry.persistenceError", { error: options.startupRetry.persistenceError })}</p>` : nothing}
+              </details>`
+            : nothing
         }
       </span>
     </div>
