@@ -82,17 +82,6 @@ vi.mock("../../plugins/provider-thinking-active.js", async (importOriginal) => (
 
 vi.mock("../../status/status-plugin-health.runtime.js", () => pluginHealthRuntimeMock);
 
-vi.mock("../../agents/harness/builtin-openclaw.js", () => ({
-  createOpenClawAgentHarness: () => ({
-    id: "openclaw",
-    label: "AgileClaw Default",
-    supports: () => ({ supported: true, priority: 0 }),
-    runAttempt: async () => {
-      throw new Error("not used in status tests");
-    },
-  }),
-}));
-
 const sessionDirs = useSessionStoreTempDirs(afterAll, "openclaw-status-auth-label-");
 const baseCfg = baseCommandTestConfig;
 const expectedCodexRuntimeUsageAuth = [

@@ -87,6 +87,7 @@ vi.mock("../harness/runtime-plugin.js", () => ({
   ensureSelectedAgentHarnessPlugin: vi.fn(async () => undefined),
 }));
 
+// mock-isolation: Compare chat and compaction model preparation with a fixed harness, excluding registry selection and execution.
 vi.mock("../harness/selection.js", () => ({
   selectAgentHarness: vi.fn(() => ({
     id: "openclaw",

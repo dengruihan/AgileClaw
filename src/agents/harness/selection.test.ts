@@ -147,6 +147,7 @@ function createTranscriptRecorder(
   };
 }
 
+// mock-isolation: Exercise dispatch and host authority with controlled attempt results; the real factory has separate owner tests.
 vi.mock("./builtin-openclaw.js", () => ({
   createOpenClawAgentHarness: (): AgentHarness => {
     const harness: AgentHarness = {

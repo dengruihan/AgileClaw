@@ -316,6 +316,7 @@ vi.mock("../config/io.js", async (importOriginal) => {
   };
 });
 
+// mock-isolation: Keep config reads and commits in the plugin CLI's in-memory fixture without exposing real recovery or runtime state.
 vi.mock("../config/config.js", () => ({
   assertConfigWriteAllowedInCurrentMode: () => {
     if (process.env.OPENCLAW_NIX_MODE === "1") {

@@ -228,8 +228,7 @@ vi.mock("./harness/runtime-plugin.js", () => ({
     ensureSelectedAgentHarnessPluginMock(...args),
 }));
 
-// Selection and host-capability owner suites execute the embedded runner and capability surface.
-// BTW only needs their identities while it verifies side-question orchestration.
+// mock-isolation: Exercise BTW selection and orchestration without loading the embedded runner; its factory has separate owner tests.
 vi.mock("./harness/builtin-openclaw.js", () => ({
   createOpenClawAgentHarness: (): AgentHarness => {
     const harness: AgentHarness = {
