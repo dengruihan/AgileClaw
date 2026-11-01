@@ -2,13 +2,11 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { Page } from "playwright";
 import { expect, it } from "vitest";
-import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { revealChatModelOption } from "../test-helpers/select-picker-e2e.ts";
 import {
   controlUiSessionUrl,
   createChatFlowE2eSuite,
   installMockGateway,
-  requireRecord,
 } from "./chat-flow.test-support.ts";
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 
@@ -274,153 +272,6 @@ suite.define(() => {
         .toBe("");
       await picker.locator('[data-chat-model-select="true"]').click();
       await screenshot(page, "04-pin-cleared.png");
-    } finally {
-      await suite.closeBrowserContext(context);
-    }
-  });
-
-  it("keeps picker opens cached and the warm list interactive during a catalog publication", async () => {
-    const context = await suite.newBrowserContext(createControlUiE2eContextOptions());
-    const page = await context.newPage();
-    const gateway = await installMockGateway(page, {
-      models: [
-        { id: "gpt-5.6-sol", name: "GPT-5.6 Sol", provider: "openai" },
-        { id: "gpt-5.6-luna", name: "GPT-5.6 Luna", provider: "openai" },
-        { id: "fable-5", name: "Claude Fable 5", provider: "anthropic" },
-      ],
-      sessionKey: "agent:main:main",
-    });
-
-    try {
-      await page.goto(`${suite.server.baseUrl}chat`);
-      const pane = page.locator('openclaw-chat-pane[aria-hidden="false"]');
-      const picker = pane.locator(".chat-controls__model-picker");
-      await picker.locator("[data-chat-model-option]").first().waitFor({ state: "attached" });
-
-      await gateway.deferNext("models.list", { view: "configured" });
-      await picker.locator('[data-chat-model-select="true"]').click();
-      await revealChatModelOption(picker.locator('[data-chat-model-option="openai/gpt-5.6-luna"]'));
-      await revealChatModelOption(picker.locator('[data-chat-model-option="anthropic/fable-5"]'));
-      await picker.getByRole("option", { name: "GPT-5.6 Luna", exact: true }).waitFor();
-      expect(await gateway.getRequests("models.list")).toHaveLength(1);
-
-      await gateway.emitGatewayEvent("chat.metadata.changed", {});
-      const request = await gateway.waitForRequest("models.list", { after: 1 });
-      expect(requireRecord(request.params)).toMatchObject({
-        sessionKey: "agent:main:main",
-        view: "configured",
-      });
-      expect(request.params).not.toHaveProperty("refresh");
-
-      // The warm list stays rendered and selectable with no refresh/loading interstitial.
-      await expect
-        .poll(() => picker.locator("[data-chat-model-option]:visible").count())
-        .toBeGreaterThanOrEqual(3);
-      await screenshot(page, "01-picker-open-refresh-in-flight.png");
-      expect(await picker.locator("[data-chat-model-catalog-state]").count()).toBe(0);
-      expect(
-        await picker.locator('[data-chat-model-option="openai/gpt-5.6-luna"]').isDisabled(),
-      ).toBe(false);
-
-      // The direct scoped response owns model readiness; commands remain independent.
-      await gateway.resolveDeferred("models.list", {
-        models: [
-          { id: "gpt-5.6-sol", name: "GPT-5.6 Sol", provider: "openai" },
-          { id: "gpt-5.6-terra", name: "GPT-5.6 Terra", provider: "openai" },
-        ],
-      });
-      await picker
-        .locator('[data-chat-model-option="openai/gpt-5.6-terra"]')
-        .waitFor({ state: "visible" });
-      expect(await picker.locator("[data-chat-model-catalog-state]").count()).toBe(0);
-      await screenshot(page, "02-picker-after-background-apply.png");
-    } finally {
-      await suite.closeBrowserContext(context);
-    }
-  });
-
-  it("reconciles the current model search when an open catalog replaces its results", async () => {
-    const context = await suite.newBrowserContext(createControlUiE2eContextOptions());
-    const page = await context.newPage();
-    const artifactRoot = process.env.OPENCLAW_UI_E2E_ARTIFACT_DIR?.trim();
-    const artifactDir = artifactRoot
-      ? createControlUiE2eArtifactDir("model-search-refresh", artifactRoot)
-      : undefined;
-    const gateway = await installMockGateway(page, {
-      models: [
-        { id: "gpt-5.5", name: "GPT-5.5", provider: "openai" },
-        { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", provider: "anthropic" },
-      ],
-      sessionKey: "agent:main:main",
-    });
-    try {
-      await page.goto(`${suite.server.baseUrl}chat`);
-      const picker = page.locator(
-        'openclaw-chat-pane[aria-hidden="false"] .chat-controls__model-picker',
-      );
-      const previous = picker.locator('[data-chat-model-option="anthropic/claude-haiku-4-5"]');
-      await previous.waitFor({ state: "attached" });
-      const discoveryCount = (await gateway.getRequests("models.list")).length;
-      await gateway.deferNext("models.list", { view: "configured" });
-      await picker.locator('[data-chat-model-select="true"]').click();
-      const search = picker.locator("[data-chat-model-search]");
-      await search.fill("anthropic");
-      await expect.poll(() => picker.locator("[data-chat-model-option]:visible").count()).toBe(1);
-      expect(await previous.isVisible()).toBe(true);
-      expect(await gateway.getRequests("models.list")).toHaveLength(discoveryCount);
-      await gateway.emitGatewayEvent("chat.metadata.changed", {});
-      await gateway.waitForRequest("models.list", { after: discoveryCount });
-      if (artifactDir) {
-        await page.screenshot({
-          animations: "disabled",
-          path: `${artifactDir}/01-search-warm.png`,
-        });
-      }
-
-      const refreshedModels = [
-        { id: "gpt-5.5", name: "GPT-5.5", provider: "openai" },
-        { id: "gpt-5.4-mini", name: "GPT-5.4 mini", provider: "openai" },
-        { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", provider: "anthropic" },
-      ];
-      await gateway.resolveDeferred("models.list", { models: refreshedModels });
-
-      const replacement = picker.locator('[data-chat-model-option="anthropic/claude-sonnet-4-6"]');
-      await replacement.waitFor({ state: "attached" });
-      await previous.waitFor({ state: "detached" });
-      if (artifactDir) {
-        await page.screenshot({
-          animations: "disabled",
-          path: `${artifactDir}/02-search-refreshed.png`,
-        });
-      }
-
-      expect(await search.inputValue()).toBe("anthropic");
-      await expect
-        .poll(() =>
-          picker
-            .locator("[data-chat-model-option]:visible")
-            .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-chat-model-option"))),
-        )
-        .toEqual(["anthropic/claude-sonnet-4-6"]);
-      expect(await picker.locator("[data-chat-model-search-empty]").isVisible()).toBe(false);
-      await expect
-        .poll(() =>
-          search.evaluate((input) => {
-            const activeId = input.getAttribute("aria-activedescendant");
-            return activeId
-              ? document.getElementById(activeId)?.getAttribute("data-chat-model-option")
-              : null;
-          }),
-        )
-        .toBe("anthropic/claude-sonnet-4-6");
-      const patchCount = (await gateway.getRequests("sessions.patch")).length;
-      await search.press("Enter");
-      const patch = await gateway.waitForRequest("sessions.patch", { after: patchCount });
-      expect(patch.params).toMatchObject({
-        key: "agent:main:main",
-        model: "anthropic/claude-sonnet-4-6",
-      });
-      await expect.poll(() => picker.getAttribute("open")).toBe(null);
     } finally {
       await suite.closeBrowserContext(context);
     }

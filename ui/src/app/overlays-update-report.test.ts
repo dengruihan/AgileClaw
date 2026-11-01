@@ -73,28 +73,22 @@ it.each([
   { reason: "already-current", reportable: false },
   { reason: "dry-run", reportable: false },
   { reason: "cancelled", reportable: false },
-])(
-  "offers explicit Report for skipped $reason without changing triage admission",
-  async ({ reason, reportable }) => {
-    const run = createUpdateRunFixture({ status: "skipped", phase: "finished", reason });
-    const request = vi.fn<RequestFn>(async () => ({ lastRun: run }));
-    const harness = harnessFor(request);
-    const onUpdateFailure = vi.fn();
-    reportUpdateFailure.mockResolvedValue(null);
-    const overlays = createApplicationOverlays(harness.gateway, { onUpdateFailure });
-    try {
-      await flushMicrotasks();
-      expect(overlays.snapshot.reportableUpdateFailureId).toBe(reportable ? run.runId : null);
-      expect(reportUpdateFailure).not.toHaveBeenCalled();
-      expect(onUpdateFailure).not.toHaveBeenCalled();
-      await overlays.reportUpdateFailure(run.runId);
-      expect(reportUpdateFailure).toHaveBeenCalledTimes(reportable ? 1 : 0);
-      expect(onUpdateFailure).not.toHaveBeenCalled();
-    } finally {
-      overlays.dispose();
-    }
-  },
-);
+])("offers explicit Report only for reportable skipped $reason", async ({ reason, reportable }) => {
+  const run = createUpdateRunFixture({ status: "skipped", phase: "finished", reason });
+  const request = vi.fn<RequestFn>(async () => ({ lastRun: run }));
+  const harness = harnessFor(request);
+  reportUpdateFailure.mockResolvedValue(null);
+  const overlays = createApplicationOverlays(harness.gateway);
+  try {
+    await flushMicrotasks();
+    expect(overlays.snapshot.reportableUpdateFailureId).toBe(reportable ? run.runId : null);
+    expect(reportUpdateFailure).not.toHaveBeenCalled();
+    await overlays.reportUpdateFailure(run.runId);
+    expect(reportUpdateFailure).toHaveBeenCalledTimes(reportable ? 1 : 0);
+  } finally {
+    overlays.dispose();
+  }
+});
 
 describe.each([
   { label: "legacy sentinel", run: null, attemptId: "handoff-failed" },

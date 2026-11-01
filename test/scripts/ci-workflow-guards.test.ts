@@ -43,6 +43,7 @@ import { resolveTestNodeExecPath } from "../../src/test-utils/node-process.js";
 import { awaitGateBeforeSettlement, withinTest } from "../helpers/promise.js";
 import { createTempDirTracker, useAutoCleanupTempDirTracker } from "../helpers/temp-dir.js";
 import { createPrebuiltUiE2eVitestConfig } from "../vitest/vitest.ui-e2e-prebuilt.config.ts";
+import { createUiE2eVitestConfig } from "../vitest/vitest.ui-e2e.config.ts";
 import { uiE2eRealGatewayTestFiles } from "../vitest/vitest.ui-paths.mjs";
 import { runCiGitStep } from "./ci-git-owner.test-support.js";
 import {
@@ -5601,7 +5602,10 @@ printf '%s\n' "\${CURL_SUCCESS_IP:-203.0.113.7}"
         expect(args.slice(6 + reporterArgs.length).toSorted()).toEqual(
           prebuilt ? ["--exclude", desktop] : frozenRealGatewayFiles.toSorted(),
         );
-        const selectedConfig = createPrebuiltUiE2eVitestConfig(
+        const createSelectedConfig = prebuilt
+          ? createPrebuiltUiE2eVitestConfig
+          : createUiE2eVitestConfig;
+        const selectedConfig = createSelectedConfig(
           { OPENCLAW_VITEST_INCLUDE_FILE: readFileSync(includePath, "utf8") },
           [testNodeExecPath, ...args],
         );

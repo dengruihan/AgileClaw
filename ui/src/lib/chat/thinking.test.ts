@@ -360,6 +360,7 @@ describe("pending model thinking targets", () => {
         session: row,
         sessionKey: "main",
       }),
+      "pending thinking target rebase",
     );
     expect(target.model).toBe("claude-opus");
     expect(target.modelProvider).toBe("anthropic");
@@ -379,6 +380,7 @@ describe("pending model thinking targets", () => {
         session: row,
         sessionKey: "main",
       }),
+      "pending thinking target null selection",
     );
     expect(target.model).toBe("claude-opus");
     expect(resolveThinkingCommandArgOptionsForSession(target, undefined, pendingCatalog)).toEqual([
@@ -396,6 +398,7 @@ describe("pending model thinking targets", () => {
         session: row,
         sessionKey: "main",
       }),
+      "pending thinking target miss",
     );
     expect(resolveThinkingCommandArgOptionsForSession(target, undefined, pendingCatalog)).toEqual(
       [],
@@ -429,6 +432,7 @@ describe("pending model thinking targets", () => {
         session: row,
         sessionKey: "main",
       }),
+      "pending thinking target qualification",
     );
     expect(target.model).toBe("claude-x");
     expect(target.modelProvider).toBe("anthropic");
@@ -450,6 +454,7 @@ describe("pending model thinking targets", () => {
         session: row,
         sessionKey: "main",
       }),
+      "pending thinking target defaults",
     );
     expect(target.model).toBe("gpt-default");
     expect(target.modelProvider).toBe("openai");

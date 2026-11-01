@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 
 import { describe, expect, it, vi } from "vitest";
-import type { SessionSystemPromptReport } from "../../../src/config/sessions/session-system-prompt-report.js";
+import type { SessionSystemPromptReport } from "../../../../src/config/sessions/session-system-prompt-report.js";
 import { GatewayBrowserClient } from "../../api/gateway.ts";
 import type { ToolsEffectiveResult } from "../../api/types.ts";
 import type { ApplicationGatewaySnapshot } from "../../app/gateway.ts";

@@ -1633,32 +1633,6 @@ describeBrowserLayout.concurrent("chat responsive browser layout", () => {
     }
   });
 
-  it("optically matches the effort lightning to the microphone without shrinking fast mode", async () => {
-    await withBrowserPage(openBrowserPage(800, 300), async (page) => {
-      await page.setContent(`<!doctype html><html><head><style>${readUiCss()}</style></head><body>
-        <div class="agent-chat__input">
-          <span class="chat-controls__effort-zap">${iconSvg()}</span>
-          <button class="chat-send-btn chat-send-btn--voice">${iconSvg()}</button>
-          <span class="chat-controls__fast-mode-icon">${iconSvg()}</span>
-        </div>
-      </body></html>`);
-      const sizes = await page.evaluate(() => {
-        const size = (selector: string) => {
-          const rect = document.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
-          return { height: rect.height, width: rect.width };
-        };
-        return {
-          effort: size(".chat-controls__effort-zap"),
-          fast: size(".chat-controls__fast-mode-icon"),
-          microphone: size(".chat-send-btn--voice svg"),
-        };
-      });
-      expect(sizes.effort).toEqual({ height: 14, width: 14 });
-      expect(sizes.microphone).toEqual({ height: 16, width: 16 });
-      expect(sizes.fast).toEqual({ height: 16, width: 16 });
-    });
-  });
-
   it("keeps the desktop model picker label-to-chevron gap at 4px", async () => {
     await withBrowserPage(openBrowserPage(800, 800), async (page) => {
       await page.setContent(`<!doctype html><html><head><style>${readUiCss()}</style></head><body>

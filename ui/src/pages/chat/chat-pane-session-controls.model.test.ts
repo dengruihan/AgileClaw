@@ -335,6 +335,10 @@ describe("chat pane model controls", () => {
     expect(trigger?.getAttribute("aria-disabled")).toBe("false");
 
     modelPatch.resolve({ ok: true, key: "main", path: "", entry: { sessionId: "main" } });
-    await expect(state.chatModelSwitchPromises.main).resolves.toBe(true);
+    const pendingSwitch = state.chatModelSwitchPromises?.main;
+    if (!pendingSwitch) {
+      throw new Error("Expected a pending main model switch promise");
+    }
+    await expect(pendingSwitch).resolves.toBe(true);
   });
 });

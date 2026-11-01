@@ -14,7 +14,6 @@ describe("command palette catalog search", () => {
       sessionItems: [],
       catalogItems: [],
       desktopAvailable: false,
-      custodianAvailable: false,
     });
     expect(items).toContainEqual(
       expect.objectContaining({ label: "Meetings", action: "nav:meetings" }),
