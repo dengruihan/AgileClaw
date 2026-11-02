@@ -44,7 +44,11 @@ done
 config_mode="$(config_direct_reply_mode)"
 if [ -n "$config_mode" ]; then
   die "$CHANNEL_DIRECT_MODE_PATH is still set to '$config_mode'. Unset it before restoring the stock plugin, or the strict upstream config schema will reject it at Gateway startup:
-  pnpm openclaw config unset $CHANNEL_DIRECT_MODE_PATH"
+  pnpm openclaw config unset $CHANNEL_DIRECT_MODE_PATH
+
+If that CLI command is refused because the config is already invalid against
+the installed plugin (config-without-patch state), run instead:
+  $OPS_DIR/scripts/recover-config.sh --yes"
 fi
 
 facts="$(plugin_facts_json)"

@@ -129,6 +129,26 @@ run_expect_fail() { # run_expect_fail <label> <cmd...>
 before_fingerprint="$(install_fingerprint)"
 
 # ---------------------------------------------------------------------------
+# 0a. A failing CLI must surface its real error (the host's stale-dist guard
+#     prints UpdatePreMutationError), not "plugins list produced no JSON".
+# ---------------------------------------------------------------------------
+fake_cli="$work/fake-openclaw"
+cat >"$fake_cli" <<'FAKE'
+#!/usr/bin/env bash
+echo "UpdatePreMutationError: Runtime artifacts changed, but the affected Gateway is running." >&2
+exit 1
+FAKE
+chmod +x "$fake_cli"
+if OPENCLAW_CLI="$fake_cli" "$ops/scripts/status.sh" >"$work/cli.log" 2>&1; then
+  results+=("FAIL status propagates a failing CLI")
+  failures=$((failures + 1))
+else
+  results+=("PASS status propagates a failing CLI")
+fi
+check "CLI failure output includes UpdatePreMutationError" grep -q 'UpdatePreMutationError' "$work/cli.log"
+check "CLI failure output recommends OPENCLAW_CLI" grep -q 'OPENCLAW_CLI' "$work/cli.log"
+
+# ---------------------------------------------------------------------------
 # 0. Seed the isolated state with the real-world precondition: the stock
 #    upstream plugin installed from npm.
 # ---------------------------------------------------------------------------
@@ -161,6 +181,58 @@ check "local package manifest defines directReplyMode" node -e '
 check "local package dist carries the patch marker" bash -c "tar -xOf '$package' package/dist/message-handler-C8eu5xwl.mjs | grep -q directReplyMode"
 
 # ---------------------------------------------------------------------------
+# 1b. config-without-patch recovery. In this state the CLI config commands
+#     refuse (invalid config), so recovery must edit the config-file owner.
+# ---------------------------------------------------------------------------
+set_key() {
+  node -e '
+    const fs = require("node:fs");
+    const c = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    c.channels["dingtalk-connector"].directReplyMode = process.argv[2];
+    fs.writeFileSync(process.argv[1], JSON.stringify(c, null, 2) + "\n");
+  ' "$OPENCLAW_CONFIG_PATH" "${1:-markdown}"
+}
+
+set_key markdown
+status_broken="$("$ops/scripts/status.sh" --json || true)"
+check "status flags config-without-patch" test "$(field "$status_broken" state)" = "config-without-patch"
+check "status hint points at recover-config.sh" bash -c "'$ops/scripts/status.sh' 2>&1 | grep -q recover-config.sh"
+run_expect_fail "config unset is refused in config-without-patch" cli config unset channels.dingtalk-connector.directReplyMode
+run_expect_fail "config validate fails in config-without-patch" cli config validate
+check "key survives the refused CLI unset" test "$(config_mode)" = "markdown"
+
+"$ops/scripts/recover-config.sh" --yes >"$work/recover.log" 2>&1 || {
+  cat "$work/recover.log" >&2
+  echo "config recovery failed" >&2
+  exit 1
+}
+check "recovery removed the stale key" test -z "$(config_mode)"
+check "recovery left a config backup" bash -c "ls -1d '$work/backups'/*-config/ >/dev/null 2>&1"
+check "recovery validates the config" cli config validate
+check "recovery did not install the local package" test "$(field "$(plugin_json)" version)" = "0.8.27"
+
+cp -p "$OPENCLAW_CONFIG_PATH" "$work/valid-config.json"
+set_key markdown
+"$ops/scripts/recover-config.sh" --yes --restore "$work/valid-config.json" >"$work/recover-restore.log" 2>&1 || {
+  cat "$work/recover-restore.log" >&2
+  echo "config restore recovery failed" >&2
+  exit 1
+}
+check "config restore recovery removed the key" test -z "$(config_mode)"
+check "config restore recovery validates" cli config validate
+
+# ---------------------------------------------------------------------------
+# 1c. --package without the upstream bytes must refuse instead of silently
+#     losing the documented offline rollback.
+# ---------------------------------------------------------------------------
+mkdir -p "$work/nopkg"
+cp "$package" "$work/nopkg/"
+run_expect_fail "deploy refuses --package without offline-rollback bytes" \
+  "$ops/scripts/deploy.sh" --yes --package "$work/nopkg/$(basename "$package")"
+check "refusal names --allow-online-rollback-only" grep -q 'allow-online-rollback-only' "$work/last.log"
+check "refused --package deploy did not install the local package" test "$(field "$(plugin_json)" version)" = "0.8.27"
+
+# ---------------------------------------------------------------------------
 # 2. Dry run leaves state untouched.
 # ---------------------------------------------------------------------------
 run_dry() { "$ops/scripts/deploy.sh"; }
@@ -173,13 +245,17 @@ fi
 check "dry run did not install the local package" bash -c "! test -d '$state/extensions/dingtalk-connector'"
 
 # ---------------------------------------------------------------------------
-# 3. Deploy through the plugin owner.
+# 3. Deploy through the plugin owner using --package (carries build.json and
+#    the upstream tarball next to it).
 # ---------------------------------------------------------------------------
-"$ops/scripts/deploy.sh" --yes >"$work/deploy.log" 2>&1 || {
+"$ops/scripts/deploy.sh" --yes --package "$package" >"$work/deploy.log" 2>&1 || {
   cat "$work/deploy.log" >&2
   echo "deploy failed" >&2
   exit 1
 }
+
+backup_dir="$(ls -1dt "$work/backups"/*/ | grep -v -- '-config/' | head -1)"
+backup_dir="${backup_dir%/}"
 
 facts="$(plugin_json)"
 check "installed plugin version is 0.8.27-claw.1" test "$(field "$facts" version)" = "0.8.27-claw.1"
@@ -187,14 +263,13 @@ check "plugin installed under the managed extensions dir" test "$(field "$facts"
 check "installed plugin carries the patch marker" grep -q directReplyMode "$state/extensions/dingtalk-connector/dist/message-handler-C8eu5xwl.mjs"
 check "required dependencies installed" test "$(field "$facts" dependencyStatus.requiredInstalled)" = "true"
 check "config directReplyMode is markdown" test "$(config_mode)" = "markdown"
-check "deploy manifest written" test -f "$work/backups/$(ls -1 "$work/backups" | head -1)/deploy.json"
+check "deploy manifest written" test -f "$backup_dir/deploy.json"
+check "--package deploy saved the upstream tarball for offline rollback" test -f "$backup_dir/upstream-0.8.27.tgz"
+check "deploy saved a pre-deploy config copy" test -f "$backup_dir/openclaw.json.before"
 check "deploy did not touch the npm-managed install bytes" test "$(install_fingerprint)" = "$before_fingerprint"
 
 status_json="$("$ops/scripts/status.sh" --json)"
 check "status reports a consistent deployment" test "$(field "$status_json" state)" = "consistent"
-
-backup_dir="$(ls -1dt "$work/backups"/*/ | head -1)"
-backup_dir="${backup_dir%/}"
 
 # ---------------------------------------------------------------------------
 # 4. Rollback guards.
@@ -257,7 +332,8 @@ check "rollback left the config key unset" test -z "$(config_mode)"
 check "rollback did not touch the npm-managed install bytes" test "$(install_fingerprint)" = "$before_fingerprint"
 
 # ---------------------------------------------------------------------------
-# 6. Deploy refuses a config key that the stock plugin cannot validate.
+# 6. Deploy refuses a config key that the stock plugin cannot validate, and
+#    recovery returns the config to a valid state without the CLI.
 # ---------------------------------------------------------------------------
 node -e '
   const fs = require("node:fs");
@@ -267,6 +343,15 @@ node -e '
   fs.writeFileSync(p, JSON.stringify(c, null, 2) + "\n");
 ' "$OPENCLAW_CONFIG_PATH"
 run_expect_fail "deploy refuses config-without-patch" "$ops/scripts/deploy.sh" --yes --package "$package"
+check "deploy refusal points at recover-config.sh" grep -q 'recover-config.sh' "$work/last.log"
+
+"$ops/scripts/recover-config.sh" --yes >"$work/recover-final.log" 2>&1 || {
+  cat "$work/recover-final.log" >&2
+  echo "final config recovery failed" >&2
+  exit 1
+}
+check "final recovery validates the stock config" cli config validate
+check "final recovery left no stale key" test -z "$(config_mode)"
 
 # ---------------------------------------------------------------------------
 # 7. Scripts never address the npm-managed install path.

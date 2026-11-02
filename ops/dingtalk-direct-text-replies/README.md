@@ -96,32 +96,42 @@ cd verify && ./build-scratch.sh && node run-tests.mjs
 OPENCLAW_ROOT=/path/to/built/checkout ./verify/deploy-tests.sh
 ```
 
-结果（2026-11-02）：**28/28 PASS**（`RESULT: 28/28 passed, 0 failed`）
+结果（2026-11-02）：**50/50 PASS**（`RESULT: 50/50 passed, 0 failed`）
 
 覆盖：
 
+- CLI 失败时原样暴露 `UpdatePreMutationError` 并提示 `OPENCLAW_CLI`（不再报 "plugins list produced no JSON"）
 - 构建产物版本、补丁标记、清单 schema 正确；保存已校验的上游 tarball
 - dry run 不写入任何状态
+- `config-without-patch` 恢复：`config unset`/`config validate` 在该状态被拒绝（证明 CLI 不可用），`recover-config.sh` 备份后移除遗留键并通过校验；`--restore` 恢复有效快照
+- `--package` 缺上游字节时部署拒绝；正常 `--package` 部署会保存上游 tarball 与部署前配置副本
 - `plugins install` 后版本为 `0.8.27-claw.1`、位于托管 extensions 目录、依赖已安装
 - `config set channels.dingtalk-connector.directReplyMode markdown` 被宿主接受（清单 schema 生效）
 - `status.sh --json` 报告一致状态
 - 回退保护：配置键未删时拒绝；deploy manifest 与已安装版本不匹配时拒绝；上游 tarball 字节被篡改时拒绝
-- 离线回退后版本回到 0.8.27、补丁标记消失
-- 部署/回退/构建脚本均不引用 `node_modules/@dingtalk-real-ai`；真实 npm 托管安装的字节指纹前后一致
+- `--package` 部署后用保存的上游 tarball 离线回退成功，版本回到 0.8.27、补丁标记消失
+- 部署/回退/构建/恢复脚本均不引用 `node_modules/@dingtalk-real-ai`；真实 npm 托管安装的字节指纹前后一致
 
-结果见本次任务报告（脚本输出 `RESULT: N/N passed`）。
+部署与回退脚本默认调用 `pnpm openclaw`。在 `dist` 与源码不同步、且 Gateway 正在运行的 checkout 上，`pnpm openclaw` 会先拒绝发布构建产物（`UpdatePreMutationError`，与本部署无关）；脚本会原样打印该错误并提示改用已构建的 CLI。下面 §6/§7/§8 的命令都默认先设置：
 
-部署与回退脚本默认调用 `pnpm openclaw`。在 `dist` 与源码不同步、且 Gateway 正在运行的 checkout 上，`pnpm openclaw` 会先拒绝发布构建产物（与本部署无关）；此时可用 `OPENCLAW_CLI="node /home/raymond/repos/AgileClaw/dist/index.js"` 直接驱动已构建的 CLI。测试脚本即用此方式隔离运行。
+```bash
+export OPENCLAW_CLI="node /home/raymond/repos/AgileClaw/dist/index.js"
+```
+
+（若该 checkout 已完成 `pnpm build`，也可不设，直接使用 `pnpm openclaw`。）
 
 ## 6. 部署步骤（需人工执行；本任务未执行）
 
 ```bash
 cd /home/raymond/repos/AgileClaw/ops/dingtalk-direct-text-replies
+export OPENCLAW_CLI="node /home/raymond/repos/AgileClaw/dist/index.js"
 
 ./scripts/deploy.sh            # 只打印计划，不改动
 ./scripts/deploy.sh --yes      # 构建本地包 → plugins install → config set
 ./scripts/status.sh            # 应为 patched=true、directReplyMode=markdown、state=consistent
 ```
+
+`--package <tgz>` 复用已构建的包时，必须同时具备同目录的 `build.json` 与它引用的 `upstream-0.8.27.tgz`，否则脚本会拒绝（避免丢失离线回退能力）；确实只接受在线回退时加 `--allow-online-rollback-only`。
 
 重启 Gateway（**需要用户批准；脚本不会执行**；本机为 systemd user 服务，不是 launchd）：
 
@@ -144,6 +154,7 @@ journalctl --user -u openclaw-gateway.service -n 50 --no-pager
 
 ```bash
 cd /home/raymond/repos/AgileClaw/ops/dingtalk-direct-text-replies
+export OPENCLAW_CLI="node /home/raymond/repos/AgileClaw/dist/index.js"
 
 # 必须先删配置键：stock 清单 schema 是 strict 的，残留键会导致 Gateway 启动失败
 pnpm openclaw config unset channels.dingtalk-connector.directReplyMode
@@ -154,18 +165,29 @@ pnpm openclaw config unset channels.dingtalk-connector.directReplyMode
 ./scripts/status.sh
 ```
 
+若已处于 `config-without-patch`（stock 已安装、配置键残留），CLI 的 `config unset` 会因为整份配置无效而拒绝。此时用文件 owner 的恢复脚本（先备份、再移除、后校验，失败自动回滚备份）：
+
+```bash
+./scripts/recover-config.sh            # 只打印计划
+./scripts/recover-config.sh --yes      # 备份 → 移除 channels.dingtalk-connector[.accounts.*].directReplyMode → config validate
+./scripts/recover-config.sh --yes --restore ~/.openclaw/backups/dingtalk-direct-text-replies/<ts>/openclaw.json.before
+```
+
+`deploy.sh` 每次部署都会把部署前的 `openclaw.json` 存为备份目录下的 `openclaw.json.before`，可直接用于 `--restore`。
+
 回退保护（均已测试）：
 
-- 配置键未删 → 拒绝，并给出 unset 命令
+- 配置键未删 → 拒绝，并给出 `config unset`/`recover-config.sh` 两条路径
 - 已安装版本不是 `0.8.27-claw.1`（例如被升级到别的版本）→ 拒绝，绝不混装两个版本的 `src`/`dist`
 - `deploy.json` 中 `local.version` 与已安装版本不一致 → 拒绝
 - `--offline` 时保存的上游 tarball sha512 与固定 integrity 不一致 → 拒绝
 
 ## 8. 升级/覆盖风险与长期方案
 
-- **插件更新会替换本地包**：安装记录的来源是 npm 包身份，`openclaw plugins update` / `openclaw update` 可能把它换回上游 0.8.27（或更新版本）。换回后行为静默回到卡片；**若配置键仍在，stock 清单 schema 会拒绝配置，Gateway 启动失败**。
-  - 任何插件更新/核心升级前：先 `pnpm openclaw config unset channels.dingtalk-connector.directReplyMode`。
-  - 更新后运行 `./scripts/status.sh`；`state=config-without-patch` 即表示必须先 unset；需要继续使用时重新 `./scripts/deploy.sh --yes`。
+- **插件更新对本地包的实际行为（本机观察）**：`openclaw plugins update` 会跳过 archive 安装记录（`Skipping "dingtalk-connector" (source: archive).`）；`openclaw update` 的插件通道同步只处理 npm/clawhub/path/bundled 记录。因此当前不会自动换回上游，但这是观察到的实现行为、不是契约：不要依赖它。
+  - 保守顺序不变：任何插件更新/核心升级前，先 `OPENCLAW_CLI=... pnpm openclaw config unset channels.dingtalk-connector.directReplyMode`。
+  - 更新后运行 `./scripts/status.sh`；`state=config-without-patch` 时用 `./scripts/recover-config.sh --yes` 恢复，需要继续使用时重新 `./scripts/deploy.sh --yes`。
+- **已知限制**：状态与回退脚本只读取顶层 `channels.dingtalk-connector.directReplyMode`（恢复脚本额外处理 `accounts.<id>.directReplyMode`）；使用 `$include` 的配置，键可能位于被包含文件，脚本不会编辑它们。本机为单账号、顶层配置，不受影响；多账号/include 部署需先扩展检查范围。
 - **这是过渡 owner，不是上游 owner**。长期方案：向上游 `DingTalk-Real-AI/dingtalk-openclaw-connector` 提交 PR（`src/config/schema.ts`、`src/reply-dispatcher.ts`、`openclaw.plugin.json` 三处；本补丁可直接作为 PR 内容）。上游发布后：unset 配置 → 安装上游版本 → 按上游键语义重新配置。
 
 ## 9. 产物清单
@@ -173,6 +195,7 @@ pnpm openclaw config unset channels.dingtalk-connector.directReplyMode
 - `patches/dingtalk-connector-0.8.27-direct-reply-mode.patch` — src + dist + 插件清单统一补丁
 - `scripts/build-package.sh` — 从固定上游 tarball 构建本地包（校验 sha512，输出 `build.json` 记录哈希）
 - `scripts/deploy.sh` / `scripts/rollback.sh` / `scripts/status.sh` — 部署/回退/状态；全部经插件管理器操作
+- `scripts/recover-config.sh` — `config-without-patch` 状态的文件 owner 恢复（备份、移除、校验、可恢复快照）
 - `scripts/lib.sh` — 共享路径与校验函数
 - `verify/build-scratch.sh`、`verify/run-tests.mjs`、`verify/stub-axios/` — 离线行为验证台
 - `verify/deploy-tests.sh` — 隔离 state 的真实插件管理器部署/回退测试

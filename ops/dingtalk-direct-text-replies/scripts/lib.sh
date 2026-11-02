@@ -60,14 +60,31 @@ sha256_hex() {
 
 # Current installed-plugin facts as compact JSON (version, source, rootDir,
 # status, dependencyStatus). Prints "null" when the plugin is not installed.
+#
+# CLI failures are surfaced verbatim: the common one on this host is
+# UpdatePreMutationError when `pnpm openclaw` refuses to publish stale dist
+# artifacts over a running Gateway. Swallowing it produced a misleading
+# "plugins list produced no JSON".
 plugin_facts_json() {
-  openclaw_cli plugins list --json 2>/dev/null | node -e '
+  local output
+  if ! output="$(openclaw_cli plugins list --json 2>&1)"; then
+    printf '%s\n' "$output" >&2
+    if printf '%s' "$output" | grep -q 'UpdatePreMutationError\|Runtime artifacts changed'; then
+      cat >&2 <<EOF
+The CLI refused before touching plugins: the checkout's dist is stale while its
+Gateway is running. Rebuild on the host, or drive the existing build directly:
+  OPENCLAW_CLI="node $OPENCLAW_ROOT/dist/index.js" $0 ...
+EOF
+    fi
+    die "openclaw plugins list failed (output above)"
+  fi
+  printf '%s' "$output" | node -e '
     let input = "";
     process.stdin.on("data", (chunk) => (input += chunk));
     process.stdin.on("end", () => {
       const start = input.indexOf("{");
       if (start < 0) {
-        process.stderr.write("plugins list produced no JSON\n");
+        process.stderr.write(input + "\nplugins list produced no JSON\n");
         process.exit(1);
       }
       const parsed = JSON.parse(input.slice(start));

@@ -84,7 +84,9 @@ case "$state" in
     ;;
   config-without-patch)
     echo "risk: the installed plugin is unpatched but the config key is set — Gateway startup will fail." >&2
-    echo "      unset it now: pnpm openclaw config unset $CHANNEL_DIRECT_MODE_PATH" >&2
+    echo "      recover: ./scripts/recover-config.sh --yes" >&2
+    echo "               (backs up openclaw.json, removes the stale key at the config-file owner, validates;" >&2
+    echo "                the CLI config commands refuse in this invalid-config state)" >&2
     exit 1
     ;;
   unexpected-version)
