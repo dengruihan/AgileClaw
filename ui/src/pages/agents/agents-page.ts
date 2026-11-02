@@ -59,12 +59,15 @@ import { GatewayPageController } from "../../lit/gateway-page-controller.ts";
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
 import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
 import {
-  loadAgentFileContent,
+  loadSelectedAgentFile,
   overwriteAgentFile,
+  refreshIdentityFileBase,
   reloadAgentFile,
   resetAgentFile,
   resetAgentFiles,
   saveAgentFile,
+  settleAgentFileWrite,
+  withIdentityFileEntry,
   type RetainedAgentFileDrafts,
 } from "./files.ts";
 import {
@@ -74,7 +77,7 @@ import {
   setIdentityDraftField,
   togglePinnedAgent,
 } from "./identity-actions.ts";
-import { createAgentModelActions } from "./model-config.ts";
+import { createAgentModelActions, stageAgentTools } from "./model-config.ts";
 import type { AgentIdentityDraft } from "./panels-overview.ts";
 import {
   navigateToAgent,
@@ -410,15 +413,19 @@ class AgentsPage
   }
 
   private async selectDefaultAgentFile(agentId: string, force = false) {
-    const files = this.agentFilesList?.files ?? [];
+    // The view synthesizes the IDENTITY.md tab the gateway list omits, so
+    // retention checks the same entry set or a held editor loses its selection.
+    const files = withIdentityFileEntry(this.agentFilesList);
     if (!this.agentFileActive || !files.some((file) => file.name === this.agentFileActive)) {
       this.agentFileActive = files.find((file) => file.name === "AGENTS.md")?.name ?? null;
     }
     if (this.agentFileActive) {
-      await loadAgentFileContent(this, agentId, this.agentFileActive, {
-        force,
-      });
+      await loadSelectedAgentFile(this, agentId, this.agentFileActive, { force });
     }
+  }
+
+  get agentIdentity() {
+    return this.context.agentIdentity;
   }
 
   private resetForSourceChange() {
@@ -809,7 +816,10 @@ class AgentsPage
         this.isCurrentRequest(client, generation, agentId, { agents, agentIdentity }),
       isCurrent: () =>
         this.isCurrentRequest(client, generation, agentId, { agents, agentIdentity }),
-      onSaved: () => this.syncAgentState(agents),
+      onSaved: () => {
+        this.syncAgentState(agents);
+        refreshIdentityFileBase(this, agentId);
+      },
     });
   }
 
@@ -835,21 +845,8 @@ class AgentsPage
   }
 
   private stageTools(agentId: string, values: Record<string, unknown>, ensure: boolean) {
-    if (agentId !== this.agentsSelectedId || !this.canCall("config.set", "operator.admin")) {
-      return;
-    }
-    const runtimeConfig = this.context.runtimeConfig;
-    const target = runtimeConfig.agentEntry(agentId, { ensure });
-    if (!target) {
-      return;
-    }
-    for (const [field, value] of Object.entries(values)) {
-      const path = [...target.path, "tools", field];
-      if (value === undefined) {
-        runtimeConfig.removeFormValue(path);
-      } else {
-        runtimeConfig.patchForm(path, value);
-      }
+    if (agentId === this.agentsSelectedId && this.canCall("config.set", "operator.admin")) {
+      stageAgentTools(this.context.runtimeConfig, agentId, values, ensure);
     }
   }
 
@@ -937,7 +934,7 @@ class AgentsPage
       agentId,
       name,
       this.agentFileDrafts[name] ?? this.agentFileContents[name] ?? "",
-    );
+    ).then((saved) => settleAgentFileWrite(this, agentId, name, saved));
   }
 
   private clearAgentSkills(agentId: string) {
@@ -1034,7 +1031,7 @@ class AgentsPage
             onSelectFile: (name) => {
               this.agentFileActive = name;
               if (selectedAgentId) {
-                void loadAgentFileContent(this, selectedAgentId, name);
+                void loadSelectedAgentFile(this, selectedAgentId, name);
               }
             },
             onFileDraftChange: (name, content) => {

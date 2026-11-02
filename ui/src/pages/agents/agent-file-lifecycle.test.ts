@@ -12,11 +12,13 @@ import type {
 import type { ApplicationContext, ApplicationGatewaySnapshot } from "../../app/context.ts";
 import { createAgentCapability } from "../../lib/agents/index.ts";
 import { gatewayHelloForMethods } from "../../test-helpers/gateway-methods.ts";
+import { agentsList, settingsSelection } from "./agents-page.test-support.ts";
 import { loadAgentFileContent } from "./files.ts";
 import type { AgentsRouteData } from "./route.ts";
 import "./agents-page.ts";
 
 const AGENT_FILE_GATEWAY_HELLO = gatewayHelloForMethods(["agents.files.set"]);
+const IDENTITY_FILE_GATEWAY_HELLO = gatewayHelloForMethods(["agents.files.set", "agents.update"]);
 
 type TestAgentsPage = HTMLElement &
   Parameters<typeof loadAgentFileContent>[0] & {
@@ -32,20 +34,25 @@ type TestAgentsPage = HTMLElement &
         binding: { initial: boolean; sourceChanged: boolean },
       ) => void;
     };
-    selectDefaultAgentFile: (agentId: string) => Promise<void>;
+    selectDefaultAgentFile: (agentId: string, force?: boolean) => Promise<void>;
     syncCurrentAgentFiles: (agents?: ApplicationContext["agents"]) => void;
     loadAgentFiles: (agentId: string, force?: boolean) => Promise<void>;
     saveSelectedAgentFile: (agentId: string, name: string) => void;
+    saveIdentityDraft: () => void;
+    identityDraft: { name: string | null; emoji: string | null; avatar: string | null };
     render: () => TemplateResult;
   };
 
-function snapshot(client: GatewayBrowserClient): ApplicationGatewaySnapshot {
+function snapshot(
+  client: GatewayBrowserClient,
+  hello: ApplicationGatewaySnapshot["hello"] = AGENT_FILE_GATEWAY_HELLO,
+): ApplicationGatewaySnapshot {
   return {
     client,
     phase: "connected",
     offlineStable: false,
     canvasPluginSurfaceUrl: null,
-    hello: AGENT_FILE_GATEWAY_HELLO,
+    hello,
     assistantAgentId: null,
     sessionKey: "main",
     lastError: null,
@@ -72,6 +79,16 @@ function fileList(): AgentsFilesListResult {
   };
 }
 
+function localAvatarIdentity(): ApplicationContext["agentIdentity"] {
+  return {
+    get: () => ({ agentId: "main", avatarStatus: "local" }),
+    entries: () => [],
+    ensure: vi.fn(async () => undefined),
+    invalidate: vi.fn(),
+    subscribe: vi.fn(() => () => undefined),
+  };
+}
+
 describe("agent file lifecycle", () => {
   it("hydrates a file selected by an early list publication after list loading settles", async () => {
     const list = fileList();
@@ -85,7 +102,11 @@ describe("agent file lifecycle", () => {
       recordFile: () => list,
     } as unknown as ApplicationContext["agents"];
     const page = document.createElement("openclaw-agents-page") as TestAgentsPage;
-    page.context = { gateway: gateway(snapshot(client)), agents } as unknown as ApplicationContext;
+    page.context = {
+      gateway: gateway(snapshot(client)),
+      agents,
+      agentIdentity: localAvatarIdentity(),
+    } as unknown as ApplicationContext;
     setPageGateway(page, client);
     page.agentsSelectedId = "main";
     page.routeData = { panel: "files" } as AgentsRouteData;
@@ -121,6 +142,7 @@ describe("agent file lifecycle", () => {
         refreshFiles,
         recordFile: () => list,
       },
+      agentIdentity: localAvatarIdentity(),
     } as unknown as ApplicationContext;
     setPageGateway(page, client);
     page.agentsSelectedId = "main";
@@ -201,7 +223,11 @@ describe("agent file lifecycle", () => {
       const agents = createAgentCapability(currentGateway);
       await agents.ensureFiles("main");
       const page = document.createElement("openclaw-agents-page") as TestAgentsPage;
-      page.context = { gateway: currentGateway, agents } as unknown as ApplicationContext;
+      page.context = {
+        gateway: currentGateway,
+        agents,
+        agentIdentity: localAvatarIdentity(),
+      } as unknown as ApplicationContext;
       setPageGateway(page, client);
       page.agentsSelectedId = "main";
       page.routeData = { panel: "files" } as AgentsRouteData;
@@ -353,6 +379,171 @@ describe("agent file lifecycle", () => {
         agents.dispose();
         render(null, container);
       }
+    },
+  );
+
+  it("holds IDENTITY.md content reads while the avatar is embedded Base64 and keeps the tab selected", async () => {
+    const list = fileList();
+    const request = vi.fn(async (_method: string, params: { name: string }) => ({
+      ...list,
+      file: { ...list.files[0], name: params.name, content: "# Instructions" },
+    }));
+    const client = { request } as unknown as GatewayBrowserClient;
+    const agents = {
+      files: () => ({ list, loading: false, error: null }),
+      recordFile: () => list,
+    } as unknown as ApplicationContext["agents"];
+    const page = document.createElement("openclaw-agents-page") as TestAgentsPage;
+    page.context = {
+      gateway: gateway(snapshot(client)),
+      agents,
+      agentIdentity: {
+        get: () => ({ agentId: "main", avatarStatus: "data" }),
+        entries: () => [],
+        ensure: vi.fn(async () => undefined),
+        invalidate: vi.fn(),
+        subscribe: vi.fn(() => () => undefined),
+      },
+    } as unknown as ApplicationContext;
+    setPageGateway(page, client);
+    page.agentsSelectedId = "main";
+    page.routeData = { panel: "files" } as AgentsRouteData;
+    page.agentFilesList = list;
+
+    await page.selectDefaultAgentFile("main");
+    expect(page.agentFileActive).toBe("AGENTS.md");
+
+    page.agentFileActive = "IDENTITY.md";
+    await page.selectDefaultAgentFile("main", true);
+
+    expect(page.agentFileActive).toBe("IDENTITY.md");
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls.every(([, params]) => params.name === "AGENTS.md")).toBe(true);
+  });
+
+  it("refreshes the identity cache after a direct IDENTITY.md save", async () => {
+    const identityFile = {
+      name: "IDENTITY.md",
+      path: "/tmp/workspace/IDENTITY.md",
+      missing: false,
+      hash: "b".repeat(64),
+    };
+    const request = vi.fn(async () => ({
+      ok: true,
+      agentId: "main",
+      workspace: "/tmp/workspace",
+      file: { ...identityFile, content: "# rewritten identity" },
+    }));
+    const client = { request } as unknown as GatewayBrowserClient;
+    const agentIdentity = {
+      get: () => ({ agentId: "main", avatarStatus: "local" }),
+      entries: () => [],
+      ensure: vi.fn(async () => undefined),
+      invalidate: vi.fn(),
+      subscribe: vi.fn(() => () => undefined),
+    };
+    const refreshList = vi.fn(async () => agentsList);
+    const agents = {
+      state: { agentsList },
+      files: () => ({ list: null, loading: false, error: null }),
+      recordFile: () => null,
+      refreshList,
+      subscribe: vi.fn(() => () => undefined),
+    } as unknown as ApplicationContext["agents"];
+    const page = document.createElement("openclaw-agents-page") as TestAgentsPage;
+    page.context = {
+      gateway: gateway(snapshot(client)),
+      agents,
+      agentIdentity,
+    } as unknown as ApplicationContext;
+    setPageGateway(page, client);
+    page.agentsSelectedId = "main";
+    page.agentFileDrafts = { "IDENTITY.md": "# rewritten identity" };
+
+    page.saveSelectedAgentFile("main", "IDENTITY.md");
+
+    await vi.waitFor(() => expect(page.agentFileSaving).toBe(false));
+    expect(page.agentFileContents["IDENTITY.md"]).toBe("# rewritten identity");
+    await vi.waitFor(() => expect(agentIdentity.invalidate).toHaveBeenCalledWith(["main"]));
+    expect(refreshList).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(agentIdentity.ensure).toHaveBeenCalledWith(["main"]));
+  });
+
+  it.each([false, true])(
+    "refreshes the IDENTITY.md base after the identity form rewrites it: %s dirty draft",
+    async (dirtyDraft) => {
+      const draftContent = "# IDENTITY.md\n\n- Name: Old\nunsaved operator edit\n";
+      let identityContent = "# IDENTITY.md\n\n- Name: Old\n";
+      const request = vi.fn(async (_method: string, params: { name?: string }) => {
+        if (params.name === "IDENTITY.md") {
+          return {
+            agentId: "main",
+            workspace: "/tmp/workspace",
+            file: {
+              name: "IDENTITY.md",
+              path: "/tmp/workspace/IDENTITY.md",
+              missing: false,
+              content: identityContent,
+              hash: "d".repeat(64),
+            },
+          };
+        }
+        throw new Error(`Unexpected request: ${JSON.stringify(params)}`);
+      });
+      const client = { request } as unknown as GatewayBrowserClient;
+      const agentIdentity = {
+        get: () => ({ agentId: "main", avatarStatus: "local", name: "New" }),
+        entries: () => [],
+        ensure: vi.fn(async () => undefined),
+        invalidate: vi.fn(),
+        subscribe: vi.fn(() => () => undefined),
+      };
+      const agents = {
+        state: { agentsList },
+        files: () => ({ list: null, loading: false, error: null }),
+        recordFile: () => null,
+        refreshList: vi.fn(async () => agentsList),
+        subscribe: vi.fn(() => () => undefined),
+      } as unknown as ApplicationContext["agents"];
+      const page = document.createElement("openclaw-agents-page") as TestAgentsPage;
+      page.context = {
+        gateway: gateway(snapshot(client, IDENTITY_FILE_GATEWAY_HELLO)),
+        agents,
+        agentIdentity,
+        settingsAgentSelection: settingsSelection(agentsList),
+        runtimeConfig: {
+          state: {},
+          runExternalMutation: vi.fn(async () => ({ ok: true, refresh: { ok: true } })),
+          subscribe: vi.fn(() => () => undefined),
+        },
+      } as unknown as ApplicationContext;
+      page.gateway.applySnapshot(snapshot(client, IDENTITY_FILE_GATEWAY_HELLO), {
+        initial: false,
+        sourceChanged: false,
+      });
+      page.agentsSelectedId = "main";
+      page.routeData = { panel: "files" } as AgentsRouteData;
+      page.agentFileContents = { "IDENTITY.md": identityContent };
+      page.agentFileVersions = { "IDENTITY.md": { hash: "c".repeat(64) } };
+      page.agentFileBaseVersions = { "IDENTITY.md": { hash: "c".repeat(64) } };
+      page.agentFileDrafts = { "IDENTITY.md": dirtyDraft ? draftContent : identityContent };
+      page.identityDraft = { name: "New", emoji: null, avatar: null };
+      identityContent = "# IDENTITY.md\n\n- Name: New\n";
+
+      page.saveIdentityDraft();
+
+      await vi.waitFor(() =>
+        expect(page.agentFileContents["IDENTITY.md"]).toBe("# IDENTITY.md\n\n- Name: New\n"),
+      );
+      expect(page.agentFileBaseVersions["IDENTITY.md"]).toEqual({ hash: "d".repeat(64) });
+      // A clean draft rebases onto the rewrite; a dirty draft survives with its
+      // original ancestry so the operator resolves the divergence through the
+      // normal save-conflict flow instead of losing unsaved text.
+      expect(page.agentFileDrafts["IDENTITY.md"]).toBe(dirtyDraft ? draftContent : identityContent);
+      expect(page.agentFileVersions["IDENTITY.md"]).toEqual({
+        hash: dirtyDraft ? "c".repeat(64) : "d".repeat(64),
+      });
+      expect(page.identityDraft).toEqual({ name: null, emoji: null, avatar: null });
     },
   );
 });

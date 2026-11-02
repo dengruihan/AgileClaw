@@ -1,20 +1,61 @@
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { GatewayRequestError, type GatewayBrowserClient } from "../../api/gateway.ts";
 import type {
+  AgentIdentityResult,
+  AgentFileEntry,
   AgentsFilesGetResult,
   AgentsFilesListResult,
   AgentsFilesSetResult,
 } from "../../api/types.ts";
+import type { AgentIdentityCapability } from "../../lib/agents/identity.ts";
 import type { AgentCapability } from "../../lib/agents/index.ts";
 import { formatUiError } from "../../lib/format-error.ts";
 
 type AgentFileVersion = { hash: string } | { missing: true };
 
+export const IDENTITY_FILE_NAME = "IDENTITY.md";
+
+/**
+ * The gateway list omits IDENTITY.md because agents.update rewrites it through
+ * a field merge; the files panel still offers it as a direct editor, so its tab
+ * is synthesized until a confirmed read or write supplies the real entry.
+ */
+export function withIdentityFileEntry(list: AgentsFilesListResult | null): AgentFileEntry[] {
+  const files = list?.files;
+  if (!list || !files) {
+    return [];
+  }
+  if (files.some((file) => file.name === IDENTITY_FILE_NAME)) {
+    return files;
+  }
+  const entry: AgentFileEntry = {
+    name: IDENTITY_FILE_NAME,
+    path: `${list.workspace.replace(/\/+$/, "")}/${IDENTITY_FILE_NAME}`,
+    missing: false,
+  };
+  const index = files.findIndex((file) => file.name === "USER.md" || file.name === "SOUL.md");
+  const insertAt = index === -1 ? files.length : index + 1;
+  return [...files.slice(0, insertAt), entry, ...files.slice(insertAt)];
+}
+
+/**
+ * IDENTITY.md editing waits while the persisted avatar is still embedded
+ * Base64: the file is megabytes of encoded image and the identity form's next
+ * save rewrites it. The editor offers migration guidance instead.
+ */
+export function isIdentityFileEditorHeld(
+  name: string,
+  identity: Pick<AgentIdentityResult, "avatarStatus"> | null | undefined,
+): boolean {
+  return name === IDENTITY_FILE_NAME && identity?.avatarStatus === "data";
+}
+
 export type AgentFilesState = {
   client: GatewayBrowserClient | null;
   connected: boolean;
   requestGeneration: number;
-  agents: Pick<AgentCapability, "recordFile">;
+  agents: Pick<AgentCapability, "recordFile" | "refreshList">;
+  agentIdentity: AgentIdentityCapability;
   agentFilesLoading: boolean;
   agentFilesError: string | null;
   agentFileContents: Record<string, string>;
@@ -293,4 +334,70 @@ export async function overwriteAgentFile(
     return false;
   }
   return await requestAgentFile(state, agentId, name, { kind: "write", content });
+}
+
+/** Selection-time read for one file. IDENTITY.md waits for the roster identity
+    before loading: an unresolved avatar status must not fetch the file while
+    it may still embed a Base64 avatar. A failed identity read falls back to a
+    normal load rather than silently locking the tab. Selection changes and
+    reconnects retire the wait, so a delayed identity cannot read a workspace
+    the page no longer shows. */
+export async function loadSelectedAgentFile(
+  state: AgentFilesState,
+  agentId: string,
+  name: string,
+  opts?: { force?: boolean },
+): Promise<boolean> {
+  if (name === IDENTITY_FILE_NAME && !state.agentIdentity.get(agentId)) {
+    const generation = state.requestGeneration;
+    const client = state.client;
+    await state.agentIdentity.ensure([agentId]).catch(() => undefined);
+    if (state.requestGeneration !== generation || state.client !== client) {
+      return false;
+    }
+  }
+  if (isIdentityFileEditorHeld(name, state.agentIdentity.get(agentId))) {
+    return false;
+  }
+  return loadAgentFileContent(state, agentId, name, opts);
+}
+
+/** A confirmed IDENTITY.md write changes the parsed identity the overview form
+    and sidebar display; drop the shared identity cache and re-read it so both
+    entries agree. The capabilities scope themselves to the live connection. */
+export async function syncIdentityAfterIdentityFileWrite(
+  state: AgentFilesState,
+  agentId: string,
+): Promise<void> {
+  state.agentIdentity.invalidate([agentId]);
+  await state.agents.refreshList().catch(() => undefined);
+  await state.agentIdentity.ensure([agentId]).catch(() => undefined);
+}
+
+/** After a file write settles, run the follow-up its name requires. */
+export function settleAgentFileWrite(
+  state: AgentFilesState,
+  agentId: string,
+  name: string,
+  saved: boolean,
+): void {
+  if (saved && name === IDENTITY_FILE_NAME) {
+    void syncIdentityAfterIdentityFileWrite(state, agentId);
+  }
+}
+
+/** The identity form rewrites IDENTITY.md through agents.update; advance the
+    direct editor's base so both entrances show the same content. A plain
+    forced read keeps a dirty draft and its expectedHash ancestry intact — the
+    next save conflicts and the operator resolves it — while clean drafts
+    rebase. A held editor keeps its migration guidance instead of pulling
+    embedded bytes. Callers run it while their request scope is current. */
+export function refreshIdentityFileBase(state: AgentFilesState, agentId: string): void {
+  if (
+    !Object.hasOwn(state.agentFileContents, IDENTITY_FILE_NAME) ||
+    isIdentityFileEditorHeld(IDENTITY_FILE_NAME, state.agentIdentity.get(agentId))
+  ) {
+    return;
+  }
+  void loadAgentFileContent(state, agentId, IDENTITY_FILE_NAME, { force: true });
 }

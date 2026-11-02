@@ -1264,6 +1264,11 @@ export const en: TranslationMap & {
       addFile: "Add file…",
       createHint: "This file does not exist yet. Saving will create it in the agent workspace.",
       content: "Content",
+      identityManagedHint:
+        "Name, emoji, and avatar are managed by the Identity form in Overview; other identity text here saves directly to IDENTITY.md.",
+      identityAvatarLegacy:
+        "This agent's avatar is still embedded in IDENTITY.md as Base64, so the file is too large to edit here. Re-save the avatar from the Identity form in Overview, or set a workspace image with openclaw agents set-identity --agent <id> --avatar <path>; editing opens here once the embedded avatar is gone.",
+      identityOpenForm: "Open identity form",
       words: "{count} words",
       lines: "lines",
       overwrite: "Overwrite",

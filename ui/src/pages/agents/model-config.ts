@@ -28,6 +28,27 @@ export function createAgentModelActions(params: {
   };
 }
 
+/** Stage per-agent tool overrides; the tools panel owns which fields it sends. */
+export function stageAgentTools(
+  runtimeConfig: RuntimeConfig,
+  agentId: string,
+  values: Record<string, unknown>,
+  ensure: boolean,
+) {
+  const target = runtimeConfig.agentEntry(agentId, { ensure });
+  if (!target) {
+    return;
+  }
+  for (const [field, value] of Object.entries(values)) {
+    const path = [...target.path, "tools", field];
+    if (value === undefined) {
+      runtimeConfig.removeFormValue(path);
+    } else {
+      runtimeConfig.patchForm(path, value);
+    }
+  }
+}
+
 /** Null inherits; an empty string is an explicit per-agent disable. */
 function stageAgentDecisionModel(
   runtimeConfig: RuntimeConfig,

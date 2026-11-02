@@ -844,6 +844,13 @@ describe("AgentsPage gateway lifecycle", () => {
         refreshFiles: vi.fn(async () => fileList),
         recordFile: vi.fn(),
       },
+      agentIdentity: {
+        get: () => ({ agentId: "main", avatarStatus: "local" }),
+        entries: () => [],
+        ensure: vi.fn(async () => undefined),
+        invalidate: vi.fn(),
+        subscribe: vi.fn(() => () => undefined),
+      },
     } as unknown as ApplicationContext;
 
     await page.loadAgentFiles("main");

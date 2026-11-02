@@ -27,7 +27,7 @@ import {
 } from "../../lib/config/config-state-model.ts";
 import type { CronState } from "../../lib/cron/types.ts";
 import type { ModelCatalogPresentation } from "../../lib/model-catalog-store.ts";
-import type { AgentFilesViewState } from "./files.ts";
+import { withIdentityFileEntry, type AgentFilesViewState } from "./files.ts";
 import { renderAgentFiles } from "./panels-files.ts";
 import type { AgentIdentityDraft, IdentityAvatarLoader } from "./panels-overview.ts";
 import { renderAgentOverview } from "./panels-overview.ts";
@@ -174,7 +174,11 @@ export function renderAgents(props: AgentsProps) {
     : null;
   const cronJobCount = selectedId ? props.cron.cronJobsTotal : null;
   const tabCounts: Record<string, number | null> = {
-    files: props.agentFiles.agentFilesList?.files?.length ?? null,
+    // The same synthesized entry set the files tab strip renders, so the
+    // visible count includes the IDENTITY.md editor tab.
+    files: props.agentFiles.agentFilesList
+      ? withIdentityFileEntry(props.agentFiles.agentFilesList).length
+      : null,
     skills: selectedSkillCount,
     channels: channelEntryCount,
     cron: cronJobCount || null,
@@ -229,9 +233,11 @@ export function renderAgents(props: AgentsProps) {
           agentFileDrafts: props.agentFiles.agentFileDrafts,
           agentFileSaving: props.agentFiles.agentFileSaving,
           agentFileConflict: props.agentFiles.agentFileConflict,
+          agentIdentity: props.agentIdentityById[agent.id] ?? null,
           canWrite: props.access.canWriteFiles,
           onLoadFiles: props.onLoadFiles,
           onSelectFile: props.onSelectFile,
+          onOpenIdentityForm: () => props.onSelectPanel("overview"),
           onFileDraftChange: props.onFileDraftChange,
           onFileReset: props.onFileReset,
           onFileSave: props.onFileSave,
