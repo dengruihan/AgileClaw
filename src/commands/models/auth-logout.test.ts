@@ -17,7 +17,8 @@ import {
 import * as catalogCredentials from "../../agents/plugin-model-catalog-credentials.js";
 import * as catalogs from "../../agents/plugin-model-catalog.js";
 import { registerModelsCli } from "../../cli/models-cli.js";
-import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import { coerceConfig } from "../../config/io.read-helpers.js";
+import type { OpenClawConfig, OpenClawConfigInput } from "../../config/types.openclaw.js";
 import { createDirectChatContext } from "../../gateway/server-chat.agent-events.test-helpers.js";
 import { handleGatewayRequest } from "../../gateway/server-methods.js";
 import type { RespondFn } from "../../gateway/server-methods/types.js";
@@ -368,14 +369,14 @@ describe("models auth logout", () => {
   });
 
   it("drops a provider entry left empty by key removal", async () => {
-    const cfg: OpenClawConfig = {
+    const cfg = coerceConfig({
       models: {
         providers: {
           openai: { apiKey: "openai:manual" },
           anthropic: { baseUrl: "https://example.test/v1" },
         },
       },
-    };
+    } satisfies OpenClawConfigInput);
     mocks.loadModelsConfig.mockResolvedValue(cfg);
     await modelsAuthLogoutCommand({ profileId: "openai:manual", yes: true }, createRuntime());
     const updated = await applyCapturedConfigUpdate(cfg);
@@ -387,10 +388,10 @@ describe("models auth logout", () => {
 
   it("drops a literal-key-only provider entry through the API-key logout path", async () => {
     const keyId = "openai:key";
-    let liveConfig: OpenClawConfig = {
+    let liveConfig = coerceConfig({
       auth: { profiles: { [keyId]: { provider: "openai", mode: "api_key" } } },
       models: { providers: { openai: { apiKey: "sk-literal-config-key" } } },
-    };
+    } satisfies OpenClawConfigInput);
     mocks.ensureAuthProfileStoreWithoutExternalProfiles.mockReturnValue(
       createAuthProfileStoreFixture({ [keyId]: createApiKeyCredential("openai", "synthetic-key") }),
     );
