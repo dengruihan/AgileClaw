@@ -14,6 +14,9 @@
 // senderId 时才可用；多条身份、无 inbound、senderId 缺失/非数字、文件损坏一律拒绝。
 // --target / DINGTALK_NOTIFY_TARGET 仅允许精确等于已钉定的 user:<本人staffId>；
 // group:、空 ID、他人 ID、损坏/陈旧状态一律拒绝。旧版 notify-target.json 不再被读取。
+// 兼容迁移：verifiedVia 不是 connector-context 的旧钉定（含已被真实测试证伪的
+// dws-auth-status 版本）在预览/发送前一律用连接器上下文重新验证——上下文恰一身份时
+// 以它为最终目标并安全迁移钉定（dry-run 只预览不写入）；上下文不可判定时 fail-closed。
 //
 // 职责边界：只负责把一条通知送达本人钉钉单聊。去重（每源每日一次、便单/日程查重）
 // 与是否需要通知由 collector 唤醒轮 Agent 按既有规则判断，本脚本不做。
@@ -93,17 +96,17 @@ const contextIdentity = () => {
   return { ok: true, id: [...ids][0] };
 };
 
-const pinOwner = (parsed, verifiedVia) => {
+const pinOwner = (parsed, verifiedVia, extra = {}) => {
   try {
     mkdirSync(stateDir, { recursive: true });
     writeFileSync(
       ownerFile,
-      `${JSON.stringify({ ownerTarget: parsed.target, verifiedVia, pinnedAt: new Date().toISOString() }, null, 2)}\n`,
+      `${JSON.stringify({ ownerTarget: parsed.target, verifiedVia, pinnedAt: new Date().toISOString(), ...extra }, null, 2)}\n`,
     );
   } catch (err) {
     fail(2, `无法写入目标钉定文件 ${ownerFile}：${err.message}`);
   }
-  return parsed;
+  return { ...parsed, verifiedVia };
 };
 
 const readPinnedOwner = () => {
@@ -121,14 +124,34 @@ const readPinnedOwner = () => {
       `目标钉定文件 ${ownerFile} 内容非法（${JSON.stringify(raw?.ownerTarget)}）；仅接受部署时核验的 user:<本人staffId>，请重新钉定`,
     );
   }
-  return parsed;
+  return { ...parsed, verifiedVia: typeof raw?.verifiedVia === "string" ? raw.verifiedVia : null };
 };
 
 // 解析本次发送要用的目标。flag/env 只是「显式携带已钉定目标」的通道，
 // 必须精确匹配钉定值；未钉定时唯一自举路径是连接器上下文（其 inbound senderId
 // 是机器人已实证接受的本人 staffId）。
+// 兼容迁移：verifiedVia 不是 connector-context 的旧钉定（dws-auth-status/manual-deploy/
+// 缺失，其中 dws 版已被真实测试证伪）一律视为未核验——发送前必须用连接器上下文
+// 重新验证：上下文恰一身份时以它为最终目标（persist 时把钉定安全迁移为 connector-context，
+// dry-run 只预览、不写）；上下文不可判定时 fail-closed，拒绝预览与发送。
 const resolveSendTarget = (flagTarget, envTarget, { persist = true } = {}) => {
   const pinned = readPinnedOwner();
+  let owner = pinned;
+  if (!pinned || pinned.verifiedVia !== "connector-context") {
+    const ctx = contextIdentity();
+    if (!ctx.ok) {
+      fail(
+        2,
+        `既有钉定（${pinned?.verifiedVia ?? "未知来源"}）未经连接器上下文核验，且上下文现在不可判定（${ctx.error}）；fail-closed，拒绝发送。请恢复连接器消息历史后重试，或删除 ${ownerFile} 后重新钉定`,
+      );
+    }
+    const ctxParsed = parseUserTarget(`user:${ctx.id}`);
+    if (!ctxParsed) fail(2, `连接器上下文身份非法：${JSON.stringify(ctx.id)}`);
+    const migratedFrom = pinned ? pinned.target : null;
+    owner = persist
+      ? pinOwner(ctxParsed, "connector-context", migratedFrom ? { migratedFrom } : {})
+      : { ...ctxParsed, verifiedVia: "connector-context" };
+  }
   const explicit = flagTarget ?? envTarget ?? "";
   if (explicit.toString().trim() !== "") {
     const parsed = parseUserTarget(explicit);
@@ -137,27 +160,14 @@ const resolveSendTarget = (flagTarget, envTarget, { persist = true } = {}) => {
         2,
         `目标安全拒绝：--target/DINGTALK_NOTIFY_TARGET 只能是已核验的 user:<本人staffId>（收到 ${JSON.stringify(String(explicit))}）；group:、空 ID 与其他形态一律不接受`,
       );
-    if (!pinned)
+    if (parsed.id !== owner.id)
       fail(
         2,
-        "目标尚未钉定：先执行 --set-owner user:<本人staffId>（与连接器上下文身份比对）再发送",
+        `目标安全拒绝：${parsed.target} 与连接器上下文核验的本人目标不一致（stale/foreign 目标）`,
       );
-    if (parsed.id !== pinned.id)
-      fail(2, `目标安全拒绝：${parsed.target} 与部署时核验的本人目标不一致（stale/foreign 目标）`);
-    return pinned;
+    return owner;
   }
-  if (pinned) return pinned;
-  const ctx = contextIdentity();
-  if (!ctx.ok) {
-    fail(
-      2,
-      `目标尚未钉定，且无法从连接器消息上下文判定本人身份（${ctx.error}）。部署时先人工确认后执行 --set-owner user:<本人staffId>`,
-    );
-  }
-  const parsed = parseUserTarget(`user:${ctx.id}`);
-  if (!parsed) fail(2, `连接器上下文身份非法：${JSON.stringify(ctx.id)}`);
-  if (!persist) return { ...parsed, verifiedVia: "connector-context" };
-  return pinOwner(parsed, "connector-context");
+  return owner;
 };
 
 // ---- 参数 ----

@@ -34,7 +34,9 @@ senderId——2026-11-02 真实测试证实它是 `robot/oToMessages/batchSend` 
 staffId（`dws auth status` 的 user_id **不是**，调用会返回 `staffId.notExisted`）。
 解析 fail-closed：全部 inbound 恰好同一纯数字 senderId 才可用；多身份、无 inbound、
 senderId 缺失/非数字、文件损坏一律拒绝。目标钉定在 `state/notify-owner.json`
-（`--set-owner` 或上下文自举写入，均须与上下文身份一致）；发送时 `--target`/env 必须
+（`--set-owner` 或上下文自举写入，均须与上下文身份一致；verifiedVia 非 connector-context
+的旧钉定（含已证伪的 dws-auth-status 版）在预览/发送前一律以上下文重新验证并安全迁移，
+上下文不可判定时 fail-closed）；发送时 `--target`/env 必须
 精确匹配钉定值，拒绝 group:/空 ID/他人 ID/损坏状态；按 ≤1900 code point 行边界分块
 （不拆代理对）；逐块调用 `openclaw gateway call dingtalk-connector.send`
 （`useAICard:false`、`msgType:"markdown"`）并校验返回 JSON `ok` 字段；非零退出时
@@ -56,17 +58,22 @@ diff ops/collector-phase2/files/home/raymond/.openclaw/workspace/collection/trig
 cp ops/dingtalk-private-notifications/files/home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs \
    /home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs
 
-# 2. 钉定本人目标（一次性；权威来源为连接器消息上下文 inbound senderId）
+# 2. 钉定/迁移本人目标（一次性；权威来源为连接器消息上下文 inbound senderId）
 node /home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs \
   --title "目标钉定" --text "部署期目标钉定" --dry-run
-# 首次运行无钉定时会自动从连接器上下文解析本人身份并钉定（dry-run 不写钉定；
-# 正式发送或用 --set-owner 才写）。期望输出 target 为 user:<20位数字>。
+# 无钉定时 dry-run 会从连接器上下文解析本人身份并预览（不写钉定）；
+# 若 state/notify-owner.json 留有旧版 verifiedVia=dws-auth-status 的错误钉定，
+# dry-run 预览目标会是上下文身份而非旧钉定。正式发送（步骤 3）或 --set-owner
+# 会把钉定迁移为 verifiedVia=connector-context；上下文不可判定（多身份/无 inbound/
+# 损坏）时 fail-closed 拒绝发送与预览，须恢复连接器消息历史后重试。
+# 期望输出 target 为 user:<20位数字>。
 # 注意：不要使用 `dws auth status` 的 user_id 作为目标——真实测试（2026-11-02）证实
 # 它不是 oToMessages 的合法 staffId（返回 staffId.notExisted）。
 # 如需显式钉定（例如在上下文不可判定的人工核验后）：
 #   node /home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs --set-owner user:<本人staffId>
 #（--set-owner 会与上下文身份比对，不一致即拒绝；verifiedVia=connector-context）
-# 核验：cat /home/raymond/.openclaw/workspace/collection/state/notify-owner.json（只含 ID，不涉凭据）。
+# 核验：cat /home/raymond/.openclaw/workspace/collection/state/notify-owner.json
+# 部署成功发送后应显示 verifiedVia=connector-context（旧 dws 钉定会带 migratedFrom 记录）。
 
 # 3. 真实单条测试（用户已授权这一条；建议工作日白天执行。目标已钉定，无需再带 --target）
 node /home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs \

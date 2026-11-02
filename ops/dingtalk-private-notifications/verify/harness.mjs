@@ -175,10 +175,10 @@ const openclawCalls = (logFile) =>
     .map((e) => e.argv);
 const paramsOf = (argv) => JSON.parse(argv[argv.indexOf("--params") + 1]);
 const ownerFileOf = (stateDir) => join(stateDir, "notify-owner.json");
-const pinOwner = (fx, id = SELF_ID) => {
+const pinOwner = (fx, id = SELF_ID, verifiedVia = "connector-context") => {
   writeFileSync(
     ownerFileOf(fx.stateDir),
-    `${JSON.stringify({ ownerTarget: `user:${id}`, verifiedVia: "test-pin", pinnedAt: "2026-11-02T00:00:00.000Z" }, null, 2)}\n`,
+    `${JSON.stringify({ ownerTarget: `user:${id}`, verifiedVia, pinnedAt: "2026-11-02T00:00:00.000Z" }, null, 2)}\n`,
   );
 };
 
@@ -324,7 +324,117 @@ const hasLoneSurrogate = (s) => {
   rmSync(fx4.dir, { recursive: true, force: true });
 }
 
-// 6. 权威来源：dws 类 ID 不等于 staffId 时必须以连接器上下文 inbound senderId 为准
+// 6. legacy dws 钉定迁移（真实回归：线上留有 verifiedVia=dws-auth-status 的错误 ID 钉定）
+{
+  // a) dry-run：预览以上下文身份为准，零写副作用、零调用
+  const fx = makeEnv({ context: "valid" });
+  pinOwner(fx, FOREIGN_ID, "dws-auth-status");
+  const r0 = run(fx.env, sendArgs("迁移预览", ["--dry-run"]));
+  check(
+    "legacy dws 钉定 dry-run → 预览目标=上下文身份",
+    r0.status === 0 &&
+      r0.stdout.includes(`user:${SELF_ID}`) &&
+      !r0.stdout.includes(`user:${FOREIGN_ID}`),
+    `${r0.status} ${r0.stderr} ${r0.stdout.slice(0, 200)}`,
+  );
+  check(
+    "legacy dws 钉定 dry-run 零调用零写入",
+    openclawCalls(fx.logFile).length === 0 &&
+      (() => {
+        try {
+          const o = JSON.parse(readFileSync(ownerFileOf(fx.stateDir), "utf8"));
+          return o.verifiedVia === "dws-auth-status" && o.ownerTarget === `user:${FOREIGN_ID}`;
+        } catch {
+          return false;
+        }
+      })(),
+  );
+  rmSync(fx.dir, { recursive: true, force: true });
+
+  // b) 正式发送：自动迁移到上下文身份并送达
+  const fx2 = makeEnv({ context: "valid" });
+  pinOwner(fx2, FOREIGN_ID, "dws-auth-status");
+  const r1 = run(fx2.env, sendArgs("迁移后发送"));
+  check(
+    "legacy dws 钉定发送 → 目标=上下文身份",
+    r1.status === 0 && paramsOf(openclawCalls(fx2.logFile)[0]).target === `user:${SELF_ID}`,
+    `${r1.status} ${r1.stderr}`,
+  );
+  check(
+    "legacy dws 钉定发送后自动迁移 owner 文件",
+    (() => {
+      try {
+        const o = JSON.parse(readFileSync(ownerFileOf(fx2.stateDir), "utf8"));
+        return (
+          o.ownerTarget === `user:${SELF_ID}` &&
+          o.verifiedVia === "connector-context" &&
+          o.migratedFrom === `user:${FOREIGN_ID}`
+        );
+      } catch {
+        return false;
+      }
+    })(),
+    readFileSync(ownerFileOf(fx2.stateDir), "utf8"),
+  );
+  rmSync(fx2.dir, { recursive: true, force: true });
+
+  // c) legacy 钉定与上下文一致：同样升级为 connector-context
+  const fx3 = makeEnv({ context: "valid" });
+  pinOwner(fx3, SELF_ID, "dws-auth-status");
+  const r2 = run(fx3.env, sendArgs("同身份迁移"));
+  check("legacy 同身份发送成功", r2.status === 0, `${r2.status} ${r2.stderr}`);
+  check(
+    "legacy 同身份 owner 升级为 connector-context",
+    (() => {
+      try {
+        const o = JSON.parse(readFileSync(ownerFileOf(fx3.stateDir), "utf8"));
+        return o.verifiedVia === "connector-context" && o.ownerTarget === `user:${SELF_ID}`;
+      } catch {
+        return false;
+      }
+    })(),
+  );
+  rmSync(fx3.dir, { recursive: true, force: true });
+
+  // d) 上下文歧义/损坏时 fail-closed：不发送、不迁移
+  for (const [mode, label] of [
+    ["multi", "多身份"],
+    ["corrupt", "损坏"],
+    ["empty", "无 inbound"],
+  ]) {
+    const fxA = makeEnv({ context: mode });
+    pinOwner(fxA, FOREIGN_ID, "dws-auth-status");
+    const ra = run(fxA.env, sendArgs("x"));
+    check(
+      `legacy 钉定 + 上下文${label} → 退出 2 不发送`,
+      ra.status === 2 && openclawCalls(fxA.logFile).length === 0,
+      `${ra.status} ${ra.stderr}`,
+    );
+    check(
+      `legacy 钉定 + 上下文${label} → 不迁移文件`,
+      (() => {
+        try {
+          const o = JSON.parse(readFileSync(ownerFileOf(fxA.stateDir), "utf8"));
+          return o.verifiedVia === "dws-auth-status";
+        } catch {
+          return false;
+        }
+      })(),
+    );
+    rmSync(fxA.dir, { recursive: true, force: true });
+  }
+
+  // e) legacy 钉定下显式 --target：只能等于上下文身份，不能等于旧错误钉定
+  const fx4 = makeEnv({ context: "valid" });
+  pinOwner(fx4, FOREIGN_ID, "dws-auth-status");
+  const r3 = run(fx4.env, sendArgs("x", ["--target", `user:${SELF_ID}`]));
+  check("legacy 钉定 + --target=上下文身份 → 允许", r3.status === 0, `${r3.status} ${r3.stderr}`);
+  const r4 = run(fx4.env, sendArgs("x", ["--target", `user:${FOREIGN_ID}`]));
+  check("legacy 钉定 + --target=旧错误 ID → 拒绝", r4.status === 2, `${r4.status} ${r4.stderr}`);
+  rmSync(fx4.dir, { recursive: true, force: true });
+}
+
+// 7. 权威来源：其他 ID 来源（dws 形态）不等于 staffId 时必须以连接器上下文为准
 {
   // 真实回归（2026-11-02 真实测试）：某 ID 来源给出 FOREIGN_ID，上下文身份是 SELF_ID → 必须发 SELF_ID
   const fx = makeEnv({ context: "valid" });
