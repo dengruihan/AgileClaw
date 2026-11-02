@@ -98,6 +98,24 @@ describe("host-owned workspace access", () => {
     },
   );
 
+  it("forwards optional bridge removal through the binding lifetime", async () => {
+    const root = workspace();
+    const remove = vi.fn(async () => {});
+    const release = bindWorkspace(root, {
+      bridge: { ...provider().bridge, remove },
+    });
+
+    const retained = getAgentWorkspaceAccess(root)!.bridge;
+    await retained.remove?.({ filePath: "IDENTITY.md" });
+    expect(remove).toHaveBeenCalledExactlyOnceWith({ filePath: "IDENTITY.md" });
+
+    release();
+    await expect(retained.remove?.({ filePath: "IDENTITY.md" })).rejects.toMatchObject({
+      code: "WORKSPACE_ACCESS_UNAVAILABLE",
+    });
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves remote discovery failure causes across the SDK boundary", async () => {
     const root = workspace();
     const cause = new Error("transport disconnected");

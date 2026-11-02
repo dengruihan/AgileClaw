@@ -399,6 +399,60 @@ it("restores IDENTITY.md when the config write fails after the avatar is publish
   expect(await fs.readFile(state.configPath, "utf8")).toBe(originalConfig);
 });
 
+it("removes a newly created remote IDENTITY.md when the config write fails", async () => {
+  await fs.rm(identityPath, { force: true });
+  config = {
+    ...config,
+    agents: {
+      entries: { existing: { workspace, identity: { name: "Existing" } } },
+    },
+  };
+  await state.writeConfig(config);
+  const originalConfig = await fs.readFile(state.configPath, "utf8");
+  const remove = vi.fn(async (params: { filePath: string }) => {
+    if (params.filePath === "IDENTITY.md") {
+      await fs.rm(identityPath, { force: true });
+    }
+  });
+  const release = registerAgentWorkspaceAccess(workspace, {
+    bridge: {
+      readFile: async ({ filePath }) => {
+        try {
+          return await fs.readFile(path.join(workspace, filePath));
+        } catch {
+          throw Object.assign(new Error(`missing ${filePath}`), { code: "ENOENT" });
+        }
+      },
+      writeFile: async ({ filePath, data }) => {
+        const destination = path.join(workspace, filePath);
+        await fs.mkdir(path.dirname(destination), { recursive: true });
+        await fs.writeFile(destination, data);
+      },
+      remove,
+      stat: vi.fn(),
+    },
+  });
+  const prepare = configBackup.prepareConfigFileWrite;
+  let failOnce = true;
+  vi.spyOn(configBackup, "prepareConfigFileWrite").mockImplementation(async (params) => {
+    if (failOnce) {
+      failOnce = false;
+      throw new Error("config write refused after publish");
+    }
+    return await prepare(params);
+  });
+
+  try {
+    await expect(call("agents.update")).rejects.toThrow("config write refused after publish");
+
+    expect(remove).toHaveBeenCalledExactlyOnceWith({ filePath: "IDENTITY.md" });
+    await expect(fs.access(identityPath)).rejects.toThrow();
+    expect(await fs.readFile(state.configPath, "utf8")).toBe(originalConfig);
+  } finally {
+    release();
+  }
+});
+
 it("restores the previous IDENTITY.md when the config update is refused", async () => {
   const identityWithStoredAvatar =
     "# Identity\n\n- Name: Existing\n- Avatar: avatars/old-only-copy.png\n\nKeep these notes.\n";

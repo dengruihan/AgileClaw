@@ -148,6 +148,10 @@ export function registerAgentWorkspaceAccess(
   if (readDirectory) {
     bridge.readDirectory = guardCall(readDirectory);
   }
+  const remove = access.bridge.remove?.bind(access.bridge);
+  if (remove) {
+    bridge.remove = guardCall(remove);
+  }
   const boundAccess: AgentWorkspaceAccess = { bridge: Object.freeze(bridge) };
   const outboundMedia = access.outboundMedia;
   if (outboundMedia) {
