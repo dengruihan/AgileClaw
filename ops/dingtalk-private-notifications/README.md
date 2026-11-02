@@ -14,7 +14,7 @@
 | --------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
 | 提醒/告警通道   | 灯效推送（`ntf.cjs light send`）                             | 私人钉钉机器人 Markdown 单聊（非 AI 卡片）                                                                |
 | 发送命令        | `ntf.cjs light send --segments ... --title ... --reason ...` | `node /home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs --title <标题≤20字> --text <正文>` |
-| 目标约束        | 灯效硬件通道                                                 | **只发本人单聊**：部署时核验的 staffId 钉定，flag/env/state/dws 均须精确匹配                              |
+| 目标约束        | 灯效硬件通道                                                 | **只发本人单聊**：连接器上下文 inbound senderId 钉定，flag/env 均须精确匹配                               |
 | 通道失败时      | 无回退                                                       | 脚本退出码 1 并打印灯效回退命令；prompt 要求退回灯效                                                      |
 | 自动化 delivery | `none`                                                       | `none`（不变）                                                                                            |
 | 灯效工具        | 主通道                                                       | 回退保留，不清理                                                                                          |
@@ -28,11 +28,17 @@
 | `ops/dingtalk-private-notifications/files/home/raymond/.openclaw/workspace/collection/trigger-collector.mjs` | `/home/raymond/.openclaw/workspace/collection/trigger-collector.mjs`（+ cron edit 内嵌副本） | post-M2 完整触发脚本（= M1 tip 7a53295ef 版 + R2a/R2b 措辞） |
 | `prompt-segments/replacements.md` R3                                                                         | 线上 collection README 一行                                                                  | 一次性安全替换（命令见步骤 5）                               |
 
-包装脚本职责：钉定并强制使用本人单聊目标（`--set-owner` 或 dws 自举写入
-`state/notify-owner.json`；发送时 `--target`/env 必须精确匹配钉定值，拒绝 group:/空 ID/
-他人 ID/损坏状态）；按 ≤1900 code point 行边界分块（不拆代理对）；逐块调用
-`openclaw gateway call dingtalk-connector.send`（`useAICard:false`、`msgType:"markdown"`）；
-校验返回 JSON `ok` 字段。不读取/输出凭据；去重与分诊判断不在脚本内。
+包装脚本职责：钉定并强制使用本人单聊目标。权威来源是连接器自己的消息上下文
+（`~/.openclaw/dingtalk-connector/message-context.json`）中本人私人会话 inbound 记录的
+senderId——2026-11-02 真实测试证实它是 `robot/oToMessages/batchSend` 唯一接受的本人
+staffId（`dws auth status` 的 user_id **不是**，调用会返回 `staffId.notExisted`）。
+解析 fail-closed：全部 inbound 恰好同一纯数字 senderId 才可用；多身份、无 inbound、
+senderId 缺失/非数字、文件损坏一律拒绝。目标钉定在 `state/notify-owner.json`
+（`--set-owner` 或上下文自举写入，均须与上下文身份一致）；发送时 `--target`/env 必须
+精确匹配钉定值，拒绝 group:/空 ID/他人 ID/损坏状态；按 ≤1900 code point 行边界分块
+（不拆代理对）；逐块调用 `openclaw gateway call dingtalk-connector.send`
+（`useAICard:false`、`msgType:"markdown"`）并校验返回 JSON `ok` 字段；非零退出时
+stdout/stderr 都保留在错误信息里便于诊断。不读取/输出凭据；去重与分诊判断不在脚本内。
 
 ## 部署步骤（审查通过后由 tower 执行；所有命令从仓库根目录运行）
 
@@ -50,12 +56,17 @@ diff ops/collector-phase2/files/home/raymond/.openclaw/workspace/collection/trig
 cp ops/dingtalk-private-notifications/files/home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs \
    /home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs
 
-# 2. 钉定本人目标（一次性；dws 可用时会强制与 dws auth status 的本人 user_id 比对，
-#    foreign 目标直接拒绝；dws 不可用时由 tower 对照 dws auth status 历史输出核验后执行）
-node /home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs --set-owner user:<本人staffId>
-# 期望：stdout {"ok":true,"ownerTarget":"user:<staffId>","verifiedVia":"dws-auth-status"|"manual-deploy"}
-# 核验：cat /home/raymond/.openclaw/workspace/collection/state/notify-owner.json
-# staffId 形状 3000...，经 `dws auth status --format json` 的 user_id 取得（只写 ID，不涉凭据）。
+# 2. 钉定本人目标（一次性；权威来源为连接器消息上下文 inbound senderId）
+node /home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs \
+  --title "目标钉定" --text "部署期目标钉定" --dry-run
+# 首次运行无钉定时会自动从连接器上下文解析本人身份并钉定（dry-run 不写钉定；
+# 正式发送或用 --set-owner 才写）。期望输出 target 为 user:<20位数字>。
+# 注意：不要使用 `dws auth status` 的 user_id 作为目标——真实测试（2026-11-02）证实
+# 它不是 oToMessages 的合法 staffId（返回 staffId.notExisted）。
+# 如需显式钉定（例如在上下文不可判定的人工核验后）：
+#   node /home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs --set-owner user:<本人staffId>
+#（--set-owner 会与上下文身份比对，不一致即拒绝；verifiedVia=connector-context）
+# 核验：cat /home/raymond/.openclaw/workspace/collection/state/notify-owner.json（只含 ID，不涉凭据）。
 
 # 3. 真实单条测试（用户已授权这一条；建议工作日白天执行。目标已钉定，无需再带 --target）
 node /home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs \

@@ -52,8 +52,24 @@
   「Send to third parties」节）已记录其走钉钉 IPaaS 并失败
   `dingOpenErrcode 400106 robot 不存在`；该应用的 robot 只存在于直连 Open API 路径
   （连接器自己的发送器即 `robotCode = clientId` 直打 `robot/oToMessages/batchSend`）。
+- **`dws auth status` 的 user_id 作为接收人 ID**：2026-11-02 16:06 真实测试证实不可用。
+  Gateway/connector 健康、`dingtalk-connector.send` 调用以 `useAICard:false` 正常到达
+  API，但以 dws user_id 为 userIds 时钉钉返回 `staffId.notExisted`，0/1 未送达。
+  合法接收人是连接器消息上下文（`~/.openclaw/dingtalk-connector/message-context.json`）
+  里本人私人会话 inbound 记录的 senderId：该会话多条 inbound 的 senderId 为同一个
+  一致的 20 位纯数字 ID（与 dws user_id 不同），即 `oToMessages/batchSend` userIds
+  接受的 staffId。该 ID 不写入本文档与任何交付物。
 - **群回复模式 `groupReplyMode`**：只影响群聊，且本通知场景是单聊，不适用。
 - **DM 自动回复关卡片**：插件无此配置（见第 1 条），不做全局改造去 patch 插件。
+
+## 真实测试记录（2026-11-02 16:06，tower 执行）
+
+- 调用：`dingtalk-connector.send`，`target=user:<dws user_id>`，`useAICard:false`，
+  `msgType:markdown`——路线正确到达 API。
+- 结果：失败 `staffId.notExisted`（未送达），message-context 无新增测试记录。
+- 根因：dws user_id ≠ oToMessages staffId（见上节）。
+- 处置（本返工）：目标权威改为连接器上下文 inbound senderId，fail-closed 解析；
+  目标安全模型（钉定 + 精确匹配 + group/foreign 拒绝）保持不变。
 
 ## 现场状态（只读核验 2026-11-02）
 

@@ -1,6 +1,7 @@
-// dingtalk-notify 包装器的 fixture 干跑验证（不触碰真实 Gateway / 钉钉 / dws）。
-// 用 Mock 的 openclaw / dws 验证：调用参数、AI 卡片关闭、本人目标强制、
-// code-point 安全分块、失败与部分送达行为。退出码 0 = 全部通过。
+// dingtalk-notify 包装器的 fixture 干跑验证（不触碰真实 Gateway / 钉钉 / 连接器上下文）。
+// 用 Mock 的 openclaw 与临时上下文文件验证：调用参数、AI 卡片关闭、本人目标强制
+//（连接器上下文 inbound senderId 为权威）、code-point 安全分块、失败与部分送达行为。
+// 退出码 0 = 全部通过。
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -38,19 +39,79 @@ function check(name, cond, detail = "") {
   }
 }
 
-// 每个用例一个独立 tmp 目录：mock bin/（openclaw、dws）、state/、调用日志。
+const inboundRec = (senderId, id = "msg1") => ({
+  scope: { accountId: "__default__", conversationId: "cidSelf=" },
+  id,
+  direction: "inbound",
+  senderId,
+  text: "hi",
+  createdAt: 1,
+});
+const outboundRec = (id = "card_1") => ({
+  scope: { accountId: "__default__", conversationId: "cidSelf=" },
+  id,
+  direction: "outbound",
+  text: "reply",
+  createdAt: 2,
+});
+
+// 上下文 fixture 形态：
+//  valid            → 两条同身份 inbound + 一条 outbound（真实形态）
+//  empty            → 只有 outbound，无 inbound
+//  multi            → 两个不同 inbound 身份
+//  corrupt          → 非 JSON
+//  badshape         → records 非数组
+//  missing-sender   → inbound 缺 senderId
+//  nonnumeric-sender→ inbound senderId 非纯数字
+//  absent           → 文件不存在
+function contextFixture(mode) {
+  switch (mode) {
+    case "valid":
+      return JSON.stringify({
+        version: 1,
+        records: [inboundRec(SELF_ID, "m1"), outboundRec(), inboundRec(SELF_ID, "m2")],
+      });
+    case "empty":
+      return JSON.stringify({ version: 1, records: [outboundRec("o1"), outboundRec("o2")] });
+    case "multi":
+      return JSON.stringify({
+        version: 1,
+        records: [inboundRec(SELF_ID, "m1"), inboundRec(FOREIGN_ID, "m2")],
+      });
+    case "corrupt":
+      return "not-json{";
+    case "badshape":
+      return JSON.stringify({ version: 1, records: "nope" });
+    case "missing-sender": {
+      const r = inboundRec(SELF_ID);
+      delete r.senderId;
+      return JSON.stringify({ version: 1, records: [r] });
+    }
+    case "nonnumeric-sender":
+      return JSON.stringify({ version: 1, records: [inboundRec("unionIdXyz")] });
+    case "absent":
+      return null;
+    default:
+      throw new Error(`未知 fixture 形态 ${mode}`);
+  }
+}
+
+// 每个用例一个独立 tmp 目录：mock bin/openclaw、上下文文件、state/、调用日志。
 function makeEnv({
-  dwsUserId = SELF_ID,
-  dwsFail = false,
+  context = "valid",
   openclawStdout = '{"ok":true,"processQueryKey":"pqk-1"}',
   openclawCode = 0,
+  openclawStderr = "",
 } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "dt-notify-"));
   const binDir = join(dir, "bin");
   const stateDir = join(dir, "state");
+  const contextDir = join(dir, "context");
   mkdirSync(binDir);
   mkdirSync(stateDir);
+  mkdirSync(contextDir);
   const logFile = join(dir, "calls.jsonl");
+  const contextFile = join(contextDir, "message-context.json");
 
   const openclawMock = join(binDir, "openclaw");
   writeFileSync(
@@ -59,23 +120,17 @@ function makeEnv({
 const fs = require("node:fs");
 fs.appendFileSync(process.env.MOCK_LOG, JSON.stringify({ bin: "openclaw", argv: process.argv.slice(2) }) + "\\n");
 const out = process.env.MOCK_OPENCLAW_STDOUT || "";
+const err = process.env.MOCK_OPENCLAW_STDERR || "";
 const code = Number(process.env.MOCK_OPENCLAW_CODE || 0);
 if (out) process.stdout.write(out + "\\n");
+if (err) process.stderr.write(err + "\\n");
 process.exit(code);
 `,
   );
-  const dwsMock = join(binDir, "dws");
-  writeFileSync(
-    dwsMock,
-    `#!/usr/bin/env node
-const fs = require("node:fs");
-fs.appendFileSync(process.env.MOCK_LOG, JSON.stringify({ bin: "dws", argv: process.argv.slice(2) }) + "\\n");
-if (process.env.MOCK_DWS_FAIL === "1") { process.stderr.write("dws auth expired\\n"); process.exit(1); }
-process.stdout.write(JSON.stringify({ user_id: process.env.MOCK_DWS_USER_ID || "${SELF_ID}" }) + "\\n");
-`,
-  );
   chmodSync(openclawMock, 0o755);
-  chmodSync(dwsMock, 0o755);
+
+  const fixture = contextFixture(context);
+  if (fixture !== null) writeFileSync(contextFile, fixture);
 
   return {
     dir,
@@ -84,13 +139,12 @@ process.stdout.write(JSON.stringify({ user_id: process.env.MOCK_DWS_USER_ID || "
     env: {
       ...process.env,
       DINGTALK_NOTIFY_OPENCLAW: openclawMock,
-      DINGTALK_NOTIFY_DWS: dwsMock,
+      DINGTALK_NOTIFY_CONTEXT_FILE: contextFile,
       DINGTALK_NOTIFY_STATE_DIR: stateDir,
       MOCK_LOG: logFile,
       MOCK_OPENCLAW_STDOUT: openclawStdout,
+      MOCK_OPENCLAW_STDERR: openclawStderr,
       MOCK_OPENCLAW_CODE: String(openclawCode),
-      MOCK_DWS_FAIL: dwsFail ? "1" : "0",
-      MOCK_DWS_USER_ID: dwsUserId,
       DINGTALK_NOTIFY_TARGET: "",
     },
   };
@@ -118,10 +172,6 @@ const readLog = (logFile) => {
 const openclawCalls = (logFile) =>
   readLog(logFile)
     .filter((e) => e.bin === "openclaw")
-    .map((e) => e.argv);
-const dwsCalls = (logFile) =>
-  readLog(logFile)
-    .filter((e) => e.bin === "dws")
     .map((e) => e.argv);
 const paramsOf = (argv) => JSON.parse(argv[argv.indexOf("--params") + 1]);
 const ownerFileOf = (stateDir) => join(stateDir, "notify-owner.json");
@@ -161,11 +211,28 @@ const hasLoneSurrogate = (s) => {
   check("目标为钉定的本人单聊", params.target === `user:${SELF_ID}`, params.target);
   check("标题随首块传递", params.title === "测试标题");
   check("stdout 报 ok", r.stdout.includes('"ok":true'), r.stdout);
-  check("钉定后不再调用 dws", dwsCalls(fx.logFile).length === 0);
   rmSync(fx.dir, { recursive: true, force: true });
 }
 
-// 2. 长消息：按行分块、每块 ≤1900、标题只在首块、顺序保持
+// 2. 钉定后上下文损坏/缺失也不影响发送（钉定值是发送期唯一权威）
+{
+  const fx = makeEnv({ context: "corrupt" });
+  pinOwner(fx);
+  const r = run(fx.env, sendArgs("钉定后发送"));
+  check(
+    "钉定后上下文损坏仍可发本人",
+    r.status === 0 && openclawCalls(fx.logFile).length === 1,
+    `${r.status} ${r.stderr}`,
+  );
+  rmSync(fx.dir, { recursive: true, force: true });
+  const fx2 = makeEnv({ context: "absent" });
+  pinOwner(fx2);
+  const r2 = run(fx2.env, sendArgs("钉定后发送(无上下文)"));
+  check("钉定后上下文缺失仍可发本人", r2.status === 0, `${r2.status} ${r2.stderr}`);
+  rmSync(fx2.dir, { recursive: true, force: true });
+}
+
+// 3. 长消息：按行分块、每块 ≤1900、标题只在首块、顺序保持
 {
   const fx = makeEnv();
   pinOwner(fx);
@@ -195,7 +262,7 @@ const hasLoneSurrogate = (s) => {
   rmSync(fx.dir, { recursive: true, force: true });
 }
 
-// 3. emoji 边界：超长单行在 emoji 上硬切不拆代理对；多块含 emoji 可无损还原
+// 4. emoji 边界：超长单行在 emoji 上硬切不拆代理对；多块含 emoji 内容精确
 {
   const fx = makeEnv();
   pinOwner(fx);
@@ -223,78 +290,110 @@ const hasLoneSurrogate = (s) => {
   rmSync(fx.dir, { recursive: true, force: true });
 }
 
-// 4. Gateway 返回 ok:false → 退出 1 + 灯效回退提示
+// 5. 失败行为：ok:false / 非零退出（stdout+stderr 都保留）/ 非 JSON → 退出 1
 {
-  const fx = makeEnv({ openclawStdout: '{"ok":false,"error":"DingTalk not configured"}' });
+  const fx = makeEnv({ openclawStdout: '{"ok":false,"error":"staffId.notExisted"}' });
   pinOwner(fx);
   const r = run(fx.env, sendArgs("故障告警测试"));
   check("ok:false 退出码 1", r.status === 1, `实际 ${r.status}`);
   check("ok:false 给出灯效回退提示", r.stderr.includes("ntf.cjs light send"), r.stderr);
+  check("ok:false 错误带 Gateway 细节", r.stderr.includes("staffId.notExisted"), r.stderr);
   rmSync(fx.dir, { recursive: true, force: true });
-}
 
-// 5. openclaw 进程非零退出 / 非 JSON 输出 → 退出 1
-{
-  const fx = makeEnv({ openclawCode: 1, openclawStdout: "" });
-  pinOwner(fx);
-  const r1 = run(fx.env, sendArgs("进程失败测试"));
-  check("非零退出码透传为 1", r1.status === 1, `实际 ${r1.status}`);
-  rmSync(fx.dir, { recursive: true, force: true });
-  const fx2 = makeEnv({ openclawStdout: "<html>Gateway Error</html>" });
+  const fx2 = makeEnv({ openclawCode: 7, openclawStderr: "boom detail", openclawStdout: "" });
   pinOwner(fx2);
-  const r2 = run(fx2.env, sendArgs("非JSON测试"));
-  check("非 JSON 输出退出码 1", r2.status === 1, `实际 ${r2.status}`);
+  const r2 = run(fx2.env, sendArgs("进程失败测试"));
+  check("非零退出码透传为 1", r2.status === 1, `实际 ${r2.status}`);
+  check("非零退出保留 stderr", r2.stderr.includes("boom detail"), r2.stderr);
   rmSync(fx2.dir, { recursive: true, force: true });
+
+  const fx3 = makeEnv({ openclawCode: 7, openclawStderr: "", openclawStdout: "exit-side-detail" });
+  pinOwner(fx3);
+  const r3 = run(fx3.env, sendArgs("stdout 保留测试"));
+  check(
+    "非零退出保留 stdout",
+    r3.status === 1 && r3.stderr.includes("exit-side-detail"),
+    `${r3.status} ${r3.stderr}`,
+  );
+  rmSync(fx3.dir, { recursive: true, force: true });
+
+  const fx4 = makeEnv({ openclawStdout: "<html>Gateway Error</html>" });
+  pinOwner(fx4);
+  const r4 = run(fx4.env, sendArgs("非JSON测试"));
+  check("非 JSON 输出退出码 1", r4.status === 1, `实际 ${r4.status}`);
+  rmSync(fx4.dir, { recursive: true, force: true });
 }
 
-// 6. --set-owner：dws 核验、foreign 拒绝、dws 不可用时手工钉定
+// 6. 权威来源：dws 类 ID 不等于 staffId 时必须以连接器上下文 inbound senderId 为准
 {
-  const fx = makeEnv();
+  // 真实回归（2026-11-02 真实测试）：某 ID 来源给出 FOREIGN_ID，上下文身份是 SELF_ID → 必须发 SELF_ID
+  const fx = makeEnv({ context: "valid" });
+  writeFileSync(
+    join(fx.stateDir, "..", "dws-decoy.json"),
+    JSON.stringify({ note: "dws user_id 形态", user_id: FOREIGN_ID }),
+  );
+  const r = run(fx.env, sendArgs("自举发送"));
+  check(
+    "自举目标=上下文身份而非其他 ID 来源",
+    r.status === 0 && paramsOf(openclawCalls(fx.logFile)[0]).target === `user:${SELF_ID}`,
+    `${r.status} ${r.stderr}`,
+  );
+  check(
+    "自举写入 owner 文件且标记 connector-context",
+    (() => {
+      try {
+        const o = JSON.parse(readFileSync(ownerFileOf(fx.stateDir), "utf8"));
+        return o.ownerTarget === `user:${SELF_ID}` && o.verifiedVia === "connector-context";
+      } catch {
+        return false;
+      }
+    })(),
+    r.stdout,
+  );
+  rmSync(fx.dir, { recursive: true, force: true });
+}
+
+// 7. --set-owner：与上下文一致才钉定；上下文歧义/损坏时 fail-closed
+{
+  const fx = makeEnv({ context: "valid" });
   const r1 = run(fx.env, ["--set-owner", `user:${SELF_ID}`]);
   check(
-    "set-owner 与 dws 一致 → 钉定成功",
-    r1.status === 0 && r1.stdout.includes('"verifiedVia":"dws-auth-status"'),
+    "set-owner 与上下文一致 → 钉定成功",
+    r1.status === 0 && r1.stdout.includes('"verifiedVia":"connector-context"'),
     `${r1.status} ${r1.stderr} ${r1.stdout}`,
   );
-  check("set-owner 写入 owner 文件", existsSync(ownerFileOf(fx.stateDir)));
-  rmSync(fx.dir, { recursive: true, force: true });
-
-  const fx2 = makeEnv({ dwsUserId: FOREIGN_ID });
-  const r2 = run(fx2.env, ["--set-owner", `user:${SELF_ID}`]);
+  const r2 = run(fx.env, ["--set-owner", `user:${FOREIGN_ID}`]);
   check(
-    "set-owner 与 dws 不一致 → 拒绝 foreign（退出 2）",
+    "set-owner foreign → 拒绝（退出 2）",
     r2.status === 2 && r2.stderr.includes("foreign"),
     `${r2.status} ${r2.stderr}`,
   );
-  check("foreign set-owner 不写文件", !existsSync(ownerFileOf(fx2.stateDir)));
-  rmSync(fx2.dir, { recursive: true, force: true });
+  rmSync(fx.dir, { recursive: true, force: true });
 
-  const fx3 = makeEnv({ dwsFail: true });
-  const r3 = run(fx3.env, ["--set-owner", `user:${SELF_ID}`]);
-  check(
-    "dws 不可用时手工 set-owner → 钉定（manual-deploy）",
-    r3.status === 0 && r3.stdout.includes('"verifiedVia":"manual-deploy"'),
-    `${r3.status} ${r3.stderr} ${r3.stdout}`,
-  );
-  check(
-    "手工钉定后发送无需 dws/其他来源",
-    (() => {
-      const r = run(fx3.env, sendArgs("钉定后发送"));
-      return (
-        r.status === 0 &&
-        openclawCalls(fx3.logFile).length === 1 &&
-        paramsOf(openclawCalls(fx3.logFile)[0]).target === `user:${SELF_ID}`
-      );
-    })(),
-  );
-  rmSync(fx3.dir, { recursive: true, force: true });
+  for (const [mode, label] of [
+    ["multi", "上下文多身份"],
+    ["corrupt", "上下文损坏"],
+    ["badshape", "上下文形态非法"],
+    ["empty", "上下文无 inbound"],
+    ["missing-sender", "inbound 缺 senderId"],
+    ["nonnumeric-sender", "senderId 非数字"],
+    ["absent", "上下文文件缺失"],
+  ]) {
+    const fxA = makeEnv({ context: mode });
+    const ra = run(fxA.env, sendArgs("x"));
+    check(`${label} → 自举拒绝（退出 2）`, ra.status === 2, `${ra.status} ${ra.stderr}`);
+    const rb = run(fxA.env, ["--set-owner", `user:${SELF_ID}`]);
+    check(`${label} → set-owner 拒绝（退出 2）`, rb.status === 2, `${rb.status} ${rb.stderr}`);
+    check(`${label} → 不写 owner 文件`, !existsSync(ownerFileOf(fxA.stateDir)));
+    rmSync(fxA.dir, { recursive: true, force: true });
+  }
 }
 
-// 7. 目标安全负例：group:、空 ID、他人 ID、stale flag、损坏 owner 文件、旧缓存被忽略
+// 8. 目标安全负例：group:、空 ID、他人 ID、非数字 ID、损坏 owner 文件、旧缓存被忽略、env foreign
 {
   const fx = makeEnv();
   pinOwner(fx);
-  const r1 = run(fx.env, sendArgs("x", ["--target", `group:cidabc`]));
+  const r1 = run(fx.env, sendArgs("x", ["--target", "group:cidabc"]));
   check(
     "group: 目标 → 退出 2",
     r1.status === 2 && r1.stderr.includes("目标安全拒绝"),
@@ -316,7 +415,6 @@ const hasLoneSurrogate = (s) => {
   check("非数字 ID → 退出 2", r4.status === 2, `${r4.status} ${r4.stderr}`);
   rmSync(fx.dir, { recursive: true, force: true });
 
-  // 损坏的 owner 文件（group: 污染）→ 拒绝
   const fx2 = makeEnv();
   writeFileSync(
     ownerFileOf(fx2.stateDir),
@@ -330,14 +428,12 @@ const hasLoneSurrogate = (s) => {
   );
   rmSync(fx2.dir, { recursive: true, force: true });
 
-  // owner 文件非 JSON → 拒绝
   const fx3 = makeEnv();
   writeFileSync(ownerFileOf(fx3.stateDir), "not-json");
   const r6 = run(fx3.env, sendArgs("x"));
   check("owner 文件损坏（非 JSON）→ 退出 2", r6.status === 2, `${r6.status} ${r6.stderr}`);
   rmSync(fx3.dir, { recursive: true, force: true });
 
-  // 旧版 notify-target.json（foreign）存在但不得被读取
   const fx4 = makeEnv();
   pinOwner(fx4);
   writeFileSync(
@@ -352,32 +448,11 @@ const hasLoneSurrogate = (s) => {
   );
   rmSync(fx4.dir, { recursive: true, force: true });
 
-  // env 变量与钉定不一致 → 拒绝
   const fx5 = makeEnv();
   pinOwner(fx5);
   const r8 = run({ ...fx5.env, DINGTALK_NOTIFY_TARGET: `user:${FOREIGN_ID}` }, sendArgs("x"));
   check("env foreign 目标 → 退出 2", r8.status === 2, `${r8.status} ${r8.stderr}`);
   rmSync(fx5.dir, { recursive: true, force: true });
-}
-
-// 8. 自举：无钉定时 dws 可用 → 解析并钉定；dws 不可用 → 退出 2
-{
-  const fx = makeEnv();
-  const r = run(fx.env, sendArgs("自举发送"));
-  check("无钉定 + dws 可用 → 自举发送成功", r.status === 0, `${r.status} ${r.stderr}`);
-  check("自举写入 owner 文件", existsSync(ownerFileOf(fx.stateDir)));
-  const r2 = run(fx.env, sendArgs("再次发送"));
-  check(
-    "自举后第二次发送不依赖 dws",
-    r2.status === 0 && dwsCalls(fx.logFile).length === 1,
-    `${r2.status} ${r2.stderr}`,
-  );
-  rmSync(fx.dir, { recursive: true, force: true });
-
-  const fx2 = makeEnv({ dwsFail: true });
-  const r3 = run(fx2.env, sendArgs("无钉定 dws 挂"));
-  check("无钉定 + dws 不可用 → 退出 2", r3.status === 2, `实际 ${r3.status}`);
-  rmSync(fx2.dir, { recursive: true, force: true });
 }
 
 // 9. 参数校验：标题超长 / 空正文 / 缺 --text / set-owner 形态非法 → 退出 2
@@ -397,9 +472,16 @@ const hasLoneSurrogate = (s) => {
   rmSync(fx.dir, { recursive: true, force: true });
 }
 
-// 10. --dry-run：打印计划、零调用；钉定后可复现同一计划
+// 10. --dry-run：打印计划、零调用、无副作用（不写钉定）
 {
   const fx = makeEnv();
+  const r0 = run(fx.env, sendArgs("钉定前干跑", ["--dry-run"]));
+  check(
+    "未钉定 dry-run 预览上下文身份",
+    r0.status === 0 && r0.stdout.includes(`user:${SELF_ID}`),
+    `${r0.status} ${r0.stderr}`,
+  );
+  check("dry-run 不写钉定文件", !existsSync(ownerFileOf(fx.stateDir)));
   pinOwner(fx);
   const r = run(fx.env, sendArgs("干跑内容", ["--dry-run"]));
   check("dry-run 退出码 0", r.status === 0, r.stderr);
