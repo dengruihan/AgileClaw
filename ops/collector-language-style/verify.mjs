@@ -114,8 +114,24 @@ for (const e of examples) {
 }
 pass("示例引号核对完成");
 
+// 语义审查：紧急事项示例第一句必须先给出行动（规则"紧急事项第一句先说该做什么"）。
+const urgent = examples.find((l) => l.startsWith("- 紧急事项："));
+if (!urgent) fail("紧急事项示例缺失");
+else {
+  const text = urgent.slice(urgent.indexOf("「") + 1, urgent.indexOf("」"));
+  const firstSentence = text.split("。")[0] ?? "";
+  if (
+    /^(请(先|立即|马上))/.test(firstSentence) ||
+    /^(先|马上|立即)(完成|处理|做)/.test(firstSentence)
+  )
+    pass(`紧急示例第一句先行动：${firstSentence.slice(0, 30)}…`);
+  else fail(`紧急示例第一句未先给行动：${firstSentence.slice(0, 30)}…`);
+}
+
 // —— SOUL.md 全局表达规则（用户已授权改 ~/.openclaw/workspace/SOUL.md）——
-const soul = readFileSync(join(dir, "SOUL.md"), "utf8");
+// 候选以 SOUL.md.txt 交付：仓库 pre-commit 的 oxfmt 拥有 .md 字节（会重排表格、
+// 补末尾换行），无法承载"live 原文逐字节不变"的候选；.txt 不在 format 扩展名内。
+const soul = readFileSync(join(dir, "SOUL.md.txt"), "utf8");
 const soulBase = readFileSync(join(dir, "baseline-soul.txt"), "utf8");
 const SOUL_STYLE_MARKERS = [
   "## 表达",
