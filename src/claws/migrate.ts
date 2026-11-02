@@ -4,7 +4,6 @@ import { listAgentEntries, resolveAgentWorkspaceDir } from "../agents/agent-scop
 import { resolveStateDir } from "../config/paths.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { resolveIdentityPathViaExistingAncestorSync } from "../infra/boundary-path.js";
-import { isAvatarDataUrl } from "../shared/avatar-policy.js";
 import { tableExists } from "../state/openclaw-state-db-schema-helpers.js";
 import { openExistingOpenClawStateDatabaseReadOnly } from "../state/openclaw-state-db.js";
 import type { OpenClawStateDatabaseOptions } from "../state/openclaw-state-db.js";
@@ -31,12 +30,15 @@ import {
   resolveMigrationAgentSettings,
   validateAgentConfigKeys,
 } from "./migrate-validation.js";
-import { readSelectedWorkspaceFiles } from "./migrate-workspace-files.js";
+import {
+  readMigrationAvatarFile,
+  readSelectedWorkspaceFiles,
+  type CapturedManagedFile,
+} from "./migrate-workspace-files.js";
 import { readClawInstallRecordFromDatabase } from "./provenance-read.kernel.js";
 import { readClawSecondaryReferenceTables } from "./provenance-secondary-references.js";
 import { persistClawMigrationOwnership, readClawInstallRecords } from "./provenance.js";
 import { readClawManifestFile } from "./reader.js";
-import { isPortableClawAvatar } from "./schema-portability.js";
 import type { ClawManifest, ClawOpenClawProfile } from "./types.js";
 import {
   CLAW_WORKSPACE_FILE_RECORD_SCHEMA_VERSION,
@@ -96,6 +98,7 @@ type BuiltMigration = {
   clawMarkdownBody?: Buffer;
   packageFiles: Map<string, Buffer>;
   ownershipFiles: PersistedClawWorkspaceFile[];
+  avatarFile?: CapturedManagedFile;
 };
 
 async function readOwnership(options: OpenClawStateDatabaseOptions, agentId: string) {
@@ -302,13 +305,15 @@ export async function buildClawMigrationPlan(params: {
       `$.workspace.${conflictingFile.path}`,
     );
   }
-  const avatar = agent.identity?.avatar?.trim();
-  const portableAvatar =
-    avatar && isAvatarDataUrl(avatar) && isPortableClawAvatar(avatar) ? avatar : undefined;
+  const avatarFile = await readMigrationAvatarFile({
+    workspace,
+    avatar: agent.identity?.avatar,
+  });
   const projected = generatedPackage(agentId, {
     agent: migrationAgent,
-    avatar: portableAvatar,
+    avatar: avatarFile?.path,
     files: selectedFiles,
+    managedFiles: avatarFile ? [avatarFile] : undefined,
   });
   if (inspectValueForSecret({ agent: projected.manifest.agent, profile: projected.profile })) {
     throw new ClawMigrationError(
@@ -367,9 +372,15 @@ export async function buildClawMigrationPlan(params: {
         "$.agent",
       );
     }
+    const capturedByPath = new Map<string, CapturedManagedFile>(
+      [
+        ...selectedFiles.map((file) => ({ path: file.name, ...file })),
+        ...(avatarFile ? [avatarFile] : []),
+      ].map((file) => [file.path, file]),
+    );
     for (const fileAction of addPlan.actions.filter((action) => action.kind === "workspaceFile")) {
       const name = fileAction.id;
-      const captured = selectedFiles.find((file) => file.name === name);
+      const captured = capturedByPath.get(name);
       if (!captured || fileAction.digest !== captured.digest) {
         throw new ClawMigrationError(
           "workspace_file_projection_changed",
@@ -399,11 +410,22 @@ export async function buildClawMigrationPlan(params: {
           digest: digestClawBytes(content),
         }))
         .toSorted((left, right) => left.path.localeCompare(right.path)),
-      workspaceFiles: selectedFiles.map(({ name, content, digest }) => ({
-        path: resolve(workspace, name),
-        byteLength: content.byteLength,
-        digest,
-      })),
+      workspaceFiles: [
+        ...selectedFiles.map(({ name, content, digest }) => ({
+          path: resolve(workspace, name),
+          byteLength: content.byteLength,
+          digest,
+        })),
+        ...(avatarFile
+          ? [
+              {
+                path: resolve(workspace, avatarFile.path),
+                byteLength: avatarFile.content.byteLength,
+                digest: avatarFile.digest,
+              },
+            ]
+          : []),
+      ],
       retained: [...MIGRATION_RETAINED_PATHS],
       planIntegrity,
       blockers: [],
@@ -445,6 +467,7 @@ export async function buildClawMigrationPlan(params: {
       ...(loaded.clawMarkdownBody ? { clawMarkdownBody: loaded.clawMarkdownBody } : {}),
       packageFiles: projected.packageFiles,
       ownershipFiles,
+      ...(avatarFile ? { avatarFile } : {}),
     };
   } finally {
     await removePackagePreview(packagePreview);
@@ -492,13 +515,25 @@ export async function applyClawMigrationPlan(params: {
       "$.packageRoot",
     );
   }
+  const readMigrationWorkspaceFiles = async (workspaceDir: string) => {
+    const files = await readSelectedWorkspaceFiles(workspaceDir);
+    const avatarFile = params.migration.avatarFile;
+    if (!avatarFile) {
+      return files;
+    }
+    const avatar = await readMigrationAvatarFile({
+      workspace: workspaceDir,
+      avatar: avatarFile.path,
+    });
+    return avatar ? [...files, { name: avatar.path, digest: avatar.digest }] : files;
+  };
   await params.assertCurrentConfig?.();
   await createGeneratedPackage(root, params.migration.packageFiles);
   try {
     await assertWorkspaceSnapshotUnchanged(
       currentWorkspace,
       params.migration.ownershipFiles,
-      readSelectedWorkspaceFiles,
+      readMigrationWorkspaceFiles,
     );
     const read = await readClawManifestFile(root);
     if (!read.ok) {
@@ -559,7 +594,7 @@ export async function applyClawMigrationPlan(params: {
     await assertWorkspaceSnapshotUnchanged(
       currentWorkspace,
       params.migration.ownershipFiles,
-      readSelectedWorkspaceFiles,
+      readMigrationWorkspaceFiles,
     );
     const finalOwnershipFiles = params.migration.ownershipFiles.map((file) => ({
       ...file,

@@ -175,14 +175,26 @@ function validateIdentityAvatar(
       continue;
     }
     const avatar = avatarRaw.trim();
-    if (!avatar || isAvatarDataUrl(avatar) || isAvatarHttpUrl(avatar)) {
+    if (!avatar) {
+      continue;
+    }
+    if (isAvatarDataUrl(avatar)) {
+      issues.push(
+        createIdentityAvatarIssue(
+          source,
+          'identity.avatar no longer accepts base64 data URIs. Save the image inside the agent workspace (for example avatars/main.png) and reference that path, or use an http(s) URL. Run "openclaw doctor --fix" to migrate existing avatars.',
+        ),
+      );
+      continue;
+    }
+    if (isAvatarHttpUrl(avatar)) {
       continue;
     }
     if (avatar.startsWith("~") || (hasAvatarUriScheme(avatar) && !isWindowsAbsolutePath(avatar))) {
       issues.push(
         createIdentityAvatarIssue(
           source,
-          "identity.avatar must be a workspace-relative path, http(s) URL, or data URI.",
+          "identity.avatar must be a workspace-relative path or an http(s) URL.",
         ),
       );
       continue;

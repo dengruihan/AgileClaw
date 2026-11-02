@@ -19,6 +19,7 @@ import {
 } from "../shared/avatar-limits.js";
 import {
   hasAvatarUriScheme,
+  isAvatarDataUrl,
   isAvatarHttpUrl,
   isWindowsAbsolutePath,
   looksLikeAvatarPath,
@@ -69,7 +70,7 @@ function normalizeIdentityValue(
   return trimmed ? truncateUtf16Safe(trimmed, ASSISTANT_IDENTITY_LIMITS[field]) : undefined;
 }
 
-function isAvatarUrl(value: string): boolean {
+function isRenderableAvatarCandidate(value: string): boolean {
   return isAvatarHttpUrl(value) || isRenderableAvatarImageDataUrl(value);
 }
 
@@ -78,7 +79,9 @@ function normalizeAvatarValue(value: string | undefined): string | undefined {
   if (!trimmed || trimmed.length > AVATAR_MAX_DATA_URL_CHARS) {
     return undefined;
   }
-  if (isAvatarUrl(trimmed)) {
+  if (isRenderableAvatarCandidate(trimmed)) {
+    // Image data URLs stay in the resolved identity so the avatar owner can
+    // report them as unmigrated sources; renderers never display them.
     return trimmed;
   }
   // URI-like values are not local paths. Reject unsupported schemes before
@@ -100,7 +103,8 @@ function normalizeEmojiValue(value: string | undefined): string | undefined {
     return undefined;
   }
   if (
-    isAvatarUrl(value) ||
+    isAvatarHttpUrl(value) ||
+    isAvatarDataUrl(value) ||
     (hasAvatarUriScheme(value) && !isWindowsAbsolutePath(value)) ||
     looksLikeAvatarPath(value)
   ) {

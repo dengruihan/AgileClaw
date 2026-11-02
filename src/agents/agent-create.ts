@@ -124,6 +124,11 @@ type CreateAgentParams = {
   assertIdentityInputAllowed?: () => void;
   /** Prepare guided staged state at the last reversible edge before config publication. */
   prepareConfigCommit?: () => Promise<ConfigCommitReceipt | void>;
+  /**
+   * Publish creation-owned files after the creation is admitted and before the
+   * config commit; a throw aborts creation without leaving a config pointer.
+   */
+  beforeConfigCommit?: () => void | Promise<void>;
   /** Observe published config before post-commit bookkeeping that may still fail. */
   onCommitted?: (result: CreateAgentSuccess & { config: OpenClawConfig }) => void;
   provenance?: { createdVia: AgentCreatedVia; creatorAgentId?: string };
@@ -639,6 +644,7 @@ export async function createAgent(params: CreateAgentParams): Promise<CreateAgen
               configCommitReceipt = (await prepareConfigCommit()) ?? undefined;
             });
           }
+          await params.beforeConfigCommit?.();
 
           return {
             nextConfig,

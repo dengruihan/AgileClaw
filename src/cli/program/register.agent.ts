@@ -143,7 +143,7 @@ export function registerAgentsCommands(program: Command): void {
     .option("--name <name>", "Identity name")
     .option("--theme <theme>", "Identity theme")
     .option("--emoji <emoji>", "Identity emoji")
-    .option("--avatar <value>", "Identity avatar (workspace path, http(s) URL, or data URI)")
+    .option("--avatar <value>", "Identity avatar (workspace-relative image path or http(s) URL)")
     .option("--json", "Output JSON summary", false)
     .addHelpText(
       "after",

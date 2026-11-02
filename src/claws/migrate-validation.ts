@@ -7,7 +7,7 @@ import type { OpenClawConfigWithLegacyRoster } from "../config/legacy.roster.js"
 import { resolveAgentModelFallbackValues } from "../config/model-input.js";
 import type { AgentConfig } from "../config/types.agents.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import { isAvatarDataUrl } from "../shared/avatar-policy.js";
+import { isAvatarDataUrl, isAvatarHttpUrl } from "../shared/avatar-policy.js";
 import { ClawMigrationError } from "./migrate-errors.js";
 import { isPortableClawAvatar } from "./schema-portability.js";
 
@@ -102,10 +102,27 @@ export function validateAgentConfigKeys(agent: AgentConfig): void {
     );
   }
   const avatar = agent.identity?.avatar?.trim();
-  if (avatar && (!isAvatarDataUrl(avatar) || !isPortableClawAvatar(avatar))) {
+  if (!avatar) {
+    return;
+  }
+  if (isAvatarDataUrl(avatar)) {
     throw new ClawMigrationError(
       "agent_avatar_unsupported",
-      "This migration can represent an embedded portable image avatar, but not a URL or local avatar path. Keep the avatar unmanaged or convert it to a supported image data URL before migrating.",
+      "Embedded base64 avatars are no longer persisted. Save the image as a file inside the agent workspace and reference its relative path before migrating.",
+      "$.agent.identity.avatar",
+    );
+  }
+  if (isAvatarHttpUrl(avatar)) {
+    throw new ClawMigrationError(
+      "agent_avatar_unsupported",
+      "Remote http(s) avatars cannot be represented by a Claw v1 package. Save the image inside the agent workspace and reference its relative path before migrating.",
+      "$.agent.identity.avatar",
+    );
+  }
+  if (!isPortableClawAvatar(avatar)) {
+    throw new ClawMigrationError(
+      "agent_avatar_unsupported",
+      "This migration can represent a workspace-relative image file. Move the avatar into the agent workspace and reference its relative path before migrating.",
       "$.agent.identity.avatar",
     );
   }

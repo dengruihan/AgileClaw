@@ -7,11 +7,12 @@ import {
   normalizeOptionalString,
 } from "@openclaw/normalization-core/string-coerce";
 import type { IdentityConfig } from "../config/types.base.js";
+import { isAvatarDataUrl } from "../shared/avatar-policy.js";
 import { DEFAULT_IDENTITY_FILENAME } from "./workspace-bootstrap-policy.js";
 
-// IDENTITY.md may contain the supported 2 MiB avatar encoded as a roughly
-// 2.7 MiB data URL. Keep bounded headroom for the remaining identity fields.
-const MAX_IDENTITY_FILE_BYTES = 4 * 1024 * 1024;
+// Identity files historically embedded avatars as multi-megabyte data URLs.
+// Keep the bound so legacy files stay readable until Doctor migrates them.
+export const MAX_IDENTITY_FILE_BYTES = 4 * 1024 * 1024;
 
 export type AgentIdentityFile = {
   name?: string;
@@ -37,7 +38,7 @@ const IDENTITY_PLACEHOLDER_VALUES = new Set([
   "ai? robot? familiar? ghost in the machine? something weirder?",
   "how do you come across? sharp? warm? chaotic? calm?",
   "your signature - pick one that feels right",
-  "workspace-relative path, http(s) url, or data uri",
+  "workspace-relative path or http(s) url",
 ]);
 
 export function sanitizeAgentIdentityLine(value: string): string {
@@ -62,10 +63,16 @@ export function createAgentIdentityConfig(params: {
   emoji?: unknown;
   avatar?: unknown;
 }): IdentityConfig | undefined {
+  const avatar = sanitizeAgentIdentityLine(normalizeOptionalString(params.avatar) ?? "");
+  if (isAvatarDataUrl(avatar)) {
+    throw new Error(
+      "identity.avatar cannot persist a base64 data URI. Save the image inside the agent workspace and reference its path, or use an http(s) URL.",
+    );
+  }
   return normalizeIdentityForFile({
     ...(params.name ? { name: sanitizeAgentIdentityLine(params.name) } : {}),
     emoji: sanitizeAgentIdentityLine(normalizeOptionalString(params.emoji) ?? ""),
-    avatar: sanitizeAgentIdentityLine(normalizeOptionalString(params.avatar) ?? ""),
+    ...(avatar ? { avatar } : {}),
   });
 }
 
@@ -96,7 +103,8 @@ function parseIdentityLine(line: string): { label: string; value: string } | und
       };
 }
 
-function parseIdentityMarkdown(content: string): AgentIdentityFile | null {
+/** Parse writable identity fields from IDENTITY.md content. */
+export function parseIdentityMarkdown(content: string): AgentIdentityFile | null {
   const identity: AgentIdentityFile = {};
   for (const line of content.split(/\r?\n/)) {
     const parsed = parseIdentityLine(line);

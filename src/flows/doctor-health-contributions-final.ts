@@ -300,6 +300,20 @@ export function resolveFinalDoctorHealthContributions(params: {
       run: runHeartbeatCadenceMigrationHealth,
     }),
     createDoctorHealthContribution({
+      id: "doctor:avatar-file-migration",
+      label: "Avatar file migration",
+      healthChecks: {
+        description:
+          "Persisted agent avatars must be workspace image files or http(s) URLs, not base64 data URIs.",
+        defaultEnabled: true,
+        async detect(ctx) {
+          const { collectAvatarFileMigrationFindings } =
+            await import("../commands/doctor-avatar-file-migration.js");
+          return collectAvatarFileMigrationFindings(ctx.cfg, ctx.env);
+        },
+      },
+    }),
+    createDoctorHealthContribution({
       id: "doctor:heartbeat-scratch-migration",
       label: "Heartbeat scratch migration",
       healthChecks: {

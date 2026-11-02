@@ -821,7 +821,7 @@ describe("handleControlUiHttpRequest", () => {
     expect(parseBootstrapPayload(replaced.end).assistantAvatar).not.toBe(parsed.assistantAvatar);
   });
 
-  it("keeps an exact-cap IDENTITY.md data URL out of bootstrap", async () => {
+  it("refuses an exact-cap IDENTITY.md data URL avatar in bootstrap", async () => {
     const tmp = await createControlUiRoot();
     const dataUrl = `data:image/svg+xml;base64,${Buffer.alloc(AVATAR_MAX_BYTES).toString("base64")}`;
     expect(dataUrl).toHaveLength(AVATAR_MAX_DATA_URL_CHARS);
@@ -832,8 +832,9 @@ describe("handleControlUiHttpRequest", () => {
     });
     expect(handled).toBe(true);
     expect(parseBootstrapPayload(end)).toMatchObject({
-      assistantAvatar: expect.stringMatching(/^\/avatar\/main\?v=[a-f0-9]+$/),
-      assistantAvatarStatus: "data",
+      assistantAvatar: "A",
+      assistantAvatarStatus: "none",
+      assistantAvatarReason: "unmigrated_data_url",
     });
   });
 

@@ -51,12 +51,19 @@ import {
 } from "../../agents/auth-profiles/path-resolve.js";
 import { resolveAuthProfileDatabasePath } from "../../agents/auth-profiles/sqlite.js";
 import {
+  stageAgentAvatarUpload,
+  type StagedAgentAvatarUpload,
+} from "../../agents/identity-avatar-upload.js";
+import {
   createAgentIdentityConfig,
   normalizeIdentityForFile,
   sanitizeAgentIdentityLine,
 } from "../../agents/identity-file.js";
 import { resolveAgentIdentity } from "../../agents/identity.js";
-import { getAgentWorkspaceAccess } from "../../agents/workspace-access.js";
+import {
+  getAgentWorkspaceAccess,
+  type AgentWorkspaceAccess,
+} from "../../agents/workspace-access.js";
 import {
   prepareLegacyWorkspaceStateReset,
   removeLegacyWorkspaceStateForReset,
@@ -75,12 +82,13 @@ import {
 import { purgeAgentSessionStoreEntries } from "../../config/sessions.js";
 import { resolveSessionTranscriptsDirForAgent } from "../../config/sessions/paths.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
-import { isMissingPathError } from "../../infra/errors.js";
+import { formatErrorMessage, isMissingPathError } from "../../infra/errors.js";
 import { withAgentExecApprovalsRemoved } from "../../infra/exec-approvals.js";
 import { root, FsSafeError } from "../../infra/fs-safe.js";
 import { isPathInside } from "../../infra/path-guards.js";
 import { movePathToTrash } from "../../plugin-sdk/browser-maintenance.js";
 import { normalizeAgentIdStrict } from "../../routing/session-key.js";
+import { isAvatarDataUrl } from "../../shared/avatar-policy.js";
 import {
   readAgentDeletionJournal,
   type AgentDeletionJournalCleanupPath,
@@ -101,6 +109,8 @@ import {
 import {
   agentFileHandlers,
   buildIdentityMarkdownOrRespondUnsafe,
+  readWorkspaceFileContent,
+  restoreWorkspaceFileContent,
   writeWorkspaceFileOrRespond,
 } from "./agents-files.js";
 import { agentListHandler } from "./agents-list.js";
@@ -109,6 +119,21 @@ import { assertValidParams } from "./validation.js";
 
 function respondAgentNotFound(respond: RespondFn, agentId: string): void {
   respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `agent "${agentId}" not found`));
+}
+
+/** Actionable message for a workspace avatar write that failed after admission. */
+function avatarPublishFailureMessage(error: unknown): string {
+  const detail = error instanceof Error && error.message ? error.message : String(error);
+  return `could not save the avatar image into the agent workspace: ${detail}`;
+}
+
+/** Extract a transport-only avatar data URL from request params, if present. */
+function resolveAgentAvatarUploadParam(avatar: unknown): string | undefined {
+  if (typeof avatar !== "string") {
+    return undefined;
+  }
+  const trimmed = avatar.trim();
+  return isAvatarDataUrl(trimmed) ? trimmed : undefined;
 }
 
 type AgentDeleteRemovedPath = NonNullable<AgentsDeleteResult["removed"]>[number];
@@ -432,19 +457,61 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
 
+    const assertUploadCurrent = captureGatewayClientUploadCommitGuard({
+      method: "agents.create",
+      requestParams: params,
+      client,
+      context,
+    });
+    // Uploads carry avatar images as data URLs for transport only. Stage the
+    // decoded bytes; the admitted creation publishes them before its config commit.
+    const avatarUpload = resolveAgentAvatarUploadParam(params.avatar);
+    let avatarInput: unknown = params.avatar;
+    let stagedAvatar: StagedAgentAvatarUpload | undefined;
+    if (avatarUpload) {
+      const agentId = normalizeAgentIdStrict(params.name);
+      if (!agentId.ok) {
+        // createAgent reports the invalid name; no avatar work can target it.
+        avatarInput = undefined;
+      } else {
+        const workspaceDir = params.workspace?.trim()
+          ? resolveUserPath(params.workspace.trim())
+          : resolveAgentWorkspaceDir(context.getRuntimeConfig(), agentId.value);
+        const staged = stageAgentAvatarUpload({
+          workspaceDir,
+          agentId: agentId.value,
+          avatar: avatarUpload,
+        });
+        if (!staged.ok) {
+          respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, staged.message));
+          return;
+        }
+        stagedAvatar = staged.upload;
+        avatarInput = staged.upload.source;
+      }
+    }
+
+    let avatarPublishFailure: unknown;
     try {
       const result = await createAgent({
         name: params.name,
         workspace: params.workspace,
         model: params.model,
         emoji: params.emoji,
-        avatar: params.avatar,
-        assertIdentityInputAllowed: captureGatewayClientUploadCommitGuard({
-          method: "agents.create",
-          requestParams: params,
-          client,
-          context,
-        }),
+        ...(avatarInput === undefined ? {} : { avatar: avatarInput }),
+        ...(stagedAvatar
+          ? {
+              beforeConfigCommit: async () => {
+                try {
+                  await stagedAvatar.publish();
+                } catch (error) {
+                  avatarPublishFailure = error;
+                  throw error;
+                }
+              },
+            }
+          : {}),
+        assertIdentityInputAllowed: assertUploadCurrent,
       });
       if (result.status === "error") {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, result.message));
@@ -467,6 +534,14 @@ export const agentsHandlers: GatewayRequestHandlers = {
     } catch (error) {
       if (error instanceof SessionMutationAuthorizationChangedError) {
         respond(false, undefined, error.error);
+        return;
+      }
+      if (avatarPublishFailure) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, avatarPublishFailureMessage(avatarPublishFailure)),
+        );
         return;
       }
       throw error;
@@ -504,10 +579,56 @@ export const agentsHandlers: GatewayRequestHandlers = {
     const name = resolveOptionalStringParam(params.name);
     const safeName = name ? sanitizeAgentIdentityLine(name) : undefined;
 
+    // The not-found check only needs field presence; uploads materialize below.
+    const avatarUpload = resolveAgentAvatarUploadParam(params.avatar);
+    const requestedIdentity = createAgentIdentityConfig({
+      name: safeName,
+      emoji: params.emoji,
+      avatar: avatarUpload ? undefined : params.avatar,
+    });
+    const selectionError = validateAgentModelSelectionUpdate(params);
+    if (selectionError) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, selectionError));
+      return;
+    }
+    const configured = isConfiguredAgent(cfg, agentId);
+    if (
+      !configured &&
+      !isImplicitAgentModelUpdate(cfg, {
+        agentId,
+        ...(safeName ? { name: safeName } : {}),
+        ...(workspaceDir ? { workspace: workspaceDir } : {}),
+        ...(model !== undefined ? { model } : {}),
+        ...(params.agentRuntime ? { agentRuntime: params.agentRuntime } : {}),
+        ...(requestedIdentity ? { identity: requestedIdentity } : {}),
+      })
+    ) {
+      respondAgentNotFound(respond, agentId);
+      return;
+    }
+
+    // Uploads carry avatar images as data URLs for transport only. Stage the
+    // decoded bytes; the admitted config mutation publishes them before commit.
+    let avatarInput: unknown = params.avatar;
+    let stagedAvatar: StagedAgentAvatarUpload | undefined;
+    if (avatarUpload) {
+      const staged = stageAgentAvatarUpload({
+        workspaceDir: workspaceDir ?? resolveAgentWorkspaceDir(cfg, agentId),
+        agentId,
+        avatar: avatarUpload,
+      });
+      if (!staged.ok) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, staged.message));
+        return;
+      }
+      stagedAvatar = staged.upload;
+      avatarInput = staged.upload.source;
+    }
+
     const identity = createAgentIdentityConfig({
       name: safeName,
       emoji: params.emoji,
-      avatar: params.avatar,
+      avatar: avatarInput,
     });
     const hasIdentityFields = Boolean(identity);
 
@@ -519,18 +640,16 @@ export const agentsHandlers: GatewayRequestHandlers = {
       ...(params.agentRuntime ? { agentRuntime: params.agentRuntime } : {}),
       ...(identity ? { identity } : {}),
     };
-    const selectionError = validateAgentModelSelectionUpdate(params);
-    if (selectionError) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, selectionError));
-      return;
-    }
-    const configured = isConfiguredAgent(cfg, agentId);
-    if (!configured && !isImplicitAgentModelUpdate(cfg, agentConfigUpdate)) {
-      respondAgentNotFound(respond, agentId);
-      return;
-    }
     const nextConfig = configured ? applyAgentConfig(cfg, agentConfigUpdate) : cfg;
 
+    let avatarPublishFailure: unknown;
+    let identityRollback:
+      | {
+          workspaceDir: string;
+          previousContent: string | undefined;
+          access: AgentWorkspaceAccess | undefined;
+        }
+      | undefined;
     try {
       let ensuredWorkspace: Awaited<ReturnType<typeof ensureAgentWorkspace>> | undefined;
       if (workspaceDir) {
@@ -577,6 +696,27 @@ export const agentsHandlers: GatewayRequestHandlers = {
           return;
         }
         assertWorkspaceAccessCurrent();
+        let previousIdentityContent: string | undefined;
+        try {
+          previousIdentityContent = await readWorkspaceFileContent(
+            identityWorkspaceDir,
+            DEFAULT_IDENTITY_FILENAME,
+          );
+        } catch (error) {
+          if (error instanceof FsSafeError) {
+            respond(
+              false,
+              undefined,
+              errorShape(
+                ErrorCodes.INVALID_REQUEST,
+                `unsafe workspace file "${DEFAULT_IDENTITY_FILENAME}"`,
+              ),
+            );
+            return;
+          }
+          throw error;
+        }
+        const identityAccess = getAgentWorkspaceAccess(identityWorkspaceDir);
         if (
           !(await writeWorkspaceFileOrRespond({
             respond,
@@ -588,14 +728,46 @@ export const agentsHandlers: GatewayRequestHandlers = {
         ) {
           return;
         }
-        // The write accepted these exact bytes. Settle their config projection,
-        // without retiring workspace authority or admitting another upload.
+        // The write accepted these exact bytes. Any later failure in this update
+        // restores them before the handler reports it.
         identityPublished = true;
+        identityRollback = {
+          workspaceDir: identityWorkspaceDir,
+          previousContent: previousIdentityContent,
+          access: identityAccess,
+        };
         assertWorkspaceAccessCurrent();
       }
 
-      await updateAgentConfigEntry({ ...agentConfigUpdate, assertCurrent: assertUploadAllowed });
+      await updateAgentConfigEntry({
+        ...agentConfigUpdate,
+        ...(stagedAvatar
+          ? {
+              beforeCommit: async () => {
+                try {
+                  await stagedAvatar.publish(assertUploadAllowed);
+                } catch (error) {
+                  avatarPublishFailure = error;
+                  throw error;
+                }
+              },
+            }
+          : {}),
+        assertCurrent: assertUploadAllowed,
+      });
     } catch (error) {
+      const rollbackError = identityRollback
+        ? await restoreWorkspaceFileContent({
+            ...identityRollback,
+            name: DEFAULT_IDENTITY_FILENAME,
+          }).catch((restoreFailure: unknown) => restoreFailure)
+        : undefined;
+      if (rollbackError) {
+        throw new Error(
+          `Agent identity update failed (${formatErrorMessage(error)}) and the previous ${DEFAULT_IDENTITY_FILENAME} could not be restored: ${formatErrorMessage(rollbackError)}.`,
+          { cause: error },
+        );
+      }
       if (error instanceof SessionMutationAuthorizationChangedError) {
         respond(false, undefined, error.error);
         return;
@@ -606,6 +778,14 @@ export const agentsHandlers: GatewayRequestHandlers = {
       }
       if (error instanceof AgentModelSelectionError) {
         respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, error.message));
+        return;
+      }
+      if (avatarPublishFailure) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, avatarPublishFailureMessage(avatarPublishFailure)),
+        );
         return;
       }
       throw error;

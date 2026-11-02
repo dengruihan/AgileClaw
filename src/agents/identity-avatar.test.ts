@@ -148,8 +148,9 @@ describe("resolveAgentAvatar", () => {
     expect(absolute.kind).toBe("none");
     expect(resolvePublicAgentAvatarSource(absolute)).toBeUndefined();
 
-    // Public status/UI surfaces may report remote/data origins, but local
-    // absolute paths and traversal attempts stay hidden.
+    // Public status/UI surfaces may report remote origins, but local absolute
+    // paths and traversal attempts stay hidden; unmigrated data URLs expose
+    // only their header prefix.
     expect(
       resolvePublicAgentAvatarSource({
         kind: "remote",
@@ -158,7 +159,7 @@ describe("resolveAgentAvatar", () => {
     ).toBe("remote URL");
     expect(
       resolvePublicAgentAvatarSource({
-        kind: "data",
+        kind: "none",
         source: "data:image/png;base64,aaaaaaaa",
       }),
     ).toBe("data:image/png;base64,...");
@@ -196,7 +197,7 @@ describe("resolveAgentAvatar", () => {
     }
   });
 
-  it("accepts remote and data avatars", () => {
+  it("resolves remote avatars and refuses unmigrated data URLs", () => {
     const cfg: OpenClawConfig = {
       agents: {
         entries: {
@@ -213,13 +214,14 @@ describe("resolveAgentAvatar", () => {
     }
 
     const data = resolveAgentAvatar(cfg, "data");
-    expect(data.kind).toBe("data");
-    if (data.kind === "data") {
-      expect(data.source).toBe("data:image/png;base64,aaaa");
-    }
+    expect(data).toMatchObject({
+      kind: "none",
+      reason: "unmigrated_data_url",
+      source: "data:image/png;base64,aaaa",
+    });
   });
 
-  it("preserves generic and oversized data URIs at the public resolution boundary", () => {
+  it("rejects generic and oversized data URIs without rendering them", () => {
     const oversized = `data:image/png;base64,${"A".repeat(AVATAR_MAX_DATA_URL_CHARS)}`;
     const cfg: OpenClawConfig = {
       agents: {
@@ -231,12 +233,12 @@ describe("resolveAgentAvatar", () => {
     };
 
     expect(resolveAgentAvatar(cfg, "generic")).toMatchObject({
-      kind: "data",
-      url: "data:text/plain,avatar",
+      kind: "none",
+      reason: "unmigrated_data_url",
     });
     expect(resolveAgentAvatar(cfg, "oversized")).toMatchObject({
-      kind: "data",
-      url: oversized,
+      kind: "none",
+      reason: "unmigrated_data_url",
     });
   });
 });

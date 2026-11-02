@@ -49,9 +49,10 @@ describe("resolveAgentOutboundIdentity", () => {
         emoji: "",
       },
       avatar: {
-        kind: "data",
-        dataUrl: "data:image/png;base64,abc",
-      },
+        kind: "local",
+        filePath: "/workspace/avatars/main.png",
+        source: "avatars/main.png",
+      } as const,
       expected: undefined,
     },
     {

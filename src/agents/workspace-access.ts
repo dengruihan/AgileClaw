@@ -53,7 +53,9 @@ export type AgentWorkspaceAccess = {
     | "writeFile"
     | "createFileExclusive"
     | "stat"
-  >;
+  > &
+    /** Optional delete for failure rollback; real bridges expose it. */
+    Partial<Pick<SandboxFsBridge, "remove">>;
   /** Purpose-scoped output reads; the document bridge need not allow attachment paths. */
   outboundMedia?: {
     localRoots: readonly string[];
@@ -145,6 +147,10 @@ export function registerAgentWorkspaceAccess(
   const readDirectory = access.bridge.readDirectory?.bind(access.bridge);
   if (readDirectory) {
     bridge.readDirectory = guardCall(readDirectory);
+  }
+  const remove = access.bridge.remove?.bind(access.bridge);
+  if (remove) {
+    bridge.remove = guardCall(remove);
   }
   const boundAccess: AgentWorkspaceAccess = { bridge: Object.freeze(bridge) };
   const outboundMedia = access.outboundMedia;

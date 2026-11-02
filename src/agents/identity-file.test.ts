@@ -32,7 +32,7 @@ describe("parseIdentityMarkdown", () => {
 - **Creature:** *(AI? robot? familiar? ghost in the machine? something weirder?)*
 - **Vibe:** *(how do you come across? sharp? warm? chaotic? calm?)*
 - **Emoji:** *(your signature - pick one that feels right)*
-- **Avatar:** *(workspace-relative path, http(s) URL, or data URI)*
+- **Avatar:** *(workspace-relative path or http(s) URL)*
     `,
       expected: null,
     },
@@ -65,7 +65,7 @@ describe("parseIdentityMarkdown", () => {
       },
     },
     {
-      content: "- **Avatar:** `(workspace-relative path, http(s) URL, or data URI)`",
+      content: "- **Avatar:** `(workspace-relative path or http(s) URL)`",
       expected: null,
     },
     { content: "- **Avatar:** *(not set yet)*", expected: null },

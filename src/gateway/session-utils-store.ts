@@ -39,6 +39,7 @@ import { resolveExecPolicyForMode } from "../infra/exec-approvals-core.js";
 import { loadExecApprovalsReadOnlyAsync } from "../infra/exec-approvals-store.js";
 import { normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.js";
 import { isAcpSessionKey } from "../sessions/session-key-utils.js";
+import { isAvatarDataUrl } from "../shared/avatar-policy.js";
 import { dedupeByKey } from "../shared/dedupe-by-key.js";
 import { listAgentProvenance } from "../state/agent-provenance.js";
 import { listGatewayAgentsBasic } from "./agent-list.js";
@@ -333,12 +334,15 @@ export async function listAgentsForGateway(
           ).avatar
         : undefined;
     const avatarUrl = httpAvatar ?? (await resolveAgentAvatarUrlFromSource(cfg, agentId, avatar));
+    // Persisted base64 avatars are unmigrated sources, not renderable row values.
+    const rowAvatar =
+      httpAvatar ?? (avatar !== undefined && isAvatarDataUrl(avatar) ? undefined : avatar);
     const identity = entry.identity
       ? {
           name: normalizeOptionalString(entry.identity.name),
           theme: normalizeOptionalString(entry.identity.theme),
           emoji: normalizeOptionalString(entry.identity.emoji),
-          avatar: httpAvatar ?? avatar,
+          avatar: rowAvatar,
           avatarUrl,
         }
       : undefined;

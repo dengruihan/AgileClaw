@@ -19,8 +19,7 @@ import { resolveAgentIdentity } from "./identity.js";
 export type AgentAvatarResolution =
   | { kind: "none"; reason: string; source?: string }
   | { kind: "local"; filePath: string; source: string }
-  | { kind: "remote"; url: string; source: string }
-  | { kind: "data"; url: string; source: string };
+  | { kind: "remote"; url: string; source: string };
 
 type AgentAvatarPublicSourceInput = {
   kind: AgentAvatarResolution["kind"];
@@ -89,7 +88,9 @@ export function resolveAgentAvatar(cfg: OpenClawConfig, agentId: string): AgentA
     return { kind: "remote", url: source, source };
   }
   if (isAvatarDataUrl(source)) {
-    return { kind: "data", url: source, source };
+    // Base64 avatars are not a supported persisted source; migration owns their
+    // conversion so unmigrated values never render silently.
+    return { kind: "none", reason: "unmigrated_data_url", source };
   }
   const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
   const resolved = resolveLocalAgentAvatarPath({ raw: source, workspaceDir });
