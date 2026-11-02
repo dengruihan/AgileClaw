@@ -43,8 +43,9 @@ done
 
 config_mode="$(config_direct_reply_mode)"
 if [ -n "$config_mode" ]; then
+  cli_display="${OPENCLAW_CLI:-pnpm openclaw}"
   die "$CHANNEL_DIRECT_MODE_PATH is still set to '$config_mode'. Unset it before restoring the stock plugin, or the strict upstream config schema will reject it at Gateway startup:
-  pnpm openclaw config unset $CHANNEL_DIRECT_MODE_PATH
+  $cli_display config unset $CHANNEL_DIRECT_MODE_PATH
 
 If that CLI command is refused because the config is already invalid against
 the installed plugin (config-without-patch state), run instead:
@@ -64,7 +65,15 @@ if [ "$installed_version" != "$LOCAL_VERSION" ]; then
 fi
 
 if [ -z "$backup_dir" ]; then
-  backup_dir="$(ls -1dt "$BACKUP_BASE"/*/ 2>/dev/null | head -1 || true)"
+  # Newest directory that actually contains a deploy manifest; recovery
+  # backups share the base directory and have no deploy.json.
+  backup_dir=""
+  while IFS= read -r candidate; do
+    if [ -f "$candidate/deploy.json" ]; then
+      backup_dir="$candidate"
+      break
+    fi
+  done < <(ls -1dt "$BACKUP_BASE"/*/ 2>/dev/null || true)
 fi
 [ -n "$backup_dir" ] || die "no deploy backup found under $BACKUP_BASE; pass --backup <dir>"
 backup_dir="${backup_dir%/}"

@@ -96,7 +96,7 @@ cd verify && ./build-scratch.sh && node run-tests.mjs
 OPENCLAW_ROOT=/path/to/built/checkout ./verify/deploy-tests.sh
 ```
 
-结果（2026-11-02）：**50/50 PASS**（`RESULT: 50/50 passed, 0 failed`）
+结果（2026-11-02）：**51/51 PASS**（`RESULT: 51/51 passed, 0 failed`）
 
 覆盖：
 
@@ -116,9 +116,11 @@ OPENCLAW_ROOT=/path/to/built/checkout ./verify/deploy-tests.sh
 
 ```bash
 export OPENCLAW_CLI="node /home/raymond/repos/AgileClaw/dist/index.js"
+# 与脚本使用的 CLI 完全一致的裸命令包装（同样遵循 OPENCLAW_CLI）
+oc() { (cd /home/raymond/repos/AgileClaw && $OPENCLAW_CLI "$@"); }
 ```
 
-（若该 checkout 已完成 `pnpm build`，也可不设，直接使用 `pnpm openclaw`。）
+（若该 checkout 已完成 `pnpm build`，也可不设，直接使用 `pnpm openclaw`；下面命令里的 `oc` 换成 `pnpm openclaw` 即可。）
 
 ## 6. 部署步骤（需人工执行；本任务未执行）
 
@@ -136,8 +138,9 @@ export OPENCLAW_CLI="node /home/raymond/repos/AgileClaw/dist/index.js"
 重启 Gateway（**需要用户批准；脚本不会执行**；本机为 systemd user 服务，不是 launchd）：
 
 ```bash
+oc() { (cd /home/raymond/repos/AgileClaw && $OPENCLAW_CLI "$@"); }
 systemctl --user restart openclaw-gateway.service
-(cd /home/raymond/repos/AgileClaw && pnpm openclaw gateway health)
+oc gateway health
 journalctl --user -u openclaw-gateway.service -n 50 --no-pager
 ```
 
@@ -155,9 +158,10 @@ journalctl --user -u openclaw-gateway.service -n 50 --no-pager
 ```bash
 cd /home/raymond/repos/AgileClaw/ops/dingtalk-direct-text-replies
 export OPENCLAW_CLI="node /home/raymond/repos/AgileClaw/dist/index.js"
+oc() { (cd /home/raymond/repos/AgileClaw && $OPENCLAW_CLI "$@"); }
 
 # 必须先删配置键：stock 清单 schema 是 strict 的，残留键会导致 Gateway 启动失败
-pnpm openclaw config unset channels.dingtalk-connector.directReplyMode
+oc config unset channels.dingtalk-connector.directReplyMode
 
 ./scripts/rollback.sh                 # 只打印计划
 ./scripts/rollback.sh --yes           # 从 npm registry 安装 stock 0.8.27
@@ -185,7 +189,7 @@ pnpm openclaw config unset channels.dingtalk-connector.directReplyMode
 ## 8. 升级/覆盖风险与长期方案
 
 - **插件更新对本地包的实际行为（本机观察）**：`openclaw plugins update` 会跳过 archive 安装记录（`Skipping "dingtalk-connector" (source: archive).`）；`openclaw update` 的插件通道同步只处理 npm/clawhub/path/bundled 记录。因此当前不会自动换回上游，但这是观察到的实现行为、不是契约：不要依赖它。
-  - 保守顺序不变：任何插件更新/核心升级前，先 `OPENCLAW_CLI=... pnpm openclaw config unset channels.dingtalk-connector.directReplyMode`。
+  - 保守顺序不变：任何插件更新/核心升级前，先运行 `oc config unset channels.dingtalk-connector.directReplyMode`（`oc` 定义见 §5.2 末尾/§6；等价于 `node /home/raymond/repos/AgileClaw/dist/index.js config unset ...`）。
   - 更新后运行 `./scripts/status.sh`；`state=config-without-patch` 时用 `./scripts/recover-config.sh --yes` 恢复，需要继续使用时重新 `./scripts/deploy.sh --yes`。
 - **已知限制**：状态与回退脚本只读取顶层 `channels.dingtalk-connector.directReplyMode`（恢复脚本额外处理 `accounts.<id>.directReplyMode`）；使用 `$include` 的配置，键可能位于被包含文件，脚本不会编辑它们。本机为单账号、顶层配置，不受影响；多账号/include 部署需先扩展检查范围。
 - **这是过渡 owner，不是上游 owner**。长期方案：向上游 `DingTalk-Real-AI/dingtalk-openclaw-connector` 提交 PR（`src/config/schema.ts`、`src/reply-dispatcher.ts`、`openclaw.plugin.json` 三处；本补丁可直接作为 PR 内容）。上游发布后：unset 配置 → 安装上游版本 → 按上游键语义重新配置。

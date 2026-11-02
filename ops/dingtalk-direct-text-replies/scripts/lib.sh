@@ -135,11 +135,17 @@ service_state() {
 }
 
 print_restart_steps() {
+  local health_cmd
+  if [ -n "${OPENCLAW_CLI:-}" ]; then
+    health_cmd="(cd $OPENCLAW_ROOT && $OPENCLAW_CLI gateway health)"
+  else
+    health_cmd="(cd $OPENCLAW_ROOT && pnpm openclaw gateway health)"
+  fi
   cat <<EOF
 
 Restart (operator action; this script never restarts the Gateway):
   systemctl --user restart $SERVICE_UNIT
-  (cd $OPENCLAW_ROOT && pnpm openclaw gateway health)
+  $health_cmd
   journalctl --user -u $SERVICE_UNIT -n 50 --no-pager
 EOF
 }

@@ -282,6 +282,11 @@ check "config key removed for rollback tests" test -z "$(config_mode)"
 status_after_unset="$("$ops/scripts/status.sh" --json || true)"
 check "status flags patched-but-dormant after unset" test "$(field "$status_after_unset" state)" = "patched-but-dormant"
 
+# A newer recovery backup (no deploy.json) must not shadow the deploy backup.
+mkdir -p "$work/backups/99999999-999999-config"
+"$ops/scripts/rollback.sh" >"$work/rollback-plan.log" 2>&1 || true
+check "rollback default backup discovery skips config-only backups" grep -q "$(basename "$backup_dir")" "$work/rollback-plan.log"
+
 cp "$backup_dir/deploy.json" "$work/deploy.json.good"
 node -e '
   const fs = require("node:fs");

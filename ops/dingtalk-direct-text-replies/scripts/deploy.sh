@@ -217,7 +217,8 @@ plugin_marker_present "$root_after" ||
 
 info "setting $CHANNEL_DIRECT_MODE_PATH=markdown"
 if ! openclaw_cli config set "$CHANNEL_DIRECT_MODE_PATH" markdown; then
-  die "config set failed after the plugin install. The patched plugin stays installed but dormant (default aicard). Retry: pnpm openclaw config set $CHANNEL_DIRECT_MODE_PATH markdown"
+  cli_display="${OPENCLAW_CLI:-pnpm openclaw}"
+  die "config set failed after the plugin install. The patched plugin stays installed but dormant (default aicard). Retry: $cli_display config set $CHANNEL_DIRECT_MODE_PATH markdown"
 fi
 [ "$(config_direct_reply_mode)" = "markdown" ] ||
   die "config verification failed: $CHANNEL_DIRECT_MODE_PATH is not markdown"
