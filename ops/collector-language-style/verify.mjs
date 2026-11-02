@@ -114,6 +114,35 @@ for (const e of examples) {
 }
 pass("示例引号核对完成");
 
+// —— SOUL.md 全局表达规则（用户已授权改 ~/.openclaw/workspace/SOUL.md）——
+const soul = readFileSync(join(dir, "SOUL.md"), "utf8");
+const soulBase = readFileSync(join(dir, "baseline-soul.txt"), "utf8");
+const SOUL_STYLE_MARKERS = [
+  "## 表达",
+  "体贴但有边界",
+  "清晰有条理、简单易懂",
+  "偶尔一点克制的幽默",
+  "不拿人、不拿失误、不拿紧急事项开玩笑",
+  "紧急事项第一句先说行动",
+];
+for (const s of SOUL_STYLE_MARKERS) {
+  if (!soul.includes(s)) fail(`SOUL 表达规则缺失：${s}`);
+  else pass(`SOUL 表达规则存在：${s}`);
+}
+// 新 SOUL 只能是在 live 基准的「气质」与「延续」之间插入表达节，其余字节不变。
+const soulWithoutInsert = soul.replace(/## 表达\n\n[\s\S]*?(?=## 延续)/u, "");
+if (soulWithoutInsert === soulBase) pass("SOUL 其余内容与 live 基准逐字节一致（仅插入表达节）");
+else fail("SOUL 除表达节外还有改动，超出授权范围");
+// 身份红线：全文不得出现影视角色名（防自称/模仿）。
+for (const b of ["贾维斯", "Jarvis", "jarvis"]) {
+  if (soul.includes(b)) fail(`SOUL 含角色名：${b}`);
+  else pass(`SOUL 角色名缺席：${b}`);
+}
+// 通知风格最小自洽：lightContext cron 不注入 SOUL（见 DEPLOY.md 证据链），
+// payload 必须自带足够的最小通知风格规则，不能只剩"见 SOUL.md"式空指针。
+if (next.includes("SOUL.md")) fail("payload 引用了注入不到的 SOUL.md（lightContext 下为空指针）");
+else pass("payload 无 SOUL.md 空指针引用");
+
 if (failures) {
   console.error(`\n${failures} 项检查失败`);
   process.exit(1);
