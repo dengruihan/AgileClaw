@@ -18,6 +18,8 @@ FILES=(
   EVIDENCE.md
   prompt-segments/replacements.md
   files/home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs
+  files/home/raymond/.openclaw/workspace/collection/payload-message.txt
+  files/home/raymond/.openclaw/workspace/collection/trigger-collector.mjs
   verify/harness.mjs
 )
 
