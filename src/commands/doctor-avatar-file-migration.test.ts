@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { agentAvatarStoragePath } from "../agents/identity-avatar-upload.js";
 import { registerAgentWorkspaceAccess } from "../agents/workspace-access.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
@@ -9,6 +9,22 @@ import {
   collectAvatarFileMigrationFindings,
   migrateAgentAvatarFilesToWorkspaces,
 } from "./doctor-avatar-file-migration.js";
+
+const archiveHooks = vi.hoisted(() => ({
+  afterPublish: undefined as (() => void | Promise<void>) | undefined,
+}));
+
+vi.mock("../infra/directory-durability.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../infra/directory-durability.js")>();
+  return {
+    ...actual,
+    publishFileNoClobber: async (...args: Parameters<typeof actual.publishFileNoClobber>) => {
+      const result = await actual.publishFileNoClobber(...args);
+      await archiveHooks.afterPublish?.();
+      return result;
+    },
+  };
+});
 
 const tempRoots: string[] = [];
 
@@ -20,6 +36,7 @@ async function createTempRoot(label: string): Promise<{ root: string; env: NodeJ
 }
 
 afterEach(async () => {
+  archiveHooks.afterPublish = undefined;
   await Promise.all(
     tempRoots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })),
   );
@@ -188,6 +205,115 @@ describe("avatar file migration", () => {
       expect(files.get("IDENTITY.md")?.toString("utf8")).toBe(original);
     } finally {
       release();
+    }
+  });
+
+  it("leaves every source unchanged and keeps an error finding when remote IDENTITY.md is unreadable", async () => {
+    const { root, env } = await createTempRoot("openclaw-avatar-migrate-remote-unreadable-");
+    const workspace = path.join(root, "remote-workspace");
+    const writeFile = vi.fn(async () => {
+      throw new Error("unexpected write");
+    });
+    const release = registerAgentWorkspaceAccess(workspace, {
+      bridge: {
+        readFile: async () => {
+          throw Object.assign(new Error("permission denied"), { code: "EACCES" });
+        },
+        writeFile,
+        stat: async () => null,
+      },
+    });
+    const config: OpenClawConfig = {
+      agents: {
+        entries: { remote: { workspace, identity: { avatar: AVATAR_DATA_URL } } },
+      },
+    };
+    try {
+      const findings = await collectAvatarFileMigrationFindings(config, env);
+      expect(findings).toHaveLength(1);
+      expect(findings[0]).toMatchObject({ severity: "error", target: "remote" });
+      expect(findings[0]?.message).toMatch(
+        /IDENTITY\.md could not be inspected: .*permission denied/u,
+      );
+
+      const result = await migrateAgentAvatarFilesToWorkspaces({ config, env });
+      expect(result.fileChanges).toEqual([]);
+      expect(result.configChanges).toEqual([]);
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings[0]).toMatch(
+        /was not migrated: IDENTITY\.md could not be read \(.*permission denied\)/u,
+      );
+      expect(config.agents?.entries?.remote?.identity?.avatar).toBe(AVATAR_DATA_URL);
+      expect(writeFile).not.toHaveBeenCalled();
+
+      const rerun = await migrateAgentAvatarFilesToWorkspaces({ config, env });
+      expect(rerun.warnings).toHaveLength(1);
+      expect(await collectAvatarFileMigrationFindings(config, env)).toHaveLength(1);
+    } finally {
+      release();
+    }
+  });
+
+  it("refuses to write a remote identity through a replaced workspace binding", async () => {
+    const { root, env } = await createTempRoot("openclaw-avatar-migrate-remote-swap-");
+    const workspace = path.join(root, "remote-workspace");
+    const original = `- Name: remote\n- Avatar: ${AVATAR_DATA_URL}\n`;
+    const firstFiles = new Map<string, Buffer>([["IDENTITY.md", Buffer.from(original)]]);
+    const firstWrites: string[] = [];
+    let releaseFirst: (() => void) | undefined = registerAgentWorkspaceAccess(workspace, {
+      bridge: {
+        readFile: async ({ filePath }) => {
+          const value = firstFiles.get(filePath);
+          if (!value) {
+            throw Object.assign(new Error(`missing ${filePath}`), { code: "ENOENT" });
+          }
+          return value;
+        },
+        writeFile: async ({ filePath, data }) => {
+          firstWrites.push(filePath);
+          firstFiles.set(filePath, Buffer.from(data));
+        },
+        stat: async () => null,
+      },
+    });
+    const secondFiles = new Map<string, Buffer>();
+    const secondWrites: string[] = [];
+    let releaseSecond: (() => void) | undefined;
+    archiveHooks.afterPublish = () => {
+      releaseFirst?.();
+      releaseFirst = undefined;
+      releaseSecond = registerAgentWorkspaceAccess(workspace, {
+        bridge: {
+          readFile: async ({ filePath }) => {
+            const value = secondFiles.get(filePath);
+            if (!value) {
+              throw Object.assign(new Error(`missing ${filePath}`), { code: "ENOENT" });
+            }
+            return value;
+          },
+          writeFile: async ({ filePath, data }) => {
+            secondWrites.push(filePath);
+            secondFiles.set(filePath, Buffer.from(data));
+          },
+          stat: async () => null,
+        },
+      });
+    };
+    const config: OpenClawConfig = {
+      agents: { entries: { remote: { workspace, identity: {} } } },
+    };
+    try {
+      const result = await migrateAgentAvatarFilesToWorkspaces({ config, env });
+      expect(result.configChanges).toEqual([]);
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings[0]).toMatch(
+        /Workspace access changed after the Agent identity was archived/u,
+      );
+      expect(secondWrites).toEqual([]);
+      expect(firstFiles.get("IDENTITY.md")?.toString("utf8")).toBe(original);
+    } finally {
+      releaseSecond?.();
+      releaseFirst?.();
     }
   });
 

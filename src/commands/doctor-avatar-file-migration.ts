@@ -40,6 +40,8 @@ type AvatarMigrationTarget = {
   configAvatar: string | undefined;
   /** Avatar value parsed from the workspace IDENTITY.md. */
   identityAvatar: string | undefined;
+  /** Why IDENTITY.md could not be inspected; unknown state must never look synced. */
+  identityReadError?: string;
 };
 
 function isDataUrlAvatar(value: string | undefined): value is string {
@@ -112,19 +114,22 @@ async function readWorkspaceIdentityState(
   }
 }
 
-async function readWorkspaceIdentityAvatar(workspaceDir: string): Promise<string | undefined> {
-  let identity;
+async function inspectWorkspaceIdentityAvatar(
+  workspaceDir: string,
+): Promise<{ avatar?: string; error?: string }> {
   try {
-    identity = parseIdentityMarkdown(
-      (await readWorkspaceIdentityState(workspaceDir))?.content ?? "",
-    );
-  } catch {
-    // Unreadable identity files behave like a missing file for discovery; the
-    // rewrite step re-reads and reports an actionable warning if it still fails.
-    return undefined;
+    const state = await readWorkspaceIdentityState(workspaceDir);
+    if (!state) {
+      return {};
+    }
+    const identity = parseIdentityMarkdown(state.content);
+    const avatar = identity?.avatar?.trim();
+    return avatar ? { avatar } : {};
+  } catch (error) {
+    // An unreadable IDENTITY.md is unknown state, not an empty file: keep the
+    // error so Doctor neither claims a sync nor silently half-migrates config.
+    return { error: formatErrorMessage(error) };
   }
-  const avatar = identity?.avatar?.trim();
-  return avatar ? avatar : undefined;
 }
 
 async function collectAvatarMigrationTargets(
@@ -140,9 +145,15 @@ async function collectAvatarMigrationTargets(
     seen.add(agentId);
     const configAvatar = readConfigAvatar(entry);
     const workspaceDir = resolveAgentWorkspaceDir(config, agentId, env);
-    const identityAvatar = await readWorkspaceIdentityAvatar(workspaceDir);
-    if (isDataUrlAvatar(configAvatar) || isDataUrlAvatar(identityAvatar)) {
-      targets.push({ agentId, workspaceDir, configAvatar, identityAvatar });
+    const identity = await inspectWorkspaceIdentityAvatar(workspaceDir);
+    if (identity.error || isDataUrlAvatar(configAvatar) || isDataUrlAvatar(identity.avatar)) {
+      targets.push({
+        agentId,
+        workspaceDir,
+        configAvatar,
+        identityAvatar: identity.avatar,
+        ...(identity.error ? { identityReadError: identity.error } : {}),
+      });
     }
   }
   return targets;
@@ -189,6 +200,13 @@ async function writeWorkspaceIdentityContent(params: {
   content: string;
   access: AgentWorkspaceAccess | undefined;
 }): Promise<void> {
+  // Archive I/O may outlive the binding captured by the read; revalidate the
+  // exact owner immediately before the write side effect.
+  if (getAgentWorkspaceAccess(params.workspaceDir) !== params.access) {
+    throw new Error(
+      "Workspace access changed after the Agent identity was archived; refusing to write through a stale workspace binding",
+    );
+  }
   if (params.access) {
     await params.access.bridge.writeFile({
       filePath: DEFAULT_IDENTITY_FILENAME,
@@ -242,14 +260,26 @@ export async function collectAvatarFileMigrationFindings(
 ): Promise<readonly HealthFinding[]> {
   try {
     const targets = await collectAvatarMigrationTargets(cfg, env);
-    return targets.map((target) => ({
-      checkId: AVATAR_MIGRATION_CHECK_ID,
-      severity: "warning" as const,
-      message: `Agent "${target.agentId}" persists a base64 avatar data URI in ${describeTargetSources(target)}; base64 is no longer a supported persisted avatar source.`,
-      target: target.agentId,
-      requirement: "avatar-file-migration",
-      fixHint: `Run ${formatCliCommand("openclaw doctor --fix")} to decode it into an image file under ${shortenHomePath(target.workspaceDir)} and reference that path.`,
-    }));
+    return targets.map((target) => {
+      if (target.identityReadError) {
+        return {
+          checkId: AVATAR_MIGRATION_CHECK_ID,
+          severity: "error" as const,
+          message: `Agent "${target.agentId}" IDENTITY.md could not be inspected: ${target.identityReadError}. Its persisted avatar state is unknown.`,
+          target: target.agentId,
+          requirement: "avatar-file-migration",
+          fixHint: `Restore workspace read access for ${shortenHomePath(target.workspaceDir)}, then run ${formatCliCommand("openclaw doctor --fix")} and rerun doctor to confirm no avatar findings remain.`,
+        };
+      }
+      return {
+        checkId: AVATAR_MIGRATION_CHECK_ID,
+        severity: "warning" as const,
+        message: `Agent "${target.agentId}" persists a base64 avatar data URI in ${describeTargetSources(target)}; base64 is no longer a supported persisted avatar source.`,
+        target: target.agentId,
+        requirement: "avatar-file-migration",
+        fixHint: `Run ${formatCliCommand("openclaw doctor --fix")} to decode it into an image file under ${shortenHomePath(target.workspaceDir)} and reference that path.`,
+      };
+    });
   } catch (error) {
     return [
       {
@@ -299,6 +329,12 @@ export async function migrateAgentAvatarFilesToWorkspaces(params: {
 
   for (const target of targets) {
     const label = `Agent "${target.agentId}"`;
+    if (target.identityReadError) {
+      warnings.push(
+        `${label} avatar was not migrated: IDENTITY.md could not be read (${target.identityReadError}). No persisted avatar source was changed; restore workspace read access, then rerun doctor.`,
+      );
+      continue;
+    }
     // Config owns the effective avatar; when both hold base64, its bytes win and
     // the archived IDENTITY.md preserves the other value.
     const dataUrl = isDataUrlAvatar(target.configAvatar)

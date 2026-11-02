@@ -60,7 +60,10 @@ import {
   sanitizeAgentIdentityLine,
 } from "../../agents/identity-file.js";
 import { resolveAgentIdentity } from "../../agents/identity.js";
-import { getAgentWorkspaceAccess } from "../../agents/workspace-access.js";
+import {
+  getAgentWorkspaceAccess,
+  type AgentWorkspaceAccess,
+} from "../../agents/workspace-access.js";
 import {
   prepareLegacyWorkspaceStateReset,
   removeLegacyWorkspaceStateForReset,
@@ -79,7 +82,7 @@ import {
 import { purgeAgentSessionStoreEntries } from "../../config/sessions.js";
 import { resolveSessionTranscriptsDirForAgent } from "../../config/sessions/paths.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
-import { isMissingPathError } from "../../infra/errors.js";
+import { formatErrorMessage, isMissingPathError } from "../../infra/errors.js";
 import { withAgentExecApprovalsRemoved } from "../../infra/exec-approvals.js";
 import { root, FsSafeError } from "../../infra/fs-safe.js";
 import { isPathInside } from "../../infra/path-guards.js";
@@ -106,6 +109,8 @@ import {
 import {
   agentFileHandlers,
   buildIdentityMarkdownOrRespondUnsafe,
+  readWorkspaceFileContent,
+  restoreWorkspaceFileContent,
   writeWorkspaceFileOrRespond,
 } from "./agents-files.js";
 import { agentListHandler } from "./agents-list.js";
@@ -638,6 +643,13 @@ export const agentsHandlers: GatewayRequestHandlers = {
     const nextConfig = configured ? applyAgentConfig(cfg, agentConfigUpdate) : cfg;
 
     let avatarPublishFailure: unknown;
+    let identityRollback:
+      | {
+          workspaceDir: string;
+          previousContent: string | undefined;
+          access: AgentWorkspaceAccess | undefined;
+        }
+      | undefined;
     try {
       let ensuredWorkspace: Awaited<ReturnType<typeof ensureAgentWorkspace>> | undefined;
       if (workspaceDir) {
@@ -684,6 +696,27 @@ export const agentsHandlers: GatewayRequestHandlers = {
           return;
         }
         assertWorkspaceAccessCurrent();
+        let previousIdentityContent: string | undefined;
+        try {
+          previousIdentityContent = await readWorkspaceFileContent(
+            identityWorkspaceDir,
+            DEFAULT_IDENTITY_FILENAME,
+          );
+        } catch (error) {
+          if (error instanceof FsSafeError) {
+            respond(
+              false,
+              undefined,
+              errorShape(
+                ErrorCodes.INVALID_REQUEST,
+                `unsafe workspace file "${DEFAULT_IDENTITY_FILENAME}"`,
+              ),
+            );
+            return;
+          }
+          throw error;
+        }
+        const identityAccess = getAgentWorkspaceAccess(identityWorkspaceDir);
         if (
           !(await writeWorkspaceFileOrRespond({
             respond,
@@ -695,9 +728,14 @@ export const agentsHandlers: GatewayRequestHandlers = {
         ) {
           return;
         }
-        // The write accepted these exact bytes. Settle their config projection,
-        // without retiring workspace authority or admitting another upload.
+        // The write accepted these exact bytes. Any later failure in this update
+        // restores them before the handler reports it.
         identityPublished = true;
+        identityRollback = {
+          workspaceDir: identityWorkspaceDir,
+          previousContent: previousIdentityContent,
+          access: identityAccess,
+        };
         assertWorkspaceAccessCurrent();
       }
 
@@ -718,6 +756,18 @@ export const agentsHandlers: GatewayRequestHandlers = {
         assertCurrent: assertUploadAllowed,
       });
     } catch (error) {
+      const rollbackError = identityRollback
+        ? await restoreWorkspaceFileContent({
+            ...identityRollback,
+            name: DEFAULT_IDENTITY_FILENAME,
+          }).catch((restoreFailure: unknown) => restoreFailure)
+        : undefined;
+      if (rollbackError) {
+        throw new Error(
+          `Agent identity update failed (${formatErrorMessage(error)}) and the previous ${DEFAULT_IDENTITY_FILENAME} could not be restored: ${formatErrorMessage(rollbackError)}.`,
+          { cause: error },
+        );
+      }
       if (error instanceof SessionMutationAuthorizationChangedError) {
         respond(false, undefined, error.error);
         return;

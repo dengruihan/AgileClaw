@@ -11,7 +11,10 @@ import {
 } from "../../../packages/gateway-protocol/src/index.js";
 import { resolveAgentWorkspaceDir } from "../../agents/agent-scope.js";
 import { buildIdentityMarkdownForWrite } from "../../agents/identity-file.js";
-import { getAgentWorkspaceAccess } from "../../agents/workspace-access.js";
+import {
+  getAgentWorkspaceAccess,
+  type AgentWorkspaceAccess,
+} from "../../agents/workspace-access.js";
 import { MAX_WORKSPACE_BOOTSTRAP_FILE_BYTES } from "../../agents/workspace-bootstrap-read.js";
 import {
   DEFAULT_BOOTSTRAP_FILENAME,
@@ -163,7 +166,7 @@ export async function writeWorkspaceFileOrRespond(params: {
   return true;
 }
 
-async function readWorkspaceFileContent(
+export async function readWorkspaceFileContent(
   workspaceDir: string,
   name: string,
 ): Promise<string | undefined> {
@@ -192,6 +195,51 @@ async function readWorkspaceFileContent(
       return undefined;
     }
     throw err;
+  }
+}
+
+/**
+ * Restore one workspace document after a failed identity/config mutation. The
+ * captured access binding must still be current: a replaced workspace owner is
+ * never written through a stale bridge.
+ */
+export async function restoreWorkspaceFileContent(params: {
+  workspaceDir: string;
+  name: string;
+  previousContent: string | undefined;
+  access: AgentWorkspaceAccess | undefined;
+}): Promise<void> {
+  if (getAgentWorkspaceAccess(params.workspaceDir) !== params.access) {
+    throw new Error(
+      "Workspace access changed after the Agent identity was written; refusing to restore through a different workspace owner",
+    );
+  }
+  if (params.access) {
+    if (params.previousContent === undefined) {
+      const remove = params.access.bridge.remove;
+      if (!remove) {
+        throw new Error(
+          `cannot remove restored workspace file "${params.name}": the workspace access bridge cannot delete files`,
+        );
+      }
+      await remove({ filePath: params.name });
+    } else {
+      await params.access.bridge.writeFile({
+        filePath: params.name,
+        data: params.previousContent,
+        mkdir: false,
+      });
+    }
+    if (getAgentWorkspaceAccess(params.workspaceDir) !== params.access) {
+      throw new Error("Workspace access changed while restoring Agent identity");
+    }
+    return;
+  }
+  const workspaceRoot = await root(params.workspaceDir);
+  if (params.previousContent === undefined) {
+    await workspaceRoot.remove(params.name, { force: true });
+  } else {
+    await workspaceRoot.write(params.name, params.previousContent, { encoding: "utf8" });
   }
 }
 

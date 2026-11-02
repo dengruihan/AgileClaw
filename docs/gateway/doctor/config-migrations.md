@@ -383,11 +383,13 @@ the backups until the repaired config and migrated state have been verified.
 
 ## Avatar files
 
-Persisted agent avatars must be workspace image files or `http(s)` URLs. Config
-or `IDENTITY.md` values that still hold a `data:image/...;base64` URI fail config
-validation with a Doctor hint, and the Gateway never renders them. Run
-`openclaw doctor --fix` before starting a directly replaced binary; the normal
-`openclaw update` flow invokes the candidate Doctor.
+Persisted agent avatars must be workspace image files or `http(s)` URLs. A
+base64 `data:image/...` avatar in agent config fails config validation with a
+Doctor hint, so the Gateway refuses to start until it is migrated; run
+`openclaw doctor --fix` before starting a directly replaced binary (the normal
+`openclaw update` flow invokes the candidate Doctor). A base64 avatar that exists
+only in a workspace `IDENTITY.md` does not block startup: Doctor reports it as a
+health finding and the Gateway renders no avatar until the migration rewrites it.
 
 Doctor decodes each persisted base64 avatar into a content-addressed image
 file under `<workspace>/avatars/` (`png`, `jpg`, `webp`, `gif`, or `svg`),
@@ -396,7 +398,11 @@ workspace-relative path, and archives the previous `IDENTITY.md` under the state
 directory's `backups/avatar-file-migration/` folder. Config bytes win when both
 places hold a base64 avatar. A value that cannot be decoded — unsupported image
 type, malformed base64, or over the 2 MiB limit — is left untouched with an
-actionable warning; replace it with a path or URL, then rerun Doctor.
+actionable warning; replace it with a path or URL, then rerun Doctor. If Doctor
+cannot read an agent's `IDENTITY.md`, it reports that agent as an error finding
+and leaves config and the identity file untouched instead of half-migrating;
+restore workspace read access, rerun Doctor, and confirm no avatar findings
+remain.
 
 New uploads never persist base64: Gateway avatar uploads accept the existing
 data-URL input for transport, decode it immediately, write the image into the

@@ -331,6 +331,7 @@ it("keeps the previous avatar bytes and config when an update cannot publish the
   };
   await state.writeConfig(config);
   const originalConfig = await fs.readFile(state.configPath, "utf8");
+  const identityBefore = await fs.readFile(identityPath, "utf8");
   const release = registerAgentWorkspaceAccess(workspace, {
     bridge: {
       readFile: async () => await fs.readFile(identityPath),
@@ -356,7 +357,86 @@ it("keeps the previous avatar bytes and config when an update cannot publish the
       message: expect.stringContaining("could not save the avatar image"),
     });
     expect(await fs.readFile(previousPath)).toEqual(previousBody);
+    expect(await fs.readFile(identityPath, "utf8")).toBe(identityBefore);
     expect(await fs.readFile(state.configPath, "utf8")).toBe(originalConfig);
+  } finally {
+    release();
+  }
+});
+
+it("restores IDENTITY.md when the config write fails after the avatar is published", async () => {
+  const previousBody = Buffer.from([6, 5, 4]);
+  const previousSource = agentAvatarStoragePath("existing", "png", previousBody);
+  const previousPath = path.join(workspace, previousSource);
+  await fs.mkdir(path.dirname(previousPath), { recursive: true });
+  await fs.writeFile(previousPath, previousBody);
+  const identityWithStoredAvatar = `# Identity\n\n- Name: Existing\n- Avatar: ${previousSource}\n`;
+  await fs.writeFile(identityPath, identityWithStoredAvatar);
+  config = {
+    ...config,
+    agents: {
+      entries: {
+        existing: { workspace, identity: { name: "Existing", avatar: previousSource } },
+      },
+    },
+  };
+  await state.writeConfig(config);
+  const originalConfig = await fs.readFile(state.configPath, "utf8");
+  const prepare = configBackup.prepareConfigFileWrite;
+  let failOnce = true;
+  vi.spyOn(configBackup, "prepareConfigFileWrite").mockImplementation(async (params) => {
+    if (failOnce) {
+      failOnce = false;
+      throw new Error("config write refused after publish");
+    }
+    return await prepare(params);
+  });
+
+  await expect(call("agents.update")).rejects.toThrow("config write refused after publish");
+
+  expect(await fs.readFile(previousPath)).toEqual(previousBody);
+  expect(await fs.readFile(identityPath, "utf8")).toBe(identityWithStoredAvatar);
+  expect(await fs.readFile(state.configPath, "utf8")).toBe(originalConfig);
+});
+
+it("restores the previous IDENTITY.md when the config update is refused", async () => {
+  const identityWithStoredAvatar =
+    "# Identity\n\n- Name: Existing\n- Avatar: avatars/old-only-copy.png\n\nKeep these notes.\n";
+  await fs.writeFile(identityPath, identityWithStoredAvatar);
+  config = {
+    ...config,
+    agents: {
+      entries: { existing: { workspace, identity: { name: "Existing" } } },
+    },
+  };
+  await state.writeConfig(config);
+  let firstIdentityWrite = true;
+  const release = registerAgentWorkspaceAccess(workspace, {
+    bridge: {
+      readFile: async () => await fs.readFile(identityPath),
+      writeFile: async (params) => {
+        if (params.filePath !== "IDENTITY.md") {
+          return;
+        }
+        await fs.writeFile(identityPath, params.data);
+        if (firstIdentityWrite) {
+          firstIdentityWrite = false;
+          // The config loses the agent while the identity bytes are in flight.
+          await state.writeConfig({ gateway: { uploads: { enabled: true } } });
+        }
+      },
+      stat: vi.fn(),
+    },
+  });
+
+  try {
+    const respond = await call("agents.update");
+    expect(respond).toHaveBeenCalledExactlyOnceWith(
+      false,
+      undefined,
+      expect.objectContaining({ code: "INVALID_REQUEST" }),
+    );
+    expect(await fs.readFile(identityPath, "utf8")).toBe(identityWithStoredAvatar);
   } finally {
     release();
   }

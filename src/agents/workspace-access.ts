@@ -53,7 +53,9 @@ export type AgentWorkspaceAccess = {
     | "writeFile"
     | "createFileExclusive"
     | "stat"
-  >;
+  > &
+    /** Optional delete for failure rollback; real bridges expose it. */
+    Partial<Pick<SandboxFsBridge, "remove">>;
   /** Purpose-scoped output reads; the document bridge need not allow attachment paths. */
   outboundMedia?: {
     localRoots: readonly string[];
