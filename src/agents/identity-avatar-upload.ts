@@ -1,7 +1,9 @@
-// Upload-time avatar materialization: decode base64 image data URLs into
-// workspace image files so persisted identity sources stay file paths.
 import fs from "node:fs/promises";
 import path from "node:path";
+// Upload-time avatar staging: decode base64 image data URLs and stage workspace
+// image files so persisted identity sources stay file paths. Workspace bytes are
+// published only from the admitted create/update mutation.
+import { sha256HexPrefixCore } from "@openclaw/normalization-core/node-crypto";
 import { root as fsSafeRoot, FsSafeError } from "../infra/fs-safe.js";
 import { AVATAR_MAX_BYTES } from "../shared/avatar-policy.js";
 import { getAgentWorkspaceAccess } from "./workspace-access.js";
@@ -79,9 +81,13 @@ export function decodeAvatarImageDataUrl(value: string): AvatarUploadDecodeResul
   return { ok: true, value: { mimeType, extension, body } };
 }
 
-/** Persisted workspace-relative storage path for one agent's uploaded avatar. */
-export function agentAvatarStoragePath(agentId: string, extension: string): string {
-  return `${AGENT_AVATAR_DIRECTORY}/${agentId}.${extension}`;
+/** Deterministic workspace-relative storage path for one agent's exact avatar bytes. */
+export function agentAvatarStoragePath(
+  agentId: string,
+  extension: string,
+  body: Uint8Array,
+): string {
+  return `${AGENT_AVATAR_DIRECTORY}/${agentId}-${sha256HexPrefixCore(body, 16)}.${extension}`;
 }
 
 /** Normalize a workspace avatar storage path for the current platform. */
@@ -89,12 +95,70 @@ export function agentAvatarStorageFilePath(workspaceDir: string, source: string)
   return path.join(workspaceDir, ...source.split("/"));
 }
 
+export type StagedAgentAvatarUpload = {
+  /** Workspace-relative source to persist in config and IDENTITY.md. */
+  source: string;
+  filePath: string;
+  /**
+   * Write the staged bytes. The content-hashed path means a different upload
+   * never replaces this file, so a failed operation cannot alter an existing
+   * avatar image; callers publish only from their admitted mutation.
+   */
+  publish: (assertCurrent?: () => void) => Promise<void>;
+};
+
+/** Stage decoded avatar bytes without touching the workspace. */
+export function stageDecodedAgentAvatarUpload(params: {
+  workspaceDir: string;
+  agentId: string;
+  decoded: DecodedAvatarUpload;
+}): StagedAgentAvatarUpload {
+  const source = agentAvatarStoragePath(
+    params.agentId,
+    params.decoded.extension,
+    params.decoded.body,
+  );
+  return {
+    source,
+    filePath: agentAvatarStorageFilePath(params.workspaceDir, source),
+    publish: (assertCurrent) =>
+      writeAgentAvatarFile({
+        workspaceDir: params.workspaceDir,
+        source,
+        body: params.decoded.body,
+        assertCurrent,
+      }),
+  };
+}
+
+/**
+ * Stage one uploaded data-URL avatar. Decoding and path selection validate the
+ * request; workspace bytes are written only by the returned `publish`.
+ */
+export function stageAgentAvatarUpload(params: {
+  workspaceDir: string;
+  agentId: string;
+  avatar: string;
+}): { ok: true; upload: StagedAgentAvatarUpload } | { ok: false; message: string } {
+  const decoded = decodeAvatarImageDataUrl(params.avatar);
+  if (!decoded.ok) {
+    return { ok: false, message: decoded.message };
+  }
+  return {
+    ok: true,
+    upload: stageDecodedAgentAvatarUpload({
+      workspaceDir: params.workspaceDir,
+      agentId: params.agentId,
+      decoded: decoded.value,
+    }),
+  };
+}
+
 export type PersistedAgentAvatarUpload = { source: string; filePath: string };
 
 /**
- * Write decoded avatar bytes into the agent workspace and return the persisted
- * relative source. Remote workspaces use their access bridge; local workspaces
- * write through the fs-safe root after the parent directory exists.
+ * Write decoded avatar bytes immediately. Gateway uploads stage instead and
+ * publish from their admitted mutation; Doctor migration owns its own writes.
  */
 export async function persistAgentAvatarUpload(params: {
   workspaceDir: string;
@@ -102,73 +166,46 @@ export async function persistAgentAvatarUpload(params: {
   decoded: DecodedAvatarUpload;
   assertCurrent?: () => void;
 }): Promise<PersistedAgentAvatarUpload> {
-  const source = agentAvatarStoragePath(params.agentId, params.decoded.extension);
+  const staged = stageDecodedAgentAvatarUpload(params);
+  await staged.publish(params.assertCurrent);
+  return { source: staged.source, filePath: staged.filePath };
+}
+
+async function writeAgentAvatarFile(params: {
+  workspaceDir: string;
+  source: string;
+  body: Buffer;
+  assertCurrent?: () => void;
+}): Promise<void> {
   const access = getAgentWorkspaceAccess(params.workspaceDir);
   if (access) {
     params.assertCurrent?.();
     await access.bridge.writeFile({
-      filePath: source,
-      data: params.decoded.body,
+      filePath: params.source,
+      data: params.body,
       mkdir: true,
     });
     if (getAgentWorkspaceAccess(params.workspaceDir) !== access) {
       throw new Error("Workspace access changed while saving the Agent avatar");
     }
-    return { source, filePath: agentAvatarStorageFilePath(params.workspaceDir, source) };
+    return;
   }
-  const filePath = agentAvatarStorageFilePath(params.workspaceDir, source);
+  const filePath = agentAvatarStorageFilePath(params.workspaceDir, params.source);
   // Revalidate admission before the first filesystem effect (directory creation).
   params.assertCurrent?.();
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   const workspaceRoot = await fsSafeRoot(params.workspaceDir);
   params.assertCurrent?.();
   try {
-    await workspaceRoot.write(source, params.decoded.body, {
+    await workspaceRoot.write(params.source, params.body, {
       assertBeforeMutation: params.assertCurrent,
     });
   } catch (error) {
     if (error instanceof FsSafeError) {
-      throw new Error(`unsafe avatar destination "${source}" in the agent workspace`, {
+      throw new Error(`unsafe avatar destination "${params.source}" in the agent workspace`, {
         cause: error,
       });
     }
     throw error;
-  }
-  return { source, filePath };
-}
-
-/**
- * Materialize one uploaded data-URL avatar into the workspace. Returns the
- * persisted relative source, or an actionable failure message. Errors matching
- * `rethrowIf` (upload admission revocation) propagate to the caller's mapping.
- */
-export async function materializeAgentAvatarUpload(params: {
-  workspaceDir: string;
-  agentId: string;
-  avatar: string;
-  assertCurrent?: () => void;
-  rethrowIf?: (error: unknown) => boolean;
-}): Promise<{ ok: true; source: string } | { ok: false; message: string }> {
-  const result = decodeAvatarImageDataUrl(params.avatar);
-  if (!result.ok) {
-    return { ok: false, message: result.message };
-  }
-  try {
-    const persisted = await persistAgentAvatarUpload({
-      workspaceDir: params.workspaceDir,
-      agentId: params.agentId,
-      decoded: result.value,
-      assertCurrent: params.assertCurrent,
-    });
-    return { ok: true, source: persisted.source };
-  } catch (error) {
-    if (params.rethrowIf?.(error)) {
-      throw error;
-    }
-    const detail = error instanceof Error && error.message ? error.message : String(error);
-    return {
-      ok: false,
-      message: `could not save the avatar image into the agent workspace: ${detail}`,
-    };
   }
 }

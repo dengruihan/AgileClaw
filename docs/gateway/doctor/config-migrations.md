@@ -389,8 +389,8 @@ validation with a Doctor hint, and the Gateway never renders them. Run
 `openclaw doctor --fix` before starting a directly replaced binary; the normal
 `openclaw update` flow invokes the candidate Doctor.
 
-Doctor decodes each persisted base64 avatar into
-`<workspace>/avatars/<agent-id>.<ext>` (`png`, `jpg`, `webp`, `gif`, or `svg`),
+Doctor decodes each persisted base64 avatar into a content-addressed image
+file under `<workspace>/avatars/` (`png`, `jpg`, `webp`, `gif`, or `svg`),
 repoints `identity.avatar` and `- Avatar:` in the workspace `IDENTITY.md` at that
 workspace-relative path, and archives the previous `IDENTITY.md` under the state
 directory's `backups/avatar-file-migration/` folder. Config bytes win when both

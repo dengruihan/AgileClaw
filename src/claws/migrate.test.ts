@@ -15,7 +15,11 @@ import {
   persistClawPackageRef,
   readClawInstallRecord,
 } from "./provenance.js";
-import { CLAW_WORKSPACE_FILE_RECORD_SCHEMA_VERSION, upsertClawWorkspaceFile } from "./workspace.js";
+import {
+  CLAW_WORKSPACE_FILE_RECORD_SCHEMA_VERSION,
+  readClawWorkspaceFiles,
+  upsertClawWorkspaceFile,
+} from "./workspace.js";
 
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
 afterEach(() => closeOpenClawStateDatabaseForTest());
@@ -252,6 +256,68 @@ describe("Claw migration planning", () => {
         message: expect.stringContaining(`agents.defaults.${field}`),
       });
     }
+  });
+
+  it("packages a workspace avatar file as a managed workspace file", async () => {
+    const avatar = Buffer.from([137, 80, 78, 71, 1, 2, 3]);
+    const { workspace, env, config, build } = await fixture({
+      identity: { avatar: "avatars/worker.png" },
+    });
+    await mkdir(join(workspace, "avatars"), { recursive: true });
+    await writeFile(join(workspace, "avatars/worker.png"), avatar);
+
+    const migration = await build();
+
+    expect(migration.manifest.agent.identity?.avatar).toBe("avatars/worker.png");
+    expect(migration.manifest.workspace.files).toEqual([
+      { source: "workspace/avatars/worker.png", path: "avatars/worker.png" },
+    ]);
+    expect(migration.packageFiles.get("workspace/avatars/worker.png")).toEqual(avatar);
+    expect(migration.plan.generatedPackageFiles).toContainEqual(
+      expect.objectContaining({ path: "workspace/avatars/worker.png" }),
+    );
+    expect(migration.plan.workspaceFiles).toContainEqual(
+      expect.objectContaining({ path: join(workspace, "avatars/worker.png") }),
+    );
+
+    await applyClawMigrationPlan({ migration, config, options: { env } });
+    expect(readClawInstallRecord("worker", { env })).toMatchObject({ agentId: "worker" });
+    expect(readClawWorkspaceFiles("worker", { env })).toContainEqual(
+      expect.objectContaining({
+        path: "avatars/worker.png",
+        sourcePath: "workspace/avatars/worker.png",
+      }),
+    );
+  });
+
+  it.each([
+    {
+      avatar: "data:image/png;base64,AQID",
+      message: /Embedded base64 avatars are no longer persisted/u,
+    },
+    {
+      avatar: "https://example.test/avatar.png",
+      message: /Remote http\(s\) avatars cannot be represented/u,
+    },
+    {
+      avatar: "../outside.png",
+      message: /workspace-relative image file/u,
+    },
+  ])("rejects unrepresentable avatar $avatar", async ({ avatar, message }) => {
+    const { build } = await fixture({ identity: { avatar } });
+    await expect(build()).rejects.toMatchObject({
+      code: "agent_avatar_unsupported",
+      path: "$.agent.identity.avatar",
+      message: expect.stringMatching(message),
+    });
+  });
+
+  it("rejects an unreadable workspace avatar file", async () => {
+    const { build } = await fixture({ identity: { avatar: "avatars/missing.png" } });
+    await expect(build()).rejects.toMatchObject({
+      code: "agent_avatar_unreadable",
+      path: "$.agent.identity.avatar",
+    });
   });
 
   it("rejects selected workspace changes after consent and cleans the generated package", async () => {

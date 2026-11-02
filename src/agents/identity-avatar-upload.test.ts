@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   agentAvatarStoragePath,
   decodeAvatarImageDataUrl,
-  materializeAgentAvatarUpload,
   persistAgentAvatarUpload,
+  stageAgentAvatarUpload,
 } from "./identity-avatar-upload.js";
 import { registerAgentWorkspaceAccess } from "./workspace-access.js";
 
@@ -75,6 +75,66 @@ describe("decodeAvatarImageDataUrl", () => {
   });
 });
 
+describe("stageAgentAvatarUpload", () => {
+  it("stages bytes without touching the workspace until publish", async () => {
+    const workspace = await createTempWorkspace();
+    const staged = stageAgentAvatarUpload({
+      workspaceDir: workspace,
+      agentId: "main",
+      avatar: PNG_DATA_URL,
+    });
+    if (!staged.ok) {
+      throw new Error("expected staged avatar");
+    }
+    const source = agentAvatarStoragePath("main", "png", PNG_BODY);
+
+    expect(staged.upload.source).toBe(source);
+    await expect(fs.access(path.join(workspace, "avatars"))).rejects.toThrow();
+
+    await staged.upload.publish();
+    expect(await fs.readFile(staged.upload.filePath)).toEqual(PNG_BODY);
+  });
+
+  it("never replaces an earlier avatar file when a later upload fails to publish", async () => {
+    const workspace = await createTempWorkspace();
+    const first = stageAgentAvatarUpload({
+      workspaceDir: workspace,
+      agentId: "main",
+      avatar: PNG_DATA_URL,
+    });
+    if (!first.ok) {
+      throw new Error("expected staged avatar");
+    }
+    await first.upload.publish();
+
+    const second = stageAgentAvatarUpload({
+      workspaceDir: workspace,
+      agentId: "main",
+      avatar: `data:image/png;base64,${Buffer.from([9, 9, 9]).toString("base64")}`,
+    });
+    if (!second.ok) {
+      throw new Error("expected staged avatar");
+    }
+    expect(second.upload.source).not.toBe(first.upload.source);
+
+    await expect(fs.readFile(first.upload.filePath)).resolves.toEqual(PNG_BODY);
+    await second.upload.publish();
+    expect(await fs.readFile(first.upload.filePath)).toEqual(PNG_BODY);
+    expect(await fs.readFile(second.upload.filePath)).toEqual(Buffer.from([9, 9, 9]));
+  });
+
+  it("reports unsupported uploads without staging workspace work", async () => {
+    const workspace = await createTempWorkspace();
+    const staged = stageAgentAvatarUpload({
+      workspaceDir: workspace,
+      agentId: "main",
+      avatar: "data:image/bmp;base64,AQID",
+    });
+    expect(staged.ok).toBe(false);
+    await expect(fs.access(path.join(workspace, "avatars"))).rejects.toThrow();
+  });
+});
+
 describe("persistAgentAvatarUpload", () => {
   it("writes local workspace avatar files and returns the persisted source", async () => {
     const workspace = await createTempWorkspace();
@@ -87,8 +147,9 @@ describe("persistAgentAvatarUpload", () => {
       agentId: "main",
       decoded: decoded.value,
     });
-    expect(persisted.source).toBe(agentAvatarStoragePath("main", "png"));
-    expect(persisted.filePath).toBe(path.join(workspace, "avatars", "main.png"));
+    const source = agentAvatarStoragePath("main", "png", PNG_BODY);
+    expect(persisted.source).toBe(source);
+    expect(persisted.filePath).toBe(path.join(workspace, "avatars", source.split("/")[1]!));
     expect(await fs.readFile(persisted.filePath)).toEqual(PNG_BODY);
   });
 
@@ -105,13 +166,17 @@ describe("persistAgentAvatarUpload", () => {
       },
     });
     try {
-      const materialized = await materializeAgentAvatarUpload({
+      const staged = stageAgentAvatarUpload({
         workspaceDir: workspace,
         agentId: "remote-agent",
         avatar: PNG_DATA_URL,
       });
-      expect(materialized).toEqual({ ok: true, source: "avatars/remote-agent.png" });
-      expect(writes).toEqual([{ filePath: "avatars/remote-agent.png", data: PNG_BODY }]);
+      if (!staged.ok) {
+        throw new Error("expected staged avatar");
+      }
+      await staged.upload.publish();
+      const source = agentAvatarStoragePath("remote-agent", "png", PNG_BODY);
+      expect(writes).toEqual([{ filePath: source, data: PNG_BODY }]);
     } finally {
       release();
     }
@@ -126,15 +191,17 @@ describe("persistAgentAvatarUpload", () => {
     await fs.mkdir(blocked);
     await fs.chmod(blocked, 0o500);
     try {
-      const materialized = await materializeAgentAvatarUpload({
-        workspaceDir: workspace,
-        agentId: "main",
-        avatar: PNG_DATA_URL,
-      });
-      if (materialized.ok) {
-        throw new Error("expected the avatar write to fail");
+      const decoded = decodeAvatarImageDataUrl(PNG_DATA_URL);
+      if (!decoded.ok) {
+        throw new Error("expected decodable avatar");
       }
-      expect(materialized.message).toMatch(/could not save the avatar image/);
+      await expect(
+        persistAgentAvatarUpload({
+          workspaceDir: workspace,
+          agentId: "main",
+          decoded: decoded.value,
+        }),
+      ).rejects.toThrow();
     } finally {
       await fs.chmod(blocked, 0o700);
     }
@@ -142,17 +209,21 @@ describe("persistAgentAvatarUpload", () => {
 
   it("rethrows admission revocation before creating workspace files", async () => {
     const workspace = await createTempWorkspace();
+    const decoded = decodeAvatarImageDataUrl(PNG_DATA_URL);
+    if (!decoded.ok) {
+      throw new Error("expected decodable avatar");
+    }
     const revocation = new Error("uploads disabled");
-    const materialized = materializeAgentAvatarUpload({
-      workspaceDir: workspace,
-      agentId: "main",
-      avatar: PNG_DATA_URL,
-      assertCurrent: () => {
-        throw revocation;
-      },
-      rethrowIf: (error) => error === revocation,
-    });
-    await expect(materialized).rejects.toBe(revocation);
+    await expect(
+      persistAgentAvatarUpload({
+        workspaceDir: workspace,
+        agentId: "main",
+        decoded: decoded.value,
+        assertCurrent: () => {
+          throw revocation;
+        },
+      }),
+    ).rejects.toBe(revocation);
     await expect(fs.access(path.join(workspace, "avatars"))).rejects.toThrow();
   });
 });

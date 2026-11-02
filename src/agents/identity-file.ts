@@ -12,7 +12,7 @@ import { DEFAULT_IDENTITY_FILENAME } from "./workspace-bootstrap-policy.js";
 
 // Identity files historically embedded avatars as multi-megabyte data URLs.
 // Keep the bound so legacy files stay readable until Doctor migrates them.
-const MAX_IDENTITY_FILE_BYTES = 4 * 1024 * 1024;
+export const MAX_IDENTITY_FILE_BYTES = 4 * 1024 * 1024;
 
 export type AgentIdentityFile = {
   name?: string;
@@ -103,7 +103,8 @@ function parseIdentityLine(line: string): { label: string; value: string } | und
       };
 }
 
-function parseIdentityMarkdown(content: string): AgentIdentityFile | null {
+/** Parse writable identity fields from IDENTITY.md content. */
+export function parseIdentityMarkdown(content: string): AgentIdentityFile | null {
   const identity: AgentIdentityFile = {};
   for (const line of content.split(/\r?\n/)) {
     const parsed = parseIdentityLine(line);

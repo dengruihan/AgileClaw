@@ -8,9 +8,11 @@ import {
   persistAgentAvatarUpload,
 } from "../agents/identity-avatar-upload.js";
 import {
-  loadAgentIdentityFromWorkspaceAsync,
+  MAX_IDENTITY_FILE_BYTES,
   mergeIdentityMarkdownContent,
+  parseIdentityMarkdown,
 } from "../agents/identity-file.js";
+import { getAgentWorkspaceAccess, type AgentWorkspaceAccess } from "../agents/workspace-access.js";
 import { DEFAULT_IDENTITY_FILENAME } from "../agents/workspace.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import { getRecord } from "../config/legacy.shared.js";
@@ -18,7 +20,7 @@ import { resolveStateDir } from "../config/paths.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { HealthFinding } from "../flows/health-checks.js";
 import { publishFileNoClobber, syncDirectoryIfSupported } from "../infra/directory-durability.js";
-import { formatErrorMessage } from "../infra/errors.js";
+import { formatErrorMessage, isMissingPathError } from "../infra/errors.js";
 import { FsSafeError, root as fsSafeRoot } from "../infra/fs-safe.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { isAvatarDataUrl } from "../shared/avatar-policy.js";
@@ -76,8 +78,51 @@ function* visitAgentEntryRecords(
   }
 }
 
+/** Read IDENTITY.md through the workspace owner so remote workspaces migrate too. */
+async function readWorkspaceIdentityState(
+  workspaceDir: string,
+): Promise<{ content: string; access?: AgentWorkspaceAccess } | undefined> {
+  const access = getAgentWorkspaceAccess(workspaceDir);
+  if (access) {
+    try {
+      const buffer = await access.bridge.readFile({
+        filePath: DEFAULT_IDENTITY_FILENAME,
+        maxBytes: MAX_IDENTITY_FILE_BYTES,
+      });
+      if (getAgentWorkspaceAccess(workspaceDir) !== access) {
+        throw new Error("Workspace access changed while reading the Agent identity");
+      }
+      return { content: buffer.toString("utf8"), access };
+    } catch (error) {
+      if (isMissingPathError(error)) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+  try {
+    const workspaceRoot = await fsSafeRoot(workspaceDir);
+    const safeRead = await workspaceRoot.read(DEFAULT_IDENTITY_FILENAME, { hardlinks: "reject" });
+    return { content: safeRead.buffer.toString("utf8") };
+  } catch (error) {
+    if (error instanceof FsSafeError && error.code === "not-found") {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
 async function readWorkspaceIdentityAvatar(workspaceDir: string): Promise<string | undefined> {
-  const identity = await loadAgentIdentityFromWorkspaceAsync(workspaceDir);
+  let identity;
+  try {
+    identity = parseIdentityMarkdown(
+      (await readWorkspaceIdentityState(workspaceDir))?.content ?? "",
+    );
+  } catch {
+    // Unreadable identity files behave like a missing file for discovery; the
+    // rewrite step re-reads and reports an actionable warning if it still fails.
+    return undefined;
+  }
   const avatar = identity?.avatar?.trim();
   return avatar ? avatar : undefined;
 }
@@ -139,17 +184,24 @@ async function archiveIdentityFile(params: {
   return archivePath;
 }
 
-async function readWorkspaceIdentityContent(workspaceDir: string): Promise<string | undefined> {
-  try {
-    const workspaceRoot = await fsSafeRoot(workspaceDir);
-    const safeRead = await workspaceRoot.read(DEFAULT_IDENTITY_FILENAME, { hardlinks: "reject" });
-    return safeRead.buffer.toString("utf8");
-  } catch (error) {
-    if (error instanceof FsSafeError && error.code === "not-found") {
-      return undefined;
+async function writeWorkspaceIdentityContent(params: {
+  workspaceDir: string;
+  content: string;
+  access: AgentWorkspaceAccess | undefined;
+}): Promise<void> {
+  if (params.access) {
+    await params.access.bridge.writeFile({
+      filePath: DEFAULT_IDENTITY_FILENAME,
+      data: params.content,
+      mkdir: false,
+    });
+    if (getAgentWorkspaceAccess(params.workspaceDir) !== params.access) {
+      throw new Error("Workspace access changed while writing the Agent identity");
     }
-    throw error;
+    return;
   }
+  const workspaceRoot = await fsSafeRoot(params.workspaceDir);
+  await workspaceRoot.write(DEFAULT_IDENTITY_FILENAME, params.content, { encoding: "utf8" });
 }
 
 async function rewriteIdentityAvatarLine(params: {
@@ -158,18 +210,21 @@ async function rewriteIdentityAvatarLine(params: {
   source: string;
   env: NodeJS.ProcessEnv;
 }): Promise<string | undefined> {
-  const existing = await readWorkspaceIdentityContent(params.workspaceDir);
+  const existing = await readWorkspaceIdentityState(params.workspaceDir);
   if (existing === undefined) {
     return undefined;
   }
   const archivePath = await archiveIdentityFile({
     agentId: params.agentId,
-    content: existing,
+    content: existing.content,
     env: params.env,
   });
-  const content = mergeIdentityMarkdownContent(existing, { avatar: params.source });
-  const workspaceRoot = await fsSafeRoot(params.workspaceDir);
-  await workspaceRoot.write(DEFAULT_IDENTITY_FILENAME, content, { encoding: "utf8" });
+  const content = mergeIdentityMarkdownContent(existing.content, { avatar: params.source });
+  await writeWorkspaceIdentityContent({
+    workspaceDir: params.workspaceDir,
+    content,
+    access: existing.access,
+  });
   return shortenHomePath(archivePath);
 }
 

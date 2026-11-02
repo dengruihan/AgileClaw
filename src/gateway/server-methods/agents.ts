@@ -50,7 +50,10 @@ import {
   resolveSharedAuthStorePath,
 } from "../../agents/auth-profiles/path-resolve.js";
 import { resolveAuthProfileDatabasePath } from "../../agents/auth-profiles/sqlite.js";
-import { materializeAgentAvatarUpload } from "../../agents/identity-avatar-upload.js";
+import {
+  stageAgentAvatarUpload,
+  type StagedAgentAvatarUpload,
+} from "../../agents/identity-avatar-upload.js";
 import {
   createAgentIdentityConfig,
   normalizeIdentityForFile,
@@ -111,6 +114,12 @@ import { assertValidParams } from "./validation.js";
 
 function respondAgentNotFound(respond: RespondFn, agentId: string): void {
   respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `agent "${agentId}" not found`));
+}
+
+/** Actionable message for a workspace avatar write that failed after admission. */
+function avatarPublishFailureMessage(error: unknown): string {
+  const detail = error instanceof Error && error.message ? error.message : String(error);
+  return `could not save the avatar image into the agent workspace: ${detail}`;
 }
 
 /** Extract a transport-only avatar data URL from request params, if present. */
@@ -449,10 +458,11 @@ export const agentsHandlers: GatewayRequestHandlers = {
       client,
       context,
     });
-    // Uploads carry avatar images as data URLs for transport only; the persisted
-    // source is always the workspace-relative file written here.
+    // Uploads carry avatar images as data URLs for transport only. Stage the
+    // decoded bytes; the admitted creation publishes them before its config commit.
     const avatarUpload = resolveAgentAvatarUploadParam(params.avatar);
     let avatarInput: unknown = params.avatar;
+    let stagedAvatar: StagedAgentAvatarUpload | undefined;
     if (avatarUpload) {
       const agentId = normalizeAgentIdStrict(params.name);
       if (!agentId.ok) {
@@ -462,30 +472,21 @@ export const agentsHandlers: GatewayRequestHandlers = {
         const workspaceDir = params.workspace?.trim()
           ? resolveUserPath(params.workspace.trim())
           : resolveAgentWorkspaceDir(context.getRuntimeConfig(), agentId.value);
-        let materialized: Awaited<ReturnType<typeof materializeAgentAvatarUpload>>;
-        try {
-          materialized = await materializeAgentAvatarUpload({
-            workspaceDir,
-            agentId: agentId.value,
-            avatar: avatarUpload,
-            assertCurrent: assertUploadCurrent,
-            rethrowIf: (error) => error instanceof SessionMutationAuthorizationChangedError,
-          });
-        } catch (error) {
-          if (error instanceof SessionMutationAuthorizationChangedError) {
-            respond(false, undefined, error.error);
-            return;
-          }
-          throw error;
-        }
-        if (!materialized.ok) {
-          respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, materialized.message));
+        const staged = stageAgentAvatarUpload({
+          workspaceDir,
+          agentId: agentId.value,
+          avatar: avatarUpload,
+        });
+        if (!staged.ok) {
+          respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, staged.message));
           return;
         }
-        avatarInput = materialized.source;
+        stagedAvatar = staged.upload;
+        avatarInput = staged.upload.source;
       }
     }
 
+    let avatarPublishFailure: unknown;
     try {
       const result = await createAgent({
         name: params.name,
@@ -493,6 +494,18 @@ export const agentsHandlers: GatewayRequestHandlers = {
         model: params.model,
         emoji: params.emoji,
         ...(avatarInput === undefined ? {} : { avatar: avatarInput }),
+        ...(stagedAvatar
+          ? {
+              beforeConfigCommit: async () => {
+                try {
+                  await stagedAvatar.publish();
+                } catch (error) {
+                  avatarPublishFailure = error;
+                  throw error;
+                }
+              },
+            }
+          : {}),
         assertIdentityInputAllowed: assertUploadCurrent,
       });
       if (result.status === "error") {
@@ -516,6 +529,14 @@ export const agentsHandlers: GatewayRequestHandlers = {
     } catch (error) {
       if (error instanceof SessionMutationAuthorizationChangedError) {
         respond(false, undefined, error.error);
+        return;
+      }
+      if (avatarPublishFailure) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, avatarPublishFailureMessage(avatarPublishFailure)),
+        );
         return;
       }
       throw error;
@@ -581,31 +602,22 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    // Uploads carry avatar images as data URLs for transport only; the persisted
-    // source is always the workspace-relative file written here.
+    // Uploads carry avatar images as data URLs for transport only. Stage the
+    // decoded bytes; the admitted config mutation publishes them before commit.
     let avatarInput: unknown = params.avatar;
+    let stagedAvatar: StagedAgentAvatarUpload | undefined;
     if (avatarUpload) {
-      let materialized: Awaited<ReturnType<typeof materializeAgentAvatarUpload>>;
-      try {
-        materialized = await materializeAgentAvatarUpload({
-          workspaceDir: workspaceDir ?? resolveAgentWorkspaceDir(cfg, agentId),
-          agentId,
-          avatar: avatarUpload,
-          assertCurrent: assertUploadAllowed,
-          rethrowIf: (error) => error instanceof SessionMutationAuthorizationChangedError,
-        });
-      } catch (error) {
-        if (error instanceof SessionMutationAuthorizationChangedError) {
-          respond(false, undefined, error.error);
-          return;
-        }
-        throw error;
-      }
-      if (!materialized.ok) {
-        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, materialized.message));
+      const staged = stageAgentAvatarUpload({
+        workspaceDir: workspaceDir ?? resolveAgentWorkspaceDir(cfg, agentId),
+        agentId,
+        avatar: avatarUpload,
+      });
+      if (!staged.ok) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, staged.message));
         return;
       }
-      avatarInput = materialized.source;
+      stagedAvatar = staged.upload;
+      avatarInput = staged.upload.source;
     }
 
     const identity = createAgentIdentityConfig({
@@ -625,6 +637,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
     };
     const nextConfig = configured ? applyAgentConfig(cfg, agentConfigUpdate) : cfg;
 
+    let avatarPublishFailure: unknown;
     try {
       let ensuredWorkspace: Awaited<ReturnType<typeof ensureAgentWorkspace>> | undefined;
       if (workspaceDir) {
@@ -688,7 +701,22 @@ export const agentsHandlers: GatewayRequestHandlers = {
         assertWorkspaceAccessCurrent();
       }
 
-      await updateAgentConfigEntry({ ...agentConfigUpdate, assertCurrent: assertUploadAllowed });
+      await updateAgentConfigEntry({
+        ...agentConfigUpdate,
+        ...(stagedAvatar
+          ? {
+              beforeCommit: async () => {
+                try {
+                  await stagedAvatar.publish(assertUploadAllowed);
+                } catch (error) {
+                  avatarPublishFailure = error;
+                  throw error;
+                }
+              },
+            }
+          : {}),
+        assertCurrent: assertUploadAllowed,
+      });
     } catch (error) {
       if (error instanceof SessionMutationAuthorizationChangedError) {
         respond(false, undefined, error.error);
@@ -700,6 +728,14 @@ export const agentsHandlers: GatewayRequestHandlers = {
       }
       if (error instanceof AgentModelSelectionError) {
         respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, error.message));
+        return;
+      }
+      if (avatarPublishFailure) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, avatarPublishFailureMessage(avatarPublishFailure)),
+        );
         return;
       }
       throw error;

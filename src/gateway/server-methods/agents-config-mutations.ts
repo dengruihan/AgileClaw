@@ -31,6 +31,8 @@ type AgentConfigUpdate = {
   model?: string | null;
   agentRuntime?: string;
   identity?: IdentityConfig;
+  /** Publish update-owned files after the mutation is admitted and before it commits. */
+  beforeCommit?: () => void | Promise<void>;
 };
 
 function isModelOnlyUpdate(params: AgentConfigUpdate): boolean {
@@ -143,6 +145,7 @@ export async function updateAgentConfigEntry(
             ...(params.identity ? { identity: params.identity } : {}),
           })
         : next;
+      await params.beforeCommit?.();
       Object.assign(draft, latestNextConfig);
     },
   });

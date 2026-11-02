@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
+import { agentAvatarStoragePath } from "../agents/identity-avatar-upload.js";
 import { isToolAllowed, resolveSandboxToolPolicyForAgent } from "../agents/sandbox/tool-policy.js";
 import { readConfigFileSnapshot } from "../config/config.js";
 import { findLegacyConfigIssues } from "../config/legacy.js";
@@ -98,13 +99,14 @@ it("repairs a persisted base64 avatar in the doctor config flow", async () => {
     // The invalid persisted source blocks ordinary config reads; Doctor must still repair it.
     expect((await readConfigFileSnapshot()).valid).toBe(false);
 
+    const avatarSource = agentAvatarStoragePath("main", "png", body);
     const ctx = await prepareDoctorContext(configPath);
     expect(ctx.sourceConfigValid).toBe(false);
     expect(ctx.configResult.shouldWriteConfig).toBe(true);
-    expect(ctx.cfg.agents?.entries?.main?.identity?.avatar).toBe("avatars/main.png");
-    expect(await fs.readFile(path.join(workspace, "avatars", "main.png"))).toEqual(body);
+    expect(ctx.cfg.agents?.entries?.main?.identity?.avatar).toBe(avatarSource);
+    expect(await fs.readFile(path.join(workspace, avatarSource))).toEqual(body);
     expect(await fs.readFile(path.join(workspace, "IDENTITY.md"), "utf8")).toContain(
-      "- Avatar: avatars/main.png",
+      `- Avatar: ${avatarSource}`,
     );
     // Check 18 owns the atomic config write; run it as the health flow does.
     expect(await fs.readFile(configPath, "utf8")).toContain(dataUrl);
@@ -112,7 +114,7 @@ it("repairs a persisted base64 avatar in the doctor config flow", async () => {
 
     const saved = await readConfigFileSnapshot();
     expect(saved.valid).toBe(true);
-    expect(saved.sourceConfig.agents?.entries?.main?.identity?.avatar).toBe("avatars/main.png");
+    expect(saved.sourceConfig.agents?.entries?.main?.identity?.avatar).toBe(avatarSource);
     expect(await fs.readFile(`${configPath}.bak`, "utf8")).toContain(dataUrl);
   });
 });

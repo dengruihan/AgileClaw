@@ -51,6 +51,8 @@ export function generatedPackage(
     agent: AgentConfig;
     avatar?: string;
     files: CapturedWorkspaceFile[];
+    /** Additional managed workspace files already present in the source workspace. */
+    managedFiles?: Array<{ path: string; content: Buffer }>;
   },
 ): {
   manifest: ClawManifest;
@@ -71,6 +73,21 @@ export function generatedPackage(
       source: `workspace/${file.name}`,
     };
     packageFiles.set(`workspace/${file.name}`, file.content);
+  }
+  for (const file of params.managedFiles ?? []) {
+    const packagePath = `workspace/${file.path}`;
+    if (
+      packageFiles.has(packagePath) ||
+      (CLAW_BOOTSTRAP_FILE_NAMES as readonly string[]).includes(file.path)
+    ) {
+      throw new ClawMigrationError(
+        "migration_path_invalid",
+        `Managed workspace file ${JSON.stringify(file.path)} conflicts with another package file.`,
+        `$.workspace.${file.path}`,
+      );
+    }
+    workspaceFiles.push({ source: packagePath, path: file.path });
+    packageFiles.set(packagePath, file.content);
   }
   const agent = portableAgent(params.agent, params.avatar);
   const profile = portableOpenClawProfile(params.agent, []);

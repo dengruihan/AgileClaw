@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { agentAvatarStoragePath } from "../../agents/identity-avatar-upload.js";
 import { registerAgentWorkspaceAccess } from "../../agents/workspace-access.js";
 import * as workspaceOwner from "../../agents/workspace.js";
 import * as configBackup from "../../config/backup-rotation.js";
@@ -37,7 +38,11 @@ const client: GatewayClient = {
   },
 };
 const avatarSourceFor = (method: "agents.create" | "agents.update") =>
-  method === "agents.update" ? "avatars/existing.png" : "avatars/new-avatar-agent.png";
+  agentAvatarStoragePath(
+    method === "agents.update" ? "existing" : "new-avatar-agent",
+    "png",
+    inlineAvatarBody,
+  );
 const avatarPathFor = (method: "agents.create" | "agents.update") =>
   path.join(workspace, avatarSourceFor(method));
 function disableUploads() {
@@ -110,15 +115,14 @@ beforeEach(async () => {
 });
 
 it.each([
-  { method: "agents.create", stage: "identity-write" },
-  { method: "agents.update", stage: "identity-write" },
+  { method: "agents.create", stage: "identity-read" },
+  { method: "agents.update", stage: "identity-read" },
   { method: "agents.create", stage: "config" },
   { method: "agents.update", stage: "config" },
   { method: "agents.create", stage: "unpublished-config" },
-  { method: "agents.update", stage: "remote-read" },
   { method: "agents.update", stage: "remote-write" },
 ] as const)(
-  "$method rechecks upload admission at $stage and settles accepted bytes",
+  "$method rechecks upload admission at $stage and settles admitted bytes",
   async ({ method, stage }) => {
     const entered = createDeferredCore();
     const resume = createDeferredCore();
@@ -136,20 +140,20 @@ it.each([
         await pause();
       }
     });
-    if (stage === "identity-write") {
+    if (stage === "identity-read") {
       const realRoot = fsSafe.root;
       vi.spyOn(fsSafe, "root").mockImplementation(async (...args) => {
         const handle = await realRoot(...args);
         if (args[0] === workspace) {
-          const write = handle.write.bind(handle);
+          const read = handle.read.bind(handle);
           let pausedOnce = false;
-          vi.spyOn(handle, "write").mockImplementation(async (...writeArgs) => {
-            // The avatar file write happens before the identity write.
+          vi.spyOn(handle, "read").mockImplementation(async (...readArgs) => {
+            // Pause before the identity bytes are accepted, then revoke uploads.
             if (!pausedOnce) {
               pausedOnce = true;
               await pause();
             }
-            return await write(...writeArgs);
+            return await read(...readArgs);
           });
         }
         return handle;
@@ -170,12 +174,7 @@ it.each([
     } else {
       release = registerAgentWorkspaceAccess(workspace, {
         bridge: {
-          readFile: async () => {
-            if (stage === "remote-read") {
-              await pause();
-            }
-            return await fs.readFile(identityPath);
-          },
+          readFile: async () => await fs.readFile(identityPath),
           writeFile,
           stat: vi.fn(),
         },
@@ -194,8 +193,6 @@ it.each([
       const admittedIdentity = await fs.readFile(identityPath, "utf8");
       if (accepted) {
         expect(admittedIdentity).toContain(avatarSourceFor(method));
-      } else if (stage === "unpublished-config") {
-        expect(admittedIdentity).toBe(originalIdentity);
       }
       disableUploads();
       resume.resolve();
@@ -218,10 +215,9 @@ it.each([
         expectDisabled(respond);
         expect.soft(await fs.readFile(identityPath, "utf8")).toBe(originalIdentity);
         expect.soft(await fs.readFile(state.configPath, "utf8")).toBe(originalConfig);
-        if (stage === "remote-read") {
-          // The admitted avatar bytes settled before the revoked identity read.
-          expect(writeFile).toHaveBeenCalledTimes(1);
-          await expectMaterializedAvatar(method);
+        if (stage === "identity-read") {
+          // Staged bytes never reach the workspace before the identity is accepted.
+          await expect(fs.access(avatarPathFor(method))).rejects.toThrow();
         }
       }
     } finally {
@@ -262,8 +258,10 @@ it("decodes avatar uploads into workspace image files and persists only the path
     undefined,
   );
   await expectMaterializedAvatar("agents.update");
-  expect(await fs.readFile(identityPath, "utf8")).toContain("- Avatar: avatars/existing.png");
-  expect(await fs.readFile(state.configPath, "utf8")).toContain("avatars/existing.png");
+  expect(await fs.readFile(identityPath, "utf8")).toContain(
+    `- Avatar: ${avatarSourceFor("agents.update")}`,
+  );
+  expect(await fs.readFile(state.configPath, "utf8")).toContain(avatarSourceFor("agents.update"));
 });
 
 it("rejects avatar uploads whose data URL cannot be decoded", async () => {
@@ -283,5 +281,83 @@ it("rejects avatar uploads whose data URL cannot be decoded", async () => {
       );
     expect.soft(await fs.readFile(identityPath, "utf8")).toBe(originalIdentity);
   }
+  await expect(fs.access(path.join(workspace, "avatars"))).rejects.toThrow();
+});
+
+it("keeps the existing avatar bytes when agents.create hits the duplicate check", async () => {
+  const existingBody = Buffer.from([7, 8, 9]);
+  const existingSource = agentAvatarStoragePath("existing", "png", existingBody);
+  const existingPath = path.join(workspace, existingSource);
+  await fs.mkdir(path.dirname(existingPath), { recursive: true });
+  await fs.writeFile(existingPath, existingBody);
+  config = {
+    ...config,
+    agents: {
+      entries: {
+        existing: { workspace, identity: { name: "Existing", avatar: existingSource } },
+      },
+    },
+  };
+  await state.writeConfig(config);
+  const originalConfig = await fs.readFile(state.configPath, "utf8");
+  const identityBefore = await fs.readFile(identityPath, "utf8");
+
+  const respond = await call("agents.create", { name: "Existing", avatar: inlineAvatar });
+
+  expect(respond).toHaveBeenCalledExactlyOnceWith(
+    false,
+    undefined,
+    expect.objectContaining({ code: "INVALID_REQUEST" }),
+  );
+  expect(await fs.readFile(existingPath)).toEqual(existingBody);
   await expect(fs.access(avatarPathFor("agents.update"))).rejects.toThrow();
+  expect(await fs.readFile(state.configPath, "utf8")).toBe(originalConfig);
+  expect(await fs.readFile(identityPath, "utf8")).toBe(identityBefore);
+});
+
+it("keeps the previous avatar bytes and config when an update cannot publish the upload", async () => {
+  const previousBody = Buffer.from([4, 5, 6]);
+  const previousSource = agentAvatarStoragePath("existing", "png", previousBody);
+  const previousPath = path.join(workspace, previousSource);
+  await fs.mkdir(path.dirname(previousPath), { recursive: true });
+  await fs.writeFile(previousPath, previousBody);
+  config = {
+    ...config,
+    agents: {
+      entries: {
+        existing: { workspace, identity: { name: "Existing", avatar: previousSource } },
+      },
+    },
+  };
+  await state.writeConfig(config);
+  const originalConfig = await fs.readFile(state.configPath, "utf8");
+  const release = registerAgentWorkspaceAccess(workspace, {
+    bridge: {
+      readFile: async () => await fs.readFile(identityPath),
+      writeFile: async (params) => {
+        if (params.filePath === "IDENTITY.md") {
+          await fs.writeFile(identityPath, params.data);
+          return;
+        }
+        throw new Error("workspace storage offline");
+      },
+      stat: vi.fn(),
+    },
+  });
+
+  try {
+    const respond = await call("agents.update");
+    expect(respond).toHaveBeenCalledExactlyOnceWith(
+      false,
+      undefined,
+      expect.objectContaining({ code: "INVALID_REQUEST" }),
+    );
+    expect(respond.mock.calls[0]?.[2]).toMatchObject({
+      message: expect.stringContaining("could not save the avatar image"),
+    });
+    expect(await fs.readFile(previousPath)).toEqual(previousBody);
+    expect(await fs.readFile(state.configPath, "utf8")).toBe(originalConfig);
+  } finally {
+    release();
+  }
 });
