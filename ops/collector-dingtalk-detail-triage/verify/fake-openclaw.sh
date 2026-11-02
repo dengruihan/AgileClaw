@@ -14,6 +14,19 @@ shift || true
 
 case "$sub" in
   get)
+    if [ -f "$state.nextget" ]; then
+      mode="$(cat "$state.nextget")"
+      case "$mode" in
+        fail)
+          echo "fake: simulated cron get failure" >&2
+          exit 3
+          ;;
+        badjson)
+          printf '{"broken":'
+          exit 0
+          ;;
+      esac
+    fi
     cat "$state"
     ;;
   edit)
@@ -39,6 +52,11 @@ case "$sub" in
       if (process.env.FAKE_CORRUPT === "1") job.trigger.script += "\n// simulated trigger drift";
       fs.writeFileSync(process.env.FAKE_STATE, JSON.stringify(job));
     '
+    if [ -n "${FAKE_FAIL_NEXT_GET:-}" ]; then
+      printf 'fail' >"$state.nextget"
+    elif [ -n "${FAKE_BAD_JSON_NEXT_GET:-}" ]; then
+      printf 'badjson' >"$state.nextget"
+    fi
     ;;
   *)
     echo "fake: unsupported cron subcommand $sub" >&2

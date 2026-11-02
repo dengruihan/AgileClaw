@@ -29,6 +29,7 @@ check() { # check <label> <condition-exit-code>
 
 fixture() {
   rm -rf "$tmp/backups"
+  rm -f "$FAKE_STATE.nextget"
   cat >"$FAKE_STATE" <<'EOF'
 {
   "id": "6a45be21-ce0b-4b8b-8986-4c885d1ea659",
@@ -122,6 +123,20 @@ if FAKE_CORRUPT=1 "$ops/scripts/deploy.sh" --yes --allow-drift >"$tmp/corrupt.lo
 check "failed post-deploy verification exits nonzero" "$([ "$code" -ne 0 ] && echo 0 || echo 1)"
 grep -q "trigger script changed unexpectedly" "$tmp/corrupt.log"; check "corruption is reported" "$?"
 message_is "BASELINE PROMPT FIXTURE"; check "failed verification auto-restores the message" "$?"
+
+# Regression r1-2: the edit succeeds but the next read fails / returns bad JSON.
+# Both must reach restore_previous instead of aborting on set -e.
+fixture
+if FAKE_FAIL_NEXT_GET=1 "$ops/scripts/deploy.sh" --yes --allow-drift >"$tmp/getfail.log" 2>&1; then code=0; else code=$?; fi
+check "after-get failure exits nonzero" "$([ "$code" -ne 0 ] && echo 0 || echo 1)"
+grep -q "after-get failed" "$tmp/getfail.log"; check "after-get failure is reported" "$?"
+message_is "BASELINE PROMPT FIXTURE"; check "after-get failure auto-restores the message" "$?"
+
+fixture
+if FAKE_BAD_JSON_NEXT_GET=1 "$ops/scripts/deploy.sh" --yes --allow-drift >"$tmp/badjson.log" 2>&1; then code=0; else code=$?; fi
+check "after-get JSON parse failure exits nonzero" "$([ "$code" -ne 0 ] && echo 0 || echo 1)"
+grep -q "unparsable" "$tmp/badjson.log"; check "after-get parse failure is reported" "$?"
+message_is "BASELINE PROMPT FIXTURE"; check "after-get parse failure auto-restores the message" "$?"
 
 echo "RESULT: $passed passed, $failures failed"
 [ "$failures" -eq 0 ]

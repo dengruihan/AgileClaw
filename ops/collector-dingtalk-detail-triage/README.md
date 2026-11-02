@@ -21,7 +21,7 @@
 | --------------------------- | ------------------------------------------------------------------ |
 | payload.message sha256      | `3422e6ed8a38d0e1169f508c16d951991ef9aaa6fd0d5436b0cea4d4845dd311` |
 | trigger.script sha256       | `2fefcf25abc694c645c1e856ec85433f2b5bff25ce72d938e2be92b8f53e3a91` |
-| 期望 payload.message sha256 | `28a814aa35caa3ce30f215c7564936274f498b8f6be2000b7999088ff3ed7c94` |
+| 期望 payload.message sha256 | `fa8537795b3b7bcda4b1feb2dcf7b9a5edbb24ed80401c295a7812e11e7ca25c` |
 
 ## 3. 方案（只改 Agent 提示词）
 
@@ -34,7 +34,7 @@
 5. **未回复时的判断输入**：正文要点、是否 @ 我、是否提问、是否含截止/时间要求、未读状态。需要行动才按 `schedule-sweep` 登记/排程并提醒；否则静默。
 6. **通知可写正文要点**：可以准确概括「谁、什么时候、说了什么要点」，不再写「只能看到会话动态」或让用户自己去钉钉看。只提炼要点，不复述大段原文，不展开隐私细节。
 7. **补查失败**：同一会话重试一次；仍失败则本轮跳过，**不发「收集层无正文」这类提醒，也不猜内容**。`DWS_AUTH`/auth/token/401/403 → 走既有故障流程提示用户 `dws auth login`，不代登。
-8. **有界**：一轮最多补查 10 个变化会话，先未读、再按 `lastMsgAt` 从新到旧；其余只按未读状态粗筛。
+8. **有界**：一轮最多补查 10 个变化会话，按 `lastMsgAt` 从新到旧。超出上限的会话本轮**完全跳过**：不提醒、不登记、不排程，也不能只凭未读状态行动——未读只是补查后的判断输入，不是提醒依据。
 
 保留不变：
 
@@ -86,7 +86,7 @@ cd /home/raymond/repos/AgileClaw/ops/collector-dingtalk-detail-triage
 - `trigger.script` 的 sha256 与部署前一致；
 - `schedule`、`timeoutSeconds`、`toolsAllow`、`sessionTarget`、`enabled`、description 全部未变。
 
-任一项不符会自动把旧 message 写回并报错。当前 live message 若已不是 §2 的基线，脚本会拒绝，需先看 `openclaw cron get ... --json` 再决定是否 `--allow-drift`。
+任一项不符会自动把旧 message 写回并报错。**部署后的读取失败、JSON 解析失败也走同一恢复路径**：`verify_after` 内的 after-get、字段解析、比较任一步失败都会先 `restore_previous` 再退出，不会因 `set -e` 把新 prompt 留在线上。`cron edit` 本身报错时同样先尝试写回。当前 live message 若已不是 §2 的基线，脚本会拒绝，需先看 `openclaw cron get ... --json` 再决定是否 `--allow-drift`。
 
 部署后验证（不 force run、不发测试消息）：
 
@@ -108,21 +108,21 @@ cd /home/raymond/repos/AgileClaw/ops/collector-dingtalk-detail-triage
 
 ## 7. 验证结果（2026-11-02）
 
-| 命令                                      | 结果                                                                                                                                                                              |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `node verify/check-prompt.mjs`            | **70/70 PASS**：必需补查步骤、身份映射、本人收尾跳过、失败不降级为「无正文」提醒、语言/通知/其他来源/故障流程保留、脚本不碰 trigger、无真实 cid/messageId/手机号/个人 userId 泄漏 |
-| `./verify/deploy-sim.sh`                  | **22/22 PASS**（fake CLI，不碰 live）：dry run、drift 拒绝、apply、字段不变、status、rollback、未知状态拒绝、`--force`、校验失败自动回滚                                          |
-| `./verify/probe.sh --cid <已脱敏 cid>` ×3 | 3 个真实只读样本，结论分别为 `skip` / `triage` / `skip`，无正文输出                                                                                                               |
-| `./scripts/deploy.sh`（无 `--yes`）       | 只打印计划，未改动 live                                                                                                                                                           |
-| `./scripts/status.sh`                     | live：`state=not deployed`，trigger sha 与基线一致，message 未变                                                                                                                  |
-| `./scripts/rollback.sh`（无 `--yes`）     | 当前无备份，按预期报错退出；有备份路径由 deploy-sim 覆盖                                                                                                                          |
+| 命令                                      | 结果                                                                                                                                                                                                                                      |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node verify/check-prompt.mjs`            | **84/84 PASS**：必需补查步骤、身份映射、本人收尾跳过、失败不降级为「无正文」提醒、超限会话只跳过不做未读-only 行动、语言/通知/其他来源/故障流程保留、脚本不碰 trigger、部署后读取失败可恢复、无真实 cid/messageId/手机号/个人 userId 泄漏 |
+| `./verify/deploy-sim.sh`                  | **28/28 PASS**（fake CLI，不碰 live）：dry run、drift 拒绝、apply、字段不变、status、rollback、未知状态拒绝、`--force`、校验失败自动回滚，以及 **edit 成功后 after-get 失败 / 返回坏 JSON 两种情况都自动恢复**                            |
+| `./verify/probe.sh --cid <已脱敏 cid>` ×3 | 3 个真实只读样本，结论分别为 `skip` / `triage` / `skip`，无正文输出                                                                                                                                                                       |
+| `./scripts/deploy.sh`（无 `--yes`）       | 只打印计划，未改动 live                                                                                                                                                                                                                   |
+| `./scripts/status.sh`                     | live：`state=not deployed`，trigger sha 与基线一致，message 未变                                                                                                                                                                          |
+| `./scripts/rollback.sh`（无 `--yes`）     | 当前无备份，按预期报错退出；有备份路径由 deploy-sim 覆盖                                                                                                                                                                                  |
 
 ## 8. 边界、风险与后续
 
 - **未验证部分（如实声明）**：模型是否按提示正确调用工具、判断是否值得提醒，离线无法执行；需部署后自然周期观察一轮真实 delta（不 force run）。
 - `+unread-chats` 的字段名无法预演（当前未读为空）；提示词因此以已实测的 `chat-list.unreadPoint` 为主、`+unread-chats` 为交叉验证，成员匹配按会话 ID/名称。
 - 每会话只读最近 15 条，同一秒内多条消息依赖 dws 返回顺序；极端并发下可能把同一秒的收尾判成未回复（会多提醒一次，不会漏掉本人回复）。
-- 一轮最多补查 10 个会话；超出部分只按未读状态粗筛，不做正文判断。
+- 一轮最多补查 10 个会话；超出部分本轮完全跳过（不提醒、不登记、不排程），不允许仅凭未读状态行动。
 - 正文只在本轮 Agent 上下文使用，不写入 `report.json`、快照或日志；提醒只提炼要点。部署后仍建议人工抽查一条通知是否泄露过多原文。
 - live 工作区 `~/.openclaw/workspace/collection/README.md` 描述的是收集层（仍准确），本次不改；如需让运维文档也写明「唤醒后由 Agent 补查钉钉正文」，可在部署后追加一句，不阻塞本任务。
 - description 未改（「有事项delta唤醒Agent分诊」仍准确）。

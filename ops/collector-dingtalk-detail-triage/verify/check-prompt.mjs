@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (name) => readFileSync(join(root, name), "utf8");
 const prompt = read("payload-message.txt");
+const readme = read("README.md");
 const deploy = read("scripts/deploy.sh");
 const rollback = read("scripts/rollback.sh");
 const lib = read("scripts/lib.sh");
@@ -99,7 +100,30 @@ check(
   !has(prompt, "不得声称读过或总结正文"),
 );
 
-// 5. Preserved behavior.
+// 5. Bounded run: excess conversations are skipped, never acted on from unread alone.
+check(
+  "prompt marks excess conversations as fully skipped",
+  has(prompt, "本轮超出上限的会话完全跳过"),
+);
+check("prompt forbids action on skipped conversations", has(prompt, "不提醒、不登记、不排程"));
+check(
+  "prompt says unread is not an action basis",
+  has(prompt, "未读只是补查后的判断输入，不是提醒依据"),
+);
+check(
+  "prompt drops unread-only coarse filtering",
+  !has(prompt, "只按未读状态粗筛") && !/只按未读/.test(prompt),
+);
+check(
+  "README drops unread-only coarse filtering",
+  !has(readme, "只按未读状态粗筛") && !/只按未读/.test(readme),
+);
+check(
+  "README states excess conversations are skipped",
+  has(readme, "本轮完全跳过") && has(readme, "不允许仅凭未读状态行动"),
+);
+
+// 6. Preserved behavior.
 const preserved = [
   "体贴周到但不越界、条理清楚、简单易懂",
   "node /home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs --title <标题≤20字> --text <正文>",
@@ -114,7 +138,7 @@ const preserved = [
 ];
 for (const needle of preserved) check(`preserved: ${needle.slice(0, 24)}`, has(prompt, needle));
 
-// 6. The prompt only uses read-only dws commands.
+// 7. The prompt only uses read-only dws commands.
 const mutating = [
   "+messages-send",
   "+send-",
@@ -128,7 +152,7 @@ const mutating = [
 ];
 for (const needle of mutating) check(`no mutating dws command: ${needle}`, !has(prompt, needle));
 
-// 7. Deployment leaves the trigger script alone.
+// 8. Deployment leaves the trigger script alone.
 check("deploy never passes --trigger-script", !has(deploy, "--trigger-script"));
 check("rollback never passes --trigger-script", !has(rollback, "--trigger-script"));
 check(
@@ -137,6 +161,21 @@ check(
 );
 check("deploy supports a drift guard", has(deploy, "--allow-drift"));
 check("deploy auto-restores on failed verification", has(deploy, "restore_previous"));
+check("deploy guards the edit command", has(deploy, "if ! openclaw_cli cron edit"));
+check(
+  "deploy wraps post-edit reads in verify_after",
+  has(deploy, 'if ! after="$(cron_json)"') &&
+    has(deploy, "if ! verify_after; then") &&
+    /if ! verify_after; then[\s\S]*?restore_previous/.test(deploy),
+);
+check(
+  "deploy reports unparsable after-get JSON",
+  has(deploy, "missing or unparsable") && has(deploy, "after-get failed"),
+);
+check(
+  "deploy has one after-get entry point",
+  (deploy.match(/after="\$\(cron_json\)"/g) || []).length === 1,
+);
 check(
   "rollback refuses unknown live state",
   has(rollback, "--force") && has(rollback, "not the one this deployment wrote"),
@@ -147,7 +186,7 @@ check(
     has(lib, "2fefcf25abc694c645c1e856ec85433f2b5bff25ce72d938e2be92b8f53e3a91"),
 );
 
-// 8. No real identifiers or message content in the deliverable.
+// 9. No real identifiers or message content in the deliverable.
 const leakPatterns = [
   [/cid(?!\/name)[A-Za-z0-9+/=]{12,}/, "real conversation id"],
   [/msg[A-Za-z0-9+/=]{12,}/, "real message id"],

@@ -101,11 +101,6 @@ cat >"$backup_dir/deploy.json" <<EOF
 EOF
 info "backup: $backup_dir"
 
-info "applying payload.message"
-# Command substitution strips the file's trailing newline, matching how the
-# live message was authored (no trailing newline).
-openclaw_cli cron edit "$JOB_ID" --message "$(cat "$PAYLOAD_FILE")"
-
 restore_previous() {
   echo "==> restoring the previous message" >&2
   if openclaw_cli cron edit "$JOB_ID" --message "$(cat "$backup_dir/payload-message.before.txt")" >&2; then
@@ -115,26 +110,74 @@ restore_previous() {
   fi
 }
 
-after="$(cron_json)"
-after_message="$(printf '%s' "$after" | json_field payload.message)"
-after_sha="$(sha256_text "$after_message")"
-after_facts="$(job_facts_json "$after")"
+info "applying payload.message"
+# Command substitution strips the file's trailing newline, matching how the
+# live message was authored (no trailing newline).
+if ! openclaw_cli cron edit "$JOB_ID" --message "$(cat "$PAYLOAD_FILE")"; then
+  echo "ERROR: cron edit failed; the live message may be partially applied." >&2
+  restore_previous
+  exit 1
+fi
 
-fail=""
-[ "$after_sha" = "$desired_sha" ] || fail="payload.message does not match $PAYLOAD_FILE"
+current_description="$(printf '%s' "$current_facts" | json_field description)"
+verify_fail=""
 
-before_compare="$(printf '%s' "$current_facts" | node -e '
-  let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);delete j.triggerSha256;delete j.description;process.stdout.write(JSON.stringify(j))})')"
-after_compare="$(printf '%s' "$after_facts" | node -e '
-  let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);delete j.triggerSha256;delete j.description;process.stdout.write(JSON.stringify(j))})')"
-[ "$before_compare" = "$after_compare" ] || fail="${fail:+$fail; }schedule/timeout/tools/session/enabled changed unexpectedly"
-[ "$(printf '%s' "$after_facts" | json_field triggerSha256)" = "$trigger_sha" ] ||
-  fail="${fail:+$fail; }trigger script changed unexpectedly"
-[ "$(printf '%s' "$after" | json_field description)" = "$(printf '%s' "$current" | json_field description)" ] ||
-  fail="${fail:+$fail; }description changed unexpectedly"
+# Every read, parse and comparison after the edit is fallible. They run inside
+# a function called from `if !`, and each step is checked explicitly, so a
+# failed after-get or unparsable JSON reaches restore_previous instead of
+# aborting on set -e with the new prompt left live.
+verify_after() {
+  local after after_message after_sha after_facts before_compare after_compare
+  local after_trigger_sha after_description
 
-if [ -n "$fail" ]; then
-  echo "ERROR: post-deploy verification failed: $fail" >&2
+  if ! after="$(cron_json)"; then
+    verify_fail="after-get failed"
+    return 1
+  fi
+  if [ -z "$after" ]; then
+    verify_fail="after-get returned nothing"
+    return 1
+  fi
+  if ! after_message="$(printf '%s' "$after" | json_field payload.message)"; then
+    verify_fail="after-get payload.message missing or unparsable"
+    return 1
+  fi
+  after_sha="$(sha256_text "$after_message")"
+  if ! after_facts="$(job_facts_json "$after")"; then
+    verify_fail="after-get job facts unparsable"
+    return 1
+  fi
+  if ! before_compare="$(printf '%s' "$current_facts" | node -e '
+    let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);delete j.triggerSha256;delete j.description;process.stdout.write(JSON.stringify(j))})')"; then
+    verify_fail="before facts unparsable"
+    return 1
+  fi
+  if ! after_compare="$(printf '%s' "$after_facts" | node -e '
+    let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);delete j.triggerSha256;delete j.description;process.stdout.write(JSON.stringify(j))})')"; then
+    verify_fail="after facts unparsable"
+    return 1
+  fi
+
+  [ "$after_sha" = "$desired_sha" ] || verify_fail="payload.message does not match $PAYLOAD_FILE"
+  [ "$before_compare" = "$after_compare" ] ||
+    verify_fail="${verify_fail:+$verify_fail; }schedule/timeout/tools/session/enabled changed unexpectedly"
+
+  if ! after_trigger_sha="$(printf '%s' "$after_facts" | json_field triggerSha256)"; then
+    verify_fail="${verify_fail:+$verify_fail; }after trigger sha unreadable"
+  elif [ "$after_trigger_sha" != "$trigger_sha" ]; then
+    verify_fail="${verify_fail:+$verify_fail; }trigger script changed unexpectedly"
+  fi
+  if ! after_description="$(printf '%s' "$after" | json_field description)"; then
+    verify_fail="${verify_fail:+$verify_fail; }after description unreadable"
+  elif [ "$after_description" != "$current_description" ]; then
+    verify_fail="${verify_fail:+$verify_fail; }description changed unexpectedly"
+  fi
+
+  [ -z "$verify_fail" ]
+}
+
+if ! verify_after; then
+  echo "ERROR: post-deploy verification failed: ${verify_fail:-unknown}" >&2
   restore_previous
   exit 1
 fi
