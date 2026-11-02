@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 // Offline verification for the DingTalk direct-reply-mode patch.
@@ -572,6 +572,60 @@ for (const [variant, expectKey] of [
       );
     }
   }
+}
+
+// S14 — host config schema boundary: core validates channels.* against the
+// channel schema in openclaw.plugin.json, not only the runtime zod schema
+// (config set fails with "must not have additional properties" otherwise).
+for (const [variant, expectKey] of [
+  ["patched", true],
+  ["pristine", false],
+]) {
+  const manifest = JSON.parse(
+    readFileSync(
+      path.join(
+        HERE,
+        ".scratch",
+        variant,
+        "node_modules",
+        "@dingtalk-real-ai",
+        "dingtalk-connector",
+        "openclaw.plugin.json",
+      ),
+      "utf8",
+    ),
+  );
+  const channelSchema = manifest.channelConfigs?.["dingtalk-connector"]?.schema;
+  const top = channelSchema?.properties?.directReplyMode;
+  const account =
+    channelSchema?.properties?.accounts?.additionalProperties?.properties?.directReplyMode;
+  const expectedEnum = JSON.stringify(["aicard", "text", "markdown"]);
+  check(
+    "S14",
+    `${variant} manifest schema ${expectKey ? "defines" : "lacks"} directReplyMode (top level)`,
+    Boolean(top) === expectKey,
+    `directReplyMode=${JSON.stringify(top)}`,
+  );
+  check(
+    "S14",
+    `${variant} manifest schema ${expectKey ? "defines" : "lacks"} directReplyMode (per account)`,
+    Boolean(account) === expectKey,
+    `directReplyMode=${JSON.stringify(account)}`,
+  );
+  if (expectKey) {
+    check(
+      "S14",
+      "manifest directReplyMode enums are aicard/text/markdown",
+      JSON.stringify(top?.enum) === expectedEnum && JSON.stringify(account?.enum) === expectedEnum,
+      `${JSON.stringify(top?.enum)} / ${JSON.stringify(account?.enum)}`,
+    );
+  }
+  check(
+    "S14",
+    `${variant} manifest channel schema is strict (additionalProperties=false)`,
+    channelSchema?.additionalProperties === false,
+    JSON.stringify(channelSchema?.additionalProperties),
+  );
 }
 
 summary();
