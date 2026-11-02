@@ -25,6 +25,7 @@ import {
   maybeRepairLegacyAuthProfileStores,
 } from "../doctor-auth-flat-profiles.js";
 import { listLegacyOAuthSidecarPaths } from "../doctor-auth-legacy-paths.js";
+import { migrateAgentAvatarFilesToWorkspaces } from "../doctor-avatar-file-migration.js";
 import { maybeRepairPluginOpenClawHostLinks } from "../doctor-plugin-host-links.js";
 import { maybeRepairStaleManagedNpmBundledPlugins } from "../doctor-plugin-registry.js";
 import { repairAuthProfileMigration } from "./auth-profile-repair.js";
@@ -172,6 +173,17 @@ export async function runDoctorRepairSequence(params: {
       env,
     }),
   );
+  // Avatar file writes are committed side effects; their config mutations queue below.
+  const avatarFileMigration = await migrateAgentAvatarFilesToWorkspaces({
+    config: state.candidate,
+    env,
+  });
+  appendNotes(changeNotes, avatarFileMigration.fileChanges);
+  applyMutation({
+    config: avatarFileMigration.config,
+    changes: avatarFileMigration.configChanges,
+    warnings: avatarFileMigration.warnings,
+  });
   for (const mutation of initialChannelRepairs) {
     applyMutation(mutation);
   }

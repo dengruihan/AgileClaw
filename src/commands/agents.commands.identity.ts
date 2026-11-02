@@ -24,6 +24,7 @@ import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { normalizeAgentId, normalizeAgentIdStrict } from "../routing/session-key.js";
 import { defaultRuntime, type RuntimeEnv, writeRuntimeJson } from "../runtime.js";
+import { isAvatarDataUrl } from "../shared/avatar-policy.js";
 import { resolveUserPath, shortenHomePath } from "../utils.js";
 import { applyAgentConfig, listAgentEntries } from "./agents.config.js";
 import { requireValidConfigForWrite } from "./config-validation.js";
@@ -143,6 +144,17 @@ export async function agentsSetIdentityCommand(
         identityFilePath ??
         (workspaceDir ? path.join(workspaceDir, DEFAULT_IDENTITY_FILENAME) : "IDENTITY.md");
       failAgentIdentity(`No identity data found in ${shortenHomePath(targetPath)}.`);
+    }
+  }
+
+  for (const [label, value] of [
+    ["--avatar", avatarRaw],
+    ["IDENTITY.md Avatar", identityFromFile?.avatar],
+  ] as const) {
+    if (value && isAvatarDataUrl(value)) {
+      failAgentIdentity(
+        `${label} cannot use a base64 data URI. Save the image inside the agent workspace (for example avatars/main.png) and pass that path, or use an http(s) URL. Run ${formatCliCommand("openclaw doctor --fix")} to migrate an existing avatar.`,
+      );
     }
   }
 

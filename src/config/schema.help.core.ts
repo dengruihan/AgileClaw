@@ -370,7 +370,7 @@ export const CORE_FIELD_HELP: Record<string, string> = {
   "agents.entries.*.runtime.acp.cwd":
     "Optional default working directory for this agent's ACP sessions.",
   "agents.entries.*.identity.avatar":
-    "Avatar image path (relative to the agent workspace only) or a remote URL/data URL.",
+    "Agent avatar: a workspace-relative image path or a remote http(s) URL. Uploads save their image into the workspace and store that path.",
   "agents.defaults.heartbeat.timeoutSeconds":
     "Maximum time in seconds allowed for a heartbeat agent turn before it is aborted. Leave unset to use agents.defaults.timeoutSeconds when set, otherwise the heartbeat cadence capped at 600 seconds.",
   "agents.defaults.heartbeat.agentId":

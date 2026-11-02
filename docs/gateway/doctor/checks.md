@@ -24,6 +24,7 @@ full behavior and rationale of each numbered check, follow the links under
   </Accordion>
   <Accordion title="Config and migrations">
     - Config normalization for legacy value shapes.
+    - Avatar file migration: base64 `data:image/...` avatars in agent config or a workspace `IDENTITY.md` are decoded into `avatars/<agent-id>.<ext>` inside the agent workspace, and config plus `IDENTITY.md` are repointed at the relative path. The previous `IDENTITY.md` is archived before it is rewritten; values that cannot be decoded are reported and left untouched, and unmigrated base64 avatars never render.
     - Removal of retired `gateway.controlUi.toolTitles` config. Tool activity descriptions appear automatically without utility-model requests.
     - Inspection of legacy default HTTPS Tailscale Serve routes from a LAN-bound Gateway. Doctor does not change these routes because status shape cannot prove ownership; after confirming a stale route, clear only its root handler and configure managed loopback ingress manually. Retired named-Service config is removed with managed ingress disabled until the operator chooses a device route; custom external routes receive manual guidance.
     - Talk config migration from legacy flat `talk.*` fields into `talk.provider` + `talk.providers.<provider>`.

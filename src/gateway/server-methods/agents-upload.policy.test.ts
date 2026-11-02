@@ -17,6 +17,7 @@ import { agentsHandlers } from "./agents.js";
 import type { GatewayClient } from "./client-types.js";
 
 const inlineAvatar = "data:image/png;base64,AQID";
+const inlineAvatarBody = Buffer.from([1, 2, 3]);
 const originalIdentity = "# Identity\n\n- Name: Existing\n\nKeep these notes.\n";
 let state: OpenClawTestState;
 let config: OpenClawConfig;
@@ -35,6 +36,10 @@ const client: GatewayClient = {
     client: { id: "test", version: "1", platform: "test", mode: "test" },
   },
 };
+const avatarSourceFor = (method: "agents.create" | "agents.update") =>
+  method === "agents.update" ? "avatars/existing.png" : "avatars/new-avatar-agent.png";
+const avatarPathFor = (method: "agents.create" | "agents.update") =>
+  path.join(workspace, avatarSourceFor(method));
 function disableUploads() {
   config = { ...config, gateway: { uploads: { enabled: false } } };
 }
@@ -68,6 +73,9 @@ function expectDisabled(respond: ReturnType<typeof vi.fn>) {
       undefined,
       expect.objectContaining({ code: "FORBIDDEN", details: { code: "UPLOADS_DISABLED" } }),
     );
+}
+async function expectMaterializedAvatar(method: "agents.create" | "agents.update") {
+  expect(await fs.readFile(avatarPathFor(method))).toEqual(inlineAvatarBody);
 }
 
 beforeAll(async () => {
@@ -119,9 +127,14 @@ it.each([
       await resume.promise;
     };
     let release: (() => void) | undefined;
-    const writeFile = vi.fn(async (params: { data: string | Uint8Array }) => {
-      await fs.writeFile(identityPath, params.data);
-      await pause();
+    const writeFile = vi.fn(async (params: { filePath: string; data: string | Uint8Array }) => {
+      const destination =
+        params.filePath === "IDENTITY.md" ? identityPath : path.join(workspace, params.filePath);
+      await fs.mkdir(path.dirname(destination), { recursive: true });
+      await fs.writeFile(destination, params.data);
+      if (params.filePath === "IDENTITY.md") {
+        await pause();
+      }
     });
     if (stage === "identity-write") {
       const realRoot = fsSafe.root;
@@ -129,8 +142,13 @@ it.each([
         const handle = await realRoot(...args);
         if (args[0] === workspace) {
           const write = handle.write.bind(handle);
+          let pausedOnce = false;
           vi.spyOn(handle, "write").mockImplementation(async (...writeArgs) => {
-            await pause();
+            // The avatar file write happens before the identity write.
+            if (!pausedOnce) {
+              pausedOnce = true;
+              await pause();
+            }
             return await write(...writeArgs);
           });
         }
@@ -155,7 +173,6 @@ it.each([
           readFile: async () => {
             if (stage === "remote-read") {
               await pause();
-              return Buffer.from(originalIdentity);
             }
             return await fs.readFile(identityPath);
           },
@@ -176,7 +193,7 @@ it.each([
       const accepted = stage === "config" || stage === "remote-write";
       const admittedIdentity = await fs.readFile(identityPath, "utf8");
       if (accepted) {
-        expect(admittedIdentity).toContain(inlineAvatar);
+        expect(admittedIdentity).toContain(avatarSourceFor(method));
       } else if (stage === "unpublished-config") {
         expect(admittedIdentity).toBe(originalIdentity);
       }
@@ -189,17 +206,22 @@ it.each([
           method === "agents.update" ? { ok: true, agentId: "existing" } : expect.anything(),
           undefined,
         );
-        expect(await fs.readFile(state.configPath, "utf8")).toContain(inlineAvatar);
+        const persistedConfig = await fs.readFile(state.configPath, "utf8");
+        expect(persistedConfig).toContain(avatarSourceFor(method));
+        expect(persistedConfig).not.toContain("data:image");
         expect(await fs.readFile(identityPath, "utf8")).toBe(admittedIdentity);
+        await expectMaterializedAvatar(method);
         if (stage === "remote-write") {
-          expect(writeFile).toHaveBeenCalledTimes(1);
+          expect(writeFile).toHaveBeenCalledTimes(2);
         }
       } else {
         expectDisabled(respond);
         expect.soft(await fs.readFile(identityPath, "utf8")).toBe(originalIdentity);
         expect.soft(await fs.readFile(state.configPath, "utf8")).toBe(originalConfig);
         if (stage === "remote-read") {
-          expect.soft(writeFile).not.toHaveBeenCalled();
+          // The admitted avatar bytes settled before the revoked identity read.
+          expect(writeFile).toHaveBeenCalledTimes(1);
+          await expectMaterializedAvatar(method);
         }
       }
     } finally {
@@ -224,26 +246,42 @@ it.each(["agents.create", "agents.update"] as const)(
       expect.anything(),
       undefined,
     );
-    expect(await fs.readFile(identityPath, "utf8")).toContain(inlineAvatar);
-    expect(await fs.readFile(state.configPath, "utf8")).toContain(inlineAvatar);
+    const persistedIdentity = await fs.readFile(identityPath, "utf8");
+    expect(persistedIdentity).toContain(avatarSourceFor(method));
+    expect(persistedIdentity).not.toContain("data:image");
+    expect(await fs.readFile(state.configPath, "utf8")).toContain(avatarSourceFor(method));
+    await expectMaterializedAvatar(method);
   },
 );
 
-it("allows text-only edits to an existing inline avatar while uploads are disabled", async () => {
-  config = {
-    ...config,
-    agents: {
-      entries: { existing: { workspace, identity: { name: "Existing", avatar: inlineAvatar } } },
-    },
-  };
-  disableUploads();
-  await state.writeConfig(config);
-  expect(await call("agents.update", { name: "Text Only" })).toHaveBeenCalledWith(
+it("decodes avatar uploads into workspace image files and persists only the path", async () => {
+  const respond = await call("agents.update");
+  expect(respond).toHaveBeenCalledExactlyOnceWith(
     true,
     { ok: true, agentId: "existing" },
     undefined,
   );
-  expect(await fs.readFile(identityPath, "utf8")).toContain("- Name: Text Only");
-  expect(await fs.readFile(identityPath, "utf8")).toContain(inlineAvatar);
-  expect(await fs.readFile(state.configPath, "utf8")).toContain(inlineAvatar);
+  await expectMaterializedAvatar("agents.update");
+  expect(await fs.readFile(identityPath, "utf8")).toContain("- Avatar: avatars/existing.png");
+  expect(await fs.readFile(state.configPath, "utf8")).toContain("avatars/existing.png");
+});
+
+it("rejects avatar uploads whose data URL cannot be decoded", async () => {
+  for (const avatar of [
+    "data:image/png;base64,A",
+    "data:image/bmp;base64,AQID",
+    `data:image/png;base64,${Buffer.alloc(2 * 1024 * 1024 + 1).toString("base64")}`,
+    "data:image/svg+xml,%3Csvg%3E",
+  ]) {
+    const respond = await call("agents.update", { avatar });
+    expect
+      .soft(respond)
+      .toHaveBeenCalledExactlyOnceWith(
+        false,
+        undefined,
+        expect.objectContaining({ code: "INVALID_REQUEST" }),
+      );
+    expect.soft(await fs.readFile(identityPath, "utf8")).toBe(originalIdentity);
+  }
+  await expect(fs.access(avatarPathFor("agents.update"))).rejects.toThrow();
 });

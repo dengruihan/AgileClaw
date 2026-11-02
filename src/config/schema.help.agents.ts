@@ -64,7 +64,7 @@ export const AGENT_FIELD_HELP: Record<string, string> = {
   "plugins.entries.*.config":
     "Plugin-defined configuration payload interpreted by that plugin's own schema and validation rules. Use only documented fields from the plugin to prevent ignored or invalid settings.",
   "agents.entries.*.identity.avatar":
-    "Agent avatar (workspace-relative path, http(s) URL, or data URI).",
+    "Agent avatar (workspace-relative path or http(s) URL; uploads save their image into the workspace).",
   "agents.defaults.model.primary": "Primary model (provider/model).",
   "agents.defaults.model.fallbacks":
     "Ordered fallback models (provider/model). Used when the primary model fails.",

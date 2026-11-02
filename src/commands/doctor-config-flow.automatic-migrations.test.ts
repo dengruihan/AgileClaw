@@ -6,6 +6,7 @@ import { readConfigFileSnapshot } from "../config/config.js";
 import { findLegacyConfigIssues } from "../config/legacy.js";
 import { writeOpenClawConfig } from "../config/test-helpers.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { runWriteConfigHealth } from "../flows/doctor-health-contribution-runners.config.js";
 import { readPersistedInstalledPluginIndexInstallRecords } from "../plugins/installed-plugin-index-records.js";
 import { seedInstalledPluginIndex } from "../plugins/test-helpers/installed-plugin-index.js";
 import { closeOpenClawStateDatabaseForTest } from "../state/openclaw-state-db.js";
@@ -76,6 +77,43 @@ it("backs up and persists inherited Talk SecretRefs for an unmarked published up
     await prepareDoctorContext(configPath, { options: { nonInteractive: true } });
     expect((await readConfigFileSnapshot()).raw).toBe(saved.raw);
     expect(await fs.readFile(`${configPath}.bak`, "utf8")).toBe(original);
+  });
+});
+
+it("repairs a persisted base64 avatar in the doctor config flow", async () => {
+  await withMigrationHome(async (home) => {
+    const workspace = path.join(home, "workspace");
+    await fs.mkdir(workspace, { recursive: true });
+    const body = Buffer.from([1, 2, 3]);
+    const dataUrl = `data:image/png;base64,${body.toString("base64")}`;
+    await fs.writeFile(path.join(workspace, "IDENTITY.md"), `- Name: main\n- Avatar: ${dataUrl}\n`);
+    const configPath = await writeOpenClawConfig(home, {
+      gateway: { mode: "local", port: await getFreePort() },
+      plugins: { enabled: false },
+      agents: {
+        ownership: "explicit",
+        entries: { main: { workspace, identity: { avatar: dataUrl } } },
+      },
+    });
+    // The invalid persisted source blocks ordinary config reads; Doctor must still repair it.
+    expect((await readConfigFileSnapshot()).valid).toBe(false);
+
+    const ctx = await prepareDoctorContext(configPath);
+    expect(ctx.sourceConfigValid).toBe(false);
+    expect(ctx.configResult.shouldWriteConfig).toBe(true);
+    expect(ctx.cfg.agents?.entries?.main?.identity?.avatar).toBe("avatars/main.png");
+    expect(await fs.readFile(path.join(workspace, "avatars", "main.png"))).toEqual(body);
+    expect(await fs.readFile(path.join(workspace, "IDENTITY.md"), "utf8")).toContain(
+      "- Avatar: avatars/main.png",
+    );
+    // Check 18 owns the atomic config write; run it as the health flow does.
+    expect(await fs.readFile(configPath, "utf8")).toContain(dataUrl);
+    expect(await runWriteConfigHealth(ctx)).toBe(true);
+
+    const saved = await readConfigFileSnapshot();
+    expect(saved.valid).toBe(true);
+    expect(saved.sourceConfig.agents?.entries?.main?.identity?.avatar).toBe("avatars/main.png");
+    expect(await fs.readFile(`${configPath}.bak`, "utf8")).toContain(dataUrl);
   });
 });
 

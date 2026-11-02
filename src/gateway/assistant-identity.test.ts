@@ -100,7 +100,7 @@ describe("resolveAssistantIdentity", () => {
       agents: {
         entries: {
           main: {
-            identity: { avatar: "workspace-relative path, http(s) URL, or data URI" },
+            identity: { avatar: "workspace-relative path or http(s) URL" },
           },
         },
       },

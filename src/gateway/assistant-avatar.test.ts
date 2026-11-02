@@ -51,14 +51,26 @@ describe("resolveGatewayAssistantAvatar", () => {
     expect(await projectAvatar(cfg)).toEqual({ avatar: "🦞", resolution: null });
   });
 
-  it.each([
-    ["remote URL", "https://example.com/avatar.png"],
-    ["data URI", REAL_PNG_DATA_URL],
-  ])("preserves a selected %s", async (_name, avatar) => {
+  it("preserves a selected remote avatar", async () => {
     const { cfg } = createWorkspace();
-    cfg.agents!.entries!.main!.identity = { avatar };
+    cfg.agents!.entries!.main!.identity = {
+      avatar: "https://example.com/avatar.png",
+    };
 
-    expect(await projectAvatar(cfg)).toMatchObject({ avatar, resolution: { source: avatar } });
+    expect(await projectAvatar(cfg)).toMatchObject({
+      avatar: "https://example.com/avatar.png",
+      resolution: { source: "https://example.com/avatar.png" },
+    });
+  });
+
+  it("reports an unmigrated base64 avatar and falls back to the default avatar", async () => {
+    const { cfg } = createWorkspace();
+    cfg.agents!.entries!.main!.identity = { avatar: REAL_PNG_DATA_URL };
+
+    expect(await projectAvatar(cfg)).toEqual({
+      avatar: "A",
+      resolution: { kind: "none", reason: "unmigrated_data_url", source: REAL_PNG_DATA_URL },
+    });
   });
 
   it("uses a configured emoji when the selected local path is rejected", async () => {
@@ -72,7 +84,7 @@ describe("resolveGatewayAssistantAvatar", () => {
   });
 
   it.each([
-    ["unsupported_data_url", "data:text/plain,avatar"],
+    ["unmigrated_data_url", "data:text/plain,avatar"],
     ["unsupported_uri", "slack://avatar.png"],
   ])("rejects %s before local-path handling", async (reason, avatar) => {
     const { cfg } = createWorkspace();

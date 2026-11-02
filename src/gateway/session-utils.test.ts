@@ -2324,12 +2324,19 @@ describe("gateway session utils", () => {
       cfg.agents!.entries!.main!.identity!.avatar = dataUrl;
     }
     const browser = await listAgentsForGateway(cfg, undefined, { httpAvatarBasePath: "/control" });
-    expect(browser.agents[0]?.identity?.avatarUrl).toMatch(
-      /^\/control\/avatar\/main\?v=[a-f0-9]+$/,
-    );
-    expect(browser.agents[0]?.identity?.avatar).toBe(browser.agents[0]?.identity?.avatarUrl);
+    if (kind === "local") {
+      expect(browser.agents[0]?.identity?.avatarUrl).toMatch(
+        /^\/control\/avatar\/main\?v=[a-f0-9]+$/,
+      );
+      expect(browser.agents[0]?.identity?.avatar).toBe(browser.agents[0]?.identity?.avatarUrl);
+      expect((await listAgentsForGateway(cfg)).agents[0]?.identity?.avatarUrl).toBe(dataUrl);
+    } else {
+      // Unmigrated base64 avatars never render in any row shape.
+      expect(browser.agents[0]?.identity?.avatar).toBe("A");
+      expect((await listAgentsForGateway(cfg)).agents[0]?.identity?.avatar).toBeUndefined();
+      expect((await listAgentsForGateway(cfg)).agents[0]?.identity?.avatarUrl).toBeUndefined();
+    }
     expect(JSON.stringify(browser)).not.toContain(dataUrl);
-    expect((await listAgentsForGateway(cfg)).agents[0]?.identity?.avatarUrl).toBe(dataUrl);
   });
 
   test("listAgentsForGateway keeps explicit agents.entries scope over disk-only agents (scope boundary)", async () => {

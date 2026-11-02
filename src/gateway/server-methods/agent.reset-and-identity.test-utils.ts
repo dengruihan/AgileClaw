@@ -964,7 +964,6 @@ describe("gateway agent handler", () => {
 
   it.each([
     ["remote", "https://example.com/avatar.png"],
-    ["data", "data:image/png;base64,aaaa"],
     ["text", "PS"],
   ] as const)("preserves %s avatar values in agent.identity.get", async (_kind, avatar) => {
     mocks.loadConfigReturn = {
@@ -977,6 +976,23 @@ describe("gateway agent handler", () => {
     );
 
     expect((mockCallArg(respond, 0, 1) as { avatar?: unknown }).avatar).toBe(avatar);
+  });
+
+  it("refuses unmigrated base64 avatars in agent.identity.get", async () => {
+    mocks.loadConfigReturn = {
+      agents: { entries: { main: { identity: { avatar: "data:image/png;base64,aaaa" } } } },
+    };
+
+    const respond = await invokeAgentIdentityGet(
+      { sessionKey: "agent:main:main" },
+      { reqId: "5-avatar-unmigrated-data" },
+    );
+
+    expectRecordFields(mockCallArg(respond, 0, 1), {
+      avatar: "A",
+      avatarStatus: "none",
+      avatarReason: "unmigrated_data_url",
+    });
   });
 
   it("prefixes same-origin avatar routes in agent.identity.get when Control UI has a base path", async () => {

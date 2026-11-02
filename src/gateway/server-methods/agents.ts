@@ -50,6 +50,7 @@ import {
   resolveSharedAuthStorePath,
 } from "../../agents/auth-profiles/path-resolve.js";
 import { resolveAuthProfileDatabasePath } from "../../agents/auth-profiles/sqlite.js";
+import { materializeAgentAvatarUpload } from "../../agents/identity-avatar-upload.js";
 import {
   createAgentIdentityConfig,
   normalizeIdentityForFile,
@@ -81,6 +82,7 @@ import { root, FsSafeError } from "../../infra/fs-safe.js";
 import { isPathInside } from "../../infra/path-guards.js";
 import { movePathToTrash } from "../../plugin-sdk/browser-maintenance.js";
 import { normalizeAgentIdStrict } from "../../routing/session-key.js";
+import { isAvatarDataUrl } from "../../shared/avatar-policy.js";
 import {
   readAgentDeletionJournal,
   type AgentDeletionJournalCleanupPath,
@@ -109,6 +111,15 @@ import { assertValidParams } from "./validation.js";
 
 function respondAgentNotFound(respond: RespondFn, agentId: string): void {
   respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `agent "${agentId}" not found`));
+}
+
+/** Extract a transport-only avatar data URL from request params, if present. */
+function resolveAgentAvatarUploadParam(avatar: unknown): string | undefined {
+  if (typeof avatar !== "string") {
+    return undefined;
+  }
+  const trimmed = avatar.trim();
+  return isAvatarDataUrl(trimmed) ? trimmed : undefined;
 }
 
 type AgentDeleteRemovedPath = NonNullable<AgentsDeleteResult["removed"]>[number];
@@ -432,19 +443,57 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
 
+    const assertUploadCurrent = captureGatewayClientUploadCommitGuard({
+      method: "agents.create",
+      requestParams: params,
+      client,
+      context,
+    });
+    // Uploads carry avatar images as data URLs for transport only; the persisted
+    // source is always the workspace-relative file written here.
+    const avatarUpload = resolveAgentAvatarUploadParam(params.avatar);
+    let avatarInput: unknown = params.avatar;
+    if (avatarUpload) {
+      const agentId = normalizeAgentIdStrict(params.name);
+      if (!agentId.ok) {
+        // createAgent reports the invalid name; no avatar work can target it.
+        avatarInput = undefined;
+      } else {
+        const workspaceDir = params.workspace?.trim()
+          ? resolveUserPath(params.workspace.trim())
+          : resolveAgentWorkspaceDir(context.getRuntimeConfig(), agentId.value);
+        let materialized: Awaited<ReturnType<typeof materializeAgentAvatarUpload>>;
+        try {
+          materialized = await materializeAgentAvatarUpload({
+            workspaceDir,
+            agentId: agentId.value,
+            avatar: avatarUpload,
+            assertCurrent: assertUploadCurrent,
+            rethrowIf: (error) => error instanceof SessionMutationAuthorizationChangedError,
+          });
+        } catch (error) {
+          if (error instanceof SessionMutationAuthorizationChangedError) {
+            respond(false, undefined, error.error);
+            return;
+          }
+          throw error;
+        }
+        if (!materialized.ok) {
+          respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, materialized.message));
+          return;
+        }
+        avatarInput = materialized.source;
+      }
+    }
+
     try {
       const result = await createAgent({
         name: params.name,
         workspace: params.workspace,
         model: params.model,
         emoji: params.emoji,
-        avatar: params.avatar,
-        assertIdentityInputAllowed: captureGatewayClientUploadCommitGuard({
-          method: "agents.create",
-          requestParams: params,
-          client,
-          context,
-        }),
+        ...(avatarInput === undefined ? {} : { avatar: avatarInput }),
+        assertIdentityInputAllowed: assertUploadCurrent,
       });
       if (result.status === "error") {
         respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, result.message));
@@ -504,10 +553,65 @@ export const agentsHandlers: GatewayRequestHandlers = {
     const name = resolveOptionalStringParam(params.name);
     const safeName = name ? sanitizeAgentIdentityLine(name) : undefined;
 
+    // The not-found check only needs field presence; uploads materialize below.
+    const avatarUpload = resolveAgentAvatarUploadParam(params.avatar);
+    const requestedIdentity = createAgentIdentityConfig({
+      name: safeName,
+      emoji: params.emoji,
+      avatar: avatarUpload ? undefined : params.avatar,
+    });
+    const selectionError = validateAgentModelSelectionUpdate(params);
+    if (selectionError) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, selectionError));
+      return;
+    }
+    const configured = isConfiguredAgent(cfg, agentId);
+    if (
+      !configured &&
+      !isImplicitAgentModelUpdate(cfg, {
+        agentId,
+        ...(safeName ? { name: safeName } : {}),
+        ...(workspaceDir ? { workspace: workspaceDir } : {}),
+        ...(model !== undefined ? { model } : {}),
+        ...(params.agentRuntime ? { agentRuntime: params.agentRuntime } : {}),
+        ...(requestedIdentity ? { identity: requestedIdentity } : {}),
+      })
+    ) {
+      respondAgentNotFound(respond, agentId);
+      return;
+    }
+
+    // Uploads carry avatar images as data URLs for transport only; the persisted
+    // source is always the workspace-relative file written here.
+    let avatarInput: unknown = params.avatar;
+    if (avatarUpload) {
+      let materialized: Awaited<ReturnType<typeof materializeAgentAvatarUpload>>;
+      try {
+        materialized = await materializeAgentAvatarUpload({
+          workspaceDir: workspaceDir ?? resolveAgentWorkspaceDir(cfg, agentId),
+          agentId,
+          avatar: avatarUpload,
+          assertCurrent: assertUploadAllowed,
+          rethrowIf: (error) => error instanceof SessionMutationAuthorizationChangedError,
+        });
+      } catch (error) {
+        if (error instanceof SessionMutationAuthorizationChangedError) {
+          respond(false, undefined, error.error);
+          return;
+        }
+        throw error;
+      }
+      if (!materialized.ok) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, materialized.message));
+        return;
+      }
+      avatarInput = materialized.source;
+    }
+
     const identity = createAgentIdentityConfig({
       name: safeName,
       emoji: params.emoji,
-      avatar: params.avatar,
+      avatar: avatarInput,
     });
     const hasIdentityFields = Boolean(identity);
 
@@ -519,16 +623,6 @@ export const agentsHandlers: GatewayRequestHandlers = {
       ...(params.agentRuntime ? { agentRuntime: params.agentRuntime } : {}),
       ...(identity ? { identity } : {}),
     };
-    const selectionError = validateAgentModelSelectionUpdate(params);
-    if (selectionError) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, selectionError));
-      return;
-    }
-    const configured = isConfiguredAgent(cfg, agentId);
-    if (!configured && !isImplicitAgentModelUpdate(cfg, agentConfigUpdate)) {
-      respondAgentNotFound(respond, agentId);
-      return;
-    }
     const nextConfig = configured ? applyAgentConfig(cfg, agentConfigUpdate) : cfg;
 
     try {

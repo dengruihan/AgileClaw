@@ -9,7 +9,6 @@ import { agentsSetIdentityCommand } from "./agents.commands.identity.js";
 import { createThrowingTestRuntime } from "./test-runtime-config-helpers.js";
 
 async function avatarConfig(home: string): Promise<OpenClawConfig> {
-  const image = await fs.readFile(path.resolve("extensions/nextcloud-talk/assets/icon.png"));
   return {
     meta: {
       lastTouchedVersion: VERSION,
@@ -24,7 +23,7 @@ async function avatarConfig(home: string): Promise<OpenClawConfig> {
           identity: {
             name: "Avatar",
             emoji: "🦉",
-            avatar: `data:image/png;base64,${image.toString("base64")}`,
+            avatar: `https://example.test/${"a".repeat(300)}/avatar.png`,
           },
         },
         other: { workspace: path.join(home, "other"), identity: { name: "Other" } },
@@ -49,6 +48,31 @@ describe("agent identity persistence", () => {
         const expected = structuredClone(before);
         expected.agents!.entries!.avatar!.identity!.avatar = avatar;
         expect(JSON.parse(await fs.readFile(configPath, "utf8"))).toEqual(expected);
+      });
+    },
+  );
+
+  it.each(["cli", "gateway"] as const)(
+    "%s rejects a base64 data URI avatar with migration guidance",
+    async (owner) => {
+      await withTempHome(async (home) => {
+        const before = await avatarConfig(home);
+        const configPath = await writeOpenClawConfig(home, before);
+        const original = await fs.readFile(configPath, "utf8");
+        const dataUrl = `data:image/png;base64,${Buffer.from("avatar").toString("base64")}`;
+        if (owner === "cli") {
+          await expect(
+            agentsSetIdentityCommand(
+              { agent: "avatar", avatar: dataUrl },
+              createThrowingTestRuntime(),
+            ),
+          ).rejects.toThrow(/cannot use a base64 data URI/);
+        } else {
+          await expect(
+            updateAgentConfigEntry({ agentId: "avatar", identity: { avatar: dataUrl } }),
+          ).rejects.toThrow(/no longer accepts base64 data URIs/);
+        }
+        expect(await fs.readFile(configPath, "utf8")).toBe(original);
       });
     },
   );

@@ -57,14 +57,17 @@ describe("local agent avatar files", () => {
     );
   });
 
-  it("passes through only bounded image data URLs for agent-list projections", async () => {
+  it("never projects persisted data URL avatars for agent-list projections", async () => {
     const { cfg } = createWorkspace();
     const prefix = "data:image/svg+xml;base64,";
-    const exact = `${prefix}${"A".repeat(AVATAR_MAX_DATA_URL_CHARS - prefix.length)}`;
-    expect(await resolveAgentAvatarUrlFromSource(cfg, "main", exact)).toBe(exact);
-    expect(await resolveAgentAvatarUrlFromSource(cfg, "main", `${exact}A`)).toBeUndefined();
+    const bounded = `${prefix}${"A".repeat(AVATAR_MAX_DATA_URL_CHARS - prefix.length)}`;
+    expect(await resolveAgentAvatarUrlFromSource(cfg, "main", bounded)).toBeUndefined();
+    expect(await resolveAgentAvatarUrlFromSource(cfg, "main", `${bounded}A`)).toBeUndefined();
     expect(
       await resolveAgentAvatarUrlFromSource(cfg, "main", "data:text/plain,avatar"),
+    ).toBeUndefined();
+    expect(
+      await resolveAgentAvatarUrlFromSource(cfg, "main", "data:image/png;base64,AQID"),
     ).toBeUndefined();
   });
 

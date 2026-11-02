@@ -2,8 +2,8 @@ import { normalizeMimeType } from "@openclaw/media-core/mime";
 import { fileTypeFromBuffer } from "file-type";
 import { LruCache } from "../infra/lru-cache.js";
 import { createImageProcessor, isAnimatedWebpBuffer } from "../media/image-ops.js";
-import { isAvatarImageMimeType, isRenderableAvatarImageDataUrl } from "../shared/avatar-limits.js";
-import { AVATAR_MAX_BYTES, resolveAvatarMime } from "../shared/avatar-policy.js";
+import { isAvatarImageMimeType } from "../shared/avatar-limits.js";
+import { resolveAvatarMime } from "../shared/avatar-policy.js";
 import { getOrCreatePromise } from "../shared/lazy-promise.js";
 import type { GatewayAvatarImageSource } from "./assistant-avatar-cache.js";
 import {
@@ -19,27 +19,11 @@ const pendingThumbnails = new Map<string, Promise<HttpImageRepresentation>>();
 async function createAvatarThumbnail(
   source: GatewayAvatarImageSource,
 ): Promise<HttpImageRepresentation> {
-  let body: Buffer;
-  let contentType: string;
-  if ("file" in source) {
-    if (!source.file.body) {
-      throw new Error("Avatar bytes were not prepared");
-    }
-    body = source.file.body;
-    contentType = resolveAvatarMime(source.file.path);
-  } else {
-    if (!isRenderableAvatarImageDataUrl(source.dataUrl)) {
-      throw new Error("Unsupported avatar data URL");
-    }
-    // The validated data: scheme uses native byte decoding without network I/O.
-    // Preserve charset parameters for unchanged SVG/XML representations.
-    const response = await fetch(source.dataUrl);
-    contentType = response.headers.get("content-type") ?? "";
-    body = Buffer.from(await response.arrayBuffer());
-    if (body.length > AVATAR_MAX_BYTES) {
-      throw new Error("Avatar data URL exceeds size limit");
-    }
+  if (!source.file.body) {
+    throw new Error("Avatar bytes were not prepared");
   }
+  let body: Buffer = source.file.body;
+  let contentType: string = resolveAvatarMime(source.file.path);
   const mime = normalizeMimeType(contentType);
   if (!mime || !isAvatarImageMimeType(mime)) {
     throw new Error("Unsupported avatar image type");

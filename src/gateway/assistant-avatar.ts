@@ -13,7 +13,6 @@ import {
 } from "../shared/avatar-policy.js";
 import {
   gatewayAvatarFileDataUrl,
-  prepareGatewayAvatarDataUrl,
   prepareGatewayAvatarFile,
   type GatewayAvatarImageSource,
 } from "./assistant-avatar-cache.js";
@@ -70,10 +69,7 @@ export async function prepareGatewayAssistantAvatar(params: {
     return { resolution: { kind: "remote", url: source, source } };
   }
   if (isAvatarDataUrl(source)) {
-    const image = prepareGatewayAvatarDataUrl(source);
-    return image
-      ? { resolution: { kind: "data", url: source, source }, image }
-      : { resolution: { kind: "none", reason: "unsupported_data_url", source } };
+    return { resolution: { kind: "none", reason: "unmigrated_data_url", source } };
   }
   if (hasAvatarUriScheme(source) && !isWindowsAbsolutePath(source)) {
     return { resolution: { kind: "none", reason: "unsupported_uri", source } };

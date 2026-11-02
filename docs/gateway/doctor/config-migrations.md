@@ -381,6 +381,28 @@ After repair completes and `openclaw config validate` succeeds, split the
 canonical config back into includes if desired, then validate it again. Keep
 the backups until the repaired config and migrated state have been verified.
 
+## Avatar files
+
+Persisted agent avatars must be workspace image files or `http(s)` URLs. Config
+or `IDENTITY.md` values that still hold a `data:image/...;base64` URI fail config
+validation with a Doctor hint, and the Gateway never renders them. Run
+`openclaw doctor --fix` before starting a directly replaced binary; the normal
+`openclaw update` flow invokes the candidate Doctor.
+
+Doctor decodes each persisted base64 avatar into
+`<workspace>/avatars/<agent-id>.<ext>` (`png`, `jpg`, `webp`, `gif`, or `svg`),
+repoints `identity.avatar` and `- Avatar:` in the workspace `IDENTITY.md` at that
+workspace-relative path, and archives the previous `IDENTITY.md` under the state
+directory's `backups/avatar-file-migration/` folder. Config bytes win when both
+places hold a base64 avatar. A value that cannot be decoded — unsupported image
+type, malformed base64, or over the 2 MiB limit — is left untouched with an
+actionable warning; replace it with a path or URL, then rerun Doctor.
+
+New uploads never persist base64: Gateway avatar uploads accept the existing
+data-URL input for transport, decode it immediately, write the image into the
+agent workspace, and store only the relative path in config and `IDENTITY.md`.
+Remote workspaces use their workspace access bridge for the same write.
+
 ## Channel private-network opt-ins
 
 Matrix, Mattermost, and Tlon runtime paths read only

@@ -6,7 +6,6 @@ import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { openRootFileSync, readFileDescriptorBoundedSync } from "../infra/boundary-file-read.js";
 import { resolveRealpathOrAbsolute } from "../infra/boundary-path.js";
 import { isPathInside } from "../infra/path-guards.js";
-import { isRenderableAvatarImageDataUrl } from "../shared/avatar-limits.js";
 import {
   AVATAR_MAX_BYTES,
   hasAvatarUriScheme,
@@ -206,13 +205,14 @@ export async function resolveAgentAvatarUrlFromSource(
   if (!normalized) {
     return undefined;
   }
-  if (isAvatarHttpUrl(normalized) || isRenderableAvatarImageDataUrl(normalized)) {
+  if (isAvatarHttpUrl(normalized)) {
     return normalized;
   }
   if (
     isAvatarDataUrl(normalized) ||
     (hasAvatarUriScheme(normalized) && !isWindowsAbsolutePath(normalized))
   ) {
+    // Persisted base64 avatars are unmigrated sources and never render.
     return undefined;
   }
   const prepared = await prepareLocalAgentAvatarFile({

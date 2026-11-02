@@ -254,7 +254,7 @@ Avatar paths resolve relative to the workspace root and cannot escape it, even t
 
 ## Set identity
 
-`set-identity` writes fields into `agents.entries.*.identity`: `name`, `theme`, `emoji`, `avatar` (workspace-relative path, http(s) URL, or data URI).
+`set-identity` writes fields into `agents.entries.*.identity`: `name`, `theme`, `emoji`, `avatar` (workspace-relative image path or http(s) URL).
 
 - `--agent` or `--workspace` selects the target agent. If `--workspace` matches more than one agent, the command fails and asks you to pass `--agent`.
 - `--workspace` and `--identity-file` only select the agent or identity file. They do not change `agents.entries.*.workspace`.
