@@ -16,6 +16,11 @@ import {
   resetSkillsRefreshStateForTest,
 } from "../skills/runtime/refresh-state.js";
 import { writeSkill } from "../skills/test-support/e2e-test-helpers.js";
+import {
+  createAgentDatabaseInspectionRefusal,
+  preparePendingAgentDatabase,
+  recordAgentDatabaseAdmissions,
+} from "../state/agent-database-admission.js";
 import { publishOperatorRoleConfigChange } from "./operator-role-policy.js";
 import { createChatMetadataOwner } from "./server-methods/chat-metadata-runtime.test-support.js";
 import type { GatewayRequestContext } from "./server-methods/types.js";
@@ -255,7 +260,7 @@ async function createRealMetadataLifecycle(
   const lifecycle = await pendingLifecycle;
   const attach = () =>
     lifecycle.attachContext(
-      { broadcast } as unknown as GatewayRequestContext,
+      { broadcast, getRuntimeConfig: () => config } as unknown as GatewayRequestContext,
       sidecarOwner.publish,
     );
   if (options.attach !== false) {
@@ -324,6 +329,33 @@ async function createRealMetadataLifecycle(
 }
 
 describe("gateway chat metadata lifecycle", () => {
+  it("keeps listener refreshes outside borrowed startup preparation", async () => {
+    vi.stubEnv("OPENCLAW_STATE_DIR", tempDirs.make("chat-metadata-startup-"));
+    const refusal = createAgentDatabaseInspectionRefusal({
+      agentId: "main",
+      paths: [],
+      pending: true,
+      reason: "Startup preparation is still pending",
+    });
+    recordAgentDatabaseAdmissions([refusal], { source: "startup" });
+    const harness = await createRealMetadataLifecycle({ ownerAvailable: false });
+    try {
+      await preparePendingAgentDatabase(refusal, { assertCurrent() {} }, async () => {
+        harness.replaceOwner();
+      });
+      const [metadata, models] = await Promise.all([
+        harness.lifecycle.read({ agentId: "main" }),
+        harness.lifecycle.readModelsList({ agentId: "main", params: { view: "all" } }),
+      ]);
+      expect(metadata.models).toEqual([expect.objectContaining({ id: "after-publication" })]);
+      expect(models?.models).toEqual([expect.objectContaining({ id: "after-publication" })]);
+      expect(harness.warn).not.toHaveBeenCalled();
+    } finally {
+      await harness.stop();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("does not refresh metadata for identical skills rebuilds but publishes instruction changes", async () => {
     const { loadWorkspaceSkills } = await import("../skills/loading/workspace-skill-loader.js");
     resetSkillsRefreshStateForTest();

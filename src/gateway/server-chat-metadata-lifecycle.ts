@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { onSessionCostUsageUpdated } from "../infra/session-cost-usage-events.js";
 import type { createSubsystemLogger } from "../logging/subsystem.js";
@@ -30,11 +31,14 @@ export async function createGatewayChatMetadataLifecycle(params: {
   minimalTestGateway: boolean;
   log: GatewayLogger;
 }) {
+  const runInGatewayContext = AsyncLocalStorage.snapshot();
   let context: GatewayRequestContext | undefined;
   let preparedModelRuntimeState: "unobserved" | "available" | "unavailable" = "unobserved";
   let preparedModelRuntimeEventVersion = 0;
   const { createGatewayChatMetadataRuntime } =
     await import("./server-methods/chat-metadata-runtime.js");
+  const { getAgentDatabasePreparationCompletion } =
+    await import("../state/agent-database-admission.js");
   const { ChatMetadataSnapshotUnavailableError } =
     await import("./server-methods/chat-metadata-facts.js");
   const runtime = createGatewayChatMetadataRuntime({
@@ -91,9 +95,14 @@ export async function createGatewayChatMetadataLifecycle(params: {
     log: params.log,
   });
   const refreshLogged = (notifyIfUnchanged = false) => {
-    void runtime.refresh({ notifyIfUnchanged }).catch((error: unknown) => {
-      params.log.warn(`chat metadata refresh failed: ${String(error)}`);
-    });
+    // Background metadata work belongs to the Gateway, not a publisher's temporary preparation.
+    const refresh = () => runInGatewayContext(() => runtime.refresh({ notifyIfUnchanged }));
+    const preparationCompletion = getAgentDatabasePreparationCompletion();
+    void (preparationCompletion ? preparationCompletion.then(refresh) : refresh()).catch(
+      (error: unknown) => {
+        params.log.warn(`chat metadata refresh failed: ${String(error)}`);
+      },
+    );
   };
   const refreshForSubordinateChange = (notifyIfUnchanged = false) => {
     // Auth and skill facts are subordinate to the prepared model owner. During replacement the

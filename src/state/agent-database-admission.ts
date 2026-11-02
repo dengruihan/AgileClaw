@@ -11,6 +11,7 @@ import { formatErrorMessage } from "../infra/errors.js";
 import { formatAgentDatabaseOwnershipRepairHint } from "../infra/state-migrations.agent-owner-guidance.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { sessionChanges } from "../sessions/session-row-changes.js";
+import { createDeferredCore } from "../shared/deferred.js";
 import { isReservedSystemAgentId } from "../system-agent/agent-id.js";
 import {
   openClawStateDatabaseCache,
@@ -62,6 +63,7 @@ const preparation = new AsyncLocalStorage<{
   refusal: AgentDatabaseAdmissionRefusal;
   key: string;
   active: boolean;
+  completion: Promise<void>;
   assertCurrent: () => void;
 }>();
 
@@ -272,6 +274,11 @@ function readSelectedAgentDatabaseAdmissionRefusal(
   return refusal;
 }
 
+/** Deferred listeners publish after the current admission becomes public. */
+export function getAgentDatabasePreparationCompletion(): Promise<void> | undefined {
+  return preparation.getStore()?.completion;
+}
+
 /** Preparation borrows only its own pending admission; public callers remain refused. */
 export async function preparePendingAgentDatabase(
   refusal: AgentDatabaseAdmissionRefusal,
@@ -289,7 +296,8 @@ export async function preparePendingAgentDatabase(
     }
   };
   assertCurrent();
-  const scope = { key, refusal, assertCurrent, active: true };
+  const completion = createDeferredCore();
+  const scope = { key, refusal, assertCurrent, active: true, completion: completion.promise };
   try {
     await preparation.run(scope, run);
     scope.assertCurrent();
@@ -299,6 +307,7 @@ export async function preparePendingAgentDatabase(
     current.refusals = refusals;
   } finally {
     scope.active = false;
+    completion.resolve();
   }
   sessionChanges.emit({ all: true, scope: { agentId: refusal.agentId, topology: true } });
 }
