@@ -61,12 +61,17 @@ openclaw cron get 6a45be21-ce0b-4b8b-8986-4c885d1ea659
 - delta 与故障同轮 → 单次唤醒、双原因合并
 - 输出行数不对 → 累计 collectFails；连续 2 次 → 唤醒
 
-`node ops/collector-phase2/verify/agent-boundary.mjs` —— 13 项全过（mock Agenda/通知/对外消息，隔离 fixture，审查 r1 P1 追加）：
+`node ops/collector-phase2/verify/agent-boundary.mjs` —— 28 项全过（审查 r2 按真实合同重写，不再是自实现 mock）：
 
-- 无需行动（查重命中 + 无截止信息项 + 邮件仅计数）：静默结束，零 agenda 写入、零通知、零文件写入、零对外消息
-- 需要行动（新作业近截止未登记）：agenda read 查重先于 apply、仅 apply 一次且字段正确、至多一条通知、零对外消息、零文件写入
-- 查重变体：同轮两条 delta 一条已登记 → 只对未登记条目 apply 一次（不重复建单）
-- 门控复现：toolsAllow 缺 agenda 时登记动作被拒——即 r1 P1 的阻塞形态，部署命令已带 `--tools` 修复
+**真实运行时组件（直接导入执行，非复刻）**：agenda 工具与严格 zod schema（线上扩展 `src/tool.ts` 的 `createAgendaTool`，含 `{action,query?,change?}`、apply 的 operationId/expectedRevision、main-agent 归属门控）；真实 agenda store（同扩展 `src/store.ts` 的 `openAgendaStore`，临时 SQLite，真实 revision / operationId 幂等 / revision_conflict 语义）；cron toolsAllow 门控（产品仓库 `src/agents/tool-policy-match.ts` 的 `createToolPolicyMatcher`）。fixture 条目形状取自线上真实来源输出（OSH `dueAt/submitted`、云谷 `deadlineMs/status:'To edit'`、钉钉 `cid/name/lastMsgAt` 无正文、邮件仅计数）。
+
+- 无需行动（OSH 已提交 + 云谷远期 + 钉钉会话变化 + 邮件净增计数）：静默；真实 store revision 保持 0、零 apply 回执、零通知、零文件写入、零对外消息
+- 需要行动（OSH 24h 内未提交 + 云谷 48h 内）：真实字段判定生效（修复 r2 指出的 `dueAt` 误读问题）→ agenda read 查重严格先于 apply（真实调用序）→ 两条合法 apply 回执 ok → 真实 store 按 sourceId/sourceKey 可查 → 至多一条通知、零对外消息、零文件写入
+- 重复条目不重建：预置同 sourceKey 条目后，查重命中 → 静默，真实 store revision 不变、条目唯一、本轮零 apply
+- 缺 agenda 的真实拒绝：旧 8 项 toolsAllow 下真实 matcher(agenda)=false（r1 P1 门控形态），登记被拒且零回执无部分写入；追加 agenda 后 matcher=true（修复生效）；非 main agentId 被真实工具以 "owned by the main personal assistant" 拒绝（线上 collector 以 main 运行，不阻塞）
+- 真实 schema 严格性：缺 operationId/expectedRevision、read 携带 change 均被真实工具拒绝（mock 不再宽松）
+
+**剩余行为验证缺口（如实声明）**：模型的判定与工具选择本身不在此执行——在不写入用户数据的前提下无法运行真实 isolated Agent（`openclaw agent` 不提供按轮工具限制，真实 apply 会污染用户 agenda）。部署后须自然周期观察一轮真实 delta 分诊（不 force run、不发对外测试消息）。
 
 另有：`node --test lib/diff.test.mjs`（线上 collection 目录既有 diff 行为锁）通过；
 `ops/collector-phase2/verify/l4-check.sh`（AGENTS.md L4 反模式自检）通过。
