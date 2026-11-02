@@ -472,23 +472,13 @@ describe("renderModelProviders", () => {
 
   it.each([
     {
-      name: "ready when the catalog confirms usable models",
-      card: card({ auth: { kind: "ok" }, catalogStatus: "ready" }),
+      name: "ready with usable models and no catalog outcome",
+      card: card({ auth: { kind: "api-key" } }),
       expected: "Ready",
     },
     {
-      name: "not ready when an API key is unverified",
-      card: card({ auth: { kind: "api-key" } }),
-      expected: "Not ready",
-    },
-    {
-      name: "not ready when the catalog rejects the credentials",
-      card: card({
-        auth: { kind: "ok" },
-        profiles: [{ profileId: "openai:chatgpt", type: "oauth", status: "ok" }],
-        catalogStatus: "auth-rejected",
-        hasAvailableModels: false,
-      }),
+      name: "not ready without usable models",
+      card: card({ auth: { kind: "api-key" }, hasAvailableModels: false }),
       expected: "Not ready",
     },
     {

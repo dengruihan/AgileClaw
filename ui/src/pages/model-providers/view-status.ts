@@ -11,20 +11,18 @@ function hasProviderCredentials(card: ModelProviderCard): boolean {
   return card.hasConfigApiKey || Boolean(card.apiKey) || card.profiles.length > 0;
 }
 
-function hasVerifiedProvider(card: ModelProviderCard): boolean {
+function hasUsableProviderAuth(card: ModelProviderCard): boolean {
   return (
-    card.catalogStatus === "ready" &&
-    card.auth?.kind !== "expired" &&
-    card.auth?.kind !== "missing" &&
-    card.auth?.kind !== "expiring"
+    card.auth?.kind !== "expired" && card.auth?.kind !== "missing" && card.auth?.kind !== "expiring"
   );
 }
 
 /**
  * Display-only mapping, mirroring ZCode's three provider states: ready
- * (green, catalog-confirmed with usable models), not ready (yellow,
- * credentials exist but the catalog has not confirmed usable models), and
- * not enabled (gray, the card carries no credentials at all).
+ * (green, configured credentials with usable models and valid auth), not
+ * ready (yellow, credentials exist but usable models or valid auth are
+ * missing), and not enabled (gray, the card carries no credentials at all).
+ * Catalog outcomes remain diagnostic and are not a prerequisite for readiness.
  */
 export function renderProviderStatus(card: ModelProviderCard) {
   if (card.checkingModels) {
@@ -33,8 +31,8 @@ export function renderProviderStatus(card: ModelProviderCard) {
       label: t("chat.modelControls.checkingProviderModels", { providers: card.displayName }),
     });
   }
-  const ready = hasVerifiedProvider(card) && card.hasAvailableModels;
   const hasCredentials = hasProviderCredentials(card);
+  const ready = hasCredentials && hasUsableProviderAuth(card) && card.hasAvailableModels;
   return renderSettingsStatus({
     kind: ready ? "ok" : hasCredentials ? "warn" : "muted",
     label: t(
