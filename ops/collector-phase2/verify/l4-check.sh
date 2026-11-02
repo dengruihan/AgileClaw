@@ -19,6 +19,7 @@ FILES=(
   files/home/raymond/.openclaw/workspace/collection/README.md
   README.md
   verify/harness.mjs
+  verify/agent-boundary.mjs
 )
 
 check "时间戳/更新记录段" grep -n -E "(最后修订[：:]|最后更新[：:]|^## ?(更新记录|Changelog|版本历史))" "${FILES[@]}"

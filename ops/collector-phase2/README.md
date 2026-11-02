@@ -30,16 +30,21 @@ cp ops/collector-phase2/files/home/raymond/.openclaw/workspace/collection/trigge
 cp ops/collector-phase2/files/home/raymond/.openclaw/workspace/collection/README.md \
    /home/raymond/.openclaw/workspace/collection/README.md
 
-# 2. 同步任务内嵌副本（payload.message、trigger.script、description）
+# 2. 同步任务内嵌副本（payload.message、trigger.script、description、toolsAllow）
+#    toolsAllow：保留既有 8 项 + 新增 agenda（审查 r1 P1：提示词要求 schedule-sweep 登记/排程，
+#    线上 agenda skill 规定 agenda 工具是唯一计划编辑入口，缺它则"需要行动"路径不可执行）
 openclaw cron edit 6a45be21-ce0b-4b8b-8986-4c885d1ea659 \
   --trigger-script ops/collector-phase2/files/home/raymond/.openclaw/workspace/collection/trigger-collector.mjs \
   --message "$(cat ops/collector-phase2/payload-message.txt)" \
-  --description '来源收集看门狗+事项分诊：每10分钟跑 collection/collect.mjs；有事项delta唤醒Agent分诊（无需行动静默结束）；源连续故障>=2或收集器连续异常唤醒修障'
+  --description '来源收集看门狗+事项分诊：每10分钟跑 collection/collect.mjs；有事项delta唤醒Agent分诊（无需行动静默结束）；源连续故障>=2或收集器连续异常唤醒修障' \
+  --tools 'ls read edit write apply_patch exec process light_control agenda'
 
-# 3. 核验（保留 enabled、every 10m、timeoutSeconds=600、lightContext、toolsAllow 不变）
+# 3. 核验（保留 enabled、every 10m、timeoutSeconds=600、lightContext）
 openclaw cron get 6a45be21-ce0b-4b8b-8986-4c885d1ea659
 # 期望：enabled=true；schedule.kind=every/everyMs=600000；payload.timeoutSeconds=600；
-# payload.message 与 payload-message.txt 一致；trigger.script 与落盘 trigger-collector.mjs 一致。
+# payload.message 与 payload-message.txt 一致；trigger.script 与落盘 trigger-collector.mjs 一致；
+# payload.toolsAllow = [ls, read, edit, write, apply_patch, exec, process, light_control, agenda]
+# （既有 8 项不变，新增 agenda；无其他增删）。
 
 # 4. 自然周期核验（不 force run）：等下一个 10 分钟评估点，确认 triggerEvalCount 递增、
 #    triggerState.collectFails/alerted 正常，无事项变化时无唤醒（openclaw cron runs 查看）。
@@ -56,13 +61,20 @@ openclaw cron get 6a45be21-ce0b-4b8b-8986-4c885d1ea659
 - delta 与故障同轮 → 单次唤醒、双原因合并
 - 输出行数不对 → 累计 collectFails；连续 2 次 → 唤醒
 
+`node ops/collector-phase2/verify/agent-boundary.mjs` —— 13 项全过（mock Agenda/通知/对外消息，隔离 fixture，审查 r1 P1 追加）：
+
+- 无需行动（查重命中 + 无截止信息项 + 邮件仅计数）：静默结束，零 agenda 写入、零通知、零文件写入、零对外消息
+- 需要行动（新作业近截止未登记）：agenda read 查重先于 apply、仅 apply 一次且字段正确、至多一条通知、零对外消息、零文件写入
+- 查重变体：同轮两条 delta 一条已登记 → 只对未登记条目 apply 一次（不重复建单）
+- 门控复现：toolsAllow 缺 agenda 时登记动作被拒——即 r1 P1 的阻塞形态，部署命令已带 `--tools` 修复
+
 另有：`node --test lib/diff.test.mjs`（线上 collection 目录既有 diff 行为锁）通过；
 `ops/collector-phase2/verify/l4-check.sh`（AGENTS.md L4 反模式自检）通过。
 
 ## 需部署后验证
 
-- 任务内嵌副本与落盘文件一致性（`openclaw cron get` 比对）
-- 自然周期：无变化轮不唤醒；真实 delta 轮分诊行为；故障轮灯效通知仍正常
+- 任务内嵌副本与落盘文件一致性（`openclaw cron get` 比对），含 payload.toolsAllow 含 agenda 且无其他增删
+- 自然周期：无变化轮不唤醒；真实 delta 轮分诊行为（观察一轮无需行动静默、一轮需要行动按 schedule-sweep 登记）；故障轮灯效通知仍正常
 - 通知渠道现状说明：当前提醒/通知走灯效推送（`phone-notifications` 扩展）。
   用户已表达切换到钉钉机器人通知的意向（未授权测试发送、未授权清理灯效工具）。
   切换时需调整的位置：① 本 payload-message 与 trigger 脚本 message 里「既有渠道/灯效」措辞；
