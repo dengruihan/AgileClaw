@@ -13,8 +13,10 @@ export function primaryModelPicker(container: ParentNode) {
 
 export const inertAgentFileControls = {
   agentFileConflict: null,
+  agentIdentity: null,
   onLoadFiles: () => undefined,
   onSelectFile: () => undefined,
+  onOpenIdentityForm: () => undefined,
   onFileDraftChange: () => undefined,
   onFileReset: () => undefined,
   onFileSave: () => undefined,

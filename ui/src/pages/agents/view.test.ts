@@ -748,7 +748,9 @@ describe("renderAgentFiles", () => {
     const tabLabels = Array.from(
       container.querySelectorAll<HTMLElement>(".agent-files-hub-tabs .hub-tab"),
     ).map((tab) => directText(tab));
-    expect(tabLabels).toStrictEqual(["AGENTS"]);
+    // The synthesized IDENTITY tab is always offered; missing optional files
+    // stay in the add picker.
+    expect(tabLabels).toStrictEqual(["AGENTS", "IDENTITY"]);
     expect(container.querySelector(".agent-files-hub-tabs .hub-tab__badge")?.textContent).toBe(
       "missing",
     );
@@ -820,7 +822,7 @@ describe("renderAgentFiles", () => {
       const tabLabels = Array.from(
         container.querySelectorAll<HTMLElement>(".agent-files-hub-tabs .hub-tab"),
       ).map((tab) => directText(tab));
-      expect(tabLabels).toStrictEqual(["AGENTS", "SOUL"]);
+      expect(tabLabels).toStrictEqual(["AGENTS", "SOUL", "IDENTITY"]);
       expect(container.querySelector(".agent-tab-add")).toBeNull();
       expect(container.querySelectorAll(".agent-files-hub-tabs .hub-tab__badge")).toHaveLength(0);
       expect(
@@ -850,4 +852,102 @@ describe("renderAgentFiles", () => {
       }
     },
   );
+
+  // The gateway list omits IDENTITY.md; the panel synthesizes its tab until a
+  // confirmed read or write supplies the real entry.
+  it("offers the IDENTITY tab between SOUL and USER without duplicating a recorded entry", () => {
+    const container = document.createElement("div");
+    const listed = (names: string[]) => ({
+      agentId: "alpha",
+      workspace: "/tmp/workspace",
+      files: names.map((name) => ({
+        name,
+        path: `/tmp/workspace/${name}`,
+        missing: false,
+      })),
+    });
+
+    renderFiles(
+      {
+        agentFilesList: listed(["AGENTS.md", "SOUL.md", "USER.md", "MEMORY.md"]),
+        agentFileActive: "AGENTS.md",
+        agentFileContents: { "AGENTS.md": "# Instructions" },
+        agentFileDrafts: { "AGENTS.md": "# Instructions" },
+      },
+      container,
+    );
+    expect(
+      Array.from(container.querySelectorAll<HTMLElement>(".agent-files-hub-tabs .hub-tab")).map(
+        (tab) => directText(tab),
+      ),
+    ).toStrictEqual(["AGENTS", "SOUL", "IDENTITY", "USER", "MEMORY"]);
+
+    renderFiles(
+      {
+        agentFilesList: listed(["AGENTS.md", "IDENTITY.md"]),
+        agentFileActive: "IDENTITY.md",
+        agentFileContents: { "IDENTITY.md": "# Identity" },
+        agentFileDrafts: { "IDENTITY.md": "# Identity" },
+      },
+      container,
+    );
+    expect(
+      Array.from(container.querySelectorAll<HTMLElement>(".agent-files-hub-tabs .hub-tab")).map(
+        (tab) => directText(tab),
+      ),
+    ).toStrictEqual(["AGENTS", "IDENTITY"]);
+  });
+
+  it("holds the IDENTITY editor on migration guidance while the avatar is embedded Base64", () => {
+    const container = document.createElement("div");
+    const onOpenIdentityForm = vi.fn();
+
+    renderFiles(
+      {
+        agentFilesList: {
+          agentId: "alpha",
+          workspace: "/tmp/workspace",
+          files: [{ name: "AGENTS.md", path: "/tmp/workspace/AGENTS.md", missing: false }],
+        },
+        agentFileActive: "IDENTITY.md",
+        agentIdentity: { agentId: "alpha", avatarStatus: "data" },
+        onOpenIdentityForm,
+      },
+      container,
+    );
+
+    expect(container.querySelector(".agent-file-textarea")).toBeNull();
+    expect(container.querySelector(".agent-file-header")).toBeNull();
+    const held = container.querySelector(".agent-file-identity-held");
+    expect(held?.textContent).toContain("still embedded in IDENTITY.md as Base64");
+    held?.querySelector<HTMLButtonElement>("button")?.click();
+    expect(onOpenIdentityForm).toHaveBeenCalledOnce();
+  });
+
+  it("edits IDENTITY.md directly with a managed-fields hint for a path avatar", () => {
+    const container = document.createElement("div");
+
+    renderFiles(
+      {
+        agentFilesList: {
+          agentId: "alpha",
+          workspace: "/tmp/workspace",
+          files: [{ name: "AGENTS.md", path: "/tmp/workspace/AGENTS.md", missing: false }],
+        },
+        agentFileActive: "IDENTITY.md",
+        agentFileContents: { "IDENTITY.md": "# IDENTITY.md\n\n- Avatar: identity.png\n" },
+        agentFileDrafts: { "IDENTITY.md": "# IDENTITY.md\n\n- Avatar: identity.png\n" },
+        agentIdentity: { agentId: "alpha", avatarStatus: "local" },
+      },
+      container,
+    );
+
+    const textarea = container.querySelector<HTMLTextAreaElement>(".agent-file-textarea");
+    expect(textarea?.value).toBe("# IDENTITY.md\n\n- Avatar: identity.png\n");
+    expect(textarea?.disabled).toBe(false);
+    expect(container.querySelector(".agent-file-identity-held")).toBeNull();
+    expect(container.querySelector(".agent-file-identity-hint")?.textContent).toContain(
+      "managed by the Identity form",
+    );
+  });
 });
