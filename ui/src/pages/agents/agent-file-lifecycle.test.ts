@@ -469,68 +469,81 @@ describe("agent file lifecycle", () => {
     await vi.waitFor(() => expect(agentIdentity.ensure).toHaveBeenCalledWith(["main"]));
   });
 
-  it("refreshes the IDENTITY.md base after the identity form rewrites it", async () => {
-    let identityContent = "# IDENTITY.md\n\n- Name: Old\n";
-    const request = vi.fn(async (_method: string, params: { name?: string }) => {
-      if (params.name === "IDENTITY.md") {
-        return {
-          agentId: "main",
-          workspace: "/tmp/workspace",
-          file: {
-            name: "IDENTITY.md",
-            path: "/tmp/workspace/IDENTITY.md",
-            missing: false,
-            content: identityContent,
-            hash: "c".repeat(64),
-          },
-        };
-      }
-      throw new Error(`Unexpected request: ${JSON.stringify(params)}`);
-    });
-    const client = { request } as unknown as GatewayBrowserClient;
-    const agentIdentity = {
-      get: () => ({ agentId: "main", avatarStatus: "local", name: "New" }),
-      entries: () => [],
-      ensure: vi.fn(async () => undefined),
-      invalidate: vi.fn(),
-      subscribe: vi.fn(() => () => undefined),
-    };
-    const agents = {
-      state: { agentsList },
-      files: () => ({ list: null, loading: false, error: null }),
-      recordFile: () => null,
-      refreshList: vi.fn(async () => agentsList),
-      subscribe: vi.fn(() => () => undefined),
-    } as unknown as ApplicationContext["agents"];
-    const page = document.createElement("openclaw-agents-page") as TestAgentsPage;
-    page.context = {
-      gateway: gateway(snapshot(client, IDENTITY_FILE_GATEWAY_HELLO)),
-      agents,
-      agentIdentity,
-      settingsAgentSelection: settingsSelection(agentsList),
-      runtimeConfig: {
-        state: {},
-        runExternalMutation: vi.fn(async () => ({ ok: true, refresh: { ok: true } })),
+  it.each([false, true])(
+    "refreshes the IDENTITY.md base after the identity form rewrites it: %s dirty draft",
+    async (dirtyDraft) => {
+      const draftContent = "# IDENTITY.md\n\n- Name: Old\nunsaved operator edit\n";
+      let identityContent = "# IDENTITY.md\n\n- Name: Old\n";
+      const request = vi.fn(async (_method: string, params: { name?: string }) => {
+        if (params.name === "IDENTITY.md") {
+          return {
+            agentId: "main",
+            workspace: "/tmp/workspace",
+            file: {
+              name: "IDENTITY.md",
+              path: "/tmp/workspace/IDENTITY.md",
+              missing: false,
+              content: identityContent,
+              hash: "d".repeat(64),
+            },
+          };
+        }
+        throw new Error(`Unexpected request: ${JSON.stringify(params)}`);
+      });
+      const client = { request } as unknown as GatewayBrowserClient;
+      const agentIdentity = {
+        get: () => ({ agentId: "main", avatarStatus: "local", name: "New" }),
+        entries: () => [],
+        ensure: vi.fn(async () => undefined),
+        invalidate: vi.fn(),
         subscribe: vi.fn(() => () => undefined),
-      },
-    } as unknown as ApplicationContext;
-    page.gateway.applySnapshot(snapshot(client, IDENTITY_FILE_GATEWAY_HELLO), {
-      initial: false,
-      sourceChanged: false,
-    });
-    page.agentsSelectedId = "main";
-    page.routeData = { panel: "files" } as AgentsRouteData;
-    page.agentFileContents = { "IDENTITY.md": identityContent };
-    page.agentFileDrafts = { "IDENTITY.md": identityContent };
-    page.identityDraft = { name: "New", emoji: null, avatar: null };
-    identityContent = "# IDENTITY.md\n\n- Name: New\n";
+      };
+      const agents = {
+        state: { agentsList },
+        files: () => ({ list: null, loading: false, error: null }),
+        recordFile: () => null,
+        refreshList: vi.fn(async () => agentsList),
+        subscribe: vi.fn(() => () => undefined),
+      } as unknown as ApplicationContext["agents"];
+      const page = document.createElement("openclaw-agents-page") as TestAgentsPage;
+      page.context = {
+        gateway: gateway(snapshot(client, IDENTITY_FILE_GATEWAY_HELLO)),
+        agents,
+        agentIdentity,
+        settingsAgentSelection: settingsSelection(agentsList),
+        runtimeConfig: {
+          state: {},
+          runExternalMutation: vi.fn(async () => ({ ok: true, refresh: { ok: true } })),
+          subscribe: vi.fn(() => () => undefined),
+        },
+      } as unknown as ApplicationContext;
+      page.gateway.applySnapshot(snapshot(client, IDENTITY_FILE_GATEWAY_HELLO), {
+        initial: false,
+        sourceChanged: false,
+      });
+      page.agentsSelectedId = "main";
+      page.routeData = { panel: "files" } as AgentsRouteData;
+      page.agentFileContents = { "IDENTITY.md": identityContent };
+      page.agentFileVersions = { "IDENTITY.md": { hash: "c".repeat(64) } };
+      page.agentFileBaseVersions = { "IDENTITY.md": { hash: "c".repeat(64) } };
+      page.agentFileDrafts = { "IDENTITY.md": dirtyDraft ? draftContent : identityContent };
+      page.identityDraft = { name: "New", emoji: null, avatar: null };
+      identityContent = "# IDENTITY.md\n\n- Name: New\n";
 
-    page.saveIdentityDraft();
+      page.saveIdentityDraft();
 
-    await vi.waitFor(() =>
-      expect(page.agentFileContents["IDENTITY.md"]).toBe("# IDENTITY.md\n\n- Name: New\n"),
-    );
-    expect(page.agentFileDrafts["IDENTITY.md"]).toBe("# IDENTITY.md\n\n- Name: New\n");
-    expect(page.identityDraft).toEqual({ name: null, emoji: null, avatar: null });
-  });
+      await vi.waitFor(() =>
+        expect(page.agentFileContents["IDENTITY.md"]).toBe("# IDENTITY.md\n\n- Name: New\n"),
+      );
+      expect(page.agentFileBaseVersions["IDENTITY.md"]).toEqual({ hash: "d".repeat(64) });
+      // A clean draft rebases onto the rewrite; a dirty draft survives with its
+      // original ancestry so the operator resolves the divergence through the
+      // normal save-conflict flow instead of losing unsaved text.
+      expect(page.agentFileDrafts["IDENTITY.md"]).toBe(dirtyDraft ? draftContent : identityContent);
+      expect(page.agentFileVersions["IDENTITY.md"]).toEqual({
+        hash: dirtyDraft ? "c".repeat(64) : "d".repeat(64),
+      });
+      expect(page.identityDraft).toEqual({ name: null, emoji: null, avatar: null });
+    },
+  );
 });

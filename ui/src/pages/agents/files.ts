@@ -336,15 +336,28 @@ export async function overwriteAgentFile(
   return await requestAgentFile(state, agentId, name, { kind: "write", content });
 }
 
-/** Selection-time read that leaves a held IDENTITY.md editor unloaded. */
-export function loadSelectedAgentFile(
+/** Selection-time read for one file. IDENTITY.md waits for the roster identity
+    before loading: an unresolved avatar status must not fetch the file while
+    it may still embed a Base64 avatar. A failed identity read falls back to a
+    normal load rather than silently locking the tab. Selection changes and
+    reconnects retire the wait, so a delayed identity cannot read a workspace
+    the page no longer shows. */
+export async function loadSelectedAgentFile(
   state: AgentFilesState,
   agentId: string,
   name: string,
   opts?: { force?: boolean },
 ): Promise<boolean> {
+  if (name === IDENTITY_FILE_NAME && !state.agentIdentity.get(agentId)) {
+    const generation = state.requestGeneration;
+    const client = state.client;
+    await state.agentIdentity.ensure([agentId]).catch(() => undefined);
+    if (state.requestGeneration !== generation || state.client !== client) {
+      return false;
+    }
+  }
   if (isIdentityFileEditorHeld(name, state.agentIdentity.get(agentId))) {
-    return Promise.resolve(false);
+    return false;
   }
   return loadAgentFileContent(state, agentId, name, opts);
 }
@@ -373,10 +386,12 @@ export function settleAgentFileWrite(
   }
 }
 
-/** The identity form rewrites IDENTITY.md through agents.update; refresh the
-    files panel's base so the direct editor shows the merged content. A held
-    editor keeps its migration guidance instead of pulling embedded bytes.
-    Callers run it while their request scope is still current. */
+/** The identity form rewrites IDENTITY.md through agents.update; advance the
+    direct editor's base so both entrances show the same content. A plain
+    forced read keeps a dirty draft and its expectedHash ancestry intact — the
+    next save conflicts and the operator resolves it — while clean drafts
+    rebase. A held editor keeps its migration guidance instead of pulling
+    embedded bytes. Callers run it while their request scope is current. */
 export function refreshIdentityFileBase(state: AgentFilesState, agentId: string): void {
   if (
     !Object.hasOwn(state.agentFileContents, IDENTITY_FILE_NAME) ||
@@ -384,5 +399,5 @@ export function refreshIdentityFileBase(state: AgentFilesState, agentId: string)
   ) {
     return;
   }
-  void reloadAgentFile(state, agentId, IDENTITY_FILE_NAME);
+  void loadAgentFileContent(state, agentId, IDENTITY_FILE_NAME, { force: true });
 }

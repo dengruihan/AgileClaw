@@ -357,4 +357,119 @@ suite.define(() => {
       },
     );
   });
+
+  it("holds IDENTITY.md reads until the delayed identity read resolves an embedded Base64 avatar", async () => {
+    await suite.withPage(
+      {
+        locale: "en-US",
+        serviceWorkers: "block",
+        viewport: { height: 900, width: 1440 },
+      },
+      async ({ page }) => {
+        const gateway = await installMockGateway(page, {
+          deferredMethods: ["agent.identity.get"],
+          featureMethods: [
+            "agent.identity.get",
+            "agents.files.get",
+            "agents.files.list",
+            "agents.files.set",
+            "agents.list",
+          ],
+          methodResponses: {
+            "agent.identity.get": identityResponses("data"),
+            "agents.list": {
+              defaultId: "main",
+              mainKey: "main",
+              scope: "per-sender",
+              agents: [{ id: "main", name: "Main" }],
+            },
+            "agents.files.list": fileList(),
+            "agents.files.get": identityFileResponses("Main", "1".repeat(64)),
+          },
+          operatorScopes: ["operator.admin", "operator.read", "operator.write"],
+        });
+
+        await page.goto(`${suite.server.baseUrl}settings/agents/main/files`);
+        await expect
+          .poll(() => page.locator(".agent-file-textarea").inputValue())
+          .toBe("# Main instructions\n");
+        await page.locator('[id="agent-files-tab-IDENTITY.md"]').click();
+        // The identity read is still pending; IDENTITY.md must not be fetched.
+        await expect
+          .poll(async () => (await gateway.getRequests("agent.identity.get")).length)
+          .toBeGreaterThan(0);
+        expect(
+          (await gateway.getRequests("agents.files.get")).some(
+            (request) => requestName(request) === "IDENTITY.md",
+          ),
+        ).toBe(false);
+
+        await gateway.resolveDeferred("agent.identity.get", {
+          agentId: "main",
+          avatar: "",
+          avatarStatus: "data",
+          name: "Main",
+        });
+        const held = page.locator(".agent-file-identity-held");
+        await expect
+          .poll(() => held.getByText("still embedded in IDENTITY.md as Base64").isVisible())
+          .toBe(true);
+        expect(
+          (await gateway.getRequests("agents.files.get")).some(
+            (request) => requestName(request) === "IDENTITY.md",
+          ),
+        ).toBe(false);
+        await capture(page, "05-delayed-identity-held.png");
+      },
+    );
+  });
+
+  it("fails open to a normal IDENTITY.md read when the identity read errors", async () => {
+    await suite.withPage(
+      {
+        locale: "en-US",
+        serviceWorkers: "block",
+        viewport: { height: 900, width: 1440 },
+      },
+      async ({ page }) => {
+        const gateway = await installMockGateway(page, {
+          featureMethods: [
+            "agent.identity.get",
+            "agents.files.get",
+            "agents.files.list",
+            "agents.files.set",
+            "agents.list",
+          ],
+          methodResponses: {
+            "agent.identity.get": {
+              __mockError: { code: "INTERNAL_ERROR", message: "identity read failed" },
+            },
+            "agents.list": {
+              defaultId: "main",
+              mainKey: "main",
+              scope: "per-sender",
+              agents: [{ id: "main", name: "Main" }],
+            },
+            "agents.files.list": fileList(),
+            "agents.files.get": identityFileResponses("Main", "1".repeat(64)),
+          },
+          operatorScopes: ["operator.admin", "operator.read", "operator.write"],
+        });
+
+        await page.goto(`${suite.server.baseUrl}settings/agents/main/files`);
+        await page.locator('[id="agent-files-tab-IDENTITY.md"]').click();
+
+        // An unavailable identity status must not lock the tab: after the
+        // identity read fails, the editor loads through the same read any
+        // other file uses.
+        const editor = page.locator(".agent-file-textarea");
+        await expect.poll(() => editor.inputValue()).toBe(identityContent("Main"));
+        expect(
+          (await gateway.getRequests("agents.files.get")).some(
+            (request) => requestName(request) === "IDENTITY.md",
+          ),
+        ).toBe(true);
+      },
+    );
+  });
 });

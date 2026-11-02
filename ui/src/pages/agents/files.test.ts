@@ -5,7 +5,9 @@ import type { AgentsFilesGetResult, AgentsFilesSetResult } from "../../api/types
 import { createTestGatewayClient } from "../../test-helpers/gateway-client.ts";
 import {
   loadAgentFileContent,
+  loadSelectedAgentFile,
   overwriteAgentFile,
+  refreshIdentityFileBase,
   reloadAgentFile,
   resetAgentFile,
   saveAgentFile,
@@ -49,6 +51,13 @@ function fileResult(content: string, hash?: string, missing = false): AgentsFile
       content,
       ...(hash ? { hash } : {}),
     },
+  };
+}
+
+function identityFileResult(content: string, hash?: string): AgentsFilesGetResult {
+  return {
+    ...fileResult(content, hash),
+    file: { ...fileResult(content, hash).file, name: "IDENTITY.md", path: "IDENTITY.md" },
   };
 }
 
@@ -569,4 +578,124 @@ describe("agent file requests", () => {
       expect(state.agentFilesError).toBeNull();
     },
   );
+});
+
+describe("IDENTITY.md editor integration", () => {
+  it("advances the base after an identity-form rewrite while preserving a dirty draft and its hash ancestry", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(identityFileResult("server rewrite", "b".repeat(64)))
+      .mockResolvedValueOnce({
+        ok: true,
+        ...identityFileResult("saved draft", "c".repeat(64)),
+      });
+    const state = createState(createTestGatewayClient(request));
+    state.agentFileContents = { "IDENTITY.md": "old base" };
+    state.agentFileDrafts = { "IDENTITY.md": "unsaved operator edit" };
+    state.agentFileVersions = { "IDENTITY.md": { hash: "a".repeat(64) } };
+    state.agentFileBaseVersions = { "IDENTITY.md": { hash: "a".repeat(64) } };
+
+    refreshIdentityFileBase(state, "main");
+    await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+    expect(request).toHaveBeenCalledWith("agents.files.get", {
+      agentId: "main",
+      name: "IDENTITY.md",
+    });
+    await vi.waitFor(() => expect(state.agentFileContents["IDENTITY.md"]).toBe("server rewrite"));
+
+    expect(state.agentFileDrafts["IDENTITY.md"]).toBe("unsaved operator edit");
+    expect(state.agentFileVersions["IDENTITY.md"]).toEqual({ hash: "a".repeat(64) });
+    expect(state.agentFileBaseVersions["IDENTITY.md"]).toEqual({ hash: "b".repeat(64) });
+
+    // The next save still presents the draft's original ancestry, so the
+    // gateway can reject it as a conflict instead of silently overwriting.
+    expect(await saveAgentFile(state, "main", "IDENTITY.md", "unsaved operator edit")).toBe(true);
+    expect(request).toHaveBeenLastCalledWith("agents.files.set", {
+      agentId: "main",
+      name: "IDENTITY.md",
+      content: "unsaved operator edit",
+      expectedHash: "a".repeat(64),
+    });
+  });
+
+  it("waits for the identity read before loading IDENTITY.md and holds on embedded Base64", async () => {
+    const request = vi.fn();
+    const identityResolved = createDeferred<void>();
+    let identity: { agentId: string; avatarStatus: string } | null = null;
+    const state = createState(createTestGatewayClient(request));
+    state.agentIdentity = {
+      get: () => identity,
+      entries: () => [],
+      ensure: vi.fn(() =>
+        identityResolved.promise.then(() => {
+          identity = { agentId: "main", avatarStatus: "data" };
+        }),
+      ),
+      invalidate: vi.fn(),
+      subscribe: vi.fn(() => () => undefined),
+    };
+
+    const load = loadSelectedAgentFile(state, "main", "IDENTITY.md");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(state.agentIdentity.ensure).toHaveBeenCalledWith(["main"]);
+    expect(request).not.toHaveBeenCalled();
+
+    identityResolved.resolve();
+    expect(await load).toBe(false);
+    expect(request).not.toHaveBeenCalled();
+    expect(state.agentFileContents).toEqual({});
+  });
+
+  it("fails open to a normal IDENTITY.md read when the identity read stays unavailable", async () => {
+    const request = vi.fn().mockResolvedValue(identityFileResult("# Identity\n"));
+    const state = createState(createTestGatewayClient(request));
+    state.agentIdentity = {
+      get: () => null,
+      entries: () => [],
+      ensure: vi.fn(async () => undefined),
+      invalidate: vi.fn(),
+      subscribe: vi.fn(() => () => undefined),
+    };
+
+    expect(await loadSelectedAgentFile(state, "main", "IDENTITY.md")).toBe(true);
+    expect(request).toHaveBeenCalledWith("agents.files.get", {
+      agentId: "main",
+      name: "IDENTITY.md",
+    });
+    expect(state.agentFileContents["IDENTITY.md"]).toBe("# Identity\n");
+  });
+
+  it("loads non-identity files without waiting for the identity read", async () => {
+    const request = vi.fn().mockResolvedValue(fileResult("# Instructions"));
+    const state = createState(createTestGatewayClient(request));
+
+    expect(await loadSelectedAgentFile(state, "main", "AGENTS.md")).toBe(true);
+    expect(request).toHaveBeenCalledWith("agents.files.get", {
+      agentId: "main",
+      name: "AGENTS.md",
+    });
+    expect(state.agentIdentity.ensure).not.toHaveBeenCalled();
+  });
+
+  it("retires a pending IDENTITY.md load when a selection change moves the request generation", async () => {
+    const request = vi.fn().mockResolvedValue(identityFileResult("# Identity\n"));
+    const identityResolved = createDeferred<void>();
+    const state = createState(createTestGatewayClient(request));
+    state.agentIdentity = {
+      get: () => null,
+      entries: () => [],
+      ensure: vi.fn(() => identityResolved.promise),
+      invalidate: vi.fn(),
+      subscribe: vi.fn(() => () => undefined),
+    };
+
+    const load = loadSelectedAgentFile(state, "main", "IDENTITY.md");
+    await Promise.resolve();
+    state.requestGeneration += 1;
+    identityResolved.resolve();
+
+    expect(await load).toBe(false);
+    expect(request).not.toHaveBeenCalled();
+  });
 });

@@ -132,6 +132,33 @@ describe("renderAgents", () => {
     expect(onSelectPanel).toHaveBeenCalledWith("tools");
   });
 
+  it("counts the synthesized IDENTITY tab in the Files badge", () => {
+    const container = document.createElement("div");
+    renderView(
+      {
+        activePanel: "files",
+        agentFiles: {
+          ...createProps().agentFiles,
+          agentFilesList: {
+            agentId: "beta",
+            workspace: "/tmp/workspace",
+            files: [
+              { name: "AGENTS.md", path: "/tmp/workspace/AGENTS.md", missing: false },
+              { name: "SOUL.md", path: "/tmp/workspace/SOUL.md", missing: false },
+            ],
+          },
+        },
+      },
+      container,
+    );
+
+    // Two listed files plus the synthesized IDENTITY.md editor tab.
+    expect(
+      container.querySelector('[id="agents-tab-files"] .hub-tab__badge--count')?.textContent,
+    ).toBe("3");
+    expect(container.querySelectorAll(".agent-files-hub-tabs .hub-tab")).toHaveLength(3);
+  });
+
   it("prefills the identity editor from the fetched agent identity", () => {
     const container = document.createElement("div");
     renderView(
