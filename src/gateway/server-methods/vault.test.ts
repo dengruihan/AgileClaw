@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { ErrorCodes } from "../../../packages/gateway-protocol/src/index.js";
 import type { VaultService } from "../../vault/vault-service.js";
@@ -194,5 +195,38 @@ describe("vault gateway methods", () => {
       notes: "note",
     });
     expect(JSON.stringify(respond.mock.calls[0]?.[1])).not.toContain("synthetic-password");
+  });
+
+  it("never writes vault values to handler logs", async () => {
+    const logs: string[] = [];
+    const service = createServiceStub();
+    service.create = vi.fn(async () => {
+      throw new VaultError("VAULT_CORRUPTED", "The vault entry secret is missing.");
+    });
+    const handlers = createVaultHandlers({
+      service,
+      log: { warn: (message) => logs.push(message) },
+    });
+    await invoke({
+      handlers,
+      method: "vault.create",
+      requestParams: {
+        originScheme: "https",
+        originHost: "example.com",
+        originPort: 443,
+        siteLabel: "Example",
+        account: "user@example.com",
+        password: "log-canary-password",
+        notes: "log-canary-notes",
+      },
+      scopes: ["operator.vault"],
+    });
+    expect(logs.join("\n")).not.toContain("log-canary");
+    expect(logs.join("\n")).toContain("VAULT_CORRUPTED");
+  });
+
+  it("registers no vault tool on the model-facing agent tool surface", () => {
+    const tools = fs.readdirSync("src/agents/tools");
+    expect(tools.some((name) => /vault/iu.test(name))).toBe(false);
   });
 });

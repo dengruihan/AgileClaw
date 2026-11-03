@@ -53,8 +53,6 @@ export const CLI_DEFAULT_OPERATOR_SCOPES: OperatorScope[] = [
   QUESTIONS_SCOPE,
   PAIRING_SCOPE,
   TALK_SECRETS_SCOPE,
-  VAULT_REVEAL_SCOPE,
-  VAULT_SCOPE,
 ];
 
 function resolveScopedMethod(method: string): OperatorScope | undefined {

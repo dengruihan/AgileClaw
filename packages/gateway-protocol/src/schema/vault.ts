@@ -98,7 +98,7 @@ export const VaultUpdateParamsSchema = closedObject({
   revision: VaultRevisionSchema,
   ...VaultEntryFieldsSchema,
   password: Type.Optional(VaultPasswordSchema),
-  notes: VaultNotesSchema,
+  notes: Type.Optional(VaultNotesSchema),
 });
 
 export const VaultDeleteParamsSchema = closedObject({

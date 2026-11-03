@@ -59,6 +59,7 @@ export type VaultWorkerReply =
 export type VaultWorkerData = {
   databasePath: string;
   env?: Record<string, string>;
+  maintenanceIntervalMs?: number;
 };
 
 export type VaultWorkerResultFor<Operation extends VaultWorkerOperation["type"]> = Extract<

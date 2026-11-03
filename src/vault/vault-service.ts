@@ -26,6 +26,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
 export type VaultServiceOptions = {
   databasePath?: string;
   env?: NodeJS.ProcessEnv;
+  maintenanceIntervalMs?: number;
 };
 
 type Pending = {
@@ -157,6 +158,7 @@ export class VaultService {
         this.pending.set(id, { resolve, reject, timer });
         worker.postMessage({ id, operation }, []);
       });
+      // SAFETY: extractResult switches on the same operation type that produced the reply.
       return extractResult(operation.type, result) as T;
     };
     const next = this.queue.then(run, run);
@@ -179,6 +181,9 @@ export class VaultService {
       workerData: {
         databasePath,
         ...(env ? { env } : {}),
+        ...(this.options.maintenanceIntervalMs !== undefined
+          ? { maintenanceIntervalMs: this.options.maintenanceIntervalMs }
+          : {}),
       },
     });
     worker.on("message", (message: VaultWorkerReply) => {

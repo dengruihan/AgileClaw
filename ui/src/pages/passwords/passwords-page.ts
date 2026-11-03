@@ -4,6 +4,7 @@ import { applicationContext, type ApplicationContext } from "../../app/context.t
 import { showConfirmDialog } from "../../components/confirm-dialog.ts";
 import { t } from "../../i18n/index.ts";
 import { isGatewayMethodAdvertised } from "../../lib/gateway-methods.ts";
+import { schedulePasswordClipboardClear } from "../../lib/passwords-vault/clipboard.ts";
 import {
   addShowDeletedFlag,
   createInitialPasswordsVaultState,
@@ -25,7 +26,6 @@ import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
 import { renderPasswordsVault, type RevealedPasswordsEntry } from "./view.ts";
 
 const REVEAL_HIDE_MS = 30_000;
-const CLIPBOARD_CLEAR_MS = 30_000;
 
 type PasswordsEntryDraft = {
   itemRef?: string;
@@ -105,9 +105,9 @@ class PasswordsPage extends OpenClawLightDomElement {
   @state() private authPassphrase = "";
   @state() private authConfirm = "";
   @state() private authAutoLockSeconds = 300;
+  @state() private notesMode: "keep" | "replace" | "clear" = "keep";
 
   private readonly revealTimers = new Map<string, NodeJS.Timeout>();
-  private clipboardTimer: NodeJS.Timeout | undefined;
 
   private readonly gateway = new GatewayPageController(this, {
     getGateway: () => this.context?.gateway,
@@ -155,7 +155,7 @@ class PasswordsPage extends OpenClawLightDomElement {
 
   private async refresh(): Promise<void> {
     const store = this.store;
-    await refreshPasswordsVault(store);
+    await refreshPasswordsVault(store, () => this.requestUpdate());
     if (this.store === store) {
       this.requestUpdate();
     }
@@ -176,6 +176,7 @@ class PasswordsPage extends OpenClawLightDomElement {
     this.notice = null;
     this.formError = null;
     this.draft = emptyDraft();
+    this.notesMode = "replace";
     this.dialogMode = "add";
   }
 
@@ -195,6 +196,7 @@ class PasswordsPage extends OpenClawLightDomElement {
       password: "",
       notes: "",
     };
+    this.notesMode = "keep";
     this.dialogMode = "edit";
   }
 
@@ -216,6 +218,22 @@ class PasswordsPage extends OpenClawLightDomElement {
       this.draft = { ...this.draft, password };
       this.notice = t("passwords.generated");
     }
+    this.requestUpdate();
+  }
+
+  private async loadNotes() {
+    const itemRef = this.draft.itemRef;
+    if (!this.canReveal || !itemRef || this.store.status?.state !== "unlocked") {
+      return;
+    }
+    const result = await revealPasswordsEntry(this.store, itemRef, "reveal");
+    if (!result) {
+      this.requestUpdate();
+      return;
+    }
+    this.draft = { ...this.draft, notes: result.notes };
+    this.notesMode = "replace";
+    this.notice = t("passwords.notesLoaded");
     this.requestUpdate();
   }
 
@@ -247,12 +265,20 @@ class PasswordsPage extends OpenClawLightDomElement {
       originHost: origin.host,
       originPort: origin.port,
     } as const;
+    const notes =
+      this.dialogMode === "add"
+        ? draft.notes
+        : this.notesMode === "keep"
+          ? undefined
+          : this.notesMode === "clear"
+            ? ""
+            : draft.notes;
     const apiDraft: PasswordsApiDraft = {
       siteLabel: draft.siteLabel,
       account: draft.account,
       label: draft.label,
       password: draft.password,
-      notes: draft.notes,
+      ...(notes !== undefined ? { notes } : {}),
       ...originFields,
     };
     const saved =
@@ -325,13 +351,8 @@ class PasswordsPage extends OpenClawLightDomElement {
     }
     try {
       await navigator.clipboard.writeText(result.password);
+      schedulePasswordClipboardClear(result.password);
       this.notice = t("passwords.copied");
-      if (this.clipboardTimer) {
-        clearTimeout(this.clipboardTimer);
-      }
-      this.clipboardTimer = setTimeout(() => {
-        void navigator.clipboard.writeText("").catch(() => undefined);
-      }, CLIPBOARD_CLEAR_MS);
     } catch {
       this.notice = t("passwords.copyFailed");
     }
@@ -476,6 +497,7 @@ class PasswordsPage extends OpenClawLightDomElement {
       authPassphrase: this.authPassphrase,
       authConfirm: this.authConfirm,
       authAutoLockSeconds: this.authAutoLockSeconds,
+      notesMode: this.notesMode,
       onSearchChange: (value) => {
         this.search = value;
       },
@@ -508,6 +530,13 @@ class PasswordsPage extends OpenClawLightDomElement {
       onAuthAutoLockChange: (value) => {
         this.authAutoLockSeconds = value;
       },
+      onNotesModeChange: (mode) => {
+        this.notesMode = mode;
+        if (mode === "clear") {
+          this.draft = { ...this.draft, notes: "" };
+        }
+      },
+      onLoadNotes: () => void this.loadNotes(),
       onInitialize: () => void this.initialize(),
       onUnlock: () => void this.unlock(),
     });
@@ -515,9 +544,6 @@ class PasswordsPage extends OpenClawLightDomElement {
 
   override disconnectedCallback() {
     this.clearRevealed();
-    if (this.clipboardTimer) {
-      clearTimeout(this.clipboardTimer);
-    }
     super.disconnectedCallback();
   }
 }

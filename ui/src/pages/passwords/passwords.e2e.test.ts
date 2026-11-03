@@ -74,6 +74,19 @@ const UNLOCKED = {
   deletedCount: 0,
 };
 
+const DELETED_ENTRY: VaultEntryMetadata = {
+  ...ENTRY,
+  deletedAtMs: 1_786_352_400_000,
+};
+
+const LONG_ENTRY: VaultEntryMetadata = {
+  ...SECOND_ENTRY,
+  itemRef: "vault_33333333-3333-4333-8333-333333333333",
+  siteLabel: "A very long site name that keeps going across the row to test wrapping",
+  account: "a-very-long-account-name-with-a-plus-tag@example.test",
+  label: "A long label that should not push the actions out of the table",
+};
+
 const REVEAL = {
   entry: ENTRY,
   password: "synthetic-revealed-password",
@@ -228,6 +241,263 @@ suite.define(() => {
       await link.waitFor();
       await capture(page, "secrets-callout.png");
       expect(await link.getAttribute("href")).toBe("/settings/passwords");
+    });
+  });
+
+  it("edits an entry without erasing notes unless the user explicitly replaces or clears them", async () => {
+    await suite.withPage({}, async ({ page }) => {
+      const gateway = await installMockGateway(page, {
+        featureMethods: ["vault.status", "vault.list", "vault.update", "vault.audit.list"],
+        operatorScopes: ["operator.vault"],
+        methodResponses: {
+          "vault.status": { ...UNLOCKED, itemCount: 1 },
+          "vault.list": { entries: [ENTRY] },
+          "vault.update": { entry: { ...ENTRY, revision: 2 } },
+          "vault.audit.list": { events: [] },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      await page
+        .getByRole("row", { name: /person@example.com/u })
+        .getByRole("button", { name: /Edit/u })
+        .click();
+      await page.locator('input[name="site-label"]').fill("Example renamed");
+      await page.getByRole("button", { name: "Save" }).click();
+      const keep = await gateway.waitForRequest("vault.update");
+      expect(keep.params).not.toHaveProperty("notes");
+      expect(keep.params).toMatchObject({ siteLabel: "Example renamed" });
+
+      await page
+        .getByRole("row", { name: /person@example.com/u })
+        .getByRole("button", { name: /Edit/u })
+        .click();
+      await page.getByRole("radio", { name: "Clear notes" }).check();
+      await page.getByRole("button", { name: "Save" }).click();
+      const clear = (await gateway.getRequests("vault.update")).at(-1);
+      expect(clear?.params).toMatchObject({ notes: "" });
+    });
+  });
+
+  it("loads existing notes for an explicit replace when reveal is granted", async () => {
+    await suite.withPage({}, async ({ page }) => {
+      const gateway = await installMockGateway(page, {
+        featureMethods: [
+          "vault.status",
+          "vault.list",
+          "vault.update",
+          "vault.reveal",
+          "vault.audit.list",
+        ],
+        operatorScopes: ["operator.vault", "operator.vault.reveal"],
+        methodResponses: {
+          "vault.status": { ...UNLOCKED, itemCount: 1 },
+          "vault.list": { entries: [ENTRY] },
+          "vault.reveal": REVEAL,
+          "vault.update": { entry: { ...ENTRY, revision: 2 } },
+          "vault.audit.list": { events: [] },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      await page
+        .getByRole("row", { name: /person@example.com/u })
+        .getByRole("button", { name: /Edit/u })
+        .click();
+      await page.getByRole("button", { name: "Load current notes" }).click();
+      await gateway.waitForRequest("vault.reveal");
+      await page.locator('textarea[name="notes"]').waitFor();
+      expect(await page.locator('textarea[name="notes"]').inputValue()).toBe("synthetic notes");
+      await capture(page, "p13-edit-notes.png");
+    });
+  });
+
+  it("deletes, restores, and permanently deletes an entry", async () => {
+    await suite.withPage({}, async ({ page }) => {
+      const gateway = await installMockGateway(page, {
+        featureMethods: [
+          "vault.status",
+          "vault.list",
+          "vault.delete",
+          "vault.restore",
+          "vault.purge",
+          "vault.audit.list",
+        ],
+        operatorScopes: ["operator.vault"],
+        methodResponses: {
+          "vault.status": { ...UNLOCKED, itemCount: 1 },
+          "vault.list": {
+            sequence: [
+              { entries: [ENTRY] },
+              { entries: [] },
+              { entries: [DELETED_ENTRY] },
+              { entries: [ENTRY] },
+              { entries: [DELETED_ENTRY] },
+              { entries: [] },
+            ],
+          },
+          "vault.delete": { ok: true },
+          "vault.restore": { ok: true },
+          "vault.purge": { ok: true },
+          "vault.audit.list": { events: [] },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      await page
+        .getByRole("row", { name: /person@example.com/u })
+        .getByRole("button", { name: /Delete/u })
+        .click();
+      await page
+        .locator("openclaw-modal-dialog")
+        .getByRole("button", { name: "Delete", exact: true })
+        .click();
+      await expect.poll(async () => (await gateway.getRequests("vault.delete")).length).toBe(1);
+      await page.getByLabel("Show deleted").check();
+      await page
+        .getByRole("row", { name: /person@example.com/u })
+        .getByRole("button", { name: "Restore" })
+        .click();
+      await gateway.waitForRequest("vault.restore");
+      await page
+        .getByRole("row", { name: /person@example.com/u })
+        .getByRole("button", { name: /Delete/u })
+        .click();
+      await page
+        .locator("openclaw-modal-dialog")
+        .getByRole("button", { name: "Delete", exact: true })
+        .click();
+      await expect.poll(async () => (await gateway.getRequests("vault.delete")).length).toBe(2);
+      await page
+        .getByRole("row", { name: /person@example.com/u })
+        .getByRole("button", { name: "Delete permanently" })
+        .click();
+      await page
+        .locator("openclaw-modal-dialog")
+        .getByRole("button", { name: "Delete permanently", exact: true })
+        .click();
+      await expect.poll(async () => (await gateway.getRequests("vault.purge")).length).toBe(1);
+    });
+  });
+
+  it("captures the empty gallery state", async () => {
+    await suite.withPage({}, async ({ page }) => {
+      await installMockGateway(page, {
+        featureMethods: ["vault.status", "vault.list", "vault.audit.list"],
+        operatorScopes: ["operator.vault"],
+        methodResponses: {
+          "vault.status": { ...UNLOCKED, itemCount: 0 },
+          "vault.list": { entries: [] },
+          "vault.audit.list": { events: [] },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      await page.getByText("No saved passwords yet.").waitFor();
+      await capture(page, "p06-empty.png");
+    });
+  });
+
+  it("captures the unavailable gallery state", async () => {
+    await suite.withPage({}, async ({ page }) => {
+      await installMockGateway(page, {
+        featureMethods: ["vault.status"],
+        operatorScopes: ["operator.vault"],
+        methodResponses: {
+          "vault.status": {
+            __mockError: { code: "UNAVAILABLE", message: "The password vault is unavailable." },
+          },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      await page.getByText("The password vault is unavailable.").waitFor();
+      await capture(page, "p07-unavailable.png");
+    });
+  });
+
+  it("captures the deleted-entry gallery state", async () => {
+    await suite.withPage({}, async ({ page }) => {
+      await installMockGateway(page, {
+        featureMethods: ["vault.status", "vault.list", "vault.audit.list"],
+        operatorScopes: ["operator.vault"],
+        methodResponses: {
+          "vault.status": { ...UNLOCKED, itemCount: 0, deletedCount: 1 },
+          "vault.list": {
+            sequence: [{ entries: [] }, { entries: [DELETED_ENTRY] }],
+          },
+          "vault.audit.list": { events: [] },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      await page.getByLabel("Show deleted").check();
+      await page.getByText("person@example.com", { exact: true }).waitFor();
+      await capture(page, "p08-deleted.png");
+    });
+  });
+
+  it("captures the entry dialog gallery state", async () => {
+    await suite.withPage({}, async ({ page }) => {
+      await installMockGateway(page, {
+        featureMethods: ["vault.status", "vault.list", "vault.audit.list"],
+        operatorScopes: ["operator.vault"],
+        methodResponses: {
+          "vault.status": { ...UNLOCKED, itemCount: 1 },
+          "vault.list": { entries: [ENTRY] },
+          "vault.audit.list": { events: [] },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      await page.getByRole("button", { name: "Add password" }).click();
+      await page.getByRole("heading", { name: "Add password" }).waitFor();
+      await capture(page, "p09-dialog.png");
+    });
+  });
+
+  it("captures the mobile gallery state", async () => {
+    await suite.withPage({ viewport: { width: 390, height: 844 } }, async ({ page }) => {
+      await installMockGateway(page, {
+        featureMethods: ["vault.status", "vault.list", "vault.audit.list"],
+        operatorScopes: ["operator.vault"],
+        methodResponses: {
+          "vault.status": { ...UNLOCKED, itemCount: 2 },
+          "vault.list": { entries: [ENTRY, SECOND_ENTRY] },
+          "vault.audit.list": { events: [] },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      await page.getByText("person@example.com", { exact: true }).waitFor();
+      await capture(page, "p10-mobile.png");
+    });
+  });
+
+  it("captures the long-content gallery state", async () => {
+    await suite.withPage({}, async ({ page }) => {
+      await installMockGateway(page, {
+        featureMethods: ["vault.status", "vault.list", "vault.audit.list"],
+        operatorScopes: ["operator.vault"],
+        methodResponses: {
+          "vault.status": { ...UNLOCKED, itemCount: 1 },
+          "vault.list": { entries: [LONG_ENTRY] },
+          "vault.audit.list": { events: [] },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      await page.getByText(LONG_ENTRY.account, { exact: true }).waitFor();
+      await capture(page, "p11-long-content.png");
+    });
+  });
+
+  it("captures the loading gallery state", async () => {
+    await suite.withPage({}, async ({ page }) => {
+      const gateway = await installMockGateway(page, {
+        featureMethods: ["vault.status", "vault.list", "vault.audit.list"],
+        operatorScopes: ["operator.vault"],
+        deferredMethods: ["vault.list"],
+        methodResponses: {
+          "vault.status": { ...UNLOCKED, itemCount: 0 },
+          "vault.audit.list": { events: [] },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      await page.locator(".settings-loading-skeleton").waitFor();
+      await capture(page, "p12-loading.png");
+      await gateway.resolveDeferred("vault.list", { entries: [] });
     });
   });
 });

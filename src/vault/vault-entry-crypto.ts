@@ -5,7 +5,7 @@ import {
   entryKey,
   VAULT_SCRYPT_PARAMS,
 } from "./vault-crypto.js";
-import type { VaultEncryptedEntry } from "./vault-kernel.js";
+import type { VaultEncryptedEntry } from "./vault-kernel.worker.js";
 import { VaultError, type VaultEntryMetadata, type VaultOwner } from "./vault-types.js";
 
 export function parseScryptParams(paramsJson: string) {
@@ -18,6 +18,7 @@ export function parseScryptParams(paramsJson: string) {
   if (!parsed || typeof parsed !== "object") {
     throw new VaultError("VAULT_CORRUPTED", "The password vault KDF parameters are corrupted.");
   }
+  // SAFETY: JSON.parse returns unknown; the three numeric fields are checked below.
   const record = parsed as { N?: unknown; r?: unknown; p?: unknown };
   if (record.N !== 32768 || record.r !== 8 || record.p !== 1) {
     throw new VaultError("VAULT_CORRUPTED", "The password vault KDF parameters are unsupported.");

@@ -173,6 +173,6 @@ export function normalizeUpdateInput(input: VaultEntryUpdateInput) {
     }),
     label: normalizeText(input.label, "Label", VAULT_LABEL_MAX_LENGTH, { required: false }),
     password: input.password === undefined ? undefined : normalizePassword(input.password),
-    notes: normalizeNotes(input.notes),
+    notes: input.notes === undefined ? undefined : normalizeNotes(input.notes),
   };
 }

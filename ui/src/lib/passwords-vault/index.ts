@@ -58,15 +58,25 @@ function readErrorDetails(error: unknown): Record<string, unknown> | undefined {
   if (!error || typeof error !== "object" || !("details" in error)) {
     return undefined;
   }
-  const details = (error as { details?: unknown }).details;
-  return details && typeof details === "object" ? (details as Record<string, unknown>) : undefined;
+  const details = error.details;
+  if (!details || typeof details !== "object") {
+    return undefined;
+  }
+  const record: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(details)) {
+    record[key] = value;
+  }
+  return record;
 }
 
 function isCurrent(state: PasswordsVaultState, client: GatewayBrowserClient): boolean {
   return state.client === client && state.connected;
 }
 
-export async function refreshPasswordsVault(state: PasswordsVaultState): Promise<boolean> {
+export async function refreshPasswordsVault(
+  state: PasswordsVaultState,
+  onProgress?: () => void,
+): Promise<boolean> {
   const client = state.client;
   if (!client || !state.connected || state.loading) {
     return false;
@@ -79,12 +89,14 @@ export async function refreshPasswordsVault(state: PasswordsVaultState): Promise
       return false;
     }
     state.status = status;
+    onProgress?.();
     const listParams = state.showDeleted ? { includeDeleted: true } : {};
     const list = await client.request<{ entries: VaultEntryMetadata[] }>("vault.list", listParams);
     if (!isCurrent(state, client)) {
       return false;
     }
     state.entries = list.entries;
+    onProgress?.();
     if (status.state === "unlocked") {
       const audit = await client.request<{ events: VaultAuditEvent[] }>("vault.audit.list", {
         limit: 25,
@@ -180,7 +192,7 @@ export type PasswordsEntryDraft = {
   account: string;
   label: string;
   password: string;
-  notes: string;
+  notes?: string;
 };
 
 export function createPasswordsEntry(
@@ -197,7 +209,7 @@ export function createPasswordsEntry(
         account: draft.account,
         ...(draft.label ? { label: draft.label } : {}),
         password: draft.password,
-        notes: draft.notes,
+        ...(draft.notes !== undefined ? { notes: draft.notes } : {}),
       })
       .then((result) => result.entry),
   );
@@ -219,7 +231,7 @@ export function updatePasswordsEntry(
         account: draft.account,
         ...(draft.label ? { label: draft.label } : {}),
         ...(draft.password ? { password: draft.password } : {}),
-        notes: draft.notes,
+        ...(draft.notes !== undefined ? { notes: draft.notes } : {}),
       })
       .then((result) => result.entry),
   );

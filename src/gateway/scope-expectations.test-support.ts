@@ -7,7 +7,5 @@ export function createExpectedBroadOperatorScopes() {
     "operator.questions",
     "operator.pairing",
     "operator.talk.secrets",
-    "operator.vault.reveal",
-    "operator.vault",
   ];
 }

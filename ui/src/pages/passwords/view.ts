@@ -59,6 +59,7 @@ type PasswordsVaultViewProps = {
   authPassphrase: string;
   authConfirm: string;
   authAutoLockSeconds: number;
+  notesMode: "keep" | "replace" | "clear";
   onSearchChange: (value: string) => void;
   onToggleDeleted: (value: boolean) => void;
   onRefresh: () => void;
@@ -78,11 +79,27 @@ type PasswordsVaultViewProps = {
   onAuthPassphraseChange: (value: string) => void;
   onAuthConfirmChange: (value: string) => void;
   onAuthAutoLockChange: (value: number) => void;
+  onNotesModeChange: (mode: "keep" | "replace" | "clear") => void;
+  onLoadNotes: () => void;
   onInitialize: () => void;
   onUnlock: () => void;
 };
 
 const DOCS_URL = "https://docs.openclaw.ai/gateway/passwords-vault";
+
+function eventValue(event: Event): string {
+  const target = event.target;
+  return target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+    ? target.value
+    : "";
+}
+
+function eventChecked(event: Event): boolean {
+  const target = event.target;
+  return target instanceof HTMLInputElement ? target.checked : false;
+}
 const MASK = "••••••••••••";
 
 function formatTime(value: number | undefined, fallback: string): string {
@@ -147,8 +164,7 @@ function renderAuthCard(props: PasswordsVaultViewProps): TemplateResult {
             autocomplete="current-password"
             spellcheck="false"
             .value=${props.authPassphrase}
-            @input=${(event: Event) =>
-              props.onAuthPassphraseChange((event.target as HTMLInputElement).value)}
+            @input=${(event: Event) => props.onAuthPassphraseChange(eventValue(event))}
           />
         </label>
         ${
@@ -163,8 +179,7 @@ function renderAuthCard(props: PasswordsVaultViewProps): TemplateResult {
                     autocomplete="new-password"
                     spellcheck="false"
                     .value=${props.authConfirm}
-                    @input=${(event: Event) =>
-                      props.onAuthConfirmChange((event.target as HTMLInputElement).value)}
+                    @input=${(event: Event) => props.onAuthConfirmChange(eventValue(event))}
                   />
                 </label>
                 <label class="passwords-vault__field">
@@ -172,7 +187,7 @@ function renderAuthCard(props: PasswordsVaultViewProps): TemplateResult {
                   <select
                     class="settings-input"
                     @change=${(event: Event) =>
-                      props.onAuthAutoLockChange(Number((event.target as HTMLSelectElement).value))}
+                      props.onAuthAutoLockChange(Number(eventValue(event)))}
                   >
                     ${[60, 300, 900, 3600].map(
                       (seconds) => html`
@@ -408,8 +423,7 @@ function renderEntryDialog(props: PasswordsVaultViewProps): TemplateResult | typ
             spellcheck="false"
             placeholder="https://example.com"
             .value=${props.draft.website}
-            @input=${(event: Event) =>
-              props.onDraftChange({ website: (event.target as HTMLInputElement).value })}
+            @input=${(event: Event) => props.onDraftChange({ website: eventValue(event) })}
           />
           <small>${t("passwords.websiteHint")}</small>
         </label>
@@ -420,8 +434,7 @@ function renderEntryDialog(props: PasswordsVaultViewProps): TemplateResult | typ
             name="site-label"
             autocomplete="off"
             .value=${props.draft.siteLabel}
-            @input=${(event: Event) =>
-              props.onDraftChange({ siteLabel: (event.target as HTMLInputElement).value })}
+            @input=${(event: Event) => props.onDraftChange({ siteLabel: eventValue(event) })}
           />
         </label>
         <label class="passwords-vault__field">
@@ -431,8 +444,7 @@ function renderEntryDialog(props: PasswordsVaultViewProps): TemplateResult | typ
             name="account"
             autocomplete="off"
             .value=${props.draft.account}
-            @input=${(event: Event) =>
-              props.onDraftChange({ account: (event.target as HTMLInputElement).value })}
+            @input=${(event: Event) => props.onDraftChange({ account: eventValue(event) })}
           />
         </label>
         <label class="passwords-vault__field">
@@ -442,8 +454,7 @@ function renderEntryDialog(props: PasswordsVaultViewProps): TemplateResult | typ
             name="label"
             autocomplete="off"
             .value=${props.draft.label}
-            @input=${(event: Event) =>
-              props.onDraftChange({ label: (event.target as HTMLInputElement).value })}
+            @input=${(event: Event) => props.onDraftChange({ label: eventValue(event) })}
           />
         </label>
         <label class="passwords-vault__field">
@@ -457,25 +468,90 @@ function renderEntryDialog(props: PasswordsVaultViewProps): TemplateResult | typ
               spellcheck="false"
               placeholder=${editing ? t("passwords.passwordKeepHint") : ""}
               .value=${props.draft.password}
-              @input=${(event: Event) =>
-                props.onDraftChange({ password: (event.target as HTMLInputElement).value })}
+              @input=${(event: Event) => props.onDraftChange({ password: eventValue(event) })}
             />
             <button class="btn btn--sm btn--ghost" type="button" @click=${props.onGenerate}>
               ${t("passwords.generate")}
             </button>
           </div>
         </label>
-        <label class="passwords-vault__field">
-          <span>${t("passwords.notes")}</span>
-          <textarea
-            class="settings-input passwords-vault__notes-input"
-            name="notes"
-            spellcheck="false"
-            .value=${props.draft.notes}
-            @input=${(event: Event) =>
-              props.onDraftChange({ notes: (event.target as HTMLTextAreaElement).value })}
-          ></textarea>
-        </label>
+        ${
+          editing
+            ? html`
+                <fieldset class="passwords-vault__notes-mode">
+                  <legend>${t("passwords.notes")}</legend>
+                  <label>
+                    <input
+                      type="radio"
+                      name="notes-mode"
+                      value="keep"
+                      .checked=${props.notesMode === "keep"}
+                      @change=${() => props.onNotesModeChange("keep")}
+                    />
+                    <span>${t("passwords.keepNotes")}</span>
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="notes-mode"
+                      value="replace"
+                      .checked=${props.notesMode === "replace"}
+                      @change=${() => props.onNotesModeChange("replace")}
+                    />
+                    <span>${t("passwords.replaceNotes")}</span>
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="notes-mode"
+                      value="clear"
+                      .checked=${props.notesMode === "clear"}
+                      @change=${() => props.onNotesModeChange("clear")}
+                    />
+                    <span>${t("passwords.clearNotes")}</span>
+                  </label>
+                  ${
+                    props.canReveal && props.notesMode !== "clear"
+                      ? html`<button
+                          class="btn btn--sm btn--ghost"
+                          type="button"
+                          @click=${props.onLoadNotes}
+                        >
+                          ${t("passwords.loadNotes")}
+                        </button>`
+                      : nothing
+                  }
+                </fieldset>
+              `
+            : nothing
+        }
+        ${
+          !editing || props.notesMode === "replace"
+            ? html`
+                <label class="passwords-vault__field">
+                  <span
+                    >${
+                      editing && props.notesMode === "replace"
+                        ? t("passwords.notesReplacement")
+                        : t("passwords.notes")
+                    }</span
+                  >
+                  <textarea
+                    class="settings-input passwords-vault__notes-input"
+                    name="notes"
+                    spellcheck="false"
+                    .value=${props.draft.notes}
+                    @input=${(event: Event) => props.onDraftChange({ notes: eventValue(event) })}
+                  ></textarea>
+                </label>
+              `
+            : nothing
+        }
+        ${
+          editing && props.notesMode === "keep"
+            ? html`<p class="passwords-vault__muted">${t("passwords.keepNotesHint")}</p>`
+            : nothing
+        }
         ${props.formError ? html`<div class="passwords-vault__error">${props.formError}</div>` : nothing}
         <div class="passwords-vault__dialog-actions">
           <button class="btn btn--ghost" type="button" @click=${props.onCloseDialog}>
@@ -551,15 +627,13 @@ export function renderPasswordsVault(props: PasswordsVaultViewProps): TemplateRe
                 type="search"
                 placeholder=${t("passwords.searchPlaceholder")}
                 .value=${props.search}
-                @input=${(event: Event) =>
-                  props.onSearchChange((event.target as HTMLInputElement).value)}
+                @input=${(event: Event) => props.onSearchChange(eventValue(event))}
               />
               <label class="passwords-vault__toggle">
                 <input
                   type="checkbox"
                   .checked=${props.showDeleted}
-                  @change=${(event: Event) =>
-                    props.onToggleDeleted((event.target as HTMLInputElement).checked)}
+                  @change=${(event: Event) => props.onToggleDeleted(eventChecked(event))}
                 />
                 <span>${t("passwords.showDeleted")}</span>
               </label>

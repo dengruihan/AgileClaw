@@ -98,7 +98,7 @@ function validateResult<T>(
   if (!validate(value)) {
     throw new VaultError("VAULT_UNAVAILABLE", `${method} returned an invalid payload.`);
   }
-  return value as T;
+  return value;
 }
 
 export function createVaultHandlers(
@@ -245,7 +245,7 @@ export function createVaultHandlers(
             account: requestParams.account,
             ...(requestParams.label !== undefined ? { label: requestParams.label } : {}),
             ...(requestParams.password !== undefined ? { password: requestParams.password } : {}),
-            notes: requestParams.notes,
+            ...(requestParams.notes !== undefined ? { notes: requestParams.notes } : {}),
           });
           assertCurrent();
           respond(

@@ -48,7 +48,7 @@ The vault never adds a plaintext password or notes column. The `secret_store_ent
 2. Create the vault with a master passphrase and an auto-lock interval. The passphrase is required and cannot be recovered later.
 3. Add an entry with the website URL, site name, account, password, and optional notes. The password generator uses the operating system CSPRNG.
 4. Use **Show** to reveal one password for 30 seconds, or **Copy** to copy it. The clipboard is cleared after 30 seconds where the browser permits it.
-5. Edit or delete entries individually. A deleted entry can be restored for 7 days; **Delete permanently** removes it immediately.
+5. Edit or delete entries individually. Editing keeps existing notes unless you explicitly choose **Replace notes** or **Clear notes**; a manage-only client can edit the site or account without losing notes it cannot read. A deleted entry can be restored for 7 days; **Delete permanently** removes it immediately.
 
 The list is grouped by website and supports multiple accounts per site. Search covers site names, hosts, accounts, and labels. The list never reads ciphertext.
 
@@ -56,18 +56,18 @@ The list is grouped by website and supports multiple accounts per site. Search c
 
 The vault adds two operator scopes:
 
-| Scope                   | Allows                                                                                               |
-| ----------------------- | ---------------------------------------------------------------------------------------------------- |
-| `operator.vault`        | Status, list, create, update, soft delete, restore, permanent delete, auto-lock settings, audit list |
-| `operator.vault.reveal` | Initialize, unlock, reveal, and copy                                                                 |
+| Scope                   | Allows                                                                                                           |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `operator.vault`        | Status, initialize, list, create, update, soft delete, restore, permanent delete, auto-lock settings, audit list |
+| `operator.vault.reveal` | Unlock, reveal, and copy                                                                                         |
 
-Local CLI clients receive both scopes by default. Remote or paired clients must be granted `operator.vault.reveal` explicitly. A client with only `operator.admin` can manage entries but cannot unlock or see values.
+Grant the vault scopes explicitly in an operator role or device authorization. CLI and operator clients do not receive them by default. A client with only `operator.admin` can manage entries but cannot unlock or see values; `operator.vault.reveal` must be granted explicitly.
 
 Gateway methods are `vault.status`, `vault.initialize`, `vault.unlock`, `vault.lock`, `vault.list`, `vault.create`, `vault.update`, `vault.delete`, `vault.restore`, `vault.purge`, `vault.reveal`, `vault.copy`, `vault.generate`, `vault.setAutoLock`, and `vault.audit.list`.
 
 ## Retention and backups
 
-- Soft-deleted entries are hard-deleted after 7 days. The vault also removes expired entries when it next writes or lists.
+- Soft-deleted entries are hard-deleted after 7 days. Restore rejects an expired entry, and the vault worker sweeps expired rows at startup and on its scheduled maintenance interval, even when nobody lists or creates entries.
 - Database backups contain only ciphertext. A backup without the master passphrase cannot decrypt passwords or notes. This is intentional: keep the passphrase separately if you need to restore a backup.
 - Git push backups omit the vault tables through the credential-table redaction policy, along with `secret_store_entries`.
 - Restoring a database does not restore an unlocked state. The vault starts locked and the worker holds no key after restart.

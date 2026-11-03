@@ -14,6 +14,18 @@ function expectVaultError(error: unknown, code: string): void {
   expect((error as VaultError).code).toBe(code);
 }
 
+function countVaultRows(state: { statePath: (...parts: string[]) => string }): number {
+  const database = new DatabaseSync(state.statePath("state", "openclaw.sqlite"));
+  try {
+    const row = database.prepare("SELECT COUNT(*) AS count FROM vault_entries").get() as
+      | { count: number }
+      | undefined;
+    return row?.count ?? 0;
+  } finally {
+    database.close();
+  }
+}
+
 function scanStateBytes(root: string, needle: string): string[] {
   const hits: string[] = [];
   for (const entry of fs.readdirSync(root, { recursive: true, withFileTypes: true })) {
@@ -131,7 +143,7 @@ describe("personal password vault service", () => {
           siteLabel: "Example",
           account: "person@example.com",
           password: SYNTHETIC_PASSWORD,
-          notes: "",
+          notes: SYNTHETIC_NOTES,
         });
         const updated = await service.update({
           itemRef: entry.itemRef,
@@ -142,9 +154,21 @@ describe("personal password vault service", () => {
           siteLabel: "Example updated",
           account: "person@example.com",
           password: "replacement-synthetic-password",
-          notes: "note",
         });
         expect(updated.revision).toBe(entry.revision + 1);
+        expect((await service.reveal(entry.itemRef, "reveal")).notes).toBe(SYNTHETIC_NOTES);
+        const cleared = await service.update({
+          itemRef: entry.itemRef,
+          revision: updated.revision,
+          originScheme: "https",
+          originHost: "example.com",
+          originPort: 443,
+          siteLabel: "Example updated",
+          account: "person@example.com",
+          notes: "",
+        });
+        expect(cleared.hasNotes).toBe(false);
+        expect((await service.reveal(entry.itemRef, "reveal")).notes).toBe("");
         await expect(
           service.update({
             itemRef: entry.itemRef,
@@ -161,13 +185,13 @@ describe("personal password vault service", () => {
           return true;
         });
 
-        await service.delete(entry.itemRef, updated.revision);
+        await service.delete(entry.itemRef, cleared.revision);
         expect(await service.list(false)).toEqual([]);
         expect(await service.list(true)).toHaveLength(1);
         await service.restore(entry.itemRef);
         expect(await service.list(false)).toHaveLength(1);
 
-        await service.delete(entry.itemRef, updated.revision);
+        await service.delete(entry.itemRef, cleared.revision);
         await service.close();
         service = undefined;
 
@@ -179,8 +203,20 @@ describe("personal password vault service", () => {
 
         service = new VaultService({ env: state.env });
         await service.unlock(PASSPHRASE);
-        await service.list(false);
-        expect(await service.list(true)).toEqual([]);
+        const expire = new DatabaseSync(state.statePath("state", "openclaw.sqlite"));
+        expire
+          .prepare("UPDATE vault_entries SET deleted_at_ms = ? WHERE item_ref = ?")
+          .run(Date.now() - 8 * 24 * 60 * 60_000, entry.itemRef);
+        expire.close();
+        await expect(service.restore(entry.itemRef)).rejects.toSatisfy((error: unknown) => {
+          expectVaultError(error, "VAULT_NOT_FOUND");
+          return true;
+        });
+        await service.close();
+        service = undefined;
+        service = new VaultService({ env: state.env, maintenanceIntervalMs: 100 });
+        await service.status();
+        await expect.poll(() => countVaultRows(state), { timeout: 2_000 }).toBe(0);
         const audit = await service.auditList(50);
         expect(audit.map((event) => event.action)).toContain("purge-expired");
       },
@@ -214,5 +250,103 @@ describe("personal password vault service", () => {
       expect(status.failedAttempts).toBe(5);
       expect(status.lockedUntilMs).toBeTypeOf("number");
     });
+  });
+
+  it("sweeps expired deletions on the worker lifecycle without list or create", async () => {
+    await withOpenClawTestState({ label: "vault-sweep", scenario: "minimal" }, async (state) => {
+      service = new VaultService({ env: state.env, maintenanceIntervalMs: 100 });
+      await service.initialize(PASSPHRASE, 60);
+      const entry = await service.create({
+        originScheme: "https",
+        originHost: "example.com",
+        originPort: 443,
+        siteLabel: "Example",
+        account: "person@example.com",
+        password: SYNTHETIC_PASSWORD,
+      });
+      await service.delete(entry.itemRef, entry.revision);
+      const database = new DatabaseSync(state.statePath("state", "openclaw.sqlite"));
+      database
+        .prepare("UPDATE vault_entries SET deleted_at_ms = ? WHERE item_ref = ?")
+        .run(Date.now() - 8 * 24 * 60 * 60_000, entry.itemRef);
+      database.close();
+
+      // The scheduled lifecycle sweep, not a list/create caller, removes the row.
+      await expect.poll(() => countVaultRows(state), { timeout: 3_000 }).toBe(0);
+      expect((await service.status()).state).toBe("unlocked");
+      const audit = await service.auditList(50);
+      expect(audit.map((event) => event.action)).toContain("purge-expired");
+    });
+  });
+
+  it("serializes real concurrent updates so only one revision wins", async () => {
+    await withOpenClawTestState(
+      { label: "vault-concurrent", scenario: "minimal" },
+      async (state) => {
+        service = new VaultService({ env: state.env });
+        await service.initialize(PASSPHRASE, 60);
+        const entry = await service.create({
+          originScheme: "https",
+          originHost: "example.com",
+          originPort: 443,
+          siteLabel: "Example",
+          account: "person@example.com",
+          password: SYNTHETIC_PASSWORD,
+        });
+        const results = await Promise.allSettled([
+          service.update({
+            itemRef: entry.itemRef,
+            revision: entry.revision,
+            originScheme: "https",
+            originHost: "example.com",
+            originPort: 443,
+            siteLabel: "First writer",
+            account: "person@example.com",
+          }),
+          service.update({
+            itemRef: entry.itemRef,
+            revision: entry.revision,
+            originScheme: "https",
+            originHost: "example.com",
+            originPort: 443,
+            siteLabel: "Second writer",
+            account: "person@example.com",
+          }),
+        ]);
+        const fulfilled = results.filter((result) => result.status === "fulfilled");
+        const rejected = results.filter((result) => result.status === "rejected");
+        expect(fulfilled).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+        expectVaultError((rejected[0] as PromiseRejectedResult).reason, "VAULT_CONFLICT");
+      },
+    );
+  });
+
+  it("records value-free generate audits", async () => {
+    await withOpenClawTestState({ label: "vault-generate", scenario: "minimal" }, async (state) => {
+      service = new VaultService({ env: state.env });
+      await service.initialize(PASSPHRASE, 60);
+      const generated = await service.generate(24, true);
+      expect(generated).toHaveLength(24);
+      const audit = await service.auditList(20);
+      expect(audit.map((event) => event.action)).toContain("generate");
+      expect(JSON.stringify(audit)).not.toContain(generated);
+    });
+  });
+
+  it("auto-locks after the configured idle interval", async () => {
+    await withOpenClawTestState(
+      { label: "vault-autolock", scenario: "minimal" },
+      async (state) => {
+        service = new VaultService({ env: state.env });
+        await service.initialize(PASSPHRASE, 15);
+        expect((await service.status()).state).toBe("unlocked");
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 16_000);
+        });
+        expect((await service.status()).state).toBe("locked");
+      },
+      30_000,
+    );
   });
 });

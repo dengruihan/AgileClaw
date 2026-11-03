@@ -82,6 +82,7 @@ function kysely(db: DatabaseSync) {
 function toMetadata(row: OpenClawStateKyselyDatabase["vault_entries"]): VaultEntryMetadata {
   return {
     itemRef: row.item_ref,
+    // SAFETY: the vault_entries CHECK constraint admits only https/http.
     originScheme: row.origin_scheme as "https" | "http",
     originHost: row.origin_host,
     originPort: row.origin_port,
@@ -137,7 +138,7 @@ export function readVaultKeyRecord(
           ...(wrap.last_used_at_ms !== null ? { lastUsedAtMs: wrap.last_used_at_ms } : {}),
         }
       : undefined,
-  } as VaultKeyRecord;
+  };
 }
 
 export function readVaultMeta(db: DatabaseSync, owner: VaultOwner): VaultMetaRecord | undefined {
@@ -361,6 +362,21 @@ export function restoreVaultEntry(
   itemRef: string,
   now: number,
 ): void {
+  const row = executeSqliteQueryTakeFirstSync(
+    db,
+    kysely(db)
+      .selectFrom("vault_entries")
+      .select(["deleted_at_ms"])
+      .where("owner_kind", "=", owner.kind)
+      .where("owner_id", "=", owner.id)
+      .where("item_ref", "=", itemRef),
+  );
+  if (!row || row.deleted_at_ms === null) {
+    throw new VaultError("VAULT_NOT_FOUND", "The deleted vault entry no longer exists.");
+  }
+  if (row.deleted_at_ms <= now - VAULT_SOFT_DELETE_RETENTION_MS) {
+    throw new VaultError("VAULT_NOT_FOUND", "The deleted vault entry has expired.");
+  }
   const result = executeSqliteQuerySync(
     db,
     kysely(db)
@@ -552,7 +568,9 @@ export function listVaultAudit(
   for (const row of rows) {
     events.push({
       sequence: row.sequence,
+      // SAFETY: vault_audit_events CHECK constraints admit only these audit actions.
       action: row.action as VaultAuditAction,
+      // SAFETY: vault_audit_events CHECK constraints admit only these audit statuses.
       status: row.status as VaultAuditStatus,
       ...(row.item_ref !== null ? { itemRef: row.item_ref } : {}),
       ...(row.reason_code !== null ? { reasonCode: row.reason_code } : {}),

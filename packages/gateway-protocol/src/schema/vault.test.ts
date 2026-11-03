@@ -43,6 +43,8 @@ describe("vault protocol schemas", () => {
       notes: "",
     };
     expect(validateVaultUpdateParams({ ...base, revision: 2 })).toBe(true);
+    const { notes: _notes, ...withoutNotes } = base;
+    expect(validateVaultUpdateParams({ ...withoutNotes, revision: 2 })).toBe(true);
     expect(validateVaultUpdateParams(base)).toBe(false);
     expect(validateVaultUpdateParams({ ...base, revision: 2, password: "" })).toBe(false);
   });

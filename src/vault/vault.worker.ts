@@ -50,7 +50,7 @@ import {
   touchVaultEntryLastUsed,
   updateVaultEntry,
   upsertVaultMeta,
-} from "./vault-kernel.js";
+} from "./vault-kernel.worker.js";
 import { ensureVaultSchema } from "./vault-schema.js";
 import {
   VAULT_DEFAULT_AUTO_LOCK_SECONDS,
@@ -76,6 +76,7 @@ const port = parentPort;
 if (!port) {
   throw new Error("vault worker requires a parent port");
 }
+// SAFETY: the sole launcher supplies VaultWorkerData.
 const data = workerData as VaultWorkerData;
 const owner: VaultOwner = { kind: VAULT_OWNER_KIND, id: VAULT_DEFAULT_OWNER_ID };
 const send = (message: VaultWorkerReply) => port.postMessage(message);
@@ -90,7 +91,7 @@ function db(): OpenClawStateDatabase {
   if (!database) {
     database = openOpenClawStateDatabase({
       path: data.databasePath,
-      env: data.env as NodeJS.ProcessEnv | undefined,
+      env: data.env,
     });
     ensureVaultSchema(database.db);
   }
@@ -101,7 +102,7 @@ function write<T>(operationLabel: string, callback: (db: OpenClawStateDatabase) 
   const handle = db();
   return runOpenClawStateWriteTransaction(
     ({ db: connection }) => callback({ ...handle, db: connection }),
-    { path: handle.path, env: data.env as NodeJS.ProcessEnv | undefined },
+    { path: handle.path, env: data.env },
     { operationLabel },
   );
 }
@@ -191,6 +192,10 @@ function status(): VaultStatus {
 }
 
 function maintenance(): void {
+  const handle = db();
+  if (countVaultEntries(handle.db, owner).deletedCount === 0) {
+    return;
+  }
   const now = Date.now();
   const purged = write("vault.maintenance.purge-expired", (transaction) => {
     const removed = purgeExpiredVaultEntries(transaction.db, owner, now);
@@ -432,6 +437,7 @@ function updateEntry(input: VaultEntryUpdateInput): VaultEntryMetadata {
   }
   const keyId = readVaultKeyId();
   const current = decryptEntryFields(activeDek, owner, existing, secret, secret.keyId);
+  const nextNotes = normalized.notes ?? current.notes;
   const now = Date.now();
   const nextEntry: VaultEntryMetadata = {
     ...existing,
@@ -441,7 +447,7 @@ function updateEntry(input: VaultEntryUpdateInput): VaultEntryMetadata {
     siteLabel: normalized.siteLabel,
     account: normalized.account,
     label: normalized.label || undefined,
-    hasNotes: normalized.notes.length > 0,
+    hasNotes: nextNotes.length > 0,
     revision: existing.revision + 1,
     passwordUpdatedAtMs:
       normalized.password !== undefined ? now : (existing.passwordUpdatedAtMs ?? now),
@@ -453,7 +459,7 @@ function updateEntry(input: VaultEntryUpdateInput): VaultEntryMetadata {
       key,
       entryAadParams(nextEntry, keyId, owner),
       normalized.password ?? current.password,
-      normalized.notes,
+      nextNotes,
     );
     write("vault.update", (transaction) => {
       updateVaultEntry(
@@ -620,6 +626,9 @@ async function execute(operation: VaultWorkerOperation): Promise<VaultWorkerResu
           ? { includeSymbols: operation.includeSymbols }
           : {}),
       });
+      write("vault.generate", (transaction) => {
+        audit(transaction, "generate", "succeeded");
+      });
       touchActivity();
       return { type: "generate", password };
     }
@@ -659,6 +668,19 @@ port.on("message", (request: { id: number; operation: VaultWorkerOperation }) =>
     }
   })();
 });
+
+function runLifecycleMaintenance(): void {
+  try {
+    maintenance();
+  } catch {
+    // The first vault request retries after a transient startup failure.
+  }
+}
+
+runLifecycleMaintenance();
+const maintenanceIntervalMs = Math.max(100, data.maintenanceIntervalMs ?? 60 * 60_000);
+const maintenanceTimer = setInterval(runLifecycleMaintenance, maintenanceIntervalMs);
+maintenanceTimer.unref();
 
 send({ type: "ready" });
 
