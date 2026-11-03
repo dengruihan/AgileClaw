@@ -156,6 +156,11 @@ export function createSkillWorkshopExperienceFixture() {
   const installedSkills = [
     { name: "changelog-style", skillKey: "changelog-style", description: "Changelog rules." },
     { name: "release-review", skillKey: "release-review", description: "Release checks." },
+    {
+      name: "release-rollback-check",
+      skillKey: "release-rollback-check",
+      description: "Rollback checks.",
+    },
   ];
   const pendingProposal = {
     id: "prop-experience-flaky",

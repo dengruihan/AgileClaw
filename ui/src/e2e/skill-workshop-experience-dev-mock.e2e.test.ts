@@ -66,17 +66,43 @@ describeDevMock("Skill Workshop Experience dev mock", () => {
       await page.getByRole("button", { name: "Promote to skill", exact: true }).click();
       const promote = page.locator("openclaw-modal-dialog .sw-experience-dialog");
       await promote.waitFor();
-      await promote.getByLabel("Skill name").fill("dev-mock-rollback");
+      await promote
+        .locator(".sw-experience__fixed-target")
+        .getByText("release-rollback-check", { exact: true })
+        .waitFor();
       await promote.getByLabel("Skill description").fill("Rollback check from the dev mock.");
       await promote.getByRole("button", { name: "Create draft suggestion" }).click();
       await page.locator("#skill-workshop-mode-tab-suggestions[active]").waitFor();
-      await page.getByText("dev-mock-rollback", { exact: true }).first().waitFor();
+      await page.getByText("Promote release-rollback-check", { exact: true }).first().waitFor();
       await page.screenshot({ path: `${artifacts}/dev-mock-promoted.png` });
 
+      await page.getByRole("button", { name: "Apply", exact: true }).click();
+      await page.getByText("Applied", { exact: true }).first().waitFor();
       await page.locator("#skill-workshop-mode-tab-experience").click();
       const promotedChip = page.locator(".sw-experience__chip", { hasText: "Promoted" });
       await expect.poll(async () => promotedChip.getAttribute("aria-pressed")).toBe("true");
-      await page.getByText("Promotion pending review for dev-mock-rollback").first().waitFor();
+      await page.getByText("Promoted to release-rollback-check").first().waitFor();
+      await page.screenshot({ path: `${artifacts}/dev-mock-applied.png` });
+
+      await page.locator(".sw-experience__chip", { hasText: "Candidate" }).click();
+      await page.locator(".sw-experience__row", { hasText: "proxy-header-recovery" }).click();
+      await page.getByRole("button", { name: "Promote to skill", exact: true }).click();
+      const rejectPromote = page.locator("openclaw-modal-dialog .sw-experience-dialog");
+      await rejectPromote.waitFor();
+      await rejectPromote
+        .locator(".sw-experience__fixed-target")
+        .getByText("proxy-header-recovery", { exact: true })
+        .waitFor();
+      await rejectPromote.getByLabel("Skill description").fill("Proxy recovery from the dev mock.");
+      await rejectPromote.getByRole("button", { name: "Create draft suggestion" }).click();
+      await page.locator("#skill-workshop-mode-tab-suggestions[active]").waitFor();
+      await page.getByText("Promote proxy-header-recovery", { exact: true }).first().waitFor();
+      await page.getByRole("button", { name: "Reject", exact: true }).click();
+      await page.getByText("Rejected", { exact: true }).first().waitFor();
+      await page.locator("#skill-workshop-mode-tab-experience").click();
+      await page.locator(".sw-experience__chip", { hasText: "Candidate" }).click();
+      await page.getByText("Promotion rejected. This stays a candidate.").first().waitFor();
+      await page.screenshot({ path: `${artifacts}/dev-mock-rejected.png` });
     } finally {
       await context.close();
     }

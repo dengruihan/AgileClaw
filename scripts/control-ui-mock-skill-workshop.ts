@@ -8,6 +8,7 @@ import type {
   SkillExperienceListResult,
   SkillExperienceMutationResult,
   SkillExperiencePromoteResult,
+  SkillExperiencePromotionState,
   SkillExperienceReadResult,
   SkillExperienceRecord,
 } from "../ui/src/lib/skill-workshop/experience.ts";
@@ -498,6 +499,44 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
     }
     return scope;
   };
+  const proposalScopeFor = (agentId: string) => {
+    let proposalScope = scopes.get(agentId);
+    if (!proposalScope) {
+      proposalScope = {
+        list: structuredClone(seed.list),
+        details: new Map<string, SkillsProposalInspectResult>(),
+      };
+      scopes.set(agentId, proposalScope);
+    }
+    return proposalScope;
+  };
+  const proposalStateFor = (
+    proposalId: string,
+    proposalScope: ReturnType<typeof proposalScopeFor>,
+  ): SkillExperiencePromotionState => {
+    const detail = proposalScope.details.get(proposalId);
+    const entry = proposalScope.list.proposals.find((proposal) => proposal.id === proposalId);
+    const status = detail?.record.status ?? entry?.status;
+    return status === "pending" ? "pending" : status === "applied" ? "applied" : "rejected";
+  };
+  // The Gateway projects promotion state from the proposal owner on every read;
+  // this mirror keeps that single-owner rule so apply/reject round trips show up.
+  const projectExperience = (
+    record: SkillExperienceRecord,
+    proposalScope: ReturnType<typeof proposalScopeFor>,
+  ): SkillExperienceRecord => {
+    const state = record.promotion
+      ? proposalStateFor(record.promotion.proposalId, proposalScope)
+      : undefined;
+    const promotion = record.promotion && state ? { ...record.promotion, state } : undefined;
+    const status =
+      record.status === "retired"
+        ? "retired"
+        : promotion && (promotion.state === "pending" || promotion.state === "applied")
+          ? "promoted"
+          : "active";
+    return { ...record, status, ...(promotion ? { promotion } : {}) };
+  };
   let experienceSequence = 100;
   const nextRevision = () => `e${String(++experienceSequence).padStart(63, "0")}`;
   const nowIso = () => new Date().toISOString();
@@ -507,8 +546,13 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
-  const experienceManifest = (scope: ExperienceScope): SkillExperienceListResult => {
-    const experiences = Array.from(scope.records.values());
+  const experienceManifest = (
+    scope: ExperienceScope,
+    proposalScope: ReturnType<typeof proposalScopeFor>,
+  ): SkillExperienceListResult => {
+    const experiences = Array.from(scope.records.values()).map((record) =>
+      projectExperience(record, proposalScope),
+    );
     return {
       schema: "openclaw.skill-workshop.experiences-manifest.v1",
       updatedAt: nowIso(),
@@ -539,7 +583,8 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
 
   gateway.setRequestHandler("skills.experience.list", ({ params: input, respond }) => {
     const params = (input ?? {}) as { agentId?: string };
-    respond(experienceManifest(experienceScopeFor(params.agentId ?? "main")));
+    const agentId = params.agentId ?? "main";
+    respond(experienceManifest(experienceScopeFor(agentId), proposalScopeFor(agentId)));
   });
 
   gateway.setRequestHandler("skills.experience.read", ({ params: input, respond }) => {
@@ -550,7 +595,7 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
       return rejectExperience(respond, "Unknown mock experience; refresh the Workshop.");
     }
     const result: SkillExperienceReadResult = {
-      record: structuredClone(record),
+      record: projectExperience(record, proposalScopeFor(params.agentId ?? "main")),
       revisionHash: record.revisionHash,
       content: scope.contents.get(record.id) ?? "",
     };
@@ -570,9 +615,9 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
     if (!name || !params.description?.trim() || !params.content?.trim()) {
       return rejectExperience(respond, "Name, summary, and document are required.");
     }
-    const proposalScope = scopes.get(agentId);
+    const proposalScope = proposalScopeFor(agentId);
     if (
-      proposalScope?.list.installedSkills.some(
+      proposalScope.list.installedSkills.some(
         (skill) => skill.name.toLowerCase() === name.toLowerCase(),
       )
     ) {
@@ -639,7 +684,7 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
     record.updatedAt = nowIso();
     record.revisionHash = nextRevision();
     const result: SkillExperienceMutationResult = {
-      record,
+      record: projectExperience(record, proposalScopeFor(params.agentId ?? "main")),
       revisionHash: record.revisionHash,
     };
     respond(result);
@@ -670,7 +715,7 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
     record.updatedAt = now;
     record.revisionHash = nextRevision();
     const result: SkillExperienceMutationResult = {
-      record,
+      record: projectExperience(record, proposalScopeFor(params.agentId ?? "main")),
       revisionHash: record.revisionHash,
     };
     respond(result);
@@ -696,14 +741,15 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
     ) {
       return revisionMismatch(respond, params.expectedRevisionHash, record.revisionHash);
     }
-    record.status =
-      record.promotion && record.promotion.state !== "rejected" ? "promoted" : "active";
+    const proposalScope = proposalScopeFor(params.agentId ?? "main");
+    const projected = projectExperience(record, proposalScope);
+    record.status = projected.status === "retired" ? "active" : projected.status;
     record.retiredAt = undefined;
     record.retireReason = undefined;
     record.updatedAt = nowIso();
     record.revisionHash = nextRevision();
     const result: SkillExperienceMutationResult = {
-      record,
+      record: projectExperience(record, proposalScope),
       revisionHash: record.revisionHash,
     };
     respond(result);
@@ -724,26 +770,33 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
     if (!record || !params.target) {
       return rejectExperience(respond, "Unknown mock experience or missing promotion target.");
     }
-    if (record.status !== "active") {
-      return rejectExperience(respond, "Only candidate experiences can be promoted.");
+    const proposalScope = proposalScopeFor(agentId);
+    if (projectExperience(record, proposalScope).status !== "active") {
+      return rejectExperience(
+        respond,
+        "Only candidate experiences can be promoted; a pending or applied promotion already exists.",
+      );
     }
     if (params.expectedRevisionHash !== record.revisionHash) {
       return revisionMismatch(respond, params.expectedRevisionHash, record.revisionHash);
     }
-    const proposalScope = scopes.get(agentId) ?? {
-      list: structuredClone(seed.list),
-      details: new Map<string, SkillsProposalInspectResult>(),
-    };
-    scopes.set(agentId, proposalScope);
-    const targetSkillName =
-      params.target.kind === "create" ? params.target.name.trim() : params.target.skillName;
+    if (params.target.kind === "create" && params.target.name !== record.name) {
+      return rejectExperience(
+        respond,
+        `A new Skill must keep the Experience name (${record.name}).`,
+      );
+    }
+    const targetSkillName = params.target.kind === "create" ? record.name : params.target.skillName;
     if (!targetSkillName) {
       return rejectExperience(respond, "A skill name is required.");
     }
-    const proposalId = `prop-experience-${record.id}`;
-    if (proposalScope.list.proposals.some((proposal) => proposal.id === proposalId)) {
-      return rejectExperience(respond, "This experience already has a promotion proposal.");
-    }
+    const baseProposalId = `prop-experience-${record.id}`;
+    // A rejected promotion stays retryable; each attempt needs its own proposal.
+    const proposalId = proposalScope.list.proposals.some(
+      (proposal) => proposal.id === baseProposalId,
+    )
+      ? `${baseProposalId}-${++experienceSequence}`
+      : baseProposalId;
     if (
       params.target.kind === "create" &&
       proposalScope.list.installedSkills.some(
@@ -813,7 +866,7 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
     record.updatedAt = now;
     record.revisionHash = nextRevision();
     const result: SkillExperiencePromoteResult = {
-      record,
+      record: projectExperience(record, proposalScope),
       revisionHash: record.revisionHash,
       proposal,
     };

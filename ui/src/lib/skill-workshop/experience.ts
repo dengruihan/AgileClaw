@@ -104,7 +104,6 @@ export type SkillExperiencePromoteDraft = {
   experienceName: string;
   experienceDescription: string;
   targetKind: "create" | "update";
-  name: string;
   skillName: string;
   description: string;
   busy: boolean;

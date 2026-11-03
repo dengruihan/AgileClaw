@@ -280,6 +280,8 @@ const enSkillWorkshop = {
         createOption: "Create a new skill",
         updateOption: "Update an existing skill",
         skillName: "Skill name",
+        fixedNameHint:
+          "A new skill keeps the experience name. Edit the experience first to use a different name.",
         installedSkill: "Installed skill",
         selectSkill: "Select a skill",
         skillDescription: "Skill description",

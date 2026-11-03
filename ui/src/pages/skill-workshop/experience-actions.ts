@@ -167,20 +167,22 @@ export async function restoreSkillExperienceFromDetail(
   if (!options.isCurrent()) {
     return;
   }
-  if (outcome === "saved") {
+  if (outcome.status === "saved") {
     showSkillExperienceNotice(
       state,
       t("skillWorkshop.experience.notices.restored"),
       options.onProgress,
     );
-  } else if (outcome === "conflict") {
+  } else if (outcome.status === "conflict") {
     showSkillExperienceNotice(
       state,
       t("skillWorkshop.experience.notices.conflict"),
       options.onProgress,
     );
+  } else if (outcome.status === "error") {
+    showSkillExperienceNotice(state, outcome.message, options.onProgress);
   }
-  if (outcome === "saved" || outcome === "conflict") {
+  if (outcome.status === "saved" || outcome.status === "conflict") {
     await loadSkillExperiences(state, context, {
       force: true,
       isCurrent: options.isCurrent,

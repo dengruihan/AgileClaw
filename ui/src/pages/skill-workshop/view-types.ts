@@ -56,7 +56,6 @@ export type SkillExperienceViewProps = {
   onPromoteCancel: () => void;
   onPromoteDraftChange: (patch: {
     targetKind?: SkillExperiencePromoteTarget["kind"];
-    name?: string;
     skillName?: string;
     description?: string;
   }) => void;

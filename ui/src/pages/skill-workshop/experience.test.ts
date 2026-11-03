@@ -5,26 +5,72 @@ import { createDeferred } from "../../../../test/helpers/promise.js";
 import { createSkillWorkshopExperienceFixture } from "../../test-helpers/skill-workshop-experience-fixture.ts";
 import { createFixture } from "../../test-helpers/skill-workshop-proposal-fixture.ts";
 import {
-  invalidateSkillExperienceReads,
   loadSkillExperiences,
+  saveSkillExperienceDraft,
   selectSkillExperience,
 } from "./experience.ts";
 
 describe("Skill Workshop experience reads", () => {
-  it("drops a list result invalidated by a confirmed mutation", async () => {
+  it("keeps a confirmed update when an older list read resolves last", async () => {
     const fixture = createSkillWorkshopExperienceFixture();
-    const { state, context, request } = createFixture();
-    const deferred = createDeferred<unknown>();
-    request.mockReturnValueOnce(deferred.promise);
+    const original = fixture.records.find((record) => record.id === "release-rollback-check")!;
+    const updated = {
+      ...original,
+      description: "New confirmed description",
+      updatedAt: "2026-11-03T11:30:00.000Z",
+      revisionHash: "f".repeat(64),
+    };
+    const oldManifest = {
+      ...fixture.manifest,
+      experiences: [original],
+      counts: { active: 1, promoted: 0, retired: 0 },
+    };
+    const listDeferred = createDeferred<unknown>();
+    const { state, context, request } = createFixture({ skillWorkshopMode: "experience" });
+    state.skillWorkshopExperiences = [{ ...original, content: "old body", contentLoaded: true }];
+    request.mockImplementation(async (method) => {
+      if (method === "skills.experience.list") {
+        return listDeferred.promise;
+      }
+      if (method === "skills.experience.update") {
+        return { record: updated, revisionHash: updated.revisionHash };
+      }
+      throw new Error(`unexpected ${method}`);
+    });
 
-    const load = loadSkillExperiences(state, context, { force: true });
+    const loading = loadSkillExperiences(state, context, { force: true });
+    await expect
+      .poll(
+        async () =>
+          request.mock.calls.filter(([method]) => method === "skills.experience.list").length,
+      )
+      .toBe(1);
     expect(state.skillWorkshopExperienceLoading).toBe(true);
-    invalidateSkillExperienceReads(state);
-    deferred.resolve(fixture.manifest);
-    await load;
 
-    expect(state.skillWorkshopExperiences).toEqual([]);
-    expect(state.skillWorkshopExperienceLoaded).toBe(false);
+    // The list load owns the first agent-scope bind, which resets experience
+    // state; the draft belongs to the operator interaction after that bind.
+    state.skillWorkshopExperienceDraft = {
+      mode: "edit",
+      id: original.id,
+      name: original.name,
+      description: updated.description,
+      content: "new body",
+      baseRevisionHash: original.revisionHash,
+      saving: false,
+      error: null,
+      conflictHeld: false,
+      notice: null,
+    };
+    expect(await saveSkillExperienceDraft(state, context)).toBe("saved");
+    expect(state.skillWorkshopExperienceLoading).toBe(false);
+
+    listDeferred.resolve(oldManifest);
+    await loading;
+
+    expect(state.skillWorkshopExperiences.find((entry) => entry.id === original.id)).toMatchObject({
+      description: "New confirmed description",
+      revisionHash: updated.revisionHash,
+    });
     expect(state.skillWorkshopExperienceLoading).toBe(false);
     expect(state.skillWorkshopExperienceError).toBeNull();
   });

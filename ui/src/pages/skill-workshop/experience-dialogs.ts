@@ -130,7 +130,7 @@ export function renderSkillExperiencePromoteDialog(props: SkillExperienceViewPro
   if (!draft) {
     return nothing;
   }
-  const normalizedName = draft.name.trim().toLowerCase();
+  const normalizedName = draft.experienceName.trim().toLowerCase();
   const existingSkill = props.installedSkills.find(
     (skill) => skill.name.toLowerCase() === normalizedName,
   );
@@ -141,7 +141,7 @@ export function renderSkillExperiencePromoteDialog(props: SkillExperienceViewPro
   const canSubmit =
     !draft.busy &&
     (draft.targetKind === "create"
-      ? Boolean(draft.name.trim()) && Boolean(draft.description.trim()) && !createCollision
+      ? Boolean(draft.description.trim()) && !createCollision
       : Boolean(draft.skillName));
   return html`
     <openclaw-modal-dialog
@@ -194,26 +194,20 @@ export function renderSkillExperiencePromoteDialog(props: SkillExperienceViewPro
         ${
           draft.targetKind === "create"
             ? html`
-                <label class="sw-experience-dialog__field">
+                <div class="sw-experience-dialog__field">
                   <span>${t("skillWorkshop.experience.promote.skillName")}</span>
-                  <input
-                    type="text"
-                    maxlength="200"
-                    .value=${draft.name}
-                    ?disabled=${draft.busy}
-                    @input=${(event: Event) =>
-                      props.onPromoteDraftChange({
-                        name: (event.currentTarget as HTMLInputElement).value,
-                      })}
-                  />
-                </label>
+                  <p class="sw-experience__fixed-target">${draft.experienceName}</p>
+                  <span class="sw-experience-dialog__hint">
+                    ${t("skillWorkshop.experience.promote.fixedNameHint")}
+                  </span>
+                </div>
                 ${
                   createCollision
                     ? html`
                         <div class="sw-experience__dedupe" role="alert">
                           <span>
                             ${t("skillWorkshop.experience.promote.dedupeSkill", {
-                              name: existingSkill?.name ?? draft.name,
+                              name: existingSkill?.name ?? draft.experienceName,
                             })}
                           </span>
                           <button
@@ -226,7 +220,7 @@ export function renderSkillExperiencePromoteDialog(props: SkillExperienceViewPro
                               })}
                           >
                             ${t("skillWorkshop.experience.promote.useUpdate", {
-                              name: existingSkill?.name ?? draft.name,
+                              name: existingSkill?.name ?? draft.experienceName,
                             })}
                           </button>
                         </div>

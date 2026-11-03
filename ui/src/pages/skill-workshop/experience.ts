@@ -30,6 +30,12 @@ export type SkillExperiencePromoteOutcome =
   | { status: "promoted"; proposalId: string }
   | { status: "conflict" | "error" | "stale" };
 
+export type SkillExperienceRestoreOutcome =
+  | { status: "saved" }
+  | { status: "conflict" }
+  | { status: "error"; message: string }
+  | { status: "stale" };
+
 const generationByState = new WeakMap<SkillWorkshopState, number>();
 const detailRequestsByState = new WeakMap<SkillWorkshopState, Map<string, Promise<boolean>>>();
 const selectionRequestByState = new WeakMap<SkillWorkshopState, string>();
@@ -373,6 +379,7 @@ export async function saveSkillExperienceDraft(
       return "stale";
     }
     mergeExperience(state, result.record, result.revisionHash, draft.content);
+    invalidateSkillExperienceReads(state);
     state.skillWorkshopExperienceDraft = null;
     if (draft.mode === "create") {
       state.skillWorkshopExperienceFilter = "active";
@@ -431,7 +438,6 @@ export function startSkillExperiencePromoteDraft(
     experienceName: experience.name,
     experienceDescription: experience.description,
     targetKind: "create",
-    name: experience.name,
     skillName: "",
     description: experience.description,
     busy: false,
@@ -471,7 +477,7 @@ export async function promoteSkillExperience(
   const description = draft.description.trim();
   const target =
     draft.targetKind === "create"
-      ? { kind: "create" as const, name: draft.name.trim(), description }
+      ? { kind: "create" as const, name: record.name, description }
       : {
           kind: "update" as const,
           skillName: draft.skillName,
@@ -488,6 +494,7 @@ export async function promoteSkillExperience(
       return { status: "stale" };
     }
     mergeExperience(state, result.record, result.revisionHash);
+    invalidateSkillExperienceReads(state);
     state.skillWorkshopExperiencePromoteDraft = null;
     // The promotion moves the document out of the candidate filter; keep it in
     // view when the operator returns from reviewing the suggestion.
@@ -562,6 +569,7 @@ export async function retireSkillExperience(
       return "stale";
     }
     mergeExperience(state, result.record, result.revisionHash);
+    invalidateSkillExperienceReads(state);
     state.skillWorkshopExperienceRetireDraft = null;
     selectVisibleFallback(state);
     return "saved";
@@ -583,7 +591,7 @@ export async function restoreSkillExperience(
   context: SkillWorkshopContext,
   id: string,
   options?: SkillExperienceLoadOptions,
-): Promise<SkillExperienceWriteOutcome> {
+): Promise<SkillExperienceRestoreOutcome> {
   const client = context.gateway.snapshot.client;
   const record = state.skillWorkshopExperiences.find((entry) => entry.id === id);
   if (
@@ -592,7 +600,7 @@ export async function restoreSkillExperience(
     context.gateway.snapshot.phase !== "connected" ||
     state.skillWorkshopExperienceBusy
   ) {
-    return "stale";
+    return { status: "stale" };
   }
   const agentId = resolveSkillWorkshopAgentId(context);
   const requestGeneration = readGeneration(state);
@@ -609,19 +617,23 @@ export async function restoreSkillExperience(
       { agentId, id, expectedRevisionHash: record.revisionHash },
     );
     if (!isCurrentWrite()) {
-      return "stale";
+      return { status: "stale" };
     }
     mergeExperience(state, result.record, result.revisionHash);
+    invalidateSkillExperienceReads(state);
     state.skillWorkshopExperienceBusy = null;
-    state.skillWorkshopExperienceFilter = "active";
+    // A pending/applied promotion returns a restored document to Promoted.
+    state.skillWorkshopExperienceFilter = result.record.status;
     state.skillWorkshopExperienceSelectedId = result.record.id;
     selectionRequestByState.set(state, result.record.id);
-    return "saved";
+    return { status: "saved" };
   } catch (error) {
     if (!isCurrentWrite()) {
-      return "stale";
+      return { status: "stale" };
     }
     state.skillWorkshopExperienceBusy = null;
-    return isSkillExperienceRevisionConflict(error) ? "conflict" : "error";
+    return isSkillExperienceRevisionConflict(error)
+      ? { status: "conflict" }
+      : { status: "error", message: formatUiError(error) };
   }
 }

@@ -271,31 +271,39 @@ describe("Skill Workshop Experience mocked Gateway E2E", () => {
     });
     try {
       await openExperience(page);
-      const original = fixture.records.find((record) => record.id === "release-rollback-check")!;
+      const colliding = fixture.records.find((record) => record.id === "release-rollback-check")!;
       await page.locator(".sw-experience__row", { hasText: "release-rollback-check" }).click();
       await page.getByRole("button", { name: "Promote to skill" }).click();
       const dialog = page.locator("openclaw-modal-dialog .sw-experience-dialog");
       await dialog.waitFor();
-      await dialog.getByText("Creates a pending suggestion.").waitFor();
-
-      const skillName = dialog.getByLabel("Skill name");
-      await skillName.fill("release-review");
-      await dialog.getByText("A skill named release-review already exists.").waitFor();
+      await dialog
+        .locator(".sw-experience__fixed-target")
+        .getByText(colliding.name, { exact: true })
+        .waitFor();
+      expect(await dialog.getByLabel("Skill name").count()).toBe(0);
+      await dialog.getByText(`A skill named ${colliding.name} already exists.`).waitFor();
       expect(
         await dialog.getByRole("button", { name: "Create draft suggestion" }).isDisabled(),
       ).toBe(true);
-      await dialog.getByRole("button", { name: "Update release-review instead" }).click();
+      await dialog.getByRole("button", { name: `Update ${colliding.name} instead` }).click();
       expect(
         await dialog.getByRole("radio", { name: "Update an existing skill" }).isChecked(),
       ).toBe(true);
-      await dialog.getByRole("radio", { name: "Create a new skill" }).check();
-      await skillName.fill("release-rollback-ritual");
-      await dialog.getByLabel("Skill description").fill("Rollback check before publishing.");
-      await dialog.getByRole("button", { name: "Create draft suggestion" }).waitFor();
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+
+      const original = fixture.records.find((record) => record.id === "proxy-header-recovery")!;
+      await page.locator(".sw-experience__row", { hasText: "proxy-header-recovery" }).click();
+      await page.getByRole("button", { name: "Promote to skill" }).click();
+      const createDialog = page.locator("openclaw-modal-dialog .sw-experience-dialog");
+      await createDialog.waitFor();
+      await createDialog
+        .locator(".sw-experience__fixed-target")
+        .getByText(original.name, { exact: true })
+        .waitFor();
+      await createDialog.getByLabel("Skill description").fill("Proxy recovery before retrying.");
       const promoteResult = experiencePromoteResult({
         ...original,
-        name: "release-rollback-ritual",
-        description: "Rollback check before publishing.",
+        description: "Proxy recovery before retrying.",
       });
       const promotedRecord = promoteResult.record;
       const proposalId = promoteResult.proposal.id;
@@ -303,10 +311,10 @@ describe("Skill Workshop Experience mocked Gateway E2E", () => {
         id: proposalId,
         kind: "create",
         status: "pending",
-        title: "Promote release-rollback-ritual",
-        description: "Rollback check before publishing.",
-        skillName: "release-rollback-ritual",
-        skillKey: "release-rollback-ritual",
+        title: `Promote ${original.name}`,
+        description: "Proxy recovery before retrying.",
+        skillName: original.name,
+        skillKey: original.name,
         createdAt: "2026-11-03T11:00:00.000Z",
         updatedAt: "2026-11-03T11:00:00.000Z",
         scanState: "clean",
@@ -322,7 +330,7 @@ describe("Skill Workshop Experience mocked Gateway E2E", () => {
             response: {
               record: promoteResult.proposal,
               revisionHash: "d".repeat(64),
-              content: "# release-rollback-ritual",
+              content: `# ${original.name}`,
               supportFiles: [],
             },
           },
@@ -352,18 +360,18 @@ describe("Skill Workshop Experience mocked Gateway E2E", () => {
       });
       const promoteCount = (await gateway.getRequests("skills.experience.promote")).length;
       await gateway.deferNext("skills.experience.promote");
-      await dialog.getByRole("button", { name: "Create draft suggestion" }).click();
+      await createDialog.getByRole("button", { name: "Create draft suggestion" }).click();
       const promoteRequest = await gateway.waitForRequest("skills.experience.promote", {
         after: promoteCount,
       });
       expect(promoteRequest.params).toMatchObject({
         agentId: "main",
-        id: "release-rollback-check",
+        id: original.id,
         expectedRevisionHash: original.revisionHash,
         target: {
           kind: "create",
-          name: "release-rollback-ritual",
-          description: "Rollback check before publishing.",
+          name: original.name,
+          description: "Proxy recovery before retrying.",
         },
       });
       await gateway.resolveDeferred("skills.experience.promote", promoteResult);
@@ -377,10 +385,7 @@ describe("Skill Workshop Experience mocked Gateway E2E", () => {
       await page.locator("#skill-workshop-mode-tab-experience").click();
       const promotedChip = page.locator(".sw-experience__chip", { hasText: "Promoted" });
       await expect.poll(async () => promotedChip.getAttribute("aria-pressed")).toBe("true");
-      await page
-        .getByText("Promotion pending review for release-rollback-ritual")
-        .first()
-        .waitFor();
+      await page.getByText(`Promotion pending review for ${original.name}`).first().waitFor();
     } finally {
       await context.close();
     }
@@ -468,6 +473,84 @@ describe("Skill Workshop Experience mocked Gateway E2E", () => {
         .poll(async () => (await candidateChip.textContent())?.replace(/\s+/g, ""))
         .toBe("Candidate3");
       await page.screenshot({ path: path.join(artifacts, "01-restored-candidate.png") });
+
+      const promoted = fixture.records.find((record) => record.id === "flaky-e2e-quarantine")!;
+      const activeRecords = [
+        restored,
+        ...fixture.records.filter((record) => record.id !== original.id),
+      ];
+      const retiredPromoted = {
+        ...promoted,
+        status: "retired" as const,
+        retiredAt: "2026-11-03T13:00:00.000Z",
+        retireReason: "Kept for history.",
+        updatedAt: "2026-11-03T13:00:00.000Z",
+        revisionHash: "b4".padEnd(64, "0"),
+      };
+      await page.locator(".sw-experience__chip", { hasText: "Promoted" }).click();
+      await rows.filter({ hasText: promoted.name }).click();
+      await page.getByRole("button", { name: "Retire", exact: true }).click();
+      const promotedRetireDialog = page.locator("openclaw-modal-dialog .sw-experience-dialog");
+      await promotedRetireDialog.waitFor();
+      await promotedRetireDialog.getByLabel("Reason (optional)").fill("Kept for history.");
+      await gateway.setMethodResponse(
+        "skills.experience.list",
+        manifestWith(
+          activeRecords.map((record) => (record.id === promoted.id ? retiredPromoted : record)),
+        ),
+      );
+      const promotedRetireCount = (await gateway.getRequests("skills.experience.retire")).length;
+      await gateway.deferNext("skills.experience.retire");
+      await promotedRetireDialog.getByRole("button", { name: "Retire experience" }).click();
+      await gateway.waitForRequest("skills.experience.retire", {
+        after: promotedRetireCount,
+      });
+      await gateway.resolveDeferred("skills.experience.retire", {
+        record: retiredPromoted,
+        revisionHash: retiredPromoted.revisionHash,
+      });
+      await expect.poll(async () => page.locator("openclaw-modal-dialog").count()).toBe(0);
+      await page.locator(".sw-experience__chip", { hasText: "Retired" }).click();
+      await rows.filter({ hasText: promoted.name }).click();
+
+      const failedRestoreCount = (await gateway.getRequests("skills.experience.restore")).length;
+      await gateway.deferNext("skills.experience.restore");
+      await page.getByRole("button", { name: "Restore", exact: true }).click();
+      await gateway.waitForRequest("skills.experience.restore", { after: failedRestoreCount });
+      await gateway.rejectDeferred("skills.experience.restore", {
+        code: "UNAVAILABLE",
+        message: "Restore failed in the mock.",
+      });
+      await page.getByText("Restore failed in the mock.").waitFor();
+      expect(await page.getByRole("button", { name: "Restore", exact: true }).isEnabled()).toBe(
+        true,
+      );
+
+      const restoredPromoted = {
+        ...promoted,
+        updatedAt: "2026-11-03T13:30:00.000Z",
+        revisionHash: "b5".padEnd(64, "0"),
+      };
+      await gateway.setMethodResponse(
+        "skills.experience.list",
+        manifestWith(
+          activeRecords.map((record) => (record.id === promoted.id ? restoredPromoted : record)),
+        ),
+      );
+      const promotedRestoreCount = (await gateway.getRequests("skills.experience.restore")).length;
+      await gateway.deferNext("skills.experience.restore");
+      await page.getByRole("button", { name: "Restore", exact: true }).click();
+      await gateway.waitForRequest("skills.experience.restore", {
+        after: promotedRestoreCount,
+      });
+      await gateway.resolveDeferred("skills.experience.restore", {
+        record: restoredPromoted,
+        revisionHash: restoredPromoted.revisionHash,
+      });
+      const promotedChip = page.locator(".sw-experience__chip", { hasText: "Promoted" });
+      await expect.poll(async () => promotedChip.getAttribute("aria-pressed")).toBe("true");
+      await page.getByText(`Promotion pending review for ${promoted.name}`).first().waitFor();
+      await page.screenshot({ path: path.join(artifacts, "02-restored-promoted.png") });
     } finally {
       await context.close();
     }
