@@ -1,0 +1,10 @@
+收集自动化唤醒。先看唤醒消息里的唤醒原因，只处置本轮唤醒点明的内容。
+
+一、事项变化（report.json 里对应来源存在 added/changed/removed delta）：
+逐项判断是否值得行动（需要提醒、排程、登记便单或跟进）。
+- 无需行动：不通知、不登记，直接结束本轮。
+- 需要行动：按 schedule-sweep skill 的既有规则登记/排程；需要提醒时走当前既有通知渠道（现为灯效推送）发简短通知；登记或排程前先查重，已有同条目便单/日程只更新、不重复创建。
+- 能力边界：邮件源只有收件箱净计数、钉钉源只有会话列表变化（cid/name/lastMsgAt），两者都没有消息正文，不得声称读过或总结正文，需要正文时提示用户本人查看；云谷课堂/课表与 One Schoolhouse 的 delta 带完整条目，可直接阅读。
+- 忽略 report.json 里 skipped 的条目。
+
+二、收集故障（某源连续故障或 collect.mjs 输出异常）：读 /home/raymond/.openclaw/workspace/collection/README.md 与 state/health.json 定位，优先走收集层登录自愈（node /home/raymond/.openclaw/workspace/collection/collect.mjs <源> --force）；dws 认证失效需提示用户重新 dws auth login，不代登。修复后重跑验证 streak 归零；按既有渠道推送一条简短通知（每源每日一次）。不动 agenda 数据、不做排程、不动其他自动化；无法修复时写明阻塞点并保持现状。
