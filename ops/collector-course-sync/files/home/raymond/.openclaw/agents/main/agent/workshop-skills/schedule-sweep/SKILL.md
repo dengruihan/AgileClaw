@@ -62,7 +62,9 @@ Agenda 是事项和执行计划的唯一主清单；先读插件 `agenda` skill�
 - 持续调整受截止、会议、耗时、完成反馈和依赖变化影响的事项，不重复重建整个日历。
   没有实质变化就不 apply，不为更新时间重写同一批数据，避免自身修改触发循环。
 - 区分实际完成、已安排、评估后不变、等待和失败。只处理一小批不能称所有事项都已完成。
-- 桌面完成反馈的自动重排依赖 `sentinel`。`sentinel` 停用期间不承诺自动重排：反馈按可行动的
-  错误/等待处理，不因此重新启用 `sentinel`，也不另建自动化替代。
+- 桌面完成反馈的重排由 Agenda 唤起唯一启用的后台 owner：`sentinel` 启用时优先，停用时回退
+  `collector`。collector 反馈轮必须读 pending/queued/running feedback，并在同一 apply 提交
+  `feedbackResults`（adjusted/unchanged/error + 简短中文 summary）；不发送消息、不重新启用
+  `sentinel`，也不另建自动化替代。
 
 执行不得扩大对外发送、花费、删除或服务控制权限。无需再对便单登录、补写或同步。

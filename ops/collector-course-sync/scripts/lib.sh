@@ -5,6 +5,9 @@ set -euo pipefail
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FILES_DIR="$PKG_DIR/files"
 BACKUP_ROOT="${HOME}/.openclaw/backups/collector-course-sync"
+JOB_ID="6a45be21-ce0b-4b8b-8986-4c885d1ea659"
+PAYLOAD_FILE="$PKG_DIR/payload-message.txt"
+TRIGGER_REL="home/raymond/.openclaw/workspace/collection/trigger-collector.mjs"
 SYNC_URL="${AGENDA_SYNC_URL:-http://127.0.0.1:18810/agenda/api/sync}"
 SESSION_URL="${AGENDA_SESSION_URL:-http://127.0.0.1:18810/agenda/api/session}"
 AGENDA_SYNC_ORIGIN="${AGENDA_SYNC_ORIGIN:-http://127.0.0.1:18810}"
@@ -27,6 +30,50 @@ package_files() {
 
 sha256_file() {
   sha256sum "$1" | awk '{print $1}'
+}
+
+OPENCLAW_BIN="${OPENCLAW_BIN:-openclaw}"
+
+cron_get() {
+  "$OPENCLAW_BIN" cron get "$JOB_ID" --json
+}
+
+cron_edit() {
+  "$OPENCLAW_BIN" cron edit "$JOB_ID" "$@"
+}
+
+# Verify the embedded cron copy matches the deployed files and untouched fields did not move.
+# Usage: verify_job_files <before.json> <after.json> <payload-file> <trigger-file>
+verify_job_files() {
+  node - "$1" "$2" "$3" "$4" <<'NODE'
+const fs = require('node:fs');
+const [beforePath, afterPath, payloadPath, triggerPath] = process.argv.slice(2);
+const before = JSON.parse(fs.readFileSync(beforePath, 'utf8'));
+const after = JSON.parse(fs.readFileSync(afterPath, 'utf8'));
+const payload = fs.readFileSync(payloadPath, 'utf8').replace(/\n$/, '');
+const trigger = fs.readFileSync(triggerPath, 'utf8').replace(/\n$/, '');
+const failures = [];
+if (String(after?.payload?.message ?? '').replace(/\n$/, '') !== payload) failures.push('payload.message');
+if (String(after?.trigger?.script ?? '').replace(/\n$/, '') !== trigger) failures.push('trigger.script');
+const pick = (job) => ({
+  enabled: job.enabled,
+  schedule: job.schedule,
+  sessionTarget: job.sessionTarget,
+  wakeMode: job.wakeMode,
+  delivery: job.delivery,
+  payloadKind: job.payload?.kind,
+  timeoutSeconds: job.payload?.timeoutSeconds,
+  lightContext: job.payload?.lightContext,
+  toolsAllow: job.payload?.toolsAllow,
+});
+const expected = JSON.stringify(pick(before));
+const actual = JSON.stringify(pick(after));
+if (expected !== actual) failures.push(`untouched fields changed\n  before=${expected}\n  after=${actual}`);
+if (failures.length) {
+  console.error(`cron job verification failed: ${failures.join(', ')}`);
+  process.exit(1);
+}
+NODE
 }
 
 require_sync_endpoint() {

@@ -16,6 +16,8 @@ const SOURCE = `${FILES}/workspace/collection/sources/yungu-schedule.mjs`;
 const WEEKS = `${FILES}/workspace/collection/lib/course-weeks.mjs`;
 const SYNC = `${FILES}/workspace/collection/lib/agenda-sync.mjs`;
 const COLLECT = `${FILES}/workspace/collection/collect.mjs`;
+const TRIGGER = `${FILES}/workspace/collection/trigger-collector.mjs`;
+const PAYLOAD = "payload-message.txt";
 const README = `${FILES}/workspace/collection/README.md`;
 const TRIAGE = `${FILES}/workspace/skills/collector-source-triage/SKILL.md`;
 const YUNGU_SKILL = `${FILES}/workspace/skills/yungu-schedule/SKILL.md`;
@@ -39,6 +41,8 @@ for (const path of [
   WEEKS,
   SYNC,
   COLLECT,
+  TRIGGER,
+  PAYLOAD,
   README,
   TRIAGE,
   YUNGU_SKILL,
@@ -50,21 +54,19 @@ for (const path of [
 for (const script of ["deploy.sh", "rollback.sh", "status.sh", "lib.sh"]) {
   check(`script exists: ${script}`, exists(`scripts/${script}`));
 }
-for (const banned of [
-  "payload-message.txt",
-  "trigger-collector.mjs",
-  "config.mjs",
-  "dingtalk-notify.mjs",
-]) {
+for (const banned of ["config.mjs", "dingtalk-notify.mjs"]) {
   check(`package does not ship ${banned}`, !exists(`${FILES}/workspace/collection/${banned}`));
 }
-check("package ships no cron payload file", !exists("payload-message.txt"));
+check("package ships the cron trigger", exists(TRIGGER));
+check("package ships the cron payload", exists(PAYLOAD));
 
 const norm = (text) => text.replace(/"/g, "'");
 const source = norm(read(SOURCE));
 const weeks = norm(read(WEEKS));
 const sync = norm(read(SYNC));
 const collect = norm(read(COLLECT));
+const trigger = norm(read(TRIGGER));
+const payload = read(PAYLOAD);
 const readme = read(README);
 const triage = read(TRIAGE);
 const yunguSkill = read(YUNGU_SKILL);
@@ -199,8 +201,9 @@ for (const [label, needle] of [
   ["absence is unlisted", "缺席只算 unlisted"],
   ["cancellation evidence", "平台显式取消状态"],
   ["failed week not free", "失败周不当空闲"],
-  ["replanner sentinel dependency honest", "自动重排依赖 `sentinel`"],
-  ["no sentinel re-enable for feedback", "不因此重新启用 `sentinel`"],
+  ["collector feedback fallback", "停用时回退"],
+  ["collector must submit feedbackResults", "feedbackResults"],
+  ["no sentinel re-enable", "不重新启用"],
 ]) {
   check(`schedule-sweep: ${label}`, has(scheduleSweep, needle), needle);
 }
@@ -210,12 +213,30 @@ check(
 );
 
 // --- 7. Deploy / rollback safety --------------------------------------------
-for (const forbidden of ["cron edit", "--trigger-script", "--message", "--tools", "--enabled"]) {
+for (const forbidden of [
+  "--tools",
+  "--enabled",
+  "--every",
+  "--description",
+  "--timeout-seconds",
+  "--session-target",
+  "--delivery",
+]) {
   check(`deploy does not run ${forbidden}`, !has(deploy, forbidden));
   check(`rollback does not run ${forbidden}`, !has(rollback, forbidden));
 }
+check("deploy snapshots the full cron job", has(deploy, "job.before.json"));
+check("deploy backs up cron payload", has(deploy, "payload-message.before.txt"));
+check("deploy backs up cron trigger", has(deploy, "trigger-collector.before.mjs"));
+check("deploy updates cron trigger and message", has(deploy, "cron_edit --trigger-script"));
+check("deploy passes the payload message", has(deploy, '--message "$(cat'));
+check("deploy verifies untouched cron fields", has(deploy, "verify_job_files"));
+check("deploy restores cron on verification failure", has(deploy, "自动恢复旧 payload/trigger"));
+check("deploy guards payload drift", has(deploy, "baseline_message_hash"));
+check("deploy guards trigger drift", has(deploy, "baseline_trigger_hash"));
 check("deploy runs package checks", has(deploy, "verify/check-package.mjs"));
-check("deploy runs isolated tests", has(deploy, "verify/course-sync.test.mjs"));
+check("deploy runs course-sync tests", has(deploy, "verify/course-sync.test.mjs"));
+check("deploy runs feedback trigger tests", has(deploy, "verify/trigger-feedback.test.mjs"));
 check("deploy requires the Agenda sync endpoint", has(deploy, "require_sync_endpoint"));
 check(
   "preflight probes the POST sync route, not just session",
@@ -229,16 +250,22 @@ check("deploy records absent targets", has(deploy, "printf 'absent"));
 check("deploy verifies hashes after copy", has(deploy, "hash mismatch after deploy"));
 check(
   "deploy has a collect.mjs drift guard",
-  has(deploy, "--allow-drift") && has(deploy, "baselines/collect.pre-m19.mjs"),
+  has(deploy, "--allow-drift") && has(deploy, "baselines/collect.pre-m19.mjs.txt"),
 );
 check(
   "baseline collect.mjs is the pre-M19 copy",
-  exists("baselines/collect.pre-m19.mjs") &&
-    !has(read("baselines/collect.pre-m19.mjs"), "await mod.collect()"),
+  exists("baselines/collect.pre-m19.mjs.txt") &&
+    !has(read("baselines/collect.pre-m19.mjs.txt"), "await mod.collect()"),
 );
 check("deploy supports dry run by default", has(deploy, "dry run"));
 check("deploy does not delete anything", !/\brm\b/.test(deploy));
 check("rollback restores from the backup", has(rollback, 'cp -p "$backup_dir/files/$rel"'));
+check(
+  "rollback restores cron payload/trigger",
+  has(rollback, 'cron_edit --trigger-script "$backup_dir/trigger-collector.before.mjs"'),
+);
+check("rollback verifies cron restoration", has(rollback, "verify_job_files"));
+check("rollback keeps the pre-deploy job snapshot", has(rollback, "job.before.json"));
 check("rollback removes pre-deploy-absent files", has(rollback, 'rm -f "$target"'));
 check("rollback verifies restored hashes", has(rollback, "回滚后 hash 不符"));
 check("status is read-only", !/cron edit|cp |\brm\b/.test(status));
@@ -300,6 +327,10 @@ for (const needle of [
   "./scripts/status.sh",
   "verify/check-package.mjs",
   "verify/course-sync.test.mjs",
+  "verify/trigger-feedback.test.mjs",
+  "Agenda 完成反馈轮",
+  "feedbackResults",
+  "openclaw cron edit",
   "WEEK_DATE_MISMATCH",
   "unlisted",
   "operationId",

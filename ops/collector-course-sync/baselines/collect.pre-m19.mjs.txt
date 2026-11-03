@@ -4,38 +4,30 @@
 //   node collect.mjs status            打印健康状态
 // 选项: --force 忽略间隔门; --no-attach 跳过附件归档
 // 每源输出一行 JSON 摘要（自动化触发脚本消费）；完整结果写 report.json。
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { CONFIG } from "./config.mjs";
-import { archiveAttachments } from "./lib/attach.mjs";
-import { diffByKey } from "./lib/diff.mjs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { CONFIG } from './config.mjs';
+import { diffByKey } from './lib/diff.mjs';
+import { archiveAttachments } from './lib/attach.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const STATE_DIR = path.join(ROOT, "state");
-const REPORT = path.join(ROOT, "report.json");
-const HEALTH = path.join(STATE_DIR, "health.json");
-const HISTORY = path.join(STATE_DIR, "history");
+const STATE_DIR = path.join(ROOT, 'state');
+const REPORT = path.join(ROOT, 'report.json');
+const HEALTH = path.join(STATE_DIR, 'health.json');
+const HISTORY = path.join(STATE_DIR, 'history');
 
 const ADAPTERS = {
-  "yungu-tasks": () => import("./sources/yungu-tasks.mjs"),
-  "yungu-schedule": () => import("./sources/yungu-schedule.mjs"),
-  osh: () => import("./sources/osh.mjs"),
-  dingtalk: () => import("./sources/dingtalk.mjs"),
-  mail: () => import("./sources/mail.mjs"),
+  'yungu-tasks': () => import('./sources/yungu-tasks.mjs'),
+  'yungu-schedule': () => import('./sources/yungu-schedule.mjs'),
+  osh: () => import('./sources/osh.mjs'),
+  dingtalk: () => import('./sources/dingtalk.mjs'),
+  mail: () => import('./sources/mail.mjs'),
 };
 
 function readJson(file, fallback) {
   try {
-    return JSON.parse(readFileSync(file, "utf8"));
+    return JSON.parse(readFileSync(file, 'utf8'));
   } catch {
     return fallback;
   }
@@ -47,7 +39,7 @@ function writeJsonAtomic(file, value) {
 }
 
 function beijingDay(now = new Date()) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(now);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(now);
 }
 
 function snapshotPath(source) {
@@ -57,7 +49,7 @@ function snapshotPath(source) {
 function summarizeDelta(result) {
   if (result.counts) {
     const d = result.countsDelta || {};
-    return `yungu ${d.yungu >= 0 ? "+" : ""}${d.yungu ?? "?"} qq ${d.qq >= 0 ? "+" : ""}${d.qq ?? "?"}`;
+    return `yungu ${d.yungu >= 0 ? '+' : ''}${d.yungu ?? '?'} qq ${d.qq >= 0 ? '+' : ''}${d.qq ?? '?'}`;
   }
   const { added, changed, removed } = result.delta || {};
   return `+${added?.length || 0} ~${changed?.length || 0} -${removed?.length || 0}`;
@@ -69,21 +61,13 @@ async function runSource(source, { force, attach }) {
   const prevHealth = health[source] || {};
   const now = Date.now();
 
-  const lastAttemptMs = Date.parse(prevHealth.lastAttemptAt || "");
+  const lastAttemptMs = Date.parse(prevHealth.lastAttemptAt || '');
   if (!force && Number.isFinite(lastAttemptMs) && now - lastAttemptMs < cfg.minIntervalMs) {
     const prevReport = readJson(REPORT, { sources: {} });
     const carried = prevReport.sources?.[source];
     return {
-      line: {
-        source,
-        label: cfg.label,
-        ok: carried ? carried.ok : true,
-        skipped: true,
-        streak: prevHealth.streak || 0,
-      },
-      entry: carried
-        ? { ...carried, skipped: true }
-        : { source, label: cfg.label, skipped: true, ok: null },
+      line: { source, label: cfg.label, ok: carried ? carried.ok : true, skipped: true, streak: prevHealth.streak || 0 },
+      entry: carried ? { ...carried, skipped: true } : { source, label: cfg.label, skipped: true, ok: null },
     };
   }
 
@@ -93,11 +77,7 @@ async function runSource(source, { force, attach }) {
     const mod = await ADAPTERS[source]();
     result = mod.collect();
   } catch (e) {
-    result = {
-      ok: false,
-      error: "ADAPTER_CRASH",
-      detail: String(e && e.message ? e.message : e).slice(0, 200),
-    };
+    result = { ok: false, error: 'ADAPTER_CRASH', detail: String(e && e.message ? e.message : e).slice(0, 200) };
   }
   const durationMs = Date.now() - startedAt;
 
@@ -133,7 +113,7 @@ async function runSource(source, { force, attach }) {
   }
 
   // 附件归档挂在 yungu-tasks 成功抓取之后；失败不阻塞报告，记录在 entry.attach
-  if (attach && source === "yungu-tasks" && result.ok && CONFIG.attach.enabled) {
+  if (attach && source === 'yungu-tasks' && result.ok && CONFIG.attach.enabled) {
     try {
       entry.attach = archiveAttachments({
         items: result.items,
@@ -142,9 +122,7 @@ async function runSource(source, { force, attach }) {
         courseDirs: CONFIG.attach.courseDirs || {},
       });
     } catch (e) {
-      entry.attach = [
-        { error: `ATTACH_CRASH:${String(e && e.message ? e.message : e).slice(0, 120)}` },
-      ];
+      entry.attach = [{ error: `ATTACH_CRASH:${String(e && e.message ? e.message : e).slice(0, 120)}` }];
     }
   }
 
@@ -160,7 +138,7 @@ async function runSource(source, { force, attach }) {
     [source]: {
       lastOkAt: result.ok ? entry.at : prevHealth.lastOkAt || null,
       lastAttemptAt: entry.at,
-      lastError: result.ok ? null : `${result.error}: ${result.detail || ""}`.slice(0, 200),
+      lastError: result.ok ? null : `${result.error}: ${result.detail || ''}`.slice(0, 200),
       streak,
       coverage: result.coverage || null,
     },
@@ -219,20 +197,20 @@ function printStatus() {
 async function main() {
   mkdirSync(STATE_DIR, { recursive: true });
   const args = process.argv.slice(2);
-  const force = args.includes("--force");
-  const attach = !args.includes("--no-attach");
-  const names = args.filter((a) => !a.startsWith("--"));
-  const command = names[0] || "all";
+  const force = args.includes('--force');
+  const attach = !args.includes('--no-attach');
+  const names = args.filter((a) => !a.startsWith('--'));
+  const command = names[0] || 'all';
 
-  if (command === "status") {
+  if (command === 'status') {
     printStatus();
     return;
   }
 
-  const targets = command === "all" ? CONFIG.order : names;
+  const targets = command === 'all' ? CONFIG.order : names;
   const unknown = targets.filter((t) => !CONFIG.sources[t]);
   if (unknown.length) {
-    console.log(JSON.stringify({ ok: false, error: `unknown source: ${unknown.join(",")}` }));
+    console.log(JSON.stringify({ ok: false, error: `unknown source: ${unknown.join(',')}` }));
     process.exit(2);
   }
 
@@ -249,12 +227,6 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.log(
-    JSON.stringify({
-      ok: false,
-      error: "COLLECT_CRASH",
-      detail: String(e && e.message ? e.message : e).slice(0, 200),
-    }),
-  );
+  console.log(JSON.stringify({ ok: false, error: 'COLLECT_CRASH', detail: String(e && e.message ? e.message : e).slice(0, 200) }));
   process.exit(1);
 });
