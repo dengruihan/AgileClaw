@@ -10,7 +10,14 @@ import { buildPlan } from "./plan.mjs";
 const manifest = loadManifest();
 const plan = buildPlan(manifest);
 
-const lightTokens = ["灯效", "light_control", "lightrules", "ntf.cjs light", "light send"];
+const lightTokens = [
+  "灯效",
+  "light_control",
+  "lightrules",
+  "ntf light",
+  "ntf.cjs light",
+  "light send",
+];
 
 console.log(`package:          ${manifest.name} (${manifest.createdFor})`);
 console.log(`job:              ${manifest.job.name} (${manifest.job.id})`);

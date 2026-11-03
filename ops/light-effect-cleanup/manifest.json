@@ -33,7 +33,7 @@
       "lightrules_delete"
     ]
   },
-  "forbiddenAfter": ["灯效", "light_control", "lightrules", "ntf.cjs light", "light send"],
+  "forbiddenAfter": ["灯效", "light_control", "lightrules", "ntf light", "ntf.cjs light", "light send"],
   "files": [
     {
       "path": "home/raymond/.openclaw/workspace/AGENTS.md",
@@ -90,6 +90,18 @@
           "type": "removeSection",
           "start": "## Light pushes (ntf light send)",
           "end": "## Boundaries"
+        }
+      ]
+    },
+    {
+      "path": "home/raymond/.openclaw/agents/main/agent/workshop-skills/openclaw-automations-jobs/SKILL.md",
+      "owner": "openclaw-automations-jobs skill: automation delivery example",
+      "baselineSha256": "9021072f6d68321a0458d8ca49b27e18f9f806d717431c105f6c08eb9c6501f5",
+      "ops": [
+        {
+          "type": "replace",
+          "old": "    when the job pushes its own output (e.g. ntf light) instead of chat delivery.",
+          "new": "    when the job pushes its own output through its own channel instead of chat delivery."
         }
       ]
     },

@@ -47,6 +47,7 @@ const requiredOwners = [
   "home/raymond/.openclaw/workspace/scripts/sentinel.md",
   "home/raymond/.openclaw/agents/main/agent/workshop-skills/dingtalk-busy-reply/SKILL.md",
   "home/raymond/.openclaw/agents/main/agent/workshop-skills/yoooclaw-plugin-status/SKILL.md",
+  "home/raymond/.openclaw/agents/main/agent/workshop-skills/openclaw-automations-jobs/SKILL.md",
   "home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md",
   "home/raymond/.openclaw/workspace/skills/collector-health-repair/SKILL.md",
   "home/raymond/.openclaw/workspace/collection/README.md",
@@ -92,13 +93,20 @@ check(
   "collector message is checked for light references",
   ["light_control", "lightrules"].every((token) => manifest.job.forbiddenInMessage.includes(token)),
 );
+check(
+  "post-patch scan includes bare ntf light",
+  manifest.forbiddenAfter.includes("ntf light") &&
+    manifest.forbiddenAfter.includes("ntf.cjs light"),
+);
 
 const allNewText = manifest.files.flatMap((spec) =>
   spec.ops.map((op) => (op.type === "replace" ? op.new : "")),
 );
 check(
   "no replacement reintroduces a light command",
-  allNewText.every((text) => !/ntf\.cjs\s+light|light_control|lightrules_|light send/.test(text)),
+  allNewText.every(
+    (text) => !/ntf(?:\.cjs)?\s+light|light_control|lightrules_|light send/.test(text),
+  ),
 );
 check(
   "reminder replacements use dingtalk-notify",

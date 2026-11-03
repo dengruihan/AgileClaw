@@ -6,21 +6,22 @@
 
 ## 1. 清理范围（live 入口与 owner）
 
-| 入口                                              | owner                | 现状                                     | 本包动作                                                              |
-| ------------------------------------------------- | -------------------- | ---------------------------------------- | --------------------------------------------------------------------- |
-| collector `payload.toolsAllow`                    | cron job             | 含 `light_control`                       | 移除，保留 `ls,read,edit,write,apply_patch,exec,process,agenda`       |
-| collector `trigger.script` 两处修障文案           | cron job（内嵌副本） | “失败退回灯效，每源每日一次”             | 改为“发送失败就在本轮结果写明失败与原因，不换通道重发”                |
-| `workspace/collection/trigger-collector.mjs`      | collection 源文件    | 与内嵌 trigger 同文，供重新同步          | 同上，保持两边一致                                                    |
-| `workspace/AGENTS.md` 手机推送规则                | workspace AGENTS     | 要求走 `ntf.cjs light send`              | 改为私人钉钉机器人 Markdown 单聊（`collection/dingtalk-notify.mjs`）  |
-| `workspace/scripts/sentinel.md` 通知段            | sentinel 规则        | “沿用现有手机灯效通知渠道”               | 改为私人钉钉机器人渠道                                                |
-| `skills/collector-notify/SKILL.md`                | collector 通知 skill | description 与失败分支含灯效回退命令     | 移除回退，失败时如实报告、不换通道重发                                |
-| `skills/collector-health-repair/SKILL.md`         | collector 修障 skill | 失败退回灯效                             | 同上                                                                  |
-| `workshop-skills/dingtalk-busy-reply/SKILL.md`    | 代复 skill           | 代复后用灯效提醒                         | 改为私人钉钉通知，保留 24 小时去重                                    |
-| `workshop-skills/yoooclaw-plugin-status/SKILL.md` | 插件状态 skill       | 大段 `ntf light send` 说明与历史审计流程 | 删除灯效推送、审计段落；保留插件状态、通知/录音/图片/网页数据查询     |
-| `collection/README.md`                            | collection 文档      | “失败退回灯效推送”                       | 改为“发送失败如实记录，不换通道重发”                                  |
-| `collection/dingtalk-notify.mjs`                  | 通知出口             | 失败 stderr 打印灯效回退命令；头注释同   | 失败只报告进度与原因，不再给出灯效命令                                |
-| `openclaw.json` `tools.alsoAllow`（全局 + main）  | 工具策略             | 显式列出 5 个灯效工具                    | 移除 5 项，保留 `notifications_summary`、`ai_todo_*`、`plugin-update` |
-| `openclaw.json` `tools.deny`                      | 工具策略             | 未设置                                   | 新增 5 个灯效工具的 deny                                              |
+| 入口                                                 | owner                | 现状                                     | 本包动作                                                              |
+| ---------------------------------------------------- | -------------------- | ---------------------------------------- | --------------------------------------------------------------------- |
+| collector `payload.toolsAllow`                       | cron job             | 含 `light_control`                       | 移除，保留 `ls,read,edit,write,apply_patch,exec,process,agenda`       |
+| collector `trigger.script` 两处修障文案              | cron job（内嵌副本） | “失败退回灯效，每源每日一次”             | 改为“发送失败就在本轮结果写明失败与原因，不换通道重发”                |
+| `workspace/collection/trigger-collector.mjs`         | collection 源文件    | 与内嵌 trigger 同文，供重新同步          | 同上，保持两边一致                                                    |
+| `workspace/AGENTS.md` 手机推送规则                   | workspace AGENTS     | 要求走 `ntf.cjs light send`              | 改为私人钉钉机器人 Markdown 单聊（`collection/dingtalk-notify.mjs`）  |
+| `workspace/scripts/sentinel.md` 通知段               | sentinel 规则        | “沿用现有手机灯效通知渠道”               | 改为私人钉钉机器人渠道                                                |
+| `skills/collector-notify/SKILL.md`                   | collector 通知 skill | description 与失败分支含灯效回退命令     | 移除回退，失败时如实报告、不换通道重发                                |
+| `skills/collector-health-repair/SKILL.md`            | collector 修障 skill | 失败退回灯效                             | 同上                                                                  |
+| `workshop-skills/dingtalk-busy-reply/SKILL.md`       | 代复 skill           | 代复后用灯效提醒                         | 改为私人钉钉通知，保留 24 小时去重                                    |
+| `workshop-skills/openclaw-automations-jobs/SKILL.md` | 自动化任务 skill     | cron 自推送示例写 `ntf light`            | 改为“通过自己的通道推送”，不再示例灯效                                |
+| `workshop-skills/yoooclaw-plugin-status/SKILL.md`    | 插件状态 skill       | 大段 `ntf light send` 说明与历史审计流程 | 删除灯效推送、审计段落；保留插件状态、通知/录音/图片/网页数据查询     |
+| `collection/README.md`                               | collection 文档      | “失败退回灯效推送”                       | 改为“发送失败如实记录，不换通道重发”                                  |
+| `collection/dingtalk-notify.mjs`                     | 通知出口             | 失败 stderr 打印灯效回退命令；头注释同   | 失败只报告进度与原因，不再给出灯效命令                                |
+| `openclaw.json` `tools.alsoAllow`（全局 + main）     | 工具策略             | 显式列出 5 个灯效工具                    | 移除 5 项，保留 `notifications_summary`、`ai_todo_*`、`plugin-update` |
+| `openclaw.json` `tools.deny`                         | 工具策略             | 未设置                                   | 新增 5 个灯效工具的 deny                                              |
 
 未动：collector `payload.message`、schedule、timeout、`lightContext`、`delivery`、session/wake 设置；所有历史备份、memory、`daily-report/schedule-2026-10-20.md`、`sentinel-state.json` 中的灯效记录；plugin 安装与启用状态。
 
@@ -83,9 +84,9 @@ cd /home/raymond/repos/AgileClaw/ops/light-effect-cleanup
 
 | 命令                                                                | 结果                                                                                                                        |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `node verify/check-package.mjs`                                     | **58/58 PASS**：9 个文件入口、5 个灯效工具、补丁 new 文本无灯效命令、无凭据/私人 ID、JS 语法                                |
-| `node verify/deploy-sim.mjs`                                        | **56/56 PASS**：临时 root + fake CLI，覆盖只读计划、drift 拒绝、config 失败自动恢复、成功部署、status、幂等、回滚、二次回滚 |
-| `./scripts/status.sh`（只读 live）                                  | 9 个文件均 `needs cleanup`，trigger/alsoAllow/deny 与计划一致，无 precondition error                                        |
+| `node verify/check-package.mjs`                                     | **63/63 PASS**：10 个文件入口、5 个灯效工具、补丁 new 文本无灯效命令（含裸 `ntf light`）、无凭据/私人 ID、JS 语法           |
+| `node verify/deploy-sim.mjs`                                        | **59/59 PASS**：临时 root + fake CLI，覆盖只读计划、drift 拒绝、config 失败自动恢复、成功部署、status、幂等、回滚、二次回滚 |
+| `./scripts/status.sh`（只读 live）                                  | 10 个文件均 `needs cleanup`，trigger/alsoAllow/deny 与计划一致，无 precondition error                                       |
 | `./scripts/deploy.sh`（只读 live）                                  | 只打印计划：trigger `2fefcf… -> a34f72…`，tools 去掉 `light_control`，deny 新增 5 项                                        |
 | `openclaw config patch --file /tmp/lec-config-patch.json --dry-run` | `Dry run successful: 3 update(s) validated`                                                                                 |
 | `node collection/dingtalk-notify.mjs ... --dry-run`（清理前）       | exit 0，`dryRun:true`，1 个分块计划；未发送                                                                                 |
@@ -118,7 +119,7 @@ live 只读基线（2026-11-03）：
 2. **插件仍无条件注入灯效提示词**：`dist/index.cjs` 的 `before_prompt_build` 每次都会追加 `buildLightRulePromptGuidance()`（约 80958 行），内容要求模型“必须调用 light_control / lightrules_*”。该提示不检查工具是否被 deny，也没有配置开关。结果是主会话提示词里仍可能出现灯效路由提示，但对应工具不可调用；模型可能回答“当前不能控制灯效”。这是本包无法通过配置消除的 vendor 行为，已作为残留报告；建议后续向上游提 feature flag，而不是手改 dist。
 3. **云端灯效规则仍可能存在**：`lightrules_*` 工具被 deny 后无法查询/删除；服务器侧已存在的规则可能继续按触发条件亮灯。本包不删除任何云端规则（破坏性且无授权证据），需用户/上游另行处理。
 4. **历史 ops 包仍编码灯效回退**：`ops/collector-skill-dispatcher`、`ops/collector-language-style`、`ops/dingtalk-private-notifications` 的 README/skill 快照/校验仍包含灯效回退文案。它们是已部署历史记录，本包按“保留历史审计”未改；但**重新部署这些旧包会覆盖本清理结果**。已作为 scope 外 finding 上报，后续应由各包 owner 更新或标注废弃。
-5. **workshop skills 是 agent 自有文件**：`dingtalk-busy-reply`、`yoooclaw-plugin-status` 位于 `agents/main/agent/workshop-skills/`。本包部署时备份并直接替换指定段落；若之后 skill workshop 重新生成同名 skill，需要重新检查灯效段落。
+5. **workshop skills 是 agent 自有文件**：`dingtalk-busy-reply`、`yoooclaw-plugin-status`、`openclaw-automations-jobs` 位于 `agents/main/agent/workshop-skills/`。本包部署时备份并直接替换指定段落；若之后 skill workshop 重新生成同名 skill，需要重新检查灯效段落。
 
 ## 9. 隐私与凭据
 
