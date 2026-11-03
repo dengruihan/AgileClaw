@@ -1,4 +1,4 @@
-import { html, nothing } from "lit";
+import { html, nothing, type TemplateResult } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
@@ -288,6 +288,8 @@ type MarkdownSidebarProps = {
   onAttachmentUpdate: () => void;
   attachmentRuntime: AttachmentSidebarRuntime;
   attachmentDownload?: { pending: boolean; error: string | null; onDownload: () => void };
+  /** Lazy-loaded structured Office viewer for the selected sidebar preview. */
+  officePreview?: TemplateResult | typeof nothing;
 };
 
 function renderMarkdownSidebar(props: MarkdownSidebarProps) {
@@ -334,15 +336,17 @@ function renderMarkdownSidebar(props: MarkdownSidebarProps) {
             ? content.title.trim() || t("chat.detailPanel.file")
             : content?.kind === "file"
               ? content.name.trim() || t("chat.detailPanel.file")
-              : content?.kind === "session-diff"
-                ? t("chat.sessionDiff.title")
-                : content?.kind === "markdown"
-                  ? t(
-                      props.showingRawText
-                        ? "chat.detailPanel.viewSource"
-                        : "chat.detailPanel.markdownPreview",
-                    )
-                  : t("chat.detailPanel.toolDetails");
+              : content?.kind === "office"
+                ? content.title.trim() || t("chat.detailPanel.file")
+                : content?.kind === "session-diff"
+                  ? t("chat.sessionDiff.title")
+                  : content?.kind === "markdown"
+                    ? t(
+                        props.showingRawText
+                          ? "chat.detailPanel.viewSource"
+                          : "chat.detailPanel.markdownPreview",
+                      )
+                    : t("chat.detailPanel.toolDetails");
   return html`
     <div
       class="sidebar-panel"
@@ -401,99 +405,103 @@ function renderMarkdownSidebar(props: MarkdownSidebarProps) {
                         .openFile=${content.openFile ?? null}
                         .revealFile=${props.fileView?.onReveal ?? null}
                       ></openclaw-session-diff>`
-                    : content.kind === "canvas" || content.kind === "image"
-                      ? keyed(
-                          content.kind,
-                          html`
-                            <div class="chat-tool-card__preview" data-kind=${content.kind}>
-                              <div class="chat-tool-card__preview-panel" data-side="front">
-                                ${
-                                  content.kind === "canvas"
-                                    ? keyed(
-                                        `${canvasSandbox}\u0000${canvasSrc ?? ""}\u0000${content.preferredHeight ?? ""}`,
-                                        html`<iframe
-                                          class="chat-tool-card__preview-frame"
-                                          title=${title}
-                                          sandbox=${canvasSandbox}
-                                          src=${canvasSrc ?? nothing}
-                                          style=${content.preferredHeight ? `height:${content.preferredHeight}px` : ""}
-                                        ></iframe>`,
-                                      )
-                                    : html`<button
-                                        type="button"
-                                        class="chat-tool-card__preview-image-button"
-                                        aria-label=${t("chat.imageLightbox.open", { title })}
-                                        @click=${() => openResolvedImage(props.onOpenImage, content.src, title)}
-                                      >
-                                        <img
-                                          class="chat-tool-card__preview-image"
-                                          src=${content.src}
-                                          alt=${title}
-                                          style="display:block;max-width:100%;height:auto;border-radius:8px;"
-                                        />
-                                      </button>`
-                                }
-                              </div>
-                              ${
-                                content.rawText?.trim()
-                                  ? html`
-                                      <div style="margin-top: 12px;">${renderRawButton()}</div>
-                                    `
-                                  : nothing
-                              }
-                            </div>
-                          `,
-                        )
-                      : content.kind === "attachment"
-                        ? html`<div class="sidebar-attachment-preview">
-                            ${renderSidebarAttachment(
-                              content,
-                              props.onAttachmentUpdate,
-                              props.attachmentRuntime,
-                              props.embedSandboxMode ?? "scripts",
-                              props.attachmentDownload,
-                            )}
-                          </div>`
-                        : html`
-                            <section class="sidebar-markdown-shell">
-                              <div class="sidebar-markdown-shell__toolbar">
-                                <div class="sidebar-markdown-shell__intro">
-                                  <div class="sidebar-markdown-shell__eyebrow">
-                                    ${icons.scrollText}
-                                    <span
-                                      >${t(props.showingRawText ? "chat.detailPanel.viewSource" : "chat.detailPanel.renderedMarkdown")}</span
-                                    >
-                                  </div>
+                    : content.kind === "office"
+                      ? html`<div class="sidebar-office-preview-host">
+                          ${props.officePreview ?? nothing}
+                        </div>`
+                      : content.kind === "canvas" || content.kind === "image"
+                        ? keyed(
+                            content.kind,
+                            html`
+                              <div class="chat-tool-card__preview" data-kind=${content.kind}>
+                                <div class="chat-tool-card__preview-panel" data-side="front">
                                   ${
-                                    props.showingRawText
-                                      ? nothing
-                                      : html`
-                                          <div class="sidebar-markdown-shell__hint">
-                                            ${t("chat.detailPanel.renderedMarkdownHint")}
-                                          </div>
-                                        `
+                                    content.kind === "canvas"
+                                      ? keyed(
+                                          `${canvasSandbox}\u0000${canvasSrc ?? ""}\u0000${content.preferredHeight ?? ""}`,
+                                          html`<iframe
+                                            class="chat-tool-card__preview-frame"
+                                            title=${title}
+                                            sandbox=${canvasSandbox}
+                                            src=${canvasSrc ?? nothing}
+                                            style=${content.preferredHeight ? `height:${content.preferredHeight}px` : ""}
+                                          ></iframe>`,
+                                        )
+                                      : html`<button
+                                          type="button"
+                                          class="chat-tool-card__preview-image-button"
+                                          aria-label=${t("chat.imageLightbox.open", { title })}
+                                          @click=${() => openResolvedImage(props.onOpenImage, content.src, title)}
+                                        >
+                                          <img
+                                            class="chat-tool-card__preview-image"
+                                            src=${content.src}
+                                            alt=${title}
+                                            style="display:block;max-width:100%;height:auto;border-radius:8px;"
+                                          />
+                                        </button>`
                                   }
                                 </div>
-                                ${props.showingRawText ? nothing : renderRawButton("btn btn--sm")}
+                                ${
+                                  content.rawText?.trim()
+                                    ? html`
+                                        <div style="margin-top: 12px;">${renderRawButton()}</div>
+                                      `
+                                    : nothing
+                                }
                               </div>
-                              ${
-                                markdownHtml
-                                  ? html`
-                                      <article
-                                        class="sidebar-markdown-reader sidebar-markdown"
-                                        dir=${detectTextDirection(content.content)}
+                            `,
+                          )
+                        : content.kind === "attachment"
+                          ? html`<div class="sidebar-attachment-preview">
+                              ${renderSidebarAttachment(
+                                content,
+                                props.onAttachmentUpdate,
+                                props.attachmentRuntime,
+                                props.embedSandboxMode ?? "scripts",
+                                props.attachmentDownload,
+                              )}
+                            </div>`
+                          : html`
+                              <section class="sidebar-markdown-shell">
+                                <div class="sidebar-markdown-shell__toolbar">
+                                  <div class="sidebar-markdown-shell__intro">
+                                    <div class="sidebar-markdown-shell__eyebrow">
+                                      ${icons.scrollText}
+                                      <span
+                                        >${t(props.showingRawText ? "chat.detailPanel.viewSource" : "chat.detailPanel.renderedMarkdown")}</span
                                       >
-                                        ${unsafeHTML(markdownHtml)}
-                                      </article>
-                                    `
-                                  : html`
-                                      <div class="sidebar-markdown-empty">
-                                        ${t("chat.detailPanel.noPreviewableMarkdown")}
-                                      </div>
-                                    `
-                              }
-                            </section>
-                          `
+                                    </div>
+                                    ${
+                                      props.showingRawText
+                                        ? nothing
+                                        : html`
+                                            <div class="sidebar-markdown-shell__hint">
+                                              ${t("chat.detailPanel.renderedMarkdownHint")}
+                                            </div>
+                                          `
+                                    }
+                                  </div>
+                                  ${props.showingRawText ? nothing : renderRawButton("btn btn--sm")}
+                                </div>
+                                ${
+                                  markdownHtml
+                                    ? html`
+                                        <article
+                                          class="sidebar-markdown-reader sidebar-markdown"
+                                          dir=${detectTextDirection(content.content)}
+                                        >
+                                          ${unsafeHTML(markdownHtml)}
+                                        </article>
+                                      `
+                                    : html`
+                                        <div class="sidebar-markdown-empty">
+                                          ${t("chat.detailPanel.noPreviewableMarkdown")}
+                                        </div>
+                                      `
+                                }
+                              </section>
+                            `
               : html` <div class="muted">${t("chat.detailPanel.noContent")}</div> `
         }
       </div>
@@ -513,6 +521,7 @@ export function renderSidebarPanel(
   const fillHost =
     props.content?.kind === "file" ||
     props.content?.kind === "markdown" ||
+    props.content?.kind === "office" ||
     props.content?.kind === "attachment" ||
     props.content?.kind === "session-diff";
   return html`

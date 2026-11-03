@@ -784,7 +784,16 @@ describe("sessions.files preview formats", () => {
       }),
     );
     expect(reveal).toMatchObject({ ok: false, error: expect.stringContaining("remote host") });
-    expect(expectError(await getFile("large.txt")).details.type).toBe("session_file_too_large");
+    // Node-backed workspaces cannot serve a byte prefix, so an oversized file
+    // keeps its metadata-only preview instead of failing the whole read.
+    const oversized = expectOkPayload(await getFile("large.txt")).file;
+    expect(oversized).toMatchObject({
+      missing: false,
+      path: "large.txt",
+      previewKind: "unsupported",
+      size: 256 * 1024 + 1,
+    });
+    expect(oversized.content).toBeUndefined();
     expect(readFile).toHaveBeenCalledTimes(1);
     await expect(
       invoke("sessions.files.set", {

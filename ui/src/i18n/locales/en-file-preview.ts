@@ -50,6 +50,14 @@ const catalog = {
       overwriteLoadFailed: "Failed to load the latest file before overwriting.",
       fullContentLoadFailed: "Failed to load full content: {error}",
     },
+    officePreview: {
+      title: "Office preview",
+      truncated: "This preview is truncated. Open the file in an Office app to see everything.",
+      empty: "This file has no previewable content.",
+      sheetPicker: "Worksheets",
+      untitledSheet: "Untitled sheet",
+      slideLabel: "Slide {index}",
+    },
   },
   filePreview: {
     bundle: {
@@ -81,6 +89,7 @@ const catalog = {
 export const registerFilePreviewEnglish = Object.assign(
   () => {
     Object.assign(en.chat.detailPanel, catalog.chat.detailPanel);
+    Object.assign(en.chat.officePreview, catalog.chat.officePreview);
     Object.assign(en.filePreview, catalog.filePreview);
   },
   { catalog },

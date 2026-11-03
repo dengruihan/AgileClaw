@@ -218,8 +218,55 @@ export const SessionFileContentEncodingSchema = Type.Union([
 export const SessionFilePreviewKindSchema = Type.Union([
   Type.Literal("text"),
   Type.Literal("image"),
+  Type.Literal("office"),
   Type.Literal("unsupported"),
 ]);
+
+/** Modern OOXML container the Gateway parsed for an `office` preview. */
+export const SessionFileOfficeFormatSchema = Type.Union([
+  Type.Literal("xlsx"),
+  Type.Literal("docx"),
+  Type.Literal("pptx"),
+]);
+
+/** One worksheet of a workbook preview; `rows` holds display strings only. */
+export const SessionFileOfficeSheetSchema = closedObject({
+  name: Type.String({ maxLength: 256 }),
+  rows: Type.Array(Type.Array(Type.String({ maxLength: 4096 }), { maxItems: 200 }), {
+    maxItems: 200,
+  }),
+  /** True 1-based worksheet row for each rendered row; sparse sheets skip empty rows. */
+  rowNumbers: Type.Optional(Type.Array(Type.Integer({ minimum: 1 }), { maxItems: 200 })),
+  /** Rows and columns the sheet declares, including ones omitted by truncation. */
+  rowCount: Type.Integer({ minimum: 0 }),
+  /** Bounded by the spreadsheet column limit so malformed references stay valid. */
+  columnCount: Type.Integer({ minimum: 0, maximum: 16_384 }),
+  truncated: Type.Optional(Type.Boolean()),
+});
+
+/** One sanitized body block of a word-processing document preview. */
+export const SessionFileOfficeBlockSchema = closedObject({
+  kind: Type.Union([Type.Literal("heading"), Type.Literal("paragraph"), Type.Literal("listItem")]),
+  level: Type.Optional(Type.Integer({ minimum: 1, maximum: 6 })),
+  text: Type.String({ maxLength: 8_000 }),
+});
+
+/** One slide outline of a presentation preview. */
+export const SessionFileOfficeSlideSchema = closedObject({
+  index: Type.Integer({ minimum: 1 }),
+  title: Type.Optional(Type.String({ maxLength: 512 })),
+  lines: Type.Array(Type.String({ maxLength: 2_000 }), { maxItems: 80 }),
+});
+
+/** Structured read-only payload rendered by the Control UI office viewer. */
+export const SessionFileOfficePreviewSchema = closedObject({
+  format: SessionFileOfficeFormatSchema,
+  /** True when any sheet, block, slide, or text limit cut the payload short. */
+  truncated: Type.Optional(Type.Boolean()),
+  sheets: Type.Optional(Type.Array(SessionFileOfficeSheetSchema, { maxItems: 20 })),
+  blocks: Type.Optional(Type.Array(SessionFileOfficeBlockSchema, { maxItems: 2_000 })),
+  slides: Type.Optional(Type.Array(SessionFileOfficeSlideSchema, { maxItems: 100 })),
+});
 
 const SessionFileHashSchema = Type.String({
   minLength: 64,
@@ -241,6 +288,7 @@ export const SessionFileEntrySchema = closedObject({
   mimeType: Type.Optional(NonEmptyString),
   contentEncoding: Type.Optional(SessionFileContentEncodingSchema),
   previewKind: Type.Optional(SessionFilePreviewKindSchema),
+  officePreview: Type.Optional(SessionFileOfficePreviewSchema),
 });
 
 /** One file or folder in the session-rooted browser. */
@@ -811,6 +859,11 @@ export type SessionsUsageParams = Static<typeof SessionsUsageParamsSchema>;
 export type SessionFileContentEncoding = Static<typeof SessionFileContentEncodingSchema>;
 export type SessionFileKind = Static<typeof SessionFileKindSchema>;
 export type SessionFilePreviewKind = Static<typeof SessionFilePreviewKindSchema>;
+export type SessionFileOfficeFormat = Static<typeof SessionFileOfficeFormatSchema>;
+export type SessionFileOfficeSheet = Static<typeof SessionFileOfficeSheetSchema>;
+export type SessionFileOfficeBlock = Static<typeof SessionFileOfficeBlockSchema>;
+export type SessionFileOfficeSlide = Static<typeof SessionFileOfficeSlideSchema>;
+export type SessionFileOfficePreview = Static<typeof SessionFileOfficePreviewSchema>;
 export type SessionFileRelevance = Static<typeof SessionFileRelevanceSchema>;
 export type SessionFileEntry = Static<typeof SessionFileEntrySchema>;
 export type SessionFileBrowserEntry = Static<typeof SessionFileBrowserEntrySchema>;

@@ -14,6 +14,7 @@ export const en: TranslationMap & {
     codeBlock: TranslationMap;
     commands: TranslationMap;
     detailPanel: TranslationMap;
+    officePreview: TranslationMap;
     welcome: TranslationMap & { suggestions: TranslationMap & { whatCanYouDo: string } };
     goals: TranslationMap;
     messages: TranslationMap &
@@ -3621,6 +3622,7 @@ export const en: TranslationMap & {
       },
     },
     detailPanel: {},
+    officePreview: {},
     sidebarColumns: {
       close: "Close {panel}",
     },

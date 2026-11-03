@@ -1,5 +1,9 @@
 import type { TemplateResult } from "lit";
 import type { ChatMessageGetResult } from "../../../../../packages/gateway-protocol/src/schema/logs-chat.js";
+import type {
+  SessionFileOfficeFormat,
+  SessionFileOfficePreview,
+} from "../../../../../packages/gateway-protocol/src/schema/sessions.js";
 import type { ToolCard } from "../../../lib/chat/chat-types.ts";
 import type { ChatMediaPlaybackMode } from "./chat-media-playback.ts";
 import type { ArtifactDownloadResolver } from "./chat-message-media.ts";
@@ -115,6 +119,15 @@ type FileSidebarEdit = {
 
 export type FileSidebarNavigation = { line: number };
 
+/** Structured read-only spreadsheet, document, or presentation preview. */
+export type OfficeSidebarContent = {
+  kind: "office";
+  title: string;
+  format: SessionFileOfficeFormat;
+  preview: SessionFileOfficePreview;
+  rawText?: string | null;
+};
+
 export type SessionFileSource = { sessionKey: string; agentId?: string; path: string };
 
 export type FileSidebarContent = {
@@ -158,6 +171,7 @@ export type SidebarContent =
   | CanvasSidebarContent
   | ImageSidebarContent
   | AttachmentSidebarContent
+  | OfficeSidebarContent
   | FileSidebarContent
   | SessionDiffSidebarContent;
 

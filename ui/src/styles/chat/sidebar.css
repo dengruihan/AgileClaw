@@ -887,6 +887,170 @@ openclaw-session-discussion {
   margin-top: 16px;
 }
 
+/* Structured Office previews own their scroll container so wide sheets never
+   widen the sidebar itself. */
+.sidebar-office-preview-host {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sidebar-office-preview {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.sidebar-office-preview__notice {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--muted);
+}
+
+.sidebar-office-preview__empty {
+  padding: 24px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.sidebar-office-preview__tabs {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-office-preview__tab {
+  padding: 6px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  white-space: nowrap;
+
+  &[aria-selected="true"] {
+    border-bottom-color: var(--accent);
+    color: var(--text);
+  }
+}
+
+.sidebar-office-preview__grid-scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.sidebar-office-preview__grid {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+
+  td,
+  th {
+    max-width: 320px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: top;
+  }
+
+  tr:last-child td,
+  tr:last-child th {
+    border-bottom: 0;
+  }
+}
+
+.sidebar-office-preview__row-number {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-elevated);
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.sidebar-office-preview__document {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+
+  > * + * {
+    margin-top: 8px;
+  }
+}
+
+.sidebar-office-preview__heading {
+  margin-top: 16px;
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.35;
+
+  &[data-level="1"] {
+    font-size: 18px;
+  }
+}
+
+.sidebar-office-preview__paragraph {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.sidebar-office-preview__list {
+  margin: 0;
+  padding-left: 20px;
+
+  li + li {
+    margin-top: 4px;
+  }
+}
+
+.sidebar-office-preview__slides {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.sidebar-office-preview__slide {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.sidebar-office-preview__slide-title {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .sidebar-attachment-preview__text {
   min-width: 0;
   margin: 16px 0 0;
