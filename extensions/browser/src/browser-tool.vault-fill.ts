@@ -1,14 +1,12 @@
 import type { AgentToolResult } from "openclaw/plugin-sdk/agent-core";
 import type { BrowserProxyRequest } from "./browser-node-proxy.js";
 import {
-  browserVaultFill,
   browserVaultObserve,
   browserVaultSubmit,
   callGatewayTool,
   jsonResult,
   type BrowserVaultObserveResult,
 } from "./browser-tool.runtime.js";
-import { registerVaultFillSecret } from "./browser/vault-fill-scrub.js";
 
 const PREVIEW_TIMEOUT_MS = 15_000;
 const APPROVAL_TIMEOUT_MS = 120_000;
@@ -31,11 +29,8 @@ type VaultFillExecuteResponse = {
   status: string;
   itemRef?: string;
   siteLabel?: string;
-  accountLabel?: string;
   origin?: { scheme: "https" | "http"; host: string; port: number };
   reasonCode?: string;
-  /** Internal material: consumed immediately below and never returned. */
-  password?: string;
 };
 
 type VaultFillApprovalResponse = {
@@ -264,76 +259,47 @@ export async function executeVaultAutofillAction(
   } catch {
     return jsonResult({ status: "unavailable", reasonCode: "fill_execute_failed" });
   }
-  if (executed.status !== "filled" || typeof executed.password !== "string") {
+  if (executed.status !== "filled") {
     return jsonResult(publicStatus(executed));
   }
+  await params.onTabActivity?.(reobserved.targetId);
 
-  // Consume the material immediately. The value is never assigned to a
-  // module-level or result field.
-  try {
-    const filled = await browserVaultFill(params.baseUrl, {
-      targetId: reobserved.targetId,
-      profile: params.profile,
-      password: executed.password,
-      ...(executed.accountLabel !== undefined ? { username: executed.accountLabel } : {}),
-      // Submission is a separate approval below; the fill call never presses
-      // Enter on the strength of the fill approval alone.
-      expected: observeBinding(reobserved),
-      signal: params.signal,
-      timeoutMs: EXECUTE_TIMEOUT_MS,
-    });
-    if (!filled.ok) {
-      return jsonResult({
-        status: filled.status,
-        ...(filled.reasonCode ? { reasonCode: filled.reasonCode } : {}),
-      });
-    }
-    registerVaultFillSecret(reobserved.targetId, executed.password);
-    await params.onTabActivity?.(reobserved.targetId);
-
-    let submitted: boolean | undefined;
-    let submitStatus: string | undefined;
-    if (params.submit === true) {
-      const decision = await requestSubmitApproval(params, originText);
-      if (decision === "allow-once") {
-        try {
-          const submittedResult = await browserVaultSubmit(params.baseUrl, {
-            targetId: reobserved.targetId,
-            profile: params.profile,
-            expected: observeBinding(reobserved),
-            signal: params.signal,
-            timeoutMs: EXECUTE_TIMEOUT_MS,
-          });
-          submitted = submittedResult.ok;
-          if (!submitted) {
-            submitStatus = submittedResult.status;
-          }
-        } catch {
-          submitted = false;
-          submitStatus = "unavailable";
+  let submitted: boolean | undefined;
+  let submitStatus: string | undefined;
+  if (params.submit === true) {
+    const decision = await requestSubmitApproval(params, originText);
+    if (decision === "allow-once") {
+      try {
+        const submittedResult = await browserVaultSubmit(params.baseUrl, {
+          targetId: reobserved.targetId,
+          profile: params.profile,
+          expected: observeBinding(reobserved),
+          signal: params.signal,
+          timeoutMs: EXECUTE_TIMEOUT_MS,
+        });
+        submitted = submittedResult.ok;
+        if (!submitted) {
+          submitStatus = submittedResult.status;
         }
-      } else {
+      } catch {
         submitted = false;
-        submitStatus = decision;
+        submitStatus = "unavailable";
       }
+    } else {
+      submitted = false;
+      submitStatus = decision;
     }
-
-    return jsonResult({
-      status: "filled",
-      itemRef: executed.itemRef ?? preview.itemRef ?? params.itemRef,
-      ...(executed.siteLabel ? { siteLabel: executed.siteLabel } : {}),
-      origin: originText,
-      submit: false,
-      ...(submitted !== undefined ? { submitted } : {}),
-      ...(submitStatus ? { submitStatus } : {}),
-    });
-  } catch {
-    // Browser transport errors may echo request context; never surface them.
-    return jsonResult({ status: "unavailable", reasonCode: "fill_failed" });
-  } finally {
-    // Best-effort release; the string was never returned to the caller.
-    executed.password = undefined;
   }
+
+  return jsonResult({
+    status: "filled",
+    itemRef: executed.itemRef ?? preview.itemRef ?? params.itemRef,
+    ...(executed.siteLabel ? { siteLabel: executed.siteLabel } : {}),
+    origin: originText,
+    submit: false,
+    ...(submitted !== undefined ? { submitted } : {}),
+    ...(submitStatus ? { submitStatus } : {}),
+  });
 }
 
 async function requestSubmitApproval(

@@ -228,36 +228,6 @@ export async function browserVaultObserve(
   );
 }
 
-export async function browserVaultFill(
-  baseUrl: BrowserClientTarget,
-  opts: BrowserTimedActionOptions & {
-    targetId: string;
-    password: string;
-    username?: string;
-    expected: {
-      origin: BrowserVaultOrigin;
-      documentId: string;
-      frameId: string;
-      fieldSignature: string;
-    };
-  },
-): Promise<BrowserVaultFillResult> {
-  const timeoutMs = resolveBrowserNavigationTimeoutMs(opts.timeoutMs);
-  return await postBrowserJson(
-    baseUrl,
-    "/vault/fill",
-    {
-      targetId: opts.targetId,
-      password: opts.password,
-      ...(opts.username !== undefined ? { username: opts.username } : {}),
-      expected: opts.expected,
-      timeoutMs,
-    },
-    resolveBrowserOperationRequestTimeoutMs(timeoutMs),
-    opts,
-  );
-}
-
 export async function browserVaultSubmit(
   baseUrl: BrowserClientTarget,
   opts: BrowserTimedActionOptions & {

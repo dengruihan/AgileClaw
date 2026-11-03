@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   callGatewayTool: vi.fn(),
   browserVaultObserve: vi.fn(),
-  browserVaultFill: vi.fn(),
   browserVaultSubmit: vi.fn(),
   jsonResult: vi.fn((details: unknown) => ({
     content: [{ type: "text" as const, text: JSON.stringify(details) }],
@@ -14,14 +13,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./browser-tool.runtime.js", () => ({
   callGatewayTool: mocks.callGatewayTool,
   browserVaultObserve: mocks.browserVaultObserve,
-  browserVaultFill: mocks.browserVaultFill,
   browserVaultSubmit: mocks.browserVaultSubmit,
   jsonResult: mocks.jsonResult,
 }));
 
 const { executeVaultAutofillAction } = await import("./browser-tool.vault-fill.js");
-const { clearVaultFillSession, hasAnyActiveVaultFill } =
-  await import("./browser/vault-fill-scrub.js");
+const { clearVaultFillSession } = await import("./browser/vault-fill-scrub.js");
 
 const ORIGIN = { scheme: "https" as const, host: "login.example.com", port: 443 };
 const CANARY = "canary-autofill-7c31e9b2";
@@ -75,7 +72,6 @@ describe("browser vault autofill", () => {
   beforeEach(() => {
     mocks.callGatewayTool.mockReset();
     mocks.browserVaultObserve.mockReset();
-    mocks.browserVaultFill.mockReset();
     mocks.browserVaultSubmit.mockReset();
     clearVaultFillSession("target-1");
   });
@@ -92,9 +88,7 @@ describe("browser vault autofill", () => {
         siteLabel: "Example Login",
         accountLabel: "person@example.com",
         origin: ORIGIN,
-        password: CANARY,
       });
-    mocks.browserVaultFill.mockResolvedValue({ ok: true, status: "filled", targetId: "target-1" });
 
     const result = await executeVaultAutofillAction(baseParams());
 
@@ -114,13 +108,6 @@ describe("browser vault autofill", () => {
       origin: "https://login.example.com",
       submit: false,
     });
-    // The password is consumed by the local fill route and masked afterwards.
-    expect(mocks.browserVaultFill.mock.calls[0]?.[1]).toMatchObject({
-      targetId: "target-1",
-      password: CANARY,
-      username: "person@example.com",
-    });
-    expect(hasAnyActiveVaultFill()).toBe(true);
   });
 
   it("returns denied without executing or filling", async () => {
@@ -133,7 +120,6 @@ describe("browser vault autofill", () => {
     const result = await executeVaultAutofillAction(baseParams());
     expect(result.details).toMatchObject({ status: "denied" });
     expect(mocks.callGatewayTool).toHaveBeenCalledTimes(2);
-    expect(mocks.browserVaultFill).not.toHaveBeenCalled();
   });
 
   it("invalidates the request when the document changes after approval", async () => {
@@ -151,7 +137,6 @@ describe("browser vault autofill", () => {
       reasonCode: "page_changed_after_approval",
     });
     expect(mocks.callGatewayTool).toHaveBeenCalledTimes(2);
-    expect(mocks.browserVaultFill).not.toHaveBeenCalled();
   });
 
   it("requests a second approval before submitting a filled form", async () => {
@@ -164,12 +149,9 @@ describe("browser vault autofill", () => {
         status: "filled",
         itemRef: "vault_entry_1",
         siteLabel: "Example Login",
-        accountLabel: "person@example.com",
         origin: ORIGIN,
-        password: CANARY,
       })
       .mockResolvedValueOnce({ id: "plugin:submit-1", decision: "allow-once" });
-    mocks.browserVaultFill.mockResolvedValue({ ok: true, status: "filled", targetId: "target-1" });
     mocks.browserVaultSubmit.mockResolvedValue({
       ok: true,
       status: "filled",
@@ -195,9 +177,8 @@ describe("browser vault autofill", () => {
     mocks.callGatewayTool
       .mockResolvedValueOnce(preview())
       .mockResolvedValueOnce({ id: "plugin:approval-1", decision: "allow-once" })
-      .mockResolvedValueOnce({ status: "filled", password: CANARY, origin: ORIGIN })
+      .mockResolvedValueOnce({ status: "filled", origin: ORIGIN })
       .mockResolvedValueOnce({ id: "plugin:submit-1", decision: "deny" });
-    mocks.browserVaultFill.mockResolvedValue({ ok: true, status: "filled", targetId: "target-1" });
 
     const result = await executeVaultAutofillAction({ ...baseParams(), submit: true });
     expect(result.details).toMatchObject({

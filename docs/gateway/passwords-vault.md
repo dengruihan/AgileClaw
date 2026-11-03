@@ -75,17 +75,17 @@ An agent can ask to use one saved login without receiving the password. This is 
 3. The vault checks the observation against the entry. The scheme, host, and port must match exactly; IDN hosts compare in A-label form. Subdomains, cross-origin password iframes, and non-http(s) pages are rejected.
 4. The operator sees a plugin approval card with the agent, origin, profile, saved site/account, and the agent's reason. The only offered decision is **allow once** or **deny**. There is no standing grant, background use, or unattended fill.
 5. After approval the tool re-observes the tab. A navigation, document replacement, field change, or password revision change invalidates the request.
-6. The vault decrypts once, the browser tool fills the username and password, and the value is dropped. `submit` defaults to `false`; setting it to `true` requests a second "Submit login form" approval after the fill, and never presses Enter on the fill approval alone.
+6. The vault decrypts once, the trusted in-process browser fill dispatch inserts the username and password, and the value is dropped. `submit` defaults to `false`; setting it to `true` requests a second "Submit login form" approval after the fill, and never presses Enter on the fill approval alone.
 
 Results are explicit and value-free: `filled`, `needs_approval`, `needs_human`, `denied`, `origin_mismatch`, `subdomain_mismatch`, `insecure_origin`, `iframe_denied`, `document_changed`, `revision_mismatch`, `not_found`, `expired`, `replayed`, `vault_locked`, or `unavailable`. The agent never receives the password, account name in the tool result, or fill material.
 
 ### Trust boundaries
 
 - Agent fill runs only on the local managed or shared Chromium controlled by this Gateway. Browser nodes, sandbox targets, remote CDP URLs, and existing-session profiles are rejected.
-- The password exists only in the vault worker, the broker's one-time material, and the loopback browser-control request used to insert it. It is never written to the tool request/result, model context, transcript, Gateway log, or audit record.
-- While a fill session is active (about 60 seconds), `act:evaluate`, `act:wait --fn`, and screenshots are blocked, and text-bearing tool results pass through a broker-owned full-mask scrub that runs even when `logging.redact` is `off`.
+- The password exists only in the vault worker, the broker's one-time material, and the trusted in-process browser fill dispatch used to insert it. It is never written to a Gateway RPC/WebSocket response, tool request/result, model context, transcript, Gateway log, or audit record.
+- While a fill session owns the tab, `act:evaluate`, `act:wait --fn`, screenshots, and every agent click/press/type/fill/select/drag/batch interaction are blocked; text-bearing tool results pass through a broker-owned full-mask scrub that runs even when `logging.redact` is `off`. Submission is available only through the separately approved `browser_login` submit flow. The session persists until the tab navigates, closes, or the approved submit clears the field; it never expires by wall-clock time.
 - OpenClaw cannot isolate the password from page JavaScript or another CDP client attached to the same browser. A page script can read its own input value, and any co-attached CDP client can evaluate in the page. The fill broker reduces OpenClaw's own leak surfaces; it is not a same-machine isolation boundary. Treat a browser profile as trusted for the logins it holds.
-- Document binding prefers the CDP loader id. If the browser cannot expose one, the broker falls back to a URL-scoped token, so a same-URL reload may not invalidate a pending preview; dismiss and re-request the approval if the page reloaded.
+- Document identity comes from the browser's CDP loader id. If the browser cannot expose one, the fill fails closed (`document_identity_unavailable`) instead of using a URL-derived token, so a same-URL reload invalidates the approval.
 - Passwords never enter `secret_store_entries`. Fill approvals use the existing operator approval store, and vault audit rows contain only the action, item reference, status, and reason code.
 
 ### Configuration and auditing

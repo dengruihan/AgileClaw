@@ -4,6 +4,7 @@ import type { Page } from "playwright-core";
 import { getBrowserProfileCapabilities } from "../profile-capabilities.js";
 import { getPageForTargetId } from "../pw-session-connection.js";
 import type { BrowserRouteContext } from "../server-context.js";
+import { clearVaultFillSession, registerVaultFillSecret } from "../vault-fill-scrub.js";
 import {
   browserNavigationPolicyForProfile,
   readBody,
@@ -38,6 +39,7 @@ type ObserveResult =
 
 const MAX_PASSWORD_LENGTH = 4096;
 const MAX_USERNAME_LENGTH = 512;
+const FILL_ACTION_TIMEOUT_MS = 5_000;
 
 function readOrigin(url: string): ObservedOrigin | undefined {
   let parsed: URL;
@@ -98,8 +100,9 @@ async function observeFields(page: Page): Promise<FieldObservation> {
   });
 }
 
-async function documentIdentity(page: Page): Promise<{ documentId: string; frameId: string }> {
-  const mainFrame = page.mainFrame();
+async function documentIdentity(
+  page: Page,
+): Promise<{ documentId: string; frameId: string } | undefined> {
   try {
     const session = await page.context().newCDPSession(page);
     try {
@@ -114,13 +117,10 @@ async function documentIdentity(page: Page): Promise<{ documentId: string; frame
       await session.detach().catch(() => undefined);
     }
   } catch {
-    // CDP document identity is preferred; a stable frame-scoped fallback keeps
-    // the lease closed rather than widening it.
+    // Fail closed: a URL-derived token does not change on a same-URL reload,
+    // so it cannot prove that the approved document is still current.
   }
-  return {
-    documentId: `frame:${createHash("sha256").update(mainFrame.url()).digest("hex")}`,
-    frameId: mainFrame.name() || "main",
-  };
+  return undefined;
 }
 
 async function crossOriginPasswordFrameCount(page: Page, mainOrigin: string): Promise<number> {
@@ -190,6 +190,9 @@ async function observeVaultTarget(params: {
     return { ok: false, status: "needs_human", reasonCode: "no_password_field" };
   }
   const identity = await documentIdentity(page);
+  if (!identity) {
+    return { ok: false, status: "needs_human", reasonCode: "document_identity_unavailable" };
+  }
   return {
     ok: true,
     observation: {
@@ -380,14 +383,21 @@ export function registerBrowserVaultRoutes(
           ...(navigationPolicy.ssrfPolicy ? { ssrfPolicy: navigationPolicy.ssrfPolicy } : {}),
         });
         const inputs = page.locator("input");
+        // Arm masking before insertion so a transport failure, partial fill, or
+        // timeout cannot leave plaintext in the DOM unprotected.
+        registerVaultFillSecret(tab.targetId, password);
+        const passwordField = inputs.nth(observation.fields.passwordIndex);
         try {
           if (username !== undefined && observation.fields.usernameIndex >= 0) {
-            await inputs.nth(observation.fields.usernameIndex).fill(username);
+            await inputs
+              .nth(observation.fields.usernameIndex)
+              .fill(username, { timeout: FILL_ACTION_TIMEOUT_MS });
           }
-          const passwordField = inputs.nth(observation.fields.passwordIndex);
-          await passwordField.fill(password);
+          await passwordField.fill(password, { timeout: FILL_ACTION_TIMEOUT_MS });
         } catch {
-          // Browser errors can echo typed values; keep the error value-free.
+          // Best-effort cleanup; keep the scrub session armed until navigation,
+          // close, or the approved submit path clears the document.
+          await passwordField.fill("", { timeout: 1_000 }).catch(() => undefined);
           res.json({ ok: false, status: "unavailable", reasonCode: "fill_failed" });
           return;
         }
@@ -466,12 +476,16 @@ export function registerBrowserVaultRoutes(
           targetId: tab.targetId,
           ...(navigationPolicy.ssrfPolicy ? { ssrfPolicy: navigationPolicy.ssrfPolicy } : {}),
         });
+        const passwordField = page.locator("input").nth(observation.fields.passwordIndex);
         try {
-          await page.locator("input").nth(observation.fields.passwordIndex).press("Enter");
+          await passwordField.press("Enter", { timeout: FILL_ACTION_TIMEOUT_MS });
         } catch {
           res.json({ ok: false, status: "unavailable", reasonCode: "submit_failed" });
           return;
         }
+        // Do not leave plaintext behind if the form did not navigate away.
+        await passwordField.fill("", { timeout: 1_000 }).catch(() => undefined);
+        clearVaultFillSession(tab.targetId);
         res.json({ ok: true, status: "filled", targetId: tab.targetId });
       },
     });

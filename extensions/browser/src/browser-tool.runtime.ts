@@ -50,7 +50,6 @@ export {
   browserNavigate,
   browserPdfSave,
   browserScreenshotAction,
-  browserVaultFill,
   browserVaultObserve,
   browserVaultSubmit,
   browserWaitForDownload,

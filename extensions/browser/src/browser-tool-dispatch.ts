@@ -40,7 +40,12 @@ import {
 } from "./browser-tool.screenshot.js";
 import { appendNavigatedPageState, executeSnapshotAction } from "./browser-tool.snapshot.js";
 import { parseBrowserNavigationUrl } from "./browser/navigation-guard.js";
-import { clearVaultFillSession, hasAnyActiveVaultFill } from "./browser/vault-fill-scrub.js";
+import {
+  assertVaultFillActAllowed,
+  clearVaultFillSession,
+  hasActiveVaultFill,
+  hasAnyActiveVaultFill,
+} from "./browser/vault-fill-scrub.js";
 
 function readOptionalTargetAndTimeout(params: Record<string, unknown>) {
   const targetId = normalizeOptionalString(params.targetId);
@@ -147,11 +152,14 @@ export async function executeBrowserTabAction(context: {
     }
     case "close": {
       const targetId = readStringParam(params, "targetId");
-      clearVaultFillSession(targetId);
       const result = targetId
         ? await browserCloseTab(proxyRequest ?? baseUrl, targetId, clientOptions)
         : await browserAct(proxyRequest ?? baseUrl, { kind: "close" }, clientOptions);
-      await sessionTabs.untrack(readStringValue(asNullableRecord(result)?.targetId) ?? targetId);
+      const closedTargetId = readStringValue(asNullableRecord(result)?.targetId) ?? targetId;
+      if (closedTargetId) {
+        clearVaultFillSession(closedTargetId);
+      }
+      await sessionTabs.untrack(closedTargetId);
       return jsonResult(result);
     }
     case "snapshot":
@@ -159,10 +167,12 @@ export async function executeBrowserTabAction(context: {
         ...actionOptions,
         onTabActivity: touchTab,
       });
-    case "screenshot":
-      if (hasAnyActiveVaultFill()) {
+    case "screenshot": {
+      const screenshotTargetId =
+        readStringParam(params, "targetId") ?? context.boundTargetId ?? undefined;
+      if (screenshotTargetId ? hasActiveVaultFill(screenshotTargetId) : hasAnyActiveVaultFill()) {
         throw new Error(
-          "Screenshots are blocked while a password fill session is active; wait for the fill session to expire.",
+          "Screenshots are blocked while a password fill session owns the tab; navigate or close the filled tab.",
         );
       }
       return await executeScreenshotAction({
@@ -171,6 +181,7 @@ export async function executeBrowserTabAction(context: {
         onTabActivity: touchTab,
         opts,
       });
+    }
     case "navigate": {
       const targetUrl = readTargetUrlParam(params);
       const targetId = readStringParam(params, "targetId");
@@ -182,7 +193,9 @@ export async function executeBrowserTabAction(context: {
         signal,
       });
       const navigatedTargetId = readStringValue(asNullableRecord(result)?.targetId) ?? targetId;
-      clearVaultFillSession(navigatedTargetId);
+      if (navigatedTargetId) {
+        clearVaultFillSession(navigatedTargetId);
+      }
       await touchTab(navigatedTargetId);
       const formatted = formatBrowserExternalToolResult({
         kind: asNullableRecord(result)?.download ? "download" : "act",
@@ -279,16 +292,9 @@ export async function executeBrowserTabAction(context: {
       if (!request) {
         throw new Error("request required");
       }
-      if (request.kind === "evaluate" && hasAnyActiveVaultFill()) {
-        throw new Error(
-          "act:evaluate is blocked while a password fill session is active; wait for the fill session to expire.",
-        );
-      }
-      if (request.kind === "wait" && request.fn && hasAnyActiveVaultFill()) {
-        throw new Error(
-          "act:wait --fn is blocked while a password fill session is active; wait for the fill session to expire.",
-        );
-      }
+      const guardTargetId =
+        request.targetId ?? context.boundTargetId ?? readStringParam(params, "targetId");
+      assertVaultFillActAllowed(guardTargetId, request);
       if (!capabilities.actKinds.some((kind) => kind === request.kind)) {
         throw new Error(
           `browser act kind ${JSON.stringify(request.kind)} is unavailable for this run`,

@@ -124,6 +124,7 @@ async function invoke(params: {
   requestParams: Record<string, unknown>;
   scopes: string[];
   agent?: { agentId?: string; sessionKey?: string };
+  context?: Record<string, unknown>;
 }) {
   const respond = vi.fn();
   await params.handlers[params.method]?.({
@@ -138,7 +139,7 @@ async function invoke(params: {
       : invokedClient(params.scopes),
     isWebchatConnect: () => false,
     respond: respond as never,
-    context: {} as never,
+    context: (params.context ?? {}) as never,
   });
   return respond;
 }
@@ -427,7 +428,18 @@ describe("vault gateway methods", () => {
     const service = createUnlockedServiceStub();
     service.list = vi.fn(async () => [FILL_ENTRY]);
     const approval = createFillApproval();
-    const handlers = createVaultHandlers({ service, fillApproval: approval.lookup });
+    const fillRequests: Array<{ password: string; username?: string }> = [];
+    const handlers = createVaultHandlers({
+      service,
+      fillApproval: approval.lookup,
+      browserFillExecutor: async (input) => {
+        fillRequests.push({
+          password: input.password,
+          ...(input.username ? { username: input.username } : {}),
+        });
+        return { ok: true, status: "filled" };
+      },
+    });
     const preview = await invoke({
       handlers,
       method: "vault.fill.preview",
@@ -466,9 +478,14 @@ describe("vault gateway methods", () => {
       siteLabel: "Example",
       origin: { scheme: "https", host: "login.example.com", port: 443 },
     });
-    expect(firstResult.password).toBe("synthetic-fill-password");
-    // The internal response is consumed by the browser fill executor; it is not
-    // a tool result or a protocol schema.
+    // The in-process executor is the only consumer of plaintext material.
+    expect(fillRequests[0]).toEqual({
+      password: "synthetic-fill-password",
+      username: "user@example.com",
+    });
+    expect(JSON.stringify(firstResult)).not.toContain("synthetic-fill-password");
+    expect(firstResult).not.toHaveProperty("password");
+    expect(firstResult).not.toHaveProperty("accountLabel");
 
     const second = await invoke({
       handlers,
@@ -478,6 +495,110 @@ describe("vault gateway methods", () => {
       agent: {},
     });
     expect(second.mock.calls[0]?.[1]).toMatchObject({ status: "replayed" });
+  });
+
+  it("fails closed without an in-process browser capability and never falls back to the wire", async () => {
+    const service = createUnlockedServiceStub();
+    service.list = vi.fn(async () => [FILL_ENTRY]);
+    const approval = createFillApproval();
+    const handlers = createVaultHandlers({ service, fillApproval: approval.lookup });
+    const preview = await invoke({
+      handlers,
+      method: "vault.fill.preview",
+      requestParams: fillParams(),
+      scopes: ["operator.vault"],
+      agent: {},
+    });
+    const previewResult = preview.mock.calls[0]?.[1] as { previewId: string };
+    approval.state.snapshot = {
+      status: "allowed",
+      decision: "allow-once",
+      agentId: "agent-1",
+      sessionKey: "agent:main",
+      detail: `preview: ${previewResult.previewId}`,
+    };
+    const { reason: _reason, ...executeBinding } = fillParams();
+    const execute = await invoke({
+      handlers,
+      method: "vault.fill.execute",
+      requestParams: {
+        previewId: previewResult.previewId,
+        approvalId: "plugin:approval-1",
+        ...executeBinding,
+        revision: FILL_ENTRY.revision,
+      },
+      scopes: ["operator.vault"],
+      agent: {},
+    });
+    const [ok, result] = execute.mock.calls[0] as [boolean, Record<string, unknown>];
+    expect(ok).toBe(true);
+    expect(result).toEqual({
+      status: "unavailable",
+      reasonCode: "browser_capability_unavailable",
+    });
+    expect(JSON.stringify(result)).not.toContain("synthetic-fill-password");
+  });
+
+  it("consumes material through the in-process browser capability without serializing it", async () => {
+    const service = createUnlockedServiceStub();
+    service.list = vi.fn(async () => [FILL_ENTRY]);
+    const approval = createFillApproval();
+    const handlers = createVaultHandlers({ service, fillApproval: approval.lookup });
+    const preview = await invoke({
+      handlers,
+      method: "vault.fill.preview",
+      requestParams: fillParams(),
+      scopes: ["operator.vault"],
+      agent: {},
+    });
+    const previewResult = preview.mock.calls[0]?.[1] as { previewId: string };
+    approval.state.snapshot = {
+      status: "allowed",
+      decision: "allow-once",
+      agentId: "agent-1",
+      sessionKey: "agent:main",
+      detail: `preview: ${previewResult.previewId}`,
+    };
+    const browserCalls: Array<{ body?: Record<string, unknown> }> = [];
+    const context = {
+      getGatewayMethodRegistry: () => ({
+        getHandler: (name: string) =>
+          name === "browser.request"
+            ? async (options: {
+                params: { body?: Record<string, unknown> };
+                respond: (ok: boolean, payload?: unknown) => void;
+              }) => {
+                browserCalls.push(options.params);
+                options.respond(true, { ok: true, status: "filled", targetId: "target-1" });
+              }
+            : undefined,
+      }),
+    };
+    const { reason: _reason, ...executeBinding } = fillParams();
+    const execute = await invoke({
+      handlers,
+      method: "vault.fill.execute",
+      requestParams: {
+        previewId: previewResult.previewId,
+        approvalId: "plugin:approval-1",
+        ...executeBinding,
+        revision: FILL_ENTRY.revision,
+      },
+      scopes: ["operator.vault"],
+      agent: {},
+      context,
+    });
+    const [ok, result] = execute.mock.calls[0] as [boolean, Record<string, unknown>];
+    expect(ok).toBe(true);
+    expect(result).toMatchObject({ status: "filled", itemRef: "vault_item" });
+    expect(browserCalls[0]?.body).toMatchObject({
+      targetId: "target-1",
+      password: "synthetic-fill-password",
+      username: "user@example.com",
+    });
+    // The general response never carries the in-process material.
+    expect(JSON.stringify(result)).not.toContain("synthetic-fill-password");
+    expect(result).not.toHaveProperty("password");
   });
 
   it("rejects a fill when the observed origin does not match the entry", async () => {

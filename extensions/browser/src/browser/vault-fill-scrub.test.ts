@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  assertVaultFillActAllowed,
   clearVaultFillSession,
   hasActiveVaultFill,
   hasAnyActiveVaultFill,
@@ -39,12 +40,42 @@ describe("vault fill scrub", () => {
     expect(result.result.nested[1]).toBe("safe");
   });
 
-  it("scopes masking to the target and expires the session", () => {
-    registerVaultFillSecret("target-1", CANARY, { nowMs: 1_000, ttlMs: 5_000 });
-    expect(scrubVaultFillText("target-2", CANARY, 1_000)).toBe(CANARY);
-    expect(hasActiveVaultFill("target-1", 5_999)).toBe(true);
-    expect(hasActiveVaultFill("target-1", 6_000)).toBe(false);
-    expect(hasAnyActiveVaultFill(6_000)).toBe(false);
+  it("keeps masking until the session is explicitly cleared, not by TTL", () => {
+    registerVaultFillSecret("target-1", CANARY);
+    expect(hasActiveVaultFill("target-1")).toBe(true);
+    expect(hasAnyActiveVaultFill()).toBe(true);
+    expect(scrubVaultFillText("target-1", CANARY)).toBe("***");
+    clearVaultFillSession("target-1");
+    expect(hasActiveVaultFill("target-1")).toBe(false);
+    expect(hasAnyActiveVaultFill()).toBe(false);
+    expect(scrubVaultFillText("target-1", CANARY)).toBe(CANARY);
+  });
+
+  it("blocks scripts and every mutation path at any batch depth", () => {
+    registerVaultFillSecret("target-1", CANARY);
+    expect(() =>
+      assertVaultFillActAllowed("target-1", {
+        kind: "batch",
+        actions: [
+          {
+            kind: "batch",
+            actions: [{ kind: "evaluate", fn: "() => document.querySelector('input').value" }],
+          },
+        ],
+      }),
+    ).toThrow(/evaluate/u);
+    expect(() =>
+      assertVaultFillActAllowed("target-1", {
+        kind: "batch",
+        actions: [{ kind: "batch", actions: [{ kind: "press", key: "Enter" }] }],
+      }),
+    ).toThrow(/interactions are blocked/u);
+    expect(() => assertVaultFillActAllowed("target-1", { kind: "click", ref: "1" })).toThrow(
+      /interactions are blocked/u,
+    );
+    expect(() =>
+      assertVaultFillActAllowed("target-2", { kind: "press", key: "Enter" }),
+    ).not.toThrow();
   });
 
   it("can be cleared explicitly on navigation or close", () => {

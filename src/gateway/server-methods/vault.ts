@@ -46,6 +46,11 @@ import type {
   RespondFn,
 } from "./types.js";
 import { defineValidatedGatewayHandler } from "./validation.js";
+import {
+  createInProcessBrowserFillExecutor,
+  type VaultFillBrowserExecutor,
+  type VaultFillBrowserExecutorResult,
+} from "./vault-fill-browser.js";
 
 const VAULT_REVEAL_SCOPE = "operator.vault.reveal";
 
@@ -151,6 +156,7 @@ export function createVaultHandlers(
     requestFillApproval?: (
       input: VaultFillApprovalRequestInput,
     ) => Promise<{ id: string; decision: ExecApprovalDecision | null }>;
+    browserFillExecutor?: VaultFillBrowserExecutor;
   } = {},
 ): GatewayRequestHandlers {
   const service = params.service ?? getVaultService();
@@ -594,22 +600,60 @@ export function createVaultHandlers(
             },
           });
           assertCurrent();
-          if (result.status === "filled") {
-            // Internal material for the trusted fill executor only. No tool
-            // result, transcript, or log path receives this response.
+          if (result.status !== "filled") {
+            respond(true, {
+              status: result.status,
+              ...(result.reasonCode ? { reasonCode: result.reasonCode } : {}),
+            });
+            return;
+          }
+          const material = result.material;
+          const executor =
+            params.browserFillExecutor ?? createInProcessBrowserFillExecutor(options);
+          if (!executor) {
+            material.password = "";
+            respond(true, {
+              status: "unavailable",
+              reasonCode: "browser_capability_unavailable",
+            });
+            return;
+          }
+          let fillResult: VaultFillBrowserExecutorResult;
+          try {
+            fillResult = await executor({
+              targetId: requestParams.targetId,
+              profile: requestParams.profile,
+              origin: material.origin,
+              documentId: requestParams.documentId,
+              frameId: requestParams.frameId,
+              fieldSignature: requestParams.fieldSignature,
+              password: material.password,
+              username: material.entry.accountLabel,
+            });
+          } catch {
+            // The executor may surface transport failures; keep them value-free.
+            fillResult = {
+              ok: false,
+              status: "unavailable",
+              reasonCode: "browser_fill_failed",
+            };
+          } finally {
+            // The general Gateway response only carries the status below.
+            material.password = "";
+          }
+          assertCurrent();
+          if (fillResult.ok) {
             respond(true, {
               status: "filled",
-              itemRef: result.material.entry.itemRef,
-              siteLabel: result.material.entry.siteLabel,
-              accountLabel: result.material.entry.accountLabel,
-              origin: result.material.origin,
-              password: result.material.password,
+              itemRef: material.entry.itemRef,
+              siteLabel: material.entry.siteLabel,
+              origin: material.origin,
             });
             return;
           }
           respond(true, {
-            status: result.status,
-            ...(result.reasonCode ? { reasonCode: result.reasonCode } : {}),
+            status: fillResult.status,
+            ...(fillResult.reasonCode ? { reasonCode: fillResult.reasonCode } : {}),
           });
         } catch (error) {
           logFailure(params.log, "vault.fill.execute", error);
