@@ -3,6 +3,14 @@ import JSZip from "jszip";
 /** Deterministic synthetic OOXML fixtures; no real Office file is ever read. */
 export type OfficeFixtureFile = { path: string; content: string | Buffer };
 
+/** Extra package part used to prove a relationship target is never read. */
+export type OfficeFixtureRelationship = {
+  id: string;
+  target: string;
+  type?: string;
+  targetMode?: "External";
+};
+
 export async function buildZip(files: readonly OfficeFixtureFile[]): Promise<Buffer> {
   const zip = new JSZip();
   for (const file of files) {
@@ -23,23 +31,73 @@ function contentTypes(overrides: readonly string[]): string {
 </Types>`;
 }
 
-function relationships(entries: readonly { id: string; type: string; target: string }[]): string {
+function relationships(
+  entries: readonly {
+    id: string;
+    type?: string;
+    target: string;
+    targetMode?: "External";
+  }[],
+): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="${RELATIONSHIPS_NS}">
 ${entries
   .map(
-    (entry) => `  <Relationship Id="${entry.id}" Type="${entry.type}" Target="${entry.target}"/>`,
+    (entry) =>
+      `  <Relationship Id="${entry.id}" Type="${entry.type ?? `${OFFICE_REL_NS}/worksheet`}" Target="${entry.target}"${
+        entry.targetMode ? ` TargetMode="${entry.targetMode}"` : ""
+      }/>`,
   )
   .join("\n")}
 </Relationships>`;
 }
 
+export type XlsxFixtureSheet = {
+  name: string;
+  rows?: readonly (readonly {
+    column: string;
+    value: string;
+    type?: "s" | "inlineStr" | "b";
+  }[])[];
+  /** Raw `<sheetData>` body, for malformed or sparse row-number regressions. */
+  sheetDataXml?: string;
+};
+
+function worksheetContent(sheetDataXml: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetDataXml}</sheetData></worksheet>`;
+}
+
+function generatedSheetData(sheet: XlsxFixtureSheet): string {
+  return (sheet.rows ?? [])
+    .map((row, rowIndex) => {
+      const cells = row
+        .map((cell) => {
+          const reference = `${cell.column}${rowIndex + 1}`;
+          if (cell.type === "s") {
+            return `<c r="${reference}" t="s"><v>${cell.value}</v></c>`;
+          }
+          if (cell.type === "inlineStr") {
+            return `<c r="${reference}" t="inlineStr"><is><t>${cell.value}</t></is></c>`;
+          }
+          if (cell.type === "b") {
+            return `<c r="${reference}" t="b"><v>${cell.value}</v></c>`;
+          }
+          return `<c r="${reference}"><v>${cell.value}</v></c>`;
+        })
+        .join("");
+      return `<row r="${rowIndex + 1}">${cells}</row>`;
+    })
+    .join("");
+}
+
 export async function buildXlsxFixture(options?: {
-  sheets?: readonly {
-    name: string;
-    rows: readonly (readonly { column: string; value: string; type?: "s" | "inlineStr" | "b" }[])[];
-  }[];
+  sheets?: readonly XlsxFixtureSheet[];
   sharedStrings?: readonly string[];
+  /** Sheet declarations without a packaged worksheet part. */
+  linkedSheets?: readonly { name: string; relationshipId: string }[];
+  /** Relationships appended to the workbook part, including external targets. */
+  workbookRelationships?: readonly OfficeFixtureRelationship[];
+  extraParts?: readonly OfficeFixtureFile[];
 }): Promise<Buffer> {
   const sheets = options?.sheets ?? [
     {
@@ -62,33 +120,12 @@ export async function buildXlsxFixture(options?: {
     { name: "Notes", rows: [[{ column: "A", value: "2", type: "s" as const }]] },
   ];
   const sharedStrings = options?.sharedStrings ?? ["Item", "Cost", "Hello "];
+  const linkedSheets = options?.linkedSheets ?? [];
 
-  const sheetXml = sheets.map((sheet, sheetIndex) => {
-    const rows = sheet.rows
-      .map((row, rowIndex) => {
-        const cells = row
-          .map((cell) => {
-            const reference = `${cell.column}${rowIndex + 1}`;
-            if (cell.type === "s") {
-              return `<c r="${reference}" t="s"><v>${cell.value}</v></c>`;
-            }
-            if (cell.type === "inlineStr") {
-              return `<c r="${reference}" t="inlineStr"><is><t>${cell.value}</t></is></c>`;
-            }
-            if (cell.type === "b") {
-              return `<c r="${reference}" t="b"><v>${cell.value}</v></c>`;
-            }
-            return `<c r="${reference}"><v>${cell.value}</v></c>`;
-          })
-          .join("");
-        return `<row r="${rowIndex + 1}">${cells}</row>`;
-      })
-      .join("");
-    return {
-      path: `xl/worksheets/sheet${sheetIndex + 1}.xml`,
-      content: `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rows}</sheetData></worksheet>`,
-    };
-  });
+  const sheetXml = sheets.map((sheet, sheetIndex) => ({
+    path: `xl/worksheets/sheet${sheetIndex + 1}.xml`,
+    content: worksheetContent(sheet.sheetDataXml ?? generatedSheetData(sheet)),
+  }));
 
   return await buildZip([
     {
@@ -113,25 +150,29 @@ export async function buildXlsxFixture(options?: {
     },
     {
       path: "xl/workbook.xml",
-      content: `<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="${OFFICE_REL_NS}"><sheets>${sheets
-        .map(
+      content: `<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="${OFFICE_REL_NS}"><sheets>${[
+        ...sheets.map(
           (sheet, index) =>
             `<sheet name="${sheet.name}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`,
-        )
-        .join("")}</sheets></workbook>`,
+        ),
+        ...linkedSheets.map(
+          (sheet, index) =>
+            `<sheet name="${sheet.name}" sheetId="${sheets.length + index + 1}" r:id="${sheet.relationshipId}"/>`,
+        ),
+      ].join("")}</sheets></workbook>`,
     },
     {
       path: "xl/_rels/workbook.xml.rels",
-      content: relationships(
-        sheets.map((_, index) => ({
+      content: relationships([
+        ...sheets.map((_, index) => ({
           id: `rId${index + 1}`,
-          type: `${OFFICE_REL_NS}/worksheet`,
           target:
             index === sheets.length - 1
               ? `/xl/worksheets/sheet${index + 1}.xml`
               : `worksheets/sheet${index + 1}.xml`,
         })),
-      ),
+        ...(options?.workbookRelationships ?? []),
+      ]),
     },
     {
       path: "xl/sharedStrings.xml",
@@ -140,6 +181,7 @@ export async function buildXlsxFixture(options?: {
         .join("")}</sst>`,
     },
     ...sheetXml,
+    ...(options?.extraParts ?? []),
   ]);
 }
 
@@ -170,7 +212,7 @@ export async function buildDocxFixture(elementXml?: string): Promise<Buffer> {
   ]);
 }
 
-function slideXml(title: string, lines: readonly string[]): string {
+export function buildSlideXml(title: string, lines: readonly string[]): string {
   return `<?xml version="1.0" encoding="UTF-8"?><p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree>
   <p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>${title}</a:t></a:r></a:p></p:txBody></p:sp>
   <p:sp><p:txBody>${lines.map((line) => `<a:p><a:r><a:t>${line}</a:t></a:r></a:p>`).join("")}</p:txBody></p:sp>
@@ -182,7 +224,15 @@ export async function buildPptxFixture(
     { title: "Roadmap", lines: ["Ship previews", "Measure adoption"] },
     { title: "Risks", lines: ["Large workbooks"] },
   ],
+  options?: {
+    /** Slide ids appended to the slide list without a packaged slide part. */
+    linkedSlides?: readonly { id: number; relationshipId: string }[];
+    /** Relationships appended to the presentation part, including external targets. */
+    presentationRelationships?: readonly OfficeFixtureRelationship[];
+    extraParts?: readonly OfficeFixtureFile[];
+  },
 ): Promise<Buffer> {
+  const linkedSlides = options?.linkedSlides ?? [];
   return await buildZip([
     {
       path: "[Content_Types].xml",
@@ -198,24 +248,29 @@ export async function buildPptxFixture(
     },
     {
       path: "ppt/presentation.xml",
-      content: `<?xml version="1.0" encoding="UTF-8"?><p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="${OFFICE_REL_NS}"><p:sldIdLst>${slides
-        .map((_, index) => `<p:sldId id="${256 + index}" r:id="rId${index + 2}"/>`)
-        .join("")}</p:sldIdLst></p:presentation>`,
+      content: `<?xml version="1.0" encoding="UTF-8"?><p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="${OFFICE_REL_NS}"><p:sldIdLst>${[
+        ...slides.map((_, index) => `<p:sldId id="${256 + index}" r:id="rId${index + 2}"/>`),
+        ...linkedSlides.map(
+          (slide) => `<p:sldId id="${slide.id}" r:id="${slide.relationshipId}"/>`,
+        ),
+      ].join("")}</p:sldIdLst></p:presentation>`,
     },
     {
       path: "ppt/_rels/presentation.xml.rels",
-      content: relationships(
-        slides.map((_, index) => ({
+      content: relationships([
+        ...slides.map((_, index) => ({
           id: `rId${index + 2}`,
           type: `${OFFICE_REL_NS}/slide`,
           target: `slides/slide${index + 1}.xml`,
         })),
-      ),
+        ...(options?.presentationRelationships ?? []),
+      ]),
     },
     ...slides.map((slide, index) => ({
       path: `ppt/slides/slide${index + 1}.xml`,
-      content: slideXml(slide.title, slide.lines),
+      content: buildSlideXml(slide.title, slide.lines),
     })),
+    ...(options?.extraParts ?? []),
   ]);
 }
 

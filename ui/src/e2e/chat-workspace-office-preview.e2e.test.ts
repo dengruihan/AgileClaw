@@ -47,10 +47,11 @@ const workbookPayload = {
       name: "Budget",
       rowCount: 3,
       columnCount: 2,
+      // Sparse sheet: rows 1 and 3 exist, row 2 is empty.
+      rowNumbers: [1, 3],
       rows: [
         ["Item", "Cost"],
         ["Rent", "1200"],
-        ["Coffee", "48"],
       ],
     },
     {
@@ -177,14 +178,20 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
       const workbook = page.locator('.sidebar-office-preview[data-office-format="xlsx"]');
       await workbook.waitFor({ state: "visible" });
       await expect.poll(() => workbook.locator("table").textContent()).toContain("Rent");
+      expect(
+        await workbook
+          .locator(".sidebar-office-preview__row-number")
+          .allTextContents()
+          .then((labels) => labels.map((label) => label.trim())),
+      ).toEqual(["1", "3"]);
       const requestCount = (await gateway.getRequests("sessions.files.get")).length;
       expect(requestCount).toBe(1);
+      await page.screenshot({ path: path.join(artifactDir, "after-xlsx-preview.png") });
 
       await page.locator('[role="tab"]', { hasText: "Notes" }).click();
       await expect.poll(() => workbook.locator("table").textContent()).toContain("Renew in March");
       // Worksheet switching stays client-side.
       expect((await gateway.getRequests("sessions.files.get")).length).toBe(requestCount);
-      await page.screenshot({ path: path.join(artifactDir, "after-xlsx-preview.png") });
     } finally {
       await context.close();
     }
@@ -253,11 +260,47 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
       await expect
         .poll(() => page.locator(".sidebar-markdown-reader").textContent())
         .toContain("application/vnd.ms-excel");
-      await page.screenshot({ path: path.join(artifactDir, "before-metadata-only-xls.png") });
+      await page.screenshot({ path: path.join(artifactDir, "legacy-xls-metadata-only.png") });
       fs.writeFileSync(
         path.join(artifactDir, "office-preview-requests.json"),
         JSON.stringify(await gateway.getRequests("sessions.files.get"), null, 2),
       );
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("captures the pre-change metadata state for the same workbook", async () => {
+    // The branch before this change returned `previewKind: "unsupported"` for
+    // every Office file; replay that gateway response for the same file the
+    // "after" screenshot opens.
+    const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
+      await installMockGateway(page, {
+        featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
+        methodResponses: {
+          ...officeResponses(),
+          "sessions.files.get": {
+            cases: ["budget.xlsx", `${fileRoot}/budget.xlsx`].map((requestPath) => ({
+              match: { path: requestPath },
+              response: officeResponse("budget.xlsx", {
+                mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                previewKind: "unsupported",
+              }),
+            })),
+          },
+        },
+      });
+      await page.goto(`${server.baseUrl}chat`);
+      await openRailFile(page, "budget.xlsx");
+      await expect
+        .poll(() => page.locator(".sidebar-markdown-reader").textContent())
+        .toContain("This file is not previewable inline.");
+      await page.screenshot({
+        path: path.join(artifactDir, "before-budget-xlsx-metadata-only.png"),
+      });
     } finally {
       await context.close();
     }

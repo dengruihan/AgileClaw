@@ -40,7 +40,8 @@ it("renders workbook rows and switches worksheets", async () => {
             ["Item", "Cost"],
             ["Rent", "1200"],
           ],
-          rowCount: 2,
+          rowNumbers: [1, 3],
+          rowCount: 3,
           columnCount: 2,
         },
         { name: "Notes", rows: [["Hello"]], rowCount: 1, columnCount: 1 },
@@ -51,6 +52,12 @@ it("renders workbook rows and switches worksheets", async () => {
   const viewer = panel.querySelector("openclaw-chat-office-preview")!;
   expect(viewer).not.toBeNull();
   expect(viewer.querySelector("table")?.textContent).toContain("Rent");
+  // Sparse worksheets keep their real row numbers instead of renumbering.
+  expect(
+    [...viewer.querySelectorAll(".sidebar-office-preview__row-number")].map((cell) =>
+      cell.textContent?.trim(),
+    ),
+  ).toEqual(["1", "3"]);
   const tabs = [...viewer.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
   expect(tabs.map((tab) => tab.textContent?.trim())).toEqual(["Budget", "Notes"]);
   expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");

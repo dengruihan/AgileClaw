@@ -242,9 +242,15 @@ function parseWorksheet(
   xml: string,
   sharedStrings: readonly string[],
   budget: CharacterBudget,
-): { sheet: Pick<SessionFileOfficeSheet, "rows" | "rowCount" | "columnCount" | "truncated"> } {
+): {
+  sheet: Pick<
+    SessionFileOfficeSheet,
+    "rows" | "rowNumbers" | "rowCount" | "columnCount" | "truncated"
+  >;
+} {
   const doc = parseXml(xml);
   const rows: string[][] = [];
+  const rowNumbers: number[] = [];
   let displayedCells = 0;
   let rowCount = 0;
   let columnCount = 0;
@@ -252,11 +258,14 @@ function parseWorksheet(
 
   for (const row of elements(doc, "row")) {
     const declaredRow = Number.parseInt(attribute(row, "r") ?? "", 10);
-    const rowNumber = Number.isSafeInteger(declaredRow) ? declaredRow : rowCount + 1;
-    rowCount = Math.max(rowCount, rowNumber);
+    // Only a positive, strictly increasing declaration is trusted. Duplicate or
+    // malformed numbers are repaired so one archive cannot label unbounded rows.
+    const rowNumber =
+      Number.isSafeInteger(declaredRow) && declaredRow > rowCount ? declaredRow : rowCount + 1;
+    rowCount = rowNumber;
     const cells = elements(row, "c");
-    if (rowNumber > OFFICE_PREVIEW_MAX_SHEET_ROWS) {
-      // Keep scanning only for declarations; rendered rows stay bounded.
+    if (rows.length >= OFFICE_PREVIEW_MAX_SHEET_ROWS) {
+      // The rendered window is full; keep counting declared columns only.
       truncated = true;
       for (const cell of cells) {
         const column = columnIndexFromReference(attribute(cell, "r"));
@@ -288,6 +297,7 @@ function parseWorksheet(
       displayedCells += 1;
     }
     rows.push(trimTrailingEmpty(values));
+    rowNumbers.push(rowNumber);
   }
 
   if (budget.exhausted) {
@@ -295,10 +305,12 @@ function parseWorksheet(
   }
   while (rows.length > 0 && rows[rows.length - 1]?.length === 0) {
     rows.pop();
+    rowNumbers.pop();
   }
   return {
     sheet: {
       rows,
+      rowNumbers,
       rowCount,
       columnCount,
       ...(truncated ? { truncated: true } : {}),
@@ -328,14 +340,14 @@ function parseXlsx(archive: OfficeZipArchive): SessionFileOfficePreview | null {
     const xml = partPath ? archive.readText(partPath) : undefined;
     if (!xml) {
       // Chartsheets and unsupported sheet kinds keep their tab without content.
-      sheets.push({ name, rows: [], rowCount: 0, columnCount: 0 });
+      sheets.push({ name, rows: [], rowNumbers: [], rowCount: 0, columnCount: 0 });
       continue;
     }
     let parsed: ReturnType<typeof parseWorksheet>;
     try {
       parsed = parseWorksheet(xml, sharedStrings, budget);
     } catch {
-      sheets.push({ name, rows: [], rowCount: 0, columnCount: 0 });
+      sheets.push({ name, rows: [], rowNumbers: [], rowCount: 0, columnCount: 0 });
       truncated = true;
       continue;
     }
@@ -453,19 +465,25 @@ function parseDocx(archive: OfficeZipArchive): SessionFileOfficePreview | null {
   return { format: "docx", blocks, ...(truncated ? { truncated: true } : {}) };
 }
 
-function shapeLines(shape: XmlElement): string[] {
+type SlideText = { lines: string[]; truncated: boolean };
+
+function shapeLines(shape: XmlElement): SlideText {
   const lines: string[] = [];
+  let truncated = false;
   for (const paragraph of elements(shape, "a:p")) {
-    const line = cleanText(
+    const text = cleanText(
       elements(paragraph, "a:t")
         .map((node) => node.textContent ?? "")
         .join(""),
     ).trim();
-    if (line) {
-      lines.push(truncate(line, OFFICE_PREVIEW_MAX_SLIDE_LINE_CHARS));
+    if (!text) {
+      continue;
     }
+    const line = truncate(text, OFFICE_PREVIEW_MAX_SLIDE_LINE_CHARS);
+    truncated ||= line.length < text.length;
+    lines.push(line);
   }
-  return lines;
+  return { lines, truncated };
 }
 
 function isTitleShape(shape: XmlElement): boolean {
@@ -474,29 +492,39 @@ function isTitleShape(shape: XmlElement): boolean {
   return type === "title" || type === "ctrTitle";
 }
 
-function parseSlide(xml: string, index: number): SessionFileOfficeSlide {
+/** Every per-slide cut reports upward so the payload never hides truncation. */
+function parseSlide(
+  xml: string,
+  index: number,
+): { slide: SessionFileOfficeSlide; truncated: boolean } {
   const doc = parseXml(xml);
   const lines: string[] = [];
   let title: string | undefined;
+  let truncated = false;
   for (const shape of elements(doc, "p:sp")) {
     const shapeText = shapeLines(shape);
-    if (shapeText.length === 0) {
+    truncated ||= shapeText.truncated;
+    if (shapeText.lines.length === 0) {
       continue;
     }
     if (title === undefined && isTitleShape(shape)) {
-      title = truncate(shapeText[0] ?? "", 512);
-      lines.push(...shapeText.slice(1));
+      const rawTitle = shapeText.lines[0] ?? "";
+      title = truncate(rawTitle, 512);
+      truncated ||= title.length < rawTitle.length;
+      lines.push(...shapeText.lines.slice(1));
       continue;
     }
-    lines.push(...shapeText);
+    lines.push(...shapeText.lines);
   }
-  const boundedLines = lines
-    .filter((line) => line.length > 0)
-    .slice(0, OFFICE_PREVIEW_MAX_SLIDE_LINES);
+  const visibleLines = lines.filter((line) => line.length > 0);
+  truncated ||= visibleLines.length > OFFICE_PREVIEW_MAX_SLIDE_LINES;
   return {
-    index,
-    ...(title ? { title } : {}),
-    lines: boundedLines,
+    slide: {
+      index,
+      ...(title ? { title } : {}),
+      lines: visibleLines.slice(0, OFFICE_PREVIEW_MAX_SLIDE_LINES),
+    },
+    truncated,
   };
 }
 
@@ -542,17 +570,18 @@ function parsePptx(archive: OfficeZipArchive): SessionFileOfficePreview | null {
     if (!xml) {
       continue;
     }
-    let slide: SessionFileOfficeSlide;
+    let parsed: ReturnType<typeof parseSlide>;
     try {
-      slide = parseSlide(xml, slides.length + 1);
+      parsed = parseSlide(xml, slides.length + 1);
     } catch {
       truncated = true;
       continue;
     }
-    slide.lines = slide.lines
+    truncated ||= parsed.truncated;
+    parsed.slide.lines = parsed.slide.lines
       .map((line) => budget.take(line, OFFICE_PREVIEW_MAX_SLIDE_LINE_CHARS))
       .filter((line) => line.length > 0);
-    slides.push(slide);
+    slides.push(parsed.slide);
   }
   if (budget.exhausted) {
     truncated = true;

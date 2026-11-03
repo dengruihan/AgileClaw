@@ -1,0 +1,185 @@
+import fs from "node:fs";
+import path from "node:path";
+import { Value } from "typebox/value";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SessionFileOfficePreviewSchema } from "../../../packages/gateway-protocol/src/schema/sessions.js";
+import {
+  buildDocxFixture,
+  buildPptxFixture,
+  buildXlsxFixture,
+  OLE_COMPOUND_FILE_HEADER,
+} from "../office-preview/office-preview.test-support.js";
+import { sessionsFilesHandlers } from "./sessions-files.js";
+import {
+  createSessionFilesHandlerInvoker,
+  createVisibleMessagesMock,
+  expectOkPayload,
+  prepareSessionFilesTest,
+  removeWorkspaceFixture,
+} from "./sessions-files.test-support.js";
+
+const hoisted = vi.hoisted(() => ({
+  execOpenPath: vi.fn(),
+  loadSessionEntry: vi.fn(),
+  resolveAgentWorkspaceDir: vi.fn(),
+  resolveDefaultAgentId: vi.fn(),
+  readDelta: vi.fn(),
+}));
+
+vi.mock("./open-path.js", async () => {
+  const actual = await vi.importActual<typeof import("./open-path.js")>("./open-path.js");
+  return { ...actual, execOpenPath: hoisted.execOpenPath };
+});
+
+vi.mock("../../agents/agent-scope.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../agents/agent-scope.js")>()),
+  resolveAgentWorkspaceDir: hoisted.resolveAgentWorkspaceDir,
+  resolveDefaultAgentId: hoisted.resolveDefaultAgentId,
+}));
+
+vi.mock("../session-utils.js", async (original) => ({
+  ...(await original<typeof import("../session-utils.js")>()),
+  loadSessionEntry: hoisted.loadSessionEntry,
+  loadGatewaySessionEntryReadOnly: hoisted.loadSessionEntry,
+}));
+
+vi.mock("../session-transcript-readers.js", async (original) => ({
+  ...(await original<typeof import("../session-transcript-readers.js")>()),
+  readSessionTranscriptVisibleMessageDeltaCore: hoisted.readDelta,
+}));
+
+const sessionKey = "agent:main:main";
+const invoke = createSessionFilesHandlerInvoker(sessionsFilesHandlers);
+function getFile(filePath: string) {
+  return invoke("sessions.files.get", { sessionKey, path: filePath });
+}
+
+const mockVisibleMessages = createVisibleMessagesMock(hoisted.readDelta);
+
+let workspaceRoot: string;
+beforeEach(() => {
+  workspaceRoot = prepareSessionFilesTest(
+    { ...hoisted, readSessionTranscriptVisibleMessageDeltaCore: hoisted.readDelta },
+    mockVisibleMessages,
+  );
+});
+
+afterEach(() => {
+  removeWorkspaceFixture(workspaceRoot);
+});
+
+describe("sessions.files office previews", () => {
+  it("bounds malformed worksheet row numbers at the RPC boundary", async () => {
+    const sheetDataXml = Array.from(
+      { length: 201 },
+      (_, index) => `<row r="1"><c r="A1"><v>${index}</v></c></row>`,
+    ).join("");
+    fs.writeFileSync(
+      path.join(workspaceRoot, "bogus-rows.xlsx"),
+      await buildXlsxFixture({ sheets: [{ name: "Bogus", sheetDataXml }], sharedStrings: [] }),
+    );
+
+    const file = expectOkPayload(await getFile("bogus-rows.xlsx")).file;
+
+    expect(file.previewKind).toBe("office");
+    expect(file.officePreview.sheets[0].rows).toHaveLength(200);
+    expect(file.officePreview.sheets[0].truncated).toBe(true);
+    expect(file.officePreview.truncated).toBe(true);
+    // The closed protocol schema rejects more than 200 rows, so the RPC payload
+    // must validate as a whole.
+    expect(Value.Check(SessionFileOfficePreviewSchema, file.officePreview)).toBe(true);
+  });
+
+  it("returns structured payloads for modern OOXML files", async () => {
+    fs.writeFileSync(path.join(workspaceRoot, "budget.xlsx"), await buildXlsxFixture());
+    fs.writeFileSync(path.join(workspaceRoot, "report.docx"), await buildDocxFixture());
+    fs.writeFileSync(path.join(workspaceRoot, "deck.pptx"), await buildPptxFixture());
+
+    const workbook = expectOkPayload(await getFile("budget.xlsx")).file;
+    expect(workbook).toMatchObject({
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      path: "budget.xlsx",
+      previewKind: "office",
+    });
+    expect(workbook.officePreview.sheets[0].rows[1]).toEqual(["Rent", "1200"]);
+
+    const document = expectOkPayload(await getFile("report.docx")).file;
+    expect(document).toMatchObject({
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      previewKind: "office",
+    });
+    expect(document.officePreview.blocks[0]).toEqual({
+      kind: "heading",
+      level: 1,
+      text: "Quarterly report",
+    });
+
+    const presentation = expectOkPayload(await getFile("deck.pptx")).file;
+    expect(presentation).toMatchObject({
+      mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      previewKind: "office",
+    });
+    expect(presentation.officePreview.slides[0]).toMatchObject({ index: 1, title: "Roadmap" });
+  });
+
+  it("degrades corrupt packages to metadata instead of failing the read", async () => {
+    const fixture = await buildXlsxFixture();
+    fs.writeFileSync(
+      path.join(workspaceRoot, "broken.xlsx"),
+      Buffer.concat([fixture.subarray(0, 64), Buffer.from("garbage")]),
+    );
+
+    const file = expectOkPayload(await getFile("broken.xlsx")).file;
+
+    expect(file).toMatchObject({
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      path: "broken.xlsx",
+      previewKind: "unsupported",
+    });
+    expect(file.officePreview).toBeUndefined();
+    expect(file.content).toBeUndefined();
+  });
+
+  it("labels legacy OLE containers without parsing them", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "legacy.xls"),
+      Buffer.concat([OLE_COMPOUND_FILE_HEADER, Buffer.alloc(512)]),
+    );
+
+    const file = expectOkPayload(await getFile("legacy.xls")).file;
+
+    expect(file).toMatchObject({
+      mimeType: "application/vnd.ms-excel",
+      path: "legacy.xls",
+      previewKind: "unsupported",
+    });
+  });
+
+  it("keeps the metadata-only preview for oversized workbooks", async () => {
+    const fixture = await buildXlsxFixture();
+    fs.writeFileSync(
+      path.join(workspaceRoot, "huge.xlsx"),
+      Buffer.concat([fixture, Buffer.alloc(9 * 1024 * 1024)]),
+    );
+
+    const file = expectOkPayload(await getFile("huge.xlsx")).file;
+
+    expect(file).toMatchObject({
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      previewKind: "unsupported",
+    });
+    expect(file.content).toBeUndefined();
+  });
+
+  it("keeps a text file renamed to .xlsx on the text preview", async () => {
+    fs.writeFileSync(path.join(workspaceRoot, "notes.xlsx"), "plain text\n", "utf8");
+
+    const payload = expectOkPayload(await getFile("notes.xlsx"));
+
+    expect(payload.file).toMatchObject({
+      content: "plain text\n",
+      contentEncoding: "utf8",
+      previewKind: "text",
+    });
+  });
+});

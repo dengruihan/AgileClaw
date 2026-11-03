@@ -235,6 +235,8 @@ export const SessionFileOfficeSheetSchema = closedObject({
   rows: Type.Array(Type.Array(Type.String({ maxLength: 4096 }), { maxItems: 200 }), {
     maxItems: 200,
   }),
+  /** True 1-based worksheet row for each rendered row; sparse sheets skip empty rows. */
+  rowNumbers: Type.Optional(Type.Array(Type.Integer({ minimum: 1 }), { maxItems: 200 })),
   /** Rows and columns the sheet declares, including ones omitted by truncation. */
   rowCount: Type.Integer({ minimum: 0 }),
   columnCount: Type.Integer({ minimum: 0 }),

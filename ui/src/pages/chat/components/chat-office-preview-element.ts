@@ -131,7 +131,7 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
                     ${sheet.rows.map(
                       (row, rowIndex) => html`<tr>
                         <th class="sidebar-office-preview__row-number" scope="row">
-                          ${rowIndex + 1}
+                          ${sheet.rowNumbers?.[rowIndex] ?? rowIndex + 1}
                         </th>
                         ${row.map((cell) => html`<td>${cell}</td>`)}
                       </tr>`,
