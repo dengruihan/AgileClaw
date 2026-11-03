@@ -84,7 +84,9 @@ const send = (message: VaultWorkerReply) => port.postMessage(message);
 let database: OpenClawStateDatabase | undefined;
 let dek: Buffer | undefined;
 let autoLockSeconds = VAULT_DEFAULT_AUTO_LOCK_SECONDS;
-let lastActivityAt = Date.now();
+let manualNow = data.clock?.startMs ?? 0;
+const clockNow = () => (data.clock ? manualNow : Date.now());
+let lastActivityAt = clockNow();
 let autoLockTimer: NodeJS.Timeout | undefined;
 
 function db(): OpenClawStateDatabase {
@@ -123,7 +125,7 @@ function audit(
       ...(options.itemRef ? { itemRef: options.itemRef } : {}),
       ...(options.reasonCode ? { reasonCode: options.reasonCode } : {}),
     },
-    Date.now(),
+    clockNow(),
   );
 }
 
@@ -145,17 +147,25 @@ function armAutoLock(): void {
     return;
   }
   autoLockTimer = setInterval(() => {
-    if (dek && Date.now() - lastActivityAt >= autoLockSeconds * 1000) {
-      zeroizeDek();
-      clearAutoLock();
-      send({ type: "locked", reason: "auto" });
-    }
+    checkAutoLock(true);
   }, 1_000);
   autoLockTimer.unref();
 }
 
+function checkAutoLock(notify: boolean): boolean {
+  if (!dek || clockNow() - lastActivityAt < autoLockSeconds * 1000) {
+    return false;
+  }
+  zeroizeDek();
+  clearAutoLock();
+  if (notify) {
+    send({ type: "locked", reason: "auto" });
+  }
+  return true;
+}
+
 function touchActivity(): void {
-  lastActivityAt = Date.now();
+  lastActivityAt = clockNow();
 }
 
 function requireDek(): Buffer {
@@ -196,7 +206,7 @@ function maintenance(): void {
   if (countVaultEntries(handle.db, owner).deletedCount === 0) {
     return;
   }
-  const now = Date.now();
+  const now = clockNow();
   const purged = write("vault.maintenance.purge-expired", (transaction) => {
     const removed = purgeExpiredVaultEntries(transaction.db, owner, now);
     if (removed > 0) {
@@ -213,7 +223,7 @@ async function initialize(passphrase: string, autoLockOption?: number): Promise<
   const normalized = validatePassphrase(passphrase);
   const lockSeconds = normalizeAutoLockSeconds(autoLockOption);
   const handle = db();
-  const now = Date.now();
+  const now = clockNow();
   const freshDek = randomBytes(VAULT_DEK_BYTES);
   const wrapSalt = randomBytes(VAULT_SALT_BYTES);
   const derived = await deriveKek(normalized, wrapSalt);
@@ -267,7 +277,7 @@ async function initialize(passphrase: string, autoLockOption?: number): Promise<
 async function unlock(passphrase: string): Promise<VaultStatus> {
   const normalized = validatePassphrase(passphrase);
   const handle = db();
-  const now = Date.now();
+  const now = clockNow();
   const record = readVaultKeyRecord(handle.db, owner);
   if (!record) {
     throw new VaultError("VAULT_UNINITIALIZED", "Set up the password vault first.");
@@ -365,7 +375,7 @@ function createEntry(input: VaultEntryCreateInput): VaultEntryMetadata {
   const activeDek = requireDek();
   const normalized = normalizeCreateInput(input);
   maintenance();
-  const now = Date.now();
+  const now = clockNow();
   const itemRef = newVaultItemRef();
   const baseEntry: VaultEntryMetadata = {
     itemRef,
@@ -438,7 +448,7 @@ function updateEntry(input: VaultEntryUpdateInput): VaultEntryMetadata {
   const keyId = readVaultKeyId();
   const current = decryptEntryFields(activeDek, owner, existing, secret, secret.keyId);
   const nextNotes = normalized.notes ?? current.notes;
-  const now = Date.now();
+  const now = clockNow();
   const nextEntry: VaultEntryMetadata = {
     ...existing,
     originScheme: normalized.scheme,
@@ -505,7 +515,7 @@ function deleteEntry(itemRef: string, revision: number): void {
       "This entry changed on another screen. Refresh and retry.",
     );
   }
-  const now = Date.now();
+  const now = clockNow();
   write("vault.delete", (transaction) => {
     softDeleteVaultEntry(transaction.db, owner, itemRef, now);
     audit(transaction, "delete", "succeeded", { itemRef });
@@ -515,7 +525,7 @@ function deleteEntry(itemRef: string, revision: number): void {
 
 function restoreEntry(itemRef: string): void {
   requireDek();
-  const now = Date.now();
+  const now = clockNow();
   write("vault.restore", (transaction) => {
     restoreVaultEntry(transaction.db, owner, itemRef, now);
     audit(transaction, "restore", "succeeded", { itemRef });
@@ -550,7 +560,7 @@ function revealEntry(
     throw new VaultError("VAULT_CORRUPTED", "The vault entry secret is missing.");
   }
   const decrypted = decryptEntryFields(requireDek(), owner, entry, secret, secret.keyId);
-  const now = Date.now();
+  const now = clockNow();
   write(`vault.${mode}`, (transaction) => {
     touchVaultEntryLastUsed(transaction.db, owner, itemRef, now);
     audit(transaction, mode, "succeeded", { itemRef });
@@ -562,7 +572,7 @@ function revealEntry(
 function setAutoLock(seconds: number): VaultStatus {
   requireDek();
   const lockSeconds = normalizeAutoLockSeconds(seconds);
-  const now = Date.now();
+  const now = clockNow();
   write("vault.set-auto-lock", (transaction) => {
     upsertVaultMeta(
       transaction.db,
@@ -643,6 +653,15 @@ async function execute(operation: VaultWorkerOperation): Promise<VaultWorkerResu
           ...(operation.before !== undefined ? { before: operation.before } : {}),
         }),
       };
+    case "internal.tick": {
+      if (!data.clock) {
+        throw new VaultError("VAULT_UNAVAILABLE", "A manual clock is not configured.");
+      }
+      manualNow += Math.max(0, operation.advanceMs);
+      checkAutoLock(false);
+      runLifecycleMaintenance();
+      return { type: "internal.tick", status: status() };
+    }
     default:
       throw new VaultError("VAULT_UNAVAILABLE", "Unknown password vault operation.");
   }
@@ -678,9 +697,10 @@ function runLifecycleMaintenance(): void {
 }
 
 runLifecycleMaintenance();
-const maintenanceIntervalMs = Math.max(100, data.maintenanceIntervalMs ?? 60 * 60_000);
-const maintenanceTimer = setInterval(runLifecycleMaintenance, maintenanceIntervalMs);
-maintenanceTimer.unref();
+if (!data.clock) {
+  const maintenanceTimer = setInterval(runLifecycleMaintenance, 60 * 60_000);
+  maintenanceTimer.unref();
+}
 
 send({ type: "ready" });
 

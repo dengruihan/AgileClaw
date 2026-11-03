@@ -46,12 +46,51 @@ describe("password clipboard cleanup", () => {
     expect(clipboard.writeText).not.toHaveBeenCalled();
   });
 
-  it("survives page teardown because the owner is module-scoped", async () => {
+  it("survives real page teardown and navigation because the owner is module-scoped", async () => {
     vi.useFakeTimers();
     const clipboard = createClipboard("synthetic-password");
+    const page = document.createElement("div");
+    document.body.append(page);
     schedulePasswordClipboardClear("synthetic-password", { delayMs: 1_000, clipboard });
-    // No page component unmount hook can cancel this timer; the module retains it.
+    page.remove();
+    window.history.pushState({}, "", "/settings/general");
+    window.dispatchEvent(new PopStateEvent("popstate"));
     expect(hasPendingPasswordClipboardClear()).toBe(true);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(clipboard.writeText).toHaveBeenCalledWith("");
+  });
+
+  it("does not let an in-flight older cleanup erase a newer vault copy", async () => {
+    vi.useFakeTimers();
+    let resolveFirstRead: ((value: string) => void) | undefined;
+    let readCount = 0;
+    const clipboard = {
+      value: "first-password",
+      readText: vi.fn(() => {
+        readCount += 1;
+        if (readCount === 1) {
+          return new Promise<string>((resolve) => {
+            resolveFirstRead = resolve;
+          });
+        }
+        return Promise.resolve(clipboard.value);
+      }),
+      writeText: vi.fn(async (next: string) => {
+        clipboard.value = next;
+      }),
+    };
+    schedulePasswordClipboardClear("first-password", { delayMs: 1_000, clipboard });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(resolveFirstRead).toBeTypeOf("function");
+
+    clipboard.value = "second-password";
+    schedulePasswordClipboardClear("second-password", { delayMs: 1_000, clipboard });
+    resolveFirstRead?.("first-password");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(clipboard.writeText).not.toHaveBeenCalled();
+    expect(clipboard.value).toBe("second-password");
+
     await vi.advanceTimersByTimeAsync(1_000);
     expect(clipboard.writeText).toHaveBeenCalledWith("");
   });

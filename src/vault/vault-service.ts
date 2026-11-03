@@ -26,7 +26,8 @@ const REQUEST_TIMEOUT_MS = 30_000;
 export type VaultServiceOptions = {
   databasePath?: string;
   env?: NodeJS.ProcessEnv;
-  maintenanceIntervalMs?: number;
+  /** Test-only manual clock; production workers use Date.now() and real timers. */
+  clock?: { mode: "manual"; startMs: number };
 };
 
 type Pending = {
@@ -135,6 +136,14 @@ export class VaultService {
     });
   }
 
+  /** Test-only: advance the manual worker clock and run its lifecycle checks. */
+  advanceClockForTests(advanceMs: number): Promise<VaultStatus> {
+    if (!this.options.clock) {
+      throw new VaultError("VAULT_UNAVAILABLE", "A manual clock is not configured.");
+    }
+    return this.request<VaultStatus>({ type: "internal.tick", advanceMs });
+  }
+
   async close(): Promise<void> {
     this.closed = true;
     await this.terminateWorker();
@@ -181,9 +190,7 @@ export class VaultService {
       workerData: {
         databasePath,
         ...(env ? { env } : {}),
-        ...(this.options.maintenanceIntervalMs !== undefined
-          ? { maintenanceIntervalMs: this.options.maintenanceIntervalMs }
-          : {}),
+        ...(this.options.clock ? { clock: this.options.clock } : {}),
       },
     });
     worker.on("message", (message: VaultWorkerReply) => {
@@ -255,6 +262,7 @@ function extractResult(type: VaultWorkerOperation["type"], result: VaultWorkerRe
     case "initialize":
     case "unlock":
     case "setAutoLock":
+    case "internal.tick":
       if (result.type === type) {
         return result.status;
       }

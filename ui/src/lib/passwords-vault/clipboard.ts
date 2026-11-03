@@ -34,21 +34,26 @@ export function schedulePasswordClipboardClear(
   }
   const token = Symbol("password-clipboard-clear");
   const timer = setTimeout(() => {
-    if (pendingClear?.token !== token) {
-      return;
-    }
-    pendingClear = undefined;
     void (async () => {
       try {
         if (!clipboard.readText) {
           return;
         }
         const current = await clipboard.readText();
+        // A newer vault copy may have scheduled its own cleanup while this read
+        // was in flight. Never let the older generation write after that point.
+        if (pendingClear?.token !== token) {
+          return;
+        }
         if (current === value) {
           await clipboard.writeText("");
         }
       } catch {
         // Never overwrite content we could not verify.
+      } finally {
+        if (pendingClear?.token === token) {
+          pendingClear = undefined;
+        }
       }
     })();
   }, delayMs);

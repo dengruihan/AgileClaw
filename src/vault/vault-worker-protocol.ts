@@ -21,7 +21,8 @@ export type VaultWorkerOperation =
   | { type: "reveal"; itemRef: string; mode: "reveal" | "copy" }
   | { type: "generate"; length?: number; includeSymbols?: boolean }
   | { type: "setAutoLock"; autoLockSeconds: number }
-  | { type: "audit.list"; limit: number; before?: number };
+  | { type: "audit.list"; limit: number; before?: number }
+  | { type: "internal.tick"; advanceMs: number };
 
 export type VaultWorkerResult =
   | { type: "status"; status: VaultStatus }
@@ -37,7 +38,8 @@ export type VaultWorkerResult =
   | { type: "reveal"; entry: VaultEntryMetadata; password: string; notes: string }
   | { type: "generate"; password: string }
   | { type: "setAutoLock"; status: VaultStatus }
-  | { type: "audit.list"; events: VaultAuditEvent[] };
+  | { type: "audit.list"; events: VaultAuditEvent[] }
+  | { type: "internal.tick"; status: VaultStatus };
 
 export type VaultWorkerRequest = {
   id: number;
@@ -59,7 +61,8 @@ export type VaultWorkerReply =
 export type VaultWorkerData = {
   databasePath: string;
   env?: Record<string, string>;
-  maintenanceIntervalMs?: number;
+  /** Test-only manual clock; production workers use Date.now() and real timers. */
+  clock?: { mode: "manual"; startMs: number };
 };
 
 export type VaultWorkerResultFor<Operation extends VaultWorkerOperation["type"]> = Extract<

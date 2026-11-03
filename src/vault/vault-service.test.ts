@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { withOpenClawTestState } from "../test-utils/openclaw-test-state.js";
+import { restoreVaultEntry } from "./vault-kernel.worker.js";
 import { VaultService } from "./vault-service.js";
 import { VaultError } from "./vault-types.js";
 
@@ -194,33 +195,48 @@ describe("personal password vault service", () => {
         await service.delete(entry.itemRef, cleared.revision);
         await service.close();
         service = undefined;
-
-        const database = new DatabaseSync(state.statePath("state", "openclaw.sqlite"));
-        database
-          .prepare("UPDATE vault_entries SET deleted_at_ms = ? WHERE item_ref = ?")
-          .run(Date.now() - 8 * 24 * 60 * 60_000, entry.itemRef);
-        database.close();
-
-        service = new VaultService({ env: state.env });
-        await service.unlock(PASSPHRASE);
-        const expire = new DatabaseSync(state.statePath("state", "openclaw.sqlite"));
-        expire
-          .prepare("UPDATE vault_entries SET deleted_at_ms = ? WHERE item_ref = ?")
-          .run(Date.now() - 8 * 24 * 60 * 60_000, entry.itemRef);
-        expire.close();
-        await expect(service.restore(entry.itemRef)).rejects.toSatisfy((error: unknown) => {
-          expectVaultError(error, "VAULT_NOT_FOUND");
-          return true;
-        });
-        await service.close();
-        service = undefined;
-        service = new VaultService({ env: state.env, maintenanceIntervalMs: 100 });
-        await service.status();
-        await expect.poll(() => countVaultRows(state), { timeout: 2_000 }).toBe(0);
-        const audit = await service.auditList(50);
-        expect(audit.map((event) => event.action)).toContain("purge-expired");
       },
     );
+  });
+
+  it("rejects an expired tombstone at the kernel boundary", async () => {
+    await withOpenClawTestState({ label: "vault-expired", scenario: "minimal" }, async (state) => {
+      service = new VaultService({
+        env: state.env,
+        clock: { mode: "manual", startMs: 1_800_000_000_000 },
+      });
+      await service.initialize(PASSPHRASE, 60);
+      const entry = await service.create({
+        originScheme: "https",
+        originHost: "example.com",
+        originPort: 443,
+        siteLabel: "Example",
+        account: "person@example.com",
+        password: SYNTHETIC_PASSWORD,
+      });
+      await service.delete(entry.itemRef, entry.revision);
+      await service.close();
+      service = undefined;
+
+      const database = new DatabaseSync(state.statePath("state", "openclaw.sqlite"));
+      let expiredError: unknown;
+      try {
+        restoreVaultEntry(
+          database,
+          { kind: "profile", id: "local" },
+          entry.itemRef,
+          1_800_000_000_000 + 8 * 24 * 60 * 60_000,
+        );
+      } catch (error) {
+        expiredError = error;
+      }
+      expectVaultError(expiredError, "VAULT_NOT_FOUND");
+      const tombstone = database
+        .prepare("SELECT deleted_at_ms FROM vault_entries WHERE item_ref = ?")
+        .get(entry.itemRef) as { deleted_at_ms: number | null } | undefined;
+      expect(tombstone?.deleted_at_ms).not.toBeNull();
+      database.close();
+    });
   });
 
   it("backs off after repeated wrong passphrases and starts locked after restart", async () => {
@@ -252,9 +268,13 @@ describe("personal password vault service", () => {
     });
   });
 
-  it("sweeps expired deletions on the worker lifecycle without list or create", async () => {
+  it("sweeps expired tombstones at startup with an injected clock", async () => {
     await withOpenClawTestState({ label: "vault-sweep", scenario: "minimal" }, async (state) => {
-      service = new VaultService({ env: state.env, maintenanceIntervalMs: 100 });
+      const startMs = 1_800_000_000_000;
+      service = new VaultService({
+        env: state.env,
+        clock: { mode: "manual", startMs },
+      });
       await service.initialize(PASSPHRASE, 60);
       const entry = await service.create({
         originScheme: "https",
@@ -265,17 +285,45 @@ describe("personal password vault service", () => {
         password: SYNTHETIC_PASSWORD,
       });
       await service.delete(entry.itemRef, entry.revision);
-      const database = new DatabaseSync(state.statePath("state", "openclaw.sqlite"));
-      database
-        .prepare("UPDATE vault_entries SET deleted_at_ms = ? WHERE item_ref = ?")
-        .run(Date.now() - 8 * 24 * 60 * 60_000, entry.itemRef);
-      database.close();
+      await service.close();
+      service = undefined;
 
-      // The scheduled lifecycle sweep, not a list/create caller, removes the row.
-      await expect.poll(() => countVaultRows(state), { timeout: 3_000 }).toBe(0);
-      expect((await service.status()).state).toBe("unlocked");
+      service = new VaultService({
+        env: state.env,
+        clock: { mode: "manual", startMs: startMs + 8 * 24 * 60 * 60_000 },
+      });
+      // Startup maintenance completes before the status reply.
+      expect((await service.status()).state).toBe("locked");
+      await service.close();
+      service = undefined;
+      expect(countVaultRows(state)).toBe(0);
+    });
+  });
+
+  it("sweeps expired tombstones on the scheduled manual tick", async () => {
+    await withOpenClawTestState({ label: "vault-tick", scenario: "minimal" }, async (state) => {
+      service = new VaultService({
+        env: state.env,
+        clock: { mode: "manual", startMs: 1_800_000_000_000 },
+      });
+      await service.initialize(PASSPHRASE, 60);
+      const entry = await service.create({
+        originScheme: "https",
+        originHost: "example.com",
+        originPort: 443,
+        siteLabel: "Example",
+        account: "person@example.com",
+        password: SYNTHETIC_PASSWORD,
+      });
+      await service.delete(entry.itemRef, entry.revision);
+      const status = await service.advanceClockForTests(8 * 24 * 60 * 60_000);
+      // Advancing past the idle interval also locks the vault; the sweep still runs.
+      expect(status.state).toBe("locked");
       const audit = await service.auditList(50);
       expect(audit.map((event) => event.action)).toContain("purge-expired");
+      await service.close();
+      service = undefined;
+      expect(countVaultRows(state)).toBe(0);
     });
   });
 
@@ -334,19 +382,16 @@ describe("personal password vault service", () => {
     });
   });
 
-  it("auto-locks after the configured idle interval", async () => {
-    await withOpenClawTestState(
-      { label: "vault-autolock", scenario: "minimal" },
-      async (state) => {
-        service = new VaultService({ env: state.env });
-        await service.initialize(PASSPHRASE, 15);
-        expect((await service.status()).state).toBe("unlocked");
-        await new Promise<void>((resolve) => {
-          setTimeout(resolve, 16_000);
-        });
-        expect((await service.status()).state).toBe("locked");
-      },
-      30_000,
-    );
+  it("auto-locks on the injected owner clock", async () => {
+    await withOpenClawTestState({ label: "vault-autolock", scenario: "minimal" }, async (state) => {
+      service = new VaultService({
+        env: state.env,
+        clock: { mode: "manual", startMs: 1_800_000_000_000 },
+      });
+      await service.initialize(PASSPHRASE, 15);
+      expect((await service.status()).state).toBe("unlocked");
+      const status = await service.advanceClockForTests(16_000);
+      expect(status.state).toBe("locked");
+    });
   });
 });
