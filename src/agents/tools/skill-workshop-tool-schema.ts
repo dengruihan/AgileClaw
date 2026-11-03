@@ -19,6 +19,10 @@ export const SKILL_WORKSHOP_ACTIONS = [
   "quarantine",
   "history",
   "restore_collection",
+  "experience_list",
+  "experience_read",
+  "experience_capture",
+  "experience_update",
 ] as const;
 
 export const SKILL_PROPOSAL_STATUSES = [
@@ -36,6 +40,10 @@ export function resolveProposalOnlyActions(updateProposals: boolean) {
     "revise",
     "list",
     "inspect",
+    "experience_list",
+    "experience_read",
+    "experience_capture",
+    ...(updateProposals ? ["experience_update"] : []),
   ];
 }
 
@@ -45,7 +53,7 @@ export function buildSkillWorkshopToolSchema(proposalRevision = false) {
       action: stringEnum(proposalRevision ? ["inspect", "revise"] : [...SKILL_WORKSHOP_ACTIONS], {
         description: proposalRevision
           ? "inspect = read the exact operator-reviewed proposal; revise = update only that proposal with the run-bound expected revision hash."
-          : "create = stage a pending proposal for a new skill; read = existing live skill when complete content fits; prepare_patch = authorize one exact non-empty span and return bounded context, with only one prepared span active per skill; patch = targeted find-and-replace after read or prepare_patch; update = stage a full-body rewrite; history = read historical collection review records (current runs use automation history); restore_collection = restore a retained backup from the previous collection reviewer; revise = existing pending proposal; list/inspect discover pending proposals (not filesystem search); evaluate runs plugin evaluators for the exact draft; apply/reject/quarantine are explicit lifecycle actions.",
+          : "create = stage a pending proposal for a new skill; experience_list/read manage this agent's private EXPERIENCE.md documents; experience_capture records durable learning whose procedure or boundary is not settled yet; experience_update replaces the whole body only after experience_read supplies the exact revision hash; read = existing live skill when complete content fits; prepare_patch = authorize one exact non-empty span and return bounded context, with only one prepared span active per skill; patch = targeted find-and-replace after read or prepare_patch; update = stage a full-body rewrite; history = read historical collection review records (current runs use automation history); restore_collection = restore a retained backup from the previous collection reviewer; revise = existing pending proposal; list/inspect discover pending proposals (not filesystem search); evaluate runs plugin evaluators for the exact draft; apply/reject/quarantine are explicit lifecycle actions.",
       }),
       proposal_id: Type.Optional(
         Type.String({
@@ -66,6 +74,24 @@ export function buildSkillWorkshopToolSchema(proposalRevision = false) {
         }),
       ),
       query: Type.Optional(Type.String({ description: "Optional query for action=list." })),
+      experience_id: Type.Optional(
+        Type.String({
+          description:
+            "Agent-private Experience id returned by experience_list. Required for experience_read and experience_update.",
+        }),
+      ),
+      experience_content: Type.Optional(
+        Type.String({
+          description:
+            "Complete EXPERIENCE.md body for experience_capture or experience_update. Frontmatter is added automatically; never include a plan or diff. experience_update replaces the whole body.",
+        }),
+      ),
+      expected_experience_hash: Type.Optional(
+        Type.String({
+          description:
+            "Exact revision hash returned by experience_read. Required for experience_update; the update fails if the document changed.",
+        }),
+      ),
       status: Type.Optional(
         stringEnum(SKILL_PROPOSAL_STATUSES, {
           description: "Optional proposal status filter for action=list.",

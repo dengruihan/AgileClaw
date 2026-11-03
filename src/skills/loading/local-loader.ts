@@ -83,9 +83,12 @@ export function loadSingleSkillDirectory(params: {
   rootRealPath: string;
   maxBytes?: number;
   rejectHardlinks?: boolean;
+  /** Instruction document owned by this root; defaults to SKILL.md. */
+  instructionFile?: string;
   onDiagnostic?: (diagnostic: LocalSkillLoadDiagnostic) => void;
 }): LoadedLocalSkill | null {
-  const skillFilePath = path.join(params.skillDir, "SKILL.md");
+  const instructionFile = params.instructionFile ?? "SKILL.md";
+  const skillFilePath = path.join(params.skillDir, instructionFile);
   const raw = readSkillFileSync({
     rootRealPath: params.rootRealPath,
     filePath: skillFilePath,
@@ -102,7 +105,12 @@ export function loadSingleSkillDirectory(params: {
   const baseDir = path.resolve(params.skillDir);
   let loaded = localSkillContentCache.get(raw);
   // An omitted name is directory-derived, including its fallback display title.
-  if (loaded && !loaded.frontmatter.name?.trim() && loaded.skill.name !== fallbackName) {
+  if (
+    loaded &&
+    (loaded.skill.documentKind !==
+      (instructionFile === "EXPERIENCE.md" ? "experience" : undefined) ||
+      (!loaded.frontmatter.name?.trim() && loaded.skill.name !== fallbackName))
+  ) {
     loaded = undefined;
   }
   if (!loaded) {
@@ -125,16 +133,19 @@ export function loadSingleSkillDirectory(params: {
       return null;
     }
     loaded = {
-      skill: materializeSkill({
-        content: raw,
-        frontmatter,
-        name,
-        description,
-        filePath,
-        baseDir,
-        source: params.source,
-        sourceOptions: { source: params.source, scope: "project", origin: "top-level" },
-      }),
+      skill: {
+        ...materializeSkill({
+          content: raw,
+          frontmatter,
+          name,
+          description,
+          filePath,
+          baseDir,
+          source: params.source,
+          sourceOptions: { source: params.source, scope: "project", origin: "top-level" },
+        }),
+        ...(instructionFile === "EXPERIENCE.md" ? { documentKind: "experience" as const } : {}),
+      },
       frontmatter,
     };
   }

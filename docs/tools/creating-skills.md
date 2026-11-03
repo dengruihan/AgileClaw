@@ -108,6 +108,15 @@ identities for the same operator do not turn a personal installation into a
 team setup. See [personal skills and revisions](/tools/skills#personal-skills-on-a-shared-gateway)
 for ownership, sharing, storage, and session behavior.
 
+## When the workflow is not settled yet
+
+Do not write a `SKILL.md` just to remember something. If the learning is worth
+keeping but its trigger, procedure, or boundary is still unclear, capture it as
+an agent-private [Experience document](/tools/self-learning#experience-documents)
+instead. Promote it to a skill through Skill Workshop once the flow is fixed,
+repeatable, and verified. A first-time task can become a skill directly when its
+boundary is clear, its flow is complete, and the result was checked.
+
 ## SKILL.md reference
 
 ### Required fields

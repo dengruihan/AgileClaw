@@ -1,5 +1,6 @@
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import {
+  buildSkillExperienceRevisionChangedErrorDetails,
   buildSkillProposalRevisionChangedErrorDetails,
   ErrorCodes,
   errorShape,
@@ -12,6 +13,7 @@ import {
 } from "../../agents/agent-scope.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
+import { ExperienceRevisionChangedError } from "../../skills/experience/experience-document.js";
 import { SkillProposalRevisionChangedError } from "../../skills/workshop/service-evaluation.js";
 import { SessionMutationAuthorizationChangedError } from "../session-mutation-authorization-error.js";
 import type {
@@ -100,7 +102,12 @@ export function defineSkillsProposalWorkspaceHandler<TParams extends { agentId?:
               expectedRevisionHash: error.expectedRevisionHash,
               currentRevisionHash: error.currentRevisionHash,
             })
-          : undefined;
+          : error instanceof ExperienceRevisionChangedError
+            ? buildSkillExperienceRevisionChangedErrorDetails({
+                expectedRevisionHash: error.expectedRevisionHash,
+                currentRevisionHash: error.currentRevisionHash,
+              })
+            : undefined;
       respond(
         false,
         undefined,

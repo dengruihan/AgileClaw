@@ -20,6 +20,7 @@ export {
   type OutboundDeliveryQueuedErrorDetails,
   type MissingScopeErrorDetails,
   type SkillProposalRevisionChangedErrorDetails,
+  type SkillExperienceRevisionChangedErrorDetails,
   type UserPrefsLimitExceededErrorDetails,
   type ProjectCloneErrorDetails,
   type ProjectCloneFailureCause,
@@ -35,7 +36,9 @@ export {
   readMissingScopeError,
   readMissingScopeErrorDetails,
   buildSkillProposalRevisionChangedErrorDetails,
+  buildSkillExperienceRevisionChangedErrorDetails,
   readSkillProposalRevisionChangedError,
+  readSkillExperienceRevisionChangedError,
 } from "../gateway-error-details.js";
 
 export const CronJobNotFoundErrorDetailsSchema = closedObject({
@@ -97,6 +100,12 @@ export const SkillProposalRevisionChangedErrorDetailsSchema = closedObject({
   currentRevisionHash: RevisionHashSchema,
 });
 
+export const SkillExperienceRevisionChangedErrorDetailsSchema = closedObject({
+  code: Type.Literal(GatewayErrorDetailCodes.SKILL_EXPERIENCE_REVISION_CHANGED),
+  expectedRevisionHash: RevisionHashSchema,
+  currentRevisionHash: RevisionHashSchema,
+});
+
 export const SessionWorkspaceRecoveryRequiredErrorDetailsSchema = closedObject({
   code: Type.Literal(GatewayErrorDetailCodes.SESSION_WORKSPACE_RECOVERY_REQUIRED),
   cause: Type.Literal("device_offline"),
@@ -123,6 +132,7 @@ export const GatewayErrorDetailsSchema = Type.Union([
   OutboundDeliveryQueuedErrorDetailsSchema,
   UserPrefsLimitExceededErrorDetailsSchema,
   SkillProposalRevisionChangedErrorDetailsSchema,
+  SkillExperienceRevisionChangedErrorDetailsSchema,
   ProjectCloneErrorDetailsSchema,
   UnknownAgentIdErrorDetailsSchema,
   WizardNotFoundErrorDetailsSchema,

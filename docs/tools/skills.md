@@ -42,10 +42,11 @@ identity and revision rather than discovered by scanning every user's files.
 | 2           | Project agent skills   | `<workspace>/.agents/skills`                         |
 | 3           | Personal agent skills  | `~/.agents/skills` (default state only)              |
 | 4           | Managed / local skills | `<state-dir>/skills`                                 |
-| 5           | Workshop skills        | `<state-dir>/agents/<agentId>/agent/workshop-skills` |
-| 6           | Bundled skills         | shipped with the install                             |
-| 6           | Custodian skills       | shipped; configured Custodian agent only             |
-| 7 — lowest  | Extra directories      | `skills.load.extraDirs` + plugin skills              |
+| 5           | Experience documents   | `<state-dir>/agents/<agentId>/agent/experience`      |
+| 6           | Workshop skills        | `<state-dir>/agents/<agentId>/agent/workshop-skills` |
+| 7           | Bundled skills         | shipped with the install                             |
+| 7           | Custodian skills       | shipped; configured Custodian agent only             |
+| 8 — lowest  | Extra directories      | `skills.load.extraDirs` + plugin skills              |
 
 When a session uses a different execution workspace, OpenClaw also loads that
 workspace's `skills/` and `.agents/skills/` directories. These skills follow the
@@ -129,11 +130,15 @@ matches your desired visibility:
 | Project-agent  | `<workspace>/.agents/skills`                         | Only that workspace's agent    |
 | Personal-agent | `~/.agents/skills`                                   | Agents using the default state |
 | Shared managed | `<state-dir>/skills`                                 | All agents using that state    |
+| Experience     | `<state-dir>/agents/<agentId>/agent/experience`      | Only that agent                |
 | Workshop       | `<state-dir>/agents/<agentId>/agent/workshop-skills` | Only that agent                |
 | Extra dirs     | `skills.load.extraDirs`                              | All agents using that config   |
 
-Workshop skills learned by one agent are not shared with another agent. Publish
-a skill to the managed library when it must be available to multiple agents.
+Workshop skills and Experience documents learned by one agent are not shared with
+another agent. Experience entries use `EXPERIENCE.md` instead of `SKILL.md` and
+appear in the same catalog marked `<kind>experience</kind>`; a namesake skill keeps
+the identity. Publish a skill to the managed library when it must be available to
+multiple agents.
 
 When `OPENCLAW_STATE_DIR` points somewhere other than the default
 `~/.openclaw`, session skill indexes exclude home-scoped personal or

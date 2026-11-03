@@ -46,7 +46,9 @@ export function isSkillDiscoveryFileWatchPath(watchPath: string): boolean {
   const basename = path.posix.basename(watchPath.replaceAll("\\", "/"));
   // Source-origin parents can be contained symlink aliases of the metadata directory.
   return (
-    (basename === "SKILL.md" || basename === SKILL_SOURCE_ORIGIN_FILENAME) &&
+    (basename === "SKILL.md" ||
+      basename === "EXPERIENCE.md" ||
+      basename === SKILL_SOURCE_ORIGIN_FILENAME) &&
     !DEFAULT_SKILLS_WATCH_IGNORED.some((re) => re.test(watchPath))
   );
 }

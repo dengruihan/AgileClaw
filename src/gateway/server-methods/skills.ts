@@ -60,6 +60,7 @@ import {
 } from "../../skills/workshop/workspace-skill-read.js";
 import { captureGatewayClientUploadCommitGuard } from "../upload-policy.js";
 import { skillsCuratorHandlers } from "./skills-curator.js";
+import { skillsExperienceHandlers } from "./skills-experience.js";
 import { handleSkillsInstall } from "./skills-install.js";
 import { skillsLibraryHandlers } from "./skills-library.js";
 import { skillProposalHistoryHandlers } from "./skills-proposal-history.js";
@@ -118,6 +119,7 @@ function buildRevisionAgentInstruction(proposal: SkillProposalReadResult) {
 
 export const skillsHandlers: GatewayRequestHandlers = {
   ...skillsCuratorHandlers,
+  ...skillsExperienceHandlers,
   ...skillsLibraryHandlers,
   ...skillsUploadHandlers,
   ...skillProposalHistoryHandlers,

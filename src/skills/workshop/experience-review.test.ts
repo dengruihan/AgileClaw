@@ -660,6 +660,16 @@ describe("skill experience review prompt", () => {
     }
   });
 
+  it("routes unsettled learning to Experience and avoids count-based promotion", () => {
+    const prompt = buildSkillExperienceReviewPrompt({}, "propose");
+    expect(prompt).toContain("private Experience (skill_workshop action=experience_capture");
+    expect(prompt).toContain("clear boundary, complete flow, and verified result");
+    expect(prompt).toContain("Never use usage frequency");
+    expect(prompt).toContain("Facts and user preferences belong to Memory");
+    expect(prompt).not.toContain("two future model round trips");
+    expect(prompt).not.toContain("at least two");
+  });
+
   it("preserves interrupted evidence", () => {
     const prompt = buildSkillExperienceReviewPrompt({ turnAborted: true }, "propose");
     expect(prompt).toContain("Only capture procedures that visibly worked");

@@ -38,7 +38,9 @@ skills.library.mutate skills.library.activate skills.library.import skills.libra
 skills.search skills.detail skills.securityVerdicts
 skills.skillCard skills.bins skills.upload.begin skills.upload.chunk skills.upload.commit
 skills.install skills.update skills.curator.status skills.curator.pin skills.curator.unpin
-skills.curator.restore skills.proposals.list skills.proposals.inspect
+skills.curator.restore skills.experience.list skills.experience.read skills.experience.create
+skills.experience.update skills.experience.retire skills.experience.restore
+skills.experience.promote skills.proposals.list skills.proposals.inspect
 skills.proposals.historyStatus skills.proposals.historyScan skills.proposals.create
 skills.proposals.update skills.proposals.revise skills.proposals.requestRevision
 skills.proposals.apply skills.proposals.reject skills.proposals.quarantine update.status

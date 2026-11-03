@@ -42,6 +42,8 @@ export type SkillWorkshopProposalMutationBudget = {
   readSkillHashes?: Map<string, string>;
   /** Single-use exact-span patch authority prepared from authoritative live content. */
   preparedSkillPatches?: Map<string, SkillWorkshopPreparedPatch>;
+  /** Bounds automatic Experience capture to one document per run. */
+  experienceCaptureUsed?: boolean;
 };
 
 /** Exact proposal revision an operator reviewed before requesting an agent-authored revision. */

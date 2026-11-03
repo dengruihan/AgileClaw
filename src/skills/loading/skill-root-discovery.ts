@@ -143,9 +143,9 @@ function createSkillDiscoveryBudget(maxCandidateDirs: number): SkillDiscoveryBud
   };
 }
 
-function hasSkillFileCandidate(skillDir: string): boolean {
+function hasSkillFileCandidate(skillDir: string, instructionFile = "SKILL.md"): boolean {
   try {
-    fs.lstatSync(path.join(skillDir, "SKILL.md"));
+    fs.lstatSync(path.join(skillDir, instructionFile));
     return true;
   } catch (error) {
     return !isMissingPathError(error);
@@ -159,12 +159,16 @@ function containsDiscoverableSkill(
     skipTopLevelDirName?: string;
     includeRoot?: boolean;
     symlinkCandidates?: boolean;
+    instructionFile?: string;
   },
 ): boolean {
   const discoveryBudget = createSkillDiscoveryBudget(opts.maxCandidateDirs);
   const queue: Array<{ dir: string; depth: number }> = [{ dir, depth: 0 }];
   for (const candidate of queue) {
-    if ((opts.includeRoot || candidate.depth > 0) && hasSkillFileCandidate(candidate.dir)) {
+    if (
+      (opts.includeRoot || candidate.depth > 0) &&
+      hasSkillFileCandidate(candidate.dir, opts.instructionFile)
+    ) {
       return true;
     }
     if (candidate.depth >= MAX_GROUPED_SKILL_SCAN_DEPTH) {
@@ -384,9 +388,10 @@ function resolveSkillFilePath(params: {
   source: string;
   skillDir: string;
   skillDirRealPath: string;
+  instructionFile?: string;
   onDiagnostic?: SkillDiscoveryReporter;
 }): string | null {
-  const candidatePath = path.join(params.skillDir, "SKILL.md");
+  const candidatePath = path.join(params.skillDir, params.instructionFile ?? "SKILL.md");
   const resolved = resolveContainedSkillPath({
     source: params.source,
     rootDir: params.skillDir,
@@ -403,6 +408,8 @@ export function discoverSkillCandidates(params: {
   source: string;
   limits: ResolvedSkillDiscoveryLimits;
   allowedSymlinkTargetRealPaths: readonly string[];
+  /** Instruction document this root owns; Experience roots use EXPERIENCE.md. */
+  instructionFile?: string;
   onDiagnostic?: SkillDiscoveryReporter;
 }): DiscoveredSkillCandidates {
   const rootDir = path.resolve(params.dir);
@@ -415,8 +422,10 @@ export function discoverSkillCandidates(params: {
     }
     return { candidates: [], rootIsSkill: false };
   }
-  // Workshop roots are containers; promotion would hide a child skill named "skills".
-  const rootIsContainer = params.source === "openclaw-workshop";
+  // Workshop and Experience roots are containers; promotion would hide a child
+  // document named "skills" or treat the agent root itself as one document.
+  const rootIsContainer =
+    params.source === "openclaw-workshop" || params.source === "openclaw-experience";
   const baseDir = rootIsContainer
     ? rootDir
     : resolveNestedSkillsRoot(params.dir, params.limits.maxCandidatesPerRoot);
@@ -432,11 +441,12 @@ export function discoverSkillCandidates(params: {
     return { candidates: [], rootIsSkill: false };
   }
 
-  if (!rootIsContainer && hasSkillFileCandidate(baseDir)) {
+  if (!rootIsContainer && hasSkillFileCandidate(baseDir, params.instructionFile)) {
     const rootSkillRealPath = resolveSkillFilePath({
       source: params.source,
       skillDir: baseDir,
       skillDirRealPath: baseDirRealPath,
+      instructionFile: params.instructionFile,
       onDiagnostic: params.onDiagnostic,
     });
     return {
@@ -503,11 +513,16 @@ export function discoverSkillCandidates(params: {
   reportTruncatedScan(childDirScan);
 
   let configuredRootCandidate: CandidateSkillDir | undefined;
-  if (!rootIsContainer && path.resolve(baseDir) !== rootDir && hasSkillFileCandidate(rootDir)) {
+  if (
+    !rootIsContainer &&
+    path.resolve(baseDir) !== rootDir &&
+    hasSkillFileCandidate(rootDir, params.instructionFile)
+  ) {
     const configuredRootSkillRealPath = resolveSkillFilePath({
       source: params.source,
       skillDir: rootDir,
       skillDirRealPath: rootRealPath,
+      instructionFile: params.instructionFile,
       onDiagnostic: params.onDiagnostic,
     });
     if (configuredRootSkillRealPath) {
@@ -523,7 +538,11 @@ export function discoverSkillCandidates(params: {
     (name) => ({
       skillDir: path.join(baseDir, name),
       name,
-      depth: name === "skills" && !hasSkillFileCandidate(path.join(baseDir, name)) ? 0 : 1,
+      depth:
+        name === "skills" &&
+        !hasSkillFileCandidate(path.join(baseDir, name), params.instructionFile)
+          ? 0
+          : 1,
     }),
   );
 
@@ -540,11 +559,12 @@ export function discoverSkillCandidates(params: {
       continue;
     }
 
-    if (hasSkillFileCandidate(candidate.skillDir)) {
+    if (hasSkillFileCandidate(candidate.skillDir, params.instructionFile)) {
       const skillMdRealPath = resolveSkillFilePath({
         source: params.source,
         skillDir: candidate.skillDir,
         skillDirRealPath,
+        instructionFile: params.instructionFile,
         onDiagnostic: params.onDiagnostic,
       });
       if (skillMdRealPath) {

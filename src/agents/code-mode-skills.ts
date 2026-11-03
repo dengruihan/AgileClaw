@@ -6,6 +6,8 @@ export type CodeModeSkill = {
   name: string;
   description: string;
   location: string;
+  /** Catalog identity so search/read surfaces can distinguish Experience documents. */
+  kind?: "skill" | "experience";
   source: Pick<Skill, "filePath" | "readContent">;
   reader?: CodeModeSkillReader;
 };
@@ -27,7 +29,7 @@ export function resolveCodeModeSkills(params: {
   }
   const candidatesByName = new Map(params.candidates.map((skill) => [skill.name, skill]));
   const result: CodeModeSkill[] = [];
-  for (const { name, location } of catalog) {
+  for (const { name, location, kind } of catalog) {
     const source = candidatesByName.get(name);
     if (!source) {
       continue;
@@ -36,6 +38,7 @@ export function resolveCodeModeSkills(params: {
       name,
       description: [source.description, source.locationNote].filter(Boolean).join("\n"),
       location,
+      kind,
       source: {
         filePath: source.filePath,
         readContent: source.readContent,

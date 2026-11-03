@@ -5,6 +5,7 @@ import { isDefaultStateDir } from "../../config/paths.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import type { PluginMetadataSnapshot } from "../../plugins/plugin-metadata-snapshot.types.js";
 import { CONFIG_DIR, resolveUserPath } from "../../utils.js";
+import { EXPERIENCE_SOURCE, resolveExperienceRoot } from "../experience/experience-root.js";
 import {
   resolvePluginSkillRoots,
   resolvePluginSkillRootsFromMetadata,
@@ -46,6 +47,12 @@ export function resolveSkillsWatchSourceRoots(
       source,
     }));
     baseRoots.push(...resolveWorkshopWatchRoots(config, agentId));
+    if (config && agentId) {
+      baseRoots.push({
+        path: resolveExperienceRoot(config, agentId),
+        source: EXPERIENCE_SOURCE,
+      });
+    }
     baseRoots.push({ path: path.join(CONFIG_DIR, "skills"), source: "openclaw-managed" });
     if (isDefaultStateDir()) {
       baseRoots.push({

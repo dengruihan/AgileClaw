@@ -39,6 +39,10 @@ import {
 } from "./skill-workshop-tool-collection.js";
 import { buildSkillWorkshopToolDescription } from "./skill-workshop-tool-description.js";
 import {
+  executeExperienceAction,
+  EXPERIENCE_TOOL_ACTIONS,
+} from "./skill-workshop-tool-experience.js";
+import {
   actionResult,
   assertAutonomousSkillSize,
   proposalMutationText,
@@ -69,6 +73,7 @@ import {
 } from "./skill-workshop-tool-schema.js";
 import { textResult } from "./tool-results.js";
 
+const EXPERIENCE_TOOL_ACTION_SET: ReadonlySet<string> = new Set(EXPERIENCE_TOOL_ACTIONS);
 const SKILL_WORKSHOP_MUTATION_ACTIONS = new Set(["create", "patch", "update", "revise"]);
 function requireProposalContent(content: string | undefined): string {
   if (content === undefined) {
@@ -178,6 +183,30 @@ export function createSkillWorkshopTool(options: SkillWorkshopToolOptions): AnyA
 
       if (action === "restore_collection") {
         return await executeSkillCollectionRestore(options);
+      }
+
+      if (EXPERIENCE_TOOL_ACTION_SET.has(action)) {
+        const experienceCaptureBudget = options.proposalMutationBudget
+          ? { used: options.proposalMutationBudget.experienceCaptureUsed === true }
+          : undefined;
+        const result = await executeExperienceAction(
+          // SAFETY: the membership check above narrows action to EXPERIENCE_TOOL_ACTIONS.
+          action as (typeof EXPERIENCE_TOOL_ACTIONS)[number],
+          params,
+          {
+            config: options.config,
+            agentId: options.agentId,
+            workspaceDir: options.workspaceDir,
+            ...(options.env ? { env: options.env } : {}),
+            ...(options.origin ? { origin: options.origin } : {}),
+            ...(experienceCaptureBudget ? { experienceCaptureBudget } : {}),
+            maxChars: projectionBudgets.artifactChars,
+          },
+        );
+        if (experienceCaptureBudget && options.proposalMutationBudget) {
+          options.proposalMutationBudget.experienceCaptureUsed = experienceCaptureBudget.used;
+        }
+        return result;
       }
 
       if (action === "history") {
