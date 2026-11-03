@@ -61,7 +61,12 @@ AgileClaw 不是 Agenda owner。
 - `src/replanner.test.ts`（15）：sentinel 停用回退 collector、两者停用的可行动错误、既有时序/预留/关闭。
 - `web/calendar.test.ts`（7）：已结束课程不进「无日期」、课程/会议/待办分类、陈旧来源标签、覆盖语义。
 
-全量结果：**5 files / 43 tests passed**（`npx vitest run`，约 4 秒）。
+全量结果：**5 files / 43 tests passed**（`pnpm test`，约 5 秒）。
+
+额外用**已部署的** `dist/src/sqlite.worker.js` 对 live 数据库的 `VACUUM INTO` 副本做了一次真实形状验收
+（不触碰 live）：副本 383 items / 139 门课程 / revision 179 → 一次 sync 收养 1 条、0 新建、revision 180，
+课程块全部锁定、来源 `managedBy:"source"`；同内容重放 `changed:false`、revision 仍为 180；课程数保持 139。
+证明旧 data 的收养与幂等语义在部署产物上成立。
 
 类型检查说明：`pnpm typecheck` 依赖宿主私有 SQLite facade 的声明构建
 （`OPENCLAW_BUILD_PRIVATE_QA=1 pnpm build:plugin-sdk:dts`）。本次该声明构建在共享 AgileClaw
