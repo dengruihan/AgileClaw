@@ -41,6 +41,7 @@ export * from "./schema/presence.js";
 export * from "./schema/push.js";
 export * from "./schema/questions.js";
 export * from "./schema/secrets.js";
+export * from "./schema/vault.js";
 export * from "./schema/session-placement.js";
 export * from "./schema/session-discussion.js";
 export * from "./schema/sessions.js";

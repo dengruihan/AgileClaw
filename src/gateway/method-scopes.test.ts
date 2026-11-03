@@ -1048,5 +1048,7 @@ describe("CLI default operator scopes", () => {
     const { CLI_DEFAULT_OPERATOR_SCOPES } = await import("./method-scopes.js");
     expect(CLI_DEFAULT_OPERATOR_SCOPES).toContain("operator.talk.secrets");
     expect(CLI_DEFAULT_OPERATOR_SCOPES).toContain("operator.questions");
+    expect(CLI_DEFAULT_OPERATOR_SCOPES).not.toContain("operator.vault");
+    expect(CLI_DEFAULT_OPERATOR_SCOPES).not.toContain("operator.vault.reveal");
   });
 });

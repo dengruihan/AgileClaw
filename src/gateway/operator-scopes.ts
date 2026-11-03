@@ -10,6 +10,8 @@ export const QUESTIONS_SCOPE = "operator.questions" as const;
 export const PAIRING_SCOPE = "operator.pairing" as const;
 export const TALK_SCOPE = "operator.talk" as const;
 export const TALK_SECRETS_SCOPE = "operator.talk.secrets" as const;
+export const VAULT_SCOPE = "operator.vault" as const;
+export const VAULT_REVEAL_SCOPE = "operator.vault.reveal" as const;
 
 const KNOWN_OPERATOR_SCOPE_VALUES = [
   ADMIN_SCOPE,
@@ -22,6 +24,8 @@ const KNOWN_OPERATOR_SCOPE_VALUES = [
   PAIRING_SCOPE,
   TALK_SCOPE,
   TALK_SECRETS_SCOPE,
+  VAULT_SCOPE,
+  VAULT_REVEAL_SCOPE,
 ] as const;
 
 /** Operator privileges advertised by gateway auth and checked by method policy. */

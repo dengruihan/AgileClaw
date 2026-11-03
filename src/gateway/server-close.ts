@@ -434,6 +434,14 @@ async function closeGatewayResources(
     });
     await shutdownStep("ai-session-resources", () => cleanupSessionResources(), warnings);
     await shutdownStep(
+      "password-vault",
+      async () => {
+        const { shutdownVaultService } = await import("../vault/vault-service.js");
+        await shutdownVaultService();
+      },
+      warnings,
+    );
+    await shutdownStep(
       "provider-transport-dispatchers",
       () => params.closeProviderTransportDispatcherPool(),
       warnings,

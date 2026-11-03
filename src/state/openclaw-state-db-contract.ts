@@ -56,6 +56,12 @@ export const FIRST_USE_STATE_TABLES = [
   "execution_owner_lifecycle_bindings",
   "outbound_message_execution_bindings",
   "outbound_message_progress",
+  "vault_entries",
+  "vault_entry_secrets",
+  "vault_keys",
+  "vault_key_wraps",
+  "vault_meta",
+  "vault_audit_events",
 ] as const;
 export const FIRST_USE_STATE_INDEXES = [
   "idx_user_profile_identities_profile_id",
@@ -77,6 +83,11 @@ export const FIRST_USE_STATE_INDEXES = [
   "outbound_message_execution_bindings_execution_event_idx",
   "outbound_message_progress_occurred_idx",
   "outbound_message_progress_run_occurred_idx",
+  "vault_entries_owner_active_account_idx",
+  "vault_entries_owner_live_idx",
+  "vault_entries_owner_deleted_idx",
+  "vault_keys_owner_live_idx",
+  "vault_audit_events_owner_sequence_idx",
 ] as const;
 // These additive tables stay optional until their feature-local lazy ensures
 // run; fold them into the next natural schema-version bump.

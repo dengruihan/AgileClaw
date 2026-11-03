@@ -26,17 +26,20 @@ import {
   QUESTIONS_SCOPE,
   READ_SCOPE,
   TALK_SECRETS_SCOPE,
+  VAULT_REVEAL_SCOPE,
+  VAULT_SCOPE,
   WRITE_SCOPE,
   isOperatorScope,
   type OperatorScope,
 } from "./operator-scopes.js";
-
 export {
   ADMIN_SCOPE,
   APPROVALS_SCOPE,
   PAIRING_SCOPE,
   QUESTIONS_SCOPE,
   READ_SCOPE,
+  VAULT_REVEAL_SCOPE,
+  VAULT_SCOPE,
   WRITE_SCOPE,
   type OperatorScope,
 };

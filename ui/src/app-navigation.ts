@@ -208,7 +208,7 @@ const SETTINGS_NAVIGATION_GROUPS = [
   },
   {
     labelKey: "nav.settingsGroupSecurity",
-    routes: ["security", "secrets", "approvals"],
+    routes: ["security", "secrets", "passwords", "approvals"],
   },
   {
     labelKey: "nav.settingsGroupSystem",
@@ -372,6 +372,7 @@ const NAVIGATION_PRESENTATION: Record<NavigationRouteId, NavigationPresentation>
   notifications: ["bell", "routeTitles.notifications", "subtitles.notifications"],
   security: navigationPresentation("shieldCheck", "security"),
   secrets: ["key", "tabs.secrets", "secretsStore.hint"],
+  passwords: ["lock", "tabs.passwords", "passwords.hint"],
   advanced: ["fileCode", "routeTitles.advanced", "subtitles.advanced"],
   debug: navigationPresentation("bug", "debug"),
   logs: navigationPresentation("scrollText", "logs"),

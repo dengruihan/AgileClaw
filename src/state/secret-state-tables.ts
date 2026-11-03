@@ -16,6 +16,12 @@ export const STATE_SECRET_TABLE_NAMES = [
   "mcp_oauth_stores",
   "native_hook_relay_bridges",
   "secret_store_entries",
+  "vault_entries",
+  "vault_entry_secrets",
+  "vault_keys",
+  "vault_key_wraps",
+  "vault_meta",
+  "vault_audit_events",
   "web_push_subscriptions",
   "worker_environment_credentials",
 ] as const;

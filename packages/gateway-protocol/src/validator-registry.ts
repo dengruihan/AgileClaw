@@ -254,6 +254,27 @@ export const validateSecretsStoreListResult = compile(S.SecretsStoreListResultSc
 export const validateSecretsStoreSetParams = compile(S.SecretsStoreSetParamsSchema);
 export const validateSecretsStoreDeleteParams = compile(S.SecretsStoreDeleteParamsSchema);
 export const validateSecretsStoreMutationResult = compile(S.SecretsStoreMutationResultSchema);
+export const validateVaultStatusParams = compile(S.VaultStatusParamsSchema);
+export const validateVaultStatusResult = compile(S.VaultStatusResultSchema);
+export const validateVaultInitializeParams = compile(S.VaultInitializeParamsSchema);
+export const validateVaultUnlockParams = compile(S.VaultUnlockParamsSchema);
+export const validateVaultLockParams = compile(S.VaultLockParamsSchema);
+export const validateVaultListParams = compile(S.VaultListParamsSchema);
+export const validateVaultListResult = compile(S.VaultListResultSchema);
+export const validateVaultCreateParams = compile(S.VaultCreateParamsSchema);
+export const validateVaultUpdateParams = compile(S.VaultUpdateParamsSchema);
+export const validateVaultDeleteParams = compile(S.VaultDeleteParamsSchema);
+export const validateVaultRestoreParams = compile(S.VaultRestoreParamsSchema);
+export const validateVaultPurgeParams = compile(S.VaultPurgeParamsSchema);
+export const validateVaultEntryMutationResult = compile(S.VaultEntryMutationResultSchema);
+export const validateVaultMutationResult = compile(S.VaultMutationResultSchema);
+export const validateVaultRevealParams = compile(S.VaultRevealParamsSchema);
+export const validateVaultRevealResult = compile(S.VaultRevealResultSchema);
+export const validateVaultGenerateParams = compile(S.VaultGenerateParamsSchema);
+export const validateVaultGenerateResult = compile(S.VaultGenerateResultSchema);
+export const validateVaultSetAutoLockParams = compile(S.VaultSetAutoLockParamsSchema);
+export const validateVaultAuditListParams = compile(S.VaultAuditListParamsSchema);
+export const validateVaultAuditListResult = compile(S.VaultAuditListResultSchema);
 // Runs before the schema: compare only numeric boundaries and leave type errors to the schema.
 function checkPulseBoundaries(data: unknown) {
   const boundaries = asNullableRecord(data)?.activityPulseBoundaries;

@@ -190,6 +190,11 @@ remote is private; restores from redacted history require re-pairing devices
 and re-authenticating providers afterward. Local (non-push) schedules keep full
 fidelity so restores are complete.
 
+The personal [password vault](/gateway/passwords-vault) follows the same rule.
+Its tables are omitted from pushed Git backups. Even a full-fidelity backup
+contains only ciphertext: restoring passwords requires the master passphrase,
+which is never stored in the database or the backup.
+
 Use `--global-only` or `--agent <id>` to narrow the Git scope. Add
 `--exclude-secrets` for a redacted Git history.
 

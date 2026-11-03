@@ -18,6 +18,8 @@ session lifecycles, or host-owned leases safe across Gateway instances.
 
 ### Keep operations at the owning store
 
+The personal password vault is a new state-database owner. Entry metadata, authenticated ciphertext, key wraps, lock metadata, and value-free vault audit rows live in first-use `vault_*` tables. The dedicated vault worker owns the data encryption key and every encrypt/decrypt operation; the Gateway main thread only routes operator RPCs. Plaintext passwords and notes are never written to SQLite, logs, transcripts, or agent tool results. `operator.admin` does not imply the explicit reveal scope. Git push backups omit the vault tables, and restoring a database leaves the vault locked. The change does not read, rewrite, or reuse `secret_store_entries`. See [Password vault](/gateway/passwords-vault).
+
 Deferred transcript projection reconciliation publishes bounded active-event and
 FTS chunks through the canonical agent database worker. The host captures the
 existing execution owner before scheduling, and revalidates it at each native

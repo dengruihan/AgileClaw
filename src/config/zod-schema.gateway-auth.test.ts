@@ -44,6 +44,8 @@ describe("Cloudflare Access OIDC GitHub identity config", () => {
 describe("gateway identity scope grants config", () => {
   test.each([
     { scope: "operator.admin", success: true },
+    { scope: "operator.vault", success: true },
+    { scope: "operator.vault.reveal", success: true },
     { scope: "operator.superuser", success: false },
   ])("validates configured scope $scope", ({ scope, success }) => {
     const result = OpenClawSchema.safeParse({

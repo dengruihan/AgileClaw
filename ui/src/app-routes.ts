@@ -51,6 +51,7 @@ import { page as memoryImportPage } from "./pages/memory-import/route.ts";
 import { page as modelProvidersPage } from "./pages/model-providers/route.ts";
 import { page as modelSetupPage } from "./pages/model-setup/route.ts";
 import { page as newSessionPage } from "./pages/new-session/route.ts";
+import { page as passwordsPage } from "./pages/passwords/route.ts";
 import { page as pluginPage } from "./pages/plugin/route.ts";
 import { pages as pluginsPages } from "./pages/plugins/route.ts";
 import { page as portalsPage } from "./pages/portals/route.ts";
@@ -108,6 +109,7 @@ const APP_ROUTE_TREE = [
   sessionsPage,
   systemsPage,
   secretsPage,
+  passwordsPage,
   searchPage,
   usagePage,
   debugPage,
