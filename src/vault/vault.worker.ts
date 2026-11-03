@@ -634,6 +634,8 @@ async function execute(operation: VaultWorkerOperation): Promise<VaultWorkerResu
           ...(operation.before !== undefined ? { before: operation.before } : {}),
         }),
       };
+    default:
+      throw new VaultError("VAULT_UNAVAILABLE", "Unknown password vault operation.");
   }
 }
 
@@ -662,5 +664,5 @@ send({ type: "ready" });
 
 process.on("exit", () => {
   zeroizeDek();
-  database?.walMaintenance.stop();
+  void database?.walMaintenance.stop();
 });

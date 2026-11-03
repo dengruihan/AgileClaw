@@ -92,7 +92,7 @@ function logFailure(log: VaultLogger | undefined, method: string, error: unknown
 
 function validateResult<T>(
   value: unknown,
-  validate: (candidate: unknown) => boolean,
+  validate: (candidate: unknown) => candidate is T,
   method: string,
 ): T {
   if (!validate(value)) {

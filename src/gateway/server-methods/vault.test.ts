@@ -105,6 +105,7 @@ describe("vault gateway methods", () => {
       requestParams: { itemRef: "vault_item" },
       scopes: ["operator.admin", "operator.vault"],
     });
+    // oxlint-disable-next-line typescript/unbound-method -- vi.fn service stub
     expect(service.reveal).not.toHaveBeenCalled();
     expect(reveal).toHaveBeenCalledWith(
       false,
@@ -118,6 +119,7 @@ describe("vault gateway methods", () => {
       requestParams: { passphrase: "correct horse battery" },
       scopes: ["operator.admin"],
     });
+    // oxlint-disable-next-line typescript/unbound-method -- vi.fn service stub
     expect(service.unlock).not.toHaveBeenCalled();
     expect(unlock).toHaveBeenCalledWith(
       false,
@@ -135,6 +137,7 @@ describe("vault gateway methods", () => {
       requestParams: { itemRef: "vault_item" },
       scopes: ["operator.admin", "operator.vault.reveal"],
     });
+    // oxlint-disable-next-line typescript/unbound-method -- vi.fn service stub
     expect(service.reveal).toHaveBeenCalledWith("vault_item", "reveal");
     expect(respond).toHaveBeenCalledWith(
       true,
@@ -180,6 +183,7 @@ describe("vault gateway methods", () => {
       },
       scopes: ["operator.vault"],
     });
+    // oxlint-disable-next-line typescript/unbound-method -- vi.fn service stub
     expect(service.create).toHaveBeenCalledWith({
       originScheme: "https",
       originHost: "example.com",

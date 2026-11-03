@@ -157,7 +157,7 @@ export class VaultService {
         this.pending.set(id, { resolve, reject, timer });
         worker.postMessage({ id, operation }, []);
       });
-      return extractResult<T>(operation.type, result);
+      return extractResult(operation.type, result) as T;
     };
     const next = this.queue.then(run, run);
     this.queue = next.catch(() => undefined);
@@ -244,47 +244,47 @@ export class VaultService {
   }
 }
 
-function extractResult<T>(type: VaultWorkerOperation["type"], result: VaultWorkerResult): T {
+function extractResult(type: VaultWorkerOperation["type"], result: VaultWorkerResult): unknown {
   switch (type) {
     case "status":
     case "initialize":
     case "unlock":
     case "setAutoLock":
       if (result.type === type) {
-        return result.status as T;
+        return result.status;
       }
       break;
     case "list":
       if (result.type === "list") {
-        return result.entries as T;
+        return result.entries;
       }
       break;
     case "create":
     case "update":
       if (result.type === type) {
-        return result.entry as T;
+        return result.entry;
       }
       break;
     case "reveal":
       if (result.type === "reveal") {
-        return { entry: result.entry, password: result.password, notes: result.notes } as T;
+        return { entry: result.entry, password: result.password, notes: result.notes };
       }
       break;
     case "generate":
       if (result.type === "generate") {
-        return result.password as T;
+        return result.password;
       }
       break;
     case "audit.list":
       if (result.type === "audit.list") {
-        return result.events as T;
+        return result.events;
       }
       break;
     case "lock":
     case "delete":
     case "restore":
     case "purge":
-      return undefined as T;
+      return undefined;
   }
   throw new VaultError("VAULT_UNAVAILABLE", "The password vault returned an invalid response.");
 }

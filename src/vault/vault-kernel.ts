@@ -84,19 +84,19 @@ function toMetadata(row: OpenClawStateKyselyDatabase["vault_entries"]): VaultEnt
     itemRef: row.item_ref,
     originScheme: row.origin_scheme as "https" | "http",
     originHost: row.origin_host,
-    originPort: Number(row.origin_port),
+    originPort: row.origin_port,
     siteLabel: row.site_label,
     account: row.account,
     ...(row.label !== null ? { label: row.label } : {}),
-    hasNotes: Number(row.has_notes) === 1,
-    revision: Number(row.revision),
+    hasNotes: row.has_notes === 1,
+    revision: row.revision,
     ...(row.password_updated_at_ms !== null
-      ? { passwordUpdatedAtMs: Number(row.password_updated_at_ms) }
+      ? { passwordUpdatedAtMs: row.password_updated_at_ms }
       : {}),
-    ...(row.last_used_at_ms !== null ? { lastUsedAtMs: Number(row.last_used_at_ms) } : {}),
-    createdAtMs: Number(row.created_at_ms),
-    updatedAtMs: Number(row.updated_at_ms),
-    ...(row.deleted_at_ms !== null ? { deletedAtMs: Number(row.deleted_at_ms) } : {}),
+    ...(row.last_used_at_ms !== null ? { lastUsedAtMs: row.last_used_at_ms } : {}),
+    createdAtMs: row.created_at_ms,
+    updatedAtMs: row.updated_at_ms,
+    ...(row.deleted_at_ms !== null ? { deletedAtMs: row.deleted_at_ms } : {}),
   };
 }
 
@@ -124,7 +124,7 @@ export function readVaultKeyRecord(
     keyId: key.key_id,
     ownerKind: key.owner_kind,
     ownerId: key.owner_id,
-    createdAtMs: Number(key.created_at_ms),
+    createdAtMs: key.created_at_ms,
     wrap: wrap
       ? {
           method: wrap.method,
@@ -134,7 +134,7 @@ export function readVaultKeyRecord(
           nonce: Buffer.from(wrap.nonce),
           wrappedDek: Buffer.from(wrap.wrapped_dek),
           keyCheck: Buffer.from(wrap.key_check),
-          ...(wrap.last_used_at_ms !== null ? { lastUsedAtMs: Number(wrap.last_used_at_ms) } : {}),
+          ...(wrap.last_used_at_ms !== null ? { lastUsedAtMs: wrap.last_used_at_ms } : {}),
         }
       : undefined,
   } as VaultKeyRecord;
@@ -153,9 +153,9 @@ export function readVaultMeta(db: DatabaseSync, owner: VaultOwner): VaultMetaRec
     return undefined;
   }
   return {
-    autoLockSeconds: Number(row.auto_lock_seconds),
-    failedAttempts: Number(row.failed_attempts),
-    ...(row.locked_until_ms !== null ? { lockedUntilMs: Number(row.locked_until_ms) } : {}),
+    autoLockSeconds: row.auto_lock_seconds,
+    failedAttempts: row.failed_attempts,
+    ...(row.locked_until_ms !== null ? { lockedUntilMs: row.locked_until_ms } : {}),
   };
 }
 
@@ -234,7 +234,7 @@ export function readVaultEntrySecret(
   return {
     itemRef: row.item_ref,
     keyId: row.key_id,
-    aadVersion: Number(row.aad_version),
+    aadVersion: row.aad_version,
     secretNonce: Buffer.from(row.secret_nonce),
     secretCiphertext: Buffer.from(row.secret_ciphertext),
     notesNonce: Buffer.from(row.notes_nonce),
@@ -551,12 +551,12 @@ export function listVaultAudit(
   const events: VaultAuditEvent[] = [];
   for (const row of rows) {
     events.push({
-      sequence: Number(row.sequence),
+      sequence: row.sequence,
       action: row.action as VaultAuditAction,
       status: row.status as VaultAuditStatus,
       ...(row.item_ref !== null ? { itemRef: row.item_ref } : {}),
       ...(row.reason_code !== null ? { reasonCode: row.reason_code } : {}),
-      occurredAtMs: Number(row.occurred_at_ms),
+      occurredAtMs: row.occurred_at_ms,
     });
   }
   return events;
