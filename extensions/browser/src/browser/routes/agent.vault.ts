@@ -531,10 +531,39 @@ export function registerBrowserVaultRoutes(
           res.json({ ok: false, status: "unavailable", reasonCode: "submit_failed" });
           return;
         }
-        // Do not leave plaintext behind if the form did not navigate away.
+        if (page.isClosed()) {
+          clearVaultFillSession(tab.targetId);
+          res.json({ ok: true, status: "filled", targetId: tab.targetId });
+          return;
+        }
+        // Best-effort clear; a disabled/read-only input may reject it. Never
+        // treat that failure as a successful cleanup.
         await passwordField.fill("", { timeout: 1_000 }).catch(() => undefined);
-        clearVaultFillSession(tab.targetId);
-        res.json({ ok: true, status: "filled", targetId: tab.targetId });
+        let retained: string | undefined;
+        try {
+          retained = await passwordField.inputValue();
+        } catch {
+          retained = undefined;
+        }
+        if (retained === "") {
+          clearVaultFillSession(tab.targetId);
+          res.json({ ok: true, status: "filled", targetId: tab.targetId });
+          return;
+        }
+        // The field is not proven empty. Clear protection only when the browser
+        // proves the approved document was replaced; if identity is unavailable
+        // or unchanged, keep masking and all guards armed.
+        const currentIdentity = await documentIdentity(page);
+        if (currentIdentity && currentIdentity.documentId !== observation.documentId) {
+          clearVaultFillSession(tab.targetId);
+          res.json({ ok: true, status: "filled", targetId: tab.targetId });
+          return;
+        }
+        res.json({
+          ok: false,
+          status: "needs_human",
+          reasonCode: "password_clear_unverified",
+        });
       },
     });
   });

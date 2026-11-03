@@ -277,9 +277,11 @@ export async function executeVaultAutofillAction(
           signal: params.signal,
           timeoutMs: EXECUTE_TIMEOUT_MS,
         });
-        submitted = submittedResult.ok;
-        if (!submitted) {
-          submitStatus = submittedResult.status;
+        if (submittedResult.ok) {
+          submitted = true;
+        } else {
+          submitted = false;
+          submitStatus = submittedResult.reasonCode ?? submittedResult.status;
         }
       } catch {
         submitted = false;

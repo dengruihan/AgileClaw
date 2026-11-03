@@ -353,5 +353,104 @@ describe.runIf(process.env.OPENCLAW_BROWSER_VAULT_E2E === "1")(
         await context.close();
       }
     }, 30_000);
+    it("keeps protection when a non-navigating submit leaves the password in a disabled field", async () => {
+      const port = await getFreePort();
+      const cdpUrl = `http://127.0.0.1:${port}`;
+      const context = await getPlaywrightCore().chromium.launchPersistentContext(
+        path.join(tempDirs.make("openclaw-vault-submit-blocked-"), "profile"),
+        {
+          headless: true,
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+          args: [`--remote-debugging-port=${port}`],
+        },
+      );
+      try {
+        const page = context.pages()[0] ?? (await context.newPage());
+        await page.route("http://127.0.0.1:11111/**", async (route) => {
+          await route.fulfill({
+            contentType: "text/html",
+            body: `<!doctype html><title>Blocked submit</title>
+              <form onsubmit="event.preventDefault(); document.body.dataset.submitted='yes'; document.querySelector('#password').disabled = true;">
+                <input id="password" type="password" autocomplete="current-password">
+                <button type="submit">Sign in</button>
+              </form>`,
+          });
+        });
+        await page.goto("http://127.0.0.1:11111/blocked");
+        const session = await context.newCDPSession(page);
+        const { targetInfo } = await session.send("Target.getTargetInfo");
+        await session.detach();
+        const targetId = targetInfo.targetId;
+
+        const state: BrowserServerState = {
+          port: 0,
+          resolved: resolveBrowserConfig({
+            defaultProfile: "vault",
+            evaluateEnabled: true,
+            ssrfPolicy: { dangerouslyAllowPrivateNetwork: true },
+            profiles: { vault: { cdpUrl, color: "#123456", attachOnly: true } },
+          }),
+          profiles: new Map(),
+        };
+        const routes = createBrowserRouteApp();
+        registerBrowserVaultRoutes(
+          routes.app,
+          createBrowserRouteContext({ getState: () => state }),
+        );
+        const observe = expectDefined(routes.postHandlers.get("/vault/observe"));
+        const fill = expectDefined(routes.postHandlers.get("/vault/fill"));
+        const submit = expectDefined(routes.postHandlers.get("/vault/submit"));
+
+        const observeResponse = createBrowserRouteResponse();
+        await observe(
+          { params: {}, query: { profile: "vault" }, body: { targetId } },
+          observeResponse.res,
+        );
+        const observation = observeResponse.body as VaultObservation;
+        expect(observation.ok).toBe(true);
+
+        const fillResponse = createBrowserRouteResponse();
+        await fill(
+          {
+            params: {},
+            query: { profile: "vault" },
+            body: {
+              targetId,
+              password: CANARY,
+              expected: expectedFrom(observation),
+            },
+          },
+          fillResponse.res,
+        );
+        expect(fillResponse.body).toMatchObject({ ok: true, status: "filled" });
+
+        const submitResponse = createBrowserRouteResponse();
+        await submit(
+          {
+            params: {},
+            query: { profile: "vault" },
+            body: { targetId, expected: expectedFrom(observation) },
+          },
+          submitResponse.res,
+        );
+        expect(submitResponse.body).toMatchObject({
+          ok: false,
+          status: "needs_human",
+          reasonCode: "password_clear_unverified",
+        });
+        expect(await page.locator("body").getAttribute("data-submitted")).toBe("yes");
+        expect(await page.locator("#password").isDisabled()).toBe(true);
+        expect(await page.locator("#password").inputValue()).toBe(CANARY);
+        expect(hasActiveVaultFill(targetId)).toBe(true);
+        expect(scrubVaultFillText(targetId, CANARY)).toBe("***");
+        expect(() =>
+          assertVaultFillActAllowed(targetId, { kind: "evaluate", fn: "() => 1" }),
+        ).toThrow(/evaluate/u);
+        clearVaultFillSession(targetId);
+      } finally {
+        await closePlaywrightBrowserConnection({ cdpUrl });
+        await context.close();
+      }
+    }, 30_000);
   },
 );

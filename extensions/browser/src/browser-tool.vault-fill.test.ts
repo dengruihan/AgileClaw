@@ -189,6 +189,34 @@ describe("browser vault autofill", () => {
     expect(mocks.browserVaultSubmit).not.toHaveBeenCalled();
   });
 
+  it("reports an uncertain submit without clearing the fill result", async () => {
+    clearVaultFillSession("target-1");
+    mocks.browserVaultObserve.mockResolvedValue(observation());
+    mocks.callGatewayTool
+      .mockResolvedValueOnce(preview())
+      .mockResolvedValueOnce({ id: "plugin:approval-1", decision: "allow-once" })
+      .mockResolvedValueOnce({
+        status: "filled",
+        itemRef: "vault_entry_1",
+        siteLabel: "Example Login",
+        origin: ORIGIN,
+      })
+      .mockResolvedValueOnce({ id: "plugin:submit-1", decision: "allow-once" });
+    mocks.browserVaultSubmit.mockResolvedValue({
+      ok: false,
+      status: "needs_human",
+      reasonCode: "password_clear_unverified",
+    });
+
+    const result = await executeVaultAutofillAction({ ...baseParams(), submit: true });
+    expect(result.details).toMatchObject({
+      status: "filled",
+      submitted: false,
+      submitStatus: "password_clear_unverified",
+    });
+    expect(JSON.stringify(result)).not.toContain(CANARY);
+  });
+
   it("rejects remote/node browsers before observing", async () => {
     const result = await executeVaultAutofillAction({
       ...baseParams(),
