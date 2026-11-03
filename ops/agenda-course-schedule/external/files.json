@@ -1,13 +1,13 @@
 {
-  "commit": "1eab93a0116b1cff455ef614888614e77efdf99f",
-  "tree": "a2271dd8ca73ed697b4aa754dfd18c5de59b2d84",
+  "commit": "53962ecd7b02c71aea7420401b2f2ef73b74d3e3",
+  "tree": "866441f5484dc858728dae4af520818fa72fd897",
   "files": {
     "dist/index.js": "23b86644ca4ca94276ca5ba1096226755df6d42fbb22d9c6efad34098c4556c7",
-    "dist/src/sqlite.worker.js": "6ff49c86d8fb469b4bb66e157ec46e08137aa510803c1d8eb2ee3db96a4c615a",
+    "dist/src/sqlite.worker.js": "bcc61d93382da511d7b59abda77e1786961eaed724bf649b66d3d7a1af5a9da7",
     "assets/app.js": "15916c510d0502aabdf6d0cf8a40eabd7dea403bb0284d81e8fcd6037fc6ff42",
     "assets/app.css": "d66021e85d36733803a7d7758f0fd042d8229fc2aefdc5cd3d36b2c90f8af421",
     "assets/index.html": "00b374426c301f71159d39c62ca0308568e5d1ab6fabbc05ecc07ae8bee2c3a6",
     "openclaw.plugin.json": "04b03539d7adac5827b681490f2c2f105b47dfefa22f45c41d3a84f5e37b7e79",
-    "skills/agenda/SKILL.md": "b12483f060268a51a836ab54f63efedc02e2d248c21b07ec553dda8529967564"
+    "skills/agenda/SKILL.md": "b657103e4ffd2dc61de80152f9cb3ecd9aa472d3c6b3419dff8c6a614cb8a9b2"
   }
 }

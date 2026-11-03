@@ -1,7 +1,7 @@
 From 5910b3fa5e427937b31b7bdc3a23868801bd9b49 Mon Sep 17 00:00:00 2001
 From: dengruihan <551310554@qq.com>
 Date: Tue, 3 Nov 2026 11:02:39 +0800
-Subject: [PATCH 1/2] feat: source-owned course sync, conflicts, and stale
+Subject: [PATCH 1/4] feat: source-owned course sync, conflicts, and stale
  coverage UI
 
 ---
@@ -3056,7 +3056,7 @@ index 2e31524..48ef9eb 100644
 From 1eab93a0116b1cff455ef614888614e77efdf99f Mon Sep 17 00:00:00 2001
 From: dengruihan <551310554@qq.com>
 Date: Tue, 3 Nov 2026 11:16:07 +0800
-Subject: [PATCH 2/2] fix: fence source-owned sources and restore evidence-free
+Subject: [PATCH 2/4] fix: fence source-owned sources and restore evidence-free
  course cancellations
 
 ---
@@ -3369,6 +3369,230 @@ index 7d84472..8bee175 100644
    cancelled: string[];
    unlisted: AgendaSyncUnlisted[];
    ignoredCancellations: AgendaSyncIgnoredCancellation[];
+-- 
+2.43.0
+
+
+From d684d0037c2696c7b395c73c91884efe5cd58368 Mon Sep 17 00:00:00 2001
+From: dengruihan <551310554@qq.com>
+Date: Tue, 3 Nov 2026 11:17:38 +0800
+Subject: [PATCH 3/4] test: reproduce the reviewed migration-as-cancellation
+ bypass
+
+---
+ src/sync.test.ts | 45 +++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 45 insertions(+)
+
+diff --git a/src/sync.test.ts b/src/sync.test.ts
+index 9c7ef96..9edc8ad 100644
+--- a/src/sync.test.ts
++++ b/src/sync.test.ts
+@@ -686,3 +686,48 @@ describe("Agenda course cancellation cannot be pre-seeded", () => {
+     expect(snapshot.blocks).toHaveLength(0);
+   });
+ });
++
++describe("Agenda source ownership migration fence", () => {
++  it("rejects migrating a local item into a source-owned source as a hidden cancellation", async () => {
++    const store = fixture();
++    await store.apply(
++      seed({
++        items: [
++          task(),
++          task({ id: "local-event", kind: "event", title: "本地安排", nextAction: "" }),
++        ],
++      }),
++      current,
++    );
++    await store.sync(syncInput({ weeks: [week({ slots: [math] })] }), current);
++    const snapshot = await store.read({ includeCompleted: true });
++    const blocked = await store.apply(
++      {
++        operationId: "migrate-cancel",
++        expectedRevision: snapshot.revision,
++        items: [
++          {
++            ...itemByTitle(snapshot, "本地安排"),
++            sourceId: "yungu-schedule",
++            sourceKey: physics.start,
++            status: "cancelled",
++          },
++        ],
++      },
++      current,
++    );
++    expect(blocked).toMatchObject({ ok: false, code: "source_owned" });
++    const unchanged = await store.read({ includeCompleted: true });
++    expect(itemByTitle(unchanged, "本地安排")).toMatchObject({
++      sourceId: "local",
++      status: "pending",
++    });
++    const result = await store.sync(
++      syncInput({ operationId: "sync-2", weeks: [week({ slots: [math, physics] })] }),
++      current,
++    );
++    expect(result).toMatchObject({ ok: true, created: [expect.any(String)], restored: [] });
++    const after = await store.read({ includeCompleted: true });
++    expect(itemByTitle(after, "物理").status).toBe("pending");
++  });
++});
+-- 
+2.43.0
+
+
+From 53962ecd7b02c71aea7420401b2f2ef73b74d3e3 Mon Sep 17 00:00:00 2001
+From: dengruihan <551310554@qq.com>
+Date: Tue, 3 Nov 2026 11:18:19 +0800
+Subject: [PATCH 4/4] fix: refresh source check time on a safe sync replay
+
+---
+ README.md              |  3 +++
+ skills/agenda/SKILL.md |  5 +++--
+ src/sqlite.worker.ts   | 36 ++++++++++++++++++++---------
+ src/sync.test.ts       | 51 ++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 83 insertions(+), 12 deletions(-)
+
+diff --git a/README.md b/README.md
+index b76cff4..eaf0851 100644
+--- a/README.md
++++ b/README.md
+@@ -163,6 +163,9 @@ item kind, or schema version is introduced.
+   its own week; otherwise the whole sync is refused (`slot_outside_week`).
+ - Identical content returns `changed: false` without bumping the revision or
+   touching item timestamps; it only refreshes the source's last check time.
++  Replaying the same `operationId` with identical content likewise refreshes
++  that source's `checkedAt` (health observation) and changes nothing else,
++  including the revision, status, coverage, and courses.
+   The receipt lists created/updated/adopted/unchanged/cancelled IDs, `unlisted`,
+   `failures`, and the derived coverage.
+ 
+diff --git a/skills/agenda/SKILL.md b/skills/agenda/SKILL.md
+index ae99cfa..90d0b22 100644
+--- a/skills/agenda/SKILL.md
++++ b/skills/agenda/SKILL.md
+@@ -31,8 +31,9 @@ never use `apply` to create, move, or cancel courses.
+   status, a school/teacher notice, or the user's own confirmation, recorded as
+   `{kind, detail, observedAt}`. A disappeared slot is not evidence, and a
+   cancelled row without evidence is restored by the next sync.
+-- A no-op `sync` does not bump the revision. Treat `changed: false` as a
+-  successful refresh, not as an unapplied batch.
++- A no-op `sync` does not bump the revision; a safe replay of the same
++  operationId only refreshes the source's last check time. Treat
++  `changed: false` as a successful refresh, not as an unapplied batch.
+ - Coverage only comes from successful weeks; a failed week leaves earlier data
+   intact and shows as an error with the failed range named. Never describe a
+   failed fetch as an empty timetable.
+diff --git a/src/sqlite.worker.ts b/src/sqlite.worker.ts
+index cd2a0da..c745d81 100644
+--- a/src/sqlite.worker.ts
++++ b/src/sqlite.worker.ts
+@@ -1048,16 +1048,32 @@ export function createSqliteWorkerBackend(
+       query.selectFrom("agenda_receipts").selectAll().where("operation_id", "=", input.operationId),
+     );
+     if (prior) {
+-      return prior.request_hash === hash
+-        ? {
+-            ok: true,
+-            revision: prior.revision,
+-            operationId: input.operationId,
+-            replayed: true,
+-            code: "replayed",
+-            ...empty(),
+-          }
+-        : fail("operation_id_reused", "此操作编号已用于不同内容，请使用新的操作编号。");
++      if (prior.request_hash !== hash) {
++        return fail("operation_id_reused", "此操作编号已用于不同内容，请使用新的操作编号。");
++      }
++      const source = snapshot.sources.find((entry) => entry.id === input.sourceId);
++      if (source) {
++        // A safe replay refreshes only the health observation timestamp:
++        // it never changes courses, coverage, status, or the revision.
++        const refreshed: AgendaSource = { ...source, checkedAt: now };
++        execute(
++          db,
++          query
++            .insertInto("agenda_sources")
++            .values({ id: refreshed.id, payload: JSON.stringify(refreshed) })
++            .onConflict((conflict) =>
++              conflict.column("id").doUpdateSet({ payload: JSON.stringify(refreshed) }),
++            ),
++        );
++      }
++      return {
++        ok: true,
++        revision: prior.revision,
++        operationId: input.operationId,
++        replayed: true,
++        code: "replayed",
++        ...empty(),
++      };
+     }
+ 
+     const weeks = input.weeks.toSorted((a, b) => a.start.localeCompare(b.start));
+diff --git a/src/sync.test.ts b/src/sync.test.ts
+index 9edc8ad..ce9affb 100644
+--- a/src/sync.test.ts
++++ b/src/sync.test.ts
+@@ -1,4 +1,5 @@
+ import { mkdtempSync, rmSync } from "node:fs";
++import { DatabaseSync } from "node:sqlite";
+ import { tmpdir } from "node:os";
+ import path from "node:path";
+ import { afterEach, describe, expect, it } from "vitest";
+@@ -731,3 +732,53 @@ describe("Agenda source ownership migration fence", () => {
+     expect(itemByTitle(after, "物理").status).toBe("pending");
+   });
+ });
++
++describe("Agenda sync replay freshness", () => {
++  it("refreshes only the source check time when the exact operation is replayed", async () => {
++    const directory = mkdtempSync(path.join(tmpdir(), "agenda-sync-replay-"));
++    directories.push(directory);
++    const databasePath = path.join(directory, "agenda.sqlite");
++    const store = openAgendaStore({ databasePath, workerModuleUrl });
++    stores.push(store);
++    const input = syncInput({ weeks: [week({ slots: [math] })] });
++    const first = await store.sync(input, current);
++    expect(first).toMatchObject({ ok: true, replayed: false });
++    const stale = "2020-01-01T00:00:00.000Z";
++    const direct = new DatabaseSync(databasePath);
++    try {
++      direct.exec("PRAGMA busy_timeout = 5000");
++      const row = direct
++        .prepare("SELECT payload FROM agenda_sources WHERE id = ?")
++        .get("yungu-schedule");
++      const payload = JSON.parse(row.payload);
++      payload.checkedAt = stale;
++      direct
++        .prepare("UPDATE agenda_sources SET payload = ? WHERE id = ?")
++        .run(JSON.stringify(payload), "yungu-schedule");
++    } finally {
++      direct.close();
++    }
++    const beforeReplay = await store.read({ includeCompleted: true });
++    expect(beforeReplay.sources.find((source) => source.id === "yungu-schedule")?.checkedAt).toBe(
++      stale,
++    );
++    const replayed = await store.sync(input, current);
++    expect(replayed).toMatchObject({
++      ok: true,
++      replayed: true,
++      changed: false,
++      revision: first.revision,
++      created: [],
++      updated: [],
++      restored: [],
++    });
++    const afterReplay = await store.read({ includeCompleted: true });
++    const source = afterReplay.sources.find((entry) => entry.id === "yungu-schedule");
++    expect(source?.checkedAt).not.toBe(stale);
++    expect(Date.parse(source.checkedAt)).toBeGreaterThan(Date.parse(stale));
++    expect(afterReplay.revision).toBe(first.revision);
++    expect(afterReplay.items).toHaveLength(1);
++    expect(afterReplay.items[0]?.status).toBe("pending");
++    expect(afterReplay.blocks).toHaveLength(1);
++  });
++});
 -- 
 2.43.0
 

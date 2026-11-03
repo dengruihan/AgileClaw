@@ -1,6 +1,6 @@
 # Agenda 来源维护课程（M18，2026-11-03）
 
-状态：**已部署并验证**。外部源码提交 `1eab93a0116b1cff455ef614888614e77efdf99f`（`~/repos/agenda`，
+状态：**已部署并验证**。外部源码提交 `53962ecd7b02c71aea7420401b2f2ef73b74d3e3`（`~/repos/agenda`，
 分支 `feat/m18-source-owned-courses`，基于 `3d275df`）的构建已复制到
 `~/.openclaw/extensions/agenda`，经原生 `plugins reload` 生效；Gateway 健康 OK，网站 revision
 部署前后均为 **179**。本包**没有导入或取消任何课程、没有发送测试消息、没有改 live 数据库**。
@@ -32,11 +32,17 @@ AgileClaw 不是 Agenda owner。
 `operation_id_reused`）；`sync` 不需要 `expectedRevision`。没有 `cancelEvidence` 的 cancelled 记录
 不能压掉课程：sync 会把它恢复为 pending 并在回执 `restored` 中列出；只有带证据的取消才保留。
 
-**预合并复审修复（P1）**：原实现只拦截「修改既有 source-owned item」，允许把普通/新建 item 放进
-`managedBy:"source"` 的来源，并可预置 `cancelled` + 未来 sourceKey 让后续 sync 跳过。现在
-`apply` 对所有 `incoming.sourceId` 属于 source-owned 来源的新建/跨来源迁入/修改一律 `source_owned`；
-`sync` 对无证据的 cancelled 条目恢复课程。回归用例覆盖：新建、跨来源迁入、预置 cancelled（无证据恢复 /
-有证据保留），均为真实 store 测试。
+**复审修复（r1 P1 + M19 复审缺陷）**：
+
+1. 原实现只拦截「修改既有 source-owned item」，允许把普通/新建 item 放进 `managedBy:"source"` 的来源，
+   并可预置 `cancelled` + 未来 sourceKey 让后续 sync 跳过。现在 `apply` 对所有 `incoming.sourceId`
+   属于 source-owned 来源的新建/跨来源迁入/修改一律 `source_owned`；`sync` 对无证据的 cancelled 条目
+   恢复课程（回执 `restored`）。回归覆盖：新建、跨来源迁入、预置 cancelled（无证据恢复/有证据保留），
+   以及 reviewer 的完整复现场景（把本地 event 迁入课表来源并置 cancelled+未来 sourceKey → 拒绝，随后
+   sync 正常创建课程）。
+2. 同 `operationId` + 同 body 的安全重放此前在 source 写入前直接返回，未刷新 `checkedAt`，与给 M19 的
+   契约不符。现在重放只刷新该来源的 `checkedAt`（健康观察时间），不 bump revision、不改课程/覆盖/状态；
+   真实 store 回归把库内 `checkedAt` 改旧后重放，断言行内时间被刷新且 revision/课程不变。
 
 ## 2. 外部仓库提交与可重放证据
 
@@ -44,9 +50,9 @@ AgileClaw 不是 Agenda owner。
 | ------------ | ------------------------------------------------------------------------------------- |
 | 仓库 / 分支  | `~/repos/agenda` · `feat/m18-source-owned-courses`                                    |
 | base         | `3d275dfea5f961c8419388d8750c83ed33c5f640`（main）                                    |
-| commit       | `1eab93a0116b1cff455ef614888614e77efdf99f`                                            |
-| tree         | `a2271dd8ca73ed697b4aa754dfd18c5de59b2d84`                                            |
-| 补丁         | `external/source.patch`（`git format-patch --stdout`，2 个提交，16 文件，+2202/−159） |
+| commit       | `53962ecd7b02c71aea7420401b2f2ef73b74d3e3`                                            |
+| tree         | `866441f5484dc858728dae4af520818fa72fd897`                                            |
+| 补丁         | `external/source.patch`（`git format-patch --stdout`，4 个提交，16 文件，+2318/−159） |
 | 构建产物哈希 | `external/files.json`（7 个安装文件）                                                 |
 | 部署记录     | `external/deploy-record.json`、`external/deploy-backup-metadata.json`                 |
 
@@ -54,7 +60,7 @@ AgileClaw 不是 Agenda owner。
 软链到 `~/repos/agenda/node_modules`，`~/repos/agenda` 主工作区未改动、仍停在 `3d275df`）。
 
 `bash verify/replay-tests.sh ~/repos/agenda` 在 `3d275df` 上 `git am` 本补丁（2 个提交），得到相同 tree，
-`node build.mjs` + `npx vitest run` 全绿（45 tests / 5 files）。`node verify/check-package.mjs
+`node build.mjs` + `npx vitest run` 全绿（47 tests / 5 files）。`node verify/check-package.mjs
 --source <built checkout>` 的 21 项证据检查全部通过。
 
 ## 3. 测试覆盖（外部仓库 `pnpm build && pnpm test` 等价）
@@ -68,7 +74,7 @@ AgileClaw 不是 Agenda owner。
 - `src/replanner.test.ts`（15）：sentinel 停用回退 collector、两者停用的可行动错误、既有时序/预留/关闭。
 - `web/calendar.test.ts`（7）：已结束课程不进「无日期」、课程/会议/待办分类、陈旧来源标签、覆盖语义。
 
-全量结果：**5 files / 45 tests passed**（`pnpm test`，约 5 秒）；其中 `src/sync.test.ts` 9 项，含上述 P1 回归。
+全量结果：**5 files / 47 tests passed**（`pnpm test`，约 5 秒）；其中 `src/sync.test.ts` 11 项，含上述 P1 与 replay freshness 回归。
 
 额外用**已部署的** `dist/src/sqlite.worker.js` 对 live 数据库的 `VACUUM INTO` 副本做了一次真实形状验收
 （不触碰 live）：副本 383 items / 139 门课程 / revision 179 → 一次 sync 收养 1 条、0 新建、revision 180，
@@ -110,9 +116,9 @@ node scripts/deploy.mjs --source ../../.external/agenda      # 计划
 node scripts/deploy.mjs --source ../../.external/agenda --yes
 ```
 
-2026-11-03T03:16:23Z（P1 修复后的最终部署）实际执行结果：
+2026-11-03T03:18:37Z（P1 + replay freshness 修复后的最终部署）实际执行结果：
 
-- 部署前备份：`~/.openclaw/backups/agenda-course-schedule/2026-11-03T03-16-23-277Z`
+- 部署前备份：`~/.openclaw/backups/agenda-course-schedule/2026-11-03T03-18-37-217Z`
   （上一版 `dist/`、`assets/`、`skills/`、manifest，外加 VACUUM INTO 数据库快照
   `agenda.sqlite.snapshot`，sha256 `f47a039ad0c93f48fe4d87fcbd1891af3e268d771b4be41f5c58efb1bc499d51`）；
 - 源提交与 7 个产物哈希在复制前校验；
@@ -120,8 +126,9 @@ node scripts/deploy.mjs --source ../../.external/agenda --yes
 - `openclaw gateway health`：OK；
 - `/agenda/api/status` revision **179 → 179**（无数据写入）；
 - 7 个安装文件逐字节匹配 `external/files.json`；线上 `app.js` sha256 `15916c51…`（UI 未变，截图仍有效）；
-- 用已部署 worker 对 live 库副本验收：139 门课程收养 1 条、0 新建、revision 179→180，重放
-  `changed:false`；随后向 `yungu-schedule` 新建 item 的 apply 被拒 `source_owned` 且 revision 仍 180；
+- 用已部署 worker 对 live 库副本验收：139 门课程收养 1 条、0 新建、revision 179→180；把副本
+  `checkedAt` 改旧后同 operationId 重放：`replayed:true, changed:false`、revision 仍 180、`checkedAt`
+  被刷新、课程仍 139；随后向 `yungu-schedule` 新建 item 的 apply 被拒 `source_owned` 且 revision 仍 180；
 - 线上区间读返回新 `range` 摘要（今日 0 blocks / 162 unscheduled / coverage 未覆盖，逐源 `stale`），
   `GET /api/sync` = 405、无凭据 `POST /api/sync` = 403。
 
@@ -131,7 +138,9 @@ node scripts/deploy.mjs --source ../../.external/agenda --yes
 ## 6. 回滚
 
 ```bash
-# 只回退 P1 修复（回到上一版 M18 构建）：
+# 只回退 replay freshness 修复（回到 1eab93a 构建）：
+scripts/rollback.sh ~/.openclaw/backups/agenda-course-schedule/2026-11-03T03-18-37-217Z
+# 只回退 P1 修复（回到 5910b3f 构建）：
 scripts/rollback.sh ~/.openclaw/backups/agenda-course-schedule/2026-11-03T03-16-23-277Z
 # 整体回退到 M18 之前的 main 构建：
 scripts/rollback.sh ~/.openclaw/backups/agenda-course-schedule/2026-11-03T03-04-02-920Z
@@ -148,7 +157,8 @@ M19 的 collector 用本机 HTTP 路由写课表，刻意避免脚本直接开 S
 2. `POST http://127.0.0.1:18810/agenda/api/sync`，头 `Content-Type: application/json`、`Origin`
    与请求 Host 完全一致（`http://127.0.0.1:18810`）、`X-Agenda-CSRF`；
 3. body 为 `{operationId, sourceId, label?, window, weeks[], cancellations?}`；`changed:false` 视为成功刷新；
-   `operationId` 按「同窗口同内容」确定性生成，内容变化才换 id。
+   `operationId` 按「同窗口同内容」确定性生成，内容变化才换 id。未知结果重试同一 operationId 时，服务端
+   只刷新该来源的 `checkedAt`，不 bump revision、不改课程——重放是安全且会留下新鲜健康观察的。
 
 `sync` 的归属语义：首次 sync 会把该来源标为 `managedBy:"source"`，此后该来源下**所有**事项对 Agent
 只读（包括历史上以 agent 身份登记的条目）。当前 `yungu-schedule` 的 139 条旧课程正属于这种情况；
