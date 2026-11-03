@@ -1,5 +1,6 @@
 import { toErrorObject } from "@openclaw/normalization-core";
 import { property, state } from "lit/decorators.js";
+import { LazyCustomElementRequestController } from "../../../app/lazy-custom-element.ts";
 import {
   localEditorFilePath,
   observeNativeGateway,
@@ -24,6 +25,7 @@ import { FileCopyController } from "./chat-file-copy-controller.ts";
 import { captureFileEditorDraft, readFileDraft, setFileDraft } from "./chat-file-drafts.ts";
 import { FileHtmlPreviewController } from "./chat-html-preview.ts";
 import { releaseChatMediaResourceSubscriber } from "./chat-message-media.ts";
+import { officePreviewElement, renderOfficePreview } from "./chat-office-preview.ts";
 import type {
   FileSidebarNavigation,
   AttachmentSidebarRuntime,
@@ -88,6 +90,8 @@ class ChatDetailPanel extends OpenClawLightDomElement {
     () => this.currentFileText(),
   );
 
+  private readonly officePreviewLoader = new LazyCustomElementRequestController(this);
+
   private fileOperationVersion = 0;
   private showingRawText = false;
   private rawFileContent: FileSidebarContent | null = null;
@@ -115,6 +119,7 @@ class ChatDetailPanel extends OpenClawLightDomElement {
 
   override disconnectedCallback() {
     this.attachmentDownload.cancel();
+    this.officePreviewLoader.requestWhileActive(officePreviewElement, false);
     document.removeEventListener("pointerdown", this.handleDocumentPointerDown);
     if (this.fileDirty) {
       this.fileDraftContent = this.currentFileText();
@@ -722,6 +727,10 @@ class ChatDetailPanel extends OpenClawLightDomElement {
       onAttachmentUpdate: this.requestAttachmentUpdate,
       attachmentRuntime: this.attachmentRuntime,
       attachmentDownload: this.attachmentDownload,
+      officePreview: renderOfficePreview(
+        this.officePreviewLoader,
+        this.visibleContent?.kind === "office" ? this.visibleContent : null,
+      ),
     });
   }
 }

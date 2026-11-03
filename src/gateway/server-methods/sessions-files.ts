@@ -484,7 +484,11 @@ async function handleSessionFilesRead(
               ? "outside_session_boundary"
               : undefined,
           );
-      } else if (typeof file.content !== "string" && file.previewKind !== "unsupported") {
+      } else if (
+        typeof file.content !== "string" &&
+        file.previewKind !== "unsupported" &&
+        file.previewKind !== "office"
+      ) {
         failure = () => respondSessionFileTooLarge(respond, file, request.params.path);
       }
       result = fileResult;

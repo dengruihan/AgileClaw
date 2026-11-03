@@ -13,6 +13,12 @@ import { insideGitCheckout } from "../../agents/worktrees/git.js";
 import { FsSafeError } from "../../infra/fs-safe.js";
 import { isPathInside } from "../../infra/path-guards.js";
 import { BROWSER_IMAGE_MIME_TYPES } from "../../shared/browser-image-mime-types.js";
+import {
+  OFFICE_PREVIEW_MAX_BYTES,
+  readOfficePreview,
+  resolveOfficePreviewTarget,
+  type OfficePreviewTarget,
+} from "../office-preview/office-preview.js";
 import { WORKSPACE_PREVIEW_MAX_BYTES } from "../workspace-file-limits.js";
 import { resolveSessionFileReadTarget, type SessionFileReadBoundary } from "./session-file-read.js";
 import {
@@ -161,10 +167,42 @@ function isDetectedTextMime(mimeType: string): boolean {
   );
 }
 
+const ZIP_LOCAL_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+const OLE_COMPOUND_FILE_HEADER = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+
+function hasSignature(buffer: Buffer, signature: Buffer): boolean {
+  return (
+    buffer.length >= signature.length && buffer.subarray(0, signature.length).equals(signature)
+  );
+}
+
 export async function populateSessionFilePreview(
   entry: SessionFileEntry,
   buffer: Buffer,
 ): Promise<void> {
+  // OOXML packages are zipped parts, so the file type alone cannot select the
+  // preview: a renamed text file still gets its text preview below.
+  const officeTarget = resolveOfficePreviewTarget(entry.path);
+  if (officeTarget?.kind === "modern" && hasSignature(buffer, ZIP_LOCAL_HEADER)) {
+    const preview = await readOfficePreview(buffer, officeTarget.format);
+    if (preview) {
+      entry.mimeType = officeTarget.mimeType;
+      entry.previewKind = "office";
+      entry.officePreview = preview;
+    } else {
+      // Corrupt, encrypted, or over-limit packages keep the declared type.
+      entry.mimeType = officeTarget.mimeType;
+      entry.previewKind = "unsupported";
+    }
+    return;
+  }
+  if (officeTarget?.kind === "legacy" && hasSignature(buffer, OLE_COMPOUND_FILE_HEADER)) {
+    // Legacy OLE containers need an OLE reader; report the real file family
+    // instead of the sniffed container type.
+    entry.mimeType = officeTarget.mimeType;
+    entry.previewKind = "unsupported";
+    return;
+  }
   const mimeType = await detectMime({ buffer });
   if (mimeType && BROWSER_IMAGE_MIME_TYPES.has(mimeType)) {
     entry.mimeType = mimeType;
@@ -194,7 +232,14 @@ function applyOversizedFileMetadata(
   entry: SessionFileEntry,
   buffer: Buffer,
   mimeType?: string,
+  officeTarget?: OfficePreviewTarget,
 ): void {
+  // A legacy Office container only needs the sniffed prefix to name its family.
+  if (officeTarget?.kind === "legacy" && hasSignature(buffer, OLE_COMPOUND_FILE_HEADER)) {
+    entry.mimeType = officeTarget.mimeType;
+    entry.previewKind = "unsupported";
+    return;
+  }
   const prefixIsText = decodeUtf8Strict(buffer) !== undefined;
   if ((!mimeType && prefixIsText) || (mimeType && isDetectedTextMime(mimeType) && prefixIsText)) {
     return;
@@ -249,14 +294,54 @@ async function toSessionFileEntry(
   if (!opts.includeContent) {
     return entry;
   }
+  const officeTarget = resolveOfficePreviewTarget(touched.path);
+  if (officeTarget?.kind === "modern") {
+    // A modern package needs the whole file even when it exceeds the text cap.
+    if (stat.size > OFFICE_PREVIEW_MAX_BYTES) {
+      entry.mimeType = officeTarget.mimeType;
+      entry.previewKind = "unsupported";
+      return entry;
+    }
+    const officeRead = await readWorkspaceFile(readRoot, browserPath, {
+      assertCurrent: opts.assertCurrent,
+      maxBytes: OFFICE_PREVIEW_MAX_BYTES,
+    });
+    if (!officeRead) {
+      return { ...base, missing: true };
+    }
+    if (officeRead === "too-large") {
+      // A workspace host that cannot serve the bytes still reports metadata
+      // instead of failing the whole read as an unpresentable text file.
+      entry.mimeType = officeTarget.mimeType;
+      entry.previewKind = "unsupported";
+      return entry;
+    }
+    entry.workspacePath = target.outside ? target.absolutePath : officeRead.canonicalPath;
+    entry.size = officeRead.stat.size;
+    entry.updatedAtMs = toUpdatedAtMs(officeRead.stat.mtimeMs);
+    await populateSessionFilePreview(entry, officeRead.buffer);
+    if (officeRead.readOnly || target.outside) {
+      delete entry.hash;
+    }
+    return entry;
+  }
   const inline = stat.size <= WORKSPACE_PREVIEW_MAX_BYTES;
   const read = inline
-    ? await readWorkspaceFile(readRoot, browserPath, { assertCurrent: opts.assertCurrent })
+    ? await readWorkspaceFile(readRoot, browserPath, {
+        assertCurrent: opts.assertCurrent,
+        maxBytes: WORKSPACE_PREVIEW_MAX_BYTES,
+      })
     : await readWorkspaceFilePrefix(readRoot, browserPath, MIME_SNIFF_PREFIX_BYTES);
   if (!read) {
     return { ...base, missing: true };
   }
-  if (read === "too-large" || read === "unsupported") {
+  if (read === "unsupported") {
+    // Hosts that cannot serve a byte prefix (node-backed workspaces) keep the
+    // metadata-only preview instead of failing the read as a too-large file.
+    entry.previewKind = "unsupported";
+    return entry;
+  }
+  if (read === "too-large") {
     return entry;
   }
   entry.workspacePath = target.outside ? target.absolutePath : read.canonicalPath;
@@ -268,7 +353,12 @@ async function toSessionFileEntry(
       delete entry.hash;
     }
   } else {
-    applyOversizedFileMetadata(entry, read.buffer, await detectMime({ buffer: read.buffer }));
+    applyOversizedFileMetadata(
+      entry,
+      read.buffer,
+      await detectMime({ buffer: read.buffer }),
+      officeTarget,
+    );
   }
   return entry;
 }

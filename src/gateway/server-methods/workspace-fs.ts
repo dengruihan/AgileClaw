@@ -36,7 +36,10 @@ type WorkspaceFileReadResult = {
 
 export const enqueueWorkspaceFileUpdate = createAsyncLock();
 
-export async function openWorkspaceRoot(rootDir: string): Promise<WorkspaceRoot | undefined> {
+export async function openWorkspaceRoot(
+  rootDir: string,
+  options?: { maxBytes?: number },
+): Promise<WorkspaceRoot | undefined> {
   // Resolve the owner before trying local storage. A stopped remote binding must
   // remain unavailable rather than exposing a Gateway-side copy.
   const access = getAgentWorkspaceAccess(rootDir);
@@ -46,7 +49,7 @@ export async function openWorkspaceRoot(rootDir: string): Promise<WorkspaceRoot 
   try {
     return await fsSafeRoot(rootDir, {
       hardlinks: "reject",
-      maxBytes: WORKSPACE_PREVIEW_MAX_BYTES,
+      maxBytes: options?.maxBytes ?? WORKSPACE_PREVIEW_MAX_BYTES,
       symlinks: "reject",
     });
   } catch {
@@ -161,7 +164,12 @@ export async function readWorkspaceFile(
   browserPath: string,
   opts?: { maxBytes?: number; assertCurrent?: () => void },
 ): Promise<WorkspaceFileReadResult | undefined | "too-large"> {
-  const workspaceRoot = typeof rootDir === "string" ? await openWorkspaceRoot(rootDir) : rootDir;
+  const workspaceRoot =
+    typeof rootDir === "string"
+      ? // The root's byte ceiling is fixed at open time; a caller asking for a
+        // larger window (Office previews) needs a root opened with that ceiling.
+        await openWorkspaceRoot(rootDir, { maxBytes: opts?.maxBytes })
+      : rootDir;
   if (!workspaceRoot) {
     return undefined;
   }

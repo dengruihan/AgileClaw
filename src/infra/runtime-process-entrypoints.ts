@@ -20,6 +20,7 @@ export const runtimeProcessEntrypoints = {
   spawnBroker: runtimeProcessEntrypoint("process/spawn-broker/worker"),
   cronStreamMatcher: runtimeProcessEntrypoint("gateway/cron-stream-matcher.worker"),
   controlUiFile: runtimeProcessEntrypoint("gateway/control-ui-file.worker"),
+  officePreview: runtimeProcessEntrypoint("gateway/office-preview/office-preview.worker"),
   nodeBootstrapArtifact: runtimeProcessEntrypoint(
     "gateway/worker-environments/node-bootstrap-artifact.worker",
   ),

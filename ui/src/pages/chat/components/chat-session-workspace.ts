@@ -216,6 +216,23 @@ function openFile(
           rawText: file.workspacePath || file.path || path,
         };
       }
+      if (file.previewKind === "office") {
+        const preview = file.officePreview;
+        if (!preview) {
+          // An office kind without its payload still renders the metadata panel
+          // instead of failing the open.
+          return {
+            ...unsupportedFileSidebarContent(file, path),
+            fileLinkSessionKey: result.sessionKey,
+          };
+        }
+        return {
+          kind: "office",
+          title: name,
+          format: preview.format,
+          preview,
+        };
+      }
       if (file.previewKind === "unsupported") {
         return {
           ...unsupportedFileSidebarContent(file, path),

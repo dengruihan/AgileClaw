@@ -7,6 +7,12 @@ import { createDeferred } from "../../../test/helpers/promise.js";
 import { useAutoCleanupTempDirTracker } from "../../../test/helpers/temp-dir.js";
 import { registerAgentWorkspaceAccess } from "../../agents/workspace-access.js";
 import { root as openSafeRoot } from "../../infra/fs-safe.js";
+import {
+  buildDocxFixture,
+  buildPptxFixture,
+  buildXlsxFixture,
+  OLE_COMPOUND_FILE_HEADER,
+} from "../office-preview/office-preview.test-support.js";
 import { resolveOpenPathCommand } from "./open-path.js";
 import { sessionsFilesHandlers } from "./sessions-files.js";
 import {
@@ -784,7 +790,16 @@ describe("sessions.files preview formats", () => {
       }),
     );
     expect(reveal).toMatchObject({ ok: false, error: expect.stringContaining("remote host") });
-    expect(expectError(await getFile("large.txt")).details.type).toBe("session_file_too_large");
+    // Node-backed workspaces cannot serve a byte prefix, so an oversized file
+    // keeps its metadata-only preview instead of failing the whole read.
+    const oversized = expectOkPayload(await getFile("large.txt")).file;
+    expect(oversized).toMatchObject({
+      missing: false,
+      path: "large.txt",
+      previewKind: "unsupported",
+      size: 256 * 1024 + 1,
+    });
+    expect(oversized.content).toBeUndefined();
     expect(readFile).toHaveBeenCalledTimes(1);
     await expect(
       invoke("sessions.files.set", {
@@ -842,6 +857,101 @@ describe("sessions.files preview formats", () => {
       hash: hashContent(fixture.content),
       mimeType: fixture.mimeType,
       path: fileName,
+      previewKind: "text",
+    });
+  });
+});
+
+describe("sessions.files office previews", () => {
+  it("returns structured payloads for modern OOXML files", async () => {
+    fs.writeFileSync(path.join(workspaceRoot, "budget.xlsx"), await buildXlsxFixture());
+    fs.writeFileSync(path.join(workspaceRoot, "report.docx"), await buildDocxFixture());
+    fs.writeFileSync(path.join(workspaceRoot, "deck.pptx"), await buildPptxFixture());
+
+    const workbook = expectOkPayload(await getFile("budget.xlsx")).file;
+    expect(workbook).toMatchObject({
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      path: "budget.xlsx",
+      previewKind: "office",
+    });
+    expect(workbook.officePreview.sheets[0].rows[1]).toEqual(["Rent", "1200"]);
+
+    const document = expectOkPayload(await getFile("report.docx")).file;
+    expect(document).toMatchObject({
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      previewKind: "office",
+    });
+    expect(document.officePreview.blocks[0]).toEqual({
+      kind: "heading",
+      level: 1,
+      text: "Quarterly report",
+    });
+
+    const presentation = expectOkPayload(await getFile("deck.pptx")).file;
+    expect(presentation).toMatchObject({
+      mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      previewKind: "office",
+    });
+    expect(presentation.officePreview.slides[0]).toMatchObject({ index: 1, title: "Roadmap" });
+  });
+
+  it("degrades corrupt packages to metadata instead of failing the read", async () => {
+    const fixture = await buildXlsxFixture();
+    fs.writeFileSync(
+      path.join(workspaceRoot, "broken.xlsx"),
+      Buffer.concat([fixture.subarray(0, 64), Buffer.from("garbage")]),
+    );
+
+    const file = expectOkPayload(await getFile("broken.xlsx")).file;
+
+    expect(file).toMatchObject({
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      path: "broken.xlsx",
+      previewKind: "unsupported",
+    });
+    expect(file.officePreview).toBeUndefined();
+    expect(file.content).toBeUndefined();
+  });
+
+  it("labels legacy OLE containers without parsing them", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "legacy.xls"),
+      Buffer.concat([OLE_COMPOUND_FILE_HEADER, Buffer.alloc(512)]),
+    );
+
+    const file = expectOkPayload(await getFile("legacy.xls")).file;
+
+    expect(file).toMatchObject({
+      mimeType: "application/vnd.ms-excel",
+      path: "legacy.xls",
+      previewKind: "unsupported",
+    });
+  });
+
+  it("keeps the metadata-only preview for oversized workbooks", async () => {
+    const fixture = await buildXlsxFixture();
+    fs.writeFileSync(
+      path.join(workspaceRoot, "huge.xlsx"),
+      Buffer.concat([fixture, Buffer.alloc(9 * 1024 * 1024)]),
+    );
+
+    const file = expectOkPayload(await getFile("huge.xlsx")).file;
+
+    expect(file).toMatchObject({
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      previewKind: "unsupported",
+    });
+    expect(file.content).toBeUndefined();
+  });
+
+  it("keeps a text file renamed to .xlsx on the text preview", async () => {
+    fs.writeFileSync(path.join(workspaceRoot, "notes.xlsx"), "plain text\n", "utf8");
+
+    const payload = expectOkPayload(await getFile("notes.xlsx"));
+
+    expect(payload.file).toMatchObject({
+      content: "plain text\n",
+      contentEncoding: "utf8",
       previewKind: "text",
     });
   });
