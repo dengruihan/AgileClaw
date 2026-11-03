@@ -2,6 +2,8 @@
 
 状态：**已就绪，未部署**。本包只替换 `collector-notify` 里一行过时的邮件示例，未修改 live 工作区、cron、`~/.openclaw/openclaw.json`、Gateway 或任何消息；部署由 tower 在独立复审后执行。
 
+> **M15 取代（2026-11-03）**：本包的 `collector-notify` 副本是 M15 部署前的基线（sha256 `f62eeab1…`），其邮件示例含已被证实的「记进便单」错误措辞。M15（`ops/collector-agenda-wording-fix`）已把该文件更新为 Agenda-only 措辞和「只说本轮做过的动作」规则。本包保留为 M13 切片的逐字证据，**不要在 M15 之后重新部署**；它的 live 基线已不匹配，默认会拒绝。
+
 依赖：M11（灯效入口清理）与 M12（Agent 邮件正文分诊）已上线。本包基线就是 M11/M12 之后的 live `collector-notify`：sha256 `6be95ab3…`，2216 bytes。
 
 ## 1. 为什么改

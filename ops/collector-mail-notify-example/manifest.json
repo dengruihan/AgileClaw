@@ -3,6 +3,8 @@
   "name": "collector-mail-notify-example",
   "mission": "M13",
   "createdFor": "2026-11-03",
+  "supersededBy": "ops/collector-agenda-wording-fix (M15)",
+  "supersededAt": "2026-11-03",
   "target": {
     "path": "home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md",
     "owner": "collector-notify skill: notification wording and channel",

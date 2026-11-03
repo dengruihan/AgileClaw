@@ -2,6 +2,8 @@
 
 状态：**已就绪，未部署**。本包未修改 live cron、`~/.openclaw` 工作区、Gateway、邮件索引或任何消息；部署由 tower 在独立复审后执行。真实 notmuch 只读验证已在本机执行（见第 7 节），未读取或输出真实邮件内容。
 
+> **M15 口径更新（2026-11-03）**：本包的 `collector-source-triage` 与 `payload-message.txt` 副本是 M15 部署前的基线，仍含「登记便单或排程」措辞。M15（`ops/collector-agenda-wording-fix`）已把两处改为 Agenda，并新增通知只描述本轮真实动作的规则。本包保留为 M12 切片的逐字证据，**不要在 M15 之后重新部署**；live 基线已不匹配，默认会拒绝。
+
 覆盖对象：线上自动化 `collector`（id `6a45be21-ce0b-4b8b-8986-4c885d1ea659`，`displayName=统一事项收集`，每 10 分钟评估，`sessionTarget=isolated`）。M10 已把 3276 chars 的操作手册换成 skill 调度器；本包只改邮件这一条职责。
 
 r1 修订（2026-11-03）：初版的 `collection/state/mail-triage.json` 水位 sidecar 违反根 `AGENTS.md` 的 SQLite/state owner 规则，已完全移除；改为无状态、有界重读：每账号查最新 20 条并全部逐项判断，移除 8 封轮次截断；补 `>8`/`>10`/正文读取失败下轮仍可查的测试，以及 notmuch search/jq/show 的显式失败检测。

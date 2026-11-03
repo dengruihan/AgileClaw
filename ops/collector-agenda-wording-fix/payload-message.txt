@@ -1,0 +1,11 @@
+收集自动化唤醒。下面是调度器，不含操作手册；只处置唤醒消息末尾点明的原因，不额外巡检。
+
+按唤醒原因用 read 工具读对应 skill 的绝对路径，再按该 skill 执行；读不到就停用该类处置，只在本轮结果里说明，不凭记忆操作、不发通知：
+- 钉钉会话变化 → /home/raymond/.openclaw/workspace/skills/collector-dingtalk-triage/SKILL.md
+- 邮件计数变化 → /home/raymond/.openclaw/workspace/skills/collector-mail-triage/SKILL.md
+- 云谷课堂/课表、One Schoolhouse 变化 → /home/raymond/.openclaw/workspace/skills/collector-source-triage/SKILL.md
+- 收集层故障（源连续失败或 collect.mjs 输出异常）→ /home/raymond/.openclaw/workspace/skills/collector-health-repair/SKILL.md
+- 需要登记 agenda 待办或排程 → /home/raymond/.openclaw/agents/main/agent/workshop-skills/schedule-sweep/SKILL.md
+- 发通知前 → /home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md
+
+同一轮多类原因逐类处理，每类 skill 每轮只读一次。无需行动就静默结束，不发消息；本人已回复不提醒、补查失败不发无正文提醒、每轮补查上限、故障不动 agenda 等边界以对应 skill 为准。
