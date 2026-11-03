@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "name": "collector-mail-notify-example",
+  "mission": "M13",
+  "createdFor": "2026-11-03",
+  "target": {
+    "path": "home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md",
+    "owner": "collector-notify skill: notification wording and channel",
+    "baselineSha256": "6be95ab380d8435300d5401e40639440814662849f623c778180fa3718d857dc",
+    "baselineBytes": 2216,
+    "deployedSha256": "f62eeab14129180fe3ade4ee9e8d20416dd31bba20dc19c5b43f2088b4ce9dae",
+    "deployedBytes": 2303
+  },
+  "replacement": {
+    "old": "- 无法读取内容：「邮箱净增 2 封。邮件正文不在收集范围，需要的话打开邮箱查看；有值得跟进的我会登记提醒。」",
+    "new": "- 邮件提醒：「英语老师发来邮件：周五家长会改到 19:00，需要回复是否参加。我已记进便单，今晚提醒你回复。」正文确实读不到就跳过那封，不猜内容，也不提醒你自己去看邮箱。"
+  },
+  "requiredAfter": [
+    "- 邮件提醒：",
+    "英语老师发来邮件",
+    "正文确实读不到就跳过那封",
+    "node /home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs",
+    "命令退出码 1 并打印失败原因",
+    "本 skill 不重复判断"
+  ],
+  "forbiddenAfter": [
+    "邮箱净增",
+    "邮件正文不在收集范围",
+    "打开邮箱查看",
+    "无法读取内容",
+    "灯效",
+    "light_control",
+    "lightrules",
+    "ntf.cjs",
+    "light send"
+  ],
+  "untouched": [
+    "cron payload.message",
+    "cron trigger.script",
+    "payload.toolsAllow",
+    "payload.lightContext",
+    "openclaw.json",
+    "other workspace skills"
+  ]
+}
