@@ -7,8 +7,8 @@
     "repository": "/home/raymond/repos/agenda",
     "branch": "feat/m18-source-owned-courses",
     "base": "3d275dfea5f961c8419388d8750c83ed33c5f640",
-    "commit": "5910b3fa5e427937b31b7bdc3a23868801bd9b49",
-    "tree": "7c9154ae78881d18911e5a7f4ce824637095c1e3",
+    "commit": "1eab93a0116b1cff455ef614888614e77efdf99f",
+    "tree": "a2271dd8ca73ed697b4aa754dfd18c5de59b2d84",
     "patch": "external/source.patch"
   },
   "install": {
@@ -19,8 +19,8 @@
   },
   "databaseChanges": "none",
   "schemaVersion": 2,
-  "deployedAt": "2026-11-03T03:04:02Z",
-  "backup": "~/.openclaw/backups/agenda-course-schedule/2026-11-03T03-04-02-920Z",
+  "deployedAt": "2026-11-03T03:16:23Z",
+  "backup": "~/.openclaw/backups/agenda-course-schedule/2026-11-03T03-16-23-277Z",
   "commands": {
     "status": "node scripts/status.mjs --source <built checkout>",
     "deployDryRun": "node scripts/deploy.mjs --source <built checkout>",

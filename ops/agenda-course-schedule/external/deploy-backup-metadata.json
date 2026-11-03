@@ -1,20 +1,20 @@
 {
-  "timestamp": "2026-11-03T03-04-02-920Z",
-  "sourceCommit": "5910b3fa5e427937b31b7bdc3a23868801bd9b49",
+  "timestamp": "2026-11-03T03-16-23-277Z",
+  "sourceCommit": "1eab93a0116b1cff455ef614888614e77efdf99f",
   "liveRevisionBefore": {
     "ok": true,
     "revision": 179
   },
   "installedBefore": {
-    "dist/index.js": "f6e9227292372a3c3edbdab93af6e270760fdf222dd85f65eff9466d274d3221",
-    "dist/src/sqlite.worker.js": "2dbe584cdcafdf7522d2a4f4073ec149d609b86d83676f76e233a76c2ba96608",
-    "assets/app.js": "c311ecafe51c7368a748287c7be13b8de873e5a599895edc0dda17fa2c0d1712",
-    "assets/app.css": "bb10d9c1b0f400222daa629684d687cb6147325553b8fa7f8d4af948e0551cb9",
+    "dist/index.js": "cf48a53c79d121d51075de1bc26ff21b9b97bb09166e2b71784db279e6693408",
+    "dist/src/sqlite.worker.js": "a14d2c3b30c6448ed3be1ba083d42f29e5a3390585c6ff787e93c33d4ed89ed5",
+    "assets/app.js": "15916c510d0502aabdf6d0cf8a40eabd7dea403bb0284d81e8fcd6037fc6ff42",
+    "assets/app.css": "d66021e85d36733803a7d7758f0fd042d8229fc2aefdc5cd3d36b2c90f8af421",
     "assets/index.html": "00b374426c301f71159d39c62ca0308568e5d1ab6fabbc05ecc07ae8bee2c3a6",
     "openclaw.plugin.json": "04b03539d7adac5827b681490f2c2f105b47dfefa22f45c41d3a84f5e37b7e79",
-    "skills/agenda/SKILL.md": "87bb2cc998c29d6ade310ba0ec52e099969ac65ddc3431794084d6036ca495bc"
+    "skills/agenda/SKILL.md": "98cff6a096344cdedffcf7561fd17162e53e0228ce4e1de0745c07de69956dd4"
   },
   "database": "/home/raymond/.openclaw/plugins/agenda/agenda.sqlite",
-  "databaseSnapshot": "/home/raymond/.openclaw/backups/agenda-course-schedule/2026-11-03T03-04-02-920Z/agenda.sqlite.snapshot",
+  "databaseSnapshot": "/home/raymond/.openclaw/backups/agenda-course-schedule/2026-11-03T03-16-23-277Z/agenda.sqlite.snapshot",
   "databaseSnapshotSha256": "f47a039ad0c93f48fe4d87fcbd1891af3e268d771b4be41f5c58efb1bc499d51"
 }

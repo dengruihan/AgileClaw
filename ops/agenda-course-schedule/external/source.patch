@@ -1,8 +1,8 @@
 From 5910b3fa5e427937b31b7bdc3a23868801bd9b49 Mon Sep 17 00:00:00 2001
 From: dengruihan <551310554@qq.com>
 Date: Tue, 3 Nov 2026 11:02:39 +0800
-Subject: [PATCH] feat: source-owned course sync, conflicts, and stale coverage
- UI
+Subject: [PATCH 1/2] feat: source-owned course sync, conflicts, and stale
+ coverage UI
 
 ---
  README.md              |  71 +++++
@@ -3049,6 +3049,326 @@ index 2e31524..48ef9eb 100644
 +  border-color: var(--glass-line);
 +  color: var(--glass-muted);
 +}
+-- 
+2.43.0
+
+
+From 1eab93a0116b1cff455ef614888614e77efdf99f Mon Sep 17 00:00:00 2001
+From: dengruihan <551310554@qq.com>
+Date: Tue, 3 Nov 2026 11:16:07 +0800
+Subject: [PATCH 2/2] fix: fence source-owned sources and restore evidence-free
+ course cancellations
+
+---
+ README.md              |   8 ++-
+ skills/agenda/SKILL.md |   7 ++-
+ src/http.test.ts       |   1 +
+ src/sqlite.worker.ts   |  32 +++++++++--
+ src/sync.test.ts       | 118 +++++++++++++++++++++++++++++++++++++++++
+ src/tool.ts            |   2 +-
+ src/types.ts           |   2 +
+ 7 files changed, 161 insertions(+), 9 deletions(-)
+
+diff --git a/README.md b/README.md
+index 5873c89..b76cff4 100644
+--- a/README.md
++++ b/README.md
+@@ -124,7 +124,9 @@ historical progress, not evidence that its task or estimated workload is finishe
+ Course timetables are source-owned events: a source record with
+ `managedBy: "source"` owns its events and blocks. The Agent may read and mark
+ segments complete, but `agenda apply` refuses every edit to them with
+-`code: "source_owned"`; only the deterministic sync writes them. No new table,
++`code: "source_owned"`, including creating a new item under that source or
++migrating an existing item into it; only the deterministic sync writes them.
++Ad-hoc items belong under an Agent-managed source. No new table,
+ item kind, or schema version is introduced.
+ 
+ `sync` reconciles one source for a declared window:
+@@ -152,7 +154,9 @@ item kind, or schema version is introduced.
+   occurrence and reports the old one as `unlisted`.
+ - Absence from a successful week never deletes or cancels. Cancellation requires
+   explicit `evidence` (`kind: platform|notice|user`, non-empty `detail`,
+-  `observedAt`); a slot that merely disappeared is not evidence.
++  `observedAt`); a slot that merely disappeared is not evidence. A cancelled
++  row with no recorded evidence (for example a pre-seeded key) cannot suppress
++  a course: sync restores it as pending and reports it in `restored`.
+ - Coverage comes only from the latest contiguous run of successful weeks. A
+   failed week keeps existing items, sets the source to `error`, and names the
+   failed range. A failed week must not carry slots, and a slot must fall inside
+diff --git a/skills/agenda/SKILL.md b/skills/agenda/SKILL.md
+index fb5a6ff..ae99cfa 100644
+--- a/skills/agenda/SKILL.md
++++ b/skills/agenda/SKILL.md
+@@ -20,14 +20,17 @@ never use `apply` to create, move, or cancel courses.
+ - A source whose record says `managedBy: "source"` owns its events. `apply`
+   refuses every edit to those items and blocks with `code: "source_owned"`
+   (including `unlockBlockIds`, `deleteBlockIds`, title, status, and schedule).
+-  Only `sync` writes them.
++  Never create a new item under a source-owned source or migrate an existing
++  item into it; ad-hoc items belong under an Agent-managed source. Only `sync`
++  writes the timetable source.
+ - `sync` identity is the slot start. Renaming a course keeps its item; a time
+   change is a new occurrence and the old one is reported as `unlisted`. Absence
+   from a successful fetch is never a deletion or cancellation: confirm such
+   items with the user before proposing any cancellation.
+ - Cancellation requires explicit evidence: a platform's explicit cancelled
+   status, a school/teacher notice, or the user's own confirmation, recorded as
+-  `{kind, detail, observedAt}`. A disappeared slot is not evidence.
++  `{kind, detail, observedAt}`. A disappeared slot is not evidence, and a
++  cancelled row without evidence is restored by the next sync.
+ - A no-op `sync` does not bump the revision. Treat `changed: false` as a
+   successful refresh, not as an unapplied batch.
+ - Coverage only comes from successful weeks; a failed week leaves earlier data
+diff --git a/src/http.test.ts b/src/http.test.ts
+index b916c56..2d3b03b 100644
+--- a/src/http.test.ts
++++ b/src/http.test.ts
+@@ -45,6 +45,7 @@ describe("Agenda website read boundary", () => {
+           updated: [],
+           adopted: [],
+           unchanged: [],
++          restored: [],
+           cancelled: [],
+           unlisted: [],
+           ignoredCancellations: [],
+diff --git a/src/sqlite.worker.ts b/src/sqlite.worker.ts
+index 7b0c1b2..cd2a0da 100644
+--- a/src/sqlite.worker.ts
++++ b/src/sqlite.worker.ts
+@@ -759,6 +759,21 @@ export function createSqliteWorkerBackend(
+       }
+       const current = items.get(incoming.id);
+       let item = incoming;
++      if (owners.get(incoming.sourceId) === "source") {
++        // A timetable source is written only by sync: the Agent may carry an
++        // unchanged existing record forward, but never create or migrate into it.
++        if (
++          !current ||
++          current.sourceId !== incoming.sourceId ||
++          itemContentChanged(current, incoming)
++        ) {
++          return fail(
++            "source_owned",
++            `来源 ${incoming.sourceId} 由课表同步维护；Agent 不能在该来源下新建、迁入或修改事项。`,
++            { details: { itemId: incoming.id, sourceId: incoming.sourceId } },
++          );
++        }
++      }
+       if (current && current.kind !== incoming.kind) {
+         return fail("item_kind_immutable", `保留已有事项 ${incoming.id} 的类型。`, {
+           details: { itemId: incoming.id },
+@@ -1006,6 +1021,7 @@ export function createSqliteWorkerBackend(
+       updated: [],
+       adopted: [],
+       unchanged: [],
++      restored: [],
+       cancelled: [],
+       unlisted: [],
+       ignoredCancellations: [],
+@@ -1172,9 +1188,15 @@ export function createSqliteWorkerBackend(
+           kind: item.kind,
+         });
+       }
++      let restoring = false;
+       if (item && item.status === "cancelled") {
+-        receipt.unchanged.push(item.id);
+-        continue;
++        if (item.cancelEvidence) {
++          receipt.unchanged.push(item.id);
++          continue;
++        }
++        // Only a recorded explicit cancellation removes a course. A cancelled
++        // row without evidence (for example a pre-seeded key) cannot suppress it.
++        restoring = true;
+       }
+       if (item && (item.status === "done" || hasCompletionHistory(item))) {
+         receipt.unchanged.push(item.id);
+@@ -1191,7 +1213,7 @@ export function createSqliteWorkerBackend(
+         id: item?.id ?? deterministicId("agenda-sync-", input.sourceId, key),
+         kind: "event",
+         title: slot.title,
+-        status: item?.status ?? "pending",
++        status: restoring ? "pending" : (item?.status ?? "pending"),
+         sourceId: input.sourceId,
+         sourceKey: key,
+         sourceUrl: slot.sourceUrl ?? item?.sourceUrl ?? null,
+@@ -1229,7 +1251,8 @@ export function createSqliteWorkerBackend(
+       for (const block of existingBlocks) {
+         if (block.id !== nextBlock.id) deletedBlockIds.add(block.id);
+       }
+-      if (!item) receipt.created.push(nextItem.id);
++      if (restoring) receipt.restored.push(nextItem.id);
++      else if (!item) receipt.created.push(nextItem.id);
+       else if (adopted) receipt.adopted.push(nextItem.id);
+       else if (itemChanged || blockChanged) receipt.updated.push(nextItem.id);
+       else receipt.unchanged.push(nextItem.id);
+@@ -1335,6 +1358,7 @@ export function createSqliteWorkerBackend(
+       updated: receipt.updated,
+       adopted: receipt.adopted,
+       unchanged: receipt.unchanged,
++      restored: receipt.restored,
+       cancelled: receipt.cancelled,
+       unlisted: receipt.unlisted,
+       ignoredCancellations: receipt.ignoredCancellations,
+diff --git a/src/sync.test.ts b/src/sync.test.ts
+index 492a2a4..9c7ef96 100644
+--- a/src/sync.test.ts
++++ b/src/sync.test.ts
+@@ -405,6 +405,36 @@ describe("Agenda source-owned course sync", () => {
+       details: { itemId: course.id },
+     });
+ 
++    const createdInSource = await store.apply(
++      {
++        operationId: "create-in-course-source",
++        expectedRevision: snapshot.revision,
++        items: [
++          {
++            ...task({
++              id: "sneaky-course",
++              kind: "event",
++              title: "自习",
++              sourceId: "yungu-schedule",
++              sourceKey: "2026-11-05T02:00:00.000Z",
++            }),
++          },
++        ],
++      },
++      current,
++    );
++    expect(createdInSource).toMatchObject({ ok: false, code: "source_owned" });
++
++    const migrated = await store.apply(
++      {
++        operationId: "migrate-into-course-source",
++        expectedRevision: snapshot.revision,
++        items: [{ ...itemByTitle(snapshot, "整理笔记"), sourceId: "yungu-schedule" }],
++      },
++      current,
++    );
++    expect(migrated).toMatchObject({ ok: false, code: "source_owned" });
++
+     const courseSource = snapshot.sources.find((source) => source.id === "yungu-schedule")!;
+     const sourceEdit = await store.apply(
+       {
+@@ -568,3 +598,91 @@ describe("Agenda source-owned course sync", () => {
+     expect(after.blockProgress).toHaveLength(1);
+   });
+ });
++
++describe("Agenda course cancellation cannot be pre-seeded", () => {
++  const preseedKey = "2026-11-03T00:10:00.000Z";
++  const preseed = (overrides: Partial<AgendaItem> = {}) =>
++    task({
++      id: "preseed",
++      kind: "event",
++      title: "预置",
++      sourceId: "yungu-schedule",
++      sourceKey: preseedKey,
++      status: "cancelled",
++      completedBy: null,
++      nextAction: "",
++      estimatedMinutes: null,
++      ...overrides,
++    });
++
++  it("restores a cancelled entry that has no recorded cancellation evidence", async () => {
++    const store = fixture();
++    await store.apply(
++      {
++        operationId: "preseed",
++        expectedRevision: 0,
++        sources: [
++          {
++            id: "yungu-schedule",
++            label: "云谷课表",
++            checkedAt: null,
++            status: "ok",
++            message: null,
++            coverageStart: "2026-11-02",
++            coverageEnd: "2026-11-08",
++          },
++        ],
++        items: [preseed()],
++      },
++      current,
++    );
++    const receipt = await store.sync(
++      syncInput({ weeks: [week({ slots: [math] })] }),
++      current,
++    );
++    expect(receipt).toMatchObject({ ok: true, changed: true, restored: ["preseed"] });
++    const snapshot = await store.read({ includeCompleted: true });
++    const restored = itemByTitle(snapshot, "数学");
++    expect(restored).toMatchObject({
++      id: "preseed",
++      status: "pending",
++      cancelEvidence: null,
++      sourceKey: preseedKey,
++    });
++    expect(snapshot.blocks.filter((block) => block.itemId === "preseed")).toHaveLength(1);
++  });
++
++  it("keeps a cancelled entry that carries explicit evidence and never resurrects it", async () => {
++    const store = fixture();
++    await store.apply(
++      {
++        operationId: "preseed-evidence",
++        expectedRevision: 0,
++        sources: [
++          {
++            id: "yungu-schedule",
++            label: "云谷课表",
++            checkedAt: null,
++            status: "ok",
++            message: null,
++            coverageStart: "2026-11-02",
++            coverageEnd: "2026-11-08",
++          },
++        ],
++        items: [preseed({ cancelEvidence: evidence })],
++      },
++      current,
++    );
++    const receipt = await store.sync(
++      syncInput({ weeks: [week({ slots: [math] })] }),
++      current,
++    );
++    expect(receipt).toMatchObject({ ok: true, changed: true, restored: [] });
++    const snapshot = await store.read({ includeCompleted: true });
++    expect(itemByTitle(snapshot, "预置")).toMatchObject({
++      status: "cancelled",
++      cancelEvidence: evidence,
++    });
++    expect(snapshot.blocks).toHaveLength(0);
++  });
++});
+diff --git a/src/tool.ts b/src/tool.ts
+index ae729ed..e2e47fd 100644
+--- a/src/tool.ts
++++ b/src/tool.ts
+@@ -30,7 +30,7 @@ export function createAgendaTool(options: {
+     name: "agenda",
+     label: "Agenda",
+     description:
+-      "Read, schedule, or synchronize the user's canonical tasks and calendar. read accepts query {start,end,includeCompleted,operationId}; a ranged read returns range {blocks, scheduledItems, fixedItems, unscheduledItems, coverage{covered,sources}} so uncovered intervals stay explicit. apply atomically changes this Agent's tasks, events, and blocks: it requires expectedRevision and a unique operationId, rejects time_conflict against fixed/locked/source-owned blocks unless allowOverlaps is true, and rejects any edit to source-owned courses (source_owned) — those only change through sync. sync reconciles one timetable source: stable occurrence identity is the slot start, existing entries are adopted by matching block start, absence never deletes or cancels, and cancellation requires explicit evidence {kind:platform|notice|user, detail, observedAt}. Identical sync content does not bump the revision. Include sources on first item creation. All timestamps require timezone offsets; dueDate is date-only. Deadlines are not execution blocks. Fixed events and locked blocks require explicit unlockBlockIds to move; user-confirmed completions require explicit reopenItemIds. On unknown write outcome read query.operationId before retrying. Only this tool and the local sync route change plans; the website records block/task completion and undo. Read blockProgress and pending feedback, replan from the current Beijing time using existing personal scheduling rules, then include feedbackResults with IDs, adjusted/unchanged/error and a concise Chinese summary in the same apply. Completed blocks are historical and cannot be moved or deleted.",
++      "Read, schedule, or synchronize the user's canonical tasks and calendar. read accepts query {start,end,includeCompleted,operationId}; a ranged read returns range {blocks, scheduledItems, fixedItems, unscheduledItems, coverage{covered,sources}} so uncovered intervals stay explicit. apply atomically changes this Agent's tasks, events, and blocks: it requires expectedRevision and a unique operationId, rejects time_conflict against fixed/locked/source-owned blocks unless allowOverlaps is true, and rejects any edit, creation, or migration into a source-owned source (source_owned) — those only change through sync. sync reconciles one timetable source: stable occurrence identity is the slot start, existing entries are adopted by matching block start, absence never deletes or cancels, and cancellation requires explicit evidence {kind:platform|notice|user, detail, observedAt}. Identical sync content does not bump the revision. Include sources on first item creation. All timestamps require timezone offsets; dueDate is date-only. Deadlines are not execution blocks. Fixed events and locked blocks require explicit unlockBlockIds to move; user-confirmed completions require explicit reopenItemIds. On unknown write outcome read query.operationId before retrying. Only this tool and the local sync route change plans; the website records block/task completion and undo. Read blockProgress and pending feedback, replan from the current Beijing time using existing personal scheduling rules, then include feedbackResults with IDs, adjusted/unchanged/error and a concise Chinese summary in the same apply. Completed blocks are historical and cannot be moved or deleted.",
+     parameters: Type.Unsafe<z.input<typeof toolSchema>>(
+       z.toJSONSchema(toolSchema, { io: "input" }),
+     ),
+diff --git a/src/types.ts b/src/types.ts
+index 7d84472..8bee175 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -224,6 +224,8 @@ export type AgendaSyncReceipt = AgendaReceipt & {
+   updated: string[];
+   adopted: string[];
+   unchanged: string[];
++  /** Cancelled entries without recorded evidence that the timetable restored. */
++  restored: string[];
+   cancelled: string[];
+   unlisted: AgendaSyncUnlisted[];
+   ignoredCancellations: AgendaSyncIgnoredCancellation[];
 -- 
 2.43.0
 
