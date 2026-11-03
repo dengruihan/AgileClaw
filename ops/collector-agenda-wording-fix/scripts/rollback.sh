@@ -72,14 +72,23 @@ actions+=("payload.message: $message_action")
 
 for name in "${SKILL_NAMES[@]}"; do
   rel="home/raymond/.openclaw/workspace/skills/$name/SKILL.md"
-  target="$(target_file "$rel")"
+  before="$backup/files/$name/SKILL.md.before"
   current_file_sha="$(target_sha "$rel")"
   deployed="$(package_entry file "$rel" deployedSha256)"
-  if [ ! -f "$backup/files/$name/SKILL.md.before" ]; then
-    actions+=("$name: no before copy (missing at deploy)")
+  if [ ! -f "$before" ]; then
+    # Missing at deploy: deploy created it, so rollback must remove it. The
+    # delete is drift-protected the same way as a restore: only the exact
+    # deployed content is removed unless --force is passed.
+    if [ "$current_file_sha" = "missing" ]; then
+      actions+=("$name: already rolled back (absent before and now)")
+    elif [ "$current_file_sha" = "$deployed" ]; then
+      actions+=("$name: delete (created at deploy)")
+    else
+      actions+=("$name: delete (drift)")
+    fi
     continue
   fi
-  before_sha="$(sha256_file "$backup/files/$name/SKILL.md.before")"
+  before_sha="$(sha256_file "$before")"
   if [ "$current_file_sha" = "$before_sha" ]; then
     actions+=("$name: already rolled back")
   elif [ "$current_file_sha" != "$deployed" ]; then
@@ -137,6 +146,11 @@ for name in "${SKILL_NAMES[@]}"; do
   before="$backup/files/$name/SKILL.md.before"
   if [ -f "$before" ]; then
     cp "$before" "$target"
+  else
+    rm -f "$target"
+    if [ "$(backup_skill_state "$backup" "$name" dirExisted 2>/dev/null || printf true)" = "false" ]; then
+      rmdir "$(dirname "$target")" 2>/dev/null || true
+    fi
   fi
 done
 
@@ -170,9 +184,20 @@ verify_after() {
   for name in "${SKILL_NAMES[@]}"; do
     rel="home/raymond/.openclaw/workspace/skills/$name/SKILL.md"
     target="$(target_file "$rel")"
-    [ -f "$backup/files/$name/SKILL.md.before" ] || continue
-    [ "$(sha256_file "$target")" = "$(sha256_file "$backup/files/$name/SKILL.md.before")" ] ||
-      restore_fail="${restore_fail:+$restore_fail; }skill $name not restored"
+    before="$backup/files/$name/SKILL.md.before"
+    if [ -f "$before" ]; then
+      [ "$(sha256_file "$target")" = "$(sha256_file "$before")" ] ||
+        restore_fail="${restore_fail:+$restore_fail; }skill $name not restored"
+      continue
+    fi
+    if [ -e "$target" ]; then
+      restore_fail="${restore_fail:+$restore_fail; }skill $name still present after rollback (created at deploy)"
+      continue
+    fi
+    if [ "$(backup_skill_state "$backup" "$name" dirExisted 2>/dev/null || printf true)" = "false" ] &&
+      [ -d "$(dirname "$target")" ]; then
+      restore_fail="${restore_fail:+$restore_fail; }skill $name directory still present after rollback"
+    fi
   done
   for rel in "${PATCH_PATHS[@]}"; do
     target="$(target_file "$rel")"

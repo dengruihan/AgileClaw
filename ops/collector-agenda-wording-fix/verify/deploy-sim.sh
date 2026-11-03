@@ -267,7 +267,48 @@ run_script rollback.sh --yes --force
 assert_eq "$code" 0 "rollback --force succeeds"
 assert_eq "$(sha_file "$SKILLS_DIR/collector-notify/SKILL.md")" "$(sha_file "$BASELINE_NOTIFY")" "forced rollback restores the skill"
 
-# --- 8. Failed apply restores every surface --------------------------------
+# --- 8. A skill missing before deploy is deleted by rollback ---------------
+reset_all
+rm -rf "$SKILLS_DIR/collector-notify"
+run_script deploy.sh --yes
+assert_eq "$code" 0 "deploy creates a skill missing before deploy"
+assert_eq "$(sha_file "$SKILLS_DIR/collector-notify/SKILL.md")" "$(sha_file "$PACKAGE_NOTIFY")" "created skill matches the package"
+backup_created="$(latest_backup)"
+assert_eq "$(node -e 'const d=require(process.argv[1]);process.stdout.write(String(d.skillState["collector-notify"].existed))' "$backup_created/deploy.json")" \
+  "false" "backup records that the skill did not exist"
+assert_eq "$(node -e 'const d=require(process.argv[1]);process.stdout.write(String(d.skillState["collector-notify"].dirExisted))' "$backup_created/deploy.json")" \
+  "false" "backup records that the skill directory did not exist"
+run_script rollback.sh
+assert_eq "$code" 0 "rollback plan for a created skill succeeds"
+assert_contains "$output" "collector-notify: delete (created at deploy)" "rollback plan declares the delete"
+run_script rollback.sh --yes
+assert_eq "$code" 0 "rollback deletes the created skill"
+assert_eq "$(if [ -e "$SKILLS_DIR/collector-notify/SKILL.md" ]; then echo present; else echo absent; fi)" \
+  "absent" "created skill file is gone after rollback"
+assert_eq "$(if [ -d "$SKILLS_DIR/collector-notify" ]; then echo present; else echo absent; fi)" \
+  "absent" "created skill directory is gone after rollback"
+assert_eq "$(sha_file "$SKILLS_DIR/collector-source-triage/SKILL.md")" "$(sha_file "$BASELINE_SOURCE")" "existing skill is restored"
+assert_eq "$(sha_file "$AGENTS_FILE")" "$agents_before" "AGENTS.md is restored"
+assert_eq "$(sha_file "$MJS_FILE")" "$mjs_before" "notify script is restored"
+assert_eq "$(job_sha)" "$(baseline_payload_sha)" "message is restored"
+run_script rollback.sh --yes
+assert_contains "$output" "already rolled back (absent before and now)" "second rollback keeps the created file absent"
+
+reset_all
+rm -rf "$SKILLS_DIR/collector-notify"
+run_script deploy.sh --yes
+printf '\n<!-- drift on the created file -->\n' >>"$SKILLS_DIR/collector-notify/SKILL.md"
+run_script rollback.sh --yes
+assert_eq "$code" 1 "rollback refuses to delete a drifted created skill"
+assert_contains "$output" "changed after deployment" "drifted delete requires --force"
+assert_eq "$(if [ -f "$SKILLS_DIR/collector-notify/SKILL.md" ]; then echo present; else echo absent; fi)" \
+  "present" "drifted created skill is kept without --force"
+run_script rollback.sh --yes --force
+assert_eq "$code" 0 "rollback --force deletes the drifted created skill"
+assert_eq "$(if [ -e "$SKILLS_DIR/collector-notify/SKILL.md" ]; then echo present; else echo absent; fi)" \
+  "absent" "forced rollback removes the created file"
+
+# --- 9. Failed apply restores every surface --------------------------------
 reset_all
 export FAKE_EDIT_FAIL=1
 run_script deploy.sh --yes
@@ -289,7 +330,7 @@ assert_eq "$(sha_file "$SKILLS_DIR/collector-notify/SKILL.md")" "$(sha_file "$BA
 assert_eq "$(sha_file "$AGENTS_FILE")" "$agents_before" "verification failure restores AGENTS.md"
 assert_eq "$(job_sha)" "$(baseline_payload_sha)" "verification failure restores the message"
 
-# --- 9. Missing patch target is refused ------------------------------------
+# --- 10. Missing patch target is refused -----------------------------------
 reset_all
 rm -f "$AGENTS_FILE"
 run_script deploy.sh --yes

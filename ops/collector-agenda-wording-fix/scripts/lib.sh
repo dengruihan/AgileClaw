@@ -360,6 +360,21 @@ deploy_patch_after_sha() {
   ' "$1/deploy.json" "$2"
 }
 
+# backup_skill_state <backup-dir> <name> <field> prints existed|dirExisted from
+# deploy.json. Backups written before skillState existed exit 1; callers then
+# fall back to the presence of the before copy.
+backup_skill_state() {
+  node -e '
+    const fs = require("node:fs");
+    const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const entry = (doc.skillState || {})[process.argv[2]];
+    if (!entry) process.exit(1);
+    const v = entry[process.argv[3]];
+    if (v === undefined || v === null) process.exit(1);
+    process.stdout.write(typeof v === "string" ? v : String(v));
+  ' "$1/deploy.json" "$2" "$3"
+}
+
 pick_backup_dir() {
   local candidate
   while IFS= read -r candidate; do

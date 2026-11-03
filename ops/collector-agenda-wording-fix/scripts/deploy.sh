@@ -160,13 +160,26 @@ printf '%s\n' "$current" >"$backup_dir/job.before.json"
 printf '%s' "$current_message" >"$backup_dir/payload-message.before.txt"
 
 file_backups=()
+skill_state_json="{}"
 for name in "${SKILL_NAMES[@]}"; do
   rel="home/raymond/.openclaw/workspace/skills/$name/SKILL.md"
   target="$(target_file "$rel")"
   mkdir -p "$backup_dir/files/$name"
   if [ -f "$target" ]; then
     cp "$target" "$backup_dir/files/$name/SKILL.md.before"
+    existed=true
+  else
+    existed=false
   fi
+  if [ -d "$(dirname "$target")" ]; then dir_existed=true; else dir_existed=false; fi
+  skill_state_json="$(SKILL_STATE="$skill_state_json" NAME="$name" EXISTED="$existed" DIR_EXISTED="$dir_existed" node -e '
+    const state = JSON.parse(process.env.SKILL_STATE);
+    state[process.env.NAME] = {
+      existed: process.env.EXISTED === "true",
+      dirExisted: process.env.DIR_EXISTED === "true",
+    };
+    process.stdout.write(JSON.stringify(state));
+  ')"
   file_backups+=("$name")
 done
 for rel in "${PATCH_PATHS[@]}"; do
@@ -206,6 +219,7 @@ cat >"$backup_dir/deploy.json" <<EOF
     for (const p of m.files) out[p.path.split("/").slice(-2)[0]] = p.deployedSha256;
     process.stdout.write(JSON.stringify(out));
   ' "$MANIFEST_FILE"),
+  "skillState": $skill_state_json,
   "patches": $patches_json
 }
 EOF

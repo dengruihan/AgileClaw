@@ -1,6 +1,6 @@
 # Collector Agenda 措辞修正（M15，2026-11-03）
 
-状态：**已就绪，待部署**。本包是 M15 的唯一可重放入口：五个 live 面一次切换，先备份后写入，失败自动恢复；不发送钉钉/邮件测试消息，不 force run cron，不重启 Gateway。
+状态：**已部署（2026-11-03）**；r1 review P2 已修复：独立 rollback 现在会带 drift 防护地删除「部署前缺失、部署时新建」的 skill，并在删除后复核文件/空目录不存在。本包是 M15 的唯一可重放入口：五个 live 面一次切换，先备份后写入，失败自动恢复；不发送钉钉/邮件测试消息，不 force run cron，不重启 Gateway。
 
 覆盖对象：线上自动化 `collector`（id `6a45be21-ce0b-4b8b-8986-4c885d1ea659`，`displayName=统一事项收集`，每 10 分钟评估，`sessionTarget=isolated`，`lightContext=true`）。
 
@@ -82,7 +82,7 @@ openclaw gateway health
 ./scripts/rollback.sh --yes --backup DIR  # 指定历史备份
 ```
 
-只恢复当前内容仍等于本包部署值的面；部署后被别人改过时默认拒绝，确认后用 `--force`。message 与四个文件副本一起恢复，并复核未触碰的 job 字段未变。
+只恢复当前内容仍等于本包部署值的面；部署后被别人改过时默认拒绝，确认后用 `--force`。如果某个 skill 在部署前不存在（deploy 走了 `create`），回滚会删除部署新建的文件：只有当前内容仍等于部署值时才删除，被改过则同样需要 `--force`；删除后复核文件不存在，并在该 skill 目录也是部署时新建的情况下移除空目录。message 与其余文件副本一起恢复，并复核未触碰的 job 字段未变。
 
 ## 6. 验证
 
@@ -91,17 +91,17 @@ node verify/check-package.mjs  # 静态契约：哈希、基线重建、正向�
 ./verify/deploy-sim.sh         # 临时根 + 假 CLI：计划、备份、幂等、drift、恢复、回滚
 ```
 
-| 命令                                                               | 结果                                                                                                                      |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `node verify/check-package.mjs`                                    | **PASS 161 checks**：review 哈希锁定、两个基线逐字重建、正向便单拒绝/禁令放行、五个面锚点、部署/回滚安全、隐私            |
-| `./verify/deploy-sim.sh`                                           | **PASS 73 checks**：基线重建、只读计划、备份内容、幂等、skill/锚点 drift 拒绝、包审查后改动拒绝、字段不变、回滚、失败恢复 |
-| `./scripts/status.sh`（部署前，只读）                              | 五面 `baseline`；message `2fe4d3e6…`；trigger `a34f72e4…`；`toolsAllow` 8 项、`lightContext=true`                         |
-| `./scripts/deploy.sh`（无 `--yes`）                                | 只打印计划：2 个 replace、2 个 patch、message replace；未写 live                                                          |
-| `./scripts/deploy.sh --yes`                                        | 备份到 `~/.openclaw/backups/collector-agenda-wording-fix/20261103T024424Z`，五面写入并自检通过                            |
-| `./scripts/status.sh`（部署后，只读）                              | 五面 `deployed`/`applied`；message `45832094…`；trigger `a34f72e4…` 未变                                                  |
-| `openclaw skills info collector-notify --agent main --json`        | `eligible=true`、`modelVisible=true`、`filePath` 指向 live SKILL.md                                                       |
-| `openclaw skills info collector-source-triage --agent main --json` | `eligible=true`、`modelVisible=true`、`filePath` 指向 live SKILL.md                                                       |
-| `openclaw gateway health`                                          | `OK (6ms)`，DingTalk configured                                                                                           |
+| 命令                                                               | 结果                                                                                                                                                        |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node verify/check-package.mjs`                                    | **PASS 163 checks**：review 哈希锁定、两个基线逐字重建、正向便单拒绝/禁令放行、五个面锚点、部署/回滚安全（含缺失 skill 删除路径）、隐私                     |
+| `./verify/deploy-sim.sh`                                           | **PASS 92 checks**：基线重建、只读计划、备份内容、幂等、skill/锚点 drift 拒绝、包审查后改动拒绝、字段不变、回滚、失败恢复、缺失 skill 的 create→delete 回归 |
+| `./scripts/status.sh`（部署前，只读）                              | 五面 `baseline`；message `2fe4d3e6…`；trigger `a34f72e4…`；`toolsAllow` 8 项、`lightContext=true`                                                           |
+| `./scripts/deploy.sh`（无 `--yes`）                                | 只打印计划：2 个 replace、2 个 patch、message replace；未写 live                                                                                            |
+| `./scripts/deploy.sh --yes`                                        | 备份到 `~/.openclaw/backups/collector-agenda-wording-fix/20261103T024424Z`，五面写入并自检通过                                                              |
+| `./scripts/status.sh`（部署后，只读）                              | 五面 `deployed`/`applied`；message `45832094…`；trigger `a34f72e4…` 未变                                                                                    |
+| `openclaw skills info collector-notify --agent main --json`        | `eligible=true`、`modelVisible=true`、`filePath` 指向 live SKILL.md                                                                                         |
+| `openclaw skills info collector-source-triage --agent main --json` | `eligible=true`、`modelVisible=true`、`filePath` 指向 live SKILL.md                                                                                         |
+| `openclaw gateway health`                                          | `OK (6ms)`，DingTalk configured                                                                                                                             |
 
 第一次 `--yes` 尝试暴露了一个真实问题：验证器把 AGENTS.md 里「旧便单脚本的独立 state.json」也算作正向便单措辞，部署因此自动回滚到五面基线；随后给该历史说明补上「（已停用）」并把校验改为允许显式禁令，第二次部署通过。该失败尝试的备份保留在 `~/.openclaw/backups/collector-agenda-wording-fix/20261103T024317Z`。
 

@@ -285,6 +285,16 @@ check(
   has(rollback, "changed after deployment") && has(rollback, "--force"),
 );
 check(
+  "rollback deletes a skill that was missing at deploy",
+  has(rollback, "delete (created at deploy)") &&
+    has(rollback, 'rm -f "$target"') &&
+    has(deploy, '"skillState"'),
+);
+check(
+  "rollback verifies the created skill is gone",
+  has(rollback, "still present after rollback") && has(rollback, "dirExisted"),
+);
+check(
   "status is read-only",
   !has(status, "cp ") && !has(status, "mv ") && !has(status, "rm ") && !has(status, "cron edit"),
 );
