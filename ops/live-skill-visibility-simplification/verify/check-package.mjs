@@ -70,6 +70,8 @@ const targets = manifest.targets;
 
 if (manifest.mission === "M20") pass("manifest records mission M20");
 else fail(`manifest mission is ${manifest.mission}`);
+if (manifest.followUpMission === "M21") pass("manifest records the M21 owner-detection fix");
+else fail(`manifest followUpMission is ${manifest.followUpMission}`);
 if (manifest.surfaces?.flagKey === "disable-model-invocation")
   pass("flag is loader-supported disable-model-invocation");
 else fail("manifest flag key is wrong");
@@ -122,6 +124,51 @@ try {
     if (Buffer.byteLength(baseline) === target.baselineBytes)
       pass(`${target.name}: baseline byte count matches`);
     else fail(`${target.name}: baseline byte count mismatch`);
+
+    // The body always has an author. currentOwnerCopies names the package that
+    // holds the reviewed current body; those copies must track the baseline so a
+    // later status run cannot call the current owner a visibility restoration.
+    const ownerCopies = target.currentOwnerCopies ?? [];
+    const legacyCopies = target.legacyCopies ?? [];
+    if (!Array.isArray(ownerCopies) || !Array.isArray(legacyCopies)) {
+      fail(`${target.name}: copy lists must be arrays`);
+    }
+    if (ownerCopies.every((copy) => !legacyCopies.includes(copy))) {
+      pass(`${target.name}: owner and legacy copy lists are disjoint`);
+    } else {
+      fail(`${target.name}: a package copy is both current owner and legacy`);
+    }
+    for (const copy of ownerCopies) {
+      const full = join(REPO_ROOT, copy);
+      if (!existsSync(full)) {
+        fail(`${target.name}: current owner copy missing: ${copy}`);
+        continue;
+      }
+      if (shaFile(full) === target.baselineSha256)
+        pass(`${target.name}: baseline tracks current owner copy`);
+      else fail(`${target.name}: baseline does not match current owner copy ${copy}`);
+      if (!read(full).includes("disable-model-invocation"))
+        pass(`${target.name}: current owner copy is pre-M20`);
+      else fail(`${target.name}: current owner copy already carries the flag: ${copy}`);
+    }
+    for (const copy of legacyCopies) {
+      const full = join(REPO_ROOT, copy);
+      if (!existsSync(full)) {
+        fail(`${target.name}: legacy copy missing: ${copy}`);
+        continue;
+      }
+      const legacyHash = shaFile(full);
+      const matchesOwner = ownerCopies.some(
+        (owner) =>
+          existsSync(join(REPO_ROOT, owner)) && shaFile(join(REPO_ROOT, owner)) === legacyHash,
+      );
+      if (legacyHash !== target.baselineSha256 && !matchesOwner)
+        pass(`${target.name}: legacy copy is genuinely stale: ${copy.split("/")[1]}`);
+      else fail(`${target.name}: legacy copy holds reviewed current bytes: ${copy}`);
+      if (!read(full).includes("disable-model-invocation"))
+        pass(`${target.name}: legacy copy is pre-M20`);
+      else fail(`${target.name}: legacy copy already carries the flag: ${copy}`);
+    }
 
     const fm = frontmatterLines(baseline);
     if (!fm) {
@@ -191,9 +238,15 @@ try {
   rmSync(tmp, { recursive: true, force: true });
 }
 
-// Older packages keep historical copies. Known copies are allowed as baselines;
-// an unreconciled copy would be a new owner that can restore visibility silently.
-const knownRoots = new Set(manifest.guard?.legacyPackageRoots ?? []);
+// Older packages keep historical copies. Each copy must be declared as the
+// target's current owner or a legacy copy; an undeclared copy could restore
+// visibility silently.
+const knownRoots = new Set([
+  ...(manifest.guard?.legacyPackageRoots ?? []),
+  ...targets.flatMap((target) =>
+    (target.currentOwnerCopies ?? []).map((copy) => copy.split("/").slice(0, 2).join("/")),
+  ),
+]);
 const copiesByTarget = new Map(names.map((name) => [name, []]));
 function walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -213,6 +266,9 @@ function walk(dir) {
 }
 walk(join(REPO_ROOT, "ops"));
 for (const name of names) {
+  const target = targets.find((item) => item.name === name);
+  const ownerCopies = target?.currentOwnerCopies ?? [];
+  const legacyCopies = target?.legacyCopies ?? [];
   const copies = [...new Set(copiesByTarget.get(name))];
   for (const copy of copies) {
     const packageName = copy.split("/")[1];
@@ -220,11 +276,17 @@ for (const name of names) {
       fail(`${name}: unreconciled package copy ${copy}`);
       continue;
     }
+    if (!ownerCopies.includes(copy) && !legacyCopies.includes(copy)) {
+      fail(`${name}: package copy is not declared as owner or legacy: ${copy}`);
+      continue;
+    }
     const text = read(join(REPO_ROOT, copy));
     if (text.includes("disable-model-invocation: true")) {
       pass(`${name}: known copy already hidden: ${copy}`);
+    } else if (ownerCopies.includes(copy)) {
+      pass(`${name}: declared current owner copy: ${copy}`);
     } else {
-      pass(`${name}: known historical copy is pre-M20: ${copy}`);
+      pass(`${name}: declared historical copy is pre-M20: ${copy}`);
     }
   }
   if (copies.length === 0) pass(`${name}: no repository package copy outside this package`);
@@ -242,7 +304,10 @@ if (existsSync(readme)) {
     "allowlist",
     "M15",
     "M19",
+    "M21",
     "alwaysActive",
+    "currentOwnerCopies",
+    "VISIBILITY-RESTORED",
   ]) {
     if (text.includes(token)) pass(`README documents ${token}`);
     else fail(`README does not document ${token}`);
@@ -284,6 +349,15 @@ else fail("deploy does not use the reviewed transformer");
 if (read(join(PACKAGE_DIR, "scripts/status.sh")).includes("VISIBILITY-RESTORED"))
   pass("status names visibility restoration");
 else fail("status does not detect visibility restoration");
+const libText = read(join(PACKAGE_DIR, "scripts/lib.sh"));
+if (libText.includes("currentOwnerCopies") && libText.includes("copy_match"))
+  pass("ownership classification consults currentOwnerCopies");
+else fail("ownership classification is not owner-aware");
+if (libText.includes("legacy_lookup")) fail("legacy_lookup blanket scan is still present");
+else pass("blanket legacy_lookup scan is gone");
+if (read(join(PACKAGE_DIR, "scripts/deploy.sh")).includes("VISIBILITY-RESTORED by"))
+  pass("deploy refuses a legacy-restored body");
+else fail("deploy does not refuse a legacy-restored body");
 if (read(join(PACKAGE_DIR, "scripts/rollback.sh")).includes("--force"))
   pass("rollback has an explicit force path");
 else fail("rollback has no force path");

@@ -2,6 +2,7 @@
   "version": 1,
   "name": "live-skill-visibility-simplification",
   "mission": "M20",
+  "followUpMission": "M21",
   "createdFor": "2026-11-03",
   "owner": "Model visibility for six named skills. Content bodies remain owned by their collector/workshop authors; this package only inserts one frontmatter line.",
   "surfaces": {
@@ -37,9 +38,10 @@
       "targetSha256": "4a98d8ed3c303579b2c3b4208d48bb132fe5430a115b2445bf3316b110340b98",
       "targetBytes": 3948,
       "contentOwner": "ops/collector-skill-dispatcher",
-      "legacyCopies": [
+      "currentOwnerCopies": [
         "ops/collector-skill-dispatcher/files/home/raymond/.openclaw/workspace/skills/collector-dingtalk-triage/SKILL.md"
       ],
+      "legacyCopies": [],
       "requiredBodyTokens": [
         "仅供 collector 自动化使用"
       ],
@@ -56,9 +58,10 @@
       "targetSha256": "62352a10bcf40868b6afa63af559cb7ba0f2937cf9b59c48a37b1a257d864a2f",
       "targetBytes": 5104,
       "contentOwner": "ops/collector-mail-agent-triage",
-      "legacyCopies": [
+      "currentOwnerCopies": [
         "ops/collector-mail-agent-triage/files/home/raymond/.openclaw/workspace/skills/collector-mail-triage/SKILL.md"
       ],
+      "legacyCopies": [],
       "requiredBodyTokens": [
         "仅供 collector 自动化使用"
       ],
@@ -70,11 +73,14 @@
       "source": "openclaw-workspace",
       "path": "workspace/skills/collector-source-triage/SKILL.md",
       "baselineFixture": "verify/fixtures/baseline/workspace/skills/collector-source-triage/SKILL.md",
-      "baselineSha256": "68c89b98bbb10dc590127302603c707b07ed92beabcf8cd9105fd28aa1b42528",
-      "baselineBytes": 870,
-      "targetSha256": "2992697512e55819838a8be75aec5b099dfb20f4075e3d6d9247e5da6de12010",
-      "targetBytes": 901,
-      "contentOwner": "ops/collector-agenda-wording-fix (M15 current owner; M10/M12 copies are historical)",
+      "baselineSha256": "b51938930562a03893812902b11fe1bab592c256844548ed5df2825b4142dfd4",
+      "baselineBytes": 1961,
+      "targetSha256": "9da7e1eafb0e6be8e49fe4a1f0b65b5b80fc0415ea821fc62714e262772b9285",
+      "targetBytes": 1992,
+      "contentOwner": "ops/collector-course-sync (M19 current owner; M10/M12/M15 copies are historical)",
+      "currentOwnerCopies": [
+        "ops/collector-course-sync/files/home/raymond/.openclaw/workspace/skills/collector-source-triage/SKILL.md"
+      ],
       "legacyCopies": [
         "ops/collector-skill-dispatcher/files/home/raymond/.openclaw/workspace/skills/collector-source-triage/SKILL.md",
         "ops/collector-mail-agent-triage/files/home/raymond/.openclaw/workspace/skills/collector-source-triage/SKILL.md",
@@ -95,7 +101,8 @@
       "baselineBytes": 1199,
       "targetSha256": "8942295e495768a9eccf0539d82252e17e8beae06014e1a97284ba2a59e5704c",
       "targetBytes": 1230,
-      "contentOwner": "ops/collector-skill-dispatcher",
+      "contentOwner": "ops/light-effect-cleanup (M11 current body; no snapshot copy in that package) — ops/collector-skill-dispatcher keeps the pre-M11 copy",
+      "currentOwnerCopies": [],
       "legacyCopies": [
         "ops/collector-skill-dispatcher/files/home/raymond/.openclaw/workspace/skills/collector-health-repair/SKILL.md"
       ],
@@ -115,10 +122,12 @@
       "targetSha256": "daff9047ae4b743acd3abdfbab6a216bb838951b840c7bb0274ae0657499798b",
       "targetBytes": 2773,
       "contentOwner": "ops/collector-agenda-wording-fix (M15 current owner; M10/M13 copies are historical)",
+      "currentOwnerCopies": [
+        "ops/collector-agenda-wording-fix/files/home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md"
+      ],
       "legacyCopies": [
         "ops/collector-skill-dispatcher/files/home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md",
-        "ops/collector-mail-notify-example/files/home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md",
-        "ops/collector-agenda-wording-fix/files/home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md"
+        "ops/collector-mail-notify-example/files/home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md"
       ],
       "requiredBodyTokens": [
         "仅供 collector 自动化使用"
@@ -136,6 +145,7 @@
       "targetSha256": "d5219593a2b12881d623fd7d23c4054a6d1864d4bda3c75c40834d383a1402e1",
       "targetBytes": 11243,
       "contentOwner": "live workshop skill (operator-maintained; no repository ops package)",
+      "currentOwnerCopies": [],
       "legacyCopies": [],
       "requiredBodyTokens": [
         "便单"
@@ -148,10 +158,10 @@
       "ops/collector-skill-dispatcher",
       "ops/collector-mail-agent-triage",
       "ops/collector-mail-notify-example",
-      "ops/collector-agenda-wording-fix",
-      "ops/collector-course-sync"
+      "ops/collector-agenda-wording-fix"
     ],
-    "restoreDetection": "status.sh hashes each live target; if a visible target equals a legacy package copy, it reports VISIBILITY-RESTORED and names that package.",
+    "ownershipRule": "A live body is legitimate when it equals the authoring baseline or a copy listed in that target's currentOwnerCopies. Only a body that equals a copy from an older package is a visibility restoration. currentOwnerCopies always wins over legacyCopies so the current owner package is never reported as a regression.",
+    "restoreDetection": "status.sh hashes each live target: baseline or current-owner content is reported as owner content with the flag absent, while any other repository package copy with the same bytes reports VISIBILITY-RESTORED and names that package. deploy.sh refuses to hide a body restored by a legacy copy.",
     "unrelatedStateFields": [
       "eligible",
       "disabled",

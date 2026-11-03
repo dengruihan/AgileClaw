@@ -36,7 +36,15 @@ for name in "${names[@]}"; do
   fi
   state="$(printf '%s' "$result" | json_stream_field status)"
   case "$state" in
-    visible) planned+=("$name") ;;
+    visible)
+      classification="$(classify_visible_content "$name" "$path")"
+      case "$classification" in
+        legacy:*)
+          die "$name: live body is VISIBILITY-RESTORED by ${classification#legacy:}; repair the content owner before hiding a stale body"
+          ;;
+      esac
+      planned+=("$name")
+      ;;
     hidden) already+=("$name") ;;
     *) die "$name: unexpected state $state" ;;
   esac
@@ -49,7 +57,7 @@ info "expected live visibility: $(manifest_field surfaces.expectedVisibleBefore)
 
 if [ "$write" -eq 0 ]; then
   echo
-  echo "Dry run only. Re-run with --yes after M15 and M19 are merged."
+  echo "Dry run only. Re-run with --yes after this change is reviewed and merged."
   exit 0
 fi
 

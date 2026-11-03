@@ -46,23 +46,42 @@ while IFS= read -r name; do
       ;;
     visible)
       visible=$((visible + 1))
-      hash="$(sha256_file "$path")"
-      baseline_sha="$(target_field "$name" baselineSha256)"
-      if [ "$hash" = "$baseline_sha" ]; then
-        if [ "$mode" = "expect-hidden" ]; then
-          failed "$name: visible (authoring baseline; expected hidden)"
-        else
-          echo "PASS $name: visible (authoring baseline; ready to hide)"
-        fi
-      elif legacy="$(legacy_lookup "$name" "$hash")"; then
-        failed "$name: VISIBILITY-RESTORED by $legacy"
-      else
-        if [ "$mode" = "expect-hidden" ]; then
-          failed "$name: visible (content differs from authoring baseline; expected hidden)"
-        else
-          echo "PASS $name: visible (content differs from authoring baseline; flag absent)"
-        fi
-      fi
+      classification="$(classify_visible_content "$name" "$path")"
+      case "$classification" in
+        baseline-owner:*)
+          owner_path="${classification#baseline-owner:}"
+          if [ "$mode" = "expect-hidden" ]; then
+            failed "$name: visible (authoring baseline; current owner $owner_path; expected hidden)"
+          else
+            echo "PASS $name: visible (authoring baseline; current owner $owner_path; ready to hide)"
+          fi
+          ;;
+        baseline)
+          if [ "$mode" = "expect-hidden" ]; then
+            failed "$name: visible (authoring baseline; expected hidden)"
+          else
+            echo "PASS $name: visible (authoring baseline; ready to hide)"
+          fi
+          ;;
+        owner:*)
+          owner_path="${classification#owner:}"
+          if [ "$mode" = "expect-hidden" ]; then
+            failed "$name: visible (current owner body $owner_path; flag absent; expected hidden)"
+          else
+            echo "PASS $name: visible (current owner body $owner_path; flag absent)"
+          fi
+          ;;
+        legacy:*)
+          failed "$name: VISIBILITY-RESTORED by ${classification#legacy:}"
+          ;;
+        *)
+          if [ "$mode" = "expect-hidden" ]; then
+            failed "$name: visible (content differs from authoring baseline; expected hidden)"
+          else
+            echo "PASS $name: visible (content differs from authoring baseline; flag absent)"
+          fi
+          ;;
+      esac
       ;;
     *)
       failed "$name: unexpected state $state"
@@ -118,5 +137,5 @@ if [ "$failures" -gt 0 ]; then
 fi
 echo "All checks passed."
 if [ "$mode" = "report" ]; then
-  echo "Run '$OPS_DIR/scripts/deploy.sh --yes' only after M15 and M19 are merged."
+  echo "Run '$OPS_DIR/scripts/deploy.sh --yes' only after this change is reviewed and merged."
 fi
