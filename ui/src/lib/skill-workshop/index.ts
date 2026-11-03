@@ -62,7 +62,7 @@ export type SkillWorkshopProposal = {
 };
 
 export type SkillWorkshopAction = "apply" | "evaluate" | "revise" | "reject";
-export type SkillWorkshopMode = "skills" | "suggestions";
+export type SkillWorkshopMode = "skills" | "suggestions" | "experience";
 
 export type SkillWorkshopInstalledSkill = SkillsProposalsListResult["installedSkills"][number] & {
   read?: SkillWorkshopInstalledSelection;

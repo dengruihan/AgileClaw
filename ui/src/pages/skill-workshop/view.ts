@@ -22,6 +22,7 @@ import {
 import { renderSkillDocument, renderSkillWorkshopCollection } from "./collection-view.ts";
 import { renderSkillWorkshopEmptyDetail, renderWorkshopEmptyState } from "./empty-states.ts";
 import { renderSkillWorkshopEvaluation } from "./evaluation-view.ts";
+import { renderSkillWorkshopExperience } from "./experience-view.ts";
 import { renderSkillWorkshopProposalList } from "./proposal-list.ts";
 import { renderSelfLearningError } from "./self-learning.ts";
 import type { SkillWorkshopProps } from "./view-types.ts";
@@ -57,7 +58,9 @@ export function renderSkillWorkshop(props: SkillWorkshopProps) {
   const body =
     props.mode === "skills"
       ? renderSkillWorkshopCollection(props)
-      : renderSuggestions(props, section);
+      : props.mode === "experience"
+        ? renderSkillWorkshopExperience(props.experience)
+        : renderSuggestions(props, section);
 
   return html`
     <section class="skill-workshop sw-mode-${props.mode}">
@@ -75,6 +78,11 @@ export function renderSkillWorkshop(props: SkillWorkshopProps) {
       <div class="sw-view" data-mode=${props.mode}>
         ${keyed(props.mode, html`<div class="sw-view__pane">${body}</div>`)}
       </div>
+      ${
+        props.experience.notice
+          ? html`<div class="sw-action-toast" role="status">${props.experience.notice}</div>`
+          : nothing
+      }
       ${props.actionNotice ? renderActionNotice(props.actionNotice) : nothing}
     </section>
     ${

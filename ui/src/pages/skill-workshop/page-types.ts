@@ -1,4 +1,5 @@
 import type { SkillWorkshopRevisionAdmissionOutcome } from "../../app/skill-workshop-revision-admissions.ts";
+import type { SkillWorkshopExperience } from "../../lib/skill-workshop/experience.ts";
 import type { SkillWorkshopProposalDecision } from "../../lib/skill-workshop/index.ts";
 import type { SkillWorkshopState } from "./proposals.ts";
 import type { SkillWorkshopSelfLearning } from "./self-learning.ts";
@@ -26,4 +27,11 @@ export type SkillWorkshopRenderContext = {
   learningError: string | null;
   onLearn: () => Promise<void>;
   onRetry: () => void;
+  onExperienceRetry: () => void;
+  onExperienceSave: () => void;
+  onExperienceReloadConflict: () => void;
+  onExperiencePromoteSubmit: () => void;
+  onExperienceRetireSubmit: () => void;
+  onExperienceRestore: (experience: SkillWorkshopExperience) => void;
+  onExperienceOpenProposal: (proposalId: string) => void;
 };

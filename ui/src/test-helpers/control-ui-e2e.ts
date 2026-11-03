@@ -2128,6 +2128,13 @@ function installControlUiMockGateway(
           proposals: [],
           installedSkills: [],
         };
+      case "skills.experience.list":
+        return {
+          schema: "openclaw.skill-workshop.experiences-manifest.v1",
+          updatedAt: new Date().toISOString(),
+          experiences: [],
+          counts: { active: 0, promoted: 0, retired: 0 },
+        };
       case "skills.status":
         return {
           workspaceDir: "/tmp/control-ui-mock/workspace",

@@ -1,16 +1,11 @@
-import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
-import { type AddressInfo, createServer } from "node:net";
+import type { AddressInfo } from "node:net";
 import path from "node:path";
-import type { Readable } from "node:stream";
-import { setTimeout as delay } from "node:timers/promises";
-import { fileURLToPath } from "node:url";
 import { asNullableRecord } from "@openclaw/normalization-core/record-coerce";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runQaGatewayFixture } from "../../../test/helpers/qa-gateway-cleanup.ts";
-import { stopChildProcess } from "../../../test/helpers/stop-child-process.ts";
 import type { ApplicationRuntime } from "../app/bootstrap.ts";
 import type { SkillWorkshopDiffResponse } from "../lib/skill-workshop/diff.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
@@ -20,93 +15,18 @@ import {
   resolvePlaywrightChromiumExecutablePath,
   type ControlUiMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
+import {
+  startControlUiMockDevServer,
+  stopControlUiMockDevServer,
+  type ControlUiMockDevServer,
+} from "../test-helpers/control-ui-mock-dev-server.ts";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const chromiumExecutablePath = resolvePlaywrightChromiumExecutablePath(chromium.executablePath());
 const chromiumAvailable = canRunPlaywrightChromium(chromiumExecutablePath);
 const allowMissingChromium = process.env.OPENCLAW_UI_E2E_ALLOW_MISSING_CHROMIUM === "1";
 const captureUiProof = process.env.OPENCLAW_CAPTURE_UI_PROOF === "1";
 const describeStandaloneMockServer =
   chromiumAvailable || !allowMissingChromium ? describe : describe.skip;
-
-type FixtureProcess = ChildProcessByStdio<null, Readable, Readable>;
-
-type FixtureServer = {
-  child: FixtureProcess;
-  url: string;
-  output: () => string;
-};
-
-async function reservePort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
-  const port = (server.address() as AddressInfo).port;
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => (error ? reject(error) : resolve()));
-  });
-  return port;
-}
-
-async function startFixtureServer(fixture?: "attachments" | "workboard"): Promise<FixtureServer> {
-  const port = await reservePort();
-  const url = `http://127.0.0.1:${port}/__fixtures/board/`;
-  const child = spawn(
-    process.execPath,
-    [
-      "--import",
-      "./scripts/tsx.mjs",
-      "scripts/control-ui-mock-dev.ts",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(port),
-      ...(fixture ? ["--fixture", fixture] : []),
-    ],
-    {
-      cwd: repoRoot,
-      env: { ...process.env, CI: "1" },
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
-  let output = "";
-  child.stdout.setEncoding("utf8");
-  child.stderr.setEncoding("utf8");
-  child.stdout.on("data", (chunk: string) => {
-    output += chunk;
-  });
-  child.stderr.on("data", (chunk: string) => {
-    output += chunk;
-  });
-  const mockServer = { child, url, output: () => output };
-
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      throw new Error(`Control UI mock server exited before startup\n${output}`);
-    }
-    try {
-      const response = await fetch(url);
-      if (response.ok) {
-        return mockServer;
-      }
-    } catch {}
-    await delay(100);
-  }
-
-  await stopFixtureServer(mockServer);
-  throw new Error(`timed out waiting for Control UI mock server\n${output}`);
-}
-
-async function stopFixtureServer(server: FixtureServer | undefined): Promise<void> {
-  if (server) {
-    await stopChildProcess(server.child, 5_000);
-  }
-}
 
 function colorChannelToLinear(channel: number): number {
   const value = channel / 255;
@@ -158,7 +78,7 @@ async function readMenuColors(page: Page): Promise<{ background: string; foregro
 }
 
 let browser: Browser;
-let fixtureServer: FixtureServer;
+let fixtureServer: ControlUiMockDevServer;
 
 async function requestPreviewGateway(
   page: Page,
@@ -178,7 +98,7 @@ async function requestPreviewGateway(
 
 describeStandaloneMockServer("standalone Control UI mock server", () => {
   beforeAll(async () => {
-    fixtureServer = await startFixtureServer();
+    fixtureServer = await startControlUiMockDevServer({ fixturePath: "/__fixtures/board/" });
     browser = await chromium.launch({ executablePath: chromiumExecutablePath, headless: true });
   });
 
@@ -187,7 +107,7 @@ describeStandaloneMockServer("standalone Control UI mock server", () => {
       async () => {
         await browser?.close();
       },
-      () => stopFixtureServer(fixtureServer),
+      () => stopControlUiMockDevServer(fixtureServer),
     );
   });
 
@@ -739,7 +659,10 @@ describeStandaloneMockServer("standalone Control UI mock server", () => {
   });
 
   it("serves attachment fixtures and blob previews under the same isolation policy", async () => {
-    const attachments = await startFixtureServer("attachments");
+    const attachments = await startControlUiMockDevServer({
+      fixture: "attachments",
+      fixturePath: "/__fixtures/board/",
+    });
     let context: BrowserContext | undefined;
     await runQaGatewayFixture(
       async () => {
@@ -781,7 +704,7 @@ describeStandaloneMockServer("standalone Control UI mock server", () => {
         );
       },
       () => context?.close(),
-      () => stopFixtureServer(attachments),
+      () => stopControlUiMockDevServer(attachments),
     );
   });
 
@@ -984,11 +907,14 @@ describeStandaloneMockServer("standalone Control UI mock server", () => {
 });
 
 describeStandaloneMockServer("standalone native plugin preview", () => {
-  let server: FixtureServer;
+  let server: ControlUiMockDevServer;
   let previewBrowser: Browser;
 
   beforeAll(async () => {
-    server = await startFixtureServer("workboard");
+    server = await startControlUiMockDevServer({
+      fixture: "workboard",
+      fixturePath: "/__fixtures/board/",
+    });
     previewBrowser = await chromium.launch({
       executablePath: chromiumExecutablePath,
       headless: true,
@@ -997,7 +923,7 @@ describeStandaloneMockServer("standalone native plugin preview", () => {
 
   afterAll(async () => {
     await previewBrowser?.close();
-    await stopFixtureServer(server);
+    await stopControlUiMockDevServer(server);
   });
 
   it("loads native plugin pages and dashboard widgets in the standalone preview", async () => {

@@ -13,7 +13,12 @@ export type SkillWorkshopAdminMethod =
   | "skills.proposals.apply"
   | "skills.proposals.evaluate"
   | "skills.proposals.reject"
-  | "skills.proposals.requestRevision";
+  | "skills.proposals.requestRevision"
+  | "skills.experience.create"
+  | "skills.experience.update"
+  | "skills.experience.retire"
+  | "skills.experience.restore"
+  | "skills.experience.promote";
 
 export function canCallWorkshopAdminMethod(
   snapshot: ApplicationGatewaySnapshot | null | undefined,

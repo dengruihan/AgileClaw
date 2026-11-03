@@ -47,6 +47,13 @@ export function renderSkillWorkshopHeaderControls(
   const pending = state.skillWorkshopProposals.filter(
     (proposal) => proposal.status === "pending",
   ).length;
+  // The Experience count is its own list read, so it is withheld until that
+  // read succeeds rather than borrowing the proposals load state.
+  const experienceCountsKnown =
+    state.skillWorkshopExperienceLoaded &&
+    !state.skillWorkshopExperienceLoading &&
+    !state.skillWorkshopExperienceError;
+  const activeExperiences = state.skillWorkshopExperienceCounts?.active;
 
   return html`
     <div class="sw-header-controls">
@@ -68,6 +75,15 @@ export function renderSkillWorkshopHeaderControls(
             label: html`
               ${sectionIcon(icons.wandSparkles)}
               <span>${t("skillWorkshop.sections.suggestions")}</span>
+            `,
+          },
+          {
+            value: "experience",
+            count:
+              experienceCountsKnown && activeExperiences !== undefined ? activeExperiences : null,
+            label: html`
+              ${sectionIcon(icons.brain)}
+              <span>${t("skillWorkshop.sections.experience")}</span>
             `,
           },
         ],
