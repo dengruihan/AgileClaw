@@ -139,9 +139,7 @@ class PasswordsPage extends OpenClawLightDomElement {
     const snapshot = this.gateway.snapshot;
     return (
       isGatewayMethodAdvertised(snapshot ?? {}, "vault.status") === true &&
-      (this.scopes.includes("operator.vault") ||
-        this.scopes.includes("operator.admin") ||
-        this.scopes.includes("operator.vault.reveal"))
+      (this.scopes.includes("operator.vault") || this.scopes.includes("operator.admin"))
     );
   }
 
