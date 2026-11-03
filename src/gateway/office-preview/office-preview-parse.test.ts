@@ -71,6 +71,28 @@ describe("parseOfficePreviewBuffer", () => {
     expect(preview?.truncated).toBe(true);
   });
 
+  it("rejects overlong column references instead of overflowing the payload", async () => {
+    const overlong = "A".repeat(400);
+    const sheetDataXml =
+      `<row r="1"><c r="${overlong}1"><v>1</v></c><c r="B1"><v>2</v></c></row>` +
+      '<row r="2"><c r="XFD2"><v>3</v></c></row>';
+    const preview = parseOfficePreviewBuffer(
+      await buildXlsxFixture({ sheets: [{ name: "Columns", sheetDataXml }], sharedStrings: [] }),
+      "xlsx",
+    );
+
+    expectValidPreview(preview);
+    const sheet = preview?.sheets?.[0];
+    // The malformed reference resolves to no column and falls back to position.
+    expect(sheet?.rows[0]).toEqual(["1", "2"]);
+    expect(sheet?.columnCount).toBe(16_384);
+    expect(Number.isSafeInteger(sheet?.columnCount)).toBe(true);
+    // The wire format is JSON, which would turn a non-finite value into null.
+    const serialized = JSON.stringify(preview);
+    expect(serialized).toContain('"columnCount":16384');
+    expect(serialized).not.toContain('"columnCount":null');
+  });
+
   it("keeps headings, paragraph runs, and list items for documents", async () => {
     const preview = parseOfficePreviewBuffer(await buildDocxFixture(), "docx");
     expectValidPreview(preview);
@@ -196,16 +218,14 @@ describe("parseOfficePreviewBuffer", () => {
   it("never reads slide parts behind external relationships", async () => {
     const preview = parseOfficePreviewBuffer(
       await buildPptxFixture([{ title: "Roadmap", lines: ["Ship"] }], {
-        linkedSlides: [{ id: 999, relationshipId: "rIdExternal" }],
+        // The slide list points directly at an in-package part marked
+        // TargetMode="External". If the relationship filter disappeared, the
+        // secret would resolve and the assertions below would fail.
+        linkedSlides: [{ id: 999, relationshipId: "rIdSecret" }],
         presentationRelationships: [
           {
-            id: "rIdExternal",
+            id: "rIdSecret",
             type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
-            target: "https://evil.example/stolen-slide.xml",
-            targetMode: "External",
-          },
-          {
-            id: "rIdLocal",
             target: "/hidden/secret-slide.xml",
             targetMode: "External",
           },

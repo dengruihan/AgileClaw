@@ -90,6 +90,23 @@ describe("sessions.files office previews", () => {
     expect(Value.Check(SessionFileOfficePreviewSchema, file.officePreview)).toBe(true);
   });
 
+  it("returns schema-valid payloads for overlong column references", async () => {
+    const overlong = "A".repeat(400);
+    const sheetDataXml = `<row r="1"><c r="${overlong}1"><v>1</v></c><c r="B1"><v>2</v></c></row>`;
+    fs.writeFileSync(
+      path.join(workspaceRoot, "overlong-column.xlsx"),
+      await buildXlsxFixture({ sheets: [{ name: "Columns", sheetDataXml }], sharedStrings: [] }),
+    );
+
+    const file = expectOkPayload(await getFile("overlong-column.xlsx")).file;
+
+    expect(file.previewKind).toBe("office");
+    expect(file.officePreview.sheets[0].rows).toEqual([["1", "2"]]);
+    expect(file.officePreview.sheets[0].columnCount).toBe(2);
+    expect(Value.Check(SessionFileOfficePreviewSchema, file.officePreview)).toBe(true);
+    expect(JSON.stringify(file.officePreview)).toContain('"columnCount":2');
+  });
+
   it("returns structured payloads for modern OOXML files", async () => {
     fs.writeFileSync(path.join(workspaceRoot, "budget.xlsx"), await buildXlsxFixture());
     fs.writeFileSync(path.join(workspaceRoot, "report.docx"), await buildDocxFixture());

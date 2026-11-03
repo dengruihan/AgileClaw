@@ -239,7 +239,8 @@ export const SessionFileOfficeSheetSchema = closedObject({
   rowNumbers: Type.Optional(Type.Array(Type.Integer({ minimum: 1 }), { maxItems: 200 })),
   /** Rows and columns the sheet declares, including ones omitted by truncation. */
   rowCount: Type.Integer({ minimum: 0 }),
-  columnCount: Type.Integer({ minimum: 0 }),
+  /** Bounded by the spreadsheet column limit so malformed references stay valid. */
+  columnCount: Type.Integer({ minimum: 0, maximum: 16_384 }),
   truncated: Type.Optional(Type.Boolean()),
 });
 

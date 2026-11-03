@@ -168,14 +168,25 @@ class CharacterBudget {
   }
 }
 
+/**
+ * Excel's last column is XFD (16,384). Longer references are malformed input,
+ * and accumulating unbounded letters would overflow into Infinity and break the
+ * closed protocol payload, so they resolve to no column.
+ */
+const MAX_SPREADSHEET_COLUMNS = 16_384;
+const MAX_COLUMN_REFERENCE_LETTERS = 4;
+
 function columnIndexFromReference(reference: string | undefined): number | undefined {
   const letters = reference?.match(/^[A-Za-z]+/u)?.[0];
-  if (!letters) {
+  if (!letters || letters.length > MAX_COLUMN_REFERENCE_LETTERS) {
     return undefined;
   }
   let index = 0;
   for (const letter of letters.toUpperCase()) {
     index = index * 26 + (letter.charCodeAt(0) - 64);
+    if (index > MAX_SPREADSHEET_COLUMNS) {
+      return undefined;
+    }
   }
   return index - 1;
 }
@@ -280,7 +291,7 @@ function parseWorksheet(
     for (const cell of cells) {
       const column = columnIndexFromReference(attribute(cell, "r")) ?? nextColumn;
       nextColumn = column + 1;
-      columnCount = Math.max(columnCount, column + 1);
+      columnCount = Math.min(MAX_SPREADSHEET_COLUMNS, Math.max(columnCount, column + 1));
       const value = budget.take(cellValue(cell, sharedStrings), OFFICE_PREVIEW_MAX_CELL_CHARS);
       if (displayedCells >= OFFICE_PREVIEW_MAX_SHEET_CELLS) {
         truncated = true;
