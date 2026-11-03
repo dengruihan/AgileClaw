@@ -28,6 +28,7 @@
     "rollback": "scripts/rollback.sh <backup directory>",
     "packageCheck": "node verify/check-package.mjs --source <built checkout>",
     "replayTests": "bash verify/replay-tests.sh ~/repos/agenda",
+    "backupRegression": "node --test verify/backup-failure.test.mjs",
     "screenshots": "node verify/screenshot.mjs --assets <built assets> --out verify/screenshots --label after --verify unified"
   }
 }

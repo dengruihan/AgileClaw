@@ -317,14 +317,26 @@ try {
     assert(dialog?.includes("执行安排"), "detail dialog lost its block section");
     await page.locator(".detail-dialog .icon-button").click();
 
-    const [request] = await Promise.all([
+    const [request, response] = await Promise.all([
       page.waitForRequest((candidate) => candidate.url().includes("/agenda/api/feedback")),
+      page.waitForResponse(
+        (candidate) =>
+          candidate.url().includes("/agenda/api/feedback") &&
+          candidate.request().method() === "POST",
+      ),
       page.locator(".agenda-entry .block-completion input").first().click(),
     ]);
     const body = request.postDataJSON();
+    const receipt = await response.json();
     assert(body.kind === "complete_block", `completion sent ${body.kind}`);
     assert(body.targetId === "course-math-block", `completion targeted ${body.targetId}`);
-    assert(feedbackRequest?.operationId === body.operationId, "feedback receipt did not match");
+    assert(response.ok(), `feedback POST returned ${response.status()}`);
+    assert(receipt.ok === true, "feedback receipt was not accepted");
+    assert(
+      receipt.operationId === body.operationId,
+      "feedback receipt operationId did not match the request",
+    );
+    assert(feedbackRequest?.operationId === body.operationId, "server did not consume feedback");
     await page.close();
   }
 } finally {

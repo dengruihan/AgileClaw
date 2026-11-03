@@ -7,8 +7,8 @@ import path from "node:path";
 import {
   backupRoot,
   compareHashes,
+  createVerifiedBackup,
   databasePath,
-  ensureDirectory,
   installRoot,
   installedHashes,
   liveRevision,
@@ -62,11 +62,19 @@ if (!apply) {
   process.exit(0);
 }
 
-await ensureDirectory(backup);
-for (const entry of managedEntries) {
-  const from = path.join(installRoot, entry);
-  await cp(from, path.join(backup, entry), { recursive: true }).catch(() => {});
+let backupSummary;
+try {
+  backupSummary = await createVerifiedBackup(installRoot, backup, managedEntries);
+} catch (error) {
+  console.error(
+    `Backup failed before any live file was changed: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  await rm(backup, { recursive: true, force: true });
+  process.exit(1);
 }
+console.log(
+  `backup verified: ${backupSummary.files} files across ${backupSummary.entries} entries`,
+);
 const backupMetadata = {
   timestamp: stamp,
   sourceCommit: commit,

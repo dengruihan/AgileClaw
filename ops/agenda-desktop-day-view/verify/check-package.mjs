@@ -40,6 +40,21 @@ const patch = await readFile(path.join(packageRoot, "external", "source.patch"),
 check(patch.startsWith("From "), "source.patch is a format-patch series");
 check(patch.includes(fields.commit ?? "no-commit"), "source.patch contains the recorded commit");
 
+const deploy = await readFile(path.join(packageRoot, "scripts", "deploy.mjs"), "utf8");
+check(deploy.includes("createVerifiedBackup"), "deploy verifies the backup before mutation");
+check(!deploy.includes(".catch(() => {})"), "deploy does not swallow copy failures");
+
+const screenshot = await readFile(path.join(packageRoot, "verify", "screenshot.mjs"), "utf8");
+check(
+  screenshot.includes("waitForResponse") &&
+    screenshot.includes('candidate.url().includes("/agenda/api/feedback")'),
+  "screenshot waits for the feedback response",
+);
+check(
+  await exists(path.join(packageRoot, "verify", "backup-failure.test.mjs")),
+  "isolated backup-failure regression",
+);
+
 for (const name of [
   "before-desktop-light.png",
   "before-desktop-dark.png",

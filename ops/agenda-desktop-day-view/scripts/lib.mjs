@@ -1,27 +1,23 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, stat } from "node:fs/promises";
+import { cp, lstat, mkdir, readFile, readdir, readlink, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const packageRoot = fileURLToPath(new URL("..", import.meta.url));
-export const installRoot = path.join(os.homedir(), ".openclaw", "extensions", "agenda");
-export const backupRoot = path.join(
-  os.homedir(),
-  ".openclaw",
-  "backups",
-  "agenda-desktop-day-view",
-);
-export const databasePath = path.join(
-  os.homedir(),
-  ".openclaw",
-  "plugins",
-  "agenda",
-  "agenda.sqlite",
-);
-export const liveOrigin = "http://127.0.0.1:18810";
+// Environment overrides let the isolated backup regression run without touching
+// the real installation, database, or Gateway.
+export const installRoot =
+  process.env.AGENDA_INSTALL_ROOT ?? path.join(os.homedir(), ".openclaw", "extensions", "agenda");
+export const backupRoot =
+  process.env.AGENDA_BACKUP_ROOT ??
+  path.join(os.homedir(), ".openclaw", "backups", "agenda-desktop-day-view");
+export const databasePath =
+  process.env.AGENDA_DATABASE_PATH ??
+  path.join(os.homedir(), ".openclaw", "plugins", "agenda", "agenda.sqlite");
+export const liveOrigin = process.env.AGENDA_LIVE_ORIGIN ?? "http://127.0.0.1:18810";
 export const managedEntries = ["dist", "assets", "skills", "openclaw.plugin.json"];
 
 export async function readJson(file) {
@@ -75,6 +71,74 @@ export function compareHashes(expected, actual) {
     actual: actual[relative] ?? null,
     ok: hash === actual[relative],
   }));
+}
+
+async function hashPath(absolute) {
+  const info = await lstat(absolute);
+  if (info.isSymbolicLink()) {
+    return { "": `link:${await readlink(absolute)}` };
+  }
+  if (info.isFile()) {
+    return { "": await sha256File(absolute) };
+  }
+  if (!info.isDirectory()) {
+    throw new Error(`unsupported backup entry: ${absolute}`);
+  }
+  const result = {};
+  const walk = async (directory, prefix) => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const child = path.join(directory, entry.name);
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        await walk(child, relative);
+      } else if (entry.isSymbolicLink()) {
+        result[relative] = `link:${await readlink(child)}`;
+      } else if (entry.isFile()) {
+        result[relative] = await sha256File(child);
+      } else {
+        throw new Error(`unsupported backup entry: ${child}`);
+      }
+    }
+  };
+  await walk(absolute, "");
+  return result;
+}
+
+export async function hashEntries(root, entries = managedEntries) {
+  const result = {};
+  for (const entry of entries) {
+    const hashes = await hashPath(path.join(root, entry));
+    for (const [relative, hash] of Object.entries(hashes)) {
+      result[`${entry}${relative ? `/${relative}` : ""}`] = hash;
+    }
+  }
+  return result;
+}
+
+// Copy every required installation entry, then prove the backup contains the
+// same file set and bytes before deploy.mjs is allowed to touch live files.
+export async function createVerifiedBackup(sourceRoot, destinationRoot, entries = managedEntries) {
+  await ensureDirectory(destinationRoot);
+  for (const entry of entries) {
+    const from = path.join(sourceRoot, entry);
+    if (!(await exists(from))) {
+      throw new Error(`required installation entry is missing: ${entry}`);
+    }
+    await cp(from, path.join(destinationRoot, entry), { recursive: true, force: true });
+  }
+  const expected = await hashEntries(sourceRoot, entries);
+  const actual = await hashEntries(destinationRoot, entries);
+  const mismatches = [];
+  for (const [relative, hash] of Object.entries(expected)) {
+    if (actual[relative] !== hash) mismatches.push(relative);
+  }
+  for (const relative of Object.keys(actual)) {
+    if (!(relative in expected)) mismatches.push(relative);
+  }
+  if (mismatches.length) {
+    throw new Error(`backup verification failed for: ${mismatches.slice(0, 8).join(", ")}`);
+  }
+  return { entries: entries.length, files: Object.keys(expected).length };
 }
 
 export async function liveRevision() {

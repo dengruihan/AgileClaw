@@ -1,8 +1,12 @@
 # Agenda 桌面日视图合并为一张全天表（M22，2026-11-03）
 
-状态：**实现、测试、构建、截图与证据包已完成，等待独立复审和合并；尚未部署**。
+状态：**r1 复审工具修复已完成，等待复审和合并；尚未部署**。
 外部源码基于当前线上/已复审的 M18 tip `53962ec`，不是旧 `3d275df`。本次没有改动任何真实日程、
 课表或数据库；观察线上 revision 只用了 `GET /agenda/api/status`（180）。
+
+r1 只修工具，不改已获认可的 UI：截图脚本在完成反馈断言前等待 `POST /agenda/api/feedback`
+的 response 并解析 receipt；部署备份不再吞掉复制错误，复制前检查每个必需安装项，复制后逐文件
+哈希验证，任一失败都在 live mutation 前中止；新增 4 个隔离备份回归。
 
 用户原话：『我需要你迭代一下现在的agenda 的desktop版本，显示当日日程的页面，不用上午下午分开展示，
 做到一张表里』。范围仅限 `display=desktop` 的日视图；周/月/移动布局不变。
@@ -64,6 +68,13 @@ npx tsc --ignoreConfig --noEmit --strict --target es2022 \
 
 cd /home/raymond/repos/AgileClaw/.tower/worktrees/wt-22
 bash ops/agenda-desktop-day-view/verify/replay-tests.sh ~/repos/agenda
+node --test ops/agenda-desktop-day-view/verify/backup-failure.test.mjs
+for run in 1 2 3 4 5; do
+  node ops/agenda-desktop-day-view/verify/screenshot.mjs \
+    --assets .external/agenda/assets \
+    --out ops/agenda-desktop-day-view/verify/screenshots \
+    --label after --verify unified
+done
 node ops/agenda-desktop-day-view/verify/check-package.mjs --source .external/agenda
 ```
 
@@ -71,11 +82,14 @@ node ops/agenda-desktop-day-view/verify/check-package.mjs --source .external/age
 
 - `pnpm test`：**50 tests passed**（原 47 + 3 个新回归）。
 - 补丁在 `53962ec` 上 `git am` 后 tree 完全一致（`0c1344…`），重放构建 + 50 tests 全绿。
-- `check-package.mjs` 21 项证据检查全部通过。
-- 浏览器断言（`screenshot.mjs --verify unified`）：唯一全天表、无上午/下午切换、标题含「全天」、
-  5 个定时行跨 08:10–19:00、全天事项与截止可见、`现在 11:30` 标记存在、5 个完成控件；
-  实测打开详情弹窗，并实际点击「本段完成」确认 `POST /agenda/api/feedback`
-  提交 `kind:"complete_block"`、`targetId:"course-math-block"`。
+- r1 备份回归：**4/4 passed**（成功复制 + 哈希一致、缺失必需项拒绝、复制冲突不被吞、
+  deploy 在 live mutation 前中止且不调用 `openclaw`）。
+- 浏览器断言（`screenshot.mjs --verify unified`）连续运行 **5 次全部通过**：唯一全天表、无上午/下午
+  切换、标题含「全天」、5 个定时行跨 08:10–19:00、全天事项与截止可见、`现在 11:30` 标记存在、
+  5 个完成控件；实测打开详情弹窗，并实际点击「本段完成」。完成反馈断言现在等待
+  `POST /agenda/api/feedback` 的 response，读取并核对 receipt 后再检查服务端已消费的请求，
+  不再依赖 `waitForRequest` 后的推测时序。
+- `check-package.mjs` 全部证据检查通过（包含备份不吞错、截图等待 response、隔离回归文件）。
 - 全量 `pnpm typecheck` 仍被宿主私有 SQLite facade 的 `.d.ts` 缺失阻塞（`sqlite-runtime`、
   `sqlite-worker-runtime` 及其 implicit-any），与 M18 记录的环境问题相同；web 源码单独 strict
   typecheck 无错误。构建与全部运行时测试通过。
@@ -115,9 +129,14 @@ node scripts/deploy.mjs --source ../../.external/agenda      # 计划
 node scripts/deploy.mjs --source ../../.external/agenda --yes
 ```
 
-部署脚本会：校验源 HEAD 与 7 个构建产物哈希 → 备份 `dist/assets/skills/openclaw.plugin.json`
+部署脚本会：校验源 HEAD 与 7 个构建产物哈希 → 检查并复制所有必需安装项
+`dist/assets/skills/openclaw.plugin.json`，然后逐文件 SHA-256 验证备份与安装一致（任一项缺失、
+复制失败或校验不一致都会在任何 live 文件被替换前中止，不调用 reload）
 → `VACUUM INTO` 数据库快照（仅证据，不恢复、不写入）→ 复制 → `openclaw plugins reload agenda
 --wait --json` → `openclaw gateway health` → 逐文件哈希比对 → 读取前后 revision。
+
+`AGENDA_INSTALL_ROOT`、`AGENDA_BACKUP_ROOT`、`AGENDA_DATABASE_PATH`、`AGENDA_LIVE_ORIGIN`
+只用于隔离回归（`verify/backup-failure.test.mjs`）；正常部署使用上述默认路径。
 
 部署后还需人工/浏览器核验真实 `http://127.0.0.1:18810/agenda/?display=desktop` 当日页面：
 唯一全天表、无上午/下午切换、当前时间、全天/截止、详情和完成交互；确认 Gateway/插件健康且
