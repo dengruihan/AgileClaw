@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 //   - collector-mail-triage reads the local notmuch index read-only, with
 //     bounded candidate count and body size, no attachments, no tag/new,
 //     no marking read and no replies
-//   - watermarks store timestamps only
+//   - no watermark/sidecar: bounded stateless re-reads keep unprocessed mail reachable
 //   - schedule-sweep stays the only owner of agenda rules and collector-notify
 //     stays the only owner of notification wording (M11 owns its fallback)
 //   - deploy/rollback only edit payload.message and the two mail skills, and
@@ -38,7 +38,6 @@ const REPAIR_TARGET = "/home/raymond/.openclaw/workspace/skills/collector-health
 const NOTIFY_TARGET = "/home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md";
 const SCHEDULE_SWEEP =
   "/home/raymond/.openclaw/agents/main/agent/workshop-skills/schedule-sweep/SKILL.md";
-const WATERMARK = "/home/raymond/.openclaw/workspace/collection/state/mail-triage.json";
 
 const payload = read("payload-message.txt").replace(/\n$/u, "");
 const mail = read(MAIL_SKILL);
@@ -150,30 +149,33 @@ for (const [label, needle] of [
   ["no content in report or snapshots", "发件人/主题/正文都不进 report.json 或收集快照"],
   ["not a capability boundary", "这是常规步骤，不是能力边界"],
   ["count alone is not an action basis", "不能单独作为提醒理由"],
-  ["watermark path", WATERMARK],
-  ["watermark read command", "cat \"$W\" 2>/dev/null || echo '{}'"],
+  ["no persistent progress", "不创建、不读取、不写入任何水位/进度/缓存文件"],
+  ["no new database or table", "不新增数据库或表"],
+  ["stateless re-read wording", "每轮都从最新邮件重新定位"],
+  ["unprocessed remain reachable", "下一次唤醒时仍在候选里"],
   [
     "candidate search command",
-    'notmuch search --format=json --sort=newest-first --limit=10 "folder:$acct/INBOX"',
+    'notmuch search --format=json --sort=newest-first --limit=20 "folder:$acct/INBOX"',
   ],
-  ["candidate watermark filter", "select(.timestamp > $s)"],
   ["candidate rows carry sender/subject", "[$a, .timestamp, .query[0], .authors, .subject]"],
   ["two mail accounts", "for acct in yungu qq; do"],
-  ["per-account bound", "每账号最多 10 条"],
-  ["round candidate bound", "取前 8 封为本轮候选"],
-  ["excess candidates skipped", "更旧的候选本轮完全跳过"],
-  ["no guessing from counts", "也不凭计数猜内容"],
-  [
-    "late-delivery fallback",
-    "若某个账号净新增 > 0 却没有候选，放宽到该账号最新 3 封（忽略水位）重新定位",
-  ],
-  ["fallback failure skipped", "仍无可读条目就跳过该账号本轮，不猜"],
+  ["per-account query bound", "每账号查询上限 20 条"],
+  ["no round truncation", "不额外按排序截断候选"],
+  ["every candidate is judged", "逐项判断"],
+  ["net count is not per-message progress", "它不是逐封已处理状态"],
   [
     "body read command",
     "notmuch show --format=text --body=true --include-html=true --entire-thread=false",
   ],
+  ["body capture before truncation", "body=$(notmuch show"],
   ["body size bound", "head -c 4000"],
   ["body size wording", "正文最多 4000 字节"],
+  ["explicit notmuch search failure", 'echo "NOTMUCH_SEARCH_FAILED:$acct" >&2'],
+  ["explicit jq failure", 'echo "JQ_FAILED:$acct" >&2'],
+  ["explicit notmuch show failure", "NOTMUCH_SHOW_FAILED"],
+  ["search pipeline pipefail", "set -o pipefail"],
+  ["failure is not empty success", "不要把它当成「没有新邮件」"],
+  ["single message failure skipped", "单封读取失败跳过该封，其余候选照常判断"],
   ["read only needed bodies", "其余需要确认时才读正文，每封一次"],
   ["skip bodies for obvious marketing", "明显营销、群发、自动通知"],
   ["no attachment reads", "不按 part 取附件、不转存、不打开附件文件"],
@@ -186,25 +188,15 @@ for (const [label, needle] of [
   ["uncertain stays silent", "拿不准是否需行动、且没有明确截止或请求 → 静默"],
   ["no bodyless reminder", "不发「收集层无正文」「请自己打开邮箱查看」这类提醒"],
   ["notify example override", "collector-notify 里的邮件无法读取示例不适用于本轮"],
-  [
-    "watermark is timestamp only",
-    "水位文件只写 unix 时间戳，不写发件人、主题、正文、邮件 id、链接或凭据",
-  ],
-  ["watermark monotonic", "只增不减"],
-  [
-    "query failure keeps watermark",
-    "查询整体失败（notmuch 报错/超时/不可用）时不要更新对应账号水位，下轮重试",
-  ],
-  ["single message failure skipped", "单封读取失败跳过该封，其余照常"],
-  [
-    "watermark write failure is reported",
-    "水位写入失败不影响本轮判断，在结果里说明下轮可能重复读取",
-  ],
+  ["dedupe across rounds", "同一封邮件可能在相邻轮次重复出现"],
+  ["agenda dedupe before notify", "登记前按 schedule-sweep 查重"],
   ["retry once", "重试一次"],
+  ["uncertain location is skipped", "定位不确定也跳过"],
   ["no bodyless reminder on failure", "不发无正文提醒，不猜内容"],
-  ["round cap wording", "每轮最多 8 封候选、每封正文 4000 字节"],
+  ["bounded candidate wording", "每账号最多 20 条候选、每封正文 4000 字节"],
   ["prefer a miss over a wrong reminder", "宁可本轮漏报，也不做无正文误报"],
   ["net change semantics", "计数是净变化（新增减删除）"],
+  ["no wake without a new delta", "没有新的净新增就不会再次唤醒"],
   ["does not run collection", "不运行收集命令"],
   ["does not change the trigger", "不改 trigger/schedule"],
   ["schedule-sweep route", SCHEDULE_SWEEP],
@@ -213,6 +205,22 @@ for (const [label, needle] of [
 ]) {
   check(`mail: ${label}`, has(mail, needle), needle);
 }
+
+check(
+  "mail skill has no sidecar state path",
+  !has(mail, "mail-triage.json") && !has(mail, "lastSeenTs"),
+);
+check(
+  "mail skill never writes collection state",
+  !/>\s*\/home\/[^\n]*collection\/state/u.test(mail),
+);
+check("mail skill captures search output explicitly", has(mail, "raw=$(notmuch search"));
+check("mail skill never runs sqlite3", !has(mail, "sqlite3"));
+check("mail skill never touches the agent database", !has(mail, "openclaw-agent.sqlite"));
+check(
+  "mail skill does not pipe notmuch directly into head",
+  !/notmuch show[^\n]*\|\s*head/u.test(mail),
+);
 
 // Read-only constraints: no mutating notmuch/mail commands anywhere in the skill.
 check("mail skill never tags messages", !/notmuch\s+tag\s+[+-]/u.test(mail));
@@ -373,12 +381,32 @@ check(
   has(isolated, "body read is capped at 4000 bytes"),
 );
 check(
-  "isolated check asserts the 10-message cap",
-  has(isolated, "per-account query is limited to 10"),
+  "isolated check asserts the per-account cap",
+  has(isolated, "per-account lookup is capped at 20"),
 );
 check(
-  "isolated check asserts timestamp-only watermark",
-  has(isolated, "watermark only has account keys and updatedAt"),
+  "isolated check asserts no sidecar state",
+  has(isolated, "no sidecar progress file was created"),
+);
+check(
+  "isolated check proves >8 is not truncated",
+  has(isolated, "lookup returns all 11 candidates (no >8 round cut)"),
+);
+check(
+  "isolated check proves >10 is not truncated",
+  has(isolated, "lookup returns all 21 candidates (no >10 round cut)"),
+);
+check(
+  "isolated check proves no candidate disappears",
+  has(isolated, "no candidate disappears between lookups"),
+);
+check(
+  "isolated check proves a failed body stays reachable",
+  has(isolated, "failed message is still returned next lookup"),
+);
+check(
+  "isolated check proves search failure is explicit",
+  has(isolated, "candidate search failure is reported explicitly"),
 );
 check("live probe is read-only", !/notmuch\s+(tag|new|insert)/u.test(liveProbe));
 check("live probe prints no message ids", !/printf[^\n]*\$q/u.test(liveProbe));
@@ -407,6 +435,10 @@ for (const [label, needle] of [
   ["live read-only verification", "verify/live-readonly-probe.sh"],
   ["deploy simulation", "verify/deploy-sim.sh"],
   ["skill discovery", "verify/discover-skills.sh"],
+  ["no persistent state", "不新增任何持久状态"],
+  ["stateless bounded reread", "无持久进度"],
+  ["sidecar removal rationale", "JSON sidecar"],
+  ["body/cap failure tests documented", "正文失败后下轮仍可查"],
   ["natural observation after deploy", "部署后自然观察"],
   ["M11 coordination", "M11"],
   ["M10 baseline", "M10"],
