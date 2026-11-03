@@ -60,6 +60,7 @@ const APP_ROUTE_DEFINITIONS = {
   notifications: { path: "/settings/notifications" },
   security: { path: "/settings/security" },
   secrets: { path: "/settings/secrets" },
+  passwords: { path: "/settings/passwords" },
   advanced: { path: "/settings/advanced" },
   approvals: { path: "/settings/approvals" },
   automation: { path: "/settings/automation", aliases: ["/automation"] },

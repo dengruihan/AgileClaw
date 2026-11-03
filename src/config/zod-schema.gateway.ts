@@ -12,6 +12,8 @@ import {
   SESSION_WRITE_SCOPE,
   TALK_SCOPE,
   TALK_SECRETS_SCOPE,
+  VAULT_REVEAL_SCOPE,
+  VAULT_SCOPE,
   WRITE_SCOPE,
 } from "../gateway/operator-scopes.js";
 import { normalizeGitHubLogin } from "../utils/github-login.js";
@@ -38,6 +40,8 @@ const OperatorScopeSchema = z.enum([
   PAIRING_SCOPE,
   TALK_SCOPE,
   TALK_SECRETS_SCOPE,
+  VAULT_SCOPE,
+  VAULT_REVEAL_SCOPE,
 ]);
 const GatewayGitHubEndpointSchema = z
   .strictObject({

@@ -2746,3 +2746,93 @@ CREATE TABLE IF NOT EXISTS secret_store_entries (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS secret_store_entries_live_idx
   ON secret_store_entries (scope_kind, scope_id, name) WHERE deleted_at_ms IS NULL;
+
+-- Personal website-password vault. Secret fields are stored only as AES-256-GCM
+-- ciphertext; metadata remains queryable while locked. No value column exists.
+CREATE TABLE IF NOT EXISTS vault_entries (
+  item_ref TEXT NOT NULL PRIMARY KEY CHECK (length(item_ref) BETWEEN 1 AND 128),
+  owner_kind TEXT NOT NULL CHECK (owner_kind IN ('profile')),
+  owner_id TEXT NOT NULL CHECK (length(owner_id) BETWEEN 1 AND 256),
+  origin_scheme TEXT NOT NULL CHECK (origin_scheme IN ('https', 'http')),
+  origin_host TEXT NOT NULL CHECK (length(origin_host) BETWEEN 1 AND 253),
+  origin_port INTEGER NOT NULL CHECK (origin_port BETWEEN 1 AND 65535),
+  site_label TEXT NOT NULL CHECK (length(site_label) BETWEEN 1 AND 256),
+  account TEXT NOT NULL CHECK (length(account) BETWEEN 1 AND 512),
+  label TEXT,
+  has_notes INTEGER NOT NULL CHECK (has_notes IN (0, 1)),
+  revision INTEGER NOT NULL CHECK (revision >= 1),
+  password_updated_at_ms INTEGER,
+  last_used_at_ms INTEGER,
+  created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+  updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms >= 0),
+  deleted_at_ms INTEGER
+) STRICT;
+CREATE UNIQUE INDEX IF NOT EXISTS vault_entries_owner_active_account_idx
+  ON vault_entries (owner_kind, owner_id, origin_host, account) WHERE deleted_at_ms IS NULL;
+CREATE INDEX IF NOT EXISTS vault_entries_owner_live_idx
+  ON vault_entries (owner_kind, owner_id, deleted_at_ms, updated_at_ms DESC);
+CREATE INDEX IF NOT EXISTS vault_entries_owner_deleted_idx
+  ON vault_entries (owner_kind, owner_id, deleted_at_ms) WHERE deleted_at_ms IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS vault_entry_secrets (
+  item_ref TEXT NOT NULL PRIMARY KEY REFERENCES vault_entries(item_ref) ON DELETE CASCADE,
+  key_id TEXT NOT NULL,
+  aad_version INTEGER NOT NULL CHECK (aad_version = 1),
+  secret_nonce BLOB NOT NULL CHECK (length(secret_nonce) = 12),
+  secret_ciphertext BLOB NOT NULL,
+  notes_nonce BLOB NOT NULL CHECK (length(notes_nonce) = 12),
+  notes_ciphertext BLOB NOT NULL,
+  updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms >= 0)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS vault_keys (
+  key_id TEXT NOT NULL PRIMARY KEY CHECK (length(key_id) BETWEEN 1 AND 128),
+  owner_kind TEXT NOT NULL CHECK (owner_kind IN ('profile')),
+  owner_id TEXT NOT NULL CHECK (length(owner_id) BETWEEN 1 AND 256),
+  created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+  retired_at_ms INTEGER
+) STRICT;
+CREATE UNIQUE INDEX IF NOT EXISTS vault_keys_owner_live_idx
+  ON vault_keys (owner_kind, owner_id) WHERE retired_at_ms IS NULL;
+
+CREATE TABLE IF NOT EXISTS vault_key_wraps (
+  key_id TEXT NOT NULL PRIMARY KEY REFERENCES vault_keys(key_id) ON DELETE CASCADE,
+  method TEXT NOT NULL CHECK (method IN ('passphrase')),
+  kdf TEXT NOT NULL CHECK (kdf IN ('scrypt')),
+  salt BLOB NOT NULL CHECK (length(salt) = 16),
+  params_json TEXT NOT NULL,
+  nonce BLOB NOT NULL CHECK (length(nonce) = 12),
+  wrapped_dek BLOB NOT NULL,
+  key_check BLOB NOT NULL CHECK (length(key_check) = 32),
+  created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+  last_used_at_ms INTEGER
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS vault_meta (
+  owner_kind TEXT NOT NULL CHECK (owner_kind IN ('profile')),
+  owner_id TEXT NOT NULL CHECK (length(owner_id) BETWEEN 1 AND 256),
+  auto_lock_seconds INTEGER NOT NULL CHECK (auto_lock_seconds BETWEEN 15 AND 86400),
+  failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0),
+  locked_until_ms INTEGER,
+  updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms >= 0),
+  PRIMARY KEY (owner_kind, owner_id)
+) STRICT;
+
+-- Value-free audit trail owned by the vault. Passwords, notes, and account names
+-- never appear here; the item reference and action are sufficient for review.
+CREATE TABLE IF NOT EXISTS vault_audit_events (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id TEXT NOT NULL UNIQUE,
+  owner_kind TEXT NOT NULL CHECK (owner_kind IN ('profile')),
+  owner_id TEXT NOT NULL CHECK (length(owner_id) BETWEEN 1 AND 256),
+  action TEXT NOT NULL CHECK (action IN (
+    'initialize', 'unlock', 'unlock-failed', 'lock', 'create', 'update',
+    'delete', 'restore', 'purge', 'reveal', 'copy', 'generate', 'purge-expired'
+  )),
+  status TEXT NOT NULL CHECK (status IN ('succeeded', 'failed', 'blocked')),
+  item_ref TEXT,
+  reason_code TEXT,
+  occurred_at_ms INTEGER NOT NULL CHECK (occurred_at_ms >= 0)
+) STRICT;
+CREATE INDEX IF NOT EXISTS vault_audit_events_owner_sequence_idx
+  ON vault_audit_events (owner_kind, owner_id, sequence DESC);

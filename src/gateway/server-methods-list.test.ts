@@ -278,6 +278,21 @@ describe("listGatewayMethods", () => {
       "sessions.processes.list",
       "sessions.processes.stop",
       "models.authInspectApiKey",
+      "vault.status",
+      "vault.initialize",
+      "vault.unlock",
+      "vault.lock",
+      "vault.list",
+      "vault.create",
+      "vault.update",
+      "vault.delete",
+      "vault.restore",
+      "vault.purge",
+      "vault.reveal",
+      "vault.copy",
+      "vault.generate",
+      "vault.setAutoLock",
+      "vault.audit.list",
     ];
     expect(listGatewayMethods().slice(-expectedSuffix.length)).toEqual(expectedSuffix);
     const methods = listGatewayMethods();
@@ -362,6 +377,21 @@ describe("listGatewayMethods", () => {
       "sessions.processes.list",
       "sessions.processes.stop",
       "models.authInspectApiKey",
+      "vault.status",
+      "vault.initialize",
+      "vault.unlock",
+      "vault.lock",
+      "vault.list",
+      "vault.create",
+      "vault.update",
+      "vault.delete",
+      "vault.restore",
+      "vault.purge",
+      "vault.reveal",
+      "vault.copy",
+      "vault.generate",
+      "vault.setAutoLock",
+      "vault.audit.list",
     ]);
   });
 
@@ -574,6 +604,21 @@ describe("listGatewayMethods", () => {
       "sessions.processes.list",
       "sessions.processes.stop",
       "models.authInspectApiKey",
+      "vault.status",
+      "vault.initialize",
+      "vault.unlock",
+      "vault.lock",
+      "vault.list",
+      "vault.create",
+      "vault.update",
+      "vault.delete",
+      "vault.restore",
+      "vault.purge",
+      "vault.reveal",
+      "vault.copy",
+      "vault.generate",
+      "vault.setAutoLock",
+      "vault.audit.list",
     ];
     expect(coreMethods.slice(-expectedCoreSuffix.length)).toEqual(expectedCoreSuffix);
     expect(methods.indexOf("approval.get")).toBeGreaterThan(methods.indexOf("tts.speak"));
@@ -597,6 +642,8 @@ describe("listGatewayMethods", () => {
     expect(methods.indexOf("secrets.store.set")).toBe(methods.indexOf("secrets.store.list") + 1);
     expect(methods.indexOf("secrets.store.delete")).toBe(methods.indexOf("secrets.store.set") + 1);
     expect(methods.indexOf("users.prefs.get")).toBe(methods.indexOf("secrets.store.delete") + 1);
+    expect(methods.indexOf("vault.status")).toBe(methods.indexOf("models.authInspectApiKey") + 1);
+    expect(methods.indexOf("vault.audit.list")).toBe(methods.indexOf("vault.setAutoLock") + 1);
     expect(methods.indexOf("users.prefs.set")).toBe(methods.indexOf("users.prefs.get") + 1);
     expect(methods.indexOf("projects.add")).toBe(methods.indexOf("users.prefs.set") + 1);
     expect(methods.indexOf("projects.searchRemote")).toBe(methods.indexOf("projects.add") + 1);

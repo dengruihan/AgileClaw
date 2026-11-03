@@ -89,6 +89,16 @@ for retention and restoration, and
 [agent schema 20](/reference/database-schemas/agent-schema-history#cold-transcript-storage)
 for the schema and update contract.
 
+### Password vault
+
+The shared state database holds the personal website password vault in
+`vault_entries`, `vault_entry_secrets`, `vault_keys`, `vault_key_wraps`,
+`vault_meta`, and `vault_audit_events`. Entry metadata is queryable while the
+vault is locked; password and notes values exist only as authenticated ciphertext
+in `vault_entry_secrets`. The vault is independent of `secret_store_entries` and
+is created on first use by the dedicated vault worker. See
+[Password vault](/gateway/passwords-vault).
+
 ### Plugin state listing index
 
 Plugin keyed stores use the shared `plugin_state_entries` table. Its listing

@@ -13,6 +13,7 @@ export const SQLITE_READONLY_CHILD_ARG = "--openclaw-sqlite-readonly-child";
 
 export const runtimeProcessEntrypoints = {
   secretEgressProxy: runtimeProcessEntrypoint("secrets/egress-proxy/proxy.worker"),
+  vaultWorker: runtimeProcessEntrypoint("vault/vault.worker"),
   codeModeNode: runtimeProcessEntrypoint("agents/code-mode-node.worker"),
   cronReadOnly: runtimeProcessEntrypoint("cron/store/read-only.worker"),
   stateRead: runtimeProcessEntrypoint("state/openclaw-state-read.worker"),

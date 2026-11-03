@@ -410,6 +410,14 @@ export function createGatewayAuxHandlers(
     { cacheRejections: true },
   );
 
+  const loadVaultHandlers = createLazyPromise(
+    async () => {
+      const { createVaultHandlers } = await import("./server-methods/vault.js");
+      return createVaultHandlers({ log: params.log });
+    },
+    { cacheRejections: true },
+  );
+
   const beginCloseApprovalObservers = () => {
     for (const manager of approvalManagers) {
       manager.beginClose();
@@ -506,6 +514,21 @@ export function createGatewayAuxHandlers(
       "secrets.store.list": createLazyHandler("secrets.store.list", loadSecretsHandlers),
       "secrets.store.set": createLazyHandler("secrets.store.set", loadSecretsHandlers),
       "secrets.store.delete": createLazyHandler("secrets.store.delete", loadSecretsHandlers),
+      "vault.status": createLazyHandler("vault.status", loadVaultHandlers),
+      "vault.initialize": createLazyHandler("vault.initialize", loadVaultHandlers),
+      "vault.unlock": createLazyHandler("vault.unlock", loadVaultHandlers),
+      "vault.lock": createLazyHandler("vault.lock", loadVaultHandlers),
+      "vault.list": createLazyHandler("vault.list", loadVaultHandlers),
+      "vault.create": createLazyHandler("vault.create", loadVaultHandlers),
+      "vault.update": createLazyHandler("vault.update", loadVaultHandlers),
+      "vault.delete": createLazyHandler("vault.delete", loadVaultHandlers),
+      "vault.restore": createLazyHandler("vault.restore", loadVaultHandlers),
+      "vault.purge": createLazyHandler("vault.purge", loadVaultHandlers),
+      "vault.reveal": createLazyHandler("vault.reveal", loadVaultHandlers),
+      "vault.copy": createLazyHandler("vault.copy", loadVaultHandlers),
+      "vault.generate": createLazyHandler("vault.generate", loadVaultHandlers),
+      "vault.setAutoLock": createLazyHandler("vault.setAutoLock", loadVaultHandlers),
+      "vault.audit.list": createLazyHandler("vault.audit.list", loadVaultHandlers),
     },
   };
 }

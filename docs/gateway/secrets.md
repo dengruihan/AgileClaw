@@ -29,6 +29,7 @@ Open the page that matches your task.
 | [Secrets runtime model](/gateway/secrets/runtime-model)                          | Owner isolation, sentinel injection, the agent-access boundary, and active-surface filtering.                |
 | [SecretRef contract and provider config](/gateway/secrets/secretref-contract)    | The SecretRef contract, id grammars, validation rules, and the env, file, exec, and store provider blocks.   |
 | [Shared secret store and egress proxy](/gateway/secrets/secret-store-and-egress) | The shared secret store, the secret egress proxy and its traffic allowlist, and file-backed API keys.        |
+| [Password vault](/gateway/passwords-vault)                                       | Personal website logins encrypted with a master passphrase, separate from API secrets.                       |
 | [Secrets integration examples](/gateway/secrets/integration-examples)            | Exec provider recipes for 1Password, Bitwarden, Vault, pass, and sops, plus MCP and sandbox SSH.             |
 | [Secrets operations and behavior](/gateway/secrets/operations)                   | Supported surfaces, precedence, activation triggers, degraded signals, and the audit and configure workflow. |
 

@@ -404,6 +404,10 @@ export function renderSecretsStore(props: SecretsStoreViewProps): TemplateResult
   return html`
     ${renderSettingsPage(
       html`
+        <div class="callout secrets-store__message" role="note">
+          <span>${t("secretsStore.passwordVaultCallout")}</span>
+          <a href="/settings/passwords">${t("secretsStore.openPasswordVault")}</a>
+        </div>
         ${
           props.error
             ? html`<div class="callout danger secrets-store__message" role="alert">
