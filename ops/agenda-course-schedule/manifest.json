@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "name": "agenda-course-schedule",
+  "createdFor": "2026-11-03",
+  "mission": "M18",
+  "external": {
+    "repository": "/home/raymond/repos/agenda",
+    "branch": "feat/m18-source-owned-courses",
+    "base": "3d275dfea5f961c8419388d8750c83ed33c5f640",
+    "commit": "53962ecd7b02c71aea7420401b2f2ef73b74d3e3",
+    "tree": "866441f5484dc858728dae4af520818fa72fd897",
+    "patch": "external/source.patch"
+  },
+  "install": {
+    "root": "~/.openclaw/extensions/agenda",
+    "database": "~/.openclaw/plugins/agenda/agenda.sqlite",
+    "managedEntries": ["dist", "assets", "skills", "openclaw.plugin.json"],
+    "preservedEntries": ["operations/", "live database and WAL family", "Gateway config and credentials"]
+  },
+  "databaseChanges": "none",
+  "schemaVersion": 2,
+  "deployedAt": "2026-11-03T03:18:37Z",
+  "backup": "~/.openclaw/backups/agenda-course-schedule/2026-11-03T03-18-37-217Z",
+  "commands": {
+    "status": "node scripts/status.mjs --source <built checkout>",
+    "deployDryRun": "node scripts/deploy.mjs --source <built checkout>",
+    "deploy": "node scripts/deploy.mjs --source <built checkout> --yes",
+    "rollback": "scripts/rollback.sh <backup directory>",
+    "packageCheck": "node verify/check-package.mjs --source <built checkout>",
+    "replayTests": "bash verify/replay-tests.sh ~/repos/agenda"
+  }
+}
