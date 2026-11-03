@@ -217,6 +217,98 @@ test("同一 start 重复槽位去重，不产生重复 occurrence", () => {
   assert.equal(payload.weeks[0].slots.length, 1);
 });
 
+test("非课程标签/占位即使带取消字段也不生成取消，且不影响同 start 课程", () => {
+  const mixed = week(MONDAY, {
+    0: [
+      slot(MONDAY, 0, 8, 10, "起床", { status: "cancelled", cancelReason: "平台误标" }),
+      slot(MONDAY, 0, 8, 10, "数学"),
+      slot(MONDAY, 0, 14, 0, "第5节", { status: "cancelled" }),
+    ],
+  });
+  const normalized = normalizeWeek(MONDAY, { monday: MONDAY, content: mixed });
+  assert.equal(normalized.ok, true);
+  const label = normalized.items.find((item) => item.name === "起床");
+  const placeholder = normalized.items.find((item) => item.name === "第5节");
+  assert.equal(label.classification, "label");
+  assert.equal(placeholder.classification, "placeholder");
+  assert.equal(normalized.cancelled, 0);
+  const payload = buildScheduleSyncPayload({ checkedAt: NOW.toISOString(), weeks: [normalized] });
+  assert.deepEqual(payload.cancellations, []);
+  assert.deepEqual(
+    payload.weeks[0].slots.map((s) => s.title),
+    ["数学"],
+  );
+});
+
+test("课程 start>=end 判 INVALID_SLOT；零时长作息标签仍合法", () => {
+  const zeroCourse = week(MONDAY, {
+    0: [{ startTime: MONDAY + 8 * 3600_000, endTime: MONDAY + 8 * 3600_000, name: "数学" }],
+  });
+  const courseWeek = normalizeWeek(MONDAY, { monday: MONDAY, content: zeroCourse });
+  assert.equal(courseWeek.ok, false);
+  assert.equal(courseWeek.reason, "INVALID_SLOT");
+
+  const negativeCourse = week(MONDAY, {
+    0: [{ startTime: MONDAY + 9 * 3600_000, endTime: MONDAY + 8 * 3600_000, name: "数学" }],
+  });
+  assert.equal(
+    normalizeWeek(MONDAY, { monday: MONDAY, content: negativeCourse }).reason,
+    "INVALID_SLOT",
+  );
+
+  const zeroLabel = week(MONDAY, {
+    0: [{ startTime: MONDAY + 7 * 3600_000, endTime: MONDAY + 7 * 3600_000, name: "起床" }],
+  });
+  assert.equal(normalizeWeek(MONDAY, { monday: MONDAY, content: zeroLabel }).ok, true);
+});
+
+test("取消 observedAt 首次观察后稳定，operationId 不因每轮 checkedAt 改变", () => {
+  const content = week(MONDAY, {
+    0: [slot(MONDAY, 0, 8, 10, "数学", { status: "cancelled", cancelReason: "老师通知停课" })],
+  });
+  const first = normalizeWeek(
+    MONDAY,
+    { monday: MONDAY, content },
+    { now: new Date("2026-11-03T01:00:00Z") },
+  );
+  const firstAt = first.items[0].cancelObservedAt;
+  assert.equal(firstAt, "2026-11-03T01:00:00.000Z");
+  const second = normalizeWeek(
+    MONDAY,
+    { monday: MONDAY, content },
+    {
+      now: new Date("2026-11-03T07:00:00Z"),
+      previousCancellations: new Map([[first.items[0].start, firstAt]]),
+    },
+  );
+  assert.equal(second.items[0].cancelObservedAt, firstAt);
+  const p1 = buildScheduleSyncPayload({ checkedAt: "2026-11-03T01:00:00.000Z", weeks: [first] });
+  const p2 = buildScheduleSyncPayload({ checkedAt: "2026-11-03T07:00:00.000Z", weeks: [second] });
+  assert.equal(p1.cancellations[0].evidence.observedAt, firstAt);
+  assert.equal(p2.cancellations[0].evidence.observedAt, firstAt);
+  assert.equal(p1.operationId, p2.operationId);
+});
+
+test("失败周 message/detail 变化会换 operationId（避免 operation_id_reused）", () => {
+  const build = (reason, detail, checkedAt) => {
+    const weeks = [
+      normalizeWeek(MONDAY, { monday: MONDAY, content: validWeek(MONDAY) }),
+      normalizeWeek(NEXT_MONDAY, { err: reason, detail }),
+    ];
+    return buildScheduleSyncPayload({ checkedAt, weeks });
+  };
+  const empty = build("EMPTY_WEEK", "响应没有任何课表槽位", "2026-11-03T01:00:00.000Z");
+  const mismatch = build(
+    "WEEK_DATE_MISMATCH",
+    "返回 2026-11-02..2026-11-08 的槽位不属于请求周",
+    "2026-11-03T01:00:00.000Z",
+  );
+  const detailChanged = build("EMPTY_WEEK", "另一种失败详情", "2026-11-03T01:00:00.000Z");
+  assert.notEqual(empty.operationId, mismatch.operationId);
+  assert.notEqual(empty.operationId, detailChanged.operationId);
+  assert.equal(empty.weeks[1].message.includes("EMPTY_WEEK"), true);
+});
+
 test("同一 start 的两门课程判 DUPLICATE_OCCURRENCE；标签与课程同 start 不冲突", () => {
   const conflict = week(MONDAY, {
     0: [slot(MONDAY, 0, 8, 10, "数学"), slot(MONDAY, 0, 8, 10, "物理")],
@@ -429,6 +521,41 @@ test("HTTP sync：取 csrf、带 Origin/CSRF、不转发 cookie、解析 receipt
     operationId: "op-1",
     sourceId: "yungu-schedule",
   });
+});
+
+test("HTTP sync：保留 M18 数组回执与 ignoredCancellations/completedHistory", async () => {
+  const receiptBody = {
+    ok: true,
+    revision: 7,
+    operationId: "op-arrays",
+    replayed: false,
+    changed: true,
+    created: ["i-1"],
+    updated: [],
+    unchanged: ["i-2"],
+    adopted: ["i-3"],
+    restored: ["i-4"],
+    cancelled: ["i-5"],
+    unlisted: ["i-6"],
+    ignoredCancellations: [{ start: "2026-11-04T10:00:00+08:00", reason: "no such course" }],
+    completedHistory: [{ itemId: "i-7", completedAt: "2026-11-03T01:00:00Z" }],
+    failures: [],
+    coverage: { start: "2026-11-02", end: "2026-11-08" },
+  };
+  const receipt = await requestCourseSync(
+    { operationId: "op-arrays" },
+    { fetch: fakeFetch({ receipt: receiptBody }).fetchFn },
+  );
+  assert.equal(receipt.ok, true);
+  assert.deepEqual(receipt.created, ["i-1"]);
+  assert.deepEqual(receipt.unchanged, ["i-2"]);
+  assert.deepEqual(receipt.adopted, ["i-3"]);
+  assert.deepEqual(receipt.restored, ["i-4"]);
+  assert.deepEqual(receipt.cancelled, ["i-5"]);
+  assert.deepEqual(receipt.unlisted, ["i-6"]);
+  assert.deepEqual(receipt.ignoredCancellations, receiptBody.ignoredCancellations);
+  assert.deepEqual(receipt.completedHistory, receiptBody.completedHistory);
+  assert.equal(receipt.revision, 7);
 });
 
 test("HTTP sync：业务拒绝 ok:false 保留 code；HTTP400/409 报对应业务码", async () => {

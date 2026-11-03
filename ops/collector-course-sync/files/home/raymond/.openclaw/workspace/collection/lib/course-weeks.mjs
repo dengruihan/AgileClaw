@@ -72,7 +72,7 @@ function emptyCounts() {
   return { slots: 0, courses: 0, labels: 0, placeholders: 0, cancelled: 0, duplicates: 0 };
 }
 
-export function normalizeWeek(monday, fetched) {
+export function normalizeWeek(monday, fetched, options = {}) {
   const startAt = monday;
   const endAt = monday + 7 * DAY - 1;
   const base = {
@@ -102,6 +102,10 @@ export function normalizeWeek(monday, fetched) {
     };
   }
 
+  const observedNow = (
+    options.now instanceof Date ? options.now : options.now ? new Date(options.now) : new Date()
+  ).toISOString();
+  const previousCancellations = options.previousCancellations ?? new Map();
   const items = [];
   const seen = new Set();
   const starts = new Map();
@@ -133,8 +137,17 @@ export function normalizeWeek(monday, fetched) {
         continue;
       }
       seen.add(key);
-      const cancellation = explicitCancellation(slot);
-      const classification = cancellation ? "cancelled" : classifySlot(name);
+      // 只有原本是课程的槽位才允许生成取消；标签/占位即使带取消字段也不进 Agenda cancellations。
+      const baseClassification = classifySlot(name);
+      const cancellation = baseClassification === "course" ? explicitCancellation(slot) : null;
+      const classification = cancellation ? "cancelled" : baseClassification;
+      // 课程 occurrence 必须 start < end（M18 schema）；作息标签允许零时长（平台常见）。
+      const durationOk =
+        classification === "course" || classification === "cancelled" ? start < end : start <= end;
+      if (!durationOk) {
+        invalid += 1;
+        continue;
+      }
       if (classification === "course" || classification === "cancelled") {
         if (starts.has(start)) {
           conflicts.push({ start, name, first: starts.get(start) });
@@ -162,7 +175,11 @@ export function normalizeWeek(monday, fetched) {
         name,
         sourceDate: beijingDate(start),
         ...(cancellation
-          ? { cancelEvidence: cancellation.evidence, cancelReason: cancellation.reason }
+          ? {
+              cancelEvidence: cancellation.evidence,
+              cancelReason: cancellation.reason,
+              cancelObservedAt: previousCancellations.get(start) || observedNow,
+            }
           : {}),
       });
     }
@@ -195,7 +212,7 @@ export function normalizeWeek(monday, fetched) {
       ...counts,
       ok: false,
       reason: "INVALID_SLOT",
-      detail: `${invalid} 个槽位缺少有效 startTime/endTime 或不是数组`,
+      detail: `${invalid} 个槽位缺少有效时间、非正时长或不是数组`,
     };
   }
   if (items.length === 0) {

@@ -105,14 +105,16 @@ Payload（严格字段）：
 }
 ```
 
-- `operationId` 只由 `sourceId + window + weeks(slots) + cancellations` 的 SHA-256 决定。同 id +
-  完全相同 body 幂等 replay；内容变化才换新 id（同 id 不同 body 会被 Agenda 以
-  `operation_id_reused` 拒绝）。相同 no-op 仍会刷新 checkedAt、不 bump revision，`changed:false`
+- `operationId` 对**整个 request body**（除 operationId 本身）做 SHA-256，包含失败周的
+  `message/detail`、取消 evidence 等所有会影响 Agenda request hash 的字段。同 id + 完全相同 body
+  幂等 replay；任何字段变化都换新 id（同 id 不同 body 会被 Agenda 以 `operation_id_reused` 拒绝）。
+  M18 `53962ec` 起，相同 no-op replay 会刷新 checkedAt、不 bump revision、不改课程，`changed:false`
   是成功。
 - `weeks[].ok=false` 只带 `message`，`slots` 为空；Agenda 据此把 source 标为 error 并指出周，
   且**不会删除已有课程**。
-- `cancellations` 只在平台返回显式取消字段时非空，evidence `kind=platform`、非空 `detail`、
-  `observedAt`；当前平台无可靠取消标记，通常为空。
+- `cancellations` 只从**原本分类为课程**的槽位生成；标签/占位即使带取消字段也不会取消同 start 的课程。
+  evidence `kind=platform`、非空 `detail`；`observedAt` 取该取消首次被看到的快照时间，后续轮次复用，
+  使同一取消的 operationId 稳定。当前平台无可靠取消标记，通常为空。
 - 回执写入 `report.json` 的 `sources.yungu-schedule.coverage.sync`。客户端只要求 `ok`，并记录
   `revision/created/updated/unchanged/adopted/cancelled/unlisted/failures/code/details`。
   业务拒绝是 HTTP409 + `ok:false/code`，schema/JSON 错误是 HTTP400；两者都转成可重试的
@@ -124,19 +126,29 @@ Payload（严格字段）：
 
 ```bash
 cd ops/collector-course-sync
-node verify/check-package.mjs        # 静态契约（167 项）
-node --test verify/course-sync.test.mjs  # 21 个隔离测试
+node verify/check-package.mjs        # 静态契约（180 项）
+node --test verify/course-sync.test.mjs  # 26 个隔离测试
 node --test verify/trigger-feedback.test.mjs  # 7 个反馈唤醒测试
-./verify/deploy-sim.sh               # 17 项临时树部署/回滚模拟（含假 openclaw CLI）
+node --test verify/m18-integration.test.mjs  # 4 个跨分支真实 store 测试
+./verify/deploy-sim.sh               # 19 项临时树部署/回滚模拟（含假 openclaw CLI）
 ./scripts/deploy.sh                  # 只打印部署计划（dry run）
 ./scripts/status.sh                  # 只读：包 hash vs live + sync 接口健康
 ```
 
-隔离测试覆盖：两周成功、下周返回本周日期、空周、非法槽位、同一 start 冲突、标签/占位过滤、显式取消 vs 缺席、
-重复槽位、operationId 幂等、sync 失败不丢抓取、全失败不调用 sync、会话缺失/过期重登、
-HTTP receipt/CSRF/no-cookie、业务拒绝 409、HTTP400、不可达/超时/超大 payload。
+隔离测试覆盖：两周成功、下周返回本周日期、空周、非法槽位/零时长课程、同一 start 冲突、
+标签/占位过滤（含带取消字段的非课程）、显式取消 vs 缺席、稳定 observedAt、重复槽位、
+operationId 幂等（含失败 message/detail 变化）、M18 数组回执、sync 失败不丢抓取、
+全失败不调用 sync、会话缺失/过期重登、HTTP receipt/CSRF/no-cookie、业务拒绝 409、HTTP400、
+不可达/超时/超大 payload。
 `trigger-feedback.test.mjs` 覆盖：只有 pending/queued/running 反馈唤醒、已处理/已撤销不唤醒、
 反馈+源 delta 单次唤醒、读取失败不误唤醒、只读 snapshot 不调用写接口、原有故障/delta 行为不变。
+
+`m18-integration.test.mjs` 直接导入 M18 外部 checkout `53962ecd7b02c71aea7420401b2f2ef73b74d3e3`
+的 `src/store.ts` + `dist/src/sqlite.worker.js`，在临时 SQLite 上用真实 `store.sync` 验证：
+首次创建与数组回执、同 payload replay 不 bump revision 但刷新 checkedAt、失败 message/detail 变化
+被接受且 source 转为 error、显式课程取消生效且数组回执保留。默认路径
+`../wt-18/.external/agenda`，可用 `M18_AGENDA_ROOT` 覆盖；非该 tip 默认 skip，`M18_ALLOW_ANY_TIP=1`
+可显式测试其他版本。
 
 ## 6. 部署（M18 合并并部署后由 tower 执行）
 
@@ -157,9 +169,13 @@ sessionTarget、wakeMode、delivery 逐项比对不变，失败会自动恢复�
 
 ```bash
 ./scripts/rollback.sh                  # dry run
-./scripts/rollback.sh --yes            # 恢复备份；部署前不存在的文件会被删除
+./scripts/rollback.sh --yes            # 部署后无 drift 时恢复备份
+./scripts/rollback.sh --yes --force    # 确认丢弃部署后的文件/cron 修改后强制回滚
 ./scripts/status.sh
 ```
+
+回滚前会核对当前文件与 cron payload/trigger 是否仍等于本包部署值；检测到部署后修改默认拒绝，
+必须显式 `--force`。部署前不存在的文件会被删除。
 
 ## 7. 部署后验证（等待 M18）
 

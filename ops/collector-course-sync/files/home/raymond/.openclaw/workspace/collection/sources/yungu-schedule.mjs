@@ -1,7 +1,7 @@
 // 云谷课表：包装 yungu-schedule.mjs 抓本周+下周（--json 输出，脚本已加该标志）。
 // 每周成功/失败与实际覆盖由 lib/course-weeks.mjs 判定；抓取成功后直接调用 Agenda 的
 // loopback sync（SQLite 写入仍由 Agenda 完成）。缺席只算 unlisted，不取消。
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { buildScheduleSyncPayload, requestCourseSync } from "../lib/agenda-sync.mjs";
 import { beijingMondayMs, normalizeSchedule, normalizeWeek } from "../lib/course-weeks.mjs";
 import { run, summarize } from "../lib/run.mjs";
@@ -10,6 +10,7 @@ import { getSecrets } from "../lib/secrets.mjs";
 const SCRIPT = "/home/raymond/.openclaw/workspace/skills/yungu-schedule/scripts/yungu-schedule.mjs";
 const LOGIN = "/home/raymond/.openclaw/workspace/skills/yungu-tasks/scripts/yungu-login.mjs";
 const SESSION = `${process.env.HOME}/.yungu/state.json`;
+const SNAPSHOT = "/home/raymond/.openclaw/workspace/collection/state/snapshot-yungu-schedule.json";
 const DAY = 86_400_000;
 
 function fetchWeek(monday) {
@@ -38,11 +39,26 @@ function sessionExists() {
   return existsSync(SESSION);
 }
 
+// 取消 evidence 的首次观察时间取自上一轮快照，保证同一条取消在后续轮次复用同一 operationId。
+function readPreviousCancellations() {
+  try {
+    const snapshot = JSON.parse(readFileSync(SNAPSHOT, "utf8"));
+    return new Map(
+      (snapshot.items || [])
+        .filter((item) => item.cancelObservedAt)
+        .map((item) => [item.start, item.cancelObservedAt]),
+    );
+  } catch {
+    return new Map();
+  }
+}
+
 export async function collectWith({
   now = new Date(),
   fetchWeek: fetch = fetchWeek,
   relogin: login = relogin,
   sessionExists: hasSession = sessionExists,
+  previousCancellations: readPrevious = () => new Map(),
   sync = requestCourseSync,
 } = {}) {
   const thisMonday = beijingMondayMs(0, now);
@@ -62,7 +78,11 @@ export async function collectWith({
     fetched = [await fetch(thisMonday), await fetch(nextMonday)];
   }
 
-  const weeks = [normalizeWeek(thisMonday, fetched[0]), normalizeWeek(nextMonday, fetched[1])];
+  const previous = readPrevious();
+  const weeks = [
+    normalizeWeek(thisMonday, fetched[0], { now, previousCancellations: previous }),
+    normalizeWeek(nextMonday, fetched[1], { now, previousCancellations: previous }),
+  ];
   const normalized = normalizeSchedule(weeks, { now });
   if (!normalized.ok) return normalized;
 
@@ -88,5 +108,5 @@ export async function collectWith({
 }
 
 export function collect() {
-  return collectWith();
+  return collectWith({ previousCancellations: readPreviousCancellations });
 }

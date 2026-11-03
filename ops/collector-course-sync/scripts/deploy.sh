@@ -29,10 +29,6 @@ if ! $allow_missing; then
   require_sync_endpoint
 fi
 
-trim_hash() {
-  node -e 'const fs=require("node:fs");const crypto=require("node:crypto");const s=fs.readFileSync(process.argv[1],"utf8").replace(/\n$/,"");process.stdout.write(crypto.createHash("sha256").update(s).digest("hex"))' "$1"
-}
-
 # collect.mjs 是共享运行时：只允许覆盖“M19 前基线”或“本包版本”，防止并发任务被覆盖。
 collect_rel="home/raymond/.openclaw/workspace/collection/collect.mjs"
 collect_target="$(target_path "$collect_rel")"

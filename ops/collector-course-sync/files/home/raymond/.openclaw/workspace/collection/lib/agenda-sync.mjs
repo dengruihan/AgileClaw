@@ -47,7 +47,7 @@ function payloadCancellations(weeks, checkedAt) {
       evidence: {
         kind: "platform",
         detail: item.cancelReason || "平台显式取消标记",
-        observedAt: checkedAt,
+        observedAt: item.cancelObservedAt || checkedAt,
         url: null,
       },
     }));
@@ -56,17 +56,9 @@ function payloadCancellations(weeks, checkedAt) {
 // operationId 只由窗口+槽位内容决定：同 id + 完全相同 body 幂等 replay；内容变化才换新 id。
 // Agenda 的 no-op replay 仍会刷新 checkedAt、不 bump revision，changed:false 是成功。
 export function syncOperationId(payload) {
-  const identity = {
-    sourceId: payload.sourceId,
-    window: payload.window,
-    weeks: payload.weeks.map((week) => ({
-      start: week.start,
-      end: week.end,
-      ok: week.ok,
-      slots: week.slots,
-    })),
-    cancellations: payload.cancellations,
-  };
+  // Hash every normalized field that reaches Agenda (including failed-week message/detail),
+  // because Agenda binds operationId to the full request hash.
+  const { operationId: _ignored, ...identity } = payload;
   return `ys-sync-${createHash("sha256").update(JSON.stringify(identity)).digest("hex").slice(0, 32)}`;
 }
 
@@ -87,18 +79,24 @@ export function buildScheduleSyncPayload({ checkedAt, weeks, sourceId = "yungu-s
 }
 
 function pickReceipt(body) {
-  const numeric = [
+  const arrayOrNumber = [
     "revision",
     "created",
     "updated",
     "unchanged",
     "adopted",
+    "restored",
     "cancelled",
     "unlisted",
+    "ignoredCancellations",
+    "completedHistory",
+    "failures",
   ];
   const receipt = { ok: body.ok === true };
-  for (const key of numeric) {
-    if (Number.isFinite(body[key])) receipt[key] = body[key];
+  for (const key of arrayOrNumber) {
+    const value = body[key];
+    if (Array.isArray(value)) receipt[key] = value;
+    else if (Number.isFinite(value)) receipt[key] = value;
   }
   for (const key of [
     "operationId",
@@ -107,11 +105,10 @@ function pickReceipt(body) {
     "coverage",
     "code",
     "details",
-    "failures",
+    "error",
   ]) {
     if (body[key] !== undefined) receipt[key] = body[key];
   }
-  if (typeof body.error === "string") receipt.error = body.error;
   return receipt;
 }
 

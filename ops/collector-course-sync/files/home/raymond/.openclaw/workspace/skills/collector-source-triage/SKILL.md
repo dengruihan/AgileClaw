@@ -15,8 +15,8 @@ description: "collector 唤醒：云谷课堂/课表、One Schoolhouse 变化分
 - 首次启用周校验时，旧快照里“下周副本”的条目会一次性显示为 removed；这是校验修复，
   不是课程取消，不要据此删 Agenda 课程。
 - 回执 `unlisted` 表示已有课程本次缺席但未取消：保留，不删课、不改成取消。
-- 课程取消只认平台显式取消状态、学校/老师通知或用户明确确认；槽位消失不算取消。
-  课表同步不负责取消，需要取消时按 schedule-sweep 的证据要求单独处理。
+- 课程取消只认平台显式取消状态（由课表同步自动提交 cancellations）、学校/老师通知或用户明确确认；
+  槽位消失不算取消。非平台证据的取消按 schedule-sweep 的证据要求单独处理。
 - 忽略 report.json 里 skipped 的条目。
 - 无需行动：不通知、不登记，直接结束本轮。
 - 需要登记作业或排程：读 `/home/raymond/.openclaw/agents/main/agent/workshop-skills/schedule-sweep/SKILL.md`，

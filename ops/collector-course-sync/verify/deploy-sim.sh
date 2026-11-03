@@ -185,8 +185,24 @@ status_out="$(cd "$PKG_DIR" && ./scripts/status.sh)"
 cmp -s "$PKG_DIR/files/home/raymond/.openclaw/workspace/collection/collect.mjs" "$collect_target" \
   && ok "rollback dry run leaves deployment in place" || bad "rollback dry run changed files"
 
-# 实际回滚
-(cd "$PKG_DIR" && ./scripts/rollback.sh --yes >/dev/null)
+# 部署后修改文件与 cron：默认拒绝回滚，--force 才覆盖。
+printf 'post-deploy-edit\n' >>"$collect_target"
+python3 - "$FAKE_STATE/job.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+job = json.load(open(p, encoding="utf-8"))
+job["payload"]["message"] = "post-deploy cron edit"
+json.dump(job, open(p, "w", encoding="utf-8"), ensure_ascii=False)
+PY
+if (cd "$PKG_DIR" && ./scripts/rollback.sh --yes >/dev/null 2>&1); then
+  bad "rollback should refuse post-deploy drift"
+else
+  ok "rollback refuses post-deploy file/cron drift"
+fi
+[[ "$(tail -1 "$collect_target")" == post-deploy-edit ]] && ok "drift refusal leaves files untouched" || bad "drift refusal changed files"
+
+# 实际回滚（显式 --force 覆盖已确认的部署后修改）
+(cd "$PKG_DIR" && ./scripts/rollback.sh --yes --force >/dev/null)
 for rel in "${files[@]}"; do
   target="$DEPLOY_ROOT/${rel#files/}"
   case "$rel" in

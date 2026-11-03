@@ -51,6 +51,13 @@ for (const path of [
 ]) {
   check(`file exists: ${path}`, exists(path));
 }
+for (const test of [
+  "course-sync.test.mjs",
+  "trigger-feedback.test.mjs",
+  "m18-integration.test.mjs",
+]) {
+  check(`test exists: ${test}`, exists(`verify/${test}`));
+}
 for (const script of ["deploy.sh", "rollback.sh", "status.sh", "lib.sh"]) {
   check(`script exists: ${script}`, exists(`scripts/${script}`));
 }
@@ -96,6 +103,9 @@ for (const [label, needle] of [
   ["evening study excluded", "晚自修"],
   ["placeholder names excluded", "第\\d+节"],
   ["explicit cancellation field only", "status"],
+  ["cancellation only for original course", "baseClassification === 'course'"],
+  ["course requires positive duration", "start < end"],
+  ["stable cancellation observation", "cancelObservedAt"],
 ]) {
   check(`weeks: ${label}`, has(weeks, needle), needle);
 }
@@ -140,6 +150,10 @@ for (const [label, needle] of [
   ["payload too large", "AGENDA_SYNC_PAYLOAD_TOO_LARGE"],
   ["receipt ok check", "typeof parsed.ok !== 'boolean'"],
   ["deterministic operationId", "syncOperationId"],
+  ["operationId hashes whole request", "...identity"],
+  ["receipt keeps arrays", "Array.isArray(value)"],
+  ["receipt ignoredCancellations", "ignoredCancellations"],
+  ["receipt completedHistory", "completedHistory"],
   ["source id", "sourceId = 'yungu-schedule'"],
   ["label", "label: '云谷课表'"],
   ["window from successful run", "windowStart"],
@@ -331,6 +345,9 @@ for (const needle of [
   "Agenda 完成反馈轮",
   "feedbackResults",
   "openclaw cron edit",
+  "verify/m18-integration.test.mjs",
+  "53962ecd7b02c71aea7420401b2f2ef73b74d3e3",
+  "rollback.sh --yes --force",
   "WEEK_DATE_MISMATCH",
   "unlisted",
   "operationId",

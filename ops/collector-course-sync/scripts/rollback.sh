@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # Restore the latest collector course-sync deployment backup (files + cron payload/trigger).
-# Usage: ./scripts/rollback.sh [--yes] [backup-dir]
+# Refuses by default when files or cron drifted after deploy; pass --force to override.
+# Usage: ./scripts/rollback.sh [--yes] [--force] [backup-dir]
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 apply=false
+force=false
 backup_dir=""
 for arg in "$@"; do
   case "$arg" in
     --yes) apply=true ;;
+    --force) force=true ;;
     -*) echo "unknown option: $arg" >&2; exit 2 ;;
     *) backup_dir="$arg" ;;
   esac
@@ -28,6 +31,42 @@ for required in job.before.json payload-message.before.txt trigger-collector.bef
   fi
 done
 
+# 先核对当前状态仍是本包部署值；部署后的合法修改默认不覆盖。
+drift=()
+while IFS=$'\t' read -r state rel _; do
+  target="$(target_path "$rel")"
+  package_target="$FILES_DIR/$rel"
+  if [[ "$state" == present ]]; then
+    if [[ ! -e "$target" ]]; then
+      drift+=("missing $target")
+    elif [[ "$(sha256_file "$target")" != "$(sha256_file "$package_target")" ]]; then
+      drift+=("file drift $target")
+    fi
+  elif [[ -e "$target" && "$(sha256_file "$target")" != "$(sha256_file "$package_target")" ]]; then
+    drift+=("new-file drift $target")
+  fi
+done <"$backup_dir/manifest.tsv"
+
+job_now="$(cron_get 2>/dev/null || true)"
+if [[ -z "$job_now" ]]; then
+  drift+=("cron unavailable")
+else
+  current_message_hash="$(printf '%s' "$job_now" | node -e 'let s="";process.stdin.on("data",(d)=>(s+=d)).on("end",()=>{const crypto=require("node:crypto");let m="";try{m=JSON.parse(s)?.payload?.message??""}catch{};process.stdout.write(crypto.createHash("sha256").update(String(m).replace(/\n$/,"")).digest("hex"))})')"
+  current_trigger_hash="$(printf '%s' "$job_now" | node -e 'let s="";process.stdin.on("data",(d)=>(s+=d)).on("end",()=>{const crypto=require("node:crypto");let t="";try{t=JSON.parse(s)?.trigger?.script??""}catch{};process.stdout.write(crypto.createHash("sha256").update(String(t).replace(/\n$/,"")).digest("hex"))})')"
+  [[ "$current_message_hash" == "$(trim_hash "$PAYLOAD_FILE")" ]] || drift+=("cron payload.message drift")
+  [[ "$current_trigger_hash" == "$(trim_hash "$FILES_DIR/$TRIGGER_REL")" ]] || drift+=("cron trigger.script drift")
+fi
+
+if [[ ${#drift[@]} -gt 0 ]]; then
+  echo "回滚前检测到部署后变化：" >&2
+  for item in "${drift[@]}"; do echo "  - $item" >&2; done
+  if ! $force; then
+    echo "默认拒绝覆盖；确认这些修改可丢弃后加 --force。" >&2
+    exit 1
+  fi
+  echo "已指定 --force：继续回滚。" >&2
+fi
+
 echo "回滚计划（$backup_dir）："
 while IFS=$'\t' read -r state rel _; do
   target="$(target_path "$rel")"
@@ -44,7 +83,9 @@ if ! $apply; then
   exit 0
 fi
 
-job_now="$(cron_get)"
+if [[ -z "$job_now" ]]; then
+  job_now="$(cron_get)"
+fi
 printf '%s\n' "$job_now" >"$backup_dir/job.before-rollback.json"
 
 while IFS=$'\t' read -r state rel expected; do

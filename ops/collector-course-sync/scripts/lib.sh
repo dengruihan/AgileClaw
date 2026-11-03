@@ -32,6 +32,10 @@ sha256_file() {
   sha256sum "$1" | awk '{print $1}'
 }
 
+trim_hash() {
+  node -e 'const fs=require("node:fs");const crypto=require("node:crypto");const s=fs.readFileSync(process.argv[1],"utf8").replace(/\n$/,"");process.stdout.write(crypto.createHash("sha256").update(s).digest("hex"))' "$1"
+}
+
 OPENCLAW_BIN="${OPENCLAW_BIN:-openclaw}"
 
 cron_get() {
