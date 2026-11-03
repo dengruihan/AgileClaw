@@ -74,7 +74,7 @@ yungu-tasks 每轮成功抓取后，对索引缺记录的任务自动下载附�
 ## 自动化 `collector`（看门狗 + 事项分诊）
 
 cron job `collector` 每 10 分钟评估，触发脚本 `trigger-collector.mjs` 跑一次 `collect.mjs all`
-（1 次 exec 预算）。三种情况唤醒同一自动化内的模型轮：
+（1 次 exec 预算）。四种情况唤醒同一自动化内的模型轮：
 
 1. **事项 delta**：任务类源（云谷课堂/课表、OSH、钉钉）`+A ~C -R` 非全零，或邮件源净新增 > 0
    （净减少视为已处理，不唤醒）。云谷课表在 collect 层已自动同步进 Agenda，Agent 不再判断
@@ -84,8 +84,13 @@ cron job `collector` 每 10 分钟评估，触发脚本 `trigger-collector.mjs` 
    只出现一次，无需额外去重。课表同步回执见 `sources.yungu-schedule.coverage.sync`。
 2. **源连续故障**：streak≥2（每源每日最多唤醒一次）。
 3. **收集器自身异常**：collect.mjs 连续 2 次输出异常（行数不对/不可解析/无法执行）。
+4. **Agenda 完成反馈**：触发脚本只读 `/agenda/api/snapshot?includeCompleted=true`，存在
+   `pending/queued/running` 且未撤销的 feedback 时唤醒。M18 replanner 在 sentinel 停用时唤起
+   collector；本轮必须读 feedback、重排，并在同一 apply 提交 `feedbackResults`，否则 finished 钩子
+   会记为“未收到调整结果”。
 
-2、3 唤醒轮只修障 + 通知，不动 agenda、不做排程。skipped（间隔门跳过）的源不当 delta、不当故障。
+2、3 唤醒轮只修障 + 通知，不动 agenda、不做排程；4 只处理反馈，不改课程、不发消息、不启用 sentinel。
+skipped（间隔门跳过）的源不当 delta、不当故障。
 **修改触发脚本或 payload 后必须 `openclaw cron edit collector --trigger-script/--message ...` 同步进任务**（任务内嵌的是创建时的副本）。
 
 ## 排障
