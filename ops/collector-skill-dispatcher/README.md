@@ -2,6 +2,8 @@
 
 状态：**已就绪，未部署**。本包未修改 live cron、`~/.openclaw` 工作区、Gateway 或任何消息；部署由 tower 在独立复审后执行。
 
+> **已被取代（M12/M15，2026-11-03）**：本包的 M10 调度器 payload 与 4 个 skill 副本是历史切片，仍含 M4 时代的通知示例与「登记便单」路由。M12 已替换邮件路由，M15（`ops/collector-agenda-wording-fix`）已把 Agenda 措辞和「只说本轮做过的动作」规则落到 live。本包仅供追溯，**不要重新部署**；live 基线已不匹配，默认会拒绝。
+
 覆盖对象：线上自动化 `collector`（id `6a45be21-ce0b-4b8b-8986-4c885d1ea659`，`displayName=统一事项收集`，每 10 分钟评估，`sessionTarget=isolated`，`lightContext=true`，`timeoutSeconds=600`）。
 
 ## 1. 为什么改
