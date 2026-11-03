@@ -37,6 +37,7 @@ import {
 } from "./browser-tool.runtime.js";
 import type { BrowserScreenshotOptions } from "./browser-tool.screenshot.js";
 import { withBrowserRequestScope } from "./browser/request-scope.js";
+import { scrubVaultFillValue } from "./browser/vault-fill-scrub.js";
 
 type BrowserTabIdentity = { targetId: string; profile: string } & (
   | { target: "host" }
@@ -526,7 +527,7 @@ export function createBrowserTool(
           },
         });
       const dashboardTarget = browserDashboard;
-      const result = dashboardTarget
+      const rawResult = dashboardTarget
         ? await withBrowserRequestScope(
             {
               managedOnly: true,
@@ -541,6 +542,14 @@ export function createBrowserTool(
             dispatchTabAction,
           )
         : await dispatchTabAction();
+      // The broker-owned full mask runs regardless of logging.redact so a page
+      // read-back cannot return a filled value to the model.
+      const result = scrubVaultFillValue(
+        tabIdentity?.targetId ??
+          readStringParam(params, "targetId") ??
+          (binding ? binding.targetId : undefined),
+        rawResult,
+      );
       if (browserDashboard) {
         // Dashboard presentation owns this tab; ordinary preview metadata would steal its panel.
         return { ...result, details: { ...asNullableRecord(result.details), browserDashboard } };

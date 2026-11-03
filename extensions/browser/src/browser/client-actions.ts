@@ -189,6 +189,97 @@ export async function browserAct(
   );
 }
 
+export type BrowserVaultOrigin = { scheme: "https" | "http"; host: string; port: number };
+
+export type BrowserVaultObserveResult =
+  | {
+      ok: true;
+      targetId: string;
+      origin: BrowserVaultOrigin;
+      documentId: string;
+      frameId: string;
+      fieldSignature: string;
+      fields: {
+        passwordIndex: number;
+        usernameIndex: number;
+        passwordName: string;
+        passwordAutocomplete: string;
+        usernameName: string;
+        usernameAutocomplete: string;
+      };
+    }
+  | { ok: false; status: string; reasonCode?: string };
+
+export type BrowserVaultFillResult =
+  | { ok: true; status: "filled"; targetId: string }
+  | { ok: false; status: string; reasonCode?: string };
+
+export async function browserVaultObserve(
+  baseUrl: BrowserClientTarget,
+  opts: BrowserTimedActionOptions & { targetId: string },
+): Promise<BrowserVaultObserveResult> {
+  const timeoutMs = resolveBrowserNavigationTimeoutMs(opts.timeoutMs);
+  return await postBrowserJson(
+    baseUrl,
+    "/vault/observe",
+    { targetId: opts.targetId, timeoutMs },
+    resolveBrowserOperationRequestTimeoutMs(timeoutMs),
+    opts,
+  );
+}
+
+export async function browserVaultFill(
+  baseUrl: BrowserClientTarget,
+  opts: BrowserTimedActionOptions & {
+    targetId: string;
+    password: string;
+    username?: string;
+    expected: {
+      origin: BrowserVaultOrigin;
+      documentId: string;
+      frameId: string;
+      fieldSignature: string;
+    };
+  },
+): Promise<BrowserVaultFillResult> {
+  const timeoutMs = resolveBrowserNavigationTimeoutMs(opts.timeoutMs);
+  return await postBrowserJson(
+    baseUrl,
+    "/vault/fill",
+    {
+      targetId: opts.targetId,
+      password: opts.password,
+      ...(opts.username !== undefined ? { username: opts.username } : {}),
+      expected: opts.expected,
+      timeoutMs,
+    },
+    resolveBrowserOperationRequestTimeoutMs(timeoutMs),
+    opts,
+  );
+}
+
+export async function browserVaultSubmit(
+  baseUrl: BrowserClientTarget,
+  opts: BrowserTimedActionOptions & {
+    targetId: string;
+    expected: {
+      origin: BrowserVaultOrigin;
+      documentId: string;
+      frameId: string;
+      fieldSignature: string;
+    };
+  },
+): Promise<BrowserVaultFillResult> {
+  const timeoutMs = resolveBrowserNavigationTimeoutMs(opts.timeoutMs);
+  return await postBrowserJson(
+    baseUrl,
+    "/vault/submit",
+    { targetId: opts.targetId, expected: opts.expected, timeoutMs },
+    resolveBrowserOperationRequestTimeoutMs(timeoutMs),
+    opts,
+  );
+}
+
 export async function browserScreenshotAction(
   baseUrl: BrowserClientTarget,
   opts: BrowserTimedActionOptions & {

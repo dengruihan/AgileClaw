@@ -382,6 +382,61 @@ describe("personal password vault service", () => {
     });
   });
 
+  it("decrypts for fill only at the exact revision and origin, with value-free audit", async () => {
+    await withOpenClawTestState({ label: "vault-fill", scenario: "minimal" }, async (state) => {
+      service = new VaultService({ env: state.env });
+      await service.initialize(PASSPHRASE, 60);
+      const entry = await service.create({
+        originScheme: "https",
+        originHost: "login.example.com",
+        originPort: 443,
+        siteLabel: "Example Login",
+        account: "person@example.com",
+        password: SYNTHETIC_PASSWORD,
+        notes: "",
+      });
+
+      await expect(
+        service.fill(entry.itemRef, entry.revision + 1, {
+          scheme: "https",
+          host: "login.example.com",
+          port: 443,
+        }),
+      ).rejects.toSatisfy((error: unknown) => {
+        expectVaultError(error, "VAULT_CONFLICT");
+        return true;
+      });
+      await expect(
+        service.fill(entry.itemRef, entry.revision, {
+          scheme: "https",
+          host: "evil.example.com",
+          port: 443,
+        }),
+      ).rejects.toSatisfy((error: unknown) => {
+        expectVaultError(error, "VAULT_ORIGIN_MISMATCH");
+        return true;
+      });
+
+      const filled = await service.fill(entry.itemRef, entry.revision, {
+        scheme: "https",
+        host: "login.example.com",
+        port: 443,
+      });
+      expect(filled.password).toBe(SYNTHETIC_PASSWORD);
+      expect(filled.entry.lastUsedAtMs).toBeTypeOf("number");
+
+      const audit = await service.auditList(20);
+      expect(audit.filter((event) => event.action === "fill")).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ status: "blocked", reasonCode: "revision_mismatch" }),
+          expect.objectContaining({ status: "blocked", reasonCode: "origin_mismatch" }),
+          expect.objectContaining({ status: "succeeded" }),
+        ]),
+      );
+      expect(JSON.stringify(audit)).not.toContain(SYNTHETIC_PASSWORD);
+    });
+  });
+
   it("auto-locks on the injected owner clock", async () => {
     await withOpenClawTestState({ label: "vault-autolock", scenario: "minimal" }, async (state) => {
       service = new VaultService({

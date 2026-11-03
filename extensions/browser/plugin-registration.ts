@@ -21,6 +21,7 @@ import {
   BROWSER_REQUEST_GATEWAY_SCOPE,
   SESSION_BROWSER_REQUEST_GATEWAY_METHOD,
 } from "./src/browser-gateway-contract.js";
+import { createBrowserLoginTool } from "./src/browser-login-tool.js";
 import {
   BROWSER_PROXY_COMMAND,
   BROWSER_PROXY_UPLOAD_COMMAND,
@@ -319,6 +320,21 @@ export function registerBrowserPlugin(api: OpenClawPluginApi) {
       return createLazyBrowserTool(createBrowserToolOptions(ctx), config);
     },
     { name: "browser" },
+  );
+  api.registerTool(
+    (ctx: OpenClawPluginToolContext) => {
+      const options = createBrowserToolOptions(ctx);
+      return createBrowserLoginTool({
+        ...(options.sandboxBridgeUrl ? { sandboxBridgeUrl: options.sandboxBridgeUrl } : {}),
+        ...(options.allowHostControl !== undefined
+          ? { allowHostControl: options.allowHostControl }
+          : {}),
+        ...(options.agentSessionKey ? { agentSessionKey: options.agentSessionKey } : {}),
+        ...(options.agentId ? { agentId: options.agentId } : {}),
+        ...(options.runToolBinding !== undefined ? { runToolBinding: options.runToolBinding } : {}),
+      });
+    },
+    { name: "browser_login" },
   );
   registerBrowserCliMetadata(api);
   api.registerGatewayMethod(

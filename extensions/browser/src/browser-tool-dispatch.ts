@@ -40,6 +40,7 @@ import {
 } from "./browser-tool.screenshot.js";
 import { appendNavigatedPageState, executeSnapshotAction } from "./browser-tool.snapshot.js";
 import { parseBrowserNavigationUrl } from "./browser/navigation-guard.js";
+import { clearVaultFillSession, hasAnyActiveVaultFill } from "./browser/vault-fill-scrub.js";
 
 function readOptionalTargetAndTimeout(params: Record<string, unknown>) {
   const targetId = normalizeOptionalString(params.targetId);
@@ -146,6 +147,7 @@ export async function executeBrowserTabAction(context: {
     }
     case "close": {
       const targetId = readStringParam(params, "targetId");
+      clearVaultFillSession(targetId);
       const result = targetId
         ? await browserCloseTab(proxyRequest ?? baseUrl, targetId, clientOptions)
         : await browserAct(proxyRequest ?? baseUrl, { kind: "close" }, clientOptions);
@@ -158,6 +160,11 @@ export async function executeBrowserTabAction(context: {
         onTabActivity: touchTab,
       });
     case "screenshot":
+      if (hasAnyActiveVaultFill()) {
+        throw new Error(
+          "Screenshots are blocked while a password fill session is active; wait for the fill session to expire.",
+        );
+      }
       return await executeScreenshotAction({
         ...actionOptions,
         requestedTimeoutMs,
@@ -175,6 +182,7 @@ export async function executeBrowserTabAction(context: {
         signal,
       });
       const navigatedTargetId = readStringValue(asNullableRecord(result)?.targetId) ?? targetId;
+      clearVaultFillSession(navigatedTargetId);
       await touchTab(navigatedTargetId);
       const formatted = formatBrowserExternalToolResult({
         kind: asNullableRecord(result)?.download ? "download" : "act",
@@ -270,6 +278,16 @@ export async function executeBrowserTabAction(context: {
       const request = context.actRequest;
       if (!request) {
         throw new Error("request required");
+      }
+      if (request.kind === "evaluate" && hasAnyActiveVaultFill()) {
+        throw new Error(
+          "act:evaluate is blocked while a password fill session is active; wait for the fill session to expire.",
+        );
+      }
+      if (request.kind === "wait" && request.fn && hasAnyActiveVaultFill()) {
+        throw new Error(
+          "act:wait --fn is blocked while a password fill session is active; wait for the fill session to expire.",
+        );
       }
       if (!capabilities.actKinds.some((kind) => kind === request.kind)) {
         throw new Error(

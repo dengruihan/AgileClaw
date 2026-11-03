@@ -275,6 +275,9 @@ export const validateVaultGenerateResult = compile(S.VaultGenerateResultSchema);
 export const validateVaultSetAutoLockParams = compile(S.VaultSetAutoLockParamsSchema);
 export const validateVaultAuditListParams = compile(S.VaultAuditListParamsSchema);
 export const validateVaultAuditListResult = compile(S.VaultAuditListResultSchema);
+export const validateVaultFillPreviewParams = compile(S.VaultFillPreviewParamsSchema);
+export const validateVaultFillPreviewResult = compile(S.VaultFillPreviewResultSchema);
+export const validateVaultFillExecuteParams = compile(S.VaultFillExecuteParamsSchema);
 // Runs before the schema: compare only numeric boundaries and leave type errors to the schema.
 function checkPulseBoundaries(data: unknown) {
   const boundaries = asNullableRecord(data)?.activityPulseBoundaries;

@@ -54,6 +54,7 @@ import {
   cancelUnboundRunApprovals,
   cancelWorkerTurnClaimBoundApprovals,
 } from "./server-methods/approval-run-cancellation.js";
+import { buildRequestedApprovalEvent } from "./server-methods/approval-shared.js";
 import type { GatewayRequestContext } from "./server-methods/types.js";
 import {
   createGatewaySecretsReloader,
@@ -413,7 +414,45 @@ export function createGatewayAuxHandlers(
   const loadVaultHandlers = createLazyPromise(
     async () => {
       const { createVaultHandlers } = await import("./server-methods/vault.js");
-      return createVaultHandlers({ log: params.log });
+      return createVaultHandlers({
+        log: params.log,
+        fillApproval: {
+          getSnapshot: async (id) => {
+            const record = await pluginApprovalManager.getSnapshot(id);
+            if (!record) {
+              return null;
+            }
+            return {
+              status: record.status ?? null,
+              decision: record.decision ?? null,
+              agentId: record.request.agentId ?? null,
+              sessionKey: record.request.sessionKey ?? null,
+              detail: record.request.detail ?? null,
+            };
+          },
+          consumeAllowOnce: (id, consumerId) =>
+            pluginApprovalManager.consumeAllowOnce(id, consumerId),
+        },
+        requestFillApproval: async ({ request, timeoutMs, context, client }) => {
+          // The vault handler owns the trusted agent identity; this callback
+          // only borrows the shared operator approval store and UI events.
+          const record = pluginApprovalManager.create(request, timeoutMs, `plugin:${randomUUID()}`);
+          const delegatedAuthority = client?.internal?.agentRuntimeIdentity?.delegatedAuthority;
+          if (delegatedAuthority) {
+            record.agentRuntimeDelegatedAuthority = delegatedAuthority;
+          }
+          const registration = await pluginApprovalManager.register(record, timeoutMs);
+          if (!registration) {
+            throw new Error("fill approval registration failed");
+          }
+          context.broadcast(
+            "plugin.approval.requested",
+            buildRequestedApprovalEvent(record, "plugin"),
+            { dropIfSlow: true },
+          );
+          return { id: record.id, decision: await registration.decision };
+        },
+      });
     },
     { cacheRejections: true },
   );
@@ -529,6 +568,12 @@ export function createGatewayAuxHandlers(
       "vault.generate": createLazyHandler("vault.generate", loadVaultHandlers),
       "vault.setAutoLock": createLazyHandler("vault.setAutoLock", loadVaultHandlers),
       "vault.audit.list": createLazyHandler("vault.audit.list", loadVaultHandlers),
+      "vault.fill.approval.request": createLazyHandler(
+        "vault.fill.approval.request",
+        loadVaultHandlers,
+      ),
+      "vault.fill.preview": createLazyHandler("vault.fill.preview", loadVaultHandlers),
+      "vault.fill.execute": createLazyHandler("vault.fill.execute", loadVaultHandlers),
     },
   };
 }

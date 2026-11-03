@@ -2827,7 +2827,7 @@ CREATE TABLE IF NOT EXISTS vault_audit_events (
   owner_id TEXT NOT NULL CHECK (length(owner_id) BETWEEN 1 AND 256),
   action TEXT NOT NULL CHECK (action IN (
     'initialize', 'unlock', 'unlock-failed', 'lock', 'create', 'update',
-    'delete', 'restore', 'purge', 'reveal', 'copy', 'generate', 'purge-expired'
+    'delete', 'restore', 'purge', 'reveal', 'copy', 'generate', 'fill', 'purge-expired'
   )),
   status TEXT NOT NULL CHECK (status IN ('succeeded', 'failed', 'blocked')),
   item_ref TEXT,

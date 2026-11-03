@@ -26,6 +26,11 @@ import {
   parseScryptParams,
 } from "./vault-entry-crypto.js";
 import {
+  fillVaultEntry,
+  recordVaultFillAudit,
+  type VaultFillWorkerDeps,
+} from "./vault-fill-worker.js";
+import {
   normalizeAutoLockSeconds,
   normalizeCreateInput,
   normalizeUpdateInput,
@@ -52,6 +57,7 @@ import {
   upsertVaultMeta,
 } from "./vault-kernel.worker.js";
 import { ensureVaultSchema } from "./vault-schema.js";
+import { readVaultStatus } from "./vault-status.js";
 import {
   VAULT_DEFAULT_AUTO_LOCK_SECONDS,
   VAULT_DEFAULT_OWNER_ID,
@@ -176,29 +182,12 @@ function requireDek(): Buffer {
 }
 
 function status(): VaultStatus {
-  const handle = db();
-  touchActivity();
-  const record = readVaultKeyRecord(handle.db, owner);
-  const meta = readVaultMeta(handle.db, owner) ?? {
-    autoLockSeconds: VAULT_DEFAULT_AUTO_LOCK_SECONDS,
-    failedAttempts: 0,
-  };
-  const counts = countVaultEntries(handle.db, owner);
-  const state = !record
-    ? ("uninitialized" as const)
-    : !record.wrap
-      ? ("corrupted" as const)
-      : dek
-        ? ("unlocked" as const)
-        : ("locked" as const);
-  return {
-    initialized: Boolean(record?.wrap),
-    state,
-    autoLockSeconds: meta.autoLockSeconds,
-    failedAttempts: meta.failedAttempts,
-    ...(meta.lockedUntilMs !== undefined ? { lockedUntilMs: meta.lockedUntilMs } : {}),
-    ...counts,
-  };
+  return readVaultStatus({
+    db,
+    owner,
+    hasDek: () => dek !== undefined,
+    touchActivity,
+  });
 }
 
 function maintenance(): void {
@@ -569,6 +558,10 @@ function revealEntry(
   return { entry: { ...entry, lastUsedAtMs: now }, ...decrypted };
 }
 
+function fillWorkerDeps(): VaultFillWorkerDeps {
+  return { owner, db, requireDek, write, audit, clockNow, touchActivity };
+}
+
 function setAutoLock(seconds: number): VaultStatus {
   requireDek();
   const lockSeconds = normalizeAutoLockSeconds(seconds);
@@ -629,6 +622,24 @@ async function execute(operation: VaultWorkerOperation): Promise<VaultWorkerResu
       return { type: "purge" };
     case "reveal":
       return { type: "reveal", ...revealEntry(operation.itemRef, operation.mode) };
+    case "fill":
+      return {
+        type: "fill",
+        ...fillVaultEntry(
+          fillWorkerDeps(),
+          operation.itemRef,
+          operation.revision,
+          operation.origin,
+        ),
+      };
+    case "fill.audit":
+      recordVaultFillAudit(
+        fillWorkerDeps(),
+        operation.itemRef,
+        operation.reasonCode,
+        operation.status,
+      );
+      return { type: "fill.audit" };
     case "generate": {
       const password = generatePassword({
         ...(operation.length !== undefined ? { length: operation.length } : {}),

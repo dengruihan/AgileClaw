@@ -116,6 +116,29 @@ export class VaultService {
     return this.request({ type: "reveal", itemRef, mode });
   }
 
+  /** Broker-only: decrypt one entry after exact revision/origin validation. */
+  fill(
+    itemRef: string,
+    revision: number,
+    origin: { scheme: "https" | "http"; host: string; port: number },
+  ): Promise<{ entry: VaultEntryMetadata; password: string }> {
+    return this.request({ type: "fill", itemRef, revision, origin });
+  }
+
+  /** Value-free audit for a fill attempt that never reached decryption. */
+  async recordFillAudit(
+    itemRef: string | undefined,
+    reasonCode: string,
+    status: "failed" | "blocked" = "blocked",
+  ): Promise<void> {
+    await this.request({
+      type: "fill.audit",
+      ...(itemRef ? { itemRef } : {}),
+      status,
+      reasonCode,
+    });
+  }
+
   generate(length?: number, includeSymbols?: boolean): Promise<string> {
     return this.request<string>({
       type: "generate",
@@ -281,6 +304,16 @@ function extractResult(type: VaultWorkerOperation["type"], result: VaultWorkerRe
     case "reveal":
       if (result.type === "reveal") {
         return { entry: result.entry, password: result.password, notes: result.notes };
+      }
+      break;
+    case "fill":
+      if (result.type === "fill") {
+        return { entry: result.entry, password: result.password };
+      }
+      break;
+    case "fill.audit":
+      if (result.type === "fill.audit") {
+        return undefined;
       }
       break;
     case "generate":

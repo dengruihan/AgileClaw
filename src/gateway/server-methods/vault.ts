@@ -1,11 +1,15 @@
 import {
   ErrorCodes,
   errorShape,
+  validatePluginApprovalRequestParams,
   validateVaultAuditListParams,
   validateVaultAuditListResult,
   validateVaultCreateParams,
   validateVaultDeleteParams,
   validateVaultEntryMutationResult,
+  validateVaultFillExecuteParams,
+  validateVaultFillPreviewParams,
+  validateVaultFillPreviewResult,
   validateVaultGenerateParams,
   validateVaultGenerateResult,
   validateVaultInitializeParams,
@@ -25,13 +29,51 @@ import {
   type ErrorShape,
 } from "../../../packages/gateway-protocol/src/index.js";
 import { formatErrorMessage as errorMessage } from "../../infra/errors.js";
+import {
+  sanitizeExecApprovalDisplayText,
+  sanitizeExecApprovalWarningText,
+} from "../../infra/exec-approval-text-sanitize.js";
+import type { ExecApprovalDecision } from "../../infra/exec-approvals.js";
+import type { PluginApprovalRequestPayload } from "../../infra/plugin-approvals.js";
+import { VaultFillBroker, type VaultFillApprovalLookup } from "../../vault/vault-fill-broker.js";
 import { getVaultService, type VaultService } from "../../vault/vault-service.js";
 import { VaultError } from "../../vault/vault-types.js";
 import { readGatewayRequestMutationAuthority } from "./session-mutation-guards.js";
-import type { GatewayClient, GatewayRequestHandlers, RespondFn } from "./types.js";
+import type {
+  GatewayClient,
+  GatewayRequestContext,
+  GatewayRequestHandlers,
+  RespondFn,
+} from "./types.js";
 import { defineValidatedGatewayHandler } from "./validation.js";
 
 const VAULT_REVEAL_SCOPE = "operator.vault.reveal";
+
+const UNAVAILABLE_FILL_APPROVAL: VaultFillApprovalLookup = {
+  getSnapshot: async () => null,
+  consumeAllowOnce: async () => false,
+};
+
+type FillAgentIdentity = { agentId: string; sessionKey: string };
+
+export type VaultFillApprovalRequestInput = {
+  request: PluginApprovalRequestPayload;
+  timeoutMs: number;
+  context: GatewayRequestContext;
+  client?: GatewayClient | null;
+};
+
+function readFillAgentIdentity(client: GatewayClient | null): FillAgentIdentity | undefined {
+  const identity = client?.internal?.agentRuntimeIdentity;
+  if (
+    !identity ||
+    typeof identity.agentId !== "string" ||
+    typeof identity.sessionKey !== "string"
+  ) {
+    return undefined;
+  }
+  return { agentId: identity.agentId, sessionKey: identity.sessionKey };
+}
 
 type VaultLogger = {
   warn?: (message: string) => void;
@@ -105,9 +147,17 @@ export function createVaultHandlers(
   params: {
     service?: VaultService;
     log?: VaultLogger;
+    fillApproval?: VaultFillApprovalLookup;
+    requestFillApproval?: (
+      input: VaultFillApprovalRequestInput,
+    ) => Promise<{ id: string; decision: ExecApprovalDecision | null }>;
   } = {},
 ): GatewayRequestHandlers {
   const service = params.service ?? getVaultService();
+  const fillBroker = new VaultFillBroker({
+    service,
+    approval: params.fillApproval ?? UNAVAILABLE_FILL_APPROVAL,
+  });
 
   return {
     "vault.status": defineValidatedGatewayHandler(
@@ -174,6 +224,7 @@ export function createVaultHandlers(
         const { respond } = options;
         try {
           await service.lock();
+          fillBroker.revokeAll();
           respond(true, validateResult({ ok: true }, validateVaultMutationResult, "vault.lock"));
         } catch (error) {
           logFailure(params.log, "vault.lock", error);
@@ -248,6 +299,7 @@ export function createVaultHandlers(
             ...(requestParams.notes !== undefined ? { notes: requestParams.notes } : {}),
           });
           assertCurrent();
+          fillBroker.revokeItem(requestParams.itemRef);
           respond(
             true,
             validateResult({ entry }, validateVaultEntryMutationResult, "vault.update"),
@@ -268,6 +320,7 @@ export function createVaultHandlers(
           assertCurrent();
           await service.delete(requestParams.itemRef, requestParams.revision);
           assertCurrent();
+          fillBroker.revokeItem(requestParams.itemRef);
           respond(true, validateResult({ ok: true }, validateVaultMutationResult, "vault.delete"));
         } catch (error) {
           logFailure(params.log, "vault.delete", error);
@@ -302,6 +355,7 @@ export function createVaultHandlers(
           assertCurrent();
           await service.purge(requestParams.itemRef);
           assertCurrent();
+          fillBroker.revokeItem(requestParams.itemRef);
           respond(true, validateResult({ ok: true }, validateVaultMutationResult, "vault.purge"));
         } catch (error) {
           logFailure(params.log, "vault.purge", error);
@@ -402,6 +456,163 @@ export function createVaultHandlers(
           );
         } catch (error) {
           logFailure(params.log, "vault.audit.list", error);
+          respond(false, undefined, vaultErrorShape(error));
+        }
+      },
+    ),
+    "vault.fill.approval.request": defineValidatedGatewayHandler(
+      "vault.fill.approval.request",
+      validatePluginApprovalRequestParams,
+      async (options) => {
+        const { params: requestParams, respond, client, context } = options;
+        const identity = readFillAgentIdentity(client ?? null);
+        if (!identity) {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.FORBIDDEN, "Agent fill requires a live agent runtime identity.", {
+              details: { code: "VAULT_FILL_AGENT_REQUIRED" },
+            }),
+          );
+          return;
+        }
+        if (!params.requestFillApproval) {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.UNAVAILABLE, "Password fill approval is unavailable."),
+          );
+          return;
+        }
+        const timeoutMs = Math.min(600_000, Math.max(1_000, requestParams.timeoutMs ?? 120_000));
+        try {
+          const result = await params.requestFillApproval({
+            request: {
+              pluginId: "vault",
+              title: sanitizeExecApprovalDisplayText(requestParams.title),
+              description: sanitizeExecApprovalWarningText(requestParams.description),
+              detail:
+                requestParams.detail === undefined || requestParams.detail === null
+                  ? null
+                  : sanitizeExecApprovalWarningText(requestParams.detail),
+              severity: "warning",
+              allowedDecisions: ["allow-once", "deny"],
+              toolName: "browser",
+              agentId: identity.agentId,
+              sessionKey: identity.sessionKey,
+            },
+            timeoutMs,
+            context,
+            client: client ?? null,
+          });
+          respond(true, result);
+        } catch (error) {
+          logFailure(params.log, "vault.fill.approval.request", error);
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.UNAVAILABLE, "Password fill approval is unavailable."),
+          );
+        }
+      },
+    ),
+    "vault.fill.preview": defineValidatedGatewayHandler(
+      "vault.fill.preview",
+      validateVaultFillPreviewParams,
+      async (options) => {
+        const { params: requestParams, respond, client } = options;
+        const identity = readFillAgentIdentity(client ?? null);
+        if (!identity) {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.FORBIDDEN, "Agent fill requires a live agent runtime identity.", {
+              details: { code: "VAULT_FILL_AGENT_REQUIRED" },
+            }),
+          );
+          return;
+        }
+        const { assertCurrent } = readGatewayRequestMutationAuthority(options);
+        try {
+          assertCurrent();
+          const result = await fillBroker.preview({
+            itemRef: requestParams.itemRef,
+            origin: requestParams.origin,
+            agentId: identity.agentId,
+            sessionKey: identity.sessionKey,
+            profile: requestParams.profile,
+            targetId: requestParams.targetId,
+            documentId: requestParams.documentId,
+            frameId: requestParams.frameId,
+            fieldSignature: requestParams.fieldSignature,
+            ...(requestParams.reason !== undefined ? { reason: requestParams.reason } : {}),
+          });
+          assertCurrent();
+          respond(
+            true,
+            validateResult(result, validateVaultFillPreviewResult, "vault.fill.preview"),
+          );
+        } catch (error) {
+          logFailure(params.log, "vault.fill.preview", error);
+          respond(false, undefined, vaultErrorShape(error));
+        }
+      },
+    ),
+    "vault.fill.execute": defineValidatedGatewayHandler(
+      "vault.fill.execute",
+      validateVaultFillExecuteParams,
+      async (options) => {
+        const { params: requestParams, respond, client } = options;
+        const identity = readFillAgentIdentity(client ?? null);
+        if (!identity) {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.FORBIDDEN, "Agent fill requires a live agent runtime identity.", {
+              details: { code: "VAULT_FILL_AGENT_REQUIRED" },
+            }),
+          );
+          return;
+        }
+        const { assertCurrent } = readGatewayRequestMutationAuthority(options);
+        try {
+          assertCurrent();
+          const result = await fillBroker.execute({
+            previewId: requestParams.previewId,
+            approvalId: requestParams.approvalId,
+            binding: {
+              itemRef: requestParams.itemRef,
+              revision: requestParams.revision,
+              origin: requestParams.origin,
+              agentId: identity.agentId,
+              sessionKey: identity.sessionKey,
+              profile: requestParams.profile,
+              targetId: requestParams.targetId,
+              documentId: requestParams.documentId,
+              frameId: requestParams.frameId,
+              fieldSignature: requestParams.fieldSignature,
+            },
+          });
+          assertCurrent();
+          if (result.status === "filled") {
+            // Internal material for the trusted fill executor only. No tool
+            // result, transcript, or log path receives this response.
+            respond(true, {
+              status: "filled",
+              itemRef: result.material.entry.itemRef,
+              siteLabel: result.material.entry.siteLabel,
+              accountLabel: result.material.entry.accountLabel,
+              origin: result.material.origin,
+              password: result.material.password,
+            });
+            return;
+          }
+          respond(true, {
+            status: result.status,
+            ...(result.reasonCode ? { reasonCode: result.reasonCode } : {}),
+          });
+        } catch (error) {
+          logFailure(params.log, "vault.fill.execute", error);
           respond(false, undefined, vaultErrorShape(error));
         }
       },
