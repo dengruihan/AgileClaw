@@ -10,6 +10,7 @@ OPS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 SKILL_REL="home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md"
 PACKAGE_FILE="$OPS_DIR/files/$SKILL_REL"
+MANIFEST_FILE="$OPS_DIR/manifest.json"
 # Empty TARGET_ROOT is the host root; the offline simulator points it at a temp tree.
 TARGET_ROOT="${CMNE_TARGET_ROOT:-}"
 TARGET_FILE="${TARGET_ROOT}/${SKILL_REL}"
@@ -42,9 +43,38 @@ file_bytes() {
   wc -c <"$1" | tr -d ' '
 }
 
+# manifest_field <dotted.path> prints a fixed value from manifest.json.
+manifest_field() {
+  [ -f "$MANIFEST_FILE" ] || die "manifest missing: $MANIFEST_FILE"
+  node -e '
+    const fs = require("node:fs");
+    let v = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    for (const p of process.argv[2].split(".")) {
+      if (v === null || v === undefined) break;
+      v = v[p];
+    }
+    if (v === undefined || v === null) process.exit(1);
+    process.stdout.write(typeof v === "string" ? v : JSON.stringify(v));
+  ' "$MANIFEST_FILE" "$1"
+}
+
+# package_sha prints the reviewed package hash only while the file still
+# matches manifest.target.deployedSha256. A package changed after review is
+# refused before deploy can write the target or create a backup.
 package_sha() {
   [ -f "$PACKAGE_FILE" ] || die "package skill missing: $PACKAGE_FILE"
-  sha256_file "$PACKAGE_FILE"
+  local actual expected
+  actual="$(sha256_file "$PACKAGE_FILE")"
+  expected="$(manifest_field target.deployedSha256)" || die "cannot read manifest.target.deployedSha256"
+  if [ "$actual" != "$expected" ]; then
+    die "package file does not match the reviewed manifest hash.
+  package:  $PACKAGE_FILE
+  actual:   $actual
+  expected: $expected
+Refusing to continue: the reviewed content is fixed in manifest.json.
+No target or backup was written."
+  fi
+  printf '%s' "$actual"
 }
 
 # Prints the target hash, or "missing".

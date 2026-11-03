@@ -44,11 +44,13 @@ cd /home/raymond/repos/AgileClaw/ops/collector-mail-notify-example
 
 `deploy.sh` 没有 `--yes` 时只读。应用时：
 
-1. 校验包内文件的 sha256、必需锚点，并确认过时/灯效 token 不在；
+1. 校验包内文件的 sha256 **必须等于 `manifest.target.deployedSha256`**（审查后被改动立即拒绝，不写目标、不建备份）、必需锚点存在，并确认过时/灯效 token 不在；
 2. 只有 live 文件等于记录的基线才替换；等于本包内容则报 `already deployed` 并退出；其他内容视为 drift，拒绝执行；
 3. 备份到 `~/.openclaw/backups/collector-mail-notify-example/<UTC 时间戳>/`（`SKILL.md.before` + `deploy.json`，记录前后 sha）；
 4. 用同目录临时文件 + `mv` 原子写入；
 5. 复核 sha256、字节长度、锚点与禁用 token；失败自动恢复备份并退出 1。
+
+包哈希与 `manifest.target.deployedSha256` 不一致时，`deploy.sh`（以及同为只读的 `status.sh`）会立即退出，不写目标、不创建备份。
 
 `--allow-drift` 用于确认过人工 diff 后仍要替换（替换前同样备份）。
 
@@ -78,13 +80,13 @@ node verify/check-package.mjs   # 静态契约：单行 diff 重建基线、锚�
 
 结果见下表（2026-11-03，作者本机；模拟不触碰 live）。
 
-| 命令                               | 结果                                                                                                                                                                     |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `node verify/check-package.mjs`    | **PASS 65 checks**：包 sha/字节、单行替换重建基线（sha 与字节均一致）、旧文案与灯效 token 缺席、其余示例/命令/失败处理保留、脚本语法与只读约束、隐私扫描                 |
-| `./verify/deploy-sim.sh`           | **PASS 37 checks**：临时根 + 临时备份目录；计划只读、应用与备份内容、幂等、drift 拒绝、`--allow-drift`、回滚、二次回滚，文件权限保持，其他 skill 与 `openclaw.json` 不变 |
-| `./scripts/status.sh`（只读 live） | `state: baseline`（`6be95ab3…`，2216 bytes）；stale token 为旧邮件示例 4 项；无备份                                                                                      |
-| `./scripts/deploy.sh`（只读 live） | 只打印计划：`replace`、`6be95ab3… -> f62eeab1…`；未写 live                                                                                                               |
-| `./scripts/rollback.sh`（无备份）  | 按预期退出 1：`no backup with deploy.json under …`                                                                                                                       |
+| 命令                               | 结果                                                                                                                                                                                                                            |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node verify/check-package.mjs`    | **PASS 67 checks**：包 sha/字节与 manifest 固定哈希一致、单行替换重建基线、旧文案与灯效 token 缺席、其余示例/命令/失败处理保留、部署入口锁定 manifest 哈希、脚本语法与只读约束、隐私扫描                                        |
+| `./verify/deploy-sim.sh`           | **PASS 42 checks**：临时根 + 临时备份目录；计划只读、应用与备份内容、幂等、drift 拒绝、`--allow-drift`、回滚、二次回滚，文件权限保持，其他 skill 与 `openclaw.json` 不变；审查后改动包时 deploy/status 拒绝且不写目标、不建备份 |
+| `./scripts/status.sh`（只读 live） | `state: baseline`（`6be95ab3…`，2216 bytes）；stale token 为旧邮件示例 4 项；无备份                                                                                                                                             |
+| `./scripts/deploy.sh`（只读 live） | 只打印计划：`replace`、`6be95ab3… -> f62eeab1…`；未写 live                                                                                                                                                                      |
+| `./scripts/rollback.sh`（无备份）  | 按预期退出 1：`no backup with deploy.json under …`                                                                                                                                                                              |
 
 ## 6. 不改动的部分
 

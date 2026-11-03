@@ -3,14 +3,16 @@
 #
 # Runs deploy/status/rollback against a temporary root and backup base, so no
 # live file is read or written. Covers the plan-only default, backup contents,
-# idempotency, drift refusal, --allow-drift, rollback and double rollback.
+# idempotency, drift refusal, --allow-drift, rollback, double rollback and a
+# package changed after review being refused before any write.
 #
 # Usage: ./verify/deploy-sim.sh
 set -euo pipefail
 
 OPS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 MANIFEST="$OPS_DIR/manifest.json"
-PACKAGE_FILE="$OPS_DIR/files/home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md"
+SKILL_REL="home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md"
+PACKAGE_FILE="$OPS_DIR/files/$SKILL_REL"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -175,6 +177,27 @@ else
 fi
 assert_eq "$(sha "$OTHER_SKILL")" "$other_sha" "another skill is still untouched"
 assert_eq "$(sha "$CONFIG")" "$config_sha" "openclaw.json is still untouched"
+
+# --- 8. A package changed after review is refused before any write ----------
+TAMPER_PKG="$TMP/package-tampered"
+cp -R "$OPS_DIR" "$TAMPER_PKG"
+printf '\n<!-- unreviewed append -->\n' >>"$TAMPER_PKG/files/$SKILL_REL"
+target_before="$(sha "$TARGET")"
+backups_before="$(backup_count)"
+
+if out="$("$TAMPER_PKG/scripts/deploy.sh" --yes 2>&1)"; then
+  bad "deploy accepted a package that no longer matches manifest.target.deployedSha256"
+else
+  assert_contains "$out" "does not match the reviewed manifest hash" "deploy refuses a tampered package"
+  assert_contains "$out" "No target or backup was written" "refusal states nothing was written"
+  assert_eq "$(sha "$TARGET")" "$target_before" "tampered deploy leaves the target untouched"
+  assert_eq "$(backup_count)" "$backups_before" "tampered deploy creates no backup"
+fi
+if out="$("$TAMPER_PKG/scripts/status.sh" 2>&1)"; then
+  bad "status accepted a package that no longer matches the reviewed hash"
+else
+  assert_contains "$out" "does not match the reviewed manifest hash" "status reports package tampering"
+fi
 
 if [ "$failures" -ne 0 ]; then
   echo "FAILED $failures of $((passed + failures)) checks" >&2

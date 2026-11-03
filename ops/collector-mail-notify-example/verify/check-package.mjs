@@ -29,6 +29,7 @@ const deploy = read("scripts/deploy.sh");
 const rollback = read("scripts/rollback.sh");
 const status = read("scripts/status.sh");
 const lib = read("scripts/lib.sh");
+const deploySim = read("verify/deploy-sim.sh");
 
 let passed = 0;
 const failures = [];
@@ -154,6 +155,15 @@ check(
 check(
   "deploy refuses unrecorded drift by default",
   has(deploy, "--allow-drift") && has(deploy, "allow_drift"),
+);
+check(
+  "package hash is locked to manifest.target.deployedSha256",
+  has(lib, "manifest_field target.deployedSha256") &&
+    has(lib, "does not match the reviewed manifest hash"),
+);
+check(
+  "sim covers a package changed after review",
+  has(deploySim, "unreviewed append") && has(deploySim, "creates no backup"),
 );
 check(
   "rollback refuses post-deploy drift by default",
