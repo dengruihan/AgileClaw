@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "name": "live-skill-visibility-simplification",
+  "mission": "M20",
+  "createdFor": "2026-11-03",
+  "owner": "Model visibility for six named skills. Content bodies remain owned by their collector/workshop authors; this package only inserts one frontmatter line.",
+  "surfaces": {
+    "flagKey": "disable-model-invocation",
+    "flagLine": "disable-model-invocation: true",
+    "loader": [
+      "src/skills/loading/frontmatter.ts:171-179 parses disable-model-invocation as a boolean",
+      "src/skills/discovery/skill-index.ts:13-19 removes it from the available-skills prompt",
+      "src/skills/loading/skill-entry-metadata.ts:72 maps it to includeInAvailableSkillsPrompt=false"
+    ],
+    "notUsed": [
+      "alwaysActive",
+      "always: true"
+    ],
+    "effect": "The six skills stay installed and readable by absolute path; only model-initiated catalog selection is hidden. user-invocable stays true, so explicit /skill or $skill invocation remains possible.",
+    "expectedVisibleBefore": 79,
+    "expectedVisibleAfter": 73,
+    "expectedHiddenCount": 6
+  },
+  "dependencyGate": {
+    "requiredMissions": ["M15", "M19"],
+    "rule": "Do not deploy live until both missions are merged. This package never copies skill bodies, so it does not overwrite their collector updates; the gate preserves the reviewed ordering."
+  },
+  "targets": [
+    {
+      "name": "collector-dingtalk-triage",
+      "agent": "main",
+      "source": "openclaw-workspace",
+      "path": "workspace/skills/collector-dingtalk-triage/SKILL.md",
+      "baselineFixture": "verify/fixtures/baseline/workspace/skills/collector-dingtalk-triage/SKILL.md",
+      "baselineSha256": "93de645ca73286162972a94b5823d4da8c3f66a9c98772f6a19c04442de4d7bd",
+      "baselineBytes": 3917,
+      "targetSha256": "4a98d8ed3c303579b2c3b4208d48bb132fe5430a115b2445bf3316b110340b98",
+      "targetBytes": 3948,
+      "contentOwner": "ops/collector-skill-dispatcher",
+      "legacyCopies": [
+        "ops/collector-skill-dispatcher/files/home/raymond/.openclaw/workspace/skills/collector-dingtalk-triage/SKILL.md"
+      ],
+      "requiredBodyTokens": [
+        "仅供 collector 自动化使用"
+      ],
+      "reason": "collector dispatcher reads this file by absolute path with the read tool; the model catalog is not a routing dependency."
+    },
+    {
+      "name": "collector-mail-triage",
+      "agent": "main",
+      "source": "openclaw-workspace",
+      "path": "workspace/skills/collector-mail-triage/SKILL.md",
+      "baselineFixture": "verify/fixtures/baseline/workspace/skills/collector-mail-triage/SKILL.md",
+      "baselineSha256": "fffbbc78f1397a789df52d7a907cec4c70e4d3cba8f970b0d8fb2fc7222fc18f",
+      "baselineBytes": 5073,
+      "targetSha256": "62352a10bcf40868b6afa63af559cb7ba0f2937cf9b59c48a37b1a257d864a2f",
+      "targetBytes": 5104,
+      "contentOwner": "ops/collector-mail-agent-triage",
+      "legacyCopies": [
+        "ops/collector-mail-agent-triage/files/home/raymond/.openclaw/workspace/skills/collector-mail-triage/SKILL.md"
+      ],
+      "requiredBodyTokens": [
+        "仅供 collector 自动化使用"
+      ],
+      "reason": "collector dispatcher reads this file by absolute path with the read tool; the model catalog is not a routing dependency."
+    },
+    {
+      "name": "collector-source-triage",
+      "agent": "main",
+      "source": "openclaw-workspace",
+      "path": "workspace/skills/collector-source-triage/SKILL.md",
+      "baselineFixture": "verify/fixtures/baseline/workspace/skills/collector-source-triage/SKILL.md",
+      "baselineSha256": "68c89b98bbb10dc590127302603c707b07ed92beabcf8cd9105fd28aa1b42528",
+      "baselineBytes": 870,
+      "targetSha256": "2992697512e55819838a8be75aec5b099dfb20f4075e3d6d9247e5da6de12010",
+      "targetBytes": 901,
+      "contentOwner": "ops/collector-agenda-wording-fix (M15 current owner; M10/M12 copies are historical)",
+      "legacyCopies": [
+        "ops/collector-skill-dispatcher/files/home/raymond/.openclaw/workspace/skills/collector-source-triage/SKILL.md",
+        "ops/collector-mail-agent-triage/files/home/raymond/.openclaw/workspace/skills/collector-source-triage/SKILL.md",
+        "ops/collector-agenda-wording-fix/files/home/raymond/.openclaw/workspace/skills/collector-source-triage/SKILL.md"
+      ],
+      "requiredBodyTokens": [
+        "仅供 collector 自动化使用"
+      ],
+      "reason": "collector dispatcher reads this file by absolute path with the read tool; the model catalog is not a routing dependency."
+    },
+    {
+      "name": "collector-health-repair",
+      "agent": "main",
+      "source": "openclaw-workspace",
+      "path": "workspace/skills/collector-health-repair/SKILL.md",
+      "baselineFixture": "verify/fixtures/baseline/workspace/skills/collector-health-repair/SKILL.md",
+      "baselineSha256": "f5d189b8306d13e0db1b32842be4249a5b5276854113cb8e93557e5801962bee",
+      "baselineBytes": 1199,
+      "targetSha256": "8942295e495768a9eccf0539d82252e17e8beae06014e1a97284ba2a59e5704c",
+      "targetBytes": 1230,
+      "contentOwner": "ops/collector-skill-dispatcher",
+      "legacyCopies": [
+        "ops/collector-skill-dispatcher/files/home/raymond/.openclaw/workspace/skills/collector-health-repair/SKILL.md"
+      ],
+      "requiredBodyTokens": [
+        "仅供 collector 自动化使用"
+      ],
+      "reason": "collector dispatcher reads this file by absolute path with the read tool; the model catalog is not a routing dependency."
+    },
+    {
+      "name": "collector-notify",
+      "agent": "main",
+      "source": "openclaw-workspace",
+      "path": "workspace/skills/collector-notify/SKILL.md",
+      "baselineFixture": "verify/fixtures/baseline/workspace/skills/collector-notify/SKILL.md",
+      "baselineSha256": "bac70a7e328d58bd4bcae8e0cc93a329582b602db85d0ee374ef1af0b8526be8",
+      "baselineBytes": 2742,
+      "targetSha256": "daff9047ae4b743acd3abdfbab6a216bb838951b840c7bb0274ae0657499798b",
+      "targetBytes": 2773,
+      "contentOwner": "ops/collector-agenda-wording-fix (M15 current owner; M10/M13 copies are historical)",
+      "legacyCopies": [
+        "ops/collector-skill-dispatcher/files/home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md",
+        "ops/collector-mail-notify-example/files/home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md",
+        "ops/collector-agenda-wording-fix/files/home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md"
+      ],
+      "requiredBodyTokens": [
+        "仅供 collector 自动化使用"
+      ],
+      "reason": "collector dispatcher and triage skills read this file by absolute path before sending; the model catalog is not a routing dependency."
+    },
+    {
+      "name": "biandan-todo",
+      "agent": "main",
+      "source": "openclaw-workshop",
+      "path": "agents/main/agent/workshop-skills/biandan-todo/SKILL.md",
+      "baselineFixture": "verify/fixtures/baseline/agents/main/agent/workshop-skills/biandan-todo/SKILL.md",
+      "baselineSha256": "03005463e447df5e378fbe4e93ea5ea9b2a0a212dfad39560fcf8a545a8796ec",
+      "baselineBytes": 11212,
+      "targetSha256": "d5219593a2b12881d623fd7d23c4054a6d1864d4bda3c75c40834d383a1402e1",
+      "targetBytes": 11243,
+      "contentOwner": "live workshop skill (operator-maintained; no repository ops package)",
+      "legacyCopies": [],
+      "requiredBodyTokens": [
+        "便单"
+      ],
+      "reason": "The user already stopped using 便单; AGENTS.md and schedule-sweep own the current todo route. The skill stays installed for explicit requests but must not consume catalog budget."
+    }
+  ],
+  "guard": {
+    "legacyPackageRoots": [
+      "ops/collector-skill-dispatcher",
+      "ops/collector-mail-agent-triage",
+      "ops/collector-mail-notify-example",
+      "ops/collector-agenda-wording-fix",
+      "ops/collector-course-sync"
+    ],
+    "restoreDetection": "status.sh hashes each live target; if a visible target equals a legacy package copy, it reports VISIBILITY-RESTORED and names that package.",
+    "unrelatedStateFields": [
+      "eligible",
+      "disabled",
+      "blockedByAllowlist",
+      "blockedByAgentFilter",
+      "modelVisible",
+      "userInvocable",
+      "commandVisible",
+      "source"
+    ]
+  },
+  "deployment": {
+    "backupBase": "~/.openclaw/backups/live-skill-visibility-simplification",
+    "writeScope": [
+      "workspace/skills/collector-dingtalk-triage/SKILL.md",
+      "workspace/skills/collector-mail-triage/SKILL.md",
+      "workspace/skills/collector-source-triage/SKILL.md",
+      "workspace/skills/collector-health-repair/SKILL.md",
+      "workspace/skills/collector-notify/SKILL.md",
+      "agents/main/agent/workshop-skills/biandan-todo/SKILL.md"
+    ],
+    "neverTouch": [
+      "cron payloads or schedules",
+      "openclaw.json",
+      "agents.main.skillsLimits.maxSkillsPromptChars (stays 18000/default)",
+      "agents.main.skills allowlist",
+      "any other skill file",
+      "Gateway process or service",
+      "DingTalk or mail messages"
+    ]
+  }
+}
