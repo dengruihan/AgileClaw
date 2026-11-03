@@ -214,6 +214,30 @@ export type BrowserVaultFillResult =
   | { ok: true; status: "filled"; targetId: string }
   | { ok: false; status: string; reasonCode?: string };
 
+export type BrowserVaultIdentityResult =
+  | {
+      ok: true;
+      targetId: string;
+      documentId: string;
+      frameId: string;
+      origin: BrowserVaultOrigin;
+    }
+  | { ok: false; reasonCode?: string };
+
+export async function browserVaultIdentity(
+  baseUrl: BrowserClientTarget,
+  opts: BrowserTimedActionOptions & { targetId: string },
+): Promise<BrowserVaultIdentityResult> {
+  const timeoutMs = resolveBrowserNavigationTimeoutMs(opts.timeoutMs);
+  return await postBrowserJson(
+    baseUrl,
+    "/vault/identity",
+    { targetId: opts.targetId, timeoutMs },
+    resolveBrowserOperationRequestTimeoutMs(timeoutMs),
+    opts,
+  );
+}
+
 export async function browserVaultObserve(
   baseUrl: BrowserClientTarget,
   opts: BrowserTimedActionOptions & { targetId: string },

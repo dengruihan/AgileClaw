@@ -27,6 +27,7 @@ import {
   browserNavigate,
   browserOpenTab,
   browserPdfSave,
+  browserVaultIdentity,
   jsonResult,
   normalizeOptionalString,
   readPositiveIntegerParam,
@@ -43,6 +44,7 @@ import { parseBrowserNavigationUrl } from "./browser/navigation-guard.js";
 import {
   assertVaultFillActAllowed,
   clearVaultFillSession,
+  clearVaultFillSessionIfDocumentChanged,
   hasActiveVaultFill,
   hasAnyActiveVaultFill,
 } from "./browser/vault-fill-scrub.js";
@@ -61,6 +63,36 @@ function readTargetUrlParam(params: Record<string, unknown>) {
     readStringParam(params, "url", { required: true, label: "targetUrl" });
   parseBrowserNavigationUrl(targetUrl);
   return targetUrl;
+}
+
+/**
+ * A download or hash-only navigation keeps the approved document alive. Only a
+ * genuine document replacement (or a confirmed close) may drop protection.
+ * If identity cannot be proven, keep the session (fail closed).
+ */
+async function clearVaultFillAfterNavigate(params: {
+  baseUrl?: string;
+  profile?: string;
+  targetId?: string;
+  proxyRequest: BrowserProxyRequest | null;
+  signal?: AbortSignal;
+}): Promise<void> {
+  if (!params.targetId || params.proxyRequest || !hasActiveVaultFill(params.targetId)) {
+    return;
+  }
+  try {
+    const identity = await browserVaultIdentity(params.baseUrl, {
+      targetId: params.targetId,
+      profile: params.profile,
+      signal: params.signal,
+      timeoutMs: 5_000,
+    });
+    if (identity.ok) {
+      clearVaultFillSessionIfDocumentChanged(params.targetId, identity.documentId);
+    }
+  } catch {
+    // Keep protection when the current document identity is uncertain.
+  }
 }
 
 export async function executeBrowserTabAction(context: {
@@ -193,8 +225,17 @@ export async function executeBrowserTabAction(context: {
         signal,
       });
       const navigatedTargetId = readStringValue(asNullableRecord(result)?.targetId) ?? targetId;
-      if (navigatedTargetId) {
+      const aborted = asNullableRecord(asNullableRecord(result)?.aborted);
+      if (aborted?.reason === "closed" && navigatedTargetId) {
         clearVaultFillSession(navigatedTargetId);
+      } else {
+        await clearVaultFillAfterNavigate({
+          baseUrl,
+          profile,
+          targetId: navigatedTargetId,
+          proxyRequest,
+          signal,
+        });
       }
       await touchTab(navigatedTargetId);
       const formatted = formatBrowserExternalToolResult({
@@ -308,7 +349,12 @@ export async function executeBrowserTabAction(context: {
         proxyRequest,
         signal,
         onTabActivity: touchTab,
-        onTabClose: sessionTabs.untrack,
+        onTabClose: async (targetId) => {
+          if (targetId) {
+            clearVaultFillSession(targetId);
+          }
+          await sessionTabs.untrack(targetId);
+        },
       });
     }
     default:

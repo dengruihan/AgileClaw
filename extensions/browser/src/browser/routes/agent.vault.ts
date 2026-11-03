@@ -298,6 +298,53 @@ export function registerBrowserVaultRoutes(
     });
   });
 
+  app.post("/vault/identity", async (req, res) => {
+    const body = readBody(req);
+    const targetId = toStringOrEmpty(body.targetId) || undefined;
+    await withRouteTabContext({
+      req,
+      res,
+      ctx,
+      targetId,
+      enforceCurrentUrlAllowed: true,
+      run: async ({ profileCtx, cdpUrl, tab }) => {
+        if (getBrowserProfileCapabilities(profileCtx.profile).usesChromeMcp) {
+          return jsonError(
+            res,
+            501,
+            "Password fill identity is not available for existing-session browser profiles; use a managed profile.",
+          );
+        }
+        if (
+          profileCtx.profile.driver === "extension" ||
+          !isLocalCdpUrl(profileCtx.profile.cdpUrl)
+        ) {
+          res.json({ ok: false, reasonCode: "remote_browser_unsupported" });
+          return;
+        }
+        const navigationPolicy = browserNavigationPolicyForProfile(ctx, profileCtx);
+        const page = await getPageForTargetId({
+          cdpUrl,
+          targetId: tab.targetId,
+          ...(navigationPolicy.ssrfPolicy ? { ssrfPolicy: navigationPolicy.ssrfPolicy } : {}),
+        });
+        const identity = await documentIdentity(page);
+        const origin = readOrigin(page.url());
+        if (!identity || !origin) {
+          res.json({ ok: false, reasonCode: "document_identity_unavailable" });
+          return;
+        }
+        res.json({
+          ok: true,
+          targetId: tab.targetId,
+          documentId: identity.documentId,
+          frameId: identity.frameId,
+          origin,
+        });
+      },
+    });
+  });
+
   app.post("/vault/fill", async (req, res) => {
     const body = readBody(req);
     const targetId = toStringOrEmpty(body.targetId) || undefined;
@@ -384,8 +431,9 @@ export function registerBrowserVaultRoutes(
         });
         const inputs = page.locator("input");
         // Arm masking before insertion so a transport failure, partial fill, or
-        // timeout cannot leave plaintext in the DOM unprotected.
-        registerVaultFillSecret(tab.targetId, password);
+        // timeout cannot leave plaintext in the DOM unprotected. Bind the
+        // document id so a later navigation can prove replacement.
+        registerVaultFillSecret(tab.targetId, password, observation.documentId);
         const passwordField = inputs.nth(observation.fields.passwordIndex);
         try {
           if (username !== undefined && observation.fields.usernameIndex >= 0) {

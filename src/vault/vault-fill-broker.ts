@@ -54,6 +54,8 @@ export type VaultFillServicePort = {
     reasonCode: string,
     status?: "failed" | "blocked",
   ): Promise<void>;
+  /** Fires on lock/worker-generation transitions; the broker revokes previews. */
+  onLock?: (listener: () => void) => () => void;
 };
 
 export type VaultFillBrokerOptions = {
@@ -147,6 +149,7 @@ export class VaultFillBroker {
     this.previewTtlMs = options.previewTtlMs ?? VAULT_FILL_PREVIEW_TTL_MS;
     this.approvalTtlMs = options.approvalTtlMs ?? VAULT_FILL_APPROVAL_TTL_MS;
     this.randomId = options.randomId ?? defaultRandomId;
+    options.service.onLock?.(() => this.revokeAll());
   }
 
   /** Validate the observed origin against the entry and mint a preview binding. */

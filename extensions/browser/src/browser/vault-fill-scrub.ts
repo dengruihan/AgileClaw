@@ -16,6 +16,7 @@ const MASK = "***";
 
 type FillSession = {
   secrets: string[];
+  documentId?: string;
 };
 
 const sessions = new Map<string, FillSession>();
@@ -39,7 +40,11 @@ function secretVariants(secret: string): string[] {
 }
 
 /** Arm masking before the value is inserted into the document. */
-export function registerVaultFillSecret(targetId: string, secret: string): void {
+export function registerVaultFillSecret(
+  targetId: string,
+  secret: string,
+  documentId?: string,
+): void {
   if (!targetId || !secret) {
     return;
   }
@@ -48,7 +53,12 @@ export function registerVaultFillSecret(targetId: string, secret: string): void 
   for (const variant of secretVariants(secret)) {
     secrets.add(variant);
   }
-  sessions.set(targetId, { secrets: [...secrets].toSorted((a, b) => b.length - a.length) });
+  sessions.set(targetId, {
+    secrets: [...secrets].toSorted((a, b) => b.length - a.length),
+    ...((documentId ?? existing?.documentId)
+      ? { documentId: documentId ?? existing?.documentId }
+      : {}),
+  });
 }
 
 export function hasActiveVaultFill(targetId: string | undefined): boolean {
@@ -63,6 +73,27 @@ export function clearVaultFillSession(targetId: string | undefined): void {
   if (targetId) {
     sessions.delete(targetId);
   }
+}
+
+/**
+ * Drop the session only when the browser proves the approved document was
+ * replaced. A download, hash-only navigation, or a same-document navigation
+ * keeps the filled document alive and must keep protection in place. If the
+ * current document identity is unavailable, keep protection (fail closed).
+ */
+export function clearVaultFillSessionIfDocumentChanged(
+  targetId: string | undefined,
+  currentDocumentId: string | undefined,
+): boolean {
+  if (!targetId || !currentDocumentId) {
+    return false;
+  }
+  const session = sessions.get(targetId);
+  if (!session?.documentId || session.documentId === currentDocumentId) {
+    return false;
+  }
+  sessions.delete(targetId);
+  return true;
 }
 
 export function clearAllVaultFillSessions(): void {

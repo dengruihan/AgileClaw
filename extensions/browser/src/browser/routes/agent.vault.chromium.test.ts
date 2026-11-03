@@ -212,6 +212,7 @@ describe.runIf(process.env.OPENCLAW_BROWSER_VAULT_E2E === "1")(
           createBrowserRouteContext({ getState: () => state }),
         );
         const observe = expectDefined(routes.postHandlers.get("/vault/observe"));
+        const identity = expectDefined(routes.postHandlers.get("/vault/identity"));
         const fill = expectDefined(routes.postHandlers.get("/vault/fill"));
 
         const firstObserve = createBrowserRouteResponse();
@@ -221,6 +222,19 @@ describe.runIf(process.env.OPENCLAW_BROWSER_VAULT_E2E === "1")(
         );
         const first = firstObserve.body as VaultObservation;
         expect(first.ok).toBe(true);
+
+        await page.evaluate(() => {
+          location.hash = "section";
+        });
+        const hashIdentity = createBrowserRouteResponse();
+        await identity(
+          { params: {}, query: { profile: "vault" }, body: { targetId } },
+          hashIdentity.res,
+        );
+        expect(hashIdentity.body).toMatchObject({
+          ok: true,
+          documentId: first.documentId,
+        });
 
         await page.reload();
         const secondObserve = createBrowserRouteResponse();

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   assertVaultFillActAllowed,
   clearVaultFillSession,
+  clearVaultFillSessionIfDocumentChanged,
   hasActiveVaultFill,
   hasAnyActiveVaultFill,
   registerVaultFillSecret,
@@ -76,6 +77,17 @@ describe("vault fill scrub", () => {
     expect(() =>
       assertVaultFillActAllowed("target-2", { kind: "press", key: "Enter" }),
     ).not.toThrow();
+  });
+
+  it("clears only when the approved document is proven replaced", () => {
+    registerVaultFillSecret("target-1", CANARY, "doc-1");
+    expect(clearVaultFillSessionIfDocumentChanged("target-1", "doc-1")).toBe(false);
+    expect(hasActiveVaultFill("target-1")).toBe(true);
+    expect(clearVaultFillSessionIfDocumentChanged("target-1", undefined)).toBe(false);
+    expect(hasActiveVaultFill("target-1")).toBe(true);
+    expect(clearVaultFillSessionIfDocumentChanged("target-1", "doc-2")).toBe(true);
+    expect(hasActiveVaultFill("target-1")).toBe(false);
+    expect(scrubVaultFillText("target-1", CANARY)).toBe(CANARY);
   });
 
   it("can be cleared explicitly on navigation or close", () => {

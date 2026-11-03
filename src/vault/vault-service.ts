@@ -57,8 +57,30 @@ export class VaultService {
   private nextId = 1;
   private queue: Promise<unknown> = Promise.resolve();
   private closed = false;
+  private readonly lockListeners = new Set<() => void>();
 
   constructor(private readonly options: VaultServiceOptions = {}) {}
+
+  /**
+   * Fires on every lock or worker-generation transition. Pending fill previews
+   * must be revoked because the old worker's unlocked generation is gone.
+   */
+  onLock(listener: () => void): () => void {
+    this.lockListeners.add(listener);
+    return () => {
+      this.lockListeners.delete(listener);
+    };
+  }
+
+  private notifyLock(): void {
+    for (const listener of this.lockListeners) {
+      try {
+        listener();
+      } catch {
+        // A revoked preview must not prevent the lock transition.
+      }
+    }
+  }
 
   status(): Promise<VaultStatus> {
     return this.request<VaultStatus>({ type: "status" });
@@ -160,11 +182,17 @@ export class VaultService {
   }
 
   /** Test-only: advance the manual worker clock and run its lifecycle checks. */
-  advanceClockForTests(advanceMs: number): Promise<VaultStatus> {
+  async advanceClockForTests(advanceMs: number): Promise<VaultStatus> {
     if (!this.options.clock) {
       throw new VaultError("VAULT_UNAVAILABLE", "A manual clock is not configured.");
     }
-    return this.request<VaultStatus>({ type: "internal.tick", advanceMs });
+    const status = await this.request<VaultStatus>({ type: "internal.tick", advanceMs });
+    // The manual tick observes the same lock transition the production timer
+    // reports through `locked`; keep the broker's revocation hook aligned.
+    if (status.state === "locked") {
+      this.notifyLock();
+    }
+    return status;
   }
 
   async close(): Promise<void> {
@@ -202,6 +230,7 @@ export class VaultService {
     if (this.worker) {
       return this.worker;
     }
+    this.notifyLock();
     const moduleUrl = resolveRuntimeWorkerUrl(runtimeProcessEntrypoints.vaultWorker);
     const env = toProcessEnvRecord(this.options.env);
     const databasePath = resolveDatabasePath({
@@ -250,6 +279,7 @@ export class VaultService {
       if (this.worker === worker) {
         this.worker = undefined;
       }
+      this.notifyLock();
       this.failAll(new VaultError("VAULT_UNAVAILABLE", "The password vault worker stopped."));
     });
     worker.unref();
@@ -268,6 +298,7 @@ export class VaultService {
   private async terminateWorker(): Promise<void> {
     const worker = this.worker;
     this.worker = undefined;
+    this.notifyLock();
     this.failAll(new VaultError("VAULT_UNAVAILABLE", "The password vault worker stopped."));
     if (worker) {
       try {
