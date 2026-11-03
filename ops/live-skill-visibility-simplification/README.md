@@ -153,6 +153,7 @@ node verify/check-package.mjs   # 静态契约 + transformer + 旧包副本扫�
 - 依赖 **M15**（collector Agenda 措辞）和 **M19**（collector 课表同步）合并后再部署，避免打乱它们的 collector 更新顺序。
 - 本包 baseline 快照取自 2026-11-03 的 live：M15 已于 02:44Z 完成 live 部署，因此 `collector-notify` / `collector-source-triage` 的 fixture 是 M15 后的正文，尽管 M15 分支当时仍在 rework、尚未合并。
 - 本包“只插入一行”的设计不复制正文，因此 M15/M19 后续改动 source-triage/notify 时仍可直接部署；`status.sh` 会把正文与 authoring baseline 不同但 flag 缺失的状态标为 `visible (content differs ...)`，不是错误。
+- `biandan-todo` 的已提交 fixture 经仓库 pre-commit 的 YAML 格式化（description 的双引号转单引号，语义不变，少 4 bytes），manifest 的 baseline/target 哈希以这份已提交 fixture 为准。live 文件仍保留原双引号写法，因此部署前 `status.sh` 对 `biandan-todo` 显示 `content differs from authoring baseline; flag absent` 是预期状态；deploy 仍按 live 文件锚定插入，不依赖该哈希。
 - 截至交付时 M15 仍在 rework、M19 仍在实现，**live 未部署**；因此 live 79→73 的最终验证留给合并后的部署步骤。
 
 ## 10. 风险与边界
