@@ -158,20 +158,83 @@ visible_count() {
   ' "$1"
 }
 
-# Prints the repo-relative legacy package copy whose bytes equal the live hash.
-# Older collector packages keep pre-M20 copies without the flag; if one is
-# redeployed, the live file matches that copy again. Naming it turns a silent
-# visibility regression into an actionable status line.
-legacy_lookup() {
-  local name="$1" hash="$2" file relative
+# True when the target's manifest list contains this repo-relative copy path.
+list_has() {
+  local name="$1" field="$2" relative="$3"
+  "$NODE_BIN" -e '
+    const fs = require("node:fs");
+    const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const target = manifest.targets.find((item) => item.name === process.argv[2]);
+    if (!target) process.exit(2);
+    const list = target[process.argv[3]] ?? [];
+    process.exit(list.includes(process.argv[4]) ? 0 : 1);
+  ' "$MANIFEST_FILE" "$name" "$field" "$relative"
+}
+
+# Classifies a live hash against repository package copies.
+#
+# The six bodies have their own authors, so a repository copy is not automatically
+# a stale copy: the target's currentOwnerCopies names the package that holds the
+# current body (for collector-source-triage after M19 that is
+# ops/collector-course-sync). Only copies outside that list are visibility
+# restorations. Copies no list mentions still count as legacy so an unreviewed
+# package copy cannot silently restore model visibility.
+#
+# Prints "owner<TAB>path" or "legacy<TAB>path"; returns 1 when no copy matches.
+copy_match() {
+  local name="$1" hash="$2" file relative declared_legacy="" other_legacy=""
   while IFS= read -r file; do
-    if [ "$(sha256_file "$file")" = "$hash" ]; then
-      relative="${file#"$REPO_ROOT"/}"
-      printf '%s' "$relative"
+    [ "$(sha256_file "$file")" = "$hash" ] || continue
+    relative="${file#"$REPO_ROOT"/}"
+    if list_has "$name" currentOwnerCopies "$relative"; then
+      printf 'owner\t%s\n' "$relative"
       return 0
     fi
+    if list_has "$name" legacyCopies "$relative"; then
+      [ -n "$declared_legacy" ] || declared_legacy="$relative"
+    else
+      [ -n "$other_legacy" ] || other_legacy="$relative"
+    fi
   done < <(find "$REPO_ROOT/ops" -type f -path "*/files/*/$name/SKILL.md" 2>/dev/null | sort)
+  if [ -n "$declared_legacy" ]; then
+    printf 'legacy\t%s\n' "$declared_legacy"
+    return 0
+  fi
+  if [ -n "$other_legacy" ]; then
+    printf 'legacy\t%s\n' "$other_legacy"
+    return 0
+  fi
   return 1
+}
+
+# Classifies a visible target file. Prints one of:
+#   baseline                      authoring baseline bytes, no owner copy matched
+#   baseline-owner:<path>         authoring baseline bytes, current owner copy matches
+#   owner:<path>                  current owner body, baseline moved on, flag absent
+#   legacy:<path>                 bytes restored by an older package copy
+#   drift                         none of the reviewed bodies
+classify_visible_content() {
+  local name="$1" path="$2" hash baseline_sha match kind="" copy_path=""
+  hash="$(sha256_file "$path")"
+  baseline_sha="$(target_field "$name" baselineSha256)"
+  match="$(copy_match "$name" "$hash" || true)"
+  if [ -n "$match" ]; then
+    kind="${match%%$'\t'*}"
+    copy_path="${match#*$'\t'}"
+  fi
+  if [ "$hash" = "$baseline_sha" ]; then
+    if [ "$kind" = "owner" ]; then
+      printf 'baseline-owner:%s' "$copy_path"
+    else
+      printf 'baseline'
+    fi
+    return 0
+  fi
+  case "$kind" in
+    owner) printf 'owner:%s' "$copy_path" ;;
+    legacy) printf 'legacy:%s' "$copy_path" ;;
+    *) printf 'drift' ;;
+  esac
 }
 
 new_backup_dir() {
