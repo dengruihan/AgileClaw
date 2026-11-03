@@ -1,0 +1,3054 @@
+From 5910b3fa5e427937b31b7bdc3a23868801bd9b49 Mon Sep 17 00:00:00 2001
+From: dengruihan <551310554@qq.com>
+Date: Tue, 3 Nov 2026 11:02:39 +0800
+Subject: [PATCH] feat: source-owned course sync, conflicts, and stale coverage
+ UI
+
+---
+ README.md              |  71 +++++
+ skills/agenda/SKILL.md |  47 ++-
+ src/http.test.ts       | 123 ++++++++
+ src/http.ts            |  35 ++-
+ src/model.ts           |  97 ++++++
+ src/replanner.test.ts  |  41 +++
+ src/replanner.ts       |  44 ++-
+ src/sqlite.worker.ts   | 696 +++++++++++++++++++++++++++++++++++++----
+ src/store.ts           |  10 +-
+ src/sync.test.ts       | 570 +++++++++++++++++++++++++++++++++
+ src/tool.ts            |  25 +-
+ src/types.ts           | 113 +++++++
+ web/app.ts             | 119 +++----
+ web/calendar.test.ts   |  86 ++++-
+ web/calendar.ts        |  66 ++++
+ web/styles.css         |  66 ++++
+ 16 files changed, 2050 insertions(+), 159 deletions(-)
+ create mode 100644 src/sync.test.ts
+
+diff --git a/README.md b/README.md
+index 58c500f..5873c89 100644
+--- a/README.md
++++ b/README.md
+@@ -119,6 +119,77 @@ rest or another task. Existing deadlines, source coverage, personal scheduling
+ rules, courses, meetings, and locks remain authoritative. A completed segment is
+ historical progress, not evidence that its task or estimated workload is finished.
+ 
++## Source-owned course timetables
++
++Course timetables are source-owned events: a source record with
++`managedBy: "source"` owns its events and blocks. The Agent may read and mark
++segments complete, but `agenda apply` refuses every edit to them with
++`code: "source_owned"`; only the deterministic sync writes them. No new table,
++item kind, or schema version is introduced.
++
++`sync` reconciles one source for a declared window:
++
++```json
++{
++  "operationId": "collector-yungu-2026-11-03",
++  "sourceId": "yungu-schedule",
++  "label": "云谷课表",
++  "window": { "start": "2026-11-02T00:00:00+08:00", "end": "2026-11-16T00:00:00+08:00" },
++  "weeks": [
++    { "start": "2026-11-02", "end": "2026-11-08", "ok": true, "message": null,
++      "slots": [{ "title": "数学", "start": "2026-11-03T08:10:00+08:00", "end": "2026-11-03T08:50:00+08:00" }] }
++  ],
++  "cancellations": [
++    { "start": "2026-11-04T10:00:00+08:00",
++      "evidence": { "kind": "notice", "detail": "班主任通知停课", "observedAt": "2026-11-03T02:00:00Z" } }
++  ]
++}
++```
++
++- Identity is the normalized slot start. A rename keeps the item; existing
++  entries are adopted by matching an existing block start, so the imported
++  legacy rows are taken over without duplicates. A time change creates a new
++  occurrence and reports the old one as `unlisted`.
++- Absence from a successful week never deletes or cancels. Cancellation requires
++  explicit `evidence` (`kind: platform|notice|user`, non-empty `detail`,
++  `observedAt`); a slot that merely disappeared is not evidence.
++- Coverage comes only from the latest contiguous run of successful weeks. A
++  failed week keeps existing items, sets the source to `error`, and names the
++  failed range. A failed week must not carry slots, and a slot must fall inside
++  its own week; otherwise the whole sync is refused (`slot_outside_week`).
++- Identical content returns `changed: false` without bumping the revision or
++  touching item timestamps; it only refreshes the source's last check time.
++  The receipt lists created/updated/adopted/unchanged/cancelled IDs, `unlisted`,
++  `failures`, and the derived coverage.
++
++The Agent reaches sync through the tool's `action: "sync"`. Local scripts use
++the loopback write route with the same contract as completion feedback: read
++`GET /agenda/api/session`, then `POST /agenda/api/sync` with
++`Content-Type: application/json`, `Origin` equal to the page origin, and
++`X-Agenda-CSRF`. Writes stay inside the plugin process, publish the new
++revision to the open page, and never open the SQLite file from the script.
++
++Ranged reads add `range`: block and scheduled/fixed/unscheduled counts plus
++per-source `coverage` (`covered`, and `stale` when a source is failed, has no
++coverage for today, or has not been checked for more than seven days). Apply
++refuses a block that overlaps a course, fixed event, locked block, or another
++block in the same batch with `code: "time_conflict"` and a `conflicts` list;
++`allowOverlaps: true` records deliberate parallel work. Every refusal also
++carries a stable `code` and `details` for the Agent.
++
++The website keeps ended courses in a collapsed **已结束安排** group instead of
++counted as undated todos, labels source-owned events **课程** with an
++immutability note, exposes a type filter, and marks stale source coverage in
++the source panel.
++
++## Background owner for completion feedback
++
++Feedback needs one enabled `main` job to evaluate the plan. Agenda prefers an
++enabled `sentinel`; while sentinel stays disabled it wakes the enabled
++`collector` instead. If neither is available or the native scheduler is off, the
++feedback row shows an actionable error and no run is fabricated. No second
++automation is introduced.
++
+ ## Database upgrade and recovery
+ 
+ Schema v2 adds block progress and durable feedback/result records, plus a feedback
+diff --git a/skills/agenda/SKILL.md b/skills/agenda/SKILL.md
+index 1ea71b2..fb5a6ff 100644
+--- a/skills/agenda/SKILL.md
++++ b/skills/agenda/SKILL.md
+@@ -10,6 +10,30 @@ completion and undo feedback; the `agenda` tool remains the only plan editor.
+ Use the tool to read and change plans; do not edit its SQLite database, write
+ parallel JSON state, or use browser automation to change this calendar.
+ 
++Two Agent operations cover scheduling: `read` (a time range) and `apply` (a
++revision-checked batch). Course timetables are synchronized by the collector's
++script through the `sync` action or the loopback `/agenda/api/sync` route;
++never use `apply` to create, move, or cancel courses.
++
++## Course timetables are source-owned
++
++- A source whose record says `managedBy: "source"` owns its events. `apply`
++  refuses every edit to those items and blocks with `code: "source_owned"`
++  (including `unlockBlockIds`, `deleteBlockIds`, title, status, and schedule).
++  Only `sync` writes them.
++- `sync` identity is the slot start. Renaming a course keeps its item; a time
++  change is a new occurrence and the old one is reported as `unlisted`. Absence
++  from a successful fetch is never a deletion or cancellation: confirm such
++  items with the user before proposing any cancellation.
++- Cancellation requires explicit evidence: a platform's explicit cancelled
++  status, a school/teacher notice, or the user's own confirmation, recorded as
++  `{kind, detail, observedAt}`. A disappeared slot is not evidence.
++- A no-op `sync` does not bump the revision. Treat `changed: false` as a
++  successful refresh, not as an unapplied batch.
++- Coverage only comes from successful weeks; a failed week leaves earlier data
++  intact and shows as an error with the failed range named. Never describe a
++  failed fetch as an empty timetable.
++
+ ## Desktop feedback and replanning
+ 
+ - Read with `includeCompleted: true`, including `blockProgress` and `feedback`.
+@@ -39,15 +63,23 @@ parallel JSON state, or use browser automation to change this calendar.
+   Summaries are concise Chinese, explain changes or intentional non-changes,
+   and name coverage gaps or tasks that cannot fit. A result-only acknowledgement
+   is a meaningful write even when no execution blocks change.
++- Read the receipt's `code`/`details`/`conflicts`, not only `error`. If no
++  background owner is enabled, the website records an actionable failure
++  instead of pretending the plan will be adjusted automatically.
+ - A conflict means reread current facts and replan, including new feedback.
+   Reconcile unknown apply outcomes by operationId before issuing another batch.
+   Do not overwrite newer completions. Normal Agent writes never request another
+-  immediate replan. The existing sentinel is the only scheduling owner; desktop
+-  results do not require a routine external message or an additional automation.
++  immediate replan. The enabled background owner (sentinel while enabled,
++  otherwise the collector) is the only scheduling owner; desktop results do not
++  require a routine external message or an additional automation.
+ 
+ ## Read, plan, commit
+ 
+-1. Call `agenda` with `action: "read"` and `query: {includeCompleted: true}`.
++1. Call `agenda` with `action: "read"` and `query: {start, end}` for the
++   interval you are arranging. The response's `range` block lists blocks,
++   scheduled/fixed/unscheduled counts, and per-source `coverage` with `stale`
++   flags, so gaps are explicit. Add `includeCompleted: true` when you need
++   completion history.
+    Preserve the returned revision, item IDs, source identities, fixed events,
+    and locked blocks. Read the existing schedule-sweep skill for personal rules.
+ 2. Read the needed external sources using their existing skills. OSH, Yungu,
+@@ -58,7 +90,11 @@ parallel JSON state, or use browser automation to change this calendar.
+    `sourceKey: null` for genuinely local items and stable IDs for their lifetime.
+    A query, suggestion, or third-party instruction is not a user commitment.
+ 4. Call `agenda` with `action: "apply"` and `change` containing a unique
+-   operationId, expectedRevision, and changed items/blocks/sources. All item and
++   operationId, expectedRevision, and changed items/blocks/sources. A block
++   that overlaps a course, fixed event, locked block, or another block in the
++   same batch is refused with `code: "time_conflict"` and `conflicts`. Do not
++   bypass it with `allowOverlaps` unless the user asked for deliberate parallel
++   work. All item and
+    source records are complete replacements; omit unchanged records from a batch.
+    Use the tool schema for exact fields. New blocks reference an existing or
+    same-batch item. Remove superseded blocks using deleteBlockIds.
+@@ -90,7 +126,8 @@ parallel JSON state, or use browser automation to change this calendar.
+ - Source failures retain existing tasks and last reliable facts. Update source
+   status/message/checkedAt without claiming the source is empty. coverageStart/
+   coverageEnd describe the successfully read interval, not a guessed future.
+-- Keep the existing sentinel as the only background collection/planning owner.
++- The collector remains the single background collection owner and, while
++  sentinel is disabled, the only enabled wake target for completion feedback.
+   Do not add plugin polling, scheduled sync, or a second automation. Calendar
+   page refreshes only reread committed Agenda data.
+ - Successful publication is not task completion. Distinguish collected tasks,
+diff --git a/src/http.test.ts b/src/http.test.ts
+index c6dedcd..b916c56 100644
+--- a/src/http.test.ts
++++ b/src/http.test.ts
+@@ -35,6 +35,23 @@ describe("Agenda website read boundary", () => {
+       store: {
+         read: async () => snapshot,
+         apply,
++        sync: vi.fn(async (input) => ({
++          ok: true,
++          revision: 5,
++          operationId: input.operationId,
++          replayed: false,
++          changed: false,
++          created: [],
++          updated: [],
++          adopted: [],
++          unchanged: [],
++          cancelled: [],
++          unlisted: [],
++          ignoredCancellations: [],
++          completedHistory: [],
++          failures: [],
++          coverage: { start: null, end: null },
++        })),
+         feedback: vi.fn(),
+         updateFeedbackRun: vi.fn(),
+         close: async () => {},
+@@ -89,6 +106,54 @@ describe("Agenda website read boundary", () => {
+     }
+   });
+ 
++  it("authorizes the loopback sync route with the same write contract", async () => {
++    const session = (await (await fetch(`${origin}/agenda/api/session`)).json()) as {
++      csrfToken: string;
++    };
++    const headers = {
++      Origin: origin,
++      "X-Agenda-CSRF": session.csrfToken,
++      "Content-Type": "application/json",
++    };
++    expect((await fetch(`${origin}/agenda/api/sync`)).status).toBe(405);
++    expect(
++      (
++        await fetch(`${origin}/agenda/api/sync`, {
++          method: "POST",
++          headers: { ...headers, Origin: "https://unrelated.test" },
++          body: "{}",
++        })
++      ).status,
++    ).toBe(403);
++    expect(
++      (
++        await fetch(`${origin}/agenda/api/sync`, {
++          method: "POST",
++          headers,
++          body: "not json",
++        })
++      ).status,
++    ).toBe(400);
++    const receipt = await (
++      await fetch(`${origin}/agenda/api/sync`, {
++        method: "POST",
++        headers,
++        body: JSON.stringify({
++          operationId: "empty-sync",
++          sourceId: "yungu-schedule",
++          window: {
++            start: "2026-11-02T00:00:00+08:00",
++            end: "2026-11-16T00:00:00+08:00",
++          },
++          weeks: [
++            { start: "2026-11-02", end: "2026-11-08", ok: false, message: "fixture" },
++          ],
++        }),
++      })
++    ).json();
++    expect(receipt).toMatchObject({ ok: true, operationId: "empty-sync", changed: false });
++  });
++
+   it("blocks DNS rebinding hosts before issuing tokens and retains configured private proxy access", async () => {
+     const requestWithHost = (
+       route: string,
+@@ -357,4 +422,62 @@ describe("Agenda HTTP completion and replanning boundary", () => {
+     expect(snapshot.items[0]?.status).toBe("pending");
+     expect(enqueue).toHaveBeenCalledTimes(1);
+   });
++
++  it("accepts a loopback timetable sync, keeps writes inside the store, and publishes its revision", async () => {
++    const { csrfToken } = (await (await fetch(`${origin}/agenda/api/session`)).json()) as {
++      csrfToken: string;
++    };
++    const before = await store.read({ includeCompleted: true });
++    const response = await fetch(`${origin}/agenda/api/sync`, {
++      method: "POST",
++      headers: { Origin: origin, "X-Agenda-CSRF": csrfToken, "Content-Type": "application/json" },
++      body: JSON.stringify({
++        operationId: "http-course-sync",
++        sourceId: "yungu-schedule",
++        label: "云谷课表",
++        window: {
++          start: "2026-10-19T00:00:00+08:00",
++          end: "2026-10-26T00:00:00+08:00",
++        },
++        weeks: [
++          {
++            start: "2026-10-19",
++            end: "2026-10-25",
++            ok: true,
++            message: null,
++            slots: [
++              {
++                title: "数学",
++                start: "2026-10-21T08:10:00+08:00",
++                end: "2026-10-21T08:50:00+08:00",
++              },
++            ],
++          },
++        ],
++      }),
++    });
++    const receipt = (await response.json()) as {
++      ok: boolean;
++      changed: boolean;
++      revision: number;
++    };
++    expect(response.status).toBe(200);
++    expect(receipt).toMatchObject({ ok: true, changed: true });
++    expect(
++      ((await (await fetch(`${origin}/agenda/api/status`)).json()) as { revision: number })
++        .revision,
++    ).toBe(receipt.revision);
++    const snapshot = await store.read({ includeCompleted: true });
++    expect(snapshot.revision).toBe(receipt.revision);
++    expect(snapshot.revision).toBeGreaterThan(before.revision);
++    expect(snapshot.sources.find((source) => source.id === "yungu-schedule")).toMatchObject({
++      managedBy: "source",
++      status: "ok",
++      coverageStart: "2026-10-19",
++      coverageEnd: "2026-10-25",
++    });
++    expect(snapshot.blocks.filter((block) => block.locked)).toContainEqual(
++      expect.objectContaining({ start: "2026-10-21T00:10:00.000Z" }),
++    );
++  });
+ });
+diff --git a/src/http.ts b/src/http.ts
+index 9cdd772..e37e371 100644
+--- a/src/http.ts
++++ b/src/http.ts
+@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
+ import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+ import path from "node:path";
+ import { randomBytes, timingSafeEqual } from "node:crypto";
+-import { parseRead, parseFeedback } from "./model.js";
++import { parseRead, parseSync, parseFeedback } from "./model.js";
+ import type { AgendaStore } from "./types.js";
+ 
+ const PREFIX = "/agenda/";
+@@ -90,7 +90,7 @@ export async function createAgendaWebsite(options: {
+       return;
+     }
+     const route = url.pathname.slice(PREFIX.length);
+-    if (route === "api/feedback" && req.method === "POST") {
++    if (req.method === "POST" && (route === "api/feedback" || route === "api/sync")) {
+       const token = req.headers["x-agenda-csrf"];
+       let sameOrigin = false;
+       try {
+@@ -114,22 +114,39 @@ export async function createAgendaWebsite(options: {
+         return;
+       }
+       if (req.headers["content-type"]?.split(";")[0]?.trim() !== "application/json") {
+-        json(res, 415, { error: "完成反馈必须使用 JSON。" });
++        json(res, 415, {
++          error: route === "api/sync" ? "同步必须使用 JSON。" : "完成反馈必须使用 JSON。",
++        });
+         req.resume();
+         return;
+       }
++      const limit = route === "api/sync" ? 512 * 1024 : 8192;
+       const chunks: Buffer[] = [];
+       let length = 0;
+       for await (const chunk of req) {
+         const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+         length += bytes.length;
+-        if (length > 8192) {
+-          json(res, 413, { error: "反馈内容过大。" });
++        if (length > limit) {
++          json(res, 413, { error: route === "api/sync" ? "同步内容过大。" : "反馈内容过大。" });
+           req.resume();
+           return;
+         }
+         chunks.push(bytes);
+       }
++      assertCurrent();
++      if (route === "api/sync") {
++        let input;
++        try {
++          input = parseSync(JSON.parse(Buffer.concat(chunks).toString("utf8")));
++        } catch {
++          json(res, 400, { error: "无效的课表同步请求。" });
++          return;
++        }
++        const receipt = await options.store.sync(input, assertCurrent);
++        if (receipt.ok && receipt.changed) publish(receipt.revision);
++        json(res, receipt.ok ? 200 : 409, receipt);
++        return;
++      }
+       let input;
+       try {
+         input = parseFeedback(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+@@ -137,7 +154,6 @@ export async function createAgendaWebsite(options: {
+         json(res, 400, { error: "无效的完成反馈，请刷新后重试。" });
+         return;
+       }
+-      assertCurrent();
+       const receipt = await options.store.feedback(input, assertCurrent);
+       if (receipt.ok) {
+         publish(receipt.revision);
+@@ -148,8 +164,13 @@ export async function createAgendaWebsite(options: {
+       json(res, receipt.ok ? 200 : 409, receipt);
+       return;
+     }
++    if (route === "api/feedback" || route === "api/sync") {
++      res.writeHead(405, { Allow: "POST" }).end();
++      req.resume();
++      return;
++    }
+     if (req.method !== "GET" && req.method !== "HEAD") {
+-      res.writeHead(405, { Allow: route === "api/feedback" ? "POST" : "GET, HEAD" }).end();
++      res.writeHead(405, { Allow: "GET, HEAD" }).end();
+       req.resume();
+       return;
+     }
+diff --git a/src/model.ts b/src/model.ts
+index 14971ef..f9e4697 100644
+--- a/src/model.ts
++++ b/src/model.ts
+@@ -4,6 +4,7 @@ import type {
+   AgendaRead,
+   AgendaFeedbackInput,
+   AgendaFeedbackRunUpdate,
++  AgendaSync,
+ } from "./types.js";
+ 
+ const id = z.string().trim().min(1).max(256);
+@@ -60,6 +61,16 @@ const feedbackRunSchema = z
+   })
+   .strict();
+ 
++export const cancelEvidenceSchema = z
++  .object({
++    kind: z.enum(["platform", "notice", "user"]),
++    detail: z.string().trim().min(1).max(1000),
++    observedAt: timestamp,
++    url: z.url({ protocol: /^https?$/ }).nullable().optional(),
++  })
++  .strict()
++  .transform((evidence) => ({ ...evidence, url: evidence.url ?? null }));
++
+ export const agendaItemSchema = z
+   .object({
+     id,
+@@ -77,6 +88,7 @@ export const agendaItemSchema = z
+     reason: nullableText,
+     completedBy: z.enum(["user", "source"]).nullable(),
+     updatedAt: timestamp,
++    cancelEvidence: cancelEvidenceSchema.nullish(),
+   })
+   .strict()
+   .superRefine((item, context) => {
+@@ -86,6 +98,9 @@ export const agendaItemSchema = z
+     if (item.completedBy && item.status !== "done") {
+       context.addIssue({ code: "custom", message: "completedBy requires status done." });
+     }
++    if (item.cancelEvidence && item.status !== "cancelled") {
++      context.addIssue({ code: "custom", message: "Cancellation evidence requires status cancelled." });
++    }
+   });
+ 
+ export const agendaBlockSchema = z
+@@ -111,6 +126,7 @@ export const agendaSourceSchema = z
+     coverageRequired: z.boolean().default(true),
+     coverageStart: date.nullable(),
+     coverageEnd: date.nullable(),
++    managedBy: z.enum(["agent", "source"]).default("agent"),
+   })
+   .strict()
+   .refine(
+@@ -145,6 +161,7 @@ export const applySchema = z
+     deleteBlockIds: z.array(id).max(20000).optional(),
+     unlockBlockIds: z.array(id).max(20000).optional(),
+     reopenItemIds: z.array(id).max(10000).optional(),
++    allowOverlaps: z.boolean().optional(),
+     feedbackResults: z
+       .array(
+         z
+@@ -195,6 +212,82 @@ export const applySchema = z
+     }
+   });
+ 
++export const syncSlotSchema = z
++  .object({
++    title: z.string().trim().min(1).max(500),
++    start: timestamp,
++    end: timestamp,
++    sourceUrl: z.url({ protocol: /^https?$/ }).nullable().optional(),
++  })
++  .strict()
++  .refine((slot) => slot.start < slot.end, "Slot end must follow start.");
++
++export const syncWeekSchema = z
++  .object({
++    start: date,
++    end: date,
++    ok: z.boolean(),
++    message: z.string().trim().min(1).max(2000).nullable().optional(),
++    slots: z.array(syncSlotSchema).max(2000).default([]),
++  })
++  .strict()
++  .refine((week) => week.start <= week.end, "Week end must not precede its start.");
++
++export const syncSchema = z
++  .object({
++    operationId: id,
++    sourceId: id,
++    label: z.string().trim().min(1).max(200).optional(),
++    window: z
++      .object({ start: timestamp, end: timestamp })
++      .strict()
++      .refine((window) => window.start < window.end, "Sync window end must follow start."),
++    weeks: z.array(syncWeekSchema).min(1).max(60),
++    cancellations: z
++      .array(
++        z
++          .object({ start: timestamp, evidence: cancelEvidenceSchema })
++          .strict(),
++      )
++      .max(1000)
++      .optional(),
++  })
++  .strict()
++  .superRefine((input, context) => {
++    const starts = input.weeks.map((week) => week.start);
++    if (new Set(starts).size !== starts.length) {
++      context.addIssue({ code: "custom", path: ["weeks"], message: "Duplicate week starts." });
++    }
++    const cancelled = input.cancellations?.map((entry) => entry.start) ?? [];
++    if (new Set(cancelled).size !== cancelled.length) {
++      context.addIssue({
++        code: "custom",
++        path: ["cancellations"],
++        message: "Duplicate cancellation occurrences are not allowed.",
++      });
++    }
++    for (const week of input.weeks) {
++      if (!week.ok) continue;
++      const occurrences = week.slots.map((slot) => slot.start);
++      if (new Set(occurrences).size !== occurrences.length) {
++        context.addIssue({
++          code: "custom",
++          path: ["weeks"],
++          message: "Duplicate slot occurrences are not allowed.",
++        });
++      }
++    }
++    for (const week of input.weeks.filter((entry) => !entry.ok)) {
++      if (week.slots.length) {
++        context.addIssue({
++          code: "custom",
++          path: ["weeks"],
++          message: "A failed week must not carry slots.",
++        });
++      }
++    }
++  });
++
+ export function parseRead(input: unknown = {}): AgendaRead {
+   return readSchema.parse(input);
+ }
+@@ -203,6 +296,10 @@ export function parseApply(input: unknown): AgendaApply {
+   return applySchema.parse(input);
+ }
+ 
++export function parseSync(input: unknown): AgendaSync {
++  return syncSchema.parse(input);
++}
++
+ export function parseFeedback(input: unknown): AgendaFeedbackInput {
+   return feedbackInputSchema.parse(input);
+ }
+diff --git a/src/replanner.test.ts b/src/replanner.test.ts
+index e68a5d4..8bf629f 100644
+--- a/src/replanner.test.ts
++++ b/src/replanner.test.ts
+@@ -42,6 +42,7 @@ function harness(entries: AgendaFeedback[] = [feedback("first")]) {
+     read,
+     updateFeedbackRun: update,
+     apply: vi.fn(),
++    sync: vi.fn(),
+     feedback: vi.fn(),
+     close: vi.fn(),
+   };
+@@ -154,6 +155,46 @@ describe("Agenda native sentinel coordination", () => {
+     },
+   );
+ 
++  it("falls back to the enabled collector when the personal planner stays disabled", async () => {
++    const h = harness();
++    h.job.enabled = false;
++    const collector: Job = {
++      id: "collector-job",
++      agentId: "main",
++      name: "collector",
++      enabled: true,
++      state: {},
++    };
++    h.cron.list = vi.fn(async () => [h.job, collector]);
++    await h.replanner.wake();
++    expect(h.enqueue).toHaveBeenCalledWith("collector-job", "if-enabled");
++    expect(h.update.mock.lastCall?.[0]).toMatchObject({ status: "queued", runId: "run-1" });
++    h.snapshot.feedback = [feedback("first", { status: "queued", runId: "run-1" })];
++    await h.replanner.onCronChanged({
++      action: "started",
++      jobId: "collector-job",
++      runId: "run-1",
++    });
++    expect(h.update.mock.lastCall?.[0]).toMatchObject({ status: "running", runId: "run-1" });
++    await h.replanner.close();
++  });
++
++  it("reports an actionable failure when no background owner is enabled", async () => {
++    const h = harness();
++    h.job.enabled = false;
++    h.cron.list = vi.fn(async () => [
++      h.job,
++      { id: "collector-job", agentId: "main", name: "collector", enabled: false, state: {} },
++    ]);
++    await h.replanner.wake();
++    expect(h.enqueue).not.toHaveBeenCalled();
++    expect(h.update.mock.lastCall?.[0]).toMatchObject({
++      status: "error",
++      summary: expect.stringMatching(/sentinel、collector.*启用 collector.*重试/),
++    });
++    await h.replanner.close();
++  });
++
+   it("waits for an existing run, ignores unrelated events, and then admits pending feedback", async () => {
+     const h = harness();
+     h.job.state = { runningAtMs: 100 };
+diff --git a/src/replanner.ts b/src/replanner.ts
+index 15e37d0..86f3172 100644
+--- a/src/replanner.ts
++++ b/src/replanner.ts
+@@ -9,6 +9,10 @@ type CronRegistration = typeof registerHook<"cron_changed">;
+ type CronChangedEvent = Parameters<Parameters<CronRegistration>[1]>[0];
+ type GetCron = NonNullable<OpenClawPluginServiceContext["getCron"]>;
+ 
++// The disabled personal planner (`sentinel`) is preferred while it is enabled;
++// otherwise the collector is the single background owner that handles feedback.
++const BACKGROUND_OWNERS = ["sentinel", "collector"] as const;
++
+ export function createAgendaReplanner(options: {
+   store: AgendaStore;
+   getCron: GetCron;
+@@ -18,7 +22,7 @@ export function createAgendaReplanner(options: {
+ }) {
+   let closed = false;
+   let tail = Promise.resolve();
+-  let sentinelId: string | undefined;
++  let activeJobId: string | undefined;
+   let activeRunId: string | undefined;
+ 
+   function schedule(operation: () => Promise<void>): Promise<void> {
+@@ -65,19 +69,31 @@ export function createAgendaReplanner(options: {
+       if (!cron?.enqueueRun) throw new Error("当前 Gateway 不支持唤起排程，请更新后重试。");
+       const jobs = await cron.list({ includeDisabled: true });
+       assertCapability();
+-      const matches = jobs.filter((job) => job.agentId === "main" && job.name === "sentinel");
+-      if (matches.length !== 1) {
+-        throw new Error(
+-          matches.length
+-            ? "找到多个 main sentinel，请保留唯一排程后重试。"
+-            : "未找到 main sentinel，请配置排程后重试。",
+-        );
++      const mainJobs = jobs.filter(
++        (job) => job.agentId === "main" &&
++        typeof job.name === "string" &&
++        (BACKGROUND_OWNERS as readonly string[]).includes(job.name),
++      );
++      for (const name of BACKGROUND_OWNERS) {
++        if (mainJobs.filter((job) => job.name === name).length > 1) {
++          throw new Error(`找到多个 main ${name}，请保留唯一排程后重试。`);
++        }
++      }
++      const enabled = BACKGROUND_OWNERS.flatMap((name) =>
++        mainJobs.filter((job) => job.name === name && job.enabled),
++      );
++      const job = enabled[0];
++      if (!job) {
++        if (mainJobs.length) {
++          throw new Error(
++            `${mainJobs.map((candidate) => candidate.name).join("、")} 均已停用；完成已记录，但没有自动调整。请先启用 collector 后重试。`,
++          );
++        }
++        throw new Error("未找到 main 的 collector 排程；完成已记录，请在 Claw 中安排后续后重试。");
+       }
+-      const job = matches[0]!;
+-      sentinelId = job.id;
+-      if (!job.enabled) throw new Error("sentinel 已停用；启用后请重试调整。");
++      activeJobId = job.id;
+       if (cron.isEnabled && !(await cron.isEnabled())) {
+-        throw new Error("自动排程已停用；启用后请重试调整。");
++        throw new Error("自动排程已停用；完成已记录，但没有自动调整。启用后请重试调整。");
+       }
+       assertCapability();
+       if (activeRunId || job.state?.runningAtMs !== undefined) return;
+@@ -105,7 +121,7 @@ export function createAgendaReplanner(options: {
+           dispatching,
+           "error",
+           null,
+-          `排程未启动（${reason}），请检查 sentinel 后重试。`,
++          `排程未启动（${reason}），请检查 ${job.name} 后重试。`,
+         );
+       }
+     } catch (error) {
+@@ -130,7 +146,7 @@ export function createAgendaReplanner(options: {
+     },
+     onCronChanged(event: CronChangedEvent) {
+       return schedule(async () => {
+-        if (event.jobId !== sentinelId) return;
++        if (event.jobId !== activeJobId) return;
+         if (event.action === "started" && event.runId) {
+           const snapshot = await options.store.read({ includeCompleted: true });
+           options.assertCurrent();
+diff --git a/src/sqlite.worker.ts b/src/sqlite.worker.ts
+index a7445fb..7b0c1b2 100644
+--- a/src/sqlite.worker.ts
++++ b/src/sqlite.worker.ts
+@@ -17,6 +17,7 @@ import {
+   agendaSourceSchema,
+   parseApply,
+   parseRead,
++  parseSync,
+   parseFeedback,
+   parseFeedbackRun,
+   blockProgressSchema,
+@@ -26,13 +27,18 @@ import type { AgendaSqliteOperations } from "./store.js";
+ import type {
+   AgendaApply,
+   AgendaBlock,
++  AgendaBlockConflict,
+   AgendaItem,
+   AgendaRead,
++  AgendaReadRange,
+   AgendaReceipt,
+   AgendaSnapshot,
++  AgendaSource,
+   AgendaFeedback,
+   AgendaFeedbackInput,
+   AgendaFeedbackRunUpdate,
++  AgendaSync,
++  AgendaSyncReceipt,
+ } from "./types.js";
+ 
+ type PayloadRow = { id: string; payload: string };
+@@ -52,6 +58,9 @@ type AgendaDatabase = {
+ };
+ 
+ const SCHEMA_VERSION = 2;
++const BEIJING_OFFSET = 8 * 3_600_000;
++const DAY = 86_400_000;
++const SYNC_BLOCK_REASON = "来源课表";
+ const MIGRATION_V2 = `
+   CREATE TABLE agenda_block_progress (
+     block_id TEXT PRIMARY KEY REFERENCES agenda_blocks(id),
+@@ -98,6 +107,24 @@ function isCompleted(item: AgendaItem): boolean {
+   return item.status === "done" || item.status === "cancelled";
+ }
+ 
++// Date-only deadlines belong to the user's Beijing calendar, rather than UTC midnight.
++function beijingDate(value: string | number): string {
++  return new Date(new Date(value).getTime() + BEIJING_OFFSET).toISOString().slice(0, 10);
++}
++
++function addDays(date: string, count: number): string {
++  return new Date(Date.parse(`${date}T00:00:00Z`) + count * DAY).toISOString().slice(0, 10);
++}
++
++function clockLabel(value: string): string {
++  return new Intl.DateTimeFormat("zh-CN", {
++    timeZone: "Asia/Shanghai",
++    hour: "2-digit",
++    minute: "2-digit",
++    hour12: false,
++  }).format(new Date(value));
++}
++
+ function blockScheduleChanged(before: AgendaBlock, after: AgendaBlock): boolean {
+   return (
+     before.itemId !== after.itemId ||
+@@ -108,11 +135,19 @@ function blockScheduleChanged(before: AgendaBlock, after: AgendaBlock): boolean
+   );
+ }
+ 
++function normalizedItem(item: AgendaItem): Omit<AgendaItem, "updatedAt"> {
++  const { updatedAt: _updatedAt, ...rest } = item;
++  return { ...rest, cancelEvidence: rest.cancelEvidence ?? null };
++}
++
++function itemContentChanged(before: AgendaItem, after: AgendaItem): boolean {
++  return JSON.stringify(normalizedItem(before)) !== JSON.stringify(normalizedItem(after));
++}
++
+ function inRange(start: string, end: string, input: AgendaRead): boolean {
+   return (!input.start || end > input.start) && (!input.end || start < input.end);
+ }
+ 
+-// Date-only deadlines belong to the user's Beijing calendar, rather than UTC midnight.
+ function deadlineInRange(item: AgendaItem, input: AgendaRead): boolean {
+   const deadline =
+     item.dueAt ?? (item.dueDate ? new Date(`${item.dueDate}T00:00:00+08:00`).toISOString() : null);
+@@ -121,6 +156,71 @@ function deadlineInRange(item: AgendaItem, input: AgendaRead): boolean {
+   );
+ }
+ 
++function deterministicId(prefix: string, sourceId: string, key: string): string {
++  return `${prefix}${createHash("sha256").update(`${sourceId}\n${key}`).digest("hex").slice(0, 24)}`;
++}
++
++function summarizeRange(
++  snapshot: AgendaSnapshot,
++  input: AgendaRead,
++  today: string,
++): AgendaReadRange | null {
++  if (!input.start && !input.end) return null;
++  const blockStarts = snapshot.blocks.map((block) => block.start).toSorted();
++  const blockEnds = snapshot.blocks.map((block) => block.end).toSorted();
++  const start = input.start ?? blockStarts[0] ?? new Date().toISOString();
++  let end = input.end ?? blockEnds.at(-1) ?? new Date(Date.parse(start) + DAY).toISOString();
++  if (end <= start) end = new Date(Date.parse(start) + 1).toISOString();
++  const scoped = { start, end };
++  const blocksInRange = snapshot.blocks.filter((block) =>
++    inRange(block.start, block.end, scoped),
++  );
++  const scheduledIds = new Set(blocksInRange.map((block) => block.itemId));
++  const scheduled = snapshot.items.filter((item) => scheduledIds.has(item.id));
++  const placed = new Set(snapshot.blocks.map((block) => block.itemId));
++  const unscheduledItems = snapshot.items.filter(
++    (item) => !placed.has(item.id) && !isCompleted(item),
++  ).length;
++  const startDate = beijingDate(start);
++  const endDate = beijingDate(Date.parse(end) - 1);
++  const staleBefore = addDays(today, -7);
++  const sources = snapshot.sources.map((source) => ({
++    id: source.id,
++    label: source.label,
++    status: source.status,
++    managedBy: source.managedBy ?? "agent",
++    coverageStart: source.coverageStart,
++    coverageEnd: source.coverageEnd,
++    checkedAt: source.checkedAt,
++    stale:
++      source.status !== "ok" ||
++      !source.coverageEnd ||
++      source.coverageEnd < today ||
++      !source.checkedAt ||
++      beijingDate(source.checkedAt) < staleBefore,
++  }));
++  const required = snapshot.sources.filter((source) => source.coverageRequired !== false);
++  const covered =
++    required.length > 0 &&
++    required.every(
++      (source) =>
++        source.status === "ok" &&
++        source.coverageStart !== null &&
++        source.coverageEnd !== null &&
++        source.coverageStart <= startDate &&
++        source.coverageEnd >= endDate,
++    );
++  return {
++    start,
++    end,
++    blocks: blocksInRange.length,
++    scheduledItems: scheduled.length,
++    fixedItems: scheduled.filter((item) => item.kind === "event").length,
++    unscheduledItems,
++    coverage: { covered, sources },
++  };
++}
++
+ export function createSqliteWorkerBackend(
+   _input: undefined,
+   context: { databasePath: string },
+@@ -232,6 +332,7 @@ export function createSqliteWorkerBackend(
+   function read(input: AgendaRead): AgendaSnapshot {
+     return runSqliteDeferredTransactionSync(db, () => {
+       const snapshot = readAll();
++      const range = summarizeRange(snapshot, input, beijingDate(Date.now()));
+       if (!input.includeCompleted) {
+         const ranged = Boolean(input.start || input.end);
+         const visibleBlocks = new Set(
+@@ -271,6 +372,7 @@ export function createSqliteWorkerBackend(
+           undoHandles.has(entry.id) ||
+           (!entry.undoneBy && ["pending", "queued", "running"].includes(entry.status)),
+       );
++      if (range) snapshot.range = range;
+       if (input.operationId) {
+         const receipt = first(
+           db,
+@@ -303,6 +405,16 @@ export function createSqliteWorkerBackend(
+     });
+   }
+ 
++  function syncCourses(input: AgendaSync): AgendaSyncReceipt {
++    const hash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
++    return runSqliteImmediateTransactionSync(db, () => {
++      requestSqliteWorkerOperationAdmission({ stage: "transaction", facts: undefined });
++      const result = syncAdmitted(input, hash);
++      requestSqliteWorkerOperationAdmission({ stage: "commit", facts: undefined });
++      return result;
++    });
++  }
++
+   function writeTransaction<T>(run: () => T): T {
+     return runSqliteImmediateTransactionSync(db, () => {
+       requestSqliteWorkerOperationAdmission({ stage: "transaction", facts: undefined });
+@@ -337,12 +449,13 @@ export function createSqliteWorkerBackend(
+     const hash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
+     return writeTransaction(() => {
+       const snapshot = readAll();
+-      const fail = (error: string): AgendaReceipt => ({
++      const fail = (code: string, message: string): AgendaReceipt => ({
+         ok: false,
+         revision: snapshot.revision,
+         operationId: input.operationId,
+         replayed: false,
+-        error,
++        code,
++        error: `${code}: ${message}`,
+       });
+       const prior = first(
+         db,
+@@ -360,9 +473,9 @@ export function createSqliteWorkerBackend(
+               replayed: true,
+               ...(prior.feedback_id ? { feedbackId: prior.feedback_id } : {}),
+             }
+-          : fail("operation_id_reused: 此操作编号已用于不同内容，请刷新后重试。");
++          : fail("operation_id_reused", "此操作编号已用于不同内容，请刷新后重试。");
+       if (input.expectedRevision !== snapshot.revision)
+-        return fail("revision_conflict: 日程已更新，请刷新后确认当前安排再操作。");
++        return fail("revision_conflict", "日程已更新，请刷新后确认当前安排再操作。");
+ 
+       const at = new Date().toISOString();
+       const entries = new Map(snapshot.feedback.map((entry) => [entry.id, entry]));
+@@ -376,24 +489,24 @@ export function createSqliteWorkerBackend(
+       if (input.kind === "retry") {
+         const existing = entries.get(input.targetId);
+         if (!existing || existing.status !== "error" || existing.undoneBy)
+-          return fail("feedback_not_retryable: 此反馈无需重试，请刷新查看结果。");
++          return fail("feedback_not_retryable", "此反馈无需重试，请刷新查看结果。");
+         entry = { ...existing, status: "pending", runId: null, summary: null };
+       } else if (input.kind === "undo") {
+         const original = entries.get(input.targetId);
+         if (!original || original.kind === "undo" || original.undoneBy)
+-          return fail("feedback_not_undoable: 此完成记录已撤销或不存在。");
++          return fail("feedback_not_undoable", "此完成记录已撤销或不存在。");
+         const item = snapshot.items.find((item) => item.id === original.itemId);
+-        if (!item) return fail("unknown_item: 事项不存在，请刷新。");
++        if (!item) return fail("unknown_item", "事项不存在，请刷新。");
+         if (original.kind === "complete_block") {
+           const progress = snapshot.blockProgress.find(
+             (progress) => progress.blockId === original.targetId,
+           );
+           if (progress?.feedbackId !== original.id)
+-            return fail("completion_changed: 此时间块的完成状态已变化，请刷新。");
++            return fail("completion_changed", "此时间块的完成状态已变化，请刷新。");
+           undoBlockId = original.targetId;
+         } else {
+           if (item.status !== "done" || item.completedBy !== "user")
+-            return fail("completion_changed: 任务完成状态已变化，请刷新。");
++            return fail("completion_changed", "任务完成状态已变化，请刷新。");
+           const row = first(
+             db,
+             query
+@@ -402,7 +515,7 @@ export function createSqliteWorkerBackend(
+               .where("id", "=", original.id),
+           );
+           if (!row?.previous_state)
+-            return fail("completion_history_missing: 缺少原状态，请在 Claw 中恢复任务。");
++            return fail("completion_history_missing", "缺少原状态，请在 Claw 中恢复任务。");
+           const restored = agendaItemSchema.parse({
+             ...item,
+             ...JSON.parse(row.previous_state),
+@@ -434,20 +547,20 @@ export function createSqliteWorkerBackend(
+             ? snapshot.blocks.find((block) => block.id === input.targetId)
+             : undefined;
+         if (input.kind === "complete_block" && !completedBlock)
+-          return fail("unknown_block: 此时间块已变化，请刷新。");
++          return fail("unknown_block", "此时间块已变化，请刷新。");
+         const item = snapshot.items.find(
+           (item) => item.id === (completedBlock?.itemId ?? input.targetId),
+         );
+-        if (!item) return fail("unknown_item: 事项不存在，请刷新。");
+-        if (isCompleted(item)) return fail("item_completed: 此事项已完成或取消，请刷新。");
++        if (!item) return fail("unknown_item", "事项不存在，请刷新。");
++        if (isCompleted(item)) return fail("item_completed", "此事项已完成或取消，请刷新。");
+         if (input.kind === "complete_task" && item.kind !== "task")
+-          return fail("fixed_event: 课程和会议只能标记本段完成。");
++          return fail("fixed_event", "课程和会议只能标记本段完成。");
+         const completedBlockId = completedBlock?.id;
+         if (
+           completedBlockId &&
+           snapshot.blockProgress.some((progress) => progress.blockId === completedBlockId)
+         )
+-          return fail("block_completed: 本段已经完成，请刷新。");
++          return fail("block_completed", "本段已经完成，请刷新。");
+         entry = {
+           id: input.operationId,
+           kind: input.kind,
+@@ -545,14 +658,48 @@ export function createSqliteWorkerBackend(
+     });
+   }
+ 
++  function saveItem(item: AgendaItem): void {
++    const row = {
++      id: item.id,
++      source_id: item.sourceId,
++      source_key: item.sourceKey,
++      payload: JSON.stringify(item),
++    };
++    execute(
++      db,
++      query
++        .insertInto("agenda_items")
++        .values(row)
++        .onConflict((conflict) => conflict.column("id").doUpdateSet(row)),
++    );
++  }
++
++  function saveBlock(block: AgendaBlock): void {
++    const row = { id: block.id, item_id: block.itemId, payload: JSON.stringify(block) };
++    execute(
++      db,
++      query
++        .insertInto("agenda_blocks")
++        .values(row)
++        .onConflict((conflict) => conflict.column("id").doUpdateSet(row)),
++    );
++  }
++
+   function applyAdmitted(input: AgendaApply, hash: string): AgendaReceipt {
+     const snapshot = readAll();
+-    const fail = (error: string): AgendaReceipt => ({
++    const fail = (
++      code: string,
++      message: string,
++      extra: { details?: unknown; conflicts?: AgendaBlockConflict[] } = {},
++    ): AgendaReceipt => ({
+       ok: false,
+       revision: snapshot.revision,
+       operationId: input.operationId,
+       replayed: false,
+-      error,
++      code,
++      error: `${code}: ${message}`,
++      ...(extra.details === undefined ? {} : { details: extra.details }),
++      ...(extra.conflicts?.length ? { conflicts: extra.conflicts } : {}),
+     });
+     const prior = first(
+       db,
+@@ -561,12 +708,10 @@ export function createSqliteWorkerBackend(
+     if (prior) {
+       return prior.request_hash === hash
+         ? { ok: true, revision: prior.revision, operationId: input.operationId, replayed: true }
+-        : fail(
+-            "operation_id_reused: this operationId belongs to different content; use a new operationId.",
+-          );
++        : fail("operation_id_reused", "此操作编号已用于不同内容，请使用新的操作编号。");
+     }
+     if (snapshot.revision !== input.expectedRevision) {
+-      return fail("revision_conflict: read Agenda again before applying a revised batch.");
++      return fail("revision_conflict", "日程已更新，请重新读取后再提交修改。");
+     }
+ 
+     const items = new Map(snapshot.items.map((item) => [item.id, item]));
+@@ -576,28 +721,55 @@ export function createSqliteWorkerBackend(
+       ...snapshot.sources.map((source) => source.id),
+       ...(input.sources ?? []).map((source) => source.id),
+     ]);
++    const owners = new Map(snapshot.sources.map((source) => [source.id, source.managedBy ?? "agent"]));
++    for (const source of input.sources ?? []) owners.set(source.id, source.managedBy ?? "agent");
++    const sourceOwned = (item: AgendaItem | undefined): boolean =>
++      Boolean(item && owners.get(item.sourceId) === "source");
+     const unlock = new Set(input.unlockBlockIds);
+     const reopen = new Set(input.reopenItemIds);
+     for (const id of unlock) {
+       if (!blocks.has(id)) {
+-        return fail(`unknown_block: ${id}`);
++        return fail("unknown_block", `时间块 ${id} 不存在。`, { details: { blockId: id } });
+       }
+     }
+     for (const id of reopen) {
+       if (!items.has(id) || !input.items?.some((item) => item.id === id)) {
+-        return fail(`reopen_requires_item: include the existing item ${id} in items.`);
++        return fail("reopen_requires_item", `重新打开 ${id} 时必须同时提交该事项。`, {
++          details: { itemId: id },
++        });
++      }
++    }
++
++    for (const incoming of input.sources ?? []) {
++      if (snapshot.sources.some((source) => source.id === incoming.id && source.managedBy === "source")) {
++        return fail(
++          "source_owned",
++          `来源 ${incoming.id} 由课表同步维护；登记事项无需重新提交该来源。`,
++          { details: { sourceId: incoming.id } },
++        );
+       }
+     }
+ 
+     const changedItems: AgendaItem[] = [];
+     for (const incoming of input.items ?? []) {
+       if (!sources.has(incoming.sourceId)) {
+-        return fail(`unknown_source: include ${incoming.sourceId} in sources.`);
++        return fail("unknown_source", `请先登记来源 ${incoming.sourceId}。`, {
++          details: { sourceId: incoming.sourceId },
++        });
+       }
+       const current = items.get(incoming.id);
+       let item = incoming;
+       if (current && current.kind !== incoming.kind) {
+-        return fail(`item_kind_immutable: preserve the kind of existing item ${incoming.id}.`);
++        return fail("item_kind_immutable", `保留已有事项 ${incoming.id} 的类型。`, {
++          details: { itemId: incoming.id },
++        });
++      }
++      if (current && sourceOwned(current) && itemContentChanged(current, incoming)) {
++        return fail(
++          "source_owned",
++          `${current.title} 由来源「${current.sourceId}」维护，Agent 不能修改；课表请通过 sync 或带证据的取消处理。`,
++          { details: { itemId: current.id, sourceId: current.sourceId } },
++        );
+       }
+       if (current && incoming.updatedAt < current.updatedAt && !reopen.has(incoming.id)) {
+         item = current;
+@@ -617,7 +789,9 @@ export function createSqliteWorkerBackend(
+       );
+       if (duplicate) {
+         return fail(
+-          `source_identity_exists: use existing item ${duplicate.id} for ${item.sourceId}/${item.sourceKey}.`,
++          "source_identity_exists",
++          `来源身份 ${item.sourceId}/${item.sourceKey} 已属于 ${duplicate.id}。`,
++          { details: { itemId: duplicate.id, sourceId: item.sourceId } },
+         );
+       }
+       items.set(item.id, item);
+@@ -627,25 +801,43 @@ export function createSqliteWorkerBackend(
+     const changedBlocks = new Map<string, AgendaBlock>();
+     const completedBlocks = new Set(snapshot.blockProgress.map((progress) => progress.blockId));
+     for (const id of unlock) {
+-      if (completedBlocks.has(id)) return fail(`block_completed: preserve completed block ${id}.`);
++      if (completedBlocks.has(id)) {
++        return fail("block_completed", `时间块 ${id} 已完成，不能修改。`, {
++          details: { blockId: id },
++        });
++      }
+       const block = blocks.get(id);
++      if (sourceOwned(items.get(block?.itemId ?? ""))) {
++        return fail("source_owned", `时间块 ${id} 属于来源维护的课程，Agent 不能解锁。`, {
++          details: { blockId: id },
++        });
++      }
+       if (block) {
+         changedBlocks.set(id, { ...block, locked: false });
+       }
+     }
+     for (const block of input.blocks ?? []) {
+       if (!items.has(block.itemId)) {
+-        return fail(`unknown_item: ${block.itemId}`);
++        return fail("unknown_item", `时间块引用了不存在的事项 ${block.itemId}。`, {
++          details: { itemId: block.itemId },
++        });
+       }
+       const current = blocks.get(block.id);
+       if (current && completedBlocks.has(block.id) && blockScheduleChanged(current, block)) {
+-        return fail(`block_completed: preserve completed block ${block.id}.`);
++        return fail("block_completed", `保留已完成的时间块 ${block.id}。`, {
++          details: { blockId: block.id },
++        });
+       }
+       const target = items.get(block.itemId);
++      if (sourceOwned(target) && (!current || blockScheduleChanged(current, block))) {
++        return fail("source_owned", `时间块 ${block.id} 属于来源维护的课程，Agent 不能改期。`, {
++          details: { blockId: block.id, itemId: block.itemId },
++        });
++      }
+       if (target && isCompleted(target) && (!current || blockScheduleChanged(current, block))) {
+-        return fail(
+-          `item_completed: reopen ${block.itemId} before adding or rescheduling execution blocks.`,
+-        );
++        return fail("item_completed", `重新打开 ${block.itemId} 后才能新增或改期执行块。`, {
++          details: { itemId: block.itemId },
++        });
+       }
+       if (
+         current &&
+@@ -653,25 +845,73 @@ export function createSqliteWorkerBackend(
+         (current.locked || originalItems.get(current.itemId)?.kind === "event") &&
+         blockScheduleChanged(current, block)
+       ) {
+-        return fail(`block_locked: explicitly unlock ${block.id} before rescheduling.`);
++        return fail("block_locked", `调整 ${block.id} 前需要显式解锁。`, {
++          details: { blockId: block.id },
++        });
+       }
+       changedBlocks.set(block.id, block);
+     }
+     for (const id of input.deleteBlockIds ?? []) {
+-      if (completedBlocks.has(id)) return fail(`block_completed: preserve completed block ${id}.`);
++      if (completedBlocks.has(id)) {
++        return fail("block_completed", `保留已完成的时间块 ${id}。`, { details: { blockId: id } });
++      }
+       const current = blocks.get(id);
+       if (!current) {
+-        return fail(`unknown_block: ${id}`);
++        return fail("unknown_block", `时间块 ${id} 不存在。`, { details: { blockId: id } });
++      }
++      if (sourceOwned(originalItems.get(current.itemId))) {
++        return fail("source_owned", `时间块 ${id} 属于来源维护的课程，Agent 不能删除。`, {
++          details: { blockId: id },
++        });
+       }
+       if (
+         !unlock.has(id) &&
+         (current.locked || originalItems.get(current.itemId)?.kind === "event")
+       ) {
+-        return fail(`block_locked: explicitly unlock ${id} before deleting.`);
++        return fail("block_locked", `删除 ${id} 前需要显式解锁。`, { details: { blockId: id } });
+       }
+       changedBlocks.delete(id);
+     }
+ 
++    if (!input.allowOverlaps && changedBlocks.size) {
++      const resulting = new Map(blocks);
++      for (const id of input.deleteBlockIds ?? []) resulting.delete(id);
++      for (const [id, block] of changedBlocks) resulting.set(id, block);
++      const conflicts = new Map<string, AgendaBlockConflict>();
++      for (const block of changedBlocks.values()) {
++        if (block.allDay) continue;
++        for (const other of resulting.values()) {
++          if (other.id === block.id || other.allDay) continue;
++          if (other.start >= block.end || other.end <= block.start) continue;
++          const otherItem = items.get(other.itemId) ?? originalItems.get(other.itemId);
++          if (
++            !other.locked &&
++            otherItem?.kind !== "event" &&
++            !sourceOwned(otherItem) &&
++            !changedBlocks.has(other.id)
++          ) {
++            continue;
++          }
++          conflicts.set(other.id, {
++            blockId: other.id,
++            itemId: other.itemId,
++            title: otherItem?.title ?? other.itemId,
++            start: other.start,
++            end: other.end,
++          });
++        }
++      }
++      if (conflicts.size) {
++        const list = [...conflicts.values()].toSorted((a, b) => a.start.localeCompare(b.start));
++        const first = list[0]!;
++        return fail(
++          "time_conflict",
++          `${clockLabel(first.start)}–${clockLabel(first.end)} 已被「${first.title}」占用；如需有意并行，请在批次中设置 allowOverlaps。`,
++          { conflicts: list, details: { conflicts: list.length } },
++        );
++      }
++    }
++
+     const feedback = new Map(snapshot.feedback.map((entry) => [entry.id, entry]));
+     const planChanged =
+       changedItems.some(
+@@ -686,9 +926,11 @@ export function createSqliteWorkerBackend(
+     for (const result of input.feedbackResults ?? []) {
+       const entry = feedback.get(result.id);
+       if (!entry || entry.undoneBy || ["adjusted", "unchanged"].includes(entry.status))
+-        return fail(`feedback_not_pending: ${result.id}`);
++        return fail("feedback_not_pending", `反馈 ${result.id} 不在待处理状态。`, {
++          details: { feedbackId: result.id },
++        });
+       if (result.status === "adjusted" && !planChanged)
+-        return fail("feedback_without_changes: use unchanged when no plan changed.");
++        return fail("feedback_without_changes", "没有实际改动时请使用 unchanged。");
+       feedback.set(result.id, { ...entry, status: result.status, summary: result.summary });
+     }
+     for (const entry of snapshot.feedback) {
+@@ -723,34 +965,11 @@ export function createSqliteWorkerBackend(
+           ),
+       );
+     }
+-    for (const item of changedItems) {
+-      const row = {
+-        id: item.id,
+-        source_id: item.sourceId,
+-        source_key: item.sourceKey,
+-        payload: JSON.stringify(item),
+-      };
+-      execute(
+-        db,
+-        query
+-          .insertInto("agenda_items")
+-          .values(row)
+-          .onConflict((conflict) => conflict.column("id").doUpdateSet(row)),
+-      );
+-    }
++    for (const item of changedItems) saveItem(item);
+     for (const id of input.deleteBlockIds ?? []) {
+       execute(db, query.deleteFrom("agenda_blocks").where("id", "=", id));
+     }
+-    for (const block of changedBlocks.values()) {
+-      const row = { id: block.id, item_id: block.itemId, payload: JSON.stringify(block) };
+-      execute(
+-        db,
+-        query
+-          .insertInto("agenda_blocks")
+-          .values(row)
+-          .onConflict((conflict) => conflict.column("id").doUpdateSet(row)),
+-      );
+-    }
++    for (const block of changedBlocks.values()) saveBlock(block);
+     for (const entry of feedback.values()) {
+       if (
+         JSON.stringify(entry) !==
+@@ -778,6 +997,353 @@ export function createSqliteWorkerBackend(
+     return { ok: true, revision, operationId: input.operationId, replayed: false };
+   }
+ 
++  function syncAdmitted(input: AgendaSync, hash: string): AgendaSyncReceipt {
++    const snapshot = readAll();
++    const now = new Date().toISOString();
++    const empty = (): Omit<AgendaSyncReceipt, "ok" | "revision" | "operationId" | "replayed"> => ({
++      changed: false,
++      created: [],
++      updated: [],
++      adopted: [],
++      unchanged: [],
++      cancelled: [],
++      unlisted: [],
++      ignoredCancellations: [],
++      completedHistory: [],
++      failures: [],
++      coverage: { start: null, end: null },
++    });
++    const fail = (
++      code: string,
++      message: string,
++      details?: unknown,
++    ): AgendaSyncReceipt => ({
++      ok: false,
++      revision: snapshot.revision,
++      operationId: input.operationId,
++      replayed: false,
++      code,
++      error: `${code}: ${message}`,
++      ...(details === undefined ? {} : { details }),
++      ...empty(),
++    });
++    const prior = first(
++      db,
++      query.selectFrom("agenda_receipts").selectAll().where("operation_id", "=", input.operationId),
++    );
++    if (prior) {
++      return prior.request_hash === hash
++        ? {
++            ok: true,
++            revision: prior.revision,
++            operationId: input.operationId,
++            replayed: true,
++            code: "replayed",
++            ...empty(),
++          }
++        : fail("operation_id_reused", "此操作编号已用于不同内容，请使用新的操作编号。");
++    }
++
++    const weeks = input.weeks.toSorted((a, b) => a.start.localeCompare(b.start));
++    const occurrences = new Map<string, string>();
++    for (const week of weeks) {
++      if (!week.ok) continue;
++      for (const slot of week.slots) {
++        const day = beijingDate(slot.start);
++        if (day < week.start || day > week.end) {
++          return fail(
++            "slot_outside_week",
++            `课程「${slot.title}」的开始日期 ${day} 不属于 ${week.start}–${week.end}，本次同步未写入。`,
++            { week: { start: week.start, end: week.end }, slot: { title: slot.title, start: slot.start } },
++          );
++        }
++        const existingWeek = occurrences.get(slot.start);
++        if (existingWeek) {
++          return fail("duplicate_occurrence", `同一开始时间出现在多个周次：${slot.start}。`, {
++            start: slot.start,
++            weeks: [existingWeek, week.start],
++          });
++        }
++        occurrences.set(slot.start, week.start);
++      }
++    }
++    for (const cancellation of input.cancellations ?? []) {
++      if (occurrences.has(cancellation.start)) {
++        return fail("conflicting_occurrence", `同一时间既作为课程又作为取消提交：${cancellation.start}。`, {
++          start: cancellation.start,
++        });
++      }
++    }
++
++    const failedWeeks = weeks.filter((week) => !week.ok);
++    const okWeeks = weeks.filter((week) => week.ok);
++    const failures = failedWeeks.map(
++      (week) =>
++        `${week.start}–${week.end}${week.message ? `（${week.message}）` : ""}`,
++    );
++    let coverageStart: string | null = null;
++    let coverageEnd: string | null = null;
++    const latest = okWeeks.at(-1);
++    if (latest) {
++      let runStart = latest;
++      for (let index = okWeeks.length - 1; index > 0; index -= 1) {
++        const previous = okWeeks[index - 1]!;
++        const current = okWeeks[index]!;
++        if (addDays(previous.end, 1) !== current.start) break;
++        runStart = previous;
++      }
++      coverageStart = runStart.start;
++      coverageEnd = latest.end;
++    }
++
++    const previousSource = snapshot.sources.find((source) => source.id === input.sourceId);
++    const nextSource: AgendaSource = {
++      id: input.sourceId,
++      label: input.label ?? previousSource?.label ?? input.sourceId,
++      checkedAt: now,
++      status: failures.length ? "error" : "ok",
++      message: failures.length ? `未获取：${failures.join("；")}` : null,
++      coverageRequired: previousSource?.coverageRequired ?? true,
++      coverageStart,
++      coverageEnd,
++      managedBy: "source",
++    };
++    const sourceChanged =
++      !previousSource ||
++      previousSource.label !== nextSource.label ||
++      previousSource.status !== nextSource.status ||
++      previousSource.message !== nextSource.message ||
++      previousSource.coverageRequired !== nextSource.coverageRequired ||
++      previousSource.coverageStart !== nextSource.coverageStart ||
++      previousSource.coverageEnd !== nextSource.coverageEnd ||
++      previousSource.managedBy !== nextSource.managedBy;
++
++    const sourceItems = snapshot.items.filter((item) => item.sourceId === input.sourceId);
++    const sourceBlocks = new Map<string, AgendaBlock[]>();
++    for (const block of snapshot.blocks) {
++      const list = sourceBlocks.get(block.itemId) ?? [];
++      list.push(block);
++      sourceBlocks.set(block.itemId, list);
++    }
++    const itemsByKey = new Map<string, AgendaItem>();
++    const itemsByBlockStart = new Map<string, AgendaItem[]>();
++    for (const item of sourceItems) {
++      if (item.sourceKey !== null) itemsByKey.set(item.sourceKey, item);
++      for (const block of sourceBlocks.get(item.id) ?? []) {
++        const list = itemsByBlockStart.get(block.start) ?? [];
++        list.push(item);
++        itemsByBlockStart.set(block.start, list);
++      }
++    }
++    const completedBlocks = new Set(snapshot.blockProgress.map((progress) => progress.blockId));
++    const hasCompletionHistory = (item: AgendaItem): boolean =>
++      (sourceBlocks.get(item.id) ?? []).some((block) => completedBlocks.has(block.id));
++
++    const receipt = empty();
++    const changedItems = new Map<string, AgendaItem>();
++    const changedBlocks = new Map<string, AgendaBlock>();
++    const deletedBlockIds = new Set<string>();
++    const slots = weeks
++      .filter((week) => week.ok)
++      .flatMap((week) => week.slots)
++      .toSorted((a, b) => a.start.localeCompare(b.start));
++
++    for (const slot of slots) {
++      const key = slot.start;
++      let item = itemsByKey.get(key);
++      let adopted = false;
++      if (!item) {
++        const candidates = itemsByBlockStart.get(key) ?? [];
++        if (candidates.length > 1) {
++          return fail("adoption_ambiguous", `开始时间 ${key} 对应多个已有事项，无法确定采用哪一条。`, {
++            start: key,
++            items: candidates.map((candidate) => candidate.id),
++          });
++        }
++        const candidate = candidates[0];
++        if (candidate) {
++          item = candidate;
++          adopted = true;
++        }
++      }
++      if (item && item.kind !== "event") {
++        return fail("sync_kind_mismatch", `已有事项 ${item.id} 不是课程/事件，不能由课表同步接管。`, {
++          itemId: item.id,
++          kind: item.kind,
++        });
++      }
++      if (item && item.status === "cancelled") {
++        receipt.unchanged.push(item.id);
++        continue;
++      }
++      if (item && (item.status === "done" || hasCompletionHistory(item))) {
++        receipt.unchanged.push(item.id);
++        receipt.completedHistory.push({
++          sourceKey: key,
++          itemId: item.id,
++          title: item.title,
++          reason: "block_completed",
++        });
++        continue;
++      }
++
++      const nextItem: AgendaItem = {
++        id: item?.id ?? deterministicId("agenda-sync-", input.sourceId, key),
++        kind: "event",
++        title: slot.title,
++        status: item?.status ?? "pending",
++        sourceId: input.sourceId,
++        sourceKey: key,
++        sourceUrl: slot.sourceUrl ?? item?.sourceUrl ?? null,
++        dueAt: item?.dueAt ?? null,
++        dueDate: item?.dueDate ?? null,
++        estimatedMinutes: item?.estimatedMinutes ?? null,
++        priority: item?.priority ?? "normal",
++        nextAction: item?.nextAction ?? "",
++        reason: item?.reason ?? null,
++        completedBy: item?.completedBy ?? null,
++        updatedAt: item ? item.updatedAt : now,
++        cancelEvidence: null,
++      };
++      const itemChanged = !item || itemContentChanged(item, nextItem);
++      if (itemChanged) nextItem.updatedAt = now;
++
++      const existingBlocks = item ? (sourceBlocks.get(item.id) ?? []) : [];
++      const target =
++        existingBlocks.find((block) => block.start === key) ??
++        (existingBlocks.length === 1 ? existingBlocks[0] : undefined);
++      const nextBlock: AgendaBlock = {
++        id: target?.id ?? deterministicId("agenda-sync-block-", nextItem.id, key),
++        itemId: nextItem.id,
++        start: key,
++        end: slot.end,
++        allDay: false,
++        locked: true,
++        reason: SYNC_BLOCK_REASON,
++      };
++      const blockChanged = !target || JSON.stringify(target) !== JSON.stringify(nextBlock);
++      if (blockChanged) changedItems.set(nextItem.id, nextItem);
++      else if (itemChanged) changedItems.set(nextItem.id, nextItem);
++      // A source-owned occurrence has exactly one scheduled block; completed
++      // history is never reached here because such items were skipped above.
++      for (const block of existingBlocks) {
++        if (block.id !== nextBlock.id) deletedBlockIds.add(block.id);
++      }
++      if (!item) receipt.created.push(nextItem.id);
++      else if (adopted) receipt.adopted.push(nextItem.id);
++      else if (itemChanged || blockChanged) receipt.updated.push(nextItem.id);
++      else receipt.unchanged.push(nextItem.id);
++      if (blockChanged) changedBlocks.set(nextBlock.id, nextBlock);
++    }
++
++    for (const cancellation of input.cancellations ?? []) {
++      const key = cancellation.start;
++      let item = itemsByKey.get(key);
++      if (!item) {
++        const candidates = itemsByBlockStart.get(key) ?? [];
++        if (candidates.length > 1) {
++          return fail("adoption_ambiguous", `取消的 ${key} 对应多个已有事项，无法确定取消哪一条。`, {
++            start: key,
++            items: candidates.map((candidate) => candidate.id),
++          });
++        }
++        item = candidates[0];
++      }
++      if (!item) {
++        receipt.ignoredCancellations.push({ sourceKey: key, reason: "not_found" });
++        continue;
++      }
++      if (item.status === "cancelled") {
++        receipt.ignoredCancellations.push({ sourceKey: key, reason: "already_cancelled" });
++        continue;
++      }
++      if (hasCompletionHistory(item)) {
++        receipt.ignoredCancellations.push({ sourceKey: key, reason: "completed_history" });
++        continue;
++      }
++      const nextItem: AgendaItem = {
++        ...item,
++        sourceKey: key,
++        status: "cancelled",
++        cancelEvidence: cancellation.evidence,
++        updatedAt: now,
++      };
++      changedItems.set(nextItem.id, nextItem);
++      for (const block of sourceBlocks.get(item.id) ?? []) deletedBlockIds.add(block.id);
++      receipt.cancelled.push(item.id);
++    }
++
++    for (const item of sourceItems) {
++      const canonical = item.sourceKey;
++      const listed = canonical !== null && occurrences.has(canonical);
++      const cancelledHere = receipt.cancelled.includes(item.id);
++      if (
++        !listed &&
++        !cancelledHere &&
++        item.status !== "cancelled" &&
++        (sourceBlocks.get(item.id) ?? []).length > 0
++      ) {
++        receipt.unlisted.push({
++          sourceKey: canonical ?? item.id,
++          itemId: item.id,
++          title: item.title,
++        });
++      }
++    }
++
++    const planChanged =
++      sourceChanged ||
++      changedItems.size > 0 ||
++      deletedBlockIds.size > 0 ||
++      receipt.created.length > 0 ||
++      receipt.cancelled.length > 0;
++
++    execute(
++      db,
++      query
++        .insertInto("agenda_sources")
++        .values({ id: nextSource.id, payload: JSON.stringify(nextSource) })
++        .onConflict((conflict) =>
++          conflict.column("id").doUpdateSet({ payload: JSON.stringify(nextSource) }),
++        ),
++    );
++    for (const item of changedItems.values()) saveItem(item);
++    for (const block of changedBlocks.values()) saveBlock(block);
++    for (const id of deletedBlockIds) {
++      execute(db, query.deleteFrom("agenda_blocks").where("id", "=", id));
++    }
++    const revision = planChanged ? advanceRevision(snapshot.revision) : snapshot.revision;
++    if (revision > 0) {
++      execute(
++        db,
++        query.insertInto("agenda_receipts").values({
++          operation_id: input.operationId,
++          request_hash: hash,
++          revision,
++          feedback_id: null,
++        }),
++      );
++    }
++    return {
++      ok: true,
++      revision,
++      operationId: input.operationId,
++      replayed: false,
++      code: planChanged ? "applied" : "unchanged",
++      changed: planChanged,
++      created: receipt.created,
++      updated: receipt.updated,
++      adopted: receipt.adopted,
++      unchanged: receipt.unchanged,
++      cancelled: receipt.cancelled,
++      unlisted: receipt.unlisted,
++      ignoredCancellations: receipt.ignoredCancellations,
++      completedHistory: receipt.completedHistory,
++      failures,
++      coverage: { start: coverageStart, end: coverageEnd },
++    };
++  }
++
+   return {
+     execute(command) {
+       switch (command.type) {
+@@ -785,6 +1351,8 @@ export function createSqliteWorkerBackend(
+           return read(parseRead(command.input));
+         case "apply":
+           return apply(parseApply(command.input));
++        case "sync":
++          return syncCourses(parseSync(command.input));
+         case "feedback":
+           return submitFeedback(parseFeedback(command.input));
+         case "updateFeedbackRun":
+diff --git a/src/store.ts b/src/store.ts
+index c50da21..d533075 100644
+--- a/src/store.ts
++++ b/src/store.ts
+@@ -3,7 +3,7 @@ import {
+   openSqliteWorkerStore,
+   runSqliteWorkerStoreWrite,
+ } from "openclaw/plugin-sdk/sqlite-runtime";
+-import { parseApply, parseRead, parseFeedback, parseFeedbackRun } from "./model.js";
++import { parseApply, parseRead, parseSync, parseFeedback, parseFeedbackRun } from "./model.js";
+ import type {
+   AgendaApply,
+   AgendaRead,
+@@ -12,11 +12,14 @@ import type {
+   AgendaStore,
+   AgendaFeedbackInput,
+   AgendaFeedbackRunUpdate,
++  AgendaSync,
++  AgendaSyncReceipt,
+ } from "./types.js";
+ 
+ export type AgendaSqliteOperations = {
+   read: { input: AgendaRead; output: AgendaSnapshot };
+   apply: { input: AgendaApply; output: AgendaReceipt };
++  sync: { input: AgendaSync; output: AgendaSyncReceipt };
+   feedback: { input: AgendaFeedbackInput; output: AgendaReceipt };
+   updateFeedbackRun: { input: AgendaFeedbackRunUpdate; output: number };
+ };
+@@ -47,7 +50,7 @@ export function openAgendaStore(options: {
+     return result;
+   }
+ 
+-  function write<K extends "apply" | "feedback" | "updateFeedbackRun">(
++  function write<K extends "apply" | "sync" | "feedback" | "updateFeedbackRun">(
+     type: K,
+     input: AgendaSqliteOperations[K]["input"],
+     assertCurrent: () => void,
+@@ -75,6 +78,9 @@ export function openAgendaStore(options: {
+     async apply(input, assertCurrent) {
+       return write("apply", parseApply(input), assertCurrent);
+     },
++    async sync(input, assertCurrent) {
++      return write("sync", parseSync(input), assertCurrent);
++    },
+     async feedback(input, assertCurrent) {
+       return write("feedback", parseFeedback(input), assertCurrent);
+     },
+diff --git a/src/sync.test.ts b/src/sync.test.ts
+new file mode 100644
+index 0000000..492a2a4
+--- /dev/null
++++ b/src/sync.test.ts
+@@ -0,0 +1,570 @@
++import { mkdtempSync, rmSync } from "node:fs";
++import { tmpdir } from "node:os";
++import path from "node:path";
++import { afterEach, describe, expect, it } from "vitest";
++import { openAgendaStore } from "./store.js";
++import type {
++  AgendaApply,
++  AgendaBlock,
++  AgendaItem,
++  AgendaSnapshot,
++  AgendaStore,
++  AgendaSync,
++  AgendaSyncWeek,
++} from "./types.js";
++
++const stores: AgendaStore[] = [];
++const directories: string[] = [];
++afterEach(async () => {
++  try {
++    await Promise.all(stores.splice(0).map((store) => store.close()));
++  } finally {
++    for (const directory of directories.splice(0)) {
++      rmSync(directory, { recursive: true, force: true });
++    }
++  }
++});
++const workerModuleUrl = new URL("../dist/src/sqlite.worker.js", import.meta.url);
++const current = () => {};
++
++function fixture() {
++  const directory = mkdtempSync(path.join(tmpdir(), "agenda-sync-"));
++  directories.push(directory);
++  const store = openAgendaStore({ databasePath: path.join(directory, "agenda.sqlite"), workerModuleUrl });
++  stores.push(store);
++  return store;
++}
++
++function task(overrides: Partial<AgendaItem> = {}): AgendaItem {
++  return {
++    id: "essay",
++    kind: "task",
++    title: "整理笔记",
++    status: "pending",
++    sourceId: "local",
++    sourceKey: null,
++    sourceUrl: null,
++    dueAt: null,
++    dueDate: null,
++    estimatedMinutes: 60,
++    priority: "important",
++    nextAction: "写第一部分",
++    reason: null,
++    completedBy: null,
++    updatedAt: "2026-11-02T01:00:00.000Z",
++    ...overrides,
++  };
++}
++
++function block(overrides: Partial<AgendaBlock> = {}): AgendaBlock {
++  return {
++    id: "work",
++    itemId: "essay",
++    start: "2026-11-03T09:00:00+08:00",
++    end: "2026-11-03T10:00:00+08:00",
++    allDay: false,
++    locked: false,
++    reason: "上午",
++    ...overrides,
++  };
++}
++
++const localSource = {
++  id: "local",
++  label: "本地任务",
++  checkedAt: null,
++  status: "ok" as const,
++  message: null,
++  coverageRequired: false,
++  coverageStart: null,
++  coverageEnd: null,
++};
++
++function seed(overrides: Partial<AgendaApply> = {}): AgendaApply {
++  return {
++    operationId: "seed",
++    expectedRevision: 0,
++    sources: [localSource],
++    items: [task()],
++    blocks: [],
++    ...overrides,
++  };
++}
++
++function week(overrides: Partial<AgendaSyncWeek> = {}): AgendaSyncWeek {
++  return {
++    start: "2026-11-02",
++    end: "2026-11-08",
++    ok: true,
++    message: null,
++    slots: [],
++    ...overrides,
++  };
++}
++
++function slot(title: string, start: string, end: string) {
++  return { title, start, end };
++}
++
++function syncInput(overrides: Partial<AgendaSync> = {}): AgendaSync {
++  return {
++    operationId: "sync-1",
++    sourceId: "yungu-schedule",
++    label: "云谷课表",
++    window: { start: "2026-11-02T00:00:00+08:00", end: "2026-11-16T00:00:00+08:00" },
++    weeks: [week()],
++    ...overrides,
++  };
++}
++
++const math = slot("数学", "2026-11-03T08:10:00+08:00", "2026-11-03T08:50:00+08:00");
++const physics = slot("物理", "2026-11-03T10:00:00+08:00", "2026-11-03T10:40:00+08:00");
++const physicsNextWeek = slot("物理", "2026-11-10T10:00:00+08:00", "2026-11-10T10:40:00+08:00");
++const evidence = {
++  kind: "notice" as const,
++  detail: "班主任通知停课",
++  observedAt: "2026-11-03T02:00:00.000Z",
++  url: null,
++};
++
++function itemByTitle(snapshot: AgendaSnapshot, title: string): AgendaItem {
++  const item = snapshot.items.find((candidate) => candidate.title === title);
++  if (!item) throw new Error(`missing item ${title}`);
++  return item;
++}
++
++describe("Agenda source-owned course sync", () => {
++  it("creates locked courses, adopts legacy rows by block start, and keeps identical syncs revision-stable", async () => {
++    const store = fixture();
++    await store.apply(
++      {
++        operationId: "legacy",
++        expectedRevision: 0,
++        sources: [
++          {
++            id: "yungu-schedule",
++            label: "云谷课表",
++            checkedAt: "2026-10-24T22:41:30.000Z",
++            status: "ok",
++            message: null,
++            coverageStart: "2026-10-19",
++            coverageEnd: "2026-11-08",
++          },
++        ],
++        items: [
++          {
++            ...task({
++              id: "school:legacy",
++              kind: "event",
++              title: "数学",
++              sourceId: "yungu-schedule",
++              sourceKey: "-1@2026-11-03T08:10:00+08:00",
++              nextAction: "",
++              estimatedMinutes: null,
++            }),
++          },
++        ],
++        blocks: [
++          block({
++            id: "legacy-block",
++            itemId: "school:legacy",
++            start: "2026-11-03T08:10:00+08:00",
++            end: "2026-11-03T08:50:00+08:00",
++            locked: true,
++            reason: "",
++          }),
++        ],
++      },
++      current,
++    );
++    const first = await store.sync(
++      syncInput({ weeks: [week({ slots: [math, physics] })] }),
++      current,
++    );
++    expect(first).toMatchObject({
++      ok: true,
++      replayed: false,
++      changed: true,
++      created: [expect.any(String)],
++      adopted: ["school:legacy"],
++      cancelled: [],
++      coverage: { start: "2026-11-02", end: "2026-11-08" },
++      failures: [],
++    });
++    let snapshot = await store.read({ includeCompleted: true });
++    expect(snapshot.revision).toBe(first.revision);
++    expect(snapshot.sources.find((source) => source.id === "yungu-schedule")).toMatchObject({
++      managedBy: "source",
++      status: "ok",
++      coverageStart: "2026-11-02",
++      coverageEnd: "2026-11-08",
++    });
++    expect(snapshot.items).toHaveLength(2);
++    const mathItem = itemByTitle(snapshot, "数学");
++    expect(mathItem).toMatchObject({
++      id: "school:legacy",
++      kind: "event",
++      sourceKey: "2026-11-03T00:10:00.000Z",
++      status: "pending",
++    });
++    const mathBlock = snapshot.blocks.find((candidate) => candidate.itemId === mathItem.id);
++    expect(mathBlock).toMatchObject({ id: "legacy-block", locked: true, allDay: false });
++    expect(snapshot.blocks.every((candidate) => candidate.locked)).toBe(true);
++
++    const steady = await store.sync(
++      syncInput({ operationId: "sync-2", weeks: [week({ slots: [math, physics] })] }),
++      current,
++    );
++    expect(steady).toMatchObject({ ok: true, changed: false, revision: first.revision });
++    expect(steady.unchanged).toHaveLength(2);
++    expect((await store.read({ includeCompleted: true })).revision).toBe(first.revision);
++
++    const renamed = await store.sync(
++      syncInput({
++        operationId: "sync-3",
++        weeks: [week({ slots: [{ ...math, title: "数学（分层）" }, physics] })],
++      }),
++      current,
++    );
++    expect(renamed.changed).toBe(true);
++    snapshot = await store.read({ includeCompleted: true });
++    expect(itemByTitle(snapshot, "数学（分层）").id).toBe(mathItem.id);
++    expect(snapshot.items).toHaveLength(2);
++  });
++
++  it("treats absence as unlisted and removes a course only with explicit evidence", async () => {
++    const store = fixture();
++    await store.sync(syncInput({ weeks: [week({ slots: [math, physics] })] }), current);
++    const absent = await store.sync(
++      syncInput({
++        operationId: "sync-2",
++        weeks: [week({ slots: [math] })],
++      }),
++      current,
++    );
++    expect(absent.ok).toBe(true);
++    expect(absent.cancelled).toEqual([]);
++    expect(absent.unlisted).toEqual([
++      { sourceKey: "2026-11-03T02:00:00.000Z", itemId: expect.any(String), title: "物理" },
++    ]);
++    let snapshot = await store.read({ includeCompleted: true });
++    expect(itemByTitle(snapshot, "物理").status).toBe("pending");
++
++    await expect(
++      store.sync(
++        syncInput({
++          operationId: "sync-3",
++          weeks: [week({ slots: [math] })],
++          cancellations: [
++            { start: physics.start, evidence: { ...evidence, detail: "" } },
++          ],
++        }),
++        current,
++      ),
++    ).rejects.toThrow();
++
++    const cancelled = await store.sync(
++      syncInput({
++        operationId: "sync-3",
++        weeks: [week({ slots: [math] })],
++        cancellations: [{ start: physics.start, evidence }],
++      }),
++      current,
++    );
++    expect(cancelled).toMatchObject({ ok: true, changed: true, cancelled: [expect.any(String)] });
++    snapshot = await store.read({ includeCompleted: true });
++    const physicsItem = itemByTitle(snapshot, "物理");
++    expect(physicsItem).toMatchObject({ status: "cancelled", cancelEvidence: evidence });
++    expect(snapshot.blocks.some((candidate) => candidate.itemId === physicsItem.id)).toBe(false);
++
++    const revision = snapshot.revision;
++    const repeated = await store.sync(
++      syncInput({
++        operationId: "sync-4",
++        weeks: [week({ slots: [math] })],
++        cancellations: [{ start: physics.start, evidence }],
++      }),
++      current,
++    );
++    expect(repeated).toMatchObject({ ok: true, changed: false, revision });
++    expect(repeated.ignoredCancellations).toEqual([
++      { sourceKey: "2026-11-03T02:00:00.000Z", reason: "already_cancelled" },
++    ]);
++  });
++
++  it("refuses cross-week slots, duplicate occurrences, and slot/cancellation collisions atomically", async () => {
++    const store = fixture();
++    const outside = await store.sync(
++      syncInput({
++        weeks: [
++          week({
++            slots: [slot("越周课程", "2026-11-10T08:10:00+08:00", "2026-11-10T08:50:00+08:00")],
++          }),
++        ],
++      }),
++      current,
++    );
++    expect(outside).toMatchObject({ ok: false, code: "slot_outside_week", revision: 0 });
++    expect(await store.read({ includeCompleted: true })).toMatchObject({ items: [], revision: 0 });
++
++    const duplicate = await store.sync(
++      syncInput({
++        operationId: "sync-2",
++        weeks: [
++          week({ slots: [math] }),
++          week({ start: "2026-11-03", end: "2026-11-09", slots: [math] }),
++        ],
++      }),
++      current,
++    );
++    expect(duplicate).toMatchObject({ ok: false, code: "duplicate_occurrence" });
++
++    const collision = await store.sync(
++      syncInput({
++        operationId: "sync-3",
++        weeks: [week({ slots: [math] })],
++        cancellations: [{ start: math.start, evidence }],
++      }),
++      current,
++    );
++    expect(collision).toMatchObject({ ok: false, code: "conflicting_occurrence" });
++  });
++
++  it("derives coverage only from the latest contiguous successful weeks", async () => {
++    const store = fixture();
++    const both = await store.sync(
++      syncInput({
++        weeks: [
++          week({ slots: [math] }),
++          week({ start: "2026-11-09", end: "2026-11-15", slots: [physicsNextWeek] }),
++        ],
++      }),
++      current,
++    );
++    expect(both).toMatchObject({
++      ok: true,
++      coverage: { start: "2026-11-02", end: "2026-11-15" },
++      failures: [],
++    });
++
++    const failed = await store.sync(
++      syncInput({
++        operationId: "sync-2",
++        weeks: [
++          week({ slots: [math] }),
++          week({ start: "2026-11-09", end: "2026-11-15", ok: false, message: "登录失效" }),
++        ],
++      }),
++      current,
++    );
++    expect(failed).toMatchObject({
++      ok: true,
++      changed: true,
++      coverage: { start: "2026-11-02", end: "2026-11-08" },
++      failures: ["2026-11-09–2026-11-15（登录失效）"],
++    });
++    let snapshot = await store.read({ includeCompleted: true });
++    expect(snapshot.sources.find((source) => source.id === "yungu-schedule")).toMatchObject({
++      status: "error",
++      message: expect.stringContaining("登录失效"),
++    });
++
++    const onlyFailed = await store.sync(
++      syncInput({
++        operationId: "sync-3",
++        weeks: [week({ start: "2026-11-09", end: "2026-11-15", ok: false, message: "平台异常" })],
++      }),
++      current,
++    );
++    expect(onlyFailed).toMatchObject({ ok: true, coverage: { start: null, end: null } });
++    snapshot = await store.read({ includeCompleted: true });
++    expect(itemByTitle(snapshot, "数学").status).toBe("pending");
++    expect(snapshot.sources.find((source) => source.id === "yungu-schedule")?.status).toBe("error");
++  });
++
++  it("refuses Agent edits to source-owned courses and reports conflicts structurally", async () => {
++    const store = fixture();
++    await store.apply(seed(), current);
++    await store.sync(syncInput({ weeks: [week({ slots: [math] })] }), current);
++    let snapshot = await store.read({ includeCompleted: true });
++    const course = itemByTitle(snapshot, "数学");
++    const courseBlock = snapshot.blocks.find((candidate) => candidate.itemId === course.id)!;
++
++    const edited = await store.apply(
++      {
++        operationId: "edit-course",
++        expectedRevision: snapshot.revision,
++        items: [{ ...course, title: "改名的课" }],
++      },
++      current,
++    );
++    expect(edited).toMatchObject({
++      ok: false,
++      code: "source_owned",
++      error: expect.stringContaining("source_owned"),
++      details: { itemId: course.id },
++    });
++
++    const courseSource = snapshot.sources.find((source) => source.id === "yungu-schedule")!;
++    const sourceEdit = await store.apply(
++      {
++        operationId: "edit-course-source",
++        expectedRevision: snapshot.revision,
++        sources: [{ ...courseSource, managedBy: "agent" }],
++      },
++      current,
++    );
++    expect(sourceEdit).toMatchObject({ ok: false, code: "source_owned" });
++
++    for (const change of [
++      { deleteBlockIds: [courseBlock.id] },
++      { unlockBlockIds: [courseBlock.id] },
++      {
++        blocks: [
++          {
++            ...courseBlock,
++            locked: false,
++            end: "2026-11-03T09:00:00+08:00",
++          },
++        ],
++      },
++    ]) {
++      const refused = await store.apply(
++        { operationId: `course-${JSON.stringify(change).slice(0, 12)}`, expectedRevision: snapshot.revision, ...change },
++        current,
++      );
++      expect(refused).toMatchObject({ ok: false, code: "source_owned" });
++    }
++    expect((await store.read({ includeCompleted: true })).revision).toBe(snapshot.revision);
++
++    const conflict = await store.apply(
++      {
++        operationId: "overlap",
++        expectedRevision: snapshot.revision,
++        items: [task({ id: "overlap-task", title: "晨读" })],
++        blocks: [
++          block({
++            id: "overlap-block",
++            itemId: "overlap-task",
++            start: "2026-11-03T08:20:00+08:00",
++            end: "2026-11-03T08:40:00+08:00",
++          }),
++        ],
++      },
++      current,
++    );
++    expect(conflict).toMatchObject({
++      ok: false,
++      code: "time_conflict",
++      conflicts: [{ blockId: courseBlock.id, itemId: course.id, title: "数学" }],
++    });
++    expect((await store.read({ includeCompleted: true })).revision).toBe(snapshot.revision);
++
++    const allowed = await store.apply(
++      {
++        operationId: "intentional-overlap",
++        expectedRevision: snapshot.revision,
++        allowOverlaps: true,
++        items: [task({ id: "overlap-task", title: "晨读" })],
++        blocks: [
++          block({
++            id: "overlap-block",
++            itemId: "overlap-task",
++            start: "2026-11-03T08:20:00+08:00",
++            end: "2026-11-03T08:40:00+08:00",
++          }),
++        ],
++      },
++      current,
++    );
++    expect(allowed).toMatchObject({ ok: true });
++  });
++
++  it("summarizes a ranged read with coverage and unscheduled noise", async () => {
++    const store = fixture();
++    await store.apply(
++      seed({
++        items: [task(), task({ id: "undated", title: "无日期事项", nextAction: "" })],
++      }),
++      current,
++    );
++    await store.sync(
++      syncInput({
++        weeks: [week({ slots: [math, physics] })],
++      }),
++      current,
++    );
++    const ranged = await store.read({
++      start: "2026-11-03T00:00:00+08:00",
++      end: "2026-11-04T00:00:00+08:00",
++    });
++    expect(ranged.range).toMatchObject({
++      start: "2026-11-02T16:00:00.000Z",
++      end: "2026-11-03T16:00:00.000Z",
++      blocks: 2,
++      scheduledItems: 2,
++      fixedItems: 2,
++      unscheduledItems: 2,
++      coverage: { covered: true },
++    });
++    const yungu = ranged.range?.coverage.sources.find((source) => source.id === "yungu-schedule");
++    expect(yungu).toMatchObject({
++      managedBy: "source",
++      coverageStart: "2026-11-02",
++      coverageEnd: "2026-11-08",
++      stale: false,
++    });
++    expect(ranged.range?.coverage.sources.find((source) => source.id === "local")).toMatchObject({
++      stale: true,
++    });
++    const failedOnly = await store.sync(
++      syncInput({
++        operationId: "sync-failed",
++        weeks: [week({ start: "2026-11-09", end: "2026-11-15", ok: false, message: "平台异常" })],
++      }),
++      current,
++    );
++    expect(failedOnly.coverage).toEqual({ start: null, end: null });
++    const uncovered = await store.read({
++      start: "2026-11-03T00:00:00+08:00",
++      end: "2026-11-04T00:00:00+08:00",
++    });
++    expect(uncovered.range?.coverage.covered).toBe(false);
++    expect(
++      uncovered.range?.coverage.sources.find((source) => source.id === "yungu-schedule"),
++    ).toMatchObject({ status: "error", stale: true });
++    expect((await store.read({ includeCompleted: true })).range).toBeUndefined();
++  });
++
++  it("preserves completed course history when a later sync moves the same occurrence", async () => {
++    const store = fixture();
++    await store.sync(syncInput({ weeks: [week({ slots: [math] })] }), current);
++    const snapshot = await store.read({ includeCompleted: true });
++    const course = itemByTitle(snapshot, "数学");
++    const courseBlock = snapshot.blocks.find((candidate) => candidate.itemId === course.id)!;
++    await store.feedback(
++      {
++        operationId: "finish-course-segment",
++        expectedRevision: snapshot.revision,
++        kind: "complete_block",
++        targetId: courseBlock.id,
++      },
++      current,
++    );
++    const moved = await store.sync(
++      syncInput({
++        operationId: "sync-2",
++        weeks: [
++          week({ slots: [{ ...math, title: "数学（调课）" }] }),
++        ],
++      }),
++      current,
++    );
++    expect(moved.completedHistory).toEqual([
++      expect.objectContaining({ itemId: course.id, title: "数学", reason: "block_completed" }),
++    ]);
++    const after = await store.read({ includeCompleted: true });
++    expect(after.blocks.map((candidate) => candidate.id)).toEqual([courseBlock.id]);
++    expect(after.blockProgress).toHaveLength(1);
++  });
++});
+diff --git a/src/tool.ts b/src/tool.ts
+index 188c579..ae729ed 100644
+--- a/src/tool.ts
++++ b/src/tool.ts
+@@ -2,14 +2,15 @@ import type { AnyAgentTool, OpenClawPluginToolContext } from "openclaw/plugin-sd
+ import { jsonResult } from "openclaw/plugin-sdk/tool-results";
+ import { Type } from "typebox";
+ import { z } from "zod";
+-import { applySchema, readSchema } from "./model.js";
++import { applySchema, readSchema, syncSchema } from "./model.js";
+ import type { AgendaStore } from "./types.js";
+ 
+ const toolSchema = z
+   .object({
+-    action: z.enum(["read", "apply"]),
++    action: z.enum(["read", "apply", "sync"]),
+     query: readSchema.optional(),
+     change: applySchema.optional(),
++    sync: syncSchema.optional(),
+   })
+   .strict();
+ 
+@@ -29,7 +30,7 @@ export function createAgendaTool(options: {
+     name: "agenda",
+     label: "Agenda",
+     description:
+-      "Read or atomically update the user's canonical tasks and calendar. Read first for revision and stable IDs; apply requires expectedRevision and a unique operationId. Include sources on first item creation. All timestamps require timezone offsets; dueDate is date-only. Deadlines are not execution blocks. Fixed events and locked blocks require explicit unlockBlockIds to move; user-confirmed completions require explicit reopenItemIds to reopen. On unknown write outcome read query.operationId before retrying. The website records block/task completion and undo feedback; only this tool changes plans. Read blockProgress and pending feedback, replan from the current Beijing time using existing personal scheduling rules, then include feedbackResults with IDs, adjusted/unchanged/error and a concise Chinese summary in the same apply. Completed blocks are historical and cannot be moved or deleted. A completed block does not finish its task or prove actual time spent. Do not infer source failure means no tasks.",
++      "Read, schedule, or synchronize the user's canonical tasks and calendar. read accepts query {start,end,includeCompleted,operationId}; a ranged read returns range {blocks, scheduledItems, fixedItems, unscheduledItems, coverage{covered,sources}} so uncovered intervals stay explicit. apply atomically changes this Agent's tasks, events, and blocks: it requires expectedRevision and a unique operationId, rejects time_conflict against fixed/locked/source-owned blocks unless allowOverlaps is true, and rejects any edit to source-owned courses (source_owned) — those only change through sync. sync reconciles one timetable source: stable occurrence identity is the slot start, existing entries are adopted by matching block start, absence never deletes or cancels, and cancellation requires explicit evidence {kind:platform|notice|user, detail, observedAt}. Identical sync content does not bump the revision. Include sources on first item creation. All timestamps require timezone offsets; dueDate is date-only. Deadlines are not execution blocks. Fixed events and locked blocks require explicit unlockBlockIds to move; user-confirmed completions require explicit reopenItemIds. On unknown write outcome read query.operationId before retrying. Only this tool and the local sync route change plans; the website records block/task completion and undo. Read blockProgress and pending feedback, replan from the current Beijing time using existing personal scheduling rules, then include feedbackResults with IDs, adjusted/unchanged/error and a concise Chinese summary in the same apply. Completed blocks are historical and cannot be moved or deleted.",
+     parameters: Type.Unsafe<z.input<typeof toolSchema>>(
+       z.toJSONSchema(toolSchema, { io: "input" }),
+     ),
+@@ -38,15 +39,25 @@ export function createAgendaTool(options: {
+       const parsed = toolSchema.parse(input);
+       const store = options.getStore();
+       if (parsed.action === "read") {
+-        if (parsed.change !== undefined) {
+-          throw new Error("read accepts query, not change.");
++        if (parsed.change !== undefined || parsed.sync !== undefined) {
++          throw new Error("read accepts query, not change or sync.");
+         }
+         const snapshot = await store.read(parsed.query);
+         assertCurrent();
+         return jsonResult(snapshot);
+       }
+-      if (parsed.query !== undefined || parsed.change === undefined) {
+-        throw new Error("apply requires change and does not accept query.");
++      if (parsed.action === "sync") {
++        if (parsed.query !== undefined || parsed.change !== undefined || parsed.sync === undefined) {
++          throw new Error("sync requires sync and does not accept query or change.");
++        }
++        const receipt = await store.sync(parsed.sync, assertCurrent);
++        if (receipt.ok && receipt.changed) {
++          options.onCommit(receipt.revision);
++        }
++        return jsonResult(receipt);
++      }
++      if (parsed.query !== undefined || parsed.sync !== undefined || parsed.change === undefined) {
++        throw new Error("apply requires change and does not accept query or sync.");
+       }
+       const receipt = await store.apply(parsed.change, assertCurrent);
+       if (receipt.ok && !receipt.replayed) {
+diff --git a/src/types.ts b/src/types.ts
+index 457c521..7d84472 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -1,5 +1,13 @@
+ export type AgendaStatus = "pending" | "in_progress" | "waiting" | "done" | "cancelled";
+ export type AgendaPriority = "important_urgent" | "important" | "urgent" | "normal";
++export type AgendaSourceOwner = "agent" | "source";
++
++export type AgendaCancelEvidence = {
++  kind: "platform" | "notice" | "user";
++  detail: string;
++  observedAt: string;
++  url: string | null;
++};
+ 
+ export type AgendaItem = {
+   id: string;
+@@ -17,6 +25,8 @@ export type AgendaItem = {
+   reason: string | null;
+   completedBy: "user" | "source" | null;
+   updatedAt: string;
++  /** Only a source-owned item can carry this; absence means no recorded cancellation. */
++  cancelEvidence?: AgendaCancelEvidence | null;
+ };
+ 
+ export type AgendaBlock = {
+@@ -38,6 +48,32 @@ export type AgendaSource = {
+   coverageRequired?: boolean;
+   coverageStart: string | null;
+   coverageEnd: string | null;
++  /** "source" marks a timetable the Agent may read but never edit; default is "agent". */
++  managedBy?: AgendaSourceOwner;
++};
++
++export type AgendaReadCoverageSource = {
++  id: string;
++  label: string;
++  status: AgendaSource["status"];
++  managedBy: AgendaSourceOwner;
++  coverageStart: string | null;
++  coverageEnd: string | null;
++  checkedAt: string | null;
++  stale: boolean;
++};
++
++export type AgendaReadRange = {
++  start: string;
++  end: string;
++  blocks: number;
++  scheduledItems: number;
++  fixedItems: number;
++  unscheduledItems: number;
++  coverage: {
++    covered: boolean;
++    sources: AgendaReadCoverageSource[];
++  };
+ };
+ 
+ export type AgendaSnapshot = {
+@@ -49,6 +85,8 @@ export type AgendaSnapshot = {
+   blockProgress: AgendaBlockProgress[];
+   feedback: AgendaFeedback[];
+   receipt?: AgendaReceipt | null;
++  /** Present for ranged reads: what this interval contains and which sources cover it. */
++  range?: AgendaReadRange | null;
+ };
+ 
+ export type AgendaRead = {
+@@ -67,9 +105,65 @@ export type AgendaApply = {
+   sources?: AgendaSource[];
+   unlockBlockIds?: string[];
+   reopenItemIds?: string[];
++  allowOverlaps?: boolean;
+   feedbackResults?: { id: string; status: "adjusted" | "unchanged" | "error"; summary: string }[];
+ };
+ 
++export type AgendaSyncSlot = {
++  title: string;
++  start: string;
++  end: string;
++  sourceUrl?: string | null;
++};
++
++export type AgendaSyncWeek = {
++  start: string;
++  end: string;
++  ok: boolean;
++  message?: string | null;
++  slots: AgendaSyncSlot[];
++};
++
++export type AgendaSyncCancellation = {
++  start: string;
++  evidence: AgendaCancelEvidence;
++};
++
++export type AgendaSync = {
++  operationId: string;
++  sourceId: string;
++  label?: string;
++  window: { start: string; end: string };
++  weeks: AgendaSyncWeek[];
++  cancellations?: AgendaSyncCancellation[];
++};
++
++export type AgendaBlockConflict = {
++  blockId: string;
++  itemId: string;
++  title: string;
++  start: string;
++  end: string;
++};
++
++export type AgendaSyncUnlisted = {
++  sourceKey: string;
++  itemId: string;
++  title: string;
++};
++
++export type AgendaSyncIgnoredCancellation = {
++  sourceKey: string;
++  reason: "not_found" | "already_cancelled" | "completed_history";
++};
++
++export type AgendaSyncHistory = {
++  sourceKey: string;
++  itemId: string;
++  title: string;
++  reason: "block_completed";
++};
++
+ export type AgendaBlockProgress = {
+   blockId: string;
+   itemId: string;
+@@ -116,13 +210,32 @@ export type AgendaReceipt = {
+   revision: number;
+   operationId: string;
+   replayed: boolean;
++  /** Stable machine-readable refusal or replay code; `error` carries the human sentence. */
++  code?: string;
++  details?: unknown;
++  conflicts?: AgendaBlockConflict[];
+   error?: string;
+   feedbackId?: string;
+ };
+ 
++export type AgendaSyncReceipt = AgendaReceipt & {
++  changed: boolean;
++  created: string[];
++  updated: string[];
++  adopted: string[];
++  unchanged: string[];
++  cancelled: string[];
++  unlisted: AgendaSyncUnlisted[];
++  ignoredCancellations: AgendaSyncIgnoredCancellation[];
++  completedHistory: AgendaSyncHistory[];
++  failures: string[];
++  coverage: { start: string | null; end: string | null };
++};
++
+ export type AgendaStore = {
+   read: (input?: AgendaRead) => Promise<AgendaSnapshot>;
+   apply: (input: AgendaApply, assertCurrent: () => void) => Promise<AgendaReceipt>;
++  sync: (input: AgendaSync, assertCurrent: () => void) => Promise<AgendaSyncReceipt>;
+   feedback: (input: AgendaFeedbackInput, assertCurrent: () => void) => Promise<AgendaReceipt>;
+   updateFeedbackRun: (input: AgendaFeedbackRunUpdate, assertCurrent: () => void) => Promise<number>;
+   close: () => Promise<void>;
+diff --git a/web/app.ts b/web/app.ts
+index 2ca0607..568de69 100644
+--- a/web/app.ts
++++ b/web/app.ts
+@@ -17,8 +17,12 @@ import {
+   dayLabel,
+   daySegments,
+   dayStart,
++  itemGroups,
+   itemOverdue,
++  itemType,
++  isSourceOwned,
+   safeSourceUrl,
++  sourceStaleLabel,
+   shiftDate,
+   viewDays,
+   type CalendarView,
+@@ -84,6 +88,7 @@ let view: CalendarView =
+       : "week";
+ let sourceFilter = "";
+ let statusFilter = "";
++let typeFilter = "";
+ let query = "";
+ let showCompleted = false;
+ let selectedItem: string | null = null;
+@@ -161,7 +166,7 @@ function renderFeedback(itemId?: string): TemplateResult {
+     .slice(0, 3);
+   return html`<section class="feedback-panel" aria-label="完成反馈" aria-live="polite">
+     <div class="feedback-heading">
+-      <strong>完成反馈</strong><span>标记完成后，Claw 会按当前时间评估后续安排。</span>
++      <strong>完成反馈</strong><span>标记完成后会请求 Claw 评估后续安排；没有可用后台轮次时会在这里说明。</span>
+     </div>
+     ${feedbackError ? html`<p class="feedback-error" role="alert">${feedbackError}</p>` : nothing}
+     ${
+@@ -288,6 +293,14 @@ function sourceColor(id: string): string {
+   const index = snapshot?.sources.findIndex((source) => source.id === id) ?? -1;
+   return `source-${Math.max(0, index) % 5}`;
+ }
++const TYPE_LABEL = { course: "课程", meeting: "会议", todo: "待办" } as const;
++function typeOf(item: AgendaItem): "course" | "meeting" | "todo" {
++  return itemType(item, snapshot?.sources ?? []);
++}
++function kindMatches(item: AgendaItem): boolean {
++  if (!typeFilter) return true;
++  return typeOf(item) === typeFilter;
++}
+ function filteredItems(): AgendaItem[] {
+   return (snapshot?.items ?? []).filter(
+     (item) =>
+@@ -300,6 +313,7 @@ function filteredItems(): AgendaItem[] {
+           ))) &&
+       (!sourceFilter || item.sourceId === sourceFilter) &&
+       (!statusFilter || item.status === statusFilter) &&
++      kindMatches(item) &&
+       (!query ||
+         `${item.title} ${item.nextAction} ${sourceLabel(item.sourceId)}`
+           .toLowerCase()
+@@ -333,7 +347,10 @@ function itemButton(item: AgendaItem, compact = false): TemplateResult {
+     <span class="item-card-heading"
+       ><span class="source-dot"></span><strong>${item.title}</strong></span
+     >
+-    <span class="item-meta">${sourceLabel(item.sourceId)}<span>·</span>${STATUS[item.status]}</span>
++    <span class="item-meta"
++      ><span class="item-type ${typeOf(item)}">${TYPE_LABEL[typeOf(item)]}</span
++      ><span>·</span>${sourceLabel(item.sourceId)}<span>·</span>${STATUS[item.status]}</span
++    >
+     ${!compact && (item.dueAt || item.dueDate) ? html`<span class="due-label ${itemOverdue(item, now) ? "overdue" : ""}">${itemOverdue(item, now) ? "已逾期 · " : "截止 "}${deadline(item)}</span>` : nothing}
+   </button>`;
+ }
+@@ -359,7 +376,7 @@ function renderMonth(days: string[], items: AgendaItem[], blocks: AgendaBlock[])
+           </button>
+           ${!dayCovered(date, snapshot?.sources ?? []) ? html`<span class="coverage-dot" title="来源覆盖不足，未完整整理" aria-label="未完整整理"></span>` : nothing}
+           <div class="month-items">
+-            ${dayItems.slice(0, 3).map((item) => html`<button class="month-event ${sourceColor(item.sourceId)}" @click=${() => openItem(item.id)}><span class="source-dot"></span>${item.title}</button>`)}
++            ${dayItems.slice(0, 3).map((item) => html`<button class="month-event ${sourceColor(item.sourceId)} ${typeOf(item) === "course" ? "course-entry" : ""}" @click=${() => openItem(item.id)}><span class="source-dot"></span>${item.title}</button>`)}
+             ${dayItems.length > 3 ? html`<button class="more-events" @click=${() => changeDate(date, "day")}>+${dayItems.length - 3} 项安排</button>` : nothing}
+             ${dues.length ? html`<button class="month-due" @click=${() => changeDate(date, "day")}>${dues.length} 项截止</button>` : nothing}
+           </div>
+@@ -478,7 +495,7 @@ function renderTimeline(
+                 segments.map(({ block, item, startMinute: start, endMinute: end }) => {
+                   const active = currentMinute >= start && currentMinute < end;
+                   return html`<article
+-                    class="agenda-entry ${sourceColor(item.sourceId)} ${active ? "active-entry" : ""} ${item.status === "done" || snapshot?.blockProgress.some((entry) => entry.blockId === block.id) ? "completed-entry" : ""}"
++                    class="agenda-entry ${sourceColor(item.sourceId)} ${typeOf(item) === "course" ? "course-entry" : ""} ${active ? "active-entry" : ""} ${item.status === "done" || snapshot?.blockProgress.some((entry) => entry.blockId === block.id) ? "completed-entry" : ""}"
+                     data-start-minute=${start}
+                     data-end-minute=${end}
+                     style=${`flex-grow:${Math.max(30, end - start)}`}
+@@ -489,7 +506,7 @@ function renderTimeline(
+                     </span>
+                     <div class="agenda-entry-card">
+                       <span class="agenda-entry-meta">
+-                        <span>${sourceLabel(item.sourceId)} · ${end - start} 分钟</span>
++                        <span>${sourceLabel(item.sourceId)} · ${TYPE_LABEL[typeOf(item)]} · ${end - start} 分钟</span>
+                         <span class="agenda-entry-state">${blockState(block, item)}</span>
+                       </span>
+                       <button
+@@ -526,7 +543,7 @@ function renderTimeline(
+                     }) => {
+                       const minutes = segmentEnd - segmentStart;
+                       return html`<div
+-                        class="time-event ${sourceColor(item.sourceId)} ${item.status === "done" ? "completed" : ""} ${minutes < 50 ? "short-event" : ""}"
++                        class="time-event ${sourceColor(item.sourceId)} ${typeOf(item) === "course" ? "course-entry" : ""} ${item.status === "done" ? "completed" : ""} ${minutes < 50 ? "short-event" : ""}"
+                         style=${`top: calc(var(--hour-px) * ${segmentStart - startMinute} / 60); height: calc(var(--hour-px) * ${minutes} / 60); min-height: 14px; left: calc(${(column / columns) * 100}% + 3px); width: calc(${100 / columns}% - 6px)`}
+                       >
+                         <button
+@@ -551,55 +568,21 @@ function renderTimeline(
+   </div>`;
+ }
+ function renderSidebar(items: AgendaItem[], blocks: AgendaBlock[]): TemplateResult {
+-  const arranged = new Set(
+-    blocks.filter((block) => Date.parse(block.end) > now).map((block) => block.itemId),
+-  );
+-  const groups = [
+-    { label: "已逾期", key: "overdue", items: items.filter((item) => itemOverdue(item, now)) },
+-    {
+-      label: "未安排",
+-      key: "unscheduled",
+-      items: items.filter(
+-        (item) =>
+-          !arranged.has(item.id) &&
+-          (item.dueAt || item.dueDate) &&
+-          item.status !== "waiting" &&
+-          item.status !== "done" &&
+-          item.status !== "cancelled",
+-      ),
+-    },
+-    {
+-      label: "无日期",
+-      key: "undated",
+-      items: items.filter(
+-        (item) =>
+-          !arranged.has(item.id) &&
+-          !item.dueAt &&
+-          !item.dueDate &&
+-          item.status !== "waiting" &&
+-          item.status !== "done" &&
+-          item.status !== "cancelled",
+-      ),
+-    },
+-    {
+-      label: "已安排",
+-      key: "scheduled",
+-      items: items.filter(
+-        (item) =>
+-          arranged.has(item.id) &&
+-          !itemOverdue(item, now) &&
+-          item.status !== "waiting" &&
+-          item.status !== "done" &&
+-          item.status !== "cancelled",
+-      ),
+-    },
+-    { label: "等待中", key: "waiting", items: items.filter((item) => item.status === "waiting") },
++  const groups = itemGroups(items, blocks, now);
++  const sections = [
++    { label: "已逾期", key: "overdue", items: groups.overdue, collapsed: false },
++    { label: "未安排", key: "unscheduled", items: groups.unscheduled, collapsed: false },
++    { label: "无日期", key: "undated", items: groups.undated, collapsed: false },
++    { label: "已安排", key: "scheduled", items: groups.scheduled, collapsed: false },
++    { label: "已结束安排", key: "history", items: groups.history, collapsed: true },
++    { label: "等待中", key: "waiting", items: groups.waiting, collapsed: false },
+     ...(showCompleted || desktopMode
+       ? [
+           {
+             label: showCompleted ? "已完成 / 已取消" : "今日已完成",
+             key: "completed",
+-            items: items.filter((item) => item.status === "done" || item.status === "cancelled"),
++            items: groups.completed,
++            collapsed: true,
+           },
+         ]
+       : []),
+@@ -611,16 +594,16 @@ function renderSidebar(items: AgendaItem[], blocks: AgendaBlock[]): TemplateResu
+         <span class="count">${items.length}</span>
+       </div>
+       <p class="section-caption">执行安排在日历，截止与待办在这里。</p>
+-      ${groups.map(
++      ${sections.map(
+         (group) =>
+-          html`<details class="task-group" ?open=${true} data-group=${group.key}>
++          html`<details class="task-group" ?open=${!group.collapsed} data-group=${group.key}>
+             <summary><span>${group.label}</span><span>${group.items.length}</span></summary>
+             <div class="group-items">
+               ${group.items.length ? group.items.map((item) => itemButton(item)) : html`<p class="empty-group">暂无${group.label}事项</p>`}
+             </div>
+           </details>`,
+       )}
+-      <p class="read-only-note">勾选本段完成；在详情中完成整项任务。新增事项仍可在 Claw 中沟通。</p>
++      <p class="read-only-note">课程由课表来源维护，只有明确的取消信息才会移除；待办事项仍可在 Claw 中沟通调整。</p>
+     </section>
+     <section class="sources panel">
+       <div class="section-heading">
+@@ -630,17 +613,19 @@ function renderSidebar(items: AgendaItem[], blocks: AgendaBlock[]): TemplateResu
+       ${
+         snapshot?.sources.length
+           ? snapshot.sources.map(
+-              (source) =>
+-                html`<div class="source-status">
++              (source) => {
++                const staleLabel = sourceStaleLabel(source);
++                return html`<div class="source-status ${staleLabel ? "source-stale" : ""}">
+                   <div class="source-status-title">
+                     <span class="status-dot ${source.status}"></span><strong>${source.label}</strong
+                     ><span
+                       >${{ ok: "已读取", waiting: "等待", error: "读取失败", unknown: "未读取" }[source.status]}</span
+-                    >
++                    >${staleLabel ? html`<span class="source-stale-badge">${staleLabel}</span>` : nothing}
+                   </div>
+                   <p>${source.checkedAt ? dateTime(source.checkedAt) : "暂无读取记录"}</p>
+-                  ${source.coverageStart && source.coverageEnd ? html`<p>覆盖 ${source.coverageStart} — ${source.coverageEnd}</p>` : html`<p>${source.coverageRequired === false ? "按事项记录，不参与日期覆盖" : "尚无日期覆盖范围"}</p>`}${source.message ? html`<p class="source-message">${source.message}</p>` : nothing}
+-                </div>`,
++                  ${source.coverageStart && source.coverageEnd ? html`<p>覆盖 ${source.coverageStart} — ${source.coverageEnd}</p>` : html`<p>${source.coverageRequired === false ? "按事项记录，不参与日期覆盖" : "尚无日期覆盖范围"}</p>`}${source.managedBy === "source" ? html`<p class="source-owner">课表来源：课程只按明确课表或取消更新</p>` : nothing}${source.message ? html`<p class="source-message">${source.message}</p>` : nothing}
++                </div>`;
++              },
+             )
+           : html`<p class="empty-group">尚未接入来源。请让 Claw 整理你的事项。</p>`
+       }
+@@ -681,7 +666,7 @@ function renderDetail(): TemplateResult | typeof nothing {
+       </div>
+       <h2>${item.title}</h2>
+       <p class="detail-status">
+-        ${STATUS[item.status]}<span>·</span>${item.kind === "event" ? "课程 / 会议" : "任务"}<span>·</span>${PRIORITY[item.priority]}
++        ${STATUS[item.status]}<span>·</span>${isSourceOwned(item, snapshot?.sources ?? []) ? "课程（来源维护，不可改期）" : TYPE_LABEL[typeOf(item)]}<span>·</span>${PRIORITY[item.priority]}
+       </p>
+       ${
+         item.kind === "task"
+@@ -712,6 +697,7 @@ function renderDetail(): TemplateResult | typeof nothing {
+       ${blocks.length ? blocks.map((block) => html`<div class="detail-block"><strong>${dateTime(block.start)} — ${dateTime(block.end)}</strong><span>${block.allDay ? "全天 · " : ""}${block.locked ? "▣ 已锁定，普通重排不会移动" : "可由 Claw 调整"}</span><span class="detail-progress">${blockState(block, item)}</span>${completionControl(block, item)}${block.reason ? html`<p>${block.reason}</p>` : nothing}</div>`) : html`<p class="empty-group">尚未安排执行时间</p>`}
+       ${url ? html`<a class="source-link" href=${url} target="_blank" rel="noopener noreferrer">查看原始事项 ↗</a>` : nothing}
+       ${renderFeedback(item.id)}
++      ${isSourceOwned(item, snapshot?.sources ?? []) ? html`<p class="source-owner-note">课程来自课表来源，默认不可更改；只有学校/老师的明确通知或你的明确确认才会从日程移除。</p>` : nothing}
+       <p class="read-only-note">完成反馈不会移动锁定安排。需要修改其他信息？请在 Claw 中告诉我。</p>
+     </article>
+   </dialog>`;
+@@ -807,6 +793,21 @@ function update(scroll = false): void {
+               <option value="">全部状态</option>
+               ${Object.entries(STATUS).map(([value, label]) => html`<option value=${value}>${label}</option>`)}
+             </select></label
++          ><label class="filter-select"
++            ><span>类型</span
++            ><select
++              aria-label="筛选类型"
++              .value=${typeFilter}
++              @change=${(event: Event) => {
++                typeFilter = (event.target as HTMLSelectElement).value;
++                update();
++              }}
++            >
++              <option value="">全部类型</option>
++              <option value="course">课程</option>
++              <option value="meeting">会议</option>
++              <option value="todo">待办</option>
++            </select></label
+           ><label class="completed-toggle"
+             ><input
+               type="checkbox"
+diff --git a/web/calendar.test.ts b/web/calendar.test.ts
+index bcbb1de..1267b9d 100644
+--- a/web/calendar.test.ts
++++ b/web/calendar.test.ts
+@@ -1,10 +1,13 @@
+ import { describe, expect, it } from "vitest";
+-import type { AgendaBlock, AgendaSource } from "../src/types.js";
++import type { AgendaBlock, AgendaItem, AgendaSource } from "../src/types.js";
+ import {
+   beijingDate,
+   dayCovered,
+   daySegments,
++  itemGroups,
+   itemOverdue,
++  itemType,
++  sourceStaleLabel,
+   viewDays,
+   weekStart,
+ } from "./calendar.js";
+@@ -124,3 +127,84 @@ describe("Agenda calendar display contracts", () => {
+     expect(itemOverdue({ ...due, status: "done" }, Date.parse("2026-10-21T16:00:00Z"))).toBe(false);
+   });
+ });
++
++const courseSource: AgendaSource = {
++  id: "yungu-schedule",
++  label: "云谷课表",
++  checkedAt: "2026-11-02T22:00:00.000Z",
++  status: "ok",
++  message: null,
++  coverageStart: "2026-11-02",
++  coverageEnd: "2026-11-08",
++  managedBy: "source",
++};
++const localSource: AgendaSource = {
++  id: "local",
++  label: "本地",
++  checkedAt: null,
++  status: "ok",
++  message: null,
++  coverageRequired: false,
++  coverageStart: null,
++  coverageEnd: null,
++};
++const itemShape = {
++  kind: "task" as const,
++  status: "pending" as const,
++  sourceUrl: null,
++  dueAt: null,
++  dueDate: null,
++  estimatedMinutes: null,
++  priority: "normal" as const,
++  nextAction: "",
++  reason: null,
++  completedBy: null,
++  updatedAt: "2026-11-02T01:00:00.000Z",
++};
++const course: AgendaItem = {
++  ...itemShape,
++  id: "course",
++  kind: "event",
++  title: "数学",
++  sourceId: "yungu-schedule",
++  sourceKey: "2026-11-02T00:10:00.000Z",
++};
++const todo: AgendaItem = {
++  ...itemShape,
++  id: "todo",
++  title: "写笔记",
++  sourceId: "local",
++  sourceKey: null,
++};
++const now = Date.parse("2026-11-03T12:00:00+08:00");
++
++describe("Agenda course and staleness display contracts", () => {
++  it("labels source-owned events as courses and keeps ended courses out of undated todos", () => {
++    const sources = [courseSource, localSource];
++    expect(itemType(course, sources)).toBe("course");
++    expect(itemType(todo, sources)).toBe("todo");
++    expect(itemType({ ...course, sourceId: "local" }, sources)).toBe("meeting");
++    const groups = itemGroups(
++      [course, todo],
++      [block("course", "2026-11-02T08:10:00+08:00", "2026-11-02T08:50:00+08:00")],
++      now,
++    );
++    expect(groups.history.map((item) => item.id)).toEqual(["course"]);
++    expect(groups.undated.map((item) => item.id)).toEqual(["todo"]);
++    expect(groups.scheduled).toEqual([]);
++  });
++
++  it("surfaces stale source coverage without hiding the source", () => {
++    expect(sourceStaleLabel(courseSource, "2026-11-03")).toBeNull();
++    expect(sourceStaleLabel({ ...courseSource, checkedAt: "2026-10-24T22:41:30.000Z" }, "2026-11-03")).toBe(
++      "已 9 天未更新",
++    );
++    expect(sourceStaleLabel({ ...courseSource, coverageEnd: "2026-10-30" }, "2026-11-03")).toBe(
++      "覆盖已过期",
++    );
++    expect(sourceStaleLabel({ ...courseSource, status: "error" }, "2026-11-03")).toBe("读取失败");
++    expect(sourceStaleLabel({ ...courseSource, checkedAt: null }, "2026-11-03")).toBe(
++      "没有读取时间",
++    );
++  });
++});
+diff --git a/web/calendar.ts b/web/calendar.ts
+index ceac4d4..5424148 100644
+--- a/web/calendar.ts
++++ b/web/calendar.ts
+@@ -156,3 +156,69 @@ export function safeSourceUrl(url: string | null): string | null {
+     return null;
+   }
+ }
++
++const STALE_CHECK_DAYS = 7;
++export type ItemType = "course" | "meeting" | "todo";
++export type SidebarGroups = {
++  overdue: AgendaItem[];
++  unscheduled: AgendaItem[];
++  undated: AgendaItem[];
++  scheduled: AgendaItem[];
++  history: AgendaItem[];
++  waiting: AgendaItem[];
++  completed: AgendaItem[];
++};
++
++export function isSourceOwned(item: AgendaItem, sources: AgendaSource[]): boolean {
++  return sources.some((source) => source.id === item.sourceId && source.managedBy === "source");
++}
++
++export function itemType(item: AgendaItem, sources: AgendaSource[]): ItemType {
++  if (item.kind === "task") return "todo";
++  return isSourceOwned(item, sources) ? "course" : "meeting";
++}
++
++export function sourceStaleLabel(source: AgendaSource, today = beijingDate()): string | null {
++  if (source.status === "error") return "读取失败";
++  if (source.status === "waiting") return "等待读取";
++  if (source.status === "unknown") return "尚未读取";
++  if (!source.coverageEnd) return "尚无覆盖范围";
++  if (source.coverageEnd < today) return "覆盖已过期";
++  if (!source.checkedAt) return "没有读取时间";
++  const checked = beijingDate(source.checkedAt);
++  const age = Math.floor(
++    (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${checked}T00:00:00Z`)) / DAY,
++  );
++  return age > STALE_CHECK_DAYS ? `已 ${age} 天未更新` : null;
++}
++
++export function itemGroups(items: AgendaItem[], blocks: AgendaBlock[], now: number): SidebarGroups {
++  const placed = new Set(blocks.map((block) => block.itemId));
++  const future = new Set(
++    blocks.filter((block) => Date.parse(block.end) > now).map((block) => block.itemId),
++  );
++  const active = items.filter((item) => item.status !== "done" && item.status !== "cancelled");
++  const overdue = active.filter((item) => itemOverdue(item, now));
++  const scheduled = active.filter(
++    (item) => future.has(item.id) && !itemOverdue(item, now) && item.status !== "waiting",
++  );
++  return {
++    overdue,
++    unscheduled: active.filter(
++      (item) =>
++        !placed.has(item.id) &&
++        (item.dueAt || item.dueDate) &&
++        item.status !== "waiting",
++    ),
++    // Ended courses keep their history instead of becoming undated todos.
++    undated: active.filter(
++      (item) => !placed.has(item.id) && !item.dueAt && !item.dueDate && item.status !== "waiting",
++    ),
++    scheduled,
++    history: active.filter(
++      (item) => placed.has(item.id) && !future.has(item.id) && item.status !== "waiting",
++    ),
++    waiting: items.filter((item) => item.status === "waiting"),
++    completed: items.filter((item) => item.status === "done" || item.status === "cancelled"),
++  };
++}
+diff --git a/web/styles.css b/web/styles.css
+index 2e31524..48ef9eb 100644
+--- a/web/styles.css
++++ b/web/styles.css
+@@ -2030,3 +2030,69 @@ html[data-display="desktop"][data-theme="dark"] .detail-block p {
+ html[data-display="desktop"] .time-event-open > span {
+   font-size: 12px;
+ }
++
++/* Source-owned courses and staleness stay visually distinct from agent-schedulable todos. */
++.item-type {
++  font-size: 9px;
++  line-height: 1;
++  padding: 2px 5px;
++  border-radius: 999px;
++  background: #eef0f4;
++  color: #5b6270;
++  letter-spacing: 0.02em;
++}
++.item-meta .item-type {
++  margin-right: 4px;
++}
++.item-type.course {
++  background: #e8eefc;
++  color: #33538f;
++}
++.item-type.meeting {
++  background: #f2ecfb;
++  color: #5c4390;
++}
++.source-status .source-stale-badge {
++  margin-left: auto;
++  font-size: 9px;
++  padding: 2px 6px;
++  border-radius: 999px;
++  background: #fdf0e2;
++  color: #9a5a17;
++  white-space: nowrap;
++}
++.source-status p.source-owner {
++  color: #5b6270;
++}
++.source-owner-note {
++  background: #f2f5fb;
++  border: 1px solid #e2e9f5;
++  border-radius: 8px;
++  padding: 9px 11px;
++  font-size: 12px;
++  color: #4a5568;
++  margin: 12px 0 0;
++}
++.course-entry {
++  box-shadow: inset 2px 0 0 #7f97c9;
++}
++.task-group[data-group="history"] summary > span:first-child {
++  color: #7b8290;
++}
++html[data-display="desktop"][data-theme="dark"] .item-type {
++  background: rgba(255, 255, 255, 0.08);
++  color: var(--glass-muted);
++}
++html[data-display="desktop"][data-theme="dark"] .item-type.course {
++  background: rgba(127, 151, 201, 0.24);
++  color: #c3d3f2;
++}
++html[data-display="desktop"][data-theme="dark"] .source-stale-badge {
++  background: rgba(212, 150, 71, 0.22);
++  color: #f0c48c;
++}
++html[data-display="desktop"][data-theme="dark"] .source-owner-note {
++  background: var(--glass-bg);
++  border-color: var(--glass-line);
++  color: var(--glass-muted);
++}
+-- 
+2.43.0
+
