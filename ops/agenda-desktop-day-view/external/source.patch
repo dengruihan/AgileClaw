@@ -1,0 +1,491 @@
+From 1c95defae6801c5470924c306e7f191b8181b5e4 Mon Sep 17 00:00:00 2001
+From: dengruihan <551310554@qq.com>
+Date: Tue, 3 Nov 2026 12:08:35 +0800
+Subject: [PATCH] feat(agenda): unify desktop day view into one full-day table
+
+---
+ AGENTS.md            |   2 +-
+ README.md            |   8 ++--
+ web/app.ts           | 105 +++++++++++--------------------------------
+ web/calendar.test.ts |  72 +++++++++++++++++++++++++++++
+ web/calendar.ts      |  28 ++++++++++++
+ web/styles.css       |  41 +++++++++++++++--
+ 6 files changed, 170 insertions(+), 86 deletions(-)
+
+diff --git a/AGENTS.md b/AGENTS.md
+index 9a9f0da..b7d2b57 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -11,7 +11,7 @@
+   build output, and dependencies out of Git. Deploy code without changing the
+   live SQLite database or personal sentinel configuration.
+ - Validate visual changes with inspected screenshots using synthetic schedules.
+-  Preserve readable event times, half-day boundaries, and system appearance.
++  Preserve readable event times, full-day continuity, and system appearance.
+ - Run the relevant existing tests and build before committing. Reload only the
+   Agenda plugin when deployment is authorized; a Gateway restart needs explicit
+   approval. Wait for in-flight work rather than interrupting other tasks.
+diff --git a/README.md b/README.md
+index eaf0851..138b4b1 100644
+--- a/README.md
++++ b/README.md
+@@ -73,9 +73,11 @@ copy commands. Preserve the installed `operations/` directory and live database.
+ The website listens at `http://127.0.0.1:18810/agenda/`. Add `?display=desktop`
+ for the desktop layout; `theme=dark` or `theme=light` overrides system appearance,
+ and `dock=96` controls the reserved bottom strip in CSS pixels.
+-The desktop day view centers the current Beijing time and follows it as time
+-passes. Scrolling manually pauses following; click **现在** to resume. Selecting
+-the other half-day keeps that period open for browsing.
++The desktop day view shows the whole Beijing day in one continuous schedule
++table: all-day entries and deadlines stay pinned while timed blocks for the
++morning and afternoon share the same list. It centers the current Beijing time
++and follows it as time passes. Scrolling manually pauses following; click
++**现在** to resume.
+ 
+ ## Completion feedback
+ 
+diff --git a/web/app.ts b/web/app.ts
+index 568de69..13cd306 100644
+--- a/web/app.ts
++++ b/web/app.ts
+@@ -15,8 +15,9 @@ import {
+   dateTime,
+   dayCovered,
+   dayLabel,
+-  daySegments,
++  daySchedule,
+   dayStart,
++  dueDate,
+   itemGroups,
+   itemOverdue,
+   itemType,
+@@ -46,12 +47,6 @@ const PRIORITY = {
+   urgent: "紧急",
+   normal: "普通",
+ };
+-type DayPeriod = "am" | "pm";
+-const DAY_PERIODS = {
+-  am: "上午 00:00–12:00",
+-  pm: "下午 12:00–24:00",
+-};
+-let dayPeriod: DayPeriod | null = null;
+ let snapshot: AgendaSnapshot | null = null;
+ let selectedDate = beijingDate();
+ // Desktop follows the system appearance unless ?theme=dark|light overrides it.
+@@ -320,9 +315,6 @@ function filteredItems(): AgendaItem[] {
+           .includes(query.toLowerCase())),
+   );
+ }
+-function dueDate(item: AgendaItem): string | null {
+-  return item.dueDate ?? (item.dueAt ? beijingDate(item.dueAt) : null);
+-}
+ function deadline(item: AgendaItem): string {
+   return item.dueAt
+     ? dateTime(item.dueAt)
+@@ -388,11 +380,9 @@ function renderTimeline(
+   days: string[],
+   items: AgendaItem[],
+   blocks: AgendaBlock[],
+-  period?: DayPeriod,
++  table = false,
+ ): TemplateResult {
+-  const startMinute = period === "pm" ? 720 : 0;
+-  const endMinute = period ? startMinute + 720 : 1440;
+-  const hours = (endMinute - startMinute) / 60;
++  const hours = 24;
+   const byId = new Map(items.map((item) => [item.id, item]));
+   const dayData = days.map((date) => {
+     const dateStart = dayStart(date);
+@@ -400,32 +390,15 @@ function renderTimeline(
+       date,
+       dateStart,
+       currentMinute: (now - dateStart) / 60_000,
+-      allDayBlocks: blocksOnDay(
+-        blocks.filter((block) => block.allDay),
+-        date,
+-      ),
+-      deadlines: items.filter((item) => {
+-        if (dueDate(item) !== date) return false;
+-        if (!period || !item.dueAt) return true;
+-        const minute = (Date.parse(item.dueAt) - dateStart) / 60_000;
+-        return minute >= startMinute && minute < endMinute;
+-      }),
+-      segments: daySegments(blocks, date).flatMap((segment) => {
+-        const item = byId.get(segment.block.itemId);
+-        const segmentStart = Math.max(startMinute, segment.startMinute);
+-        const segmentEnd = Math.min(endMinute, segment.endMinute);
+-        return item && segmentEnd > segmentStart
+-          ? [{ ...segment, item, startMinute: segmentStart, endMinute: segmentEnd }]
+-          : [];
+-      }),
++      ...daySchedule(blocks, items, date),
+     };
+   });
+   const hasAllDay = dayData.some((day) => day.allDayBlocks.length || day.deadlines.length);
+   return html`<div
+-    class="timeline-scroll ${period ? "half-day-timeline" : ""}"
++    class="timeline-scroll ${table ? "day-table-timeline" : ""}"
+     data-timeline
+     data-hours=${hours}
+-    data-start-hour=${startMinute / 60}
++    data-start-hour=${0}
+     @wheel=${() => {
+       followNow = false;
+     }}
+@@ -447,7 +420,7 @@ function renderTimeline(
+         ${days.map((date) => html`<button class="day-heading ${date === beijingDate(now) ? "today" : ""}" @click=${() => changeDate(date, "day")} title=${dayCovered(date, snapshot?.sources ?? []) ? `${date} · 来源已覆盖` : `${date} · 未完整整理`}><span>${dayLabel(date)}</span><strong>${Number(date.slice(8))}</strong>${!dayCovered(date, snapshot?.sources ?? []) ? html`<span class="day-coverage-dot" aria-label="未完整整理"></span>` : nothing}</button>`)}
+       </div>
+       ${
+-        !period || hasAllDay
++        !table || hasAllDay
+           ? html`<div class="all-day-row">
+               <span class="rail-caption">全天<br />/ 截止</span>${dayData.map(
+                 ({ allDayBlocks, deadlines }) => html`<div class="all-day-cell">
+@@ -480,12 +453,10 @@ function renderTimeline(
+           : nothing
+       }
+       ${
+-        period
+-          ? html`<div class="agenda-rows" aria-label="半天日程">
++        table
++          ? html`<div class="agenda-rows" aria-label="全天日程">
+               ${
+-                dayData.some(
+-                  ({ currentMinute }) => currentMinute >= startMinute && currentMinute < endMinute,
+-                )
++                dayData.some(({ currentMinute }) => currentMinute >= 0 && currentMinute < 1440)
+                   ? html`<div class="agenda-now" role="status">
+                       <span>现在 ${clock(now)}</span>
+                     </div>`
+@@ -524,11 +495,11 @@ function renderTimeline(
+                   </article>`;
+                 }),
+               )}
+-              ${dayData.every((day) => !day.segments.length) ? html`<p class="agenda-empty">这个时段暂无定时安排</p>` : nothing}
++              ${dayData.every((day) => !day.segments.length) ? html`<p class="agenda-empty">今天暂无定时安排</p>` : nothing}
+             </div>`
+           : html`<div class="time-body">
+               <div class="time-rail">
+-                ${Array.from({ length: hours }, (_, hour) => html`<span style=${`top: calc(var(--hour-px) * ${hour})`}>${String(startMinute / 60 + hour).padStart(2, "0")}:00</span>`)}
++                ${Array.from({ length: hours }, (_, hour) => html`<span style=${`top: calc(var(--hour-px) * ${hour})`}>${String(hour).padStart(2, "0")}:00</span>`)}
+               </div>
+               ${dayData.map(({ date, dateStart, currentMinute, segments }) => {
+                 return html`<div class="day-column" data-date=${date}>
+@@ -544,7 +515,7 @@ function renderTimeline(
+                       const minutes = segmentEnd - segmentStart;
+                       return html`<div
+                         class="time-event ${sourceColor(item.sourceId)} ${typeOf(item) === "course" ? "course-entry" : ""} ${item.status === "done" ? "completed" : ""} ${minutes < 50 ? "short-event" : ""}"
+-                        style=${`top: calc(var(--hour-px) * ${segmentStart - startMinute} / 60); height: calc(var(--hour-px) * ${minutes} / 60); min-height: 14px; left: calc(${(column / columns) * 100}% + 3px); width: calc(${100 / columns}% - 6px)`}
++                        style=${`top: calc(var(--hour-px) * ${segmentStart} / 60); height: calc(var(--hour-px) * ${minutes} / 60); min-height: 14px; left: calc(${(column / columns) * 100}% + 3px); width: calc(${100 / columns}% - 6px)`}
+                       >
+                         <button
+                           class="time-event-open"
+@@ -559,7 +530,7 @@ function renderTimeline(
+                       </div>`;
+                     },
+                   )}
+-                  ${currentMinute >= startMinute && currentMinute < endMinute ? html`<div class="now-line" style=${`top: calc(var(--hour-px) * ${(currentMinute - startMinute) / 60})`}><span></span></div>` : nothing}
++                  ${currentMinute >= 0 && currentMinute < 1440 ? html`<div class="now-line" style=${`top: calc(var(--hour-px) * ${currentMinute / 60})`}><span></span></div>` : nothing}
+                 </div>`;
+               })}
+             </div>`
+@@ -715,14 +686,13 @@ function update(scroll = false): void {
+       ids.has(block.itemId) && !(completedIds.has(block.itemId) && Date.parse(block.start) > now),
+   );
+   const days = viewDays(selectedDate, view);
+-  const halfDayMode = desktopMode && view === "day";
+-  const period = dayPeriod ?? (now - dayStart(beijingDate(now)) < 12 * 3_600_000 ? "am" : "pm");
+-  const displayDays = halfDayMode ? [beijingDate(now)] : days;
++  const desktopDayMode = desktopMode && view === "day";
++  const displayDays = desktopDayMode ? [beijingDate(now)] : days;
+   const hasCoverageGap = displayDays.some((date) => !dayCovered(date, snapshot?.sources ?? []));
+-  const titleDate = halfDayMode ? beijingDate(now) : selectedDate;
++  const titleDate = desktopDayMode ? beijingDate(now) : selectedDate;
+   const monthTitle = `${Number(titleDate.slice(0, 4))} 年 ${Number(titleDate.slice(5, 7))} 月`;
+-  const rangeTitle = halfDayMode
+-    ? `${monthTitle} ${Number(titleDate.slice(8))} 日 · ${DAY_PERIODS[period]}`
++  const rangeTitle = desktopDayMode
++    ? `${monthTitle} ${Number(titleDate.slice(8))} 日 · 全天`
+     : view === "day"
+       ? `${monthTitle} ${Number(selectedDate.slice(8))} 日`
+       : view === "week"
+@@ -826,7 +796,7 @@ function update(scroll = false): void {
+           <section class="calendar-panel panel" aria-label="日程日历">
+             <div class="calendar-toolbar">
+               ${
+-                halfDayMode
++                desktopDayMode
+                   ? nothing
+                   : html`<div class="date-navigation">
+                       <button
+@@ -848,36 +818,17 @@ function update(scroll = false): void {
+               }
+               <h2>${rangeTitle}</h2>
+               ${
+-                halfDayMode
+-                  ? html`<div
+-                      class="view-switch period-switch"
+-                      role="group"
+-                      aria-label="上午下午安排"
+-                    >
++                desktopDayMode
++                  ? html`<div class="view-switch now-control" role="group" aria-label="当前时间">
+                       <button
+                         @click=${() => {
+                           now = Date.now();
+-                          dayPeriod = null;
+                           update(true);
+                         }}
+                         title="回到当前时间并自动跟随"
+                       >
+                         现在
+                       </button>
+-                      ${(["am", "pm"] as const).map(
+-                        (choice) =>
+-                          html`<button
+-                            class=${period === choice ? "active" : ""}
+-                            aria-pressed=${period === choice}
+-                            title=${DAY_PERIODS[choice]}
+-                            @click=${() => {
+-                              dayPeriod = choice;
+-                              update(true);
+-                            }}
+-                          >
+-                            ${choice === "am" ? "上午" : "下午"}
+-                          </button>`,
+-                      )}
+                     </div>`
+                   : nothing
+               }
+@@ -897,7 +848,7 @@ function update(scroll = false): void {
+                   </div>`
+                 : nothing
+             }
+-            ${loading && !snapshot ? html`<div class="loading-state" role="status">正在读取你的日程…</div>` : view === "month" ? renderMonth(days, items, blocks) : renderTimeline(displayDays, items, blocks, halfDayMode ? period : undefined)}
++            ${loading && !snapshot ? html`<div class="loading-state" role="status">正在读取你的日程…</div>` : view === "month" ? renderMonth(days, items, blocks) : renderTimeline(displayDays, items, blocks, desktopDayMode)}
+             <div class="calendar-footer">
+               <span><i class="legend-line"></i>执行安排</span
+               ><span><i class="legend-dot"></i>截止单独显示</span><span>▣ 锁定安排</span>
+@@ -934,7 +885,7 @@ function syncHourScale(): void {
+   timeline.style.setProperty("--hour-px", `${hourPx}px`);
+ }
+ function syncCurrentTime(): void {
+-  const timeline = container.querySelector<HTMLElement>(".half-day-timeline");
++  const timeline = container.querySelector<HTMLElement>(".day-table-timeline");
+   const rows = timeline?.querySelector<HTMLElement>(".agenda-rows");
+   if (!timeline || !rows) return;
+   // Space at both ends lets even the first/last appointment sit at the center.
+@@ -975,7 +926,7 @@ function scrollToDefault(): void {
+   if (!timeline) {
+     return;
+   }
+-  if (timeline.classList.contains("half-day-timeline")) {
++  if (timeline.classList.contains("day-table-timeline")) {
+     if (!timeline.querySelector(".agenda-now")) timeline.scrollTop = 0;
+     return;
+   }
+@@ -1055,11 +1006,7 @@ document.addEventListener("visibilitychange", () => {
+   }
+ });
+ window.setInterval(() => {
+-  const previousDate = beijingDate(now);
+   now = Date.now();
+-  if (beijingDate(now) !== previousDate) {
+-    dayPeriod = null;
+-  }
+   if (!document.hidden) {
+     update();
+   }
+diff --git a/web/calendar.test.ts b/web/calendar.test.ts
+index 1267b9d..fb868b8 100644
+--- a/web/calendar.test.ts
++++ b/web/calendar.test.ts
+@@ -3,7 +3,9 @@ import type { AgendaBlock, AgendaItem, AgendaSource } from "../src/types.js";
+ import {
+   beijingDate,
+   dayCovered,
++  daySchedule,
+   daySegments,
++  dueDate,
+   itemGroups,
+   itemOverdue,
+   itemType,
+@@ -208,3 +210,73 @@ describe("Agenda course and staleness display contracts", () => {
+     );
+   });
+ });
++
++const dayItem = (id: string, overrides: Partial<AgendaItem> = {}): AgendaItem => ({
++  ...itemShape,
++  id,
++  title: id,
++  sourceId: "local",
++  sourceKey: null,
++  ...overrides,
++});
++
++describe("Agenda unified desktop day table", () => {
++  it("returns morning and afternoon blocks together with all-day entries and deadlines", () => {
++    const morning = dayItem("morning", { kind: "event", title: "数学" });
++    const afternoon = dayItem("afternoon", { kind: "event", title: "英语" });
++    const allDay = dayItem("all-day", { kind: "event", title: "开放日" });
++    const deadline = dayItem("deadline", {
++      title: "交报告",
++      dueAt: "2026-11-03T21:00:00+08:00",
++    });
++    const tomorrow = dayItem("tomorrow", { title: "明天截止", dueAt: "2026-11-04T09:00:00+08:00" });
++    const unscheduled = dayItem("unscheduled", { title: "写周报" });
++    const blocks = [
++      { ...block("morning", "2026-11-03T08:10:00+08:00", "2026-11-03T08:50:00+08:00"), itemId: "morning" },
++      { ...block("afternoon", "2026-11-03T14:00:00+08:00", "2026-11-03T14:40:00+08:00"), itemId: "afternoon" },
++      {
++        id: "all-day-block",
++        itemId: "all-day",
++        start: "2026-11-03T00:00:00+08:00",
++        end: "2026-11-04T00:00:00+08:00",
++        allDay: true,
++        locked: false,
++        reason: "",
++      },
++    ];
++    const schedule = daySchedule(
++      blocks,
++      [afternoon, unscheduled, tomorrow, morning, allDay, deadline],
++      "2026-11-03",
++    );
++    expect(schedule.segments.map(({ item, startMinute, endMinute }) => [item.id, startMinute, endMinute])).toEqual([
++      ["morning", 490, 530],
++      ["afternoon", 840, 880],
++    ]);
++    expect(schedule.allDayBlocks.map(({ itemId }) => itemId)).toEqual(["all-day"]);
++    expect(schedule.deadlines.map(({ id }) => id)).toEqual(["deadline"]);
++  });
++
++  it("keeps overnight segments in the table on both days without inventing items", () => {
++    const overnight = dayItem("overnight", { kind: "event", title: "夜间维护" });
++    const midnightBlock = {
++      ...block("overnight", "2026-11-03T23:30:00+08:00", "2026-11-04T00:30:00+08:00"),
++      itemId: "overnight",
++    };
++    const firstDay = daySchedule([midnightBlock], [overnight], "2026-11-03");
++    const secondDay = daySchedule([midnightBlock], [overnight], "2026-11-04");
++    expect(firstDay.segments.map(({ startMinute, endMinute }) => [startMinute, endMinute])).toEqual([
++      [1410, 1440],
++    ]);
++    expect(secondDay.segments.map(({ startMinute, endMinute }) => [startMinute, endMinute])).toEqual([
++      [0, 30],
++    ]);
++    expect(daySchedule([midnightBlock], [], "2026-11-03").segments).toEqual([]);
++  });
++
++  it("resolves date-only and timed deadlines in Beijing time", () => {
++    expect(dueDate(dayItem("date-only", { dueDate: "2026-11-03" }))).toBe("2026-11-03");
++    expect(dueDate(dayItem("timed", { dueAt: "2026-11-03T16:30:00Z" }))).toBe("2026-11-04");
++    expect(dueDate(dayItem("undated"))).toBeNull();
++  });
++});
+diff --git a/web/calendar.ts b/web/calendar.ts
+index 5424148..c90d8af 100644
+--- a/web/calendar.ts
++++ b/web/calendar.ts
+@@ -145,6 +145,34 @@ export function blocksOnDay(blocks: AgendaBlock[], date: string): AgendaBlock[]
+       Date.parse(block.end) > dayStart(date),
+   );
+ }
++export function dueDate(item: AgendaItem): string | null {
++  return item.dueDate ?? (item.dueAt ? beijingDate(item.dueAt) : null);
++}
++export type DaySchedule = {
++  allDayBlocks: AgendaBlock[];
++  deadlines: AgendaItem[];
++  segments: (BlockSegment & { item: AgendaItem })[];
++};
++// The desktop day table reads the whole Beijing day in one pass: every timed
++// block, all-day entry, and deadline belongs to the same table.
++export function daySchedule(
++  blocks: AgendaBlock[],
++  items: AgendaItem[],
++  date: string,
++): DaySchedule {
++  const byId = new Map(items.map((item) => [item.id, item]));
++  return {
++    allDayBlocks: blocksOnDay(
++      blocks.filter((block) => block.allDay),
++      date,
++    ),
++    deadlines: items.filter((item) => dueDate(item) === date),
++    segments: daySegments(blocks, date).flatMap((segment) => {
++      const item = byId.get(segment.block.itemId);
++      return item ? [{ ...segment, item }] : [];
++    }),
++  };
++}
+ export function safeSourceUrl(url: string | null): string | null {
+   if (!url) {
+     return null;
+diff --git a/web/styles.css b/web/styles.css
+index 48ef9eb..24d79cf 100644
+--- a/web/styles.css
++++ b/web/styles.css
+@@ -1646,13 +1646,13 @@ html[data-display="desktop"][data-theme="dark"] .source-4 {
+   --source-line: #c58ba1;
+ }
+ /* Scheduled rows share spare height; empty time ranges have no visual footprint. */
+-html[data-display="desktop"] .period-switch {
++html[data-display="desktop"] .now-control {
+   margin-left: 0;
+ }
+-html[data-display="desktop"] .half-day-timeline .timeline {
++html[data-display="desktop"] .day-table-timeline .timeline {
+   min-width: 0;
+ }
+-html[data-display="desktop"] .half-day-timeline .timeline-header {
++html[data-display="desktop"] .day-table-timeline .timeline-header {
+   display: none;
+ }
+ .agenda-rows {
+@@ -1663,6 +1663,41 @@ html[data-display="desktop"] .half-day-timeline .timeline-header {
+   gap: 12px;
+   padding: max(20px, calc(var(--agenda-viewport, 0px) / 2 + 16px)) 24px;
+ }
++/* The unified desktop day view keeps the whole day in one compact list.
++   All-day entries and deadlines stay pinned while the list scrolls. */
++html[data-display="desktop"] .day-table-timeline .all-day-row {
++  position: sticky;
++  top: 0;
++  z-index: 5;
++  background: #fff;
++}
++html[data-display="desktop"][data-theme] .day-table-timeline .all-day-row {
++  background: var(--glass-bg-strong);
++}
++html[data-display="desktop"] .day-table-timeline .agenda-rows {
++  gap: 10px;
++  padding: 16px 24px;
++}
++html[data-display="desktop"] .day-table-timeline .agenda-entry {
++  min-height: 108px;
++}
++html[data-display="desktop"] .day-table-timeline .agenda-entry-time {
++  gap: 4px;
++  padding-top: 14px;
++}
++html[data-display="desktop"] .day-table-timeline .agenda-entry-time strong {
++  font-size: 18px;
++}
++html[data-display="desktop"] .day-table-timeline .agenda-entry-card {
++  gap: 7px;
++  padding: 13px 18px;
++}
++html[data-display="desktop"] .day-table-timeline .agenda-entry-title {
++  font-size: 18px;
++}
++html[data-display="desktop"] .day-table-timeline .agenda-entry-action {
++  -webkit-line-clamp: 1;
++}
+ .agenda-now {
+   position: absolute;
+   z-index: 2;
+-- 
+2.43.0
+
