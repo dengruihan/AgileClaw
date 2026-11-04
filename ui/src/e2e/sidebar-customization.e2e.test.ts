@@ -221,7 +221,10 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
+      // A bare entry opens the draft landing; this case reloads on that landing
+      // to prove the persisted rail width is applied before the route commits.
+      await page.goto(suite.server.baseUrl);
+      await page.locator("openclaw-app-sidebar").waitFor({ state: "attached" });
 
       const sidebar = page.locator("openclaw-app-sidebar");
       const pinnedItems = sidebar.locator(

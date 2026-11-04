@@ -5696,7 +5696,7 @@ td.data-table-key-col {
 
 /* Touch devices need tappable actions, including a menu without right-click. */
 @media (hover: none), (pointer: coarse) {
-  .sidebar-recent-session.session-row-host {
+  .sidebar-recent-session.session-row-host:has(.session-action--touch-menu) {
     --session-row-actions-reserve: 92px;
   }
 
@@ -5721,6 +5721,46 @@ td.data-table-key-col {
 
   .sidebar-recent-session .session-action:disabled {
     opacity: 0.35;
+  }
+}
+
+/* A tablet rail sits beside a cramped content column. Hover-only controls keep
+   their documented touch space, so the title wraps to a second line instead of
+   collapsing to a few glyphs; the rail is also floored (shell-nav-width). */
+@media (min-width: 933px) and (max-width: 1320px) and (pointer: coarse) {
+  /* Secondary row buttons stay reachable but give the title their surplus:
+     both actions also live in the row menu, whose 44px target is unchanged. */
+  .sidebar-recent-session.session-row-host:has(.session-action--touch-menu) {
+    --session-row-actions-reserve: 92px;
+  }
+
+  .sidebar-recent-session :is([data-sidebar-session-pin], [data-sidebar-session-archive]) {
+    width: 32px;
+    height: 32px;
+  }
+
+  .sidebar-recent-session:not(.sidebar-recent-session--child) .sidebar-recent-session__title-row {
+    height: auto;
+  }
+
+  .sidebar-recent-session:not(.sidebar-recent-session--child) .sidebar-recent-session__name {
+    display: -webkit-box;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    mask-image: none;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .sidebar-recent-session:not(.sidebar-recent-session--child)
+    .sidebar-recent-session__name
+    > .hover-marquee__text {
+    display: block;
+    width: auto;
+    white-space: normal;
+    transform: none;
+    transition: none;
   }
 }
 
