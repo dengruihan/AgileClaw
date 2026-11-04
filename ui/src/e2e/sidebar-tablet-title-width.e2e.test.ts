@@ -149,6 +149,19 @@ suite.define(() => {
           expect(reading.archivesVisible).toBe(true);
         }
       }
+
+      // Crossing out of the tablet band drops the floor again, so a tablet docked
+      // to a large display keeps the rail the operator stored.
+      if (viewport.wrap) {
+        await page.setViewportSize({ height: 900, width: 1400 });
+        await expect
+          .poll(() =>
+            page
+              .locator(".shell-nav")
+              .evaluate((element) => Math.round(element.getBoundingClientRect().width)),
+          )
+          .toBe(258);
+      }
     } finally {
       await suite.closeBrowserContext(context);
     }
