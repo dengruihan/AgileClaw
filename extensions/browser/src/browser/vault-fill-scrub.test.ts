@@ -6,6 +6,7 @@ import {
   hasActiveVaultFill,
   hasAnyActiveVaultFill,
   registerVaultFillSecret,
+  scrubVaultFillError,
   scrubVaultFillText,
   scrubVaultFillValue,
   scrubVaultFillValueAll,
@@ -101,6 +102,35 @@ describe("vault fill scrub", () => {
     expect(JSON.stringify(result)).not.toContain("canary-one");
     expect(JSON.stringify(result)).not.toContain("canary-two");
     expect(JSON.stringify(result)).toContain("***");
+  });
+
+  it("never re-attaches an original shared or cyclic object to a scrubbed result", () => {
+    registerVaultFillSecret("target-1", CANARY);
+    const shared = { title: `login ${CANARY}` };
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    const result = scrubVaultFillValueAll({ first: shared, second: shared, third: cyclic });
+    expect(JSON.stringify(result)).not.toContain(CANARY);
+    expect(JSON.stringify(result)).toContain("[Circular]");
+  });
+
+  it("replaces an error with unreadable fields instead of rethrowing it", () => {
+    registerVaultFillSecret("target-1", CANARY);
+    const error = new Error("clean");
+    Object.defineProperty(error, "details", {
+      get() {
+        throw new Error(`locked ${CANARY}`);
+      },
+      enumerable: true,
+      configurable: true,
+    });
+    const scrubbed = scrubVaultFillError(error);
+    // Identity only: a structural not.toBe would read the hostile getter for
+    // Vitest's serialization hint and throw inside the assertion machinery.
+    expect(Object.is(scrubbed, error)).toBe(false);
+    expect((scrubbed as Error).message).toBe("clean");
+    expect(() => JSON.stringify(scrubbed)).not.toThrow();
+    expect(JSON.stringify(scrubbed)).not.toContain(CANARY);
   });
 
   it("can be cleared explicitly on navigation or close", () => {

@@ -203,14 +203,27 @@ export function scrubVaultFillValueAll<T>(value: T): T {
   return scrubValueWith(value, scrubVaultFillTextAll);
 }
 
-const PRESERVED_ERROR_KEYS = new Set(["name", "status", "code"]);
+// Fields a consumer of a thrown error reads even when they are non-enumerable
+// (`message`, `stack`, `cause` on Error) or identity-bearing (`name`, `code`,
+// `status`). Identity fields keep their original text only while proven
+// value-free; otherwise they are masked like any other secret-bearing text.
+const ERROR_SURFACE_KEYS = ["message", "stack", "cause", "name", "code", "status"] as const;
+
+const MAX_ERROR_SCRUB_DEPTH = 8;
+const CIRCULAR_PLACEHOLDER = "[Circular]";
+const WITHHELD_ERROR_MESSAGE =
+  "Browser error withheld: the original error could not be scrubbed of an active vault fill value.";
 
 /**
- * Scrub a thrown error in place so it keeps its class, name, status, and code
- * while `message`, `stack`, `cause`, and nested payloads (for example
- * `details`) can no longer return an active fill value. Route failures are
- * thrown before any target is proven, so their text is treated like an
- * aggregate result.
+ * Scrub a thrown error so no readable field can still return an active fill
+ * value, regardless of `logging.redact`. Ordinary mutable errors keep their
+ * class, name, status, and code; a field that carries a secret is masked in
+ * place. When any reachable field cannot be rewritten and re-read clean —
+ * frozen objects, non-configurable accessors, unreadable or regenerating
+ * getters — the original object is discarded and a sanitized replacement Error
+ * is returned instead: fail closed rather than rethrow a secret. Route
+ * failures are thrown before any target is proven, so their text is treated
+ * like an aggregate result.
  */
 export function scrubVaultFillError<T>(error: T): T {
   return scrubErrorWith(error, scrubVaultFillTextAll);
@@ -221,6 +234,49 @@ export function scrubVaultFillErrorForTarget<T>(targetId: string | undefined, er
   return scrubErrorWith(error, (text) => scrubVaultFillText(targetId, text));
 }
 
+function readErrorField(
+  record: Record<string, unknown>,
+  key: string,
+): { value: unknown; readable: boolean } {
+  try {
+    return { value: record[key], readable: true };
+  } catch {
+    return { value: undefined, readable: false };
+  }
+}
+
+function writeErrorField(target: object, key: string, value: unknown): boolean {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(target, key);
+    if (descriptor && !descriptor.configurable) {
+      // A non-configurable writable data property keeps its shape; only the
+      // value may change. Read-only data and any accessor cannot be rewritten.
+      if (!("value" in descriptor) || !descriptor.writable) {
+        return false;
+      }
+      Object.defineProperty(target, key, { ...descriptor, value });
+      return true;
+    }
+    Object.defineProperty(target, key, {
+      value,
+      writable: true,
+      enumerable: descriptor?.enumerable ?? true,
+      configurable: true,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function ownEnumerableKeys(candidate: object): string[] {
+  try {
+    return Object.keys(candidate);
+  } catch {
+    return [];
+  }
+}
+
 function scrubErrorWith<T>(error: T, scrubText: (text: string) => string): T {
   if (typeof error === "string") {
     const scrubbed = scrubText(error);
@@ -229,42 +285,50 @@ function scrubErrorWith<T>(error: T, scrubText: (text: string) => string): T {
   if (!error || typeof error !== "object") {
     return error;
   }
+  let tainted = false;
+  let beyondDepth = false;
   const seen = new WeakSet<object>();
-  const write = (target: object, key: string, value: unknown) => {
-    try {
-      const descriptor = Object.getOwnPropertyDescriptor(target, key);
-      Object.defineProperty(target, key, {
-        value,
-        writable: true,
-        enumerable: descriptor?.enumerable ?? true,
-        configurable: true,
-      });
-    } catch {
-      // Frozen or accessor-only fields keep their original text.
+  const verified = new WeakSet<object>();
+  const visit = (candidate: object, depth: number): void => {
+    if (depth > MAX_ERROR_SCRUB_DEPTH) {
+      beyondDepth = true;
+      return;
     }
-  };
-  const visit = (candidate: object, depth: number) => {
-    if (depth > 8 || seen.has(candidate)) {
+    if (seen.has(candidate)) {
       return;
     }
     seen.add(candidate);
     const record = candidate as Record<string, unknown>;
-    // `message`, `stack`, and `cause` are own but non-enumerable on Error.
-    const keys = new Set<string>(["message", "stack", "cause", ...Object.keys(record)]);
+    const keys = new Set<string>([...ERROR_SURFACE_KEYS, ...ownEnumerableKeys(candidate)]);
     for (const key of keys) {
-      if (PRESERVED_ERROR_KEYS.has(key)) {
-        continue;
-      }
-      let value: unknown;
+      let descriptor: PropertyDescriptor | undefined;
       try {
-        value = record[key];
+        descriptor = Object.getOwnPropertyDescriptor(candidate, key);
       } catch {
+        descriptor = undefined;
+      }
+      const isOwnAccessor =
+        descriptor !== undefined && (descriptor.get !== undefined || descriptor.set !== undefined);
+      const read = readErrorField(record, key);
+      if (!read.readable) {
+        tainted = true;
         continue;
       }
+      if (isOwnAccessor) {
+        // Snapshot the accessor into a data property so a later read cannot
+        // regenerate the secret. Non-configurable accessors cannot be
+        // replaced, so they can never be proven safe.
+        const snapshot = typeof read.value === "string" ? scrubText(read.value) : read.value;
+        if (!writeErrorField(candidate, key, snapshot)) {
+          tainted = true;
+          continue;
+        }
+      }
+      const value = read.value;
       if (typeof value === "string") {
         const scrubbed = scrubText(value);
-        if (scrubbed !== value) {
-          write(candidate, key, scrubbed);
+        if (scrubbed !== value && !writeErrorField(candidate, key, scrubbed)) {
+          tainted = true;
         }
         continue;
       }
@@ -272,12 +336,28 @@ function scrubErrorWith<T>(error: T, scrubText: (text: string) => string): T {
         continue;
       }
       if (Array.isArray(value)) {
+        if (depth + 1 > MAX_ERROR_SCRUB_DEPTH) {
+          beyondDepth = true;
+          continue;
+        }
         for (let index = 0; index < value.length; index += 1) {
-          const entry = value[index];
+          const entryRead = readErrorField(
+            value as unknown as Record<string, unknown>,
+            String(index),
+          );
+          if (!entryRead.readable) {
+            tainted = true;
+            continue;
+          }
+          const entry = entryRead.value;
           if (typeof entry === "string") {
             const scrubbed = scrubText(entry);
             if (scrubbed !== entry) {
-              value[index] = scrubbed;
+              try {
+                value[index] = scrubbed;
+              } catch {
+                tainted = true;
+              }
             }
           } else if (entry && typeof entry === "object") {
             visit(entry, depth + 1);
@@ -288,8 +368,221 @@ function scrubErrorWith<T>(error: T, scrubText: (text: string) => string): T {
       visit(value, depth + 1);
     }
   };
-  visit(error, 0);
-  return error;
+  const verify = (candidate: object, depth: number): void => {
+    if (depth > MAX_ERROR_SCRUB_DEPTH) {
+      beyondDepth = true;
+      return;
+    }
+    if (verified.has(candidate)) {
+      return;
+    }
+    verified.add(candidate);
+    const record = candidate as Record<string, unknown>;
+    const keys = new Set<string>([...ERROR_SURFACE_KEYS, ...ownEnumerableKeys(candidate)]);
+    for (const key of keys) {
+      const read = readErrorField(record, key);
+      if (!read.readable) {
+        tainted = true;
+        continue;
+      }
+      const value = read.value;
+      if (typeof value === "string") {
+        if (scrubText(value) !== value) {
+          tainted = true;
+        }
+        continue;
+      }
+      if (!value || typeof value !== "object") {
+        continue;
+      }
+      if (Array.isArray(value)) {
+        for (const entry of value) {
+          if (typeof entry === "string") {
+            if (scrubText(entry) !== entry) {
+              tainted = true;
+            }
+          } else if (entry && typeof entry === "object") {
+            verify(entry, depth + 1);
+          }
+        }
+        continue;
+      }
+      verify(value, depth + 1);
+    }
+  };
+  try {
+    visit(error, 0);
+    verify(error, 0);
+    // The formatter surface (`${error}`) reads name/message through any
+    // custom toString; it must be clean too.
+    const formatted = formatErrorText(error);
+    if (formatted !== undefined && scrubText(formatted) !== formatted) {
+      tainted = true;
+    }
+  } catch {
+    tainted = true;
+  }
+  if (!tainted && !beyondDepth) {
+    return error;
+  }
+  return buildSanitizedReplacement(error, scrubText) as T;
+}
+
+function formatErrorText(error: object): string | undefined {
+  try {
+    // The tool boundary stringifies non-Error throws (`toStructuredErrorObject`),
+    // so observe what a consumer's formatter would produce for either shape.
+    if (error instanceof Error) {
+      return error.toString();
+    }
+    return JSON.stringify(error) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readErrorString(pick: () => unknown): string | undefined {
+  try {
+    const value = pick();
+    return typeof value === "string" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function errorRecord(value: object): Record<string, unknown> {
+  return value as unknown as Record<string, unknown>;
+}
+
+/**
+ * Build a provably clean Error for objects that cannot be scrubbed in place.
+ * Every string passes the mask, the structure is fresh data-only output, and
+ * no getter or accessor of the original survives, so later reads cannot
+ * regenerate a secret.
+ */
+function buildSanitizedReplacement(error: object, scrubText: (text: string) => string): Error {
+  const record = error as Record<string, unknown>;
+  const message = readErrorString(() => record.message);
+  const serialized = readErrorString(() => JSON.stringify(error));
+  const formatted = formatErrorText(error);
+  const maskedMessage =
+    message !== undefined
+      ? scrubText(message)
+      : serialized !== undefined
+        ? scrubText(serialized)
+        : formatted !== undefined
+          ? scrubText(formatted)
+          : "";
+  const replacement = new Error(maskedMessage || WITHHELD_ERROR_MESSAGE);
+  const stack = readErrorString(() => record.stack);
+  if (stack) {
+    replacement.stack = scrubText(stack);
+  }
+  const name = readErrorString(() => record.name);
+  if (name) {
+    replacement.name = scrubText(name);
+  }
+  for (const key of ["status", "code"] as const) {
+    const read = readErrorField(record, key);
+    if (!read.readable) {
+      continue;
+    }
+    if (typeof read.value === "number" || typeof read.value === "boolean") {
+      errorRecord(replacement)[key] = read.value;
+    } else if (typeof read.value === "string" && read.value.length > 0) {
+      errorRecord(replacement)[key] = scrubText(read.value);
+    }
+  }
+  const cause = readErrorField(record, "cause");
+  if (cause.readable && cause.value && typeof cause.value === "object") {
+    (replacement as { cause?: unknown }).cause = projectScrubbedValue(
+      cause.value,
+      scrubText,
+      new WeakSet(),
+      1,
+    );
+  }
+  const details = readErrorField(record, "details");
+  if (details.readable && details.value && typeof details.value === "object") {
+    errorRecord(replacement).details = projectScrubbedValue(
+      details.value,
+      scrubText,
+      new WeakSet(),
+      1,
+    );
+  }
+  return replacement;
+}
+
+function projectScrubbedValue(
+  value: unknown,
+  scrubText: (text: string) => string,
+  seen: WeakSet<object>,
+  depth: number,
+): unknown {
+  if (typeof value === "string") {
+    return scrubText(value);
+  }
+  if (
+    value === null ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  ) {
+    return value;
+  }
+  if (typeof value !== "object") {
+    // Functions, symbols, and undefined cannot carry a masked payload into the
+    // replacement; drop them rather than retain a live secret-bearing surface.
+    return undefined;
+  }
+  if (depth > MAX_ERROR_SCRUB_DEPTH || seen.has(value)) {
+    return CIRCULAR_PLACEHOLDER;
+  }
+  seen.add(value);
+  if (Array.isArray(value)) {
+    return value.map((entry) => projectScrubbedValue(entry, scrubText, seen, depth + 1));
+  }
+  if (value instanceof Error) {
+    const source = errorRecord(value);
+    const message = readErrorString(() => value.message);
+    const copy = new Error(message !== undefined ? scrubText(message) : WITHHELD_ERROR_MESSAGE);
+    const stack = readErrorString(() => value.stack);
+    if (stack) {
+      copy.stack = scrubText(stack);
+    }
+    const name = readErrorString(() => value.name);
+    if (name) {
+      copy.name = scrubText(name);
+    }
+    const cause = readErrorField(source, "cause");
+    if (cause.readable && cause.value && typeof cause.value === "object") {
+      (copy as { cause?: unknown }).cause = projectScrubbedValue(
+        cause.value,
+        scrubText,
+        seen,
+        depth + 1,
+      );
+    }
+    const copyRecord = errorRecord(copy);
+    for (const key of ownEnumerableKeys(value)) {
+      const read = readErrorField(source, key);
+      if (!read.readable) {
+        continue;
+      }
+      copyRecord[key] = projectScrubbedValue(read.value, scrubText, seen, depth + 1);
+    }
+    return copy;
+  }
+  const projected: Record<string, unknown> = {};
+  for (const key of ownEnumerableKeys(value)) {
+    const read = readErrorField(value as Record<string, unknown>, key);
+    if (!read.readable) {
+      continue;
+    }
+    projected[key] = projectScrubbedValue(read.value, scrubText, seen, depth + 1);
+  }
+  return projected;
 }
 
 function scrubValueWith<T>(value: T, scrubText: (text: string) => string): T {
@@ -298,11 +591,17 @@ function scrubValueWith<T>(value: T, scrubText: (text: string) => string): T {
     if (typeof candidate === "string") {
       return scrubText(candidate);
     }
+    if (typeof candidate === "function" || typeof candidate === "symbol") {
+      // Coercion can expose the secret; JSON-shaped tool results never need them.
+      return undefined;
+    }
     if (!candidate || typeof candidate !== "object") {
       return candidate;
     }
     if (seen.has(candidate)) {
-      return candidate;
+      // Returning the original here would re-attach an unscrubbed live object
+      // to the result; a value-free placeholder keeps the output provably clean.
+      return CIRCULAR_PLACEHOLDER;
     }
     seen.add(candidate);
     if (Array.isArray(candidate)) {
