@@ -35,6 +35,7 @@ export const GatewayErrorDetailCodes = {
   USER_PREFS_LIMIT_EXCEEDED: "USER_PREFS_LIMIT_EXCEEDED",
   SESSION_COMPANION_BUSY: "SESSION_COMPANION_BUSY",
   SKILL_PROPOSAL_REVISION_CHANGED: "SKILL_PROPOSAL_REVISION_CHANGED",
+  SKILL_EXPERIENCE_REVISION_CHANGED: "SKILL_EXPERIENCE_REVISION_CHANGED",
   PROJECT_CLONE_FAILED: "PROJECT_CLONE_FAILED",
   UNKNOWN_AGENT_ID: "UNKNOWN_AGENT_ID",
   WIZARD_NOT_FOUND: "WIZARD_NOT_FOUND",
@@ -115,6 +116,13 @@ export type SkillProposalRevisionChangedErrorDetails = {
   currentRevisionHash: string;
 };
 
+/** Optimistic-concurrency mismatch for an agent-private Experience document. */
+export type SkillExperienceRevisionChangedErrorDetails = {
+  code: typeof GatewayErrorDetailCodes.SKILL_EXPERIENCE_REVISION_CHANGED;
+  expectedRevisionHash: string;
+  currentRevisionHash: string;
+};
+
 /** Exact retained workspace owner that must be recovered or explicitly abandoned. */
 export type SessionWorkspaceRecoveryRequiredErrorDetails = {
   code: typeof GatewayErrorDetailCodes.SESSION_WORKSPACE_RECOVERY_REQUIRED;
@@ -138,6 +146,7 @@ export type GatewayErrorDetails =
   | OutboundDeliveryQueuedErrorDetails
   | UserPrefsLimitExceededErrorDetails
   | SkillProposalRevisionChangedErrorDetails
+  | SkillExperienceRevisionChangedErrorDetails
   | ProjectCloneErrorDetails
   | UnknownAgentIdErrorDetails
   | WizardNotFoundErrorDetails
@@ -204,6 +213,40 @@ export function readSkillProposalRevisionChangedError(
     return null;
   }
   return buildSkillProposalRevisionChangedErrorDetails({
+    expectedRevisionHash,
+    currentRevisionHash,
+  });
+}
+
+/** Builds the canonical stale-document details shared by Experience RPCs. */
+export function buildSkillExperienceRevisionChangedErrorDetails(params: {
+  expectedRevisionHash: string;
+  currentRevisionHash: string;
+}): SkillExperienceRevisionChangedErrorDetails {
+  return {
+    code: GatewayErrorDetailCodes.SKILL_EXPERIENCE_REVISION_CHANGED,
+    expectedRevisionHash: params.expectedRevisionHash,
+    currentRevisionHash: params.currentRevisionHash,
+  };
+}
+
+/** Reads a stale Experience write without parsing operator-facing prose. */
+export function readSkillExperienceRevisionChangedError(
+  error: unknown,
+): SkillExperienceRevisionChangedErrorDetails | null {
+  const record = asProtocolRecord(error);
+  const details = asProtocolRecord(record?.details);
+  if (details?.code !== GatewayErrorDetailCodes.SKILL_EXPERIENCE_REVISION_CHANGED) {
+    return null;
+  }
+  const expectedRevisionHash =
+    typeof details.expectedRevisionHash === "string" ? details.expectedRevisionHash : "";
+  const currentRevisionHash =
+    typeof details.currentRevisionHash === "string" ? details.currentRevisionHash : "";
+  if (!SHA256_PATTERN.test(expectedRevisionHash) || !SHA256_PATTERN.test(currentRevisionHash)) {
+    return null;
+  }
+  return buildSkillExperienceRevisionChangedErrorDetails({
     expectedRevisionHash,
     currentRevisionHash,
   });

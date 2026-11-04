@@ -79,7 +79,7 @@ the page that now holds the content.
 ## Related
 
 - [Skills](/tools/skills) for load order, precedence, and visibility
-- [Self-learning](/tools/self-learning) for conservative post-run skill proposals
+- [Self-learning](/tools/self-learning) for conservative post-run skill proposals and agent-private Experience documents
 - [Creating skills](/tools/creating-skills) for hand-written `SKILL.md`
   basics
 - [Skills config](/tools/skills-config) for the full `skills.workshop` schema

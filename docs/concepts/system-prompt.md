@@ -198,11 +198,11 @@ See [Timezones](/concepts/timezone) and [Date & Time](/date-time) for full behav
 
 ## Skills
 
-When eligible skills exist, OpenClaw injects a compact `<available_skills>` list (`formatSkillsForPrompt`) with the **file path** for each skill. The prompt instructs the model to use `read` to load the SKILL.md at the listed location (workspace, managed, or bundled). If no skills are eligible, the Skills section is omitted.
+When eligible skills or Experience documents exist, OpenClaw injects a compact `<available_skills>` list (`formatSkillsForPrompt`) with the **file path** and document **kind** for each entry. Skill entries point at `SKILL.md`; agent-private Experience entries point at `EXPERIENCE.md` and are marked `<kind>experience</kind>`. The prompt instructs the model to read the instruction file at the listed location, or to use `skills_search` and `skills_read` when the catalog is truncated or the document was not listed. If no entries are eligible, the Skills section is omitted.
 
 Managed native Codex turns receive this list through parent-local model request instructions instead of per-turn user input, except lightweight cron turns that preserve the exact scheduled prompt. Connections without that relay use thread developer instructions so model-owned collaboration instructions cannot replace the catalog. Other harnesses keep the normal prompt section.
 
-The location can point at a nested skill, such as `skills/personal/foo/SKILL.md`. Nesting is only organizational; the prompt uses the flat skill name from `SKILL.md` frontmatter.
+The location can point at a nested skill, such as `skills/personal/foo/SKILL.md`. Nesting is only organizational; the prompt uses the flat skill name from `SKILL.md` frontmatter. Experience documents live under the selected agent's private experience root and are never listed for another agent.
 
 Eligibility includes skill metadata gates, runtime environment/config checks, and the effective agent skill allowlist when `agents.defaults.skills` or `agents.entries.*.skills` is configured. Plugin-bundled skills are eligible only when their owning plugin is enabled, letting tool plugins expose deeper operating guides without embedding all of that guidance in every tool description.
 
@@ -210,6 +210,13 @@ Eligibility includes skill metadata gates, runtime environment/config checks, an
 <available_skills>
   <skill>
     <name>...</name>
+    <kind>skill</kind>
+    <description>...</description>
+    <location>...</location>
+  </skill>
+  <skill>
+    <name>...</name>
+    <kind>experience</kind>
     <description>...</description>
     <location>...</location>
   </skill>

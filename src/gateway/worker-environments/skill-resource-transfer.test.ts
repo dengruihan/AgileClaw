@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -23,6 +22,7 @@ import {
 import { transferSkillResources } from "./skill-resource-transfer.js";
 import {
   createNodeCarrier,
+  createSshSpawnTunnel,
   NODE_WORKER_WORKSPACE_STDIN_MAX_BYTES,
 } from "./skill-resource-transfer.test-support.js";
 import type { WorkerWorkspaceTunnelHandle } from "./tunnel-contract.js";
@@ -30,30 +30,7 @@ import { captureWorkspaceManifest } from "./workspace-manifest-worker.js";
 import { WORKER_ATTACHMENT_DIRECTORY_PREFIX } from "./workspace-path-exclusions.js";
 
 const temps = useAutoCleanupTempDirTracker(afterEach);
-const tunnel: Pick<WorkerWorkspaceTunnelHandle, "runWorkspaceCommand"> = {
-  runWorkspaceCommand: async (command) => {
-    command.assertCurrent?.();
-    return new Promise((resolve, reject) => {
-      const child = spawn(command.argv[0]!, command.argv.slice(1), {
-        stdio: "pipe",
-        signal: command.signal,
-      });
-      let stdout = "",
-        stderr = "";
-      child.stdout.on("data", (bytes) => {
-        stdout += bytes;
-      });
-      child.stderr.on("data", (bytes) => {
-        stderr += bytes;
-      });
-      child.on("error", reject);
-      child.on("close", (code) =>
-        resolve({ stdout, stderr, code, termination: "exit", signal: null, killed: false }),
-      );
-      child.stdin.end(command.input);
-    });
-  },
-};
+const tunnel = createSshSpawnTunnel();
 
 async function createCarrier(kind = "ssh") {
   return kind === "node"

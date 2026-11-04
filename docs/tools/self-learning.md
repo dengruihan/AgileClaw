@@ -8,9 +8,11 @@ title: "Self-learning"
 sidebarTitle: "Self-learning"
 ---
 
-Self-learning turns corrections and successful work into reusable skills. Skills
-are the durable unit: they hold procedures that future sessions can discover and
-follow. [Skill Workshop](/tools/skill-workshop) owns the agent's learned skills.
+Self-learning turns corrections and successful work into reusable knowledge.
+**Experience documents** are agent-private `EXPERIENCE.md` notes for learning worth
+keeping while its procedure, trigger, or boundary is still unsettled. **Skills**
+are the durable, shareable unit for fixed procedures that future sessions can
+discover and follow. [Skill Workshop](/tools/skill-workshop) owns both surfaces.
 
 The default mode is `auto`. Background learning uses normal agent file tools to
 maintain the Workshop directory, like weekly collection review. Choose `propose`
@@ -43,9 +45,9 @@ template or pattern-matching path. The conversation and skill files are evidence
 not permission to resume tasks or execute the procedures under review.
 
 After substantial work, OpenClaw can run one detached background review to find
-a reusable recovery technique or a stable procedure that would remove at least
-two future model or tool round trips. Deep turns the user interrupted qualify
-too: the wrong path and its correction are exactly the evidence worth keeping.
+reusable learning: a verified recovery, a standing requirement, or a stable
+procedure. Deep turns the user interrupted qualify too: the wrong path and its
+correction are exactly the evidence worth keeping.
 The reviewer is told when a turn was interrupted and captures only procedures
 that visibly worked before the stop. Turns that ended in a provider or prompt
 error never schedule a review. That failure is transient environment noise, and
@@ -84,7 +86,10 @@ tools under the source session's permissions. It can inspect complete skills and
 supporting files, correct several connected files, and verify the result. Its
 file tools are rooted at the Workshop directory. Shell commands retain the
 operator's existing approval policy. An enabled sandbox must provide writable
-access to that directory. The run uses the normal configured agent timeout.
+access to that directory. The run uses the normal configured agent timeout. The
+reviewer's `skill_workshop` tool is limited to Experience list, read, and
+capture, so unsettled learning still reaches the private Experience root without
+opening proposal application or wider filesystem authority.
 
 The reviewer shares the weekly collection's maintenance instructions: audit
 before editing, give a procedure one home, preserve distinct tasks, and verify
@@ -101,9 +106,23 @@ operator enables automatic learning during that review.
 
 Each review gets one attempt. A failure is recorded instead of retried. Automatic
 maintenance records `completed` when the agent run succeeds. That status is not
-a claim that a file changed. Completed file edits survive later failure or
+a claim that a file changed. A captured Experience also records `completed`
+with the document id, while a staged proposal keeps `proposed` with its id.
+Completed file edits survive later failure or
 cancellation, and future sessions receive a refreshed skill snapshot. Source
 session deletion, replacement, or a permission-mode change fences retained tools.
+
+The reviewer routes by readiness, never by usage counts:
+
+- **Experience** when the learning is worth keeping but its procedure, trigger, or
+  boundary is not settled yet. Capture at most one document per review.
+- **Skill** when the task is fixed and repeatable, or when it is the first run but
+  has a clear boundary, complete flow, and a verified result.
+- **Memory** for facts and user preferences.
+
+Occurrence counts, "round trips saved," and usage frequency are never promotion
+or elimination thresholds. Nothing promotes or retires automatically from
+Experience.
 
 Good candidates include:
 
@@ -124,13 +143,58 @@ The reviewer should abstain for:
 - unsupported negative claims.
 - secrets and credential material.
 
+## Experience documents
+
+An Experience is a named, agent-private document at
+`agents/<agentId>/agent/experience/<id>/EXPERIENCE.md`. It uses the same YAML
+`name` and `description` frontmatter and the same discovery, snapshot, watch,
+and refresh path as skills, but its instruction file is `EXPERIENCE.md`. The
+prompt catalog marks each entry with `<kind>experience</kind>`, so the model can
+tell an Experience from a skill without loading either document.
+
+Experience documents never cross agent boundaries: they are not shared, synced,
+or exported, and another agent cannot list or read them. Literal credentials are
+rejected on write. Files are the only source of truth; there is no database,
+search index, or new configuration key, and usage is not tracked.
+
+Progressive disclosure is unchanged. Only the bounded name, description, kind,
+and location are prompt-resident. `skills_search` searches Experience metadata
+and bounded instruction text, and `skills_read` loads the complete document by
+its exact name when the task needs it. Retired documents move to a hidden
+`.retired` directory, so they leave discovery without losing content and can be
+restored later.
+
+Agents use the existing `skill_workshop` tool rather than a new model tool:
+
+| Action               | Use                                                              |
+| -------------------- | ---------------------------------------------------------------- |
+| `experience_list`    | List this agent's Experience documents with status and revision. |
+| `experience_read`    | Load one document and the revision hash required for an update.  |
+| `experience_capture` | Create a new document from unsettled but durable learning.       |
+| `experience_update`  | Replace the body after a read supplies the exact revision hash.  |
+
+Operators use the Control UI or the Gateway methods `skills.experience.list`,
+`skills.experience.read`, `skills.experience.create`, `skills.experience.update`,
+`skills.experience.retire`, `skills.experience.restore`, and
+`skills.experience.promote`. Reads require `operator.read`; writes require
+`operator.admin`. Writes carry an optimistic-concurrency revision hash and fail
+with `SKILL_EXPERIENCE_REVISION_CHANGED` when the document changed, so editors
+can keep the draft and reload.
+
+Promotion never publishes directly. `skills.experience.promote` reuses the Skill
+Workshop create or update proposal flow, so the draft is scanned, reviewed, and
+applied like any other proposal. The document stores only the proposal link;
+pending, applied, and rejected states are projected from the proposal owner.
+A rejected promotion returns the document to `active` and can be retried, while
+a namesake skill blocks a new proposal instead of being overwritten.
+
 ## Mode policy
 
-| Mode      | Capture behavior                                                             |
-| --------- | ---------------------------------------------------------------------------- |
-| `off`     | Does not create experience-review captures.                                  |
-| `propose` | Creates or revises pending proposals. Nothing applies automatically.         |
-| `auto`    | Maintains Workshop skills with normal agent file tools. This is the default. |
+| Mode      | Capture behavior                                                                                                                               |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `off`     | Does not create experience-review captures.                                                                                                    |
+| `propose` | Creates or revises pending Skill proposals; Experience capture writes the private document directly. Nothing applies to a Skill automatically. |
+| `auto`    | Maintains Workshop skills with normal agent file tools and may capture Experience directly. This is the default.                               |
 
 Set the mode with the CLI:
 

@@ -27,6 +27,18 @@ read_when:
 | `skills.curator.pin`               | `operator.admin` |
 | `skills.curator.unpin`             | `operator.admin` |
 | `skills.curator.restore`           | `operator.admin` |
+| `skills.experience.list`           | `operator.read`  |
+| `skills.experience.read`           | `operator.read`  |
+| `skills.experience.create`         | `operator.admin` |
+| `skills.experience.update`         | `operator.admin` |
+| `skills.experience.retire`         | `operator.admin` |
+| `skills.experience.restore`        | `operator.admin` |
+| `skills.experience.promote`        | `operator.admin` |
+
+`skills.experience.*` manages agent-private `EXPERIENCE.md` documents through the
+same loaded-document owner as skills. See
+[Experience documents](/tools/self-learning#experience-documents) for the file
+layout, revision-hash concurrency, and promotion behavior.
 
 `skills.proposals.list` includes `installedSkills`, the current Workshop inventory
 for the selected agent. Each entry contains `name`, `skillKey`, and `description`.
@@ -106,6 +118,10 @@ and privacy.
       references/
       scripts/
       templates/
+    agent/experience/<experience-id>/
+      EXPERIENCE.md
+    agent/experience/.retired/<experience-id>/
+      EXPERIENCE.md
   skill-workshop/proposals/<proposal-id>/
     generations/<generation-id>/
       PROPOSAL.md
@@ -120,7 +136,11 @@ Unless overridden, `<state-dir>` is `~/.openclaw`.
 
 - `state/openclaw.sqlite`: canonical proposal records and provenance, the active
   generation reference, proposal status, recorded skill usage, collection and
-  experience review outcomes, and apply rollback metadata.
+  experience review outcomes, and apply rollback metadata. Experience documents
+  are not stored here; their files are the only source of truth.
+- Each Experience document is a standalone `EXPERIENCE.md` file with YAML `name`
+  and `description` frontmatter. Retiring moves it under the hidden `.retired`
+  directory without deleting content; restore moves it back.
 - Each generation contains one `PROPOSAL.md` and all of that revision's support
   files. Revision publication never overwrites the active generation in place.
 - Generation files are flushed before publication. After the complete bundle is

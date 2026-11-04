@@ -141,9 +141,9 @@ async function runEmbeddedAgentInternal(
     normalizeOptionalString(paramsInput.sessionTarget?.agentId) ??
     normalizeOptionalString(paramsInput.agentId);
   const paramsBase = applyAgentRunSessionTargetIdentity(paramsInput);
-  const skillWorkshopProposalMutationBudget = paramsBase.skillWorkshopProposalOnly
-    ? (paramsBase.skillWorkshopProposalMutationBudget ?? { remaining: 1 })
-    : undefined;
+  const skillWorkshopProposalMutationBudget =
+    paramsBase.skillWorkshopProposalMutationBudget ??
+    (paramsBase.skillWorkshopProposalOnly ? { remaining: 1 } : undefined);
   let lifecycleGeneration = paramsBase.lifecycleGeneration!;
   const queuedLifecycleGeneration = getAgentEventLifecycleGeneration();
   // Resolve sessionKey early so all downstream consumers (hooks, LCM, compaction)

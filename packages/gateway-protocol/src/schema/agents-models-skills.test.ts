@@ -695,6 +695,7 @@ describe("SkillsCuratorStatusResultSchema", () => {
           attemptedAtMs: 102,
           outcome: "proposed",
           proposalId: "proposal-1",
+          experienceDocumentId: "draft-release-notes",
           usage: { inputTokens: 40, cachedInputTokens: 20, outputTokens: 10 },
         },
       },

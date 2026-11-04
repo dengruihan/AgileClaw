@@ -89,6 +89,7 @@ export function prepareInstalledSkillCatalog(params: {
       return {
         name: skill.name,
         promptListed: promptListed.has(skill.name),
+        kind: skill.documentKind === "experience" ? "experience" : "skill",
         description: [skill.description, skill.locationNote].filter(Boolean).join("\n"),
         location: resolveSkillReadPath(skill),
         source: {

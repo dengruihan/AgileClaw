@@ -32,8 +32,10 @@ export type WorkspaceSkillSource = {
   source: string;
   /** Prepared diagnostic provenance, preserved when roots cross hosts. */
   worktree?: boolean;
-  tier: "extra" | "bundled" | "workshop" | "managed" | "personal" | "workspace";
+  tier: "extra" | "bundled" | "workshop" | "experience" | "managed" | "personal" | "workspace";
   rejectHardlinks?: boolean;
+  /** Instruction document this root owns; Experience roots use EXPERIENCE.md. */
+  instructionFile?: string;
   /** Original root precedence, retained when discovery is split between hosts. */
   order?: number;
 };

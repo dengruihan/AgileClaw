@@ -15,7 +15,7 @@ export function buildSkillsSection(params: {
   return [
     "## Skills",
     ...(hasListedSkills
-      ? ["Scan <available_skills> for a matching workflow."]
+      ? ["Scan <available_skills> for a matching skill or experience document."]
       : ["No skill entries are listed in this prompt."]),
     params.codeModeActive && params.installedSkillRead
       ? 'Known name or clear match: use `skills.read("<name>")` inside `exec`; read the complete instructions before task actions and follow them.'
@@ -24,8 +24,8 @@ export function buildSkillsSection(params: {
         : `Clear match: read exact <location> with \`${params.readToolName}\`; obey.`,
     ...(params.installedSkillSearch
       ? [
-          `Before work involving files, specialized tools, or a reusable workflow, ${hasListedSkills ? "use a listed match or search" : "search"} with ${params.codeModeActive ? "`skills.search(query)` inside `exec`" : "`skills_search`"} for an applicable skill. Read the best match before implementing the workflow yourself.`,
-          "Search by the task goal and distinctive terms. Simple conversation or a self-contained answer does not need a search. Search covers installed skills; it does not install skills.",
+          `Before work involving files, specialized tools, or a reusable workflow, ${hasListedSkills ? "use a listed match or search" : "search"} with ${params.codeModeActive ? "`skills.search(query)` inside `exec`" : "`skills_search`"} for an applicable skill or experience. Read the best match before implementing the workflow yourself.`,
+          "Search by the task goal and distinctive terms. Simple conversation or a self-contained answer does not need a search. Search covers installed skills and this agent's experiences; it does not install skills.",
         ]
       : []),
     "Several: most specific. No relevant skill: read none.",

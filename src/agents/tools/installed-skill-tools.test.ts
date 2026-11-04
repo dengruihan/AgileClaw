@@ -139,6 +139,7 @@ it.each(["inline", "reader", "partial"] as const)(
             name: "release-guide",
             description: "Publish a software release",
             location: "/skills/release/SKILL.md",
+            kind: "skill",
           },
         ],
         hasMore: false,

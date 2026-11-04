@@ -145,6 +145,8 @@ function wrapWorkspaceSkillRead(
               return Buffer.from(await reader.readInstructions(skill.filePath, { signal: active }));
             }
             const { prepareSkillBundle } = await import("../skills/library/bundle.js");
+            const { instructionFileForDocumentKind } =
+              await import("../skills/loading/document-kind.js");
             const files = await reader.readSkillFiles(skill, { allowMissingRoot: false });
             active.throwIfAborted();
             const relative = relativePathInsideSandboxRoot(skill.baseDir, sourcePath)!;
@@ -153,7 +155,10 @@ function wrapWorkspaceSkillRead(
                 ? relative.split("\\").join("/")
                 : relative;
             const file =
-              files && prepareSkillBundle(files).files.find((entry) => entry.path === bundlePath);
+              files &&
+              prepareSkillBundle(files, {
+                instructionFile: instructionFileForDocumentKind(skill.documentKind),
+              }).files.find((entry) => entry.path === bundlePath);
             if (!file) {
               throw Object.assign(new Error(`Skill file not found: ${sourcePath}`), {
                 code: "ENOENT",

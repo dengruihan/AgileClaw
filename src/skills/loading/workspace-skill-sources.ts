@@ -7,6 +7,7 @@ import { isPathInside } from "../../infra/path-guards.js";
 import type { PluginMetadataSnapshot } from "../../plugins/plugin-metadata-snapshot.types.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
 import { CONFIG_DIR, resolveUserPath } from "../../utils.js";
+import { resolveExperienceRoot } from "../experience/experience-root.js";
 import { resolveWorkshopSkillsDir } from "../workshop/skills-root.js";
 import { resolveBundledSkillsDir } from "./bundled-dir.js";
 import { resolvePluginSkillRoots, resolvePluginSkillRootsFromMetadata } from "./plugin-skills.js";
@@ -137,6 +138,12 @@ export function resolveWorkspaceSkillSourcePlan(
         dir: resolveWorkshopSkillsDir(opts.config, opts.agentId),
         source: "openclaw-workshop",
         tier: "workshop",
+      });
+      roots.push({
+        dir: resolveExperienceRoot(opts.config, opts.agentId),
+        source: "openclaw-experience",
+        tier: "experience",
+        instructionFile: "EXPERIENCE.md",
       });
     }
     roots.push({ dir: managedSkillsDir, source: "openclaw-managed", tier: "managed" });

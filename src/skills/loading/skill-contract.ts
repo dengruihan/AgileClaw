@@ -2,9 +2,12 @@ import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import type { SourceInfo } from "../../agents/sessions/source-info.js";
 import { decodeXml, escapeXml } from "../../shared/xml.js";
 import { resolveSkillReadPath } from "../workspace-skill-read-path.js";
+import type { SkillDocumentKind } from "./document-kind.js";
 
 export interface Skill {
   name: string;
+  /** Document family; omitted for ordinary skills. */
+  documentKind?: SkillDocumentKind;
   /** Human-readable title from the first Markdown H1, falling back to the identifier. */
   displayName?: string;
   description: string;
@@ -106,13 +109,14 @@ function formatSkillCatalog(
   const lines = [
     "\n\nThe following skills provide specialized instructions for specific tasks.",
     loadingInstructions,
-    "When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.",
+    "When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / EXPERIENCE.md or dirname of the path) and use that absolute path in tool commands.",
     "",
     "<available_skills>",
   ];
   for (const skill of skills) {
     lines.push("  <skill>");
     lines.push(`    <name>${escapeXml(skill.name)}</name>`);
+    lines.push(`    <kind>${skill.documentKind === "experience" ? "experience" : "skill"}</kind>`);
     const description = descriptionForSkill(skill);
     if (description !== undefined) {
       lines.push(`    <description>${escapeXml(description)}</description>`);

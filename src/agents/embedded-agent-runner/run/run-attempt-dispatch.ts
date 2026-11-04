@@ -620,6 +620,7 @@ export async function prepareAndDispatchEmbeddedRunAttempt(
     skillWorkshopAutonomousCapture: params.skillWorkshopAutonomousCapture,
     skillWorkshopUpdateProposals: params.skillWorkshopUpdateProposals,
     skillWorkshopProposalOnly: params.skillWorkshopProposalOnly,
+    skillWorkshopExperienceCaptureOnly: params.skillWorkshopExperienceCaptureOnly,
     skillWorkshopProposalEnv: params.skillWorkshopProposalEnv,
     skillWorkshopOrigin: params.skillWorkshopOrigin,
     skillWorkshopProposalMutationBudget: params.skillWorkshopProposalMutationBudget,

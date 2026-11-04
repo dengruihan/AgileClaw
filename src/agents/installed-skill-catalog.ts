@@ -226,13 +226,19 @@ export async function searchInstalledSkills(
       b.score - a.score ||
       (a.value.name < b.value.name ? -1 : a.value.name > b.value.name ? 1 : 0),
   );
-  const results: Array<{ name: string; description: string; location: string }> = [];
+  const results: Array<{
+    name: string;
+    description: string;
+    location: string;
+    kind: "skill" | "experience";
+  }> = [];
   let chars = 0;
   for (const { value } of ranked.slice(0, limit)) {
     const result = {
       name: value.name,
       description: value.description.slice(0, MAX_DESCRIPTION_CHARS),
       location: value.location,
+      kind: value.kind ?? ("skill" as const),
     };
     chars += JSON.stringify(result).length;
     if (chars > MAX_RESULT_CHARS) {

@@ -11,6 +11,8 @@ export const SkillResourceDeliverySchema = closedObject({
       modelVisible: Type.Optional(Type.Boolean()),
       name: Type.String({ minLength: 1, maxLength: 128 }),
       displayName: Type.Optional(Type.String({ maxLength: 256 })),
+      /** Root instruction document: SKILL.md by default, EXPERIENCE.md for Experience entries. */
+      instructionFile: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
       description: Type.String({ maxLength: 1024 }),
       revision: Type.String({ pattern: "^[a-f0-9]{64}$" }),
       files: Type.Array(SkillLibraryFileSchema, { maxItems: SKILL_LIBRARY_MAX_FILES }),

@@ -39,6 +39,10 @@ import {
 } from "./skill-workshop-tool-collection.js";
 import { buildSkillWorkshopToolDescription } from "./skill-workshop-tool-description.js";
 import {
+  executeExperienceAction,
+  EXPERIENCE_TOOL_ACTIONS,
+} from "./skill-workshop-tool-experience.js";
+import {
   actionResult,
   assertAutonomousSkillSize,
   proposalMutationText,
@@ -69,6 +73,12 @@ import {
 } from "./skill-workshop-tool-schema.js";
 import { textResult } from "./tool-results.js";
 
+const EXPERIENCE_TOOL_ACTION_SET: ReadonlySet<string> = new Set(EXPERIENCE_TOOL_ACTIONS);
+const EXPERIENCE_CAPTURE_ONLY_ACTIONS: ReadonlySet<string> = new Set([
+  "experience_list",
+  "experience_read",
+  "experience_capture",
+]);
 const SKILL_WORKSHOP_MUTATION_ACTIONS = new Set(["create", "patch", "update", "revise"]);
 function requireProposalContent(content: string | undefined): string {
   if (content === undefined) {
@@ -125,6 +135,8 @@ type SkillWorkshopToolOptions = {
   origin?: SkillProposalOrigin;
   /** Internal reviewers may inspect and draft bounded pending proposals, never change lifecycle state. */
   proposalOnly?: boolean;
+  /** Automatic reviews may only list/read this agent's Experience documents and capture one. */
+  experienceCaptureOnly?: boolean;
   /** Allows proposal-only sessions to draft update proposals for existing live skills. */
   updateProposals?: boolean;
   /** Marks proposals created by an autonomous capture pipeline. */
@@ -151,9 +163,14 @@ export function createSkillWorkshopTool(options: SkillWorkshopToolOptions): AnyA
   const readSkillHashes =
     options.proposalMutationBudget?.readSkillHashes ?? new Map<string, string>();
   const preparedSkillPatches = options.proposalMutationBudget?.preparedSkillPatches ?? new Map();
+  // Shared capture receipt: the tool reserves the one-capture slot synchronously
+  // before its first await, so parallel calls observe the reservation; ids are
+  // appended in place to survive concurrent completions without last-writer loss.
+  const experienceCaptureIds = options.proposalMutationBudget?.experienceCaptureIds ?? [];
   if (options.proposalMutationBudget) {
     options.proposalMutationBudget.readSkillHashes = readSkillHashes;
     options.proposalMutationBudget.preparedSkillPatches = preparedSkillPatches;
+    options.proposalMutationBudget.experienceCaptureIds = experienceCaptureIds;
   }
   return {
     label: "Skill Workshop",
@@ -176,8 +193,57 @@ export function createSkillWorkshopTool(options: SkillWorkshopToolOptions): AnyA
         );
       }
 
+      if (options.experienceCaptureOnly === true && !EXPERIENCE_CAPTURE_ONLY_ACTIONS.has(action)) {
+        throw new ToolInputError(
+          "this Skill Workshop review allows only Experience list, read, and capture",
+        );
+      }
+
       if (action === "restore_collection") {
         return await executeSkillCollectionRestore(options);
+      }
+
+      if (EXPERIENCE_TOOL_ACTION_SET.has(action)) {
+        if (action === "experience_capture" && options.proposalMutationBudget) {
+          // Reserve the shared one-capture slot synchronously before the first
+          // await so parallel tool calls cannot both pass the budget check; the
+          // catch below releases the slot when no document id was recorded.
+          if (options.proposalMutationBudget.experienceCaptureUsed === true) {
+            throw new ToolInputError(
+              "This run already captured one Experience; reuse or update it.",
+            );
+          }
+          options.proposalMutationBudget.experienceCaptureUsed = true;
+        }
+        const capturedBefore = experienceCaptureIds.length;
+        try {
+          return await executeExperienceAction(
+            // SAFETY: the membership check above narrows action to EXPERIENCE_TOOL_ACTIONS.
+            action as (typeof EXPERIENCE_TOOL_ACTIONS)[number],
+            params,
+            {
+              config: options.config,
+              agentId: options.agentId,
+              workspaceDir: options.workspaceDir,
+              ...(options.env ? { env: options.env } : {}),
+              ...(options.origin ? { origin: options.origin } : {}),
+              ...(options.proposalMutationBudget
+                ? { experienceCaptureBudget: { ids: experienceCaptureIds } }
+                : {}),
+              maxChars: projectionBudgets.artifactChars,
+            },
+          );
+        } catch (error) {
+          if (
+            action === "experience_capture" &&
+            options.proposalMutationBudget &&
+            experienceCaptureIds.length === capturedBefore
+          ) {
+            // The capture failed before recording a document; free the slot for a retry.
+            options.proposalMutationBudget.experienceCaptureUsed = false;
+          }
+          throw error;
+        }
       }
 
       if (action === "history") {

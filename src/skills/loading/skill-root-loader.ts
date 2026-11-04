@@ -13,7 +13,11 @@ import {
 import type { PluginSkillRoot } from "./plugin-skill-root.js";
 import { createSkillEntry } from "./skill-entry-metadata.js";
 import { compactSkillPath } from "./skill-paths.js";
-import { mergeSkillRecords, type SkillCollision } from "./skill-precedence.js";
+import {
+  appendLowerPrecedenceSkillRecords,
+  mergeSkillRecords,
+  type SkillCollision,
+} from "./skill-precedence.js";
 import {
   canonicalSkillDirForSource,
   discoverPluginSkills,
@@ -55,6 +59,7 @@ function loadContainedSkillRecord(params: {
   maxSkillFileBytes: number;
   canonicalSkillDir?: string;
   rejectHardlinks: boolean;
+  instructionFile?: string;
   onDiagnostic?: (diagnostic: LocalSkillLoadDiagnostic) => void;
 }): LoadedSkillRecord | null {
   const loaded = loadSingleSkillDirectory({
@@ -63,6 +68,7 @@ function loadContainedSkillRecord(params: {
     source: params.source,
     maxBytes: params.maxSkillFileBytes,
     rejectHardlinks: params.rejectHardlinks,
+    ...(params.instructionFile ? { instructionFile: params.instructionFile } : {}),
     onDiagnostic:
       params.onDiagnostic ?? ((diagnostic) => warnInvalidSkill(params.source, diagnostic)),
   });
@@ -106,6 +112,8 @@ export function loadSkillRootRecords(params: {
   config?: OpenClawConfig;
   rejectHardlinks?: boolean;
   mode?: "audit";
+  /** Instruction document this root owns; Experience roots use EXPERIENCE.md. */
+  instructionFile?: string;
   onDiagnostic?: (diagnostic: LocalSkillLoadDiagnostic) => void;
 }): LoadedSkillRecord[] {
   const discoveryRoot = {
@@ -144,6 +152,7 @@ export function loadSkillRootRecords(params: {
     source: params.source,
     limits,
     allowedSymlinkTargetRealPaths: resolveAllowedSkillSymlinkTargetRealPaths(params.config),
+    ...(params.instructionFile ? { instructionFile: params.instructionFile } : {}),
     onDiagnostic: params.onDiagnostic,
   });
   const maxSkillsLoadedPerSource = Math.max(0, limits.maxSkillsLoadedPerSource);
@@ -158,6 +167,7 @@ export function loadSkillRootRecords(params: {
           ? candidate.skillDirRealPath
           : canonicalSkillDirForSource(params.source, candidate.skillDirRealPath),
       rejectHardlinks,
+      ...(params.instructionFile ? { instructionFile: params.instructionFile } : {}),
       onDiagnostic: params.onDiagnostic,
     });
     if (record) {
@@ -260,13 +270,30 @@ export function loadWorkspaceSkillSourceEntries(
         left.skill.name.localeCompare(right.skill.name, "en") ||
         left.skill.source.localeCompare(right.skill.source, "en"),
     );
-  return mergeSkillRecords(
+  const skillRecords = mergeSkillRecords(
     ["extra", "bundled", "workshop", "managed", "personal", "workspace"].flatMap(
       (tier) => grouped.get(tier) ?? [],
     ),
     JSON.stringify(["sources", plan.workspaceDir]),
     collisions,
-  ).map(createSkillEntry);
+  );
+  // Experience documents are agent-private candidates: a namesake Skill always
+  // keeps its identity so a later Experience can never shadow an installed skill.
+  const merged = appendLowerPrecedenceSkillRecords(
+    skillRecords,
+    grouped.get("experience") ?? [],
+    (winner, loser) => {
+      skillsLogger.warn("Skipping Experience name shadowed by a skill.", {
+        name: loser.skill.name,
+        skillFile: compactSkillPath(winner.skill.filePath),
+        experienceFile: compactSkillPath(loser.skill.filePath),
+        consoleMessage:
+          `Experience ${loser.skill.name} is hidden by skill ${winner.skill.name}; ` +
+          "rename one of them to keep both discoverable.",
+      });
+    },
+  );
+  return merged.map(createSkillEntry);
 }
 
 export function loadExecutionSkillEntries(
