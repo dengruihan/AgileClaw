@@ -17,6 +17,7 @@ const { clearAllVaultFillSessions, registerVaultFillSecret } =
 
 const CANARY = "aggregate-tabs-canary-3e7f";
 const KEY_CANARY = "property-key-canary-r5";
+const GETTER_CANARY = "getter-result-canary-r6";
 
 describe("browser tool aggregate fill scrub", () => {
   beforeEach(() => {
@@ -79,6 +80,39 @@ describe("browser tool aggregate fill scrub", () => {
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain(KEY_CANARY);
     expect(serialized).toContain("***");
+  });
+
+  it("never invokes a result getter on the final scrub and stays value-free", async () => {
+    registerVaultFillSecret("target-1", GETTER_CANARY, "doc-1");
+    let getterCalls = 0;
+    const title: Record<string, unknown> = {};
+    Object.defineProperty(title, "display", {
+      get() {
+        getterCalls += 1;
+        if (getterCalls >= 2) {
+          throw new Error(`getter ${GETTER_CANARY}`);
+        }
+        return "clean";
+      },
+      enumerable: true,
+      configurable: true,
+    });
+    mocks.browserTabs.mockResolvedValue({
+      running: true,
+      tabs: [{ targetId: "target-1", title, url: "https://login.example.com/" }],
+    });
+
+    const tool = createBrowserTool({ allowHostControl: true });
+    const result = await tool.execute?.(
+      "call-1",
+      { action: "tabs" },
+      undefined as never,
+      undefined as never,
+    );
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(GETTER_CANARY);
+    // The dispatch formatter may read the getter once; the scrub must not.
+    expect(getterCalls).toBeLessThanOrEqual(1);
   });
 
   it("masks a filled value in a rejected aggregate tabs error without rethrowing the live object", async () => {

@@ -178,6 +178,52 @@ describe("vault fill scrub", () => {
     expect(scrubVaultFillError(fn)).toBe(fn);
   });
 
+  it("withholds a thrown proxy whose prototype trap throws the canary", () => {
+    registerVaultFillSecret("target-1", CANARY);
+    const trapError = new Error(`trap ${CANARY}`);
+    const evil = new Proxy(
+      { clean: "value" },
+      {
+        getPrototypeOf() {
+          throw trapError;
+        },
+      },
+    );
+    const scrubbed = scrubVaultFillError(evil);
+    expect(Object.is(scrubbed, evil)).toBe(false);
+    expect(Object.is(scrubbed, trapError)).toBe(false);
+    expect(scrubbed).toBeInstanceOf(Error);
+    expect(String(scrubbed as Error)).not.toContain(CANARY);
+    expect(JSON.stringify(scrubbed)).not.toContain(CANARY);
+  });
+
+  it("never invokes result getters while scrubbing a tool result", () => {
+    registerVaultFillSecret("target-1", CANARY);
+    let calls = 0;
+    const source: Record<string, unknown> = { safe: "clean" };
+    Object.defineProperty(source, "hostile", {
+      get() {
+        calls += 1;
+        throw new Error(`late ${CANARY}`);
+      },
+      enumerable: true,
+      configurable: true,
+    });
+    const result = scrubVaultFillValueAll({ tab: source });
+    expect(calls).toBe(0);
+    expect(JSON.stringify(result)).toEqual(JSON.stringify({ tab: { safe: "clean" } }));
+  });
+
+  it("withholds the result instead of throwing when a revoked proxy is scrubbed", () => {
+    registerVaultFillSecret("target-1", CANARY);
+    const revocable = Proxy.revocable({ title: CANARY }, {});
+    revocable.revoke();
+    const result = scrubVaultFillValueAll(revocable.proxy);
+    expect(() => JSON.stringify(result)).not.toThrow();
+    expect(JSON.stringify(result)).not.toContain(CANARY);
+    expect(JSON.stringify(result)).toContain("withheld");
+  });
+
   it("replaces an error with unreadable fields instead of rethrowing it", () => {
     registerVaultFillSecret("target-1", CANARY);
     const error = new Error("clean");

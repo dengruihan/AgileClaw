@@ -204,30 +204,51 @@ export function scrubVaultFillValueAll<T>(value: T): T {
 }
 
 const MAX_ERROR_SCRUB_DEPTH = 8;
+const MAX_ERROR_PROTOTYPE_DEPTH = 16;
 const MAX_PROJECTED_ARRAY_ENTRIES = 1024;
 const CIRCULAR_PLACEHOLDER = "[Circular]";
 const WITHHELD_ERROR_MESSAGE =
   "Browser error withheld: the original error was replaced because it could not be proven free of an active vault fill value.";
+const WITHHELD_RESULT_TEXT = "[withheld: active vault fill protection]";
+const WITHHELD_SCRUB_RESULT: Readonly<Record<string, unknown>> = Object.freeze({
+  content: Object.freeze([Object.freeze({ type: "text", text: WITHHELD_RESULT_TEXT })]),
+  details: Object.freeze({ withheld: "vault_fill_protection" }),
+});
 
 /**
  * Scrub a thrown browser-tool error of every active fill secret, regardless of
  * `logging.redact`. While any secret applies, the original live object is
- * never rethrown: getters, custom `toString`/`toJSON`, prototypes, and class
- * identity can all regenerate or expose a value on a later read, so the result
- * is always a fresh inert Error whose fields are data-only copies with every
- * string masked. With no active secret the thrown value is returned unchanged.
- * Route failures are thrown before any target is proven, so their text is
- * treated like an aggregate result.
+ * never rethrown: getters, custom `toString`/`toJSON`, prototypes, proxy traps,
+ * and class identity can all regenerate or expose a value on a later read, so
+ * the result is always a fresh inert Error whose fields are data-only copies
+ * with every string and property name masked. The whole projection is bounded
+ * at this boundary: any trap, revoked proxy, or unexpected failure while
+ * secrets apply fails closed to a fixed value-free Error — never the thrown
+ * value and never thrown error text. With no active secret the thrown value is
+ * returned unchanged. Route failures are thrown before any target is proven,
+ * so their text is treated like an aggregate result.
  */
 export function scrubVaultFillError<T>(error: T): T {
-  return allFillSecrets().length === 0 ? error : inertErrorProjection(error, scrubVaultFillTextAll);
+  if (allFillSecrets().length === 0) {
+    return error;
+  }
+  try {
+    return inertErrorProjection(error, scrubVaultFillTextAll);
+  } catch {
+    return new Error(WITHHELD_ERROR_MESSAGE) as T;
+  }
 }
 
 /** Scrub a thrown error with one tab's active fill secrets. */
 export function scrubVaultFillErrorForTarget<T>(targetId: string | undefined, error: T): T {
-  return !targetId || !hasActiveVaultFill(targetId)
-    ? error
-    : inertErrorProjection(error, (text) => scrubVaultFillText(targetId, text));
+  if (!targetId || !hasActiveVaultFill(targetId)) {
+    return error;
+  }
+  try {
+    return inertErrorProjection(error, (text) => scrubVaultFillText(targetId, text));
+  } catch {
+    return new Error(WITHHELD_ERROR_MESSAGE) as T;
+  }
 }
 
 function inertErrorProjection<T>(error: T, scrubText: (text: string) => string): T {
@@ -272,9 +293,60 @@ function ownEnumerableDataKeys(target: object): string[] {
   try {
     keys = Object.keys(target);
   } catch {
-    return [];
+    // A hostile ownKeys trap (or revoked proxy) makes enumeration unreliable:
+    // fail closed at the public boundary rather than projecting an empty shell.
+    throw SCRUB_UNREADABLE;
   }
+  // Individual descriptor failures just drop that field; the enumeration
+  // itself already succeeded.
   return keys.filter((key) => readOwnDataField(target, key).present);
+}
+
+/**
+ * Internal marker for "the value cannot be structurally inspected" (revoked
+ * proxy, hostile prototype/ownKeys trap). Thrown to the public scrub boundary,
+ * which fails closed to a fixed value-free Error/result; it is value-free by
+ * construction and never exposed to callers.
+ */
+class ScrubUnreadableError extends Error {
+  constructor() {
+    super("vault fill scrub could not inspect the value");
+    this.name = "ScrubUnreadableError";
+  }
+}
+const SCRUB_UNREADABLE = new ScrubUnreadableError();
+
+/**
+ * Structural Error check that never goes through `instanceof` (whose
+ * `Symbol.hasInstance` path invokes a proxy's getPrototypeOf trap). A trap
+ * failure or revoked proxy makes the value unreadable: the whole scrub fails
+ * closed at the public boundary instead of guessing a shape.
+ */
+function hasErrorPrototype(value: object): boolean {
+  try {
+    let proto: object | null = Object.getPrototypeOf(value);
+    for (let steps = 0; proto && steps < MAX_ERROR_PROTOTYPE_DEPTH; steps += 1) {
+      if (proto === Error.prototype) {
+        return true;
+      }
+      proto = Object.getPrototypeOf(proto);
+    }
+    return false;
+  } catch {
+    throw SCRUB_UNREADABLE;
+  }
+}
+
+/**
+ * `Array.isArray` throws on a revoked proxy; a failure means the value cannot
+ * be proven array-shaped, so the whole scrub fails closed at the boundary.
+ */
+function isArrayValue(value: object): boolean {
+  try {
+    return Array.isArray(value);
+  } catch {
+    throw SCRUB_UNREADABLE;
+  }
 }
 
 /**
@@ -298,8 +370,14 @@ function setInertField(target: Record<string, unknown>, key: string, value: unkn
 
 function buildInertError(error: object, scrubText: (text: string) => string): Error {
   const projected = projectInertValue(error, scrubText, new WeakSet(), 0);
-  if (projected instanceof Error) {
-    return projected;
+  if (
+    typeof projected === "object" &&
+    projected !== null &&
+    Object.getPrototypeOf(projected) === Error.prototype
+  ) {
+    // Only this module's own `new Error` copies reach here with that
+    // prototype; the cast narrows the structural check back to Error.
+    return projected as Error;
   }
   let serialized: string | undefined;
   try {
@@ -348,22 +426,26 @@ function projectInertValue(
     return CIRCULAR_PLACEHOLDER;
   }
   seen.add(value);
-  if (Array.isArray(value)) {
+  if (isArrayValue(value)) {
+    // Length and entries come from own data descriptors only: a direct
+    // `value.length` read or `.map()` would invoke proxy/accessor behavior.
+    const lengthRead = readOwnDataField(value, "length");
+    const length =
+      typeof lengthRead.value === "number" &&
+      Number.isFinite(lengthRead.value) &&
+      lengthRead.value > 0
+        ? Math.min(Math.floor(lengthRead.value), MAX_PROJECTED_ARRAY_ENTRIES)
+        : 0;
     const copy: unknown[] = [];
-    try {
-      const length = Math.min(value.length, MAX_PROJECTED_ARRAY_ENTRIES);
-      for (let index = 0; index < length; index += 1) {
-        const read = readOwnDataField(value, String(index));
-        copy.push(
-          read.present ? projectInertValue(read.value, scrubText, seen, depth + 1) : undefined,
-        );
-      }
-    } catch {
-      // A hostile length keeps whatever inert entries were already copied.
+    for (let index = 0; index < length; index += 1) {
+      const read = readOwnDataField(value, String(index));
+      copy.push(
+        read.present ? projectInertValue(read.value, scrubText, seen, depth + 1) : undefined,
+      );
     }
     return copy;
   }
-  if (value instanceof Error) {
+  if (hasErrorPrototype(value)) {
     const message = readOwnDataField(value, "message");
     const copy = new Error(
       typeof message.value === "string" && message.value.length > 0
@@ -418,32 +500,15 @@ function projectInertValue(
 }
 
 function scrubValueWith<T>(value: T, scrubText: (text: string) => string): T {
-  const seen = new WeakSet<object>();
-  const scrub = (candidate: unknown): unknown => {
-    if (typeof candidate === "string") {
-      return scrubText(candidate);
-    }
-    if (typeof candidate === "function" || typeof candidate === "symbol") {
-      // Coercion can expose the secret; JSON-shaped tool results never need them.
-      return undefined;
-    }
-    if (!candidate || typeof candidate !== "object") {
-      return candidate;
-    }
-    if (seen.has(candidate)) {
-      // Returning the original here would re-attach an unscrubbed live object
-      // to the result; a value-free placeholder keeps the output provably clean.
-      return CIRCULAR_PLACEHOLDER;
-    }
-    seen.add(candidate);
-    if (Array.isArray(candidate)) {
-      return candidate.map(scrub);
-    }
-    const result: Record<string, unknown> = {};
-    for (const [key, entry] of Object.entries(candidate)) {
-      setInertField(result, scrubText(key), scrub(entry));
-    }
-    return result;
-  };
-  return scrub(value) as T;
+  // Result scrubbing uses the same guarded data-descriptor projection as the
+  // error path — never `Object.entries`, `.map()`, or live reads that could
+  // invoke getters or proxy traps on the untrusted result. The whole scrub is
+  // bounded at this public boundary: any trap, revoked proxy, or unexpected
+  // failure fails closed to a fixed value-free withheld result instead of
+  // throwing untrusted text at the tool boundary.
+  try {
+    return projectInertValue(value, scrubText, new WeakSet(), 0) as T;
+  } catch {
+    return WITHHELD_SCRUB_RESULT as T;
+  }
 }

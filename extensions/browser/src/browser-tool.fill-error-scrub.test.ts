@@ -33,6 +33,7 @@ const TOJSON_CANARY = "tojson-err-canary-52aa";
 const ARRAY_CANARY = "array-err-canary-d6b1";
 const FUNC_CANARY = "func-err-canary-r5";
 const KEY_CANARY = "property-key-canary-r5";
+const PROXY_CANARY = "proxy-err-canary-r6";
 
 function collectReachableText(value: unknown, depth = 0): string {
   if (typeof value === "string") {
@@ -342,6 +343,83 @@ describe("browser tool thrown fill-error scrub (inert projection)", () => {
     expect(serialized).not.toContain(KEY_CANARY);
     expect(serialized).toContain("***");
     assertInert(thrown, KEY_CANARY);
+  });
+
+  it("withholds a thrown proxy whose getPrototypeOf trap throws the canary", async () => {
+    registerVaultFillSecret("target-1", PROXY_CANARY, "doc-1");
+    const trapError = new Error(`proxy ${PROXY_CANARY}`);
+    const evil = new Proxy(
+      { body: "clean" },
+      {
+        getPrototypeOf() {
+          throw trapError;
+        },
+      },
+    );
+    mocks.browserTabs.mockRejectedValue(evil);
+
+    const thrown = await executeTabsAction();
+
+    expect(Object.is(thrown, evil)).toBe(false);
+    expect(Object.is(thrown, trapError)).toBe(false);
+    expect(thrown).toBeInstanceOf(Error);
+    assertInert(thrown, PROXY_CANARY);
+  });
+
+  it("withholds a revoked proxy throw without leaking revocation text", async () => {
+    registerVaultFillSecret("target-1", PROXY_CANARY, "doc-1");
+    const revocable = Proxy.revocable({ body: `revoked ${PROXY_CANARY}` }, {});
+    revocable.revoke();
+    mocks.browserTabs.mockRejectedValue(revocable.proxy);
+
+    const thrown = await executeTabsAction();
+
+    expect(Object.is(thrown, revocable.proxy)).toBe(false);
+    expect(thrown).toBeInstanceOf(Error);
+    expect(String(thrown)).not.toContain("revoked");
+    assertInert(thrown, PROXY_CANARY);
+  });
+
+  it("withholds a thrown proxy whose ownKeys trap throws the canary", async () => {
+    registerVaultFillSecret("target-1", PROXY_CANARY, "doc-1");
+    const trapError = new Error(`ownKeys ${PROXY_CANARY}`);
+    const evil = new Proxy(
+      { clean: "value" },
+      {
+        ownKeys() {
+          throw trapError;
+        },
+      },
+    );
+    mocks.browserTabs.mockRejectedValue(evil);
+
+    const thrown = await executeTabsAction();
+
+    expect(Object.is(thrown, evil)).toBe(false);
+    expect(Object.is(thrown, trapError)).toBe(false);
+    expect(thrown).toBeInstanceOf(Error);
+    assertInert(thrown, PROXY_CANARY);
+  });
+
+  it("withholds a thrown proxy whose descriptor trap throws the canary", async () => {
+    registerVaultFillSecret("target-1", PROXY_CANARY, "doc-1");
+    const trapError = new Error(`descriptor ${PROXY_CANARY}`);
+    const evil = new Proxy(
+      { clean: "value" },
+      {
+        getOwnPropertyDescriptor() {
+          throw trapError;
+        },
+      },
+    );
+    mocks.browserTabs.mockRejectedValue(evil);
+
+    const thrown = await executeTabsAction();
+
+    expect(Object.is(thrown, evil)).toBe(false);
+    expect(Object.is(thrown, trapError)).toBe(false);
+    expect(thrown).toBeInstanceOf(Error);
+    assertInert(thrown, PROXY_CANARY);
   });
 
   describe("real loopback /tabs rejection", () => {
