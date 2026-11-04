@@ -428,6 +428,7 @@ describe("browser screencast sessions", () => {
   it.each(["page", "cdp", "lifecycle"])(
     "closes viewers with target_closed when %s closes",
     async (owner) => {
+      registerVaultFillSecret("target-1", `owner-${owner}-canary`, "doc-1", "openclaw");
       const lifecycle = new AbortController();
       const viewer = await attach(screencastParams({ lifecycleSignal: lifecycle.signal }));
       if (owner === "lifecycle") {
@@ -440,8 +441,21 @@ describe("browser screencast sessions", () => {
       expect(viewer.close).toHaveBeenCalledWith(4004, "target_closed");
       await flush();
       expect(page.cdp.detach).toHaveBeenCalledTimes(1);
+      expect(hasActiveVaultFill("target-1")).toBe(owner !== "page");
+      clearAllVaultFillSessions();
     },
   );
+
+  it("keeps masking when capture acknowledgement fails but still closes the viewer", async () => {
+    registerVaultFillSecret("target-1", "ack-failure-canary", "doc-1", "openclaw");
+    const viewer = await attach();
+    page.cdp.send.mockRejectedValueOnce(new Error("ack failed"));
+    page.paint(1);
+    await vi.advanceTimersByTimeAsync(60);
+    expect(viewer.close).toHaveBeenCalledWith(4004, "target_closed");
+    expect(hasActiveVaultFill("target-1")).toBe(true);
+    clearAllVaultFillSessions();
+  });
 
   it("stops only after the last viewer leaves and closes all viewers with 1012 on shutdown", async () => {
     const first = await attach();

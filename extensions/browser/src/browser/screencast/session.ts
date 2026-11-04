@@ -98,11 +98,11 @@ class BrowserScreencastSession {
         ssrfPolicy: this.params.ssrfPolicy,
       });
       if (!this.isCurrent() || page.isClosed()) {
-        this.onTargetClosed();
+        this.onPageClosed();
         return;
       }
       this.page = page;
-      page.on("close", this.onTargetClosed);
+      page.on("close", this.onPageClosed);
       page.on("framenavigated", this.onNavigation);
       page.on("load", this.onLoad);
       await this.checkNavigation(page.url());
@@ -111,9 +111,17 @@ class BrowserScreencastSession {
     }
   }
 
-  private readonly onTargetClosed = (): void => {
-    // The document is gone, so its sensitive-input masking session is gone too.
+  /**
+   * A positively closed Playwright page proves the document is gone.
+   * Lifecycle invalidation, CDP detach, and capture/ack failures only stop the
+   * stream; the tab can survive them, so masking is retained.
+   */
+  private readonly onPageClosed = (): void => {
     clearVaultFillSession(this.params.targetId);
+    void this.close(4004, "target_closed");
+  };
+
+  private readonly onTargetClosed = (): void => {
     void this.close(4004, "target_closed");
   };
 
@@ -285,7 +293,7 @@ class BrowserScreencastSession {
     }
     this.closed = true;
     this.params.lifecycleSignal.removeEventListener("abort", this.onTargetClosed);
-    this.page?.off("close", this.onTargetClosed);
+    this.page?.off("close", this.onPageClosed);
     this.page?.off("framenavigated", this.onNavigation);
     this.page?.off("load", this.onLoad);
     const viewers = [...this.viewers.keys()];
