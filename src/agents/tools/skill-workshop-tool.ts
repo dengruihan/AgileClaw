@@ -163,9 +163,14 @@ export function createSkillWorkshopTool(options: SkillWorkshopToolOptions): AnyA
   const readSkillHashes =
     options.proposalMutationBudget?.readSkillHashes ?? new Map<string, string>();
   const preparedSkillPatches = options.proposalMutationBudget?.preparedSkillPatches ?? new Map();
+  // Shared capture receipt: the tool reserves the one-capture slot synchronously
+  // before its first await, so parallel calls observe the reservation; ids are
+  // appended in place to survive concurrent completions without last-writer loss.
+  const experienceCaptureIds = options.proposalMutationBudget?.experienceCaptureIds ?? [];
   if (options.proposalMutationBudget) {
     options.proposalMutationBudget.readSkillHashes = readSkillHashes;
     options.proposalMutationBudget.preparedSkillPatches = preparedSkillPatches;
+    options.proposalMutationBudget.experienceCaptureIds = experienceCaptureIds;
   }
   return {
     label: "Skill Workshop",
@@ -199,31 +204,46 @@ export function createSkillWorkshopTool(options: SkillWorkshopToolOptions): AnyA
       }
 
       if (EXPERIENCE_TOOL_ACTION_SET.has(action)) {
-        const experienceCaptureBudget = options.proposalMutationBudget
-          ? {
-              used: options.proposalMutationBudget.experienceCaptureUsed === true,
-              ids: [...(options.proposalMutationBudget.experienceCaptureIds ?? [])],
-            }
-          : undefined;
-        const result = await executeExperienceAction(
-          // SAFETY: the membership check above narrows action to EXPERIENCE_TOOL_ACTIONS.
-          action as (typeof EXPERIENCE_TOOL_ACTIONS)[number],
-          params,
-          {
-            config: options.config,
-            agentId: options.agentId,
-            workspaceDir: options.workspaceDir,
-            ...(options.env ? { env: options.env } : {}),
-            ...(options.origin ? { origin: options.origin } : {}),
-            ...(experienceCaptureBudget ? { experienceCaptureBudget } : {}),
-            maxChars: projectionBudgets.artifactChars,
-          },
-        );
-        if (experienceCaptureBudget && options.proposalMutationBudget) {
-          options.proposalMutationBudget.experienceCaptureUsed = experienceCaptureBudget.used;
-          options.proposalMutationBudget.experienceCaptureIds = experienceCaptureBudget.ids;
+        if (action === "experience_capture" && options.proposalMutationBudget) {
+          // Reserve the shared one-capture slot synchronously before the first
+          // await so parallel tool calls cannot both pass the budget check; the
+          // catch below releases the slot when no document id was recorded.
+          if (options.proposalMutationBudget.experienceCaptureUsed === true) {
+            throw new ToolInputError(
+              "This run already captured one Experience; reuse or update it.",
+            );
+          }
+          options.proposalMutationBudget.experienceCaptureUsed = true;
         }
-        return result;
+        const capturedBefore = experienceCaptureIds.length;
+        try {
+          return await executeExperienceAction(
+            // SAFETY: the membership check above narrows action to EXPERIENCE_TOOL_ACTIONS.
+            action as (typeof EXPERIENCE_TOOL_ACTIONS)[number],
+            params,
+            {
+              config: options.config,
+              agentId: options.agentId,
+              workspaceDir: options.workspaceDir,
+              ...(options.env ? { env: options.env } : {}),
+              ...(options.origin ? { origin: options.origin } : {}),
+              ...(options.proposalMutationBudget
+                ? { experienceCaptureBudget: { ids: experienceCaptureIds } }
+                : {}),
+              maxChars: projectionBudgets.artifactChars,
+            },
+          );
+        } catch (error) {
+          if (
+            action === "experience_capture" &&
+            options.proposalMutationBudget &&
+            experienceCaptureIds.length === capturedBefore
+          ) {
+            // The capture failed before recording a document; free the slot for a retry.
+            options.proposalMutationBudget.experienceCaptureUsed = false;
+          }
+          throw error;
+        }
       }
 
       if (action === "history") {

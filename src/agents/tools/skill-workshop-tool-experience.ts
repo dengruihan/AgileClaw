@@ -24,7 +24,13 @@ type ExperienceToolOptions = {
   workspaceDir: string;
   env?: NodeJS.ProcessEnv;
   origin?: SkillProposalOrigin;
-  experienceCaptureBudget?: { used: boolean; ids: string[] };
+  /**
+   * Shared run-scoped capture receipt. The skill_workshop tool reserves the
+   * one-capture slot synchronously before dispatch, so this action only records
+   * the captured document id on the shared array; it never re-checks or
+   * replaces the receipt.
+   */
+  experienceCaptureBudget?: { ids: string[] };
   maxChars: number;
 };
 
@@ -114,28 +120,18 @@ export async function executeExperienceAction(
       required: true,
       label: "experience_content",
     });
-    if (options.experienceCaptureBudget?.used) {
-      throw new ToolInputError("This run already captured one Experience; reuse or update it.");
-    }
+    const evidence = readToolStringParam(params, "evidence");
+    // Parse every parameter before writing so an input error cannot leave an
+    // unrecorded document behind the reserved slot.
     const result = await captureExperience(scope(options), {
       name,
       description,
       content,
       ...(originForCapture(options) ? { origin: originForCapture(options) } : {}),
-      ...(readToolStringParam(params, "evidence")
-        ? {
-            evidence: {
-              verification: "observed" as const,
-              summary: readToolStringParam(params, "evidence"),
-            },
-          }
-        : {}),
+      ...(evidence ? { evidence: { verification: "observed" as const, summary: evidence } } : {}),
       project: { workspaceDir: options.workspaceDir },
     });
-    if (options.experienceCaptureBudget) {
-      options.experienceCaptureBudget.used = true;
-      options.experienceCaptureBudget.ids.push(result.record.id);
-    }
+    options.experienceCaptureBudget?.ids.push(result.record.id);
     return textResult(
       `${result.created ? "Captured" : "Reused"} Experience ${result.record.id} (${result.record.status}).`,
       {

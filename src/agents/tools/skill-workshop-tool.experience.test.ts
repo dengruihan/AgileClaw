@@ -114,6 +114,78 @@ describe("skill_workshop Experience actions", () => {
     ).rejects.toThrow("expected_experience_hash");
   });
 
+  it("reserves the one-capture budget atomically across parallel capture calls", async () => {
+    const budget: SkillWorkshopProposalMutationBudget = { remaining: 0 };
+    const tool = createSkillWorkshopTool({
+      workspaceDir: testState.workspaceDir,
+      config: {
+        agents: {
+          entries: { main: { agentDir: path.join(testState.stateDir, "agents", "main", "agent") } },
+        },
+      },
+      env: testState.env,
+      agentId: "main",
+      experienceCaptureOnly: true,
+      proposalMutationBudget: budget,
+    });
+    const capture = (name: string) =>
+      tool.execute(`call-${name}`, {
+        action: "experience_capture",
+        name,
+        description: `${name}.`,
+        experience_content: "Body.\n",
+      });
+
+    const [first, second] = await Promise.allSettled([
+      capture("first-note"),
+      capture("second-note"),
+    ]);
+    expect(first.status).toBe("fulfilled");
+    expect(second.status).toBe("rejected");
+    expect(budget.experienceCaptureUsed).toBe(true);
+    expect(budget.experienceCaptureIds).toEqual(["first-note"]);
+
+    const listed = await tool.execute("call-list", { action: "experience_list" });
+    expect(text(listed)).toContain("- first-note [active]");
+    expect(text(listed)).not.toContain("second-note");
+  });
+
+  it("releases the capture reservation when the capture fails before recording a document", async () => {
+    const budget: SkillWorkshopProposalMutationBudget = { remaining: 0 };
+    const tool = createSkillWorkshopTool({
+      workspaceDir: testState.workspaceDir,
+      config: {
+        agents: {
+          entries: { main: { agentDir: path.join(testState.stateDir, "agents", "main", "agent") } },
+        },
+      },
+      env: testState.env,
+      agentId: "main",
+      experienceCaptureOnly: true,
+      proposalMutationBudget: budget,
+    });
+
+    await expect(
+      tool.execute("call-invalid", {
+        action: "experience_capture",
+        name: "Retry note",
+        experience_content: "Body.\n",
+      }),
+    ).rejects.toThrow("description");
+    expect(budget.experienceCaptureUsed).toBe(false);
+    expect(budget.experienceCaptureIds ?? []).toEqual([]);
+
+    const retried = await tool.execute("call-retry", {
+      action: "experience_capture",
+      name: "Retry note",
+      description: "Retry note.",
+      experience_content: "Body.\n",
+    });
+    expect(text(retried)).toContain("Captured Experience retry-note");
+    expect(budget.experienceCaptureUsed).toBe(true);
+    expect(budget.experienceCaptureIds).toEqual(["retry-note"]);
+  });
+
   it("keeps Experience reads and captures available to draft-only reviews but not edits", async () => {
     const tool = buildTool({ proposalOnly: true, updateProposals: false });
     await tool.execute("call-capture", {

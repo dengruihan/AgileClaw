@@ -42,9 +42,13 @@ export type SkillWorkshopProposalMutationBudget = {
   readSkillHashes?: Map<string, string>;
   /** Single-use exact-span patch authority prepared from authoritative live content. */
   preparedSkillPatches?: Map<string, SkillWorkshopPreparedPatch>;
-  /** Bounds automatic Experience capture to one document per run. */
+  /**
+   * Bounds Experience capture to one document per run. The skill_workshop tool
+   * reserves this slot synchronously before its first await so parallel tool
+   * calls cannot both capture; released when a capture fails before recording a document.
+   */
   experienceCaptureUsed?: boolean;
-  /** Documents captured by this run, in capture order. */
+  /** Documents captured by this run, in capture order; appended in place on the shared array. */
   experienceCaptureIds?: string[];
 };
 
