@@ -6,7 +6,6 @@ describe("initial sidebar visibility", () => {
   it.each([
     "/chat/research/conversation?keep=yes#details",
     "/chat/research",
-    "/chat",
     "/dashboard/research/conversation",
     "/settings/appearance",
     "/chat/research/conversation?nav=collapsed",
@@ -22,6 +21,24 @@ describe("initial sidebar visibility", () => {
       expect(window.location.pathname + window.location.search + window.location.hash).toBe(
         initialUrl,
       );
+    } finally {
+      runtime?.stop();
+      window.history.replaceState({}, "", previousUrl);
+      saveSettings(previousSettings);
+    }
+  });
+
+  it("starts expanded and opens the unsent draft landing at /chat", () => {
+    const previousSettings = loadSettings();
+    const previousUrl = window.location.href;
+    window.history.replaceState({}, "", "/chat");
+    let runtime: ReturnType<typeof bootstrapApplication> | undefined;
+
+    try {
+      runtime = bootstrapApplication();
+      expect(runtime.context.navigation.snapshot.navCollapsed).toBe(false);
+      // A bare chat entry is the draft landing now, not a restored conversation.
+      expect(window.location.pathname).toBe("/new");
     } finally {
       runtime?.stop();
       window.history.replaceState({}, "", previousUrl);

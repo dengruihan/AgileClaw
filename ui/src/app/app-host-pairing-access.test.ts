@@ -317,8 +317,9 @@ describe("application shell pairing access", () => {
         render(shell.render(), container);
         await settleLitElements([sidebar, topbar]);
         expect(renderSidebarChild).toHaveBeenCalledOnce();
-        expect(sidebar.querySelector(".session-row-badge--attention")?.textContent).toContain("2");
-        expect(sidebar.querySelector(".session-row-badge--draft")).toBeNull();
+        // The retired Home row owned those state badges; the sidebar receives the
+        // same outbox projection through its regular session rows instead.
+        expect(sidebar.storedOutboxes?.attentionCountForSession("agent:main:main")).toBe(2);
       }
     },
   );

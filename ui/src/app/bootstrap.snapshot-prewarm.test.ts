@@ -16,16 +16,14 @@ afterEach(() => {
 
 describe("bootstrap routed snapshot prewarm", () => {
   it.each([
-    {
-      key: "agent:other:custom-main",
-      boot: true,
-      url: "/chat",
-      expected: "agent:other:main",
-    },
+    // A bare /chat is the unsent draft landing, so warm boot never prewarms a
+    // conversation there; an explicit session route still does.
+    { key: "agent:other:custom-main", boot: true, url: "/chat", expected: null },
+    { key: "agent:other:conversation", boot: true, url: "/chat", expected: null },
     {
       key: "agent:other:conversation",
       boot: true,
-      url: "/chat",
+      url: "/chat/other/conversation",
       expected: "agent:other:conversation",
     },
     { key: "main", boot: true, url: "/chat", expected: null },
@@ -152,7 +150,8 @@ describe("warm startup credential binding", () => {
     "$authMethod boot with operator '$token' and device '$deviceToken' is warm: $warm",
     ({ authMethod, token, deviceToken, warm, retained }) => {
       const previousUrl = window.location.href;
-      window.history.replaceState({}, "", "/chat");
+      // An explicit session route keeps warm-boot snapshot prewarm observable.
+      window.history.replaceState({}, "", "/chat/main");
       vi.stubGlobal("localStorage", createStorageMock());
       vi.stubGlobal("sessionStorage", createStorageMock());
       const settings = { ...loadSettings(), sessionKey: "agent:main:main" };
