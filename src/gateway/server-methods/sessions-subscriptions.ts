@@ -84,7 +84,7 @@ export const sessionSubscriptionHandlers: GatewayRequestHandlers = {
           sessionObserverScopeKey(requested.value.sessionKey, requested.value.agentId),
         );
       }
-      const sessionKeys = declarations.replace(connId, canonicalKeys);
+      const sessionKeys = declarations.replace(connId, canonicalKeys, params.focused === true);
       respond(true, { sessionKeys }, undefined);
     },
   ),

@@ -83,6 +83,7 @@ const DEFAULT_CRON_FORM: CronFormState = {
   deliveryTo: "",
   deliveryAccountId: "",
   deliveryBestEffort: false,
+  deliveryNotifyOnComplete: true,
   deliveryThreadId: undefined,
   deliveryCompletionDestination: undefined,
   deliveryFailureDestination: undefined,
@@ -152,6 +153,13 @@ function supportsAnnounceDelivery(
   form: Pick<CronFormState, "sessionTarget" | "payloadKind" | "payloadLocked">,
 ) {
   return form.sessionTarget !== "main" && (form.payloadKind === "agentTurn" || form.payloadLocked);
+}
+
+/** Only scheduled agent runs can attribute a completion push back to this job. */
+function supportsCompletionNotification(
+  form: Pick<CronFormState, "sessionTarget" | "payloadKind">,
+) {
+  return form.sessionTarget !== "main" && form.payloadKind === "agentTurn";
 }
 
 export function normalizeCronFormState(
@@ -519,6 +527,7 @@ function jobToForm(job: CronJob, prev: CronFormState): CronFormState {
     deliveryTo: job.delivery?.to ?? "",
     deliveryAccountId: job.delivery?.accountId ?? "",
     deliveryBestEffort: job.delivery?.bestEffort ?? false,
+    deliveryNotifyOnComplete: job.delivery?.notifyOnComplete ?? true,
     deliveryThreadId: job.delivery?.threadId,
     deliveryCompletionDestination:
       job.delivery?.mode === "announce" ? job.delivery.completionDestination : undefined,
@@ -739,6 +748,9 @@ export async function addCronJob(state: CronState): Promise<CronSaveResult> {
               (selectedDeliveryMode === "announce" && editingJob?.delivery?.to ? null : undefined),
             accountId: deliveryAccountId,
             bestEffort: form.deliveryBestEffort,
+            ...(supportsCompletionNotification(form)
+              ? { notifyOnComplete: form.deliveryNotifyOnComplete }
+              : {}),
             ...(form.deliveryThreadId !== undefined ? { threadId: form.deliveryThreadId } : {}),
             ...(selectedDeliveryMode === "announce" && form.deliveryCompletionDestination
               ? { completionDestination: form.deliveryCompletionDestination }
@@ -751,6 +763,9 @@ export async function addCronJob(state: CronState): Promise<CronSaveResult> {
           ? ({
               mode: "none",
               ...(form.deliveryBestEffort ? { bestEffort: true } : {}),
+              ...(supportsCompletionNotification(form)
+                ? { notifyOnComplete: form.deliveryNotifyOnComplete }
+                : {}),
               ...(form.deliveryThreadId !== undefined ? { threadId: form.deliveryThreadId } : {}),
               ...(form.deliveryFailureDestination
                 ? { failureDestination: form.deliveryFailureDestination }

@@ -22,6 +22,7 @@ import { prepareSessionEventProjection } from "./session-event-projection.js";
 import { resolveSessionEventAgentScope } from "./session-request-agent.js";
 import type { SessionRowProjection } from "./session-row-projection.js";
 import { canReceiveSessionEvent, prepareProjectedSessionSharing } from "./session-sharing.js";
+import type { createSessionViewerPresenceDeclarations } from "./session-viewer-presence.js";
 
 /** Creates transport-independent connection, subscription, and run state. */
 export function createGatewayConnectionState(params: {
@@ -29,6 +30,10 @@ export function createGatewayConnectionState(params: {
   bootId: string;
   cfg: import("../config/config.js").OpenClawConfig;
   getRuntimeConfig?: () => import("../config/config.js").OpenClawConfig;
+  /** Lazy live-state presence declarations; absent until the Gateway publishes live state. */
+  getSessionViewerPresence?: () =>
+    | ReturnType<typeof createSessionViewerPresenceDeclarations>
+    | undefined;
 }) {
   const loadRuntimeConfig = params.getRuntimeConfig ?? (() => params.cfg);
   let sessionRowProjection: SessionRowProjection | undefined;
@@ -61,7 +66,10 @@ export function createGatewayConnectionState(params: {
     isConnectionActive,
     forgetConnectionAncestors,
   );
-  const eventWebPush = createEventWebPushDelivery({ getRuntimeConfig: loadRuntimeConfig });
+  const eventWebPush = createEventWebPushDelivery({
+    getRuntimeConfig: loadRuntimeConfig,
+    getFocusedSessionViewers: params.getSessionViewerPresence,
+  });
   const gatewayBroadcaster = createGatewayBroadcaster({
     clients,
     preparePresenceProjection: (presence) =>

@@ -9,6 +9,8 @@ export type CronRunExecSource = {
   jobConfigRevision: string;
   /** Display name for operator surfaces (approval cards); not identity. */
   jobName: string;
+  /** Completion notification preference captured when the run starts. Absent means true. */
+  notifyOnComplete?: boolean;
 };
 
 // Bounded by live cron-run concurrency; the cap only guards a leaked

@@ -34,7 +34,7 @@ async function declare(params: {
 }
 
 function createContext() {
-  const replace = vi.fn((_connId: string, sessionKeys: readonly string[]) =>
+  const replace = vi.fn((_connId: string, sessionKeys: readonly string[], _focused?: boolean) =>
     [...new Set(sessionKeys)].toSorted(),
   );
   const context = {
@@ -56,16 +56,28 @@ describe("sessions.viewers.set", () => {
       context,
     });
 
-    expect(replace).toHaveBeenCalledWith("conn-viewer", [
-      "agent:work:home",
-      "agent:work:other",
-      "agent:work:home",
-    ]);
+    expect(replace).toHaveBeenCalledWith(
+      "conn-viewer",
+      ["agent:work:home", "agent:work:other", "agent:work:home"],
+      false,
+    );
     expect(respond).toHaveBeenCalledWith(
       true,
       { sessionKeys: ["agent:work:home", "agent:work:other"] },
       undefined,
     );
+  });
+
+  it("forwards optional focus as private connection state", async () => {
+    const { context, replace } = createContext();
+    const respond = await declare({
+      body: { sessionKeys: ["agent:work:home"], focused: true },
+      connId: "conn-viewer",
+      context,
+    });
+
+    expect(replace).toHaveBeenCalledWith("conn-viewer", ["agent:work:home"], true);
+    expect(respond).toHaveBeenCalledWith(true, { sessionKeys: ["agent:work:home"] }, undefined);
   });
 
   it("accepts an empty declaration and rejects malformed or oversized sets", async () => {
@@ -114,7 +126,9 @@ describe("sessions.viewers.set", () => {
   });
 
   it("scopes bare viewer identities by explicit owner and rejects ambiguity", async () => {
-    const replace = vi.fn((_connId: string, sessionKeys: readonly string[]) => sessionKeys);
+    const replace = vi.fn(
+      (_connId: string, sessionKeys: readonly string[], _focused?: boolean) => sessionKeys,
+    );
     const context = {
       getRuntimeConfig: () => ({
         agents: { ownership: "explicit", entries: { main: {}, work: {} } },
@@ -127,7 +141,7 @@ describe("sessions.viewers.set", () => {
       connId: "conn-viewer",
       context,
     });
-    expect(replace).toHaveBeenCalledWith("conn-viewer", ["agent:work:global"]);
+    expect(replace).toHaveBeenCalledWith("conn-viewer", ["agent:work:global"], false);
     expect(selected).toHaveBeenCalledWith(true, { sessionKeys: ["agent:work:global"] }, undefined);
 
     replace.mockClear();

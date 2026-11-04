@@ -213,6 +213,24 @@ describe("applyJobPatch delivery merge", () => {
     expect(resolveCronDeliveryPlan(job).mode).toBe("announce");
   });
 
+  it("persists notifyOnComplete through partial delivery updates and defaults it separately", () => {
+    const job = makeJob({ delivery: { mode: "announce", notifyOnComplete: true } });
+
+    applyJobPatch(job, {
+      delivery: { channel: "telegram", notifyOnComplete: false },
+    });
+    expect(job.delivery).toMatchObject({ mode: "announce", notifyOnComplete: false });
+
+    applyJobPatch(job, {
+      delivery: { notifyOnComplete: true },
+    });
+    expect(job.delivery).toMatchObject({ mode: "announce", notifyOnComplete: true });
+
+    const implicit = makeJob({ delivery: undefined });
+    applyJobPatch(implicit, { delivery: { notifyOnComplete: false } });
+    expect(implicit.delivery).toEqual({ mode: "announce", notifyOnComplete: false });
+  });
+
   it.each([
     { name: "best-effort disabled", delivery: { bestEffort: false } },
     {

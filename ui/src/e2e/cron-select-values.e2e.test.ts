@@ -267,7 +267,10 @@ suite.define(() => {
         expect(request.params).toMatchObject({
           id: job.id,
           expectedConfigRevision: "garden-legacy-revision",
-          patch: { name: "Renamed garden summary", delivery: { mode: "none" } },
+          patch: {
+            name: "Renamed garden summary",
+            delivery: { mode: "none", notifyOnComplete: true },
+          },
         });
         expect(await gateway.getRequests("cron.update")).toHaveLength(1);
       },

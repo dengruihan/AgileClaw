@@ -190,6 +190,14 @@ function coerceDelivery(delivery: UnknownRecord) {
       delete next[field];
     }
   }
+  if ("notifyOnComplete" in next) {
+    const notifyOnComplete = parseBoolean(next.notifyOnComplete);
+    if (notifyOnComplete === undefined) {
+      delete next.notifyOnComplete;
+    } else {
+      next.notifyOnComplete = notifyOnComplete;
+    }
+  }
   if ("failureDestination" in next && next.failureDestination !== null) {
     // Null is an explicit clear signal in patches; invalid objects are dropped.
     if (isRecord(next.failureDestination)) {

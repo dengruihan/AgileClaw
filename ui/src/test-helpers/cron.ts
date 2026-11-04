@@ -76,6 +76,7 @@ export const DEFAULT_CRON_FORM: CronFormState = {
   deliveryTo: "",
   deliveryAccountId: "",
   deliveryBestEffort: false,
+  deliveryNotifyOnComplete: true,
   deliveryThreadId: undefined,
   deliveryCompletionDestination: undefined,
   deliveryFailureDestination: undefined,

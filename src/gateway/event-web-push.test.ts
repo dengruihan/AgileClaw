@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDeferred } from "../../test/helpers/promise.js";
 import { upsertSessionEntryCore } from "../config/sessions/session-accessor.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { registerCronRunExecSource } from "../infra/cron-run-exec-source.js";
 import { requireNodeSqlite } from "../infra/node-sqlite.js";
 import type { BoundWebPushSubscription } from "../infra/push-web.js";
 import { closeOpenClawAgentDatabasesAsync } from "../state/openclaw-agent-db-lifecycle.js";
@@ -388,6 +389,103 @@ describe("event Web Push classification", () => {
       );
     },
   );
+
+  it("suppresses only the completed session for a focused recipient identity", async () => {
+    listBoundWebPushSubscriptionsMock.mockResolvedValue([
+      boundSubscription("browser-device", "bob"),
+    ]);
+    const isFocusedForIdentity = vi.fn(
+      (
+        identity: { userProfileId: string | null; deviceId: string },
+        sessionKeys: ReadonlySet<string>,
+      ) => identity.userProfileId === "bob" && sessionKeys.has("agent:research:thread.1"),
+    );
+    const delivery = createEventWebPushDelivery({
+      getRuntimeConfig: () => ({}),
+      getFocusedSessionViewers: () => ({ isFocusedForIdentity }),
+    });
+
+    delivery.handleEvent(
+      "chat",
+      { state: "final", runId: "focused-run", sessionKey: "agent:research:thread.1" },
+      { agentId: "research" },
+    );
+    await authorityCompleted.promise;
+    expect(preparedWebPushSendMock).not.toHaveBeenCalled();
+
+    delivery.handleEvent(
+      "chat",
+      { state: "final", runId: "other-run", sessionKey: "agent:research:thread.2" },
+      { agentId: "research" },
+    );
+    await vi.waitFor(() => expect(preparedWebPushSendMock).toHaveBeenCalledOnce());
+    expect(isFocusedForIdentity).toHaveBeenLastCalledWith(
+      expect.objectContaining({ userProfileId: "bob", deviceId: "browser-device" }),
+      new Set(["agent:research:thread.2"]),
+    );
+  });
+
+  it.each([
+    { event: "question.requested", payload: { id: "question-1" } },
+    { event: "cron", payload: { action: "finished", jobId: "nightly", status: "error" } },
+  ])("never suppresses $event for a focused window", async ({ event, payload }) => {
+    listDevicePairingMock.mockReturnValue({
+      pending: [],
+      paired: [pairedOperator("browser-device", ["operator.read", "operator.questions"])],
+    });
+    const delivery = createEventWebPushDelivery({
+      getRuntimeConfig: () => ({}),
+      getFocusedSessionViewers: () => ({ isFocusedForIdentity: () => true }),
+    });
+
+    delivery.handleEvent(event, payload);
+    await vi.waitFor(() => expect(preparedWebPushSendMock).toHaveBeenCalledOnce());
+  });
+
+  it("captures a cron run's disabled completion notification before the run source clears", async () => {
+    const unregister = registerCronRunExecSource("cron-run-without-notify", {
+      agentId: "research",
+      jobId: "nightly",
+      jobConfigRevision: "rev-1",
+      jobName: "Nightly",
+      notifyOnComplete: false,
+    });
+    try {
+      const delivery = createEventWebPushDelivery({ getRuntimeConfig: () => ({}) });
+      delivery.handleEvent(
+        "chat",
+        { state: "final", runId: "cron-run-without-notify", sessionKey: "agent:research:cron" },
+        { agentId: "research" },
+      );
+      unregister();
+      await Promise.resolve();
+      expect(prepareWebPushNotificationSenderMock).not.toHaveBeenCalled();
+      expect(preparedWebPushSendMock).not.toHaveBeenCalled();
+    } finally {
+      unregister();
+    }
+  });
+
+  it("keeps completion notifications when a cron run source is absent or allows them", async () => {
+    const unregister = registerCronRunExecSource("cron-run-with-notify", {
+      agentId: "research",
+      jobId: "nightly",
+      jobConfigRevision: "rev-1",
+      jobName: "Nightly",
+      notifyOnComplete: true,
+    });
+    try {
+      const delivery = createEventWebPushDelivery({ getRuntimeConfig: () => ({}) });
+      delivery.handleEvent(
+        "chat",
+        { state: "final", runId: "cron-run-with-notify", sessionKey: "agent:research:cron" },
+        { agentId: "research" },
+      );
+      await vi.waitFor(() => expect(preparedWebPushSendMock).toHaveBeenCalledOnce());
+    } finally {
+      unregister();
+    }
+  });
 
   it("sends only failed cron terminal events", async () => {
     const delivery = createEventWebPushDelivery({ getRuntimeConfig: () => ({}) });

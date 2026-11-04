@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GatewayPendingRequests } from "../../../packages/gateway-client/src/pending-request.js";
 import type { GatewayBrowserClient, GatewayHelloOk } from "../api/gateway.ts";
 import type { ApplicationGateway, ApplicationGatewaySnapshot } from "../app/gateway.ts";
@@ -103,6 +103,13 @@ async function flushSync() {
   await Promise.resolve();
 }
 
+let setDocumentFocus: (focused: boolean) => void;
+
+beforeEach(() => {
+  const hasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(true);
+  setDocumentFocus = (focused) => hasFocus.mockReturnValue(focused);
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
@@ -139,7 +146,7 @@ describe("session viewer presence store", () => {
       expect(harness.unsubscribe).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(30_000);
       expect(harness.request).toHaveBeenCalledTimes(4);
-      expect(harness.request.mock.calls[3]?.[1]).toEqual({ sessionKeys: [] });
+      expect(harness.request.mock.calls[3]?.[1]).toEqual({ sessionKeys: [], focused: false });
       harness.acknowledge(3);
       await flushSync();
       expect(harness.unsubscribe).toHaveBeenCalledOnce();
@@ -225,6 +232,7 @@ describe("session viewer presence store", () => {
       SESSION_VIEWERS_SET_METHOD,
       {
         sessionKeys: ["agent:main:main", "agent:main:other"],
+        focused: true,
       },
       expect.anything(),
     );
@@ -235,6 +243,7 @@ describe("session viewer presence store", () => {
       SESSION_VIEWERS_SET_METHOD,
       {
         sessionKeys: ["agent:main:other", "agent:main:replacement"],
+        focused: true,
       },
       expect.anything(),
     );
@@ -245,6 +254,7 @@ describe("session viewer presence store", () => {
       SESSION_VIEWERS_SET_METHOD,
       {
         sessionKeys: ["agent:main:replacement"],
+        focused: true,
       },
       expect.anything(),
     );
@@ -255,6 +265,7 @@ describe("session viewer presence store", () => {
       SESSION_VIEWERS_SET_METHOD,
       {
         sessionKeys: [],
+        focused: false,
       },
       expect.anything(),
     );
@@ -278,6 +289,7 @@ describe("session viewer presence store", () => {
       {
         agentId: "work",
         sessionKeys: ["global"],
+        focused: true,
       },
       expect.anything(),
     );
@@ -299,6 +311,7 @@ describe("session viewer presence store", () => {
       SESSION_VIEWERS_SET_METHOD,
       {
         sessionKeys: [],
+        focused: false,
       },
       expect.anything(),
     );
@@ -310,6 +323,41 @@ describe("session viewer presence store", () => {
       SESSION_VIEWERS_SET_METHOD,
       {
         sessionKeys: ["agent:main:visible"],
+        focused: true,
+      },
+      expect.anything(),
+    );
+    store.unwatch(owner);
+    await flushSync();
+  });
+
+  it("declares private focus changes on blur and focus without changing the session set", async () => {
+    const harness = createGatewayHarness();
+    const store = sessionViewerPresenceForGateway(harness.gateway);
+    const owner = {};
+    store.watch(owner, ["agent:main:visible"]);
+    await flushSync();
+
+    setDocumentFocus(false);
+    window.dispatchEvent(new Event("blur"));
+    await flushSync();
+    expect(harness.request).toHaveBeenLastCalledWith(
+      SESSION_VIEWERS_SET_METHOD,
+      {
+        sessionKeys: ["agent:main:visible"],
+        focused: false,
+      },
+      expect.anything(),
+    );
+
+    setDocumentFocus(true);
+    window.dispatchEvent(new Event("focus"));
+    await flushSync();
+    expect(harness.request).toHaveBeenLastCalledWith(
+      SESSION_VIEWERS_SET_METHOD,
+      {
+        sessionKeys: ["agent:main:visible"],
+        focused: true,
       },
       expect.anything(),
     );
@@ -328,6 +376,7 @@ describe("session viewer presence store", () => {
       SESSION_VIEWERS_SET_METHOD,
       {
         sessionKeys: ["agent:main:main"],
+        focused: true,
       },
       expect.anything(),
     );
@@ -349,6 +398,7 @@ describe("session viewer presence store", () => {
       SESSION_VIEWERS_SET_METHOD,
       {
         sessionKeys: ["agent:work:home"],
+        focused: true,
       },
       expect.anything(),
     );
@@ -410,6 +460,7 @@ describe("session viewer presence store", () => {
       SESSION_VIEWERS_SET_METHOD,
       {
         sessionKeys: [],
+        focused: false,
       },
       expect.anything(),
     );
@@ -464,6 +515,7 @@ describe("session viewer presence store", () => {
       SESSION_VIEWERS_SET_METHOD,
       {
         sessionKeys: [],
+        focused: false,
       },
       expect.anything(),
     );

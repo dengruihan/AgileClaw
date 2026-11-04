@@ -4557,6 +4557,9 @@ export const en: TranslationMap & {
       failureAlertAccountPlaceholder: "Account ID for multi-account setups",
       bestEffortDelivery: "Best effort delivery",
       bestEffortHelp: "Do not fail the task if delivery itself fails.",
+      notifyOnComplete: "Notify when complete",
+      notifyOnCompleteHelp:
+        "Send a browser notification when this automation finishes. A focused window that is already showing the run's session stays quiet.",
       cantAddYet: "Can't save yet",
       fillRequired: "Fill the required fields below to enable submit.",
       fixFields: "Fix {count} field to continue.",

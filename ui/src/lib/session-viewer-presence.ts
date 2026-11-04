@@ -23,6 +23,13 @@ function createStore(gateway: ApplicationGateway): SessionViewerPresenceStore {
   let acknowledgedGeneration = 0;
   let requestGeneration = 0;
   let requestController: AbortController | null = null;
+  const readDocumentFocus = () =>
+    typeof document === "undefined" || typeof document.hasFocus !== "function"
+      ? true
+      : document.hasFocus();
+  // Event order can make hasFocus lag a blur; the window's own focus state wins
+  // until a visibility or focus change re-reads the document.
+  let windowFocused = readDocumentFocus();
 
   const retireRequest = () => {
     requestController?.abort();
@@ -52,16 +59,45 @@ function createStore(gateway: ApplicationGateway): SessionViewerPresenceStore {
     return [...keys].toSorted().slice(0, SESSION_VIEWER_PRESENCE_MAX_KEYS);
   };
 
+  const handleWindowFocus = () => {
+    windowFocused = true;
+    sync();
+  };
+  const handleWindowBlur = () => {
+    windowFocused = false;
+    sync();
+  };
+  const handleVisibilityChange = () => {
+    if (typeof document === "undefined" || document.visibilityState !== "hidden") {
+      windowFocused = readDocumentFocus();
+    }
+    sync();
+  };
   const lifecycle = createGatewaySetSyncLifecycle(gateway, {
     sync,
     onAttach: () => {
       knownClient = gateway.snapshot.client;
       clearReceipt();
+      windowFocused = readDocumentFocus();
+      if (typeof window !== "undefined") {
+        window.addEventListener("focus", handleWindowFocus);
+        window.addEventListener("blur", handleWindowBlur);
+      }
+      if (typeof document !== "undefined") {
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+      }
     },
     onDetach: () => {
       requestGeneration += 1;
       retireRequest();
       clearReceipt();
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", handleWindowFocus);
+        window.removeEventListener("blur", handleWindowBlur);
+      }
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
     },
   });
   const { retry } = lifecycle;
@@ -87,14 +123,15 @@ function createStore(gateway: ApplicationGateway): SessionViewerPresenceStore {
       }
       return;
     }
-    const sessionKeys =
-      typeof document !== "undefined" && document.visibilityState === "hidden"
-        ? []
-        : visibleSessionKeys();
+    const visible = typeof document === "undefined" || document.visibilityState !== "hidden";
+    const sessionKeys = visible ? visibleSessionKeys() : [];
+    // Focus is this connection's private delivery context; hidden or unknown focus never
+    // claims the foreground so a missing signal cannot suppress another client's push.
+    const focused = visible && sessionKeys.length > 0 && windowFocused;
     const agentId = sessionKeys.some((key) => !key.startsWith("agent:"))
       ? snapshot.assistantAgentId
       : undefined;
-    const signature = JSON.stringify({ agentId, sessionKeys });
+    const signature = JSON.stringify({ agentId, sessionKeys, focused });
     if (snapshot.hello === lastHello && signature === lastSignature) {
       if (
         !isActive() &&
@@ -119,7 +156,7 @@ function createStore(gateway: ApplicationGateway): SessionViewerPresenceStore {
     retry.cancel();
     const request = client.request(
       SESSION_VIEWERS_SET_METHOD,
-      { ...(agentId ? { agentId } : {}), sessionKeys },
+      { ...(agentId ? { agentId } : {}), sessionKeys, focused },
       { timeoutMs: DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS, signal: requestController.signal },
     );
     void request

@@ -936,7 +936,11 @@ function renderEditor(props: CronProps, mode: CronPanelMode) {
     >
       ${renderPromptSection(props, { payloadLocked, isAgentTurn })} ${renderGeneralSection(props)}
       ${renderScheduleSection(props)}
-      ${renderDeliverySection(props, { supportsAnnounce, selectedDeliveryMode })}
+      ${renderDeliverySection(props, {
+        supportsAnnounce,
+        selectedDeliveryMode,
+        notifySupported: isAgentTurn && props.form.sessionTarget !== "main",
+      })}
       ${renderAdvanced(props, {
         mode,
         isAgentTurn,
@@ -1360,6 +1364,7 @@ function renderDeliverySection(
   ctx: {
     supportsAnnounce: boolean;
     selectedDeliveryMode: CronFormState["deliveryMode"];
+    notifySupported: boolean;
   },
 ) {
   const channelOptions = buildChannelOptions(props);
@@ -1410,6 +1415,14 @@ function renderDeliverySection(
               errorKey: "deliveryTo",
               list: "cron-delivery-to-suggestions",
               placeholder: t("cron.form.webhookPlaceholder"),
+            })
+          : nothing
+      }
+      ${
+        ctx.notifySupported
+          ? renderToggleRow(props, "deliveryNotifyOnComplete", {
+              label: t("cron.form.notifyOnComplete"),
+              help: t("cron.form.notifyOnCompleteHelp"),
             })
           : nothing
       }

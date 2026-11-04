@@ -100,6 +100,210 @@ describe("session viewer presence declarations", () => {
   });
 });
 
+function focusedClient(params: {
+  connId: string;
+  presenceKey: string;
+  deviceId: string;
+  userProfileId?: string;
+}): GatewayWsClient {
+  return {
+    connId: params.connId,
+    presenceKey: params.presenceKey,
+    usesSharedGatewayAuth: false,
+    socket: { readyState: 1 } as GatewayWsClient["socket"],
+    connect: {
+      minProtocol: 1,
+      maxProtocol: 1,
+      role: "operator",
+      client: { id: "openclaw-control-ui", version: "test", platform: "test", mode: "webchat" },
+      device: {
+        id: params.deviceId,
+        publicKey: "pk",
+        signature: "sig",
+        signedAt: 0,
+        nonce: params.connId,
+      },
+    },
+    ...(params.userProfileId
+      ? {
+          authenticatedUserProfile: {
+            profileId: params.userProfileId,
+            displayName: null,
+            avatarRevision: "1",
+            hasAvatar: false,
+            updatedAt: 1,
+          },
+        }
+      : {}),
+    authenticatedUserId: `${params.deviceId}@focused.test`,
+    personPresence: { onlineSince: Date.now() - 1_000 },
+  };
+}
+
+describe("focused session viewer declarations", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2041-01-01T00:00:00Z"));
+  });
+  afterEach(() => {
+    vi.setSystemTime(Date.now() + 300_001);
+    listSystemPresence();
+    vi.useRealTimers();
+  });
+
+  function createFocusedDeclarations() {
+    const laptop = focusedClient({
+      connId: "conn-laptop",
+      presenceKey: "focused-laptop",
+      deviceId: "device-laptop",
+      userProfileId: "profile-a",
+    });
+    const phone = focusedClient({
+      connId: "conn-phone",
+      presenceKey: "focused-phone",
+      deviceId: "device-phone",
+      userProfileId: "profile-a",
+    });
+    const anonymous = focusedClient({
+      connId: "conn-anon",
+      presenceKey: "focused-anon",
+      deviceId: "device-anon",
+    });
+    const clients = new GatewayClientRegistry([laptop, phone, anonymous]);
+    const publishPresence = vi.fn();
+    const declarations = createSessionViewerPresenceDeclarations({
+      clients,
+      publishPresence,
+    });
+    return { declarations, clients, laptop, phone, anonymous, publishPresence };
+  }
+
+  it("keeps focus private and does not publish it as presence", () => {
+    const { declarations, laptop } = createFocusedDeclarations();
+
+    declarations.replace(laptop.connId!, ["agent:main:alpha"], true);
+
+    const row = listSystemPresence().find((entry) => entry.connectionId === laptop.connId);
+    expect(row?.watchedSessions).toEqual(["agent:main:alpha"]);
+    expect(row).not.toHaveProperty("focused");
+    expect(row).not.toHaveProperty("focusedSessions");
+  });
+
+  it("matches the same profile across devices and falls back to device without a profile", () => {
+    const { declarations, laptop, phone, anonymous } = createFocusedDeclarations();
+    const completed = new Set(["agent:main:alpha"]);
+
+    declarations.replace(laptop.connId!, ["agent:main:alpha"], true);
+    expect(
+      declarations.isFocusedForIdentity(
+        { userProfileId: "profile-a", deviceId: "device-phone" },
+        completed,
+      ),
+    ).toBe(true);
+    expect(
+      declarations.isFocusedForIdentity(
+        { userProfileId: "profile-b", deviceId: "device-phone" },
+        completed,
+      ),
+    ).toBe(false);
+    // A subscription without a profile binds to its device, so a focused window on
+    // that same device still represents the same viewer.
+    expect(
+      declarations.isFocusedForIdentity(
+        { userProfileId: null, deviceId: "device-laptop" },
+        completed,
+      ),
+    ).toBe(true);
+
+    declarations.replace(anonymous.connId!, ["agent:main:alpha"], true);
+    expect(
+      declarations.isFocusedForIdentity(
+        { userProfileId: null, deviceId: "device-anon" },
+        completed,
+      ),
+    ).toBe(true);
+    expect(
+      declarations.isFocusedForIdentity(
+        { userProfileId: null, deviceId: "device-phone" },
+        completed,
+      ),
+    ).toBe(false);
+    expect(phone.connId).toBe("conn-phone");
+  });
+
+  it("does not match another session and clears on blur, hidden, disconnect, or stale transport", () => {
+    const { declarations, laptop } = createFocusedDeclarations();
+    const completed = new Set(["agent:main:alpha"]);
+
+    declarations.replace(laptop.connId!, ["agent:main:alpha"], true);
+    expect(
+      declarations.isFocusedForIdentity(
+        { userProfileId: "profile-a", deviceId: "device-laptop" },
+        new Set(["agent:main:beta"]),
+      ),
+    ).toBe(false);
+
+    declarations.replace(laptop.connId!, ["agent:main:alpha"], false);
+    expect(
+      declarations.isFocusedForIdentity(
+        { userProfileId: "profile-a", deviceId: "device-laptop" },
+        completed,
+      ),
+    ).toBe(false);
+
+    declarations.replace(laptop.connId!, ["agent:main:alpha"], true);
+    declarations.replace(laptop.connId!, [], true);
+    expect(
+      declarations.isFocusedForIdentity(
+        { userProfileId: "profile-a", deviceId: "device-laptop" },
+        completed,
+      ),
+    ).toBe(false);
+
+    declarations.replace(laptop.connId!, ["agent:main:alpha"], true);
+    declarations.unsubscribe(laptop.connId!);
+    expect(
+      declarations.isFocusedForIdentity(
+        { userProfileId: "profile-a", deviceId: "device-laptop" },
+        completed,
+      ),
+    ).toBe(false);
+
+    declarations.replace(laptop.connId!, ["agent:main:alpha"], true);
+    laptop.invalidated = true;
+    expect(
+      declarations.isFocusedForIdentity(
+        { userProfileId: "profile-a", deviceId: "device-laptop" },
+        completed,
+      ),
+    ).toBe(false);
+
+    laptop.invalidated = false;
+    laptop.socket = { readyState: 3 } as GatewayWsClient["socket"];
+    expect(
+      declarations.isFocusedForIdentity(
+        { userProfileId: "profile-a", deviceId: "device-laptop" },
+        completed,
+      ),
+    ).toBe(false);
+  });
+
+  it("updates focus without republishing an unchanged session set", () => {
+    const { declarations, laptop, publishPresence } = createFocusedDeclarations();
+
+    declarations.replace(laptop.connId!, ["agent:main:alpha"], false);
+    declarations.replace(laptop.connId!, ["agent:main:alpha"], true);
+
+    expect(publishPresence).toHaveBeenCalledTimes(1);
+    expect(
+      declarations.isFocusedForIdentity(
+        { userProfileId: "profile-a", deviceId: "device-laptop" },
+        new Set(["agent:main:alpha"]),
+      ),
+    ).toBe(true);
+  });
+});
+
 function recipient(scopes = ["operator.admin"]): GatewayClient {
   return {
     connect: {
