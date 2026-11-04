@@ -66,7 +66,7 @@ jobs:
 
       - name: Prepare Git owner
         if: env.OPENCLAW_DOCS_SYNC_TOKEN != ''
-        uses: openclaw/openclaw/.github/actions/git-owner@dd4528b6393e7d00063067a080ca7241b48ce475
+        uses: openclaw/openclaw/.github/actions/git-owner@27f7042f3b3dd62ce6360e24f8d9aa2a6347a020
 
       - name: Setup Node
         if: env.OPENCLAW_DOCS_SYNC_TOKEN != ''
