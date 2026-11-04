@@ -40,10 +40,27 @@ export type SkillExperienceRestoreOutcome =
 
 const generationByState = new WeakMap<SkillWorkshopState, number>();
 const detailRequestsByState = new WeakMap<SkillWorkshopState, Map<string, Promise<boolean>>>();
+const detailRequestTokensByState = new WeakMap<SkillWorkshopState, Map<string, number>>();
+const detailRequestSequenceByState = new WeakMap<SkillWorkshopState, number>();
 const selectionRequestByState = new WeakMap<SkillWorkshopState, string>();
 
 function readGeneration(state: SkillWorkshopState): number {
   return generationByState.get(state) ?? 0;
+}
+
+// Forced reloads of one document can overlap; only the newest request may
+// merge a record, publish an error, or become the draft's new base.
+function nextDetailRequestToken(state: SkillWorkshopState, id: string): number {
+  const sequence = (detailRequestSequenceByState.get(state) ?? 0) + 1;
+  detailRequestSequenceByState.set(state, sequence);
+  const tokens = detailRequestTokensByState.get(state) ?? new Map<string, number>();
+  tokens.set(id, sequence);
+  detailRequestTokensByState.set(state, tokens);
+  return sequence;
+}
+
+function isLatestDetailRequest(state: SkillWorkshopState, id: string, token: number): boolean {
+  return detailRequestTokensByState.get(state)?.get(id) === token;
 }
 
 export function invalidateSkillExperienceReads(state: SkillWorkshopState): void {
@@ -52,6 +69,7 @@ export function invalidateSkillExperienceReads(state: SkillWorkshopState): void 
   state.skillWorkshopExperienceLoading = false;
   state.skillWorkshopExperienceInspectingId = null;
   detailRequestsByState.delete(state);
+  detailRequestTokensByState.delete(state);
 }
 
 export function isSkillExperienceRevisionConflict(error: unknown): boolean {
@@ -216,8 +234,10 @@ async function readSkillExperience(
     state.skillWorkshopAgentId = requestAgentId;
   }
   const requestGeneration = readGeneration(state);
+  const requestToken = nextDetailRequestToken(state, id);
   const isCurrentRead = () =>
     readGeneration(state) === requestGeneration &&
+    isLatestDetailRequest(state, id, requestToken) &&
     options?.isCurrent?.() !== false &&
     context.gateway.snapshot.client === client &&
     state.skillWorkshopAgentId === requestAgentId &&

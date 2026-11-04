@@ -7,6 +7,7 @@ import { createFixture } from "../../test-helpers/skill-workshop-proposal-fixtur
 import { restoreSkillExperienceFromDetail } from "./experience-actions.ts";
 import {
   loadSkillExperiences,
+  reloadSkillExperienceDraftBase,
   saveSkillExperienceDraft,
   selectSkillExperience,
 } from "./experience.ts";
@@ -136,6 +137,134 @@ describe("Skill Workshop experience reads", () => {
     expect(state.skillWorkshopExperiences.find((entry) => entry.id === retired.id)).toMatchObject({
       status: "promoted",
       promotion: { state: "pending" },
+    });
+  });
+
+  it("lets only the newest forced detail read rebase the draft", async () => {
+    const fixture = createSkillWorkshopExperienceFixture();
+    const original = fixture.records.find((record) => record.id === "release-rollback-check")!;
+    const olderRecord = {
+      ...original,
+      description: "old description",
+      revisionHash: "a9".padEnd(64, "0"),
+    };
+    const newerRecord = {
+      ...original,
+      description: "new description",
+      revisionHash: "b9".padEnd(64, "0"),
+    };
+    const { state, context, request } = createFixture({ skillWorkshopMode: "experience" });
+    state.skillWorkshopAgentId = "research";
+    state.skillWorkshopExperiences = [{ ...original, content: "old body", contentLoaded: true }];
+    state.skillWorkshopExperienceDraft = {
+      mode: "edit",
+      id: original.id,
+      name: original.name,
+      description: "held summary",
+      content: "held body",
+      baseRevisionHash: original.revisionHash,
+      saving: false,
+      error: null,
+      conflictHeld: true,
+      notice: null,
+    };
+    await selectSkillExperience(state, context, original.id);
+
+    const olderRead = createDeferred<unknown>();
+    const newerRead = createDeferred<unknown>();
+    let reads = 0;
+    request.mockImplementation(async (method) => {
+      if (method === "skills.experience.read") {
+        reads += 1;
+        return reads === 1 ? olderRead.promise : newerRead.promise;
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+
+    const first = reloadSkillExperienceDraftBase(state, context);
+    const second = reloadSkillExperienceDraftBase(state, context);
+    await expect.poll(async () => reads).toBe(2);
+
+    newerRead.resolve({
+      record: newerRecord,
+      revisionHash: newerRecord.revisionHash,
+      content: "new body",
+    });
+    expect(await second).toBe(true);
+    olderRead.resolve({
+      record: olderRecord,
+      revisionHash: olderRecord.revisionHash,
+      content: "old body",
+    });
+    expect(await first).toBe(false);
+
+    expect(state.skillWorkshopExperienceDraft).toMatchObject({
+      content: "held body",
+      baseRevisionHash: newerRecord.revisionHash,
+      conflictHeld: false,
+      error: null,
+    });
+    expect(state.skillWorkshopExperiences.find((entry) => entry.id === original.id)).toMatchObject({
+      description: "new description",
+      revisionHash: newerRecord.revisionHash,
+      content: "new body",
+    });
+    expect(state.skillWorkshopExperienceError).toBeNull();
+  });
+
+  it("ignores a stale forced read error after a newer reload", async () => {
+    const fixture = createSkillWorkshopExperienceFixture();
+    const original = fixture.records.find((record) => record.id === "release-rollback-check")!;
+    const newerRecord = {
+      ...original,
+      description: "new description",
+      revisionHash: "b9".padEnd(64, "0"),
+    };
+    const { state, context, request } = createFixture({ skillWorkshopMode: "experience" });
+    state.skillWorkshopAgentId = "research";
+    state.skillWorkshopExperiences = [{ ...original, content: "old body", contentLoaded: true }];
+    state.skillWorkshopExperienceDraft = {
+      mode: "edit",
+      id: original.id,
+      name: original.name,
+      description: "held summary",
+      content: "held body",
+      baseRevisionHash: original.revisionHash,
+      saving: false,
+      error: null,
+      conflictHeld: true,
+      notice: null,
+    };
+    await selectSkillExperience(state, context, original.id);
+
+    const olderRead = createDeferred<unknown>();
+    const newerRead = createDeferred<unknown>();
+    let reads = 0;
+    request.mockImplementation(async (method) => {
+      if (method === "skills.experience.read") {
+        reads += 1;
+        return reads === 1 ? olderRead.promise : newerRead.promise;
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+
+    const first = reloadSkillExperienceDraftBase(state, context);
+    const second = reloadSkillExperienceDraftBase(state, context);
+    await expect.poll(async () => reads).toBe(2);
+
+    newerRead.resolve({
+      record: newerRecord,
+      revisionHash: newerRecord.revisionHash,
+      content: "new body",
+    });
+    expect(await second).toBe(true);
+    olderRead.reject(new Error("older read failed after the newer one"));
+    expect(await first).toBe(false);
+
+    expect(state.skillWorkshopExperienceError).toBeNull();
+    expect(state.skillWorkshopExperienceDraft).toMatchObject({
+      baseRevisionHash: newerRecord.revisionHash,
+      content: "held body",
     });
   });
 
