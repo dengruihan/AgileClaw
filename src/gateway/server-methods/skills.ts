@@ -52,7 +52,6 @@ import {
   rejectSkillProposal,
   reviseSkillProposal,
 } from "../../skills/workshop/service.js";
-import { PROPOSAL_DRAFT_FILE } from "../../skills/workshop/store-record.js";
 import type { SkillProposalReadResult, SkillProposalRecord } from "../../skills/workshop/types.js";
 import {
   listWritableWorkshopSkillSummaries,
@@ -64,6 +63,7 @@ import { skillsExperienceHandlers } from "./skills-experience.js";
 import { handleSkillsInstall } from "./skills-install.js";
 import { skillsLibraryHandlers } from "./skills-library.js";
 import { skillProposalHistoryHandlers } from "./skills-proposal-history.js";
+import { projectGatewaySkillProposalRecord } from "./skills-proposal-projection.js";
 import { buildRemoteAwareWorkspaceSkillStatus, handleSkillsStatus } from "./skills-status.js";
 import { skillsUploadHandlers } from "./skills-upload.js";
 import {
@@ -84,13 +84,9 @@ function proposalWorkspaceOptions(resolved: ResolvedSkillsWorkspace) {
   };
 }
 
-function projectGatewaySkillProposalRecord(record: SkillProposalRecord): SkillProposalRecord {
-  return record.draftFile === PROPOSAL_DRAFT_FILE
-    ? record
-    : { ...record, draftFile: PROPOSAL_DRAFT_FILE };
-}
-
-function projectGatewaySkillProposalResult<T extends { record: SkillProposalRecord }>(result: T) {
+export function projectGatewaySkillProposalResult<T extends { record: SkillProposalRecord }>(
+  result: T,
+) {
   return { ...result, record: projectGatewaySkillProposalRecord(result.record) };
 }
 

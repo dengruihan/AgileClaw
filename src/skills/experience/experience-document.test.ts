@@ -168,6 +168,93 @@ describe("Experience documents", () => {
     expect(await fs.readFile(filePath, "utf8")).toContain('operator-note: "keep me"');
   });
 
+  it("rejects credentials in free-text metadata without echoing them", async () => {
+    const { config, env } = await fixture();
+    const secret = `ghp_${"a".repeat(32)}`;
+    const createError = await createExperienceFile({
+      config,
+      agentId: "main",
+      env,
+      name: "Evidence note",
+      description: "Evidence.",
+      content: "Safe body.\n",
+      evidence: { verification: "observed", summary: `Observed token ${secret}` },
+    }).catch((error: unknown) => error as Error);
+    expect(createError).toBeInstanceOf(Error);
+    expect((createError as Error).message).toContain("literal credential");
+    expect((createError as Error).message).not.toContain(secret);
+    expect(await listExperienceFiles({ config, agentId: "main", env })).toEqual([]);
+
+    const created = await createExperienceFile({
+      config,
+      agentId: "main",
+      env,
+      name: "Retire note",
+      description: "Retire.",
+      content: "Safe body.\n",
+    });
+    await expect(
+      retireExperienceFile({
+        config,
+        agentId: "main",
+        env,
+        id: created.id,
+        expectedRevisionHash: created.revisionHash,
+        reason: `Superseded by ${secret}`,
+      }),
+    ).rejects.toThrow("literal credential");
+    expect(
+      (await listExperienceFiles({ config, agentId: "main", env })).find(
+        (file) => file.id === created.id,
+      )?.retired,
+    ).toBe(false);
+  });
+
+  it("honors a configured larger size limit across read, update, retire, and restore", async () => {
+    const { agentDir, env } = await fixture();
+    const config: OpenClawConfig = {
+      agents: { entries: { main: { agentDir } } },
+      skills: { limits: { maxSkillFileBytes: 400_000 } },
+    };
+    const body = `# Large experience\n\n${"x".repeat(300_000)}\n`;
+    expect(Buffer.byteLength(body)).toBeGreaterThan(256_000);
+
+    const created = await createExperienceFile({
+      config,
+      agentId: "main",
+      env,
+      name: "Large note",
+      description: "Large.",
+      content: body,
+    });
+    const read = await readExperienceFile({ config, agentId: "main", env, id: created.id });
+    expect(read.body).toBe(body);
+
+    const updated = await updateExperienceFile({
+      config,
+      agentId: "main",
+      env,
+      id: created.id,
+      expectedRevisionHash: created.revisionHash,
+      content: `${body}More.\n`,
+    });
+    const retired = await retireExperienceFile({
+      config,
+      agentId: "main",
+      env,
+      id: created.id,
+      expectedRevisionHash: updated.revisionHash,
+    });
+    const restored = await restoreExperienceFile({
+      config,
+      agentId: "main",
+      env,
+      id: created.id,
+      expectedRevisionHash: retired.revisionHash,
+    });
+    expect(restored.retired).toBe(false);
+  });
+
   it("retires out of discovery and restores without losing the document", async () => {
     const { config, env } = await fixture();
     const created = await createExperienceFile({

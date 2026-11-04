@@ -17,6 +17,7 @@ import {
   updateExperience,
   type ExperienceScope,
 } from "../../skills/experience/experience-service.js";
+import { projectGatewaySkillProposalRecord } from "./skills-proposal-projection.js";
 import {
   defineSkillsProposalWorkspaceHandler,
   type ResolvedSkillsWorkspace,
@@ -74,7 +75,7 @@ export const skillsExperienceHandlers: GatewayRequestHandlers = {
       return {
         record: result.record,
         revisionHash: result.revisionHash,
-        proposal: result.proposal,
+        proposal: projectGatewaySkillProposalRecord(result.proposal),
       };
     },
   ),

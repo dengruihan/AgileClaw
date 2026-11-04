@@ -296,6 +296,13 @@ describe("listGatewayMethods", () => {
       "vault.fill.approval.request",
       "vault.fill.preview",
       "vault.fill.execute",
+      "skills.experience.list",
+      "skills.experience.read",
+      "skills.experience.create",
+      "skills.experience.update",
+      "skills.experience.retire",
+      "skills.experience.restore",
+      "skills.experience.promote",
     ];
     expect(listGatewayMethods().slice(-expectedSuffix.length)).toEqual(expectedSuffix);
     const methods = listGatewayMethods();
@@ -398,6 +405,13 @@ describe("listGatewayMethods", () => {
       "vault.fill.approval.request",
       "vault.fill.preview",
       "vault.fill.execute",
+      "skills.experience.list",
+      "skills.experience.read",
+      "skills.experience.create",
+      "skills.experience.update",
+      "skills.experience.retire",
+      "skills.experience.restore",
+      "skills.experience.promote",
     ]);
   });
 
@@ -628,6 +642,13 @@ describe("listGatewayMethods", () => {
       "vault.fill.approval.request",
       "vault.fill.preview",
       "vault.fill.execute",
+      "skills.experience.list",
+      "skills.experience.read",
+      "skills.experience.create",
+      "skills.experience.update",
+      "skills.experience.retire",
+      "skills.experience.restore",
+      "skills.experience.promote",
     ];
     expect(coreMethods.slice(-expectedCoreSuffix.length)).toEqual(expectedCoreSuffix);
     expect(methods.indexOf("approval.get")).toBeGreaterThan(methods.indexOf("tts.speak"));

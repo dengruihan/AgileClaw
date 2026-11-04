@@ -5,7 +5,7 @@ import { createTrackedTempDirs } from "../../test-utils/tracked-temp-dirs.js";
 import type { SkillProposalReadResult, SkillProposalRecord } from "../workshop/types.js";
 import { createExperienceFile, readExperienceFile } from "./experience-document.js";
 import { resolveExperienceRoot } from "./experience-root.js";
-import { listExperiences, promoteExperience } from "./experience-service.js";
+import { listExperiences, promoteExperience, readExperience } from "./experience-service.js";
 
 const tempDirs = createTrackedTempDirs();
 const mocks = vi.hoisted(() => ({
@@ -263,6 +263,29 @@ describe("Experience promotion", () => {
         expectedRevisionHash: "proposal-revision",
       }),
     );
+  });
+
+  it("propagates proposal-owner failures instead of reporting missing or duplicating promotion", async () => {
+    const document = await createDocument();
+    mocks.proposeCreateSkill.mockResolvedValue(proposalRecord("pending"));
+    const promoted = await promoteExperience(scope, {
+      id: document.id,
+      expectedRevisionHash: document.revisionHash,
+      target: { kind: "create", name: "Release checklist", description: "Release notes." },
+    });
+
+    mocks.inspectSkillProposal.mockRejectedValue(new Error("proposal store unavailable"));
+    mocks.listSkillProposals.mockRejectedValue(new Error("proposal store unavailable"));
+    await expect(listExperiences(scope)).rejects.toThrow("proposal store unavailable");
+    await expect(readExperience(scope, document.id)).rejects.toThrow("proposal store unavailable");
+    await expect(
+      promoteExperience(scope, {
+        id: document.id,
+        expectedRevisionHash: promoted.revisionHash,
+        target: { kind: "create", name: "Release checklist", description: "Release notes." },
+      }),
+    ).rejects.toThrow("proposal store unavailable");
+    expect(mocks.proposeCreateSkill).toHaveBeenCalledTimes(1);
   });
 
   it("projects pending and rejected proposal states into list results", async () => {

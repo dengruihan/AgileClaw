@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import type {
   SkillExperienceEvidence,
@@ -112,6 +113,20 @@ function normalizeTags(tags: readonly string[] | undefined): string[] | undefine
   return normalized.length > 0 ? [...new Set(normalized)] : undefined;
 }
 
+function freeTextMetadata(...values: unknown[]): string[] {
+  const texts: string[] = [];
+  for (const value of values) {
+    if (typeof value === "string") {
+      texts.push(value);
+    } else if (Array.isArray(value)) {
+      texts.push(...freeTextMetadata(...value));
+    } else if (isRecord(value)) {
+      texts.push(...freeTextMetadata(...Object.values(value)));
+    }
+  }
+  return texts;
+}
+
 function assertNoLiteralSecrets(params: {
   body: string;
   name: string;
@@ -213,8 +228,8 @@ async function readDocumentAt(
   filePath: string,
   id: string,
   retired: boolean,
+  maxBytes: number,
 ): Promise<ExperienceDocument> {
-  const maxBytes = MAX_EXPERIENCE_BYTES_DEFAULT;
   const result = await readLocalFileSafely({ filePath, maxBytes });
   const content = result.buffer.toString("utf8");
   let frontmatter: Record<string, string>;
@@ -257,7 +272,7 @@ export async function readExperienceFile(params: {
   if (!entry) {
     throw new ExperienceNotFoundError(id);
   }
-  return await readDocumentAt(entry.filePath, id, entry.retired);
+  return await readDocumentAt(entry.filePath, id, entry.retired, maxExperienceBytes(params.config));
 }
 
 async function ensureContainedRoot(rootPath: string): Promise<string> {
@@ -346,7 +361,7 @@ export async function createExperienceFile(
     body,
     name,
     description,
-    metadata: tags ?? [],
+    metadata: freeTextMetadata(tags, input.evidence, input.project),
   });
   return await withExperienceWriteLock(dirPath, async () => {
     if (await pathExists(dirPath)) {
@@ -430,7 +445,7 @@ export async function updateExperienceFile(
       body,
       name,
       description,
-      metadata: tags ?? [],
+      metadata: freeTextMetadata(tags, existing.metadata.evidence, existing.metadata.project),
     });
     const metadata: ExperienceWriteMetadata = {
       ...existing.metadata,
@@ -486,6 +501,12 @@ export async function retireExperienceFile(params: {
     if (await pathExists(retiredPath)) {
       throw new Error(`Retired Experience path already exists: ${retiredPath}`);
     }
+    assertNoLiteralSecrets({
+      body: existing.body,
+      name: existing.metadata.name,
+      description: existing.metadata.description,
+      metadata: freeTextMetadata(params.reason),
+    });
     const metadata: ExperienceWriteMetadata = {
       ...existing.metadata,
       updatedAt: new Date().toISOString(),

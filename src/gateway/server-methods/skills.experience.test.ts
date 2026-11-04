@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveExperienceRoot } from "../../skills/experience/experience-root.js";
+import { withOpenClawTestState } from "../../test-utils/openclaw-test-state.js";
 import { createTrackedTempDirs } from "../../test-utils/tracked-temp-dirs.js";
 import { skillsExperienceHandlers } from "./skills-experience.js";
 import { callGatewayHandler } from "./skills.test-helpers.js";
@@ -122,6 +123,59 @@ describe("skills.experience gateway methods", () => {
     expect(restored.response).toMatchObject({
       record: { status: "active" },
     });
+  });
+
+  it("stages a real Workshop promotion and returns the public proposal shape", async () => {
+    await withOpenClawTestState(
+      { layout: "state-only", prefix: "openclaw-experience-promote-gateway-" },
+      async (state) => {
+        const config = {
+          agents: { entries: { main: { agentDir: state.agentDir() } } },
+        } as never;
+        const context = { getRuntimeConfig: () => config } as never;
+        const call = (method: string, params: Record<string, unknown>) =>
+          callGatewayHandler(skillsExperienceHandlers, method, params, { context });
+
+        const created = await call("skills.experience.create", {
+          agentId: "main",
+          name: "Release checklist",
+          description: "Checklist for release notes.",
+          content: "1. Collect merged changes.\n",
+        });
+        expect(created.ok).toBe(true);
+        const createdHash = (created.response as { revisionHash: string }).revisionHash;
+
+        const promoted = await call("skills.experience.promote", {
+          agentId: "main",
+          id: "release-checklist",
+          expectedRevisionHash: createdHash,
+          target: {
+            kind: "create",
+            name: "Release checklist",
+            description: "Release notes.",
+          },
+        });
+        expect(promoted.ok).toBe(true);
+        const result = promoted.response as {
+          record: { status: string; promotion: { state: string } };
+          proposal: { draftFile: string; status: string; id: string };
+          revisionHash: string;
+        };
+        expect(result.proposal.draftFile).toBe("PROPOSAL.md");
+        expect(result.proposal.status).toBe("pending");
+        expect(result.record).toMatchObject({
+          status: "promoted",
+          promotion: { state: "pending" },
+        });
+        expect(result.revisionHash).not.toBe(createdHash);
+
+        const list = await call("skills.experience.list", { agentId: "main" });
+        expect(list.response).toMatchObject({
+          counts: { active: 0, promoted: 1, retired: 0 },
+          experiences: [{ id: "release-checklist", promotion: { state: "pending" } }],
+        });
+      },
+    );
   });
 
   it("validates params and refuses unknown agents", async () => {

@@ -117,10 +117,10 @@ function projectDocument(document: ExperienceDocument, state?: ProjectedPromotio
 
 export async function listExperiences(scope: ExperienceScope): Promise<SkillExperienceListResult> {
   const files = await listExperienceFiles(scope);
-  // The documents remain readable when the proposal store is mid-restart or
-  // unavailable: unprojected links then report "rejected" history and stay retryable.
+  // The proposal owner is authoritative for promotion state; an operational
+  // failure propagates rather than masquerading as a rejected or missing link.
   const states = files.some((file) => file.metadata.promotion)
-    ? await proposalStates(scope).catch(() => new Map<string, ProjectedPromotion>())
+    ? await proposalStates(scope)
     : new Map<string, ProjectedPromotion>();
   const experiences = files.map((file) =>
     toRecord({
@@ -161,7 +161,7 @@ export async function readExperience(
       config: scope.config,
       agentId: scope.agentId,
       ...(scope.env ? { env: scope.env } : {}),
-    }).catch(() => null);
+    });
     state = inspected
       ? {
           proposalId: inspected.record.id,
@@ -331,7 +331,7 @@ export async function promoteExperience(
       config: scope.config,
       agentId: scope.agentId,
       ...(scope.env ? { env: scope.env } : {}),
-    }).catch(() => null);
+    });
     if (
       existing &&
       (existing.record.status === "pending" || existing.record.status === "applied")
