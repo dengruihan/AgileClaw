@@ -114,6 +114,70 @@ describe("vault fill scrub", () => {
     expect(JSON.stringify(result)).toContain("[Circular]");
   });
 
+  it("masks secret-bearing property names at every depth of a scrubbed result", () => {
+    registerVaultFillSecret("target-1", CANARY);
+    const result = scrubVaultFillValueAll({
+      [CANARY]: { nested: { [`prefix-${CANARY}`]: "clean" } },
+      safe: "clean",
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(CANARY);
+    expect(serialized).toContain("***");
+    expect((result as Record<string, unknown>).safe).toBe("clean");
+  });
+
+  it("sets an own data property for __proto__-shaped keys instead of mutating the prototype", () => {
+    registerVaultFillSecret("target-1", CANARY);
+    const hostile = JSON.parse(`{"__proto__":{"polluted":"${CANARY}"},"safe":"clean"}`) as Record<
+      string,
+      unknown
+    >;
+    const result = scrubVaultFillValueAll(hostile) as Record<string, unknown>;
+    expect(JSON.stringify(result)).not.toContain(CANARY);
+    expect(Object.prototype.polluted).toBeUndefined();
+    expect((result as { polluted?: unknown }).polluted).toBeUndefined();
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect(Object.hasOwn(result, "__proto__")).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(result, "__proto__")?.value).toEqual({
+      polluted: "***",
+    });
+  });
+
+  it("masks secret-bearing property names on an inert thrown error", () => {
+    registerVaultFillSecret("target-1", CANARY);
+    const error = Object.assign(new Error("clean"), {
+      details: { [CANARY]: "clean" },
+    });
+    const scrubbed = scrubVaultFillError(error) as { details?: Record<string, unknown> };
+    expect(Object.is(scrubbed, error)).toBe(false);
+    const serialized = JSON.stringify(scrubbed);
+    expect(serialized).not.toContain(CANARY);
+    expect(serialized).toContain("***");
+    expect(scrubbed.details).toEqual({ "***": "clean" });
+  });
+
+  it("replaces a root function throw with a value-free error", () => {
+    registerVaultFillSecret("target-1", CANARY);
+    const fn = () => "clean";
+    let toStringCalls = 0;
+    Object.defineProperty(fn, "toString", {
+      value: () => {
+        toStringCalls += 1;
+        return toStringCalls === 1 ? "clean" : `boom ${CANARY}`;
+      },
+      writable: true,
+      configurable: true,
+    });
+    const scrubbed = scrubVaultFillError(fn);
+    expect(Object.is(scrubbed, fn)).toBe(false);
+    expect(scrubbed).toBeInstanceOf(Error);
+    expect(String(scrubbed)).not.toContain(CANARY);
+    expect(toStringCalls).toBe(0);
+    // With no active secret the control keeps identity.
+    clearVaultFillSession("target-1");
+    expect(scrubVaultFillError(fn)).toBe(fn);
+  });
+
   it("replaces an error with unreadable fields instead of rethrowing it", () => {
     registerVaultFillSecret("target-1", CANARY);
     const error = new Error("clean");

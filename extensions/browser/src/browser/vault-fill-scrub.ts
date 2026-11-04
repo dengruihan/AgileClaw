@@ -239,6 +239,11 @@ function inertErrorProjection<T>(error: T, scrubText: (text: string) => string):
     // A symbol's description is readable through String() coercion.
     return new Error(WITHHELD_ERROR_MESSAGE) as T;
   }
+  if (typeof error === "function") {
+    // A root function keeps its live formatter behavior; only a fresh inert
+    // error may be rethrown while any secret applies.
+    return new Error(WITHHELD_ERROR_MESSAGE) as T;
+  }
   if (!error || typeof error !== "object") {
     return error;
   }
@@ -272,6 +277,25 @@ function ownEnumerableDataKeys(target: object): string[] {
   return keys.filter((key) => readOwnDataField(target, key).present);
 }
 
+/**
+ * Define a projected field as an own data property. An assignment would route
+ * a "__proto__"-shaped key through the Object prototype setter and let it
+ * mutate (or collide with) inherited members of the fresh projection; masked
+ * keys must stay plain data.
+ */
+function setInertField(target: Record<string, unknown>, key: string, value: unknown): void {
+  try {
+    Object.defineProperty(target, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  } catch {
+    // An un-definable key is dropped with its value; the rest stays inert.
+  }
+}
+
 function buildInertError(error: object, scrubText: (text: string) => string): Error {
   const projected = projectInertValue(error, scrubText, new WeakSet(), 0);
   if (projected instanceof Error) {
@@ -294,9 +318,10 @@ function buildInertError(error: object, scrubText: (text: string) => string): Er
 
 /**
  * Build a data-only masked copy: primitives pass through (strings masked),
- * functions and symbols are dropped, accessors are never read, and every
- * object becomes a fresh plain structure or Error copy. No later read,
- * formatter, or serializer can regenerate a value from the result.
+ * functions and symbols are dropped, accessors are never read, property names
+ * are masked exactly like values, and every object becomes a fresh plain
+ * structure or Error copy with own data properties. No later read, formatter,
+ * or serializer can regenerate a value from the result.
  */
 function projectInertValue(
   value: unknown,
@@ -377,7 +402,7 @@ function projectInertValue(
       // Dropping a function (for example a custom `toString`) must remove the
       // key entirely; assigning undefined would shadow prototype behavior.
       if (projected !== undefined) {
-        copyRecord[key] = projected;
+        setInertField(copyRecord, scrubText(key), projected);
       }
     }
     return copy;
@@ -386,7 +411,7 @@ function projectInertValue(
   for (const key of ownEnumerableDataKeys(value)) {
     const entry = projectInertValue(readOwnDataField(value, key).value, scrubText, seen, depth + 1);
     if (entry !== undefined) {
-      projected[key] = entry;
+      setInertField(projected, scrubText(key), entry);
     }
   }
   return projected;
@@ -416,7 +441,7 @@ function scrubValueWith<T>(value: T, scrubText: (text: string) => string): T {
     }
     const result: Record<string, unknown> = {};
     for (const [key, entry] of Object.entries(candidate)) {
-      result[key] = scrub(entry);
+      setInertField(result, scrubText(key), scrub(entry));
     }
     return result;
   };

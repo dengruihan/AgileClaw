@@ -31,6 +31,8 @@ const LOOPBACK_CANARY = "loopback-err-canary-c3d8";
 const TOSTRING_CANARY = "tostring-err-canary-8f13";
 const TOJSON_CANARY = "tojson-err-canary-52aa";
 const ARRAY_CANARY = "array-err-canary-d6b1";
+const FUNC_CANARY = "func-err-canary-r5";
+const KEY_CANARY = "property-key-canary-r5";
 
 function collectReachableText(value: unknown, depth = 0): string {
   if (typeof value === "string") {
@@ -291,6 +293,55 @@ describe("browser tool thrown fill-error scrub (inert projection)", () => {
     expect(error.details[0]).toBe("clean");
     expect(error.details[0]).toContain(ARRAY_CANARY);
     expect(indexedReads).toBe(3);
+  });
+
+  it("replaces a root function throw instead of returning it live", async () => {
+    registerVaultFillSecret("target-1", FUNC_CANARY, "doc-1");
+    const fn = () => "clean";
+    let toStringCalls = 0;
+    Object.defineProperty(fn, "toString", {
+      value: () => {
+        toStringCalls += 1;
+        return toStringCalls === 1 ? "clean" : `boom ${FUNC_CANARY}`;
+      },
+      writable: true,
+      configurable: true,
+    });
+    mocks.browserTabs.mockRejectedValue(fn);
+
+    const thrown = await executeTabsAction();
+
+    expect(Object.is(thrown, fn)).toBe(false);
+    expect(thrown).toBeInstanceOf(Error);
+    // The function (and its formatter) is never carried or even read.
+    expect(toStringCalls).toBe(0);
+    assertInert(thrown, FUNC_CANARY);
+  });
+
+  it("returns a root function throw unchanged when no secret applies", async () => {
+    const fn = () => "clean";
+    mocks.browserTabs.mockRejectedValue(fn);
+
+    const thrown = await executeTabsAction();
+
+    expect(Object.is(thrown, fn)).toBe(true);
+  });
+
+  it("masks secret-bearing property names on an inert thrown error", async () => {
+    registerVaultFillSecret("target-1", KEY_CANARY, "doc-1");
+    const error = Object.assign(new BrowserServiceError("tabs failed", undefined, 500), {
+      details: { [KEY_CANARY]: "clean" },
+    });
+    mocks.browserTabs.mockRejectedValue(error);
+
+    const thrown = await executeTabsAction();
+
+    expect(Object.is(thrown, error)).toBe(false);
+    // The final model-bound payload must not carry the raw key anywhere.
+    const serialized = JSON.stringify(thrown);
+    expect(serialized).not.toContain(KEY_CANARY);
+    expect(serialized).toContain("***");
+    assertInert(thrown, KEY_CANARY);
   });
 
   describe("real loopback /tabs rejection", () => {

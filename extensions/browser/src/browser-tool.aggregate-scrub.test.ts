@@ -16,6 +16,7 @@ const { clearAllVaultFillSessions, registerVaultFillSecret } =
   await import("./browser/vault-fill-scrub.js");
 
 const CANARY = "aggregate-tabs-canary-3e7f";
+const KEY_CANARY = "property-key-canary-r5";
 
 describe("browser tool aggregate fill scrub", () => {
   beforeEach(() => {
@@ -53,6 +54,31 @@ describe("browser tool aggregate fill scrub", () => {
     expect(text).toContain("***");
     expect(JSON.stringify(result?.details)).not.toContain(CANARY);
     expect(JSON.stringify(result?.details)).toContain("***");
+  });
+
+  it("masks secret-bearing property names in an aggregate tool result", async () => {
+    registerVaultFillSecret("target-1", KEY_CANARY, "doc-1");
+    mocks.browserTabs.mockResolvedValue({
+      running: true,
+      tabs: [
+        {
+          targetId: "target-1",
+          title: { [KEY_CANARY]: "clean" },
+          url: "https://login.example.com/",
+        },
+      ],
+    });
+
+    const tool = createBrowserTool({ allowHostControl: true });
+    const result = await tool.execute?.(
+      "call-1",
+      { action: "tabs" },
+      undefined as never,
+      undefined as never,
+    );
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(KEY_CANARY);
+    expect(serialized).toContain("***");
   });
 
   it("masks a filled value in a rejected aggregate tabs error without rethrowing the live object", async () => {
