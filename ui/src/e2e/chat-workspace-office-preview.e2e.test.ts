@@ -39,6 +39,8 @@ afterAll(async () => {
 });
 
 const fileRoot = "/workspace";
+// Bare /chat opens an unsent draft; every fixture here needs an existing
+// conversation with its transcript, composer, and workspace rail.
 const sessionKey = "agent:main:main";
 
 const workbookPayload = {
@@ -200,7 +202,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
         featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
         methodResponses: officeResponses(),
       });
-      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
       await openRailFile(page, "budget.xlsx");
 
       const workbook = page.locator('.sidebar-office-preview[data-office-format="xlsx"]');
@@ -234,7 +236,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
         featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
         methodResponses: officeResponses(),
       });
-      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
       await openRailFile(page, "report.docx");
 
       const documentPreview = page.locator('.sidebar-office-preview[data-office-format="docx"]');
@@ -259,7 +261,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
         featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
         methodResponses: officeResponses(),
       });
-      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
       await openRailFile(page, "deck.pptx");
 
       const presentationPreview = page.locator(
@@ -283,7 +285,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
         featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
         methodResponses: officeResponses(),
       });
-      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
       await openRailFile(page, "legacy.xls");
       await expect
         .poll(() => page.locator(".sidebar-markdown-reader").textContent())
@@ -321,7 +323,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
           },
         },
       });
-      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
       await openRailFile(page, "budget.xlsx");
       await expect
         .poll(() => page.locator(".sidebar-markdown-reader").textContent())
@@ -346,7 +348,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
         featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
         methodResponses: officeResponses(),
       });
-      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
       await openRailFile(page, "budget.xlsx");
       const workbook = page.locator('.sidebar-office-preview[data-office-format="xlsx"]');
       await workbook.waitFor({ state: "visible" });
@@ -407,7 +409,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
           },
         },
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
       const card = page
         .locator(".chat-assistant-attachment-card--compact")
         .filter({ hasText: "applications.xlsx" });
@@ -474,7 +476,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
           },
         },
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
       await openChatSidePanelType(page, "Files");
       const artifactsChip = page
         .locator(".chat-workspace-rail__chip")
@@ -549,7 +551,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
           },
         ],
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
       const card = page
         .locator(".chat-assistant-attachment-card--compact")
         .filter({ hasText: "old-ledger.xls" });
@@ -615,7 +617,7 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
           },
         },
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
       await openChatSidePanelType(page, "Files");
       const artifactsChip = page.locator(".chat-workspace-rail__chip").filter({
         hasText: /artifact/iu,
@@ -689,7 +691,7 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
       await installMockGateway(page, {
         featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.fill("Outbox workbook for preview");
       await page.locator(".agent-chat__file-input").setInputFiles({
@@ -838,7 +840,7 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
           },
         },
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
       await openChatSidePanelType(page, "Files");
       const artifactsChip = page.locator(".chat-workspace-rail__chip").filter({
         hasText: /artifact/iu,
@@ -888,7 +890,7 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
     try {
       const page = await context.newPage();
       page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
-      let releaseUpload: (() => void) | null = null;
+      let releaseUpload: (() => void) | undefined;
       await page.route("**/__openclaw__/assistant-media?**", async (route) => {
         const url = new URL(route.request().url());
         if (route.request().method() === "POST" && url.searchParams.get("upload") === "1") {
@@ -909,7 +911,7 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
       await installMockGateway(page, {
         featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.fill("Upload while the parse is held");
       await page.locator(".agent-chat__file-input").setInputFiles({
@@ -977,7 +979,7 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
           },
         },
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
       await openChatSidePanelType(page, "Files");
       const artifactsChip = page.locator(".chat-workspace-rail__chip").filter({
         hasText: /artifact/iu,
