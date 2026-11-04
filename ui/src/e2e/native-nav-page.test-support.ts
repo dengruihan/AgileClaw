@@ -80,7 +80,9 @@ export function createNativeNavPageOpener(suite: ReturnType<typeof createControl
       ...options.scenario,
     });
     await options.beforeNavigate?.(page);
-    const response = await page.goto(`${suite.server.baseUrl}${options.pathname ?? ""}`, {
+    // A bare entry opens an unsent draft, so shell/chat-pane chrome fixtures
+    // start on an explicit conversation instead.
+    const response = await page.goto(`${suite.server.baseUrl}${options.pathname ?? "chat/main"}`, {
       waitUntil: options.beforeNavigate ? "domcontentloaded" : "load",
     });
     expect(response?.status()).toBe(200);
