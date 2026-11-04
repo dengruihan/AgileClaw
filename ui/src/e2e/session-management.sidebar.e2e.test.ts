@@ -990,7 +990,14 @@ suite.define(() => {
         element.scrollTop = 0;
       });
       await expect
-        .poll(() => page.locator(".sidebar-recent-session").count(), { timeout: 15_000 })
+        .poll(
+          () =>
+            page
+              .locator('.sidebar-recent-session:not([data-session-key="agent:main:main"])')
+              .count(),
+          { timeout: 15_000 },
+        )
+        // The agent anchor is an ordinary row and renders on top of the fixture rows.
         .toBe(rows.length);
       await captureUiProof(suite, page, "short-window-session-sections.png");
 
