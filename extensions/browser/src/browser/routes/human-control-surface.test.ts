@@ -35,7 +35,7 @@ function tabs() {
   ];
 }
 
-function routeContext(): BrowserRouteContext {
+function routeContext(reachable = true): BrowserRouteContext {
   const resolved = resolveBrowserConfig({
     defaultProfile: "openclaw",
     evaluateEnabled: true,
@@ -54,7 +54,7 @@ function routeContext(): BrowserRouteContext {
     ensureTabAvailable: async (targetId?: string) =>
       tabs().find((tab) => tab.targetId === targetId || tab.tabId === targetId) ?? tabs()[0],
     listTabs: async () => tabs(),
-    isReachable: async () => true,
+    isReachable: async () => reachable,
     isHttpReachable: async () => true,
     isTransportAvailable: async () => true,
     closeTab: calls.close,
@@ -219,3 +219,32 @@ describe.each(["requested", "active"] as const)(
     });
   },
 );
+
+describe("stopped profile tab listing", () => {
+  afterEach(() => {
+    humanControlRegistry.revokeAll();
+    clearAllVaultFillSessions();
+    vi.clearAllMocks();
+  });
+
+  it("clears profile ownership and masking before returning running:false", async () => {
+    humanControlRegistry.revokeAll();
+    clearAllVaultFillSessions();
+    const claimed = claim("t1", "human");
+    expect(claimed.control.status).toBe("active");
+    registerVaultFillSecret("target-1", "stopped-list-canary", "doc-1", "openclaw");
+    registerVaultFillSecret("target-other", "other-canary", "doc-2", "other-profile");
+
+    const routes = createBrowserRouteApp();
+    registerBrowserTabRoutes(routes.app, routeContext(false));
+    const response = await call(routes.getHandlers.get("/tabs")!, request());
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toMatchObject({ running: false, tabs: [] });
+    expect(
+      humanControlRegistry.status({ profile: "openclaw", targetId: "target-1", tabId: "t1" }),
+    ).toBeNull();
+    expect(hasActiveVaultFill("target-1")).toBe(false);
+    expect(hasActiveVaultFill("target-other")).toBe(true);
+  });
+});

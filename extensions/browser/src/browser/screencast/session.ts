@@ -1,6 +1,7 @@
 import type { WebSocket } from "openclaw/plugin-sdk/websocket-runtime";
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { getPwAiModule } from "../pw-ai-module.js";
+import { retireSensitiveDocumentForPage } from "../vault-fill-navigation.js";
 import { clearVaultFillSession } from "../vault-fill-scrub.js";
 import { clearBrowserScreencastTokens, type BrowserScreencastTokenParams } from "./tokens.js";
 import { encodeBrowserScreencastFrame } from "./wire.js";
@@ -129,6 +130,10 @@ class BrowserScreencastSession {
   };
 
   private readonly onLoad = (): void => {
+    const page = this.page;
+    if (page) {
+      void retireSensitiveDocumentForPage(page, this.params.targetId).catch(() => false);
+    }
     void this.updateMetadata(this.navigationEpoch);
   };
 

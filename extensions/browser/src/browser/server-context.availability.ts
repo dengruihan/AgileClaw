@@ -58,6 +58,7 @@ import type {
   ProfileContext,
   ProfileRuntimeState,
 } from "./server-context.types.js";
+import { clearVaultFillSessionsForProfile } from "./vault-fill-scrub.js";
 
 type AvailabilityDeps = {
   opts: ContextOptions;
@@ -644,8 +645,6 @@ export function createProfileAvailability({
   const stopRunningBrowser = async (): Promise<{ stopped: boolean }> => {
     const current = state();
     assertProfileLifecycleContext({ state: current, runtime, configRevision });
-    // A stopped browser cannot honor human ownership; the next start is agent-owned.
-    humanControlRegistry.revokeProfile(profile.name);
     runtime.managedLaunchFailure = undefined;
     const result = await beginProfileTransition({
       state: current,
@@ -653,6 +652,10 @@ export function createProfileAvailability({
       reason: "stop requested",
       managedChrome: "stop",
     });
+    // Only a completed stop proves the documents are gone. Stay profile-scoped
+    // so other profiles keep their ownership and masking sessions.
+    humanControlRegistry.revokeProfile(profile.name);
+    clearVaultFillSessionsForProfile(profile.name);
     return {
       stopped: result.stopped || profile.attachOnly || capabilities.isRemote,
     };

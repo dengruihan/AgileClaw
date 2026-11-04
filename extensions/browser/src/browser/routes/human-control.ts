@@ -18,6 +18,7 @@ import {
 import { getBrowserProfileCapabilities } from "../profile-capabilities.js";
 import { getPageForTargetId } from "../pw-session-connection.js";
 import type { BrowserRouteContext } from "../server-context.js";
+import { documentIdentity } from "../vault-fill-document.js";
 import {
   clearVaultFillSessionIfDocumentChanged,
   registerVaultFillSecret,
@@ -27,7 +28,7 @@ import {
   readBody,
   withRouteTabContext,
 } from "./agent.shared.js";
-import { documentIdentity, readVaultOrigin } from "./agent.vault.js";
+import { readVaultOrigin } from "./agent.vault.js";
 import type { BrowserRequest, BrowserRouteRegistrar } from "./types.js";
 import { jsonError, toStringOrEmpty } from "./utils.js";
 
@@ -130,7 +131,7 @@ function rejectControl(
 const wiredSignals = new WeakSet<AbortSignal>();
 function wireConnectionCleanup(req: BrowserRequest, connId: string | undefined): void {
   const signal = req.requester?.signal;
-  if (!connId || !signal || wiredSignals.has(signal)) {
+  if (!connId || !signal || signal.aborted || wiredSignals.has(signal)) {
     return;
   }
   wiredSignals.add(signal);
@@ -240,6 +241,20 @@ export function registerBrowserHumanControlRoutes(
         });
         signal.throwIfAborted();
         const current = await currentDocument(page);
+        // The page/document/cookie reads can outlive the request. Recheck live
+        // authority synchronously before any abort listener or lease is created;
+        // an already-fired abort cannot be replayed by adding a listener later.
+        if (
+          req.signal?.aborted ||
+          req.requester?.signal.aborted ||
+          req.requester?.isCurrent() === false
+        ) {
+          res.status(409).json({
+            error: "The Gateway connection that requested human takeover has ended.",
+            code: "HUMAN_CONTROL_REQUESTER_GONE",
+          });
+          return;
+        }
         const connId = req.requester?.connId;
         wireConnectionCleanup(req, connId);
         const result = humanControlRegistry.claim({
@@ -319,6 +334,16 @@ export function registerBrowserHumanControlRoutes(
             "The current document could not be revalidated; human control stays active. Retry, or cancel the takeover.",
             baseline.control,
           );
+        }
+        if (!baseline.origin || !baseline.documentId) {
+          res.status(409).json({
+            error:
+              "The claim-time document or origin could not be verified; human control stays active. Retry with a fresh takeover, or cancel it.",
+            code: "HUMAN_CONTROL_REVALIDATION_FAILED",
+            reasonCode: "baseline_unavailable",
+            control: controlJson(baseline.control),
+          });
+          return;
         }
         if (!baseline.cookieFingerprint || !current.cookieFingerprint) {
           // Login state is part of the handback contract. A missing before or

@@ -108,6 +108,17 @@ export function clearAllVaultFillSessions(): void {
  * authoritative listing for this profile. A tab alias migration keeps its raw
  * target id live, so a confident replacement does not lose protection.
  */
+export function clearVaultFillSessionsForProfile(profile: string): number {
+  let cleared = 0;
+  for (const [targetId, session] of sessions) {
+    if (session.profile === profile) {
+      sessions.delete(targetId);
+      cleared += 1;
+    }
+  }
+  return cleared;
+}
+
 export function retainVaultFillSessions(
   profile: string,
   liveTargetIds: ReadonlySet<string>,

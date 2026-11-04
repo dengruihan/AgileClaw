@@ -4,9 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../test-support.js";
 import "./server-context.chrome-test-harness.js";
 import * as chrome from "./chrome.js";
+import { humanControlRegistry } from "./human-control.js";
 import { createBrowserRouteContext } from "./server-context.js";
 import { makeBrowserServerState } from "./server-context.test-harness.js";
 import { movePathToTrash } from "./trash.js";
+import {
+  clearAllVaultFillSessions,
+  hasActiveVaultFill,
+  registerVaultFillSecret,
+} from "./vault-fill-scrub.js";
 
 vi.mock("./trash.js", () => ({
   movePathToTrash: vi.fn(async (targetPath: string) => targetPath),
@@ -49,6 +55,32 @@ describe("managed browser profile reset", () => {
     expect(chrome.stopOwnedOpenClawChrome).toHaveBeenCalledWith(resolved, profile.profile);
     expect(order).toEqual(["stop", "trash"]);
     expect(chrome.stopOpenClawChrome).not.toHaveBeenCalled();
+  });
+
+  it("clears this profile's leases and masking without touching another profile", async () => {
+    humanControlRegistry.revokeAll();
+    clearAllVaultFillSessions();
+    const { profile } = createResetHarness();
+    const name = profile.profile.name;
+    humanControlRegistry.claim({
+      profile: name,
+      targetId: "target-reset",
+      tabId: "t1",
+      reason: "user_request",
+      requestedBy: "human",
+    });
+    registerVaultFillSecret("target-reset", "reset-canary", "doc-reset", name);
+    registerVaultFillSecret("target-other", "other-canary", "doc-other", "other-profile");
+
+    await profile.resetProfile();
+
+    expect(
+      humanControlRegistry.status({ profile: name, targetId: "target-reset", tabId: "t1" }),
+    ).toBeNull();
+    expect(hasActiveVaultFill("target-reset")).toBe(false);
+    expect(hasActiveVaultFill("target-other")).toBe(true);
+    clearAllVaultFillSessions();
+    humanControlRegistry.revokeAll();
   });
 
   it("preserves data after uncertain shutdown and allows a later reset to finish cleanup", async () => {

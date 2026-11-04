@@ -17,7 +17,14 @@ vi.mock("../pw-ai-module.js", () => ({
 }));
 
 class FakeCdp extends EventEmitter {
-  send = vi.fn(async (_method: string, _params?: unknown) => ({}));
+  constructor(private readonly page: FakePage) {
+    super();
+  }
+  send = vi.fn(async (method: string, _params?: unknown) =>
+    method === "Page.getFrameTree"
+      ? { frameTree: { frame: { id: "frame-1", loaderId: this.page.loaderId } } }
+      : {},
+  );
   detach = vi.fn(async () => {
     this.emit("close", this);
   });
@@ -39,8 +46,9 @@ class FakeCdp extends EventEmitter {
 
 class FakePage extends EventEmitter {
   cdps: FakeCdp[] = [];
+  loaderId = "doc-1";
   newCDPSession = vi.fn(async () => {
-    const cdp = new FakeCdp();
+    const cdp = new FakeCdp(this);
     this.cdps.push(cdp);
     return cdp;
   });
@@ -96,6 +104,18 @@ describe("browser screencast sessions", () => {
     await flush();
     return viewer;
   }
+
+  it("retires sensitive-input masking when a navigation replaces the document", async () => {
+    registerVaultFillSecret("target-1", "navigation-canary", "doc-1", "openclaw");
+    const viewer = await attach();
+    expect(hasActiveVaultFill("target-1")).toBe(true);
+    page.loaderId = "doc-2";
+    page.emit("load");
+    await flush();
+    expect(hasActiveVaultFill("target-1")).toBe(false);
+    viewer.close();
+    clearAllVaultFillSessions();
+  });
 
   it("drops sensitive-input masking when the captured tab closes", async () => {
     registerVaultFillSecret("target-1", "screencast-close-canary", "doc-1", "openclaw");

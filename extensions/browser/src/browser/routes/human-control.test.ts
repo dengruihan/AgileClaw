@@ -20,6 +20,8 @@ const h = vi.hoisted(() => ({
   failCookies: false,
   focusGate: null as Promise<boolean> | null,
   resolveFocusStarted: null as (() => void) | null,
+  cookiesGate: null as Promise<void> | null,
+  resolveCookiesStarted: null as (() => void) | null,
 }));
 
 vi.mock("../pw-session-connection.js", () => ({
@@ -42,6 +44,10 @@ vi.mock("../pw-session-connection.js", () => ({
     },
     context: () => ({
       cookies: async () => {
+        if (h.cookiesGate) {
+          h.resolveCookiesStarted?.();
+          await h.cookiesGate;
+        }
         if (h.failCookies) {
           throw new Error("cookie read failed");
         }
@@ -281,6 +287,57 @@ describe("human takeover routes", () => {
     );
     expect(response.statusCode).toBe(409);
     expect(JSON.stringify(response.body)).not.toContain(CANARY);
+  });
+
+  it("does not create a lease when the requester disconnects during claim reads", async () => {
+    humanControlRegistry.revokeAll();
+    const routes = app();
+    const claim = routes.postHandlers.get("/human-control/claim")!;
+    const closing = request({ targetId: "t1" }, "conn-claim-delay");
+
+    let resolveStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+    let releaseCookies!: () => void;
+    h.cookiesGate = new Promise<void>((resolve) => {
+      releaseCookies = resolve;
+    });
+    h.resolveCookiesStarted = resolveStarted;
+    const pending = call(claim, closing.req);
+    await started;
+    closing.controller.abort();
+    releaseCookies();
+    const response = await pending;
+    h.cookiesGate = null;
+    h.resolveCookiesStarted = null;
+
+    expect(response.statusCode).toBe(409);
+    expect(response.body).not.toHaveProperty("humanControlToken");
+    expect(
+      humanControlRegistry.status({ profile: "openclaw", targetId: "target-1", tabId: "t1" }),
+    ).toBeNull();
+    humanControlRegistry.revokeAll();
+  });
+
+  it("fails closed when the claim-time document identity is unavailable", async () => {
+    humanControlRegistry.revokeAll();
+    const routes = app();
+    const claim = routes.postHandlers.get("/human-control/claim")!;
+    const release = routes.postHandlers.get("/human-control/release")!;
+
+    h.failIdentity = true;
+    const claimed = await call(claim, request({ targetId: "t1" }).req);
+    h.failIdentity = false;
+    const token = (claimed.body as { humanControlToken: string }).humanControlToken;
+    const released = await call(release, request({ targetId: "t1", humanControlToken: token }).req);
+    expect(released.statusCode).toBe(409);
+    expect(released.body).toMatchObject({
+      code: "HUMAN_CONTROL_REVALIDATION_FAILED",
+      reasonCode: "baseline_unavailable",
+    });
+    expect(() => assertHumanControlAgentAllowed({ profile: "openclaw", tab: tab() })).toThrow();
+    humanControlRegistry.revokeAll();
   });
 
   it("fails closed when the before/after login fingerprint is unavailable", async () => {

@@ -30,7 +30,7 @@ The Control UI claims the lease with a one-time capability. Agent tool calls nev
 2. The page shows a CAPTCHA, a verification-code prompt, or another human gate. The agent's result is `needs_human`.
 3. Open the browser panel. The tab banner names the owner and offers **Take over this tab**.
 4. Take over, finish the challenge in the page, and enter any sensitive value through the panel.
-5. Choose **Hand back to agent**. OpenClaw revalidates the current origin, document, and login state before returning control. The agent must re-observe the page after handback, so a changed origin or document is visible to it instead of being mistaken for the approved page.
+5. Choose **Hand back to agent**. OpenClaw requires the claim-time and handback-time origin, CDP document identity, and cookie-name login fingerprints. If any baseline is unavailable it keeps human control and returns a value-free `baseline_unavailable` or `login_state_unavailable` reason. The agent must re-observe the page after handback, so a changed origin or document is visible to it instead of being mistaken for the approved page.
 6. Choose **Cancel takeover** to return the tab without the handback checks, for example when the challenge cannot be completed.
 
 The panel polls the tab's ownership while it is open, so an agent-requested takeover appears without a chat round trip.
@@ -42,7 +42,7 @@ While you control a tab, text and pasted values from the panel use a dedicated s
 - The value is not placed in a model request, tool result, transcript, tool-call event, or Gateway log. Error responses are deliberately opaque and never echo the request body.
 - The browser owner arms masking before insertion, using the same scrub owner as vault fill. Agent screenshots, labeled snapshots, and text-bearing read results are blocked or masked until the document is replaced or the tab closes.
 - The value exists only for insertion and process-local masking. OpenClaw does not write it to the vault, an audit row, or browser history.
-- **Hand back to agent** keeps masking if the sensitive field is still in the same document. **Cancel takeover** also does not clear it: cancel only returns ownership, and clearing masking while the same sensitive document remains would be unsafe. Navigate to a different document or close the tab to drop protection; the browser owner clears the masking session when the tab closes, is pruned from an authoritative tab listing, or the browser runtime stops.
+- **Hand back to agent** keeps masking if the sensitive field is still in the same document. **Cancel takeover** also does not clear it: cancel only returns ownership, and clearing masking while the same sensitive document remains would be unsafe. Navigate to a different document (the browser owner retires masking when the CDP document loader id changes), close the tab, or stop the browser to drop protection. Same-document/hash navigation and downloads keep masking because the original field may still hold the value.
 
 Do not type secrets into the chat composer or an agent `type`/`fill` action. Those values are model-visible and persisted.
 
@@ -59,7 +59,7 @@ Do not type secrets into the chat composer or an agent `type`/`fill` action. Tho
 
 - Human takeover runs only on the local managed browser profile on the Gateway host. Browser nodes, remote CDP endpoints, extension relays, and existing-session profiles are rejected. The sensitive input and lease routes are forced onto the Gateway host and never cross the node proxy.
 - The lease itself contains only an opaque tab handle, profile, reason, timestamps, and a hashed capability. It never contains passwords, OTP values, session cookies, or TOTP seeds.
-- Login-state revalidation reads cookie **names and scope**, never values, and hashes them. If the browser cannot expose a document identity, handback refuses rather than returning unverified control; cancel still works.
+- Login-state revalidation reads cookie **names and scope**, never values, and hashes them. Handback also requires a claim-time origin and CDP document identity; if either baseline is missing, handback refuses rather than returning unverified control. Cancel remains the explicit unchecked exit.
 - OpenClaw cannot isolate a typed value from the page's own JavaScript or another CDP client attached to the same browser. The sensitive route removes OpenClaw's own model, transcript, and log surfaces; treat the browser profile as trusted for the logins it holds.
 - No TOTP seed storage, no automated CAPTCHA solving, and no third-party challenge service are part of this flow.
 

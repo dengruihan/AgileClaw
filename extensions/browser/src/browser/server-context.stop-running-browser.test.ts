@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { humanControlRegistry } from "./human-control.js";
 import { createBrowserRouteContext } from "./server-context.js";
 import { makeBrowserProfile, makeBrowserServerState } from "./server-context.test-harness.js";
+import {
+  clearAllVaultFillSessions,
+  hasActiveVaultFill,
+  registerVaultFillSecret,
+} from "./vault-fill-scrub.js";
 
 const pwAiMocks = vi.hoisted(() => {
   const closePlaywrightBrowserConnection = vi.fn(async (_opts?: { cdpUrl?: string }) => {});
@@ -70,6 +76,32 @@ describe("createProfileAvailability.stopRunningBrowser", () => {
       expect(chromeMocks.stopOwnedOpenClawChrome).not.toHaveBeenCalled();
     },
   );
+
+  it("clears this profile's leases and masking without touching another profile", async () => {
+    humanControlRegistry.revokeAll();
+    clearAllVaultFillSessions();
+    const { profileCtx } = createStopHarness(makeBrowserProfile({ attachOnly: true }));
+    const name = profileCtx.profile.name;
+    humanControlRegistry.claim({
+      profile: name,
+      targetId: "target-stop",
+      tabId: "t1",
+      reason: "user_request",
+      requestedBy: "human",
+    });
+    registerVaultFillSecret("target-stop", "stop-canary", "doc-stop", name);
+    registerVaultFillSecret("target-other", "other-canary", "doc-other", "other-profile");
+
+    await profileCtx.stopRunningBrowser();
+
+    expect(
+      humanControlRegistry.status({ profile: name, targetId: "target-stop", tabId: "t1" }),
+    ).toBeNull();
+    expect(hasActiveVaultFill("target-stop")).toBe(false);
+    expect(hasActiveVaultFill("target-other")).toBe(true);
+    clearAllVaultFillSessions();
+    humanControlRegistry.revokeAll();
+  });
 
   it.each(["not-running", "stopped"] as const)(
     "reports the managed Chrome owner result: %s",
