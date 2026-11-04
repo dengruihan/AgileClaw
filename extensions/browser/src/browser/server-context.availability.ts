@@ -646,16 +646,24 @@ export function createProfileAvailability({
     const current = state();
     assertProfileLifecycleContext({ state: current, runtime, configRevision });
     runtime.managedLaunchFailure = undefined;
+    let managedChromeStopped = false;
     const result = await beginProfileTransition({
       state: current,
       runtime,
       reason: "stop requested",
       managedChrome: "stop",
+      onManagedChromeStop: (status) => {
+        managedChromeStopped = status === "stopped";
+      },
     });
-    // Only a completed stop proves the documents are gone. Stay profile-scoped
-    // so other profiles keep their ownership and masking sessions.
-    humanControlRegistry.revokeProfile(profile.name);
-    clearVaultFillSessionsForProfile(profile.name);
+    // Only an owned Chrome process reported as stopped proves the documents are
+    // gone. Attach-only/remote profiles merely detach, and "unverified" may
+    // leave Chromium alive; both keep ownership and masking. State stays
+    // profile-scoped so other profiles are untouched.
+    if (managedChromeStopped && !profile.attachOnly && !capabilities.isRemote) {
+      humanControlRegistry.revokeProfile(profile.name);
+      clearVaultFillSessionsForProfile(profile.name);
+    }
     return {
       stopped: result.stopped || profile.attachOnly || capabilities.isRemote,
     };

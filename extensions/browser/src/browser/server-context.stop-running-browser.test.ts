@@ -77,10 +77,11 @@ describe("createProfileAvailability.stopRunningBrowser", () => {
     },
   );
 
-  it("clears this profile's leases and masking without touching another profile", async () => {
+  it("clears this profile's leases and masking after a confirmed managed stop", async () => {
     humanControlRegistry.revokeAll();
     clearAllVaultFillSessions();
-    const { profileCtx } = createStopHarness(makeBrowserProfile({ attachOnly: true }));
+    chromeMocks.stopOwnedOpenClawChrome.mockResolvedValue({ status: "stopped" });
+    const { profileCtx } = createStopHarness(makeBrowserProfile());
     const name = profileCtx.profile.name;
     humanControlRegistry.claim({
       profile: name,
@@ -102,6 +103,45 @@ describe("createProfileAvailability.stopRunningBrowser", () => {
     clearAllVaultFillSessions();
     humanControlRegistry.revokeAll();
   });
+
+  it.each([
+    {
+      name: "attach-only detachment",
+      overrides: { attachOnly: true },
+      status: "not-running" as const,
+    },
+    { name: "unverified managed stop", overrides: {}, status: "unverified" as const },
+    { name: "not-running managed browser", overrides: {}, status: "not-running" as const },
+  ])(
+    "keeps masking when $name cannot prove the document is gone",
+    async ({ overrides, status }) => {
+      humanControlRegistry.revokeAll();
+      clearAllVaultFillSessions();
+      chromeMocks.stopOwnedOpenClawChrome.mockResolvedValue({
+        status,
+        ...(status === "unverified" ? { reason: "process identity changed" } : {}),
+      });
+      const { profileCtx } = createStopHarness(makeBrowserProfile(overrides));
+      const name = profileCtx.profile.name;
+      humanControlRegistry.claim({
+        profile: name,
+        targetId: "target-survives",
+        tabId: "t1",
+        reason: "user_request",
+        requestedBy: "human",
+      });
+      registerVaultFillSecret("target-survives", "survives-canary", "doc-survives", name);
+
+      await profileCtx.stopRunningBrowser();
+
+      expect(
+        humanControlRegistry.status({ profile: name, targetId: "target-survives", tabId: "t1" }),
+      ).not.toBeNull();
+      expect(hasActiveVaultFill("target-survives")).toBe(true);
+      clearAllVaultFillSessions();
+      humanControlRegistry.revokeAll();
+    },
+  );
 
   it.each(["not-running", "stopped"] as const)(
     "reports the managed Chrome owner result: %s",

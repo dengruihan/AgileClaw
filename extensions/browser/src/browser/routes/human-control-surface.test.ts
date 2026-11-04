@@ -227,7 +227,7 @@ describe("stopped profile tab listing", () => {
     vi.clearAllMocks();
   });
 
-  it("clears profile ownership and masking before returning running:false", async () => {
+  it("does not treat a transient unreachable probe as document destruction", async () => {
     humanControlRegistry.revokeAll();
     clearAllVaultFillSessions();
     const claimed = claim("t1", "human");
@@ -243,8 +243,8 @@ describe("stopped profile tab listing", () => {
     expect(response.body).toMatchObject({ running: false, tabs: [] });
     expect(
       humanControlRegistry.status({ profile: "openclaw", targetId: "target-1", tabId: "t1" }),
-    ).toBeNull();
-    expect(hasActiveVaultFill("target-1")).toBe(false);
+    ).not.toBeNull();
+    expect(hasActiveVaultFill("target-1")).toBe(true);
     expect(hasActiveVaultFill("target-other")).toBe(true);
   });
 });

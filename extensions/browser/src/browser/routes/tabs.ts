@@ -21,11 +21,7 @@ import type { BrowserRouteContext, ProfileContext } from "../server-context.js";
 import { isProfileRestartRequiredError } from "../server-context.lifecycle.js";
 import { clearSnapshotKeysForTab } from "../snapshot-delta-cache.js";
 import { resolveTargetIdFromTabs } from "../target-id.js";
-import {
-  clearVaultFillSession,
-  clearVaultFillSessionsForProfile,
-  retainVaultFillSessions,
-} from "../vault-fill-scrub.js";
+import { clearVaultFillSession, retainVaultFillSessions } from "../vault-fill-scrub.js";
 import { browserNavigationPolicyForProfile, resolveProfileContext } from "./agent.shared.js";
 import { readRouteNonNegativeInteger } from "./route-numeric.js";
 import type { BrowserRequest, BrowserResponse, BrowserRouteRegistrar } from "./types.js";
@@ -260,10 +256,9 @@ export function registerBrowserTabRoutes(app: BrowserRouteRegistrar, ctx: Browse
   const listTabs = async (profileCtx: ProfileContext, signal: AbortSignal) => {
     const running = await checkTabReachability(ctx, profileCtx, signal);
     if (!running) {
-      // A stopped profile has no documents left; clean its ownership and
-      // masking here too so an early return cannot strand them.
-      humanControlRegistry.revokeProfile(profileCtx.profile.name);
-      clearVaultFillSessionsForProfile(profileCtx.profile.name);
+      // A short probe can miss a live browser. Do not treat unreachable as
+      // document destruction: leases and masking stay until the owned stop,
+      // tab close, or navigation owner proves the document is gone.
       return { running: false, tabs: [] };
     }
     const tabs = await redactBlockedTabUrls({

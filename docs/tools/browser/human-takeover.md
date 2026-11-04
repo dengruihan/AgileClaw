@@ -42,7 +42,7 @@ While you control a tab, text and pasted values from the panel use a dedicated s
 - The value is not placed in a model request, tool result, transcript, tool-call event, or Gateway log. Error responses are deliberately opaque and never echo the request body.
 - The browser owner arms masking before insertion, using the same scrub owner as vault fill. Agent screenshots, labeled snapshots, and text-bearing read results are blocked or masked until the document is replaced or the tab closes.
 - The value exists only for insertion and process-local masking. OpenClaw does not write it to the vault, an audit row, or browser history.
-- **Hand back to agent** keeps masking if the sensitive field is still in the same document. **Cancel takeover** also does not clear it: cancel only returns ownership, and clearing masking while the same sensitive document remains would be unsafe. Navigate to a different document (the browser owner retires masking when the CDP document loader id changes), close the tab, or stop the browser to drop protection. Same-document/hash navigation and downloads keep masking because the original field may still hold the value.
+- **Hand back to agent** keeps masking if the sensitive field is still in the same document. **Cancel takeover** also does not clear it: cancel only returns ownership, and clearing masking while the same sensitive document remains would be unsafe. Navigate to a different document (the browser owner retires masking when the CDP document loader id changes), close the tab, or complete a positively confirmed managed-browser stop to drop protection. Same-document/hash navigation and downloads keep masking because the original field may still hold the value. An unreachable probe, an attach-only/remote detach, or an unverified managed stop does not prove the document is gone, so masking and ownership stay in place.
 
 Do not type secrets into the chat composer or an agent `type`/`fill` action. Those values are model-visible and persisted.
 
@@ -51,7 +51,7 @@ Do not type secrets into the chat composer or an agent `type`/`fill` action. Tho
 - A request waits for a human claim for 2 minutes. If nobody claims it, the tab returns to the agent.
 - An active takeover has a 5-minute inactivity window, renewed by human clicks, keys, navigation, and sensitive input. A 30-minute absolute cap bounds a stuck lease.
 - **Locking** a tab is the active takeover state: the agent is blocked until you hand back or cancel.
-- Closing the tab, stopping the browser, or restarting the Gateway clears the lease. Closing the Gateway connection that claimed it also clears its leases.
+- Closing the tab, a positively confirmed managed-browser stop, a successful profile reset, or restarting the Gateway clears the lease. A transient unreachable probe, attach-only/remote detach, or unverified managed stop keeps it because the document may still be alive. Closing the Gateway connection that claimed it also clears its leases.
 - Navigation while you control the tab stays inside your lease. Handback then reports the new origin/document and whether the login fingerprint changed; it does not silently reuse the pre-takeover approval.
 - A lease is keyed by the stable per-profile tab handle. The agent's fill approval is separately bound to the exact document and field, so handback alone never authorizes a new fill.
 
