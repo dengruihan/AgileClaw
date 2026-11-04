@@ -3,6 +3,11 @@ import { expectDefined } from "@openclaw/normalization-core";
 import type { WebSocket } from "openclaw/plugin-sdk/websocket-runtime";
 import type { Page } from "playwright-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  clearAllVaultFillSessions,
+  hasActiveVaultFill,
+  registerVaultFillSecret,
+} from "../vault-fill-scrub.js";
 import { attachBrowserScreencastViewer, stopBrowserScreencasts } from "./session.js";
 import { parseScreencastFrame, screencastParams, ScreencastViewer } from "./test-support.js";
 
@@ -91,6 +96,17 @@ describe("browser screencast sessions", () => {
     await flush();
     return viewer;
   }
+
+  it("drops sensitive-input masking when the captured tab closes", async () => {
+    registerVaultFillSecret("target-1", "screencast-close-canary", "doc-1", "openclaw");
+    const viewer = await attach();
+    expect(hasActiveVaultFill("target-1")).toBe(true);
+    page.emit("close");
+    await flush();
+    expect(hasActiveVaultFill("target-1")).toBe(false);
+    viewer.close();
+    clearAllVaultFillSessions();
+  });
 
   it("revokes only the requesting viewer and stops capture after the last requester leaves", async () => {
     const firstRequester = new AbortController();

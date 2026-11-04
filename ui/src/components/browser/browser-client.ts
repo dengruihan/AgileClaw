@@ -311,14 +311,27 @@ export async function openBrowserTab(
   );
 }
 
-export async function focusBrowserTab(client: BrowserRequestClient, targetId: string) {
-  await browserRequest(client, { method: "POST", path: "/tabs/focus", body: { targetId } });
+export async function focusBrowserTab(
+  client: BrowserRequestClient,
+  targetId: string,
+  humanControlToken?: string,
+) {
+  await browserRequest(client, {
+    method: "POST",
+    path: "/tabs/focus",
+    body: { targetId, ...(humanControlToken ? { humanControlToken } : {}) },
+  });
 }
 
-export async function closeBrowserTab(client: BrowserRequestClient, targetId: string) {
+export async function closeBrowserTab(
+  client: BrowserRequestClient,
+  targetId: string,
+  humanControlToken?: string,
+) {
   await browserRequest(client, {
     method: "DELETE",
     path: `/tabs/${encodeURIComponent(targetId)}`,
+    ...(humanControlToken ? { body: { humanControlToken } } : {}),
   });
 }
 
@@ -369,7 +382,7 @@ export async function navigateBrowser(
 
 export async function requestBrowserScreencast(
   client: BrowserRequestClient,
-  params: { targetId: string; maxWidth: number; maxHeight: number },
+  params: { targetId: string; maxWidth: number; maxHeight: number; humanControlToken?: string },
   options?: GatewayClientRequestOptions,
 ): Promise<{ token: string; wsPath: string; targetId: string; url: string }> {
   const result = asRecord(
@@ -464,11 +477,20 @@ export async function insertBrowserText(
   },
 ) {
   if (params.sensitive) {
-    await sendSensitiveBrowserInput(client, {
+    const result = await sendSensitiveBrowserInput(client, {
       targetId: params.targetId,
       text: params.text,
       humanControlToken: params.humanControlToken ?? "",
     });
+    if (!result.ok) {
+      throw new Error(
+        t(
+          result.reasonCode === "no_focused_field"
+            ? "browser.errors.sensitiveInputNoField"
+            : "browser.errors.sensitiveInputFailed",
+        ),
+      );
+    }
     return;
   }
   try {

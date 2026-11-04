@@ -155,6 +155,52 @@ describe("Browser panel human control", () => {
     ).toHaveLength(0);
   });
 
+  it("shows a sensitive-input failure when the page has no focused field", async () => {
+    const { controller } = await mount(
+      humanControlHandler({
+        "/human-control/claim": async () => ({
+          ok: true,
+          control: ACTIVE_CONTROL,
+          humanControlToken: "cap-token",
+        }),
+        "/human-input": async () => ({ ok: false, reasonCode: "no_focused_field" }),
+      }),
+    );
+    await controller.human.takeOver();
+    const textarea = (
+      document.querySelector("openclaw-browser-panel") as HTMLElement & { renderRoot: ShadowRoot }
+    ).renderRoot.querySelector<HTMLTextAreaElement>(".bp-input")!;
+    textarea.dispatchEvent(textInput("insertText", "123456"));
+    await flushBrowserResponses();
+
+    expect(controller.errorText).toContain("Click the field in the page first");
+    expect(controller.human.control()).toMatchObject({ status: "active" });
+  });
+
+  it("shows a fixed failure when sensitive insertion throws", async () => {
+    const { controller } = await mount(
+      humanControlHandler({
+        "/human-control/claim": async () => ({
+          ok: true,
+          control: ACTIVE_CONTROL,
+          humanControlToken: "cap-token",
+        }),
+        "/human-input": async () => {
+          throw new Error("synthetic transport echoed the value");
+        },
+      }),
+    );
+    await controller.human.takeOver();
+    const textarea = (
+      document.querySelector("openclaw-browser-panel") as HTMLElement & { renderRoot: ShadowRoot }
+    ).renderRoot.querySelector<HTMLTextAreaElement>(".bp-input")!;
+    textarea.dispatchEvent(textInput("insertText", "123456"));
+    await flushBrowserResponses();
+
+    expect(controller.errorText).toContain("Sensitive input was not delivered");
+    expect(controller.errorText).not.toContain("synthetic transport");
+  });
+
   it("clears a rejected capability and refreshes ownership after a blocked action", async () => {
     const { controller, request } = await mount(
       humanControlHandler({

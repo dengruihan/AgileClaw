@@ -14,11 +14,11 @@ It covers CAPTCHA pages, two-factor or verification-code prompts, consent screen
 
 ## Ownership states
 
-| State          | What the panel shows                              | Agent behavior                                                         |
-| -------------- | ------------------------------------------------- | ---------------------------------------------------------------------- |
-| Agent-owned    | "Agent owns this tab" with **Take over this tab** | Normal browser actions.                                                |
-| Requested      | "Agent paused: this tab needs your input"         | Mutating actions on this tab return `needs_human` until you take over. |
-| You control it | "You control this tab" with hand-back and cancel  | Mutating actions on this tab are blocked; other tabs are unaffected.   |
+| State          | What the panel shows                              | Agent behavior                                                                                                                                           |
+| -------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent-owned    | "Agent owns this tab" with **Take over this tab** | Normal browser actions.                                                                                                                                  |
+| Requested      | "Agent paused: this tab needs your input"         | Agent actions on this tab return `needs_human` until you take over.                                                                                      |
+| You control it | "You control this tab" with hand-back and cancel  | Every agent action on this tab is blocked, including PDF, screenshots, downloads, upload/dialog, emulation, focus, and close; other tabs are unaffected. |
 
 An agent asks for takeover when `browser_login` observes that the page no longer has a fillable login field, or when the page reports `needs_human` (CAPTCHA, verification code, unsupported document identity). You can also take over any tab yourself before the agent asks.
 
@@ -42,7 +42,7 @@ While you control a tab, text and pasted values from the panel use a dedicated s
 - The value is not placed in a model request, tool result, transcript, tool-call event, or Gateway log. Error responses are deliberately opaque and never echo the request body.
 - The browser owner arms masking before insertion, using the same scrub owner as vault fill. Agent screenshots, labeled snapshots, and text-bearing read results are blocked or masked until the document is replaced or the tab closes.
 - The value exists only for insertion and process-local masking. OpenClaw does not write it to the vault, an audit row, or browser history.
-- **Hand back to agent** keeps masking if the sensitive field is still in the same document. Use **Cancel takeover** or navigate away when you want to drop the protected document.
+- **Hand back to agent** keeps masking if the sensitive field is still in the same document. **Cancel takeover** also does not clear it: cancel only returns ownership, and clearing masking while the same sensitive document remains would be unsafe. Navigate to a different document or close the tab to drop protection; the browser owner clears the masking session when the tab closes, is pruned from an authoritative tab listing, or the browser runtime stops.
 
 Do not type secrets into the chat composer or an agent `type`/`fill` action. Those values are model-visible and persisted.
 

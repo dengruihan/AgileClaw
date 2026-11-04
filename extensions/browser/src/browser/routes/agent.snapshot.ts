@@ -163,14 +163,6 @@ export function registerBrowserAgentSnapshotRoutes(
       ctx,
       targetId,
       run: async ({ profileCtx, tab, cdpUrl, signal, assertCurrent }) => {
-        try {
-          assertHumanControlAgentAllowed({ profile: profileCtx.profile.name, tab, body });
-        } catch (error) {
-          if (isHumanControlError(error)) {
-            return rejectHumanControl(res, error);
-          }
-          throw error;
-        }
         if (getBrowserProfileCapabilities(profileCtx.profile).usesChromeMcp) {
           const ssrfPolicyOpts = browserNavigationPolicyForProfile(ctx, profileCtx);
           await assertBrowserNavigationAllowed({ url, ...ssrfPolicyOpts });
@@ -290,14 +282,6 @@ export function registerBrowserAgentSnapshotRoutes(
       targetId,
       enforceCurrentUrlAllowed: true,
       run: async ({ profileCtx, tab, cdpUrl, signal }) => {
-        try {
-          assertHumanControlAgentAllowed({ profile: profileCtx.profile.name, tab, body });
-        } catch (error) {
-          if (isHumanControlError(error)) {
-            return rejectHumanControl(res, error);
-          }
-          throw error;
-        }
         const jsonScreenshot = (image: Awaited<ReturnType<typeof saveBrowserScreenshot>>) => {
           const { imagePath, imageType: _imageType, ...details } = image;
           res.json({ ok: true, path: imagePath, targetId: tab.targetId, url: tab.url, ...details });
@@ -443,7 +427,11 @@ export function registerBrowserAgentSnapshotRoutes(
             timeoutMs: plan.timeoutMs,
           });
           try {
-            assertHumanControlAgentAllowed({ profile: profileCtx.profile.name, tab });
+            assertHumanControlAgentAllowed({
+              profile: profileCtx.profile.name,
+              tab,
+              query: req.query,
+            });
           } catch (error) {
             if (isHumanControlError(error)) {
               return rejectHumanControl(res, error);

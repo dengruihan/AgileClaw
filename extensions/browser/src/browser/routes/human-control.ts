@@ -159,6 +159,7 @@ export function registerBrowserHumanControlRoutes(
       res,
       ctx,
       targetId,
+      humanControl: "allow",
       run: async ({ profileCtx, tab }) => {
         const control = humanControlRegistry.status({
           profile: profileCtx.profile.name,
@@ -184,6 +185,7 @@ export function registerBrowserHumanControlRoutes(
       res,
       ctx,
       targetId,
+      humanControl: "allow",
       run: async ({ profileCtx, tab, cdpUrl, signal }) => {
         if (!supportsHumanControl(profileCtx.profile)) {
           return unsupported(res);
@@ -225,6 +227,7 @@ export function registerBrowserHumanControlRoutes(
       res,
       ctx,
       targetId,
+      humanControl: "allow",
       run: async ({ profileCtx, tab, cdpUrl, signal }) => {
         if (!supportsHumanControl(profileCtx.profile)) {
           return unsupported(res);
@@ -278,6 +281,7 @@ export function registerBrowserHumanControlRoutes(
       res,
       ctx,
       targetId,
+      humanControl: "allow",
       run: async ({ profileCtx, tab, cdpUrl, signal }) => {
         if (!supportsHumanControl(profileCtx.profile)) {
           return unsupported(res);
@@ -315,6 +319,18 @@ export function registerBrowserHumanControlRoutes(
             "The current document could not be revalidated; human control stays active. Retry, or cancel the takeover.",
             baseline.control,
           );
+        }
+        if (!baseline.cookieFingerprint || !current.cookieFingerprint) {
+          // Login state is part of the handback contract. A missing before or
+          // after fingerprint is uncertain, never a clean revalidation.
+          res.status(409).json({
+            error:
+              "Login state could not be verified; human control stays active. Retry, or cancel the takeover.",
+            code: "HUMAN_CONTROL_REVALIDATION_FAILED",
+            reasonCode: "login_state_unavailable",
+            control: controlJson(baseline.control),
+          });
+          return;
         }
         // Authorize before mutating so a wrong token cannot release another
         // connection's lease during this revalidation window.
@@ -366,11 +382,7 @@ export function registerBrowserHumanControlRoutes(
             origin: current.origin,
             documentId: current.identity.documentId,
             originChanged: !sameOrigin(baseline.origin, current.origin),
-            loginStateChanged: Boolean(
-              baseline.cookieFingerprint &&
-              current.cookieFingerprint &&
-              baseline.cookieFingerprint !== current.cookieFingerprint,
-            ),
+            loginStateChanged: baseline.cookieFingerprint !== current.cookieFingerprint,
             revalidated: true,
           } satisfies {
             url: string;
@@ -394,6 +406,7 @@ export function registerBrowserHumanControlRoutes(
       res,
       ctx,
       targetId,
+      humanControl: "allow",
       run: async ({ profileCtx, tab }) => {
         const released = token
           ? humanControlRegistry.release({
@@ -445,11 +458,16 @@ export function registerBrowserHumanControlRoutes(
       res,
       ctx,
       targetId,
+      humanControl: "allow",
       enforceCurrentUrlAllowed: false,
-      run: async ({ profileCtx, tab, cdpUrl, signal }) => {
+      run: async ({ profileCtx, tab, cdpUrl, signal, assertCurrent }) => {
         if (!supportsHumanControl(profileCtx.profile)) {
           return unsupported(res);
         }
+        const requesterCurrent = () =>
+          !req.signal?.aborted &&
+          !req.requester?.signal.aborted &&
+          req.requester?.isCurrent() !== false;
         const authorized = humanControlRegistry.authorizeHuman({
           profile: profileCtx.profile.name,
           ...leaseTarget(tab),
@@ -489,19 +507,40 @@ export function registerBrowserHumanControlRoutes(
             res.json({ ok: false, reasonCode: "no_focused_field" });
             return;
           }
-          // Arm read masking before insertion. The scrub registry keeps the
-          // value in process memory only to mask tool/UI results, and drops it
-          // when the document is replaced or the tab closes.
-          registerVaultFillSecret(tab.targetId, text, identity?.documentId);
-          await page.keyboard.insertText(text);
-          inserted = true;
-          humanControlRegistry.authorizeHuman({
+          // The page, document, and focus reads can yield long enough for a
+          // disconnect, expiry, cancel, or competing re-claim. Revalidate live
+          // authority synchronously after the final await and immediately
+          // before the side effect.
+          await assertCurrent?.();
+          const reauthorized = humanControlRegistry.authorizeHuman({
             profile: profileCtx.profile.name,
             ...leaseTarget(tab),
             token,
             ...(origin ? { origin } : {}),
             ...(identity ? { documentId: identity.documentId } : {}),
           });
+          if (!reauthorized || !requesterCurrent()) {
+            res.status(409).json({
+              ok: false,
+              reasonCode: "human_control_revoked",
+              control: humanControlRegistry.status({
+                profile: profileCtx.profile.name,
+                ...leaseTarget(tab),
+              }),
+            });
+            return;
+          }
+          // Arm read masking before insertion. The scrub registry keeps the
+          // value in process memory only to mask tool/UI results, and drops it
+          // when the document is replaced or the tab closes.
+          registerVaultFillSecret(
+            tab.targetId,
+            text,
+            identity?.documentId,
+            profileCtx.profile.name,
+          );
+          await page.keyboard.insertText(text);
+          inserted = true;
           res.json({
             ok: true,
             targetId: tab.targetId,

@@ -1,6 +1,7 @@
 import type { WebSocket } from "openclaw/plugin-sdk/websocket-runtime";
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { getPwAiModule } from "../pw-ai-module.js";
+import { clearVaultFillSession } from "../vault-fill-scrub.js";
 import { clearBrowserScreencastTokens, type BrowserScreencastTokenParams } from "./tokens.js";
 import { encodeBrowserScreencastFrame } from "./wire.js";
 
@@ -110,6 +111,8 @@ class BrowserScreencastSession {
   }
 
   private readonly onTargetClosed = (): void => {
+    // The document is gone, so its sensitive-input masking session is gone too.
+    clearVaultFillSession(this.params.targetId);
     void this.close(4004, "target_closed");
   };
 

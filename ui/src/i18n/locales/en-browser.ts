@@ -45,6 +45,8 @@ const enBrowser = {
       pasteFailed: "Could not paste. Reconnect to a managed browser and try again.",
       humanControlClaimFailed:
         "Could not take over this tab. Reconnect to the local managed browser and try again.",
+      sensitiveInputNoField:
+        "Sensitive input was not delivered. Click the field in the page first, then type again.",
       sensitiveInputFailed:
         "Sensitive input was not delivered. Reconnect to the local managed browser and try again.",
       requestFailed: "Browser request failed: {error}",

@@ -25,6 +25,7 @@ type StreamState = {
 
 interface BrowserPanelStreamHost extends StreamState {
   readonly host: BrowserPanelControllerHost;
+  humanControlTokenForInput(): string | undefined;
   readonly mode: "interact" | "annotate" | "inspect";
   readonly operations: Pick<
     BrowserPanelOperationOwnership,
@@ -157,7 +158,13 @@ export class BrowserPanelStream {
     try {
       const response = await requestBrowserScreencast(
         attempt.client,
-        { targetId: attempt.targetId, ...dimensions },
+        {
+          targetId: attempt.targetId,
+          ...dimensions,
+          ...(this.host.humanControlTokenForInput()
+            ? { humanControlToken: this.host.humanControlTokenForInput() }
+            : {}),
+        },
         { signal: attempt.controller.signal },
       );
       if (!this.current(attempt)) {

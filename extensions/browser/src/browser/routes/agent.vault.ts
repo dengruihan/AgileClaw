@@ -475,7 +475,12 @@ export function registerBrowserVaultRoutes(
         // Arm masking before insertion so a transport failure, partial fill, or
         // timeout cannot leave plaintext in the DOM unprotected. Bind the
         // document id so a later navigation can prove replacement.
-        registerVaultFillSecret(tab.targetId, password, observation.documentId);
+        registerVaultFillSecret(
+          tab.targetId,
+          password,
+          observation.documentId,
+          profileCtx.profile.name,
+        );
 
         if (username !== undefined && observation.fields.usernameIndex >= 0) {
           const usernamePage = await pageForFill();

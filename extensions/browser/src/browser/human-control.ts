@@ -114,9 +114,13 @@ export function isHumanControlError(error: unknown): error is HumanControlError 
   return error instanceof HumanControlError;
 }
 
-export function readHumanControlToken(body: unknown): string | undefined {
-  const value = (body as { humanControlToken?: unknown } | null)?.humanControlToken;
-  return typeof value === "string" && value.length > 0 ? value : undefined;
+export function readHumanControlToken(body: unknown, query?: unknown): string | undefined {
+  const fromBody = (body as { humanControlToken?: unknown } | null)?.humanControlToken;
+  if (typeof fromBody === "string" && fromBody.length > 0) {
+    return fromBody;
+  }
+  const fromQuery = (query as { humanControlToken?: unknown } | null)?.humanControlToken;
+  return typeof fromQuery === "string" && fromQuery.length > 0 ? fromQuery : undefined;
 }
 
 /** Throw a HumanControlError unless the caller is the active human owner. */
@@ -124,8 +128,10 @@ export function assertHumanControlAgentAllowed(params: {
   profile: string;
   tab: { targetId: string; tabId?: string };
   body?: unknown;
+  query?: unknown;
+  token?: string;
 }): void {
-  const token = readHumanControlToken(params.body);
+  const token = params.token ?? readHumanControlToken(params.body, params.query);
   humanControlRegistry.assertAgentAllowed({
     profile: params.profile,
     targetId: params.tab.targetId,

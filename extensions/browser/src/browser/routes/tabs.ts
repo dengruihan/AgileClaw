@@ -5,7 +5,12 @@ import {
   BrowserTargetAmbiguousError,
   toBrowserErrorResponse,
 } from "../errors.js";
-import { humanControlRegistry } from "../human-control.js";
+import {
+  assertHumanControlAgentAllowed,
+  humanControlRegistry,
+  isHumanControlError,
+  rejectHumanControl,
+} from "../human-control.js";
 import {
   assertBrowserNavigationAllowed,
   assertBrowserNavigationResultAllowed,
@@ -16,6 +21,7 @@ import type { BrowserRouteContext, ProfileContext } from "../server-context.js";
 import { isProfileRestartRequiredError } from "../server-context.lifecycle.js";
 import { clearSnapshotKeysForTab } from "../snapshot-delta-cache.js";
 import { resolveTargetIdFromTabs } from "../target-id.js";
+import { clearVaultFillSession, retainVaultFillSessions } from "../vault-fill-scrub.js";
 import { browserNavigationPolicyForProfile, resolveProfileContext } from "./agent.shared.js";
 import { readRouteNonNegativeInteger } from "./route-numeric.js";
 import type { BrowserRequest, BrowserResponse, BrowserRouteRegistrar } from "./types.js";
@@ -133,6 +139,52 @@ function parseRequiredTargetId(res: BrowserResponse, rawTargetId: unknown): stri
   return targetId;
 }
 
+function guardHumanOwnedTab(params: {
+  req: BrowserRequest;
+  res: BrowserResponse;
+  profileCtx: ProfileContext;
+  tab: { targetId: string; tabId?: string };
+}): boolean {
+  try {
+    assertHumanControlAgentAllowed({
+      profile: params.profileCtx.profile.name,
+      tab: params.tab,
+      body: params.req.body,
+      query: params.req.query,
+    });
+    return true;
+  } catch (error) {
+    if (isHumanControlError(error)) {
+      rejectHumanControl(params.res, error);
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function guardTargetId(params: {
+  req: BrowserRequest;
+  res: BrowserResponse;
+  profileCtx: ProfileContext;
+  targetId: string;
+  signal: AbortSignal;
+}): Promise<boolean> {
+  const tabs = await params.profileCtx.listTabs({ signal: params.signal });
+  const resolved = resolveTargetIdFromTabs(params.targetId, tabs);
+  if (!resolved.ok) {
+    return true;
+  }
+  const tab = tabs.find((candidate) => candidate.targetId === resolved.targetId);
+  return tab
+    ? guardHumanOwnedTab({
+        req: params.req,
+        res: params.res,
+        profileCtx: params.profileCtx,
+        tab,
+      })
+    : true;
+}
+
 function readOptionalTabLabel(body: unknown): string | undefined {
   const label = toStringOrEmpty((body as { label?: unknown })?.label);
   return label || undefined;
@@ -175,6 +227,11 @@ async function runTabTargetMutation(params: {
     targetId: string,
     signal: AbortSignal,
   ) => Promise<string | void>;
+  guard?: (
+    profileCtx: ProfileContext,
+    targetId: string,
+    signal: AbortSignal,
+  ) => boolean | Promise<boolean>;
 }) {
   await runTabsProfileRoute({
     req: params.req,
@@ -183,6 +240,9 @@ async function runTabTargetMutation(params: {
     mapTabError: true,
     run: async (profileCtx, signal) => {
       await ensureBrowserRunning(params.ctx, profileCtx, signal);
+      if (params.guard && !(await params.guard(profileCtx, params.targetId, signal))) {
+        return undefined;
+      }
       const canonicalTargetId = await params.mutate(profileCtx, params.targetId, signal);
       return {
         ok: true,
@@ -209,6 +269,7 @@ export function registerBrowserTabRoutes(app: BrowserRouteRegistrar, ctx: Browse
       profileCtx.profile.name,
       new Set(tabs.map((tab) => tab.tabId ?? tab.targetId)),
     );
+    retainVaultFillSessions(profileCtx.profile.name, new Set(tabs.map((tab) => tab.targetId)));
     const tabsWithControl = tabs.map((tab) => {
       const control = humanControlRegistry.status({
         profile: profileCtx.profile.name,
@@ -294,6 +355,8 @@ export function registerBrowserTabRoutes(app: BrowserRouteRegistrar, ctx: Browse
       res,
       ctx,
       targetId,
+      guard: (profileCtx, id, signal) =>
+        guardTargetId({ req, res, profileCtx, targetId: id, signal }),
       mutate: async (profileCtx, id, signal) => {
         const tabs = await profileCtx.listTabs({ signal });
         const resolved = resolveTargetIdFromTabs(id, tabs);
@@ -326,6 +389,8 @@ export function registerBrowserTabRoutes(app: BrowserRouteRegistrar, ctx: Browse
       res,
       ctx,
       targetId,
+      guard: (profileCtx, id, signal) =>
+        guardTargetId({ req, res, profileCtx, targetId: id, signal }),
       mutate: async (profileCtx, id, signal) => {
         signal.throwIfAborted();
         const canonicalTargetId = await profileCtx.closeTab(id, {
@@ -333,6 +398,7 @@ export function registerBrowserTabRoutes(app: BrowserRouteRegistrar, ctx: Browse
           signal,
         });
         clearSnapshotKeysForTab(ctx, profileCtx.profile.name, canonicalTargetId);
+        clearVaultFillSession(canonicalTargetId);
         return canonicalTargetId;
       },
     });
@@ -390,6 +456,17 @@ export function registerBrowserTabRoutes(app: BrowserRouteRegistrar, ctx: Browse
 
         if (action === "label") {
           await ensureBrowserRunning(ctx, profileCtx, signal);
+          if (
+            !(await guardTargetId({
+              req,
+              res,
+              profileCtx,
+              targetId: targetId!,
+              signal,
+            }))
+          ) {
+            return undefined;
+          }
           const tab = await profileCtx.labelTab(targetId!, label!);
           return { ok: true, tab };
         }
@@ -401,10 +478,20 @@ export function registerBrowserTabRoutes(app: BrowserRouteRegistrar, ctx: Browse
           throw new BrowserTabNotFoundError();
         }
         if (action === "close") {
+          if (!guardHumanOwnedTab({ req, res, profileCtx, tab: target })) {
+            return undefined;
+          }
           signal.throwIfAborted();
-          await profileCtx.closeTab(target.targetId, { exactTargetId: true, signal });
-          clearSnapshotKeysForTab(ctx, profileCtx.profile.name, target.targetId);
+          const closed = await profileCtx.closeTab(target.targetId, {
+            exactTargetId: true,
+            signal,
+          });
+          clearSnapshotKeysForTab(ctx, profileCtx.profile.name, closed);
+          clearVaultFillSession(closed);
         } else {
+          if (!guardHumanOwnedTab({ req, res, profileCtx, tab: target })) {
+            return undefined;
+          }
           await focusTab(req, profileCtx, target, signal);
         }
         return { ok: true, targetId: target.targetId };

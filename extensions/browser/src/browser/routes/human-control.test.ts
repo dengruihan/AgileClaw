@@ -17,12 +17,21 @@ const h = vi.hoisted(() => ({
   insertError: false,
   inserted: [] as string[],
   cookies: [{ name: "sid", domain: "example.test", path: "/", expires: -1 }],
+  failCookies: false,
+  focusGate: null as Promise<boolean> | null,
+  resolveFocusStarted: null as (() => void) | null,
 }));
 
 vi.mock("../pw-session-connection.js", () => ({
   getPageForTargetId: async () => ({
     url: () => h.pageUrl,
-    evaluate: async () => h.focused,
+    evaluate: async () => {
+      if (h.focusGate) {
+        h.resolveFocusStarted?.();
+        return await h.focusGate;
+      }
+      return h.focused;
+    },
     keyboard: {
       insertText: async (text: string) => {
         if (h.insertError) {
@@ -32,7 +41,12 @@ vi.mock("../pw-session-connection.js", () => ({
       },
     },
     context: () => ({
-      cookies: async () => h.cookies,
+      cookies: async () => {
+        if (h.failCookies) {
+          throw new Error("cookie read failed");
+        }
+        return h.cookies;
+      },
       newCDPSession: async () => ({
         send: async (method: string) => {
           if (h.failIdentity) {
@@ -86,18 +100,19 @@ function routeContext(): BrowserRouteContext {
   };
 }
 
-function request(body: Record<string, unknown>, connId = "conn-1") {
+function request(body: Record<string, unknown>, connId = "conn-1", sharedSignal?: AbortSignal) {
   const controller = new AbortController();
+  const signal = sharedSignal ?? controller.signal;
   return {
     req: {
       params: {},
       query: { profile: "openclaw" },
       body,
-      signal: controller.signal,
+      signal,
       requester: {
         connId,
-        signal: controller.signal,
-        isCurrent: () => !controller.signal.aborted,
+        signal,
+        isCurrent: () => !signal.aborted,
       },
     },
     controller,
@@ -266,6 +281,117 @@ describe("human takeover routes", () => {
     );
     expect(response.statusCode).toBe(409);
     expect(JSON.stringify(response.body)).not.toContain(CANARY);
+  });
+
+  it("fails closed when the before/after login fingerprint is unavailable", async () => {
+    humanControlRegistry.revokeAll();
+    const routes = app();
+    const claim = routes.postHandlers.get("/human-control/claim")!;
+    const release = routes.postHandlers.get("/human-control/release")!;
+
+    const claimed = await call(claim, request({ targetId: "t1" }).req);
+    const token = (claimed.body as { humanControlToken: string }).humanControlToken;
+    h.failCookies = true;
+    const released = await call(release, request({ targetId: "t1", humanControlToken: token }).req);
+    h.failCookies = false;
+    expect(released.statusCode).toBe(409);
+    expect(released.body).toMatchObject({
+      code: "HUMAN_CONTROL_REVALIDATION_FAILED",
+      reasonCode: "login_state_unavailable",
+    });
+    expect(() => assertHumanControlAgentAllowed({ profile: "openclaw", tab: tab() })).toThrow();
+    humanControlRegistry.revokeAll();
+  });
+
+  it("fails closed when the claim could not capture a login fingerprint", async () => {
+    humanControlRegistry.revokeAll();
+    const routes = app();
+    const claim = routes.postHandlers.get("/human-control/claim")!;
+    const release = routes.postHandlers.get("/human-control/release")!;
+
+    h.failCookies = true;
+    const claimed = await call(claim, request({ targetId: "t1" }).req);
+    h.failCookies = false;
+    const token = (claimed.body as { humanControlToken: string }).humanControlToken;
+    const released = await call(release, request({ targetId: "t1", humanControlToken: token }).req);
+    expect(released.statusCode).toBe(409);
+    expect(released.body).toMatchObject({ reasonCode: "login_state_unavailable" });
+    humanControlRegistry.revokeAll();
+  });
+
+  it("revalidates the capability after delayed focus work and refuses a disconnected insert", async () => {
+    humanControlRegistry.revokeAll();
+    clearAllVaultFillSessions();
+    h.inserted = [];
+    const routes = app();
+    const sensitive = routes.postHandlers.get("/human-input")!;
+    const closing = request({ targetId: "t1" }, "conn-disconnect");
+    const claimed = await call(routes.postHandlers.get("/human-control/claim")!, closing.req);
+    const token = (claimed.body as { humanControlToken: string }).humanControlToken;
+
+    let resolveStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+    let releaseFocus!: (value: boolean) => void;
+    h.focusGate = new Promise<boolean>((resolve) => {
+      releaseFocus = resolve;
+    });
+    h.resolveFocusStarted = resolveStarted;
+    const pending = call(
+      sensitive,
+      request(
+        { targetId: "t1", text: CANARY, humanControlToken: token },
+        "conn-disconnect",
+        closing.controller.signal,
+      ).req,
+    );
+    await started;
+    closing.controller.abort();
+    releaseFocus(true);
+    const response = await pending;
+    h.focusGate = null;
+    h.resolveFocusStarted = null;
+    expect(response.statusCode).toBe(409);
+    expect(response.body).toMatchObject({ reasonCode: "human_control_revoked" });
+    expect(h.inserted).toEqual([]);
+    clearAllVaultFillSessions();
+    humanControlRegistry.revokeAll();
+  });
+
+  it("refuses insertion when another claim replaces the capability during delayed focus", async () => {
+    humanControlRegistry.revokeAll();
+    clearAllVaultFillSessions();
+    h.inserted = [];
+    const routes = app();
+    const claim = routes.postHandlers.get("/human-control/claim")!;
+    const sensitive = routes.postHandlers.get("/human-input")!;
+    const claimed = await call(claim, request({ targetId: "t1" }).req);
+    const token = (claimed.body as { humanControlToken: string }).humanControlToken;
+
+    let resolveStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      resolveStarted = resolve;
+    });
+    let releaseFocus!: (value: boolean) => void;
+    h.focusGate = new Promise<boolean>((resolve) => {
+      releaseFocus = resolve;
+    });
+    h.resolveFocusStarted = resolveStarted;
+    const pending = call(
+      sensitive,
+      request({ targetId: "t1", text: CANARY, humanControlToken: token }).req,
+    );
+    await started;
+    await call(claim, request({ targetId: "t1" }).req);
+    releaseFocus(true);
+    const response = await pending;
+    h.focusGate = null;
+    h.resolveFocusStarted = null;
+    expect(response.statusCode).toBe(409);
+    expect(h.inserted).toEqual([]);
+    clearAllVaultFillSessions();
+    humanControlRegistry.revokeAll();
   });
 
   it("releases ownership when the claiming Gateway connection ends", async () => {

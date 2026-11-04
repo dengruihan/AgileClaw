@@ -536,7 +536,7 @@ export class BrowserPanelController implements ReactiveController {
         return;
       }
       if (options?.focusBrowserTab !== false) {
-        await focusBrowserTab(actionClient, selectedTargetId);
+        await focusBrowserTab(actionClient, selectedTargetId, this.humanControlTokenForInput());
       }
       if (!this.operations.isLive(epoch, actionClient)) {
         return;
@@ -576,7 +576,7 @@ export class BrowserPanelController implements ReactiveController {
     }
     await this.runAction(async (client) => {
       const epoch = this.operations.epoch;
-      await closeBrowserTab(client, targetId);
+      await closeBrowserTab(client, targetId, this.humanControlTokenForInput());
       this.operations.forgetNavigation(client, targetId);
       if (!this.operations.isLive(epoch, client)) {
         if (this.operations.isLive(this.operations.epoch, client)) {
