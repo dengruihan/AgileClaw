@@ -1,0 +1,5 @@
+repository: /home/raymond/repos/agenda
+worktree: /home/raymond/repos/AgileClaw/.tower/worktrees/wt-22/.external/agenda (detached)
+base: 53962ecd7b02c71aea7420401b2f2ef73b74d3e3
+commit: 1c95defae6801c5470924c306e7f191b8181b5e4
+tree: 0c13449bb0b2052101e5abd300355180879d6e63

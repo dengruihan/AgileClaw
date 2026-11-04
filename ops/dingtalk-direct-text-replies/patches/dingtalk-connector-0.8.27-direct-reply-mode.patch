@@ -1,0 +1,176 @@
+diff -ruN a/dist/message-handler-C8eu5xwl.mjs b/dist/message-handler-C8eu5xwl.mjs
+--- a/dist/message-handler-C8eu5xwl.mjs
++++ b/dist/message-handler-C8eu5xwl.mjs
+@@ -431,8 +431,10 @@
+ 	const textChunkLimit = core.channel.text.resolveTextChunkLimit(cfg, CHANNEL_ID, accountId, { fallbackLimit: 4e3 });
+ 	const chunkMode = core.channel.text.resolveChunkMode(cfg, CHANNEL_ID);
+ 	const groupReplyMode = account.config?.groupReplyMode || "aicard";
+-	const isTextMode = !isDirect && (groupReplyMode === "text" || groupReplyMode === "markdown");
+-	if (isTextMode) log.info(`[DingTalk] 群聊回复模式: ${groupReplyMode}，禁用 AI Card，使用 ${groupReplyMode} 发送`);
++	const directReplyMode = account.config?.directReplyMode || "aicard";
++	const replyMode = isDirect ? directReplyMode : groupReplyMode;
++	const isTextMode = replyMode === "text" || replyMode === "markdown";
++	if (isTextMode) log.info(`[DingTalk] 回复模式(${isDirect ? "单聊" : "群聊"}): ${replyMode}，禁用 AI Card，使用 ${replyMode} 发送`);
+ 	const streamingEnabled = !isTextMode && account.config?.streaming !== false;
+ 	let cardCreationPromise = null;
+ 	let streamingSealed = false;
+@@ -726,7 +728,7 @@
+ 		try {
+ 			const text = pickEmptyReplyFallbackText(true);
+ 			log.warn(`[DingTalk][idleNudge] ${emptyGroupReplyLogHint()}`);
+-			for (const chunk of core.channel.text.chunkTextWithMode(text, textChunkLimit, chunkMode)) if (isTextMode) if (groupReplyMode === "markdown") await sendMarkdownMessage(account.config, sessionWebhook, chunk.split("\n")[0]?.replace(/^[#*\s\->]+/, "").slice(0, 20) || "Message", chunk, {
++			for (const chunk of core.channel.text.chunkTextWithMode(text, textChunkLimit, chunkMode)) if (isTextMode) if (replyMode === "markdown") await sendMarkdownMessage(account.config, sessionWebhook, chunk.split("\n")[0]?.replace(/^[#*\s\->]+/, "").slice(0, 20) || "Message", chunk, {
+ 				cfg,
+ 				detectBareAliases: true
+ 			});
+@@ -859,12 +861,12 @@
+ 					} else log.warn(`[DingTalk][deliver] ⚠️ AI Card 创建失败，降级到非流式发送`);
+ 				}
+ 				if (info?.kind === "final") {
+-					log.info(`[DingTalk][deliver] 降级到非流式发送，文本长度=${text.length}, isTextMode=${isTextMode}, groupReplyMode=${groupReplyMode}`);
++					log.info(`[DingTalk][deliver] 降级到非流式发送，文本长度=${text.length}, isTextMode=${isTextMode}, replyMode=${replyMode}`);
+ 					try {
+ 						const messageIds = [];
+ 						for (const chunk of core.channel.text.chunkTextWithMode(text, textChunkLimit, chunkMode)) {
+ 							if (stopped) return;
+-							if (isTextMode) if (groupReplyMode === "markdown") {
++							if (isTextMode) if (replyMode === "markdown") {
+ 								const receipt = await sendMarkdownMessage(account.config, sessionWebhook, chunk.split("\n")[0]?.replace(/^[#*\s\->]+/, "").slice(0, 20) || "Message", chunk, {
+ 									cfg,
+ 									detectBareAliases: true
+diff -ruN a/dist/runtime-CalLOr7V.mjs b/dist/runtime-CalLOr7V.mjs
+--- a/dist/runtime-CalLOr7V.mjs
++++ b/dist/runtime-CalLOr7V.mjs
+@@ -462,6 +462,11 @@
+ 	"text",
+ 	"markdown"
+ ]).optional();
++const DirectReplyModeSchema = z$1.enum([
++	"aicard",
++	"text",
++	"markdown"
++]).optional();
+ /**
+ * Dingtalk tools configuration.
+ * Controls which tool categories are enabled.
+@@ -510,7 +515,8 @@
+ 	debug: z$1.boolean().optional(),
+ 	enableMediaUpload: z$1.boolean().optional(),
+ 	systemPrompt: z$1.string().optional(),
+-	groupReplyMode: GroupReplyModeSchema
++	groupReplyMode: GroupReplyModeSchema,
++	directReplyMode: DirectReplyModeSchema
+ };
+ /**
+ * Per-account configuration.
+--- a/openclaw.plugin.json
++++ b/openclaw.plugin.json
+@@ -274,6 +274,14 @@
+               "markdown"
+             ]
+           },
++          "directReplyMode": {
++            "type": "string",
++            "enum": [
++              "aicard",
++              "text",
++              "markdown"
++            ]
++          },
+           "accounts": {
+             "type": "object",
+             "additionalProperties": {
+@@ -519,6 +527,14 @@
+                     "markdown"
+                   ]
+                 },
++                "directReplyMode": {
++                  "type": "string",
++                  "enum": [
++                    "aicard",
++                    "text",
++                    "markdown"
++                  ]
++                },
+                 "cardTemplateMode": {
+                   "type": "string",
+                   "enum": [
+diff -ruN a/src/config/schema.ts b/src/config/schema.ts
+--- a/src/config/schema.ts
++++ b/src/config/schema.ts
+@@ -40,6 +40,19 @@
+   .optional();
+ 
+ /**
++ * Direct-message reply mode for DingTalk DM (单聊) replies.
++ * - "aicard" (default): use AI Card with streaming support, same as before
++ * - "text": use plain text reply (no AI Card)
++ * - "markdown": use markdown reply (no AI Card)
++ *
++ * When set to "text" or "markdown", DM auto-replies are sent once as
++ * plain text/markdown via the session webhook instead of an AI Card.
++ */
++const DirectReplyModeSchema = z
++  .enum(["aicard", "text", "markdown"])
++  .optional();
++
++/**
+  * Dingtalk tools configuration.
+  * Controls which tool categories are enabled.
+  */
+@@ -95,6 +108,7 @@
+   enableMediaUpload: z.boolean().optional(),
+   systemPrompt: z.string().optional(),
+   groupReplyMode: GroupReplyModeSchema,
++  directReplyMode: DirectReplyModeSchema,
+ };
+ 
+ /**
+diff -ruN a/src/reply-dispatcher.ts b/src/reply-dispatcher.ts
+--- a/src/reply-dispatcher.ts
++++ b/src/reply-dispatcher.ts
+@@ -237,11 +237,14 @@
+   );
+   const chunkMode = core.channel.text.resolveChunkMode(cfg, CHANNEL_ID);
+ 
+-  // ✅ 群聊回复模式：当 groupReplyMode 为 text/markdown 时，群聊禁用 AI Card
++  // ✅ 回复模式：群聊用 groupReplyMode，单聊用 directReplyMode；
++  // text/markdown 模式禁用 AI Card（单聊对齐群聊已有的纯文本能力）
+   const groupReplyMode = (account.config as any)?.groupReplyMode || 'aicard';
+-  const isTextMode = !isDirect && (groupReplyMode === 'text' || groupReplyMode === 'markdown');
++  const directReplyMode = (account.config as any)?.directReplyMode || 'aicard';
++  const replyMode = isDirect ? directReplyMode : groupReplyMode;
++  const isTextMode = replyMode === 'text' || replyMode === 'markdown';
+   if (isTextMode) {
+-    log.info(`[DingTalk] 群聊回复模式: ${groupReplyMode}，禁用 AI Card，使用 ${groupReplyMode} 发送`);
++    log.info(`[DingTalk] 回复模式(${isDirect ? '单聊' : '群聊'}): ${replyMode}，禁用 AI Card，使用 ${replyMode} 发送`);
+   }
+ 
+   // 流式 AI Card 支持（text/markdown 模式强制禁用流式）
+@@ -696,7 +699,7 @@
+         chunkMode,
+       )) {
+         if (isTextMode) {
+-          if (groupReplyMode === 'markdown') {
++          if (replyMode === 'markdown') {
+             await sendMarkdownMessage(
+               account.config as DingtalkConfig,
+               sessionWebhook,
+@@ -908,7 +911,7 @@
+         // 流式模式但没有 card target：降级到非流式发送
+         // 或者非流式模式：使用普通消息发送
+         if (info?.kind === "final") {
+-          log.info(`[DingTalk][deliver] 降级到非流式发送，文本长度=${text.length}, isTextMode=${isTextMode}, groupReplyMode=${groupReplyMode}`);
++          log.info(`[DingTalk][deliver] 降级到非流式发送，文本长度=${text.length}, isTextMode=${isTextMode}, replyMode=${replyMode}`);
+           try {
+             const messageIds: string[] = [];
+             for (const chunk of core.channel.text.chunkTextWithMode(
+@@ -918,7 +921,7 @@
+             )) {
+               if (stopped) return;
+               if (isTextMode) {
+-                if (groupReplyMode === 'markdown') {
++                if (replyMode === 'markdown') {
+                   const receipt = await sendMarkdownMessage(
+                     account.config as DingtalkConfig,
+                     sessionWebhook,

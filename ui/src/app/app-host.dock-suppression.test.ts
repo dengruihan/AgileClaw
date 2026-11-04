@@ -1,0 +1,286 @@
+/* @vitest-environment jsdom */
+
+import type { RouterState } from "@openclaw/uirouter";
+import { render as renderLit, type TemplateResult } from "lit";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { GatewayBrowserClient } from "../api/gateway.ts";
+import type { GatewaySessionRow } from "../api/types.ts";
+import type { RouteId } from "../app-routes.ts";
+import { createStorageMock } from "../test-helpers/storage.ts";
+import { selectShellRouteState, type ShellRouteState } from "./app-host-route-state.ts";
+import { resetAppHostTestGlobals } from "./app-host.test-support.ts";
+// This test owns shell panel routing, not lazy sidebar loading; settle that module at setup.
+import "../components/app-sidebar.ts";
+import "./app-host.ts";
+import type { ApplicationRuntime } from "./bootstrap.ts";
+import type { ApplicationContext } from "./context.ts";
+import { loadSettings } from "./settings.ts";
+
+type ShellRenderState = {
+  runtime: ApplicationRuntime;
+  activeSessionKey: string;
+  routeState: ShellRouteState;
+  render: () => TemplateResult;
+};
+
+afterEach(async () => {
+  await vi.dynamicImportSettled();
+  resetAppHostTestGlobals();
+});
+
+describe("AgileClaw shell dock suppression", () => {
+  it("applies route ownership to shell panels without session-gating desktop", () => {
+    vi.stubGlobal("localStorage", createStorageMock());
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: false })),
+    );
+    const client = {} as GatewayBrowserClient;
+    const context = {
+      basePath: "",
+      gateway: {
+        snapshot: {
+          phase: "connected",
+          client,
+          sessionKey: "agent:main:main",
+          assistantAgentId: "main",
+          hello: {
+            auth: { role: "operator", scopes: ["operator.admin"] },
+            features: {
+              methods: [
+                "terminal.open",
+                "browser.request",
+                "openclaw.chat",
+                "desktop.observe",
+                "chat.history",
+                "chat.send",
+              ],
+            },
+          },
+          lastError: null,
+          offlineStable: false,
+          selfUser: null,
+        },
+        connection: { gatewayUrl: "ws://gateway.test", token: "", password: "" },
+        connect: vi.fn(),
+      },
+      agents: {
+        state: {
+          agentsList: {
+            defaultId: "main",
+            mainKey: "main",
+            scope: "per-sender",
+            agents: [{ id: "main" }, { id: "research" }],
+          },
+        },
+      },
+      agentSelection: { state: { selectedId: "research" } },
+      config: {
+        current: { terminalEnabled: true, serverVersion: null, devGitBranch: null },
+      },
+      runtimeConfig: {
+        state: { configSchema: null, configForm: null, configSnapshot: null, configUiHints: null },
+      },
+      sessions: {
+        state: {
+          agentId: "main",
+          result: {
+            count: 1,
+            defaults: {},
+            path: "",
+            sessions: [
+              { key: "agent:main:main", kind: "direct", updatedAt: 0 } satisfies GatewaySessionRow,
+            ],
+            ts: 0,
+          },
+        },
+      },
+      navigation: {
+        snapshot: {
+          navCollapsed: false,
+          navWidth: 280,
+          sidebarEntries: [],
+          pinnedAgentIds: [],
+        },
+        update: vi.fn(),
+      },
+      overlays: {
+        snapshot: {
+          updateAvailable: null,
+          updateRunning: false,
+          updateStatusBanner: null,
+          recordedUpdateAttempt: null,
+          controlUiRefreshRequired: false,
+          approvalQueue: [],
+          approvalBusy: false,
+          approvalErrors: new Map(),
+          devicePairSetupOpen: false,
+          devicePairSetupLifecycle: { phase: "selection", access: "full" },
+          devicePairPendingCount: 0,
+        },
+        runUpdate: vi.fn(),
+      },
+      theme: { mode: "dark", settings: loadSettings() },
+      preload: vi.fn(),
+    } as unknown as ApplicationContext;
+    const shell = document.createElement("openclaw-app-shell") as unknown as ShellRenderState;
+    shell.runtime = { context, router: {} } as unknown as ApplicationRuntime;
+    shell.activeSessionKey = "agent:main:main";
+    const container = document.createElement("div");
+    const desktopAvailable = () =>
+      (
+        container.querySelector("openclaw-desktop-panel") as
+          | (HTMLElement & {
+              available: boolean;
+            })
+          | null
+      )?.available ?? false;
+
+    shell.routeState = { routeId: "appearance" };
+    renderLit(shell.render(), container);
+    expect(
+      container.querySelector<HTMLElement & { pageRouteId: RouteId }>("openclaw-assistant-panel")
+        ?.pageRouteId,
+    ).toBe("appearance");
+    expect(
+      (
+        container.querySelector("openclaw-terminal-panel") as HTMLElement & {
+          agentId: string | null;
+        }
+      ).agentId,
+    ).toBe("research");
+    expect(
+      (
+        container.querySelector("openclaw-terminal-panel") as HTMLElement & {
+          suppressed: boolean;
+        }
+      ).suppressed,
+    ).toBe(true);
+
+    shell.routeState = { routeId: "systems" };
+    renderLit(shell.render(), container);
+    expect(
+      container.querySelector<HTMLElement & { suppressed: boolean }>("openclaw-desktop-panel")
+        ?.suppressed,
+    ).toBe(true);
+
+    shell.routeState = { routeId: "chat" };
+    renderLit(shell.render(), container);
+    expect(
+      container.querySelector<HTMLElement & { pageRouteId: RouteId }>("openclaw-assistant-panel")
+        ?.pageRouteId,
+    ).toBe("chat");
+    expect(
+      (
+        container.querySelector("openclaw-terminal-panel") as HTMLElement & {
+          sessionKey: string | null;
+        }
+      ).sessionKey,
+    ).toBe("agent:main:main");
+    expect(container.querySelector("openclaw-browser-panel")).toBeNull();
+    expect(container.querySelector("openclaw-desktop-panel")).toBeNull();
+
+    const failedLocation = { pathname: "/chat/main/missing", search: "", hash: "" };
+    shell.routeState = selectShellRouteState({
+      matches: [],
+      pendingMatches: [
+        {
+          routeId: "chat",
+          location: failedLocation,
+          status: "error",
+          error: new Error("Unavailable session"),
+        },
+      ],
+    } as unknown as RouterState<RouteId>);
+    renderLit(shell.render(), container);
+    // A failed route no longer gates a built-in dock: the panel only renders an
+    // explicit destination, and none is open here.
+    expect(
+      container.querySelector<HTMLElement & { openSessionKey: string | null }>(
+        "openclaw-assistant-panel",
+      )?.openSessionKey,
+    ).toBeNull();
+
+    shell.routeState = {
+      routeId: "new-session",
+      location: { pathname: "/new-session", search: "?agent=missing", hash: "" },
+    };
+    renderLit(shell.render(), container);
+    expect(
+      (
+        container.querySelector("openclaw-terminal-panel") as HTMLElement & {
+          agentId: string | null;
+        }
+      ).agentId,
+    ).toBe("research");
+
+    shell.routeState = {
+      routeId: "new-session",
+      location: { pathname: "/new-session", search: "?agent=main", hash: "" },
+    };
+    renderLit(shell.render(), container);
+    expect(
+      (
+        container.querySelector("openclaw-terminal-panel") as HTMLElement & {
+          agentId: string | null;
+        }
+      ).agentId,
+    ).toBe("main");
+
+    context.sessions.state.result!.sessions = [
+      {
+        key: "agent:main:main",
+        kind: "direct",
+        placement: { state: "active" } as GatewaySessionRow["placement"],
+        updatedAt: 0,
+      },
+    ];
+    renderLit(shell.render(), container);
+    expect(desktopAvailable()).toBe(true);
+
+    context.sessions.state.result!.sessions = [
+      { key: "agent:main:main", kind: "direct", updatedAt: 0 },
+    ];
+    renderLit(shell.render(), container);
+    expect(desktopAvailable()).toBe(true);
+
+    context.sessions.state.result = null;
+    renderLit(shell.render(), container);
+    expect(desktopAvailable()).toBe(true);
+
+    // The collapsed toolbar offers no built-in Home dock; the assistant panel
+    // keeps no destination across permission, phase, and connection changes.
+    const expectingNoDockDestination = () =>
+      expect(
+        container.querySelector<HTMLElement & { openSessionKey: string | null }>(
+          "openclaw-assistant-panel",
+        )?.openSessionKey,
+      ).toBeNull();
+    context.navigation.snapshot.navCollapsed = true;
+    renderLit(shell.render(), container);
+    expect(container.querySelector(".shell-chrome-controls__home")).toBeNull();
+    expectingNoDockDestination();
+    context.gateway.snapshot.hello!.auth = {
+      role: "operator",
+      scopes: ["operator.read", "operator.write"],
+    };
+    renderLit(shell.render(), container);
+    expect(container.querySelector(".shell-chrome-controls__home")).toBeNull();
+    expectingNoDockDestination();
+    context.gateway.snapshot.phase = "offline";
+    renderLit(shell.render(), container);
+    expect(container.querySelector(".shell-chrome-controls__home")).toBeNull();
+    expectingNoDockDestination();
+    context.gateway.connection.gatewayUrl = "ws://another-gateway.test";
+    renderLit(shell.render(), container);
+    expect(container.querySelector(".shell-chrome-controls__home")).toBeNull();
+    expectingNoDockDestination();
+    context.gateway.snapshot.phase = "connected";
+    renderLit(shell.render(), container);
+    expect(container.querySelector(".shell-chrome-controls__home")).toBeNull();
+    context.gateway.snapshot.hello!.auth = { role: "operator", scopes: ["operator.read"] };
+    renderLit(shell.render(), container);
+    expect(container.querySelector(".shell-chrome-controls__home")).toBeNull();
+    expectingNoDockDestination();
+  });
+});

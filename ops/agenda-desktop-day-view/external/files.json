@@ -1,0 +1,14 @@
+{
+  "base": "53962ecd7b02c71aea7420401b2f2ef73b74d3e3",
+  "commit": "1c95defae6801c5470924c306e7f191b8181b5e4",
+  "tree": "0c13449bb0b2052101e5abd300355180879d6e63",
+  "files": {
+    "dist/index.js": "23b86644ca4ca94276ca5ba1096226755df6d42fbb22d9c6efad34098c4556c7",
+    "dist/src/sqlite.worker.js": "bcc61d93382da511d7b59abda77e1786961eaed724bf649b66d3d7a1af5a9da7",
+    "assets/app.js": "302044dd26fe992de53455ab2513b0800f6a075772ca35b3f7aa5b5bb2ba0306",
+    "assets/app.css": "61b97ed6d2dadbf87ee33c27b55b3dfa611341229d264a5a3c33247511ae4f27",
+    "assets/index.html": "00b374426c301f71159d39c62ca0308568e5d1ab6fabbc05ecc07ae8bee2c3a6",
+    "openclaw.plugin.json": "04b03539d7adac5827b681490f2c2f105b47dfefa22f45c41d3a84f5e37b7e79",
+    "skills/agenda/SKILL.md": "b657103e4ffd2dc61de80152f9cb3ecd9aa472d3c6b3419dff8c6a614cb8a9b2"
+  }
+}

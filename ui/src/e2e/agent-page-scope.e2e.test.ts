@@ -1,0 +1,405 @@
+// Control UI E2E tests cover chip-selected page scope and the all-agents escape.
+import path from "node:path";
+import type { Page } from "playwright";
+import { beforeEach, expect, it } from "vitest";
+import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
+import {
+  type MockGatewayControls,
+  controlUiSessionUrl,
+  installMockGateway,
+  waitForControlUiRoute,
+} from "../test-helpers/control-ui-e2e.ts";
+import { cronListResponseFixture } from "../test-helpers/cron.ts";
+import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
+
+const suite = createControlUiE2eSuite({
+  name: "Control UI agent page scope",
+  startServerBeforeBrowser: true,
+  unavailableMessage: (executablePath) =>
+    `Playwright Chromium is not available at ${executablePath}`,
+});
+
+const captureUiProof = process.env.OPENCLAW_CAPTURE_UI_PROOF === "1";
+let proofDir: string;
+beforeEach(() => {
+  if (captureUiProof) {
+    proofDir = createControlUiE2eArtifactDir("agent-page-scope");
+  }
+});
+
+function requestParams(request: { params?: unknown }): Record<string, unknown> {
+  return request.params && typeof request.params === "object"
+    ? (request.params as Record<string, unknown>)
+    : {};
+}
+
+async function waitForRequest(
+  gateway: MockGatewayControls,
+  method: string,
+  predicate: (params: Record<string, unknown>) => boolean,
+) {
+  await expect
+    .poll(async () =>
+      (await gateway.getRequests(method)).some((request) => predicate(requestParams(request))),
+    )
+    .toBe(true);
+}
+
+async function screenshot(page: Page, name: string) {
+  if (!captureUiProof) {
+    return;
+  }
+  await page.screenshot({
+    animations: "disabled",
+    fullPage: true,
+    path: path.join(proofDir, name),
+  });
+}
+
+function selectedAgentId(page: Page) {
+  return page.locator("openclaw-app").evaluate((element) => {
+    const app = element as HTMLElement & {
+      runtime: { context: { agentSelection: { state: { selectedId: string } } } };
+    };
+    return app.runtime.context.agentSelection.state.selectedId;
+  });
+}
+
+const emptyUsage = {
+  updatedAt: Date.now(),
+  sessions: [],
+  totals: null,
+  aggregates: {
+    messages: { total: 0, user: 0, assistant: 0, toolCalls: 0, toolResults: 0, errors: 0 },
+    tools: { totalCalls: 0, uniqueTools: 0, tools: [] },
+    byModel: [],
+    byProvider: [],
+    byAgent: [],
+    byChannel: [],
+    daily: [],
+  },
+};
+
+const multiAgentRoster = [
+  { id: "main", identity: { name: "Main" }, name: "Main" },
+  { id: "reviewer", identity: { name: "Reviewer" }, name: "Reviewer" },
+  { id: "writer", identity: { name: "Writer" }, name: "Writer" },
+];
+
+suite.define(() => {
+  it("follows the visible catalog groups when selecting an agent with the keyboard", async () => {
+    await suite.withPage(
+      { locale: "en-US", serviceWorkers: "block", viewport: { height: 900, width: 1440 } },
+      async ({ page }) => {
+        const gateway = await installMockGateway(page, {
+          featureMethods: ["cron.list"],
+          methodResponses: {
+            "agents.list": {
+              defaultId: "main",
+              mainKey: "main",
+              scope: "per-sender",
+              agents: [
+                multiAgentRoster[0],
+                { id: "alpha", name: "Needle Alpha" },
+                { id: "charlie", name: "Needle Charlie" },
+              ],
+            },
+            "cron.list": cronListResponseFixture({
+              jobs: [
+                {
+                  id: "bravo",
+                  name: "Needle Bravo",
+                  enabled: true,
+                  createdAtMs: 0,
+                  updatedAtMs: 0,
+                  schedule: { kind: "every", everyMs: 60_000 },
+                  sessionTarget: "main",
+                  wakeMode: "next-heartbeat",
+                  payload: { kind: "systemEvent", text: "Prepare the sample report." },
+                  state: {},
+                },
+              ],
+              snapshotRevision: "palette-group-order",
+              total: 1,
+              offset: 0,
+              limit: 50,
+              hasMore: false,
+              nextOffset: null,
+            }),
+            "sessions.list": { ts: 1, path: "", count: 0, defaults: {}, sessions: [] },
+            "sessions.usage": emptyUsage,
+          },
+        });
+        await page.goto(`${suite.server.baseUrl}usage`);
+        await gateway.waitForRequest("agents.list");
+        await page.keyboard.press("ControlOrMeta+k");
+        const input = page.locator(".cmd-palette__input");
+        await input.fill("Needle");
+        await page.getByRole("option", { name: "Needle Bravo", exact: true }).waitFor();
+        const options = page.locator("openclaw-command-palette").getByRole("option");
+        await expect
+          .poll(async () =>
+            (await options.allTextContents()).map((text) => text.replace(/\s+/g, " ").trim()),
+          )
+          .toEqual(["Needle Alpha alpha", "Needle Charlie charlie", "Needle Bravo"]);
+        await input.press("ArrowDown");
+        await expect.poll(() => options.nth(1).getAttribute("aria-selected")).toBe("true");
+        await screenshot(page, "09-palette-keyboard-group-order.png");
+        await input.press("Enter");
+        await expect.poll(() => new URL(page.url()).pathname).toBe("/settings/agents/charlie");
+      },
+    );
+  });
+
+  it.each(["ordinary reload", "route before hello"])(
+    "opens a named agent from the palette without changing the chat agent (%s)",
+    async (ordering) => {
+      await suite.withPage(
+        { locale: "en-US", serviceWorkers: "block", viewport: { height: 900, width: 1440 } },
+        async ({ page }) => {
+          const gateway = await installMockGateway(page, {
+            deferredMethods: ordering === "route before hello" ? ["connect"] : [],
+            methodResponses: {
+              "agents.list": {
+                defaultId: "main",
+                mainKey: "main",
+                scope: "per-sender",
+                agents: multiAgentRoster,
+              },
+              "sessions.usage": emptyUsage,
+            },
+          });
+          await page.goto(`${suite.server.baseUrl}usage`);
+          if (ordering === "route before hello") {
+            await gateway.waitForRequest("connect");
+            await gateway.resolveDeferred("connect");
+          }
+          await gateway.waitForRequest("agents.list");
+          await expect.poll(() => selectedAgentId(page)).toBe("main");
+          await page.keyboard.press("ControlOrMeta+k");
+          await page.locator(".cmd-palette__input").fill("Reviewer");
+          const result = page.getByRole("option", { name: "Reviewer reviewer", exact: true });
+          await result.waitFor();
+          await screenshot(page, "07-palette-reviewer-result.png");
+          await result.click();
+          const selectedAgent = page.locator(".settings-sidebar openclaw-agent-select");
+          await selectedAgent.waitFor();
+          await expect.poll(() => new URL(page.url()).pathname).toBe("/settings/agents/reviewer");
+          await expect
+            .poll(() =>
+              selectedAgent.evaluate((picker) => (picker as HTMLElement & { value: string }).value),
+            )
+            .toBe("reviewer");
+          await screenshot(page, "08-palette-selected-agent.png");
+          await page.reload();
+          if (ordering === "route before hello") {
+            await gateway.waitForRequest("connect");
+            // The route can settle before hello; its explicit target must survive
+            // until the canonical roster arrives from the new connection.
+            await waitForControlUiRoute(page, {
+              pathname: "/settings/agents/reviewer",
+              routeId: "agents",
+            });
+            await gateway.resolveDeferred("connect");
+          }
+          await expect
+            .poll(() =>
+              selectedAgent.evaluate((picker) => (picker as HTMLElement & { value: string }).value),
+            )
+            .toBe("reviewer");
+          await waitForRequest(
+            gateway,
+            "models.list",
+            (params) => params.agentId === "reviewer" && params.view === "configured",
+          );
+          await screenshot(page, "10-reloaded-reviewer.png");
+          await page.goBack();
+          await expect.poll(() => new URL(page.url()).pathname).toBe("/usage");
+          await expect.poll(() => selectedAgentId(page)).toBe("main");
+        },
+      );
+    },
+  );
+
+  it("preserves an in-flight canonical roster refresh while chat startup is delayed", async () => {
+    await suite.withPage(
+      { locale: "en-US", serviceWorkers: "block", viewport: { height: 900, width: 1440 } },
+      async ({ page }) => {
+        const gateway = await installMockGateway(page, {
+          defaultAgentId: "main",
+          deferredMethods: ["chat.startup"],
+        });
+
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
+        await gateway.waitForRequest("chat.startup");
+        await gateway.waitForRequest("agents.list");
+        await gateway.deferNext("agents.list");
+        await gateway.emitGatewayEvent("config.changed", { path: "agents.entries" });
+        await gateway.waitForRequest("agents.list", { after: 1 });
+        await gateway.resolveDeferred("chat.startup", {
+          messages: [],
+          metadata: { models: [] },
+          sessionId: "session:agent:main:main",
+          thinkingLevel: null,
+        });
+        await gateway.resolveDeferred("agents.list", {
+          defaultId: "research",
+          mainKey: "main",
+          scope: "per-sender",
+          agents: [{ id: "research", name: "Research" }],
+        });
+
+        await expect.poll(() => selectedAgentId(page)).toBe("research");
+      },
+    );
+  });
+
+  it("keeps a refreshed canonical roster while chat startup remains delayed", async () => {
+    await suite.withPage(
+      {
+        locale: "en-US",
+        serviceWorkers: "block",
+        viewport: { height: 900, width: 1440 },
+        ...(captureUiProof
+          ? { recordVideo: { dir: proofDir, size: { height: 900, width: 1440 } } }
+          : {}),
+      },
+      async ({ page }) => {
+        const gateway = await installMockGateway(page, {
+          defaultAgentId: "main",
+          deferredMethods: ["chat.startup"],
+          methodResponses: {
+            "agents.list": {
+              defaultId: "research",
+              mainKey: "main",
+              scope: "per-sender",
+              agents: [
+                { id: "research", name: "Research" },
+                { id: "writer", name: "Writer" },
+              ],
+            },
+          },
+        });
+
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
+        await gateway.waitForRequest("chat.startup");
+        await gateway.waitForRequest("agents.list");
+        await gateway.emitGatewayEvent("config.changed", { path: "agents.entries" });
+        await gateway.waitForRequest("agents.list", { after: 1 });
+
+        await expect.poll(() => selectedAgentId(page)).toBe("research");
+
+        await gateway.resolveDeferred("chat.startup", {
+          messages: [],
+          metadata: { models: [] },
+          sessionId: "session:agent:main:main",
+          thinkingLevel: null,
+        });
+
+        await expect.poll(() => selectedAgentId(page)).toBe("research");
+        await expect
+          .poll(() =>
+            page.locator("openclaw-chat-pane").evaluate((pane) => {
+              const state = (
+                pane as HTMLElement & {
+                  state?: {
+                    agentsList?: { agents?: Array<{ id?: string }>; defaultId?: string };
+                    agentsSelectedId?: string;
+                  };
+                }
+              ).state;
+              return {
+                defaultId: state?.agentsList?.defaultId,
+                ids: state?.agentsList?.agents?.map((agent) => agent.id),
+                selectedId: state?.agentsSelectedId,
+              };
+            }),
+          )
+          .toEqual({
+            defaultId: "research",
+            ids: ["research", "writer"],
+            selectedId: "research",
+          });
+      },
+    );
+  });
+
+  it("updates the compact session scope label and exposes All agents", async () => {
+    await suite.withPage(
+      {
+        locale: "en-US",
+        serviceWorkers: "block",
+        viewport: { height: 900, width: 1440 },
+      },
+      async ({ page }) => {
+        const gateway = await installMockGateway(page, {
+          methodResponses: {
+            "agents.list": {
+              defaultId: "main",
+              mainKey: "main",
+              scope: "per-sender",
+              agents: multiAgentRoster,
+            },
+            "sessions.list": {
+              count: 0,
+              defaults: { contextTokens: null, model: null, modelProvider: null },
+              path: "",
+              sessions: [],
+              ts: Date.now(),
+            },
+          },
+        });
+
+        await page.goto(`${suite.server.baseUrl}sessions`);
+        await gateway.waitForRequest("agents.list");
+        const pageScope = page.locator(".agent-scope-control openclaw-agent-select");
+        await expect
+          .poll(() =>
+            pageScope.evaluate((picker) => (picker as HTMLElement & { value: string }).value),
+          )
+          .toBe("main");
+
+        await pageScope.locator(".agent-select__trigger").click();
+        await pageScope
+          .locator("wa-dropdown-item[data-agent-option]")
+          .filter({ hasText: "Writer" })
+          .click();
+
+        await waitForRequest(gateway, "sessions.list", (params) => params.agentId === "writer");
+        await expect
+          .poll(() =>
+            pageScope.evaluate((picker) => (picker as HTMLElement & { value: string }).value),
+          )
+          .toBe("writer");
+        await expect
+          .poll(async () => (await pageScope.locator(".agent-select__label").textContent())?.trim())
+          .toBe("Writer");
+        await screenshot(page, "05-first-session-scope-switch.png");
+
+        const sessionRequestsBeforeAll = (await gateway.getRequests("sessions.list")).length;
+        await pageScope.locator(".agent-select__trigger").click();
+        await pageScope
+          .locator("wa-dropdown-item[data-agent-option]")
+          .filter({ hasText: "All agents" })
+          .evaluate((item) => (item as HTMLElement).click());
+        await expect
+          .poll(async () => {
+            const requests = await gateway.getRequests("sessions.list");
+            return requests
+              .slice(sessionRequestsBeforeAll)
+              .some((request) => !Object.hasOwn(requestParams(request), "agentId"));
+          })
+          .toBe(true);
+        await expect
+          .poll(() =>
+            pageScope.evaluate((picker) => (picker as HTMLElement & { value: string }).value),
+          )
+          .toBe("");
+        await expect
+          .poll(async () => (await pageScope.locator(".agent-select__label").textContent())?.trim())
+          .toBe("All agents");
+        await screenshot(page, "06-all-agents-session-scope.png");
+      },
+    );
+  });
+});

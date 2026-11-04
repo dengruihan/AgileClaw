@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "name": "agenda-desktop-day-view",
+  "createdFor": "2026-11-03",
+  "mission": "M22",
+  "external": {
+    "repository": "/home/raymond/repos/agenda",
+    "worktree": "/home/raymond/repos/AgileClaw/.tower/worktrees/wt-22/.external/agenda",
+    "base": "53962ecd7b02c71aea7420401b2f2ef73b74d3e3",
+    "commit": "1c95defae6801c5470924c306e7f191b8181b5e4",
+    "tree": "0c13449bb0b2052101e5abd300355180879d6e63",
+    "patch": "external/source.patch"
+  },
+  "install": {
+    "root": "~/.openclaw/extensions/agenda",
+    "database": "~/.openclaw/plugins/agenda/agenda.sqlite",
+    "managedEntries": ["dist", "assets", "skills", "openclaw.plugin.json"],
+    "preservedEntries": ["operations/", "live database and WAL family", "Gateway config and credentials"]
+  },
+  "databaseChanges": "none",
+  "schemaVersion": 2,
+  "deployedAt": null,
+  "backup": null,
+  "commands": {
+    "status": "node scripts/status.mjs --source <built checkout>",
+    "deployDryRun": "node scripts/deploy.mjs --source <built checkout>",
+    "deploy": "node scripts/deploy.mjs --source <built checkout> --yes",
+    "rollback": "scripts/rollback.sh <backup directory>",
+    "packageCheck": "node verify/check-package.mjs --source <built checkout>",
+    "replayTests": "bash verify/replay-tests.sh ~/repos/agenda",
+    "backupRegression": "node --test verify/backup-failure.test.mjs",
+    "screenshots": "node verify/screenshot.mjs --assets <built assets> --out verify/screenshots --label after --verify unified"
+  }
+}

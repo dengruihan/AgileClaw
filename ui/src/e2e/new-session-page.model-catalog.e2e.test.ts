@@ -1,0 +1,434 @@
+// Covers model-catalog metadata failure and recovery on the new-session page.
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { gatewayOriginScope } from "@openclaw/gateway-client/browser";
+import { expect, it } from "vitest";
+import type { ModelCatalogEntry } from "../api/types.ts";
+import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
+import { controlUiBundledGatewayUrl } from "../test-helpers/control-ui-e2e.ts";
+import { selectChatModelOption } from "../test-helpers/select-picker-e2e.ts";
+import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
+import {
+  createNewSessionPageE2eSuite,
+  installMockGateway,
+  navigateInApp,
+  pollLocatorText,
+} from "./new-session-page.test-support.ts";
+
+const suite = createNewSessionPageE2eSuite();
+const captureUiProof = process.env.OPENCLAW_CAPTURE_UI_PROOF === "1";
+
+function catalogDiscoveryRequests(
+  requests: Array<{ params?: unknown }>,
+): Array<{ params?: unknown }> {
+  return requests.filter(
+    ({ params }) =>
+      params !== null &&
+      typeof params === "object" &&
+      !Array.isArray(params) &&
+      (params as { metadataOnly?: unknown }).metadataOnly === true,
+  );
+}
+
+suite.define(() => {
+  it.each([false, true])(
+    "does not repair saved cloud placement from retained display with identity %s",
+    async (identity) => {
+      const context = await suite.browser.newContext(createControlUiE2eContextOptions());
+      const page = await context.newPage();
+      const storageKey = `openclaw.new-session.preferences.v1:${gatewayOriginScope(controlUiBundledGatewayUrl(suite.server.baseUrl))}`;
+      const preference = { where: { kind: "cloud", id: "sample-cloud" } };
+      const model: ModelCatalogEntry = {
+        id: "one",
+        name: "Retained one",
+        provider: "fixture",
+        available: true,
+        agentRuntime: { id: "sample-runtime", cloudPlacementSupported: false, source: "model" },
+      };
+      const gateway = await installMockGateway(page, {
+        agentModel: "fixture/one",
+        models: [model, { ...model, id: "two", name: "Retained two" }],
+        operatorScopes: ["operator.admin", "operator.read", "operator.write"],
+        ...(identity
+          ? { presenceUsers: [{ id: "person-a", name: "Sample Person", self: true }] }
+          : {}),
+        featureMethods: [
+          "chat.metadata",
+          "chat.startup",
+          "sessions.create",
+          ...(identity ? ["users.prefs.get", "users.prefs.set"] : []),
+        ],
+        methodResponses: {
+          "users.prefs.get": { status: "ok", entries: { "new-session.migration.v1": true } },
+          "agents.list": {
+            agents: [
+              {
+                id: "main",
+                model: { primary: "fixture/one" },
+                agentRuntime: {
+                  id: "sample-runtime",
+                  cloudPlacementSupported: true,
+                  source: "agent",
+                },
+              },
+            ],
+            defaultId: "main",
+            mainKey: "main",
+            scope: "agent",
+          },
+          "environments.list": {
+            environments: [],
+            profiles: [{ id: "sample-cloud", providerId: "crabbox" }],
+          },
+          "sessions.catalog.list": { catalogs: [] },
+        },
+      });
+      const root = page.locator("openclaw-new-session-page");
+      try {
+        await page.goto(`${suite.server.baseUrl}new?agent=main`);
+        await expect.poll(() => root.locator("[data-chat-model-option]").count()).toBe(2);
+        await navigateInApp(page, "agents-home");
+        await expect.poll(() => root.count()).toBe(0);
+        await page.evaluate(
+          ({ key, value }) =>
+            localStorage.setItem(key, JSON.stringify({ agents: { main: value } })),
+          { key: storageKey, value: preference },
+        );
+        if (identity) {
+          await gateway.setMethodResponse("users.prefs.get", {
+            status: "ok",
+            entries: { "new-session.migration.v1": true, "new-session.v1:main": preference },
+          });
+          await gateway.emitGatewayEvent("users.prefs.changed", { profileId: "person-a" });
+        }
+        const reads = (await gateway.getRequests("models.list")).length;
+        await gateway.deferNext("models.list");
+        await gateway.emitGatewayEvent("chat.metadata.changed", {});
+        await navigateInApp(page, "new-session", "?agent=main");
+        await expect
+          .poll(async () => (await gateway.getRequests("models.list")).length)
+          .toBe(reads + 1);
+        await root.locator("#new-session-where-trigger").click();
+        await expect
+          .poll(() => root.getByRole("button", { name: "sample-cloud", exact: true }).isVisible())
+          .toBe(true);
+        expect(await root.locator("[data-chat-model-option]").count()).toBe(2);
+        expect(await gateway.getRequests("users.prefs.set")).toHaveLength(0);
+        expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(
+          JSON.stringify({ agents: { main: preference } }),
+        );
+        expect(
+          await root.locator("#new-session-where-trigger").getAttribute("data-cloud-profile"),
+        ).toBe("sample-cloud");
+        await page.keyboard.press("Escape");
+        await root.locator('.new-session-page__composer [data-chat-model-select="true"]').click();
+        await selectChatModelOption(root.locator('[data-chat-model-option="fixture/one"]'));
+        expect(await gateway.getRequests("users.prefs.set")).toHaveLength(0);
+        await root.locator("#new-session-where-trigger").click();
+        expect(
+          await root.getByRole("button", { name: "sample-cloud", exact: true }).isDisabled(),
+        ).toBe(false);
+        await page.keyboard.press("Escape");
+        await root.locator('.new-session-page__composer [data-chat-model-select="true"]').click();
+        await selectChatModelOption(root.locator('[data-chat-model-option="fixture/two"]'));
+        await root.locator("#new-session-where-trigger").click();
+        await expect
+          .poll(() => root.getByRole("button", { name: "sample-cloud", exact: true }).isDisabled())
+          .toBe(true);
+        const selectionWrites = (await gateway.getRequests("users.prefs.set")).length;
+        await gateway.resolveDeferred("models.list", {
+          models: [
+            {
+              ...model,
+              name: "Accepted one",
+              agentRuntime: { ...model.agentRuntime, cloudPlacementSupported: true },
+            },
+            { ...model, id: "two", name: "Accepted two" },
+          ],
+        });
+        await expect
+          .poll(() => root.locator('[data-chat-model-option="fixture/one"]').textContent())
+          .toContain("Accepted one");
+        expect(
+          await root.locator("#new-session-where-trigger").getAttribute("data-cloud-profile"),
+        ).toBe("sample-cloud");
+        expect(await gateway.getRequests("users.prefs.set")).toHaveLength(selectionWrites);
+      } finally {
+        await context.close();
+      }
+    },
+  );
+
+  it("shows metadata failure truthfully and recovers when the picker opens", async () => {
+    const context = await suite.browser.newContext(createControlUiE2eContextOptions());
+    const page = await context.newPage();
+    const models = [
+      {
+        available: true,
+        id: "gpt-5.6-luna",
+        name: "GPT-5.6 Luna",
+        provider: "openai",
+      },
+      {
+        available: true,
+        id: "gpt-5.6-sol",
+        name: "GPT-5.6 Sol",
+        provider: "openai",
+      },
+      {
+        available: true,
+        id: "gpt-5.6-terra",
+        name: "GPT-5.6 Terra",
+        provider: "openai",
+      },
+    ];
+    const gateway = await installMockGateway(page, {
+      agentModel: "openai/gpt-5.6-luna",
+      methodResponses: {
+        "models.list": {
+          sequence: [
+            {
+              __mockError: {
+                code: "UNAVAILABLE",
+                message: "metadata request timed out",
+              },
+            },
+            { commands: [], models },
+          ],
+        },
+      },
+      models,
+    });
+
+    try {
+      await page.goto(`${suite.server.baseUrl}new`);
+      await gateway.waitForRequest("models.list");
+
+      const modelSelect = page.locator('[data-chat-model-select="true"]');
+      await expect
+        .poll(() => modelSelect.getByText("Models unavailable", { exact: true }).isVisible())
+        .toBe(true);
+      expect(await page.locator("[data-chat-model-option]").count()).toBe(0);
+
+      await modelSelect.click();
+
+      await expect.poll(async () => (await gateway.getRequests("models.list")).length).toBe(2);
+      expect((await gateway.getRequests("models.list"))[1]?.params).toMatchObject({
+        agentId: "main",
+      });
+      await expect.poll(() => page.locator("[data-chat-model-option]").count()).toBe(3);
+      expect(await page.locator("[data-chat-model-catalog-state]").count()).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("restores the model picker when startup publishes its catalog", async () => {
+    const context = await suite.browser.newContext(createControlUiE2eContextOptions());
+    const page = await context.newPage();
+    const recoveredModel = {
+      available: true,
+      id: "gpt-5.6-luna",
+      name: "Recovered GPT-5.6 Luna",
+      provider: "openai",
+      reasoning: true,
+    };
+    const gateway = await installMockGateway(page, {
+      // Seeding the recovered row keeps the derived scenario config authoring
+      // it, so the strict picker lists the model once the catalog recovers.
+      models: [recoveredModel],
+      methodResponses: {
+        "models.list": {
+          __mockError: {
+            code: "UNAVAILABLE",
+            details: { reason: "startup-sidecars" },
+            message: "gateway startup sidecars are still initializing",
+            retryable: true,
+            retryAfterMs: 100,
+          },
+        },
+      },
+    });
+
+    try {
+      await page.goto(`${suite.server.baseUrl}new`);
+      await gateway.waitForRequest("models.list");
+      await expect
+        .poll(() => page.getByText("Models unavailable", { exact: true }).count())
+        .toBeGreaterThan(0);
+      expect(await gateway.getRequests("models.list")).toHaveLength(2);
+      await gateway.setMethodResponse("models.list", { commands: [], models: [recoveredModel] });
+      await gateway.emitGatewayEvent("chat.metadata.changed", {});
+      await expect.poll(async () => (await gateway.getRequests("models.list")).length).toBe(3);
+
+      const modelSelect = page.locator(
+        '.new-session-page__composer [data-chat-model-select="true"]',
+      );
+      await expect.poll(() => modelSelect.getAttribute("aria-disabled")).toBe("false");
+      await modelSelect.click();
+      await expect
+        .poll(() => page.locator('[data-chat-model-option="openai/gpt-5.6-luna"]').textContent())
+        .toContain(recoveredModel.name);
+
+      expect(await gateway.getRequests("models.list")).toHaveLength(3);
+      for (const request of await gateway.getRequests("models.list")) {
+        expect(request.params).toEqual({ view: "configured", agentId: "main" });
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("recovers a failed CLI-agent catalog without reloading model metadata for its retry", async () => {
+    if (captureUiProof) {
+      await mkdir(path.join(suite.artifactDir, "new-session-catalog-retry"), { recursive: true });
+    }
+    const context = await suite.browser.newContext({
+      locale: "en-US",
+      serviceWorkers: "block",
+      viewport: { height: 900, width: 1280 },
+      ...(captureUiProof
+        ? {
+            recordVideo: {
+              dir: path.join(suite.artifactDir, "new-session-catalog-retry"),
+              size: { height: 900, width: 1280 },
+            },
+          }
+        : {}),
+    });
+    const page = await context.newPage();
+    const models = [
+      {
+        available: true,
+        id: "gpt-5.6-luna",
+        name: "GPT-5.6 Luna",
+        provider: "openai",
+      },
+    ];
+    const unavailable = {
+      __mockError: {
+        code: "UNAVAILABLE",
+        message: "CLI-agent catalog is warming",
+      },
+    };
+    const discoveryMatch = { agentId: "main", metadataOnly: true };
+    const gateway = await installMockGateway(page, {
+      cliAgentsEnabled: true,
+      featureMethods: [
+        "models.list",
+        "chat.startup",
+        "sessions.create",
+        "sessions.dispatch",
+        "sessions.catalog.list",
+      ],
+      methodResponses: {
+        "sessions.catalog.list": {
+          cases: [
+            { match: discoveryMatch, response: unavailable },
+            { match: {}, response: { catalogs: [] } },
+          ],
+        },
+      },
+      models,
+    });
+
+    try {
+      await page.goto(`${suite.server.baseUrl}new`);
+      await expect
+        .poll(async () =>
+          catalogDiscoveryRequests(await gateway.getRequests("sessions.catalog.list")),
+        )
+        .toHaveLength(1);
+
+      await page.locator('[data-chat-model-select="true"]').click();
+
+      await expect
+        .poll(async () =>
+          catalogDiscoveryRequests(await gateway.getRequests("sessions.catalog.list")),
+        )
+        .toHaveLength(2);
+      const errorState = page.locator(
+        '[data-chat-model-target-group="cliAgents"] [data-chat-model-catalog-state="error"]',
+      );
+      await expect.poll(() => errorState.isVisible()).toBe(true);
+      await pollLocatorText(
+        errorState.locator(".chat-controls__model-catalog-state-label > span"),
+      ).toBe("CLI agents unavailable");
+      const retry = page.locator('[data-chat-model-target-retry="cliAgents"]');
+      await expect.poll(() => retry.isEnabled()).toBe(true);
+      await pollLocatorText(retry).toContain("Retry");
+      await pollLocatorText(
+        page.locator(
+          '[data-chat-model-option="openai/gpt-5.6-luna"] .chat-controls__model-option-name',
+        ),
+      ).toBe("GPT-5.6 Luna");
+      expect(await page.getByText("Models unavailable", { exact: true }).count()).toBe(0);
+      expect(await gateway.getRequests("models.list")).toHaveLength(1);
+      if (captureUiProof) {
+        await writeFile(
+          path.join(suite.artifactDir, "new-session-catalog-retry", "01-cli-agents-retry.png"),
+          await takeControlUiViewportScreenshot(
+            page,
+            page.locator('.chat-controls__model-picker wa-popup [part="popup"]'),
+            [errorState],
+          ),
+        );
+      }
+
+      await gateway.setMethodResponse("sessions.catalog.list", {
+        cases: [
+          {
+            match: discoveryMatch,
+            response: {
+              catalogs: [
+                {
+                  id: "anthropic",
+                  label: "Claude Code",
+                  capabilities: {
+                    continueSession: false,
+                    archive: false,
+                    startTerminal: true,
+                  },
+                  hosts: [],
+                },
+              ],
+            },
+          },
+          { match: {}, response: { catalogs: [] } },
+        ],
+      });
+      await retry.click();
+
+      await expect
+        .poll(async () =>
+          catalogDiscoveryRequests(await gateway.getRequests("sessions.catalog.list")),
+        )
+        .toHaveLength(3);
+      expect(await gateway.getRequests("models.list")).toHaveLength(1);
+      await expect
+        .poll(() => page.locator('[data-chat-model-target="anthropic"]').isVisible())
+        .toBe(true);
+      await pollLocatorText(
+        page.locator(
+          '[data-chat-model-target-group="cliAgents"] .chat-controls__provider-heading > span:last-child',
+        ),
+      ).toBe("CLI agents");
+      await pollLocatorText(
+        page.locator('[data-chat-model-target="anthropic"] .chat-controls__model-option-name'),
+      ).toBe("Claude Code");
+      expect(await errorState.count()).toBe(0);
+      if (captureUiProof) {
+        await writeFile(
+          path.join(suite.artifactDir, "new-session-catalog-retry", "02-cli-agents-recovered.png"),
+          await takeControlUiViewportScreenshot(
+            page,
+            page.locator('.chat-controls__model-picker wa-popup [part="popup"]'),
+            [page.locator('[data-chat-model-target="anthropic"]')],
+          ),
+        );
+      }
+    } finally {
+      await context.close();
+    }
+  });
+});

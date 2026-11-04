@@ -1,0 +1,185 @@
+{
+  "version": 1,
+  "name": "light-effect-cleanup",
+  "createdFor": "2026-11-03",
+  "job": {
+    "id": "6a45be21-ce0b-4b8b-8986-4c885d1ea659",
+    "name": "collector",
+    "removeTools": ["light_control"],
+    "forbiddenInMessage": ["灯效", "light_control", "lightrules", "ntf.cjs"],
+    "triggerReplacements": [
+      {
+        "old": "失败退回灯效，每源每日一次",
+        "new": "发送失败就在本轮结果写明失败与原因，不换通道重发，每源每日一次",
+        "count": 2
+      }
+    ]
+  },
+  "config": {
+    "removeFromAlsoAllow": [
+      "light_control",
+      "lightrules_list",
+      "lightrules_create",
+      "lightrules_update",
+      "lightrules_delete"
+    ],
+    "alsoAllowPaths": ["tools.alsoAllow", "agents.entries.main.tools.alsoAllow"],
+    "denyPath": "tools.deny",
+    "denyTools": [
+      "light_control",
+      "lightrules_list",
+      "lightrules_create",
+      "lightrules_update",
+      "lightrules_delete"
+    ]
+  },
+  "forbiddenAfter": ["灯效", "light_control", "lightrules", "ntf light", "ntf.cjs light", "light send"],
+  "files": [
+    {
+      "path": "home/raymond/.openclaw/workspace/AGENTS.md",
+      "owner": "workspace AGENTS: standing reminder channel",
+      "baselineSha256": "422edd29d33699b9a57b1faca829b37d2bc826110751621017f2a3be1c357dfe",
+      "ops": [
+        {
+          "type": "replace",
+          "old": "**手机推送提醒：** 提醒用户走带屏硬件的灯效推送（用户 App 里叫「重点关注」）：`node ~/.openclaw/extensions/phone-notifications/dist/bin/ntf.cjs light send --segments '<JSON>' --title <简短标题> --reason <30字内原因>`；title/reason 纯文本无 emoji。YoooClaw App 未接入聊天渠道，无法主动发聊天消息。",
+          "new": "**提醒推送：** 需要提醒用户时，只用私人钉钉机器人 Markdown 单聊（非 AI 卡片，只发本人）：`node /home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs --title <标题≤20字> --text <正文>`；发送失败时如实说明失败与原因，不换通道重试。"
+        }
+      ]
+    },
+    {
+      "path": "home/raymond/.openclaw/workspace/scripts/sentinel.md",
+      "owner": "sentinel notification policy",
+      "baselineSha256": "a21fb17faa910fb5e1e4782129dd75a3d000d47802716d866f09bbc3bd331d9b",
+      "ops": [
+        {
+          "type": "replace",
+          "old": "沿用现有手机灯效通知渠道：只推需本人行动/决定、临近或错过期限、重要阻塞、冲突和来源失效。",
+          "new": "沿用现有私人钉钉机器人通知渠道（`collection/dingtalk-notify.mjs`，Markdown 单聊，只发本人）：只推需本人行动/决定、临近或错过期限、重要阻塞、冲突和来源失效。"
+        }
+      ]
+    },
+    {
+      "path": "home/raymond/.openclaw/agents/main/agent/workshop-skills/dingtalk-busy-reply/SKILL.md",
+      "owner": "dingtalk-busy-reply skill: self-notification after a proxy reply",
+      "baselineSha256": "30eae0f65478b516bf329caa543cd59043a2d2747261520367ab3aa725f43e91",
+      "ops": [
+        {
+          "type": "replace",
+          "old": "- 按哨兵通知规则推手机灯效：`node ~/.openclaw/extensions/phone-notifications/dist/bin/ntf.cjs light send --segments '<JSON>' --title 钉钉代复 --reason <发给谁·30字内>`，与既有事项通知共用 24 小时去重。",
+          "new": "- 按哨兵通知规则推私人钉钉通知：`node /home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs --title 钉钉代复 --text <发给谁·30字内>`，与既有事项通知共用 24 小时去重。"
+        }
+      ]
+    },
+    {
+      "path": "home/raymond/.openclaw/agents/main/agent/workshop-skills/yoooclaw-plugin-status/SKILL.md",
+      "owner": "yoooclaw-plugin-status skill: plugin status plus light-push instructions",
+      "baselineSha256": "d6b65f1ca882ec8c0606e0fed56ababfc48228e1660bce2e3ea9dfab898143ae",
+      "ops": [
+        {
+          "type": "replace",
+          "old": "  questions and troubleshooting, \"推送通知到手机 / notify my phone\"\n  requests, light-push sends (ntf light send), or auditing what a past push\n  displayed (color/mode). For YoooClaw product/support questions (plans,",
+          "new": "  questions and troubleshooting, or \"推送通知到手机 / notify my phone\"\n  requests. For YoooClaw product/support questions (plans,"
+        },
+        {
+          "type": "replace",
+          "old": "ntf has no server→phone *chat-message* push (verified 2026-10-10 from the\nsubcommand list: every subcommand except `light` reads phone data or manages\nthe plugin locally). On \"push/notify my phone\" requests, do not re-hunt for\na chat-push command; reach the phone through:\n\n1. `ntf light` to the paired C·ONE hardware — verified 2026-10-13, and the\n   standing reminder channel per AGENTS.md. See \"Light pushes\" below.\n2. YoooClaw app chat — send the reminder as a chat message in the user's\n   YoooClaw conversation; the app delivers its own push.\n3. DingTalk via dws — see the dws-cli skill.",
+          "new": "ntf has no server→phone *chat-message* push (verified 2026-10-10 from the\nsubcommand list: it only reads phone data or manages the plugin locally). On\n\"push/notify my phone\" requests, do not re-hunt for a chat-push command;\nreach the phone through:\n\n1. YoooClaw app chat — send the reminder as a chat message in the user's\n   YoooClaw conversation; the app delivers its own push.\n2. DingTalk via dws — see the dws-cli skill."
+        },
+        {
+          "type": "removeSection",
+          "start": "## Light pushes (ntf light send)",
+          "end": "## Boundaries"
+        }
+      ]
+    },
+    {
+      "path": "home/raymond/.openclaw/agents/main/agent/workshop-skills/openclaw-automations-jobs/SKILL.md",
+      "owner": "openclaw-automations-jobs skill: automation delivery example",
+      "baselineSha256": "9021072f6d68321a0458d8ca49b27e18f9f806d717431c105f6c08eb9c6501f5",
+      "ops": [
+        {
+          "type": "replace",
+          "old": "    when the job pushes its own output (e.g. ntf light) instead of chat delivery.",
+          "new": "    when the job pushes its own output through its own channel instead of chat delivery."
+        }
+      ]
+    },
+    {
+      "path": "home/raymond/.openclaw/workspace/skills/collector-notify/SKILL.md",
+      "owner": "collector-notify skill: notification wording and channel",
+      "baselineSha256": "870cab482f96b33234a9ceb56c326ec35de6cfd7557fc4a4f1055d29ffc8f2c2",
+      "ops": [
+        {
+          "type": "replace",
+          "old": "description: \"collector 通知：玲珑口吻的通知措辞、钉钉私人机器人 Markdown 单聊命令与灯效回退。仅供 collector 自动化使用。\"",
+          "new": "description: \"collector 通知：玲珑口吻的通知措辞与钉钉私人机器人 Markdown 单聊命令。仅供 collector 自动化使用。\""
+        },
+        {
+          "type": "replace",
+          "old": "## 发送与回退",
+          "new": "## 发送"
+        },
+        {
+          "type": "replace",
+          "old": "- 失败：命令退出码 1 并打印灯效回退命令；照它执行灯效推送：`node ~/.openclaw/extensions/phone-notifications/dist/bin/ntf.cjs light send --segments '<JSON>' --title <标题> --reason <30字内原因>`。",
+          "new": "- 失败：命令退出码 1 并打印失败原因；在本轮结果里如实说明失败与原因，不换通道重发、不凭记忆补发。"
+        }
+      ]
+    },
+    {
+      "path": "home/raymond/.openclaw/workspace/skills/collector-health-repair/SKILL.md",
+      "owner": "collector-health-repair skill: repair notification",
+      "baselineSha256": "da47146b9c80f006d05218c7f70b20bac39a6eb8e7b2e53407181397258d1c8d",
+      "ops": [
+        {
+          "type": "replace",
+          "old": "失败退回灯效推送，每源每日一次。措辞与回退命令读",
+          "new": "发送失败就在本轮结果写明失败与原因，不换通道重发，每源每日一次。措辞与发送规则读"
+        }
+      ]
+    },
+    {
+      "path": "home/raymond/.openclaw/workspace/collection/README.md",
+      "owner": "collection README: collector notification channel",
+      "baselineSha256": "484c9e26f4ce08ada666c64d4a14200d5ff7a802bc0ab92a8f893841e749db18",
+      "ops": [
+        {
+          "type": "replace",
+          "old": "Markdown 单聊，失败退回灯效推送）；",
+          "new": "Markdown 单聊；发送失败如实记录，不换通道重发）；"
+        }
+      ]
+    },
+    {
+      "path": "home/raymond/.openclaw/workspace/collection/dingtalk-notify.mjs",
+      "owner": "dingtalk-notify.mjs: failure diagnostics",
+      "baselineSha256": "56881788d2660d35cf6c5aca7b5dbecef95bd8dd11faf9fcd4bb7e5480db442e",
+      "ops": [
+        {
+          "type": "replace",
+          "old": "// 退出码：0 全部块送达；1 发送失败（可能部分送达，stderr 写明进度与灯效回退命令）；",
+          "new": "// 退出码：0 全部块送达；1 发送失败（可能部分送达，stderr 写明进度与失败原因）；"
+        },
+        {
+          "type": "replace",
+          "old": "`已送达 ${sent}/${plan.length} 块。灯效回退：node ~/.openclaw/extensions/phone-notifications/dist/bin/ntf.cjs light send --segments '<JSON>' --title <标题> --reason <30字内原因>\\n`,",
+          "new": "`已送达 ${sent}/${plan.length} 块。发送失败，不换通道重发；请检查 Gateway 与钉钉连接器后重试。\\n`,"
+        }
+      ]
+    },
+    {
+      "path": "home/raymond/.openclaw/workspace/collection/trigger-collector.mjs",
+      "owner": "collector trigger source file (kept in sync with the embedded trigger)",
+      "baselineSha256": "2d8b9fae340d5b21d96da96eaf9051dd58eaa24b8a68eec5962958514f53e31b",
+      "ops": [
+        {
+          "type": "replace",
+          "old": "失败退回灯效，每源每日一次",
+          "new": "发送失败就在本轮结果写明失败与原因，不换通道重发，每源每日一次",
+          "count": 2
+        }
+      ]
+    }
+  ]
+}

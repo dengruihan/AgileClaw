@@ -1,0 +1,742 @@
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
+import { html, nothing, type PropertyValues } from "lit";
+import { property, state } from "lit/decorators.js";
+import type { ModelCatalogEntry, ModelCatalogResult, ModelsProbeResult } from "../../api/types.ts";
+import type { ApplicationContext } from "../../app/context.ts";
+import { showConfirmDialog } from "../../components/confirm-dialog.ts";
+import { icons } from "../../components/icons.ts";
+import { renderProviderBrandIcon } from "../../components/provider-icon.ts";
+import "../../components/web-awesome.ts";
+import { t } from "../../i18n/index.ts";
+import { registerSettingsEnglish } from "../../i18n/locales/en-settings.ts";
+import { currentConfigObject } from "../../lib/config/config-state-model.ts";
+import { formatUiError } from "../../lib/format-error.ts";
+import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
+import {
+  modelProviderConfigBusy,
+  modelProviderConfigMutationBlockedReason,
+} from "./config-mutation.ts";
+import type { ModelProviderCard } from "./data.ts";
+import { ProviderCredentialController } from "./provider-credential-controller.ts";
+import { providerConnectionFields } from "./provider-manager-connection.ts";
+import { providerModelDialog } from "./provider-manager-model-dialog.ts";
+import {
+  createProviderModelEditorDraft,
+  modelConfigEntry,
+  providerModelForm,
+} from "./provider-manager-model-form.ts";
+import { providerModelsList } from "./provider-manager-models.ts";
+import {
+  configuredProvider,
+  providerConnectionPatch,
+  modelReferences,
+  modelRemovePatch,
+  modelWritePatch,
+  providerModels,
+  type ProviderModelsPatch,
+} from "./provider-model-config.ts";
+
+registerSettingsEnglish();
+
+export type ProviderManagerIntent = { provider: string; view: "settings" | "models" | "create" };
+type CredentialResult = { ok: false; error?: string } | { ok: true; warning: string | null };
+
+/** Matches the config form's auto-save debounce so both lanes feel alike. */
+const CONNECTION_AUTO_SAVE_DEBOUNCE_MS = 800;
+/** Retry cadence while an earlier save is still in flight. */
+const CONNECTION_AUTO_SAVE_RETRY_MS = 200;
+
+export class ProviderManager extends OpenClawLightDomElement {
+  @property({ attribute: false }) context!: ApplicationContext;
+  @property() agentId = "";
+  @property({ attribute: false }) intent: ProviderManagerIntent | null = null;
+  @property({ attribute: false }) card: ModelProviderCard | null = null;
+  @property({ type: Boolean }) customProvider = false;
+  @property({ attribute: false }) probeResults: Record<string, ModelsProbeResult> = {};
+  @property({ attribute: false }) probeBusy: Record<string, boolean> = {};
+  @property({ attribute: false }) probeErrors: Record<string, { text: string }> = {};
+  @property({ attribute: false }) onCreated: (provider: string) => void = () => {};
+  @property({ attribute: false }) onRefresh: () => void = () => {};
+  @property({ attribute: false }) onProbe: (modelId: string) => void = () => {};
+  @property({ attribute: false }) onConnect: () => void = () => {};
+  /** Opens the page-owned delete flow for the header menu; policy stays with the page. */
+  @property({ attribute: false })
+  onDeleteProvider: ((card: ModelProviderCard) => void) | null = null;
+  @property({ attribute: false })
+  canDeleteProvider: ((card: ModelProviderCard) => boolean) | null = null;
+  @property({ attribute: false }) onCredential: (
+    provider: string,
+    key: string | null,
+  ) => Promise<CredentialResult | undefined> = async () => undefined;
+  @state() private draft: Record<string, unknown> = {};
+  @state() private providerId = "";
+  private readonly credential = new ProviderCredentialController(() => this.requestUpdate());
+  @state() private error: string | null = null;
+  @state() private notice: string | null = null;
+  @state() private busy = false;
+  @state() private loading = false;
+  @state() private catalog: ModelCatalogEntry[] = [];
+  @state() private modelDraft: Record<string, unknown> | null = null;
+  private original: Record<string, unknown> = {};
+  private originalModelId: string | undefined;
+  private initialModelDraft: Record<string, unknown> | null = null;
+  private discardConfirmation: AbortController | null = null;
+  private originalModel: Record<string, unknown> | undefined;
+  /** Catalog thinking map the current model draft prefilled from, if any. */
+  private modelThinkingPrefill: Record<string, unknown> | undefined;
+  private generation = 0;
+  private touched = new Set<string>();
+  private listScrollTop = 0;
+  private providerCreated = false;
+  private focusModelsSection = false;
+  private autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  override willUpdate(changed: PropertyValues<ProviderManager>) {
+    if (changed.has("intent") || changed.has("agentId") || changed.has("context")) {
+      this.discardConfirmation?.abort();
+      this.clearConnectionAutoSave();
+      this.generation += 1;
+      this.busy = false;
+      this.loading = false;
+      this.error = this.notice = null;
+      this.modelDraft = null;
+      this.credential.clear();
+      this.touched.clear();
+      this.providerCreated = false;
+      this.providerId = this.intent?.provider ?? "";
+      this.original = structuredClone(configuredProvider(this.config, this.providerId) ?? {});
+      this.draft = structuredClone(this.original);
+      this.catalog = [];
+      this.focusModelsSection = this.intent?.view === "models";
+      if (this.intent) {
+        void this.load();
+      }
+    } else if (!this.dirty && !this.modelDraft && !this.busy) {
+      this.original = structuredClone(configuredProvider(this.config, this.providerId) ?? {});
+      this.draft = structuredClone(this.original);
+    }
+    this.credential.sync({
+      client: this.context.gateway.snapshot.client,
+      agentId: this.agentId,
+      provider: this.providerId,
+      baseHash: this.context.runtimeConfig.state.configSnapshot?.hash ?? undefined,
+      revision: this.card?.credentialRevision,
+      enabled: Boolean(
+        this.intent &&
+        this.intent.view !== "create" &&
+        this.card?.apiKeySupported !== false &&
+        (!this.card?.configAuthMode || this.card.configAuthMode === "api-key") &&
+        !this.blocked,
+      ),
+    });
+  }
+
+  override disconnectedCallback() {
+    this.discardConfirmation?.abort();
+    this.clearConnectionAutoSave();
+    this.generation += 1;
+    this.credential.clear();
+    super.disconnectedCallback();
+  }
+
+  override updated() {
+    if (this.focusModelsSection) {
+      this.focusModelsSection = false;
+      this.querySelector(".provider-manager__models-section")?.scrollIntoView?.({
+        block: "start",
+      });
+    }
+  }
+
+  private get config() {
+    return currentConfigObject(this.context.runtimeConfig.state);
+  }
+
+  private get blocked() {
+    return modelProviderConfigMutationBlockedReason(this.context);
+  }
+
+  private get disabled() {
+    const blocked = Boolean(this.blocked) || modelProviderConfigBusy(this.context);
+    return this.busy || this.loading || blocked;
+  }
+
+  private get dirty() {
+    return (
+      this.credential.dirty ||
+      [...this.touched].some(
+        (key) => JSON.stringify(this.draft[key]) !== JSON.stringify(this.original[key]),
+      )
+    );
+  }
+
+  private async load() {
+    const client = this.context.gateway.snapshot.client;
+    const generation = this.generation;
+    const current = () =>
+      this.isConnected &&
+      this.generation === generation &&
+      this.context.gateway.snapshot.client === client;
+    if (!client || !this.intent) {
+      return;
+    }
+    // A not-yet-created custom provider has nothing to list; after the first
+    // save the merged view shows its model list like any configured provider.
+    const listModels = this.intent.view !== "create" || this.providerCreated;
+    this.loading = true;
+    this.error = null;
+    try {
+      if (!this.touched.size && !this.providerCreated) {
+        this.original = structuredClone(configuredProvider(this.config, this.providerId) ?? {});
+        this.draft = structuredClone(this.original);
+      }
+      if (listModels) {
+        const result = await client.request<ModelCatalogResult>("models.list", {
+          agentId: this.agentId,
+          provider: this.providerId,
+          // Catalog rows never join the list (config entries only); they serve
+          // solely as edit-form prefill: thinking levels and input modalities.
+          view: "all",
+          includeDetails: true,
+          preparedOnly: true,
+        });
+        if (!current()) {
+          return;
+        }
+        this.catalog = result.models;
+      }
+    } catch (error) {
+      if (current()) {
+        this.error = formatUiError(error);
+      }
+    } finally {
+      if (current()) {
+        this.loading = false;
+      }
+    }
+  }
+
+  private setDraftField(key: "baseUrl" | "api", value: string) {
+    this.draft = { ...this.draft, [key]: value };
+    this.touched.add(key);
+    this.scheduleConnectionAutoSave();
+  }
+
+  /** Connection edits save themselves; the submit path only flushes them early. */
+  private scheduleConnectionAutoSave() {
+    this.armConnectionAutoSave(CONNECTION_AUTO_SAVE_DEBOUNCE_MS);
+  }
+
+  private armConnectionAutoSave(delay: number) {
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+    }
+    this.autoSaveTimer = setTimeout(() => {
+      this.autoSaveTimer = null;
+      if (this.busy || this.loading) {
+        this.armConnectionAutoSave(CONNECTION_AUTO_SAVE_RETRY_MS);
+        return;
+      }
+      void this.saveConnection(true);
+    }, delay);
+  }
+
+  private clearConnectionAutoSave() {
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+      this.autoSaveTimer = null;
+    }
+  }
+
+  private setModelFields(patch: Record<string, unknown>) {
+    if (this.modelDraft) {
+      this.modelDraft = { ...this.modelDraft, ...patch };
+    }
+  }
+
+  private editModel(model?: ModelCatalogEntry | Record<string, unknown>) {
+    this.listScrollTop = this.querySelector(".provider-manager__body")?.scrollTop ?? 0;
+    const configured =
+      model && providerModels(this.config, this.providerId).find((row) => row.id === model.id);
+    this.originalModel = configured ? structuredClone(configured) : undefined;
+    const editor = createProviderModelEditorDraft({
+      model,
+      configured,
+      catalogEntry: this.catalog.find((row) => row.id === model?.id),
+    });
+    this.modelThinkingPrefill = editor.thinkingPrefill;
+    this.modelDraft = editor.draft;
+    this.initialModelDraft = structuredClone(editor.draft);
+    this.originalModelId = editor.originalModelId;
+    this.error = this.notice = null;
+  }
+
+  private async backToModels() {
+    this.modelDraft = null;
+    await this.updateComplete;
+    const body = this.querySelector(".provider-manager__body");
+    if (body) {
+      body.scrollTop = this.listScrollTop;
+    }
+  }
+
+  private async saveModel() {
+    if (
+      !this.modelDraft ||
+      !this.querySelector<HTMLFormElement>(".provider-manager--model")?.reportValidity()
+    ) {
+      return;
+    }
+    const model = modelConfigEntry(this.modelDraft, this.originalModel, this.modelThinkingPrefill);
+    if (
+      !model.id ||
+      !model.name ||
+      (!this.originalModelId &&
+        providerModels(this.config, this.providerId).some((row) => row.id === model.id))
+    ) {
+      this.error = t("modelProviders.manager.duplicateModel");
+      return;
+    }
+    if (
+      await this.write((config) => {
+        const current = providerModels(config, this.providerId).find(
+          (entry) => entry.id === (this.originalModelId ?? model.id),
+        );
+        if (JSON.stringify(current) !== JSON.stringify(this.originalModel)) {
+          return { error: t("modelProviders.manager.conflict") };
+        }
+        return modelWritePatch(config, this.providerId, model, this.originalModelId);
+      })
+    ) {
+      await this.backToModels();
+    }
+  }
+
+  private async deleteModel(id: string) {
+    const original = providerModels(this.config, this.providerId).find((entry) => entry.id === id);
+    await this.write((config) => {
+      const current = providerModels(config, this.providerId).find((entry) => entry.id === id);
+      if (JSON.stringify(current) !== JSON.stringify(original)) {
+        return { error: t("modelProviders.manager.conflict") };
+      }
+      // A primary, fallback, or alias must not silently lose its target.
+      const references = modelReferences(config, this.providerId, id);
+      if (references.length) {
+        return {
+          error: t("modelProviders.manager.referenced", { references: references.join(", ") }),
+        };
+      }
+      return modelRemovePatch(config, this.providerId, id);
+    });
+  }
+
+  private renderModelForm() {
+    return providerModelForm({
+      disabled: this.disabled,
+      draft: this.modelDraft ?? {},
+      inheritedInput: this.catalog.find((row) => row.id === this.modelDraft?.id)?.input,
+      lockId: this.originalModelId !== undefined,
+      onCostField: (key, value) => this.setCostField(key, value),
+      onField: (patch) => this.setModelFields(patch),
+      onThinkingMap: (map) => this.setModelFields({ thinkingLevelMap: map }),
+      onThinkingValue: (level, value) => this.setThinkingValue(level, value),
+    });
+  }
+
+  private setThinkingValue(
+    level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
+    value: string,
+  ) {
+    if (!this.modelDraft) {
+      return;
+    }
+    const map = {
+      ...(isRecord(this.modelDraft.thinkingLevelMap) ? this.modelDraft.thinkingLevelMap : {}),
+      [level]: value,
+    };
+    this.setModelFields({ thinkingLevelMap: map });
+  }
+
+  private setCostField(key: "input" | "output" | "cacheRead" | "cacheWrite", value: string) {
+    if (!this.modelDraft) {
+      return;
+    }
+    const cost = { ...(isRecord(this.modelDraft.cost) ? this.modelDraft.cost : {}), [key]: value };
+    this.setModelFields({ cost });
+  }
+
+  private renderModels() {
+    // The list shows only authored entries; catalog rows stay behind the form.
+    const configRows = providerModels(this.config, this.providerId);
+    return providerModelsList({
+      actions: {
+        onAdd: () => this.editModel(),
+        onDelete: (id) => void this.deleteModel(id),
+        onEdit: (row) => this.editModel(row),
+        onProbe: this.onProbe,
+      },
+      state: {
+        disabled: this.disabled,
+        loading: this.loading,
+        probeBlocked: this.dirty,
+        providerId: this.providerId,
+        probeResults: this.probeResults,
+        probeBusy: this.probeBusy,
+        probeErrors: this.probeErrors,
+        rows: configRows,
+      },
+    });
+  }
+
+  /** Provider switching keeps edits until the operator explicitly discards them. */
+  async confirmLeave(): Promise<boolean> {
+    if (this.busy || this.discardConfirmation) {
+      return false;
+    }
+    const modelDirty =
+      this.modelDraft !== null &&
+      JSON.stringify(this.modelDraft) !== JSON.stringify(this.initialModelDraft);
+    if (!this.dirty && !modelDirty && !(this.intent?.view === "create" && this.providerId)) {
+      return true;
+    }
+    const controller = new AbortController();
+    this.discardConfirmation = controller;
+    try {
+      return await showConfirmDialog({
+        title: t("modelProviders.manager.unsavedTitle"),
+        message: t("modelProviders.manager.unsavedDescription"),
+        confirmLabel: t("modelProviders.manager.discard"),
+        signal: controller.signal,
+      });
+    } finally {
+      this.discardConfirmation = null;
+    }
+  }
+
+  private renderMessages() {
+    return html`${this.error ? html`<div class="callout danger" role="alert">${this.error}</div>` : nothing}
+    ${this.notice ? html`<div class="callout" role="status">${this.notice}</div>` : nothing}`;
+  }
+
+  private renderHeaderMenu() {
+    const card = this.card;
+    // Deletion applies to authored entries only; the page owns that decision
+    // and the confirm/logout flow, so the menu just forwards the current card.
+    if (!card || this.canDeleteProvider?.(card) !== true) {
+      return nothing;
+    }
+    const actionsLabel = t("modelProviders.manager.providerActions", { name: card.displayName });
+    return html`
+      <wa-dropdown
+        placement="bottom-end"
+        @wa-select=${(event: CustomEvent<{ item: { value?: string } }>) => {
+          if (event.detail.item.value === "delete") {
+            this.onDeleteProvider?.(card);
+          }
+        }}
+      >
+        <button
+          slot="trigger"
+          type="button"
+          class="btn btn--sm btn--icon provider-manager__menu-trigger"
+          aria-label=${actionsLabel}
+          title=${actionsLabel}
+          ?disabled=${this.disabled}
+        >
+          ${icons.moreHorizontal}
+        </button>
+        <wa-dropdown-item
+          value="delete"
+          variant="danger"
+          data-models-delete-provider=${card.id}
+          ?disabled=${this.disabled}
+        >
+          ${t("modelProviders.delete.action")}
+        </wa-dropdown-item>
+      </wa-dropdown>
+    `;
+  }
+
+  override render() {
+    if (!this.intent) {
+      return nothing;
+    }
+    const creating = this.intent.view === "create" && !this.providerCreated;
+    const title = creating
+      ? t("modelProviders.manager.customProvider")
+      : (this.card?.displayName ?? this.providerId);
+    const draftModelId = typeof this.modelDraft?.id === "string" ? this.modelDraft.id : null;
+    const modelIds = providerModels(this.config, this.providerId).flatMap((model) => {
+      if (typeof model.id !== "string") {
+        return [];
+      }
+      return [model.id === this.originalModelId && draftModelId !== null ? draftModelId : model.id];
+    });
+    if (this.modelDraft && this.originalModelId === undefined && draftModelId !== null) {
+      modelIds.push(draftModelId);
+    }
+    return html`${
+        this.modelDraft
+          ? providerModelDialog({
+              providerLabel: this.card?.displayName ?? this.providerId,
+              body: html`${this.renderModelForm()}${this.renderMessages()}`,
+              busy: this.busy,
+              disabled: this.disabled,
+              onSave: () => void this.saveModel(),
+              onCancel: () => {
+                if (!this.busy) {
+                  void this.backToModels();
+                }
+              },
+              onReset: () => {
+                this.modelDraft = structuredClone(this.initialModelDraft);
+                this.error = this.notice = null;
+              },
+            })
+          : nothing
+      }
+      <form
+        class="provider-manager provider-manager--inline"
+        ?inert=${Boolean(this.modelDraft)}
+        @submit=${(event: Event) => {
+          event.preventDefault();
+          void this.saveConnection();
+        }}
+      >
+        <header class="provider-manager__header">
+          <div class="provider-manager__identity">
+            ${renderProviderBrandIcon(this.providerId, {
+              className: "model-providers__icon",
+              modelIds,
+            })}
+            <div>
+              <h2>${title}</h2>
+              <span class="muted">${this.providerId}</span>
+            </div>
+          </div>
+          ${this.renderHeaderMenu()}
+        </header>
+        <div class="provider-manager__body">
+          ${this.blocked ? html`<p class="callout warning">${this.blocked}</p>` : nothing}
+          <div class="provider-manager__connection">
+            ${providerConnectionFields({
+              actions: {
+                onConnect: this.onConnect,
+                onProviderIdInput: (value) => {
+                  this.providerId = value;
+                  this.scheduleConnectionAutoSave();
+                },
+                onKeyInput: (value) => {
+                  this.credential.value = value;
+                  this.requestUpdate();
+                  this.scheduleConnectionAutoSave();
+                },
+                onToggleRevealKey: () => {
+                  this.credential.revealed = !this.credential.revealed;
+                  this.requestUpdate();
+                },
+                onFieldInput: (key, value) => this.setDraftField(key, value),
+              },
+              state: {
+                busy: this.busy,
+                card: this.card,
+                creating,
+                dirty: this.dirty,
+                disabled: this.disabled,
+                draft: this.draft,
+                keyDraft: this.credential.value,
+                keyLoading: this.credential.loading,
+                keyError: this.credential.error,
+                keySource: this.credential.source,
+                providerCreated: this.providerCreated,
+                providerId: this.providerId,
+                revealKey: this.credential.revealed,
+              },
+            })}
+          </div>
+          <footer class="provider-manager__footer">
+            <span class="muted" role="status"
+              >${
+                this.busy
+                  ? t("modelProviders.saving")
+                  : this.dirty
+                    ? t("modelProviders.manager.unsaved")
+                    : nothing
+              }</span
+            >
+          </footer>
+          ${!this.modelDraft ? this.renderMessages() : nothing}
+          ${
+            !creating
+              ? html`<section class="provider-manager__models-section">
+                  ${this.renderModels()}
+                </section>`
+              : nothing
+          }
+        </div>
+      </form>`;
+  }
+
+  private async write(
+    build: (config: Record<string, unknown>) => ProviderModelsPatch | { error: string },
+  ) {
+    if (this.disabled) {
+      return false;
+    }
+    const client = this.context.gateway.snapshot.client;
+    const generation = this.generation;
+    const agentId = this.agentId;
+    const current = () =>
+      this.isConnected &&
+      this.generation === generation &&
+      this.context.gateway.snapshot.client === client &&
+      this.agentId === agentId;
+    this.busy = true;
+    this.error = this.notice = null;
+    try {
+      const saved = await this.context.runtimeConfig.patchFromSnapshot((config) => {
+        const result = build(config);
+        return "error" in result
+          ? result
+          : {
+              options: {
+                ...result,
+                note: t("modelProviders.manager.saved"),
+                canDispatch: () => current() && !this.blocked,
+              },
+            };
+      });
+      if (!current()) {
+        return false;
+      }
+      if (!saved) {
+        this.error =
+          this.context.runtimeConfig.state.lastError ?? t("modelProviders.requestFailed");
+        return false;
+      }
+      this.onRefresh();
+      return true;
+    } catch (error) {
+      if (current()) {
+        this.error = formatUiError(error);
+      }
+      return false;
+    } finally {
+      if (current()) {
+        this.busy = false;
+      }
+    }
+  }
+
+  private async saveConnection(auto = false) {
+    this.clearConnectionAutoSave();
+    if (
+      this.disabled ||
+      !this.querySelector<HTMLFormElement>(".provider-manager--inline")?.checkValidity()
+    ) {
+      return;
+    }
+    // A retry after a failed credential save must start clean: the stale error
+    // would otherwise keep the dialog open and visible after a successful retry.
+    this.error = this.notice = null;
+    const creating = this.intent?.view === "create";
+    const id = this.providerId.trim();
+    if (
+      !id ||
+      ["__proto__", "constructor", "prototype"].includes(id) ||
+      (creating && !this.providerCreated && configuredProvider(this.config, id))
+    ) {
+      // Auto-saves stay silent on incomplete input; an explicit submit reports it.
+      if (!auto) {
+        this.error = t("modelProviders.manager.duplicateProvider");
+      }
+      return;
+    }
+    if (creating && !this.draft.baseUrl) {
+      if (!auto) {
+        this.error = t("modelProviders.manager.urlRequired");
+      }
+      return;
+    }
+    const { raw, replacePaths } = providerConnectionPatch(
+      this.original,
+      this.draft,
+      this.touched,
+      id,
+    );
+    if (creating && !this.providerCreated) {
+      raw.models = {
+        providers: {
+          [id]: { ...this.draft, api: this.draft.api ?? "openai-completions", models: [] },
+        },
+      };
+    }
+    const generation = this.generation;
+    if ((creating && !this.providerCreated) || this.touched.size) {
+      if (
+        !(await this.write((config) => {
+          const latest = configuredProvider(config, id);
+          if (
+            (creating && !this.providerCreated && latest) ||
+            [...this.touched].some(
+              (key) => JSON.stringify(latest?.[key]) !== JSON.stringify(this.original[key]),
+            )
+          ) {
+            return { error: t("modelProviders.manager.conflict") };
+          }
+          return { raw, replacePaths };
+        }))
+      ) {
+        return;
+      }
+      if (generation !== this.generation) {
+        return;
+      }
+      this.providerCreated ||= creating;
+      // The merged view continues in place; adopt the trimmed key the save used
+      // so the in-dialog model list targets the created provider.
+      this.providerId = id;
+      this.original = structuredClone(
+        configuredProvider(this.config, this.providerId) ?? this.draft,
+      );
+      this.draft = structuredClone(this.original);
+      this.touched.clear();
+    }
+    if (this.credential.dirty) {
+      this.busy = true;
+      try {
+        const result = await this.onCredential(id, this.credential.value.trim() || null);
+        if (generation !== this.generation) {
+          return;
+        }
+        if (!result?.ok) {
+          this.error = [t("modelProviders.manager.credentialsFailed"), result?.error]
+            .filter(Boolean)
+            .join(" ");
+          return;
+        }
+        this.credential.saved(this.credential.value);
+        this.notice = result.warning;
+      } catch (error) {
+        if (generation === this.generation) {
+          this.error = formatUiError(error);
+        }
+      } finally {
+        if (generation === this.generation) {
+          this.busy = false;
+        }
+      }
+    }
+    if (creating && generation === this.generation && !this.error) {
+      this.onCreated(this.providerId);
+      // Creation continues in place: the merged view lists models to add next.
+      if (!this.loading) {
+        void this.load();
+      }
+    }
+  }
+}
+
+if (!customElements.get("openclaw-provider-manager")) {
+  customElements.define("openclaw-provider-manager", ProviderManager);
+}
