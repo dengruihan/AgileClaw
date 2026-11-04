@@ -594,5 +594,202 @@ describe.runIf(process.env.OPENCLAW_BROWSER_VAULT_E2E === "1")(
         await context.close();
       }
     }, 30_000);
+    it("does not reacquire the password field in a delayed cross-origin document", async () => {
+      const port = await getFreePort();
+      const cdpUrl = `http://127.0.0.1:${port}`;
+      const context = await getPlaywrightCore().chromium.launchPersistentContext(
+        path.join(tempDirs.make("openclaw-vault-reacquire-"), "profile"),
+        {
+          headless: true,
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+          args: [`--remote-debugging-port=${port}`],
+        },
+      );
+      try {
+        const page = context.pages()[0] ?? (await context.newPage());
+        await page.route("http://127.0.0.1:11111/**", async (route) => {
+          await route.fulfill({
+            contentType: "text/html",
+            body: `<!doctype html><title>Origin A</title>
+              <input id="username" autocomplete="username"
+                oninput="setTimeout(() => { location.href='http://127.0.0.1:22222/b' }, 80)">
+              <input id="password" type="password" autocomplete="current-password" disabled>`,
+          });
+        });
+        await page.route("http://127.0.0.1:22222/**", async (route) => {
+          // A slow commit widens the window a locator would re-resolve in.
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 50);
+          });
+          await route.fulfill({
+            contentType: "text/html",
+            body: `<!doctype html><title>Origin B</title>
+              <input id="username" autocomplete="username">
+              <input id="password" type="password" autocomplete="current-password">`,
+          });
+        });
+        await page.goto("http://127.0.0.1:11111/a");
+        const session = await context.newCDPSession(page);
+        const { targetInfo } = await session.send("Target.getTargetInfo");
+        await session.detach();
+        const targetId = targetInfo.targetId;
+
+        const state: BrowserServerState = {
+          port: 0,
+          resolved: resolveBrowserConfig({
+            defaultProfile: "vault",
+            evaluateEnabled: true,
+            ssrfPolicy: { dangerouslyAllowPrivateNetwork: true },
+            profiles: { vault: { cdpUrl, color: "#123456", attachOnly: true } },
+          }),
+          profiles: new Map(),
+        };
+        const routes = createBrowserRouteApp();
+        const routeContext = createBrowserRouteContext({ getState: () => state });
+        registerBrowserVaultRoutes(routes.app, routeContext);
+        registerBrowserAgentSnapshotRoutes(routes.app, routeContext);
+        const observe = expectDefined(routes.postHandlers.get("/vault/observe"));
+        const fill = expectDefined(routes.postHandlers.get("/vault/fill"));
+
+        const observeResponse = createBrowserRouteResponse();
+        await observe(
+          { params: {}, query: { profile: "vault" }, body: { targetId } },
+          observeResponse.res,
+        );
+        const observation = observeResponse.body as VaultObservation;
+        expect(observation.ok).toBe(true);
+        expect(observation.origin).toEqual({ scheme: "http", host: "127.0.0.1", port: 11111 });
+
+        const fillResponse = createBrowserRouteResponse();
+        await fill(
+          {
+            params: {},
+            query: { profile: "vault" },
+            body: {
+              targetId,
+              username: "person@example.com",
+              password: CANARY,
+              expected: expectedFrom(observation),
+            },
+          },
+          fillResponse.res,
+        );
+        expect(fillResponse.statusCode, JSON.stringify(fillResponse.body)).toBe(200);
+        // The approved element is disabled, so the fill fails closed instead of
+        // waiting and re-resolving the same index in the replacement document.
+        expect(fillResponse.body).toMatchObject({ ok: false });
+        expect(["document_changed", "unavailable"]).toContain(
+          (fillResponse.body as { status?: string }).status,
+        );
+        expect(JSON.stringify(fillResponse.body)).not.toContain(CANARY);
+        await page
+          .waitForURL("http://127.0.0.1:22222/b", { timeout: 5_000 })
+          .catch(() => undefined);
+        expect(page.url()).toBe("http://127.0.0.1:22222/b");
+        expect(await page.locator("#password").inputValue()).toBe("");
+        expect(hasActiveVaultFill(targetId)).toBe(true);
+        expect(scrubVaultFillText(targetId, CANARY)).toBe("***");
+        clearVaultFillSession(targetId);
+      } finally {
+        await closePlaywrightBrowserConnection({ cdpUrl });
+        await context.close();
+      }
+    }, 30_000);
+    it("keeps a delayed post-insertion navigation out of the replacement origin", async () => {
+      const port = await getFreePort();
+      const cdpUrl = `http://127.0.0.1:${port}`;
+      const context = await getPlaywrightCore().chromium.launchPersistentContext(
+        path.join(tempDirs.make("openclaw-vault-delayed-nav-"), "profile"),
+        {
+          headless: true,
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+          args: [`--remote-debugging-port=${port}`],
+        },
+      );
+      try {
+        const page = context.pages()[0] ?? (await context.newPage());
+        await page.route("http://127.0.0.1:11111/**", async (route) => {
+          await route.fulfill({
+            contentType: "text/html",
+            body: `<!doctype html><title>Origin A</title>
+              <input id="password" type="password" autocomplete="current-password"
+                oninput="location.href='http://127.0.0.1:22222/b'">`,
+          });
+        });
+        await page.route("http://127.0.0.1:22222/**", async (route) => {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 100);
+          });
+          await route.fulfill({
+            contentType: "text/html",
+            body: `<!doctype html><title>Origin B</title>
+              <input id="password" type="password" autocomplete="current-password">`,
+          });
+        });
+        await page.goto("http://127.0.0.1:11111/a");
+        const session = await context.newCDPSession(page);
+        const { targetInfo } = await session.send("Target.getTargetInfo");
+        await session.detach();
+        const targetId = targetInfo.targetId;
+
+        const state: BrowserServerState = {
+          port: 0,
+          resolved: resolveBrowserConfig({
+            defaultProfile: "vault",
+            evaluateEnabled: true,
+            ssrfPolicy: { dangerouslyAllowPrivateNetwork: true },
+            profiles: { vault: { cdpUrl, color: "#123456", attachOnly: true } },
+          }),
+          profiles: new Map(),
+        };
+        const routes = createBrowserRouteApp();
+        const routeContext = createBrowserRouteContext({ getState: () => state });
+        registerBrowserVaultRoutes(routes.app, routeContext);
+        registerBrowserAgentSnapshotRoutes(routes.app, routeContext);
+        const observe = expectDefined(routes.postHandlers.get("/vault/observe"));
+        const fill = expectDefined(routes.postHandlers.get("/vault/fill"));
+
+        const observeResponse = createBrowserRouteResponse();
+        await observe(
+          { params: {}, query: { profile: "vault" }, body: { targetId } },
+          observeResponse.res,
+        );
+        const observation = observeResponse.body as VaultObservation;
+        expect(observation.ok).toBe(true);
+
+        const fillResponse = createBrowserRouteResponse();
+        await fill(
+          {
+            params: {},
+            query: { profile: "vault" },
+            body: {
+              targetId,
+              password: CANARY,
+              expected: expectedFrom(observation),
+            },
+          },
+          fillResponse.res,
+        );
+        expect(fillResponse.statusCode, JSON.stringify(fillResponse.body)).toBe(200);
+        expect(fillResponse.body).toMatchObject({
+          ok: false,
+          status: "document_changed",
+        });
+        expect(JSON.stringify(fillResponse.body)).not.toContain(CANARY);
+        await page
+          .waitForURL("http://127.0.0.1:22222/b", { timeout: 5_000 })
+          .catch(() => undefined);
+        expect(page.url()).toBe("http://127.0.0.1:22222/b");
+        // The insertion was bound to the approved document; the navigation
+        // replaced it and the replacement origin never received the value.
+        expect(await page.locator("#password").inputValue()).toBe("");
+        expect(hasActiveVaultFill(targetId)).toBe(true);
+        expect(scrubVaultFillText(targetId, CANARY)).toBe("***");
+        clearVaultFillSession(targetId);
+      } finally {
+        await closePlaywrightBrowserConnection({ cdpUrl });
+        await context.close();
+      }
+    }, 30_000);
   },
 );

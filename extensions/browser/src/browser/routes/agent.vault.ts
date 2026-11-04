@@ -12,6 +12,11 @@ import {
 } from "./agent.shared.js";
 import type { BrowserRouteRegistrar } from "./types.js";
 import { jsonError, toStringOrEmpty } from "./utils.js";
+import {
+  fillInputByBackendNode,
+  isNavigationRaceError,
+  resolveInputBackendNodeId,
+} from "./vault-fill-cdp.js";
 
 type ObservedOrigin = { scheme: "https" | "http"; host: string; port: number };
 
@@ -222,11 +227,6 @@ function isLocalCdpUrl(cdpUrl: string): boolean {
   } catch {
     return false;
   }
-}
-
-function isNavigationRaceError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : "";
-  return /execution context was destroyed|target closed|navigat/iu.test(message);
 }
 
 function readExpectedOrigin(value: unknown): ObservedOrigin | undefined {
@@ -513,32 +513,49 @@ export function registerBrowserVaultRoutes(
           res.json(beforePassword);
           return;
         }
+        // Insert into the exact node of the approved document. A locator
+        // re-resolves by index against whatever document is current, so a
+        // delayed A->B navigation could put the password into origin B.
         const passwordPage = await pageForFill();
-        const passwordField = passwordPage.locator("input").nth(observation.fields.passwordIndex);
         let navigatedDuringFill = false;
         const onFrameNavigated = () => {
           navigatedDuringFill = true;
         };
         passwordPage.on("framenavigated", onFrameNavigated);
         try {
-          await passwordField.fill(password, { timeout: FILL_ACTION_TIMEOUT_MS });
+          const passwordBackendNodeId = await resolveInputBackendNodeId(
+            passwordPage,
+            observation.fields.passwordIndex,
+            observation.documentId,
+          );
+          if (passwordBackendNodeId === undefined) {
+            res.json({
+              ok: false,
+              status: "document_changed",
+              reasonCode: "page_changed_after_approval",
+            });
+            return;
+          }
+          const fillResult = await fillInputByBackendNode(
+            passwordPage,
+            passwordBackendNodeId,
+            password,
+          );
+          if (fillResult === "stale") {
+            res.json({
+              ok: false,
+              status: "document_changed",
+              reasonCode: "page_changed_after_approval",
+            });
+            return;
+          }
+          if (fillResult === "error") {
+            res.json({ ok: false, status: "unavailable", reasonCode: "fill_failed" });
+            return;
+          }
           await passwordPage
             .waitForLoadState("domcontentloaded", { timeout: 2_000 })
             .catch(() => undefined);
-        } catch (error) {
-          // Best-effort cleanup; keep the scrub session armed until navigation,
-          // close, or the approved submit path clears the document.
-          await passwordField.fill("", { timeout: 1_000 }).catch(() => undefined);
-          res.json(
-            isNavigationRaceError(error)
-              ? {
-                  ok: false,
-                  status: "document_changed",
-                  reasonCode: "page_changed_after_approval",
-                }
-              : { ok: false, status: "unavailable", reasonCode: "fill_failed" },
-          );
-          return;
         } finally {
           passwordPage.off("framenavigated", onFrameNavigated);
         }

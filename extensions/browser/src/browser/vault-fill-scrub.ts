@@ -203,6 +203,95 @@ export function scrubVaultFillValueAll<T>(value: T): T {
   return scrubValueWith(value, scrubVaultFillTextAll);
 }
 
+const PRESERVED_ERROR_KEYS = new Set(["name", "status", "code"]);
+
+/**
+ * Scrub a thrown error in place so it keeps its class, name, status, and code
+ * while `message`, `stack`, `cause`, and nested payloads (for example
+ * `details`) can no longer return an active fill value. Route failures are
+ * thrown before any target is proven, so their text is treated like an
+ * aggregate result.
+ */
+export function scrubVaultFillError<T>(error: T): T {
+  return scrubErrorWith(error, scrubVaultFillTextAll);
+}
+
+/** Scrub a thrown error with one tab's active fill secrets. */
+export function scrubVaultFillErrorForTarget<T>(targetId: string | undefined, error: T): T {
+  return scrubErrorWith(error, (text) => scrubVaultFillText(targetId, text));
+}
+
+function scrubErrorWith<T>(error: T, scrubText: (text: string) => string): T {
+  if (typeof error === "string") {
+    const scrubbed = scrubText(error);
+    return (scrubbed === error ? error : new Error(scrubbed)) as T;
+  }
+  if (!error || typeof error !== "object") {
+    return error;
+  }
+  const seen = new WeakSet<object>();
+  const write = (target: object, key: string, value: unknown) => {
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(target, key);
+      Object.defineProperty(target, key, {
+        value,
+        writable: true,
+        enumerable: descriptor?.enumerable ?? true,
+        configurable: true,
+      });
+    } catch {
+      // Frozen or accessor-only fields keep their original text.
+    }
+  };
+  const visit = (candidate: object, depth: number) => {
+    if (depth > 8 || seen.has(candidate)) {
+      return;
+    }
+    seen.add(candidate);
+    const record = candidate as Record<string, unknown>;
+    // `message`, `stack`, and `cause` are own but non-enumerable on Error.
+    const keys = new Set<string>(["message", "stack", "cause", ...Object.keys(record)]);
+    for (const key of keys) {
+      if (PRESERVED_ERROR_KEYS.has(key)) {
+        continue;
+      }
+      let value: unknown;
+      try {
+        value = record[key];
+      } catch {
+        continue;
+      }
+      if (typeof value === "string") {
+        const scrubbed = scrubText(value);
+        if (scrubbed !== value) {
+          write(candidate, key, scrubbed);
+        }
+        continue;
+      }
+      if (!value || typeof value !== "object") {
+        continue;
+      }
+      if (Array.isArray(value)) {
+        for (let index = 0; index < value.length; index += 1) {
+          const entry = value[index];
+          if (typeof entry === "string") {
+            const scrubbed = scrubText(entry);
+            if (scrubbed !== entry) {
+              value[index] = scrubbed;
+            }
+          } else if (entry && typeof entry === "object") {
+            visit(entry, depth + 1);
+          }
+        }
+        continue;
+      }
+      visit(value, depth + 1);
+    }
+  };
+  visit(error, 0);
+  return error;
+}
+
 function scrubValueWith<T>(value: T, scrubText: (text: string) => string): T {
   const seen = new WeakSet<object>();
   const scrub = (candidate: unknown): unknown => {

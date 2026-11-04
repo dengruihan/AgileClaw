@@ -37,7 +37,12 @@ import {
 } from "./browser-tool.runtime.js";
 import type { BrowserScreenshotOptions } from "./browser-tool.screenshot.js";
 import { withBrowserRequestScope } from "./browser/request-scope.js";
-import { scrubVaultFillValue, scrubVaultFillValueAll } from "./browser/vault-fill-scrub.js";
+import {
+  scrubVaultFillError,
+  scrubVaultFillErrorForTarget,
+  scrubVaultFillValue,
+  scrubVaultFillValueAll,
+} from "./browser/vault-fill-scrub.js";
 
 type BrowserTabIdentity = { targetId: string; profile: string } & (
   | { target: "host" }
@@ -339,6 +344,11 @@ export function createBrowserTool(
               },
             },
             onTabActivity: () => {},
+          }).catch((error: unknown) => {
+            const dashboardTargetId = readStringParam(params, "targetId");
+            throw action === "tabs" || !dashboardTargetId
+              ? scrubVaultFillError(error)
+              : scrubVaultFillErrorForTarget(dashboardTargetId, error);
           });
           return {
             ...result,
@@ -527,28 +537,40 @@ export function createBrowserTool(
           },
         });
       const dashboardTarget = browserDashboard;
-      const rawResult = dashboardTarget
-        ? await withBrowserRequestScope(
-            {
-              managedOnly: true,
-              assertCurrent: async (admittedProfile) =>
-                (await import("./browser-dashboard.js")).assertBrowserDashboardTargetCurrent(
-                  dashboardTarget,
-                  opts?.agentId,
-                  { signal },
-                  admittedProfile,
-                ),
-            },
-            dispatchTabAction,
-          )
-        : await dispatchTabAction();
-      // The broker-owned full mask runs regardless of logging.redact so a page
-      // read-back cannot return a filled value to the model. Aggregate tab
-      // results and results without a proven target use every active secret.
-      const scrubTargetId =
+      // A thrown failure can carry page text (for example a loopback error
+      // body) before the result scrub runs, so resolve the addressable target
+      // first and scrub the error at the same boundary.
+      const resolveScrubTargetId = () =>
         tabIdentity?.targetId ??
         readStringParam(params, "targetId") ??
         (binding ? binding.targetId : undefined);
+      let rawResult: AgentToolResult<unknown>;
+      try {
+        rawResult = dashboardTarget
+          ? await withBrowserRequestScope(
+              {
+                managedOnly: true,
+                assertCurrent: async (admittedProfile) =>
+                  (await import("./browser-dashboard.js")).assertBrowserDashboardTargetCurrent(
+                    dashboardTarget,
+                    opts?.agentId,
+                    { signal },
+                    admittedProfile,
+                  ),
+              },
+              dispatchTabAction,
+            )
+          : await dispatchTabAction();
+      } catch (error) {
+        const errorTargetId = resolveScrubTargetId();
+        throw action === "tabs" || !errorTargetId
+          ? scrubVaultFillError(error)
+          : scrubVaultFillErrorForTarget(errorTargetId, error);
+      }
+      // The broker-owned full mask runs regardless of logging.redact so a page
+      // read-back cannot return a filled value to the model. Aggregate tab
+      // results and results without a proven target use every active secret.
+      const scrubTargetId = resolveScrubTargetId();
       const result =
         action === "tabs" || !scrubTargetId
           ? scrubVaultFillValueAll(rawResult)
