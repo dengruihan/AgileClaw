@@ -365,6 +365,36 @@ describe("session viewer presence store", () => {
     await flushSync();
   });
 
+  it("declares unfocused when document focus detection is unavailable", async () => {
+    const original = Object.getOwnPropertyDescriptor(document, "hasFocus");
+    Object.defineProperty(document, "hasFocus", { configurable: true, value: undefined });
+    try {
+      const harness = createGatewayHarness();
+      const store = sessionViewerPresenceForGateway(harness.gateway);
+      const owner = {};
+      store.watch(owner, ["agent:main:visible"]);
+      await flushSync();
+
+      expect(harness.request).toHaveBeenLastCalledWith(
+        SESSION_VIEWERS_SET_METHOD,
+        {
+          sessionKeys: ["agent:main:visible"],
+          focused: false,
+        },
+        expect.anything(),
+      );
+
+      store.unwatch(owner);
+      await flushSync();
+    } finally {
+      if (original) {
+        Object.defineProperty(document, "hasFocus", original);
+      } else {
+        Reflect.deleteProperty(document, "hasFocus");
+      }
+    }
+  });
+
   it("redeclares aliases against the new client hello", async () => {
     const harness = createGatewayHarness();
     const store = sessionViewerPresenceForGateway(harness.gateway);

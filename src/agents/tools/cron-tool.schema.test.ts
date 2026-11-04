@@ -62,6 +62,32 @@ describe("cron model schema regressions", () => {
     }
   });
 
+  it("advertises attributable completion notifications without replacing delivery mode", () => {
+    const notifyOnComplete = propertyAt(schema, "job.delivery.notifyOnComplete");
+    expect(notifyOnComplete).toMatchObject({ type: "boolean" });
+    expect(notifyOnComplete?.description).toMatch(/default/i);
+    expect(notifyOnComplete?.description).toMatch(/scheduled agent runs/i);
+    expect(notifyOnComplete?.description).toMatch(/failure alerts/i);
+    expect(notifyOnComplete?.description).toContain("delivery.mode");
+
+    for (const action of ["add", "update"]) {
+      expect(
+        Value.Check(schema, {
+          action,
+          ...(action === "update" ? { jobId: "notify-job" } : {}),
+          job: { delivery: { notifyOnComplete: false } },
+        }),
+      ).toBe(true);
+      expect(
+        Value.Check(schema, {
+          action,
+          ...(action === "update" ? { jobId: "notify-job" } : {}),
+          job: { delivery: { notifyOnComplete: "false" } },
+        }),
+      ).toBe(false);
+    }
+  });
+
   it("keeps declarationKey portable across model schema converters", () => {
     const declarationKey = propertyAt(schema, "job.declarationKey");
     expect(declarationKey).toMatchObject({ type: "string", minLength: 1, maxLength: 200 });

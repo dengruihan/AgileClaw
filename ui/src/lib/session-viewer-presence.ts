@@ -23,10 +23,18 @@ function createStore(gateway: ApplicationGateway): SessionViewerPresenceStore {
   let acknowledgedGeneration = 0;
   let requestGeneration = 0;
   let requestController: AbortController | null = null;
-  const readDocumentFocus = () =>
-    typeof document === "undefined" || typeof document.hasFocus !== "function"
-      ? true
-      : document.hasFocus();
+  const readDocumentFocus = () => {
+    if (typeof document === "undefined" || typeof document.hasFocus !== "function") {
+      // Unknown focus must not suppress completion pushes; a later focus event
+      // can still establish the foreground state.
+      return false;
+    }
+    try {
+      return document.hasFocus();
+    } catch {
+      return false;
+    }
+  };
   // Event order can make hasFocus lag a blur; the window's own focus state wins
   // until a visibility or focus change re-reads the document.
   let windowFocused = readDocumentFocus();
