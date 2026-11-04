@@ -4,7 +4,7 @@ import type { Locator, Page } from "playwright";
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { expectHistoryBoundaryState } from "./chat-history-boundary.test-support.ts";
 import {
   expectTranscriptLayoutCommitted,
@@ -13,11 +13,11 @@ import {
 } from "./claude-sessions.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 import {
+  type VirtualRowPaintResult,
   captureTopVisibleVirtualRow,
   expectPaintedVirtualRowAnchor,
   startVirtualRowPaintProbe,
   stopVirtualRowPaintProbe,
-  type VirtualRowPaintResult,
   waitForPaintedVirtualRowAnchor,
 } from "./virtual-row-anchor.test-support.ts";
 
@@ -85,7 +85,7 @@ async function expandCodingSection(page: Page) {
 }
 
 async function navigateToClaudeCatalog(page: Page) {
-  await page.goto(`${suite.server.baseUrl}chat`);
+  await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
   await expandCodingSection(page);
 }
 
@@ -116,7 +116,7 @@ suite.define(() => {
           ],
           methodResponses: { "sessions.catalog.list": hostGroupedNativeCatalogs() },
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await expandCodingSection(page);
 
         const header = page.locator(
@@ -223,7 +223,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await expandCodingSection(page);
       for (const catalogId of ["claude", "codex"]) {
         const catalogLabel = catalogId === "claude" ? "Claude Code" : "Codex";
@@ -527,7 +527,7 @@ suite.define(() => {
         },
       },
     });
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await expandCodingSection(page);
     const catalog = page.locator('[data-session-section="catalog:claude"]');
     await catalog.getByRole("link", { name: "Retained remote session", exact: true }).waitFor();
@@ -766,7 +766,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const pane = page.locator('openclaw-chat-pane[aria-hidden="false"]');
       const thread = pane.locator(".chat-thread");
       await page.getByText("Recent answer", { exact: true }).waitFor();
@@ -912,7 +912,7 @@ suite.define(() => {
       },
     });
 
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await page.getByText(/^recent native message 1100\n/).waitFor();
     const thread = page.locator(".chat-thread");
     await expect

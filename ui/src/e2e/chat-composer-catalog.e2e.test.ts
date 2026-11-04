@@ -4,10 +4,10 @@ import { buildGatewaySessionSnapshot } from "../../../src/gateway/session-event-
 import type { GatewaySessionRow } from "../api/types.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
+  type ControlUiMockGateway,
   controlUiSessionUrl,
   installMockGateway,
   navigateToControlUiSession,
-  type ControlUiMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
 import { revealChatModelOption, selectChatModelOption } from "../test-helpers/select-picker-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
@@ -49,7 +49,7 @@ suite.define(() => {
             },
           },
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await gateway.waitForRequest("chat.startup");
         const textarea = page.locator(".agent-chat__composer-combobox > textarea");
         const send = page.getByRole("button", { name: "Send message", exact: true });
@@ -362,7 +362,7 @@ suite.define(() => {
         },
       });
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("models.list");
 
       const composer = page.locator(".agent-chat__input");
@@ -600,7 +600,7 @@ suite.define(() => {
         },
       });
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
 
       const composer = page.locator(".agent-chat__input");
@@ -771,7 +771,7 @@ suite.define(() => {
     async (width, height, label) => {
       await suite.withPage({ viewport: { width, height } }, async ({ page }) => {
         const gateway = await installMockGateway(page);
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await gateway.waitForRequest("chat.startup");
 
         const textarea = page.locator(".agent-chat__composer-combobox > textarea");

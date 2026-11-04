@@ -1,24 +1,19 @@
 import { html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { isSessionRouteId, pathForRoute } from "../app-route-paths.ts";
+import { pathForRoute } from "../app-route-paths.ts";
 import { loadSettings, patchSettings } from "../app/settings.ts";
 import { t } from "../i18n/index.ts";
 import { registerAgentsHomeEnglish } from "../i18n/locales/en-agents-home.ts";
 import { rosterActivityStore } from "../lib/agents/roster-activity-store.ts";
 import { AgentRosterElement } from "../lib/agents/roster-element.ts";
 import { shouldHandleNavigationClick } from "../lib/navigation-click.ts";
-import { areUiSessionKeysEquivalent } from "../lib/sessions/session-key.ts";
 import { newSessionSearch } from "../pages/new-session/location.ts";
 import type { AppSidebarRenderHost } from "./app-sidebar-render.ts";
 import { renderPersonalSessionEmpty } from "./app-sidebar-session-filter-summary.ts";
 import { renderSessionListFrame, renderSessionSection } from "./app-sidebar-session-list-render.ts";
 import type { SidebarVisibleSections } from "./app-sidebar-session-projection.ts";
-import {
-  renderChildSessionLoadError,
-  renderSessionTree,
-  type SessionListHost,
-} from "./app-sidebar-session-row-render.ts";
+import { renderSessionTree, type SessionListHost } from "./app-sidebar-session-row-render.ts";
 import type { SidebarRecentSession } from "./app-sidebar-session-types.ts";
 import { icons } from "./icons.ts";
 import { renderAgentIdentityAvatar } from "./identity-avatar-view.ts";
@@ -105,19 +100,7 @@ class SidebarAgentRoster extends AgentRosterElement {
               const sections = this.sections.filter((section) =>
                 section.id.startsWith(`agent:${card.id}:`),
               );
-              const mainKey = this.host.selectedAgentMainSessionKey(card.id);
-              const mainRow = this.host.mainSessionRow(card.id);
-              const home = mainRow ? this.host.projectHomeSession(mainRow, card.id) : null;
-              const homeLoadKeys = home?.childLoadParentKeys?.length
-                ? home.childLoadParentKeys
-                : [mainRow?.key ?? mainKey];
-              const active =
-                isSessionRouteId(this.host.activeRouteId) &&
-                areUiSessionKeysEquivalent(this.host.getRouteSessionKey(), mainKey);
-              const summaryRows = [
-                ...(home ? [home] : []),
-                ...(collapsed ? sections.flatMap((section) => section.rows) : []),
-              ];
+              const summaryRows = collapsed ? sections.flatMap((section) => section.rows) : [];
               return html`<section
                 class="sidebar-agent-roster__group"
                 data-agent-group=${card.id}
@@ -136,24 +119,12 @@ class SidebarAgentRoster extends AgentRosterElement {
                       >${collapsed ? icons.chevronRight : icons.chevronDown}</span
                     >
                   </button>
-                  <a
-                    class="sidebar-agent-roster__row"
-                    data-agent-id=${card.id}
-                    href=${card.target.href}
-                    aria-current=${active ? "page" : nothing}
-                    title=${t("agentsHome.openChat")}
-                    @click=${(event: MouseEvent) => {
-                      if (shouldHandleNavigationClick(event)) {
-                        event.preventDefault();
-                        this.host.openMainSession(card.id);
-                      }
-                    }}
-                  >
+                  <span class="sidebar-agent-roster__row" data-agent-id=${card.id}>
                     <span class="sidebar-agent-roster__avatar" aria-hidden="true">
                       ${renderAgentIdentityAvatar(card)}
                     </span>
                     <span class="sidebar-agent-roster__copy"><span>${card.name}</span></span>
-                  </a>
+                  </span>
                   <span class="sidebar-agent-roster__signals">
                     ${
                       summaryRows.length > 0
@@ -197,9 +168,6 @@ class SidebarAgentRoster extends AgentRosterElement {
                         event: CustomEvent<{ item: HTMLElement & { value?: string } }>,
                       ) => {
                         switch (event.detail.item.value) {
-                          case "main":
-                            this.host.openMainSession(card.id);
-                            break;
                           case "sessions":
                             this.context.agentSelection.setScope(card.id);
                             this.host.onNavigate?.("sessions");
@@ -226,9 +194,6 @@ class SidebarAgentRoster extends AgentRosterElement {
                       >
                         ${icons.moreHorizontal}
                       </button>
-                      <wa-dropdown-item value="main"
-                        >${t("agentsHome.openMainChat")}</wa-dropdown-item
-                      >
                       <wa-dropdown-item value="sessions"
                         >${t("agentsHome.allSessions")}</wa-dropdown-item
                       >
@@ -241,8 +206,7 @@ class SidebarAgentRoster extends AgentRosterElement {
                 ${
                   collapsed
                     ? nothing
-                    : html`${homeLoadKeys.map((key) => renderChildSessionLoadError(this.host, key))}
-                      ${sections.map((section) =>
+                    : html`${sections.map((section) =>
                         renderSessionSection({
                           host: this.host,
                           section,

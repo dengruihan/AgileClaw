@@ -240,7 +240,7 @@ describe("AppSidebar agent chip", () => {
     expect(sidebar.querySelector(".gateway-status")).toBeNull();
   });
 
-  it("shows the Home ring without an agent subtitle during an active run", async () => {
+  it("shows the anchor row run state and unread badge like any session", async () => {
     const gateway = createGateway({} as GatewayBrowserClient);
     const harness = createSessionsHarness("main", ["agent:main:main"]);
     const { sidebar } = await mountSidebar(gateway, harness.sessions);
@@ -265,16 +265,12 @@ describe("AppSidebar agent chip", () => {
     });
     await sidebar.updateComplete;
 
-    // Run state wraps the Home icon and suppresses its unread badge.
-    const spinner = sidebar.querySelector(".nav-item--home .session-glyph__ring");
+    const row = () => sidebar.querySelector('[data-session-key="agent:main:main"]');
+    const spinner = row()?.querySelector(".session-glyph__ring");
     expect(spinner).not.toBeNull();
-    expect(sidebar.querySelector(".nav-item--home .nav-item__icon")).not.toBeNull();
-    expect(
-      sidebar.querySelector(".nav-item--home .nav-item__state .session-run-spinner"),
-    ).toBeNull();
-    expect(sidebar.querySelector(".nav-item--home .session-glyph__badge--unread")).toBeNull();
     expect(spinner?.getAttribute("role")).toBe("img");
     expect(spinner?.getAttribute("aria-label")).toBe("Active run");
+    expect(row()?.querySelector(".session-glyph__badge--unread")).toBeNull();
 
     harness.publishList({
       result: {
@@ -287,8 +283,8 @@ describe("AppSidebar agent chip", () => {
       agentId: "main",
     });
     await sidebar.updateComplete;
-    expect(sidebar.querySelector(".nav-item--home .session-glyph__ring")).toBeNull();
-    expect(sidebar.querySelector(".nav-item--home .session-glyph__badge--unread")).not.toBeNull();
+    expect(row()?.querySelector(".session-glyph__ring")).toBeNull();
+    expect(row()?.querySelector(".session-unread-dot")).not.toBeNull();
   });
 
   it("keeps the sessions list flat for the selected agent and flags other-agent unread", async () => {
@@ -327,9 +323,12 @@ describe("AppSidebar agent chip", () => {
     });
     await sidebar.updateComplete;
 
-    // Home stays outside the list; cached rows follow the selected conversation.
+    // The anchor session is an ordinary list row; no separate Home entry remains.
     expect(sidebar.querySelector(".sidebar-agent-section")).toBeNull();
-    expect(sidebar.querySelectorAll(".sidebar-recent-session")).toHaveLength(0);
+    expect(sidebar.querySelectorAll(".sidebar-recent-session")).toHaveLength(1);
+    expect(sidebar.querySelector('[data-session-key="agent:main:main"]')?.textContent).toContain(
+      "Main task",
+    );
 
     // Mid-switch (selected agent != loaded result agent) the list renders the
     // target agent's cached rows instead of flashing empty until refresh.
@@ -342,7 +341,7 @@ describe("AppSidebar agent chip", () => {
     expect(rows[0]?.textContent).toContain("Research task");
   });
 
-  it("routes Home to the main session and marks it active there", async () => {
+  it("opens the anchor row and marks it active like any session", async () => {
     const gateway = createGateway({} as GatewayBrowserClient);
     const setSessionKey = vi.fn();
     (gateway as { setSessionKey: (key: string) => void }).setSessionKey = setSessionKey;
@@ -354,11 +353,12 @@ describe("AppSidebar agent chip", () => {
     sidebar.sessionKey = "agent:main:main";
     await sidebar.updateComplete;
 
-    const home = sidebar.querySelector<HTMLAnchorElement>(".nav-item--home");
-    expect(home?.textContent).toContain("Home");
-    expect(home?.getAttribute("aria-current")).toBe("page");
+    const row = sidebar.querySelector('[data-session-key="agent:main:main"]');
+    const link = row?.querySelector("a");
+    expect(link?.textContent).toContain("Session");
+    expect(link?.getAttribute("aria-current")).toBe("page");
 
-    home?.click();
+    link?.click();
     expect(setSessionKey).toHaveBeenCalledWith("agent:main:main");
     expect(navigate).toHaveBeenCalledWith("chat", { pathname: "/chat/main" });
   });
@@ -387,93 +387,91 @@ describe("AppSidebar agent chip", () => {
     });
     await sidebar.updateComplete;
 
-    // The advertised global main hides behind the Home row instead of
-    // leaking into Threads; ordinary sessions still list, and Home surfaces
-    // the global row's unread state.
+    // No Home entry exists. Global-scope rows keep the existing sidebar rule
+    // that leaves them to the Sessions page and explicit links.
     expect(sidebar.querySelector('[data-session-key="global"]')).toBeNull();
     expect(sidebar.querySelector('[data-session-key="agent:main:side-quest"]')).not.toBeNull();
-    expect(sidebar.querySelector(".nav-item--home .session-glyph__badge--unread")).not.toBeNull();
+    expect(sidebar.querySelector(".nav-item--home")).toBeNull();
   });
 
   it.each([
-    { key: "main", mainKey: "main", pinned: false },
-    { key: "agent:main:main", mainKey: "main", pinned: true },
-    { key: "agent:main:workspace", mainKey: "workspace", pinned: false },
-    { key: "global", mainKey: "main", pinned: true, scope: "global" },
-  ])("shows only Home for $key even with subagents", async ({ key, mainKey, pinned, scope }) => {
-    const gateway = createGateway({} as GatewayBrowserClient);
-    const harness = createSessionsHarness("main", [key]);
-    const { sidebar } = await mountSidebar(gateway, harness.sessions, "panel", {
-      defaultId: "main",
-      mainKey,
-      scope: scope === "global" ? "global" : "per-sender",
-      agents: [{ id: "main", identity: { name: "Molty" } }],
-    });
-    harness.publishList({
-      result: {
-        ts: 2,
-        path: "",
-        count: 2,
-        defaults: { modelProvider: null, model: null, contextTokens: null },
-        sessions: [
-          {
-            key,
-            kind: scope === "global" ? "global" : "direct",
-            label: "[AgileClaw heartbeat poll]",
-            category: "Team",
-            pinned,
-            updatedAt: 5,
-            childSessions: ["agent:main:subagent:thread-a"],
-          },
-          {
-            key: "agent:main:subagent:thread-a",
-            spawnedBy: key,
-            kind: "direct",
-            label: "Spawned thread",
-            updatedAt: 4,
-            hasActiveRun: true,
-            status: "running",
-          },
-        ],
-      },
-    });
-    await sidebar.updateComplete;
+    { key: "main", mainKey: "main", pinned: false, scope: "global" },
+    { key: "agent:main:main", mainKey: "main", pinned: true, scope: "per-sender" },
+    { key: "agent:main:workspace", mainKey: "workspace", pinned: false, scope: "per-sender" },
+  ])(
+    "renders $key once with nested subagent attention",
+    async ({ key, mainKey, pinned, scope }) => {
+      const gateway = createGateway({} as GatewayBrowserClient);
+      const harness = createSessionsHarness("main", [key]);
+      const { sidebar } = await mountSidebar(gateway, harness.sessions, "panel", {
+        defaultId: "main",
+        mainKey,
+        scope: scope === "global" ? "global" : "per-sender",
+        agents: [{ id: "main", identity: { name: "Molty" } }],
+      });
+      harness.publishList({
+        result: {
+          ts: 2,
+          path: "",
+          count: 2,
+          defaults: { modelProvider: null, model: null, contextTokens: null },
+          sessions: [
+            {
+              key,
+              kind: "direct",
+              label: "Main",
+              lastMessagePreview: "Latest direct message",
+              category: "Team",
+              pinned,
+              updatedAt: 5,
+              childSessions: ["agent:main:subagent:thread-a"],
+            },
+            {
+              key: "agent:main:subagent:thread-a",
+              spawnedBy: key,
+              kind: "direct",
+              label: "Spawned thread",
+              updatedAt: 4,
+              hasActiveRun: true,
+              status: "running",
+            },
+          ],
+        },
+      });
+      await sidebar.updateComplete;
 
-    expect(sidebar.querySelectorAll('.nav-item--home[href="/chat/main"]')).toHaveLength(1);
-    expect(sidebar.querySelector(`[data-session-key="${key}"]`)).toBeNull();
-    expect(sidebar.querySelector(`[data-child-session-toggle="${key}"]`)).toBeNull();
-    expect(sidebar.querySelector('[data-session-key="agent:main:subagent:thread-a"]')).toBeNull();
-    expect(
-      sidebar.querySelector('.nav-item--home .session-glyph__ring[aria-label="Subagents working"]'),
-    ).not.toBeNull();
+      const anchor = () => sidebar.querySelector(`[data-session-key="${key}"]`);
+      expect(sidebar.querySelectorAll(`[data-session-key="${key}"]`)).toHaveLength(1);
+      expect(anchor()).not.toBeNull();
+      expect(sidebar.querySelector(`[data-child-session-toggle="${key}"]`)).toBeNull();
+      expect(sidebar.querySelector('[data-session-key="agent:main:subagent:thread-a"]')).toBeNull();
+      expect(
+        anchor()?.querySelector('.session-glyph__ring[aria-label="Subagents working"]'),
+      ).not.toBeNull();
 
-    const result = harness.sessions.state.result!;
-    harness.publishList({
-      result: {
-        ...result,
-        ts: 3,
-        sessions: result.sessions.map((row) =>
-          row.key === "agent:main:subagent:thread-a"
-            ? Object.assign({}, row, {
-                hasActiveRun: false,
-                status: "failed",
-                endedAt: 6,
-                updatedAt: 6,
-                lastRunError: "Review failed",
-              })
-            : row,
-        ),
-      },
-    });
-    await sidebar.updateComplete;
-    expect(sidebar.querySelectorAll(".nav-item--home")).toHaveLength(1);
-    expect(sidebar.querySelector(`[data-session-key="${key}"]`)).toBeNull();
-    expect(sidebar.querySelector(".nav-item--home .session-glyph__ring")).toBeNull();
-    expect(
-      sidebar.querySelector('.nav-item--home [data-session-attention="error"]'),
-    ).not.toBeNull();
-    expect(sidebar.querySelector(".nav-item--home")?.textContent).toContain(
-      "Child session Spawned thread failed: Review failed",
-    );
-  });
+      const result = harness.sessions.state.result!;
+      harness.publishList({
+        result: {
+          ...result,
+          ts: 3,
+          sessions: result.sessions.map((row) =>
+            row.key === "agent:main:subagent:thread-a"
+              ? Object.assign({}, row, {
+                  hasActiveRun: false,
+                  status: "failed",
+                  endedAt: 6,
+                  updatedAt: 6,
+                  lastRunError: "Review failed",
+                })
+              : row,
+          ),
+        },
+      });
+      await sidebar.updateComplete;
+      expect(sidebar.querySelectorAll(`[data-session-key="${key}"]`)).toHaveLength(1);
+      expect(anchor()?.querySelector(".session-glyph__ring")).toBeNull();
+      expect(anchor()?.querySelector('[data-session-attention="error"]')).not.toBeNull();
+      expect(anchor()?.textContent).toContain("Child session Spawned thread failed: Review failed");
+    },
+  );
 });

@@ -3,8 +3,8 @@ import path from "node:path";
 import type { Page } from "playwright";
 import { expect, it } from "vitest";
 import partialConfig from "../../../test/fixtures/config-corpus/provider-partially-unavailable.json" with { type: "json" };
-import type { ModelCatalogResult } from "../api/types.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { type ModelCatalogResult } from "../api/types.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({ name: "Partial provider refresh controls" });
@@ -122,7 +122,7 @@ suite.define(() => {
             },
           },
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const model = page.locator("[data-chat-model-select]");
         await expect.poll(() => model.getAttribute("aria-busy")).toBe("false");
         if (condition === "retained rejection") {

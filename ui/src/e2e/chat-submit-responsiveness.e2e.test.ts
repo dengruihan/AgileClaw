@@ -9,6 +9,7 @@ const captureProof = process.env.OPENCLAW_CAPTURE_UI_PROOF === "1";
 const proofDir = captureProof
   ? createControlUiE2eArtifactDir("chat-submit-responsiveness")
   : undefined;
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 async function withChatPage(run: (page: Page) => Promise<void>): Promise<void> {
   const viewport = { height: 900, width: 1280 };
@@ -29,7 +30,7 @@ suite.define(() => {
   it("keeps a durably admitted removal retired across the browser input yield", async () => {
     await withChatPage(async (page) => {
       const gateway = await installMockGateway(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.fill("discard before delivery");
       await gateway.setOnline(false);
@@ -92,7 +93,7 @@ suite.define(() => {
   it("returns to browser input before starting durable chat delivery", async () => {
     await withChatPage(async (page) => {
       const gateway = await installMockGateway(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.fill("first prompt");

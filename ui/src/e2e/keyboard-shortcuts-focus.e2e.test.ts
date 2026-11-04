@@ -24,7 +24,7 @@ suite.define(() => {
         // Cover both lazy-loaded and already-loaded shortcut/draft surfaces.
         for (let iteration = 0; iteration < 2; iteration += 1) {
           // Keep the opening control connected across navigation, like a sidebar session link.
-          await page.locator(".nav-item--home").click();
+          await page.locator('[data-session-key="agent:main:main"] a').click();
           await page.keyboard.press(`${modifier}+/`);
           const hint = page
             .locator("openclaw-keyboard-shortcuts-dialog .shortcut-row")

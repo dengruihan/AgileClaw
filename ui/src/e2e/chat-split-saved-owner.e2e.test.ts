@@ -176,7 +176,7 @@ suite.define(() => {
         });
         await waitForCommittedChatRoute(page);
         expect(await cells.first().locator("openclaw-chat-pane").count()).toBe(0);
-        await page.locator(".nav-item--home").click();
+        await page.locator('[data-session-key="agent:main:main"] a').click();
         await expect
           .poll(() =>
             cells

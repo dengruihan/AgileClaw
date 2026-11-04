@@ -120,7 +120,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByRole("button", { name: "Filter & sort", exact: true }).click();
       await chooseSidebarMenuOption(page, "Status", "Archived");
       await closeSidebarMenu(page);
@@ -495,7 +495,7 @@ suite.define(() => {
     };
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const activePane = page.locator("openclaw-chat-pane.chat-pane-cache__pane--active");
       const sidebar = page.locator("openclaw-app-sidebar");
       const rowFor = (key: string) =>
@@ -869,6 +869,7 @@ suite.define(() => {
 
       const requestsBeforeDeletion = (await gateway.getRequests("sessions.list", rosterMatch))
         .length;
+      const resolvesBeforeDeletion = (await gateway.getRequests("sessions.resolve")).length;
       await gateway.setSessionsListResponse(sessionsListResponse([mainSession]));
       await gateway.emitGatewayEvent("sessions.changed", {
         agentId: "main",
@@ -877,19 +878,14 @@ suite.define(() => {
         sessionId: `session:${deletedKey}`,
       });
 
-      await expect
-        .poll(() => new URL(page.url()).pathname, { timeout: 15_000 })
-        .toBe(controlUiSessionPath(mainKey));
-      await expect
-        .poll(() =>
-          activePane.evaluate(
-            (element) => (element as HTMLElement & { sessionKey?: string }).sessionKey,
-          ),
-        )
-        .toBe(mainKey);
-      await activePane
-        .locator(".agent-chat__input textarea")
-        .waitFor({ state: "visible", timeout: 10_000 });
+      await expect.poll(() => new URL(page.url()).pathname, { timeout: 15_000 }).toBe("/new");
+      // The retired conversation is replaced by an unsent draft for the same
+      // agent; the internal anchor is never promoted in its place.
+      const draft = page.locator("openclaw-new-session-page .new-session-page__message");
+      await draft.waitFor({ state: "visible", timeout: 10_000 });
+      await expect.poll(() => new URL(page.url()).searchParams.get("agent")).toBe("main");
+      // The missing key is never resolved again once the route leaves it.
+      expect((await gateway.getRequests("sessions.resolve")).length).toBe(resolvesBeforeDeletion);
       await expect
         .poll(async () => (await gateway.getRequests("sessions.list", rosterMatch)).length)
         .toBeGreaterThan(requestsBeforeDeletion);

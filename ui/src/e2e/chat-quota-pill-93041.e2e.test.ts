@@ -7,11 +7,11 @@ import { beforeEach, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
-  navigateToControlUiSession,
+  type MockGatewayControls,
   controlUiE2eWaitTimeoutMs,
   controlUiSessionUrl,
   installMockGateway,
-  type MockGatewayControls,
+  navigateToControlUiSession,
 } from "../test-helpers/control-ui-e2e.ts";
 import {
   createControlUiE2eContextOptions,
@@ -213,7 +213,7 @@ async function openChat(
       deferredMethods,
       methodResponses: { "models.authStatus": authStatus, ...extraMethodResponses },
     });
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await gateway.waitForRequest("models.authStatus");
     return { context, page };
   } catch (error) {

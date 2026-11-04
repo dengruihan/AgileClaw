@@ -4,6 +4,7 @@ import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it("starts the workspace files panel collapsed and toggles it open", async () => {
@@ -73,7 +74,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       expect(await gateway.getRequests("sessions.files.list")).toHaveLength(0);
       expect(await page.locator(".chat-workspace-rail").count()).toBe(0);
 
@@ -228,7 +229,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await openChatSidePanelType(page, "Files");
       await page.locator(".chat-workspace-rail__file-name", { hasText: "file-60.ts" }).waitFor({
         timeout: 10_000,

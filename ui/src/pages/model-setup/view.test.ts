@@ -215,24 +215,6 @@ describe("renderModelSetup", () => {
     expect(old.querySelector(".settings-section")).toBeNull();
   });
 
-  it("renders the selected model and verifies it", () => {
-    const onVerify = vi.fn();
-    const container = mount(
-      props({
-        page: { phase: "ready", result: { ...detected, configuredModel: "openai/gpt-5" } },
-        onVerify,
-      }),
-    );
-    const current = container.querySelector(".model-setup__current");
-    expect(container.querySelector(".settings-section")).toBe(current);
-    expect(text(current!)).toContain("Selected model OpenAI gpt-5 · Signed in locally");
-    expect(text(current!)).toContain("Signed in locally");
-    expect(text(current!)).toContain("Check model");
-    expect(current?.querySelector('[data-provider-icon="codex"]')).not.toBeNull();
-    current?.querySelector<HTMLButtonElement>("button")?.click();
-    expect(onVerify).toHaveBeenCalledOnce();
-  });
-
   it("keeps saved replacement credentials selectable without repeating the current route", () => {
     const onActivateCandidate = vi.fn();
     const savedCandidate: SystemAgentSetupDetectResult["candidates"][number] = {
@@ -283,7 +265,6 @@ describe("renderModelSetup", () => {
     expect(container.querySelector('[data-candidate-kind="existing-model"]')).toBeNull();
     expect(container.querySelector('[data-candidate-kind="provider-auto:openai"]')).toBeNull();
     expect(container.querySelector('[data-candidate-kind="claude-cli"]')).not.toBeNull();
-    expect(text(container)).toContain("Selected model OpenAI gpt-5");
     const retry = container.querySelector<HTMLButtonElement>(
       '[data-candidate-kind="saved-auth:openai:replacement"] button',
     );
@@ -291,60 +272,6 @@ describe("renderModelSetup", () => {
     expect(retry!.disabled).toBe(false);
     retry!.click();
     expect(onActivateCandidate).toHaveBeenCalledExactlyOnceWith(savedCandidate);
-  });
-
-  it("renders connection verification progress", () => {
-    const container = mount(
-      props({
-        page: { phase: "ready", result: { ...detected, configuredModel: "openai/gpt-5" } },
-        verify: { phase: "checking" },
-        actionsDisabled: true,
-      }),
-    );
-    expect(text(container)).toContain("Checking — asking openai/gpt-5 for a quick reply…");
-    expect(
-      container.querySelector<HTMLButtonElement>(".model-setup__current button")?.disabled,
-    ).toBe(true);
-  });
-
-  it("renders successful connection verification with the answering model", () => {
-    const container = mount(
-      props({
-        page: { phase: "ready", result: { ...detected, configuredModel: "openai/gpt-5" } },
-        verify: { phase: "ok", modelRef: "anthropic/claude-opus-4-8", latencyMs: 1234 },
-      }),
-    );
-    expect(text(container)).toContain("Ready · 1234 ms");
-    const current = container.querySelector(".model-setup__current");
-    expect(current?.textContent).toContain("Anthropic");
-    expect(current?.textContent).toContain("claude-opus-4-8");
-    expect(current?.textContent).not.toContain("openai/gpt-5");
-    expect(current?.querySelector('[data-provider-icon="claude"]')).not.toBeNull();
-  });
-
-  it("renders failed connection verification", () => {
-    const container = mount(
-      props({
-        page: { phase: "ready", result: { ...detected, configuredModel: "openai/gpt-5" } },
-        verify: { phase: "failed", status: "billing", error: "No credits" },
-      }),
-    );
-    expect(text(container)).toContain(
-      "Billing problem. No credits Restore provider billing or quota, then retry.",
-    );
-  });
-
-  it("shows the current model without verification controls for non-admin and unsupported gateways", () => {
-    const result = { ...detected, configuredModel: "openai/gpt-5" };
-    const nonAdmin = mount(
-      props({ page: { phase: "ready", result }, canAdmin: false, canVerify: false }),
-    );
-    expect(text(nonAdmin)).toContain("Selected model OpenAI gpt-5");
-    expect(nonAdmin.querySelector(".model-setup__current button")).toBeNull();
-
-    const unsupportedGateway = mount(props({ page: { phase: "ready", result }, canVerify: false }));
-    expect(text(unsupportedGateway)).toContain("Selected model OpenAI gpt-5");
-    expect(unsupportedGateway.querySelector(".model-setup__current button")).toBeNull();
   });
 
   it("renders note links and device codes", () => {

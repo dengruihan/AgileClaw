@@ -1,10 +1,10 @@
 import path from "node:path";
 import { expect, it } from "vitest";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import {
+  TALK_READY_HISTORY_MESSAGE,
   dispatchOpenAiTalkEvent,
   installOpenAiTalkFixture,
-  TALK_READY_HISTORY_MESSAGE,
   videoTalkCatalog,
   waitForTalkReady,
 } from "./browser-talk-start-stop.fixtures.ts";
@@ -44,7 +44,7 @@ suite.define(() => {
         },
       });
       await installOpenAiTalkFixture(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await waitForTalkReady(page);
       await page.getByRole("button", { name: "Start voice input" }).click();
       const openAudio = async () => {

@@ -51,9 +51,8 @@ import {
   renderFloatingUpdateCard,
 } from "./navigation-surface.ts";
 import { readGatewayOperatorAccess } from "./operator-access.ts";
-import { isDesktopPanelAvailable, isHomePanelAvailable } from "./panel-availability.ts";
+import { isDesktopPanelAvailable } from "./panel-availability.ts";
 import { NAV_WIDTH_MAX, NAV_WIDTH_MIN, normalizeCatalogOpenTarget } from "./settings.ts";
-import { renderCollapsedHomeToggle } from "./shell-assistant-toggles.ts";
 import type { ShellLayoutController } from "./shell-layout-traits.ts";
 
 type SettingsSidebarHost = Parameters<typeof renderLazySettingsSidebar>[0];
@@ -131,7 +130,6 @@ export function renderApplicationShell(host: ShellViewHost) {
   const watchUpdateProgress = callbacks.watchUpdateProgress;
   const terminalAvailable = isTerminalAvailable(gatewaySnapshot, config.terminalEnabled ?? false);
   const desktopPanelAvailable = isDesktopPanelAvailable(gatewaySnapshot);
-  const homePanelAvailable = isHomePanelAvailable(context.gateway);
   const activeRoute = host.routeState.routeId ?? "chat";
   const sessionRoute = isSessionRouteId(activeRoute);
   // Session routes have an offline outbox, New Session keeps a local draft, and
@@ -356,9 +354,7 @@ export function renderApplicationShell(host: ShellViewHost) {
         navCollapsed ? "shell--nav-collapsed" : ""
       } ${mobileNavLayout ? "shell--mobile-nav" : ""} ${
         mergedChatChrome ? "shell--merged-chat-chrome" : ""
-      } ${navDrawerOpen ? "shell--nav-drawer-open" : ""} ${nativeEmbed ? "shell--embed" : ""} ${embedSettings ? "shell--embed-settings" : ""} ${settingsTakeover ? "shell--settings" : ""} ${
-        collapsedControls && homePanelAvailable ? "shell--home-control" : ""
-      } ${shellConnectionStatus ? "shell--connection-status" : ""} ${
+      } ${navDrawerOpen ? "shell--nav-drawer-open" : ""} ${nativeEmbed ? "shell--embed" : ""} ${embedSettings ? "shell--embed-settings" : ""} ${settingsTakeover ? "shell--settings" : ""} ${shellConnectionStatus ? "shell--connection-status" : ""} ${
         floatingSidebarAttentionVisible(floatingUpdateCard) ? "shell--floating-attention" : ""
       } ${host.navResizing ? "shell--nav-resizing" : ""}"
       style=${`--shell-nav-expanded-width: ${navigationSnapshot.navWidth}px`}
@@ -439,7 +435,6 @@ export function renderApplicationShell(host: ShellViewHost) {
                     ${icons.search}
                   </button>
                 </openclaw-tooltip>
-                ${homePanelAvailable ? renderCollapsedHomeToggle() : nothing}
               </div>
             `
           : nothing
@@ -553,11 +548,9 @@ export function renderApplicationShell(host: ShellViewHost) {
       ${sessionRoute ? nothing : renderShellDocks(context, navDrawerOpen, settingsTakeover || nativeEmbed, selectedAgentId, activeRoute)}
       <openclaw-assistant-panel
         ?inert=${navDrawerOpen}
-        .homeAvailable=${homePanelAvailable && !nativeEmbed}
         .pageSessionKey=${host.activeSessionKey}
         .pageAgentId=${selectedAgentId}
         .pageRouteId=${activeRoute}
-        .pageRouteFailed=${host.routeState.routeFailed === true}
       ></openclaw-assistant-panel>
       ${
         isOptionalElementDefined(host.execApprovalElement)

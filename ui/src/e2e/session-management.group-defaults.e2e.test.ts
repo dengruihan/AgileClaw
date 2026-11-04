@@ -14,6 +14,7 @@ import {
 
 const suite = createSessionManagementE2eSuite();
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it("saves current-checkout group defaults for an agent workspace without a commit", async () => {
@@ -33,7 +34,7 @@ suite.define(() => {
       workspaceGit: true,
     });
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const group = page.locator('[data-session-section="category:Client work"]');
       await group.locator(".sidebar-recent-sessions__head").hover();
       await group.getByRole("button", { name: "Group options for Client work" }).click();
@@ -117,7 +118,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const group = page.locator('[data-session-section="category:Client work"]');
       await group.waitFor({ state: "visible", timeout: 10_000 });
       await group.locator(".sidebar-recent-sessions__head").hover();
@@ -274,7 +275,7 @@ suite.define(() => {
       });
 
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const group = page.locator('[data-session-section="category:Client work"]');
         await group.waitFor({ state: "visible", timeout: 10_000 });
         await group.locator(".sidebar-recent-sessions__head").hover();
@@ -350,7 +351,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const group = page.locator('[data-session-section="category:Client work"]');
       await group.waitFor({ state: "visible", timeout: 10_000 });
       await group.locator(".sidebar-recent-sessions__head").hover();
@@ -585,7 +586,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const group = page.locator('[data-session-section="category:Client work"]');
       await group.waitFor({ state: "visible", timeout: 10_000 });
       await group.locator(".sidebar-recent-sessions__head").hover();
@@ -652,7 +653,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const group = page.locator('[data-session-section="category:Client work"]');
       await group.waitFor({ state: "visible", timeout: 10_000 });
       await gateway.waitForRequest("sessions.groups.list");

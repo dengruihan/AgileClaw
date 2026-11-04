@@ -4,11 +4,11 @@ import type { Locator, Page } from "playwright";
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
+  type MockGatewayControls,
   controlUiBundledSettingsStorageKey,
   controlUiSessionUrl,
   installMockGateway,
   pauseVirtualClock,
-  type MockGatewayControls,
 } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
@@ -576,7 +576,7 @@ suite.define(() => {
           "sessions.list": roster,
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await expectCatalog(page.locator('openclaw-chat-pane[aria-hidden="false"]'), model.name);
       await page.locator(`.sidebar-recent-session[data-session-key="${sessionKeys[0]}"] a`).click();
       await expect.poll(() => page.locator("openclaw-chat-pane").count()).toBe(2);

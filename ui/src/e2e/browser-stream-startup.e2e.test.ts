@@ -4,6 +4,7 @@ import type { Socket } from "node:net";
 import { expect, it } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
 import {
+  controlUiSessionUrl,
   defaultControlUiFeatureMethods,
   installMockGateway,
   pauseVirtualClock,
@@ -147,7 +148,7 @@ suite.define(() => {
             },
           });
           await page.clock.install();
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await page.getByText("Open the browser.", { exact: true }).waitFor();
           const jpeg = await page.evaluate(() => {
             const canvas = document.createElement("canvas");

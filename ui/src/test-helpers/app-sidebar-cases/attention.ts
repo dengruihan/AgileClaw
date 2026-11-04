@@ -22,7 +22,7 @@ function setRows(
 ): void {
   harness.publishList({
     result: {
-      ts: 2,
+      ts: ++setRowsClock,
       path: "",
       count: rows.length,
       defaults: { modelProvider: null, model: null, contextTokens: null },
@@ -30,6 +30,8 @@ function setRows(
     } satisfies SessionsListResult,
   });
 }
+
+let setRowsClock = 2;
 
 function failedRow(
   key = sessionKey,
@@ -130,7 +132,7 @@ describe("AppSidebar session attention", () => {
     );
   });
 
-  it("projects canonical attention onto Home across row refresh ordering", async () => {
+  it("projects canonical attention onto the main session row across row refresh ordering", async () => {
     const mainKey = "agent:main:main";
     const client = {
       request: vi.fn().mockResolvedValue({ questions: [] }),
@@ -139,9 +141,9 @@ describe("AppSidebar session attention", () => {
     const sessionsHarness = createSessionsHarness("main", [mainKey]);
     setRows(sessionsHarness, [agentAttentionRow(mainKey)]);
     const { sidebar } = await mountSidebar(gatewayHarness.gateway, sessionsHarness.sessions);
-    const home = sidebar.querySelector(".nav-item--home");
+    const row = () => sidebar.querySelector(`[data-session-key="${mainKey}"]`);
 
-    expect(home?.querySelector('[data-session-attention="agent"]')).not.toBeNull();
+    expect(row()?.querySelector('[data-session-attention="agent"]')).not.toBeNull();
 
     gatewayHarness.publishEvent("question.requested", {
       id: "question-home",
@@ -160,11 +162,7 @@ describe("AppSidebar session attention", () => {
       status: "pending",
     });
     await sidebar.updateComplete;
-    expect(home?.querySelector('[data-session-attention="question"]')).not.toBeNull();
-
-    setRows(sessionsHarness, []);
-    await sidebar.updateComplete;
-    expect(home?.querySelector('[data-session-attention="question"]')).not.toBeNull();
+    expect(row()?.querySelector('[data-session-attention="question"]')).not.toBeNull();
 
     gatewayHarness.publishEvent("question.resolved", {
       id: "question-home",
@@ -176,17 +174,18 @@ describe("AppSidebar session attention", () => {
       }),
     ]);
     await sidebar.updateComplete;
-    expect(home?.querySelector('[data-session-attention="error"]')).not.toBeNull();
-    expect(home?.getAttribute("aria-label")).toBe(
-      "Home · Run failed:   Message failed:  delivery unavailable",
-    );
-    expect(home?.getAttribute("aria-label")).not.toMatch(/[⚠✉]/u);
+    expect(row()?.querySelector('[data-session-attention="error"]')).not.toBeNull();
+    const failureLabel = row()
+      ?.querySelector("[data-session-attention]")
+      ?.getAttribute("aria-label");
+    expect(failureLabel).toMatch(/Run failed: {3}Message failed: {2}delivery unavailable/u);
+    expect(failureLabel).not.toMatch(/[⚠✉]/u);
 
     setRows(sessionsHarness, [
-      { key: mainKey, kind: "direct", label: "Home", updatedAt: 3, status: "done" },
+      { key: mainKey, kind: "direct", label: "Main", updatedAt: 3, status: "done" },
     ]);
     await sidebar.updateComplete;
-    expect(home?.querySelector("[data-session-attention]")).toBeNull();
+    expect(row()?.querySelector("[data-session-attention]")).toBeNull();
   });
 
   it("shows question attention ahead of a run error and clears it on resolution", async () => {
@@ -383,7 +382,7 @@ describe("AppSidebar session attention", () => {
     },
   );
 
-  it("uses canonical Home attention without duplicating an agent approval badge", async () => {
+  it("uses canonical main-row attention without duplicating an agent approval badge", async () => {
     const mainKey = "agent:main:main";
     const approval = {
       id: "approval-main",
@@ -392,20 +391,22 @@ describe("AppSidebar session attention", () => {
       createdAtMs: Date.now(),
       expiresAtMs: Date.now() + 60_000,
     } satisfies ExecApprovalRequest;
+    const sessionsHarness = createSessionsHarness("main", [mainKey]);
+    setRows(sessionsHarness, [{ key: mainKey, kind: "direct", label: "Main", updatedAt: 3 }]);
     const { sidebar } = await mountSidebar(
       createGateway({} as GatewayBrowserClient),
-      createSessionsHarness("main", [mainKey]).sessions,
+      sessionsHarness.sessions,
       "panel",
       TWO_AGENTS,
       [approval],
     );
 
-    const homeAttention = sidebar.querySelector(
-      '.nav-item--home [data-session-attention="approval"]',
+    const rowAttention = sidebar.querySelector(
+      `[data-session-key="${mainKey}"] [data-session-attention="approval"]`,
     );
-    expect(homeAttention).not.toBeNull();
+    expect(rowAttention).not.toBeNull();
     expect(
-      homeAttention
+      rowAttention
         ?.closest("openclaw-tooltip")
         ?.querySelector(".sidebar-session-attention-tooltip__preview")?.textContent,
     ).toBe("git status");

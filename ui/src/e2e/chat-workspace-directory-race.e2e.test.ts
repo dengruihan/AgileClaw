@@ -6,6 +6,7 @@ import { createChatFlowE2eSuite, installMockGateway } from "./chat-flow.test-sup
 import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it.each([false, true])(
@@ -40,7 +41,7 @@ suite.define(() => {
             "sessions.files.list": rootListing,
           },
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await openChatSidePanelType(page, "Files");
         const rail = page.locator(".chat-workspace-rail");
         await rail.getByRole("button", { name: "reports", exact: true }).waitFor();
@@ -134,7 +135,7 @@ suite.define(() => {
           },
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await openChatSidePanelType(page, "Files");
       const rail = page.locator(".chat-workspace-rail");
       await rail.getByRole("button", { name: "reports", exact: true }).waitFor();

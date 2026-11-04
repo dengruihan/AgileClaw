@@ -1,6 +1,5 @@
 import { expect, it } from "vitest";
-import type { AppSidebarSessionNavigationElement } from "../components/app-sidebar-session-navigation.ts";
-import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
+import { AppSidebarSessionNavigationElement } from "../components/app-sidebar-session-navigation.ts";
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 import {
   activateSelfRemovingControl,
@@ -14,6 +13,8 @@ import {
 
 const suite = createSessionManagementE2eSuite();
 const rosterMatch = { includeGlobal: true };
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
+import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 
 suite.define(() => {
   it.each([
@@ -50,7 +51,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const sidebar = page.locator("openclaw-app-sidebar");
       const rowFor = (key: string) =>
         sidebar.locator(`.sidebar-recent-session[data-session-key="${key}"]`);

@@ -29,18 +29,17 @@ describe("ModelSetupPage catalog icons", () => {
     vi.unstubAllGlobals();
   });
 
-  it.each([true, false])("selects the correct agent for firstRun=%s", async (firstRun) => {
+  it("detects through the configured agent selection", async () => {
     const { context, client } = createContext();
     const request = vi.spyOn(client, "request");
     context.settingsAgentSelection.state.selectedId = "research";
     await mountPage(context, {
       state: { phase: "ready", result: detection },
       client,
-      firstRun,
     });
     expect(request).toHaveBeenCalledWith(
       "openclaw.setup.detect",
-      { agentId: firstRun ? "main" : "research" },
+      { agentId: "research" },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
@@ -52,7 +51,6 @@ describe("ModelSetupPage catalog icons", () => {
     const { page } = await mountPage(context, {
       state: { phase: "ready", result: detection },
       client,
-      firstRun: false,
     });
 
     expect(
@@ -69,7 +67,6 @@ describe("ModelSetupPage catalog icons", () => {
     request.mockResolvedValue(detection);
     const provider = createApplicationContextProvider(context);
     const page = document.createElement("openclaw-model-setup-page") as TestModelSetupPage;
-    page.routeData = { firstRun: false };
     provider.append(page);
     document.body.append(provider);
 
@@ -124,7 +121,6 @@ describe("ModelSetupPage catalog icons", () => {
         },
       },
       client,
-      firstRun: false,
     });
 
     await waitForFast(() => {
@@ -174,7 +170,6 @@ describe("ModelSetupPage catalog icons", () => {
         },
       },
       client,
-      firstRun: false,
     });
 
     await waitForFast(() => {
@@ -213,7 +208,6 @@ describe("ModelSetupPage catalog icons", () => {
     const { page } = await mountPage(context, {
       state: { phase: "ready", result: detection },
       client,
-      firstRun: false,
     });
 
     page.querySelector<HTMLButtonElement>('[data-prepare-choice="llama-cpp"] button')?.click();
@@ -298,7 +292,6 @@ describe("ModelSetupPage catalog icons", () => {
     const { page } = await mountPage(context, {
       state: { phase: "ready", result: preparedDetection },
       client,
-      firstRun: false,
     });
 
     page.querySelector<HTMLButtonElement>(`[data-prepare-choice="${choiceId}"] button`)?.click();
@@ -345,7 +338,6 @@ describe("ModelSetupPage catalog icons", () => {
     const { page } = await mountPage(context, {
       state: { phase: "ready", result: detection },
       client,
-      firstRun: false,
     });
 
     page.querySelector<HTMLButtonElement>('[data-prepare-choice="llama-cpp"] button')?.click();
@@ -418,7 +410,6 @@ describe("ModelSetupPage catalog icons", () => {
         },
       },
       client,
-      firstRun: false,
     });
 
     page.querySelector<HTMLButtonElement>('[data-candidate-kind="codex-cli"] button')?.click();
@@ -485,7 +476,6 @@ describe("ModelSetupPage catalog icons", () => {
         },
       },
       client,
-      firstRun: false,
     });
 
     page.querySelector<HTMLButtonElement>('[data-auth-choice="provider-auth"] button')?.click();
@@ -535,7 +525,6 @@ describe("ModelSetupPage catalog icons", () => {
         },
       },
       client,
-      firstRun: false,
     });
 
     page.querySelector<HTMLButtonElement>('[data-auth-choice="provider-auth"] button')?.click();
@@ -604,7 +593,6 @@ describe("ModelSetupPage catalog icons", () => {
         },
       },
       client,
-      firstRun: false,
     });
     page.querySelector<HTMLButtonElement>('[data-auth-choice="provider-auth"] button')?.click();
     await vi.waitFor(() => expect(releaseProgress).toBeTypeOf("function"));
@@ -667,7 +655,6 @@ describe("ModelSetupPage catalog icons", () => {
         },
       },
       client,
-      firstRun: false,
     });
 
     page.querySelector<HTMLButtonElement>('[data-candidate-kind="codex-cli"] button')?.click();
@@ -756,7 +743,6 @@ describe("ModelSetupPage catalog icons", () => {
           },
         },
         client,
-        firstRun: false,
       });
       const selector =
         entry === "candidate"
@@ -771,7 +757,7 @@ describe("ModelSetupPage catalog icons", () => {
         }
         expect(page.textContent).not.toContain("You can start chatting now.");
         expect(page.querySelector(".model-setup-success .btn.primary")?.textContent?.trim()).toBe(
-          "Chat",
+          "Return to Models",
         );
       });
     },
@@ -826,7 +812,6 @@ describe("ModelSetupPage catalog icons", () => {
         },
       },
       client,
-      firstRun: false,
     });
 
     page.querySelector<HTMLButtonElement>('[data-auth-choice="provider-auth"] button')?.click();
@@ -856,8 +841,8 @@ describe("ModelSetupPage catalog icons", () => {
 
     page.querySelector<HTMLButtonElement>("openclaw-modal-dialog .btn")?.click();
     await waitForFast(() => {
-      expect(page.querySelector("openclaw-modal-dialog")).toBeNull();
       expect(page.textContent).toContain("config.get failed after wizard commit");
+      expect(page.textContent).not.toContain("Paste token");
     });
     expect(cancellationAttempt).toBe(3);
   });

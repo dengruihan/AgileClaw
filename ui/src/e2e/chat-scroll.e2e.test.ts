@@ -17,6 +17,7 @@ import {
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it("scrolls the transcript over the pinned composer while preserving nested scrolling", async () => {
@@ -46,7 +47,7 @@ suite.define(() => {
           },
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByText("Composer wheel history 49").waitFor();
       await waitForChatScrollIdle(page);
       const thread = page.locator(".chat-thread");
@@ -183,7 +184,7 @@ suite.define(() => {
     await installMockGateway(page, { historyMessages });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByText("Composer resize history 49").waitFor({ timeout: 10_000 });
       await expect
         .poll(() => chatThreadDistanceFromBottom(page), { timeout: 10_000 })
@@ -283,7 +284,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByText("History message 49").waitFor({ timeout: 10_000 });
       const progress = page.locator('[data-progress-card-placement="composer"]');
       await expect.poll(() => progress.getAttribute("open")).toBe("");
@@ -367,7 +368,7 @@ suite.define(() => {
     await installMockGateway(page, { historyMessages });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByText("Scrollable history 49").waitFor({ timeout: 10_000 });
       await waitForChatScrollIdle(page);
 

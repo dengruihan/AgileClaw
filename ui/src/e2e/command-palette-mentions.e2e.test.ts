@@ -1,5 +1,6 @@
 import type { Locator } from "playwright";
 import { expect, it } from "vitest";
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 import {
   expectForegroundUnchanged,
   openFromForeground,
@@ -88,7 +89,7 @@ suite.define(() => {
         controlUiE2eBuiltModuleRequest("ui/src/components/command-palette.ts"),
       );
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.locator(".agent-chat__composer-combobox textarea:visible").waitFor();
         await page.keyboard.press("ControlOrMeta+K");
         const cold = page.locator(".cmd-palette[aria-busy=true] textarea");

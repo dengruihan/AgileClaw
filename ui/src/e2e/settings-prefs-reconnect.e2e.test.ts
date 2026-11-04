@@ -2,10 +2,11 @@
 import type { BrowserContext, Page } from "playwright";
 import { expect, it } from "vitest";
 import {
-  controlUiBundledSettingsStorageKey,
-  installMockGateway,
   type MockGatewayControls,
   type MockGatewayRequest,
+  controlUiBundledSettingsStorageKey,
+  controlUiSessionUrl,
+  installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
@@ -229,7 +230,9 @@ suite.define(() => {
     });
 
     try {
-      const response = await page.goto(`${suite.server.baseUrl}chat`);
+      const response = await page.goto(
+        controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"),
+      );
       expect(response?.status()).toBe(200);
       await gateway.waitForRequest("config.get");
       await gateway.waitForRequest("users.prefs.get");

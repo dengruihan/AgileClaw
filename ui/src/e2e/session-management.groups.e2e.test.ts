@@ -12,8 +12,8 @@ import {
   captureUiProofEnabled,
   collapsedSessionSectionsStorageKey,
   controlUiSessionPath,
-  createSessionManagementE2eSuite,
   controlUiSessionUrl,
+  createSessionManagementE2eSuite,
   installMockGateway,
   openSessionMenuSubmenu,
   requireRecord,
@@ -111,7 +111,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("sessions.groups.list");
       await gateway.rejectDeferred("sessions.groups.list", {
         code: "UNAVAILABLE",
@@ -316,7 +316,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       // Sidebar: pinned rows join the ordered page zone while staying out of Threads.
       const sidebarRows = page.locator(".sidebar-recent-session");
@@ -333,13 +333,14 @@ suite.define(() => {
       await expect.poll(() => page.locator('[data-session-section="pinned"]').count()).toBe(0);
 
       // Chats keep recency order with the open session highlighted in place —
-      // selecting a row must not reshuffle the list.
+      // selecting a row must not reshuffle the list. The content-bearing main
+      // anchor renders once as an ordinary row like any other session.
       const chatRows = page.locator('[data-session-section="ungrouped"] .sidebar-recent-session');
       const rowNames = () =>
         chatRows.evaluateAll((rows) =>
           rows.map((row) => row.querySelector(".sidebar-recent-session__name")?.textContent ?? ""),
         );
-      await expect.poll(rowNames).toEqual(["Data migration", "Research notes"]);
+      await expect.poll(rowNames).toEqual(["Main", "Data migration", "Research notes"]);
       const sidebarMigration = sidebarRows.filter({ hasText: "Data migration" });
       await expect
         .poll(() =>
@@ -403,7 +404,7 @@ suite.define(() => {
       await expect
         .poll(() => new URL(page.url()).pathname)
         .toBe(controlUiSessionPath("agent:main:migration"));
-      await expect.poll(rowNames).toEqual(["Release planning", "Data migration"]);
+      await expect.poll(rowNames).toEqual(["Main", "Release planning", "Data migration"]);
       await expect
         .poll(() =>
           chatRows
@@ -610,7 +611,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       // Categorized rows render as their own sidebar group section.
       const groups = page.locator(".sidebar-recent-sessions__group");
@@ -689,7 +690,7 @@ suite.define(() => {
         .poll(() =>
           page.locator('[data-session-section="ungrouped"] .sidebar-recent-session').count(),
         )
-        .toBe(2);
+        .toBe(3);
 
       // Group by "None" flattens the category sections into the plain list. The
       // confirm left the pointer over the dialog rather than the sidebar; the
@@ -717,7 +718,7 @@ suite.define(() => {
       await chooseSidebarMenuOption(page, "Group by", "None");
       await closeSidebarMenu(page);
       await expect.poll(() => groups.count()).toBe(1);
-      await expect.poll(() => groups.first().locator(".sidebar-recent-session").count()).toBe(3);
+      await expect.poll(() => groups.first().locator(".sidebar-recent-session").count()).toBe(4);
     } finally {
       await context.close();
     }
@@ -765,7 +766,7 @@ suite.define(() => {
     page.on("pageerror", (error) => pageErrors.push(error.message));
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const researchGroup = page.locator('[data-session-section="category:Research"]');
       await researchGroup.waitFor({ state: "visible", timeout: 10_000 });
       await expect.poll(() => researchGroup.locator(".sidebar-recent-session").count()).toBe(0);
@@ -970,7 +971,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const firstGroup = page.locator('[data-session-section="category:First group"]');
       await firstGroup.waitFor({ state: "visible" });
 
@@ -1024,7 +1025,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await expect
         .poll(async () =>
           (await gateway.getRequests("sessions.list")).some(

@@ -11,6 +11,7 @@ import {
 import { progressSubmitScenario } from "./session-progress-submit.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 function refreshScenario() {
   const scenario = progressSubmitScenario();
@@ -90,7 +91,7 @@ suite.define(() => {
         await page.emulateMedia({ reducedMotion });
         const scenario = refreshScenario();
         const gateway = await installMockGateway(page, scenario);
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const card = page.locator(".session-progress-card--composer");
         await card.waitFor();
         await waitForChatScrollIdle(page);
@@ -214,7 +215,7 @@ suite.define(() => {
     await suite.withPage({ viewport: { width: 1280, height: 900 } }, async ({ page }) => {
       const scenario = refreshScenario();
       const gateway = await installMockGateway(page, scenario);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const card = page.locator(".session-progress-card--composer");
       await card.waitFor();
       await waitForChatScrollIdle(page);

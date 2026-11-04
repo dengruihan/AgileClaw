@@ -341,8 +341,8 @@ remove messages already in the conversation history.
 If the Gateway reports that a `/steer` or `/redirect` message failed to start, the Control UI
 restores the submitted draft when the composer is still empty. It preserves newer text, replies,
 and attachments. If you switched conversations, recovery stays with the original conversation.
-If you moved Home between the page and its dock while the command was pending, recovery
-follows the current Home composer and preserves any newer draft entered there.
+If you moved a conversation between the page and its dock while the command was pending,
+recovery follows the current dock composer and preserves any newer draft entered there.
 
 Queued messages and drafts keep the conversation and agent selected when they were created.
 Switching agents, opening a split pane, or reloading does not move them to another destination.

@@ -1,6 +1,6 @@
 import type WaPopup from "@awesome.me/webawesome/dist/components/popup/popup.js";
 import { expect, it } from "vitest";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({ name: "Control UI emoji entry" });
@@ -177,7 +177,7 @@ suite.define(() => {
   it("dismisses the menu when its token is scrolled out of view", async () => {
     await suite.withPage({}, async ({ page }) => {
       await installMockGateway(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox > textarea");
       await composer.fill("Context line\n".repeat(50));
       await composer.evaluate((element) => {

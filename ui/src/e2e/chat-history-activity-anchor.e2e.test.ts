@@ -9,6 +9,7 @@ import {
 const suite = createChatFlowE2eSuite();
 type AnchorProbe = { frame: number; tops: Array<number | null> };
 type ProbeWindow = typeof window & { activityAnchor: AnchorProbe };
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it.each([
@@ -64,7 +65,7 @@ suite.define(() => {
         },
       });
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         let pane = page.locator(".chat-pane-cache__pane--active");
         let thread = pane.locator(".chat-thread");
         await thread.getByText(/^Retained message 51\./).waitFor();

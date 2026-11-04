@@ -252,7 +252,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const sidebar = page.locator("openclaw-app-sidebar");
       const row = sidebar.locator(
         '.sidebar-recent-session[data-session-key="agent:main:research"]',
@@ -405,7 +405,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const researchRow = page.locator('[data-session-key="agent:main:research"]');
       const followUpRow = page.locator('[data-session-key="agent:main:follow-up"]');
       const researchLink = researchRow.locator(".sidebar-recent-session__link");
@@ -886,7 +886,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await expect
         .poll(() => page.locator(".sidebar-recent-session").count(), { timeout: 15_000 })
         .toBeGreaterThan(0);
@@ -978,7 +978,7 @@ suite.define(() => {
       sessionKey: "agent:main:main",
     });
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.locator('[data-session-section="work"] .sidebar-session-group-toggle').click();
       const loadMore = page
         .locator('[data-session-section="ungrouped"]')
@@ -1062,7 +1062,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const row = page
         .locator(".sidebar-recent-sessions__list .sidebar-recent-session")
         .filter({ hasText: "Research notes" });

@@ -82,11 +82,15 @@ describe("AppSidebar outbox attention badges", () => {
     };
     await sidebar.updateComplete;
 
-    const badges = sidebar.querySelectorAll(".nav-item--home .session-row-badge--attention");
+    const badges = sidebar.querySelectorAll(
+      '[data-session-key="agent:main:main"] .session-row-badge--attention',
+    );
     expect(badges).toHaveLength(1);
     expect(badges[0]?.textContent).toContain("3");
     expect(
-      sidebar.querySelector('.nav-item--home .session-row-badge--draft[aria-label="Unsent draft"]'),
+      sidebar.querySelector(
+        '[data-session-key="agent:main:main"] .session-row-badge--draft[aria-label="Unsent draft"]',
+      ),
     ).not.toBeNull();
   });
 });

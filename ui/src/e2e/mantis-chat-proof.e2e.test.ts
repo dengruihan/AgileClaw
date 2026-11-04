@@ -1,17 +1,18 @@
 // Control UI Mantis proof covers the focused web chat browser path.
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium, type Browser, type BrowserContext } from "playwright";
+import { type Browser, type BrowserContext, chromium } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
+  type ControlUiE2eServer,
   canRunPlaywrightChromium,
+  controlUiSessionUrl,
   installMockGateway,
   pauseVirtualClock,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
 
 const chromiumExecutablePath = resolvePlaywrightChromiumExecutablePath(chromium.executablePath());
@@ -95,7 +96,7 @@ describeMantisWebUiChat("Mantis Control UI web chat proof", () => {
     const startedAt = new Date().toISOString();
 
     try {
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await page.getByText("Mantis web UI proof is ready.").waitFor({ timeout: 10_000 });
       await page.locator(".agent-chat__composer-combobox textarea").fill(prompt);
       // The working timer starts at the send click; pause first so the elapsed

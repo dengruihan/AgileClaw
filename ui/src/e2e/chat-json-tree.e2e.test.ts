@@ -1,13 +1,14 @@
 import path from "node:path";
-import { chromium, type Browser } from "playwright";
+import { type Browser, chromium } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
+  type ControlUiE2eServer,
   canRunPlaywrightChromium,
+  controlUiSessionUrl,
   installMockGateway,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
 
 const executablePath = resolvePlaywrightChromiumExecutablePath(chromium.executablePath());
@@ -88,7 +89,7 @@ suite("Control UI JSON tree and source views", () => {
         ],
       });
       try {
-        await page.goto(`${server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
         const bare = page.locator('[data-entry-id="json-bare"]');
         const fenced = page.locator('[data-entry-id="json-fenced"]');
         await fenced.waitFor({ state: "visible" });
@@ -192,7 +193,7 @@ suite("Control UI JSON tree and source views", () => {
           },
         ],
       });
-      await page.goto(server.baseUrl + "chat");
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       const bubble = page.locator('.chat-bubble[data-entry-id="long-json-user"]');
       await bubble.waitFor({ state: "visible" });

@@ -6,9 +6,10 @@ import { CONTROL_UI_SESSION_PULL_REQUESTS_CHANGED_EVENT } from "../../../src/gat
 import { SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD } from "../lib/session-pull-requests.ts";
 import { CHAT_TRANSCRIPT_END_THRESHOLD_PX } from "../pages/chat/scroll.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 import {
-  chatThreadDistanceFromBottom,
   captureUiProofEnabled,
+  chatThreadDistanceFromBottom,
   createChatFlowE2eSuite,
   installMockGateway,
   scrollChatThreadToTop,
@@ -137,7 +138,7 @@ suite.define(() => {
         });
       };
       try {
-        await page.goto(suite.server.baseUrl + "chat");
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await card.locator(".session-progress-card__body").waitFor();
         await waitForChatScrollIdle(page);
         expect(await card.getAttribute("open")).toBe("");
@@ -239,7 +240,7 @@ suite.define(() => {
       ? createControlUiE2eArtifactDir("chat-scroll-dock")
       : null;
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByText("Dock history 40").waitFor({ timeout: 10_000 });
       await expect
         .poll(() => chatThreadDistanceFromBottom(page), { timeout: 10_000 })
@@ -437,7 +438,7 @@ suite.define(() => {
       ? createControlUiE2eArtifactDir("chat-scroll-dock")
       : null;
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByText("Stream history 29").waitFor({ timeout: 10_000 });
       const watchedKey = await waitForWatchedSessionKey(gateway);
       await gateway.emitGatewayEvent(CONTROL_UI_SESSION_PULL_REQUESTS_CHANGED_EVENT, {

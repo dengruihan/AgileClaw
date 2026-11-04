@@ -1,8 +1,9 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import type { Locator } from "playwright";
+import { type Locator } from "playwright";
 import { expect, it } from "vitest";
 import {
+  controlUiSessionUrl,
   defaultControlUiFeatureMethods,
   waitForControlUiRoute,
   waitForControlUiSettingsTakeover,
@@ -167,7 +168,7 @@ suite.define(() => {
           },
         ],
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await expect
         .poll(() => page.locator(".chat-text").last().textContent())
         .toContain("Typography");
@@ -249,7 +250,7 @@ suite.define(() => {
           },
         ],
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await expect.poll(() => page.locator(".chat-text").last().textContent()).toContain("keep");
 
       const textarea = page.locator(".agent-chat__composer-combobox textarea");
@@ -339,7 +340,7 @@ suite.define(() => {
         },
       },
     });
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
     const composer = page.locator(".agent-chat__composer-combobox textarea");
     await composer.waitFor({ state: "visible" });
@@ -402,7 +403,7 @@ suite.define(() => {
           awaitInitialRoster: false,
         });
         await page.route("**/assets/**.js", (route) => route.abort());
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const report = await page.evaluate(() => ({
           buildId: document.documentElement.getAttribute("data-openclaw-control-ui-build-id"),
           background: getComputedStyle(document.documentElement).getPropertyValue("--bg").trim(),
@@ -429,7 +430,7 @@ suite.define(() => {
   it("keeps system chrome with the mounted route across shell and viewport lifecycles", async () => {
     const { page } = await openThemedChat("claw", "light");
     await page.setViewportSize({ width: 720, height: 900 });
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await page.locator(".agent-chat__composer-combobox textarea").waitFor();
 
     const readChrome = () =>
@@ -545,7 +546,7 @@ suite.define(() => {
       await paletteGate;
       await route.continue();
     });
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await page.locator(".agent-chat__composer-combobox textarea").waitFor();
     await page.evaluate(() => {
       const root = document.documentElement;

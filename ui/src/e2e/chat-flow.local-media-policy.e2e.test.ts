@@ -12,6 +12,7 @@ import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-su
 
 const suite = createChatFlowE2eSuite();
 const mediaTempDirs = useAutoCleanupTempDirTracker(afterEach);
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it.each([
@@ -127,7 +128,7 @@ suite.define(() => {
       });
 
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const media =
           kind === "image"
             ? page.getByAltText("Local bootstrap image")
@@ -257,7 +258,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const status = page.locator(".chat-assistant-attachment-card__status-meta");
       await status.waitFor({ state: "visible", timeout: 10_000 });
       await expect.poll(() => status.textContent()).toContain(reason);

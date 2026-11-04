@@ -2,11 +2,11 @@ import path from "node:path";
 // Control UI E2E tests cover visible browser dictation state through a real composer.
 import { expect, it } from "vitest";
 import { finishElementAnimations } from "../test-helpers/animations.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import {
+  TALK_READY_HISTORY_MESSAGE,
   captureComposerProof,
   installTalkBrowserFixtures,
-  TALK_READY_HISTORY_MESSAGE,
 } from "./browser-talk-start-stop.fixtures.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
@@ -50,7 +50,7 @@ suite.define(() => {
         ),
       });
       await installTalkBrowserFixtures(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const textarea = page.locator(".agent-chat__composer-combobox textarea");
       await textarea.fill("ship it");
       await textarea.evaluate(
@@ -120,7 +120,7 @@ suite.define(() => {
         ),
       });
       await installTalkBrowserFixtures(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const textarea = page.locator(".agent-chat__composer-combobox textarea");
       await textarea.fill("ship it");
       await textarea.evaluate((element: HTMLTextAreaElement) => element.setSelectionRange(5, 5));
@@ -320,7 +320,7 @@ suite.define(() => {
         },
       });
       await installTalkBrowserFixtures(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       const voice = page.getByRole("button", { name: "Start voice input" });
       await voice.hover();
@@ -369,7 +369,7 @@ suite.define(() => {
         },
       });
       await installTalkBrowserFixtures(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       // The enabled dictation microphone can be clicked before history/catalog admission.
       await gateway.waitForRequest("chat.startup");
@@ -407,7 +407,7 @@ suite.define(() => {
           ),
         });
         await installTalkBrowserFixtures(page);
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
         const microphone = page.getByRole("button", { name: "Dictation" });
         await microphone.click();

@@ -4,9 +4,10 @@ import type { Page } from "playwright";
 import { beforeEach, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
+  type MockGatewayControls,
+  controlUiSessionUrl,
   installMockGateway,
   waitForControlUiRoute,
-  type MockGatewayControls,
 } from "../test-helpers/control-ui-e2e.ts";
 import { cronListResponseFixture } from "../test-helpers/cron.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
@@ -229,7 +230,7 @@ suite.define(() => {
           deferredMethods: ["chat.startup"],
         });
 
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await gateway.waitForRequest("chat.startup");
         await gateway.waitForRequest("agents.list");
         await gateway.deferNext("agents.list");
@@ -280,7 +281,7 @@ suite.define(() => {
           },
         });
 
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await gateway.waitForRequest("chat.startup");
         await gateway.waitForRequest("agents.list");
         await gateway.emitGatewayEvent("config.changed", { path: "agents.entries" });

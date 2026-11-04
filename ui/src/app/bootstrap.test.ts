@@ -2,13 +2,10 @@ import type { RouteLocation } from "@openclaw/uirouter";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CONTROL_UI_BASE_PATH_ATTRIBUTE } from "../../../src/gateway/control-ui-contract.js";
 import { createDeferred } from "../../../test/helpers/promise.js";
-import type { GatewayBrowserClient } from "../api/gateway.ts";
-import { routeIdFromPath } from "../app-routes.ts";
 import {
-  isDefaultChatLanding,
-  startModelSetupFirstRunRedirectAfterLocation,
-} from "../pages/model-setup/first-run.ts";
-import { resolveInitialApplicationLocation } from "./bootstrap-location.ts";
+  installResolvedInitialLocation,
+  resolveInitialApplicationLocation,
+} from "./bootstrap-location.ts";
 import { bootstrapApplication } from "./bootstrap.ts";
 import type { ApplicationContext } from "./context.ts";
 import * as gatewayStore from "./gateway-store.ts";
@@ -197,7 +194,6 @@ describe("bootstrapApplication", () => {
     const canonicalLocation = await resolveInitialApplicationLocation({
       location: initialLocation,
       basePath: "",
-      sessionKey: "agent:main:main",
       gateway,
       agentsList: () => ({ defaultId: "main", mainKey: "main", scope: "global", agents: [] }),
       signal: new AbortController().signal,
@@ -207,11 +203,11 @@ describe("bootstrapApplication", () => {
       currentLocation = location;
     });
 
-    await startModelSetupFirstRunRedirectAfterLocation({
-      context: { gateway } as unknown as ApplicationContext,
-      enabled: false,
-      history: { location: () => currentLocation, replace },
-      initialLocationReady: Promise.resolve(canonicalLocation),
+    await installResolvedInitialLocation({
+      history: { location: () => currentLocation },
+      expectedLocation: initialLocation,
+      resolvedLocation: Promise.resolve(canonicalLocation),
+      install: replace,
     });
 
     expect(replace).toHaveBeenCalledWith({
@@ -221,100 +217,11 @@ describe("bootstrapApplication", () => {
     });
   });
 
-  it("starts the first-run redirect after installing the persisted session location", async () => {
-    const { promise: initialLocationReady, resolve: resolveInitialLocation } =
-      createDeferred<RouteLocation>();
-    let currentLocation: RouteLocation = { pathname: "/", search: "", hash: "" };
-    const replaceLocation = vi.fn((location: RouteLocation) => {
-      currentLocation = location;
-    });
-    const request = vi.fn().mockResolvedValue({
-      candidates: [],
-      manualProviders: [],
-      workspace: "/tmp/workspace",
-      setupComplete: false,
-    });
-    const client = { request } as unknown as GatewayBrowserClient;
-    type GatewayListener = Parameters<ApplicationContext["gateway"]["subscribe"]>[0];
-    let listener: GatewayListener | null = null;
-    const subscribe = vi.fn((next: GatewayListener) => {
-      listener = next;
-      return () => undefined;
-    });
-    const replaceRoute = vi.fn();
-    const gateway = {
-      snapshot: {
-        phase: "connecting",
-        client: null,
-        hello: null,
-      } as Parameters<GatewayListener>[0],
-      subscribe,
-    };
-    const context = {
-      gateway,
-      agentSelection: {
-        state: { selectedId: "main" },
-        subscribe: () => () => undefined,
-      },
-      replace: replaceRoute,
-    } as unknown as ApplicationContext;
-    const canonicalLocation = { pathname: "/chat/main", search: "", hash: "" };
-
-    const redirectReady = startModelSetupFirstRunRedirectAfterLocation({
-      context,
-      enabled: true,
-      history: { location: () => currentLocation, replace: replaceLocation },
-      initialLocationReady,
-    });
-    expect(subscribe).not.toHaveBeenCalled();
-
-    resolveInitialLocation(canonicalLocation);
-    await redirectReady;
-    expect(replaceLocation).toHaveBeenCalledWith(canonicalLocation);
-    expect(subscribe).toHaveBeenCalledOnce();
-
-    const connectedListener = listener as GatewayListener | null;
-    if (!connectedListener) {
-      throw new Error("expected first-run gateway listener");
-    }
-    gateway.snapshot = {
-      phase: "connected",
-      client,
-      hello: {
-        auth: { role: "operator", scopes: ["operator.admin"] },
-        features: { methods: ["openclaw.setup.detect"] },
-        snapshot: {
-          sessionDefaults: { defaultAgentId: "main", modelConfigured: false },
-        },
-      },
-    } as Parameters<GatewayListener>[0];
-    connectedListener(gateway.snapshot);
-    expect(request).not.toHaveBeenCalled();
-    expect(replaceRoute).toHaveBeenCalledOnce();
-    expect(replaceRoute).toHaveBeenCalledWith("model-setup", { search: "?firstRun=1" });
-  });
-
-  it("does not replace a user route with the deferred default chat location", async () => {
-    const currentLocation = { pathname: "/new", search: "", hash: "" };
-    const installLocation = vi.fn();
-
-    await startModelSetupFirstRunRedirectAfterLocation({
-      context: {} as ApplicationContext,
-      enabled: false,
-      history: { location: () => currentLocation, replace: vi.fn() },
-      initialLocationReady: Promise.resolve({ pathname: "/chat/main", search: "", hash: "" }),
-      installLocation,
-      shouldInstallLocation: () => isDefaultChatLanding(currentLocation, "", routeIdFromPath),
-    });
-
-    expect(installLocation).not.toHaveBeenCalled();
-  });
-
   it.each([
     {
-      name: "bootstrap token on the deferred default landing",
+      name: "bootstrap token on the default entry",
       initialUrl: "/?keep=yes#bootstrapToken=boot-default&bootstrapProfile=owner&tab=keep",
-      expectedUrl: "/?keep=yes#tab=keep",
+      expectedUrl: "/new?keep=yes#tab=keep",
       expectedBootstrapToken: "boot-default",
       expectedBootstrapProfile: "owner",
       expectedToken: "",
@@ -374,7 +281,7 @@ describe("bootstrapApplication", () => {
       expect(`${window.location.pathname}${window.location.search}${window.location.hash}`).toBe(
         testCase.expectedUrl,
       );
-      expect(replaceState).toHaveBeenCalledExactlyOnceWith({}, "", testCase.expectedUrl);
+      expect(replaceState).toHaveBeenLastCalledWith({}, "", testCase.expectedUrl);
       expect(runtime.context.gateway.connection.bootstrapToken).toBe(
         testCase.expectedBootstrapToken,
       );
@@ -512,9 +419,9 @@ describe("bootstrapApplication", () => {
       try {
         expect(runtime.focusLocation).toBeNull();
         expect(`${window.location.pathname}${window.location.search}${window.location.hash}`).toBe(
-          initialUrl,
+          `/new?view=${view}&keep=yes#pane`,
         );
-        expect(replaceState).not.toHaveBeenCalled();
+        expect(replaceState).toHaveBeenLastCalledWith({}, "", `/new?view=${view}&keep=yes#pane`);
       } finally {
         runtime.stop();
         replaceState.mockRestore();
@@ -572,7 +479,7 @@ describe("bootstrapApplication", () => {
       const start = runtime.start();
       runtime.context.replace("about");
       runtime.context.navigate("new-session");
-      expect(window.location.pathname).toBe("/chat");
+      expect(window.location.pathname).toBe("/new");
 
       await start;
 

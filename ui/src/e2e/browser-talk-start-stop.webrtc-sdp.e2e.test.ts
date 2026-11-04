@@ -1,13 +1,13 @@
 // Control UI E2E tests cover WebRTC SDP response handling through a real page.
 import type { Page } from "playwright";
 import { expect, it } from "vitest";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import {
+  TALK_READY_HISTORY_MESSAGE,
+  type WebRtcSdpE2eProof,
   captureWebRtcSdpAlertProof,
   installOversizedWebRtcSdpFixture,
   installWebRtcSdpFailureFixture,
-  type WebRtcSdpE2eProof,
-  TALK_READY_HISTORY_MESSAGE,
   videoTalkCatalog,
   waitForTalkReady,
 } from "./browser-talk-start-stop.fixtures.ts";
@@ -51,7 +51,7 @@ suite.define(() => {
       });
       await installWebRtcSdpFailureFixture(page);
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await waitForTalkReady(page);
       await expect
         .poll(() => page.locator('[data-chat-talk-capability="realtime"]').count())
@@ -102,7 +102,7 @@ suite.define(() => {
       });
       await installOversizedWebRtcSdpFixture(page);
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await waitForTalkReady(page);
       await expect
         .poll(() => page.locator('[data-chat-talk-capability="realtime"]').count())

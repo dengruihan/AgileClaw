@@ -5,8 +5,8 @@ import {
   captureSessionAccessibilityProof,
   chatSessionListResponse,
   controlUiSessionPath,
-  createChatFlowE2eSuite,
   controlUiSessionUrl,
+  createChatFlowE2eSuite,
   installMockGateway,
   requireRecord,
   sidebarSessionOrder,
@@ -557,7 +557,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const trigger = page.locator("summary.context-ring");
       await trigger.waitFor({ timeout: 10_000 });
       await trigger.click();
@@ -596,7 +596,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByText("Type whenever you are ready.").click();
 
       const composer = page.locator(".agent-chat__composer-combobox textarea");
@@ -650,7 +650,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const trigger = page.locator("summary.context-ring");
       await trigger.waitFor({ timeout: 10_000 });
       expect((await trigger.textContent())?.trim()).toBe("");
@@ -686,7 +686,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       await page.getByText("History renders before sessions finish.").waitFor({ timeout: 10_000 });
       const composer = page.locator(".agent-chat__composer-combobox textarea");

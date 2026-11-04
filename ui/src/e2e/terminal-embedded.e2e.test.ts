@@ -5,6 +5,7 @@ import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-ar
 import { waitForControlUiGatewayReady } from "../test-helpers/control-ui-e2e-readiness.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
+  controlUiSessionUrl,
   defaultControlUiFeatureMethods,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
@@ -114,7 +115,9 @@ suite.define(() => {
         terminalEnabled: true,
       });
 
-      expect((await page.goto(`${suite.server.baseUrl}chat`))?.status()).toBe(200);
+      expect(
+        (await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main")))?.status(),
+      ).toBe(200);
       const firstConnect = await gateway.waitForRequest("connect");
       expect(firstConnect.params).toMatchObject({ client: { buildId: "e2e" } });
       await page.waitForFunction(
@@ -164,7 +167,9 @@ suite.define(() => {
         terminalEnabled: true,
       });
 
-      expect((await page.goto(`${suite.server.baseUrl}chat`))?.status()).toBe(200);
+      expect(
+        (await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main")))?.status(),
+      ).toBe(200);
       await gateway.waitForRequest("connect");
       await page.waitForFunction(() => {
         const panel = document.querySelector("openclaw-terminal-panel") as

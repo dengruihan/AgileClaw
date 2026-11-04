@@ -1,8 +1,5 @@
 import { expect, it } from "vitest";
-import {
-  createControlUiE2eContextOptions,
-  tooltipTitleText,
-} from "./control-ui-e2e-suite.test-support.ts";
+import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 import {
   WORKSPACE,
   captureDeviceRuntimeUiProof,

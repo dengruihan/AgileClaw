@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import type { Locator } from "playwright";
+import { type Locator } from "playwright";
 import { expect, it } from "vitest";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import {
   createControlUiE2eContextOptions,
   createControlUiE2eSuite,
@@ -61,7 +61,7 @@ suite.define(() => {
             },
           ],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.getByRole("button", { name: "Expand table", exact: true }).click();
         const expandedTable = page.locator(".markdown-table-dialog");
         await expandedTable.waitFor({ state: "visible" });
@@ -139,7 +139,7 @@ suite.define(() => {
           },
         ],
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       const user = page.locator('.chat-bubble[data-entry-id="copy-user"]');
       const assistant = page.locator('.chat-bubble[data-entry-id="copy-assistant"]');

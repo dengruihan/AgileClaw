@@ -1,15 +1,16 @@
 import path from "node:path";
-import { chromium, type Browser } from "playwright";
+import { type Browser, chromium } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
+  type ControlUiE2eServer,
   canRunPlaywrightChromium,
   controlUiSessionUrl,
   installMockGateway,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
+import { openAssistantDock } from "./assistant-dock.test-support.ts";
 
 const executablePath = resolvePlaywrightChromiumExecutablePath(chromium.executablePath());
 let browser: Browser;
@@ -117,8 +118,12 @@ describe("Context attachment mocked Gateway E2E", () => {
       expect(
         await page.locator(".chat-bubble").filter({ hasText: text }).first().textContent(),
       ).not.toContain("Working context captured");
-      await page.getByRole("button", { name: "Talk to your Home agent", exact: true }).click();
-      const home = page.locator("openclaw-home-session");
+      await openAssistantDock(page, {
+        sessionKey: "agent:main:main",
+        agentId: "main",
+        label: "Main",
+      });
+      const home = page.locator("openclaw-assistant-session");
       const composer = home.locator(".agent-chat__composer-combobox textarea");
       await composer.fill("Please review the captured file.");
       await home.getByRole("button", { name: "Send message", exact: true }).click();

@@ -83,7 +83,7 @@ describe("Model Setup activation feedback", () => {
         button.click();
         expect(viewProps.onActivateCandidate).toHaveBeenCalledWith(detected.candidates[0]);
       } else if (entry === "manual") {
-        expect(text(button)).toBe("Connect & verify");
+        expect(text(button)).toBe("Connect & use for this agent");
         button.click();
         expect(viewProps.onManualConnect).toHaveBeenCalledOnce();
       }

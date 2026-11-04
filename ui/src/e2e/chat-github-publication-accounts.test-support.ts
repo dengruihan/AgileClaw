@@ -4,7 +4,7 @@ import type { BrowserContext } from "playwright";
 import { expect, it } from "vitest";
 import { SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD } from "../lib/session-pull-requests.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiSessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 import {
   personalAccount,
@@ -13,7 +13,7 @@ import {
   publicationOptions,
   showPublicationBranch,
 } from "./chat-github-publication.test-support.ts";
-import type { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
+import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 export function defineGitHubPublicationAccountTests({
   suite,
@@ -38,7 +38,7 @@ export function defineGitHubPublicationAccountTests({
           "sessions.github.options": publicationOptions,
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await showPublicationBranch(gateway);
       const arrow = page.getByRole("button", { name: "Publication account" });
       await arrow.waitFor();
@@ -91,7 +91,6 @@ export function defineGitHubPublicationAccountTests({
       expect(await gateway.getRequests("sessions.github.publish")).toHaveLength(0);
     },
   );
-
   it("publishes as the sole personal account only after the explicit labeled action", async () => {
     const context = await newPublicationContext();
     const page = await context.newPage();
@@ -103,7 +102,7 @@ export function defineGitHubPublicationAccountTests({
         "sessions.github.options": { ...publicationOptions, shared: null },
       },
     });
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await showPublicationBranch(gateway);
     const publish = page.getByRole("button", { name: "Publish as @alice-tools", exact: true });
     await publish.waitFor();
@@ -162,7 +161,7 @@ export function defineGitHubPublicationAccountTests({
           "sessions.github.options": publicationOptions,
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await showPublicationBranch(gateway);
       await page.getByRole("button", { name: "Publication account" }).click();
       await page.locator('wa-dropdown-item[value="personal"]').click();

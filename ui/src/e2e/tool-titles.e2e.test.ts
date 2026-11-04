@@ -8,6 +8,7 @@ import {
 } from "./chat-flow.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it("renders recorded and live execution purposes without requesting generated titles", async () => {
@@ -42,7 +43,7 @@ suite.define(() => {
             { role: "assistant", content: [{ type: "text", text: "The checks are complete." }] },
           ],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const historyRow = page.locator(".chat-tool-row", { hasText: "Check the test suite" });
         await historyRow.waitFor();
         await historyRow.click();

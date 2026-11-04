@@ -85,7 +85,7 @@ export function renderAgentsHome(props: AgentsHomeProps) {
             class="agents-home__card"
             data-agent-id=${card.id}
             href=${card.target.href}
-            @click=${(event: MouseEvent) => navigate(event, "chat", card.target.options)}
+            @click=${(event: MouseEvent) => navigate(event, "new-session", card.target.options)}
           >
             <div class="agents-home__identity">
               <div class="agents-home__avatar" aria-hidden="true">

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { expect, it } from "vitest";
 import { createDeferred } from "../../../test/helpers/promise.js";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { installMockGateway, controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 import { waitForChatScrollIdle } from "./chat-flow.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
@@ -95,7 +95,7 @@ suite.define(() => {
               },
             ],
           });
-          await page.goto(suite.server.baseUrl + "chat");
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const gallery = page.locator(".chat-group.user .chat-message-images");
           const frames = gallery.locator(".chat-image-frame");
           const allow = page.getByRole("button", { name: "Allow image", exact: true });

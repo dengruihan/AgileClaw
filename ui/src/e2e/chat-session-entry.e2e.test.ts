@@ -214,12 +214,14 @@ suite.define(() => {
                 },
                 { target, enabled: entry !== "sidebar", lastEntryId: `entry-${count - 1}` },
               );
+              // Every entry names its session: the bare landing opens a draft
+              // instead of restoring a saved conversation. The sidebar entry
+              // still starts on the anchor session and clicks through to the target.
               await page.goto(
-                entry === "direct"
-                  ? controlUiSessionUrl(suite.server.baseUrl, target)
-                  : entry === "sidebar"
-                    ? controlUiSessionUrl(suite.server.baseUrl, "agent:main:main")
-                    : `${suite.server.baseUrl}chat`,
+                controlUiSessionUrl(
+                  suite.server.baseUrl,
+                  entry === "direct" ? target : "agent:main:main",
+                ),
               );
               if (entry === "sidebar") {
                 await page.getByText("Choose the session in the sidebar.").waitFor();

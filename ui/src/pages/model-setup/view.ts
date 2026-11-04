@@ -1,26 +1,12 @@
 import { html, nothing, type TemplateResult } from "lit";
 import { cache } from "lit/directives/cache.js";
 import type { SystemAgentSetupDetectResult } from "../../api/types.ts";
-import { subtitleForRoute, titleForRoute } from "../../app-navigation.ts";
-import { shellLayoutTraits } from "../../app/shell-layout-traits.ts";
 import { icons } from "../../components/icons.ts";
-import { renderLearnMoreLink } from "../../components/settings-ui.ts";
-import { renderSettingsWorkspace } from "../../components/settings-workspace.ts";
 import { t } from "../../i18n/index.ts";
 import { registerModelSetupEnglish } from "../../i18n/locales/en-model-setup.ts";
 import "../../styles/model-setup.css";
-import type { ModelProviderLoginController } from "../model-providers/login-controller.ts";
-import {
-  renderMutationMessage,
-  renderModelProviderConnectAction,
-} from "../model-providers/view-status.ts";
 import { renderCandidateRows } from "./candidate-models.ts";
-import {
-  renderActivationFeedback,
-  renderConfiguredModel,
-  renderConfiguredUtilityModel,
-} from "./configured-model.ts";
-import { renderModelSetupLoading } from "./loading-view.ts";
+import { renderActivationFeedback, renderConfiguredUtilityModel } from "./configured-model.ts";
 import { renderProviderIcon } from "./model-setup-icon-loader.ts";
 import type { NativeModelSetup } from "./native-model-setup.ts";
 import { listModelSetupPrepareOptions, type ModelSetupPrepareOption } from "./prepare-options.ts";
@@ -28,7 +14,6 @@ import { manualProviderName, renderManualProviderPicker } from "./provider-picke
 import type {
   ModelSetupActivationState,
   ModelSetupPageState,
-  ModelSetupVerifyState,
   ModelSetupWizardState,
 } from "./state.ts";
 import { renderModelSetupSuccessDialog } from "./success-dialog.ts";
@@ -36,13 +21,9 @@ import { renderModelSetupWizard } from "./wizard-view.ts";
 
 registerModelSetupEnglish();
 
-const MODEL_SETUP_DOCS_URL = "https://docs.openclaw.ai/concepts/model-providers";
-
 type Candidate = SystemAgentSetupDetectResult["candidates"][number];
 type AuthOption = NonNullable<SystemAgentSetupDetectResult["authOptions"]>[number];
 type ModelSetupViewProps = {
-  connection?: ModelProviderLoginController["pageActions"];
-  embedded?: boolean;
   agentLabel?: string;
   credentialChoices?: readonly string[];
   onClose?: () => void;
@@ -51,31 +32,24 @@ type ModelSetupViewProps = {
   detectionError?: string | null;
   page: ModelSetupPageState;
   activation: ModelSetupActivationState;
-  verify: ModelSetupVerifyState;
   wizard: ModelSetupWizardState;
   wizardMode: "auth" | "prepare" | "activate";
   wizardValue: unknown;
   canAdmin: boolean;
-  canVerify: boolean;
   canPrepare: boolean;
-  modelConfigured?: boolean;
   gatewayTooOld: boolean;
   refreshWarning: string | null;
   cancellationNotice?: string | null;
-  activationUnresolved?: boolean;
-  onUseCurrentModel?: () => void;
   actionsDisabled: boolean;
   manualProviderId: string;
   manualApiKey: string;
   manualError: string | null;
   moreSignInOpen: boolean;
-  firstRun: boolean;
   nativeSessionCatalogsEnabled?: boolean;
   onNativeSessionCatalogsChange?: (enabled: boolean) => void;
   nativeModels?: NativeModelSetup;
   iconUrls: Readonly<Record<string, string>>;
   onDetect: () => void;
-  onVerify: () => void;
   onActivateCandidate: (candidate: Candidate) => void;
   onStartAuth: (option: AuthOption) => void;
   onStartPrepare: (option: ModelSetupPrepareOption) => void;
@@ -171,7 +145,7 @@ function renderSetupActionRow(
 
 function renderSignIn(props: ModelSetupViewProps, result: SystemAgentSetupDetectResult) {
   const options = (result.authOptions ?? [])
-    .filter((option) => !props.embedded || !props.credentialChoices?.includes(option.id))
+    .filter((option) => !props.credentialChoices?.includes(option.id))
     .toSorted((a, b) => a.label.localeCompare(b.label));
   if (options.length === 0) {
     return nothing;
@@ -227,20 +201,18 @@ function renderPrepare(props: ModelSetupViewProps, result: SystemAgentSetupDetec
 }
 
 function renderManual(props: ModelSetupViewProps, detected: SystemAgentSetupDetectResult) {
-  const result = props.embedded
-    ? {
-        ...detected,
-        manualProviders: detected.manualProviders.filter(
-          (provider) => !props.credentialChoices?.includes(provider.id),
-        ),
-      }
-    : detected;
-  if (result.manualProviders.length === 0 && props.embedded) {
+  const result = {
+    ...detected,
+    manualProviders: detected.manualProviders.filter(
+      (provider) => !props.credentialChoices?.includes(provider.id),
+    ),
+  };
+  if (result.manualProviders.length === 0) {
     return nothing;
   }
   const provider = result.manualProviders.find((entry) => entry.id === props.manualProviderId);
   const targetId = `manual:${props.manualProviderId}`;
-  const manualId = props.embedded ? "model-discovery-manual" : "model-setup-manual";
+  const manualId = "model-discovery-manual";
   const testing = props.activation.phase === "testing" && props.activation.targetId === targetId;
   return html`
     <section class="settings-section">
@@ -294,11 +266,7 @@ function renderManual(props: ModelSetupViewProps, detected: SystemAgentSetupDete
           ${
             testing
               ? t("modelSetup.candidates.testingButton")
-              : t(
-                  props.embedded
-                    ? "modelSetup.discovery.connectForAgent"
-                    : "modelSetup.manual.connectAndVerify",
-                )
+              : t("modelSetup.discovery.connectForAgent")
           }
         </button>
       </div>
@@ -347,33 +315,14 @@ function renderNativeSessionDiscovery(
 }
 
 function renderReady(props: ModelSetupViewProps, result: SystemAgentSetupDetectResult) {
-  const onContinue =
-    props.firstRun && result.setupComplete && props.activation.phase !== "success"
-      ? props.onOpenChat
-      : undefined;
-  const primary =
-    !props.embedded && result.configuredModel
-      ? renderConfiguredModel({
-          result,
-          verify:
-            props.verify.phase === "ok" && props.verify.modelTarget === "utility"
-              ? { phase: "idle" }
-              : props.verify,
-          canVerify: props.canVerify,
-          actionsDisabled: props.actionsDisabled || props.detecting === true,
-          onVerify: props.onVerify,
-          onContinue,
-        })
-      : nothing;
-  const current = html`${primary}${renderConfiguredUtilityModel({
+  const current = renderConfiguredUtilityModel({
     result,
     activation: props.activation,
     canRepair: props.canAdmin && !props.gatewayTooOld,
-    actionsDisabled:
-      props.actionsDisabled || props.detecting === true || props.activationUnresolved === true,
+    actionsDisabled: props.actionsDisabled || props.detecting === true,
     onOpenAssistant: props.onOpenSetupAssistant ?? props.onOpenChat,
     onActivateCandidate: props.onActivateCandidate,
-  })}`;
+  });
   if (!props.canAdmin) {
     return html`${current}
       <div class="callout warning" role="note">${t("modelSetup.access.adminRequired")}</div>`;
@@ -392,10 +341,7 @@ function renderReady(props: ModelSetupViewProps, result: SystemAgentSetupDetectR
 export function renderModelSetup(props: ModelSetupViewProps): TemplateResult {
   let body: unknown;
   if (props.page.phase === "ready") {
-    body = renderReady(
-      { ...props, actionsDisabled: props.actionsDisabled || props.activationUnresolved === true },
-      props.page.result,
-    );
+    body = renderReady(props, props.page.result);
   } else if (!props.canAdmin) {
     body = html`<div class="callout warning" role="note">
       ${t("modelSetup.access.adminRequired")}
@@ -405,9 +351,7 @@ export function renderModelSetup(props: ModelSetupViewProps): TemplateResult {
       ${t("modelSetup.access.gatewayTooOld")}
     </div>`;
   } else if (props.page.phase === "loading") {
-    body = props.embedded
-      ? html`<div class="model-setup__loading" role="status">${t("modelSetup.loading")}</div>`
-      : renderModelSetupLoading(props.modelConfigured === true);
+    body = html`<div class="model-setup__loading" role="status">${t("modelSetup.loading")}</div>`;
   } else if (props.page.phase === "detect-error") {
     body = html`
       <div class="callout danger" role="alert">${props.page.message}</div>
@@ -423,20 +367,11 @@ export function renderModelSetup(props: ModelSetupViewProps): TemplateResult {
     >
       <div class="model-setup__intro">
         <div>
-          ${
-            props.embedded
-              ? html`<h2>${t("modelSetup.discovery.title")}</h2>
-                  <p>
-                    ${t("modelSetup.discovery.description", { agent: props.agentLabel ?? "" })}
-                  </p>`
-              : html`<h1>${t("modelSetup.heading")}</h1>
-                  <p>${t("modelSetup.intro")}</p>`
-          }
+          <h2>${t("modelSetup.discovery.title")}</h2>
+          <p>${t("modelSetup.discovery.description", { agent: props.agentLabel ?? "" })}</p>
         </div>
-        ${props.connection ? renderModelProviderConnectAction(props.connection, true) : nothing}
         ${
           props.page.phase === "ready" &&
-          (props.embedded || !props.page.result.configuredModel) &&
           props.activation.phase !== "success" &&
           props.canAdmin &&
           !props.gatewayTooOld
@@ -461,38 +396,12 @@ export function renderModelSetup(props: ModelSetupViewProps): TemplateResult {
           ? html`<div class="callout warning" role="alert">${props.refreshWarning}</div>`
           : nothing
       }
-      ${
-        props.activationUnresolved && !props.actionsDisabled && props.activation.phase !== "success"
-          ? html`<div class="model-setup__recovery">
-              <p>${t("modelSetup.recovery.unknown")}</p>
-              ${
-                props.page.phase === "ready" &&
-                (props.page.result.configuredModel || props.page.result.setupModel) &&
-                props.canVerify &&
-                props.onUseCurrentModel
-                  ? html`<button
-                      type="button"
-                      class="btn primary"
-                      @click=${props.onUseCurrentModel}
-                    >
-                      ${t("modelSetup.recovery.useCurrent")}
-                    </button>`
-                  : nothing
-              }
-              <button type="button" class="btn" @click=${props.onDetect}>
-                ${t("modelSetup.checkAgain")}
-              </button>
-            </div>`
-          : nothing
-      }
-      ${renderMutationMessage(props.connection?.loginMessage)}
       ${props.detectionError ? html`<div class="callout warning" role="alert">${props.detectionError}</div>` : nothing}
       ${props.detecting && props.page.phase === "ready" ? html`<div class="muted" role="status">${t("modelSetup.loading")}</div>` : nothing}
       ${body}
     </div>
   `;
   const dialogs = html`
-    ${props.connection?.login}
     <div @modal-cancel=${(event: Event) => event.preventDefault()}>
       ${renderModelSetupWizard({
         mode: props.wizardMode,
@@ -514,46 +423,29 @@ export function renderModelSetup(props: ModelSetupViewProps): TemplateResult {
               ? (props.onOpenSetupAssistant ?? props.onOpenChat)
               : props.onOpenChat,
             props.onSuccessClose,
-            props.firstRun,
-            props.embedded,
           )
         : nothing
     }
   `;
-  if (props.embedded) {
-    const wizardOpen = props.wizard.phase !== "idle" || props.activation.phase === "success";
-    return html`
-      ${cache(
-        wizardOpen
-          ? nothing
-          : html`<openclaw-modal-dialog
-              label=${t("modelSetup.discovery.title")}
-              @modal-cancel=${() => props.onClose?.()}
-              @wa-after-show=${(event: Event) =>
-                event.target === event.currentTarget ? props.onDiscoveryShown?.() : undefined}
-            >
-              <div class="model-setup-wizard model-setup-discovery">
-                <div class="model-setup-wizard__body">${content}</div>
-                <div class="model-setup-wizard__footer">
-                  <button class="btn" @click=${() => props.onClose?.()}>
-                    ${t("common.close")}
-                  </button>
-                </div>
-              </div>
-            </openclaw-modal-dialog>`,
-      )}
-      ${dialogs}
-    `;
-  }
+  const wizardOpen = props.wizard.phase !== "idle" || props.activation.phase === "success";
   return html`
-    <section class="content-header" ${shellLayoutTraits({ toolbarHeader: true })}>
-      <div>
-        <div class="page-title">${titleForRoute("model-setup")}</div>
-        <div class="page-subtitle">
-          ${subtitleForRoute("model-setup")} ${renderLearnMoreLink(MODEL_SETUP_DOCS_URL)}
-        </div>
-      </div>
-    </section>
-    ${renderSettingsWorkspace(content)} ${dialogs}
+    ${cache(
+      wizardOpen
+        ? nothing
+        : html`<openclaw-modal-dialog
+            label=${t("modelSetup.discovery.title")}
+            @modal-cancel=${() => props.onClose?.()}
+            @wa-after-show=${(event: Event) =>
+              event.target === event.currentTarget ? props.onDiscoveryShown?.() : undefined}
+          >
+            <div class="model-setup-wizard model-setup-discovery">
+              <div class="model-setup-wizard__body">${content}</div>
+              <div class="model-setup-wizard__footer">
+                <button class="btn" @click=${() => props.onClose?.()}>${t("common.close")}</button>
+              </div>
+            </div>
+          </openclaw-modal-dialog>`,
+    )}
+    ${dialogs}
   `;
 }

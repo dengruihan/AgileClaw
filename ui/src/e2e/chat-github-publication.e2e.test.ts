@@ -412,7 +412,7 @@ suite.define(() => {
           "sessions.github.options": publicationOptions,
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await showPublicationBranch(gateway, "fix/publisher-recovery");
       await page.getByRole("button", { name: "Publication account", exact: true }).click();
       await page.locator(`wa-dropdown-item[value="${source}"]`).click();
@@ -546,7 +546,7 @@ suite.define(() => {
         "sessions.github.options": publicationOptions,
       },
     });
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await showPublicationBranch(gateway);
     const chooser = page.getByRole("button", { name: "Publication account", exact: true });
     await chooser.click();
@@ -687,7 +687,7 @@ suite.define(() => {
           },
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await showPublicationBranch(gateway);
       await page.getByRole("button", { name: "Confirm original publication" }).waitFor();
       expect(await gateway.getRequests("sessions.github.publish")).toHaveLength(0);
@@ -759,7 +759,7 @@ suite.define(() => {
         },
       },
     });
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await showPublicationBranch(gateway);
     await page.getByText("The original publication is still running.", { exact: true }).waitFor();
     // The same profile's writer completes the request; this connection only reads it.
@@ -830,7 +830,7 @@ suite.define(() => {
         "sessions.github.options": publicationOptions,
       },
     });
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await showPublicationBranch(gateway);
     await page.getByRole("button", { name: "Publication account" }).click();
     await page.locator('wa-dropdown-item[value="personal"]').click();

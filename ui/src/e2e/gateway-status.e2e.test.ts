@@ -110,7 +110,7 @@ suite.define(() => {
       async ({ page }) => {
         await installNativeWebChrome(page);
         const gateway = await installMockGateway(page);
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await waitForControlUiGatewayReady(page);
         await page.locator(".agent-chat__composer-combobox textarea").waitFor({ state: "visible" });
         await gateway.emitGatewayEvent("ui.command", {
@@ -161,7 +161,7 @@ suite.define(() => {
           agentModel: "example/sample-model",
           models: [{ id: "sample-model", name: "Sample model", provider: "example" }],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await waitForControlUiGatewayReady(page);
         expect((await gateway.getRequests("connect")).length).toBeGreaterThan(0);
         const composer = page.locator(".agent-chat__composer-combobox textarea");

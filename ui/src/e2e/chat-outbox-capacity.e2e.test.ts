@@ -18,6 +18,7 @@ const largePngBytes = 2_404_765;
 const smallPngBytes = 25_536;
 const storageError =
   "Could not store this message for reconnect. Free browser storage or reconnect before sending.";
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 function pngChunk(type: string, data: Buffer): Buffer {
   const chunk = Buffer.alloc(data.length + 12);
@@ -154,7 +155,7 @@ suite.define(() => {
           await page.goto(`${suite.server.baseUrl}settings/appearance`);
           await page.locator("[data-settings-follow-up-mode]").selectOption("steer");
           await gateway.waitForRequest("config.patch");
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const pane = page.locator('openclaw-chat-pane[aria-hidden="false"]');
           const composer = pane.locator(".agent-chat__composer-combobox textarea");
           const steer = pane.getByRole("button", {

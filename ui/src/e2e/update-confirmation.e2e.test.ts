@@ -2,7 +2,7 @@ import path from "node:path";
 import type { Locator, Page } from "playwright";
 import { beforeEach, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { installMockGateway, controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 import { createUpdateRunFixture } from "./update-run.test-support.ts";
 
@@ -44,7 +44,7 @@ async function openUpdateCard(page: Page, baseUrl: string, compact = false) {
       "update.runs.get": { run: createUpdateRunFixture() },
     },
   });
-  expect((await page.goto(`${baseUrl}chat`))?.status()).toBe(200);
+  expect((await page.goto(controlUiSessionUrl(baseUrl, "agent:main:main")))?.status()).toBe(200);
   await gateway.waitForRequest("chat.startup");
   await gateway.emitGatewayEvent("update.available", { updateAvailable: UPDATE_AVAILABLE });
   if (compact) {
@@ -93,7 +93,9 @@ suite.define(() => {
             target: { kind: "package", version: "2.0.0" },
           },
         });
-        expect((await page.goto(`${suite.server.baseUrl}chat`))?.status()).toBe(200);
+        expect(
+          (await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main")))?.status(),
+        ).toBe(200);
         await gateway.waitForRequest("chat.startup");
 
         // The Inbox is the sole update surface; the badge carries the attention.
@@ -150,7 +152,7 @@ suite.define(() => {
           operatorScopes: ["operator.admin", "operator.read"],
           updateAvailable: UPDATE_AVAILABLE,
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await gateway.waitForRequest("chat.startup");
         const connect = await gateway.waitForRequest("connect");
         const instanceId = (connect.params as { client: { instanceId: string } }).client.instanceId;
@@ -219,7 +221,9 @@ suite.define(() => {
             target: { kind: "package", version: "2.0.0" },
           },
         });
-        expect((await page.goto(`${suite.server.baseUrl}chat`))?.status()).toBe(200);
+        expect(
+          (await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main")))?.status(),
+        ).toBe(200);
         await gateway.waitForRequest("chat.startup");
 
         await page.locator(".sidebar-issues-button").click();

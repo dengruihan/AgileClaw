@@ -3,7 +3,7 @@ import path from "node:path";
 import { expect, it } from "vitest";
 import { prepareChatHistoryFixture } from "../test-helpers/chat-activity-fixtures.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({
@@ -103,7 +103,7 @@ suite.define(() => {
             "chat.message.get": { ok: true, message: nativeResult },
           },
         });
-        await page.goto(suite.server.baseUrl + "chat");
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.getByText("The service is running.", { exact: true }).waitFor();
         for (const group of await page
           .locator('.chat-activity-group__summary[aria-expanded="false"]')
@@ -177,7 +177,7 @@ suite.define(() => {
             await row.click();
           }
         };
-        await page.goto(suite.server.baseUrl + "chat");
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await expandOutput();
         // This capture precedes the new control assertion, so the same test also
         // retains an honest pre-fix screenshot when run against the baseline.

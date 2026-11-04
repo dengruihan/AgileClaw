@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { formatChatWorkContext } from "../../../../src/chat/work-context.js";
 import type { ApplicationContext } from "../../app/context.ts";
 import {
-  buildHomeWorkContext,
+  buildPageWorkContext,
   publishChatWorkContext,
   subscribeChatWorkContext,
 } from "./chat-work-context.ts";
@@ -68,18 +68,18 @@ describe("Home work-context snapshots", () => {
       publishChatWorkContext(context, pane, source);
       publishChatWorkContext(context, pane, { ...source });
       expect(changed).toHaveBeenCalledTimes(1);
-      expect(buildHomeWorkContext(context, "chat", sessionKey, "worker")).toMatchObject({
+      expect(buildPageWorkContext(context, "chat", sessionKey, "worker")).toMatchObject({
         title: "Parser work",
         sessionKey,
         agentId: "worker",
         file: "src/parser.ts",
         workspace: "/worktrees/parser",
       });
-      expect(buildHomeWorkContext(context, "settings", sessionKey, "worker")).toEqual({
+      expect(buildPageWorkContext(context, "settings", sessionKey, "worker")).toEqual({
         page: "settings",
       });
       publishChatWorkContext(context, pane);
-      expect(buildHomeWorkContext(context, "chat", sessionKey, "worker").file).toBeUndefined();
+      expect(buildPageWorkContext(context, "chat", sessionKey, "worker").file).toBeUndefined();
       unsubscribe();
       publishChatWorkContext(context, {}, source);
       expect(changed).toHaveBeenCalledTimes(2);
@@ -100,7 +100,7 @@ describe("Home work-context snapshots", () => {
         agentId: "worker",
         workspace: "/worktrees/parser",
       };
-      expect(buildHomeWorkContext(context, "chat", sessionKey, routeAgentId)).toEqual(expected);
+      expect(buildPageWorkContext(context, "chat", sessionKey, routeAgentId)).toEqual(expected);
       publishChatWorkContext(
         context,
         {},
@@ -110,7 +110,7 @@ describe("Home work-context snapshots", () => {
           file: "src/parser.ts",
         },
       );
-      const snapshot = buildHomeWorkContext(context, "chat", sessionKey, routeAgentId);
+      const snapshot = buildPageWorkContext(context, "chat", sessionKey, routeAgentId);
       expect(snapshot).toEqual({ ...expected, file: "src/parser.ts" });
       const payload = formatChatWorkContext(snapshot);
       expect(JSON.parse(payload.slice(payload.indexOf("\n") + 1))).toEqual({

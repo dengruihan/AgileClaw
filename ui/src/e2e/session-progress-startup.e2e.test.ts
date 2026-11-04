@@ -4,6 +4,7 @@ import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-ar
 import { createChatFlowE2eSuite, installMockGateway } from "./chat-flow.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it.each(["card", "empty", "error"] as const)(
@@ -36,7 +37,7 @@ suite.define(() => {
         methodResponses: { "progressCard.get": { card } },
       });
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await gateway.waitForRequest("chat.startup");
         const artifactDir = createControlUiE2eArtifactDir(`progress-startup-${outcome}`);
         const composer = page.locator(".agent-chat__composer-combobox textarea");
@@ -197,7 +198,7 @@ suite.define(() => {
         deferredMethods: ["progressCard.get"],
       });
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await gateway.waitForRequest("progressCard.get");
         const composer = page.locator(".agent-chat__composer-combobox textarea");
         const draft = "Keep draft and focus through either reply order";
@@ -249,7 +250,7 @@ suite.define(() => {
       deferredMethods: ["chat.startup", "progressCard.get"],
     });
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       await gateway.rejectDeferred("chat.startup", { message: "History temporarily unavailable" });
       const error = page.locator('.chat-history-error[role="alert"]');

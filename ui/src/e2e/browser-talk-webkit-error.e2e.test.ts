@@ -1,6 +1,6 @@
 // Real Chromium UI and local WebRTC peer; injected legacy WebKit acquisition failure.
 import { expect, it } from "vitest";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import {
   captureMicrophoneLossProof,
   installMicrophoneLossWebRtcFixture,
@@ -71,7 +71,7 @@ suite.define(() => {
         await page.setViewportSize({ width: 390, height: 844 });
         await page.goto(`${suite.server.baseUrl}settings/appearance`);
         await page.locator("[data-settings-microphone]").selectOption("usb");
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.getByRole("button", { name: "Tap to talk", exact: true }).click();
         const alert = page.locator('.agent-chat__talk-status[role="alert"]');
         await expect

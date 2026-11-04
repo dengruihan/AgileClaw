@@ -129,7 +129,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const actionOnlyRow = page.locator('[data-session-key="agent:main:hover-actions"]');
       await actionOnlyRow.waitFor({ state: "visible", timeout: 10_000 });
       const actionOnlyText = actionOnlyRow.locator(".sidebar-recent-session__text");
@@ -282,7 +282,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const row = page.locator('[data-session-key="agent:main:touch-forked"]');
       await row.waitFor({ state: "visible", timeout: 10_000 });
       const fork = row.locator(".sidebar-recent-session__name .sidebar-session-fork-indicator");
@@ -349,7 +349,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       // Worktree rows land in the Coding zone, which starts collapsed.
       const codingToggle = page.locator(
         '[data-session-section="work"] .sidebar-session-group-toggle',
@@ -446,7 +446,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const row = page.locator('[data-session-key="agent:main:touch-active"]');
       await row.waitFor({ state: "visible", timeout: 10_000 });
       const state = row.locator(".sidebar-session-indicator .session-glyph__ring");
@@ -506,7 +506,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const codingToggle = page.locator(
         '[data-session-section="work"] .sidebar-session-group-toggle',
       );

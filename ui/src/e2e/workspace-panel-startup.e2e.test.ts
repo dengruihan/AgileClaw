@@ -4,6 +4,7 @@ import {
   defaultControlUiFeatureMethods,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
+import { openAssistantDock } from "./assistant-dock.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({ name: "workspace panel startup" });
@@ -11,10 +12,10 @@ const panels = [
   { name: "terminal", tag: "openclaw-terminal-panel", selector: ".tp-header" },
   { name: "browser", tag: "openclaw-browser-panel", selector: ".bp" },
   { name: "desktop", tag: "openclaw-desktop-panel", selector: ".bp" },
-  { name: "home", tag: "openclaw-assistant-panel", selector: ".assistant-panel" },
+  { name: "assistant", tag: "openclaw-assistant-panel", selector: ".assistant-panel" },
 ] as const;
 const deferredPanelTags = panels.map((panel) =>
-  panel.name === "home" ? "openclaw-assistant-panel-content" : panel.tag,
+  panel.name === "assistant" ? "openclaw-assistant-panel-content" : panel.tag,
 );
 
 suite.define(() => {
@@ -128,6 +129,14 @@ suite.define(() => {
             await gateway.emitGatewayEvent("ui.command", {
               command: { kind: "panel", panel: "browser", open: true },
             });
+          } else if (panel.name === "assistant") {
+            // Only an explicit session destination opens the dock; there is no
+            // built-in Home conversation behind a toggle event any more.
+            await openAssistantDock(page, {
+              sessionKey: "agent:main:main",
+              agentId: "main",
+              label: "Main",
+            });
           } else {
             await page.evaluate(
               (name) =>
@@ -139,13 +148,22 @@ suite.define(() => {
           }
           await page.locator(panel.tag).locator(panel.selector).waitFor();
           const deferredTag =
-            panel.name === "home" ? "openclaw-assistant-panel-content" : panel.tag;
+            panel.name === "assistant" ? "openclaw-assistant-panel-content" : panel.tag;
           await page.locator(deferredTag).waitFor({ state: "attached" });
           expect(await definitions()).toEqual([deferredTag]);
           await page.reload();
-          await page.locator(panel.tag).locator(panel.selector).waitFor();
-          await page.locator(deferredTag).waitFor({ state: "attached" });
-          expect(await definitions()).toEqual([deferredTag]);
+          if (panel.name === "assistant") {
+            // The destination belongs to the page that opened it, so a reload
+            // restores the closed dock and never loads its conversation.
+            await expect
+              .poll(() => page.locator(panel.tag).locator(panel.selector).isVisible())
+              .toBe(false);
+            expect(await page.locator(deferredTag).count()).toBe(0);
+          } else {
+            await page.locator(panel.tag).locator(panel.selector).waitFor();
+            await page.locator(deferredTag).waitFor({ state: "attached" });
+            expect(await definitions()).toEqual([deferredTag]);
+          }
           if (panel.name === "terminal") {
             const terminal = page.locator(panel.tag).locator(".tp-host");
             await terminal.locator("canvas").waitFor();

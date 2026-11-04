@@ -1,11 +1,11 @@
 // Native browser lifecycle proof with an injected microphone-ended event.
 import { expect, it } from "vitest";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import {
-  captureMicrophoneLossProof,
-  installMicrophoneLossWebRtcFixture,
   type MicrophoneLossE2eProof,
   TALK_READY_HISTORY_MESSAGE,
+  captureMicrophoneLossProof,
+  installMicrophoneLossWebRtcFixture,
   videoTalkCatalog,
   waitForTalkReady,
 } from "./browser-talk-start-stop.fixtures.ts";
@@ -47,7 +47,7 @@ suite.define(() => {
           return permission.then(() => getUserMedia(constraints));
         };
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await waitForTalkReady(page);
       await page.getByRole("button", { name: "Start voice input" }).click();
       await expect
@@ -100,7 +100,7 @@ suite.define(() => {
         },
       });
       await installMicrophoneLossWebRtcFixture(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await waitForTalkReady(page);
       await page.getByRole("button", { name: "Start voice input" }).click();
       try {

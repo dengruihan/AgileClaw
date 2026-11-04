@@ -5,6 +5,7 @@ import {
   installMockGateway,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
+  controlUiSessionUrl,
 } from "../test-helpers/control-ui-e2e.ts";
 import { TEST_LINK_READER } from "../test-helpers/link-reader.ts";
 
@@ -56,7 +57,7 @@ it("keeps check navigation, refresh, and long content usable in a narrow native 
       ],
       methodResponses: { "forge.detail": detail },
     });
-    await page.goto(server.baseUrl + "chat");
+    await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
     await page.getByRole("link", { name: "Review build", exact: true }).click();
     const panel = page.locator("openclaw-link-reader-panel");
     const content = panel.locator(".lr-content:not([hidden])");

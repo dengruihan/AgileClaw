@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  controlUiSessionUrl,
   defaultControlUiFeatureMethods,
   installMockGateway,
   pauseVirtualClock,
@@ -19,7 +20,7 @@ suite.define(() => {
         deferredMethods: ["sessions.viewers.set"],
       });
       await page.clock.install();
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const first = await gateway.waitForRequest("sessions.viewers.set");
       expect(first.params).toMatchObject({ sessionKeys: ["agent:main:main"] });
       await pauseVirtualClock(page);

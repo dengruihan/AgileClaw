@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 import { projectChatDisplayMessages } from "../../../src/gateway/chat-display-projection.js";
 import { createNestedToolActivity } from "../../../src/sessions/nested-tool-activity.js";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({
@@ -88,7 +88,7 @@ suite.define(() => {
           ...projectChatDisplayMessages(calls),
         ],
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByText("I’ll inspect the workspace first.", { exact: true }).waitFor();
       if (artifactDir) {
         await page.screenshot({ path: path.join(artifactDir, "collapsed.png") });
@@ -163,7 +163,7 @@ suite.define(() => {
       },
     });
 
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     const summaries = page.locator(".chat-activity-group__summary");
     await expect.poll(() => summaries.count()).toBe(3);
     const rowKeys = await summaries.evaluateAll((elements) =>
@@ -338,7 +338,7 @@ suite.define(() => {
         ],
       });
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const transcript = page.locator(".chat-thread-inner");
       await transcript.getByText("Caption ready for the second run.", { exact: true }).waitFor();
       const artifactRoot = process.env.OPENCLAW_CONTROL_UI_E2E_ARTIFACT_DIR?.trim();
@@ -426,7 +426,7 @@ suite.define(() => {
       },
     });
 
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     const liveRow = page.locator(".chat-virtual-row", {
       has: page.locator(".chat-reading-indicator"),
     });
@@ -499,7 +499,7 @@ suite.define(() => {
       },
     });
 
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await page.getByText(selectedText, { exact: true }).waitFor();
     const inactiveSessionKey = "agent:main:inactive-session";
     await gateway.emitGatewayEvent("chat", {

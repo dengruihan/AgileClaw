@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import type { AgentsListResult, GatewaySessionRow, SessionsListResult } from "../api/types.ts";
 import {
   controlUiBundledSettingsStorageKey,
+  controlUiSessionUrl,
   installMockGateway,
   waitForControlUiRoute,
 } from "../test-helpers/control-ui-e2e.ts";
@@ -124,7 +125,7 @@ suite.define(() => {
               "sessions.list": sessions,
             },
           });
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await waitForControlUiRoute(page, { routeId: "chat" });
           const sidebar = page.locator("openclaw-app-sidebar");
           const group = sidebar.locator('[data-agent-group="main"]');

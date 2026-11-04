@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import { waitForControlUiGatewayReady } from "../test-helpers/control-ui-e2e-readiness.ts";
 import {
   controlUiBundledGatewayUrl,
+  controlUiSessionUrl,
   installMockGateway,
   waitForControlUiRoute,
 } from "../test-helpers/control-ui-e2e.ts";
@@ -203,7 +204,9 @@ suite.define(() => {
               if (reload) {
                 await page.reload({ waitUntil: "commit" });
               } else {
-                await page.goto(`${suite.server.baseUrl}chat`, { waitUntil: "commit" });
+                await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"), {
+                  waitUntil: "commit",
+                });
               }
               // Make the pre-module paint observable even on fast runners. A
               // final DOM assertion misses a wrong canvas repaired by app boot.
@@ -287,7 +290,7 @@ suite.define(() => {
             "users.prefs.get": profileResponse,
           },
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.getByText("Theme continuity is ready.", { exact: true }).waitFor();
         // With no seeded mirror, Rosé proves this tab has applied the resolved profile.
         await page.waitForFunction(
@@ -329,7 +332,9 @@ suite.define(() => {
         });
         // Keep the observed tab foreground so background rAF throttling cannot hide a flash.
         await page.bringToFront();
-        await pendingPage.goto(`${suite.server.baseUrl}chat`, { waitUntil: "commit" });
+        await pendingPage.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"), {
+          waitUntil: "commit",
+        });
         await pendingGateway.waitForRequest("users.prefs.get");
         // This native event must come from the sibling's nonappearance reconciliation.
         await page.waitForFunction(() => window.themeSiblingStorageObserved, undefined, {

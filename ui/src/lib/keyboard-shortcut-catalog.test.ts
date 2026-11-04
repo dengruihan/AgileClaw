@@ -211,7 +211,6 @@ describe("keyboard shortcut catalog presentation", () => {
     const panels = resolveKeyboardShortcutSections().find((section) => section.id === "panels")!;
     const expected = {
       terminalPanel: "⌃`",
-      homePanel: "⌘⇧H",
       workspaceFiles: "⌘⇧B",
       sideChat: "⌘⇧S",
       browserPanel: "⌘⌥⇧U",

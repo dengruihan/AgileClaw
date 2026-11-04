@@ -2,6 +2,7 @@ import type { Locator, Page } from "playwright";
 import { expect, it } from "vitest";
 import {
   controlUiBundledSettingsStorageKey,
+  controlUiSessionUrl,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
 import { createSidebarFooterProofSuite } from "./sidebar-footer-proof.test-support.ts";
@@ -75,7 +76,7 @@ async function openNames(page: Page, name: string, workspace = false) {
       },
     },
   });
-  await page.goto(`${suite.server.baseUrl}chat`);
+  await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
   const sidebar = page.locator("openclaw-app-sidebar");
   const labels = [sidebar.locator(".sidebar-identity-card__name")];
   for (const label of labels) {

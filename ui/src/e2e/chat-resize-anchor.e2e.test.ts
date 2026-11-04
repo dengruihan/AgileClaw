@@ -1,13 +1,14 @@
 // Regression: resizing the chat pane must not jump the transcript. The reader's
 // anchor row (topmost visible row) should stay in place while rows re-wrap.
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { type Browser, type BrowserContext, type Page, chromium } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  type ControlUiE2eServer,
   canRunPlaywrightChromium,
+  controlUiSessionUrl,
   installMockGateway,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
 
 const chromiumExecutablePath = resolvePlaywrightChromiumExecutablePath(chromium.executablePath());
@@ -118,7 +119,7 @@ describeControlUiE2e("Chat transcript resize anchoring", () => {
       })),
     });
 
-    await page.goto(`${controlUi.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(controlUi.baseUrl, "agent:main:main"));
     await page
       .getByText(`Message number ${MESSAGE_COUNT - 1}:`)
       .first()
@@ -218,7 +219,7 @@ describeControlUiE2e("Chat transcript resize anchoring", () => {
     });
 
     // Fresh sessions open pinned to the end; leave the scroll untouched.
-    await page.goto(`${controlUi.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(controlUi.baseUrl, "agent:main:main"));
     await page
       .getByText(`Message number ${MESSAGE_COUNT - 1}:`)
       .first()

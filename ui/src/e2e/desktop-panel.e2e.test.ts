@@ -1,6 +1,6 @@
 import path from "node:path";
 import { expect, it } from "vitest";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { activateChatHeaderPanelAction } from "./chat-side-panel.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 import { openDesktopPanel, openPalette, sessionsList } from "./desktop-panel.test-support.ts";
@@ -93,7 +93,7 @@ suite.define(() => {
     ]) {
       await suite.withPage({ serviceWorkers: "block" }, async ({ page }) => {
         await installMockGateway(page, testCase);
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await openPalette(page);
         expect(await page.getByRole("option", { name: "Desktop", exact: true }).count()).toBe(0);
       });
@@ -126,7 +126,7 @@ suite.define(() => {
             },
           },
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await openPalette(page);
         expect(await page.getByRole("option", { name: "Desktop", exact: true }).count()).toBe(1);
 
@@ -226,7 +226,7 @@ suite.define(() => {
           },
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const panel = await openDesktopPanel(page, suite.server.baseUrl);
       await installDesktopClientFake(panel);
       const requestCount = (await gateway.getRequests()).length;
@@ -271,7 +271,7 @@ suite.define(() => {
           },
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       await openDirectDesktop(page, "missing-worker");
 
@@ -315,7 +315,7 @@ suite.define(() => {
           },
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       // Settle automatic discovery of the chat's worker before opening another target.
       await gateway.waitForRequest("environments.status", {
         match: { environmentId: "other-worker" },
@@ -384,7 +384,7 @@ suite.define(() => {
           },
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.deferNext("environments.status");
       const inventoryCount = (await gateway.getRequests("environments.status")).length;
 

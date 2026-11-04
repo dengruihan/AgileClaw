@@ -1,6 +1,7 @@
 import { asNullableRecord } from "@openclaw/normalization-core/record-coerce";
 import { expect, it } from "vitest";
 import {
+  controlUiSessionUrl,
   defaultControlUiFeatureMethods,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
@@ -253,7 +254,7 @@ suite.define(() => {
               }
             }
           };
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await page.getByText("History is ready.", { exact: true }).waitFor();
           await expectRequestCountStable(gateway, "browser.request", 0);
           expect(await page.locator("openclaw-browser-tab-card").count()).toBe(0);
@@ -530,7 +531,7 @@ suite.define(() => {
               },
             },
           });
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await page.getByText("The pages are ready.", { exact: true }).waitFor();
           const hostCard = page
             .locator("openclaw-browser-tab-card")

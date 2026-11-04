@@ -5,6 +5,7 @@ import type { SidebarDock } from "../pages/chat/sidebar-layout-types.ts";
 import { waitForControlUiGatewayReady } from "../test-helpers/control-ui-e2e-readiness.ts";
 import {
   controlUiBundledSettingsStorageKey,
+  controlUiSessionUrl,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
 import { dockChatSidePanel } from "./chat-side-panel.test-support.ts";
@@ -65,7 +66,7 @@ async function openSidePanel(page: Page, dock: SidebarDock = "right") {
     workspace: "/tmp/openclaw",
     workspaceGit: true,
   });
-  await page.goto(`${suite.server.baseUrl}chat`);
+  await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
   await waitForControlUiGatewayReady(page);
 }
 

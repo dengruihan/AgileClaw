@@ -11,6 +11,7 @@ import {
 const suite = createChatFlowE2eSuite();
 type AnchorFrames = { frame: number; positions: Array<number | null>; readerDelta: number };
 type AnchorWindow = typeof window & { prependFrames: AnchorFrames };
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it.each([
@@ -97,7 +98,7 @@ suite.define(() => {
         },
       });
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const pane = page.locator(".chat-pane-cache__pane--active");
         const thread = pane.locator(".chat-thread");
         await thread.getByText(/^Transcript entry 1800\./).waitFor();

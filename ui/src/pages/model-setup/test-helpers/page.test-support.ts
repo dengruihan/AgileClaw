@@ -8,12 +8,10 @@ import {
   type ApplicationContextProvider,
 } from "../../../test-helpers/application-context.ts";
 import { waitForFast } from "../../../test-helpers/wait-for.ts";
-import type { ModelSetupRouteData } from "../first-run-setup.ts";
 import "../model-setup-page.ts";
 import type { ModelSetupPageState } from "../state.ts";
 
 export type TestModelSetupPage = HTMLElement & {
-  routeData?: ModelSetupRouteData;
   updateComplete: Promise<boolean>;
 };
 
@@ -129,7 +127,7 @@ export function createContext() {
 
 export async function mountPage(
   context: ApplicationContext,
-  fixture: ModelSetupRouteData & {
+  fixture: {
     state: Extract<ModelSetupPageState, { phase: "ready" }>;
     client: GatewayBrowserClient;
   },
@@ -137,7 +135,6 @@ export async function mountPage(
   const provider = createApplicationContextProvider(context);
   const page = document.createElement("openclaw-model-setup-page") as TestModelSetupPage;
   vi.spyOn(fixture.client, "request").mockResolvedValueOnce(fixture.state.result);
-  page.routeData = { firstRun: fixture.firstRun };
   provider.append(page);
   document.body.append(provider);
   await page.updateComplete;

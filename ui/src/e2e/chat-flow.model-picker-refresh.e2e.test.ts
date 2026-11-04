@@ -115,7 +115,7 @@ suite.define(() => {
       },
     });
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       let picker = page.locator(
         'openclaw-chat-pane[aria-hidden="false"] .chat-controls__model-picker',
       );
@@ -255,7 +255,7 @@ suite.define(() => {
       },
     });
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const picker = page.locator(
         'openclaw-chat-pane[aria-hidden="false"] .chat-controls__model-picker',
       );

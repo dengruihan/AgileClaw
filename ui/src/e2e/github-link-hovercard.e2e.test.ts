@@ -17,6 +17,7 @@ import {
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
   type ControlUiE2eServer,
+  controlUiSessionUrl,
 } from "../test-helpers/control-ui-e2e.ts";
 import { TEST_LINK_READER } from "../test-helpers/link-reader.ts";
 import { waitForWatchedSessionKey } from "./chat-github-publication.test-support.ts";
@@ -121,7 +122,7 @@ async function openPullPreviewPage(
       },
     ],
   });
-  await page.goto(`${server.baseUrl}chat`);
+  await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
 
   const pullLink = page.locator('a.markdown-github-link[href$="/pull/99816"]');
   const commentLink = page.getByRole("link", { name: "the review comment", exact: true });
@@ -328,7 +329,7 @@ describeControlUiE2e("GitHub link hover cards", () => {
           },
         },
       });
-      await page.goto(server.baseUrl + "chat");
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       const key = await waitForWatchedSessionKey(gateway);
       await gateway.emitGatewayEvent(CONTROL_UI_SESSION_PULL_REQUESTS_CHANGED_EVENT, {
         sessions: { [key]: { repository, pullRequests: [], rateLimited: false, status: "ready" } },
@@ -458,7 +459,7 @@ describeControlUiE2e("GitHub link hover cards", () => {
         },
       },
     });
-    await page.goto(`${server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
     const key = await waitForWatchedSessionKey(gateway);
     await gateway.emitGatewayEvent(CONTROL_UI_SESSION_PULL_REQUESTS_CHANGED_EVENT, {
       sessions: { [key]: { repository, pullRequests: [], rateLimited: false, status: "ready" } },
@@ -818,7 +819,7 @@ describeControlUiE2e("GitHub link hover cards", () => {
         },
       ],
     });
-    await page.goto(`${server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
 
     const previewRequestsFor = async (number: number) =>
       (await gateway.getRequests("forge.preview")).filter(

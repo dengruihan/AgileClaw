@@ -12,6 +12,7 @@ import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-su
 import { waitForCommittedComposerDraft } from "./settle.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it("persists the chat send shortcut and keeps multiline and IME input safe", async () => {
@@ -19,7 +20,7 @@ suite.define(() => {
     try {
       const page = await context.newPage();
       const gateway = await installMockGateway(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.waitFor({ state: "visible", timeout: 10_000 });
 
@@ -92,7 +93,7 @@ suite.define(() => {
       await shortcutSelect.selectOption("modifier-enter");
       expect(await shortcutSelect.inputValue()).toBe("modifier-enter");
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await composer.waitFor({ state: "visible", timeout: 10_000 });
       expect(await composer.getAttribute("aria-keyshortcuts")).toBe("Control+Enter Meta+Enter");
 
@@ -134,7 +135,7 @@ suite.define(() => {
           },
         ],
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const pane = page.locator(".chat-pane-cache__pane--active");
       const composer = pane.getByRole("textbox", { name: "Chat composer" });
       const group = pane.locator(".chat-group.assistant").filter({ hasText: quote });
@@ -225,7 +226,7 @@ suite.define(() => {
           },
         ],
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const pane = page.locator(".chat-pane-cache__pane--active");
       const composer = pane.locator(".agent-chat__composer-combobox textarea");
       const initialText = "Keep this run active while composing a reply.";
@@ -403,7 +404,7 @@ suite.define(() => {
           await followUp.selectOption(followUpMode);
         }
         await page.locator("[data-settings-send-shortcut]").selectOption("enter");
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
         const composer = page.locator(".agent-chat__composer-combobox textarea");
         const initialText = "keep the shortcut run active";

@@ -2,7 +2,10 @@ import { writeFile } from "node:fs/promises";
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
-import { captureControlUiE2eFailureDiagnostics } from "../test-helpers/control-ui-e2e.ts";
+import {
+  captureControlUiE2eFailureDiagnostics,
+  controlUiSessionUrl,
+} from "../test-helpers/control-ui-e2e.ts";
 import {
   captureUiProof,
   createChatFlowE2eSuite,
@@ -25,7 +28,7 @@ suite.define(() => {
     const gateway = await installMockGateway(page);
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.waitFor({ state: "visible", timeout: 15_000 });
       await page.locator(".agent-chat__welcome").waitFor({ state: "visible" });
@@ -104,7 +107,7 @@ suite.define(() => {
     const gateway = await installMockGateway(page);
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.waitFor({ state: "visible", timeout: 15_000 });
       await gateway.setOnline(false);
@@ -141,7 +144,7 @@ suite.define(() => {
     const gateway = await installMockGateway(page);
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.waitFor({ state: "visible", timeout: 15_000 });
       await gateway.setOnline(false);

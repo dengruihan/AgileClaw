@@ -1,10 +1,9 @@
 import { html, nothing } from "lit";
 import type { GatewayControlUiPluginTab } from "../api/gateway.ts";
 import { serializeSidebarEntry, titleForRoute, type SidebarZoneEntry } from "../app-navigation.ts";
-import { isRouteId, isSessionRouteId } from "../app-route-paths.ts";
+import { isRouteId } from "../app-route-paths.ts";
 import { gatewayPresentationScope } from "../app/gateway-presentation-scope.ts";
 import type { NativeGateway, NativeGatewaysSnapshot } from "../app/native-gateways.runtime.ts";
-import { isHomePanelAvailable } from "../app/panel-availability.ts";
 import { controlUiPublicAssetPath } from "../app/public-assets.ts";
 import { CONTROL_UI_BUILD_INFO } from "../build-info.ts";
 import { t } from "../i18n/index.ts";
@@ -13,13 +12,6 @@ import {
   formatKeyboardShortcutCombo,
   KEYBOARD_SHORTCUT_COMBOS,
 } from "../lib/keyboard-shortcut-contract.ts";
-import { shouldHandleNavigationClick } from "../lib/navigation-click.ts";
-import { isSessionRunActive } from "../lib/session-run-state.ts";
-import {
-  resolveSessionPreferredFace,
-  sessionNavigationTarget,
-} from "../lib/sessions/route-navigation.ts";
-import { areUiSessionKeysEquivalent, parseAgentSessionKey } from "../lib/sessions/session-key.ts";
 import { pluginTabKey } from "../pages/plugin/route.ts";
 import { renderSidebarPluginTab } from "./app-sidebar-nav-menus.ts";
 import { renderSidebarSessionFilter } from "./app-sidebar-session-filter-summary.ts";
@@ -29,13 +21,6 @@ import { renderGatewayStatus } from "./gateway-status.ts";
 import { icons } from "./icons.ts";
 import { renderShortcutHint } from "./kbd.ts";
 import { renderNewSessionLink } from "./new-session-link.ts";
-import { HOME_PANEL_TOGGLE_EVENT } from "./panel-toggle-contract.ts";
-import {
-  renderSessionAttentionIcon,
-  sessionAttentionTooltipLabel,
-} from "./session-attention-presentation.ts";
-import { renderSessionGlyph, renderSessionUnreadBadge } from "./session-glyph.ts";
-import { renderSessionRowBadges } from "./session-row-badges.ts";
 import { formatSidebarBuildSubtitle } from "./sidebar-build-chip-format.ts";
 import { renderSidebarReorderMenu } from "./sidebar-reorder.ts";
 
@@ -154,91 +139,6 @@ export function renderAppSidebarBrand(
   `;
 }
 
-/** Home: the first page. Opens the rolling main session on its saved face. */
-export function renderAppSidebarHomeRow(host: AppSidebarRenderHost) {
-  if (host.sidebarAgentsMode === "roster") {
-    return nothing;
-  }
-  const agentId = host.expandedAgentId();
-  const mainKey = host.selectedAgentMainSessionKey(agentId);
-  const mainRow = host.mainSessionRow(agentId);
-  const session = mainRow ? host.projectHomeSession(mainRow, agentId) : null;
-  const attention = session?.attention ?? host.resolveSessionAttention({ key: mainKey, agentId });
-  const attentionLabel = sessionAttentionTooltipLabel(attention);
-  const outboxAttentionCount = host.storedOutboxes?.attentionCountForSession(mainKey) ?? 0;
-  const active =
-    isSessionRouteId(host.activeRouteId) &&
-    areUiSessionKeysEquivalent(host.getRouteSessionKey(), mainKey);
-  const hasComposerDraft = host.storedOutboxes?.hasSessionDraft(mainKey) ?? false;
-  const ownRun = mainRow ? isSessionRunActive(mainRow) : false;
-  const subagentsWorking = (session?.runningChildCount ?? 0) > 0;
-  const running = ownRun || subagentsWorking;
-  const queued = ownRun && mainRow?.status === "queued" && !subagentsWorking;
-  const unread = (mainRow?.unread === true || (session?.unreadChildCount ?? 0) > 0) && !active;
-  const activeRunLabel = running
-    ? t(
-        subagentsWorking && (!ownRun || mainRow?.status === "queued")
-          ? "sessionsView.subagentsWorking"
-          : queued
-            ? "sessionsView.statusQueued"
-            : "sessionsView.activeRun",
-      )
-    : "";
-  const unreadLabel = unread ? t("sessionsView.unread") : "";
-  const homeDescription =
-    attentionLabel || (activeRunLabel && unreadLabel)
-      ? [attentionLabel, activeRunLabel, unreadLabel].filter(Boolean).join(" · ")
-      : "";
-  const homeGlyph = renderSessionGlyph({
-    content:
-      attention.kind === "none"
-        ? html`<span class="nav-item__icon" aria-hidden="true">${icons.home}</span>`
-        : renderSessionAttentionIcon(attention, true),
-    running,
-    queued,
-    runningLabel: activeRunLabel,
-    badge: unread && !running ? renderSessionUnreadBadge() : nothing,
-  });
-  return html`
-    <a
-      href=${
-        sessionNavigationTarget({
-          face: resolveSessionPreferredFace(mainRow),
-          sessionKey: mainKey,
-          fallbackAgentId: agentId,
-          basePath: host.basePath,
-          row: mainRow ?? undefined,
-          mainKey: parseAgentSessionKey(mainKey)?.rest,
-          preferenceDerivedFace: true,
-        }).href
-      }
-      class="nav-item nav-item--home ${active ? "nav-item--active" : ""}"
-      aria-label=${homeDescription ? `${t("nav.home")} · ${homeDescription}` : nothing}
-      aria-current=${active ? "page" : nothing}
-      @click=${(event: MouseEvent) => {
-        if (!shouldHandleNavigationClick(event)) {
-          return;
-        }
-        event.preventDefault();
-        host.openMainSession(agentId);
-      }}
-    >
-      ${homeGlyph}
-      <span class="nav-item__text">${t("nav.home")}</span>
-      ${
-        outboxAttentionCount > 0 || hasComposerDraft
-          ? html`<span class="nav-item__state sidebar-home-session-states">
-              ${renderSessionRowBadges({
-                outboxAttentionCount,
-                hasComposerDraft,
-              })}
-            </span>`
-          : nothing
-      }
-    </a>
-  `;
-}
-
 export function renderAppSidebarPagesHead(host: AppSidebarRenderHost) {
   return html`
     <div class="sidebar-nav__head">
@@ -316,22 +216,6 @@ export function renderAppSidebarFooterBar(host: AppSidebarRenderHost) {
         >${announcement}</span
       >
       <span class="sidebar-footer-actions">
-        ${
-          isHomePanelAvailable(host.sessionDataContext?.gateway)
-            ? html`<openclaw-tooltip
-                .content=${`${t("assistantPanel.toggle")} (${formatKeyboardShortcutCombo(KEYBOARD_SHORTCUT_COMBOS.homePanel)})`}
-                .contentTemplate=${renderShortcutHint(t("assistantPanel.toggle"), KEYBOARD_SHORTCUT_COMBOS.homePanel)}
-                ><button
-                  type="button"
-                  class="sidebar-brand__icon sidebar-footer-bar__home"
-                  aria-label=${t("assistantPanel.toggle")}
-                  @click=${() => window.dispatchEvent(new CustomEvent(HOME_PANEL_TOGGLE_EVENT))}
-                >
-                  ${icons.home}
-                </button></openclaw-tooltip
-              >`
-            : nothing
-        }
         <openclaw-sidebar-attention
           .activeRouteId=${host.activeRouteId}
           .onNavigate=${host.onNavigate}

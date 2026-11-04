@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, it } from "vitest";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({
@@ -73,7 +73,7 @@ suite.define(() => {
             ],
           });
 
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const markdown = page.locator(".chat-group.assistant .chat-text", {
             hasText: "Alignment check",
           });
@@ -245,7 +245,7 @@ suite.define(() => {
           ],
         });
 
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const markdown = page.locator(".chat-group.assistant .chat-text", {
           hasText: "Markdown parser fidelity",
         });
@@ -304,7 +304,7 @@ suite.define(() => {
           ],
         });
 
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const blockArt = page.locator(".chat-group.user code.markdown-block-art");
         await blockArt.waitFor();
         await expect
@@ -357,7 +357,7 @@ suite.define(() => {
           ],
         });
 
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const markdown = page.locator(".chat-group.assistant .chat-text[dir='rtl']", {
           hasText: "فحص المحاذاة",
         });

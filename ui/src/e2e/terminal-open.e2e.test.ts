@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { Locator, Page } from "playwright";
 import { expect, it } from "vitest";
 import { waitForControlUiGatewayReady } from "../test-helpers/control-ui-e2e-readiness.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
@@ -14,7 +14,7 @@ const suite = createControlUiE2eSuite({
 });
 
 async function openTerminalSidePanel(page: Page): Promise<Locator> {
-  await page.goto(`${suite.server.baseUrl}chat`);
+  await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
   await waitForControlUiGatewayReady(page);
   await openChatSidePanelType(page, "Terminal");
   return page.locator(".sidebar-region__right-runtime openclaw-terminal-panel");
@@ -50,7 +50,6 @@ suite.define(() => {
         featureMethods: ["chat.startup", "terminal.open"],
         terminalEnabled: true,
       });
-
       const panel = await openTerminalSidePanel(page);
       await gateway.waitForRequest("terminal.open");
       await page.locator('[data-region-header="side"] .tabstrip-tab.is-live').waitFor();

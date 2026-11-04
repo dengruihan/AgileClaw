@@ -5,7 +5,7 @@ import { afterEach, expect, it } from "vitest";
 // Control UI E2E tests cover session-list event scope through the Gateway WebSocket.
 import { SIDEBAR_SESSION_ROSTER_LIMIT } from "../../../src/shared/session-list-limits.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { installMockGateway, controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({
@@ -270,7 +270,7 @@ suite.define(() => {
       },
     });
 
-    await currentPage.goto(`${suite.server?.baseUrl ?? ""}chat`);
+    await currentPage.goto(controlUiSessionUrl(suite.server?.baseUrl ?? "", "agent:main:main"));
     const sidebarRow = currentPage.locator(
       `.sidebar-recent-session[data-session-key="${sessionKey}"]`,
     );

@@ -2,6 +2,7 @@ import type { Locator } from "playwright";
 import { expect, it } from "vitest";
 import { storedChatOutboxScopeKey } from "../lib/chat/outbox-store.ts";
 import {
+  controlUiSessionUrl,
   defaultControlUiFeatureMethods,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
@@ -53,7 +54,7 @@ suite.define(() => {
               "sessions.companion.state": { exchanges: [] },
             },
           });
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const composer = page.locator(".agent-chat__composer-shell textarea");
           await composer.fill(draft);
           await selectText(page.locator(".chat-bubble .chat-text p").filter({ hasText: passage }));
@@ -138,7 +139,7 @@ suite.define(() => {
         const gateway = await installMockGateway(page, {
           historyMessages: [{ role: "assistant", content: selectedText }],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const source = page.locator(".chat-bubble .chat-text p").filter({ hasText: selectedText });
         await source.waitFor({ state: "visible" });
         await selectText(source);
@@ -206,7 +207,7 @@ suite.define(() => {
           const gateway = await installMockGateway(page, {
             historyMessages: [{ role: "assistant", content: selectedText }],
           });
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const composer = page.locator(".agent-chat__composer-shell textarea");
           await composer.waitFor({ state: "visible" });
           const text = page.locator(".chat-bubble .chat-text p").filter({ hasText: selectedText });
@@ -429,7 +430,7 @@ suite.define(() => {
               { role: "assistant", content: `${filler}\n\n${passage}\n\n${filler}` },
             ],
           });
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const text = page.locator(".chat-bubble .chat-text p").filter({ hasText: passage });
           await waitForChatScrollIdle(page);
           await page.locator(".chat-thread").hover();
@@ -514,7 +515,7 @@ suite.define(() => {
             ),
           }),
         );
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const composer = replacement
           ? page.getByRole("textbox", { name: "Fixture draft", exact: true })
           : page.locator(".agent-chat__composer-shell textarea");
@@ -603,7 +604,7 @@ suite.define(() => {
         await installMockGateway(page, {
           historyMessages: [{ role: "assistant", content: passage }],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const text = page.locator(".chat-bubble .chat-text p");
         await text.waitFor({ state: "visible" });
         await selectText(text);
@@ -641,7 +642,7 @@ suite.define(() => {
         const gateway = await installMockGateway(page, {
           historyMessages: [{ role: "assistant", content: "A  \nB" }],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const paragraph = page.locator(".chat-bubble .chat-text p");
         await paragraph.waitFor({ state: "visible" });
         const sourceText = await page.locator(".chat-bubble").textContent();
@@ -703,7 +704,7 @@ suite.define(() => {
               "sessions.companion.state": { exchanges: [] },
             },
           });
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const composer = page.locator(".agent-chat__composer-shell textarea");
           await composer.fill(draft);
           const text = page.locator(".chat-bubble .chat-text p").filter({ hasText: selectedText });

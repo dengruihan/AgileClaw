@@ -168,7 +168,8 @@ function parseSessionKey(key: string): SessionKeyInfo {
   const normalized = normalizeLowercaseStringOrEmpty(key);
 
   if (key === "main" || /^agent:[^:]+:main$/u.test(key)) {
-    return { prefix: "", fallbackName: "Main Session" };
+    // The routing anchor is an ordinary session; never expose a "main" type.
+    return { prefix: "", fallbackName: t("sessionsView.sessionFallback") };
   }
 
   if (key.includes(":subagent:")) {

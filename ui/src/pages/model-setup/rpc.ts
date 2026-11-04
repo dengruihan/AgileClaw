@@ -1,13 +1,10 @@
 import { initialState, Task } from "@lit/task";
 import type { ReactiveControllerHost } from "lit";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
-import type {
-  SystemAgentSetupDetectResult,
-  SystemAgentSetupVerifyResult,
-} from "../../api/types.ts";
-import type { ModelSetupConnection } from "./first-run-setup.ts";
+import type { SystemAgentSetupDetectResult } from "../../api/types.ts";
+import type { ModelSetupConnection } from "./model-setup-connection.ts";
 import { captureModelSetupResult, type ModelSetupTaskResult } from "./model-setup-task-result.ts";
-import { MODEL_SETUP_DETECT_TIMEOUT_MS, MODEL_SETUP_VERIFY_TIMEOUT_MS } from "./state.ts";
+import { MODEL_SETUP_DETECT_TIMEOUT_MS } from "./state.ts";
 
 type ModelSetupDetectTaskResult = ModelSetupTaskResult<SystemAgentSetupDetectResult> & {
   agentId: string | null;
@@ -47,25 +44,5 @@ export function createModelSetupDetectTask(
       };
     },
     onComplete: options.onComplete,
-  });
-}
-
-export function createModelSetupVerifyTask(host: ReactiveControllerHost) {
-  return new Task<
-    readonly [GatewayBrowserClient | null, string | null, "utility" | undefined],
-    ModelSetupTaskResult<SystemAgentSetupVerifyResult>
-  >(host, {
-    autoRun: false,
-    args: () => [null, null, undefined],
-    task: async ([client, agentId, modelTarget], { signal }) =>
-      client
-        ? captureModelSetupResult(client, () =>
-            client.request<SystemAgentSetupVerifyResult>(
-              "openclaw.setup.verify",
-              { ...(agentId ? { agentId } : {}), ...(modelTarget ? { modelTarget } : {}) },
-              { timeoutMs: MODEL_SETUP_VERIFY_TIMEOUT_MS, signal },
-            ),
-          )
-        : initialState,
   });
 }

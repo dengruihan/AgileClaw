@@ -3,12 +3,12 @@ import { expect, it } from "vitest";
 import { GATEWAY_SERVER_CAPS } from "../../../packages/gateway-protocol/src/index.js";
 import { finishElementAnimations } from "../test-helpers/animations.ts";
 import { createControlUiMockBootstrapConfig } from "../test-helpers/control-ui-e2e.ts";
-import { resolveRenderedColors, type RenderedColor } from "../test-helpers/rendered-colors.ts";
+import { type RenderedColor, resolveRenderedColors } from "../test-helpers/rendered-colors.ts";
 import {
-  chatSessionListResponse,
-  createChatFlowE2eSuite,
-  controlUiSessionUrl,
   captureUiProof,
+  chatSessionListResponse,
+  controlUiSessionUrl,
+  createChatFlowE2eSuite,
   installMockGateway,
   waitForRequests,
 } from "./chat-flow.test-support.ts";
@@ -85,7 +85,7 @@ suite.define(() => {
     );
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("taskSuggestions.list");
       await gateway.emitGatewayEvent("task.suggestion", {
         action: "created",
@@ -225,7 +225,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const card = page.locator(`.task-suggestion[data-task-id="${suggestion.id}"]`);
       const nextCard = page.locator(`.task-suggestion[data-task-id="${nextSuggestion.id}"]`);
       await card.waitFor({ state: "visible", timeout: 10_000 });
@@ -349,7 +349,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("taskSuggestions.list");
       await expect
         .poll(() =>
@@ -417,7 +417,7 @@ suite.define(() => {
       });
 
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const tray = page.locator(".task-suggestions");
         await tray.waitFor({ state: "visible", timeout: 10_000 });
         expect(await tray.locator(".task-suggestion:visible").count()).toBe(1);

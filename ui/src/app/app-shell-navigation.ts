@@ -12,12 +12,7 @@ import {
   resolveSessionPreferredFaceForKey,
   sessionNavigationTarget,
 } from "../lib/sessions/route-navigation.ts";
-import {
-  buildAgentMainSessionKey,
-  normalizeAgentId,
-  parseAgentSessionKey,
-  resolveUiConfiguredMainKey,
-} from "../lib/sessions/session-key.ts";
+import { normalizeAgentId, parseAgentSessionKey } from "../lib/sessions/session-key.ts";
 import { newSessionSearch, type NewSessionTarget } from "../pages/new-session/location.ts";
 import { selectApplicationSession } from "./agent-selection.ts";
 import type { ShellRouteState } from "./app-host-route-state.ts";
@@ -139,35 +134,20 @@ export class ShellNavigationOwner {
       (!knownAgents || knownAgents.some((agent) => normalizeAgentId(agent.id) === parsedAgentId))
         ? parsedAgentId
         : resolveSessionNavigationAgentId(context);
-    const replacementSessionKey =
-      !sessionWasDeleted && (activeSessionRow?.key || !activeRouteFailed)
-        ? sessionKey
-        : buildAgentMainSessionKey({
-            agentId: replacementAgentId,
-            mainKey: resolveUiConfiguredMainKey({
-              agentsList: context.agents.state.agentsList,
-              hello: context.gateway.snapshot.hello,
-            }),
-          });
-    // Gateway rejects deletion of a live main session. If an orphaned event
-    // still names that fallback, replacing the same route would retry forever.
-    if (sessionWasDeleted && replacementSessionKey === sessionKey) {
+    if (!sessionWasDeleted && (activeSessionRow?.key || !activeRouteFailed)) {
+      context.replace(face, sessionNavigationTarget({ context, face, sessionKey }).options);
       return true;
     }
-    if (replacementSessionKey !== sessionKey) {
-      // Commit the replacement to both selection owners before navigating;
-      // otherwise a stale Gateway snapshot restores the deleted key and loops.
-      this.host.activeSessionKey = replacementSessionKey;
-      selectApplicationSession({
-        selection: context.agentSelection,
-        gateway: context.gateway,
-        sessionKey: replacementSessionKey,
-      });
-    }
-    context.replace(
-      face,
-      sessionNavigationTarget({ context, face, sessionKey: replacementSessionKey }).options,
-    );
+    // A retired or unresolvable active session opens a fresh draft instead of
+    // silently promoting the agent's internal routing anchor.
+    this.host.activeSessionKey = "";
+    selectApplicationSession({
+      selection: context.agentSelection,
+      gateway: context.gateway,
+      sessionKey: "",
+      agentId: replacementAgentId,
+    });
+    context.replace("new-session", { search: newSessionSearch(replacementAgentId) });
     return true;
   }
 

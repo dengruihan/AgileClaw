@@ -1,6 +1,7 @@
 import path from "node:path";
 import { beforeEach, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 import {
   createNewSessionPageE2eSuite,
   installMockGateway,
@@ -37,7 +38,9 @@ suite.define(() => {
     const gateway = await installMockGateway(page, { agentModel: null });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      // The chat-home gate (help without a model) lives on the explicit chat
+      // session; the bare landing is the /new draft.
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByRole("heading", { name: "No AI provider configured" }).waitFor();
 
       await expect.poll(() => page.locator(".agent-chat__composer-shell").count()).toBe(1);

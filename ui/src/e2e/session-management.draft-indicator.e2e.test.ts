@@ -41,7 +41,7 @@ suite.define(() => {
 
     try {
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, mainKey));
-      const homeRow = page.locator(".nav-item--home");
+      const homeRow = page.locator(`[data-session-key="${mainKey}"]`);
       const secondRow = page.locator(`[data-session-key="${secondKey}"]`);
       const composer = page.locator(
         'openclaw-chat-pane[aria-hidden="false"] .agent-chat__composer-combobox > textarea',

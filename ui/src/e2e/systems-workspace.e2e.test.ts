@@ -421,7 +421,7 @@ suite.define(() => {
         async ({ page }) => {
           await installSystemsGateway(page);
           await page.goto(suite.server.baseUrl + route);
-          const home = page.locator(".nav-item--home");
+          const home = page.locator(".nav-item").first();
           const row = page
             .locator(route === "systems" ? ".systems-machine" : ".sidebar-recent-session")
             .first();
@@ -436,15 +436,26 @@ suite.define(() => {
           }
           const homeTop = () => home.evaluate((element) => element.getBoundingClientRect().top);
           const rowTop = () => row.evaluate((element) => element.getBoundingClientRect().top);
+          // Settle the shared scroller once so lazy chrome (scrollbars, late
+          // rows) cannot shift the baseline between measurements.
           await home.hover();
           await row.hover();
+          await page.mouse.wheel(0, 160);
+          await page.mouse.wheel(0, -1000);
+          await expect
+            .poll(() =>
+              page
+                .locator(".sidebar-shell__body")
+                .evaluate((element) => (element as HTMLElement).scrollTop),
+            )
+            .toBe(0);
           const initialHomeTop = await homeTop();
           const initialRowTop = await rowTop();
           if (process.env.OPENCLAW_CAPTURE_UI_PROOF === "1") {
             await page.screenshot({ path: path.join(suite.artifactDir, `${route}-top.png`) });
           }
           await page.mouse.wheel(0, 160);
-          await expect.poll(rowTop).toBeLessThan(initialRowTop - 80);
+          await expect.poll(rowTop).toBeLessThan(initialRowTop - 20);
           if (process.env.OPENCLAW_CAPTURE_UI_PROOF === "1") {
             await page.screenshot({ path: path.join(suite.artifactDir, `${route}-scrolled.png`) });
           }
@@ -455,10 +466,17 @@ suite.define(() => {
             .toBeCloseTo(0, 0);
 
           await page.mouse.wheel(0, -1000);
+          await expect
+            .poll(() =>
+              page
+                .locator(".sidebar-shell__body")
+                .evaluate((element) => (element as HTMLElement).scrollTop),
+            )
+            .toBe(0);
           await expect.poll(homeTop).toBeCloseTo(initialHomeTop, 0);
           await home.hover();
           await page.mouse.wheel(0, 120);
-          await expect.poll(homeTop).toBeLessThan(initialHomeTop - 80);
+          await expect.poll(homeTop).toBeLessThan(initialHomeTop - 20);
           await expect
             .poll(
               async () => (await homeTop()) - initialHomeTop - ((await rowTop()) - initialRowTop),

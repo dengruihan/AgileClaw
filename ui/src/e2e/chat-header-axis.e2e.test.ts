@@ -2,10 +2,10 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, it } from "vitest";
 import {
-  chatSessionListResponse,
   captureUiProofEnabled,
-  createChatFlowE2eSuite,
+  chatSessionListResponse,
   controlUiSessionUrl,
+  createChatFlowE2eSuite,
   installMockGateway,
 } from "./chat-flow.test-support.ts";
 
@@ -170,7 +170,7 @@ suite.define(() => {
       });
 
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.locator(".agent-chat__composer-combobox > textarea").focus();
         await page.keyboard.press("ControlOrMeta+f");
         const search = page.locator(".agent-chat__search-bar input");

@@ -308,7 +308,7 @@ removed. Pinned root sessions, active or admitted work, model-locked sessions, a
 durable external conversation pointers are protected; the unarchived total can
 therefore remain above the cap when protected rows alone exceed it.
 
-Root sessions and sessions auto-parented to the agent's Home root can be pinned;
+Root sessions and sessions auto-parented to the agent's main root can be pinned;
 genuine child sessions and subagent runs reject pin requests. Persistent child
 sessions retain their sidebar nesting; subagent runs appear in transcript activity
 and session transcripts. Existing child pins disappear and no longer protect the session

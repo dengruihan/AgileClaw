@@ -33,8 +33,7 @@ describe("ModelSetupWizardRunner", () => {
     const replacementRequest = vi.spyOn(replacement, "request");
     let client = original;
     const getAgentId = vi.fn(() => "selected-agent");
-    const onStart = vi.fn();
-    const runner = createRunner({ getClient: () => client, getAgentId, onStart });
+    const runner = createRunner({ getClient: () => client, getAgentId });
     try {
       const start = runner.startMcpLogin("docs");
       expect(originalRequest).toHaveBeenCalledWith(
@@ -43,7 +42,6 @@ describe("ModelSetupWizardRunner", () => {
         { timeoutMs: null },
       );
       expect(getAgentId).not.toHaveBeenCalled();
-      expect(onStart).toHaveBeenCalledWith("mcp.authLogin", undefined);
 
       client = replacement;
       await runner.cancel();
@@ -81,11 +79,9 @@ describe("ModelSetupWizardRunner", () => {
         }
         return { done: false, status: "running", step: { id: "key", type: "text" } };
       });
-      const terminal = vi.fn();
       const runner = createRunner({
         getClient: () => ({ request }) as unknown as GatewayBrowserClient,
         getAgentId: () => "main",
-        onStart: () => terminal,
       });
       await runner.start("provider-auth");
       const explicit = runner.requestCancellation();
@@ -101,7 +97,6 @@ describe("ModelSetupWizardRunner", () => {
       await expect(Promise.all([explicit, teardown])).resolves.toEqual([undefined, undefined]);
       expect(callsBeforeAcknowledgment).toHaveLength(1);
       expect(runner.state).toEqual({ phase: "idle" });
-      expect(terminal).toHaveBeenCalledTimes(outcome === "cancelled" ? 1 : 0);
     },
   );
 
@@ -134,11 +129,9 @@ describe("ModelSetupWizardRunner", () => {
       throw new Error(`Unexpected wizard request: ${method}`);
     });
     let client = { request: originalRequest } as unknown as GatewayBrowserClient;
-    const terminal = vi.fn();
     const runner = createRunner({
       getClient: () => client,
       getAgentId: () => "main",
-      onStart: () => terminal,
     });
     await runner.start("provider-auth");
     const pending = runner.requestCancellation();
@@ -152,10 +145,8 @@ describe("ModelSetupWizardRunner", () => {
     expect(runner.state).toMatchObject({ phase: "step", authChoice: "provider-auth" });
     await expect(runner.requestCancellation()).resolves.toBe("cancelled");
     expect(cancellations).toBe(3);
-    expect(terminal).toHaveBeenCalledExactlyOnceWith({ done: true, status: "cancelled" });
     oldCancellation.resolve({ status: "cancelled" });
     await expect(pending).resolves.toBeUndefined();
-    expect(terminal).toHaveBeenCalledOnce();
     expect(runner.state).toEqual({ phase: "idle" });
     expect(
       originalRequest.mock.calls.filter(([method]) => method === "wizard.cancel"),
@@ -183,11 +174,9 @@ describe("ModelSetupWizardRunner", () => {
       }
       return { done: false, status: "running", step: { id: "key", type: "text" } };
     });
-    const terminal = vi.fn();
     const runner = createRunner({
       getClient: () => ({ request }) as unknown as GatewayBrowserClient,
       getAgentId: () => "main",
-      onStart: () => terminal,
     });
     await runner.start("original");
     const cancellation = runner.requestCancellation();
@@ -196,7 +185,6 @@ describe("ModelSetupWizardRunner", () => {
     failedCancel.reject(new Error("Original transport failed"));
     await expect(cancellation).resolves.toBeUndefined();
     expect(runner.state).toMatchObject({ phase: "step", authChoice: "replacement" });
-    expect(terminal).not.toHaveBeenCalled();
     await expect(runner.cancel()).resolves.toBeUndefined();
     expect(runner.state).toEqual({ phase: "idle" });
     expect(cancellations).toBe(2);
@@ -223,11 +211,9 @@ describe("ModelSetupWizardRunner", () => {
         throw new Error(`Unexpected wizard request: ${method}`);
       });
       const client = { request } as unknown as GatewayBrowserClient;
-      const onTerminal = vi.fn();
       const runner = createRunner({
         getClient: () => client,
         getAgentId: () => "main",
-        onStart: () => onTerminal,
       });
       let pending: Promise<unknown> = runner.start("original-provider");
       if (caseName === "late terminal") {
@@ -251,7 +237,6 @@ describe("ModelSetupWizardRunner", () => {
       );
       await pending;
       expect(request).toHaveBeenCalledTimes(requestsAtRetirement);
-      expect(onTerminal).not.toHaveBeenCalled();
       expect(runner.state).toEqual({ phase: "idle" });
     },
   );
@@ -282,11 +267,8 @@ describe("ModelSetupWizardRunner", () => {
         return { done: false, status: "running", step: { id: "replacement", type: "text" } };
       });
       let client = { request: originalRequest } as unknown as GatewayBrowserClient;
-      const originalTerminal = vi.fn();
-      const replacementTerminal = vi.fn();
       const runner = createRunner({
         getClient: () => client,
-        onStart: vi.fn().mockReturnValueOnce(originalTerminal).mockReturnValue(replacementTerminal),
       });
       await runner.start("original");
       const next = runner.answer("answer");
@@ -303,22 +285,12 @@ describe("ModelSetupWizardRunner", () => {
       ).toHaveLength(0);
       cancellation.resolve({ status: "running" });
       await cancelled;
-      expect(originalTerminal).not.toHaveBeenCalled();
       lateNext.resolve({
         done: true,
         status: terminal,
         modelActivation: { modelRef: "provider/original" },
       });
       await expect(next).resolves.toBeNull();
-      if (terminal !== "done") {
-        expect(originalTerminal).toHaveBeenCalledOnce();
-        expect(originalTerminal).toHaveBeenCalledWith(
-          expect.objectContaining({ status: terminal }),
-        );
-      } else {
-        expect(originalTerminal).not.toHaveBeenCalled();
-      }
-      expect(replacementTerminal).not.toHaveBeenCalled();
       expect(runner.state).toMatchObject({
         phase: "step",
         authChoice: "replacement",
@@ -348,11 +320,9 @@ describe("ModelSetupWizardRunner", () => {
       }),
     );
     let client = { request: originalRequest } as unknown as GatewayBrowserClient;
-    const terminal = vi.fn();
     const runner = createRunner({
       getClient: () => client,
       getAgentId: () => "research",
-      onStart: () => terminal,
     });
     await runner.start("meta-api-key");
     const answer = runner.answer("synthetic-key");
@@ -366,7 +336,6 @@ describe("ModelSetupWizardRunner", () => {
     );
     interrupted.resolve({ done: true, status: "cancelled" });
     await answer;
-    expect(terminal).not.toHaveBeenCalled();
     expect(runner.state).toMatchObject({
       phase: "step",
       authChoice: "meta-api-key",
@@ -391,11 +360,9 @@ describe("ModelSetupWizardRunner", () => {
     });
     const afterReconnect = vi.fn();
     let client = { request } as unknown as GatewayBrowserClient;
-    const onTerminal = vi.fn();
     const runner = createRunner({
       getClient: () => client,
       getAgentId: () => "research",
-      onStart: () => onTerminal,
     });
     await runner.start("meta-api-key");
     const answer = runner.answer("synthetic-key");
@@ -406,13 +373,11 @@ describe("ModelSetupWizardRunner", () => {
       modelActivation: { modelRef: "meta/fixture-model" },
     });
     await answer;
-    expect(onTerminal).not.toHaveBeenCalled();
     client = { request: afterReconnect } as unknown as GatewayBrowserClient;
     expect(await runner.resume()).toMatchObject({
       modelActivation: { modelRef: "meta/fixture-model" },
     });
     expect(afterReconnect).not.toHaveBeenCalled();
-    expect(onTerminal).toHaveBeenCalledOnce();
   });
 
   it("starts, advances an unbounded note step, and guards duplicate answers", async () => {
@@ -547,10 +512,8 @@ describe("ModelSetupWizardRunner", () => {
         },
       );
       const client = { request } as unknown as GatewayBrowserClient;
-      const terminalResult = vi.fn();
       const runner = createRunner({
         getClient: () => client,
-        onStart: () => terminalResult,
       });
 
       const firstStart = runner.start("original", method);
@@ -565,7 +528,6 @@ describe("ModelSetupWizardRunner", () => {
       await firstStart;
 
       expect(runningSession).toBeNull();
-      expect(terminalResult).toHaveBeenCalledWith({ done: true, status: "cancelled" });
       expect(request).toHaveBeenCalledWith(
         "wizard.cancel",
         { sessionId: firstSessionId },
@@ -651,10 +613,8 @@ describe("ModelSetupWizardRunner", () => {
           },
         );
         const client = { request } as unknown as GatewayBrowserClient;
-        const terminalResult = vi.fn();
         const runner = createRunner({
           getClient: () => client,
-          onStart: () => terminalResult,
         });
 
         const timedOutStart = runner.start("original", method);
@@ -665,7 +625,6 @@ describe("ModelSetupWizardRunner", () => {
         resolveFirstStart();
         await vi.runAllTimersAsync();
         expect(runningSession).toBeNull();
-        expect(terminalResult).toHaveBeenCalledTimes(status === "done" ? 0 : 1);
         const cancelCalls = request.mock.calls.filter(
           ([requestMethod]) => requestMethod === "wizard.cancel",
         );
@@ -781,10 +740,8 @@ describe("ModelSetupWizardRunner", () => {
         throw new Error(`unexpected request ${requestMethod}`);
       });
       const client = { request } as unknown as GatewayBrowserClient;
-      const terminalResult = vi.fn();
       const runner = createRunner({
         getClient: () => client,
-        onStart: () => terminalResult,
       });
 
       const start = runner.start("original", method);
@@ -797,19 +754,6 @@ describe("ModelSetupWizardRunner", () => {
 
       expect(request.mock.calls.map(([requestMethod]) => requestMethod)).toEqual([method]);
       expect(runner.state).toEqual({ phase: "idle" });
-      if (status === "busy") {
-        expect(terminalResult).toHaveBeenCalledExactlyOnceWith({
-          done: true,
-          status: "not-admitted",
-          error: "Setup busy",
-        });
-      } else if (lifecycle === "open") {
-        expect(terminalResult).toHaveBeenCalledExactlyOnceWith(
-          expect.objectContaining({ done: true, status: "done" }),
-        );
-      } else {
-        expect(terminalResult).not.toHaveBeenCalled();
-      }
     },
   );
 

@@ -2,8 +2,9 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type WaTooltip from "@awesome.me/webawesome/dist/components/tooltip/tooltip.js";
 import { describe, expect, it } from "vitest";
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 import {
-  type createControlUiE2eSuite,
+  createControlUiE2eSuite,
   holdModuleResponse,
 } from "./control-ui-e2e-suite.test-support.ts";
 import { captureUiProof, createThemedChatOpener } from "./theme-typography.test-support.ts";
@@ -27,7 +28,7 @@ export function defineTypographyModuleBoundaryTests(
           moduleRequest("node_modules/@awesome.me/webawesome/dist/components/tooltip/tooltip.js"),
         );
         try {
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const trigger = page.locator(".sidebar-brand__search");
           await trigger.waitFor();
           expect(popupModule.requests()).toBe(0);

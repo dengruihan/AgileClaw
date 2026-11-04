@@ -1,5 +1,5 @@
 import { it } from "vitest";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { expectHistoryBoundaryState } from "./chat-history-boundary.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
@@ -30,7 +30,7 @@ suite.define(() => {
       featureMethods: ["chat.metadata", "chat.startup"],
       methodResponses: { "chat.startup": history, "chat.history": history },
     });
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await page.getByText("Cached conversation message 80", { exact: true }).waitFor();
     await expectHistoryBoundaryState(page, false);
 

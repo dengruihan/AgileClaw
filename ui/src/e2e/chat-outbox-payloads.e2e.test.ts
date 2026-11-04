@@ -6,6 +6,7 @@ import {
   waitForControlUiGatewayReconnecting,
 } from "../test-helpers/control-ui-e2e-readiness.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 import {
   createChatFlowE2eSuite,
   expectRequestCountStable,
@@ -14,16 +15,16 @@ import {
   requireString,
 } from "./chat-flow.test-support.ts";
 import {
+  countOutboxPayloads as payloadCount,
   holdOutboxPreviewReads,
+  outboxChatUrl as chatUrl,
+  outboxComposerFor as composerFor,
+  outboxPaneFor as paneFor,
   outboxPayloadFile as file,
   outboxPayloadHistory as history,
-  outboxPaneFor as paneFor,
-  outboxComposerFor as composerFor,
-  readOutboxQueue as readQueue,
-  countOutboxPayloads as payloadCount,
   readOutboxPayloadBytes as readPayloadBytes,
+  readOutboxQueue as readQueue,
   stageOutboxAttachment as stage,
-  outboxChatUrl as chatUrl,
 } from "./chat-outbox-payloads.test-support.ts";
 
 const captureUiProof = process.env.OPENCLAW_CAPTURE_UI_PROOF === "1";
@@ -153,7 +154,9 @@ suite.define(() => {
           sessionInfo: { key: "main", hasActiveRun: false, status: "done" },
           deferredMethods: ["chat.send"],
         });
-        await page.goto(`${suite.server.baseUrl}chat`, { waitUntil: "domcontentloaded" });
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"), {
+          waitUntil: "domcontentloaded",
+        });
         await paneFor(page)
           .getByText("Mock Gateway: payload lifecycle proof.", { exact: true })
           .waitFor();
@@ -208,7 +211,9 @@ suite.define(() => {
         sessionInfo: { key: "main", hasActiveRun: false, status: "done" },
         deferredMethods: ["chat.send"],
       });
-      await page.goto(`${suite.server.baseUrl}chat`, { waitUntil: "domcontentloaded" });
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"), {
+        waitUntil: "domcontentloaded",
+      });
       await paneFor(page)
         .getByText("Mock Gateway: payload lifecycle proof.", { exact: true })
         .waitFor();
@@ -273,7 +278,9 @@ suite.define(() => {
         historyMessages: history,
         sessionInfo: { key: "main", hasActiveRun: false, status: "done" },
       });
-      await page.goto(`${suite.server.baseUrl}chat`, { waitUntil: "domcontentloaded" });
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"), {
+        waitUntil: "domcontentloaded",
+      });
       await paneFor(page)
         .getByText("Mock Gateway: payload lifecycle proof.", { exact: true })
         .waitFor();
@@ -400,7 +407,9 @@ suite.define(() => {
           sessionInfo: { key: "main", hasActiveRun: false, status: "done" },
           deferredMethods: ["chat.send"],
         });
-        await page.goto(`${suite.server.baseUrl}chat`, { waitUntil: "domcontentloaded" });
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"), {
+          waitUntil: "domcontentloaded",
+        });
         await paneFor(page)
           .getByText("Mock Gateway: payload lifecycle proof.", { exact: true })
           .waitFor();
@@ -489,7 +498,9 @@ suite.define(() => {
           sessionInfo: { key: "main", hasActiveRun: false, status: "done" },
         });
         try {
-          await duplicate.goto(`${suite.server.baseUrl}chat`, { waitUntil: "domcontentloaded" });
+          await duplicate.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"), {
+            waitUntil: "domcontentloaded",
+          });
           await duplicateGateway.setOnline(true);
           await waitForControlUiGatewayReady(duplicate);
           await duplicate.waitForFunction(
@@ -586,7 +597,9 @@ suite.define(() => {
         sessionInfo: { key: "main", hasActiveRun: false, status: "done" },
         deferredMethods: ["chat.send"],
       });
-      await page.goto(`${suite.server.baseUrl}chat`, { waitUntil: "domcontentloaded" });
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"), {
+        waitUntil: "domcontentloaded",
+      });
       await paneFor(page)
         .getByText("Mock Gateway: payload lifecycle proof.", { exact: true })
         .waitFor();
@@ -663,7 +676,9 @@ suite.define(() => {
         historyMessages: history,
         sessionInfo: { key: "main", hasActiveRun: false, status: "done" },
       });
-      await page.goto(`${suite.server.baseUrl}chat`, { waitUntil: "domcontentloaded" });
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"), {
+        waitUntil: "domcontentloaded",
+      });
       await paneFor(page)
         .getByText("Mock Gateway: payload lifecycle proof.", { exact: true })
         .waitFor();

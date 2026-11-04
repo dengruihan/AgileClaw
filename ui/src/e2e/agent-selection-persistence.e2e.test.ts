@@ -5,12 +5,13 @@ import { beforeEach, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
-  controlUiBundledGatewayUrl,
-  controlUiBundledSettingsStorageKey,
-  installMockGateway,
-  navigateToControlUiSession,
   type ControlUiMockGatewayScenario,
   type MockGatewayControls,
+  controlUiBundledGatewayUrl,
+  controlUiBundledSettingsStorageKey,
+  controlUiSessionUrl,
+  installMockGateway,
+  navigateToControlUiSession,
   waitForControlUiRoute,
 } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
@@ -138,7 +139,7 @@ async function openPage(
 ): Promise<{ gateway: MockGatewayControls; page: Page }> {
   const page = await context.newPage();
   const gateway = await installMockGateway(page, scenario);
-  await page.goto(`${suite.server.baseUrl}chat`);
+  await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
   await page.locator("openclaw-app-sidebar").waitFor();
   return { gateway, page };
 }

@@ -1,13 +1,14 @@
 import path from "node:path";
-import { chromium, type Browser, type Page } from "playwright";
-import { beforeEach, afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type Browser, type Page, chromium } from "playwright";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
+  type ControlUiE2eServer,
   canRunPlaywrightChromium,
+  controlUiSessionUrl,
   installMockGateway,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
 import { requireRecord, requireString } from "./chat-flow.test-support.ts";
 
@@ -85,7 +86,7 @@ describeControlUiE2e("Control UI fenced code blocks", () => {
     const page = await context.newPage();
     const gateway = await installMockGateway(page);
     try {
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await page
         .locator(".agent-chat__composer-combobox textarea")
         .fill("Show the deployment checks");
@@ -146,7 +147,7 @@ describeControlUiE2e("Control UI fenced code blocks", () => {
       historyMessages: [{ role: "assistant", content: "```\n" + art + "\n```", timestamp: 1000 }],
     });
     try {
-      await page.goto(server.baseUrl + "chat");
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       const code = page.locator(".code-block-wrapper.is-collapsible code.markdown-block-art");
       await code.waitFor();
       for (const width of [1280, 390]) {
@@ -195,7 +196,7 @@ describeControlUiE2e("Control UI fenced code blocks", () => {
       });
     });
     try {
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await page.locator(".chat-group.assistant .chat-text").waitFor();
       if (captureProof) {
         await page.screenshot({
@@ -254,7 +255,7 @@ describeControlUiE2e("Control UI fenced code blocks", () => {
     const gateway = await installMockGateway(page);
 
     try {
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await page.locator(".agent-chat__composer-combobox textarea").fill("show TypeScript");
       await page.getByRole("button", { name: "Send message" }).click();
       const sendRequest = await gateway.waitForRequest("chat.send");
@@ -362,7 +363,7 @@ describeControlUiE2e("Control UI fenced code blocks", () => {
       page.evaluate(() => (window as ObservationWindow).codeBlockObservations());
 
     try {
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await expect.poll(async () => (await observations()).connected).toBe(2);
       const code = await page.locator(".chat-thread code").elementHandle();
       const sidebar = page.locator("openclaw-app-sidebar");
@@ -461,7 +462,7 @@ describeControlUiE2e("Control UI fenced code blocks", () => {
       });
 
       try {
-        await page.goto(`${server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
         await setThemeMode(page, theme);
         const shortBubble = page.locator('[data-entry-id="assistant-fence-short"]');
         const longBubble = page.locator('[data-entry-id="assistant-fence-long"]');

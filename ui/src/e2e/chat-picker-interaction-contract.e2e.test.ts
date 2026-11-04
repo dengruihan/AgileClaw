@@ -47,7 +47,7 @@ suite.define(() => {
         },
         async ({ context, page }) => {
           const gateway = await installMockGateway(page, {});
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await gateway.waitForRequest("chat.startup");
           const selector =
             'openclaw-chat-pane[aria-hidden="false"] [data-chat-permission-select="true"]';
@@ -177,7 +177,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       const control = page.locator(".chat-composer-model-control");
 

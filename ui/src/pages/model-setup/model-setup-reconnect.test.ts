@@ -8,11 +8,9 @@ import type { ApplicationContext, ApplicationGateway } from "../../app/context.t
 import { i18n } from "../../i18n/index.ts";
 import { createRuntimeConfigCapability } from "../../lib/config/runtime-config-capability.ts";
 import { createApplicationContextProvider } from "../../test-helpers/application-context.ts";
-import type { ModelSetupRouteData } from "./first-run-setup.ts";
 import "./model-setup-page.ts";
 
 type TestModelSetupPage = HTMLElement & {
-  routeData?: ModelSetupRouteData;
   updateComplete: Promise<boolean>;
 };
 
@@ -119,15 +117,14 @@ function createFixture() {
 async function mountPage(context: ApplicationContext): Promise<TestModelSetupPage> {
   const provider = createApplicationContextProvider(context);
   const page = document.createElement("openclaw-model-setup-page") as TestModelSetupPage;
-  page.routeData = { firstRun: false };
   provider.append(page);
   document.body.append(provider);
   await page.updateComplete;
   return page;
 }
 
-function selectedModelDetail(page: TestModelSetupPage): string | undefined {
-  return page.querySelector(".model-setup__current-copy > .muted")?.textContent?.trim();
+function containsText(page: TestModelSetupPage, text: string): boolean {
+  return (page.textContent ?? "").includes(text);
 }
 
 describe("ModelSetupPage detection ownership", () => {
@@ -149,8 +146,6 @@ describe("ModelSetupPage detection ownership", () => {
     document.body.append(provider);
     await page.updateComplete;
 
-    expect(request).not.toHaveBeenCalled();
-    page.routeData = { firstRun: false };
     await vi.waitFor(() => {
       expect(request).toHaveBeenCalledOnce();
       expect(page.querySelector('[data-auth-choice="provider-auth"]')).not.toBeNull();
@@ -158,7 +153,7 @@ describe("ModelSetupPage detection ownership", () => {
     runtimeConfig.dispose();
   });
 
-  it("keeps pending detection owned through an equivalent route-data refresh", async () => {
+  it("keeps one pending detection owned through mount updates", async () => {
     const { context, request, runtimeConfig, detectCalls } = createFixture();
     const detected = createDeferred<SystemAgentSetupDetectResult>();
     request.mockReturnValue(detected.promise);
@@ -166,7 +161,6 @@ describe("ModelSetupPage detection ownership", () => {
     await vi.waitFor(() => expect(detectCalls()).toHaveLength(1));
     const signal = detectCalls()[0]?.[2]?.signal;
     try {
-      page.routeData = { firstRun: false };
       await page.updateComplete;
       expect(detectCalls()).toHaveLength(1);
       expect(signal?.aborted).toBe(false);
@@ -212,7 +206,12 @@ describe("ModelSetupPage detection ownership", () => {
       });
       request.mockImplementation(async (method) =>
         method === "openclaw.setup.detect"
-          ? { ...detection, configuredModel: "provider/current-model", setupComplete: true }
+          ? {
+              ...detection,
+              authOptions: [
+                { id: "replacement-auth", label: "Replacement provider", kind: "oauth" },
+              ],
+            }
           : {},
       );
       let page = await mountPage(context);
@@ -229,10 +228,9 @@ describe("ModelSetupPage detection ownership", () => {
       } else {
         const provider = page.parentElement!;
         page.remove();
-        page.routeData = { firstRun: false };
         provider.append(page);
       }
-      await vi.waitFor(() => expect(selectedModelDetail(page)).toBe("current-model"));
+      await vi.waitFor(() => expect(containsText(page, "Replacement provider")).toBe(true));
       expect(signal?.aborted).toBe(true);
       expect(detectCalls()).toHaveLength(2);
       expect(detectCalls().at(-1)).toEqual([
@@ -241,10 +239,14 @@ describe("ModelSetupPage detection ownership", () => {
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
       ]);
       // A server can finish after local cancellation; it cannot publish into the next visit.
-      stale.resolve({ ...detection, configuredModel: "provider/stale-model", setupComplete: true });
+      stale.resolve({
+        ...detection,
+        authOptions: [{ id: "stale-auth", label: "Stale provider", kind: "oauth" }],
+      });
       await vi.waitFor(() => expect(request.mock.settledResults[0]?.type).toBe("fulfilled"));
       await page.updateComplete;
-      expect(selectedModelDetail(page)).toBe("current-model");
+      expect(containsText(page, "Replacement provider")).toBe(true);
+      expect(containsText(page, "Stale provider")).toBe(false);
       runtimeConfig.dispose();
     },
   );
@@ -340,11 +342,10 @@ describe("ModelSetupPage detection ownership", () => {
     releaseWizard?.({ done: true, status: "done" });
 
     await vi.waitFor(() => {
-      expect(page.querySelector("openclaw-modal-dialog")).toBeNull();
       expect(page.textContent).toContain(
         "Connection changed before the configuration update was refreshed.",
       );
-      expect(selectedModelDetail(page)).toBe("current-model");
+      expect(page.querySelector('[data-auth-choice="provider-auth"]')).not.toBeNull();
     });
     runtimeConfig.dispose();
   });

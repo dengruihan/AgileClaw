@@ -5,7 +5,7 @@ import type { Page } from "playwright";
 import qrcode from "qrcode";
 import { beforeEach, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { requireRecord, requireString } from "./chat-flow.test-support.ts";
 import {
   createControlUiE2eContextOptions,
@@ -81,7 +81,6 @@ async function expectPairingLayout(page: Page, mode: "node" | "qr") {
       qrState,
     };
   }, mode);
-
   expect(layout).toEqual({
     accessCards: 3,
     outside: [],
@@ -124,7 +123,7 @@ suite.define(() => {
         operatorScopes: ["operator.admin"],
       });
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const baseline = page
         .locator(".chat-group.assistant .chat-text")
         .getByText(baselineText, { exact: true });

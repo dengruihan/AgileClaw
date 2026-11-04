@@ -1,5 +1,8 @@
 import { expect, it } from "vitest";
-import { defaultControlUiFeatureMethods } from "../test-helpers/control-ui-e2e.ts";
+import {
+  controlUiSessionUrl,
+  defaultControlUiFeatureMethods,
+} from "../test-helpers/control-ui-e2e.ts";
 import {
   createChatFlowE2eSuite,
   installMockGateway,
@@ -17,7 +20,7 @@ suite.define(() => {
     const gateway = await installMockGateway(page, { workspaceGit: true });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const newSessionButton = page.locator("openclaw-app-sidebar .sidebar-brand__new-thread");
       await newSessionButton.waitFor({ state: "visible", timeout: 10_000 });
       await newSessionButton.click();
@@ -62,7 +65,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       expect(await gateway.getRequests("agents.list")).toHaveLength(1);
       // chat.startup owns the initial metadata load; the old parallel
@@ -190,7 +193,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       await gateway.waitForRequest("agents.list");
       await gateway.waitForRequest("chat.metadata");

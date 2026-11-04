@@ -7,6 +7,7 @@ import {
   defaultControlUiFeatureMethods,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
+import { openAssistantDock } from "./assistant-dock.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const captureUiProof = process.env.OPENCLAW_CAPTURE_UI_PROOF === "1";
@@ -81,7 +82,7 @@ suite.define(() => {
           });
           await page.goto(controlUiSessionUrl(suite.server.baseUrl, workKey));
           await gateway.waitForRequest("chat.startup");
-          await page.locator(".sidebar-footer-bar__home").click();
+          await openAssistantDock(page, { sessionKey: homeKey, agentId: "main", label: "Home" });
           const panel = page.locator("openclaw-assistant-panel");
           await panel.locator("openclaw-chat-pane").waitFor();
           await gateway.waitForRequest("chat.startup", { after: 1 });
@@ -142,7 +143,11 @@ suite.define(() => {
           ],
         });
         await page.goto(controlUiSessionUrl(suite.server.baseUrl, work.key));
-        await page.locator(".sidebar-footer-bar__home").click();
+        await openAssistantDock(page, {
+          sessionKey: home.key,
+          agentId: "main",
+          label: "Personal Home",
+        });
         const panel = page.locator("openclaw-assistant-panel");
         const details = panel.locator(".assistant-panel-context details");
         await details.locator("summary").click();

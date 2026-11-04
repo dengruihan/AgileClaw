@@ -5,6 +5,7 @@ import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
   controlUiSessionPath,
+  controlUiSessionUrl,
   defaultControlUiFeatureMethods,
   installMockGateway,
   waitForControlUiSettingsTakeover,
@@ -123,7 +124,7 @@ suite.define(() => {
   it("finds session sources from the sidebar and independently saves discovery preferences", async () => {
     await suite.withPage({ viewport: { width: 1440, height: 1000 } }, async ({ page }) => {
       const gateway = await installMockGateway(page, { featureMethods, methodResponses });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByRole("button", { name: "Filter & sort", exact: true }).click();
       await page.getByRole("link", { name: "Session sources", exact: true }).click();
       const { search, sidebar } = await waitForControlUiSettingsTakeover(page);

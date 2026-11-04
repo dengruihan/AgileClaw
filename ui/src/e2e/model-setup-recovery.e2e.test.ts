@@ -4,7 +4,6 @@ import path from "node:path";
 import { beforeEach, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 import { installSetupGateway, openModelSetup } from "./model-setup.test-support.ts";
 
@@ -232,109 +231,6 @@ suite.define(() => {
       },
     );
   });
-
-  it.each(["rejected", "uncertain"] as const)(
-    "preserves first-run recovery after a terminal %s activation outcome",
-    async (outcome) => {
-      await suite.withPage(
-        {
-          locale: "en-US",
-          serviceWorkers: "block",
-          viewport: { height: 900, width: 1280 },
-          ...(artifactDir
-            ? { recordVideo: { dir: artifactDir, size: { height: 900, width: 1280 } } }
-            : {}),
-        },
-        async ({ page }) => {
-          const gateway = await installMockGateway(page, {
-            featureMethods: ["openclaw.setup.detect", "openclaw.setup.auth.start", "wizard.next"],
-            methodResponses: {
-              "openclaw.setup.detect": {
-                candidates: [],
-                manualProviders: [],
-                authOptions: [
-                  { id: "provider-login", label: "Provider login", kind: "oauth", featured: true },
-                ],
-                workspace: "/tmp/openclaw-e2e",
-                setupComplete: false,
-              },
-              "openclaw.setup.auth.start": { done: false, status: "running" },
-              "wizard.next": {
-                done: true,
-                status: "error",
-                error: "The model could not finish setup",
-                ...(outcome === "rejected"
-                  ? {
-                      activationRejection: {
-                        disposition: "rejected-before-promotion",
-                        status: "timeout",
-                      },
-                    }
-                  : {}),
-              },
-            },
-          });
-          await page.goto(`${suite.server.baseUrl}settings/model-setup?firstRun=1`);
-          const signIn = page.locator('[data-auth-choice="provider-login"] button');
-          await signIn.waitFor();
-          if (artifactDir) {
-            await page.screenshot({
-              animations: "disabled",
-              path: path.join(artifactDir, `${outcome}-before.png`),
-            });
-          }
-          await signIn.click();
-          const dialog = page.locator("openclaw-modal-dialog");
-          const alert = dialog.getByRole("alert");
-          await alert.waitFor();
-          expect((await alert.textContent())?.trim()).toBe(
-            "Could not finish. Open Details to see what to do next.",
-          );
-          const details = dialog.locator("details");
-          expect(await details.getAttribute("open")).toBeNull();
-          const diagnostic = details.getByText("The model could not finish setup", { exact: true });
-          expect(await diagnostic.isVisible()).toBe(false);
-          await details.getByText("Details", { exact: true }).click();
-          await diagnostic.waitFor();
-          await dialog.getByRole("button", { name: "Close", exact: true }).click();
-          await expect.poll(() => dialog.count()).toBe(0);
-          await expect.poll(() => signIn.isDisabled()).toBe(outcome === "uncertain");
-          const receiptKey = "openclaw.modelSetup.pendingActivation.v1";
-          const receipt = await page.evaluate((key) => localStorage.getItem(key), receiptKey);
-          expect(receipt === null).toBe(outcome === "rejected");
-          expect(new URL(page.url()).pathname).toBe("/settings/model-setup");
-          expect(await gateway.getRequests("openclaw.setup.auth.start")).toHaveLength(1);
-          expect(await gateway.getRequests("openclaw.setup.activate.start")).toHaveLength(0);
-          if (outcome === "uncertain") {
-            const recovery = page.locator(".model-setup__recovery");
-            await recovery.getByRole("button", { name: "Check again", exact: true }).click();
-            await page.getByText("may still be running", { exact: false }).waitFor();
-            expect(await gateway.getRequests("openclaw.setup.auth.start")).toHaveLength(1);
-            expect(await page.evaluate((key) => localStorage.getItem(key), receiptKey)).toBe(
-              receipt,
-            );
-          } else {
-            await signIn.click();
-            await alert.waitFor();
-            expect((await alert.textContent())?.trim()).toBe(
-              "Could not finish. Open Details to see what to do next.",
-            );
-            expect(await details.getAttribute("open")).toBeNull();
-            expect(await diagnostic.isVisible()).toBe(false);
-            await details.getByText("Details", { exact: true }).click();
-            await diagnostic.waitFor();
-            expect(await gateway.getRequests("openclaw.setup.auth.start")).toHaveLength(2);
-          }
-          if (artifactDir) {
-            await page.screenshot({
-              animations: "disabled",
-              path: path.join(artifactDir, `${outcome}-after.png`),
-            });
-          }
-        },
-      );
-    },
-  );
 
   it("shows a failed configured LM Studio connection without implicit preparation", async () => {
     await suite.withPage(

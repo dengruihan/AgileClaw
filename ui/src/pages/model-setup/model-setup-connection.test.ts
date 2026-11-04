@@ -1,9 +1,12 @@
 import { expect, it } from "vitest";
 import { createHarness } from "../model-providers/model-providers-page.test-support.ts";
-import { captureModelSetupConnection, reconcileModelSetupConnection } from "./first-run-setup.ts";
+import {
+  captureModelSetupConnection,
+  reconcileModelSetupConnection,
+} from "./model-setup-connection.ts";
 
 function connection() {
-  const snapshot = captureModelSetupConnection(createHarness("writer").context, false);
+  const snapshot = captureModelSetupConnection(createHarness("writer").context);
   if (!snapshot.hello?.auth) {
     throw new Error("Expected an authenticated test Gateway");
   }

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { expect, it } from "vitest";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { installMockGateway, controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({ name: "command palette avatars" });
@@ -103,7 +103,7 @@ suite.define(() => {
         await page.route("**/api/users/profile-alex/avatar", (route) =>
           route.fulfill({ contentType: "image/svg+xml", body: ownerAvatar }),
         );
-        await page.goto(suite.server.baseUrl + "chat");
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.locator(".shell").waitFor({ state: "visible" });
         await page.keyboard.press("ControlOrMeta+K");
         const input = page.locator(".cmd-palette__input");

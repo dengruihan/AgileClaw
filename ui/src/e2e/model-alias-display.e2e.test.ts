@@ -6,6 +6,7 @@ import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-
 import { createChatFlowE2eSuite, installMockGateway } from "./chat-flow.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 const models = [
   {
@@ -63,7 +64,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const main = page.getByRole("main");
       const picker = main.locator('[data-chat-model-select="true"]').first();
       await picker.waitFor({ state: "visible", timeout: 10_000 });

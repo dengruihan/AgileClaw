@@ -11,6 +11,7 @@ const text =
     (_, index) => `\n## Step ${index + 1}\n\nReview the notes before continuing.\n`,
   ).join("") +
   "\nEnd of the release checklist.\n";
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it.each([
@@ -63,7 +64,7 @@ suite.define(() => {
         ],
       });
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await gateway.waitForRequest("chat.startup");
         const card = page
           .locator(".chat-assistant-attachment-card--compact")

@@ -2,7 +2,7 @@ import path from "node:path";
 import type { Locator, Page } from "playwright";
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 import { controlUiE2eBuiltModuleRequest } from "./control-ui-built-module.test-support.ts";
 import {
@@ -29,7 +29,7 @@ suite.define(() => {
     it(`focuses Side chat on open, reopen, and tab activation at ${viewport.width}px`, async () => {
       await suite.withPage({ viewport }, async ({ page }) => {
         await installMockGateway(page);
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await openChatSidePanelType(page, "Side chat");
         const input = page.getByRole("textbox", { name: "Ask in side chat", exact: true });
         await expect
@@ -59,7 +59,7 @@ suite.define(() => {
   it.each(["/btw", "/side"])("opens and refocuses Side chat with %s", async (command) => {
     await suite.withPage({ viewport: { width: 1440, height: 900 } }, async ({ page }) => {
       const gateway = await installMockGateway(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const mainInput = page.locator(".agent-chat__composer-shell textarea");
       const input = page.getByRole("textbox", { name: "Ask in side chat", exact: true });
       expect(await input.isVisible()).toBe(false);
@@ -93,7 +93,7 @@ suite.define(() => {
         );
         try {
           await installMockGateway(page);
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const mainInput = page.locator(".agent-chat__composer-shell textarea");
           await enterSideCommand(page, command);
           await held.request;
@@ -131,7 +131,7 @@ suite.define(() => {
         );
         try {
           await installMockGateway(page);
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await enterSideCommand(page, "/btw");
           await held.request;
           const sideInput = page.getByRole("textbox", { name: "Ask in side chat", exact: true });
@@ -167,7 +167,7 @@ suite.define(() => {
   it("opens Side chat when selecting /btw from the slash menu", async () => {
     await suite.withPage({ viewport: { width: 1440, height: 900 } }, async ({ page }) => {
       await installMockGateway(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const mainInput = page.locator(".agent-chat__composer-shell textarea");
       await mainInput.fill("/bt");
       await page.getByRole("option").filter({ hasText: "/btw" }).click();
@@ -186,7 +186,7 @@ suite.define(() => {
         const gateway = await installMockGateway(page, {
           deferredMethods: ["sessions.companion.ask"],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const input = page.getByRole("textbox", { name: "Ask in side chat", exact: true });
         if (open) {
           await openChatSidePanelType(page, "Side chat");
@@ -224,7 +224,7 @@ suite.define(() => {
         const gateway = await installMockGateway(page, {
           deferredMethods: ["sessions.companion.ask"],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.getByRole("button", { name: "Open split view", exact: true }).click();
         const panes = page.locator("openclaw-chat-pane.chat-split-view__pane");
         await expect.poll(() => panes.count()).toBe(2);
@@ -282,7 +282,7 @@ suite.define(() => {
           },
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const mainInput = page.locator(".agent-chat__composer-shell textarea");
       const sideInput = page.locator(".chat-session-rail__input");
       await enterSideCommand(page, "/btw what is this?");
@@ -343,7 +343,7 @@ suite.define(() => {
             { key: "agent:main:sidebar-focus", label: "Sidebar focus", updatedAt: Date.now() },
           ],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const mainInput = page.locator(".agent-chat__composer-shell textarea");
         await enterSideCommand(page, "/btw what is this?");
         await gateway.waitForRequest("sessions.companion.ask");
@@ -418,7 +418,7 @@ suite.define(() => {
         const gateway = await installMockGateway(page, {
           deferredMethods: ["sessions.companion.state"],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await gateway.waitForRequest("sessions.companion.state");
         await openChatSidePanelType(page, "Side chat");
         const input = page.getByRole("textbox", { name: "Ask in side chat", exact: true });

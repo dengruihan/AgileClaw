@@ -1,8 +1,8 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
-  buildControlUiFocusPath,
   type ControlUiFocusBuildTarget,
+  buildControlUiFocusPath,
 } from "@openclaw/session-url-contract";
 import type { Page, Route, Video } from "playwright";
 import { beforeEach, expect, it } from "vitest";
@@ -15,6 +15,7 @@ import {
   defaultControlUiFeatureMethods,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
+import { openAssistantDock } from "./assistant-dock.test-support.ts";
 import {
   controlUiE2eBuiltModuleRequest,
   controlUiE2eRouteStylesheetRequest,
@@ -236,7 +237,11 @@ const dockedCases = [
     close: (page: Page) =>
       page.getByRole("button", { name: "Close assistant sidebar", exact: true }),
     open: async (page: Page) => {
-      await page.locator(".sidebar-footer-bar__home").click();
+      await openAssistantDock(page, {
+        sessionKey: "agent:main:main",
+        agentId: "main",
+        label: "Home",
+      });
     },
     ready: (page: Page) =>
       page.locator("openclaw-assistant-panel .agent-chat__composer-combobox textarea"),
@@ -392,7 +397,7 @@ suite.define(() => {
               documentRequests += 1;
             }
           });
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await waitForControlUiGatewayReady(page);
           await page.keyboard.press("ControlOrMeta+k");
           const error = await expectRealChunkFailure(page, "command palette");
@@ -501,7 +506,7 @@ suite.define(() => {
         controlUiE2eBuiltModuleRequest("ui/src/components/command-palette.ts"),
       );
       await installMockGateway(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await waitForControlUiGatewayReady(page);
 
       await page.evaluate(() => {
@@ -645,7 +650,11 @@ suite.define(() => {
         );
         try {
           const composer = await installDockedScenario(page, "right", "new");
-          await page.locator(".sidebar-footer-bar__home").click();
+          await openAssistantDock(page, {
+            sessionKey: "agent:main:main",
+            agentId: "main",
+            label: "Home",
+          });
           await held.request;
           if (captureUiProof) {
             await page.screenshot({
@@ -807,6 +816,12 @@ suite.define(() => {
           await expect.poll(failure.headCount).toBe(1);
 
           await retryThroughReload(page, error);
+        }
+        if (testCase.dock) {
+          // The dock has no implicit destination: its owner must reopen it after
+          // the reload, which is also what retries the failed chunk.
+          await waitForControlUiGatewayReady(page);
+          await testCase.open(page);
         }
         await testCase.ready(page).waitFor();
         expect(failure.chunkRequestCount()).toBe(2);

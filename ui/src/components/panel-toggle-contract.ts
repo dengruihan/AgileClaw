@@ -10,7 +10,6 @@ export const TERMINAL_PANEL_DOCK_BOTTOM_EVENT = "openclaw:terminal-dock-bottom";
 export const BROWSER_PANEL_TOGGLE_EVENT = "openclaw:browser-toggle";
 export const DESKTOP_PANEL_TOGGLE_EVENT = "openclaw:desktop-toggle";
 export const PORTAL_PANEL_TOGGLE_EVENT = "openclaw:portal-toggle";
-export const HOME_PANEL_TOGGLE_EVENT = "openclaw:home-toggle";
 export const DEBUG_OVERLAY_REQUEST_EVENT = "openclaw:debug-overlay-request";
 export const KEYBOARD_SHORTCUTS_REQUEST_EVENT = "openclaw:keyboard-shortcuts-request";
 export const LINK_READER_PANEL_TOGGLE_EVENT = "openclaw:link-reader-panel-toggle";
@@ -76,8 +75,4 @@ export type PanelToggleElement = HTMLElement & {
 
 export function isTerminalPanelShortcut(event: KeyboardEvent): boolean {
   return matchesShortcutCombo(KEYBOARD_SHORTCUT_COMBOS.terminalPanel, event);
-}
-
-export function isHomePanelShortcut(event: KeyboardEvent): boolean {
-  return matchesShortcutCombo(KEYBOARD_SHORTCUT_COMBOS.homePanel, event);
 }

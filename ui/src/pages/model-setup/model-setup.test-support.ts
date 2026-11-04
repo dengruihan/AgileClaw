@@ -8,7 +8,6 @@ import { createRuntimeConfigCapability } from "../../lib/config/runtime-config-c
 import { createApplicationContextProvider } from "../../test-helpers/application-context.ts";
 import { createTestGatewayClient } from "../../test-helpers/gateway-client.ts";
 import { waitForFast } from "../../test-helpers/wait-for.ts";
-import type { ModelSetupRouteData } from "./first-run-setup.ts";
 import { ModelSetupPage } from "./model-setup-page.ts";
 import type { ModelSetupPageState } from "./state.ts";
 
@@ -27,7 +26,10 @@ function mutableGatewaySnapshot(snapshot: ApplicationGateway["snapshot"]) {
   return snapshot;
 }
 
-export function createFirstRunContext(refreshError?: string, beforeRefresh?: () => Promise<void>) {
+export function createModelSetupContext(
+  refreshError?: string,
+  beforeRefresh?: () => Promise<void>,
+) {
   const request =
     vi.fn<(...args: Parameters<GatewayBrowserClient["request"]>) => Promise<unknown>>();
   const client = createTestGatewayClient(request);
@@ -119,7 +121,7 @@ export function createFirstRunContext(refreshError?: string, beforeRefresh?: () 
     resourceBasePath: "/openclaw",
     navigate: vi.fn(),
     runtimeConfig: { ...runtimeConfig, runExternalMutation },
-    // SAFETY: the first-run page consumes only the gateway, agent selection,
+    // SAFETY: the discovery page consumes only the gateway, agent selection,
     // navigation, and runtime config fixtures defined above.
   } as unknown as ApplicationContext;
   return {
@@ -138,7 +140,7 @@ export function createFirstRunContext(refreshError?: string, beforeRefresh?: () 
 
 export async function mountPage(
   context: ApplicationContext,
-  fixture: ModelSetupRouteData & {
+  fixture: {
     state: Extract<ModelSetupPageState, { phase: "ready" }>;
     client: GatewayBrowserClient;
   },
@@ -148,7 +150,6 @@ export async function mountPage(
   // Prime inventory through the real detection boundary; the request fixture
   // below it continues observing subsequent activation and recovery actions.
   vi.spyOn(fixture.client, "request").mockResolvedValueOnce(fixture.state.result);
-  page.routeData = { firstRun: fixture.firstRun };
   provider.append(page);
   document.body.append(provider);
   await page.updateComplete;

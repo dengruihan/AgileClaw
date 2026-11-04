@@ -10,6 +10,7 @@ import {
 } from "../../../src/gateway/control-ui-csp.js";
 import { createSandboxHostHttpServer } from "../../../src/gateway/mcp-app-sandbox-http.js";
 import {
+  controlUiSessionUrl,
   createControlUiMockBootstrapConfig,
   defaultControlUiFeatureMethods,
   installMockGateway,
@@ -116,7 +117,7 @@ suite.define(() => {
                 },
               },
             });
-            await page.goto(`${suite.server.baseUrl}chat`);
+            await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
             await gateway.waitForRequest("chat.startup");
             await page.locator('a.markdown-file-link[data-file-path="page.html"]').click();
             const panel = page.locator("openclaw-chat-detail-panel:visible");
@@ -232,7 +233,8 @@ suite.define(() => {
               });
               // Exercise the production app CSP, not a srcdoc demo that accidentally
               // permits scripts only because a dev server omitted the app policy.
-              await page.route(`${suite.server.baseUrl}chat`, async (route) => {
+              const chatUrl = controlUiSessionUrl(suite.server.baseUrl, "agent:main:main");
+              await page.route(chatUrl, async (route) => {
                 const response = await route.fetch();
                 const body = await response.text();
                 await route.fulfill({
@@ -253,7 +255,7 @@ suite.define(() => {
                   });
                 });
               }
-              await page.goto(`${suite.server.baseUrl}chat`);
+              await page.goto(chatUrl);
               await gateway.waitForRequest("chat.startup");
               await page
                 .locator('a.markdown-file-link[data-file-path="page.html"]')

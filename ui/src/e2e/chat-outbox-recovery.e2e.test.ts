@@ -6,9 +6,9 @@ import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-
 import {
   controlUiBundledGatewayUrl,
   createControlUiMockSameOriginGatewayScript,
+  controlUiSessionUrl,
 } from "../test-helpers/control-ui-e2e.ts";
 import {
-  controlUiSessionUrl,
   createChatFlowE2eSuite,
   expectRequestCountStable,
   installMockGateway,
@@ -54,7 +54,7 @@ suite.define(() => {
             ],
           ),
         });
-        await page.goto(suite.server.baseUrl + "chat");
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const statuses = page.locator(".chat-send-status");
         await expectBrowser(statuses).toHaveCount(4, { timeout: 30_000 });
         const held = page.locator('.chat-send-status[data-send-state="held"]');
@@ -215,7 +215,7 @@ suite.define(() => {
             },
           });
 
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await gateway.deferNext("chat.send");
 
           const prompt =

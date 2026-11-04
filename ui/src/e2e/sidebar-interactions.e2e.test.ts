@@ -2,13 +2,13 @@ import type { Page } from "playwright";
 import { expect, it } from "vitest";
 import { CONTROL_UI_BOOTSTRAP_CONFIG_PATH } from "../../../src/gateway/control-ui-bootstrap-contract.js";
 import {
+  type ControlUiMockGatewayScenario,
+  type MockGatewayRequest,
   controlUiSessionUrl,
   createControlUiMockBootstrapConfig,
   createControlUiMockGatewayInitScript,
   defaultControlUiFeatureMethods,
   waitForControlUiRoute,
-  type ControlUiMockGatewayScenario,
-  type MockGatewayRequest,
 } from "../test-helpers/control-ui-e2e.ts";
 import {
   captureSidebarUiProof,
@@ -274,7 +274,7 @@ suite.define(() => {
         .toBe(true);
       await page.keyboard.press("Tab");
       await expect.poll(() => menu.count()).toBe(0);
-      const homeLink = sidebar.locator(".nav-item--home");
+      const homeLink = sidebar.locator(".nav-item").first();
       await expect
         .poll(() => homeLink.evaluate((element) => element === document.activeElement))
         .toBe(true);

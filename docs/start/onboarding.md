@@ -114,7 +114,7 @@ enabling it, including verified first-party packages. Review the details, then
 explicitly confirm acceptance to continue.
 Declining or confirmed cancellation stops that attempt without selecting another
 inference route. If the confirmation turn fails, the app shows the failure and
-keeps the saved credential. Choose the saved sign-in in **Model Setup** to retry
+keeps the saved credential. Choose the saved sign-in in **Models** to retry
 without signing in again. Runtime plugins installed for that attempt are kept.
 
 Fresh installs also ask whether existing native provider conversations should
@@ -178,10 +178,12 @@ Continuing remains locked until one backend has passed, so the first agent
 chat cannot start without working inference.
 </Step>
 <Step title="Continue in the dashboard">
-After a new model passes its live check, native setup closes and opens guided
-onboarding in the dashboard. OpenClaw helps configure the remaining workspace,
-Gateway, channels, and other optional features, then hands you off to normal
-agent chat. A verified pre-existing model opens the normal dashboard instead.
+After a new model passes its live check, native setup closes and opens the
+dashboard with a new unsent session draft. Provider connection and embedded
+discovery stay on **Models**; the web app no longer runs a separate first-run
+setup page. Configure remaining workspace, Gateway, channels, and optional
+features from Settings, then send your first message. A verified pre-existing
+model opens the same new draft.
 
 Memory import is part of guided setup, not a separate native onboarding page.
 For a local Gateway, supported sources include Claude Code auto-memory, Codex

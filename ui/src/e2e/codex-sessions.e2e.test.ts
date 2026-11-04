@@ -8,6 +8,7 @@ import {
   controlUiBundledGatewayUrl,
   controlUiBundledSettingsStorageKey,
   controlUiSessionPath,
+  controlUiSessionUrl,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
 import { readTextTone } from "../test-helpers/rendered-colors.ts";
@@ -72,7 +73,7 @@ suite.define(() => {
       },
     });
 
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await gateway.waitForRequest("sessions.catalog.list");
     expect(await page.locator('[data-session-section="catalog:codex"]').count()).toBe(0);
     expect(await page.locator('[data-session-section="catalog:claude"]').count()).toBe(0);
@@ -178,7 +179,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await expandCodingSection(page, true);
       const sessionGroups = page.locator(".sidebar-recent-sessions");
       const workSection = sessionGroups.locator(':scope > [data-session-section="work"]');
@@ -237,7 +238,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const request = await gateway.waitForRequest("sessions.catalog.list");
       const progressId = (request.params as { progressId?: string })?.progressId;
       expect(progressId).toEqual(expect.any(String));
@@ -435,7 +436,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await expandCodingSection(page);
       const section = page.locator('[data-session-section="catalog:codex"]');
       await section.waitFor({ state: "visible" });
@@ -704,7 +705,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await expandCodingSection(page);
       await expect
         .poll(async () => (await gateway.getRequests("sessions.catalog.list")).length)
@@ -777,7 +778,7 @@ suite.define(() => {
         "chat.send": { runId: "run-adopted", status: "started" },
       },
     });
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await expandCodingSection(page);
     await page.getByText("Release checklist", { exact: true }).click();
     const catalogPane = page

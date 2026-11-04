@@ -17,12 +17,10 @@ import {
   resolveSafeExternalUrl,
 } from "../../lib/open-external-url.ts";
 import { generateUUID } from "../../lib/uuid.ts";
-import type { FirstRunSetup } from "./first-run-setup.ts";
 import {
   MODEL_SETUP_AUTH_START_TIMEOUT_MS,
   MODEL_SETUP_WIZARD_NEXT_TIMEOUT_MS,
   type ModelSetupWizardResult,
-  type ModelSetupWizardRecovery,
   type ModelSetupWizardState,
   wizardStateFromResult,
 } from "./state.ts";
@@ -42,18 +40,12 @@ export type ModelSetupWizardCompletion = {
   isCurrent?: () => boolean;
 };
 
-type WizardTerminalObserver = (result: ModelSetupWizardResult) => (() => boolean) | void;
-
 type WizardRunnerOptions = {
   getClient: () => GatewayBrowserClient | null;
   getAgentId: () => string | null;
   onChange: (state: ModelSetupWizardState) => void;
   onBackgroundCompletion?: (completion: ModelSetupWizardCompletion) => Promise<void>;
   onSessionMissing?: () => void;
-  onStart?: (
-    method: ModelSetupWizardStartMethod,
-    activation?: Parameters<FirstRunSetup["beginActivation"]>[0],
-  ) => WizardTerminalObserver | undefined;
   requestFailedMessage: () => string;
   cancelledMessage: () => string;
   sessionExpiredMessage: () => string;
@@ -81,7 +73,6 @@ type WizardSession = {
   abortController: AbortController;
   startMethod: ModelSetupWizardStartMethod;
   activationTargetId?: string;
-  onTerminalResult?: WizardTerminalObserver;
 };
 
 export class ModelSetupWizardRunner {
@@ -129,24 +120,6 @@ export class ModelSetupWizardRunner {
       authChoice: session.authChoice,
       ...(notice ? { notice } : {}),
     });
-  }
-
-  restore(recovery: ModelSetupWizardRecovery, onTerminalResult: WizardTerminalObserver): void {
-    const client = this.options.getClient();
-    if (!client || this.session) {
-      return;
-    }
-    this.session = {
-      ...recovery,
-      client,
-      notes: [],
-      admitted: true,
-      retirementGeneration: this.retirementGeneration,
-      abortController: new AbortController(),
-      startMethod: "openclaw.setup.auth.start",
-      onTerminalResult,
-    };
-    this.setState({ phase: "starting", authChoice: recovery.authChoice });
   }
 
   async resume(): Promise<ModelSetupWizardCompletion | null> {
@@ -240,18 +213,6 @@ export class ModelSetupWizardRunner {
       abortController: new AbortController(),
       startMethod,
       activationTargetId,
-      onTerminalResult: this.options.onStart?.(
-        startMethod,
-        "kind" in params
-          ? params
-          : startMethod === "openclaw.setup.auth.start" && "authChoice" in params
-            ? {
-                ...params,
-                kind: "provider-auth",
-                wizard: { sessionId, authChoice, authKind: this.pendingSignIn?.kind },
-              }
-            : undefined,
-      ),
     };
     this.pendingSignIn = undefined;
     this.session = session;
@@ -427,12 +388,8 @@ export class ModelSetupWizardRunner {
     let timedOut = false;
     // Gateway request abort/deadline retirement discards the late session needed for cleanup.
     const retainedRequest = request.then(async (result) => {
-      if (timedOut) {
-        if (result.done) {
-          this.reportTerminalResult(session, result);
-        } else {
-          await this.cancelSession(session);
-        }
+      if (timedOut && !result.done) {
+        await this.cancelSession(session);
       }
       return result;
     });
@@ -512,12 +469,7 @@ export class ModelSetupWizardRunner {
       session.terminalResult = result;
       return null;
     }
-    const isCurrent = this.reportTerminalResult(session, result);
     if (session !== this.session || session.suspended) {
-      return null;
-    }
-    if (isCurrent?.() === false) {
-      this.close();
       return null;
     }
     if (result.done && result.status === "cancelled" && session.cancellationRequested) {
@@ -577,7 +529,6 @@ export class ModelSetupWizardRunner {
     return {
       startMethod: session.startMethod,
       ...(session.activationTargetId ? { activationTargetId: session.activationTargetId } : {}),
-      ...(isCurrent ? { isCurrent } : {}),
       ...(result.preparedModelRef ? { preparedModelRef: result.preparedModelRef } : {}),
       ...(result.modelActivation ? { modelActivation: result.modelActivation } : {}),
     };
@@ -685,35 +636,12 @@ export class ModelSetupWizardRunner {
           { sessionId: session.sessionId, ...(closeInput ? { closeInput: true } : {}) },
           { timeoutMs: MODEL_SETUP_AUTH_START_TIMEOUT_MS },
         )
-        .then((result) => {
-          if (result.status === "cancelled" || result.status === "error") {
-            this.reportTerminalResult(session, { done: true, ...result });
-          }
-          return result;
-        })
+        .then((result) => result)
         .finally(() => {
           session[promiseKey] = undefined;
         });
     }
     return session[promiseKey];
-  }
-
-  private reportTerminalResult(
-    session: WizardSession,
-    result: ModelSetupWizardResult,
-  ): (() => boolean) | void {
-    // Confirmed failure/cancellation owns exact receipt cleanup after presentation retires.
-    // Success and visible state still require this runner's live session.
-    if (this.isRetired(session) || session.suspended) {
-      return;
-    }
-    const failed =
-      result.status === "cancelled" ||
-      result.status === "error" ||
-      result.status === "not-admitted";
-    if (result.done && (session === this.session || failed)) {
-      return session.onTerminalResult?.(result);
-    }
   }
 
   private isRetired(session: WizardSession): boolean {

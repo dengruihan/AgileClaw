@@ -5,7 +5,7 @@ import type { ApplicationContext } from "../app/context.ts";
 import { i18n } from "../i18n/index.ts";
 import type { SidebarOutboxSummary } from "../lib/chat/outbox-store-projection.ts";
 import type { SidebarSessionsGrouping } from "../lib/sessions/grouping.ts";
-import { projectSidebarHomeSession } from "./app-sidebar-agent-session-rows.ts";
+import { projectSidebarAgentSessionRows } from "./app-sidebar-agent-session-rows.ts";
 import type { SidebarSessionCatalog } from "./app-sidebar-session-catalogs.ts";
 import { findActiveSidebarLineageRow } from "./app-sidebar-session-lookup.ts";
 import {
@@ -51,7 +51,7 @@ export type SidebarProjectionHost = {
   readonly sessionOwnerFilterActive: boolean;
   readonly sessionInvolvingMeFilterActive: boolean;
   readonly storedOutboxes: SidebarOutboxSummary | undefined;
-  resolveSessionAttention: Parameters<typeof projectSidebarHomeSession>[0]["resolveAttention"];
+  resolveSessionAttention: Parameters<typeof projectSidebarAgentSessionRows>[0]["resolveAttention"];
   getRouteSessionKey(): string;
   getSessionNavigationState(): SidebarSessionNavigationState;
   effectiveSessionSortMode(): SidebarSessionSortMode;
@@ -270,33 +270,4 @@ export function sidebarRowsInputs(
     host.sessionInvolvingMeFilterActive,
     host.sessionDataContext?.gateway.snapshot.selfUser,
   ];
-}
-
-export function memoizedSidebarHome(
-  memo: SidebarProjectionMemo<SidebarRecentSession>,
-  host: SidebarProjectionHost,
-  row: GatewaySessionRow,
-  agentId: string,
-) {
-  const result = host.sidebarAgentsMode === "roster" ? host.rosterSessionSource?.result : undefined;
-  const navigationState = host.getSessionNavigationState();
-  return memo.read(
-    () => [
-      row,
-      agentId,
-      result,
-      navigationState,
-      host.sessionData.loadedChildSessionKeys,
-      host.sessionData.childSessionErrorsByParent,
-    ],
-    () =>
-      projectSidebarHomeSession({
-        host,
-        row,
-        agentId,
-        result,
-        navigationState,
-        resolveAttention: host.resolveSessionAttention,
-      }),
-  );
 }

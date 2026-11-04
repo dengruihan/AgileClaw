@@ -14,8 +14,8 @@ import "../styles/chat/composer.css";
 import "../styles/chat/composer-status.css";
 import { icons } from "./icons.ts";
 
-/** The real Home conversation; its surrounding dock owns placement and focus. */
-export class OpenClawHomeSession extends OpenClawLightDomElement {
+/** The real assistant conversation; its surrounding dock owns placement and focus. */
+export class OpenClawAssistantSession extends OpenClawLightDomElement {
   @consume({ context: applicationContext, subscribe: true })
   private context!: ApplicationContext;
   @property({ attribute: false }) sessionKey = "";
@@ -168,10 +168,10 @@ export class OpenClawHomeSession extends OpenClawLightDomElement {
   }
 }
 
-customElements.define("openclaw-home-session", OpenClawHomeSession);
+customElements.define("openclaw-assistant-session", OpenClawAssistantSession);
 
 declare global {
   interface HTMLElementTagNameMap {
-    "openclaw-home-session": OpenClawHomeSession;
+    "openclaw-assistant-session": OpenClawAssistantSession;
   }
 }

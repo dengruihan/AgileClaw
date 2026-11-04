@@ -2,12 +2,13 @@ import type { Page } from "playwright";
 import { expect, it } from "vitest";
 import {
   controlUiBundledSettingsStorageKey,
-  defaultControlUiFeatureMethods,
+  controlUiSessionUrl,
   createControlUiMockSameOriginGatewayScript,
+  defaultControlUiFeatureMethods,
 } from "../test-helpers/control-ui-e2e.ts";
 import {
-  createChatFlowE2eSuite,
   captureUiProof,
+  createChatFlowE2eSuite,
   installMockGateway,
   waitForChatScrollIdle,
 } from "./chat-flow.test-support.ts";
@@ -94,7 +95,7 @@ suite.define(() => {
             })),
           });
           await page.addInitScript(createControlUiMockSameOriginGatewayScript());
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await page.locator(".chat-position-rail__track").waitFor();
           await waitForChatScrollIdle(page);
           await expectPositionRailAtEnd(page);
@@ -186,7 +187,7 @@ suite.define(() => {
           if (direction === "rtl") {
             await page.addInitScript(() => localStorage.setItem("openclaw.i18n.locale", "ar"));
           }
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await page.locator(`.chat-text[dir="${direction}"]`).first().waitFor();
           const card = page.locator(".session-progress-card--composer");
           await card.waitFor();
@@ -589,7 +590,7 @@ suite.define(() => {
             ),
           { key: controlUiBundledSettingsStorageKey(suite.server.baseUrl), sessionKey },
         );
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.locator(".sidebar-region--bottom.sidebar-region--open").waitFor();
         const transcript = page.locator(".chat-thread");
         const track = page.locator(".chat-position-rail__track");

@@ -1,11 +1,12 @@
 import path from "node:path";
-import { expect, type Page } from "playwright/test";
+import { type Page, expect } from "playwright/test";
 import { beforeEach, it } from "vitest";
 import type { ChatPageHost } from "../pages/chat/chat-state-host.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
-  installMockGateway,
   type MockGatewayControls,
+  controlUiSessionUrl,
+  installMockGateway,
   waitForControlUiRoute,
 } from "../test-helpers/control-ui-e2e.ts";
 import {
@@ -242,7 +243,7 @@ async function openActiveTurn(scenario: Parameters<typeof installMockGateway>[1]
   const context = await suite.newBrowserContext(createControlUiE2eContextOptions());
   const page = await context.newPage();
   const gateway = await installMockGateway(page, scenario);
-  await page.goto(`${suite.server.baseUrl}chat`);
+  await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
   await page.locator(".agent-chat__composer-combobox textarea").waitFor({ timeout: 10_000 });
   return { context, page, gateway };
 }

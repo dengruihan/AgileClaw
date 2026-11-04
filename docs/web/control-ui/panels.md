@@ -1,35 +1,34 @@
 ---
 doc-schema-version: 1
-summary: "The Home dock, the operator terminal, and the browser panel"
+summary: "Conversation docks, the operator terminal, and the browser panel"
 read_when:
   - Opening a terminal or browser beside a conversation
-  - Using the Home dock
+  - Using a conversation dock
 title: "Panels and docks"
 sidebarTitle: "Panels and docks"
 ---
 
 Surfaces that dock beside the current page instead of replacing it.
 
-## Home dock
+## Conversation docks
 
-Use the **Home** button in the sidebar footer, or in the toolbar when the sidebar is collapsed, to open the selected agent's main conversation alongside your current page. When the same Home conversation is already open as the page, the dock stays hidden rather than showing it twice.
+<!-- The old Home dock anchor stays for links from other pages and outside the docs. -->
+<a id="home-dock" />
 
-Your Home draft and attachments follow the conversation between the page and dock. Files still being prepared keep their progress and Remove action, and Send waits until preparation finishes.
+A plugin page can offer an action to open its conversation beside the page. The
+dock uses the same chat pane, drafts, attachments, right-or-bottom placement,
+resizing, and close controls as the main chat, and it opens that explicit
+session. There is no built-in Home conversation and no implicit main-session
+destination: the sidebar has no dock toggle, and closing a dock leaves none open
+until the page opens one again.
 
-Home can include a bounded, quoted work-context reference with your message. Before sending, that reference follows the page's agent, session, title, and visible file, not merely the Home conversation receiving it. You can remove it before sending.
+A dock stays open across page navigation and hides while the same conversation
+is open as the Chat or Dashboard page, so the same session never renders two
+composers. Read-only access and session errors follow the normal chat rules.
 
-Sent messages show **Context attached** below your words instead of displaying the generated context as message text. Open it to inspect the captured session, page, agent, workspace, file, or selection; **Technical details** shows the snapshot as JSON. The snapshot is frozen when you send, including through queues and retries. Copying or editing your message does not include the generated reference. It remains reference data, not instructions or permission to access another conversation. Older messages without a recorded attachment are left unchanged.
-
-## Plugin conversation docks
-
-A plugin page can offer an action to open its conversation beside the page.
-It uses the same chat pane, drafts, attachments, right-or-bottom placement,
-resizing, and close controls as Home. Opening it replaces Home
-or another conversation dock. It stays open across page navigation and hides
-while the same conversation is open as the Chat or Dashboard page. Closing
-leaves no dock open. Read-only access and session errors follow the normal
-chat rules. A plugin can include a bounded page reference, shown as
-**Context attached** after sending; it remains untrusted reference data.
+Opening a dock replaces any other conversation dock. A plugin can include a
+bounded page reference, shown as **Context attached** after sending; it remains
+untrusted reference data.
 
 ## Operator terminal
 

@@ -1,18 +1,9 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { SystemAgentSetupDetectResult } from "../../api/types.ts";
 import { icons } from "../../components/icons.ts";
-import {
-  providerDisplayLabel,
-  providerIdFromModelRef,
-  renderProviderBrandIcon,
-} from "../../components/provider-icon.ts";
 import { t } from "../../i18n/index.ts";
 import { registerModelSetupEnglish } from "../../i18n/locales/en-model-setup.ts";
-import {
-  activationTargetId,
-  type ModelSetupActivationState,
-  type ModelSetupVerifyState,
-} from "./state.ts";
+import { activationTargetId, type ModelSetupActivationState } from "./state.ts";
 
 registerModelSetupEnglish();
 
@@ -102,118 +93,6 @@ function renderModelSetupFailure(status: string, error: string): TemplateResult 
         ${key === "unavailable" ? nothing : t(`modelSetup.failureGuidance.${key}`)}</span
       >
     </div>
-  `;
-}
-
-function modelName(modelRef: string): string {
-  const separator = modelRef.indexOf("/");
-  return separator < 0 ? modelRef : modelRef.slice(separator + 1);
-}
-
-function configuredModelDetail(candidate: Candidate | undefined, modelRef: string): string {
-  const name = modelName(modelRef);
-  const detail = candidate?.detail.trim();
-  if (!detail || candidate?.kind === "existing-model") {
-    return name;
-  }
-  return detail.toLowerCase().includes(name.toLowerCase()) ? detail : `${name} · ${detail}`;
-}
-
-function verificationButtonLabel(verify: ModelSetupVerifyState): string {
-  switch (verify.phase) {
-    case "checking":
-      return t("modelSetup.verify.checkingButton");
-    case "failed":
-      return t("modelSetup.verify.retry");
-    case "ok":
-      return t("modelSetup.verify.checkAgain");
-    default:
-      return t("modelSetup.verify.button");
-  }
-}
-
-export function renderConfiguredModel(props: {
-  result: SystemAgentSetupDetectResult;
-  verify: ModelSetupVerifyState;
-  canVerify: boolean;
-  actionsDisabled: boolean;
-  onVerify: () => void;
-  onContinue?: () => void;
-}): TemplateResult {
-  const configuredRef = props.result.configuredModel!;
-  // A successful verify reports the model that actually answered; prefer it over
-  // the detect-time snapshot so concurrent config changes cannot mislabel the result.
-  const displayRef = props.verify.phase === "ok" ? props.verify.modelRef : configuredRef;
-  const providerId = providerIdFromModelRef(displayRef);
-  const configuredCandidate =
-    displayRef === configuredRef
-      ? props.result.candidates.find(
-          (candidate) =>
-            candidate.modelRef === configuredRef && !candidate.kind.startsWith("saved-auth:"),
-        )
-      : undefined;
-  const providerLabel = providerId ? providerDisplayLabel(providerId) : displayRef;
-  const detail = configuredModelDetail(configuredCandidate, displayRef);
-
-  return html`
-    <section class="settings-section model-setup__current" data-verify-phase=${props.verify.phase}>
-      <div class="settings-section__header">
-        <h2>${t("modelSetup.verify.title")}</h2>
-      </div>
-      <div class="model-setup__row">
-        <div class="model-setup__provider-copy">
-          ${
-            providerId
-              ? renderProviderBrandIcon(providerId, { className: "model-setup__icon" })
-              : nothing
-          }
-          <div class="model-setup__current-copy">
-            <strong>${providerLabel}</strong>
-            <div class="muted">${detail}</div>
-            ${
-              props.verify.phase === "checking"
-                ? html`<div class="model-setup__testing" role="status">
-                    ${t("modelSetup.verify.checking", { modelRef: configuredRef })}
-                  </div>`
-                : props.verify.phase === "ok"
-                  ? html`<div class="model-setup__verified" role="status">
-                      ${
-                        props.verify.latencyMs === undefined
-                          ? t("modelSetup.verify.ready")
-                          : t("modelSetup.verify.readyIn", {
-                              latencyMs: String(props.verify.latencyMs),
-                            })
-                      }
-                    </div>`
-                  : props.verify.phase === "failed"
-                    ? renderModelSetupFailure(props.verify.status, props.verify.error)
-                    : nothing
-            }
-          </div>
-        </div>
-        <div class="model-setup__row-actions">
-          ${
-            props.canVerify
-              ? html`<button
-                  type="button"
-                  class="btn"
-                  ?disabled=${props.actionsDisabled}
-                  @click=${props.onVerify}
-                >
-                  ${verificationButtonLabel(props.verify)}
-                </button>`
-              : nothing
-          }
-          ${
-            props.onContinue
-              ? html`<button type="button" class="btn primary" @click=${props.onContinue}>
-                  ${icons.messageSquare} ${t("modelSetup.success.continueSetup")}
-                </button>`
-              : nothing
-          }
-        </div>
-      </div>
-    </section>
   `;
 }
 

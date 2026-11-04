@@ -8,6 +8,7 @@ import {
   expectDefined,
   installMockGateway,
   waitForChatScrollIdle,
+  controlUiSessionUrl,
 } from "./chat-flow.test-support.ts";
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 
@@ -96,7 +97,7 @@ suite.define(() => {
         );
       };
       try {
-        await page.goto(suite.server.baseUrl + "chat");
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         if (mobile) {
           await card.locator("summary").click();
         }

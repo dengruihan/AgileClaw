@@ -29,8 +29,6 @@ function renderModelProviderDiscovery(props: {
     </openclaw-modal-dialog>`;
   }
   return html`<openclaw-model-setup-page
-    .routeData=${{ firstRun: false }}
-    .embedded=${true}
     .credentialChoices=${props.credentialChoices}
     .agentLabel=${props.agentLabel}
     .onClose=${props.onClose}

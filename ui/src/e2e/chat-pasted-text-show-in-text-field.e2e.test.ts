@@ -6,7 +6,7 @@ import {
   computeInlineScriptHashes,
 } from "../../../src/gateway/control-ui-csp.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 import { waitForCommittedComposerDraft } from "./settle.test-support.ts";
 
@@ -48,7 +48,7 @@ suite.define(() => {
         { ...contextOptions, viewport: { width, height: 900 } },
         async ({ page }) => {
           const gateway = await installMockGateway(page);
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await page.evaluate(() => {
             document.documentElement.dataset.themeMode = "dark";
           });
@@ -102,7 +102,7 @@ suite.define(() => {
       { ...contextOptions, viewport: { width, height: 900 } },
       async ({ page }) => {
         const gateway = await installMockGateway(page);
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const composer = page.locator(".agent-chat__composer-combobox textarea");
         await composer.waitFor({ state: "visible" });
         await composer.fill("Keep this draft");
@@ -184,7 +184,7 @@ suite.define(() => {
 
   it("opens, copies, and restores exact pasted text under the Gateway CSP", async () => {
     await suite.withPage(contextOptions, async ({ page }) => {
-      const chatUrl = `${suite.server.baseUrl}chat`;
+      const chatUrl = controlUiSessionUrl(suite.server.baseUrl, "agent:main:main");
       let gatewayCsp = "";
       await page.route(chatUrl, async (route) => {
         const response = await route.fetch();
@@ -339,7 +339,7 @@ suite.define(() => {
   it("keeps a newly uploaded lookalike filename as a file and sends file origin", async () => {
     await suite.withPage(contextOptions, async ({ page }) => {
       const gateway = await installMockGateway(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.locator(".agent-chat__file-input").setInputFiles({
         name: "pasted-text-123.txt",
         mimeType: "text/plain",
@@ -418,7 +418,7 @@ suite.define(() => {
           },
         ],
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const chips = page.locator(".chat-thread-inner .chat-selection-annotations__chip");
       await expect.poll(() => chips.count()).toBe(3);
       await expect.poll(() => chips.nth(2).textContent()).toContain("Legacy pasted text");
@@ -525,7 +525,7 @@ suite.define(() => {
           },
         ],
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page
         .getByRole("button", { name: "Preserve the original UTF-8 te…", exact: true })
         .click();

@@ -6,6 +6,7 @@ import {
 } from "./chat-flow.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it("marks interrupted replies from history after a reload", async () => {
@@ -24,7 +25,7 @@ suite.define(() => {
             },
           ],
         });
-        await currentPage.goto(`${suite.server.baseUrl}chat`);
+        await currentPage.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await currentPage
           .locator(".chat-text")
           .getByText("From the earliest river", { exact: true })

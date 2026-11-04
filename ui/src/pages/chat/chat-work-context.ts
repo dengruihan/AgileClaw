@@ -54,7 +54,7 @@ export function subscribeChatWorkContext(context: object, listener: () => void):
   return () => listeners.delete(listener);
 }
 
-export function buildHomeWorkContext(
+export function buildPageWorkContext(
   context: Pick<ApplicationContext, "gateway" | "agents" | "sessions">,
   page: string,
   sessionKey: string,
