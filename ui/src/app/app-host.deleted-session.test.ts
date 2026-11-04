@@ -373,8 +373,9 @@ describe("AgileClaw shell deleted-session recovery", () => {
     expect(setSessionKey).not.toHaveBeenCalled();
     get.mockReturnValue(null);
     shell.recoverDeletedActiveSession(context.sessions.state);
-    expect(shell.activeSessionKey).toBe(mainKey);
-    expect(replace).toHaveBeenCalledOnce();
+    // The retired conversation is replaced by an unsent draft, never by the anchor.
+    expect(shell.activeSessionKey).toBe("");
+    expect(replace).toHaveBeenCalledExactlyOnceWith("new-session", { search: "?agent=main" });
   });
   it.each(["rejection", "batch interruption", "different-client batch rejection"] as const)(
     "navigates on delete intent and visibly reports %s without replacing newer navigation",
@@ -405,10 +406,10 @@ describe("AgileClaw shell deleted-session recovery", () => {
           failure === "rejection"
             ? sessions.delete(deletedKey)
             : sessions.deleteMany([{ key: deletedKey }, { key: "agent:main:unsent" }]);
-        expect(shell.activeSessionKey).toBe(mainKey);
+        expect(shell.activeSessionKey).toBe("");
         expect(sessions.deletionState(deletedKey)).toBe("pending");
         expect(sessions.state.deletedSessions).toEqual([]);
-        expect(replace).toHaveBeenCalledExactlyOnceWith("chat", { pathname: "/chat/main" });
+        expect(replace).toHaveBeenCalledExactlyOnceWith("new-session", { search: "?agent=main" });
         shell.activeSessionKey = "agent:main:another-thread";
         replace.mockClear();
         if (failure === "rejection") {
@@ -605,7 +606,8 @@ describe("AgileClaw shell deleted-session recovery", () => {
         expect(h.sessions.state.result?.sessions).toEqual([h.sibling]);
         expect(h.sessions.deletionState(h.alpha.key)).toBe("confirmed");
         expect(h.sessions.deletionState(h.sibling.key)).toBeUndefined();
-        expect(shell.activeSessionKey).toBe(mainKey);
+        expect(shell.activeSessionKey).toBe("");
+        expect(replace).toHaveBeenCalledWith("new-session", { search: "?agent=main" });
       } finally {
         stop();
         h.sessions.dispose();
@@ -691,7 +693,7 @@ describe("AgileClaw shell deleted-session recovery", () => {
     expect(toast.querySelectorAll(".app-toast")).toHaveLength(1);
   });
 
-  it("replaces an unresolvable session with the owning agent's main chat", () => {
+  it("replaces an unresolvable session with a draft for the owning agent", () => {
     const { replace, setSessionKey, shell } = createSessionRecoveryShell({
       activeSessionKey: deletedKey,
       sessionKeys: [mainKey],
@@ -699,8 +701,8 @@ describe("AgileClaw shell deleted-session recovery", () => {
 
     shell.recoverNotFoundRoute();
 
-    expect(setSessionKey).toHaveBeenCalledExactlyOnceWith(mainKey);
-    expect(replace).toHaveBeenCalledExactlyOnceWith("chat", { pathname: "/chat/main" });
+    expect(setSessionKey).toHaveBeenCalledExactlyOnceWith("");
+    expect(replace).toHaveBeenCalledExactlyOnceWith("new-session", { search: "?agent=main" });
   });
 
   it("preserves the owning non-default agent when its session is deleted", () => {
@@ -713,8 +715,8 @@ describe("AgileClaw shell deleted-session recovery", () => {
 
     shell.recoverNotFoundRoute();
 
-    expect(setSessionKey).toHaveBeenCalledExactlyOnceWith(researchKey);
-    expect(replace).toHaveBeenCalledExactlyOnceWith("chat", { pathname: "/chat/research" });
+    expect(setSessionKey).toHaveBeenCalledExactlyOnceWith("");
+    expect(replace).toHaveBeenCalledExactlyOnceWith("new-session", { search: "?agent=research" });
   });
 
   it("recovers to a known agent when the deleted session's owner was removed", () => {
@@ -726,11 +728,11 @@ describe("AgileClaw shell deleted-session recovery", () => {
 
     shell.recoverNotFoundRoute();
 
-    expect(setSessionKey).toHaveBeenCalledExactlyOnceWith(mainKey);
-    expect(replace).toHaveBeenCalledExactlyOnceWith("chat", { pathname: "/chat/main" });
+    expect(setSessionKey).toHaveBeenCalledExactlyOnceWith("");
+    expect(replace).toHaveBeenCalledExactlyOnceWith("new-session", { search: "?agent=main" });
   });
 
-  it("does not replace a main route with the same deleted main session", () => {
+  it("opens a draft when the deleted session is the agent's own anchor", () => {
     const { replace, setSessionKey, shell } = createSessionRecoveryShell({
       activeSessionKey: mainKey,
       deletedSessionKeys: [mainKey],
@@ -739,8 +741,10 @@ describe("AgileClaw shell deleted-session recovery", () => {
 
     shell.recoverNotFoundRoute();
 
-    expect(setSessionKey).not.toHaveBeenCalled();
-    expect(replace).not.toHaveBeenCalled();
+    // An authoritative deletion outranks the anchor route: it never silently
+    // reopens the deleted anchor, so the operator gets an unsent draft instead.
+    expect(setSessionKey).toHaveBeenCalledExactlyOnceWith("");
+    expect(replace).toHaveBeenCalledExactlyOnceWith("new-session", { search: "?agent=main" });
   });
 
   it("keeps a resolvable active session when a different chat route is not found", () => {
@@ -786,8 +790,8 @@ describe("AgileClaw shell deleted-session recovery", () => {
 
     shell.recoverNotFoundRoute();
 
-    expect(setSessionKey).toHaveBeenCalledExactlyOnceWith(mainKey);
-    expect(replace).toHaveBeenCalledExactlyOnceWith("chat", { pathname: "/chat/main" });
+    expect(setSessionKey).toHaveBeenCalledExactlyOnceWith("");
+    expect(replace).toHaveBeenCalledExactlyOnceWith("new-session", { search: "?agent=main" });
   });
 
   it("rejects a late route commit for a session already marked deleted", () => {
@@ -820,8 +824,8 @@ describe("AgileClaw shell deleted-session recovery", () => {
 
     shell.updateRouteState(selectShellRouteState(routerState));
 
-    expect(shell.activeSessionKey).toBe(mainKey);
-    expect(setSessionKey).toHaveBeenCalledExactlyOnceWith(mainKey);
-    expect(replace).toHaveBeenCalledExactlyOnceWith("chat", { pathname: "/chat/main" });
+    expect(shell.activeSessionKey).toBe("");
+    expect(setSessionKey).toHaveBeenCalledExactlyOnceWith("");
+    expect(replace).toHaveBeenCalledExactlyOnceWith("new-session", { search: "?agent=main" });
   });
 });

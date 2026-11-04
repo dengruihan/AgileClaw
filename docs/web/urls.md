@@ -145,10 +145,11 @@ display names, agents, and longer id prefixes. Use a longer prefix to make the
 URL unique. Current Gateways return at most ten recent candidates; when that
 bound is reached, the view treats the result as incomplete instead of guessing.
 
-Opening the Control UI at `/` or `/chat` restores the browser's last selected
-session. If that session no longer exists, the UI opens its agent's main session;
-if the agent was removed, it uses the current agent instead. Explicit links to
-missing sessions keep showing the "Session not found" recovery page.
+Opening the Control UI at `/` or `/chat` starts a new unsent draft at `/new`.
+The draft is not stored until the first message is sent, and reloading restores
+the same draft rather than creating an empty session. Read-only connections that
+cannot create a session land on `/sessions` instead. Explicit links to missing
+sessions keep showing the "Session not found" recovery page.
 
 To continue one of these links in the terminal or attach a coding harness, see
 [Session synchronization and attachment](/concepts/session-attachment).

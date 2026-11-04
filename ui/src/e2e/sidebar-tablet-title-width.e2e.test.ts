@@ -166,4 +166,85 @@ suite.define(() => {
       await suite.closeBrowserContext(context);
     }
   });
+
+  it.each(viewports.filter((viewport) => viewport.wrap))(
+    "keeps an expanded child row readable at $name",
+    async (viewport) => {
+      const context = await suite.newBrowserContext({
+        colorScheme: "dark",
+        hasTouch: viewport.touch,
+        locale: "en-US",
+        serviceWorkers: "block",
+        viewport: { height: viewport.height, width: viewport.width },
+      });
+      const page = await context.newPage();
+      // The anchor promotes its children to roots by contract, so the nesting
+      // disclosure belongs to an ordinary parent session.
+      const parentKey = "agent:main:release";
+      const childKey = "agent:main:release-child";
+      try {
+        await installMockGateway(page, {
+          sessionKey: parentKey,
+          methodResponses: {
+            "sessions.list": sessionsListResponse([
+              {
+                key: parentKey,
+                kind: "direct",
+                label: longTitle,
+                updatedAt: 3_000,
+                hasActiveRun: true,
+                status: "running",
+                childSessions: [childKey],
+              },
+              {
+                key: childKey,
+                kind: "direct",
+                label: "A very long child session name for the tablet sweep",
+                spawnedBy: parentKey,
+                updatedAt: 2_000,
+                status: "done",
+              },
+              {
+                key: "agent:main:main",
+                kind: "direct",
+                label: secondTitle,
+                updatedAt: 1_000,
+              },
+            ]),
+          },
+        });
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, parentKey));
+        const parentRow = page.locator(`.sidebar-recent-session[data-session-key="${parentKey}"]`);
+        await parentRow.waitFor({ state: "visible", timeout: 10_000 });
+        const toggle = page.locator(`[data-child-session-toggle="${parentKey}"]`);
+        await toggle.click();
+        await expect.poll(() => toggle.getAttribute("aria-expanded")).toBe("true");
+        const childRow = page.locator(`.sidebar-recent-session[data-session-key="${childKey}"]`);
+        await childRow.waitFor({ state: "visible", timeout: 10_000 });
+
+        const reading = await childRow.evaluate((row) => {
+          const name = row.querySelector<HTMLElement>(".sidebar-recent-session__name");
+          const title = name?.getBoundingClientRect();
+          return {
+            childTitleWidth: title ? Math.round(title.width) : 0,
+            rowWidth: Math.round(row.getBoundingClientRect().width),
+          };
+        });
+        await captureUiProof(
+          suite,
+          page,
+          `${viewport.name}-child-${reading.childTitleWidth}px.png`,
+        );
+        console.log(
+          `[m48] tablet-child ${viewport.name} child=${reading.childTitleWidth}px row=${reading.rowWidth}px`,
+        );
+
+        // The expanded child is indented beside the same compact actions, so its
+        // title budget is smaller than the parent's but must stay readable.
+        expect(reading.childTitleWidth).toBeGreaterThanOrEqual(70);
+      } finally {
+        await suite.closeBrowserContext(context);
+      }
+    },
+  );
 });
