@@ -19,6 +19,7 @@ import { resolveGatewayPublicOrigin } from "../config/gateway-public-origin.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { resolveDevInstallGitBranch } from "../infra/dev-install-branch.js";
 import { openLocalFileSafely, FsSafeError } from "../infra/fs-safe.js";
+import { isRequestBodyLimitError, readRequestBodyWithLimit } from "../infra/http-body.js";
 import { createHttpRequestAbortSignal } from "../infra/http-request-lifecycle.js";
 import { assertLocalMediaAllowed, LocalMediaAccessError } from "../media/local-media-access.js";
 import { resolveMediaReferenceLocalPathInfo } from "../media/media-reference.js";
@@ -458,6 +459,72 @@ async function resolveAssistantMediaAvailability(
   }
 }
 
+/**
+ * Parses one client-held Office upload for its structured preview. The bytes
+ * never persist and never mint a ticket; the route exists so optimistic/outbox
+ * attachments, whose bytes live only in the browser, still preview through the
+ * one Office parser owner.
+ */
+async function respondAssistantMediaUploadParse(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  opts?: Partial<GatewayHttpRequestAuthOptions> & { basePath?: string; config?: OpenClawConfig },
+): Promise<boolean> {
+  const requestAuth = await authorizeControlUiReadRequestOrReply({
+    ...opts,
+    req,
+    res,
+    cfg: opts?.cfg ?? opts?.config,
+    allowQueryToken: true,
+  });
+  if (!requestAuth) {
+    return true;
+  }
+  const requestAbort = createHttpRequestAbortSignal(res.req, res);
+  using _ = { [Symbol.dispose]: requestAbort.cleanup };
+  const filename = (url.searchParams.get("filename") ?? "").split(/[\\/]/).pop() ?? "";
+  try {
+    // latin1 keeps every request byte intact for the binary reader.
+    const body = await readRequestBodyWithLimit(req, {
+      maxBytes: OFFICE_PREVIEW_MAX_BYTES,
+      timeoutMs: 30_000,
+      encoding: "latin1",
+    });
+    if (requestAbort.signal.aborted) {
+      return true;
+    }
+    const buffer = Buffer.from(body, "latin1");
+    const declaredType = url.searchParams.get("type")?.trim().toLowerCase();
+    const officePreview = filename
+      ? await buildOfficePreviewPayload({
+          filename,
+          ...(declaredType ? { mimeType: declaredType } : {}),
+          sizeBytes: buffer.length,
+          read: async () => (requestAbort.signal.aborted ? null : buffer),
+        })
+      : undefined;
+    if (requestAbort.signal.aborted || res.destroyed) {
+      return true;
+    }
+    sendJson(res, 200, { available: true, ...(officePreview ? { officePreview } : {}) });
+  } catch (error) {
+    if (res.destroyed || res.writableEnded) {
+      return true;
+    }
+    if (isRequestBodyLimitError(error, "PAYLOAD_TOO_LARGE")) {
+      sendJson(res, 200, {
+        available: false,
+        reason: "Office preview payload too large",
+        code: "office-preview-too-large",
+      });
+      return true;
+    }
+    respondControlUiNotFound(res);
+  }
+  return true;
+}
+
 export async function handleControlUiAssistantMediaRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -478,10 +545,16 @@ export async function handleControlUiAssistantMediaRequest(
   const isMetaRequest = url.searchParams.get("meta") === "1";
   const explicitAllow =
     req.method === "POST" && isMetaRequest && url.searchParams.get("allow") === "1";
-  if (!isReadHttpMethod(req.method) && !explicitAllow) {
+  // Opt-in parse of client-held upload bytes for an optimistic Office preview.
+  const isUploadParse =
+    req.method === "POST" && isMetaRequest && url.searchParams.get("upload") === "1";
+  if (!isReadHttpMethod(req.method) && !explicitAllow && !isUploadParse) {
     return false;
   }
   applyControlUiSecurityHeaders(res);
+  if (isUploadParse && url.searchParams.get("preview") === "office") {
+    return await respondAssistantMediaUploadParse(req, res, url, opts);
+  }
   let source = normalizeAssistantMediaSource(url.searchParams.get("source") ?? "");
   if (!source) {
     respondControlUiNotFound(res);

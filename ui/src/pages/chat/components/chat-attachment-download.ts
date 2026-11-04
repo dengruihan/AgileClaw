@@ -79,6 +79,66 @@ async function downloadAttachmentWithFreshTicket(
   }
 }
 
+/**
+ * Retained optimistic/outbox upload bytes (data:/blob:) have no ticket to
+ * re-mint; the browser downloads those bytes directly under the attachment's
+ * name. Scoped to Office uploads whose preview already parsed the same bytes.
+ */
+export function createRetainedUploadDownloadHandler(url: string, label: string): () => void {
+  const source = url.trim();
+  return () => {
+    if (source) {
+      triggerAttachmentDownload(source, label);
+    }
+  };
+}
+
+/**
+ * Click-time download for a rail-opened managed artifact. The ordinary
+ * `artifacts.download` response is URL-only, so re-mint the ticket on every
+ * click and hand the fresh URL to the browser's download flow, exactly like a
+ * managed chat attachment.
+ */
+export function createManagedArtifactDownloadHandler(params: {
+  sessionKey: string;
+  artifactId: string;
+  label: string;
+  resolveArtifactDownload: (
+    resolveParams: { sessionKey: string; artifactId: string; variant?: "full" | "thumbnail" },
+    signal?: AbortSignal,
+  ) => Promise<{ url?: string } | null>;
+  resourceBasePath?: string;
+  connectionEpoch?: () => number | undefined;
+}): () => void {
+  return () => {
+    const dedupeKey = `managed::${params.connectionEpoch?.() ?? 0}::${params.sessionKey}::${params.artifactId}`;
+    if (inFlightDownloads.has(dedupeKey)) {
+      return;
+    }
+    inFlightDownloads.add(dedupeKey);
+    void (async () => {
+      try {
+        const result = await params.resolveArtifactDownload({
+          sessionKey: params.sessionKey,
+          artifactId: params.artifactId,
+        });
+        const url = result?.url?.trim();
+        if (!url) {
+          throw new Error("artifact download url unavailable");
+        }
+        triggerAttachmentDownload(
+          applyResourceBasePath(url, params.resourceBasePath),
+          params.label,
+        );
+      } catch {
+        showToast({ message: t("chat.attachments.downloadFailed") });
+      } finally {
+        inFlightDownloads.delete(dedupeKey);
+      }
+    })();
+  };
+}
+
 async function resolveFreshAttachmentDownloadUrl(
   attachment: DownloadableAttachment,
   options: ImageRenderOptions,
@@ -110,7 +170,8 @@ async function resolveFreshAttachmentDownloadUrl(
   );
 }
 
-function triggerAttachmentDownload(url: string, filename: string): void {
+/** Hands one URL to the browser's download flow with an explicit filename. */
+export function triggerAttachmentDownload(url: string, filename: string): void {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;

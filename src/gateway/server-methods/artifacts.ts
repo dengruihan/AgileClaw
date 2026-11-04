@@ -331,20 +331,30 @@ const BASE64_MAX_LENGTH_FOR_OFFICE_PREVIEW = Math.ceil((OFFICE_PREVIEW_MAX_BYTES
  * Opt-in structured preview for one artifact. The normal download path never
  * parses content; only `preview: "office"` reads the bounded original and
  * reuses the shared Office worker.
+ *
+ * Returns `"ordinary"` without responding when the artifact is outside the
+ * Office families, so the caller answers with the artifact's normal download
+ * delivery instead of a payload-less summary.
  */
 async function respondArtifactOfficePreview(
   query: ArtifactsGetParams,
   access: ArtifactSessionAccess & { assertCurrent: () => void },
   respond: RespondFn,
-): Promise<void> {
-  await runArtifactSessionOperation(respond, async () => {
+): Promise<"handled" | "ordinary"> {
+  const outcome = await runArtifactSessionOperation(respond, async () => {
     const resolveSession = await prepareArtifactSessionResolution(query, access.projection);
     const resolved = await resolveSession(access);
     const cfg = access.getRuntimeConfig();
     const defaultAgentId = resolved
       ? tryResolveSessionCompatibilityOwnerAgentId(cfg, resolved.sessionKey)
       : undefined;
-    if (parseManagedOutgoingArtifactId(query.artifactId)) {
+    const managedId = parseManagedOutgoingArtifactId(query.artifactId);
+    if (managedId?.family === "image") {
+      // Managed images are never Office; keep their ordinary managed delivery.
+      await respondManagedArtifactDownload(query, access, respond);
+      return "handled" as const;
+    }
+    if (managedId) {
       const content = resolved
         ? await readManagedOutgoingMediaArtifactContent({
             sessionKey: resolved.sessionKey,
@@ -358,7 +368,16 @@ async function respondArtifactOfficePreview(
       access.assertCurrent();
       if (!content) {
         respondArtifactNotFound(respond, query.artifactId);
-        return;
+        return "handled" as const;
+      }
+      if (
+        !resolveOfficePreviewFamily({
+          filename: content.filename,
+          ...(content.mimeType ? { mimeType: content.mimeType } : {}),
+        }).office
+      ) {
+        await respondManagedArtifactDownload(query, access, respond);
+        return "handled" as const;
       }
       const preview = await buildOfficePreviewPayload({
         filename: content.filename,
@@ -371,7 +390,7 @@ async function respondArtifactOfficePreview(
         artifact: managedArtifactSummary(content),
         ...(preview ? { preview } : {}),
       });
-      return;
+      return "handled" as const;
     }
     const found = await runArtifactSessionOperation(respond, () =>
       findArtifact(query, access, {
@@ -380,20 +399,25 @@ async function respondArtifactOfficePreview(
       }),
     );
     if (!found.ok) {
-      return;
+      return "handled" as const;
     }
     const { artifact } = found.value;
     if (!artifact) {
       respondArtifactNotFound(respond, query.artifactId);
-      return;
+      return "handled" as const;
     }
     const family = resolveOfficePreviewFamily({
       filename: artifact.title,
       ...(artifact.mimeType ? { mimeType: artifact.mimeType } : {}),
     });
+    if (!family.office) {
+      // A preview request never strips the ordinary payload: answer non-Office
+      // artifacts through the normal download path.
+      return "ordinary" as const;
+    }
     const encodedData = artifact.data;
     const preview =
-      family.office && encodedData && encodedData.length > BASE64_MAX_LENGTH_FOR_OFFICE_PREVIEW
+      encodedData && encodedData.length > BASE64_MAX_LENGTH_FOR_OFFICE_PREVIEW
         ? {
             kind: "office" as const,
             ...(family.format ? { format: family.format } : {}),
@@ -407,21 +431,21 @@ async function respondArtifactOfficePreview(
               read: async () =>
                 typeof artifact.data === "string" ? Buffer.from(artifact.data, "base64") : null,
             })
-          : family.office
-            ? {
-                kind: "office" as const,
-                ...(family.format ? { format: family.format } : {}),
-                state: "unsupported" as const,
-              }
-            : undefined;
+          : {
+              kind: "office" as const,
+              ...(family.format ? { format: family.format } : {}),
+              state: "unsupported" as const,
+            };
     if (!artifactResponseIsCurrent(found.value, respond)) {
-      return;
+      return "handled" as const;
     }
     respond(true, {
       artifact: toArtifactSummary(artifact),
       ...(preview ? { preview } : {}),
     });
+    return "handled" as const;
   });
+  return outcome.ok ? outcome.value : "handled";
 }
 
 export const artifactsHandlers: GatewayRequestHandlers = {
@@ -507,8 +531,11 @@ export const artifactsHandlers: GatewayRequestHandlers = {
     }
     const query = { ...params };
     if (query.preview === "office") {
-      await respondArtifactOfficePreview(query, access, respond);
-      return;
+      if ((await respondArtifactOfficePreview(query, access, respond)) === "handled") {
+        return;
+      }
+      // Non-Office artifacts keep their ordinary download delivery.
+      delete query.preview;
     }
     if (
       query.sessionKey &&

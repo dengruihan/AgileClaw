@@ -176,12 +176,13 @@ describe("artifacts.download opt-in Office preview", () => {
     expect(payload.preview).toEqual({ kind: "office", state: "unsupported" });
   });
 
-  it("leaves non-Office artifacts without a preview payload", async () => {
+  it("answers non-Office preview requests with ordinary download delivery", async () => {
+    const data = Buffer.from("%PDF-1.4").toString("base64");
     const artifactId = await openInlineArtifact({
       type: "file",
       title: "report.pdf",
       mimeType: "application/pdf",
-      data: Buffer.from("%PDF-1.4").toString("base64"),
+      data,
       sizeBytes: 8,
     });
     const payload = expectOkPayload(
@@ -190,7 +191,71 @@ describe("artifacts.download opt-in Office preview", () => {
         artifactId,
         preview: "office",
       }),
-    ) as { preview?: unknown };
+    ) as { preview?: unknown; encoding?: string; data?: string; url?: string };
+    // The preview opt-in never strips the payload another preview needs.
+    expect(payload.preview).toBeUndefined();
+    expect(payload.encoding).toBe("base64");
+    expect(payload.data).toBe(data);
+    expect(Value.Check(ArtifactsDownloadResultSchema, payload)).toBe(true);
+  });
+
+  it("keeps managed images on their ordinary URL delivery when a preview is requested", async () => {
+    const artifactId = "artifact_managed_image_11111111-1111-4111-8111-111111111111";
+    hoisted.resolveManagedArtifactDownload.mockResolvedValue({
+      artifactId,
+      sessionKey: "agent:main:main",
+      type: "image",
+      title: "chart.png",
+      mimeType: "image/png",
+      sizeBytes: 1234,
+      url: `/api/chat/media/outgoing/agent%3Amain%3Amain/11111111-1111-4111-8111-111111111111/full`,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    const payload = expectOkPayload(
+      await invoke("artifacts.download", {
+        sessionKey: "agent:main:main",
+        artifactId,
+        preview: "office",
+      }),
+    ) as { artifact: Record<string, unknown>; url?: string; preview?: unknown };
+    expect(payload.artifact).toMatchObject({ id: artifactId, type: "image" });
+    expect(payload.url).toContain("/api/chat/media/outgoing/");
+    expect(payload.preview).toBeUndefined();
+    // Image-family IDs never read the managed original for the Office parser.
+    expect(hoisted.readManagedArtifactContent).not.toHaveBeenCalled();
+  });
+
+  it("keeps managed non-Office media on their ordinary URL delivery", async () => {
+    const artifactId = "artifact_managed_media_22222222-2222-4222-8222-222222222222";
+    hoisted.readManagedArtifactContent.mockResolvedValue({
+      artifactId,
+      sessionKey: "agent:main:main",
+      type: "file",
+      title: "voice-note.mp3",
+      filename: "voice-note.mp3",
+      mimeType: "audio/mpeg",
+      sizeBytes: 2048,
+      buffer: Buffer.from("id3"),
+      tooLarge: false,
+    });
+    hoisted.resolveManagedArtifactDownload.mockResolvedValue({
+      artifactId,
+      sessionKey: "agent:main:main",
+      type: "media",
+      title: "voice-note.mp3",
+      mimeType: "audio/mpeg",
+      sizeBytes: 2048,
+      url: `/api/chat/media/outgoing/agent%3Amain%3Amain/22222222-2222-4222-8222-222222222222/full`,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    const payload = expectOkPayload(
+      await invoke("artifacts.download", {
+        sessionKey: "agent:main:main",
+        artifactId,
+        preview: "office",
+      }),
+    ) as { url?: string; preview?: unknown };
+    expect(payload.url).toContain("/api/chat/media/outgoing/");
     expect(payload.preview).toBeUndefined();
   });
 

@@ -10,6 +10,7 @@ import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
 import * as playback from "../media/playback-transcode.js";
 import { handleControlUiAssistantMediaRequest } from "./control-ui.js";
 import * as httpAuth from "./http-auth-utils.js";
+import { buildXlsxFixture } from "./office-preview/office-preview.test-support.js";
 import { makeMockHttpResponse } from "./test-http-response.js";
 
 const runFfprobe = vi.hoisted(() => vi.fn<() => Promise<string>>());
@@ -367,3 +368,91 @@ it.each(["while queued", "during safe-open"] as const)(
     }
   },
 );
+
+function startUploadParseRequest(params: {
+  filename: string;
+  body?: Buffer;
+  contentLength?: string;
+  token?: string | null;
+  method?: string;
+}) {
+  const response = makeMockHttpResponse();
+  const { res } = response;
+  const search = new URLSearchParams({
+    meta: "1",
+    preview: "office",
+    upload: "1",
+    filename: params.filename,
+  });
+  if (params.token !== null) {
+    search.set("token", params.token ?? "test-token");
+  }
+  res.req.url = `/__openclaw__/assistant-media?${search.toString()}`;
+  res.req.method = params.method ?? "POST";
+  Object.defineProperty(res.req.socket, "remoteAddress", { value: "127.0.0.1" });
+  const body = params.body ?? Buffer.alloc(0);
+  res.req.headers["content-length"] = params.contentLength ?? String(body.length);
+  const handled = handleControlUiAssistantMediaRequest(res.req, res, {
+    auth: { mode: "token", token: "test-token", allowTailscale: false },
+  });
+  res.req.push(body);
+  res.req.push(null);
+  // A real server marks the request complete once its body finishes arriving;
+  // the raw mock stream otherwise reports an aborted request.
+  Object.defineProperty(res.req, "complete", { value: true });
+  return { ...response, handled };
+}
+
+async function readUploadParseResponse(request: ReturnType<typeof startUploadParseRequest>) {
+  expect(await request.handled).toBe(true);
+  expect(request.res.statusCode).toBe(200);
+  return JSON.parse(String(request.end.mock.calls[0]?.[0] ?? "")) as Record<string, unknown>;
+}
+
+it("parses an uploaded Office document for a preview without persisting it", async () => {
+  const workbook = await buildXlsxFixture();
+  const root = tempDirs.make("ui-media-upload-", resolvePreferredOpenClawTmpDir());
+  const before = await fs.readdir(root);
+  const payload = await readUploadParseResponse(
+    startUploadParseRequest({ filename: "budget.xlsx", body: workbook }),
+  );
+  expect(payload).toMatchObject({
+    available: true,
+    officePreview: { kind: "office", format: "xlsx", state: "ready" },
+  });
+  // The upload never writes anything: nothing new exists under the temp root.
+  expect(await fs.readdir(root)).toEqual(before);
+});
+
+it("answers oversized uploads with the explicit too-large preview state", async () => {
+  const payload = await readUploadParseResponse(
+    startUploadParseRequest({
+      filename: "budget.xlsx",
+      body: Buffer.from("PK"),
+      contentLength: String(9 * 1024 * 1024),
+    }),
+  );
+  expect(payload).toMatchObject({
+    available: false,
+    code: "office-preview-too-large",
+  });
+  expect(payload.officePreview).toBeUndefined();
+});
+
+it("keeps non-Office uploads without a structured preview", async () => {
+  const payload = await readUploadParseResponse(
+    startUploadParseRequest({ filename: "notes.txt", body: Buffer.from("hello") }),
+  );
+  expect(payload).toEqual({ available: true });
+});
+
+it("requires control-ui authorization for upload parsing", async () => {
+  const request = startUploadParseRequest({
+    filename: "budget.xlsx",
+    body: Buffer.from("PK"),
+    token: "wrong-token",
+  });
+  expect(await request.handled).toBe(true);
+  expect(request.res.statusCode).toBe(401);
+  expect(request.end).toHaveBeenCalled();
+});

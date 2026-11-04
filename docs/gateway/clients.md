@@ -251,16 +251,24 @@ Pass `preview: "office"` to `artifacts.download` when the client wants a
 structured preview instead of a download. The Gateway reads the bounded
 original (8 MiB) under the same transcript membership and ownership checks,
 parses it in the shared Office worker, and returns an optional `preview`
-object beside the artifact summary; no download URL or base64 payload is
-issued for that request. `preview.state` is `ready` with the worksheet,
-document, or slide payload, or `unsupported` (legacy `.xls`/`.doc`/`.ppt` and
-non-Office sources), `too-large`, or `invalid`. Without the parameter, the
+object beside the artifact summary. `preview.state` is `ready` with the
+worksheet, document, or slide payload, or `unsupported` (legacy `.xls`/`.doc`/
+`.ppt` and non-Office sources), `too-large`, or `invalid`. When the artifact
+is outside the Office families the request is answered with the artifact's
+ordinary download delivery — inline base64, ticket URL, or managed media URL —
+so a preview opt-in never strips the payload another preview needs. Managed
+image artifacts keep their managed URL response. Without the parameter, the
 normal download response never parses file content.
 
 Local and uploaded document attachments use the same parser through the
 optional `preview=office` parameter on the Control UI assistant-media
 metadata request. That route keeps its existing read authorization and returns
-the structured payload only for that opt-in request.
+the structured payload only for that opt-in request. Optimistic and outbox
+uploads, whose bytes still exist only in the client, send the retained bytes
+to the same route with `meta=1&preview=office&upload=1` and the file name; the
+Gateway parses the bounded request body (8 MiB cap), persists nothing, and
+mints no ticket, and an oversized upload answers with
+`{ available: false, code: "office-preview-too-large" }`.
 
 Use the active Gateway's HTTPS origin and configured Control UI base path. TLS
 can terminate at the Gateway or its reverse proxy; the proxy must forward

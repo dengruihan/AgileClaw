@@ -147,7 +147,9 @@ class ChatDetailPanel extends OpenClawLightDomElement {
     ) {
       releaseChatMediaResourceSubscriber(this.requestAttachmentUpdate);
       this.attachmentDownload.cancel();
-      this.attachmentOffice.cancel();
+      // Reload the open Office preview under the new connection; sync aborts
+      // the stale request before starting the replacement load.
+      this.attachmentOffice.sync();
     }
     if (changed.has("fileNavigation") && this.fileNavigation && this.content?.kind === "file") {
       this.htmlPreview.showSource();
@@ -171,6 +173,10 @@ class ChatDetailPanel extends OpenClawLightDomElement {
     releaseChatMediaResourceSubscriber(this.requestAttachmentUpdate);
     this.attachmentDownload.cancel();
     this.visibleContent = this.content;
+    // Sync the lazy Office preview before rendering, so a newly selected
+    // attachment shows its loading state in this update cycle instead of a
+    // blank panel or the previous document.
+    this.attachmentOffice.sync();
     this.error = null;
     this.showingRawText = false;
     this.rawFileContent = null;
@@ -210,7 +216,6 @@ class ChatDetailPanel extends OpenClawLightDomElement {
   }
 
   protected override updated(changed: Map<string, unknown>) {
-    this.attachmentOffice.sync();
     const visibleContent = this.visibleContent;
     if (
       visibleContent?.kind === "file" &&

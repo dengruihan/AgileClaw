@@ -302,7 +302,7 @@ describe("session workspace artifacts", () => {
     },
   );
 
-  it("keeps nested code literal in a decoded text artifact preview", async () => {
+  it("renders a markdown artifact's own source with nested code intact", async () => {
     const source = [
       "Résumé 東京 🦀",
       "",
@@ -319,7 +319,8 @@ describe("session workspace artifacts", () => {
     });
     createSessionWorkspaceProps(state).onOpenArtifact("artifact-1");
     const content = await loadedContent();
-    expect(content).toMatchObject({ kind: "markdown", rawText: source });
+    // Markdown artifacts render their own document, not a synthetic wrapper.
+    expect(content).toMatchObject({ kind: "markdown", content: source, rawText: source });
     const panel = document.createElement("openclaw-chat-detail-panel") as HTMLElement & {
       content: SidebarContent;
       updateComplete: Promise<unknown>;
@@ -336,15 +337,15 @@ describe("session workspace artifacts", () => {
     try {
       await panel.updateComplete;
       const reader = panel.querySelector(".sidebar-markdown-reader");
-      expect(reader?.querySelector("h1")?.textContent).toBe("Source notes");
+      expect(reader?.querySelector("h1")).toBeNull();
       expect.soft(reader?.querySelectorAll("pre code")).toHaveLength(1);
-      expect.soft(reader?.querySelector("pre code")?.textContent).toBe(`${source}\n`);
-      expect.soft(reader?.querySelector("strong")).toBeNull();
+      expect.soft(reader?.querySelector("pre code")?.textContent).toBe("const x = 1;\n");
+      expect.soft(reader?.querySelector("strong")?.textContent).toBe("literal after");
       const copyButton = reader?.querySelector<HTMLButtonElement>(".code-block-copy");
       expect(copyButton).toBeInstanceOf(HTMLButtonElement);
       copyButton!.click();
       await vi.waitFor(() => expect(copyButton!.getAttribute("aria-label")).toBe("Copied!"));
-      expect(writeText).toHaveBeenCalledWith(source);
+      expect(writeText).toHaveBeenCalledWith("const x = 1;");
     } finally {
       for (const [index, [, delay]] of schedule.mock.calls.entries()) {
         if (delay === 1_500) {
@@ -362,16 +363,15 @@ describe("session workspace artifacts", () => {
   });
 
   it.each([
-    { mimeType: "text/plain", http: false, content: "Résumé 東京 🦀", fence: "```" },
-    { mimeType: "text/plain; charset=utf-8", http: true, content: "Résumé 東京 🦀", fence: "```" },
+    { mimeType: "text/plain", http: false, content: "Résumé 東京 🦀" },
+    { mimeType: "text/plain; charset=utf-8", http: true, content: "Résumé 東京 🦀" },
     {
       mimeType: "application/json",
       http: false,
       content: JSON.stringify({ message: "Résumé 東京 🦀" }),
-      fence: "```json",
     },
   ])(
-    "decodes UTF-8 $mimeType artifacts without corrupting visible or raw text (HTTP: $http)",
+    "decodes UTF-8 $mimeType artifacts into the code view without corrupting visible or raw text (HTTP: $http)",
     async (testCase) => {
       const data = btoa(String.fromCharCode(...new TextEncoder().encode(testCase.content)));
       const { state, fetchMock, url, loadedContent } = createArtifactHost({
@@ -383,8 +383,12 @@ describe("session workspace artifacts", () => {
       createSessionWorkspaceProps(state).onOpenArtifact("artifact-1");
 
       expect(await loadedContent()).toEqual({
-        kind: "markdown",
-        content: `# Unicode artifact\n\n${testCase.fence}\n${testCase.content}\n\`\`\``,
+        kind: "file",
+        path: "Unicode artifact",
+        name: "Unicode artifact",
+        content: testCase.content,
+        mimeType: testCase.mimeType,
+        language: testCase.mimeType === "application/json" ? "json" : "",
         rawText: testCase.content,
       });
       if (testCase.http) {
@@ -401,7 +405,7 @@ describe("session workspace artifacts", () => {
     "retains image artifact previews beyond ticket expiry (HTTP: %s)",
     async (http) => {
       const data = "iVBORw0KGgo=";
-      const { state, fetchMock, url, loadedContent } = createArtifactHost({
+      const { state, request, fetchMock, url, loadedContent } = createArtifactHost({
         data,
         mimeType: "image/png",
         title: "preview.png",
@@ -417,6 +421,8 @@ describe("session workspace artifacts", () => {
         src: `data:image/png;base64,${data}`,
         title: "preview.png",
       });
+      // Non-Office artifacts keep their ordinary download delivery.
+      expect(request.mock.calls.map(([, query]) => query.preview)).toEqual([undefined]);
       if (http) {
         expect(fetchMock).toHaveBeenCalledExactlyOnceWith(url, {
           credentials: "same-origin",
@@ -449,7 +455,8 @@ describe("session workspace artifacts", () => {
       createSessionWorkspaceProps(state).onOpenArtifact("artifact-1");
 
       expect(await loadedContent()).toMatchObject({
-        kind: "markdown",
+        kind: "file",
+        content: source,
         rawText: source,
       });
       expect(fetchMock).toHaveBeenCalledExactlyOnceWith(url, {

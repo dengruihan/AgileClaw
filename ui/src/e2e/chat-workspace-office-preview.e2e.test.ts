@@ -570,3 +570,406 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
     }
   });
 });
+
+const ONE_PIXEL_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
+  it("downloads a managed Files-rail artifact through a fresh, explicit action", async () => {
+    const context = await browser.newContext({ acceptDownloads: true });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
+      const managed = managedWorkbookAttachment();
+      let served = 0;
+      await page.route("**/api/chat/media/outgoing/**", async (route) => {
+        served += 1;
+        await route.fulfill({
+          status: 200,
+          headers: {
+            "Content-Type": managed.artifact.mimeType,
+            "Content-Disposition": `attachment; filename="${managed.artifact.title}"`,
+          },
+          body: Buffer.from("managed-workbook-bytes"),
+        });
+      });
+      const gateway = await installMockGateway(page, {
+        featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
+        methodResponses: {
+          "artifacts.list": { artifacts: [managed.artifact] },
+          "artifacts.download": {
+            cases: [
+              {
+                match: { preview: "office" },
+                response: { artifact: managed.artifact, preview: managed.readyPreview },
+              },
+              {
+                response: {
+                  artifact: managed.artifact,
+                  url: `${managed.url}?mediaTicket=ticket-rail-${served}`,
+                  expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+                },
+              },
+            ],
+          },
+        },
+      });
+      await page.goto(`${server.baseUrl}chat`);
+      await openChatSidePanelType(page, "Files");
+      const artifactsChip = page.locator(".chat-workspace-rail__chip").filter({
+        hasText: /artifact/iu,
+      });
+      await artifactsChip.first().click();
+      const rail = page
+        .locator(".chat-workspace-rail__file-name", { hasText: managed.artifact.title })
+        .first();
+      await rail.waitFor({ state: "visible" });
+
+      let downloads = 0;
+      page.on("download", () => {
+        downloads += 1;
+      });
+      await rail.click();
+      const workbook = page.locator('.sidebar-office-preview[data-office-format="xlsx"]');
+      await workbook.waitFor({ state: "visible" });
+      await expect.poll(() => workbook.textContent()).toContain("Rent");
+      // Opening previews; it never downloads.
+      expect(downloads).toBe(0);
+      await page.screenshot({ path: path.join(artifactDir, "managed-rail-preview.png") });
+
+      const downloadButton = page.locator(".sidebar-office-preview__download");
+      await downloadButton.waitFor({ state: "visible" });
+      const [download] = await Promise.all([page.waitForEvent("download"), downloadButton.click()]);
+      expect(download.suggestedFilename()).toBe(managed.artifact.title);
+      // The download re-minted the ticket instead of reusing the preview request.
+      const reissues = (await gateway.getRequests("artifacts.download")).filter(
+        (request) => (request.params as { preview?: string } | undefined)?.preview !== "office",
+      );
+      expect(reissues).toHaveLength(1);
+      expect(reissues[0]?.params).toMatchObject({
+        sessionKey,
+        artifactId: managed.artifactId,
+      });
+      await page.screenshot({ path: path.join(artifactDir, "managed-rail-after-download.png") });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("previews an optimistic outbox workbook before the send is acknowledged", async () => {
+    const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
+      const uploadRequests: string[] = [];
+      await page.route("**/__openclaw__/assistant-media?**", async (route) => {
+        const url = new URL(route.request().url());
+        if (
+          route.request().method() === "POST" &&
+          url.searchParams.get("upload") === "1" &&
+          url.searchParams.get("preview") === "office"
+        ) {
+          uploadRequests.push(url.searchParams.get("filename") ?? "");
+          await route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({
+              available: true,
+              officePreview: managedWorkbookAttachment().readyPreview,
+            }),
+          });
+          return;
+        }
+        await route.continue();
+      });
+      await installMockGateway(page, {
+        featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
+      });
+      await page.goto(`${server.baseUrl}chat`);
+      const composer = page.locator(".agent-chat__composer-combobox textarea");
+      await composer.fill("Outbox workbook for preview");
+      await page.locator(".agent-chat__file-input").setInputFiles({
+        name: "outbox-budget.xlsx",
+        mimeType: officeMime,
+        buffer: Buffer.from("PK-synthetic-outbox-workbook"),
+      });
+      const send = page.getByRole("button", { name: "Send message", exact: true });
+      await send.waitFor({ state: "visible" });
+      await expect.poll(() => send.isEnabled()).toBe(true);
+      await send.click();
+
+      let downloads = 0;
+      page.on("download", () => {
+        downloads += 1;
+      });
+      const card = page
+        .locator(".chat-assistant-attachment-card--compact")
+        .filter({ hasText: "outbox-budget.xlsx" });
+      const expand = card.locator(".chat-assistant-attachment-card__expand");
+      await expand.waitFor({ state: "visible" });
+      await page.screenshot({ path: path.join(artifactDir, "before-outbox-office-open.png") });
+      await expand.click();
+
+      const workbook = page.locator('.sidebar-office-preview[data-office-format="xlsx"]');
+      await workbook.waitFor({ state: "visible" });
+      await expect.poll(() => workbook.textContent()).toContain("Rent");
+      expect(downloads).toBe(0);
+      expect(uploadRequests).toEqual(["outbox-budget.xlsx"]);
+      const downloadButton = page.locator(".sidebar-office-preview__download");
+      await downloadButton.waitFor({ state: "visible" });
+      await page.screenshot({ path: path.join(artifactDir, "after-outbox-office-preview.png") });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it.each([
+    {
+      id: "artifact_notes_md",
+      title: "notes.md",
+      mimeType: "text/markdown",
+      mode: "bytes" as const,
+      body: () => Buffer.from("# Rail notes\n\n- first entry\n- second entry\n").toString("base64"),
+      assert: async (page: import("playwright").Page) => {
+        const reader = page.locator(".sidebar-markdown-reader");
+        await reader.waitFor({ state: "visible" });
+        await expect.poll(() => reader.textContent()).toContain("Rail notes");
+        await expect.poll(() => reader.locator("li").count()).toBe(2);
+        await page.screenshot({ path: path.join(artifactDir, "rail-markdown-preview.png") });
+      },
+    },
+    {
+      id: "artifact_log_txt",
+      title: "deploy.log",
+      mimeType: "text/plain",
+      mode: "bytes" as const,
+      body: () => Buffer.from("deploy step 1 ok\ndeploy step 2 ok\n").toString("base64"),
+      assert: async (page: import("playwright").Page) => {
+        const codeView = page.locator(".sidebar-file-view");
+        await codeView.waitFor({ state: "visible" });
+        await expect.poll(() => codeView.textContent()).toContain("deploy step 1 ok");
+        await page.screenshot({ path: path.join(artifactDir, "rail-text-preview.png") });
+      },
+    },
+    {
+      id: "artifact_diagram_png",
+      title: "diagram.png",
+      mimeType: "image/png",
+      mode: "bytes" as const,
+      body: () => ONE_PIXEL_PNG_BASE64,
+      assert: async (page: import("playwright").Page) => {
+        const image = page.locator(".chat-tool-card__preview-image");
+        await image.waitFor({ state: "visible" });
+        await page.screenshot({ path: path.join(artifactDir, "rail-image-preview.png") });
+      },
+    },
+    {
+      id: "artifact_sheet_pdf",
+      title: "sheet.pdf",
+      mimeType: "application/pdf",
+      mode: "url" as const,
+      body: () => "",
+      assert: async (page: import("playwright").Page) => {
+        await page.locator("openclaw-chat-pdf-preview").waitFor({ state: "visible" });
+        await page.screenshot({ path: path.join(artifactDir, "rail-pdf-preview.png") });
+      },
+    },
+    {
+      id: "artifact_voice_mp3",
+      title: "voice.mp3",
+      mimeType: "audio/mpeg",
+      mode: "url" as const,
+      body: () => "",
+      assert: async (page: import("playwright").Page) => {
+        await page.locator("openclaw-chat-audio-player").waitFor({ state: "visible" });
+        await page.screenshot({ path: path.join(artifactDir, "rail-audio-preview.png") });
+      },
+    },
+  ])("previews the $title Files-rail artifact inline", async (fixture) => {
+    const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
+      const artifact = {
+        id: fixture.id,
+        type: fixture.mimeType.startsWith("image/") ? "image" : "file",
+        title: fixture.title,
+        mimeType: fixture.mimeType,
+        sizeBytes: 40,
+        download: { mode: fixture.mode },
+      };
+      await page.route("**/api/artifacts/download/**", async (route) => {
+        const filename = new URL(route.request().url()).pathname.split("/").pop();
+        await route.fulfill({
+          status: 200,
+          headers: {
+            "Content-Type": fixture.mimeType,
+            "Content-Disposition": `attachment; filename="${filename}"`,
+          },
+          body: Buffer.from("synthetic-preview-bytes"),
+        });
+      });
+      const gateway = await installMockGateway(page, {
+        featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
+        methodResponses: {
+          "artifacts.list": { artifacts: [artifact] },
+          "artifacts.download": {
+            artifact,
+            ...(fixture.mode === "bytes"
+              ? { encoding: "base64", data: fixture.body() }
+              : {
+                  url: `/api/artifacts/download/connection/${artifact.id}`,
+                  expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+                }),
+          },
+        },
+      });
+      await page.goto(`${server.baseUrl}chat`);
+      await openChatSidePanelType(page, "Files");
+      const artifactsChip = page.locator(".chat-workspace-rail__chip").filter({
+        hasText: /artifact/iu,
+      });
+      await artifactsChip.first().click();
+      const row = page
+        .locator(".chat-workspace-rail__file-name", { hasText: fixture.title })
+        .first();
+      await row.waitFor({ state: "visible" });
+
+      let downloads = 0;
+      page.on("download", () => {
+        downloads += 1;
+      });
+      await row.click();
+      await fixture.assert(page);
+      expect(downloads).toBe(0);
+      expect((await page.locator("body").textContent()) ?? "").not.toContain("Open artifact");
+      // The open never asked for a structured Office preview.
+      const opens = await gateway.getRequests("artifacts.download");
+      expect(opens.length).toBeGreaterThanOrEqual(1);
+      expect(
+        opens.filter(
+          (request) => (request.params as { preview?: string } | undefined)?.preview === "office",
+        ),
+      ).toHaveLength(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("shows a loading state while an outbox workbook parse is in flight", async () => {
+    const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
+      let releaseUpload: (() => void) | null = null;
+      await page.route("**/__openclaw__/assistant-media?**", async (route) => {
+        const url = new URL(route.request().url());
+        if (route.request().method() === "POST" && url.searchParams.get("upload") === "1") {
+          await new Promise<void>((resolve) => {
+            releaseUpload = resolve;
+          });
+          await route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({
+              available: true,
+              officePreview: managedWorkbookAttachment().readyPreview,
+            }),
+          });
+          return;
+        }
+        await route.continue();
+      });
+      await installMockGateway(page, {
+        featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
+      });
+      await page.goto(`${server.baseUrl}chat`);
+      const composer = page.locator(".agent-chat__composer-combobox textarea");
+      await composer.fill("Upload while the parse is held");
+      await page.locator(".agent-chat__file-input").setInputFiles({
+        name: "loading-budget.xlsx",
+        mimeType: officeMime,
+        buffer: Buffer.from("PK-held-upload"),
+      });
+      await page.getByRole("button", { name: "Send message", exact: true }).click();
+      const card = page
+        .locator(".chat-assistant-attachment-card--compact")
+        .filter({ hasText: "loading-budget.xlsx" });
+      await card.locator(".chat-assistant-attachment-card__expand").click();
+      const loadingState = page.locator(".sidebar-office-preview__state[role='status']");
+      await loadingState.waitFor({ state: "visible" });
+      await expect.poll(() => loadingState.textContent()).toBeTruthy();
+      expect(await page.locator(".sidebar-office-preview[data-office-format]").count()).toBe(0);
+      await page.screenshot({ path: path.join(artifactDir, "office-loading-state.png") });
+      releaseUpload?.();
+      await page
+        .locator('.sidebar-office-preview[data-office-format="xlsx"]')
+        .waitFor({ state: "visible" });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it.each([
+    {
+      id: "artifact_corrupt_xlsx",
+      title: "corrupt.xlsx",
+      preview: { kind: "office", format: "xlsx", state: "invalid" },
+      screenshot: "office-invalid-state.png",
+    },
+    {
+      id: "artifact_huge_xlsx",
+      title: "huge.xlsx",
+      preview: { kind: "office", format: "xlsx", state: "too-large" },
+      screenshot: "office-too-large-state.png",
+    },
+  ])("keeps a $title rail artifact explicit about its preview state", async (state) => {
+    const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
+      const artifact = {
+        id: state.id,
+        type: "file",
+        title: state.title,
+        mimeType: officeMime,
+        sizeBytes: 2048,
+        download: { mode: "bytes" },
+      };
+      await installMockGateway(page, {
+        featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
+        methodResponses: {
+          "artifacts.list": { artifacts: [artifact] },
+          "artifacts.download": {
+            cases: [
+              {
+                match: { preview: "office" },
+                response: { artifact, preview: state.preview },
+              },
+              { response: { artifact, encoding: "base64", data: "UEsAAQ==" } },
+            ],
+          },
+        },
+      });
+      await page.goto(`${server.baseUrl}chat`);
+      await openChatSidePanelType(page, "Files");
+      const artifactsChip = page.locator(".chat-workspace-rail__chip").filter({
+        hasText: /artifact/iu,
+      });
+      await artifactsChip.first().click();
+      const row = page.locator(".chat-workspace-rail__file-name", { hasText: state.title }).first();
+      await row.waitFor({ state: "visible" });
+      await row.click();
+      await expect
+        .poll(() => page.locator(".sidebar-attachment-preview__notice").first().textContent())
+        .toBeTruthy();
+      expect(await page.locator(".sidebar-office-preview[data-office-format]").count()).toBe(0);
+      expect(
+        await page
+          .locator(".sidebar-attachment-preview .chat-assistant-attachment-card__download")
+          .count(),
+      ).toBe(1);
+      await page.screenshot({ path: path.join(artifactDir, state.screenshot) });
+    } finally {
+      await context.close();
+    }
+  });
+});

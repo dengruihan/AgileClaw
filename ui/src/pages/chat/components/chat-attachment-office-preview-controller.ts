@@ -88,6 +88,9 @@ export class AttachmentOfficePreviewController {
     const request = new AbortController();
     this.request = request;
     this.state = { status: "loading" };
+    // The detail panel syncs during willUpdate, so the loading state renders in
+    // the selection's own update cycle; the async handlers below publish the
+    // settled result.
     void office
       .load(request.signal)
       .then((preview) => {
@@ -150,7 +153,9 @@ export class AttachmentOfficePreviewController {
     if (content?.kind !== "attachment" || !content.office) {
       return nothing;
     }
-    if (this.state.status === "loading") {
+    if (this.state.status === "loading" || this.owner !== content) {
+      // A newly selected attachment must never show the previous document or
+      // a blank panel while its own request is still in flight.
       return html`<div class="sidebar-office-preview__state" role="status">
         ${t("common.loading")}
       </div>`;

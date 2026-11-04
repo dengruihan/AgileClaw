@@ -1,7 +1,12 @@
 import type { SessionsDiffResult } from "../../../../../packages/gateway-protocol/src/index.js";
 import { BROWSER_IMAGE_MIME_TYPES } from "../../../../../src/shared/browser-image-mime-types.js";
 import { formatInlineCodeSpan } from "../../../../../src/shared/markdown-code.js";
-import { downloadArtifact, isHttpArtifactDownloadUrl } from "../../../api/artifact-download.ts";
+import {
+  downloadArtifact,
+  isHttpArtifactDownloadUrl,
+  isManagedArtifactId,
+  resolveArtifactDownloadSource,
+} from "../../../api/artifact-download.ts";
 import { GatewayRequestError } from "../../../api/gateway.ts";
 import type { ArtifactDownloadResult, SessionWorkspaceGetResult } from "../../../api/types.ts";
 import { hasOperatorAdminAccess } from "../../../app/operator-access.ts";
@@ -16,6 +21,11 @@ import { pathDisplayName } from "../../../lib/path-display.ts";
 import { resolveSessionDisplayName } from "../../../lib/session-display.ts";
 import { parseAgentSessionKey } from "../../../lib/sessions/session-key.ts";
 import { sessionWorkspaceFileKey } from "../../../lib/sessions/workspace.ts";
+import { createManagedArtifactDownloadHandler } from "./chat-attachment-download.ts";
+import {
+  isLegacyOfficeAttachment,
+  resolveOfficeAttachmentFormat,
+} from "./chat-office-attachment.ts";
 import { openWorkspaceItem } from "./chat-session-workspace-preview.ts";
 import {
   clearWorkspaceTimer,
@@ -103,6 +113,12 @@ function workspaceBrowserFilePath(root: string | undefined, filePath: string): s
 
 type ArtifactOfficePreview = NonNullable<ArtifactDownloadResult["preview"]>;
 
+/** How one opened artifact downloads: fresh blob read or click-time re-mint. */
+type ArtifactDownloadContract = {
+  blob?: (signal: AbortSignal) => Promise<Blob | null>;
+  now?: () => void;
+};
+
 function officePreviewNotice(preview: ArtifactOfficePreview): string {
   switch (preview.state) {
     case "too-large":
@@ -128,9 +144,14 @@ function isMarkdownArtifact(mimeType: string, title: string): boolean {
   return mimeType === "text/markdown" || /\.(?:md|markdown)$/iu.test(title);
 }
 
+/** Whether the sidebar has an embedded reader for this binary artifact type. */
+function isPlayableArtifact(mimeType: string): boolean {
+  return mimeType === "application/pdf" || /^(?:audio|video)\//u.test(mimeType);
+}
+
 async function loadArtifactSidebarContent(
   result: ArtifactDownloadResult & { blob?: Blob },
-  download: (signal: AbortSignal) => Promise<Blob | null>,
+  downloads: ArtifactDownloadContract,
   resourceBasePath?: string,
 ): Promise<SidebarContent> {
   const { data, encoding, url, blob, preview } = result;
@@ -143,7 +164,8 @@ async function loadArtifactSidebarContent(
         title,
         format: preview.format,
         preview: preview.preview,
-        download,
+        ...(downloads.blob ? { download: downloads.blob } : {}),
+        ...(downloads.now ? { downloadNow: downloads.now } : {}),
       };
     }
     return {
@@ -151,7 +173,8 @@ async function loadArtifactSidebarContent(
       attachmentKind: "document",
       title,
       mimeType,
-      download,
+      ...(downloads.blob ? { download: downloads.blob } : {}),
+      ...(downloads.now ? { downloadNow: downloads.now } : {}),
       previewNotice: officePreviewNotice(preview),
     };
   }
@@ -164,7 +187,7 @@ async function loadArtifactSidebarContent(
         readError: "Artifact image could not be decoded",
         invalidResultError: "Artifact image could not be decoded",
       });
-    } else if (mimeType !== "application/pdf" && !/^(?:audio|video)\//u.test(mimeType)) {
+    } else if (!isPlayableArtifact(mimeType)) {
       text = await blob.text();
     }
   } else if (encoding === "base64" && data) {
@@ -193,31 +216,32 @@ async function loadArtifactSidebarContent(
       name: title,
       content: text,
       mimeType,
-      language: languageForFile(title),
+      language: mimeType === "application/json" ? "json" : languageForFile(title),
       rawText: text,
     };
   }
-  // PDF, audio, and video keep their existing embedded players when the Gateway
-  // exposes a readable source; everything else stays a metadata card with an
-  // explicit, user-triggered download.
-  const playableSource =
+  // PDF, audio, and video keep embedded readers when the Gateway exposes a
+  // readable source; other binaries stay a metadata card so their download is
+  // the explicit, click-time authorized action.
+  const readableSource =
     url && (isHttpArtifactDownloadUrl(url, resourceBasePath) || /^data:/iu.test(url))
       ? url
-      : blob
+      : blob && isPlayableArtifact(mimeType)
         ? await readBlobAsDataUrl(blob, {
             readError: "Artifact could not be decoded",
             invalidResultError: "Artifact could not be decoded",
           })
         : undefined;
-  if (playableSource) {
+  if (readableSource) {
     return {
       kind: "attachment",
       attachmentKind: artifactPreviewKind(mimeType),
       title,
-      src: playableSource,
+      src: readableSource,
       mimeType,
       sizeBytes: result.artifact.sizeBytes,
-      download,
+      ...(downloads.blob ? { download: downloads.blob } : {}),
+      ...(downloads.now ? { downloadNow: downloads.now } : {}),
     };
   }
   return {
@@ -225,7 +249,8 @@ async function loadArtifactSidebarContent(
     attachmentKind: "document",
     title,
     mimeType,
-    download,
+    ...(downloads.blob ? { download: downloads.blob } : {}),
+    ...(downloads.now ? { downloadNow: downloads.now } : {}),
     previewNotice: t("chat.attachments.previewDownloadHint"),
   };
 }
@@ -486,6 +511,15 @@ function openArtifact(
     artifactId,
     ...(workspace.agentId ? { agentId: workspace.agentId } : {}),
   };
+  const listed = workspace.list?.artifacts?.find((artifact) => artifact.id === artifactId);
+  // Only Office-family artifacts opt into the structured preview; every other
+  // artifact keeps its ordinary download payload so the existing Markdown,
+  // text, image, PDF, and media previews keep working.
+  const wantsOfficePreview = Boolean(
+    listed &&
+    (resolveOfficeAttachmentFormat(listed.mimeType, listed.title) ||
+      isLegacyOfficeAttachment(listed.mimeType, listed.title)),
+  );
   const readDownload = async (signal: AbortSignal): Promise<Blob | null> => {
     const currentWorkspace = getSessionWorkspace(state);
     if (
@@ -518,25 +552,41 @@ function openArtifact(
       type: result.artifact.mimeType ?? "application/octet-stream",
     });
   };
+  // Managed artifacts deliver URL-only downloads, so their explicit Download
+  // re-mints the ticket at click time instead of reading a blob.
+  const downloads: ArtifactDownloadContract = isManagedArtifactId(artifactId)
+    ? {
+        now: createManagedArtifactDownloadHandler({
+          sessionKey: query.sessionKey,
+          artifactId,
+          label: listed?.title || t("chat.workspaceFiles.artifacts"),
+          resolveArtifactDownload: (resolveParams, signal) =>
+            resolveArtifactDownloadSource(state, resolveParams, signal),
+          resourceBasePath: state.resourceBasePath,
+          connectionEpoch: () => state.connectionEpoch,
+        }),
+      }
+    : { blob: readDownload };
   openWorkspaceItem(
     state,
     workspace,
     `artifact:${artifactId}`,
     async () => {
-      const result = await downloadArtifact(state, { ...query, preview: "office" });
+      const result = await downloadArtifact(
+        state,
+        wantsOfficePreview ? { ...query, preview: "office" } : query,
+      );
       return result?.artifact
         ? {
             artifact: result.artifact,
-            content: await loadArtifactSidebarContent(result, readDownload, state.resourceBasePath),
+            content: await loadArtifactSidebarContent(result, downloads, state.resourceBasePath),
           }
         : null;
     },
     (result) => result.content,
     `Failed to load artifact ${artifactId}`,
     {
-      label:
-        workspace.list?.artifacts?.find((artifact) => artifact.id === artifactId)?.title ||
-        t("chat.workspaceFiles.artifacts"),
+      label: listed?.title || t("chat.workspaceFiles.artifacts"),
       resolveLabel: (result) => result.artifact?.title,
     },
   );

@@ -77,16 +77,23 @@ function renderSidebarAttachment(
         ${content.previewNotice}
       </div>`
     : nothing;
-  if (content.download && download && !content.src) {
+  // A fresh, user-triggered download action always beats a cached source URL:
+  // ticketed sources must reauthorize (blob read or ticket re-mint) on click.
+  const onDownload =
+    content.downloadNow ?? (content.download && download ? download.onDownload : undefined);
+  const downloadPending =
+    !content.downloadNow && content.download && download ? download.pending : false;
+  // Live-resolved sources keep their reader; this card is for static content.
+  if (!content.src && !content.resolveSource && (onDownload || content.download)) {
     return html`${previewNotice}${renderCompactAttachmentCard({
       kind: "document",
       label: content.title,
       mimeType: content.mimeType ?? undefined,
       sizeBytes: content.sizeBytes,
-      onDownload: download.onDownload,
-      downloadPending: download.pending,
+      ...(onDownload ? { onDownload } : {}),
+      downloadPending,
       downloadLabel: t("chat.officePreview.download"),
-    })}${download.error ? html`<div role="alert">${download.error}</div>` : nothing}`;
+    })}${download?.error && content.download ? html`<div role="alert">${download.error}</div>` : nothing}`;
   }
   const resolution = content.resolveSource?.(onRequestUpdate, runtime);
   const source = resolution ? (resolution.status === "ready" ? resolution : null) : content;
@@ -134,7 +141,8 @@ function renderSidebarAttachment(
       .label=${content.title}
       .mimeType=${content.mimeType ?? ""}
       .sizeBytes=${source?.sizeBytes ?? content.sizeBytes}
-      .downloadHref=${src ?? ""}
+      .onDownload=${onDownload}
+      .downloadHref=${onDownload ? "" : (src ?? "")}
     ></openclaw-chat-pdf-preview>`;
   }
   if (
@@ -166,6 +174,7 @@ function renderSidebarAttachment(
       .sizeBytes=${source?.sizeBytes ?? content.sizeBytes}
       .mediaWidth=${source?.width ?? content.width}
       .mediaHeight=${source?.height ?? content.height}
+      .onDownload=${onDownload}
     ></openclaw-chat-video-player>`;
   }
   if (!src || imagePreview) {
@@ -182,8 +191,8 @@ function renderSidebarAttachment(
           label: content.title,
           mimeType: content.mimeType ?? undefined,
           sizeBytes: source?.sizeBytes ?? content.sizeBytes,
-          ...(kind === "document" && content.downloadNow
-            ? { onDownload: content.downloadNow, downloadLabel: t("chat.officePreview.download") }
+          ...(kind === "document" && onDownload
+            ? { onDownload, downloadLabel: t("chat.officePreview.download") }
             : { downloadHref: src ?? undefined }),
           downloadPending: pending,
           visualMode: "preview-with-favicon",
@@ -242,6 +251,7 @@ function renderSidebarAttachment(
       .sizeBytes=${source?.sizeBytes ?? content.sizeBytes}
       .serverDurationMs=${source?.durationMs ?? content.durationMs}
       .voiceNote=${content.voiceNote === true}
+      .onDownload=${onDownload}
     ></openclaw-chat-audio-player>`;
   }
   return html`${previewNotice}${renderCompactAttachmentCard({
@@ -249,8 +259,10 @@ function renderSidebarAttachment(
     label: content.title,
     mimeType: content.mimeType ?? undefined,
     sizeBytes: source?.sizeBytes ?? content.sizeBytes,
-    downloadHref: content.downloadNow ? undefined : src,
-    ...(content.downloadNow ? { onDownload: content.downloadNow } : {}),
+    // Ticketed URLs reauthorize on click; a plain anchor stays only for
+    // sources with no download contract at all.
+    downloadHref: onDownload ? undefined : src,
+    ...(onDownload ? { onDownload } : {}),
     downloadLabel: t("chat.officePreview.download"),
   })}`;
 }

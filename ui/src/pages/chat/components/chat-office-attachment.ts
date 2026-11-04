@@ -1,10 +1,15 @@
 import type { SessionFileOfficeFormat } from "../../../../../packages/gateway-protocol/src/schema/sessions.js";
 import type { ArtifactOfficePreview } from "../../../api/artifact-download.ts";
+import { t } from "../../../i18n/index.ts";
+import { createRetainedUploadDownloadHandler } from "./chat-attachment-download.ts";
 import {
   isManagedOutgoingMediaSource,
   resolveManagedOutgoingMediaSessionKey,
 } from "./chat-message-attachment-availability.ts";
-import { loadAssistantAttachmentOfficePreview } from "./chat-message-attachment-office-preview.ts";
+import {
+  loadAssistantAttachmentOfficePreview,
+  loadUploadedAttachmentOfficePreview,
+} from "./chat-message-attachment-office-preview.ts";
 import { isLocalAssistantAttachmentSource } from "./chat-message-local-media.ts";
 import type { ImageRenderOptions } from "./chat-message-media.ts";
 import type { AttachmentOfficePreviewSource } from "./chat-sidebar-content-types.ts";
@@ -86,6 +91,11 @@ export function resolveAttachmentOfficePreview(
     ? resolveManagedOutgoingMediaSessionKey(attachment.url)
     : null;
   const load = (signal: AbortSignal): Promise<ArtifactOfficePreview | null> => {
+    if (/^(?:data|blob):/iu.test(attachment.url.trim())) {
+      // Optimistic/outbox bytes live only in this client; the Gateway's
+      // bounded parser reads them through the assistant-media owner.
+      return loadUploadedAttachmentOfficePreview(attachment.url, attachment.label, options, signal);
+    }
     if (managedSessionKey && attachment.artifactId && resolveArtifactDownload) {
       return resolveArtifactDownload(
         {
@@ -105,9 +115,7 @@ export function resolveAttachmentOfficePreview(
 }
 
 /** Formats the viewer can show, or null when the preview has no payload. */
-export function officePreviewPayload(
-  preview: ArtifactOfficePreview | null | undefined,
-): {
+export function officePreviewPayload(preview: ArtifactOfficePreview | null | undefined): {
   format: SessionFileOfficeFormat;
   preview: NonNullable<ArtifactOfficePreview["preview"]>;
 } | null {
@@ -120,4 +128,43 @@ export function officePreviewPayload(
     return null;
   }
   return { format: preview.format, preview: preview.preview };
+}
+
+/**
+ * Sidebar extras for one possibly-Office attachment: the opt-in preview, the
+ * legacy metadata notice, and the explicit download. Optimistic/outbox bytes
+ * (data:/blob:) back a direct local download since no ticket exists to re-mint
+ * for bytes that live only in this client.
+ */
+export function resolveOfficeSidebarExtras(input: {
+  attachment: { url: string; label: string };
+  pastedText: boolean;
+  onDownload: (() => void) | undefined;
+  options: ImageRenderOptions;
+}): {
+  content: {
+    office?: AttachmentOfficePreviewSource;
+    previewNotice?: string;
+    downloadNow?: () => void;
+  };
+  uploadSource: boolean;
+} {
+  const officePreview = input.pastedText
+    ? { legacy: false }
+    : resolveAttachmentOfficePreview(input.attachment, input.options);
+  const uploadSource =
+    Boolean(officePreview.office) && /^(?:data|blob):/iu.test(input.attachment.url.trim());
+  const downloadNow =
+    input.onDownload ??
+    (uploadSource
+      ? createRetainedUploadDownloadHandler(input.attachment.url, input.attachment.label)
+      : undefined);
+  return {
+    content: {
+      ...(officePreview.office ? { office: officePreview.office } : {}),
+      ...(officePreview.legacy ? { previewNotice: t("chat.attachments.legacyOfficePreview") } : {}),
+      ...(downloadNow ? { downloadNow } : {}),
+    },
+    uploadSource,
+  };
 }
