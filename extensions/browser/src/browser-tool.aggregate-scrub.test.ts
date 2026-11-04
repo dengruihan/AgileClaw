@@ -1,3 +1,4 @@
+import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -54,7 +55,7 @@ describe("browser tool aggregate fill scrub", () => {
     expect(JSON.stringify(result?.details)).toContain("***");
   });
 
-  it("masks a filled value in a rejected aggregate tabs error without losing its class", async () => {
+  it("masks a filled value in a rejected aggregate tabs error without rethrowing the live object", async () => {
     registerVaultFillSecret("target-1", CANARY, "doc-1");
     const error = Object.assign(new BrowserServiceError(`tabs failed ${CANARY}`, undefined, 500), {
       details: { body: CANARY },
@@ -70,8 +71,10 @@ describe("browser tool aggregate fill scrub", () => {
       thrown = caught;
     }
 
-    expect(thrown).toBe(error);
-    expect(thrown).toBeInstanceOf(BrowserServiceError);
+    // Any active secret replaces the live object with an inert projection;
+    // class identity is deliberately not preserved.
+    expect(Object.is(thrown, error)).toBe(false);
+    expect(thrown).toBeInstanceOf(Error);
     const record = thrown as {
       name?: string;
       status?: number;
@@ -90,5 +93,6 @@ describe("browser tool aggregate fill scrub", () => {
     expect(record.cause).toBeInstanceOf(Error);
     expect((record.cause as Error).message).not.toContain(CANARY);
     expect((record.cause as Error).message).toContain("***");
+    expect(formatErrorMessage(thrown)).not.toContain(CANARY);
   });
 });

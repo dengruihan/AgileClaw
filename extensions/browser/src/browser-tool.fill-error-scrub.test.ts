@@ -1,4 +1,5 @@
 import http from "node:http";
+import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ browserTabs: vi.fn() }));
@@ -27,6 +28,9 @@ const NAME_CANARY = "name-err-canary-b2f7";
 const CAUSE_CANARY = "cause-err-canary-9e31";
 const REGEN_CANARY = "regen-err-canary-6a44";
 const LOOPBACK_CANARY = "loopback-err-canary-c3d8";
+const TOSTRING_CANARY = "tostring-err-canary-8f13";
+const TOJSON_CANARY = "tojson-err-canary-52aa";
+const ARRAY_CANARY = "array-err-canary-d6b1";
 
 function collectReachableText(value: unknown, depth = 0): string {
   if (typeof value === "string") {
@@ -62,6 +66,13 @@ function collectReachableText(value: unknown, depth = 0): string {
   return parts.join("\n");
 }
 
+function assertInert(thrown: unknown, canary: string): void {
+  expect(String(thrown)).not.toContain(canary);
+  expect(JSON.stringify(thrown)).not.toContain(canary);
+  expect(formatErrorMessage(thrown)).not.toContain(canary);
+  expect(collectReachableText(thrown)).not.toContain(canary);
+}
+
 async function executeTabsAction(
   params: Record<string, unknown> = { action: "tabs" },
   toolOpts: { sandboxBridgeUrl?: string } = {},
@@ -75,14 +86,14 @@ async function executeTabsAction(
   throw new Error("expected the browser tool to reject");
 }
 
-describe("browser tool thrown fill-error scrub (fail closed)", () => {
+describe("browser tool thrown fill-error scrub (inert projection)", () => {
   beforeEach(() => {
     clearAllVaultFillSessions();
     mocks.browserTabs.mockReset();
     mocks.browserTabs.mockImplementation(realBrowserTabs);
   });
 
-  it("replaces a frozen error instead of rethrowing its secret-bearing message", async () => {
+  it("returns a fresh inert error for a frozen secret-bearing error", async () => {
     registerVaultFillSecret("target-1", FROZEN_CANARY, "doc-1");
     const error = Object.assign(
       new BrowserServiceError(`tabs failed ${FROZEN_CANARY}`, undefined, 500),
@@ -94,17 +105,15 @@ describe("browser tool thrown fill-error scrub (fail closed)", () => {
 
     const thrown = await executeTabsAction();
 
-    expect(thrown).not.toBe(error);
+    expect(Object.is(thrown, error)).toBe(false);
     expect(thrown).toBeInstanceOf(Error);
     expect((thrown as Error).message).toContain("***");
     expect((thrown as Error).name).toBe("BrowserServiceError");
     expect((thrown as { status?: number }).status).toBe(500);
-    expect(collectReachableText(thrown)).not.toContain(FROZEN_CANARY);
-    expect(JSON.stringify(thrown)).not.toContain(FROZEN_CANARY);
-    expect(String(thrown)).not.toContain(FROZEN_CANARY);
+    assertInert(thrown, FROZEN_CANARY);
   });
 
-  it("replaces non-configurable accessors that regenerate the secret", async () => {
+  it("drops non-configurable accessors instead of reading them once", async () => {
     registerVaultFillSecret("target-1", ACCESSOR_CANARY, "doc-1");
     const error = new BrowserServiceError("base", undefined, 500);
     Object.defineProperty(error, "message", {
@@ -125,18 +134,17 @@ describe("browser tool thrown fill-error scrub (fail closed)", () => {
 
     const thrown = await executeTabsAction();
 
-    expect(thrown).not.toBe(error);
+    expect(Object.is(thrown, error)).toBe(false);
     expect(thrown).toBeInstanceOf(Error);
+    // Accessor-carried text is not copied at all: it can never be proven inert.
     expect((thrown as Error).message).not.toBe("base");
-    expect(collectReachableText(thrown)).not.toContain(ACCESSOR_CANARY);
-    expect(JSON.stringify(thrown)).not.toContain(ACCESSOR_CANARY);
-    // The withheld details keep diagnostics without any live accessor.
-    expect((thrown as { details?: { body?: string } }).details?.body).toBe("fresh ***");
+    expect((thrown as { details?: unknown }).details).toBeUndefined();
+    assertInert(thrown, ACCESSOR_CANARY);
     // The untouchable original keeps its secret; it must simply not be rethrown.
     expect(error.message).toContain(ACCESSOR_CANARY);
   });
 
-  it("masks a secret-bearing name and nested cause code while keeping the class", async () => {
+  it("masks a secret-bearing name and nested cause code on inert copies", async () => {
     registerVaultFillSecret("target-1", NAME_CANARY, "doc-1");
     const cause = Object.assign(new Error(`upstream ${NAME_CANARY}`), { code: `E_${NAME_CANARY}` });
     const error = Object.assign(
@@ -147,14 +155,17 @@ describe("browser tool thrown fill-error scrub (fail closed)", () => {
 
     const thrown = await executeTabsAction();
 
-    expect(thrown).toBe(error);
-    expect(thrown).toBeInstanceOf(BrowserServiceError);
+    expect(Object.is(thrown, error)).toBe(false);
+    expect(thrown).toBeInstanceOf(Error);
     expect((thrown as Error).name).toBe("BrowserServiceError_***");
-    expect((thrown as Error).message).not.toContain(NAME_CANARY);
+    expect((thrown as Error).message).toBe("tabs failed ***");
     expect((thrown as { status?: number }).status).toBe(500);
-    expect(((thrown as { cause?: Error }).cause as { code?: string }).code).toBe("E_***");
-    expect(collectReachableText(thrown)).not.toContain(NAME_CANARY);
-    expect(JSON.stringify(thrown)).not.toContain(NAME_CANARY);
+    const thrownCause = (thrown as { cause?: Error }).cause;
+    expect(thrownCause).toBeInstanceOf(Error);
+    expect(Object.is(thrownCause, cause)).toBe(false);
+    expect((thrownCause as Error).message).toBe("upstream ***");
+    expect((thrownCause as { code?: string }).code).toBe("E_***");
+    assertInert(thrown, NAME_CANARY);
   });
 
   it("replaces an error whose frozen nested cause cannot be scrubbed", async () => {
@@ -165,22 +176,21 @@ describe("browser tool thrown fill-error scrub (fail closed)", () => {
     Object.freeze(cause);
     const error = Object.assign(
       new BrowserServiceError(`tabs failed ${CAUSE_CANARY}`, undefined, 500),
-      {
-        cause,
-      },
+      { cause },
     );
     mocks.browserTabs.mockRejectedValue(error);
 
     const thrown = await executeTabsAction();
 
-    expect(thrown).not.toBe(error);
+    expect(Object.is(thrown, error)).toBe(false);
     expect((thrown as { cause?: unknown }).cause).not.toBe(cause);
-    expect(collectReachableText(thrown)).not.toContain(CAUSE_CANARY);
-    expect(JSON.stringify(thrown)).not.toContain(CAUSE_CANARY);
-    expect((thrown as Error).message).toContain("***");
+    expect((thrown as Error).message).toBe("tabs failed ***");
+    const thrownCause = (thrown as { cause?: Error }).cause;
+    expect((thrownCause as Error).message).toBe("upstream ***");
+    assertInert(thrown, CAUSE_CANARY);
   });
 
-  it("freezes a configurable accessor at scrub time so it cannot regenerate later", async () => {
+  it("drops a configurable accessor without ever invoking it", async () => {
     registerVaultFillSecret("target-1", REGEN_CANARY, "doc-1");
     const error = new BrowserServiceError("tabs ok", undefined, 500);
     let reads = 0;
@@ -196,12 +206,91 @@ describe("browser tool thrown fill-error scrub (fail closed)", () => {
 
     const thrown = await executeTabsAction();
 
-    expect(thrown).toBe(error);
-    expect((thrown as { details?: { body?: string } }).details?.body).toBe("clean");
-    expect(collectReachableText(thrown)).not.toContain(REGEN_CANARY);
-    // Later reads must keep returning the scrub-time snapshot, not the getter.
-    expect(reads).toBe(1);
-    expect((thrown as { details?: { body?: string } }).details?.body).toBe("clean");
+    expect(Object.is(thrown, error)).toBe(false);
+    expect((thrown as { details?: unknown }).details).toBeUndefined();
+    expect(reads).toBe(0);
+    assertInert(thrown, REGEN_CANARY);
+    // Even the original's later reads cannot reach the tool result anymore.
+    expect(reads).toBe(0);
+  });
+
+  it("drops a stateful own toString and stays clean on later String() reads", async () => {
+    registerVaultFillSecret("target-1", TOSTRING_CANARY, "doc-1");
+    const error = new BrowserServiceError(`tabs failed ${TOSTRING_CANARY}`, undefined, 500);
+    let toStringCalls = 0;
+    Object.assign(error, {
+      toString: () => {
+        toStringCalls += 1;
+        return toStringCalls === 1 ? "BrowserServiceError: looks fine" : `boom ${TOSTRING_CANARY}`;
+      },
+    });
+    mocks.browserTabs.mockRejectedValue(error);
+
+    const thrown = await executeTabsAction();
+
+    expect(Object.is(thrown, error)).toBe(false);
+    // The custom formatter is dropped unread; later stringifications are inert.
+    expect(toStringCalls).toBe(0);
+    expect(String(thrown)).not.toContain(TOSTRING_CANARY);
+    expect(String(thrown)).toContain("tabs failed ***");
+    assertInert(thrown, TOSTRING_CANARY);
+    expect(toStringCalls).toBe(0);
+  });
+
+  it("drops a stateful toJSON and stays clean through the downstream error formatter", async () => {
+    registerVaultFillSecret("target-1", TOJSON_CANARY, "doc-1");
+    let jsonCalls = 0;
+    const source = {
+      status: 503,
+      note: "upstream rejected",
+      toJSON: () => {
+        jsonCalls += 1;
+        return jsonCalls === 1 ? { ok: true } : { leak: TOJSON_CANARY };
+      },
+    };
+    mocks.browserTabs.mockRejectedValue(source);
+
+    const thrown = await executeTabsAction();
+
+    expect(Object.is(thrown, source)).toBe(false);
+    expect(thrown).toBeInstanceOf(Error);
+    // toJSON is dropped unread; the real model-error formatter stays clean.
+    expect(jsonCalls).toBe(0);
+    expect(formatErrorMessage(thrown)).not.toContain(TOJSON_CANARY);
+    assertInert(thrown, TOJSON_CANARY);
+    expect(jsonCalls).toBe(0);
+  });
+
+  it("drops a non-configurable array-index accessor on later indexed reads", async () => {
+    registerVaultFillSecret("target-1", ARRAY_CANARY, "doc-1");
+    const error = Object.assign(new BrowserServiceError("tabs failed", undefined, 500), {
+      details: ["clean"],
+    });
+    let indexedReads = 0;
+    Object.defineProperty(error.details, "0", {
+      get() {
+        indexedReads += 1;
+        return indexedReads <= 2 ? "clean" : `late ${ARRAY_CANARY}`;
+      },
+      enumerable: true,
+      configurable: false,
+    });
+    mocks.browserTabs.mockRejectedValue(error);
+
+    const thrown = await executeTabsAction();
+
+    expect(Object.is(thrown, error)).toBe(false);
+    const details = (thrown as { details?: unknown[] }).details;
+    expect(Array.isArray(details)).toBe(true);
+    // The accessor entry is dropped, not snapshotted: indexed reads are inert.
+    expect(details?.[0]).toBeUndefined();
+    expect(indexedReads).toBe(0);
+    assertInert(thrown, ARRAY_CANARY);
+    // The original keeps its live stateful accessor; only the thrown copy is inert.
+    expect(error.details[0]).toBe("clean");
+    expect(error.details[0]).toBe("clean");
+    expect(error.details[0]).toContain(ARRAY_CANARY);
+    expect(indexedReads).toBe(3);
   });
 
   describe("real loopback /tabs rejection", () => {
@@ -241,19 +330,18 @@ describe("browser tool thrown fill-error scrub (fail closed)", () => {
       });
     });
 
-    it("masks a real rejected /tabs body while preserving class and status", async () => {
+    it("masks a real rejected /tabs body on an inert error with name and status", async () => {
       registerVaultFillSecret("target-1", LOOPBACK_CANARY, "doc-1");
 
       const thrown = await executeTabsAction({ action: "tabs" }, { sandboxBridgeUrl: baseUrl });
 
-      expect(thrown).toBeInstanceOf(BrowserServiceError);
+      expect(thrown).toBeInstanceOf(Error);
       expect((thrown as Error).name).toBe("BrowserServiceError");
       expect((thrown as { status?: number }).status).toBe(500);
       expect((thrown as Error).message).toContain("tabs unavailable");
       expect((thrown as Error).message).toContain("***");
-      expect(collectReachableText(thrown)).not.toContain(LOOPBACK_CANARY);
-      expect(String(thrown)).not.toContain(LOOPBACK_CANARY);
-      expect(JSON.stringify(thrown)).not.toContain(LOOPBACK_CANARY);
+      expect((thrown as Error).message).not.toContain(LOOPBACK_CANARY);
+      assertInert(thrown, LOOPBACK_CANARY);
     });
   });
 });
