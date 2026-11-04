@@ -266,11 +266,25 @@ Copy controls. Reading a bundle requires `operator.read`.
 
 The **Skills** tab keeps the skill status report, enable/disable toggles, API
 key entry, and inline ClawHub skill search, scoped to the selected agent. The
-**Skill workshop** tab shows installed skills and pending
-[skill proposals](/tools/skill-workshop). **Learn from past conversations** opens
+**Skill workshop** tab shows installed skills, pending
+[skill proposals](/tools/skill-workshop), and the agent's Experience documents.
+**Learn from past conversations** opens
 a normal session with the selected agent's configured model and permitted tools.
 The agent chooses which history and skills to inspect, following the current
 Workshop mode. Chat shows progress, results, and normal stop and follow-up controls.
+
+The Workshop's **Experience** section lists the selected agent's candidate,
+promoted, and retired Experience documents. Open a row to read its Markdown
+document, capture source, and verification evidence. **New experience** and
+**Edit** open an editor with save and cancel; a save that loses a revision race
+keeps the draft and offers **Reload latest** instead of overwriting silently.
+**Retire** keeps the document and can be undone with **Restore**. **Promote to
+skill** opens a dialog for a new or existing skill and only stages a pending
+suggestion — it never edits an installed skill directly. Review the suggestion in
+**Suggestions**, which reports pending, applied, and rejected promotions back in
+the Experience section. Reading requires `operator.read`; creating, editing,
+retiring, restoring, and promoting require `operator.admin`. Experience documents
+do not track usage, so the section makes no usage claim.
 
 Included plugins are already present on the Gateway and show **Enable** or
 **Disable** instead of **Install**. For example, Workboard is included with

@@ -6,7 +6,7 @@ const SKILL_WORKSHOP_MODE_KEY = "openclaw:control-ui:skill-workshop-mode:v1";
 export function loadSkillWorkshopMode(): SkillWorkshopMode {
   try {
     const mode = getSafeLocalStorage()?.getItem(SKILL_WORKSHOP_MODE_KEY);
-    return mode === "suggestions" ? mode : "skills";
+    return mode === "suggestions" || mode === "experience" ? mode : "skills";
   } catch {
     return "skills";
   }

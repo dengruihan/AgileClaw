@@ -20,7 +20,7 @@ import {
   type SkillWorkshopProposal,
 } from "../../lib/skill-workshop/index.ts";
 import { parseDateMs, proposalFromInspect, proposalFromManifest } from "./proposal-records.ts";
-import type { SkillWorkshopState } from "./state.ts";
+import { resetSkillExperienceState, type SkillWorkshopState } from "./state.ts";
 export { createSkillWorkshopState, type SkillWorkshopState } from "./state.ts";
 
 export type SkillWorkshopLoadOptions = {
@@ -79,6 +79,7 @@ function resetSkillWorkshopAgentScope(state: SkillWorkshopState, agentId: string
   state.skillWorkshopRevisionDraft = "";
   state.skillWorkshopFilePreviewKey = null;
   state.skillWorkshopFilePreviewQuery = "";
+  resetSkillExperienceState(state);
   selectionRequestByState.delete(state);
 }
 

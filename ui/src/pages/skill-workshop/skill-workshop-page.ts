@@ -6,6 +6,7 @@ import { t } from "../../i18n/index.ts";
 import { registerSkillWorkshopEnglish } from "../../i18n/locales/en-skill-workshop.ts";
 import { readSessionMethodAccess } from "../../lib/session-method-access.ts";
 import { sessionNavigationTarget } from "../../lib/sessions/route-navigation.ts";
+import type { SkillWorkshopExperience } from "../../lib/skill-workshop/experience.ts";
 import type { SkillWorkshopProposalDecision } from "../../lib/skill-workshop/index.ts";
 import { generateUUID } from "../../lib/uuid.ts";
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
@@ -13,6 +14,16 @@ import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
 import { buildInitialChatSubmission } from "../chat/user-message-content.ts";
 import { retainRejectedInitialTurn } from "../new-session/rejected-initial-turn.ts";
 import { canCallWorkshopAdminMethod } from "./access.ts";
+import {
+  loadSkillExperienceSection,
+  openSkillExperienceProposal,
+  promoteAndReviewSkillExperience,
+  reloadSkillExperienceConflict,
+  restoreSkillExperienceFromDetail,
+  retireConfirmedSkillExperience,
+  saveSkillExperience,
+  type SkillExperienceActionOptions,
+} from "./experience-actions.ts";
 import { SKILL_WORKSHOP_LEARNING_PROMPT } from "./learning-prompt.ts";
 import type { SkillWorkshopRevisionRequest } from "./page-types.ts";
 import { renderSkillWorkshopPage } from "./page-view.ts";
@@ -214,6 +225,63 @@ class SkillWorkshopPage extends OpenClawLightDomElement {
     }).finally(this.requestPageUpdate);
   };
 
+  private readonly experienceOptions = (scope: SkillWorkshopSourceScope) => ({
+    isCurrent: () => this.isCurrentSourceScope(scope),
+    onProgress: this.requestPageUpdate,
+  });
+
+  private readonly runExperienceAction = (
+    action: (
+      state: SkillWorkshopState,
+      context: SkillWorkshopPageContext,
+      options: SkillExperienceActionOptions,
+    ) => Promise<void>,
+  ) => {
+    const scope = this.captureSourceScope();
+    if (!scope) {
+      return;
+    }
+    void action(scope.state, scope.context, this.experienceOptions(scope)).finally(
+      this.requestPageUpdate,
+    );
+  };
+
+  private readonly loadExperiences = (force: boolean) => {
+    const scope = this.captureSourceScope();
+    if (!scope) {
+      return;
+    }
+    void loadSkillExperienceSection(
+      scope.state,
+      scope.context,
+      this.experienceOptions(scope),
+      force,
+    ).finally(this.requestPageUpdate);
+  };
+
+  private readonly handleExperienceRetry = () => this.loadExperiences(true);
+
+  private readonly handleExperienceSave = () => this.runExperienceAction(saveSkillExperience);
+
+  private readonly handleExperienceReloadConflict = () =>
+    this.runExperienceAction(reloadSkillExperienceConflict);
+
+  private readonly handleExperiencePromoteSubmit = () =>
+    this.runExperienceAction(promoteAndReviewSkillExperience);
+
+  private readonly handleExperienceRetireSubmit = () =>
+    this.runExperienceAction(retireConfirmedSkillExperience);
+
+  private readonly handleExperienceRestore = (experience: SkillWorkshopExperience) =>
+    this.runExperienceAction((state, context, options) =>
+      restoreSkillExperienceFromDetail(state, context, experience.id, options),
+    );
+
+  private readonly handleExperienceOpenProposal = (proposalId: string) =>
+    this.runExperienceAction((state, context, options) =>
+      openSkillExperienceProposal(state, context, proposalId, options),
+    );
+
   private readonly handleRevisionSubmit = (proposalId: string) => {
     const scope = this.captureSourceScope();
     if (!scope) {
@@ -266,6 +334,15 @@ class SkillWorkshopPage extends OpenClawLightDomElement {
     if (this.gatewayConnected && canLoad) {
       this.loadProposals(false);
     }
+    const canLoadExperiences =
+      state &&
+      state.skillWorkshopMode === "experience" &&
+      !state.skillWorkshopExperienceLoaded &&
+      !state.skillWorkshopExperienceLoading &&
+      !state.skillWorkshopExperienceError;
+    if (this.gatewayConnected && canLoadExperiences) {
+      this.loadExperiences(false);
+    }
     // Establish the proposal scope before restoring a revision notice: recovery
     // must neither block the first list load nor lose its draft to the scope reset.
     if (this.state && this.context) {
@@ -295,6 +372,9 @@ class SkillWorkshopPage extends OpenClawLightDomElement {
     }
     if (previous.skillWorkshopActionNoticeTimer) {
       globalThis.clearTimeout(previous.skillWorkshopActionNoticeTimer);
+    }
+    if (previous.skillWorkshopExperienceNoticeTimer) {
+      globalThis.clearTimeout(previous.skillWorkshopExperienceNoticeTimer);
     }
     const next = createSkillWorkshopState();
     next.skillWorkshopAgentId = previous.skillWorkshopAgentId;
@@ -509,6 +589,13 @@ class SkillWorkshopPage extends OpenClawLightDomElement {
             learningError: this.learningError,
             onLearn: this.handleLearn,
             onRetry: () => this.loadProposals(true),
+            onExperienceRetry: this.handleExperienceRetry,
+            onExperienceSave: this.handleExperienceSave,
+            onExperienceReloadConflict: this.handleExperienceReloadConflict,
+            onExperiencePromoteSubmit: this.handleExperiencePromoteSubmit,
+            onExperienceRetireSubmit: this.handleExperienceRetireSubmit,
+            onExperienceRestore: this.handleExperienceRestore,
+            onExperienceOpenProposal: this.handleExperienceOpenProposal,
           },
           this.requestPageUpdate,
         )

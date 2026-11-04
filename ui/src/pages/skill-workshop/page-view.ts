@@ -5,6 +5,7 @@ import { icons } from "../../components/icons.ts";
 import { t } from "../../i18n/index.ts";
 import { registerSkillWorkshopEnglish } from "../../i18n/locales/en-skill-workshop.ts";
 import { readSessionMethodAccess } from "../../lib/session-method-access.ts";
+import { sessionNavigationTarget } from "../../lib/sessions/route-navigation.ts";
 import {
   filterSkillWorkshopProposals,
   type SkillWorkshopMode,
@@ -16,6 +17,18 @@ import {
   resolveWorkshopAccess,
   type SkillWorkshopAdminMethod,
 } from "./access.ts";
+import {
+  cancelSkillExperienceDraft,
+  cancelSkillExperiencePromoteDraft,
+  cancelSkillExperienceRetireDraft,
+  selectSkillExperience,
+  setSkillExperienceFilter,
+  setSkillExperienceQuery,
+  startEditSkillExperienceDraft,
+  startNewSkillExperienceDraft,
+  startSkillExperiencePromoteDraft,
+  startSkillExperienceRetireDraft,
+} from "./experience.ts";
 import { renderSkillWorkshopHeaderControls, setSkillWorkshopMode } from "./header-controls.ts";
 import type { SkillWorkshopRenderContext } from "./page-types.ts";
 import {
@@ -23,6 +36,7 @@ import {
   selectSkillWorkshopProposal,
   type SkillWorkshopState,
 } from "./proposals.ts";
+import type { SkillExperienceViewProps } from "./view-types.ts";
 import { renderSkillWorkshop } from "./view.ts";
 
 registerSkillWorkshopEnglish();
@@ -45,6 +59,13 @@ export function renderSkillWorkshopPage(
     learningError,
     onLearn,
     onRetry,
+    onExperienceRetry,
+    onExperienceSave,
+    onExperienceReloadConflict,
+    onExperiencePromoteSubmit,
+    onExperienceRetireSubmit,
+    onExperienceRestore,
+    onExperienceOpenProposal,
   } = renderContext;
   const access = resolveWorkshopAccess(context.gateway.snapshot);
   const learningAccess = readSessionMethodAccess(context.gateway.snapshot, {
@@ -70,12 +91,135 @@ export function renderSkillWorkshopPage(
     setSkillWorkshopMode(state, mode, requestUpdate);
     if (mode === "skills") {
       onRetry();
-    } else {
+    } else if (mode === "suggestions") {
       const proposal = filterSkillWorkshopProposals(state.skillWorkshopProposals, "")[0];
       if (proposal) {
         void selectSkillWorkshopProposal(state, context, proposal.key).finally(requestUpdate);
       }
+    } else {
+      // Promotion state is projected from the proposal owner, so entering the
+      // section always re-reads the documents instead of trusting a stale copy.
+      onExperienceRetry();
     }
+  };
+  const experienceProps: SkillExperienceViewProps = {
+    experiences: state.skillWorkshopExperiences,
+    counts: state.skillWorkshopExperienceCounts,
+    loaded: state.skillWorkshopExperienceLoaded,
+    loading: state.skillWorkshopExperienceLoading,
+    error: state.skillWorkshopExperienceError,
+    query: state.skillWorkshopExperienceQuery,
+    filter: state.skillWorkshopExperienceFilter,
+    selectedId: state.skillWorkshopExperienceSelectedId,
+    inspectingId: state.skillWorkshopExperienceInspectingId,
+    canCreate: canCallWorkshopAdminMethod(context.gateway.snapshot, "skills.experience.create"),
+    canUpdate: canCallWorkshopAdminMethod(context.gateway.snapshot, "skills.experience.update"),
+    canPromote: canCallWorkshopAdminMethod(context.gateway.snapshot, "skills.experience.promote"),
+    canRetire: canCallWorkshopAdminMethod(context.gateway.snapshot, "skills.experience.retire"),
+    canRestore: canCallWorkshopAdminMethod(context.gateway.snapshot, "skills.experience.restore"),
+    agentName: workshopAgentName || context.config.current.assistantIdentity.name,
+    installedSkills: state.skillWorkshopInstalledSkills,
+    draft: state.skillWorkshopExperienceDraft,
+    promoteDraft: state.skillWorkshopExperiencePromoteDraft,
+    retireDraft: state.skillWorkshopExperienceRetireDraft,
+    busy: state.skillWorkshopExperienceBusy,
+    notice: state.skillWorkshopExperienceNotice,
+    onQueryChange: (query) => {
+      setSkillExperienceQuery(state, query);
+      const selectedId = state.skillWorkshopExperienceSelectedId;
+      if (selectedId) {
+        void selectSkillExperience(state, context, selectedId).finally(requestUpdate);
+      }
+      requestUpdate();
+    },
+    onFilterChange: (filter) => {
+      setSkillExperienceFilter(state, filter);
+      const selectedId = state.skillWorkshopExperienceSelectedId;
+      if (selectedId) {
+        void selectSkillExperience(state, context, selectedId).finally(requestUpdate);
+      }
+      requestUpdate();
+    },
+    onSelect: (id) => {
+      void selectSkillExperience(state, context, id).finally(requestUpdate);
+      requestUpdate();
+    },
+    onRetry: onExperienceRetry,
+    onNew: () => {
+      startNewSkillExperienceDraft(state);
+      requestUpdate();
+    },
+    onEdit: (experience) => {
+      startEditSkillExperienceDraft(state, experience);
+      requestUpdate();
+    },
+    onCancelDraft: () => {
+      cancelSkillExperienceDraft(state);
+      requestUpdate();
+    },
+    onDraftChange: (patch) => {
+      const draft = state.skillWorkshopExperienceDraft;
+      if (!draft) {
+        return;
+      }
+      Object.assign(draft, patch, { notice: null });
+      requestUpdate();
+    },
+    onSave: onExperienceSave,
+    onReloadConflict: onExperienceReloadConflict,
+    onPromoteOpen: (experience) => {
+      startSkillExperiencePromoteDraft(state, experience);
+      requestUpdate();
+    },
+    onPromoteCancel: () => {
+      cancelSkillExperiencePromoteDraft(state);
+      requestUpdate();
+    },
+    onPromoteDraftChange: (patch) => {
+      const draft = state.skillWorkshopExperiencePromoteDraft;
+      if (!draft) {
+        return;
+      }
+      Object.assign(draft, patch);
+      if (patch.targetKind === "update" && !draft.skillName) {
+        draft.skillName = state.skillWorkshopInstalledSkills[0]?.name ?? "";
+      }
+      requestUpdate();
+    },
+    onPromoteSubmit: onExperiencePromoteSubmit,
+    onRetireOpen: (experience) => {
+      startSkillExperienceRetireDraft(state, experience);
+      requestUpdate();
+    },
+    onRetireCancel: () => {
+      cancelSkillExperienceRetireDraft(state);
+      requestUpdate();
+    },
+    onRetireReasonChange: (reason) => {
+      const draft = state.skillWorkshopExperienceRetireDraft;
+      if (draft) {
+        draft.reason = reason;
+        requestUpdate();
+      }
+    },
+    onRetireSubmit: onExperienceRetireSubmit,
+    onRestore: onExperienceRestore,
+    onOpenProposal: onExperienceOpenProposal,
+    onOpenSession: (experience) => {
+      const sessionKey = experience.origin?.sessionKey;
+      if (!sessionKey) {
+        return;
+      }
+      context.navigate(
+        "chat",
+        sessionNavigationTarget({
+          context,
+          face: "chat",
+          sessionKey,
+          agentId: experience.origin?.agentId ?? state.skillWorkshopAgentId ?? undefined,
+        }).options,
+      );
+    },
   };
 
   return html`
@@ -189,6 +333,7 @@ export function renderSkillWorkshopPage(
               assistantName: context.config.current.assistantIdentity.name,
               workshopAgentName,
               selfLearning,
+              experience: experienceProps,
               onRetry,
               onQueryChange: (query) => {
                 state.skillWorkshopQuery = query;
