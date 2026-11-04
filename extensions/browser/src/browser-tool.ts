@@ -37,6 +37,12 @@ import {
 } from "./browser-tool.runtime.js";
 import type { BrowserScreenshotOptions } from "./browser-tool.screenshot.js";
 import { withBrowserRequestScope } from "./browser/request-scope.js";
+import {
+  scrubVaultFillError,
+  scrubVaultFillErrorForTarget,
+  scrubVaultFillValue,
+  scrubVaultFillValueAll,
+} from "./browser/vault-fill-scrub.js";
 
 type BrowserTabIdentity = { targetId: string; profile: string } & (
   | { target: "host" }
@@ -251,7 +257,9 @@ export function createBrowserTool(
           return dashboard;
         };
         if (action === "close") {
-          return jsonResult({ browserDashboard: await callDashboard("DELETE") });
+          return scrubVaultFillValueAll(
+            jsonResult({ browserDashboard: await callDashboard("DELETE") }),
+          );
         }
         if (action === "open") {
           if (params.targetUrl !== undefined || params.url !== undefined) {
@@ -259,9 +267,11 @@ export function createBrowserTool(
               "Update the dashboard widget URL with dashboard widget_put before opening it",
             );
           }
-          return jsonResult({
-            browserDashboard: await callDashboard("POST", true),
-          });
+          return scrubVaultFillValueAll(
+            jsonResult({
+              browserDashboard: await callDashboard("POST", true),
+            }),
+          );
         }
         if (["doctor", "status", "start", "stop", "profiles", "importprofile"].includes(action)) {
           throw new Error(
@@ -338,10 +348,26 @@ export function createBrowserTool(
               },
             },
             onTabActivity: () => {},
+          }).catch((error: unknown) => {
+            const dashboardTargetId = readStringParam(params, "targetId");
+            throw action === "tabs" || !dashboardTargetId
+              ? scrubVaultFillError(error)
+              : scrubVaultFillErrorForTarget(dashboardTargetId, error);
           });
+          // Dashboard-owned dispatch results carry page-controlled content and
+          // return before the common scrub below; mask them at the same
+          // boundary, with the dashboard's own metadata merged after.
+          const dashboardScrubTargetId = readStringParam(params, "targetId");
+          const scrubbedResult =
+            action === "tabs" || !dashboardScrubTargetId
+              ? scrubVaultFillValueAll(result)
+              : scrubVaultFillValue(dashboardScrubTargetId, result);
           return {
-            ...result,
-            details: { ...asNullableRecord(result.details), browserDashboard: dashboard },
+            ...scrubbedResult,
+            details: {
+              ...asNullableRecord(scrubbedResult.details),
+              browserDashboard: dashboard,
+            },
           };
         }
       }
@@ -467,17 +493,21 @@ export function createBrowserTool(
         case "stop":
         case "profiles":
         case "importprofile":
-          return await executeBrowserLifecycleAction({
-            action,
-            input: params,
-            baseUrl,
-            profile,
-            timeoutMs: toolTimeoutMs,
-            proxyRequest,
-            allowHostControl: opts?.allowHostControl,
-            sandboxBridgeUrl: opts?.sandboxBridgeUrl,
-            signal,
-          });
+          // Every model-bound success passes through the scrub owner; with no
+          // active fill secret this returns the result unchanged.
+          return scrubVaultFillValueAll(
+            await executeBrowserLifecycleAction({
+              action,
+              input: params,
+              baseUrl,
+              profile,
+              timeoutMs: toolTimeoutMs,
+              proxyRequest,
+              allowHostControl: opts?.allowHostControl,
+              sandboxBridgeUrl: opts?.sandboxBridgeUrl,
+              signal,
+            }),
+          );
         default:
           break;
       }
@@ -526,21 +556,44 @@ export function createBrowserTool(
           },
         });
       const dashboardTarget = browserDashboard;
-      const result = dashboardTarget
-        ? await withBrowserRequestScope(
-            {
-              managedOnly: true,
-              assertCurrent: async (admittedProfile) =>
-                (await import("./browser-dashboard.js")).assertBrowserDashboardTargetCurrent(
-                  dashboardTarget,
-                  opts?.agentId,
-                  { signal },
-                  admittedProfile,
-                ),
-            },
-            dispatchTabAction,
-          )
-        : await dispatchTabAction();
+      // A thrown failure can carry page text (for example a loopback error
+      // body) before the result scrub runs, so resolve the addressable target
+      // first and scrub the error at the same boundary.
+      const resolveScrubTargetId = () =>
+        tabIdentity?.targetId ??
+        readStringParam(params, "targetId") ??
+        (binding ? binding.targetId : undefined);
+      let rawResult: AgentToolResult<unknown>;
+      try {
+        rawResult = dashboardTarget
+          ? await withBrowserRequestScope(
+              {
+                managedOnly: true,
+                assertCurrent: async (admittedProfile) =>
+                  (await import("./browser-dashboard.js")).assertBrowserDashboardTargetCurrent(
+                    dashboardTarget,
+                    opts?.agentId,
+                    { signal },
+                    admittedProfile,
+                  ),
+              },
+              dispatchTabAction,
+            )
+          : await dispatchTabAction();
+      } catch (error) {
+        const errorTargetId = resolveScrubTargetId();
+        throw action === "tabs" || !errorTargetId
+          ? scrubVaultFillError(error)
+          : scrubVaultFillErrorForTarget(errorTargetId, error);
+      }
+      // The broker-owned full mask runs regardless of logging.redact so a page
+      // read-back cannot return a filled value to the model. Aggregate tab
+      // results and results without a proven target use every active secret.
+      const scrubTargetId = resolveScrubTargetId();
+      const result =
+        action === "tabs" || !scrubTargetId
+          ? scrubVaultFillValueAll(rawResult)
+          : scrubVaultFillValue(scrubTargetId, rawResult);
       if (browserDashboard) {
         // Dashboard presentation owns this tab; ordinary preview metadata would steal its panel.
         return { ...result, details: { ...asNullableRecord(result.details), browserDashboard } };

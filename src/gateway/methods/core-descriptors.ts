@@ -671,4 +671,7 @@ export const CORE_GATEWAY_METHOD_SPECS = [
   ["vault.generate", null, "operator.vault", "2026.10"],
   ["vault.setAutoLock", null, "operator.vault", "2026.10", CONTROL_PLANE_WRITE],
   ["vault.audit.list", null, "operator.vault", "2026.10"],
+  ["vault.fill.approval.request", null, "operator.vault", "2026.10"],
+  ["vault.fill.preview", null, "operator.vault", "2026.10"],
+  ["vault.fill.execute", null, "operator.vault", "2026.10"],
 ] as const satisfies readonly CoreGatewayMethodSpecRow[];

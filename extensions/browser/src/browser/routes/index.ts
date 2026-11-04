@@ -4,6 +4,7 @@ import { registerBrowserAgentDebugRoutes } from "./agent.debug.js";
 import { registerBrowserAgentScreencastRoutes } from "./agent.screencast.js";
 import { registerBrowserAgentSnapshotRoutes } from "./agent.snapshot.js";
 import { registerBrowserAgentStorageRoutes } from "./agent.storage.js";
+import { registerBrowserVaultRoutes } from "./agent.vault.js";
 import { registerBrowserBasicRoutes } from "./basic.js";
 import { registerBrowserPermissionRoutes } from "./permissions.js";
 import { withBrowserProfileCapabilities } from "./profile-capabilities.js";
@@ -18,6 +19,7 @@ export function registerBrowserRoutes(registrar: BrowserRouteRegistrar, ctx: Bro
   registerBrowserAgentSnapshotRoutes(app, ctx);
   registerBrowserAgentScreencastRoutes(app, ctx);
   registerBrowserAgentActRoutes(app, ctx);
+  registerBrowserVaultRoutes(app, ctx);
   registerBrowserAgentDebugRoutes(app, ctx);
   registerBrowserAgentStorageRoutes(app, ctx);
 }

@@ -27,6 +27,7 @@ import {
   browserNavigate,
   browserOpenTab,
   browserPdfSave,
+  browserVaultIdentity,
   jsonResult,
   normalizeOptionalString,
   readPositiveIntegerParam,
@@ -40,6 +41,13 @@ import {
 } from "./browser-tool.screenshot.js";
 import { appendNavigatedPageState, executeSnapshotAction } from "./browser-tool.snapshot.js";
 import { parseBrowserNavigationUrl } from "./browser/navigation-guard.js";
+import {
+  assertVaultFillActAllowed,
+  clearVaultFillSession,
+  clearVaultFillSessionIfDocumentChanged,
+  hasActiveVaultFill,
+  hasAnyActiveVaultFill,
+} from "./browser/vault-fill-scrub.js";
 
 function readOptionalTargetAndTimeout(params: Record<string, unknown>) {
   const targetId = normalizeOptionalString(params.targetId);
@@ -55,6 +63,36 @@ function readTargetUrlParam(params: Record<string, unknown>) {
     readStringParam(params, "url", { required: true, label: "targetUrl" });
   parseBrowserNavigationUrl(targetUrl);
   return targetUrl;
+}
+
+/**
+ * A download or hash-only navigation keeps the approved document alive. Only a
+ * genuine document replacement (or a confirmed close) may drop protection.
+ * If identity cannot be proven, keep the session (fail closed).
+ */
+async function clearVaultFillAfterNavigate(params: {
+  baseUrl?: string;
+  profile?: string;
+  targetId?: string;
+  proxyRequest: BrowserProxyRequest | null;
+  signal?: AbortSignal;
+}): Promise<void> {
+  if (!params.targetId || params.proxyRequest || !hasActiveVaultFill(params.targetId)) {
+    return;
+  }
+  try {
+    const identity = await browserVaultIdentity(params.baseUrl, {
+      targetId: params.targetId,
+      profile: params.profile,
+      signal: params.signal,
+      timeoutMs: 5_000,
+    });
+    if (identity.ok) {
+      clearVaultFillSessionIfDocumentChanged(params.targetId, identity.documentId);
+    }
+  } catch {
+    // Keep protection when the current document identity is uncertain.
+  }
 }
 
 export async function executeBrowserTabAction(context: {
@@ -149,21 +187,46 @@ export async function executeBrowserTabAction(context: {
       const result = targetId
         ? await browserCloseTab(proxyRequest ?? baseUrl, targetId, clientOptions)
         : await browserAct(proxyRequest ?? baseUrl, { kind: "close" }, clientOptions);
-      await sessionTabs.untrack(readStringValue(asNullableRecord(result)?.targetId) ?? targetId);
+      const closedTargetId = readStringValue(asNullableRecord(result)?.targetId) ?? targetId;
+      if (closedTargetId) {
+        clearVaultFillSession(closedTargetId);
+      }
+      await sessionTabs.untrack(closedTargetId);
       return jsonResult(result);
     }
-    case "snapshot":
+    case "snapshot": {
+      const snapshotTargetId =
+        readStringParam(params, "targetId") ?? context.boundTargetId ?? undefined;
+      if (params.labels === true) {
+        const protectedSession = snapshotTargetId
+          ? hasActiveVaultFill(snapshotTargetId)
+          : hasAnyActiveVaultFill();
+        if (protectedSession) {
+          throw new Error(
+            "Labeled/image-bearing snapshots are blocked while a password fill session owns the tab; navigate or close the filled tab.",
+          );
+        }
+      }
       return await executeSnapshotAction({
         ...actionOptions,
         onTabActivity: touchTab,
       });
-    case "screenshot":
+    }
+    case "screenshot": {
+      const screenshotTargetId =
+        readStringParam(params, "targetId") ?? context.boundTargetId ?? undefined;
+      if (screenshotTargetId ? hasActiveVaultFill(screenshotTargetId) : hasAnyActiveVaultFill()) {
+        throw new Error(
+          "Screenshots are blocked while a password fill session owns the tab; navigate or close the filled tab.",
+        );
+      }
       return await executeScreenshotAction({
         ...actionOptions,
         requestedTimeoutMs,
         onTabActivity: touchTab,
         opts,
       });
+    }
     case "navigate": {
       const targetUrl = readTargetUrlParam(params);
       const targetId = readStringParam(params, "targetId");
@@ -175,6 +238,18 @@ export async function executeBrowserTabAction(context: {
         signal,
       });
       const navigatedTargetId = readStringValue(asNullableRecord(result)?.targetId) ?? targetId;
+      const aborted = asNullableRecord(asNullableRecord(result)?.aborted);
+      if (aborted?.reason === "closed" && navigatedTargetId) {
+        clearVaultFillSession(navigatedTargetId);
+      } else {
+        await clearVaultFillAfterNavigate({
+          baseUrl,
+          profile,
+          targetId: navigatedTargetId,
+          proxyRequest,
+          signal,
+        });
+      }
       await touchTab(navigatedTargetId);
       const formatted = formatBrowserExternalToolResult({
         kind: asNullableRecord(result)?.download ? "download" : "act",
@@ -271,6 +346,9 @@ export async function executeBrowserTabAction(context: {
       if (!request) {
         throw new Error("request required");
       }
+      const guardTargetId =
+        request.targetId ?? context.boundTargetId ?? readStringParam(params, "targetId");
+      assertVaultFillActAllowed(guardTargetId, request);
       if (!capabilities.actKinds.some((kind) => kind === request.kind)) {
         throw new Error(
           `browser act kind ${JSON.stringify(request.kind)} is unavailable for this run`,
@@ -284,7 +362,12 @@ export async function executeBrowserTabAction(context: {
         proxyRequest,
         signal,
         onTabActivity: touchTab,
-        onTabClose: sessionTabs.untrack,
+        onTabClose: async (targetId) => {
+          if (targetId) {
+            clearVaultFillSession(targetId);
+          }
+          await sessionTabs.untrack(targetId);
+        },
       });
     }
     default:

@@ -39,6 +39,7 @@ The vault never adds a plaintext password or notes column. The `secret_store_ent
 - The vault starts locked after a Gateway restart. It auto-locks after the configured idle interval (default five minutes).
 - Five consecutive wrong passphrases trigger a 30-second lockout. Further groups of five back off to five minutes, then one hour. Attempts and the timeout are persisted, so a restart does not clear them.
 - No agent tool is registered for the vault. Agent/model context, transcripts, and logs never include passwords or notes.
+- Agent fill is a separate, per-request flow that uses an opaque `itemRef`; it never exposes a vault read verb to the model. See [Agent fill](#agent-fill).
 - `operator.admin` does not imply `operator.vault.reveal`. Unlock, reveal, and copy need that explicit scope on the connection.
 - Audit records contain actions, item references, and timestamps. They never contain passwords, notes, or account names.
 
@@ -56,14 +57,40 @@ The list is grouped by website and supports multiple accounts per site. Search c
 
 The vault adds two operator scopes:
 
-| Scope                   | Allows                                                                                                           |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `operator.vault`        | Status, initialize, list, create, update, soft delete, restore, permanent delete, auto-lock settings, audit list |
-| `operator.vault.reveal` | Unlock, reveal, and copy                                                                                         |
+| Scope                   | Allows                                                                                                                                       |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `operator.vault`        | Status, initialize, list, create, update, soft delete, restore, permanent delete, auto-lock settings, audit list, agent fill preview/execute |
+| `operator.vault.reveal` | Unlock, reveal, and copy                                                                                                                     |
 
 Grant the vault scopes explicitly in an operator role or device authorization. CLI and operator clients do not receive them by default. A client with only `operator.admin` can manage entries but cannot unlock or see values; `operator.vault.reveal` must be granted explicitly.
 
-Gateway methods are `vault.status`, `vault.initialize`, `vault.unlock`, `vault.lock`, `vault.list`, `vault.create`, `vault.update`, `vault.delete`, `vault.restore`, `vault.purge`, `vault.reveal`, `vault.copy`, `vault.generate`, `vault.setAutoLock`, and `vault.audit.list`.
+Gateway methods are `vault.status`, `vault.initialize`, `vault.unlock`, `vault.lock`, `vault.list`, `vault.create`, `vault.update`, `vault.delete`, `vault.restore`, `vault.purge`, `vault.reveal`, `vault.copy`, `vault.generate`, `vault.setAutoLock`, `vault.audit.list`, `vault.fill.approval.request`, `vault.fill.preview`, and `vault.fill.execute`.
+
+## Agent fill
+
+An agent can ask to use one saved login without receiving the password. This is a per-use flow, not a standing vault grant:
+
+1. The model calls the `browser_login` tool with an opaque `itemRef`. It cannot list, reveal, or read entries.
+2. The local browser tool observes the active tab's exact origin, document, and login fields. The model never supplies the origin.
+3. The vault checks the observation against the entry. The scheme, host, and port must match exactly; IDN hosts compare in A-label form. Subdomains, cross-origin password iframes, and non-http(s) pages are rejected.
+4. The operator sees a plugin approval card with the agent, origin, profile, saved site/account, and the agent's reason. The only offered decision is **allow once** or **deny**. There is no standing grant, background use, or unattended fill.
+5. After approval the tool re-observes the tab. A navigation, document replacement, field change, or password revision change invalidates the request.
+6. The vault decrypts once, the trusted in-process browser fill dispatch inserts the username and password, and the value is dropped. `submit` defaults to `false`; setting it to `true` requests a second "Submit login form" approval after the fill, and never presses Enter on the fill approval alone.
+
+Results are explicit and value-free: `filled`, `needs_approval`, `needs_human`, `denied`, `origin_mismatch`, `subdomain_mismatch`, `insecure_origin`, `iframe_denied`, `document_changed`, `revision_mismatch`, `not_found`, `expired`, `replayed`, `vault_locked`, or `unavailable`. The agent never receives the password, account name in the tool result, or fill material.
+
+### Trust boundaries
+
+- Agent fill runs only on the local managed or shared Chromium controlled by this Gateway. Browser nodes, sandbox targets, remote CDP URLs, and existing-session profiles are rejected.
+- The password exists only in the vault worker, the broker's one-time material, and the trusted in-process browser fill dispatch used to insert it. It is never written to a Gateway RPC/WebSocket response, tool request/result, model context, transcript, Gateway log, or audit record.
+- While a fill session owns the tab, `act:evaluate`, `act:wait --fn`, screenshots, and every agent click/press/type/fill/select/drag/batch interaction are blocked; text-bearing tool results pass through a broker-owned full-mask scrub that runs even when `logging.redact` is `off`. Submission is available only through the separately approved `browser_login` submit flow. The session persists until the tab navigates, closes, or the approved submit clears the field; it never expires by wall-clock time.
+- OpenClaw cannot isolate the password from page JavaScript or another CDP client attached to the same browser. A page script can read its own input value, and any co-attached CDP client can evaluate in the page. The fill broker reduces OpenClaw's own leak surfaces; it is not a same-machine isolation boundary. Treat a browser profile as trusted for the logins it holds.
+- Document identity comes from the browser's CDP loader id. If the browser cannot expose one, the fill fails closed (`document_identity_unavailable`) instead of using a URL-derived token, so a same-URL reload invalidates the approval.
+- Passwords never enter `secret_store_entries`. Fill approvals use the existing operator approval store, and vault audit rows contain only the action, item reference, status, and reason code.
+
+### Configuration and auditing
+
+`vault.fill.preview` and `vault.fill.execute` require `operator.vault`. `vault.fill.execute` additionally requires a live agent runtime identity and a matching one-time approval; ordinary operator clients cannot redeem fill material. Fill attempts are audited as action `fill` with a status and reason code, never a value. Editing an entry's password, origin, or account bumps its revision and invalidates pending fill requests for that entry.
 
 ## Retention and backups
 
@@ -76,7 +103,7 @@ Gateway methods are `vault.status`, `vault.initialize`, `vault.unlock`, `vault.l
 
 - No team or shared vault. The owner is the local personal profile.
 - No TOTP seeds, plaintext export, CSV import, or automatic migration from environment values.
-- No automatic browser fill or agent access. Those are separate follow-up work with their own approval and origin-matching design.
+- Agent fill is limited to a one-time, exact-origin, locally approved request. There is no unattended or background fill, no standing grant, no team sharing, and no remote browser-node fill.
 - No OS-keychain-only wrapping. Only the passphrase wrap is supported, so headless and cross-platform restore behavior stays predictable.
 
 ## Related

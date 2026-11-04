@@ -11,8 +11,12 @@ title: "Browser login"
 When a site requires login, sign in manually in the host browser's `openclaw`
 profile. Automated logins often trigger anti-bot defenses and can lock the account.
 
-For an owner-authorized task, the agent may use owner-supplied credentials through
-browser form fills. Keep credentials out of chat and replies.
+For an owner-authorized task, the agent may request a saved login from the
+password vault with the `browser_login` tool and an opaque entry reference. The
+password never goes through chat, tool arguments, or the transcript. See
+[Password vault → Agent fill](/gateway/passwords-vault#agent-fill). Do not paste
+a password into chat or a browser `type`/`fill` action; those values are
+model-visible and persisted.
 
 Use the host browser (manual login) for both reading (search/threads) and
 posting on X/Twitter and other bot-sensitive sites. Sandboxed browser sessions

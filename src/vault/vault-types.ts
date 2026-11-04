@@ -88,6 +88,7 @@ export type VaultAuditAction =
   | "reveal"
   | "copy"
   | "generate"
+  | "fill"
   | "purge-expired";
 
 export type VaultAuditStatus = "succeeded" | "failed" | "blocked";
@@ -113,6 +114,7 @@ export type VaultErrorCode =
   | "VAULT_CONFLICT"
   | "VAULT_DUPLICATE"
   | "VAULT_INVALID_INPUT"
+  | "VAULT_ORIGIN_MISMATCH"
   | "VAULT_UNAVAILABLE";
 
 export class VaultError extends Error {

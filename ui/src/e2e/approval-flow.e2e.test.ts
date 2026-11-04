@@ -236,4 +236,67 @@ suite.define(() => {
     expect(await composer.inputValue()).toBe("");
     expect(await currentPage.getByRole("button", { name: "Stop generating" }).count()).toBe(1);
   });
+
+  it("renders the vault fill approval with agent, origin, profile, account, and reason", async () => {
+    const context = await suite.browser.newContext({
+      viewport: { height: 900, width: 1200 },
+      ...(captureUiProof
+        ? { recordVideo: { dir: proofDir, size: { height: 900, width: 1200 } } }
+        : {}),
+    });
+    const currentPage = await context.newPage();
+    page = currentPage;
+    const gateway = await installMockGateway(currentPage, { sessionKey: activeSessionKey });
+    await currentPage.goto(controlUiSessionUrl(suite.server?.baseUrl ?? "", activeSessionKey));
+    await gateway.waitForRequest("sessions.list");
+
+    await gateway.emitGatewayEvent("plugin.approval.requested", {
+      id: "plugin:vault-fill-approval",
+      createdAtMs: 1_000,
+      expiresAtMs: Date.now() + 120_000,
+      request: {
+        pluginId: "vault",
+        title: "Password fill: Example Login",
+        description:
+          "Agent main wants to use a saved password on https://login.example.com (profile shared). Reason: sign in for the agent",
+        detail: [
+          "OpenClaw password vault fill",
+          "preview: vaultfill_0123456789abcdef",
+          "item: vault_entry_1",
+          "account: person@example.com",
+          "origin: https://login.example.com",
+          "profile: shared",
+          "target: target-1",
+          "document: loader-1",
+          "submit: no",
+        ].join("\n"),
+        severity: "warning",
+        allowedDecisions: ["allow-once", "deny"],
+        toolName: "browser",
+        agentId: "main",
+        sessionKey: activeSessionKey,
+      },
+    });
+
+    const card = currentPage.locator(
+      '.chat-inline-approval [data-approval-id="plugin:vault-fill-approval"]',
+    );
+    await card.waitFor();
+    await card.getByText("Password fill: Example Login").waitFor();
+    await card
+      .getByText(/login\.example\.com/u)
+      .first()
+      .waitFor();
+    await card.getByText(/profile shared/u).waitFor();
+    await card.getByText(/person@example\.com/u).waitFor();
+    await card.getByText(/sign in for the agent/u).waitFor();
+    expect(await card.getByRole("button", { name: "Allow once" }).count()).toBe(1);
+    expect(await card.getByRole("button", { name: "Deny" }).count()).toBe(1);
+    // The approval card never carries fill material.
+    expect(await currentPage.content()).not.toContain("canary-fill");
+
+    if (captureUiProof) {
+      await currentPage.screenshot({ path: path.join(proofDir, "vault-fill-approval.png") });
+    }
+  });
 });

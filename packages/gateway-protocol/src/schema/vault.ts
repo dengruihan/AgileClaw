@@ -156,6 +156,7 @@ const VaultAuditActionSchema = Type.Union([
   Type.Literal("reveal"),
   Type.Literal("copy"),
   Type.Literal("generate"),
+  Type.Literal("fill"),
   Type.Literal("purge-expired"),
 ]);
 
@@ -175,6 +176,76 @@ export const VaultAuditListParamsSchema = closedObject({
 
 export const VaultAuditListResultSchema = closedObject({
   events: Type.Array(VaultAuditEventSchema),
+});
+
+/**
+ * Agent fill. These payloads carry an opaque item reference and the origin the
+ * local browser observed; they never carry password or notes values. The
+ * executing method is not model-facing: only the browser tool calls it after an
+ * explicit operator approval.
+ */
+const VaultFillHostSchema = Type.String({ minLength: 1, maxLength: 253 });
+const VaultFillReferenceSchema = Type.String({ minLength: 1, maxLength: 256 });
+
+export const VaultFillOriginSchema = closedObject({
+  scheme: VaultSchemeSchema,
+  host: VaultFillHostSchema,
+  port: VaultPortSchema,
+});
+export type VaultFillOriginPayload = Static<typeof VaultFillOriginSchema>;
+
+export const VaultFillPreviewParamsSchema = closedObject({
+  itemRef: VaultItemRefSchema,
+  reason: Type.Optional(Type.String({ maxLength: 300 })),
+  origin: VaultFillOriginSchema,
+  profile: Type.String({ minLength: 1, maxLength: 128 }),
+  targetId: Type.String({ minLength: 1, maxLength: 128 }),
+  documentId: Type.String({ minLength: 1, maxLength: 256 }),
+  frameId: Type.String({ minLength: 1, maxLength: 256 }),
+  fieldSignature: Type.String({ minLength: 1, maxLength: 512 }),
+});
+
+const VaultFillStatusSchema = Type.Union([
+  Type.Literal("needs_approval"),
+  Type.Literal("needs_human"),
+  Type.Literal("denied"),
+  Type.Literal("origin_mismatch"),
+  Type.Literal("subdomain_mismatch"),
+  Type.Literal("insecure_origin"),
+  Type.Literal("iframe_denied"),
+  Type.Literal("document_changed"),
+  Type.Literal("revision_mismatch"),
+  Type.Literal("not_found"),
+  Type.Literal("expired"),
+  Type.Literal("replayed"),
+  Type.Literal("vault_locked"),
+  Type.Literal("unavailable"),
+]);
+
+export const VaultFillPreviewResultSchema = closedObject({
+  status: VaultFillStatusSchema,
+  itemRef: Type.Optional(VaultItemRefSchema),
+  siteLabel: Type.Optional(VaultSiteLabelSchema),
+  accountLabel: Type.Optional(VaultAccountSchema),
+  origin: VaultFillOriginSchema,
+  previewId: Type.Optional(VaultFillReferenceSchema),
+  revision: Type.Optional(VaultRevisionSchema),
+  approvalId: Type.Optional(VaultFillReferenceSchema),
+  reasonCode: Type.Optional(Type.String({ maxLength: 64 })),
+});
+export type VaultFillPreviewResultPayload = Static<typeof VaultFillPreviewResultSchema>;
+
+export const VaultFillExecuteParamsSchema = closedObject({
+  previewId: VaultFillReferenceSchema,
+  approvalId: VaultFillReferenceSchema,
+  itemRef: VaultItemRefSchema,
+  revision: VaultRevisionSchema,
+  origin: VaultFillOriginSchema,
+  profile: Type.String({ minLength: 1, maxLength: 128 }),
+  targetId: Type.String({ minLength: 1, maxLength: 128 }),
+  documentId: Type.String({ minLength: 1, maxLength: 256 }),
+  frameId: Type.String({ minLength: 1, maxLength: 256 }),
+  fieldSignature: Type.String({ minLength: 1, maxLength: 512 }),
 });
 
 export type VaultEntryMetadata = Static<typeof VaultEntryMetadataSchema>;

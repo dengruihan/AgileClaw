@@ -50,7 +50,14 @@ export {
   browserNavigate,
   browserPdfSave,
   browserScreenshotAction,
+  browserVaultIdentity,
+  browserVaultObserve,
+  browserVaultSubmit,
   browserWaitForDownload,
+} from "./browser/client-actions.js";
+export type {
+  BrowserVaultFillResult,
+  BrowserVaultObserveResult,
 } from "./browser/client-actions.js";
 export {
   browserCloseTab,

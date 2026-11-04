@@ -4,6 +4,7 @@ import type {
   VaultEntryMetadata,
   VaultEntryUpdateInput,
   VaultErrorCode,
+  VaultOrigin,
   VaultStatus,
 } from "./vault-types.js";
 
@@ -19,6 +20,13 @@ export type VaultWorkerOperation =
   | { type: "restore"; itemRef: string }
   | { type: "purge"; itemRef: string }
   | { type: "reveal"; itemRef: string; mode: "reveal" | "copy" }
+  | { type: "fill"; itemRef: string; revision: number; origin: VaultOrigin }
+  | {
+      type: "fill.audit";
+      itemRef?: string;
+      status: "failed" | "blocked";
+      reasonCode: string;
+    }
   | { type: "generate"; length?: number; includeSymbols?: boolean }
   | { type: "setAutoLock"; autoLockSeconds: number }
   | { type: "audit.list"; limit: number; before?: number }
@@ -36,6 +44,8 @@ export type VaultWorkerResult =
   | { type: "restore" }
   | { type: "purge" }
   | { type: "reveal"; entry: VaultEntryMetadata; password: string; notes: string }
+  | { type: "fill"; entry: VaultEntryMetadata; password: string }
+  | { type: "fill.audit" }
   | { type: "generate"; password: string }
   | { type: "setAutoLock"; status: VaultStatus }
   | { type: "audit.list"; events: VaultAuditEvent[] }
