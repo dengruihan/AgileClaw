@@ -30,9 +30,23 @@ const enBrowser = {
     downloading: "Downloading…",
     downloadFile: "Download file",
     inputLabel: "Browser input: click a field in the page, then type or paste",
+    humanControlAvailable:
+      "Agent owns this tab. Take over only when you need to type something the agent must not see.",
+    humanControlRequested:
+      "Agent paused: this tab needs your input (CAPTCHA, verification, or a manual sign-in step).",
+    humanControlActive:
+      "You control this tab. Typed values use the sensitive channel and are kept out of the agent transcript.",
+    humanControlOther: "Another Control UI session controls this tab.",
+    humanControlTakeOver: "Take over this tab",
+    humanControlHandBack: "Hand back to agent",
+    humanControlCancel: "Cancel takeover",
     manualTextCorrection: "Autocorrect is unavailable in browser control. Edit the text directly.",
     errors: {
       pasteFailed: "Could not paste. Reconnect to a managed browser and try again.",
+      humanControlClaimFailed:
+        "Could not take over this tab. Reconnect to the local managed browser and try again.",
+      sensitiveInputFailed:
+        "Sensitive input was not delivered. Reconnect to the local managed browser and try again.",
       requestFailed: "Browser request failed: {error}",
       downloadFailed:
         "Could not download this file: {error}. Try again, or open it in your browser to save it.",

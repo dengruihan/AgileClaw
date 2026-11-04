@@ -47,6 +47,7 @@ export {
   browserPageText,
   browserEmulateSetting,
   browserDownload,
+  browserHumanControlRequest,
   browserNavigate,
   browserPdfSave,
   browserScreenshotAction,
@@ -56,6 +57,7 @@ export {
   browserWaitForDownload,
 } from "./browser/client-actions.js";
 export type {
+  BrowserHumanControlRequestResult,
   BrowserVaultFillResult,
   BrowserVaultObserveResult,
 } from "./browser/client-actions.js";

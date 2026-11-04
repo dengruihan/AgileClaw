@@ -214,6 +214,50 @@ export type BrowserVaultFillResult =
   | { ok: true; status: "filled"; targetId: string }
   | { ok: false; status: string; reasonCode?: string };
 
+export type BrowserHumanControl = {
+  owner: "human";
+  status: "requested" | "active";
+  reason: string;
+  requestedBy: "agent" | "human";
+  profile: string;
+  targetId: string;
+  tabId?: string;
+  generation: number;
+  claimedAtMs: number;
+  expiresAtMs: number;
+};
+
+export type BrowserHumanControlRequestResult = {
+  ok: true;
+  targetId: string;
+  tabId?: string;
+  control: BrowserHumanControl | null;
+  humanControlToken?: string;
+  handback?: {
+    url: string;
+    origin: { scheme: string; host: string; port: number };
+    documentId: string;
+    originChanged: boolean;
+    loginStateChanged: boolean;
+    revalidated: true;
+  };
+};
+
+/** Pause agent actions for one tab and route the challenge to the Control UI. */
+export async function browserHumanControlRequest(
+  baseUrl: BrowserClientTarget,
+  opts: BrowserTimedActionOptions & { targetId?: string; reason?: string },
+): Promise<BrowserHumanControlRequestResult> {
+  const timeoutMs = resolveBrowserNavigationTimeoutMs(opts.timeoutMs);
+  return await postBrowserJson(
+    baseUrl,
+    "/human-control/request",
+    { targetId: opts.targetId, reason: opts.reason, timeoutMs },
+    resolveBrowserOperationRequestTimeoutMs(timeoutMs),
+    opts,
+  );
+}
+
 export type BrowserVaultIdentityResult =
   | {
       ok: true;

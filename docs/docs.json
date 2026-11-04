@@ -2024,6 +2024,7 @@
                           "tools/browser/security",
                           "tools/browser/isolation",
                           "tools/browser/agent-tools",
+                          "tools/browser/human-takeover",
                           "tools/browser/troubleshooting"
                         ]
                       },

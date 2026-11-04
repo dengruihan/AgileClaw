@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   callGatewayTool: vi.fn(),
   browserVaultObserve: vi.fn(),
   browserVaultSubmit: vi.fn(),
+  browserHumanControlRequest: vi.fn(),
   jsonResult: vi.fn((details: unknown) => ({
     content: [{ type: "text" as const, text: JSON.stringify(details) }],
     details,
@@ -14,6 +15,7 @@ vi.mock("./browser-tool.runtime.js", () => ({
   callGatewayTool: mocks.callGatewayTool,
   browserVaultObserve: mocks.browserVaultObserve,
   browserVaultSubmit: mocks.browserVaultSubmit,
+  browserHumanControlRequest: mocks.browserHumanControlRequest,
   jsonResult: mocks.jsonResult,
 }));
 
@@ -73,6 +75,7 @@ describe("browser vault autofill", () => {
     mocks.callGatewayTool.mockReset();
     mocks.browserVaultObserve.mockReset();
     mocks.browserVaultSubmit.mockReset();
+    mocks.browserHumanControlRequest.mockReset();
     clearVaultFillSession("target-1");
   });
 
@@ -107,6 +110,53 @@ describe("browser vault autofill", () => {
       siteLabel: "Example Login",
       origin: "https://login.example.com",
       submit: false,
+    });
+  });
+
+  it("requests a human takeover when the page needs CAPTCHA or 2FA input", async () => {
+    mocks.browserVaultObserve.mockResolvedValue({
+      ok: false,
+      status: "needs_human",
+      reasonCode: "no_password_field",
+    });
+    mocks.browserHumanControlRequest.mockResolvedValue({
+      ok: true,
+      targetId: "target-1",
+      control: { owner: "human", status: "requested", requestedBy: "agent" },
+    });
+
+    const result = await executeVaultAutofillAction(baseParams());
+
+    expect(mocks.browserHumanControlRequest).toHaveBeenCalledWith(
+      "http://127.0.0.1:18800",
+      expect.objectContaining({
+        targetId: "target-1",
+        profile: "shared",
+        reason: "no_password_field",
+      }),
+    );
+    expect(mocks.callGatewayTool).not.toHaveBeenCalled();
+    expect(result.details).toMatchObject({
+      status: "needs_human",
+      reasonCode: "no_password_field",
+      control: { owner: "human", status: "requested" },
+    });
+  });
+
+  it("does not claim human control for a policy-denied iframe", async () => {
+    mocks.browserVaultObserve.mockResolvedValue({
+      ok: false,
+      status: "iframe_denied",
+      reasonCode: "cross_origin_iframe",
+    });
+
+    const result = await executeVaultAutofillAction(baseParams());
+
+    expect(mocks.browserHumanControlRequest).not.toHaveBeenCalled();
+    expect(mocks.callGatewayTool).not.toHaveBeenCalled();
+    expect(result.details).toMatchObject({
+      status: "iframe_denied",
+      reasonCode: "cross_origin_iframe",
     });
   });
 

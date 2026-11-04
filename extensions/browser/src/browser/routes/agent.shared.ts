@@ -3,6 +3,11 @@ import { resolveBrowserNavigationProxyMode } from "../browser-proxy-mode.js";
 import { redactCdpErrorText } from "../cdp.helpers.js";
 import { toBrowserErrorResponse } from "../errors.js";
 import {
+  assertHumanControlAgentAllowed,
+  humanControlNeedsHuman,
+  isHumanControlError,
+} from "../human-control.js";
+import {
   assertBrowserNavigationResultAllowed,
   withBrowserNavigationPolicy,
 } from "../navigation-guard.js";
@@ -172,6 +177,35 @@ export async function withRouteTabContext<T>(
     handleRouteError(params.res, err);
     return undefined;
   }
+}
+
+/**
+ * Admit one agent route only while no human owns the tab, unless the caller
+ * supplies the current human capability. Writes the structured needs_human
+ * response and returns undefined when the lease blocks the action.
+ */
+export async function withHumanControlRouteContext<T>(
+  params: RouteWithTabParams<T> & { body?: unknown },
+): Promise<T | undefined> {
+  return await withRouteTabContext({
+    ...params,
+    run: async (routeCtx) => {
+      try {
+        assertHumanControlAgentAllowed({
+          profile: routeCtx.profileCtx.profile.name,
+          tab: routeCtx.tab,
+          body: params.body ?? params.req.body,
+        });
+      } catch (error) {
+        if (isHumanControlError(error)) {
+          params.res.json(humanControlNeedsHuman(error));
+          return undefined as T;
+        }
+        throw error;
+      }
+      return await params.run(routeCtx);
+    },
+  });
 }
 
 /**

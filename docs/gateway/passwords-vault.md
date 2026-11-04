@@ -79,6 +79,8 @@ An agent can ask to use one saved login without receiving the password. This is 
 
 Results are explicit and value-free: `filled`, `needs_approval`, `needs_human`, `denied`, `origin_mismatch`, `subdomain_mismatch`, `insecure_origin`, `iframe_denied`, `document_changed`, `revision_mismatch`, `not_found`, `expired`, `replayed`, `vault_locked`, or `unavailable`. The agent never receives the password, account name in the tool result, or fill material.
 
+When `browser_login` observes a human gate (CAPTCHA, verification code, or a page without a fillable login field), it returns `needs_human` and asks the browser owner to pause that tab. The Control UI shows the request; the human claims the tab, finishes the challenge, and hands it back with revalidated origin, document, and login state. See [Browser human takeover](/tools/browser/human-takeover). CAPTCHA/2FA support never stores TOTP seeds or calls a third-party solving service.
+
 ### Trust boundaries
 
 - Agent fill runs only on the local managed or shared Chromium controlled by this Gateway. Browser nodes, sandbox targets, remote CDP URLs, and existing-session profiles are rejected.
@@ -86,6 +88,7 @@ Results are explicit and value-free: `filled`, `needs_approval`, `needs_human`, 
 - While a fill session owns the tab, `act:evaluate`, `act:wait --fn`, screenshots, and every agent click/press/type/fill/select/drag/batch interaction are blocked; text-bearing tool results pass through a broker-owned full-mask scrub that runs even when `logging.redact` is `off`. Submission is available only through the separately approved `browser_login` submit flow. The session persists until the tab navigates, closes, or the approved submit clears the field; it never expires by wall-clock time.
 - OpenClaw cannot isolate the password from page JavaScript or another CDP client attached to the same browser. A page script can read its own input value, and any co-attached CDP client can evaluate in the page. The fill broker reduces OpenClaw's own leak surfaces; it is not a same-machine isolation boundary. Treat a browser profile as trusted for the logins it holds.
 - Document identity comes from the browser's CDP loader id. If the browser cannot expose one, the fill fails closed (`document_identity_unavailable`) instead of using a URL-derived token, so a same-URL reload invalidates the approval.
+- A human takeover is tab-scoped and separate from the fill approval. While the human owns the tab, agent mutations, fills, screenshots, and snapshots are blocked; the panel's sensitive input route never reaches the model or transcript. Handback revalidates the origin and document, so a challenge that redirects to another host cannot be mistaken for the approved login page.
 - Passwords never enter `secret_store_entries`. Fill approvals use the existing operator approval store, and vault audit rows contain only the action, item reference, status, and reason code.
 
 ### Configuration and auditing

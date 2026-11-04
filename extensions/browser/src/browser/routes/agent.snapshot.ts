@@ -23,6 +23,11 @@ import { buildChromeMcpRouteSnapshot } from "../chrome-mcp.snapshot-result.js";
 import { flattenChromeMcpSnapshotToAriaResult } from "../chrome-mcp.snapshot.js";
 import { DEFAULT_BROWSER_SCREENSHOT_TIMEOUT_MS } from "../constants.js";
 import {
+  assertHumanControlAgentAllowed,
+  isHumanControlError,
+  rejectHumanControl,
+} from "../human-control.js";
+import {
   assertBrowserNavigationAllowed,
   assertBrowserNavigationResultAllowed,
 } from "../navigation-guard.js";
@@ -158,6 +163,14 @@ export function registerBrowserAgentSnapshotRoutes(
       ctx,
       targetId,
       run: async ({ profileCtx, tab, cdpUrl, signal, assertCurrent }) => {
+        try {
+          assertHumanControlAgentAllowed({ profile: profileCtx.profile.name, tab, body });
+        } catch (error) {
+          if (isHumanControlError(error)) {
+            return rejectHumanControl(res, error);
+          }
+          throw error;
+        }
         if (getBrowserProfileCapabilities(profileCtx.profile).usesChromeMcp) {
           const ssrfPolicyOpts = browserNavigationPolicyForProfile(ctx, profileCtx);
           await assertBrowserNavigationAllowed({ url, ...ssrfPolicyOpts });
@@ -277,6 +290,14 @@ export function registerBrowserAgentSnapshotRoutes(
       targetId,
       enforceCurrentUrlAllowed: true,
       run: async ({ profileCtx, tab, cdpUrl, signal }) => {
+        try {
+          assertHumanControlAgentAllowed({ profile: profileCtx.profile.name, tab, body });
+        } catch (error) {
+          if (isHumanControlError(error)) {
+            return rejectHumanControl(res, error);
+          }
+          throw error;
+        }
         const jsonScreenshot = (image: Awaited<ReturnType<typeof saveBrowserScreenshot>>) => {
           const { imagePath, imageType: _imageType, ...details } = image;
           res.json({ ok: true, path: imagePath, targetId: tab.targetId, url: tab.url, ...details });
@@ -421,6 +442,14 @@ export function registerBrowserAgentSnapshotRoutes(
             signal,
             timeoutMs: plan.timeoutMs,
           });
+          try {
+            assertHumanControlAgentAllowed({ profile: profileCtx.profile.name, tab });
+          } catch (error) {
+            if (isHumanControlError(error)) {
+              return rejectHumanControl(res, error);
+            }
+            throw error;
+          }
           if (plan.labels && hasActiveVaultFill(tab.targetId)) {
             return jsonError(
               res,

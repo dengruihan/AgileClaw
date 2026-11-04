@@ -8,7 +8,7 @@ import { clearVaultFillSession, registerVaultFillSecret } from "../vault-fill-sc
 import {
   browserNavigationPolicyForProfile,
   readBody,
-  withRouteTabContext,
+  withHumanControlRouteContext,
 } from "./agent.shared.js";
 import type { BrowserRouteRegistrar } from "./types.js";
 import { jsonError, toStringOrEmpty } from "./utils.js";
@@ -46,7 +46,7 @@ const MAX_PASSWORD_LENGTH = 4096;
 const MAX_USERNAME_LENGTH = 512;
 const FILL_ACTION_TIMEOUT_MS = 5_000;
 
-function readOrigin(url: string): ObservedOrigin | undefined {
+export function readVaultOrigin(url: string): ObservedOrigin | undefined {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -105,7 +105,7 @@ async function observeFields(page: Page): Promise<FieldObservation> {
   });
 }
 
-async function documentIdentity(
+export async function documentIdentity(
   page: Page,
 ): Promise<{ documentId: string; frameId: string } | undefined> {
   try {
@@ -182,7 +182,7 @@ async function observeVaultTarget(params: {
   });
   params.signal?.throwIfAborted();
   const url = page.url();
-  const origin = readOrigin(url);
+  const origin = readVaultOrigin(url);
   if (!origin) {
     return { ok: false, status: "needs_human", reasonCode: "unsupported_page" };
   }
@@ -258,7 +258,7 @@ export function registerBrowserVaultRoutes(
   app.post("/vault/observe", async (req, res) => {
     const body = readBody(req);
     const targetId = toStringOrEmpty(body.targetId) || undefined;
-    await withRouteTabContext({
+    await withHumanControlRouteContext({
       req,
       res,
       ctx,
@@ -306,7 +306,7 @@ export function registerBrowserVaultRoutes(
   app.post("/vault/identity", async (req, res) => {
     const body = readBody(req);
     const targetId = toStringOrEmpty(body.targetId) || undefined;
-    await withRouteTabContext({
+    await withHumanControlRouteContext({
       req,
       res,
       ctx,
@@ -334,7 +334,7 @@ export function registerBrowserVaultRoutes(
           ...(navigationPolicy.ssrfPolicy ? { ssrfPolicy: navigationPolicy.ssrfPolicy } : {}),
         });
         const identity = await documentIdentity(page);
-        const origin = readOrigin(page.url());
+        const origin = readVaultOrigin(page.url());
         if (!identity || !origin) {
           res.json({ ok: false, reasonCode: "document_identity_unavailable" });
           return;
@@ -375,7 +375,7 @@ export function registerBrowserVaultRoutes(
     if (!expectedOrigin || !expectedDocumentId || !expectedFrameId || !expectedFieldSignature) {
       return jsonError(res, 400, "Invalid password fill request.");
     }
-    await withRouteTabContext({
+    await withHumanControlRouteContext({
       req,
       res,
       ctx,
@@ -592,7 +592,7 @@ export function registerBrowserVaultRoutes(
     if (!expectedOrigin || !expectedDocumentId || !expectedFrameId || !expectedFieldSignature) {
       return jsonError(res, 400, "Invalid password submit request.");
     }
-    await withRouteTabContext({
+    await withHumanControlRouteContext({
       req,
       res,
       ctx,

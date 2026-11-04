@@ -19,6 +19,11 @@ import {
 import type { BrowserActRequest } from "../client-actions.types.js";
 import { BROWSER_ACT_ERROR_CODES } from "../errors.js";
 import { normalizeBrowserEvaluateFunctionSource } from "../evaluate-source.js";
+import {
+  assertHumanControlAgentAllowed,
+  isHumanControlError,
+  rejectHumanControl,
+} from "../human-control.js";
 import { getBrowserProfileCapabilities } from "../profile-capabilities.js";
 import type { BrowserRouteContext } from "../server-context.js";
 import { clearSnapshotKeysForTab } from "../snapshot-delta-cache.js";
@@ -127,6 +132,18 @@ export function registerBrowserAgentActRoutes(
         // Batch stays guarded because nested actions can read or return page data.
         enforceCurrentUrlAllowed: action.kind !== "resize" && action.kind !== "close",
         run: async ({ cdpUrl, tab, signal, resolveTabUrl, assertCurrent }) => {
+          try {
+            assertHumanControlAgentAllowed({
+              profile: profileCtx.profile.name,
+              tab,
+              body,
+            });
+          } catch (error) {
+            if (isHumanControlError(error)) {
+              return rejectHumanControl(res, error);
+            }
+            throw error;
+          }
           const evaluateEnabled = ctx.state().resolved.evaluateEnabled;
           const navigationPolicy = browserNavigationPolicyForProfile(ctx, profileCtx);
           let verificationDeadline: ReturnType<typeof createExistingSessionDeadline> | undefined;

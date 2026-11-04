@@ -31,6 +31,7 @@ import {
 import type { ResolvedBrowserProfile } from "./config.js";
 import { BROWSER_ERROR_REASONS, BrowserProfileUnavailableError } from "./errors.js";
 import { getExtensionRelayModule } from "./extension-relay.runtime.js";
+import { humanControlRegistry } from "./human-control.js";
 import { getBrowserProfileCapabilities } from "./profile-capabilities.js";
 import {
   CDP_READY_AFTER_LAUNCH_MIN_TIMEOUT_MS,
@@ -643,6 +644,8 @@ export function createProfileAvailability({
   const stopRunningBrowser = async (): Promise<{ stopped: boolean }> => {
     const current = state();
     assertProfileLifecycleContext({ state: current, runtime, configRevision });
+    // A stopped browser cannot honor human ownership; the next start is agent-owned.
+    humanControlRegistry.revokeProfile(profile.name);
     runtime.managedLaunchFailure = undefined;
     const result = await beginProfileTransition({
       state: current,

@@ -13,6 +13,7 @@ export const BROWSER_ACT_ERROR_CODES = {
   evaluateDisabled: "ACT_EVALUATE_DISABLED",
   unsupportedForExistingSession: "ACT_EXISTING_SESSION_UNSUPPORTED",
   targetIdMismatch: "ACT_TARGET_ID_MISMATCH",
+  humanControl: "ACT_HUMAN_CONTROL",
   operationFailed: "ACT_OPERATION_FAILED",
 } as const;
 

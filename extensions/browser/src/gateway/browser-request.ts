@@ -246,11 +246,14 @@ export async function handleBrowserGatewayRequest({
   }
   const cfg = getRuntimeConfig();
   const configuredNode = normalizeOptionalString(cfg.gateway?.nodes?.browser?.node);
+  // Human takeover carries manually typed secrets and a tab ownership capability;
+  // it never crosses the node-proxy trust boundary.
+  const humanControlPath = path === "/human-input" || path.startsWith("/human-control");
   // System-profile listing and import can only run where the local Keychain and
   // Chrome profiles live, so they must never route to a browser node. Force
   // host-local dispatch even when gateway.nodes.browser auto-selects a node.
   const forceHostLocal =
-    Boolean(assertDashboardCurrent) || isBrowserHostLocalRoute(methodRaw, path);
+    Boolean(assertDashboardCurrent) || humanControlPath || isBrowserHostLocalRoute(methodRaw, path);
   if (forceHostLocal && explicitNode) {
     reject(ErrorCodes.INVALID_REQUEST, "this browser route must run on the Gateway host");
     return;

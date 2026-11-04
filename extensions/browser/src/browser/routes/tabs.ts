@@ -5,6 +5,7 @@ import {
   BrowserTargetAmbiguousError,
   toBrowserErrorResponse,
 } from "../errors.js";
+import { humanControlRegistry } from "../human-control.js";
 import {
   assertBrowserNavigationAllowed,
   assertBrowserNavigationResultAllowed,
@@ -202,7 +203,25 @@ export function registerBrowserTabRoutes(app: BrowserRouteRegistrar, ctx: Browse
       navigationPolicy: browserNavigationPolicyForProfile(ctx, profileCtx),
     });
     signal.throwIfAborted();
-    return { running: true, tabs };
+    // A closed tab releases human ownership. Alias migration keeps the lease
+    // attached to the same logical tab across a confident target replacement.
+    humanControlRegistry.retainProfileTabs(
+      profileCtx.profile.name,
+      new Set(tabs.map((tab) => tab.tabId ?? tab.targetId)),
+    );
+    const tabsWithControl = tabs.map((tab) => {
+      const control = humanControlRegistry.status({
+        profile: profileCtx.profile.name,
+        targetId: tab.targetId,
+        ...(tab.tabId ? { tabId: tab.tabId } : {}),
+      });
+      if (control) {
+        // The list is a fresh projection; attach ownership without copying.
+        Object.assign(tab, { control });
+      }
+      return tab;
+    });
+    return { running: true, tabs: tabsWithControl };
   };
 
   const focusTab = async (

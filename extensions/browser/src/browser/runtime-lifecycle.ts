@@ -3,6 +3,7 @@ import {
   getExtensionRelayModule,
   getGatewayExtensionRelayModule,
 } from "./extension-relay.runtime.js";
+import { clearAllHumanControlLeases } from "./human-control.js";
 import { stopBrowserScreencasts } from "./screencast/session.js";
 import type { BrowserServerState } from "./server-context.js";
 import { markBrowserRuntimeStopping } from "./server-context.lifecycle.js";
@@ -46,6 +47,8 @@ async function stopBrowserRuntimeInternal(
     return;
   }
   markBrowserRuntimeStopping(current);
+  // Ownership ends with the runtime; a restarted browser starts with no lease.
+  clearAllHumanControlLeases();
   let firstError: Error | undefined;
 
   // Viewers receive the shutdown code before profile invalidation closes their targets.

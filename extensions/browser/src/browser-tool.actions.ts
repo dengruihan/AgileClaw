@@ -153,6 +153,14 @@ function isChromeStaleTargetError(usesChromeMcp: boolean, err: unknown): boolean
   return usesChromeMcp && isTabNotFound;
 }
 
+function isHumanControlActError(error: unknown): boolean {
+  return (
+    Boolean(error) &&
+    typeof error === "object" &&
+    (error as { code?: unknown }).code === "ACT_HUMAN_CONTROL"
+  );
+}
+
 function canRetryChromeActAfterSoleTargetRefresh(request: BrowserActRequest): boolean {
   if (request.kind !== "wait" || normalizeNonNegativeDurationMs(request.timeMs) === undefined) {
     return false;
@@ -439,6 +447,9 @@ export async function executeActAction(params: {
   try {
     dispatched = await dispatchAct(effectiveRequest);
   } catch (err) {
+    if (isHumanControlActError(err)) {
+      return jsonResult({ status: "needs_human", reasonCode: "human_control" });
+    }
     const proxyRoute = proxyRequest?.route();
     const usesChromeMcp = proxyRequest
       ? proxyRoute?.status === "resolved" && proxyRoute.driver === "existing-session"
