@@ -51,6 +51,7 @@ import {
 import { migrateSessionWatchCursorProvenance } from "./openclaw-state-db-session-watch-migration.js";
 import { isUninitializedNativeStartupDatabase } from "./openclaw-state-db-startup-checkpoint.js";
 import * as retirements from "./openclaw-state-db-table-retirements.js";
+import { repairVaultAuditActionConstraint } from "./openclaw-state-db-vault-audit-repair.js";
 import { describeAgentPathMigration, warnAgentPathMigration } from "./openclaw-state-db.paths.js";
 import { assertOpenClawStateWriteAllowed } from "./openclaw-state-ownership.js";
 import { getOpenClawStateRuntimeSchema } from "./openclaw-state-schema-compatibility.js";
@@ -104,6 +105,9 @@ export function ensureOpenClawStateRuntimeSchema(
           (initialization.kind === "fresh" && isUninitializedNativeStartupDatabase(db));
         if (previousVersion === OPENCLAW_STATE_SCHEMA_VERSION) {
           assertNoLegacyStateRuntimeRepair(db, pathname);
+          const vaultAuditChanges = repairVaultAuditActionConstraint(db)
+            ? ["Repaired shared-state vault audit action constraint"]
+            : [];
           const indexes = verifyAndRepairCanonicalSqliteIndexes(
             db,
             pathname,
@@ -121,8 +125,11 @@ export function ensureOpenClawStateRuntimeSchema(
           assertCurrentStateRuntimeSchema(db, pathname);
           writeCurrentStateSchemaMetadata(db, now);
           return indexes.length > 0
-            ? [`Rebuilt canonical shared-state SQLite indexes (${indexes.length})`]
-            : [];
+            ? [
+                ...vaultAuditChanges,
+                `Rebuilt canonical shared-state SQLite indexes (${indexes.length})`,
+              ]
+            : vaultAuditChanges;
         }
 
         // Older schemas still need atomic content transforms before retiring their columns.
@@ -140,6 +147,9 @@ export function ensureOpenClawStateRuntimeSchema(
         }
         const pathMigration = migrateAgentDatabaseRelativePaths(db, previousVersion, pathname);
         changes.push(...describeAgentPathMigration(pathMigration));
+        if (repairVaultAuditActionConstraint(db)) {
+          changes.push("Repaired shared-state vault audit action constraint");
+        }
         ensureAdditiveStateColumns(db, "repair");
         for (const migration of versionedStateMigrations) {
           if (migration.migrate(db, previousVersion)) {

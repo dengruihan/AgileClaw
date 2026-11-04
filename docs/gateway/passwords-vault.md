@@ -101,6 +101,7 @@ When `browser_login` observes a human gate (CAPTCHA, verification code, or a pag
 - Database backups contain only ciphertext. A backup without the master passphrase cannot decrypt passwords or notes. This is intentional: keep the passphrase separately if you need to restore a backup.
 - Git push backups omit the vault tables through the credential-table redaction policy, along with `secret_store_entries`.
 - Restoring a database does not restore an unlocked state. The vault starts locked and the worker holds no key after restart.
+- Updating from the first vault release upgrades the value-free audit table in place during shared-state schema admission. Existing audit rows, their sequence, and the audit index are retained; rolling back to that build needs the verified pre-update backup. See the [versioning contract](/reference/database-schemas/versioning).
 
 ## What this release does not do
 

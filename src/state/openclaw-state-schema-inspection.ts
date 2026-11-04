@@ -7,6 +7,10 @@ import {
 import { SqliteSchemaMismatchError } from "../infra/sqlite-schema-issues.js";
 import { assertOpenClawStateDatabaseOwner } from "./openclaw-state-db-maintenance.js";
 import {
+  isVaultAuditActionDefinitionIssue,
+  needsVaultAuditActionRepair,
+} from "./openclaw-state-db-vault-audit-repair.js";
+import {
   getOpenClawStateRuntimeSchema,
   isOpenClawStateFirstUseSchemaIssue,
   isOpenClawStateStartupRepairableSchemaIssue,
@@ -50,12 +54,14 @@ export function inspectCurrentStateStartupSchema(
       readTable,
     ),
   ]);
+  const vaultAuditRepairable = needsVaultAuditActionRepair(database);
+  const isRepairable = (issue: SqliteSchemaIssue) =>
+    isOpenClawStateStartupRepairableSchemaIssue(issue) ||
+    (vaultAuditRepairable && isVaultAuditActionDefinitionIssue(issue));
   return {
     blockingIssues: issues.filter(
-      (issue) =>
-        !isOpenClawStateStartupRepairableSchemaIssue(issue) &&
-        !isOpenClawStateFirstUseSchemaIssue(issue),
+      (issue) => !isRepairable(issue) && !isOpenClawStateFirstUseSchemaIssue(issue),
     ),
-    startupRepairableIssues: issues.filter(isOpenClawStateStartupRepairableSchemaIssue),
+    startupRepairableIssues: issues.filter(isRepairable),
   };
 }
