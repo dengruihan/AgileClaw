@@ -5,6 +5,7 @@ import { buildControlUiSessionPath } from "@openclaw/session-url-contract";
 import type { WebPushNotificationCategory } from "../../packages/gateway-protocol/src/schema/push.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { createCronExecutionId } from "../cron/run-id.js";
+import { lookupCronRunExecSource } from "../infra/cron-run-exec-source.js";
 import {
   isWebPushQuietHours,
   normalizeWebPushDisplayLabel,
@@ -17,6 +18,7 @@ import {
   type BoundWebPushSubscription,
 } from "../infra/push-web.js";
 import { createSubsystemLogger, type SubsystemLogger } from "../logging/subsystem.js";
+import { normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.js";
 import { isTranscriptOnlyOpenClawAssistantMessage } from "../shared/transcript-only-openclaw-assistant.js";
 import { resolveControlUiWebPushUrl } from "./control-ui-shared.js";
 import { QUESTIONS_SCOPE } from "./method-scopes.js";
@@ -42,6 +44,13 @@ type EventNotification = {
   path?: string;
 };
 
+type FocusedSessionViewers = {
+  isFocusedForIdentity: (
+    identity: { userProfileId: string | null; deviceId: string },
+    sessionKeys: ReadonlySet<string>,
+  ) => boolean;
+};
+
 export type HumanMentionWebPush = {
   id: string;
   recipientProfileId: string;
@@ -52,6 +61,34 @@ export type HumanMentionWebPush = {
   prepare: () => Promise<void>;
   isCurrent: () => boolean;
 };
+
+/** Mirrors the canonical viewer declarations so focused keys compare with completion scope. */
+function canonicalFocusedSessionKey(sessionKey: string, agentId: string | undefined): string {
+  return parseAgentSessionKey(sessionKey) || !agentId
+    ? sessionKey
+    : `agent:${normalizeAgentId(agentId)}:${sessionKey}`;
+}
+
+function resolveCompletedSessionKeys(
+  payload: unknown,
+  opts: GatewayBroadcastOpts | undefined,
+  agentId: string | undefined,
+): Set<string> {
+  const keys = new Set<string>();
+  for (const key of opts?.sessionKeys ?? []) {
+    const trimmed = key.trim();
+    if (trimmed) {
+      keys.add(canonicalFocusedSessionKey(trimmed, agentId));
+    }
+  }
+  const payloadSessionKey = isRecord(payload)
+    ? normalizeOptionalString(payload.sessionKey)
+    : undefined;
+  if (payloadSessionKey) {
+    keys.add(canonicalFocusedSessionKey(payloadSessionKey, agentId));
+  }
+  return keys;
+}
 
 function resolveEventWebPushNotification(
   event: string,
@@ -122,6 +159,8 @@ export function createEventWebPushDelivery(params: {
   getRuntimeConfig: () => OpenClawConfig;
   log?: Pick<SubsystemLogger, "warn">;
   stateDir?: string;
+  /** Current per-connection focus declarations; undefined before Gateway live state exists. */
+  getFocusedSessionViewers?: () => FocusedSessionViewers | undefined;
 }) {
   const log = params.log ?? defaultLog;
   const deliver = (
@@ -130,15 +169,25 @@ export function createEventWebPushDelivery(params: {
     payload?: unknown,
     opts?: GatewayBroadcastOpts,
     mention?: HumanMentionWebPush,
+    /** Captured while the completion event is produced, before the run source clears. */
+    notifyOnComplete = true,
   ): void => {
+    if (!notifyOnComplete) {
+      return;
+    }
+    const deliveryAgentId = normalizeOptionalString(
+      opts?.agentId ?? (isRecord(payload) ? payload.agentId : undefined),
+    );
+    const completedSessionKeys =
+      notification.category === "agent-finished"
+        ? resolveCompletedSessionKeys(payload, opts, deliveryAgentId)
+        : undefined;
     void (async () => {
       if (!(await hasBoundWebPushSubscriptions(params.stateDir))) {
         return;
       }
       const sender = await prepareWebPushNotificationSender(params.stateDir);
-      const agentId = normalizeOptionalString(
-        opts?.agentId ?? (isRecord(payload) ? payload.agentId : undefined),
-      );
+      const agentId = deliveryAgentId;
       const sessionKeys = opts?.sessionKeys ?? [];
       const groupedResults = await withCurrentWebPushAuthority(
         { ...params, sessionKeys, agentId, preparePublication: mention?.prepare },
@@ -180,6 +229,20 @@ export function createEventWebPushDelivery(params: {
           >();
           for (const target of targets) {
             if (mention && target.userProfileId !== recipientProfileId) {
+              continue;
+            }
+            if (
+              completedSessionKeys &&
+              params.getFocusedSessionViewers?.()?.isFocusedForIdentity(
+                {
+                  userProfileId: target.userProfileId,
+                  deviceId: target.subscription.deviceId,
+                },
+                completedSessionKeys,
+              )
+            ) {
+              // This recipient is already rendering the completed session in a focused
+              // window. Only the completion push is suppressed; unread state is untouched.
               continue;
             }
             const { preferences } = target;
@@ -276,7 +339,19 @@ export function createEventWebPushDelivery(params: {
     handleEvent(event: string, payload: unknown, opts?: GatewayBroadcastOpts): void {
       const notification = resolveEventWebPushNotification(event, payload);
       if (notification) {
-        deliver(notification, event, payload, opts);
+        // Capture the cron run fact synchronously; the run clears its exec source at settle.
+        const runId =
+          notification.category === "agent-finished" && isRecord(payload)
+            ? normalizeOptionalString(payload.runId)
+            : undefined;
+        deliver(
+          notification,
+          event,
+          payload,
+          opts,
+          undefined,
+          lookupCronRunExecSource(runId)?.notifyOnComplete !== false,
+        );
       }
     },
     deliverMention(this: void, mention: HumanMentionWebPush): void {

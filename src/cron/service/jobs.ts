@@ -571,6 +571,7 @@ function mergeCronDelivery(
     threadId: existing?.threadId,
     accountId: existing?.accountId,
     bestEffort: existing?.bestEffort,
+    notifyOnComplete: existing?.notifyOnComplete,
     completionDestination: existing?.completionDestination,
     failureDestination: existing?.failureDestination,
   };
@@ -606,6 +607,9 @@ function mergeCronDelivery(
   }
   if (typeof patch.bestEffort === "boolean") {
     next.bestEffort = patch.bestEffort;
+  }
+  if (typeof patch.notifyOnComplete === "boolean") {
+    next.notifyOnComplete = patch.notifyOnComplete;
   }
   if (hasCompletionDestinationPatch) {
     if (patch.completionDestination == null) {
@@ -663,6 +667,7 @@ function mergeCronDelivery(
     next.threadId === undefined &&
     next.accountId === undefined &&
     next.bestEffort === undefined &&
+    next.notifyOnComplete === undefined &&
     next.completionDestination === undefined &&
     next.failureDestination === undefined
   ) {

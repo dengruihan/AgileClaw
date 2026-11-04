@@ -53,6 +53,8 @@ By default, approval request and resolution notifications are enabled, and every
 
 Selecting an attention notification opens its question, conversation, or automation run on the Gateway that produced it. **Agent finished** waits for completion. A parent waiting for child agents does not count as finished. Automation failures use **Scheduled task failures**, without also generating a **Background task failures** alert for the same run.
 
+**Agent finished** also respects where you are looking. The Control UI reports, per connection, whether its window currently owns focus and which sessions it is rendering. If the completed session is already visible in a focused Control UI window for your user profile (or for the same browser device when no profile is signed in), the Gateway skips that completion push. A completion in a different session still notifies you, and a focused parent session does not suppress a child session's completion. Hidden tabs send an empty viewing set, disconnected or unknown connections never suppress anything, and focus is never published as presence or used for authorization. Approvals, questions, mentions, automation failures, and unread badges are unaffected. An automation created with `delivery.notifyOnComplete: false` suppresses its own completion push regardless of focus; failures still notify.
+
 The detail levels are:
 
 - **Private** — generic attention text only.

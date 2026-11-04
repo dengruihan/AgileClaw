@@ -530,6 +530,7 @@ describe("cron store", () => {
       threadId: "topic-9",
       accountId: "bot-1",
       bestEffort: true,
+      notifyOnComplete: false,
       completionDestination: {
         mode: "webhook",
         to: "https://example.invalid/legacy-completion",
@@ -545,6 +546,7 @@ describe("cron store", () => {
       threadId: "topic-9",
       accountId: "bot-1",
       bestEffort: true,
+      notifyOnComplete: false,
       completionDestination: {
         mode: "webhook",
         to: "https://example.invalid/legacy-completion",

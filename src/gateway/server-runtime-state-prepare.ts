@@ -471,6 +471,7 @@ export async function prepareGatewayKernelState(params: {
       bootId,
       cfg: cfgAtStart,
       getRuntimeConfig,
+      getSessionViewerPresence: () => runtimeStateRef.current?.sessionViewerPresence,
     }),
   );
   const transportBridge = createGatewayTransportBridge();

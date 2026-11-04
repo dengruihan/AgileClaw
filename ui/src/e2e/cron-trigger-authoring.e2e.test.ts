@@ -120,6 +120,25 @@ suite.define(() => {
         await page.locator('[data-test-id="cron-new-task"]').click();
         await page.locator("#cron-name").fill("Conditional interval");
         await page.locator("#cron-payload-text").fill("Run when the condition matches");
+        const notifyOnCompleteRow = page
+          .locator(".settings-row--toggle")
+          .filter({ hasText: "Notify when complete" });
+        await notifyOnCompleteRow.evaluate((element) =>
+          element.scrollIntoView({ block: "center" }),
+        );
+        if (proofDirectory) {
+          await page.screenshot({
+            animations: "disabled",
+            path: path.join(proofDirectory, `${proofStage}-00-notify-on-complete.png`),
+          });
+        }
+        await expect
+          .poll(() =>
+            notifyOnCompleteRow
+              .locator("wa-switch")
+              .evaluate((element) => (element as HTMLElement & { checked: boolean }).checked),
+          )
+          .toBe(true);
         await selectSeconds(page);
         await page.locator("#cron-every-amount").fill("5");
         await page.locator("details.cron-advanced > summary").click();

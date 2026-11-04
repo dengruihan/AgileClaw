@@ -56,6 +56,7 @@ export type CronFormState = {
   deliveryTo: string;
   deliveryAccountId: string;
   deliveryBestEffort: boolean;
+  deliveryNotifyOnComplete: boolean;
   deliveryThreadId: CronDelivery["threadId"] | undefined;
   deliveryCompletionDestination: CronFormAnnounceDelivery["completionDestination"] | undefined;
   deliveryFailureDestination: CronDelivery["failureDestination"] | undefined;

@@ -12,6 +12,8 @@ export const SessionsViewerPresenceSetParamsSchema = closedObject({
   sessionKeys: Type.Array(ChatSendSessionKeyString, {
     maxItems: SESSION_VIEWER_PRESENCE_MAX_KEYS,
   }),
+  /** Whether this connection's window currently owns user focus. Private to the connection. */
+  focused: Type.Optional(Type.Boolean()),
 });
 
 /** Canonical session keys retained for this connection's viewer presence. */

@@ -476,6 +476,27 @@ describe("normalizeCronJobCreate", () => {
     expect(agentDelivery(input)).toEqual(expected);
   });
 
+  it.each([
+    [
+      { mode: "none", notifyOnComplete: " false " },
+      { mode: "none", notifyOnComplete: false },
+    ],
+    [
+      { mode: "none", notifyOnComplete: "TRUE" },
+      { mode: "none", notifyOnComplete: true },
+    ],
+    [{ mode: "none", notifyOnComplete: "maybe" }, { mode: "none" }],
+    [{ mode: "none", notifyOnComplete: null }, { mode: "none" }],
+  ])("normalizes the completion notification toggle %j", (input, expected) => {
+    expect(agentDelivery(input)).toEqual(expected);
+  });
+
+  it("accepts a partial completion notification patch without inventing a mode", () => {
+    const patch = normalizePatch({ delivery: { notifyOnComplete: false } });
+    expect(patch.delivery).toEqual({ notifyOnComplete: false });
+    expect(validateCronUpdateParams({ id: "job", patch })).toBe(true);
+  });
+
   it.each<unknown>(["bogus", null, undefined])(
     "leaves invalid delivery mode %s for validation",
     (mode) => {

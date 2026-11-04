@@ -325,6 +325,45 @@ describe("cron view editor", () => {
     );
   });
 
+  it.each(["announce", "webhook", "none"] as const)(
+    "renders and toggles completion notifications for %s delivery",
+    (deliveryMode) => {
+      const onFormChange = vi.fn();
+      const container = renderView({
+        createOpen: true,
+        form: { ...DEFAULT_CRON_FORM, deliveryMode },
+        onFormChange,
+      });
+
+      const toggle = findToggleByLabel(container, "Notify when complete") as
+        | (HTMLElement & {
+            checked: boolean;
+          })
+        | null;
+      expect(toggle).not.toBeNull();
+      expect(container.textContent).toContain(
+        "A focused window that is already showing the run's session stays quiet.",
+      );
+      toggle!.checked = false;
+      toggle!.dispatchEvent(new Event("change", { bubbles: true }));
+      expect(onFormChange).toHaveBeenCalledWith({ deliveryNotifyOnComplete: false });
+    },
+  );
+
+  it("hides completion notifications for main-session and non-agent payloads", () => {
+    const main = renderView({
+      createOpen: true,
+      form: { ...DEFAULT_CRON_FORM, sessionTarget: "main", payloadKind: "systemEvent" },
+    });
+    expect(findToggleByLabel(main, "Notify when complete")).toBeNull();
+
+    const command = renderView({
+      createOpen: true,
+      form: { ...DEFAULT_CRON_FORM, payloadKind: "command" },
+    });
+    expect(findToggleByLabel(command, "Notify when complete")).toBeNull();
+  });
+
   it("shows model and reasoning rows only for agent-turn payloads", () => {
     const agentTurn = renderView({
       createOpen: true,

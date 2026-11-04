@@ -276,6 +276,12 @@ function createCronDeliverySchema(): TSchema {
               "Omitted/false requires requested delivery for successful completion; true lets successful execution complete and delete a one-shot despite failed/unknown delivery. Intentional silence succeeds in either mode.",
           }),
         ),
+        notifyOnComplete: Type.Optional(
+          Type.Boolean({
+            description:
+              "Default true. Sends the browser Agent finished notification for attributable scheduled agent runs; false suppresses only that completion push. delivery.mode, run output, and failure alerts are unchanged. Main-session enqueue and command/script completions are not linked to the job.",
+          }),
+        ),
         accountId: deliveryStringSchema("Delivery account"),
         failureDestination: Type.Optional(
           Type.Union([failureDestinationObject, Type.Null()], {

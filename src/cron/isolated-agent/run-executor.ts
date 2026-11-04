@@ -246,6 +246,7 @@ function createCronPromptExecutor(
         jobId: params.job.id,
         jobConfigRevision: resolveCronJobConfigRevision(params.job),
         jobName: params.job.name,
+        notifyOnComplete: params.job.delivery?.notifyOnComplete !== false,
       });
     } catch {
       // Non-canonicalizable job config: no grant registration for this run.

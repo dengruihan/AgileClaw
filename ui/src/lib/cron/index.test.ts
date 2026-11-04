@@ -222,6 +222,33 @@ describe("cron controller", () => {
     });
   });
 
+  it("persists a disabled completion notification toggle and reloads it", async () => {
+    const created = await createCronSubmitHarness("quiet", {
+      form: {
+        name: "Quiet",
+        payloadText: "run",
+        deliveryMode: "none",
+        deliveryNotifyOnComplete: false,
+      },
+    }).submit();
+    expect(requestPayload(created.call).delivery).toEqual({
+      mode: "none",
+      notifyOnComplete: false,
+    });
+
+    const source = createCronJob({
+      id: "quiet-edit",
+      name: "Quiet edit",
+      delivery: { mode: "none", notifyOnComplete: false },
+    });
+    const edit = createCronEditHarness(source);
+    expect(edit.state.cronForm.deliveryNotifyOnComplete).toBe(false);
+
+    edit.state.cronForm.deliveryNotifyOnComplete = true;
+    const patch = requestPatch(await edit.submit());
+    expect(patch.delivery).toMatchObject({ mode: "none", notifyOnComplete: true });
+  });
+
   it.each([{ job: { id: "wrapped" } }, { id: "bare" }])(
     "returns the saved id from %j",
     async (response) => {
@@ -1114,7 +1141,10 @@ describe("cron controller", () => {
     startCronClone(cloneState, sourceJob);
     await addCronJob(cloneState);
     const addPayload = requestPayload(findRequestCall(addRequest.mock.calls, "cron.add"));
-    expect(addPayload.delivery).toEqual(sourceJob.delivery);
+    expect(addPayload.delivery).toEqual({
+      ...sourceJob.delivery,
+      notifyOnComplete: true,
+    });
     expect(addPayload.sessionKey).toBe("agent:ops:main");
     expect(validateCronAddParams(addPayload)).toBe(true);
 
@@ -1126,6 +1156,7 @@ describe("cron controller", () => {
     const updatePayload = requestPayload(findRequestCall(updateRequest.mock.calls, "cron.update"));
     expect(requireRecord(updatePayload.patch, "cron.update patch").delivery).toEqual({
       ...sourceJob.delivery,
+      notifyOnComplete: true,
       threadId: "thread-42",
     });
     expect(validateCronUpdateParams(updatePayload)).toBe(true);

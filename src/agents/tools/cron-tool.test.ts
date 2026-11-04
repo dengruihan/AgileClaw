@@ -46,6 +46,7 @@ describe("cron tool", () => {
     to?: string;
     accountId?: string;
     threadId?: string | number;
+    notifyOnComplete?: boolean;
   };
 
   function createTestCronTool(
@@ -1327,6 +1328,15 @@ describe("cron tool", () => {
         enabled: true,
       }),
     ).rejects.toThrow("job required");
+  });
+
+  it("passes an explicit completion notification toggle through add", async () => {
+    const delivery = await executeAddAndReadDelivery({
+      callId: "call-notify-on-complete",
+      agentSessionKey: "agent:main:discord:dm:buddy",
+      delivery: { mode: "none", notifyOnComplete: false },
+    });
+    expect(delivery).toEqual({ mode: "none", notifyOnComplete: false });
   });
 
   it("does not infer announce delivery when mode is webhook", async () => {
