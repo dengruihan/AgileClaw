@@ -217,6 +217,22 @@ Older same-version readers can ignore the nullable column and open the database.
 Older ACP writers do not record this supersession; complete pending migrations
 before returning to an older writer when that protection is needed.
 
+The password vault audit table keeps state schema 20 while adding the `fill`
+action to its value-free `action` CHECK constraint. That CHECK is stored as part
+of the column definition, so a database created by the first vault release keeps
+the same numeric version but no longer matches the current canonical shape.
+Writable shared-state admission recognizes exactly that shipped table
+definition and rebuilds the table in place inside the schema transaction,
+copying every audit row, restoring the `AUTOINCREMENT` high-water mark, and
+recreating its canonical index. Gateway startup and
+`openclaw database preflight` report that exact difference as
+startup-repairable, and `openclaw doctor --fix` runs the same repair. Any other
+column, constraint, or index difference stays a mismatch and is refused instead
+of rebuilt, and a later failure in the same transaction leaves the original
+table and rows intact. No schema-version bump is required. The rebuilt
+definition admits `fill`, so rolling back to the previous build needs the
+verified pre-update backup rather than a binary-only rollback.
+
 [Cold transcript storage](/reference/database-schemas/agent-schema-history#cold-transcript-storage)
 requires agent schema 20 even though it adds a companion table. Older readers
 would interpret extracted transcript rows as missing history and cannot safely

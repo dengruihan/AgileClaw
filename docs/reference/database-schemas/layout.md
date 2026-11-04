@@ -96,8 +96,11 @@ The shared state database holds the personal website password vault in
 `vault_meta`, and `vault_audit_events`. Entry metadata is queryable while the
 vault is locked; password and notes values exist only as authenticated ciphertext
 in `vault_entry_secrets`. The vault is independent of `secret_store_entries` and
-is created on first use by the dedicated vault worker. See
-[Password vault](/gateway/passwords-vault).
+is created on first use by the dedicated vault worker. A build that adds an
+audit action rebuilds `vault_audit_events` in place during writable shared-state
+admission, preserving audit rows, the sequence high-water mark, and indexes. See
+[Password vault](/gateway/passwords-vault) and the
+[versioning contract](/reference/database-schemas/versioning).
 
 ### Plugin state listing index
 

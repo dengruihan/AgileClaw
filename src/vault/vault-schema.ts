@@ -31,46 +31,16 @@ function vaultTableSql(table: string): string {
   });
 }
 
-/** First-use additive install for the personal password vault tables. */
+/**
+ * First-use additive install for the personal password vault tables. The shared
+ * state admission owns same-version shape repairs, including the vault audit
+ * action constraint, so this only creates absent tables and indexes.
+ */
 export function ensureVaultSchema(database: DatabaseSync): void {
   for (const table of VAULT_TABLE_NAMES) {
     database.exec(vaultTableSql(table)); // sqlite-allow-raw -- Canonical feature-owned additive DDL only.
   }
-  upgradeVaultAuditActions(database);
   for (const index of VAULT_INDEX_SQL) {
     database.exec(`${index};`); // sqlite-allow-raw -- Canonical feature-owned additive DDL only.
-  }
-}
-
-const VAULT_AUDIT_COLUMNS =
-  "sequence, event_id, owner_kind, owner_id, action, status, item_ref, reason_code, occurred_at_ms";
-
-/**
- * M35 shipped the audit table before agent fill existed. New audit actions are
- * part of the table's CHECK constraint, so an already-created table needs a
- * copy-and-rebuild migration. Fresh databases already contain the full list.
- */
-function upgradeVaultAuditActions(database: DatabaseSync): void {
-  const row = database
-    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vault_audit_events'")
-    .get() as { sql?: unknown } | undefined;
-  const sql = typeof row?.sql === "string" ? row.sql : "";
-  if (sql.length === 0 || sql.includes("'fill'")) {
-    return;
-  }
-  database.exec("BEGIN IMMEDIATE"); // sqlite-allow-raw -- Feature-owned additive migration.
-  try {
-    database.exec("DROP TABLE IF EXISTS vault_audit_events_legacy"); // sqlite-allow-raw
-    database.exec("ALTER TABLE vault_audit_events RENAME TO vault_audit_events_legacy"); // sqlite-allow-raw
-    database.exec(vaultTableSql("vault_audit_events")); // sqlite-allow-raw
-    database.exec(
-      `INSERT INTO vault_audit_events (${VAULT_AUDIT_COLUMNS}) ` +
-        `SELECT ${VAULT_AUDIT_COLUMNS} FROM vault_audit_events_legacy`,
-    ); // sqlite-allow-raw
-    database.exec("DROP TABLE vault_audit_events_legacy"); // sqlite-allow-raw
-    database.exec("COMMIT"); // sqlite-allow-raw
-  } catch (error) {
-    database.exec("ROLLBACK"); // sqlite-allow-raw
-    throw error;
   }
 }

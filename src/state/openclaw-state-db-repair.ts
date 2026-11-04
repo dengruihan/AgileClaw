@@ -69,6 +69,7 @@ import {
 import * as sessionWatchMigration from "./openclaw-state-db-session-watch-migration.js";
 import * as retirements from "./openclaw-state-db-table-retirements.js";
 import { recoverOrphanTaskDeliveryRows } from "./openclaw-state-db-task-delivery-recovery.js";
+import { repairVaultAuditActionConstraint } from "./openclaw-state-db-vault-audit-repair.js";
 import { describeAgentPathMigration } from "./openclaw-state-db.paths.js";
 import { assertOpenClawStateWriteAllowed } from "./openclaw-state-ownership.js";
 import { getOpenClawStateRuntimeSchema } from "./openclaw-state-schema-compatibility.js";
@@ -192,6 +193,9 @@ export function repairStateSchema(
       pathname,
       () => {
         applied.push(...recoverOrphanTaskDeliveryRows(db, pathname));
+        if (repairVaultAuditActionConstraint(db)) {
+          applied.push("Repaired shared-state vault audit action constraint");
+        }
         const previousVersion = readStateSchemaMigrationVersion(db);
         const includeAgentDeletionJournal =
           tableExists(db, "agent_deletion_journal") || hasPreJournalStateSchema(db);
