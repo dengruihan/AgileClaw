@@ -2,15 +2,15 @@ import { html, nothing } from "lit";
 import { t } from "../../../i18n/index.ts";
 import { renderCompactAttachmentCard } from "./chat-attachment-card.ts";
 import { createAttachmentDownloadHandler } from "./chat-attachment-download.ts";
-import "./chat-audio-player.ts";
-import "./chat-svg-attachment.ts";
-import "./chat-video-player.ts";
 import {
   isCrossOriginHttpSource,
   safeAttachmentHref,
   safePlainTextAttachmentHref,
   safeMediaAttachmentHref,
 } from "./chat-attachment-href.ts";
+import "./chat-audio-player.ts";
+import "./chat-svg-attachment.ts";
+import "./chat-video-player.ts";
 import {
   renderChatAttachmentAdmission,
   shouldDeferAttachmentCard,
@@ -48,6 +48,7 @@ import {
   type ImageRenderOptions,
 } from "./chat-message-media.ts";
 import { renderMessageVideoPreview } from "./chat-message-video-preview.ts";
+import { resolveAttachmentOfficePreview } from "./chat-office-attachment.ts";
 import { isSentPastedTextAttachment } from "./chat-pasted-text.ts";
 import { isSentCommentAttachment, renderSentCommentAttachments } from "./chat-sent-comments.ts";
 import type { AttachmentSidebarState, SidebarContent } from "./chat-sidebar-content-types.ts";
@@ -212,7 +213,7 @@ function resolveManagedAttachmentAvailability(
           sessionKey,
           artifactId: attachment.artifactId!,
         });
-        const url = result?.url.trim();
+        const url = result?.url?.trim();
         if (!url) {
           availability = handleResolutionFailure();
         } else {
@@ -540,6 +541,10 @@ function renderMessageAttachmentContent(
     isLocalAssistantAttachmentSource(attachment.url) ||
     (isManagedOutgoingMediaSource(attachment.url) &&
       Boolean(attachment.artifactId && resolveArtifactDownload));
+  // Office documents preview through the Gateway-owned parser on open only.
+  const officePreview = pastedText
+    ? { legacy: false }
+    : resolveAttachmentOfficePreview(attachment, options);
   const openAttachmentSidebar =
     onOpenSidebar && (hasLiveSidebarSource || safeAttachmentUrl || pastedText)
       ? () =>
@@ -558,6 +563,11 @@ function renderMessageAttachmentContent(
             width: media?.width,
             height: media?.height,
             voiceNote: attachment.isVoiceNote === true,
+            ...(officePreview.office ? { office: officePreview.office } : {}),
+            ...(officePreview.legacy
+              ? { previewNotice: t("chat.attachments.legacyOfficePreview") }
+              : {}),
+            ...(onDownload ? { downloadNow: onDownload } : {}),
             ...(hasLiveSidebarSource
               ? {
                   resolveSource: (sidebarUpdate, runtime): AttachmentSidebarState => {

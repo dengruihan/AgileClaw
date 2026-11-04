@@ -245,6 +245,23 @@ Check the response MIME type: a thumbnail is `image/png` even when the
 artifact uses another image format. Omit the query for full-size downloads;
 the RPC schema and WebSocket base64 response are unchanged.
 
+## Preview Office artifacts
+
+Pass `preview: "office"` to `artifacts.download` when the client wants a
+structured preview instead of a download. The Gateway reads the bounded
+original (8 MiB) under the same transcript membership and ownership checks,
+parses it in the shared Office worker, and returns an optional `preview`
+object beside the artifact summary; no download URL or base64 payload is
+issued for that request. `preview.state` is `ready` with the worksheet,
+document, or slide payload, or `unsupported` (legacy `.xls`/`.doc`/`.ppt` and
+non-Office sources), `too-large`, or `invalid`. Without the parameter, the
+normal download response never parses file content.
+
+Local and uploaded document attachments use the same parser through the
+optional `preview=office` parameter on the Control UI assistant-media
+metadata request. That route keeps its existing read authorization and returns
+the structured payload only for that opt-in request.
+
 Use the active Gateway's HTTPS origin and configured Control UI base path. TLS
 can terminate at the Gateway or its reverse proxy; the proxy must forward
 `/api/artifacts/download/` as well as WebSocket upgrades. A `wss://` endpoint

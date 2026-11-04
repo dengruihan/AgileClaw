@@ -93,7 +93,7 @@ async function resolveFreshAttachmentDownloadUrl(
       sessionKey,
       artifactId: attachment.artifactId,
     });
-    const url = result?.url.trim();
+    const url = result?.url?.trim();
     return url ? applyResourceBasePath(url, options.resourceBasePath) : null;
   }
   retryAssistantAttachmentAvailability(source, options);

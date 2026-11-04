@@ -902,4 +902,115 @@ describe("attachment sidebar source ownership", () => {
     );
     container.remove();
   });
+
+  it("requests an opt-in Office preview when a managed workbook attachment opens", async () => {
+    const attachmentId = "11111111-1111-4111-8111-111111111111";
+    const artifactId = `artifact_managed_media_${attachmentId}`;
+    const source = `/api/chat/media/outgoing/agent%3Amain%3Amain/${attachmentId}/full`;
+    const officePreview = {
+      kind: "office",
+      format: "xlsx",
+      state: "ready",
+      preview: {
+        format: "xlsx",
+        sheets: [{ name: "Budget", rowCount: 1, columnCount: 1, rows: [["Rent"]] }],
+      },
+    };
+    const resolveArtifactDownload = vi.fn(
+      async (params: { preview?: "office" } | { variant?: string }) =>
+        "preview" in params && params.preview === "office"
+          ? { preview: officePreview }
+          : { url: `${source}?mediaTicket=ticket-workbook` },
+    );
+    const onOpenSidebar = vi.fn();
+    const container = document.body.appendChild(document.createElement("div"));
+    render(
+      renderAssistantAttachments(
+        [
+          {
+            type: "attachment",
+            attachment: {
+              kind: "document",
+              label: "applications.xlsx",
+              mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              url: source,
+              artifactId,
+            },
+          },
+        ],
+        { resolveArtifactDownload },
+        onOpenSidebar,
+      ),
+      container,
+    );
+
+    const expand = await vi.waitFor(() =>
+      expectDefined(
+        container.querySelector<HTMLButtonElement>(".chat-assistant-attachment-card__expand"),
+        "available workbook attachment",
+      ),
+    );
+    expand.click();
+    const content = onOpenSidebar.mock.calls.at(-1)?.[0] as AttachmentSidebarContent;
+    expect(content.office?.format).toBe("xlsx");
+    expect(content.downloadNow).toBeTypeOf("function");
+    const preview = await content.office?.load(new AbortController().signal);
+    expect(preview).toMatchObject({ kind: "office", format: "xlsx", state: "ready" });
+    expect(resolveArtifactDownload).toHaveBeenCalledWith(
+      { sessionKey: "agent:main:main", artifactId, preview: "office" },
+      expect.any(AbortSignal),
+    );
+    container.remove();
+  });
+
+  it("keeps a legacy Office attachment metadata-only with an explicit download", async () => {
+    const source = "/tmp/openclaw/ledger.xls";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              available: true,
+              mediaTicket: "ticket-legacy",
+              mediaTicketExpiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+      ),
+    );
+    const onOpenSidebar = vi.fn();
+    const container = document.body.appendChild(document.createElement("div"));
+    render(
+      renderAssistantAttachments(
+        [
+          {
+            type: "attachment",
+            attachment: {
+              kind: "document",
+              label: "ledger.xls",
+              mimeType: "application/vnd.ms-excel",
+              url: source,
+            },
+          },
+        ],
+        {},
+        onOpenSidebar,
+      ),
+      container,
+    );
+
+    const expand = await vi.waitFor(() =>
+      expectDefined(
+        container.querySelector<HTMLButtonElement>(".chat-assistant-attachment-card__expand"),
+        "legacy attachment expand action",
+      ),
+    );
+    expand.click();
+    const content = onOpenSidebar.mock.calls.at(-1)?.[0] as AttachmentSidebarContent;
+    expect(content.office).toBeUndefined();
+    expect(content.previewNotice).toContain("Legacy Office");
+    expect(content.downloadNow).toBeTypeOf("function");
+    container.remove();
+  });
 });

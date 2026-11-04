@@ -32,7 +32,11 @@ export class AttachmentDownloadController {
 
   readonly onDownload = async (): Promise<void> => {
     const content = this.content();
-    if (content?.kind !== "attachment" || !content.download || this.request) {
+    if (
+      (content?.kind !== "attachment" && content?.kind !== "office") ||
+      !content.download ||
+      this.request
+    ) {
       return;
     }
     const request = new AbortController();

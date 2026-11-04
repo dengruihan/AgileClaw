@@ -66,15 +66,26 @@ function renderSidebarAttachment(
   runtime: AttachmentSidebarRuntime,
   embedSandboxMode: EmbedSandboxMode,
   download?: { pending: boolean; error: string | null; onDownload: () => void },
+  officePreview?: TemplateResult | typeof nothing,
 ) {
-  if (content.download && download) {
-    return html`${renderCompactAttachmentCard({
+  if (content.office) {
+    // The detail panel owns the lazy preview load and its explicit download.
+    return officePreview ?? nothing;
+  }
+  const previewNotice = content.previewNotice
+    ? html`<div class="sidebar-attachment-preview__notice" role="status">
+        ${content.previewNotice}
+      </div>`
+    : nothing;
+  if (content.download && download && !content.src) {
+    return html`${previewNotice}${renderCompactAttachmentCard({
       kind: "document",
       label: content.title,
       mimeType: content.mimeType ?? undefined,
       sizeBytes: content.sizeBytes,
       onDownload: download.onDownload,
       downloadPending: download.pending,
+      downloadLabel: t("chat.officePreview.download"),
     })}${download.error ? html`<div role="alert">${download.error}</div>` : nothing}`;
   }
   const resolution = content.resolveSource?.(onRequestUpdate, runtime);
@@ -161,6 +172,7 @@ function renderSidebarAttachment(
     const width = source?.width ?? content.width;
     const height = source?.height ?? content.height;
     return html`
+      ${previewNotice}
       <div
         class="chat-assistant-attachment-card chat-assistant-attachment-card--${kind} sidebar-attachment-preview__state-card"
         aria-busy=${pending ? "true" : nothing}
@@ -170,7 +182,9 @@ function renderSidebarAttachment(
           label: content.title,
           mimeType: content.mimeType ?? undefined,
           sizeBytes: source?.sizeBytes ?? content.sizeBytes,
-          downloadHref: src ?? undefined,
+          ...(kind === "document" && content.downloadNow
+            ? { onDownload: content.downloadNow, downloadLabel: t("chat.officePreview.download") }
+            : { downloadHref: src ?? undefined }),
           downloadPending: pending,
           visualMode: "preview-with-favicon",
         })}
@@ -230,13 +244,15 @@ function renderSidebarAttachment(
       .voiceNote=${content.voiceNote === true}
     ></openclaw-chat-audio-player>`;
   }
-  return renderCompactAttachmentCard({
+  return html`${previewNotice}${renderCompactAttachmentCard({
     kind: content.attachmentKind ?? "document",
     label: content.title,
     mimeType: content.mimeType ?? undefined,
     sizeBytes: source?.sizeBytes ?? content.sizeBytes,
-    downloadHref: src,
-  });
+    downloadHref: content.downloadNow ? undefined : src,
+    ...(content.downloadNow ? { onDownload: content.downloadNow } : {}),
+    downloadLabel: t("chat.officePreview.download"),
+  })}`;
 }
 
 export function buildRawContent(
@@ -288,6 +304,8 @@ type MarkdownSidebarProps = {
   onAttachmentUpdate: () => void;
   attachmentRuntime: AttachmentSidebarRuntime;
   attachmentDownload?: { pending: boolean; error: string | null; onDownload: () => void };
+  /** Structured Office preview for an attachment, loaded by the detail panel. */
+  attachmentOfficePreview?: TemplateResult | typeof nothing;
   /** Lazy-loaded structured Office viewer for the selected sidebar preview. */
   officePreview?: TemplateResult | typeof nothing;
 };
@@ -460,6 +478,7 @@ function renderMarkdownSidebar(props: MarkdownSidebarProps) {
                                 props.attachmentRuntime,
                                 props.embedSandboxMode ?? "scripts",
                                 props.attachmentDownload,
+                                props.attachmentOfficePreview,
                               )}
                             </div>`
                           : html`

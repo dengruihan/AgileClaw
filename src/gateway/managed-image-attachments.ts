@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
-import { sanitizeUntrustedFileName } from "@openclaw/fs-safe/advanced";
+import { readFileWindowFully, sanitizeUntrustedFileName } from "@openclaw/fs-safe/advanced";
 import { maxBytesForKind, mediaKindFromMime } from "@openclaw/media-core/constants";
 import { mimeTypeFromFilePath } from "@openclaw/media-core/mime";
 import { hasHttpUrlPrefix } from "@openclaw/net-policy/url-protocol";
@@ -966,6 +966,103 @@ export async function resolveManagedOutgoingMediaArtifactDownload(params: {
     return null;
   }
   return await resolveManagedOutgoingMediaArtifactDownloadForRecord(record, stateDir);
+}
+
+/** Metadata plus bounded original bytes for one transcript-backed managed artifact. */
+export type ManagedOutgoingMediaArtifactContent = {
+  artifactId: string;
+  sessionKey: string;
+  type: ManagedOutgoingMediaArtifactDownload["type"];
+  title: string;
+  filename: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  /** Absent when the declared size already exceeds the requested preview limit. */
+  buffer?: Buffer;
+  tooLarge: boolean;
+};
+
+/**
+ * Reads the managed original under the same transcript ownership as its download
+ * ticket. Opt-in preview callers use this instead of routing through workspace
+ * file reads, which reject media-store paths by design.
+ */
+export async function readManagedOutgoingMediaArtifactContent(params: {
+  sessionKey: string;
+  agentId?: string;
+  defaultAgentId?: string;
+  artifactId: string;
+  maxBytes: number;
+  stateDir?: string;
+}): Promise<ManagedOutgoingMediaArtifactContent | null> {
+  const { artifactId, sessionKey, agentId, defaultAgentId, maxBytes } = params;
+  const stateDir = params.stateDir ?? resolveStateDir();
+  const parsed = parseManagedOutgoingArtifactId(artifactId);
+  if (!parsed) {
+    return null;
+  }
+  const record = await readManagedImageRecord(parsed.attachmentId, stateDir);
+  if (!record || record.sessionKey !== sessionKey) {
+    return null;
+  }
+  const requestedAgentId = agentId ? normalizeAgentId(agentId) : undefined;
+  const recordAgentId = resolveManagedSessionOwnerAgentId(
+    record.sessionKey,
+    record.agentId,
+    defaultAgentId,
+  );
+  if (requestedAgentId && recordAgentId !== requestedAgentId) {
+    return null;
+  }
+  const kind = resolveManagedMediaKind(record.original.contentType);
+  if (!kind || (parsed.family === "image") !== (kind === "image")) {
+    return null;
+  }
+  return await withManagedOutgoingMediaRead(record, stateDir, async (assertCurrent) => {
+    const filename = record.original.filename ?? record.alt;
+    const content = {
+      artifactId: buildManagedOutgoingArtifactId(record.attachmentId, kind),
+      sessionKey: record.sessionKey,
+      type: kind === "document" ? ("file" as const) : kind,
+      title: kind === "image" ? record.alt : filename,
+      filename,
+      ...(record.original.contentType ? { mimeType: record.original.contentType } : {}),
+      ...(record.original.sizeBytes != null ? { sizeBytes: record.original.sizeBytes } : {}),
+    };
+    let opened: Awaited<ReturnType<typeof openLocalFileSafely>>;
+    try {
+      opened = await openLocalFileSafely({ filePath: resolveManagedImageOriginalPath(record) });
+    } catch {
+      return null;
+    }
+    try {
+      if (!opened.stat.isFile()) {
+        return null;
+      }
+      assertCurrent();
+      const sizeBytes = opened.stat.size;
+      if (sizeBytes > maxBytes) {
+        return { ...content, sizeBytes, tooLarge: true };
+      }
+      // Bound the read itself: a file that grows after stat must not exceed the cap.
+      const readBuffer = Buffer.alloc(Math.min(sizeBytes, maxBytes + 1));
+      const bytesRead = readBuffer.length
+        ? await readFileWindowFully(opened.handle, readBuffer, 0)
+        : 0;
+      assertCurrent();
+      if (bytesRead > maxBytes) {
+        return { ...content, sizeBytes, tooLarge: true };
+      }
+      return {
+        ...content,
+        sizeBytes,
+        buffer: readBuffer.subarray(0, bytesRead),
+        tooLarge: false,
+      };
+    } finally {
+      await opened.handle.close();
+    }
+  });
 }
 
 /** Upgrade legacy managed-image URLs that predate stable artifact ids. */

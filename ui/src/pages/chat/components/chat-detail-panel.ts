@@ -21,6 +21,7 @@ import { type EditorId, openEditor } from "../../../lib/editor-links.ts";
 import { formatUiError } from "../../../lib/format-error.ts";
 import { OpenClawLightDomElement } from "../../../lit/openclaw-element.ts";
 import { AttachmentDownloadController } from "./chat-attachment-download-controller.ts";
+import { AttachmentOfficePreviewController } from "./chat-attachment-office-preview-controller.ts";
 import { FileCopyController } from "./chat-file-copy-controller.ts";
 import { captureFileEditorDraft, readFileDraft, setFileDraft } from "./chat-file-drafts.ts";
 import { FileHtmlPreviewController } from "./chat-html-preview.ts";
@@ -106,6 +107,12 @@ class ChatDetailPanel extends OpenClawLightDomElement {
     () => (this.content === this.visibleContent ? this.content : null),
     () => this.attachmentRuntime,
   );
+  private readonly attachmentOffice = new AttachmentOfficePreviewController(
+    this,
+    () => (this.content === this.visibleContent ? this.content : null),
+    this.officePreviewLoader,
+    this.attachmentDownload,
+  );
 
   constructor() {
     super();
@@ -119,6 +126,7 @@ class ChatDetailPanel extends OpenClawLightDomElement {
 
   override disconnectedCallback() {
     this.attachmentDownload.cancel();
+    this.attachmentOffice.cancel();
     this.officePreviewLoader.requestWhileActive(officePreviewElement, false);
     document.removeEventListener("pointerdown", this.handleDocumentPointerDown);
     if (this.fileDirty) {
@@ -139,6 +147,7 @@ class ChatDetailPanel extends OpenClawLightDomElement {
     ) {
       releaseChatMediaResourceSubscriber(this.requestAttachmentUpdate);
       this.attachmentDownload.cancel();
+      this.attachmentOffice.cancel();
     }
     if (changed.has("fileNavigation") && this.fileNavigation && this.content?.kind === "file") {
       this.htmlPreview.showSource();
@@ -201,6 +210,7 @@ class ChatDetailPanel extends OpenClawLightDomElement {
   }
 
   protected override updated(changed: Map<string, unknown>) {
+    this.attachmentOffice.sync();
     const visibleContent = this.visibleContent;
     if (
       visibleContent?.kind === "file" &&
@@ -665,6 +675,7 @@ class ChatDetailPanel extends OpenClawLightDomElement {
 
   override render() {
     const file = this.htmlPreview.file;
+    const officeContent = this.visibleContent?.kind === "office" ? this.visibleContent : null;
     const matches = this.fileSearchMatches();
     const currentMatchIndex = matches.length
       ? Math.min(this.fileSearchMatchIndex, matches.length - 1)
@@ -727,9 +738,11 @@ class ChatDetailPanel extends OpenClawLightDomElement {
       onAttachmentUpdate: this.requestAttachmentUpdate,
       attachmentRuntime: this.attachmentRuntime,
       attachmentDownload: this.attachmentDownload,
+      attachmentOfficePreview: this.attachmentOffice.render(),
       officePreview: renderOfficePreview(
         this.officePreviewLoader,
-        this.visibleContent?.kind === "office" ? this.visibleContent : null,
+        officeContent,
+        this.attachmentDownload,
       ),
     });
   }

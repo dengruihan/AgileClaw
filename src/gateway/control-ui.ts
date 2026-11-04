@@ -109,6 +109,8 @@ import {
 } from "./http-image-response.js";
 import type { GatewayHttpRequestAuthOptions } from "./http-request-authority.js";
 import { authorizeControlUiReadRequestOrReply } from "./http-utils.js";
+import { buildOfficePreviewPayload } from "./office-preview/office-preview-payload.js";
+import { OFFICE_PREVIEW_MAX_BYTES } from "./office-preview/office-preview.js";
 import { readControlUiRootAsset, type ControlUiRootState } from "./server-control-ui-root.js";
 import { isTerminalConfigEnabled } from "./terminal/enabled.js";
 
@@ -382,6 +384,26 @@ async function openAssistantMedia(
   }
 }
 
+async function readAssistantMediaOfficePreview(
+  opened: Awaited<ReturnType<typeof openAssistantMedia>>["opened"],
+  reference: Awaited<ReturnType<typeof openAssistantMedia>>["reference"],
+  mimeType: string | undefined,
+) {
+  return await buildOfficePreviewPayload({
+    filename: path.basename(reference.path),
+    ...(mimeType ? { mimeType } : {}),
+    sizeBytes: opened.stat.size,
+    read: async () => {
+      if (opened.stat.size > OFFICE_PREVIEW_MAX_BYTES) {
+        return null;
+      }
+      const buffer = Buffer.alloc(opened.stat.size);
+      const bytesRead = buffer.length ? await readFileWindowFully(opened.handle, buffer, 0) : 0;
+      return buffer.subarray(0, bytesRead);
+    },
+  });
+}
+
 async function resolveAssistantMediaAvailability(
   source: string,
   policy: AssistantMediaPolicy,
@@ -389,10 +411,20 @@ async function resolveAssistantMediaAvailability(
   agentId: string | undefined,
   signal: AbortSignal,
   assertCurrent: () => void,
+  preview?: "office",
 ): Promise<AssistantMediaAvailability & { mediaTicket?: string; mediaTicketExpiresAt?: string }> {
   try {
     assertCurrent();
-    const { opened, mimeType, file } = await openAssistantMedia(source, policy, allowance);
+    const { opened, mimeType, file, reference } = await openAssistantMedia(
+      source,
+      policy,
+      allowance,
+    );
+    const officePreview =
+      preview === "office"
+        ? await readAssistantMediaOfficePreview(opened, reference, mimeType)
+        : undefined;
+    assertCurrent();
     // The inspection owner reopens and verifies this identity after queue admission.
     await opened[Symbol.asyncDispose]();
     const mediaKind = kindFromMime(mimeType);
@@ -411,6 +443,7 @@ async function resolveAssistantMediaAvailability(
       available: true,
       ...(mimeType ? { mimeType } : {}),
       sizeBytes: opened.stat.size,
+      ...(officePreview ? { officePreview } : {}),
       ...playbackMetadata,
       ...createAssistantMediaTicket({
         source,
@@ -543,6 +576,7 @@ export async function handleControlUiAssistantMediaRequest(
       agentId,
       requestAbort.signal,
       assertCurrentPolicy,
+      url.searchParams.get("preview") === "office" ? "office" : undefined,
     );
     if (requestAbort.signal.aborted) {
       return true;

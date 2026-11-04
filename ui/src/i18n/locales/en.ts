@@ -3896,6 +3896,9 @@ export const en: TranslationMap & {
       expand: "Open {filename} in the side panel",
       open: "Open",
       previewUnavailable: "Preview unavailable",
+      previewDownloadHint: "This file can't be previewed here. Download it to open it.",
+      legacyOfficePreview:
+        "Legacy Office files can't be previewed here. Download to open them in an Office app.",
       textPreviewUnavailable:
         "Could not preview this file. Text previews require UTF-8 files up to 256 KiB. Download it to read the full file.",
       htmlPreviewUnavailable:

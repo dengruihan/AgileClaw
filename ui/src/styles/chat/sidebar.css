@@ -892,9 +892,37 @@ openclaw-session-discussion {
 .sidebar-office-preview-host {
   display: flex;
   flex: 1;
+  flex-direction: column;
   height: 100%;
   min-width: 0;
   min-height: 0;
+}
+
+/* Download stays a separate, explicitly labeled action beside the reader. */
+.sidebar-office-preview__toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 16px 0;
+}
+
+.sidebar-office-preview__download {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-office-preview__state {
+  padding: 16px;
+  color: var(--muted);
+}
+
+.sidebar-attachment-preview__notice {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .sidebar-office-preview {

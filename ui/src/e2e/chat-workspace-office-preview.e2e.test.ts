@@ -162,6 +162,33 @@ async function openRailFile(page: import("playwright").Page, name: string) {
   await row.click();
 }
 
+const officeMime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+function managedWorkbookAttachment() {
+  const attachmentId = "11111111-1111-4111-8111-111111111111";
+  const artifactId = `artifact_managed_media_${attachmentId}`;
+  return {
+    artifactId,
+    url: `/api/chat/media/outgoing/agent%3Amain%3Amain/${attachmentId}/full`,
+    artifact: {
+      id: artifactId,
+      type: "file",
+      title: "applications.xlsx",
+      mimeType: officeMime,
+      sizeBytes: 2048,
+      sessionKey,
+      source: "session-transcript",
+      download: { mode: "url" },
+    },
+    readyPreview: {
+      kind: "office",
+      format: "xlsx",
+      state: "ready",
+      preview: workbookPayload,
+    },
+  };
+}
+
 describeControlUiE2e("Control UI Office side-panel preview", () => {
   it("renders a spreadsheet with worksheet switching", async () => {
     const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
@@ -328,6 +355,216 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
       expect(overflow).toBeLessThanOrEqual(1);
       expect(await workbook.locator(".sidebar-office-preview__grid-scroll").count()).toBe(1);
       await page.screenshot({ path: path.join(artifactDir, "after-xlsx-preview-narrow-dark.png") });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("opens an AI-sent workbook attachment as a preview before any download", async () => {
+    const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
+      const managed = managedWorkbookAttachment();
+      const gateway = await installMockGateway(page, {
+        featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
+        historyMessages: [
+          {
+            role: "assistant",
+            content: [
+              { type: "text", text: "Here is the workbook." },
+              {
+                type: "attachment",
+                attachment: {
+                  artifactId: managed.artifactId,
+                  kind: "document",
+                  label: "applications.xlsx",
+                  mimeType: officeMime,
+                  sizeBytes: 2048,
+                  url: managed.url,
+                },
+              },
+            ],
+            timestamp: Date.now(),
+          },
+        ],
+        methodResponses: {
+          "artifacts.download": {
+            cases: [
+              {
+                match: { preview: "office" },
+                response: { artifact: managed.artifact, preview: managed.readyPreview },
+              },
+              {
+                response: {
+                  artifact: managed.artifact,
+                  url: `${managed.url}?mediaTicket=ticket-attachment`,
+                  expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+                },
+              },
+            ],
+          },
+        },
+      });
+      await page.goto(`${server.baseUrl}chat`);
+      const card = page
+        .locator(".chat-assistant-attachment-card--compact")
+        .filter({ hasText: "applications.xlsx" });
+      const expand = card.locator(".chat-assistant-attachment-card__expand");
+      await expand.waitFor({ state: "visible" });
+      await page.screenshot({ path: path.join(artifactDir, "before-attachment-card.png") });
+
+      let downloads = 0;
+      page.on("download", () => {
+        downloads += 1;
+      });
+      await expand.click();
+
+      const workbook = page.locator('.sidebar-office-preview[data-office-format="xlsx"]');
+      await workbook.waitFor({ state: "visible" });
+      await expect.poll(() => workbook.locator("table").textContent()).toContain("Rent");
+      expect(downloads).toBe(0);
+      expect(await gateway.getRequests("sessions.files.get")).toHaveLength(0);
+      const previewRequests = (await gateway.getRequests("artifacts.download")).filter(
+        (request) => (request.params as { preview?: string } | undefined)?.preview === "office",
+      );
+      expect(previewRequests).toHaveLength(1);
+      expect(previewRequests[0]?.params).toMatchObject({
+        sessionKey,
+        artifactId: managed.artifactId,
+      });
+      // Download is a separate, explicitly labeled action.
+      const downloadButton = page.locator(".sidebar-office-preview__download");
+      await downloadButton.waitFor({ state: "visible" });
+      expect((await downloadButton.textContent())?.trim()).toContain("Download");
+      await page.screenshot({ path: path.join(artifactDir, "after-attachment-preview.png") });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("opens a Files-rail artifact as a preview instead of an Open artifact download link", async () => {
+    const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
+      const artifactId = "artifact_office_rail";
+      const artifact = {
+        id: artifactId,
+        type: "file",
+        title: "budget.xlsx",
+        mimeType: officeMime,
+        sizeBytes: 2048,
+        download: { mode: "bytes" },
+      };
+      const gateway = await installMockGateway(page, {
+        featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
+        methodResponses: {
+          ...officeResponses(),
+          "artifacts.list": { artifacts: [artifact] },
+          "artifacts.download": {
+            artifact,
+            preview: {
+              kind: "office",
+              format: "xlsx",
+              state: "ready",
+              preview: workbookPayload,
+            },
+          },
+        },
+      });
+      await page.goto(`${server.baseUrl}chat`);
+      await openChatSidePanelType(page, "Files");
+      const artifactsChip = page
+        .locator(".chat-workspace-rail__chip")
+        .filter({ hasText: /artifact/iu });
+      await artifactsChip.first().click();
+      const rail = page.locator(".chat-workspace-rail__file-name", { hasText: "budget.xlsx" });
+      await rail.first().waitFor({ state: "visible" });
+      await page.screenshot({ path: path.join(artifactDir, "before-artifact-rail.png") });
+
+      let downloads = 0;
+      page.on("download", () => {
+        downloads += 1;
+      });
+      await rail.first().click();
+
+      const workbook = page.locator('.sidebar-office-preview[data-office-format="xlsx"]');
+      await workbook.waitFor({ state: "visible" });
+      await expect.poll(() => workbook.textContent()).toContain("Rent");
+      expect(downloads).toBe(0);
+      // The old fallback rendered a raw "Open artifact" Markdown link.
+      expect((await page.locator("body").textContent()) ?? "").not.toContain("Open artifact");
+      const request = await gateway.waitForRequest("artifacts.download");
+      expect(request.params).toMatchObject({ artifactId, preview: "office" });
+      await page.screenshot({ path: path.join(artifactDir, "after-artifact-preview.png") });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("keeps a legacy Office attachment metadata-only with an explicit download", async () => {
+    const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
+      const source = "/tmp/openclaw/old-ledger.xls";
+      await page.route("**/__openclaw__/assistant-media?**", async (route) => {
+        const url = new URL(route.request().url());
+        if (url.searchParams.get("meta") === "1") {
+          await route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({
+              available: true,
+              mediaTicket: "ticket-legacy",
+              mediaTicketExpiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+            }),
+          });
+          return;
+        }
+        await route.fulfill({
+          contentType: "application/vnd.ms-excel",
+          body: Buffer.from("legacy-office-bytes"),
+        });
+      });
+      await installMockGateway(page, {
+        featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
+        historyMessages: [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "attachment",
+                attachment: {
+                  kind: "document",
+                  label: "old-ledger.xls",
+                  mimeType: "application/vnd.ms-excel",
+                  sizeBytes: 1024,
+                  url: source,
+                },
+              },
+            ],
+            timestamp: Date.now(),
+          },
+        ],
+      });
+      await page.goto(`${server.baseUrl}chat`);
+      const card = page
+        .locator(".chat-assistant-attachment-card--compact")
+        .filter({ hasText: "old-ledger.xls" });
+      await card.locator(".chat-assistant-attachment-card__expand").click();
+      await expect
+        .poll(() => page.locator(".sidebar-attachment-preview__notice").textContent())
+        .toContain("Legacy Office");
+      expect(await page.locator('.sidebar-office-preview[data-office-format="xlsx"]').count()).toBe(
+        0,
+      );
+      expect(
+        await page
+          .locator(".sidebar-attachment-preview .chat-assistant-attachment-card__download")
+          .count(),
+      ).toBe(1);
+      await page.screenshot({ path: path.join(artifactDir, "legacy-xls-attachment-card.png") });
     } finally {
       await context.close();
     }

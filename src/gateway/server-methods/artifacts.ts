@@ -15,9 +15,15 @@ import { canCreateArtifactDownload, createArtifactDownload } from "../artifact-d
 import type { PreparedArtifactDownload } from "../artifact-download-projection.js";
 import {
   parseManagedOutgoingArtifactId,
+  readManagedOutgoingMediaArtifactContent,
   resolveManagedOutgoingMediaArtifactDownload,
   resolveManagedOutgoingMediaUrlDownload,
 } from "../managed-image-attachments.js";
+import {
+  buildOfficePreviewPayload,
+  resolveOfficePreviewFamily,
+} from "../office-preview/office-preview-payload.js";
+import { OFFICE_PREVIEW_MAX_BYTES } from "../office-preview/office-preview.js";
 import { MAX_PAYLOAD_BYTES } from "../server-constants.js";
 import { tryResolveSessionCompatibilityOwnerAgentId } from "../session-request-agent.js";
 import { getSessionRowProjection } from "../session-row-projection-access.js";
@@ -301,6 +307,123 @@ async function respondManagedArtifactDownload(
   });
 }
 
+function managedArtifactSummary(
+  content: NonNullable<Awaited<ReturnType<typeof readManagedOutgoingMediaArtifactContent>>>,
+  matched?: ArtifactRecord,
+) {
+  return {
+    id: content.artifactId,
+    type: content.type,
+    title: content.title,
+    ...(content.mimeType ? { mimeType: content.mimeType } : {}),
+    ...(content.sizeBytes !== undefined ? { sizeBytes: content.sizeBytes } : {}),
+    sessionKey: content.sessionKey,
+    ...(matched?.runId ? { runId: matched.runId } : {}),
+    ...(matched?.messageSeq !== undefined ? { messageSeq: matched.messageSeq } : {}),
+    source: "session-transcript",
+    download: { mode: "url" as const },
+  };
+}
+
+const BASE64_MAX_LENGTH_FOR_OFFICE_PREVIEW = Math.ceil((OFFICE_PREVIEW_MAX_BYTES * 4) / 3) + 4;
+
+/**
+ * Opt-in structured preview for one artifact. The normal download path never
+ * parses content; only `preview: "office"` reads the bounded original and
+ * reuses the shared Office worker.
+ */
+async function respondArtifactOfficePreview(
+  query: ArtifactsGetParams,
+  access: ArtifactSessionAccess & { assertCurrent: () => void },
+  respond: RespondFn,
+): Promise<void> {
+  await runArtifactSessionOperation(respond, async () => {
+    const resolveSession = await prepareArtifactSessionResolution(query, access.projection);
+    const resolved = await resolveSession(access);
+    const cfg = access.getRuntimeConfig();
+    const defaultAgentId = resolved
+      ? tryResolveSessionCompatibilityOwnerAgentId(cfg, resolved.sessionKey)
+      : undefined;
+    if (parseManagedOutgoingArtifactId(query.artifactId)) {
+      const content = resolved
+        ? await readManagedOutgoingMediaArtifactContent({
+            sessionKey: resolved.sessionKey,
+            ...(resolved.agentId ? { agentId: resolved.agentId } : {}),
+            ...(defaultAgentId ? { defaultAgentId } : {}),
+            artifactId: query.artifactId,
+            maxBytes: OFFICE_PREVIEW_MAX_BYTES,
+          })
+        : null;
+      resolved?.readCurrent();
+      access.assertCurrent();
+      if (!content) {
+        respondArtifactNotFound(respond, query.artifactId);
+        return;
+      }
+      const preview = await buildOfficePreviewPayload({
+        filename: content.filename,
+        ...(content.mimeType ? { mimeType: content.mimeType } : {}),
+        ...(content.sizeBytes !== undefined ? { sizeBytes: content.sizeBytes } : {}),
+        read: async () => content.buffer ?? null,
+      });
+      access.assertCurrent();
+      respond(true, {
+        artifact: managedArtifactSummary(content),
+        ...(preview ? { preview } : {}),
+      });
+      return;
+    }
+    const found = await runArtifactSessionOperation(respond, () =>
+      findArtifact(query, access, {
+        downloadArtifactId: query.artifactId,
+        includeDownloadData: true,
+      }),
+    );
+    if (!found.ok) {
+      return;
+    }
+    const { artifact } = found.value;
+    if (!artifact) {
+      respondArtifactNotFound(respond, query.artifactId);
+      return;
+    }
+    const family = resolveOfficePreviewFamily({
+      filename: artifact.title,
+      ...(artifact.mimeType ? { mimeType: artifact.mimeType } : {}),
+    });
+    const encodedData = artifact.data;
+    const preview =
+      family.office && encodedData && encodedData.length > BASE64_MAX_LENGTH_FOR_OFFICE_PREVIEW
+        ? {
+            kind: "office" as const,
+            ...(family.format ? { format: family.format } : {}),
+            state: "too-large" as const,
+          }
+        : artifact.download.mode === "bytes"
+          ? await buildOfficePreviewPayload({
+              filename: artifact.title,
+              ...(artifact.mimeType ? { mimeType: artifact.mimeType } : {}),
+              ...(artifact.sizeBytes !== undefined ? { sizeBytes: artifact.sizeBytes } : {}),
+              read: async () =>
+                typeof artifact.data === "string" ? Buffer.from(artifact.data, "base64") : null,
+            })
+          : family.office
+            ? {
+                kind: "office" as const,
+                ...(family.format ? { format: family.format } : {}),
+                state: "unsupported" as const,
+              }
+            : undefined;
+    if (!artifactResponseIsCurrent(found.value, respond)) {
+      return;
+    }
+    respond(true, {
+      artifact: toArtifactSummary(artifact),
+      ...(preview ? { preview } : {}),
+    });
+  });
+}
+
 export const artifactsHandlers: GatewayRequestHandlers = {
   "artifacts.list": async (request) => {
     const { params } = request;
@@ -383,6 +506,10 @@ export const artifactsHandlers: GatewayRequestHandlers = {
       return;
     }
     const query = { ...params };
+    if (query.preview === "office") {
+      await respondArtifactOfficePreview(query, access, respond);
+      return;
+    }
     if (
       query.sessionKey &&
       !query.runId &&

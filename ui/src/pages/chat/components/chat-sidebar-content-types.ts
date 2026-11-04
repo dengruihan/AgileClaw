@@ -4,6 +4,7 @@ import type {
   SessionFileOfficeFormat,
   SessionFileOfficePreview,
 } from "../../../../../packages/gateway-protocol/src/schema/sessions.js";
+import type { ArtifactOfficePreview } from "../../../api/artifact-download.ts";
 import type { ToolCard } from "../../../lib/chat/chat-types.ts";
 import type { ChatMediaPlaybackMode } from "./chat-media-playback.ts";
 import type { ArtifactDownloadResolver } from "./chat-message-media.ts";
@@ -76,7 +77,14 @@ export type AttachmentSidebarRuntime = {
   resolveArtifactDownload?: ArtifactDownloadResolver;
 };
 
-type AttachmentSidebarContent = Omit<AttachmentSidebarSource, "src"> & {
+/** Opt-in structured Office preview for an attachment descriptor. */
+export type AttachmentOfficePreviewSource = {
+  format: SessionFileOfficeFormat;
+  /** Request the bounded preview only when the user opens this attachment. */
+  load: (signal: AbortSignal) => Promise<ArtifactOfficePreview | null>;
+};
+
+export type AttachmentSidebarContent = Omit<AttachmentSidebarSource, "src"> & {
   kind: "attachment";
   attachmentKind?: "audio" | "video" | "document" | "image";
   title: string;
@@ -89,6 +97,11 @@ type AttachmentSidebarContent = Omit<AttachmentSidebarSource, "src"> & {
   renderActions?: () => TemplateResult;
   /** Authorize and read fresh bytes for each explicit download. */
   download?: (signal: AbortSignal) => Promise<Blob | null>;
+  /** Re-mint a ticket and hand the file to the browser's normal download flow. */
+  downloadNow?: () => void;
+  /** Why the compact metadata card replaced a structured preview. */
+  previewNotice?: string;
+  office?: AttachmentOfficePreviewSource;
   resolveSource?: (
     onRequestUpdate: () => void,
     runtime: AttachmentSidebarRuntime,
@@ -126,6 +139,10 @@ export type OfficeSidebarContent = {
   format: SessionFileOfficeFormat;
   preview: SessionFileOfficePreview;
   rawText?: string | null;
+  /** Artifact-backed previews keep an explicit download beside the reader. */
+  download?: (signal: AbortSignal) => Promise<Blob | null>;
+  /** Attachment-backed previews re-mint their ticket before handing off the file. */
+  downloadNow?: () => void;
 };
 
 export type SessionFileSource = { sessionKey: string; agentId?: string; path: string };
