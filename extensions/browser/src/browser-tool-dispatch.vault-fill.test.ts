@@ -142,6 +142,34 @@ describe("browser vault fill dispatch guard", () => {
     expect(scrubVaultFillText("target-1", CANARY)).toBe(CANARY);
   });
 
+  it("rejects labeled snapshots for protected and uncertain targets before dispatch", async () => {
+    runtimeMocks.browserSnapshot.mockReset();
+    runtimeMocks.browserSnapshot.mockResolvedValue({ snapshot: "synthetic" });
+    registerVaultFillSecret("target-1", CANARY, "doc-1");
+
+    await expect(
+      executeBrowserTabAction({
+        ...dispatchParams({}),
+        action: "snapshot",
+        actRequest: undefined,
+        params: { targetId: "target-1", labels: true },
+        baseUrl: "http://127.0.0.1:1",
+      }),
+    ).rejects.toThrow(/Labeled\/image-bearing snapshots/u);
+    expect(runtimeMocks.browserSnapshot).not.toHaveBeenCalled();
+
+    await expect(
+      executeBrowserTabAction({
+        ...dispatchParams({}),
+        action: "snapshot",
+        actRequest: undefined,
+        params: { labels: true },
+        baseUrl: "http://127.0.0.1:1",
+      }),
+    ).rejects.toThrow(/Labeled\/image-bearing snapshots/u);
+    expect(runtimeMocks.browserSnapshot).not.toHaveBeenCalled();
+  });
+
   it("rejects a batch-wrapped evaluate before dispatch", async () => {
     registerVaultFillSecret("target-1", CANARY);
     const { proxy, calls } = proxyRecorder();

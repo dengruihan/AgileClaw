@@ -608,6 +608,13 @@ export function createVaultHandlers(
             return;
           }
           const material = result.material;
+          // Revalidate at the trusted browser-effect boundary: a lock between
+          // broker decryption and this dispatch must not reach the browser.
+          if (!fillBroker.isMaterialCurrent(material)) {
+            material.password = "";
+            respond(true, { status: "expired" });
+            return;
+          }
           const executor =
             params.browserFillExecutor ?? createInProcessBrowserFillExecutor(options);
           if (!executor) {

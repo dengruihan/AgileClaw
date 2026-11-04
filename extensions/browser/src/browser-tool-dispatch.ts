@@ -194,11 +194,24 @@ export async function executeBrowserTabAction(context: {
       await sessionTabs.untrack(closedTargetId);
       return jsonResult(result);
     }
-    case "snapshot":
+    case "snapshot": {
+      const snapshotTargetId =
+        readStringParam(params, "targetId") ?? context.boundTargetId ?? undefined;
+      if (params.labels === true) {
+        const protectedSession = snapshotTargetId
+          ? hasActiveVaultFill(snapshotTargetId)
+          : hasAnyActiveVaultFill();
+        if (protectedSession) {
+          throw new Error(
+            "Labeled/image-bearing snapshots are blocked while a password fill session owns the tab; navigate or close the filled tab.",
+          );
+        }
+      }
       return await executeSnapshotAction({
         ...actionOptions,
         onTabActivity: touchTab,
       });
+    }
     case "screenshot": {
       const screenshotTargetId =
         readStringParam(params, "targetId") ?? context.boundTargetId ?? undefined;

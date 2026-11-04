@@ -48,6 +48,7 @@ import {
 } from "../snapshot-delta-cache.js";
 import { appendSnapshotUrls } from "../snapshot-urls.js";
 import { normalizeBrowserTimerDelayMs } from "../timer-delay.js";
+import { hasActiveVaultFill } from "../vault-fill-scrub.js";
 import {
   browserNavigationPolicyForProfile,
   handleRouteError,
@@ -420,6 +421,13 @@ export function registerBrowserAgentSnapshotRoutes(
             signal,
             timeoutMs: plan.timeoutMs,
           });
+          if (plan.labels && hasActiveVaultFill(tab.targetId)) {
+            return jsonError(
+              res,
+              409,
+              "Labeled/image-bearing snapshots are blocked while a password fill session owns the tab; navigate or close the filled tab.",
+            );
+          }
           const ssrfPolicyOpts = browserNavigationPolicyForProfile(ctx, profileCtx);
           if (ssrfPolicyOpts.ssrfPolicy) {
             await assertBrowserNavigationResultAllowed({

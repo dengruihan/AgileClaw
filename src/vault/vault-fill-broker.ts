@@ -90,6 +90,7 @@ type PreviewRecord = {
   previewId: string;
   binding: VaultFillBinding;
   entry: VaultEntryMetadata;
+  generation: number;
   createdAtMs: number;
   expiresAtMs: number;
   status: "pending" | "consumed" | "revoked";
@@ -122,6 +123,8 @@ export type VaultFillMaterial = {
   password: string;
   entry: { itemRef: string; siteLabel: string; accountLabel: string };
   origin: VaultFillOrigin;
+  previewId: string;
+  generation: number;
 };
 
 export type VaultFillExecuteInternal =
@@ -141,6 +144,7 @@ export class VaultFillBroker {
   private readonly approvalTtlMs: number;
   private readonly randomId: () => string;
   private readonly previews = new Map<string, PreviewRecord>();
+  private generation = 0;
 
   constructor(options: VaultFillBrokerOptions) {
     this.service = options.service;
@@ -149,7 +153,10 @@ export class VaultFillBroker {
     this.previewTtlMs = options.previewTtlMs ?? VAULT_FILL_PREVIEW_TTL_MS;
     this.approvalTtlMs = options.approvalTtlMs ?? VAULT_FILL_APPROVAL_TTL_MS;
     this.randomId = options.randomId ?? defaultRandomId;
-    options.service.onLock?.(() => this.revokeAll());
+    options.service.onLock?.(() => {
+      this.generation += 1;
+      this.revokeAll();
+    });
   }
 
   /** Validate the observed origin against the entry and mint a preview binding. */
@@ -185,6 +192,7 @@ export class VaultFillBroker {
       previewId,
       binding,
       entry,
+      generation: this.generation,
       createdAtMs,
       expiresAtMs: createdAtMs + this.previewTtlMs,
       status: "pending",
@@ -225,16 +233,34 @@ export class VaultFillBroker {
       await this.recordAudit(record.binding.itemRef, mismatch);
       return { status: mismatch };
     }
+    const expectedGeneration = record.generation;
+    const executionCurrent = () =>
+      this.generation === expectedGeneration && this.previews.get(previewId) === record;
+    const stale = async (): Promise<VaultFillExecuteInternal> => {
+      record.status = "revoked";
+      if (this.previews.get(previewId) === record) {
+        this.previews.delete(previewId);
+      }
+      await this.recordAudit(record.binding.itemRef, "expired");
+      return { status: "expired" };
+    };
     const approval = await this.approval.getSnapshot(approvalId).catch((error: unknown) => {
       log.warn("fill approval lookup failed", {
         error: error instanceof Error ? error.message : "unknown",
       });
       return null;
     });
+    // The approval lookup may await a lock/worker transition.
+    if (!executionCurrent()) {
+      return await stale();
+    }
     const approvalError = this.validateApproval(approval, record);
     if (approvalError) {
       await this.recordAudit(record.binding.itemRef, approvalError);
       return { status: approvalError };
+    }
+    if (!executionCurrent()) {
+      return await stale();
     }
     // Consume before decryption: a failed fill cannot be replayed with the same
     // operator decision, and a second caller cannot race the same preview.
@@ -247,9 +273,17 @@ export class VaultFillBroker {
         });
         return false;
       });
+    if (!executionCurrent()) {
+      // The old worker generation is gone; never decrypt or fill even if the
+      // approval store consumed the decision during the race.
+      return await stale();
+    }
     if (!consumed) {
       await this.recordAudit(record.binding.itemRef, "replayed");
       return { status: "replayed" };
+    }
+    if (!executionCurrent()) {
+      return await stale();
     }
     try {
       const { entry, password } = await this.service.fill(
@@ -257,6 +291,9 @@ export class VaultFillBroker {
         record.entry.revision,
         record.binding.origin,
       );
+      if (!executionCurrent()) {
+        return await stale();
+      }
       return {
         status: "filled",
         material: {
@@ -267,6 +304,8 @@ export class VaultFillBroker {
             accountLabel: entry.account,
           },
           origin: publicOrigin(record.binding.origin),
+          previewId,
+          generation: expectedGeneration,
         },
       };
     } catch (error) {
@@ -274,6 +313,14 @@ export class VaultFillBroker {
       await this.recordAudit(record.binding.itemRef, status);
       return { status };
     }
+  }
+
+  /** True only while this material belongs to the live worker generation. */
+  isMaterialCurrent(material: VaultFillMaterial): boolean {
+    return (
+      this.generation === material.generation &&
+      this.previews.get(material.previewId)?.status === "consumed"
+    );
   }
 
   /** Drop every pending preview for an entry; rotation and deletion call this. */

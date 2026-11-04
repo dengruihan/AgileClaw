@@ -2,6 +2,8 @@ import path from "node:path";
 import { expectDefined } from "@openclaw/normalization-core";
 import { afterEach, describe, expect, it } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../../test-support.js";
+import type { BrowserProxyRequest } from "../../browser-node-proxy.js";
+import { executeBrowserTabAction } from "../../browser-tool-dispatch.js";
 import { resolveBrowserConfig } from "../config.js";
 import { getPlaywrightCore } from "../playwright-core.runtime.js";
 import { closePlaywrightBrowserConnection } from "../pw-session.js";
@@ -14,6 +16,7 @@ import {
   hasActiveVaultFill,
   scrubVaultFillText,
 } from "../vault-fill-scrub.js";
+import { registerBrowserAgentSnapshotRoutes } from "./agent.snapshot.js";
 import { registerBrowserVaultRoutes } from "./agent.vault.js";
 import { createBrowserRouteApp, createBrowserRouteResponse } from "./test-helpers.js";
 
@@ -86,10 +89,9 @@ describe.runIf(process.env.OPENCLAW_BROWSER_VAULT_E2E === "1")(
           profiles: new Map(),
         };
         const routes = createBrowserRouteApp();
-        registerBrowserVaultRoutes(
-          routes.app,
-          createBrowserRouteContext({ getState: () => state }),
-        );
+        const routeContext = createBrowserRouteContext({ getState: () => state });
+        registerBrowserVaultRoutes(routes.app, routeContext);
+        registerBrowserAgentSnapshotRoutes(routes.app, routeContext);
         const observe = expectDefined(
           routes.postHandlers.get("/vault/observe"),
           "registered vault observe route",
@@ -143,6 +145,57 @@ describe.runIf(process.env.OPENCLAW_BROWSER_VAULT_E2E === "1")(
         expect(() => assertVaultFillActAllowed(targetId, { kind: "press", key: "Enter" })).toThrow(
           /interactions are blocked/u,
         );
+
+        const snapshot = expectDefined(routes.getHandlers.get("/snapshot"), "snapshot route");
+        const snapshotResponse = createBrowserRouteResponse();
+        await snapshot(
+          {
+            params: {},
+            query: {
+              profile: "vault",
+              targetId,
+              labels: "true",
+              format: "ai",
+              mode: "efficient",
+            },
+            body: {},
+          },
+          snapshotResponse.res,
+        );
+        expect(snapshotResponse.statusCode).toBe(409);
+        expect(JSON.stringify(snapshotResponse.body)).not.toContain("imagePath");
+        expect(JSON.stringify(snapshotResponse.body)).not.toContain("imageType");
+
+        let snapshotProxyCalls = 0;
+        const snapshotProxy = Object.assign(
+          async () => {
+            snapshotProxyCalls += 1;
+            return { ok: true };
+          },
+          { isHostFallbackActive: () => false, route: () => undefined },
+        ) as BrowserProxyRequest;
+        await expect(
+          executeBrowserTabAction({
+            action: "snapshot",
+            params: { targetId, labels: true },
+            baseUrl: undefined,
+            profile: "vault",
+            proxyRequest: snapshotProxy,
+            sessionTabs: {
+              touch: async () => {},
+              untrack: async () => {},
+              trackOpened: async () => {},
+            },
+            capabilities: {
+              actions: ["snapshot"],
+              actKinds: ["batch", "evaluate", "press", "wait", "click", "close"],
+              tabBound: false,
+            },
+            isUserBrowserProfile: false,
+            onTabActivity: () => {},
+          }),
+        ).rejects.toThrow(/Labeled\/image-bearing snapshots/u);
+        expect(snapshotProxyCalls).toBe(0);
 
         const submitResponse = createBrowserRouteResponse();
         await submit(
@@ -207,10 +260,9 @@ describe.runIf(process.env.OPENCLAW_BROWSER_VAULT_E2E === "1")(
           profiles: new Map(),
         };
         const routes = createBrowserRouteApp();
-        registerBrowserVaultRoutes(
-          routes.app,
-          createBrowserRouteContext({ getState: () => state }),
-        );
+        const routeContext = createBrowserRouteContext({ getState: () => state });
+        registerBrowserVaultRoutes(routes.app, routeContext);
+        registerBrowserAgentSnapshotRoutes(routes.app, routeContext);
         const observe = expectDefined(routes.postHandlers.get("/vault/observe"));
         const identity = expectDefined(routes.postHandlers.get("/vault/identity"));
         const fill = expectDefined(routes.postHandlers.get("/vault/fill"));
@@ -393,10 +445,9 @@ describe.runIf(process.env.OPENCLAW_BROWSER_VAULT_E2E === "1")(
           profiles: new Map(),
         };
         const routes = createBrowserRouteApp();
-        registerBrowserVaultRoutes(
-          routes.app,
-          createBrowserRouteContext({ getState: () => state }),
-        );
+        const routeContext = createBrowserRouteContext({ getState: () => state });
+        registerBrowserVaultRoutes(routes.app, routeContext);
+        registerBrowserAgentSnapshotRoutes(routes.app, routeContext);
         const observe = expectDefined(routes.postHandlers.get("/vault/observe"));
         const fill = expectDefined(routes.postHandlers.get("/vault/fill"));
         const submit = expectDefined(routes.postHandlers.get("/vault/submit"));
