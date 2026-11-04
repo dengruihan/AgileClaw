@@ -480,6 +480,7 @@ describe("browser screencast sessions", () => {
           resolvePage = resolve;
         }),
     );
+    registerVaultFillSecret("target-1", "deferred-acquisition-canary", "doc-1", "openclaw");
     const lifecycle = new AbortController();
     const params = screencastParams({ lifecycleSignal: lifecycle.signal });
     const pending = await attach(params);
@@ -488,10 +489,13 @@ describe("browser screencast sessions", () => {
     await flush();
     expect(pending.close).toHaveBeenCalledWith(4004, "target_closed");
     expect(page.newCDPSession).not.toHaveBeenCalled();
+    expect(hasActiveVaultFill("target-1")).toBe(true);
     const successor = await attach(screencastParams({ lifecycleGeneration: 1 }));
     const stale = await attach(params);
     expect(stale.close).toHaveBeenCalledWith(4004, "target_closed");
     expect(successor.close).not.toHaveBeenCalled();
+    expect(hasActiveVaultFill("target-1")).toBe(true);
+    clearAllVaultFillSessions();
   });
 
   it("waits for predecessor teardown before starting a replacement on the same target", async () => {

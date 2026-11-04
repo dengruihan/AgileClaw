@@ -97,7 +97,14 @@ class BrowserScreencastSession {
         targetId: this.params.targetId,
         ssrfPolicy: this.params.ssrfPolicy,
       });
-      if (!this.isCurrent() || page.isClosed()) {
+      if (!this.isCurrent()) {
+        // Lifecycle/generation invalidation only retires the stream; the page
+        // (and any sensitive document) can still be alive.
+        this.onTargetClosed();
+        return;
+      }
+      if (page.isClosed()) {
+        // A positively closed page is document destruction.
         this.onPageClosed();
         return;
       }
