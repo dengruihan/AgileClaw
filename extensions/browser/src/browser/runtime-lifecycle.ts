@@ -3,11 +3,13 @@ import {
   getExtensionRelayModule,
   getGatewayExtensionRelayModule,
 } from "./extension-relay.runtime.js";
+import { clearAllHumanControlLeases } from "./human-control.js";
 import { stopBrowserScreencasts } from "./screencast/session.js";
 import type { BrowserServerState } from "./server-context.js";
 import { markBrowserRuntimeStopping } from "./server-context.lifecycle.js";
 import { stopKnownBrowserProfiles } from "./server-lifecycle.js";
 import { registerBrowserUnhandledRejectionHandler } from "./unhandled-rejections.js";
+import { clearAllVaultFillSessions } from "./vault-fill-scrub.js";
 
 type CreateBrowserRuntimeStateParams = {
   resolved: BrowserServerState["resolved"];
@@ -46,6 +48,9 @@ async function stopBrowserRuntimeInternal(
     return;
   }
   markBrowserRuntimeStopping(current);
+  // Ownership and masking end with the runtime; a restarted browser starts clean.
+  clearAllHumanControlLeases();
+  clearAllVaultFillSessions();
   let firstError: Error | undefined;
 
   // Viewers receive the shutdown code before profile invalidation closes their targets.

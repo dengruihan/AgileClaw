@@ -23,6 +23,11 @@ import { buildChromeMcpRouteSnapshot } from "../chrome-mcp.snapshot-result.js";
 import { flattenChromeMcpSnapshotToAriaResult } from "../chrome-mcp.snapshot.js";
 import { DEFAULT_BROWSER_SCREENSHOT_TIMEOUT_MS } from "../constants.js";
 import {
+  assertHumanControlAgentAllowed,
+  isHumanControlError,
+  rejectHumanControl,
+} from "../human-control.js";
+import {
   assertBrowserNavigationAllowed,
   assertBrowserNavigationResultAllowed,
 } from "../navigation-guard.js";
@@ -48,6 +53,7 @@ import {
 } from "../snapshot-delta-cache.js";
 import { appendSnapshotUrls } from "../snapshot-urls.js";
 import { normalizeBrowserTimerDelayMs } from "../timer-delay.js";
+import { retireSensitiveDocumentAfterNavigation } from "../vault-fill-navigation.js";
 import { hasActiveVaultFill } from "../vault-fill-scrub.js";
 import {
   browserNavigationPolicyForProfile,
@@ -200,6 +206,16 @@ export function registerBrowserAgentSnapshotRoutes(
             actedOnTargetId: tab.targetId,
             operationTargetId: result.targetId,
             resolveRelayTarget,
+          });
+          await retireSensitiveDocumentAfterNavigation({
+            cdpUrl,
+            targetId: tab.targetId,
+            nextTargetId: currentTargetId,
+            download: Boolean(result.download),
+            signal,
+            ...(browserNavigationPolicyForProfile(ctx, profileCtx).ssrfPolicy
+              ? { ssrfPolicy: browserNavigationPolicyForProfile(ctx, profileCtx).ssrfPolicy }
+              : {}),
           });
           res.json({ ok: true, ...result, targetId: currentTargetId });
         } finally {
@@ -421,6 +437,18 @@ export function registerBrowserAgentSnapshotRoutes(
             signal,
             timeoutMs: plan.timeoutMs,
           });
+          try {
+            assertHumanControlAgentAllowed({
+              profile: profileCtx.profile.name,
+              tab,
+              query: req.query,
+            });
+          } catch (error) {
+            if (isHumanControlError(error)) {
+              return rejectHumanControl(res, error);
+            }
+            throw error;
+          }
           if (plan.labels && hasActiveVaultFill(tab.targetId)) {
             return jsonError(
               res,

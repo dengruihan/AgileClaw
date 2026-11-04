@@ -4,11 +4,12 @@ import type { Page } from "playwright-core";
 import { getBrowserProfileCapabilities } from "../profile-capabilities.js";
 import { getPageForTargetId } from "../pw-session-connection.js";
 import type { BrowserRouteContext } from "../server-context.js";
+import { documentIdentity } from "../vault-fill-document.js";
 import { clearVaultFillSession, registerVaultFillSecret } from "../vault-fill-scrub.js";
 import {
   browserNavigationPolicyForProfile,
   readBody,
-  withRouteTabContext,
+  withHumanControlRouteContext,
 } from "./agent.shared.js";
 import type { BrowserRouteRegistrar } from "./types.js";
 import { jsonError, toStringOrEmpty } from "./utils.js";
@@ -46,7 +47,7 @@ const MAX_PASSWORD_LENGTH = 4096;
 const MAX_USERNAME_LENGTH = 512;
 const FILL_ACTION_TIMEOUT_MS = 5_000;
 
-function readOrigin(url: string): ObservedOrigin | undefined {
+export function readVaultOrigin(url: string): ObservedOrigin | undefined {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -105,29 +106,6 @@ async function observeFields(page: Page): Promise<FieldObservation> {
   });
 }
 
-async function documentIdentity(
-  page: Page,
-): Promise<{ documentId: string; frameId: string } | undefined> {
-  try {
-    const session = await page.context().newCDPSession(page);
-    try {
-      const tree = (await session.send("Page.getFrameTree")) as {
-        frameTree?: { frame?: { id?: string; loaderId?: string; url?: string } };
-      };
-      const frame = tree.frameTree?.frame;
-      if (frame?.id && frame.loaderId) {
-        return { documentId: frame.loaderId, frameId: frame.id };
-      }
-    } finally {
-      await session.detach().catch(() => undefined);
-    }
-  } catch {
-    // Fail closed: a URL-derived token does not change on a same-URL reload,
-    // so it cannot prove that the approved document is still current.
-  }
-  return undefined;
-}
-
 async function crossOriginPasswordFrameCount(page: Page, mainOrigin: string): Promise<number> {
   let count = 0;
   for (const frame of page.frames()) {
@@ -182,7 +160,7 @@ async function observeVaultTarget(params: {
   });
   params.signal?.throwIfAborted();
   const url = page.url();
-  const origin = readOrigin(url);
+  const origin = readVaultOrigin(url);
   if (!origin) {
     return { ok: false, status: "needs_human", reasonCode: "unsupported_page" };
   }
@@ -258,7 +236,7 @@ export function registerBrowserVaultRoutes(
   app.post("/vault/observe", async (req, res) => {
     const body = readBody(req);
     const targetId = toStringOrEmpty(body.targetId) || undefined;
-    await withRouteTabContext({
+    await withHumanControlRouteContext({
       req,
       res,
       ctx,
@@ -306,7 +284,7 @@ export function registerBrowserVaultRoutes(
   app.post("/vault/identity", async (req, res) => {
     const body = readBody(req);
     const targetId = toStringOrEmpty(body.targetId) || undefined;
-    await withRouteTabContext({
+    await withHumanControlRouteContext({
       req,
       res,
       ctx,
@@ -334,7 +312,7 @@ export function registerBrowserVaultRoutes(
           ...(navigationPolicy.ssrfPolicy ? { ssrfPolicy: navigationPolicy.ssrfPolicy } : {}),
         });
         const identity = await documentIdentity(page);
-        const origin = readOrigin(page.url());
+        const origin = readVaultOrigin(page.url());
         if (!identity || !origin) {
           res.json({ ok: false, reasonCode: "document_identity_unavailable" });
           return;
@@ -375,7 +353,7 @@ export function registerBrowserVaultRoutes(
     if (!expectedOrigin || !expectedDocumentId || !expectedFrameId || !expectedFieldSignature) {
       return jsonError(res, 400, "Invalid password fill request.");
     }
-    await withRouteTabContext({
+    await withHumanControlRouteContext({
       req,
       res,
       ctx,
@@ -475,7 +453,12 @@ export function registerBrowserVaultRoutes(
         // Arm masking before insertion so a transport failure, partial fill, or
         // timeout cannot leave plaintext in the DOM unprotected. Bind the
         // document id so a later navigation can prove replacement.
-        registerVaultFillSecret(tab.targetId, password, observation.documentId);
+        registerVaultFillSecret(
+          tab.targetId,
+          password,
+          observation.documentId,
+          profileCtx.profile.name,
+        );
 
         if (username !== undefined && observation.fields.usernameIndex >= 0) {
           const usernamePage = await pageForFill();
@@ -592,7 +575,7 @@ export function registerBrowserVaultRoutes(
     if (!expectedOrigin || !expectedDocumentId || !expectedFrameId || !expectedFieldSignature) {
       return jsonError(res, 400, "Invalid password submit request.");
     }
-    await withRouteTabContext({
+    await withHumanControlRouteContext({
       req,
       res,
       ctx,

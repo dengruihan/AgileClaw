@@ -90,7 +90,7 @@ function renderHeaderActions(
         icon: icons.externalLink,
         newTab: true,
         disabled: !activeUrl,
-        onClick: () => controller.openExternal(),
+        onClick: () => controller.url.openExternal(),
       })}
       ${renderIconButton({
         className: "rail-header__action bp-icon",
@@ -168,10 +168,10 @@ function renderToolbar(controller: BrowserPanelController, embedded: boolean) {
         @keydown=${(event: KeyboardEvent) => {
           if (event.key === "Enter") {
             event.preventDefault();
-            controller.commitUrlDraft();
+            controller.url.commit();
             (event.target as HTMLInputElement).blur();
           } else if (event.key === "Escape") {
-            controller.resetUrlDraftFromView();
+            controller.url.resetFromView();
             (event.target as HTMLInputElement).blur();
           }
         }}
@@ -183,7 +183,7 @@ function renderToolbar(controller: BrowserPanelController, embedded: boolean) {
               icon: icons.externalLink,
               newTab: true,
               disabled: !hasView,
-              onClick: () => controller.openExternal(),
+              onClick: () => controller.url.openExternal(),
             })
           : nothing
       }
@@ -218,6 +218,69 @@ function renderToolbar(controller: BrowserPanelController, embedded: boolean) {
         disabled: !hasView || (!nativeTab && controller.evaluateUnavailable),
         onClick: () => controller.setMode("inspect"),
       })}
+    </div>
+  `;
+}
+
+function renderHumanControlBar(controller: BrowserPanelController) {
+  if (!controller.human.available()) {
+    return nothing;
+  }
+  const control = controller.human.control();
+  if (!control && !controller.view) {
+    // No live document to take over (stopped browser or empty tab strip).
+    return nothing;
+  }
+  if (!control) {
+    return html`
+      <div class="bp-controlbar">
+        <span class="bp-controlbar__hint">${t("browser.humanControlAvailable")}</span>
+        <button class="bp-btn" type="button" @click=${() => void controller.human.takeOver()}>
+          ${t("browser.humanControlTakeOver")}
+        </button>
+      </div>
+    `;
+  }
+  if (control.status === "requested") {
+    return html`
+      <div class="bp-controlbar bp-controlbar--attention" role="status">
+        <span class="bp-controlbar__hint">${t("browser.humanControlRequested")}</span>
+        <button
+          class="bp-btn bp-btn--primary"
+          type="button"
+          @click=${() => void controller.human.takeOver()}
+        >
+          ${t("browser.humanControlTakeOver")}
+        </button>
+      </div>
+    `;
+  }
+  const ownsControl = controller.human.sensitiveInputActive();
+  return html`
+    <div class="bp-controlbar bp-controlbar--human" role="status">
+      <span class="bp-controlbar__hint">
+        ${t(ownsControl ? "browser.humanControlActive" : "browser.humanControlOther")}
+      </span>
+      ${
+        ownsControl
+          ? html`
+              <button class="bp-btn" type="button" @click=${() => void controller.human.handBack()}>
+                ${t("browser.humanControlHandBack")}
+              </button>
+              <button class="bp-btn" type="button" @click=${() => void controller.human.cancel()}>
+                ${t("browser.humanControlCancel")}
+              </button>
+            `
+          : html`
+              <button
+                class="bp-btn bp-btn--primary"
+                type="button"
+                @click=${() => void controller.human.takeOver()}
+              >
+                ${t("browser.humanControlTakeOver")}
+              </button>
+            `
+      }
     </div>
   `;
 }
@@ -443,7 +506,8 @@ export function renderBrowserPanelChrome(
             </header>`
           : nothing
       }
-      ${renderToolbar(controller, embedded)} ${renderAnnotateBar(controller)}
+      ${renderToolbar(controller, embedded)} ${renderHumanControlBar(controller)}
+      ${renderAnnotateBar(controller)}
       ${
         controller.errorText
           ? html`<div class="bp-note bp-note--error" role="alert">${controller.errorText}</div>`

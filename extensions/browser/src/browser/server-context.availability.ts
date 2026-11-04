@@ -31,6 +31,7 @@ import {
 import type { ResolvedBrowserProfile } from "./config.js";
 import { BROWSER_ERROR_REASONS, BrowserProfileUnavailableError } from "./errors.js";
 import { getExtensionRelayModule } from "./extension-relay.runtime.js";
+import { humanControlRegistry } from "./human-control.js";
 import { getBrowserProfileCapabilities } from "./profile-capabilities.js";
 import {
   CDP_READY_AFTER_LAUNCH_MIN_TIMEOUT_MS,
@@ -57,6 +58,7 @@ import type {
   ProfileContext,
   ProfileRuntimeState,
 } from "./server-context.types.js";
+import { clearVaultFillSessionsForProfile } from "./vault-fill-scrub.js";
 
 type AvailabilityDeps = {
   opts: ContextOptions;
@@ -644,12 +646,24 @@ export function createProfileAvailability({
     const current = state();
     assertProfileLifecycleContext({ state: current, runtime, configRevision });
     runtime.managedLaunchFailure = undefined;
+    let managedChromeStopped = false;
     const result = await beginProfileTransition({
       state: current,
       runtime,
       reason: "stop requested",
       managedChrome: "stop",
+      onManagedChromeStop: (status) => {
+        managedChromeStopped = status === "stopped";
+      },
     });
+    // Only an owned Chrome process reported as stopped proves the documents are
+    // gone. Attach-only/remote profiles merely detach, and "unverified" may
+    // leave Chromium alive; both keep ownership and masking. State stays
+    // profile-scoped so other profiles are untouched.
+    if (managedChromeStopped && !profile.attachOnly && !capabilities.isRemote) {
+      humanControlRegistry.revokeProfile(profile.name);
+      clearVaultFillSessionsForProfile(profile.name);
+    }
     return {
       stopped: result.stopped || profile.attachOnly || capabilities.isRemote,
     };

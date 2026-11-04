@@ -3,6 +3,11 @@ import { expectDefined } from "@openclaw/normalization-core";
 import type { WebSocket } from "openclaw/plugin-sdk/websocket-runtime";
 import type { Page } from "playwright-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  clearAllVaultFillSessions,
+  hasActiveVaultFill,
+  registerVaultFillSecret,
+} from "../vault-fill-scrub.js";
 import { attachBrowserScreencastViewer, stopBrowserScreencasts } from "./session.js";
 import { parseScreencastFrame, screencastParams, ScreencastViewer } from "./test-support.js";
 
@@ -12,7 +17,14 @@ vi.mock("../pw-ai-module.js", () => ({
 }));
 
 class FakeCdp extends EventEmitter {
-  send = vi.fn(async (_method: string, _params?: unknown) => ({}));
+  constructor(private readonly page: FakePage) {
+    super();
+  }
+  send = vi.fn(async (method: string, _params?: unknown) =>
+    method === "Page.getFrameTree"
+      ? { frameTree: { frame: { id: "frame-1", loaderId: this.page.loaderId } } }
+      : {},
+  );
   detach = vi.fn(async () => {
     this.emit("close", this);
   });
@@ -34,8 +46,9 @@ class FakeCdp extends EventEmitter {
 
 class FakePage extends EventEmitter {
   cdps: FakeCdp[] = [];
+  loaderId = "doc-1";
   newCDPSession = vi.fn(async () => {
-    const cdp = new FakeCdp();
+    const cdp = new FakeCdp(this);
     this.cdps.push(cdp);
     return cdp;
   });
@@ -91,6 +104,29 @@ describe("browser screencast sessions", () => {
     await flush();
     return viewer;
   }
+
+  it("retires sensitive-input masking when a navigation replaces the document", async () => {
+    registerVaultFillSecret("target-1", "navigation-canary", "doc-1", "openclaw");
+    const viewer = await attach();
+    expect(hasActiveVaultFill("target-1")).toBe(true);
+    page.loaderId = "doc-2";
+    page.emit("load");
+    await flush();
+    expect(hasActiveVaultFill("target-1")).toBe(false);
+    viewer.close();
+    clearAllVaultFillSessions();
+  });
+
+  it("drops sensitive-input masking when the captured tab closes", async () => {
+    registerVaultFillSecret("target-1", "screencast-close-canary", "doc-1", "openclaw");
+    const viewer = await attach();
+    expect(hasActiveVaultFill("target-1")).toBe(true);
+    page.emit("close");
+    await flush();
+    expect(hasActiveVaultFill("target-1")).toBe(false);
+    viewer.close();
+    clearAllVaultFillSessions();
+  });
 
   it("revokes only the requesting viewer and stops capture after the last requester leaves", async () => {
     const firstRequester = new AbortController();
@@ -392,6 +428,7 @@ describe("browser screencast sessions", () => {
   it.each(["page", "cdp", "lifecycle"])(
     "closes viewers with target_closed when %s closes",
     async (owner) => {
+      registerVaultFillSecret("target-1", `owner-${owner}-canary`, "doc-1", "openclaw");
       const lifecycle = new AbortController();
       const viewer = await attach(screencastParams({ lifecycleSignal: lifecycle.signal }));
       if (owner === "lifecycle") {
@@ -404,8 +441,21 @@ describe("browser screencast sessions", () => {
       expect(viewer.close).toHaveBeenCalledWith(4004, "target_closed");
       await flush();
       expect(page.cdp.detach).toHaveBeenCalledTimes(1);
+      expect(hasActiveVaultFill("target-1")).toBe(owner !== "page");
+      clearAllVaultFillSessions();
     },
   );
+
+  it("keeps masking when capture acknowledgement fails but still closes the viewer", async () => {
+    registerVaultFillSecret("target-1", "ack-failure-canary", "doc-1", "openclaw");
+    const viewer = await attach();
+    page.cdp.send.mockRejectedValueOnce(new Error("ack failed"));
+    page.paint(1);
+    await vi.advanceTimersByTimeAsync(60);
+    expect(viewer.close).toHaveBeenCalledWith(4004, "target_closed");
+    expect(hasActiveVaultFill("target-1")).toBe(true);
+    clearAllVaultFillSessions();
+  });
 
   it("stops only after the last viewer leaves and closes all viewers with 1012 on shutdown", async () => {
     const first = await attach();
@@ -430,6 +480,7 @@ describe("browser screencast sessions", () => {
           resolvePage = resolve;
         }),
     );
+    registerVaultFillSecret("target-1", "deferred-acquisition-canary", "doc-1", "openclaw");
     const lifecycle = new AbortController();
     const params = screencastParams({ lifecycleSignal: lifecycle.signal });
     const pending = await attach(params);
@@ -438,10 +489,13 @@ describe("browser screencast sessions", () => {
     await flush();
     expect(pending.close).toHaveBeenCalledWith(4004, "target_closed");
     expect(page.newCDPSession).not.toHaveBeenCalled();
+    expect(hasActiveVaultFill("target-1")).toBe(true);
     const successor = await attach(screencastParams({ lifecycleGeneration: 1 }));
     const stale = await attach(params);
     expect(stale.close).toHaveBeenCalledWith(4004, "target_closed");
     expect(successor.close).not.toHaveBeenCalled();
+    expect(hasActiveVaultFill("target-1")).toBe(true);
+    clearAllVaultFillSessions();
   });
 
   it("waits for predecessor teardown before starting a replacement on the same target", async () => {

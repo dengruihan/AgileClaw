@@ -35,6 +35,7 @@ interface BrowserPanelSnapshotHost extends BrowserPanelSnapshotState {
   >;
   readonly activeTargetId: string | null;
   readonly mode: "interact" | "annotate" | "inspect";
+  humanControlTokenForInput(): string | undefined;
   readonly operations: Pick<
     BrowserPanelOperationOwnership,
     | "epoch"
@@ -152,7 +153,11 @@ export class BrowserPanelSnapshotController {
       captureRevision = stream.frameRevision;
       const route = this.controller.operations.route;
       const host = this.controller.host;
-      const shot = await captureBrowserScreenshot(client, targetId);
+      const shot = await captureBrowserScreenshot(
+        client,
+        targetId,
+        this.controller.humanControlTokenForInput(),
+      );
       if (!captureCurrent()) {
         return;
       }
@@ -169,6 +174,7 @@ export class BrowserPanelSnapshotController {
           this.controller.evaluateUnavailable,
           captureCurrent,
           () => this.controller.setState("evaluateUnavailable", true),
+          this.controller.humanControlTokenForInput(),
         ),
       ]);
       if (!captureCurrent()) {
@@ -238,12 +244,13 @@ async function readBrowserPanelOwnedMetrics(
   evaluateUnavailable: boolean,
   current: () => boolean,
   markEvaluateUnavailable: () => void,
+  humanControlToken?: string,
 ): Promise<BrowserPageMetrics | null> {
   if (evaluateUnavailable || !current()) {
     return null;
   }
   try {
-    return await readBrowserPageMetrics(client, targetId);
+    return await readBrowserPageMetrics(client, targetId, humanControlToken);
   } catch (error) {
     if (current() && isBrowserNavigationBlockedError(error)) {
       throw error;

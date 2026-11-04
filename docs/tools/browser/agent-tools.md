@@ -14,6 +14,8 @@ The agent gets two browser tools:
 
 `browser_login` takes only an opaque `itemRef` and an optional reason/profile/target. It reads the origin from the local browser, asks the operator for a one-time approval, and returns a value-free status. It is limited to local managed/shared Chromium and never exposes a vault read verb. See [Password vault → Agent fill](/gateway/passwords-vault#agent-fill).
 
+When the page needs human input (CAPTCHA, two-factor, or a manual sign-in step), the result is `needs_human` and the local browser owner pauses that tab. The operator completes the challenge in the browser panel; agent mutations on that tab stay blocked until handback. See [Browser human takeover](/tools/browser/human-takeover).
+
 How it maps:
 
 - `browser snapshot` returns a stable UI tree (AI or ARIA).

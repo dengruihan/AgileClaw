@@ -114,6 +114,37 @@ export const browserPanelStyles = css`
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .bp-controlbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 5px 10px;
+    font-size: 12px;
+    color: var(--muted, #8a919e);
+    border-bottom: 1px solid var(--border, #262b34);
+  }
+  .bp-controlbar__hint {
+    flex: 1 1 220px;
+    min-width: 0;
+  }
+  .bp-controlbar--attention {
+    color: var(--warn, #f59e0b);
+    background: var(--warn-subtle, rgba(245, 158, 11, 0.08));
+  }
+  .bp-controlbar--human {
+    color: var(--ok, #22c55e);
+    background: color-mix(in srgb, var(--ok, #22c55e) 8%, transparent);
+  }
+  @media (max-width: 560px) {
+    .bp-controlbar {
+      gap: 6px;
+      padding: 6px 8px;
+    }
+    .bp-controlbar__hint {
+      flex-basis: 100%;
+    }
+  }
   .bp-btn {
     border: 1px solid var(--border, #262b34);
     background: transparent;

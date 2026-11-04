@@ -18,6 +18,11 @@ password never goes through chat, tool arguments, or the transcript. See
 a password into chat or a browser `type`/`fill` action; those values are
 model-visible and persisted.
 
+If the page shows a CAPTCHA, a two-factor prompt, or another human gate, the
+agent asks for a tab-scoped takeover. Take over the tab in the browser panel,
+enter the sensitive value there, then hand control back. See
+[Browser human takeover](/tools/browser/human-takeover).
+
 Use the host browser (manual login) for both reading (search/threads) and
 posting on X/Twitter and other bot-sensitive sites. Sandboxed browser sessions
 are more likely to trigger bot detection.

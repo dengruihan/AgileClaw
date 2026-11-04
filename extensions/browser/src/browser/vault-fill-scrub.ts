@@ -17,6 +17,7 @@ const MASK = "***";
 type FillSession = {
   secrets: string[];
   documentId?: string;
+  profile?: string;
 };
 
 const sessions = new Map<string, FillSession>();
@@ -44,6 +45,7 @@ export function registerVaultFillSecret(
   targetId: string,
   secret: string,
   documentId?: string,
+  profile?: string,
 ): void {
   if (!targetId || !secret) {
     return;
@@ -58,6 +60,7 @@ export function registerVaultFillSecret(
     ...((documentId ?? existing?.documentId)
       ? { documentId: documentId ?? existing?.documentId }
       : {}),
+    ...((profile ?? existing?.profile) ? { profile: profile ?? existing?.profile } : {}),
   });
 }
 
@@ -98,6 +101,36 @@ export function clearVaultFillSessionIfDocumentChanged(
 
 export function clearAllVaultFillSessions(): void {
   sessions.clear();
+}
+
+/**
+ * Drop fill/sensitive-input masking for tabs that disappeared from an
+ * authoritative listing for this profile. A tab alias migration keeps its raw
+ * target id live, so a confident replacement does not lose protection.
+ */
+export function clearVaultFillSessionsForProfile(profile: string): number {
+  let cleared = 0;
+  for (const [targetId, session] of sessions) {
+    if (session.profile === profile) {
+      sessions.delete(targetId);
+      cleared += 1;
+    }
+  }
+  return cleared;
+}
+
+export function retainVaultFillSessions(
+  profile: string,
+  liveTargetIds: ReadonlySet<string>,
+): number {
+  let cleared = 0;
+  for (const [targetId, session] of sessions) {
+    if (session.profile === profile && !liveTargetIds.has(targetId)) {
+      sessions.delete(targetId);
+      cleared += 1;
+    }
+  }
+  return cleared;
 }
 
 function containsScript(action: BrowserActRequest): boolean {

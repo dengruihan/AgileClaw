@@ -63,6 +63,8 @@ interface BrowserPanelInputHost extends BrowserPanelInputState {
   ): Promise<boolean>;
   reportError(error: unknown): void;
   exitCaptureModes(): void;
+  humanControlTokenForInput(): string | undefined;
+  sensitiveInputActive(): boolean;
 }
 
 type BrowserPanelDrawingGesture = {
@@ -113,6 +115,24 @@ export class BrowserPanelInputController {
     return this.host.host.renderRoot.querySelector<HTMLElement>(".bp-stage");
   }
 
+  private controlToken(): string | undefined {
+    return this.host.humanControlTokenForInput();
+  }
+
+  private insertText(
+    text: string,
+  ): (client: BrowserRequestClient, targetId: string) => Promise<void> {
+    const sensitive = this.host.sensitiveInputActive();
+    const humanControlToken = this.controlToken();
+    return (client, targetId) =>
+      insertBrowserText(client, {
+        targetId,
+        text,
+        ...(sensitive ? { sensitive: true } : {}),
+        ...(humanControlToken ? { humanControlToken } : {}),
+      });
+  }
+
   private remotePoint(event: MouseEvent): { x: number; y: number } | null {
     return browserPanelRemotePoint(this.stageElement(), event, this.host.view);
   }
@@ -152,7 +172,12 @@ export class BrowserPanelInputController {
         return Promise.resolve(false);
       }
       return this.host.runAction((actionClient) =>
-        clickBrowserCoords(actionClient, { targetId, x: point.x, y: point.y }),
+        clickBrowserCoords(actionClient, {
+          targetId,
+          x: point.x,
+          y: point.y,
+          ...(this.controlToken() ? { humanControlToken: this.controlToken() } : {}),
+        }),
       );
     };
     this.clickSequence += 1;
@@ -194,10 +219,16 @@ export class BrowserPanelInputController {
           await pressBrowserKey(actionClient, {
             targetId,
             key: deltaY >= 0 ? "PageDown" : "PageUp",
+            ...(this.controlToken() ? { humanControlToken: this.controlToken() } : {}),
           });
           return;
         }
-        await scrollBrowserBy(actionClient, { targetId, deltaX, deltaY });
+        await scrollBrowserBy(actionClient, {
+          targetId,
+          deltaX,
+          deltaY,
+          ...(this.controlToken() ? { humanControlToken: this.controlToken() } : {}),
+        });
       });
     });
     return true;
@@ -280,9 +311,7 @@ export class BrowserPanelInputController {
     const current = this.compositionCurrent;
     this.compositionCurrent = null;
     if (current?.() && event.data) {
-      this.runAfterClick((client, targetId) =>
-        insertBrowserText(client, { targetId, text: event.data }),
-      );
+      this.runAfterClick(this.insertText(event.data));
     }
     if (event.currentTarget instanceof HTMLTextAreaElement) {
       event.currentTarget.value = "";
@@ -305,7 +334,7 @@ export class BrowserPanelInputController {
       // The empty proxy cannot identify the remote range a local correction would replace.
       this.host.setState("noticeText", t("browser.manualTextCorrection"));
     } else if (["insertText", "insertFromPaste"].includes(event.inputType) && text) {
-      this.runAfterClick((client, targetId) => insertBrowserText(client, { targetId, text }));
+      this.runAfterClick(this.insertText(text));
     } else {
       const key =
         event.inputType === "deleteContentBackward"
@@ -316,7 +345,13 @@ export class BrowserPanelInputController {
               ? "Enter"
               : null;
       if (key) {
-        this.runAfterClick((client, targetId) => pressBrowserKey(client, { targetId, key }));
+        this.runAfterClick((client, targetId) =>
+          pressBrowserKey(client, {
+            targetId,
+            key,
+            ...(this.controlToken() ? { humanControlToken: this.controlToken() } : {}),
+          }),
+        );
       }
     }
     // insertFromComposition follows compositionend on WebKit; the end event already sent it.
@@ -344,7 +379,13 @@ export class BrowserPanelInputController {
       return;
     }
     event.preventDefault();
-    this.runAfterClick((client, targetId) => pressBrowserKey(client, { targetId, key }));
+    this.runAfterClick((client, targetId) =>
+      pressBrowserKey(client, {
+        targetId,
+        key,
+        ...(this.controlToken() ? { humanControlToken: this.controlToken() } : {}),
+      }),
+    );
   }
 
   handleViewportPaste(event: ClipboardEvent): void {
@@ -356,7 +397,7 @@ export class BrowserPanelInputController {
     }
     const text = event.clipboardData.getData("text/plain");
     if (text) {
-      this.runAfterClick((client, targetId) => insertBrowserText(client, { targetId, text }));
+      this.runAfterClick(this.insertText(text));
     }
   }
 
@@ -492,7 +533,12 @@ export class BrowserPanelInputController {
     this.host.setState("inspectPointer", stagePoint);
     this.paintOverlay();
     this.host.pendingInput.queueInspection(INSPECT_THROTTLE_MS, current, () => {
-      void inspectBrowserElementAt(client, { targetId, x: point.x, y: point.y })
+      void inspectBrowserElementAt(client, {
+        targetId,
+        x: point.x,
+        y: point.y,
+        ...(this.controlToken() ? { humanControlToken: this.controlToken() } : {}),
+      })
         .then((node) => {
           if (current()) {
             if (this.inspectionError !== null && this.host.errorText === this.inspectionError) {

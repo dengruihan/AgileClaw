@@ -13,6 +13,7 @@ import {
   BrowserResetUnsupportedError,
   toBrowserErrorResponse,
 } from "./errors.js";
+import { humanControlRegistry } from "./human-control.js";
 import { getBrowserProfileCapabilities } from "./profile-capabilities.js";
 import { refreshResolvedBrowserConfigFromDisk } from "./resolved-config-refresh.js";
 import { createProfileAvailability } from "./server-context.availability.js";
@@ -35,6 +36,7 @@ import type {
   ProfileStatus,
 } from "./server-context.types.js";
 import { movePathToTrash } from "./trash.js";
+import { clearVaultFillSessionsForProfile } from "./vault-fill-scrub.js";
 
 export type {
   BrowserRouteContext,
@@ -199,6 +201,10 @@ function createProfileContext(
           }
         },
       });
+      // Only a completed reset proves this profile's documents are gone.
+      // Other profiles keep their ownership and masking sessions.
+      humanControlRegistry.revokeProfile(profile.name);
+      clearVaultFillSessionsForProfile(profile.name);
       return result;
     },
   };

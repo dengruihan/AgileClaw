@@ -1,6 +1,8 @@
 import type { WebSocket } from "openclaw/plugin-sdk/websocket-runtime";
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { getPwAiModule } from "../pw-ai-module.js";
+import { retireSensitiveDocumentForPage } from "../vault-fill-navigation.js";
+import { clearVaultFillSession } from "../vault-fill-scrub.js";
 import { clearBrowserScreencastTokens, type BrowserScreencastTokenParams } from "./tokens.js";
 import { encodeBrowserScreencastFrame } from "./wire.js";
 
@@ -95,12 +97,19 @@ class BrowserScreencastSession {
         targetId: this.params.targetId,
         ssrfPolicy: this.params.ssrfPolicy,
       });
-      if (!this.isCurrent() || page.isClosed()) {
+      if (!this.isCurrent()) {
+        // Lifecycle/generation invalidation only retires the stream; the page
+        // (and any sensitive document) can still be alive.
         this.onTargetClosed();
         return;
       }
+      if (page.isClosed()) {
+        // A positively closed page is document destruction.
+        this.onPageClosed();
+        return;
+      }
       this.page = page;
-      page.on("close", this.onTargetClosed);
+      page.on("close", this.onPageClosed);
       page.on("framenavigated", this.onNavigation);
       page.on("load", this.onLoad);
       await this.checkNavigation(page.url());
@@ -108,6 +117,16 @@ class BrowserScreencastSession {
       await this.close(4004, "target_closed");
     }
   }
+
+  /**
+   * A positively closed Playwright page proves the document is gone.
+   * Lifecycle invalidation, CDP detach, and capture/ack failures only stop the
+   * stream; the tab can survive them, so masking is retained.
+   */
+  private readonly onPageClosed = (): void => {
+    clearVaultFillSession(this.params.targetId);
+    void this.close(4004, "target_closed");
+  };
 
   private readonly onTargetClosed = (): void => {
     void this.close(4004, "target_closed");
@@ -126,6 +145,10 @@ class BrowserScreencastSession {
   };
 
   private readonly onLoad = (): void => {
+    const page = this.page;
+    if (page) {
+      void retireSensitiveDocumentForPage(page, this.params.targetId).catch(() => false);
+    }
     void this.updateMetadata(this.navigationEpoch);
   };
 
@@ -277,7 +300,7 @@ class BrowserScreencastSession {
     }
     this.closed = true;
     this.params.lifecycleSignal.removeEventListener("abort", this.onTargetClosed);
-    this.page?.off("close", this.onTargetClosed);
+    this.page?.off("close", this.onPageClosed);
     this.page?.off("framenavigated", this.onNavigation);
     this.page?.off("load", this.onLoad);
     const viewers = [...this.viewers.keys()];

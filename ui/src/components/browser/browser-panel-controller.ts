@@ -1,10 +1,8 @@
 import type { ReactiveController } from "lit";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import { hasNativeBrowserBridge } from "../../app/native-browser-bridge.ts";
-import { postNativeExternalLink } from "../../app/native-link-routing.ts";
 import { t } from "../../i18n/index.ts";
 import { formatUiError } from "../../lib/format-error.ts";
-import { openExternalUrlSafe } from "../../lib/open-external-url.ts";
 import type { AnnotationStroke } from "./browser-annotation.ts";
 import type {
   BrowserRequestClient,
@@ -23,6 +21,7 @@ import {
 } from "./browser-client.ts";
 import { BrowserPanelInputController } from "./browser-panel-controller-input.ts";
 import { BrowserPanelDownload } from "./browser-panel-download.ts";
+import { BrowserPanelHumanControl } from "./browser-panel-human-control.ts";
 import { BrowserPanelNativeController } from "./browser-panel-native-controller.ts";
 import {
   BrowserPanelOperationOwnership,
@@ -32,6 +31,7 @@ import { BrowserPanelPendingInput } from "./browser-panel-pending-input.ts";
 import { BrowserPanelSnapshotController } from "./browser-panel-snapshot-controller.ts";
 import { BrowserPanelStream } from "./browser-panel-stream.ts";
 import type { BrowserPanelView } from "./browser-panel-surface.ts";
+import { BrowserPanelUrl } from "./browser-panel-url.ts";
 import { BrowserPanelViewportController } from "./browser-panel-viewport-controller.ts";
 import { browserRouteKey, type BrowserRoute } from "./browser-target.ts";
 import { normalizeBrowserUrlDraft } from "./browser-url.ts";
@@ -59,6 +59,10 @@ export class BrowserPanelController implements ReactiveController {
   evaluateUnavailable = false;
   urlDraft = "";
   pendingNewTab = false;
+  /** Tab ownership, status polling, and the manual takeover capability. */
+  readonly human: BrowserPanelHumanControl;
+  /** URL-draft actions that do not own navigation state. */
+  readonly url: BrowserPanelUrl;
 
   readonly native: BrowserPanelNativeController;
   readonly operations: BrowserPanelOperationOwnership;
@@ -76,11 +80,31 @@ export class BrowserPanelController implements ReactiveController {
     this.input = new BrowserPanelInputController(this);
     this.stream = new BrowserPanelStream(this);
     this.native = new BrowserPanelNativeController(this);
+    this.url = new BrowserPanelUrl({
+      nativeActive: () => Boolean(this.native.activeTab),
+      nativeUrl: () => this.native.activeTab?.url,
+      view: () => this.view,
+      urlDraft: () => this.urlDraft,
+      tabs: () => this.tabs,
+      pendingNewTab: () => this.pendingNewTab,
+      setUrlDraft: (url) => this.setState("urlDraft", url),
+      openUrl: (url, options) => this.openUrl(url, options),
+    });
+    this.human = new BrowserPanelHumanControl({
+      host,
+      operations: this.operations,
+      native: this.native,
+      activeTargetId: () => this.activeTargetId,
+      requestUpdate: () => host.requestUpdate(),
+      reportError: (error) => this.reportError(error),
+      refreshView: (targetId) => this.refreshView(targetId),
+    });
     host.addController(this);
   }
 
   hostConnected(): void {
     this.native.connect();
+    this.human.schedulePoll();
   }
 
   hostUpdated(): void {
@@ -88,11 +112,13 @@ export class BrowserPanelController implements ReactiveController {
   }
 
   hostDisconnected(): void {
+    this.human.stopPolling();
     this.suspendView();
     this.native.disconnect();
   }
 
   suspendView(): void {
+    this.human.stopPolling();
     this.native.cancelCapture();
     this.native.presentation.hide();
     this.input.resetCaptureState();
@@ -117,6 +143,10 @@ export class BrowserPanelController implements ReactiveController {
     this.host.requestUpdate();
     if (key === "activeTargetId" || key === "mode") {
       this.native.presentation.update();
+    }
+    if (key === "activeTargetId") {
+      // The capability belongs to the previous tab; never carry it across.
+      this.human.resetForTab();
     }
   }
 
@@ -163,6 +193,8 @@ export class BrowserPanelController implements ReactiveController {
   }
 
   resetBrowserState(): void {
+    this.human.stopPolling();
+    this.human.resetForTab();
     this.invalidateViewOperations();
     this.setState("running", null);
     const nativeTab = this.native.activeTab ?? this.native.tabs[0];
@@ -193,6 +225,7 @@ export class BrowserPanelController implements ReactiveController {
 
   async refreshAll(): Promise<void> {
     this.native.presentation.update();
+    this.human.schedulePoll();
     const client = this.operations.captureClient();
     if (!client) {
       return;
@@ -239,6 +272,10 @@ export class BrowserPanelController implements ReactiveController {
       this.syncUrlDraft(active?.url ?? "");
       if (active) {
         await this.refreshView(active.id, invocation.epoch);
+        this.human.apply(
+          this.tabs.find((tab) => tab.id === active.id)?.control ?? null,
+          snapshot.humanControlSupported,
+        );
       } else {
         this.setState("view", null);
       }
@@ -282,6 +319,12 @@ export class BrowserPanelController implements ReactiveController {
       if (!current()) {
         return false;
       }
+      const details = (error as { details?: { code?: unknown; status?: unknown } } | null)?.details;
+      if (details?.code === "ACT_HUMAN_CONTROL" || details?.status === "needs_human") {
+        // Another client replaced the lease, or our capability expired.
+        this.human.clearToken();
+        void this.human.refresh();
+      }
       if (isBrowserEvaluateDisabledError(error)) {
         this.setState("evaluateUnavailable", true);
       }
@@ -293,6 +336,10 @@ export class BrowserPanelController implements ReactiveController {
     }
   }
 
+  /** Keep the panel input interfaces on the same capability owner. */
+  readonly humanControlTokenForInput = (): string | undefined => this.human.tokenForInput();
+  readonly sensitiveInputActive = (): boolean => this.human.sensitiveInputActive();
+
   get observedViewportSize(): { width: number; height: number } | null {
     return this.viewport.observedViewportSize;
   }
@@ -303,17 +350,14 @@ export class BrowserPanelController implements ReactiveController {
   }
 
   async startBrowserNow(): Promise<void> {
-    if (this.host.fixedTab) {
-      return;
-    }
-    if (!this.operations.captureClient()) {
+    if (this.host.fixedTab || !this.operations.captureClient()) {
       return;
     }
     const epoch = this.operations.epoch;
     this.setState("loading", true);
-    await this.runAction(async (actionClient) => {
-      await startBrowser(actionClient);
-      if (this.operations.isLive(epoch, actionClient)) {
+    await this.runAction(async (client) => {
+      await startBrowser(client);
+      if (this.operations.isLive(epoch, client)) {
         await this.refreshAll();
       }
     }, false);
@@ -369,7 +413,13 @@ export class BrowserPanelController implements ReactiveController {
         previousNavigationQueued = this.operations.hasPendingNavigation(client, targetId);
         await this.operations.queueNavigation(client, targetId, async () => {
           if (invocation.isCurrent()) {
-            await navigateBrowser(client, { url, targetId });
+            await navigateBrowser(client, {
+              url,
+              targetId,
+              ...(this.humanControlTokenForInput()
+                ? { humanControlToken: this.humanControlTokenForInput() }
+                : {}),
+            });
             this.operations.markNavigationCommitted(client, targetId);
           }
         });
@@ -486,7 +536,7 @@ export class BrowserPanelController implements ReactiveController {
         return;
       }
       if (options?.focusBrowserTab !== false) {
-        await focusBrowserTab(actionClient, selectedTargetId);
+        await focusBrowserTab(actionClient, selectedTargetId, this.humanControlTokenForInput());
       }
       if (!this.operations.isLive(epoch, actionClient)) {
         return;
@@ -526,7 +576,7 @@ export class BrowserPanelController implements ReactiveController {
     }
     await this.runAction(async (client) => {
       const epoch = this.operations.epoch;
-      await closeBrowserTab(client, targetId);
+      await closeBrowserTab(client, targetId, this.humanControlTokenForInput());
       this.operations.forgetNavigation(client, targetId);
       if (!this.operations.isLive(epoch, client)) {
         if (this.operations.isLive(this.operations.epoch, client)) {
@@ -610,15 +660,15 @@ export class BrowserPanelController implements ReactiveController {
     if (!targetId || !this.view) {
       return;
     }
-    void this.runAction((client) => goBrowserHistory(client, { targetId, delta }));
-  }
-
-  commitUrlDraft(): void {
-    const url = normalizeBrowserUrlDraft(this.urlDraft);
-    if (!url) {
-      return;
-    }
-    void this.openUrl(url, { newTab: this.pendingNewTab || this.tabs.length === 0 });
+    void this.runAction((client) =>
+      goBrowserHistory(client, {
+        targetId,
+        delta,
+        ...(this.humanControlTokenForInput()
+          ? { humanControlToken: this.humanControlTokenForInput() }
+          : {}),
+      }),
+    );
   }
 
   beginNewTab(): void {
@@ -639,24 +689,9 @@ export class BrowserPanelController implements ReactiveController {
     });
   }
 
-  resetUrlDraftFromView(): void {
-    this.setState(
-      "urlDraft",
-      this.native.activeTab?.url || this.view?.metrics?.url || this.view?.url || "",
-    );
-  }
-
   syncUrlDraft(url: string): void {
     if (!this.urlDraftEditing) {
       this.setState("urlDraft", url);
-    }
-  }
-
-  openExternal(): void {
-    const url =
-      this.native.activeTab?.url || this.view?.metrics?.url || this.view?.url || this.urlDraft;
-    if (url && !(this.native.activeTab && postNativeExternalLink(url))) {
-      openExternalUrlSafe(url);
     }
   }
 

@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { humanControlRegistry } from "./human-control.js";
+import { attachBrowserScreencastViewer, stopBrowserScreencasts } from "./screencast/session.js";
+import { ScreencastViewer, screencastParams } from "./screencast/test-support.js";
 import { createBrowserRouteContext } from "./server-context.js";
+import { getProfileLifecycle } from "./server-context.lifecycle.js";
 import { makeBrowserProfile, makeBrowserServerState } from "./server-context.test-harness.js";
+import {
+  clearAllVaultFillSessions,
+  hasActiveVaultFill,
+  registerVaultFillSecret,
+} from "./vault-fill-scrub.js";
 
 const pwAiMocks = vi.hoisted(() => {
   const closePlaywrightBrowserConnection = vi.fn(async (_opts?: { cdpUrl?: string }) => {});
@@ -31,6 +40,29 @@ vi.mock("./chrome.js", () => ({
   stopOwnedOpenClawChrome: chromeMocks.stopOwnedOpenClawChrome,
   stopOpenClawChrome: vi.fn(async () => {}),
 }));
+const screencastPage = vi.hoisted(() => {
+  const page = {
+    url: () => "https://one.test/",
+    title: async () => "One",
+    isClosed: () => false,
+    mainFrame: () => ({}),
+    on: () => undefined,
+    off: () => undefined,
+    context: () => ({
+      newCDPSession: async () => ({
+        send: async () => ({}),
+        on: () => undefined,
+        off: () => undefined,
+        detach: async () => undefined,
+      }),
+    }),
+  };
+  return page;
+});
+vi.mock("./pw-ai-module.js", () => ({
+  getPwAiModule: async () => ({ getPageForTargetId: async () => screencastPage }),
+  getLoadedPwAiModule: () => undefined,
+}));
 vi.mock("./chrome-mcp.js", () => ({
   closeChromeMcpSession: vi.fn(async () => false),
   countChromeMcpTabs: vi.fn(async () => 0),
@@ -38,7 +70,10 @@ vi.mock("./chrome-mcp.js", () => ({
   listChromeMcpTabs: vi.fn(async () => []),
 }));
 
-afterEach(() => {
+afterEach(async () => {
+  await stopBrowserScreencasts();
+  clearAllVaultFillSessions();
+  humanControlRegistry.revokeAll();
   vi.clearAllMocks();
   chromeMocks.stopOwnedOpenClawChrome.mockResolvedValue({ status: "not-running" });
 });
@@ -46,7 +81,7 @@ afterEach(() => {
 function createStopHarness(profile: ReturnType<typeof makeBrowserProfile>) {
   const state = makeBrowserServerState({ profile });
   const ctx = createBrowserRouteContext({ getState: () => state });
-  return { profileCtx: ctx.forProfile(profile.name) };
+  return { profileCtx: ctx.forProfile(profile.name), state };
 }
 
 describe("createProfileAvailability.stopRunningBrowser", () => {
@@ -68,6 +103,111 @@ describe("createProfileAvailability.stopRunningBrowser", () => {
       await expect(profileCtx.stopRunningBrowser()).resolves.toEqual({ stopped: true });
       expect(pwAiMocks.closePlaywrightBrowserConnection).not.toHaveBeenCalled();
       expect(chromeMocks.stopOwnedOpenClawChrome).not.toHaveBeenCalled();
+    },
+  );
+
+  it("clears this profile's leases and masking after a confirmed managed stop", async () => {
+    humanControlRegistry.revokeAll();
+    clearAllVaultFillSessions();
+    chromeMocks.stopOwnedOpenClawChrome.mockResolvedValue({ status: "stopped" });
+    const { profileCtx } = createStopHarness(makeBrowserProfile());
+    const name = profileCtx.profile.name;
+    humanControlRegistry.claim({
+      profile: name,
+      targetId: "target-stop",
+      tabId: "t1",
+      reason: "user_request",
+      requestedBy: "human",
+    });
+    registerVaultFillSecret("target-stop", "stop-canary", "doc-stop", name);
+    registerVaultFillSecret("target-other", "other-canary", "doc-other", "other-profile");
+
+    await profileCtx.stopRunningBrowser();
+
+    expect(
+      humanControlRegistry.status({ profile: name, targetId: "target-stop", tabId: "t1" }),
+    ).toBeNull();
+    expect(hasActiveVaultFill("target-stop")).toBe(false);
+    expect(hasActiveVaultFill("target-other")).toBe(true);
+    clearAllVaultFillSessions();
+    humanControlRegistry.revokeAll();
+  });
+
+  it.each([
+    {
+      name: "attach-only detachment",
+      overrides: { attachOnly: true },
+      status: "not-running" as const,
+    },
+    { name: "unverified managed stop", overrides: {}, status: "unverified" as const },
+    { name: "not-running managed browser", overrides: {}, status: "not-running" as const },
+  ])(
+    "keeps masking when $name cannot prove the document is gone",
+    async ({ overrides, status }) => {
+      humanControlRegistry.revokeAll();
+      clearAllVaultFillSessions();
+      chromeMocks.stopOwnedOpenClawChrome.mockResolvedValue({
+        status,
+        ...(status === "unverified" ? { reason: "process identity changed" } : {}),
+      });
+      const { profileCtx } = createStopHarness(makeBrowserProfile(overrides));
+      const name = profileCtx.profile.name;
+      humanControlRegistry.claim({
+        profile: name,
+        targetId: "target-survives",
+        tabId: "t1",
+        reason: "user_request",
+        requestedBy: "human",
+      });
+      registerVaultFillSecret("target-survives", "survives-canary", "doc-survives", name);
+
+      await profileCtx.stopRunningBrowser();
+
+      expect(
+        humanControlRegistry.status({ profile: name, targetId: "target-survives", tabId: "t1" }),
+      ).not.toBeNull();
+      expect(hasActiveVaultFill("target-survives")).toBe(true);
+      clearAllVaultFillSessions();
+      humanControlRegistry.revokeAll();
+    },
+  );
+
+  it.each([
+    {
+      name: "attach-only detachment",
+      overrides: { attachOnly: true },
+      status: "not-running" as const,
+    },
+    { name: "unverified managed stop", overrides: {}, status: "unverified" as const },
+  ])(
+    "keeps masking with an active screencast when $name cannot prove destruction",
+    async ({ overrides, status }) => {
+      chromeMocks.stopOwnedOpenClawChrome.mockResolvedValue({
+        status,
+        ...(status === "unverified" ? { reason: "process identity changed" } : {}),
+      });
+      const { profileCtx, state } = createStopHarness(makeBrowserProfile(overrides));
+      const name = profileCtx.profile.name;
+      registerVaultFillSecret("target-screencast", "screencast-stop-canary", "doc-1", name);
+      const runtime = state.profiles.get(name);
+      expect(runtime).toBeDefined();
+      const lifecycle = getProfileLifecycle(runtime!);
+      const viewer = new ScreencastViewer();
+      attachBrowserScreencastViewer(
+        screencastParams({
+          profileName: name,
+          targetId: "target-screencast",
+          lifecycleSignal: lifecycle.controller.signal,
+          lifecycleGeneration: lifecycle.generation,
+        }),
+        viewer as never,
+      );
+
+      await profileCtx.stopRunningBrowser();
+      await Promise.resolve();
+
+      expect(hasActiveVaultFill("target-screencast")).toBe(true);
+      expect(viewer.close).toHaveBeenCalledWith(4004, "target_closed");
     },
   );
 

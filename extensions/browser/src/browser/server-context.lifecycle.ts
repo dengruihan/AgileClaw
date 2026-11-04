@@ -48,6 +48,8 @@ type ProfileTransitionOptions = {
   /** Bridge runtimes must not retire process-global adapters shared by another runtime. */
   closeSharedAdapters?: boolean;
   managedChrome?: "stop" | "release-profile-data";
+  /** Reports the owned Chrome stop result; only "stopped" proves destruction. */
+  onManagedChromeStop?: (status: "stopped" | "not-running" | "unverified") => void;
   exposeReason?: boolean;
   afterCleanup?: () => Promise<void>;
   rollbackTerminalOnFailure?: boolean;
@@ -386,6 +388,7 @@ async function cleanupProfileResources(params: {
     profile: ResolvedBrowserProfile;
     resolved: ResolvedBrowserConfig;
   };
+  onManagedChromeStop?: (status: "stopped" | "not-running" | "unverified") => void;
 }): Promise<ProfileTransitionResult> {
   const { runtime } = params;
   let stopped = params.hadPendingWork;
@@ -451,6 +454,7 @@ async function cleanupProfileResources(params: {
   if (params.managedChrome) {
     const { mode, profile, resolved } = params.managedChrome;
     const result = await stopOwnedOpenClawChrome(resolved, profile);
+    params.onManagedChromeStop?.(result.status);
     if (mode === "release-profile-data" && result.status === "unverified") {
       throw new BrowserProfileUnavailableError(
         `Cannot release browser profile "${profile.name}" data: ${result.reason}. Close that browser and retry.`,
@@ -538,6 +542,7 @@ export function beginProfileTransition(
         eagerMcpClose,
         hadPendingWork: hadPendingWork || Boolean(eagerPlaywrightRetirement?.retired),
         managedChrome,
+        ...(params.onManagedChromeStop ? { onManagedChromeStop: params.onManagedChromeStop } : {}),
       });
       cleanupCompleted = true;
       await params.afterCleanup?.();

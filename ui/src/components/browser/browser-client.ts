@@ -7,6 +7,11 @@ import { buildAssistantMediaUrl } from "../../app/assistant-media.ts";
 import { t } from "../../i18n/index.ts";
 import { registerBrowserEnglish } from "../../i18n/locales/en-browser.ts";
 import { readBlobAsDataUrl } from "../../lib/blob-data-url.ts";
+import {
+  normalizeHumanControl,
+  sendSensitiveBrowserInput,
+  type BrowserHumanControl,
+} from "./browser-human-control-client.ts";
 import { browserInspectScript } from "./browser-inspect-script.ts";
 import {
   readBrowserTabTarget,
@@ -119,11 +124,14 @@ export type BrowserPanelTab = {
   /** Page-declared icon supplied by the native Mac tab. */
   favicon?: string;
   urlUnavailableReason?: "navigation_blocked" | "navigation_check_failed";
+  /** Tab-scoped human takeover ownership, when one is active or requested. */
+  control?: BrowserHumanControl;
 };
 
 type BrowserTabsSnapshot = {
   running: boolean;
   tabs: BrowserPanelTab[];
+  humanControlSupported: boolean;
 };
 
 type BrowserScreenshotCapture = {
@@ -275,6 +283,10 @@ function normalizeTab(value: unknown): BrowserPanelTab | null {
     record?.urlUnavailableReason === "navigation_check_failed"
       ? { urlUnavailableReason: record.urlUnavailableReason }
       : {}),
+    ...(() => {
+      const control = normalizeHumanControl(record?.control);
+      return control ? { control } : {};
+    })(),
   };
 }
 
@@ -283,7 +295,7 @@ export async function listBrowserTabs(client: BrowserRequestClient): Promise<Bro
   const tabs = Array.isArray(result?.tabs)
     ? result.tabs.flatMap((tab) => normalizeTab(tab) ?? [])
     : [];
-  return { running: result?.running === true, tabs };
+  return { running: result?.running === true, tabs, humanControlSupported: true };
 }
 
 export async function startBrowser(client: BrowserRequestClient): Promise<void> {
@@ -299,14 +311,27 @@ export async function openBrowserTab(
   );
 }
 
-export async function focusBrowserTab(client: BrowserRequestClient, targetId: string) {
-  await browserRequest(client, { method: "POST", path: "/tabs/focus", body: { targetId } });
+export async function focusBrowserTab(
+  client: BrowserRequestClient,
+  targetId: string,
+  humanControlToken?: string,
+) {
+  await browserRequest(client, {
+    method: "POST",
+    path: "/tabs/focus",
+    body: { targetId, ...(humanControlToken ? { humanControlToken } : {}) },
+  });
 }
 
-export async function closeBrowserTab(client: BrowserRequestClient, targetId: string) {
+export async function closeBrowserTab(
+  client: BrowserRequestClient,
+  targetId: string,
+  humanControlToken?: string,
+) {
   await browserRequest(client, {
     method: "DELETE",
     path: `/tabs/${encodeURIComponent(targetId)}`,
+    ...(humanControlToken ? { body: { humanControlToken } } : {}),
   });
 }
 
@@ -340,10 +365,14 @@ export async function downloadBrowserDocument(
 
 export async function navigateBrowser(
   client: BrowserRequestClient,
-  params: { url: string; targetId?: string },
+  params: { url: string; targetId?: string; humanControlToken?: string },
 ): Promise<{ targetId: string; url: string }> {
   const result = asRecord(
-    await browserRequest(client, { method: "POST", path: "/navigate", body: params }),
+    await browserRequest(client, {
+      method: "POST",
+      path: "/navigate",
+      body: params,
+    }),
   );
   return {
     targetId: stringOrEmpty(result?.targetId) || params.targetId || "",
@@ -353,7 +382,7 @@ export async function navigateBrowser(
 
 export async function requestBrowserScreencast(
   client: BrowserRequestClient,
-  params: { targetId: string; maxWidth: number; maxHeight: number },
+  params: { targetId: string; maxWidth: number; maxHeight: number; humanControlToken?: string },
   options?: GatewayClientRequestOptions,
 ): Promise<{ token: string; wsPath: string; targetId: string; url: string }> {
   const result = asRecord(
@@ -385,12 +414,13 @@ export function isBrowserScreencastUnsupportedError(error: unknown): boolean {
 export async function captureBrowserScreenshot(
   client: BrowserRequestClient,
   targetId: string,
+  humanControlToken?: string,
 ): Promise<BrowserScreenshotCapture> {
   const result = asRecord(
     await browserRequest(client, {
       method: "POST",
       path: "/screenshot",
-      body: { targetId, type: "png" },
+      body: { targetId, type: "png", ...(humanControlToken ? { humanControlToken } : {}) },
     }),
   );
   const path = stringOrEmpty(result?.path);
@@ -406,7 +436,13 @@ export async function captureBrowserScreenshot(
 
 export async function clickBrowserCoords(
   client: BrowserRequestClient,
-  params: { targetId: string; x: number; y: number; doubleClick?: boolean },
+  params: {
+    targetId: string;
+    x: number;
+    y: number;
+    doubleClick?: boolean;
+    humanControlToken?: string;
+  },
 ) {
   await browserAction(client, {
     kind: "clickCoords",
@@ -414,22 +450,56 @@ export async function clickBrowserCoords(
     x: Math.max(0, Math.round(params.x)),
     y: Math.max(0, Math.round(params.y)),
     ...(params.doubleClick ? { doubleClick: true } : {}),
+    ...(params.humanControlToken ? { humanControlToken: params.humanControlToken } : {}),
   });
 }
 
 export async function pressBrowserKey(
   client: BrowserRequestClient,
-  params: { targetId: string; key: string },
+  params: { targetId: string; key: string; humanControlToken?: string },
 ) {
-  await browserAction(client, { kind: "press", targetId: params.targetId, key: params.key });
+  await browserAction(client, {
+    kind: "press",
+    targetId: params.targetId,
+    key: params.key,
+    ...(params.humanControlToken ? { humanControlToken: params.humanControlToken } : {}),
+  });
 }
 
 export async function insertBrowserText(
   client: BrowserRequestClient,
-  params: { targetId: string; text: string },
+  params: {
+    targetId: string;
+    text: string;
+    humanControlToken?: string;
+    /** Route through the human-only sensitive channel (never a tool/transcript path). */
+    sensitive?: boolean;
+  },
 ) {
+  if (params.sensitive) {
+    const result = await sendSensitiveBrowserInput(client, {
+      targetId: params.targetId,
+      text: params.text,
+      humanControlToken: params.humanControlToken ?? "",
+    });
+    if (!result.ok) {
+      throw new Error(
+        t(
+          result.reasonCode === "no_focused_field"
+            ? "browser.errors.sensitiveInputNoField"
+            : "browser.errors.sensitiveInputFailed",
+        ),
+      );
+    }
+    return;
+  }
   try {
-    await browserAction(client, { kind: "insertText", ...params });
+    await browserAction(client, {
+      kind: "insertText",
+      targetId: params.targetId,
+      text: params.text,
+      ...(params.humanControlToken ? { humanControlToken: params.humanControlToken } : {}),
+    });
   } catch {
     // Transport errors can echo request bodies containing pasted passwords.
     throw new Error(t("browser.errors.pasteFailed"));
@@ -450,10 +520,15 @@ export async function resizeBrowserViewport(
 
 async function evaluateInBrowser<T>(
   client: BrowserRequestClient,
-  params: { targetId: string; fn: string },
+  params: { targetId: string; fn: string; humanControlToken?: string },
 ): Promise<T | null> {
   const result = asRecord(
-    await browserAction(client, { kind: "evaluate", targetId: params.targetId, fn: params.fn }),
+    await browserAction(client, {
+      kind: "evaluate",
+      targetId: params.targetId,
+      fn: params.fn,
+      ...(params.humanControlToken ? { humanControlToken: params.humanControlToken } : {}),
+    }),
   );
   return (result?.result as T | undefined) ?? null;
 }
@@ -479,34 +554,38 @@ export function isBrowserEvaluateDisabledError(err: unknown): boolean {
 
 export async function scrollBrowserBy(
   client: BrowserRequestClient,
-  params: { targetId: string; deltaX: number; deltaY: number },
+  params: { targetId: string; deltaX: number; deltaY: number; humanControlToken?: string },
 ) {
   const dx = Math.round(params.deltaX);
   const dy = Math.round(params.deltaY);
   await evaluateInBrowser(client, {
     targetId: params.targetId,
     fn: `() => { window.scrollBy(${dx}, ${dy}); return true; }`,
+    ...(params.humanControlToken ? { humanControlToken: params.humanControlToken } : {}),
   });
 }
 
 export async function goBrowserHistory(
   client: BrowserRequestClient,
-  params: { targetId: string; delta: -1 | 1 },
+  params: { targetId: string; delta: -1 | 1; humanControlToken?: string },
 ) {
   await evaluateInBrowser(client, {
     targetId: params.targetId,
     fn: `() => { history.go(${params.delta}); return true; }`,
+    ...(params.humanControlToken ? { humanControlToken: params.humanControlToken } : {}),
   });
 }
 
 export async function readBrowserPageMetrics(
   client: BrowserRequestClient,
   targetId: string,
+  humanControlToken?: string,
 ): Promise<BrowserPageMetrics | null> {
   const result = asRecord(
     await evaluateInBrowser(client, {
       targetId,
       fn: "() => ({ cssWidth: window.innerWidth, cssHeight: window.innerHeight, title: document.title, url: location.href })",
+      ...(humanControlToken ? { humanControlToken } : {}),
     }),
   );
   const cssWidth = asFiniteNumber(result?.cssWidth);
@@ -524,7 +603,7 @@ export async function readBrowserPageMetrics(
 
 export async function inspectBrowserElementAt(
   client: BrowserRequestClient,
-  params: { targetId: string; x: number; y: number },
+  params: { targetId: string; x: number; y: number; humanControlToken?: string },
 ): Promise<BrowserInspectedNode | null> {
   const x = Math.max(0, Math.round(params.x));
   const y = Math.max(0, Math.round(params.y));
@@ -532,6 +611,7 @@ export async function inspectBrowserElementAt(
     await evaluateInBrowser(client, {
       targetId: params.targetId,
       fn: `() => { ${browserInspectScript}\nreturn openclawInspectBrowserElement(${x}, ${y}); }`,
+      ...(params.humanControlToken ? { humanControlToken: params.humanControlToken } : {}),
     }),
   );
 }
@@ -605,3 +685,15 @@ export async function fetchBrowserScreenshotDataUrl(params: {
     invalidResultError: () => t("browser.errors.screenshotReadFailed"),
   });
 }
+
+export {
+  cancelBrowserHumanControl,
+  claimBrowserHumanControl,
+  readBrowserHumanControl,
+  releaseBrowserHumanControl,
+  sendSensitiveBrowserInput,
+} from "./browser-human-control-client.ts";
+export type {
+  BrowserHumanControl,
+  BrowserHumanControlState,
+} from "./browser-human-control-client.ts";

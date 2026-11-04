@@ -1,10 +1,12 @@
 import type { AgentToolResult } from "openclaw/plugin-sdk/agent-core";
 import type { BrowserProxyRequest } from "./browser-node-proxy.js";
 import {
+  browserHumanControlRequest,
   browserVaultObserve,
   browserVaultSubmit,
   callGatewayTool,
   jsonResult,
+  type BrowserHumanControlRequestResult,
   type BrowserVaultObserveResult,
 } from "./browser-tool.runtime.js";
 
@@ -83,6 +85,35 @@ function needsHuman(reasonCode: string): AgentToolResult<unknown> {
   return jsonResult({ status: "needs_human", reasonCode });
 }
 
+/**
+ * A login challenge is a human gate, not an agent retry loop. Ask the browser
+ * owner to pause this tab; the Control UI claims the lease and hands it back
+ * with a revalidated origin/document.
+ */
+async function requestHumanTakeover(
+  params: VaultAutofillActionParams,
+  reasonCode: string,
+): Promise<AgentToolResult<unknown>> {
+  let control: BrowserHumanControlRequestResult["control"] | undefined;
+  try {
+    const result = await browserHumanControlRequest(params.baseUrl, {
+      targetId: params.targetId,
+      reason: reasonCode,
+      profile: params.profile,
+      signal: params.signal,
+      timeoutMs: PREVIEW_TIMEOUT_MS,
+    });
+    control = result.control;
+  } catch {
+    // The needs_human result still stands even when the panel cannot be notified.
+  }
+  return jsonResult({
+    status: "needs_human",
+    reasonCode,
+    ...(control ? { control } : {}),
+  });
+}
+
 function observeMatches(
   left: Extract<BrowserVaultObserveResult, { ok: true }>,
   right: Extract<BrowserVaultObserveResult, { ok: true }>,
@@ -138,6 +169,9 @@ export async function executeVaultAutofillAction(
     return jsonResult({ status: "needs_human", reasonCode: "browser_unavailable" });
   }
   if (!observed.ok) {
+    if (observed.status === "needs_human") {
+      return await requestHumanTakeover(params, observed.reasonCode ?? "agent_needs_human");
+    }
     return jsonResult({
       status: observed.status,
       ...(observed.reasonCode ? { reasonCode: observed.reasonCode } : {}),
@@ -228,6 +262,9 @@ export async function executeVaultAutofillAction(
     return jsonResult({ status: "needs_human", reasonCode: "browser_unavailable" });
   }
   if (!reobserved.ok) {
+    if (reobserved.status === "needs_human") {
+      return await requestHumanTakeover(params, reobserved.reasonCode ?? "agent_needs_human");
+    }
     return jsonResult({
       status: reobserved.status,
       ...(reobserved.reasonCode ? { reasonCode: reobserved.reasonCode } : {}),

@@ -3,6 +3,12 @@ import { resolveBrowserNavigationProxyMode } from "../browser-proxy-mode.js";
 import { redactCdpErrorText } from "../cdp.helpers.js";
 import { toBrowserErrorResponse } from "../errors.js";
 import {
+  assertHumanControlAgentAllowed,
+  humanControlNeedsHuman,
+  isHumanControlError,
+  rejectHumanControl,
+} from "../human-control.js";
+import {
   assertBrowserNavigationResultAllowed,
   withBrowserNavigationPolicy,
 } from "../navigation-guard.js";
@@ -114,6 +120,13 @@ type RouteWithTabParams<T> = {
    * Leave false only for routes that navigate, activate, close, or otherwise manage the tab.
    */
   enforceCurrentUrlAllowed?: boolean;
+  /**
+   * Tab ownership admission. "agent" (default) blocks agent actions unless the
+   * caller supplies the current human capability; "structured" returns the
+   * value-free `{ok:false, status:"needs_human"}` form used by vault routes;
+   * "allow" is reserved for the takeover routes that validate their own token.
+   */
+  humanControl?: "agent" | "structured" | "allow";
   run: (ctx: RouteTabContext) => Promise<T>;
 };
 
@@ -150,6 +163,31 @@ export async function withRouteTabContext<T>(
         if (assertCurrent) {
           await assertCurrent();
         }
+        // Single ownership gate for every tab-targeted route: act, navigate,
+        // PDF, snapshot-targeting routes, screenshot, screencast, downloads,
+        // upload/dialog hooks, storage/emulation, vault, and their siblings.
+        // Only lease-management routes and explicit safe management routes opt
+        // out; tab listing/open remain available and never address an owned tab.
+        if ((params.humanControl ?? "agent") !== "allow") {
+          try {
+            assertHumanControlAgentAllowed({
+              profile: profileCtx.profile.name,
+              tab,
+              body: params.req.body,
+              query: params.req.query,
+            });
+          } catch (error) {
+            if (!isHumanControlError(error)) {
+              throw error;
+            }
+            if (params.humanControl === "structured") {
+              params.res.json(humanControlNeedsHuman(error));
+            } else {
+              rejectHumanControl(params.res, error);
+            }
+            return undefined;
+          }
+        }
         return await params.run({
           profileCtx,
           tab,
@@ -172,6 +210,17 @@ export async function withRouteTabContext<T>(
     handleRouteError(params.res, err);
     return undefined;
   }
+}
+
+/**
+ * Admit one agent route only while no human owns the tab, unless the caller
+ * supplies the current human capability. Writes the structured needs_human
+ * response and returns undefined when the lease blocks the action.
+ */
+export async function withHumanControlRouteContext<T>(
+  params: Omit<RouteWithTabParams<T>, "humanControl">,
+): Promise<T | undefined> {
+  return await withRouteTabContext({ ...params, humanControl: "structured" });
 }
 
 /**
