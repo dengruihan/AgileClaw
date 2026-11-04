@@ -8,6 +8,7 @@ import path from "node:path";
 import { isPathRelativeEscape } from "@openclaw/fs-safe/path";
 import { indexFirstByKey } from "../../shared/dedupe-by-key.js";
 import { resolveExplicitSkillSelectionFileHost } from "../../skills/discovery/skill-command-provenance.js";
+import { skillInstructionDirectoryPath } from "../../skills/loading/document-kind.js";
 import { formatSkillsForPromptBounded } from "../../skills/loading/skill-prompt-limits.js";
 import { clearSkillFileHost } from "../../skills/skill-file-host.js";
 import type {
@@ -219,8 +220,8 @@ export function remapSkillReferencePaths(
   for (const item of items) {
     if (item.sourceReadPath) {
       result = result.replaceAll(
-        item.sourceReadPath.slice(0, -"SKILL.md".length),
-        item.readPath.slice(0, -"SKILL.md".length),
+        skillInstructionDirectoryPath(item.sourceReadPath),
+        skillInstructionDirectoryPath(item.readPath),
       );
     }
   }
@@ -236,8 +237,8 @@ export function remapSkillReferencePaths(
       (matches.length === 1 ? matches[0] : undefined);
     if (physicalTarget) {
       result = result.replaceAll(
-        item.skillFile.slice(0, -"SKILL.md".length),
-        physicalTarget.readPath.slice(0, -"SKILL.md".length),
+        skillInstructionDirectoryPath(item.skillFile),
+        skillInstructionDirectoryPath(physicalTarget.readPath),
       );
     }
   }

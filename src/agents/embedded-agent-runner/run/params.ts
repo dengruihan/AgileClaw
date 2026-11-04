@@ -121,6 +121,8 @@ export type RunEmbeddedAgentParams = {
   disableTrajectory?: boolean;
   /** Restrict Skill Workshop to a bounded pending-proposal budget for an internal review run. */
   skillWorkshopProposalOnly?: boolean;
+  /** Restrict Skill Workshop to Experience list/read/capture for an automatic review run. */
+  skillWorkshopExperienceCaptureOnly?: boolean;
   /** Mark proposals created by this internal review as autonomous captures. */
   skillWorkshopAutonomousCapture?: boolean;
   skillWorkshopUpdateProposals?: boolean;

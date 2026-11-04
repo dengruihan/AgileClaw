@@ -86,7 +86,10 @@ tools under the source session's permissions. It can inspect complete skills and
 supporting files, correct several connected files, and verify the result. Its
 file tools are rooted at the Workshop directory. Shell commands retain the
 operator's existing approval policy. An enabled sandbox must provide writable
-access to that directory. The run uses the normal configured agent timeout.
+access to that directory. The run uses the normal configured agent timeout. The
+reviewer's `skill_workshop` tool is limited to Experience list, read, and
+capture, so unsettled learning still reaches the private Experience root without
+opening proposal application or wider filesystem authority.
 
 The reviewer shares the weekly collection's maintenance instructions: audit
 before editing, give a procedure one home, preserve distinct tasks, and verify
@@ -103,7 +106,9 @@ operator enables automatic learning during that review.
 
 Each review gets one attempt. A failure is recorded instead of retried. Automatic
 maintenance records `completed` when the agent run succeeds. That status is not
-a claim that a file changed. Completed file edits survive later failure or
+a claim that a file changed. A captured Experience also records `completed`
+with the document id, while a staged proposal keeps `proposed` with its id.
+Completed file edits survive later failure or
 cancellation, and future sessions receive a refreshed skill snapshot. Source
 session deletion, replacement, or a permission-mode change fences retained tools.
 

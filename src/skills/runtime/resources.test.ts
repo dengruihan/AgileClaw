@@ -3,6 +3,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../../test/helpers/temp-dir.js";
+import { readInstalledSkill, searchInstalledSkills } from "../../agents/installed-skill-catalog.js";
+import { prepareInstalledSkillCatalog } from "../../agents/installed-skill-runtime.js";
+import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import * as temporaryRoot from "../../infra/tmp-openclaw-dir.js";
 import { resetLogger, setLoggerOverride } from "../../logging/logger.js";
 import { loggingState } from "../../logging/state.js";
@@ -10,6 +13,12 @@ import { loadWorkspaceSkills } from "../loading/workspace-skill-loader.js";
 import { buildSkillSnapshot } from "../loading/workspace-skill-prompt.js";
 import { SkillResourceDeliveryLimitError } from "./resource-delivery-error.js";
 import { materializeSkillResources, prepareSkillResourceDelivery } from "./resources.js";
+
+// mock-isolation: keep host plugin roots out of the agent-root discovery fixture.
+vi.mock("../loading/plugin-skills.js", () => ({
+  resolvePluginSkillRoots: () => [],
+  resolvePluginSkillRootsFromMetadata: () => [],
+}));
 
 const temps = useAutoCleanupTempDirTracker(afterEach);
 const markdown = "---\ndescription: Workspace procedure\n---\n# Guide\nRun scripts/check.sh.\n";
@@ -470,6 +479,60 @@ describe("prepared workspace skill resources", () => {
       }
     },
   );
+
+  it("delivers and materializes Experience resources for search and read", async () => {
+    const workspace = await fs.realpath(temps.make("skill-experience-workspace-"));
+    const agentDir = temps.make("skill-experience-agent-");
+    const config: OpenClawConfig = { agents: { entries: { main: { agentDir } } } };
+    const experienceDir = path.join(agentDir, "experience", "draft-release-notes");
+    await fs.mkdir(experienceDir, { recursive: true });
+    await fs.writeFile(
+      path.join(experienceDir, "EXPERIENCE.md"),
+      '---\nname: "Draft release notes"\ndescription: "How this agent drafts release notes."\n---\n\nCollect merged changes first.\n',
+    );
+    const entries = loadWorkspaceSkills(workspace, {
+      config,
+      agentId: "main",
+      managedSkillsDir: path.join(workspace, ".managed"),
+      bundledSkillsDir: path.join(workspace, ".bundled"),
+    });
+    const snapshot = await buildSkillSnapshot(workspace, {
+      entries,
+      config,
+      agentId: "main",
+    });
+    const delivery = await prepareSkillResourceDelivery(snapshot, () => {});
+    expect(delivery?.skills).toMatchObject([
+      { name: "Draft release notes", instructionFile: "EXPERIENCE.md" },
+    ]);
+    expect(delivery?.skills[0]?.files.map((file) => file.path)).toContain("EXPERIENCE.md");
+
+    const materialized = await materializeSkillResources(delivery!, () => {});
+    try {
+      const skill = materialized.snapshot.resolvedSkills![0]!;
+      expect(skill.documentKind).toBe("experience");
+      expect(skill.filePath.endsWith("EXPERIENCE.md")).toBe(true);
+      expect(await fs.readFile(skill.filePath, "utf8")).toContain("Collect merged changes");
+      expect(materialized.snapshot.prompt).toContain("<kind>experience</kind>");
+      expect(materialized.snapshot.prompt).toContain("EXPERIENCE.md");
+
+      const catalog = prepareInstalledSkillCatalog({
+        snapshot: materialized.snapshot,
+        workspaceDir: materialized.directory,
+        assertCurrent: () => {},
+      });
+      const search = await searchInstalledSkills(catalog, "draft release notes", 5);
+      expect(search.skills[0]).toMatchObject({
+        name: "Draft release notes",
+        kind: "experience",
+      });
+      expect(await readInstalledSkill(catalog, "Draft release notes")).toContain(
+        "Collect merged changes",
+      );
+    } finally {
+      await materialized.cleanup();
+    }
+  });
 
   it("preserves a loaded directory-name fallback and exact instruction and executable bytes", async () => {
     const workspace = await fs.realpath(temps.make("skill-resources-"));

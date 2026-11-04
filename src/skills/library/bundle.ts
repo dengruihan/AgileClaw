@@ -148,7 +148,10 @@ export function decodeSkillLibraryFile(file: SkillLibraryFile): Buffer {
 }
 
 /** Validate exact portable artifacts without imposing publication metadata on loaded skills. */
-export function prepareSkillBundle(files: readonly SkillLibraryFile[]): PreparedSkillBundle {
+export function prepareSkillBundle(
+  files: readonly SkillLibraryFile[],
+  options: { instructionFile?: string } = {},
+): PreparedSkillBundle {
   if (files.length > SKILL_LIBRARY_MAX_FILES) {
     throw new SkillLibraryError("INVALID_BUNDLE", "Skill bundle exceeds 256 files.");
   }
@@ -189,9 +192,10 @@ export function prepareSkillBundle(files: readonly SkillLibraryFile[]): Prepared
       parts.pop();
     }
   }
-  const skillMd = prepared.find((file) => file.path === "SKILL.md");
+  const instructionFile = options.instructionFile ?? "SKILL.md";
+  const skillMd = prepared.find((file) => file.path === instructionFile);
   if (!skillMd || !Buffer.from(skillMd.bytes.toString("utf8")).equals(skillMd.bytes)) {
-    throw new SkillLibraryError("INVALID_BUNDLE", "Bundle requires a UTF-8 SKILL.md.");
+    throw new SkillLibraryError("INVALID_BUNDLE", `Bundle requires a UTF-8 ${instructionFile}.`);
   }
   // Preserve the managed revision encoding: only exact artifact bytes and metadata enter the hash.
   const manifest = prepared.map(({ bytes: _bytes, ...file }) => file);

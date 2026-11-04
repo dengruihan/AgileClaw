@@ -44,6 +44,7 @@ const SkillExperienceReviewStatusSchema = closedObject({
     Type.Literal("failed"),
   ]),
   proposalId: Type.Optional(Type.String()),
+  experienceDocumentId: Type.Optional(Type.String()),
   error: Type.Optional(Type.String()),
   usage: Type.Optional(
     closedObject({

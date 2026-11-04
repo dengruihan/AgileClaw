@@ -218,7 +218,8 @@ export async function transferSkillResources(params: {
     );
     const mounts: Array<{ hostPath: string; containerPath: string }> = [];
     for (const [index, skill] of delivery.skills.entries()) {
-      const bundle = prepareSkillBundle(skill.files);
+      const instructionFile = skill.instructionFile ?? "SKILL.md";
+      const bundle = prepareSkillBundle(skill.files, { instructionFile });
       for (const file of bundle.files) {
         let offset = 0;
         do {
@@ -259,11 +260,11 @@ export async function transferSkillResources(params: {
       const remoteBase = `${params.remoteWorkspaceDir.replaceAll("\\", "/")}/${directory}/${index}`;
       mounts.push({ hostPath: sourceBase, containerPath: remoteBase });
       if (selected) {
-        selected.filePath = `${remoteBase}/SKILL.md`;
+        selected.filePath = `${remoteBase}/${instructionFile}`;
         selected.baseDir = remoteBase;
         // Code Mode reads the same verified instructions even when the node has no filesystem bridge.
         selected.readContent = bundle.files
-          .find((file) => file.path === "SKILL.md")!
+          .find((file) => file.path === instructionFile)!
           .bytes.toString("utf8");
         delete selected.locationNote;
       }

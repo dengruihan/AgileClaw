@@ -309,6 +309,9 @@ export async function prepareEmbeddedAttemptToolBase(params: {
             skillWorkshop: {
               env: attempt.skillWorkshopProposalEnv,
               proposalOnly: attempt.skillWorkshopProposalOnly,
+              ...(attempt.skillWorkshopExperienceCaptureOnly
+                ? { experienceCaptureOnly: true }
+                : {}),
               ...(attempt.skillWorkshopUpdateProposals ? { updateProposals: true } : {}),
               ...(attempt.skillWorkshopAutonomousCapture ? { autonomousCapture: true } : {}),
               origin: attempt.skillWorkshopOrigin,

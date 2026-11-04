@@ -39,6 +39,11 @@ import {
   captureSkillLibrarySelection,
   prepareSkillLibrarySelection,
 } from "../library/selection.js";
+import {
+  documentKindForInstructionFile,
+  instructionFileForDocumentKind,
+  skillInstructionDirectoryPath,
+} from "../loading/document-kind.js";
 import { loadSingleSkillDirectory } from "../loading/local-loader.js";
 import { createSyntheticSourceInfo, type Skill } from "../loading/skill-contract.js";
 import { shouldSyncSkillPath } from "../loading/skill-paths.js";
@@ -310,9 +315,10 @@ export async function prepareSkillResourceDelivery(
       }
       continue;
     }
+    const instructionFile = instructionFileForDocumentKind(skill.documentKind);
     let bundle: ReturnType<typeof prepareSkillBundle>;
     try {
-      bundle = prepareSkillBundle(files);
+      bundle = prepareSkillBundle(files, { instructionFile });
     } catch (error) {
       throw contextualizeSkillResourceError(skill, error);
     }
@@ -339,6 +345,7 @@ export async function prepareSkillResourceDelivery(
         explicitlySelected,
       ...(skill.displayName ? { displayName: skill.displayName } : {}),
       description: skill.description,
+      instructionFile,
       revision: bundle.revision,
       files,
     });
@@ -360,7 +367,13 @@ export async function materializeSkillResources(
     throw new Error("Invalid skill resource delivery.");
   }
   const bundles = delivery.skills
-    .map((skill) => ({ skill, bundle: prepareSkillBundle(skill.files) }))
+    .map((skill) => ({
+      skill,
+      instructionFile: skill.instructionFile ?? "SKILL.md",
+      bundle: prepareSkillBundle(skill.files, {
+        instructionFile: skill.instructionFile ?? "SKILL.md",
+      }),
+    }))
     .toSorted((left, right) => {
       const a = JSON.stringify([left.skill.name, left.skill.sourcePath, left.bundle.revision]);
       const b = JSON.stringify([right.skill.name, right.skill.sourcePath, right.bundle.revision]);
@@ -409,7 +422,7 @@ export async function materializeSkillResources(
     }
     const pathMappings: Array<[string, string]> = [];
     const resolvedSkills: NonNullable<SkillSnapshot["resolvedSkills"]> = [];
-    for (const { skill, bundle } of bundles) {
+    for (const { skill, bundle, instructionFile } of bundles) {
       const name = normalizeSkillIndexName(skill.name).slice(0, 40) || "skill";
       const baseDir = path.join(
         directory,
@@ -425,20 +438,26 @@ export async function materializeSkillResources(
           flag: "wx",
         });
       }
-      const filePath = path.join(baseDir, "SKILL.md");
+      const filePath = path.join(baseDir, instructionFile);
       const virtualPath = resolveSkillReadPath(
         { name: skill.name, filePath: skill.sourcePath ?? filePath },
         "workspace",
       );
       pathMappings.push([virtualPath, filePath]);
-      pathMappings.push([virtualPath.slice(0, -"SKILL.md".length), `${baseDir}${path.sep}`]);
+      pathMappings.push([skillInstructionDirectoryPath(virtualPath), `${baseDir}${path.sep}`]);
       if (skill.sourcePath) {
         pathMappings.push([skill.sourcePath, filePath]);
         // Explicit supporting-file references share the same verified bundle root.
-        pathMappings.push([skill.sourcePath.slice(0, -"SKILL.md".length), `${baseDir}${path.sep}`]);
+        pathMappings.push([
+          skillInstructionDirectoryPath(skill.sourcePath),
+          `${baseDir}${path.sep}`,
+        ]);
       }
       resolvedSkills.push({
         name: skill.name,
+        ...(documentKindForInstructionFile(instructionFile) === "experience"
+          ? { documentKind: "experience" as const }
+          : {}),
         displayName: skill.displayName,
         description: skill.description,
         contentHash: bundle.revision,

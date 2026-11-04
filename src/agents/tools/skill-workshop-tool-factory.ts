@@ -35,6 +35,7 @@ export function createConfiguredSkillWorkshopTool(params: {
         ...(messageId ? { messageId } : {}),
       } satisfies SkillProposalOrigin),
     proposalOnly: params.run?.proposalOnly,
+    ...(params.run?.experienceCaptureOnly ? { experienceCaptureOnly: true } : {}),
     ...(params.run?.updateProposals ? { updateProposals: true } : {}),
     ...(params.run?.autonomousCapture ? { autonomousCapture: true } : {}),
     proposalMutationBudget:

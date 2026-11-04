@@ -40,6 +40,8 @@ export type SkillExperienceReviewStatus = {
   /** Completed normal maintenance does not claim that any particular file changed. */
   outcome: "completed" | "applied" | "proposed" | "nothing" | "failed";
   proposalId?: string;
+  /** Experience document captured by this review, when one was written. */
+  experienceDocumentId?: string;
   error?: string;
   usage?: { inputTokens: number; cachedInputTokens: number; outputTokens: number };
 };

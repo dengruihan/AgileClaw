@@ -44,6 +44,8 @@ export type SkillWorkshopProposalMutationBudget = {
   preparedSkillPatches?: Map<string, SkillWorkshopPreparedPatch>;
   /** Bounds automatic Experience capture to one document per run. */
   experienceCaptureUsed?: boolean;
+  /** Documents captured by this run, in capture order. */
+  experienceCaptureIds?: string[];
 };
 
 /** Exact proposal revision an operator reviewed before requesting an agent-authored revision. */
@@ -58,6 +60,8 @@ export type SkillWorkshopRunOptions = {
   libraryAuthoring?: import("../library/authoring.js").SkillLibraryAuthoringCapability;
   env?: NodeJS.ProcessEnv;
   proposalOnly?: boolean;
+  /** Restricts the tool to this agent's Experience list/read/capture for automatic reviews. */
+  experienceCaptureOnly?: boolean;
   updateProposals?: boolean;
   autonomousCapture?: boolean;
   origin?: SkillProposalOrigin;

@@ -32,7 +32,12 @@ describe("installed skill catalog", () => {
     ];
     expect((await searchInstalledSkills(skills, "releases", 1)).skills[0]?.name).toBe("releases");
     expect((await searchInstalledSkills(skills, "database migration")).skills).toEqual([
-      { name: "zulu", description: "Audit database migrations", location: "/skills/zulu/SKILL.md" },
+      {
+        name: "zulu",
+        description: "Audit database migrations",
+        location: "/skills/zulu/SKILL.md",
+        kind: "skill",
+      },
     ]);
     expect(await searchInstalledSkills(skills, "unrelated")).toEqual({
       skills: [],

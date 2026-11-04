@@ -140,11 +140,15 @@ async function runSkillExperienceReviewInner(candidate: ExperienceReviewCandidat
   });
   const origin = foregroundPromptContext.cronCreatorCallerOrigin;
   const capability = origin ? createCronCreatorAuthorityCapability(runId, origin) : undefined;
-  const proposalMutationBudget: SkillWorkshopProposalMutationBudget | undefined =
-    mode === "propose" ? { remaining: 1, readSkillHashes: new Map() } : undefined;
+  // Both modes share the per-run capture receipt; only propose mode can also stage a proposal.
+  const proposalMutationBudget: SkillWorkshopProposalMutationBudget = {
+    remaining: mode === "propose" ? 1 : 0,
+    ...(mode === "propose" ? { readSkillHashes: new Map() } : {}),
+  };
   const attemptedAtMs = Date.now();
   let outcome: "completed" | "proposed" | "nothing";
   let proposalId: string | undefined;
+  let experienceDocumentId: string | undefined;
   let usage: { inputTokens: number; cachedInputTokens: number; outputTokens: number } | undefined;
   // Runtime identity is private; the captured promptCacheKey retains foreground cache affinity.
   registerAgentRunContext(runId, {
@@ -250,7 +254,10 @@ async function runSkillExperienceReviewInner(candidate: ExperienceReviewCandidat
         allowEmptyAssistantReplyAsSilent: true,
         terminalReplyExpectation: "optional",
         toolExecutionAllow:
-          mode === "auto" ? [...SKILL_WORKSHOP_MAINTENANCE_TOOLS] : ["skill_workshop"],
+          mode === "auto"
+            ? [...SKILL_WORKSHOP_MAINTENANCE_TOOLS, "skill_workshop"]
+            : ["skill_workshop"],
+        ...(mode === "auto" ? { skillWorkshopExperienceCaptureOnly: true } : {}),
         skillWorkshopProposalOnly: mode === "propose",
         skillWorkshopUpdateProposals: mode === "propose",
         skillWorkshopAutonomousCapture: mode === "propose",
@@ -288,9 +295,19 @@ async function runSkillExperienceReviewInner(candidate: ExperienceReviewCandidat
     // Direct edits have normal file-tool semantics; drafts remain pending even
     // if the operator enables automatic maintenance while this review runs.
     assertSkillReviewRunSucceeded(embeddedResult);
-    const proposalIds = [...(proposalMutationBudget?.mutatedProposalIds ?? [])];
+    const proposalIds = [...(proposalMutationBudget.mutatedProposalIds ?? [])];
+    const captureIds = [...(proposalMutationBudget.experienceCaptureIds ?? [])];
     proposalId = proposalIds[0];
-    outcome = mode === "auto" ? "completed" : proposalIds.length === 0 ? "nothing" : "proposed";
+    experienceDocumentId = captureIds[0];
+    // A pending proposal still needs the operator; a capture alone is settled work.
+    outcome =
+      mode === "auto"
+        ? "completed"
+        : proposalIds.length > 0
+          ? "proposed"
+          : captureIds.length > 0
+            ? "completed"
+            : "nothing";
     const agentUsage = embeddedResult.meta?.agentMeta?.usage;
     usage = agentUsage
       ? {
@@ -325,6 +342,7 @@ async function runSkillExperienceReviewInner(candidate: ExperienceReviewCandidat
       attemptedAtMs,
       outcome,
       ...(proposalId ? { proposalId } : {}),
+      ...(experienceDocumentId ? { experienceDocumentId } : {}),
       ...(usage ? { usage } : {}),
     },
     outcomeStore,

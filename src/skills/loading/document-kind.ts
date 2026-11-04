@@ -11,3 +11,9 @@ export function instructionFileForDocumentKind(kind: SkillDocumentKind | undefin
 export function documentKindForInstructionFile(fileName: string): SkillDocumentKind {
   return fileName === EXPERIENCE_INSTRUCTION_FILE ? "experience" : "skill";
 }
+
+/** Strips the final path segment while preserving the original separator. */
+export function skillInstructionDirectoryPath(filePath: string): string {
+  const separator = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
+  return separator >= 0 ? filePath.slice(0, separator + 1) : "";
+}

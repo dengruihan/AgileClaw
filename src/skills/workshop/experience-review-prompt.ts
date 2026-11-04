@@ -111,6 +111,7 @@ export function buildSkillExperienceReviewPrompt(
     ...(mode === "auto"
       ? [
           "This run authorizes direct Workshop maintenance with normal file tools. When there is durable learning, improve the complete relevant procedures and supporting files. Replace the misleading rule in place; a repeated lesson strengthens one rule rather than adding another copy. Keep the smallest useful skill, preserving distinct tasks and their completion checks.",
+          "Unlike the file tools, skill_workshop is available only for Experience list, read, and capture in this run; use experience_capture for learning that is not yet a fixed, verified Skill. It writes the agent-private Experience root, not the Workshop directory.",
           SKILL_WORKSHOP_MAINTENANCE_PROMPT,
         ]
       : [

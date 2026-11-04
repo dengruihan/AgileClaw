@@ -296,3 +296,101 @@ it.each([
     }
   },
 );
+
+it("reads a workspace Experience document and supporting files through the remote host", async () => {
+  const root = temps.make("ordinary-remote-experience-");
+  const workspace = path.join(root, "workspace");
+  const logical = path.join(root, "gateway-experience");
+  const host = path.join(root, "host");
+  vi.stubEnv("HOME", root);
+  vi.stubEnv("OPENCLAW_HOME", root);
+  await fs.mkdir(workspace);
+  const documentDir = "experience/draft-notes";
+  for (const dir of [logical, host]) {
+    await fs.mkdir(path.join(dir, documentDir, "refs"), { recursive: true });
+    await fs.writeFile(
+      path.join(dir, documentDir, "EXPERIENCE.md"),
+      '---\nname: "Draft notes"\ndescription: "How release notes are drafted."\n---\nHost experience instructions',
+    );
+    await fs.writeFile(
+      path.join(dir, documentDir, "refs", "support.txt"),
+      "Host experience support",
+    );
+  }
+  const config = {
+    plugins: { enabled: false },
+    agents: { entries: { main: { agentDir: logical } } },
+  };
+  const selected = expectDefined(
+    loadWorkspaceSkills(workspace, {
+      config,
+      agentId: "main",
+      managedSkillsDir: path.join(root, "managed-empty"),
+      bundledSkillsDir: path.join(root, "bundled-empty"),
+    }).find((entry) => entry.skill.documentKind === "experience"),
+    "experience entry",
+  ).skill;
+  expect(selected.filePath.endsWith("EXPERIENCE.md")).toBe(true);
+  const skill = recordSkillFileHost({ ...selected }, "workspace");
+  const locator = encodeURIComponent(skill.name);
+  const resources = {
+    readInstructions: (filePath: string, options: { signal?: AbortSignal }) =>
+      fs.readFile(path.join(host, path.relative(logical, filePath)), {
+        encoding: "utf8",
+        signal: options.signal,
+      }),
+    resolveExplicitSkill: vi.fn(),
+    readSkillFiles: (
+      entry: Parameters<typeof readSkillResourceFiles>[0],
+      options: { allowMissingRoot: boolean },
+    ) =>
+      readSkillResourceFiles(
+        {
+          ...entry,
+          baseDir: path.join(host, documentDir),
+          filePath: path.join(host, documentDir, "EXPERIENCE.md"),
+        },
+        options,
+      ),
+  };
+  const release = registerAgentWorkspaceAccess(workspace, {
+    bridge: { readFile: vi.fn(), writeFile: vi.fn(), stat: vi.fn() },
+    loadSkills: vi.fn(),
+    skillResources: resources,
+  });
+  try {
+    const read = createCoreCodingTools({
+      codingRoot: workspace,
+      containmentRoot: workspace,
+      includeBaseCodingTools: true,
+      shellTools: "disabled",
+      workspaceOnly: true,
+      readOnly: true,
+      applyPatchEnabled: false,
+      applyPatchWorkspaceOnly: true,
+      execDefaults: {},
+      processDefaults: {},
+      skillsSnapshot: {
+        skills: [],
+        prompt: "",
+        resolvedSkills: [skill],
+      },
+    }).find((tool) => tool.name === "read")!;
+    expect(
+      getTextContent(
+        await read.execute("instructions", {
+          path: `workspace-skill://workspace/${locator}/EXPERIENCE.md`,
+        }),
+      ),
+    ).toContain("Host experience instructions");
+    expect(
+      getTextContent(
+        await read.execute("support", {
+          path: `workspace-skill://workspace/${locator}/refs/support.txt`,
+        }),
+      ),
+    ).toContain("Host experience support");
+  } finally {
+    release();
+  }
+});

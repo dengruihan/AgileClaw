@@ -24,7 +24,7 @@ type ExperienceToolOptions = {
   workspaceDir: string;
   env?: NodeJS.ProcessEnv;
   origin?: SkillProposalOrigin;
-  experienceCaptureBudget?: { used: boolean };
+  experienceCaptureBudget?: { used: boolean; ids: string[] };
   maxChars: number;
 };
 
@@ -134,6 +134,7 @@ export async function executeExperienceAction(
     });
     if (options.experienceCaptureBudget) {
       options.experienceCaptureBudget.used = true;
+      options.experienceCaptureBudget.ids.push(result.record.id);
     }
     return textResult(
       `${result.created ? "Captured" : "Reused"} Experience ${result.record.id} (${result.record.status}).`,

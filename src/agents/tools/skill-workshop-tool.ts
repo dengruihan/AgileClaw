@@ -74,6 +74,11 @@ import {
 import { textResult } from "./tool-results.js";
 
 const EXPERIENCE_TOOL_ACTION_SET: ReadonlySet<string> = new Set(EXPERIENCE_TOOL_ACTIONS);
+const EXPERIENCE_CAPTURE_ONLY_ACTIONS: ReadonlySet<string> = new Set([
+  "experience_list",
+  "experience_read",
+  "experience_capture",
+]);
 const SKILL_WORKSHOP_MUTATION_ACTIONS = new Set(["create", "patch", "update", "revise"]);
 function requireProposalContent(content: string | undefined): string {
   if (content === undefined) {
@@ -130,6 +135,8 @@ type SkillWorkshopToolOptions = {
   origin?: SkillProposalOrigin;
   /** Internal reviewers may inspect and draft bounded pending proposals, never change lifecycle state. */
   proposalOnly?: boolean;
+  /** Automatic reviews may only list/read this agent's Experience documents and capture one. */
+  experienceCaptureOnly?: boolean;
   /** Allows proposal-only sessions to draft update proposals for existing live skills. */
   updateProposals?: boolean;
   /** Marks proposals created by an autonomous capture pipeline. */
@@ -181,13 +188,22 @@ export function createSkillWorkshopTool(options: SkillWorkshopToolOptions): AnyA
         );
       }
 
+      if (options.experienceCaptureOnly === true && !EXPERIENCE_CAPTURE_ONLY_ACTIONS.has(action)) {
+        throw new ToolInputError(
+          "this Skill Workshop review allows only Experience list, read, and capture",
+        );
+      }
+
       if (action === "restore_collection") {
         return await executeSkillCollectionRestore(options);
       }
 
       if (EXPERIENCE_TOOL_ACTION_SET.has(action)) {
         const experienceCaptureBudget = options.proposalMutationBudget
-          ? { used: options.proposalMutationBudget.experienceCaptureUsed === true }
+          ? {
+              used: options.proposalMutationBudget.experienceCaptureUsed === true,
+              ids: [...(options.proposalMutationBudget.experienceCaptureIds ?? [])],
+            }
           : undefined;
         const result = await executeExperienceAction(
           // SAFETY: the membership check above narrows action to EXPERIENCE_TOOL_ACTIONS.
@@ -205,6 +221,7 @@ export function createSkillWorkshopTool(options: SkillWorkshopToolOptions): AnyA
         );
         if (experienceCaptureBudget && options.proposalMutationBudget) {
           options.proposalMutationBudget.experienceCaptureUsed = experienceCaptureBudget.used;
+          options.proposalMutationBudget.experienceCaptureIds = experienceCaptureBudget.ids;
         }
         return result;
       }

@@ -34,6 +34,8 @@ import {
   type OpenClawTestState,
 } from "../../test-utils/openclaw-test-state.js";
 import { createTrackedTempDirs } from "../../test-utils/tracked-temp-dirs.js";
+import { readExperienceFile } from "../experience/experience-document.js";
+import { resolveExperienceRoot } from "../experience/experience-root.js";
 import { readSkillCuratorReviewStatus } from "./collection-review-state.test-support.js";
 import type { ExperienceReviewCandidate } from "./experience-review-scheduler.js";
 import { runSkillExperienceReview as runCapturedExperienceReview } from "./experience-review.js";
@@ -806,5 +808,104 @@ describe("experience review maintenance", () => {
       content: expect.stringContaining("Keep this manual revision pending"),
     });
     expect(inspected?.record.autonomousCapture).toBeUndefined();
+  });
+  it("captures an Experience through the auto review capture-only route and records completion", async () => {
+    const workspaceDir = await tempDirs.make("openclaw-experience-auto-capture-workspace-");
+    const agentDir = await tempDirs.make("openclaw-experience-auto-capture-agent-");
+    const config: OpenClawConfig = {
+      agents: { entries: { main: { agentDir } } },
+      skills: { workshop: { autonomous: { mode: "auto" } } },
+    };
+    runEmbeddedAgent.mockImplementation(
+      async (params: RunEmbeddedAgentParams & { config: OpenClawConfig; agentId: string }) => {
+        const tool = createSkillWorkshopTool({
+          workspaceDir: params.workspaceDir,
+          config: params.config,
+          agentId: params.agentId,
+          origin: params.skillWorkshopOrigin,
+          experienceCaptureOnly: params.skillWorkshopExperienceCaptureOnly,
+          proposalMutationBudget: params.skillWorkshopProposalMutationBudget,
+        });
+        await tool.execute("review-capture", {
+          action: "experience_capture",
+          name: "Review capture",
+          description: "Unsettled review learning.",
+          experience_content: "Verify the approach before promoting.\n",
+        });
+        await expect(
+          tool.execute("review-create", {
+            action: "create",
+            name: "blocked-proposal",
+            description: "Must stay blocked.",
+            proposal_content: "# Blocked\n",
+          }),
+        ).rejects.toThrow("Experience list, read, and capture");
+        return { meta: { durationMs: 1 } };
+      },
+    );
+
+    await runSkillExperienceReview(
+      reviewFixture(workspaceDir, config, { runId: "foreground-run" }),
+    );
+
+    const document = await readExperienceFile({
+      config,
+      agentId: "main",
+      id: "review-capture",
+    });
+    expect(document.body).toContain("Verify the approach");
+    expect(resolveExperienceRoot(config, "main")).toBe(path.join(agentDir, "experience"));
+    expect(Object.values(readSkillCuratorReviewStatus().experienceReviews)[0]).toMatchObject({
+      outcome: "completed",
+    });
+    expect((await listSkillProposals({ config, agentId: "main" })).proposals).toHaveLength(0);
+    expect(runEmbeddedAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skillWorkshopExperienceCaptureOnly: true,
+        toolExecutionAllow: expect.arrayContaining(["skill_workshop", "write"]),
+      }),
+    );
+  });
+
+  it("records a propose-mode Experience capture as completed instead of nothing", async () => {
+    const workspaceDir = await tempDirs.make("openclaw-experience-propose-capture-workspace-");
+    const agentDir = await tempDirs.make("openclaw-experience-propose-capture-agent-");
+    const config: OpenClawConfig = {
+      agents: { entries: { main: { agentDir } } },
+      skills: { workshop: { autonomous: { mode: "propose" } } },
+    };
+    runEmbeddedAgent.mockImplementation(
+      async (params: RunEmbeddedAgentParams & { config: OpenClawConfig; agentId: string }) => {
+        const tool = createSkillWorkshopTool({
+          workspaceDir: params.workspaceDir,
+          config: params.config,
+          agentId: params.agentId,
+          origin: params.skillWorkshopOrigin,
+          proposalOnly: params.skillWorkshopProposalOnly,
+          autonomousCapture: params.skillWorkshopAutonomousCapture,
+          proposalMutationBudget: params.skillWorkshopProposalMutationBudget,
+        });
+        await tool.execute("review-capture", {
+          action: "experience_capture",
+          name: "Propose capture",
+          description: "Unsettled propose learning.",
+          experience_content: "Keep this candidate for later.\n",
+        });
+        return { meta: { durationMs: 1 } };
+      },
+    );
+
+    await runSkillExperienceReview(
+      reviewFixture(workspaceDir, config, { runId: "foreground-run" }),
+    );
+
+    expect(
+      await readExperienceFile({ config, agentId: "main", id: "propose-capture" }),
+    ).toMatchObject({ body: "Keep this candidate for later.\n" });
+    expect(Object.values(readSkillCuratorReviewStatus().experienceReviews)[0]).toMatchObject({
+      outcome: "completed",
+      experienceDocumentId: "propose-capture",
+    });
+    expect((await listSkillProposals({ config, agentId: "main" })).proposals).toHaveLength(0);
   });
 });
