@@ -19,6 +19,7 @@ import { resolveGatewayPublicOrigin } from "../config/gateway-public-origin.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { resolveDevInstallGitBranch } from "../infra/dev-install-branch.js";
 import { openLocalFileSafely, FsSafeError } from "../infra/fs-safe.js";
+import { isRequestBodyLimitError, readRequestBodyWithLimit } from "../infra/http-body.js";
 import { createHttpRequestAbortSignal } from "../infra/http-request-lifecycle.js";
 import { assertLocalMediaAllowed, LocalMediaAccessError } from "../media/local-media-access.js";
 import { resolveMediaReferenceLocalPathInfo } from "../media/media-reference.js";
@@ -109,6 +110,8 @@ import {
 } from "./http-image-response.js";
 import type { GatewayHttpRequestAuthOptions } from "./http-request-authority.js";
 import { authorizeControlUiReadRequestOrReply } from "./http-utils.js";
+import { buildOfficePreviewPayload } from "./office-preview/office-preview-payload.js";
+import { OFFICE_PREVIEW_MAX_BYTES } from "./office-preview/office-preview.js";
 import { readControlUiRootAsset, type ControlUiRootState } from "./server-control-ui-root.js";
 import { isTerminalConfigEnabled } from "./terminal/enabled.js";
 
@@ -382,6 +385,26 @@ async function openAssistantMedia(
   }
 }
 
+async function readAssistantMediaOfficePreview(
+  opened: Awaited<ReturnType<typeof openAssistantMedia>>["opened"],
+  reference: Awaited<ReturnType<typeof openAssistantMedia>>["reference"],
+  mimeType: string | undefined,
+) {
+  return await buildOfficePreviewPayload({
+    filename: path.basename(reference.path),
+    ...(mimeType ? { mimeType } : {}),
+    sizeBytes: opened.stat.size,
+    read: async () => {
+      if (opened.stat.size > OFFICE_PREVIEW_MAX_BYTES) {
+        return null;
+      }
+      const buffer = Buffer.alloc(opened.stat.size);
+      const bytesRead = buffer.length ? await readFileWindowFully(opened.handle, buffer, 0) : 0;
+      return buffer.subarray(0, bytesRead);
+    },
+  });
+}
+
 async function resolveAssistantMediaAvailability(
   source: string,
   policy: AssistantMediaPolicy,
@@ -389,10 +412,20 @@ async function resolveAssistantMediaAvailability(
   agentId: string | undefined,
   signal: AbortSignal,
   assertCurrent: () => void,
+  preview?: "office",
 ): Promise<AssistantMediaAvailability & { mediaTicket?: string; mediaTicketExpiresAt?: string }> {
   try {
     assertCurrent();
-    const { opened, mimeType, file } = await openAssistantMedia(source, policy, allowance);
+    const { opened, mimeType, file, reference } = await openAssistantMedia(
+      source,
+      policy,
+      allowance,
+    );
+    const officePreview =
+      preview === "office"
+        ? await readAssistantMediaOfficePreview(opened, reference, mimeType)
+        : undefined;
+    assertCurrent();
     // The inspection owner reopens and verifies this identity after queue admission.
     await opened[Symbol.asyncDispose]();
     const mediaKind = kindFromMime(mimeType);
@@ -411,6 +444,7 @@ async function resolveAssistantMediaAvailability(
       available: true,
       ...(mimeType ? { mimeType } : {}),
       sizeBytes: opened.stat.size,
+      ...(officePreview ? { officePreview } : {}),
       ...playbackMetadata,
       ...createAssistantMediaTicket({
         source,
@@ -423,6 +457,74 @@ async function resolveAssistantMediaAvailability(
   } catch (error) {
     return classifyAssistantMediaError(error);
   }
+}
+
+/**
+ * Parses one client-held Office upload for its structured preview. The bytes
+ * never persist and never mint a ticket; the route exists so optimistic/outbox
+ * attachments, whose bytes live only in the browser, still preview through the
+ * one Office parser owner.
+ */
+async function respondAssistantMediaUploadParse(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  opts?: Partial<GatewayHttpRequestAuthOptions> & { basePath?: string; config?: OpenClawConfig },
+): Promise<boolean> {
+  const requestAuth = await authorizeControlUiReadRequestOrReply({
+    ...opts,
+    req,
+    res,
+    cfg: opts?.cfg ?? opts?.config,
+    allowQueryToken: true,
+  });
+  if (!requestAuth) {
+    return true;
+  }
+  const requestAbort = createHttpRequestAbortSignal(res.req, res);
+  using _ = { [Symbol.dispose]: requestAbort.cleanup };
+  const filename = (url.searchParams.get("filename") ?? "").split(/[\\/]/).pop() ?? "";
+  try {
+    // latin1 keeps every request byte intact for the binary reader.
+    const body = await readRequestBodyWithLimit(req, {
+      maxBytes: OFFICE_PREVIEW_MAX_BYTES,
+      timeoutMs: 30_000,
+      encoding: "latin1",
+      // Answer the bounded 200 too-large payload instead of resetting the socket.
+      destroyOnLimit: false,
+    });
+    if (requestAbort.signal.aborted) {
+      return true;
+    }
+    const buffer = Buffer.from(body, "latin1");
+    const declaredType = url.searchParams.get("type")?.trim().toLowerCase();
+    const officePreview = filename
+      ? await buildOfficePreviewPayload({
+          filename,
+          ...(declaredType ? { mimeType: declaredType } : {}),
+          sizeBytes: buffer.length,
+          read: async () => (requestAbort.signal.aborted ? null : buffer),
+        })
+      : undefined;
+    if (requestAbort.signal.aborted || res.destroyed) {
+      return true;
+    }
+    sendJson(res, 200, { available: true, ...(officePreview ? { officePreview } : {}) });
+  } catch (error) {
+    if (res.destroyed || res.writableEnded) {
+      return true;
+    }
+    if (isRequestBodyLimitError(error, "PAYLOAD_TOO_LARGE")) {
+      sendJson(res, 200, {
+        available: false,
+        reason: "Office preview payload too large",
+        code: "office-preview-too-large",
+      });
+      return true;
+    }
+    respondControlUiNotFound(res);
+  }
+  return true;
 }
 
 export async function handleControlUiAssistantMediaRequest(
@@ -445,10 +547,16 @@ export async function handleControlUiAssistantMediaRequest(
   const isMetaRequest = url.searchParams.get("meta") === "1";
   const explicitAllow =
     req.method === "POST" && isMetaRequest && url.searchParams.get("allow") === "1";
-  if (!isReadHttpMethod(req.method) && !explicitAllow) {
+  // Opt-in parse of client-held upload bytes for an optimistic Office preview.
+  const isUploadParse =
+    req.method === "POST" && isMetaRequest && url.searchParams.get("upload") === "1";
+  if (!isReadHttpMethod(req.method) && !explicitAllow && !isUploadParse) {
     return false;
   }
   applyControlUiSecurityHeaders(res);
+  if (isUploadParse && url.searchParams.get("preview") === "office") {
+    return await respondAssistantMediaUploadParse(req, res, url, opts);
+  }
   let source = normalizeAssistantMediaSource(url.searchParams.get("source") ?? "");
   if (!source) {
     respondControlUiNotFound(res);
@@ -543,6 +651,7 @@ export async function handleControlUiAssistantMediaRequest(
       agentId,
       requestAbort.signal,
       assertCurrentPolicy,
+      url.searchParams.get("preview") === "office" ? "office" : undefined,
     );
     if (requestAbort.signal.aborted) {
       return true;

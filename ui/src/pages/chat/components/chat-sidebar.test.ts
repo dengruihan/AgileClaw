@@ -606,6 +606,31 @@ describe("markdown sidebar", () => {
     },
   );
 
+  it("routes a URL-backed image fallback through the fresh download action", async () => {
+    const downloadNow = vi.fn();
+    const panel = document.createElement("openclaw-chat-detail-panel") as DetailPanel;
+    panel.content = {
+      kind: "attachment",
+      attachmentKind: "image",
+      title: "diagram.png",
+      src: "/__openclaw__/assistant-media?mediaTicket=image-preview",
+      mimeType: "image/png",
+      downloadNow,
+    };
+    document.body.append(panel);
+    await panel.updateComplete;
+
+    // The cached ticket href never renders; the header button drives the fresh action.
+    expect(panel.querySelector("a[download]")).toBeNull();
+    const button = panel.querySelector<HTMLButtonElement>(
+      ".chat-assistant-attachment-card__download",
+    );
+    expect(button).toBeTruthy();
+    button!.click();
+    expect(downloadNow).toHaveBeenCalledOnce();
+    panel.remove();
+  });
+
   it("keeps a canvas scripts ceiling under a trusted global sandbox", async () => {
     const panel = document.createElement("openclaw-chat-detail-panel") as DetailPanel;
     panel.embedSandboxMode = "trusted";

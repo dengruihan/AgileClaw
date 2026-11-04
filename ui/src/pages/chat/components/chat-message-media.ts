@@ -1,4 +1,5 @@
 import { asNonArrayRecord } from "@openclaw/normalization-core/record-coerce";
+import type { ArtifactDownloadResolution } from "../../../api/artifact-download.ts";
 import type { GatewaySessionRow } from "../../../api/types.ts";
 import type { ImageLightboxItem } from "../../../components/image-lightbox.types.ts";
 import { t } from "../../../i18n/index.ts";
@@ -26,9 +27,15 @@ export type ImageBlock = {
 } & ({ url: string; artifactId?: string } | { url?: undefined; artifactId: string });
 
 export type ArtifactDownloadResolver = (
-  params: { sessionKey: string; artifactId: string; variant?: "full" | "thumbnail" },
+  params: {
+    sessionKey: string;
+    artifactId: string;
+    variant?: "full" | "thumbnail";
+    /** Opt in to the Gateway's structured Office preview instead of a download. */
+    preview?: "office";
+  },
   signal?: AbortSignal,
-) => Promise<{ url: string; expiresAt?: string; blob?: Blob } | null>;
+) => Promise<ArtifactDownloadResolution | null>;
 
 export type ImageRenderOptions = {
   galleryImages?: readonly ImageBlock[];

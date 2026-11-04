@@ -26,6 +26,8 @@ export type AttachmentCardHeaderOptions = {
   downloadHref?: string;
   downloadPending?: boolean;
   downloadPendingFocusable?: boolean;
+  /** Visible label for sidebar metadata cards; omitted for transcript cards. */
+  downloadLabel?: string;
   onDownload?: () => void;
   loading?: boolean;
   expandLabel?: string;
@@ -115,7 +117,7 @@ export function renderAttachmentCardHeader(options: AttachmentCardHeaderOptions)
     options.expandLabel ?? t("chat.attachments.expand", { filename: options.label });
   const downloadClass = `chat-assistant-attachment-card__action chat-assistant-attachment-card__download chat-assistant-attachment-card__download--ghost ${
     hasOpenAction ? "chat-assistant-attachment-card__download--secondary" : ""
-  }`;
+  } ${options.downloadLabel ? "chat-assistant-attachment-card__download--labeled" : ""}`;
   return html`
     <div
       class="chat-assistant-attachment-card__header ${
@@ -168,7 +170,9 @@ export function renderAttachmentCardHeader(options: AttachmentCardHeaderOptions)
                 title=${downloadTitle}
                 @click=${options.onDownload}
               >
-                ${icons.download}
+                ${icons.download}${
+                  options.downloadLabel ? html`<span>${options.downloadLabel}</span>` : nothing
+                }
               </button>`
             : options.downloadHref || options.downloadPending
               ? html`<a
@@ -182,7 +186,9 @@ export function renderAttachmentCardHeader(options: AttachmentCardHeaderOptions)
                   rel="noreferrer"
                   aria-label=${downloadTitle}
                   title=${downloadTitle}
-                  >${icons.download}</a
+                  >${icons.download}${
+                    options.downloadLabel ? html`<span>${options.downloadLabel}</span>` : nothing
+                  }</a
                 >`
               : null
         }

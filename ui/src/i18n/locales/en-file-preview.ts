@@ -57,6 +57,13 @@ const catalog = {
       sheetPicker: "Worksheets",
       untitledSheet: "Untitled sheet",
       slideLabel: "Slide {index}",
+      unsupported:
+        "This Office file can't be previewed here. Download it to open it in an Office app.",
+      tooLarge:
+        "This Office file is larger than the 8 MiB preview limit. Download it to open it in an Office app.",
+      invalid:
+        "This Office file couldn't be read for preview. Download it to open it in an Office app.",
+      download: "Download",
     },
   },
   filePreview: {

@@ -1,3 +1,4 @@
+import type { ArtifactOfficePreview } from "../../packages/gateway-protocol/src/schema/artifacts.js";
 import { FsSafeError } from "../infra/fs-safe.js";
 import type { MediaProbeResult } from "../media/media-probe.js";
 import { PlaybackInspectionBusyError } from "../media/playback-transcode.js";
@@ -8,6 +9,8 @@ export type AssistantMediaAvailability =
       mimeType?: string;
       playback?: "native" | "transcode";
       sizeBytes?: number;
+      /** Present only for `preview=office` metadata requests. */
+      officePreview?: ArtifactOfficePreview;
     } & MediaProbeResult)
   | { available: false; reason: string; code: string; retryable?: boolean };
 

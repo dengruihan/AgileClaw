@@ -15,9 +15,15 @@ import { canCreateArtifactDownload, createArtifactDownload } from "../artifact-d
 import type { PreparedArtifactDownload } from "../artifact-download-projection.js";
 import {
   parseManagedOutgoingArtifactId,
+  readManagedOutgoingMediaArtifactContent,
   resolveManagedOutgoingMediaArtifactDownload,
   resolveManagedOutgoingMediaUrlDownload,
 } from "../managed-image-attachments.js";
+import {
+  buildOfficePreviewPayload,
+  resolveOfficePreviewFamily,
+} from "../office-preview/office-preview-payload.js";
+import { OFFICE_PREVIEW_MAX_BYTES } from "../office-preview/office-preview.js";
 import { MAX_PAYLOAD_BYTES } from "../server-constants.js";
 import { tryResolveSessionCompatibilityOwnerAgentId } from "../session-request-agent.js";
 import { getSessionRowProjection } from "../session-row-projection-access.js";
@@ -301,6 +307,175 @@ async function respondManagedArtifactDownload(
   });
 }
 
+function managedArtifactSummary(
+  content: NonNullable<Awaited<ReturnType<typeof readManagedOutgoingMediaArtifactContent>>>,
+  matched?: ArtifactRecord,
+) {
+  return {
+    id: content.artifactId,
+    type: content.type,
+    title: content.title,
+    ...(content.mimeType ? { mimeType: content.mimeType } : {}),
+    ...(content.sizeBytes !== undefined ? { sizeBytes: content.sizeBytes } : {}),
+    sessionKey: content.sessionKey,
+    ...(matched?.runId ? { runId: matched.runId } : {}),
+    ...(matched?.messageSeq !== undefined ? { messageSeq: matched.messageSeq } : {}),
+    source: "session-transcript",
+    download: { mode: "url" as const },
+  };
+}
+
+const BASE64_MAX_LENGTH_FOR_OFFICE_PREVIEW = Math.ceil((OFFICE_PREVIEW_MAX_BYTES * 4) / 3) + 4;
+
+/**
+ * Opt-in structured preview for one artifact. The normal download path never
+ * parses content; only `preview: "office"` reads the bounded original and
+ * reuses the shared Office worker.
+ *
+ * Returns `"ordinary"` without responding when the artifact is outside the
+ * Office families, so the caller answers with the artifact's normal download
+ * delivery instead of a payload-less summary.
+ */
+async function respondArtifactOfficePreview(
+  query: ArtifactsGetParams,
+  access: ArtifactSessionAccess & { assertCurrent: () => void },
+  respond: RespondFn,
+): Promise<"handled" | "ordinary"> {
+  const outcome = await runArtifactSessionOperation(respond, async () => {
+    const resolveSession = await prepareArtifactSessionResolution(query, access.projection);
+    const resolved = await resolveSession(access);
+    const cfg = access.getRuntimeConfig();
+    const defaultAgentId = resolved
+      ? tryResolveSessionCompatibilityOwnerAgentId(cfg, resolved.sessionKey)
+      : undefined;
+    const managedId = parseManagedOutgoingArtifactId(query.artifactId);
+    let matched: ArtifactRecord | undefined;
+    let matchedLookup: ArtifactLookup | undefined;
+    if (managedId && (query.runId || query.messageRole)) {
+      // Provenance filters are a membership contract, not an ownership hint:
+      // prove the managed id belongs to the requested run/role through the same
+      // filtered lookup the ordinary download path uses before reading its bytes.
+      const filtered = await runArtifactSessionOperation(respond, () =>
+        findArtifact(query, access, { includeDownloadData: false }),
+      );
+      if (!filtered.ok) {
+        return "handled" as const;
+      }
+      if (!filtered.value.artifact || filtered.value.artifact.id !== query.artifactId) {
+        respondArtifactNotFound(respond, query.artifactId);
+        return "handled" as const;
+      }
+      if (!artifactResponseIsCurrent(filtered.value, respond)) {
+        return "handled" as const;
+      }
+      matched = filtered.value.artifact;
+      matchedLookup = filtered.value;
+    }
+    if (managedId?.family === "image") {
+      // Managed images are never Office; keep their ordinary managed delivery.
+      await respondManagedArtifactDownload(query, access, respond, matched);
+      return "handled" as const;
+    }
+    if (managedId) {
+      const content = resolved
+        ? await readManagedOutgoingMediaArtifactContent({
+            sessionKey: resolved.sessionKey,
+            ...(resolved.agentId ? { agentId: resolved.agentId } : {}),
+            ...(defaultAgentId ? { defaultAgentId } : {}),
+            artifactId: query.artifactId,
+            maxBytes: OFFICE_PREVIEW_MAX_BYTES,
+          })
+        : null;
+      resolved?.readCurrent();
+      access.assertCurrent();
+      if (!content) {
+        respondArtifactNotFound(respond, query.artifactId);
+        return "handled" as const;
+      }
+      if (matchedLookup && !artifactResponseIsCurrent(matchedLookup, respond)) {
+        return "handled" as const;
+      }
+      if (
+        !resolveOfficePreviewFamily({
+          filename: content.filename,
+          ...(content.mimeType ? { mimeType: content.mimeType } : {}),
+        }).office
+      ) {
+        await respondManagedArtifactDownload(query, access, respond, matched);
+        return "handled" as const;
+      }
+      const preview = await buildOfficePreviewPayload({
+        filename: content.filename,
+        ...(content.mimeType ? { mimeType: content.mimeType } : {}),
+        ...(content.sizeBytes !== undefined ? { sizeBytes: content.sizeBytes } : {}),
+        read: async () => content.buffer ?? null,
+      });
+      access.assertCurrent();
+      if (matchedLookup && !artifactResponseIsCurrent(matchedLookup, respond)) {
+        return "handled" as const;
+      }
+      respond(true, {
+        artifact: managedArtifactSummary(content, matched),
+        ...(preview ? { preview } : {}),
+      });
+      return "handled" as const;
+    }
+    const found = await runArtifactSessionOperation(respond, () =>
+      findArtifact(query, access, {
+        downloadArtifactId: query.artifactId,
+        includeDownloadData: true,
+      }),
+    );
+    if (!found.ok) {
+      return "handled" as const;
+    }
+    const { artifact } = found.value;
+    if (!artifact) {
+      respondArtifactNotFound(respond, query.artifactId);
+      return "handled" as const;
+    }
+    const family = resolveOfficePreviewFamily({
+      filename: artifact.title,
+      ...(artifact.mimeType ? { mimeType: artifact.mimeType } : {}),
+    });
+    if (!family.office) {
+      // A preview request never strips the ordinary payload: answer non-Office
+      // artifacts through the normal download path.
+      return "ordinary" as const;
+    }
+    const encodedData = artifact.data;
+    const preview =
+      encodedData && encodedData.length > BASE64_MAX_LENGTH_FOR_OFFICE_PREVIEW
+        ? {
+            kind: "office" as const,
+            ...(family.format ? { format: family.format } : {}),
+            state: "too-large" as const,
+          }
+        : artifact.download.mode === "bytes"
+          ? await buildOfficePreviewPayload({
+              filename: artifact.title,
+              ...(artifact.mimeType ? { mimeType: artifact.mimeType } : {}),
+              ...(artifact.sizeBytes !== undefined ? { sizeBytes: artifact.sizeBytes } : {}),
+              read: async () =>
+                typeof artifact.data === "string" ? Buffer.from(artifact.data, "base64") : null,
+            })
+          : {
+              kind: "office" as const,
+              ...(family.format ? { format: family.format } : {}),
+              state: "unsupported" as const,
+            };
+    if (!artifactResponseIsCurrent(found.value, respond)) {
+      return "handled" as const;
+    }
+    respond(true, {
+      artifact: toArtifactSummary(artifact),
+      ...(preview ? { preview } : {}),
+    });
+    return "handled" as const;
+  });
+  return outcome.ok ? outcome.value : "handled";
+}
+
 export const artifactsHandlers: GatewayRequestHandlers = {
   "artifacts.list": async (request) => {
     const { params } = request;
@@ -383,6 +558,13 @@ export const artifactsHandlers: GatewayRequestHandlers = {
       return;
     }
     const query = { ...params };
+    if (query.preview === "office") {
+      if ((await respondArtifactOfficePreview(query, access, respond)) === "handled") {
+        return;
+      }
+      // Non-Office artifacts keep their ordinary download delivery.
+      delete query.preview;
+    }
     if (
       query.sessionKey &&
       !query.runId &&

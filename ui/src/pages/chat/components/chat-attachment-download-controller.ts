@@ -9,6 +9,7 @@ import type {
 export class AttachmentDownloadController {
   error: string | null = null;
   private request: AbortController | null = null;
+  private directRequest: AbortController | null = null;
 
   constructor(
     private readonly host: { readonly isConnected: boolean; requestUpdate(): void },
@@ -21,6 +22,10 @@ export class AttachmentDownloadController {
   }
 
   cancel(): void {
+    // A direct ticket re-mint belongs to the panel's connection too; abort it
+    // so a removed panel or reconnect never saves the retired download.
+    this.directRequest?.abort();
+    this.directRequest = null;
     if (!this.request && this.error === null) {
       return;
     }
@@ -32,7 +37,17 @@ export class AttachmentDownloadController {
 
   readonly onDownload = async (): Promise<void> => {
     const content = this.content();
-    if (content?.kind !== "attachment" || !content.download || this.request) {
+    if ((content?.kind !== "attachment" && content?.kind !== "office") || this.request) {
+      return;
+    }
+    if (content.downloadNow) {
+      this.directRequest?.abort();
+      const direct = new AbortController();
+      this.directRequest = direct;
+      content.downloadNow(direct.signal);
+      return;
+    }
+    if (!content.download) {
       return;
     }
     const request = new AbortController();

@@ -52,6 +52,28 @@ export function resolveOfficePreviewTarget(filePath: string): OfficePreviewTarge
   return legacyMimeType ? { kind: "legacy", mimeType: legacyMimeType } : undefined;
 }
 
+/** Modern format declared by a package MIME type, independent of any file name. */
+export function resolveOfficePreviewFormatForMime(
+  mimeType: string | undefined,
+): SessionFileOfficeFormat | undefined {
+  const normalized = mimeType?.split(";", 1)[0]?.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  for (const [format, mime] of Object.entries(MODERN_OFFICE_MIME_TYPES)) {
+    if (mime === normalized) {
+      return format as SessionFileOfficeFormat;
+    }
+  }
+  return undefined;
+}
+
+/** Legacy binary Office family declared by a MIME type. */
+export function isLegacyOfficeMimeType(mimeType: string | undefined): boolean {
+  const normalized = mimeType?.split(";", 1)[0]?.trim().toLowerCase();
+  return Boolean(normalized && Object.hasOwn(LEGACY_OFFICE_MIME_TYPES, normalized));
+}
+
 /** Detected package MIME type for a modern Office format. */
 export function officeMimeTypeForFormat(format: SessionFileOfficeFormat): string {
   return MODERN_OFFICE_MIME_TYPES[format];

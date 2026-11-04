@@ -910,6 +910,14 @@
   font-weight: 600;
 }
 
+/* Sidebar metadata cards keep the download action visibly labeled. */
+.chat-assistant-attachment-card__download--labeled {
+  width: auto;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .chat-assistant-attachment-card__title--unavailable {
   color: var(--muted);
   text-decoration: line-through color-mix(in srgb, currentColor 35%, transparent) 1px;

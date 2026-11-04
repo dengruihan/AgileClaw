@@ -17,7 +17,20 @@ type ArtifactDownloadParams = {
   agentId?: string;
   artifactId: string;
   variant?: "full" | "thumbnail";
+  /** Opt in to the Gateway's structured Office preview instead of a download. */
+  preview?: "office";
 };
+
+export type ArtifactOfficePreview = NonNullable<ArtifactDownloadResult["preview"]>;
+
+/** Managed transcript artifacts deliver URL-only downloads through their own owner. */
+export function isManagedArtifactId(artifactId: string): boolean {
+  return /^artifact_managed_(?:image|media)_/u.test(artifactId);
+}
+
+export type ArtifactDownloadResolution =
+  | { url: string; expiresAt?: string; blob?: Blob; preview?: undefined }
+  | { preview: ArtifactOfficePreview; url?: undefined; expiresAt?: undefined; blob?: undefined };
 
 export function isHttpArtifactDownloadUrl(url: string, resourceBasePath = ""): boolean {
   try {
@@ -46,7 +59,7 @@ export async function downloadArtifact(
   // A loaded HTTPS Control UI proves this origin serves ordinary HTTP traffic.
   // A remote wss endpoint alone may expose only WebSocket upgrades.
   const useHttp =
-    !/^artifact_managed_(?:image|media)_/u.test(params.artifactId) &&
+    !isManagedArtifactId(params.artifactId) &&
     globalThis.location?.protocol === "https:" &&
     isSameOriginGateway(client.gatewayUrl);
   const isCurrent = () =>
@@ -122,8 +135,11 @@ export async function resolveArtifactDownloadSource(
   state: ArtifactDownloadHost,
   params: ArtifactDownloadParams,
   signal?: AbortSignal,
-): Promise<{ url: string; expiresAt?: string; blob?: Blob } | null> {
+): Promise<ArtifactDownloadResolution | null> {
   const result = await downloadArtifact(state, params, signal);
+  if (params.preview === "office") {
+    return result?.preview ? { preview: result.preview } : null;
+  }
   if (
     result?.blob &&
     (result.artifact.type !== "image" ||

@@ -48,6 +48,7 @@ import {
   type ImageRenderOptions,
 } from "./chat-message-media.ts";
 import { renderMessageVideoPreview } from "./chat-message-video-preview.ts";
+import { resolveOfficeSidebarExtras } from "./chat-office-attachment.ts";
 import { isSentPastedTextAttachment } from "./chat-pasted-text.ts";
 import { isSentCommentAttachment, renderSentCommentAttachments } from "./chat-sent-comments.ts";
 import type { AttachmentSidebarState, SidebarContent } from "./chat-sidebar-content-types.ts";
@@ -212,7 +213,7 @@ function resolveManagedAttachmentAvailability(
           sessionKey,
           artifactId: attachment.artifactId!,
         });
-        const url = result?.url.trim();
+        const url = result?.url?.trim();
         if (!url) {
           availability = handleResolutionFailure();
         } else {
@@ -540,8 +541,11 @@ function renderMessageAttachmentContent(
     isLocalAssistantAttachmentSource(attachment.url) ||
     (isManagedOutgoingMediaSource(attachment.url) &&
       Boolean(attachment.artifactId && resolveArtifactDownload));
+  // Office documents preview through the Gateway-owned parser on open only.
+  const officeExtras = resolveOfficeSidebarExtras({ attachment, pastedText, onDownload, options });
   const openAttachmentSidebar =
-    onOpenSidebar && (hasLiveSidebarSource || safeAttachmentUrl || pastedText)
+    onOpenSidebar &&
+    (hasLiveSidebarSource || safeAttachmentUrl || pastedText || officeExtras.uploadSource)
       ? () =>
           onOpenSidebar({
             kind: "attachment",
@@ -558,6 +562,7 @@ function renderMessageAttachmentContent(
             width: media?.width,
             height: media?.height,
             voiceNote: attachment.isVoiceNote === true,
+            ...officeExtras.content,
             ...(hasLiveSidebarSource
               ? {
                   resolveSource: (sidebarUpdate, runtime): AttachmentSidebarState => {

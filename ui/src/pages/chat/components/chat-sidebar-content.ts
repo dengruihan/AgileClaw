@@ -66,16 +66,38 @@ function renderSidebarAttachment(
   runtime: AttachmentSidebarRuntime,
   embedSandboxMode: EmbedSandboxMode,
   download?: { pending: boolean; error: string | null; onDownload: () => void },
+  officePreview?: TemplateResult | typeof nothing,
 ) {
-  if (content.download && download) {
-    return html`${renderCompactAttachmentCard({
+  if (content.office) {
+    // The detail panel owns the lazy preview load and its explicit download.
+    return officePreview ?? nothing;
+  }
+  const previewNotice = content.previewNotice
+    ? html`<div class="sidebar-attachment-preview__notice" role="status">
+        ${content.previewNotice}
+      </div>`
+    : nothing;
+  // A fresh, user-triggered download action always beats a cached source URL:
+  // ticketed sources must reauthorize (blob read or ticket re-mint) on click.
+  // The panel's controller owns both actions so a removed panel or reconnect
+  // aborts the pending transfer before it can save.
+  const onDownload =
+    download && (content.downloadNow || content.download)
+      ? download.onDownload
+      : content.downloadNow;
+  const downloadPending =
+    !content.downloadNow && content.download && download ? download.pending : false;
+  // Live-resolved sources keep their reader; this card is for static content.
+  if (!content.src && !content.resolveSource && (onDownload || content.download)) {
+    return html`${previewNotice}${renderCompactAttachmentCard({
       kind: "document",
       label: content.title,
       mimeType: content.mimeType ?? undefined,
       sizeBytes: content.sizeBytes,
-      onDownload: download.onDownload,
-      downloadPending: download.pending,
-    })}${download.error ? html`<div role="alert">${download.error}</div>` : nothing}`;
+      ...(onDownload ? { onDownload } : {}),
+      downloadPending,
+      downloadLabel: t("chat.officePreview.download"),
+    })}${download?.error && content.download ? html`<div role="alert">${download.error}</div>` : nothing}`;
   }
   const resolution = content.resolveSource?.(onRequestUpdate, runtime);
   const source = resolution ? (resolution.status === "ready" ? resolution : null) : content;
@@ -123,7 +145,8 @@ function renderSidebarAttachment(
       .label=${content.title}
       .mimeType=${content.mimeType ?? ""}
       .sizeBytes=${source?.sizeBytes ?? content.sizeBytes}
-      .downloadHref=${src ?? ""}
+      .onDownload=${onDownload}
+      .downloadHref=${onDownload ? "" : (src ?? "")}
     ></openclaw-chat-pdf-preview>`;
   }
   if (
@@ -155,12 +178,14 @@ function renderSidebarAttachment(
       .sizeBytes=${source?.sizeBytes ?? content.sizeBytes}
       .mediaWidth=${source?.width ?? content.width}
       .mediaHeight=${source?.height ?? content.height}
+      .onDownload=${onDownload}
     ></openclaw-chat-video-player>`;
   }
   if (!src || imagePreview) {
     const width = source?.width ?? content.width;
     const height = source?.height ?? content.height;
     return html`
+      ${previewNotice}
       <div
         class="chat-assistant-attachment-card chat-assistant-attachment-card--${kind} sidebar-attachment-preview__state-card"
         aria-busy=${pending ? "true" : nothing}
@@ -170,7 +195,9 @@ function renderSidebarAttachment(
           label: content.title,
           mimeType: content.mimeType ?? undefined,
           sizeBytes: source?.sizeBytes ?? content.sizeBytes,
-          downloadHref: src ?? undefined,
+          ...(onDownload
+            ? { onDownload, downloadLabel: t("chat.officePreview.download") }
+            : { downloadHref: src ?? undefined }),
           downloadPending: pending,
           visualMode: "preview-with-favicon",
         })}
@@ -228,15 +255,20 @@ function renderSidebarAttachment(
       .sizeBytes=${source?.sizeBytes ?? content.sizeBytes}
       .serverDurationMs=${source?.durationMs ?? content.durationMs}
       .voiceNote=${content.voiceNote === true}
+      .onDownload=${onDownload}
     ></openclaw-chat-audio-player>`;
   }
-  return renderCompactAttachmentCard({
+  return html`${previewNotice}${renderCompactAttachmentCard({
     kind: content.attachmentKind ?? "document",
     label: content.title,
     mimeType: content.mimeType ?? undefined,
     sizeBytes: source?.sizeBytes ?? content.sizeBytes,
-    downloadHref: src,
-  });
+    // Ticketed URLs reauthorize on click; a plain anchor stays only for
+    // sources with no download contract at all.
+    downloadHref: onDownload ? undefined : src,
+    ...(onDownload ? { onDownload } : {}),
+    downloadLabel: t("chat.officePreview.download"),
+  })}`;
 }
 
 export function buildRawContent(
@@ -288,6 +320,8 @@ type MarkdownSidebarProps = {
   onAttachmentUpdate: () => void;
   attachmentRuntime: AttachmentSidebarRuntime;
   attachmentDownload?: { pending: boolean; error: string | null; onDownload: () => void };
+  /** Structured Office preview for an attachment, loaded by the detail panel. */
+  attachmentOfficePreview?: TemplateResult | typeof nothing;
   /** Lazy-loaded structured Office viewer for the selected sidebar preview. */
   officePreview?: TemplateResult | typeof nothing;
 };
@@ -460,6 +494,7 @@ function renderMarkdownSidebar(props: MarkdownSidebarProps) {
                                 props.attachmentRuntime,
                                 props.embedSandboxMode ?? "scripts",
                                 props.attachmentDownload,
+                                props.attachmentOfficePreview,
                               )}
                             </div>`
                           : html`

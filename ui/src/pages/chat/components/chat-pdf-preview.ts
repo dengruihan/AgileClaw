@@ -1,5 +1,6 @@
-import { html, type PropertyValues } from "lit";
+import { html, nothing, type PropertyValues } from "lit";
 import { property, state } from "lit/decorators.js";
+import { icons } from "../../../components/icons.ts";
 import { t } from "../../../i18n/index.ts";
 import { OpenClawLightDomContentsElement } from "../../../lit/openclaw-element.ts";
 import {
@@ -28,6 +29,8 @@ class ChatPdfPreview extends OpenClawLightDomContentsElement {
   @property() mimeType = "";
   @property({ type: Number }) sizeBytes: number | undefined;
   @property() downloadHref = "";
+  /** Fresh, user-triggered download; replaces the plain href when provided. */
+  @property({ attribute: false }) onDownload: (() => void) | undefined;
 
   @state() private status: "loading" | "ready" | "error" = "loading";
   @state() private previewUrl: string | null = null;
@@ -136,6 +139,21 @@ class ChatPdfPreview extends OpenClawLightDomContentsElement {
     const downloadHref = safeAttachmentHref(this.downloadHref || this.src);
     return html`
       <div class="sidebar-pdf-preview" aria-label=${this.label}>
+        ${
+          this.onDownload
+            ? html`<div class="sidebar-office-preview__toolbar">
+                <button
+                  class="btn btn--sm sidebar-office-preview__download"
+                  type="button"
+                  aria-label=${t("chat.mediaPlayer.download", { filename: this.label })}
+                  title=${t("chat.mediaPlayer.download", { filename: this.label })}
+                  @click=${this.onDownload}
+                >
+                  ${icons.download}<span>${t("chat.officePreview.download")}</span>
+                </button>
+              </div>`
+            : nothing
+        }
         <div class="sidebar-pdf-preview__surface">
           ${
             this.status === "loading"
@@ -148,7 +166,9 @@ class ChatPdfPreview extends OpenClawLightDomContentsElement {
                       label: this.label,
                       mimeType: this.mimeType,
                       sizeBytes: this.sizeBytes,
-                      downloadHref: downloadHref ?? undefined,
+                      // The toolbar's fresh action owns the download; a cached
+                      // href here would bypass click-time reauthorization.
+                      ...(this.onDownload ? {} : { downloadHref: downloadHref ?? undefined }),
                     })}
                   </div>`
                 : html`<iframe
