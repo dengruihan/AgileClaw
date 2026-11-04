@@ -64,6 +64,15 @@ export class AttachmentOfficePreviewController {
     }
   }
 
+  /**
+   * Connection-scoped restart: a ready or in-flight preview belongs to the old
+   * connection and must not survive a reconnect, so cancel before re-syncing.
+   */
+  restart(): void {
+    this.cancel();
+    this.sync();
+  }
+
   sync(): void {
     const content = this.content();
     if (content?.kind !== "attachment" || !content.office) {
@@ -128,7 +137,7 @@ export class AttachmentOfficePreviewController {
   }
 
   private renderUnavailable(content: AttachmentSidebarContent, reason: string): TemplateResult {
-    const direct = content.downloadNow;
+    const direct = Boolean(content.downloadNow);
     const blob = content.download;
     return html`
       <div class="sidebar-office-preview__state" role="alert">${reason}</div>
@@ -137,8 +146,8 @@ export class AttachmentOfficePreviewController {
         label: content.title,
         mimeType: content.mimeType ?? undefined,
         sizeBytes: content.sizeBytes,
-        onDownload: direct ?? (blob ? this.blobDownload.onDownload : undefined),
-        downloadPending: blob ? this.blobDownload.pending : false,
+        onDownload: direct || blob ? this.blobDownload.onDownload : undefined,
+        downloadPending: blob && !direct ? this.blobDownload.pending : false,
         downloadLabel: t("chat.officePreview.download"),
       })}
       ${this.blobDownload.error ? html`<div role="alert">${this.blobDownload.error}</div>` : nothing}

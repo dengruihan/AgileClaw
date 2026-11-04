@@ -94,7 +94,13 @@ export function resolveAttachmentOfficePreview(
     if (/^(?:data|blob):/iu.test(attachment.url.trim())) {
       // Optimistic/outbox bytes live only in this client; the Gateway's
       // bounded parser reads them through the assistant-media owner.
-      return loadUploadedAttachmentOfficePreview(attachment.url, attachment.label, options, signal);
+      return loadUploadedAttachmentOfficePreview(
+        attachment.url,
+        attachment.label,
+        attachment.mimeType,
+        options,
+        signal,
+      );
     }
     if (managedSessionKey && attachment.artifactId && resolveArtifactDownload) {
       return resolveArtifactDownload(
@@ -145,7 +151,7 @@ export function resolveOfficeSidebarExtras(input: {
   content: {
     office?: AttachmentOfficePreviewSource;
     previewNotice?: string;
-    downloadNow?: () => void;
+    downloadNow?: (signal?: AbortSignal) => void;
   };
   uploadSource: boolean;
 } {

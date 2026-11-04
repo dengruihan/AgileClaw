@@ -145,6 +145,7 @@ class ChatPdfPreview extends OpenClawLightDomContentsElement {
                 <button
                   class="btn btn--sm sidebar-office-preview__download"
                   type="button"
+                  aria-label=${t("chat.mediaPlayer.download", { filename: this.label })}
                   title=${t("chat.mediaPlayer.download", { filename: this.label })}
                   @click=${this.onDownload}
                 >
@@ -165,7 +166,9 @@ class ChatPdfPreview extends OpenClawLightDomContentsElement {
                       label: this.label,
                       mimeType: this.mimeType,
                       sizeBytes: this.sizeBytes,
-                      downloadHref: downloadHref ?? undefined,
+                      // The toolbar's fresh action owns the download; a cached
+                      // href here would bypass click-time reauthorization.
+                      ...(this.onDownload ? {} : { downloadHref: downloadHref ?? undefined }),
                     })}
                   </div>`
                 : html`<iframe

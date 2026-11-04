@@ -81,6 +81,25 @@ it("does not fetch a PDF known to exceed the preview budget", async () => {
   expect(download?.download).toBe("brief.pdf");
 });
 
+it("routes the oversized PDF fallback through the fresh download action", async () => {
+  const fetchMock = vi.fn<typeof fetch>();
+  vi.stubGlobal("fetch", fetchMock);
+  const downloadNow = vi.fn();
+  const panel = await mountAttachment({
+    sizeBytes: PDF_PREVIEW_MAX_BYTES + 1,
+    downloadNow,
+  });
+
+  await vi.waitFor(() => expect(panel.textContent).toContain("Preview unavailable"));
+  expect(fetchMock).not.toHaveBeenCalled();
+  // The cached ticket href never renders; the fresh action does.
+  expect(panel.querySelector("a[download]")).toBeNull();
+  const fresh = panel.querySelector<HTMLButtonElement>("button.sidebar-office-preview__download");
+  expect(fresh).toBeTruthy();
+  fresh!.click();
+  expect(downloadNow).toHaveBeenCalledOnce();
+});
+
 it("cancels an oversized streamed PDF response", async () => {
   const cancel = vi.fn();
   const response = new Response(new ReadableStream({ start() {}, cancel }), {

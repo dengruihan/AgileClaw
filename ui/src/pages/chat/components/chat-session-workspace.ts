@@ -4,7 +4,6 @@ import { formatInlineCodeSpan } from "../../../../../src/shared/markdown-code.js
 import {
   downloadArtifact,
   isHttpArtifactDownloadUrl,
-  isManagedArtifactId,
   resolveArtifactDownloadSource,
 } from "../../../api/artifact-download.ts";
 import { GatewayRequestError } from "../../../api/gateway.ts";
@@ -21,7 +20,10 @@ import { pathDisplayName } from "../../../lib/path-display.ts";
 import { resolveSessionDisplayName } from "../../../lib/session-display.ts";
 import { parseAgentSessionKey } from "../../../lib/sessions/session-key.ts";
 import { sessionWorkspaceFileKey } from "../../../lib/sessions/workspace.ts";
-import { createManagedArtifactDownloadHandler } from "./chat-attachment-download.ts";
+import {
+  createArtifactDownloadContract,
+  type ArtifactDownloadContract,
+} from "./chat-attachment-download.ts";
 import {
   isLegacyOfficeAttachment,
   resolveOfficeAttachmentFormat,
@@ -113,12 +115,6 @@ function workspaceBrowserFilePath(root: string | undefined, filePath: string): s
 
 type ArtifactOfficePreview = NonNullable<ArtifactDownloadResult["preview"]>;
 
-/** How one opened artifact downloads: fresh blob read or click-time re-mint. */
-type ArtifactDownloadContract = {
-  blob?: (signal: AbortSignal) => Promise<Blob | null>;
-  now?: () => void;
-};
-
 function officePreviewNotice(preview: ArtifactOfficePreview): string {
   switch (preview.state) {
     case "too-large":
@@ -155,6 +151,16 @@ async function loadArtifactSidebarContent(
   resourceBasePath?: string,
 ): Promise<SidebarContent> {
   const { data, encoding, url, blob, preview } = result;
+  // An open that delivered bytes keeps the blob reader; everything else gets a
+  // click-time action. Office preview opens carry no download payload at all,
+  // so the preview itself is what proves a fresh download can be requested.
+  const freshDownloadNow =
+    downloads.now &&
+    !blob &&
+    !(encoding === "base64" && data) &&
+    (url || preview?.kind === "office")
+      ? downloads.now
+      : undefined;
   const { title } = result.artifact;
   const mimeType = result.artifact.mimeType ?? "";
   if (preview?.kind === "office") {
@@ -165,7 +171,7 @@ async function loadArtifactSidebarContent(
         format: preview.format,
         preview: preview.preview,
         ...(downloads.blob ? { download: downloads.blob } : {}),
-        ...(downloads.now ? { downloadNow: downloads.now } : {}),
+        ...(freshDownloadNow ? { downloadNow: freshDownloadNow } : {}),
       };
     }
     return {
@@ -174,7 +180,7 @@ async function loadArtifactSidebarContent(
       title,
       mimeType,
       ...(downloads.blob ? { download: downloads.blob } : {}),
-      ...(downloads.now ? { downloadNow: downloads.now } : {}),
+      ...(freshDownloadNow ? { downloadNow: freshDownloadNow } : {}),
       previewNotice: officePreviewNotice(preview),
     };
   }
@@ -241,7 +247,7 @@ async function loadArtifactSidebarContent(
       mimeType,
       sizeBytes: result.artifact.sizeBytes,
       ...(downloads.blob ? { download: downloads.blob } : {}),
-      ...(downloads.now ? { downloadNow: downloads.now } : {}),
+      ...(freshDownloadNow ? { downloadNow: freshDownloadNow } : {}),
     };
   }
   return {
@@ -250,7 +256,7 @@ async function loadArtifactSidebarContent(
     title,
     mimeType,
     ...(downloads.blob ? { download: downloads.blob } : {}),
-    ...(downloads.now ? { downloadNow: downloads.now } : {}),
+    ...(freshDownloadNow ? { downloadNow: freshDownloadNow } : {}),
     previewNotice: t("chat.attachments.previewDownloadHint"),
   };
 }
@@ -520,7 +526,11 @@ function openArtifact(
     (resolveOfficeAttachmentFormat(listed.mimeType, listed.title) ||
       isLegacyOfficeAttachment(listed.mimeType, listed.title)),
   );
-  const readDownload = async (signal: AbortSignal): Promise<Blob | null> => {
+  // Cached preview actions bind a fresh connection on click; an in-flight
+  // transfer must never follow a reconnect to a replacement Gateway.
+  const resolveFreshResult = async (
+    signal?: AbortSignal,
+  ): Promise<(ArtifactDownloadResult & { blob?: Blob }) | null> => {
     const currentWorkspace = getSessionWorkspace(state);
     if (
       currentWorkspace.sessionKey !== query.sessionKey ||
@@ -528,13 +538,11 @@ function openArtifact(
     ) {
       return null;
     }
-    // Cached preview actions bind a fresh connection on click; an in-flight
-    // transfer must never follow a reconnect to a replacement Gateway.
     const client = state.client;
     const connectionEpoch = state.connectionEpoch;
     const result = await downloadArtifact(state, query, signal, { readBinary: true });
     if (
-      signal.aborted ||
+      signal?.aborted ||
       !state.connected ||
       state.client !== client ||
       state.connectionEpoch !== connectionEpoch ||
@@ -542,31 +550,20 @@ function openArtifact(
     ) {
       return null;
     }
-    if (result?.blob) {
-      return result.blob;
-    }
-    if (result?.encoding !== "base64" || result.data === undefined) {
-      return null;
-    }
-    return new Blob([base64ToBytes(result.data)], {
-      type: result.artifact.mimeType ?? "application/octet-stream",
-    });
+    return result;
   };
-  // Managed artifacts deliver URL-only downloads, so their explicit Download
-  // re-mints the ticket at click time instead of reading a blob.
-  const downloads: ArtifactDownloadContract = isManagedArtifactId(artifactId)
-    ? {
-        now: createManagedArtifactDownloadHandler({
-          sessionKey: query.sessionKey,
-          artifactId,
-          label: listed?.title || t("chat.workspaceFiles.artifacts"),
-          resolveArtifactDownload: (resolveParams, signal) =>
-            resolveArtifactDownloadSource(state, resolveParams, signal),
-          resourceBasePath: state.resourceBasePath,
-          connectionEpoch: () => state.connectionEpoch,
-        }),
-      }
-    : { blob: readDownload };
+  // URL-only deliveries re-run the download RPC on click; a cached ticket from
+  // the open-time response is never reused.
+  const downloads = createArtifactDownloadContract({
+    artifactId,
+    sessionKey: query.sessionKey,
+    label: listed?.title,
+    resolveFreshResult,
+    resolveManagedDownload: (resolveParams, signal) =>
+      resolveArtifactDownloadSource(state, resolveParams, signal),
+    resourceBasePath: state.resourceBasePath,
+    connectionEpoch: () => state.connectionEpoch,
+  });
   openWorkspaceItem(
     state,
     workspace,

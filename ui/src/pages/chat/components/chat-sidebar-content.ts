@@ -79,8 +79,12 @@ function renderSidebarAttachment(
     : nothing;
   // A fresh, user-triggered download action always beats a cached source URL:
   // ticketed sources must reauthorize (blob read or ticket re-mint) on click.
+  // The panel's controller owns both actions so a removed panel or reconnect
+  // aborts the pending transfer before it can save.
   const onDownload =
-    content.downloadNow ?? (content.download && download ? download.onDownload : undefined);
+    download && (content.downloadNow || content.download)
+      ? download.onDownload
+      : content.downloadNow;
   const downloadPending =
     !content.downloadNow && content.download && download ? download.pending : false;
   // Live-resolved sources keep their reader; this card is for static content.
@@ -191,7 +195,7 @@ function renderSidebarAttachment(
           label: content.title,
           mimeType: content.mimeType ?? undefined,
           sizeBytes: source?.sizeBytes ?? content.sizeBytes,
-          ...(kind === "document" && onDownload
+          ...(onDownload
             ? { onDownload, downloadLabel: t("chat.officePreview.download") }
             : { downloadHref: src ?? undefined }),
           downloadPending: pending,

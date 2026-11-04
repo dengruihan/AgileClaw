@@ -53,6 +53,7 @@ export async function loadAssistantAttachmentOfficePreview(
 export async function loadUploadedAttachmentOfficePreview(
   source: string,
   label: string,
+  mimeType: string | null | undefined,
   options: ImageRenderOptions,
   signal: AbortSignal,
 ): Promise<ArtifactOfficePreview | null> {
@@ -67,6 +68,12 @@ export async function loadUploadedAttachmentOfficePreview(
     upload: "1",
     filename: label,
   });
+  // Extensionless optimistic uploads still carry their Office MIME; forward it
+  // so the parser's format detection does not depend on the filename.
+  const normalizedType = mimeType?.split(";", 1)[0]?.trim().toLowerCase();
+  if (normalizedType) {
+    params.set("type", normalizedType);
+  }
   const response = await fetchControlUiResource(
     `${normalizeRouteBasePath(options.resourceBasePath ?? "")}/__openclaw__/assistant-media?${params.toString()}`,
     {

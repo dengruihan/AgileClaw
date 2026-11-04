@@ -657,7 +657,10 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
   });
 
   it("previews an optimistic outbox workbook before the send is acknowledged", async () => {
-    const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
+    const context = await browser.newContext({
+      acceptDownloads: true,
+      viewport: { height: 900, width: 1280 },
+    });
     try {
       const page = await context.newPage();
       page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
@@ -670,6 +673,7 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
           url.searchParams.get("preview") === "office"
         ) {
           uploadRequests.push(url.searchParams.get("filename") ?? "");
+          expect(url.searchParams.get("type")).toBe(officeMime);
           await route.fulfill({
             contentType: "application/json",
             body: JSON.stringify({
@@ -688,7 +692,8 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.fill("Outbox workbook for preview");
       await page.locator(".agent-chat__file-input").setInputFiles({
-        name: "outbox-budget.xlsx",
+        // Extensionless on purpose: format detection must come from the MIME.
+        name: "outbox-budget",
         mimeType: officeMime,
         buffer: Buffer.from("PK-synthetic-outbox-workbook"),
       });
@@ -703,7 +708,7 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
       });
       const card = page
         .locator(".chat-assistant-attachment-card--compact")
-        .filter({ hasText: "outbox-budget.xlsx" });
+        .filter({ hasText: "outbox-budget" });
       const expand = card.locator(".chat-assistant-attachment-card__expand");
       await expand.waitFor({ state: "visible" });
       await page.screenshot({ path: path.join(artifactDir, "before-outbox-office-open.png") });
@@ -713,10 +718,14 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
       await workbook.waitFor({ state: "visible" });
       await expect.poll(() => workbook.textContent()).toContain("Rent");
       expect(downloads).toBe(0);
-      expect(uploadRequests).toEqual(["outbox-budget.xlsx"]);
+      expect(uploadRequests).toEqual(["outbox-budget"]);
       const downloadButton = page.locator(".sidebar-office-preview__download");
       await downloadButton.waitFor({ state: "visible" });
       await page.screenshot({ path: path.join(artifactDir, "after-outbox-office-preview.png") });
+      // The retained bytes back an explicit local download under the upload name.
+      const [download] = await Promise.all([page.waitForEvent("download"), downloadButton.click()]);
+      expect(download.suggestedFilename()).toContain("outbox-budget");
+      expect(downloads).toBe(1);
     } finally {
       await context.close();
     }
@@ -772,6 +781,7 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
         await page.locator("openclaw-chat-pdf-preview").waitFor({ state: "visible" });
         await page.screenshot({ path: path.join(artifactDir, "rail-pdf-preview.png") });
       },
+      downloadButtonName: "Download sheet.pdf",
     },
     {
       id: "artifact_voice_mp3",
@@ -783,9 +793,13 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
         await page.locator("openclaw-chat-audio-player").waitFor({ state: "visible" });
         await page.screenshot({ path: path.join(artifactDir, "rail-audio-preview.png") });
       },
+      downloadButtonName: "Download voice.mp3",
     },
   ])("previews the $title Files-rail artifact inline", async (fixture) => {
-    const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
+    const context = await browser.newContext({
+      acceptDownloads: true,
+      viewport: { height: 900, width: 1280 },
+    });
     try {
       const page = await context.newPage();
       page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
@@ -850,6 +864,19 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
           (request) => (request.params as { preview?: string } | undefined)?.preview === "office",
         ),
       ).toHaveLength(0);
+      if ("downloadButtonName" in fixture && fixture.downloadButtonName) {
+        // The explicit Download re-runs the fresh RPC and saves the returned URL.
+        const [download] = await Promise.all([
+          page.waitForEvent("download"),
+          page.getByRole("button", { name: fixture.downloadButtonName }).click(),
+        ]);
+        expect(download.suggestedFilename()).toBe(fixture.title);
+        expect(downloads).toBe(1);
+        const reissues = (await gateway.getRequests("artifacts.download")).filter(
+          (request) => (request.params as { preview?: string } | undefined)?.preview !== "office",
+        );
+        expect(reissues.length).toBe(opens.length + 1);
+      }
     } finally {
       await context.close();
     }

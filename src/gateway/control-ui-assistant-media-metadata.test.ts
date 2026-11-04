@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import fs from "node:fs/promises";
-import type { IncomingMessage } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { createDeferred } from "../../test/helpers/promise.js";
@@ -455,4 +455,36 @@ it("requires control-ui authorization for upload parsing", async () => {
   expect(await request.handled).toBe(true);
   expect(request.res.statusCode).toBe(401);
   expect(request.end).toHaveBeenCalled();
+});
+
+it("answers an oversized upload over a real socket with the explicit too-large payload", async () => {
+  const server = createServer((req, res) => {
+    void handleControlUiAssistantMediaRequest(req, res, {
+      auth: { mode: "token", token: "test-token", allowTailscale: false },
+    });
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  try {
+    const address = server.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    const oversized = Buffer.alloc(9 * 1024 * 1024, 0x50);
+    const response = await fetch(
+      `http://127.0.0.1:${port}/__openclaw__/assistant-media?meta=1&preview=office&upload=1&filename=budget.xlsx&token=test-token`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/octet-stream" },
+        body: oversized,
+      },
+    );
+    // The bounded rejection must answer, not reset the connection.
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as Record<string, unknown>;
+    expect(payload).toMatchObject({ available: false, code: "office-preview-too-large" });
+  } finally {
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
+  }
 });

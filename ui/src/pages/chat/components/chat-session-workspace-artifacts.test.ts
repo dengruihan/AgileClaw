@@ -265,6 +265,63 @@ describe("session workspace artifacts", () => {
     },
   );
 
+  it.each([
+    { label: "same-origin URL", url: "/api/artifacts/download/connection/ticket" },
+    { label: "external URL", url: "https://artifacts.example/reports/sheet.pdf" },
+  ])("downloads a URL-only artifact ($label) through a fresh click-time RPC", async ({ url }) => {
+    const fixture = createArtifactHost({
+      data: "",
+      mimeType: "application/pdf",
+      title: "sheet.pdf",
+    });
+    let ticket = 0;
+    fixture.request.mockImplementation(async () => ({
+      artifact: fixture.artifact,
+      url: url.startsWith("/") ? `${url}-${++ticket}` : url,
+    }));
+    const props = createSessionWorkspaceProps(fixture.state);
+    props.onOpenArtifact("artifact-1");
+    const content = await fixture.loadedContent();
+    if (content.kind !== "attachment" || typeof content.downloadNow !== "function") {
+      throw new Error("URL-only artifact must expose a click-time download action");
+    }
+    const panel = document.createElement("openclaw-chat-detail-panel") as HTMLElement & {
+      content: SidebarContent;
+      attachmentRuntime: AttachmentSidebarRuntime;
+      updateComplete: Promise<unknown>;
+    };
+    panel.content = content;
+    panel.attachmentRuntime = { connectionEpoch: 1, sessionKey: fixture.state.sessionKey };
+    document.body.append(panel);
+    onTestFinished(() => panel.remove());
+    await panel.updateComplete;
+    const button = panel.querySelector<HTMLButtonElement>(
+      "button.sidebar-office-preview__download, button.chat-assistant-attachment-card__download",
+    );
+    if (!button) {
+      throw new Error("URL-only artifact must render a download action");
+    }
+    const clicked: HTMLAnchorElement[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      clicked.push(this);
+    });
+    button.click();
+    await vi.waitFor(() => expect(clicked.length).toBe(1));
+    expect(clicked[0]?.download).toBe("sheet.pdf");
+    // The open consumed ticket-1; the click re-ran the RPC and saved its own
+    // freshly minted ticket, never the cached open-time URL.
+    expect(clicked[0]?.getAttribute("href")).toContain(
+      url.startsWith("/") ? "/mount/api/artifacts/download/connection/ticket-2" : url,
+    );
+    // The click re-ran the fresh download RPC: open + click, never a preview.
+    expect(fixture.request).toHaveBeenCalledTimes(2);
+    expect(fixture.request.mock.calls.every(([method]) => method === "artifacts.download")).toBe(
+      true,
+    );
+  });
+
   it.each([true, false])(
     "uses artifact titles without changing tab identity (listed: %s)",
     async (listed) => {

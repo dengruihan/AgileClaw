@@ -490,6 +490,8 @@ async function respondAssistantMediaUploadParse(
       maxBytes: OFFICE_PREVIEW_MAX_BYTES,
       timeoutMs: 30_000,
       encoding: "latin1",
+      // Answer the bounded 200 too-large payload instead of resetting the socket.
+      destroyOnLimit: false,
     });
     if (requestAbort.signal.aborted) {
       return true;

@@ -33,7 +33,13 @@ export function officePreviewDownload(
   const label = t("chat.officePreview.download");
   const title = t("chat.mediaPlayer.download", { filename: content.title });
   if (content.downloadNow) {
-    return { label, title, pending: false, onDownload: content.downloadNow };
+    // The panel controller scopes the direct ticket re-mint to its lifecycle.
+    return {
+      label,
+      title,
+      pending: false,
+      onDownload: blobDownload.onDownload,
+    };
   }
   if (content.download) {
     return {

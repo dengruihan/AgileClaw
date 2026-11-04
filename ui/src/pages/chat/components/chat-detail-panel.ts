@@ -147,9 +147,9 @@ class ChatDetailPanel extends OpenClawLightDomElement {
     ) {
       releaseChatMediaResourceSubscriber(this.requestAttachmentUpdate);
       this.attachmentDownload.cancel();
-      // Reload the open Office preview under the new connection; sync aborts
-      // the stale request before starting the replacement load.
-      this.attachmentOffice.sync();
+      // The old connection's ready or in-flight preview must not survive the
+      // reconnect; restart cancels it and reloads under the new connection.
+      this.attachmentOffice.restart();
     }
     if (changed.has("fileNavigation") && this.fileNavigation && this.content?.kind === "file") {
       this.htmlPreview.showSource();

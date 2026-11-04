@@ -98,7 +98,7 @@ export type AttachmentSidebarContent = Omit<AttachmentSidebarSource, "src"> & {
   /** Authorize and read fresh bytes for each explicit download. */
   download?: (signal: AbortSignal) => Promise<Blob | null>;
   /** Re-mint a ticket and hand the file to the browser's normal download flow. */
-  downloadNow?: () => void;
+  downloadNow?: (signal?: AbortSignal) => void;
   /** Why the compact metadata card replaced a structured preview. */
   previewNotice?: string;
   office?: AttachmentOfficePreviewSource;
@@ -142,7 +142,7 @@ export type OfficeSidebarContent = {
   /** Artifact-backed previews keep an explicit download beside the reader. */
   download?: (signal: AbortSignal) => Promise<Blob | null>;
   /** Attachment-backed previews re-mint their ticket before handing off the file. */
-  downloadNow?: () => void;
+  downloadNow?: (signal?: AbortSignal) => void;
 };
 
 export type SessionFileSource = { sessionKey: string; agentId?: string; path: string };
