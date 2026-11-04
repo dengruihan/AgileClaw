@@ -243,6 +243,16 @@ describe("vault fill scrub", () => {
     expect(JSON.stringify(scrubbed)).not.toContain(CANARY);
   });
 
+  it("returns ordinary results unchanged when no fill secret applies", () => {
+    const values = Array.from({ length: 1025 }, (_, index) => `value-${index}`);
+    const input = { values, nested: { ok: true } };
+    const result = scrubVaultFillValueAll(input);
+    expect(result).toBe(input);
+    expect(result.values).toHaveLength(1025);
+    expect(result.values[1024]).toBe("value-1024");
+    expect(scrubVaultFillValue("target-1", input)).toBe(input);
+  });
+
   it("can be cleared explicitly on navigation or close", () => {
     registerVaultFillSecret("target-1", CANARY);
     expect(hasAnyActiveVaultFill()).toBe(true);

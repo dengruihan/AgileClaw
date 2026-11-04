@@ -3,14 +3,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   browserTabs: vi.fn(),
+  callGatewayTool: vi.fn(),
 }));
 
 vi.mock("./browser-tool.runtime.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./browser-tool.runtime.js")>();
-  return { ...actual, browserTabs: mocks.browserTabs };
+  return {
+    ...actual,
+    browserTabs: mocks.browserTabs,
+    callGatewayTool: mocks.callGatewayTool,
+    readGatewayToolOperatorScopes: () => ["operator.write"],
+    getRuntimeConfig: () => ({ browser: {}, gateway: { nodes: { browser: { mode: "off" } } } }),
+  };
 });
 
 const { createBrowserTool } = await import("./browser-tool.js");
+const { browserTabs: realBrowserTabs } = await import("./browser/client.js");
 const { BrowserServiceError } = await import("./browser/client-fetch.js");
 const { clearAllVaultFillSessions, registerVaultFillSecret } =
   await import("./browser/vault-fill-scrub.js");
@@ -18,11 +26,13 @@ const { clearAllVaultFillSessions, registerVaultFillSecret } =
 const CANARY = "aggregate-tabs-canary-3e7f";
 const KEY_CANARY = "property-key-canary-r5";
 const GETTER_CANARY = "getter-result-canary-r6";
+const DASH_CANARY = "dashboard-tabs-canary-r7";
 
 describe("browser tool aggregate fill scrub", () => {
   beforeEach(() => {
     clearAllVaultFillSessions();
     mocks.browserTabs.mockReset();
+    mocks.callGatewayTool.mockReset();
   });
 
   it("masks a filled page title in untargeted browser tabs content and details", async () => {
@@ -113,6 +123,52 @@ describe("browser tool aggregate fill scrub", () => {
     expect(serialized).not.toContain(GETTER_CANARY);
     // The dispatch formatter may read the getter once; the scrub must not.
     expect(getterCalls).toBeLessThanOrEqual(1);
+  });
+
+  it("masks an active fill canary in a scoped dashboard tabs success", async () => {
+    registerVaultFillSecret("DASH-TAB", DASH_CANARY, "doc-1");
+    // The dashboard dispatch routes through the real browserTabs client so the
+    // proxyRequest -> callGatewayTool chain runs exactly as in production.
+    mocks.browserTabs.mockImplementation(realBrowserTabs);
+    mocks.callGatewayTool
+      .mockResolvedValueOnce({
+        sessionKey: "agent:main:dashboard-test",
+        name: "service",
+        instanceId: "widget-one",
+        revision: 1,
+        paused: false,
+        stopping: false,
+        url: "https://example.test/",
+        browserTab: { target: "host", profile: "openclaw", targetId: "DASH-TAB" },
+      })
+      .mockResolvedValueOnce({
+        running: true,
+        tabs: [
+          {
+            targetId: "DASH-TAB",
+            title: `dashboard ${DASH_CANARY}`,
+            url: "https://example.test/",
+          },
+        ],
+      });
+
+    const tool = createBrowserTool({
+      allowHostControl: true,
+      agentSessionKey: "agent:main:dashboard-test",
+      agentId: "main",
+    });
+    const result = await tool.execute?.(
+      "call-1",
+      { action: "tabs", dashboard: "service" },
+      undefined as never,
+      undefined as never,
+    );
+
+    const text = result?.content.map((part) => (part.type === "text" ? part.text : "")).join("\n");
+    expect(text).not.toContain(DASH_CANARY);
+    expect(text).toContain("***");
+    expect(JSON.stringify(result?.details)).not.toContain(DASH_CANARY);
+    expect(JSON.stringify(result)).not.toContain(DASH_CANARY);
   });
 
   it("masks a filled value in a rejected aggregate tabs error without rethrowing the live object", async () => {

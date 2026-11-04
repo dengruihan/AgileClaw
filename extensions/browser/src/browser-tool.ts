@@ -257,7 +257,9 @@ export function createBrowserTool(
           return dashboard;
         };
         if (action === "close") {
-          return jsonResult({ browserDashboard: await callDashboard("DELETE") });
+          return scrubVaultFillValueAll(
+            jsonResult({ browserDashboard: await callDashboard("DELETE") }),
+          );
         }
         if (action === "open") {
           if (params.targetUrl !== undefined || params.url !== undefined) {
@@ -265,9 +267,11 @@ export function createBrowserTool(
               "Update the dashboard widget URL with dashboard widget_put before opening it",
             );
           }
-          return jsonResult({
-            browserDashboard: await callDashboard("POST", true),
-          });
+          return scrubVaultFillValueAll(
+            jsonResult({
+              browserDashboard: await callDashboard("POST", true),
+            }),
+          );
         }
         if (["doctor", "status", "start", "stop", "profiles", "importprofile"].includes(action)) {
           throw new Error(
@@ -350,9 +354,20 @@ export function createBrowserTool(
               ? scrubVaultFillError(error)
               : scrubVaultFillErrorForTarget(dashboardTargetId, error);
           });
+          // Dashboard-owned dispatch results carry page-controlled content and
+          // return before the common scrub below; mask them at the same
+          // boundary, with the dashboard's own metadata merged after.
+          const dashboardScrubTargetId = readStringParam(params, "targetId");
+          const scrubbedResult =
+            action === "tabs" || !dashboardScrubTargetId
+              ? scrubVaultFillValueAll(result)
+              : scrubVaultFillValue(dashboardScrubTargetId, result);
           return {
-            ...result,
-            details: { ...asNullableRecord(result.details), browserDashboard: dashboard },
+            ...scrubbedResult,
+            details: {
+              ...asNullableRecord(scrubbedResult.details),
+              browserDashboard: dashboard,
+            },
           };
         }
       }
@@ -478,17 +493,21 @@ export function createBrowserTool(
         case "stop":
         case "profiles":
         case "importprofile":
-          return await executeBrowserLifecycleAction({
-            action,
-            input: params,
-            baseUrl,
-            profile,
-            timeoutMs: toolTimeoutMs,
-            proxyRequest,
-            allowHostControl: opts?.allowHostControl,
-            sandboxBridgeUrl: opts?.sandboxBridgeUrl,
-            signal,
-          });
+          // Every model-bound success passes through the scrub owner; with no
+          // active fill secret this returns the result unchanged.
+          return scrubVaultFillValueAll(
+            await executeBrowserLifecycleAction({
+              action,
+              input: params,
+              baseUrl,
+              profile,
+              timeoutMs: toolTimeoutMs,
+              proxyRequest,
+              allowHostControl: opts?.allowHostControl,
+              sandboxBridgeUrl: opts?.sandboxBridgeUrl,
+              signal,
+            }),
+          );
         default:
           break;
       }

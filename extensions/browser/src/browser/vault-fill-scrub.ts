@@ -195,11 +195,20 @@ function scrubTextWithSecrets(text: string, secrets: readonly string[]): string 
 }
 
 export function scrubVaultFillValue<T>(targetId: string | undefined, value: T): T {
+  // No active secret for this target: return the ordinary result unchanged.
+  // The bounded projection (including its array cap) only applies while a
+  // fill secret must be masked.
+  if (!targetId || !hasActiveVaultFill(targetId)) {
+    return value;
+  }
   return scrubValueWith(value, (text) => scrubVaultFillText(targetId, text));
 }
 
 /** Mask every active fill secret in a deep value. */
 export function scrubVaultFillValueAll<T>(value: T): T {
+  if (allFillSecrets().length === 0) {
+    return value;
+  }
   return scrubValueWith(value, scrubVaultFillTextAll);
 }
 
