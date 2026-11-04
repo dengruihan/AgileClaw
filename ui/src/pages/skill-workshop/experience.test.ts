@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createDeferred } from "../../../../test/helpers/promise.js";
 import { createSkillWorkshopExperienceFixture } from "../../test-helpers/skill-workshop-experience-fixture.ts";
 import { createFixture } from "../../test-helpers/skill-workshop-proposal-fixture.ts";
+import { restoreSkillExperienceFromDetail } from "./experience-actions.ts";
 import {
   loadSkillExperiences,
   saveSkillExperienceDraft,
@@ -73,6 +74,69 @@ describe("Skill Workshop experience reads", () => {
     });
     expect(state.skillWorkshopExperienceLoading).toBe(false);
     expect(state.skillWorkshopExperienceError).toBeNull();
+  });
+
+  it("keeps a promoted restore selected when the write response lags the projection", async () => {
+    const fixture = createSkillWorkshopExperienceFixture();
+    const promoted = fixture.records.find((record) => record.id === "flaky-e2e-quarantine")!;
+    const revision = "b5".padEnd(64, "0");
+    const retired = {
+      ...promoted,
+      status: "retired" as const,
+      retiredAt: "2026-11-03T13:00:00.000Z",
+      retireReason: "Kept for history.",
+      updatedAt: "2026-11-03T13:00:00.000Z",
+      revisionHash: revision,
+    };
+    // M43's actual restore write response does not project the proposal owner,
+    // so an existing promotion link defaults to rejected/active.
+    const writeResponse = {
+      ...promoted,
+      status: "active" as const,
+      promotion: { ...promoted.promotion!, state: "rejected" as const },
+      updatedAt: "2026-11-03T13:30:00.000Z",
+      revisionHash: revision,
+    };
+    // The forced list then projects the same revision as promoted/pending.
+    const refreshed = {
+      ...promoted,
+      updatedAt: "2026-11-03T13:30:00.000Z",
+      revisionHash: revision,
+    };
+    const { state, context, request } = createFixture({ skillWorkshopMode: "experience" });
+    state.skillWorkshopAgentId = "research";
+    state.skillWorkshopExperiences = [{ ...retired, content: "body", contentLoaded: true }];
+    state.skillWorkshopExperienceSelectedId = retired.id;
+    state.skillWorkshopExperienceFilter = "retired";
+    request.mockImplementation(async (method) => {
+      if (method === "skills.experience.restore") {
+        return { record: writeResponse, revisionHash: revision };
+      }
+      if (method === "skills.experience.list") {
+        return {
+          schema: "openclaw.skill-workshop.experiences-manifest.v1",
+          updatedAt: "2026-11-03T13:30:00.000Z",
+          experiences: [refreshed],
+          counts: { active: 0, promoted: 1, retired: 0 },
+        };
+      }
+      if (method === "skills.experience.read") {
+        return { record: refreshed, revisionHash: revision, content: "body" };
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+
+    await restoreSkillExperienceFromDetail(state, context, retired.id, {
+      isCurrent: () => true,
+      onProgress: () => undefined,
+    });
+
+    expect(state.skillWorkshopExperienceFilter).toBe("promoted");
+    expect(state.skillWorkshopExperienceSelectedId).toBe(retired.id);
+    expect(state.skillWorkshopExperiences.find((entry) => entry.id === retired.id)).toMatchObject({
+      status: "promoted",
+      promotion: { state: "pending" },
+    });
   });
 
   it("keeps the newer selection when an earlier read resolves last", async () => {

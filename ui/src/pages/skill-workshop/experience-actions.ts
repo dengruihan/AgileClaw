@@ -6,6 +6,7 @@ import {
   restoreSkillExperience,
   retireSkillExperience,
   saveSkillExperienceDraft,
+  selectSkillExperience,
   showSkillExperienceNotice,
 } from "./experience.ts";
 import { setSkillWorkshopMode } from "./header-controls.ts";
@@ -188,6 +189,17 @@ export async function restoreSkillExperienceFromDetail(
       isCurrent: options.isCurrent,
       onProgress: options.onProgress,
     });
+    if (outcome.status === "saved" && options.isCurrent()) {
+      // The write response can lag the proposal projection (M43 restores the
+      // document before projecting its promotion link). Reconcile the filter
+      // and selection from the authoritative refreshed row instead of the
+      // write's status hint, so a promoted restore stays selected.
+      const restored = state.skillWorkshopExperiences.find((entry) => entry.id === experienceId);
+      if (restored) {
+        state.skillWorkshopExperienceFilter = restored.status;
+        await selectSkillExperience(state, context, restored.id);
+      }
+    }
   }
   options.onProgress();
 }

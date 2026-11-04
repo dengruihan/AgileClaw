@@ -526,10 +526,21 @@ describe("Skill Workshop Experience mocked Gateway E2E", () => {
         true,
       );
 
+      const restoreRevision = "b5".padEnd(64, "0");
       const restoredPromoted = {
         ...promoted,
         updatedAt: "2026-11-03T13:30:00.000Z",
-        revisionHash: "b5".padEnd(64, "0"),
+        revisionHash: restoreRevision,
+      };
+      // M43's restore write response does not project the proposal owner yet:
+      // the same revision comes back active/rejected, then the forced list
+      // projects it as promoted/pending.
+      const laggingRestoreResponse = {
+        ...promoted,
+        status: "active" as const,
+        promotion: { ...promoted.promotion!, state: "rejected" as const },
+        updatedAt: "2026-11-03T13:30:00.000Z",
+        revisionHash: restoreRevision,
       };
       await gateway.setMethodResponse(
         "skills.experience.list",
@@ -537,6 +548,21 @@ describe("Skill Workshop Experience mocked Gateway E2E", () => {
           activeRecords.map((record) => (record.id === promoted.id ? restoredPromoted : record)),
         ),
       );
+      const readFixture = fixture.responses["skills.experience.read"];
+      await gateway.setMethodResponse("skills.experience.read", {
+        cases: readFixture.cases.map((entry) =>
+          entry.match.id === promoted.id
+            ? {
+                match: entry.match,
+                response: {
+                  record: restoredPromoted,
+                  revisionHash: restoreRevision,
+                  content: entry.response.content,
+                },
+              }
+            : entry,
+        ),
+      });
       const promotedRestoreCount = (await gateway.getRequests("skills.experience.restore")).length;
       await gateway.deferNext("skills.experience.restore");
       await page.getByRole("button", { name: "Restore", exact: true }).click();
@@ -544,11 +570,13 @@ describe("Skill Workshop Experience mocked Gateway E2E", () => {
         after: promotedRestoreCount,
       });
       await gateway.resolveDeferred("skills.experience.restore", {
-        record: restoredPromoted,
-        revisionHash: restoredPromoted.revisionHash,
+        record: laggingRestoreResponse,
+        revisionHash: laggingRestoreResponse.revisionHash,
       });
       const promotedChip = page.locator(".sw-experience__chip", { hasText: "Promoted" });
       await expect.poll(async () => promotedChip.getAttribute("aria-pressed")).toBe("true");
+      const promotedRow = page.locator(".sw-experience__row", { hasText: promoted.name });
+      await expect.poll(async () => promotedRow.getAttribute("aria-current")).toBe("true");
       await page.getByText(`Promotion pending review for ${promoted.name}`).first().waitFor();
       await page.screenshot({ path: path.join(artifacts, "02-restored-promoted.png") });
     } finally {
