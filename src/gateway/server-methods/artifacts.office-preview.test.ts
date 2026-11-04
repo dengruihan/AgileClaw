@@ -77,6 +77,26 @@ function messageWithFile(file: Record<string, unknown>) {
   });
 }
 
+function messageWithFilteredFile(params: {
+  file: Record<string, unknown>;
+  role?: string;
+  runId: string;
+  seq?: number;
+}) {
+  const seq = params.seq ?? 2;
+  hoisted.visitSessionMessagesAsync.mockImplementation(async (_scope, visit) => {
+    visit(
+      {
+        role: params.role ?? "assistant",
+        content: [params.file],
+        __openclaw: { seq, runId: params.runId },
+      },
+      seq,
+    );
+    return 1;
+  });
+}
+
 async function openInlineArtifact(file: Record<string, unknown>) {
   messageWithFile(file);
   const listed = await invoke("artifacts.list", { sessionKey: "agent:main:main" });
@@ -302,6 +322,155 @@ describe("artifacts.download opt-in Office preview", () => {
     );
     expect(hoisted.resolveManagedArtifactDownload).not.toHaveBeenCalled();
     expect(hoisted.resolveManagedUrlDownload).not.toHaveBeenCalled();
+  });
+
+  it("carries matched run provenance into a managed Office preview", async () => {
+    const buffer = await buildXlsxFixture();
+    const artifactId = "artifact_managed_media_11111111-1111-4111-8111-111111111111";
+    messageWithFilteredFile({
+      runId: "run-preview",
+      file: { type: "file", artifactId, title: "applications.xlsx", mimeType: XLSX_MIME },
+    });
+    hoisted.readManagedArtifactContent.mockResolvedValue({
+      artifactId,
+      sessionKey: "agent:main:main",
+      type: "file",
+      title: "applications.xlsx",
+      filename: "applications.xlsx",
+      mimeType: XLSX_MIME,
+      sizeBytes: buffer.length,
+      buffer,
+      tooLarge: false,
+    });
+
+    const payload = expectOkPayload(
+      await invoke("artifacts.download", {
+        sessionKey: "agent:main:main",
+        agentId: "main",
+        artifactId,
+        runId: "run-preview",
+        messageRole: "assistant",
+        preview: "office",
+      }),
+    ) as { artifact: Record<string, unknown>; preview: Record<string, unknown> };
+    expect(payload.preview).toMatchObject({ kind: "office", format: "xlsx", state: "ready" });
+    expect(payload.artifact).toMatchObject({
+      id: artifactId,
+      runId: "run-preview",
+      messageSeq: 2,
+      source: "session-transcript",
+    });
+  });
+
+  it.each([
+    { filter: { runId: "other-run" }, messageRole: "assistant" },
+    { filter: { runId: "run-preview", messageRole: "assistant" }, messageRole: "user" },
+    { filter: { messageRole: "assistant" }, messageRole: "user" },
+  ])(
+    "requires filtered transcript membership before a managed Office preview: %j",
+    async ({ filter, messageRole }) => {
+      const artifactId = "artifact_managed_media_11111111-1111-4111-8111-111111111111";
+      messageWithFilteredFile({
+        role: messageRole,
+        runId: "run-preview",
+        file: { type: "file", artifactId, title: "applications.xlsx", mimeType: XLSX_MIME },
+      });
+
+      const calls = await invoke("artifacts.download", {
+        sessionKey: "agent:main:main",
+        agentId: "main",
+        artifactId,
+        preview: "office",
+        ...filter,
+      });
+      expect(expectErrorDetails(calls)).toMatchObject({ type: "artifact_not_found", artifactId });
+      expect(hoisted.readManagedArtifactContent).not.toHaveBeenCalled();
+      expect(hoisted.resolveManagedArtifactDownload).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { match: false, filter: { runId: "other-run" } },
+    { match: true, filter: { runId: "run-preview" } },
+  ])(
+    "applies run filters to managed image fallbacks (match: $match)",
+    async ({ match, filter }) => {
+      const artifactId = "artifact_managed_image_11111111-1111-4111-8111-111111111111";
+      messageWithFilteredFile({ runId: "run-preview", file: { type: "image", artifactId } });
+      hoisted.resolveManagedArtifactDownload.mockResolvedValue({
+        artifactId,
+        sessionKey: "agent:main:main",
+        type: "image",
+        title: "chart.png",
+        mimeType: "image/png",
+        sizeBytes: 1234,
+        url: `/api/chat/media/outgoing/agent%3Amain%3Amain/11111111-1111-4111-8111-111111111111/full`,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+
+      const calls = await invoke("artifacts.download", {
+        sessionKey: "agent:main:main",
+        agentId: "main",
+        artifactId,
+        preview: "office",
+        ...filter,
+      });
+      if (!match) {
+        expect(expectErrorDetails(calls)).toMatchObject({ type: "artifact_not_found", artifactId });
+        expect(hoisted.resolveManagedArtifactDownload).not.toHaveBeenCalled();
+        return;
+      }
+      const payload = expectOkPayload(calls) as {
+        artifact: Record<string, unknown>;
+        url?: string;
+      };
+      expect(payload.url).toContain("/api/chat/media/outgoing/");
+      expect(payload.artifact).toMatchObject({
+        id: artifactId,
+        runId: "run-preview",
+        messageSeq: 2,
+      });
+    },
+  );
+
+  it("requires filtered membership before a managed non-Office fallback", async () => {
+    const artifactId = "artifact_managed_media_22222222-2222-4222-8222-222222222222";
+    messageWithFilteredFile({
+      runId: "run-preview",
+      file: { type: "file", artifactId, title: "voice-note.mp3", mimeType: "audio/mpeg" },
+    });
+    hoisted.readManagedArtifactContent.mockResolvedValue({
+      artifactId,
+      sessionKey: "agent:main:main",
+      type: "file",
+      title: "voice-note.mp3",
+      filename: "voice-note.mp3",
+      mimeType: "audio/mpeg",
+      sizeBytes: 2048,
+      buffer: Buffer.from("id3"),
+      tooLarge: false,
+    });
+    hoisted.resolveManagedArtifactDownload.mockResolvedValue({
+      artifactId,
+      sessionKey: "agent:main:main",
+      type: "media",
+      title: "voice-note.mp3",
+      mimeType: "audio/mpeg",
+      sizeBytes: 2048,
+      url: `/api/chat/media/outgoing/agent%3Amain%3Amain/22222222-2222-4222-8222-222222222222/full`,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    const calls = await invoke("artifacts.download", {
+      sessionKey: "agent:main:main",
+      agentId: "main",
+      artifactId,
+      runId: "other-run",
+      preview: "office",
+    });
+    expect(expectErrorDetails(calls)).toMatchObject({ type: "artifact_not_found", artifactId });
+    expect(hoisted.readManagedArtifactContent).not.toHaveBeenCalled();
+    expect(hoisted.resolveManagedArtifactDownload).not.toHaveBeenCalled();
   });
 
   it("reports a managed artifact that its owner no longer exposes", async () => {

@@ -349,9 +349,31 @@ async function respondArtifactOfficePreview(
       ? tryResolveSessionCompatibilityOwnerAgentId(cfg, resolved.sessionKey)
       : undefined;
     const managedId = parseManagedOutgoingArtifactId(query.artifactId);
+    let matched: ArtifactRecord | undefined;
+    let matchedLookup: ArtifactLookup | undefined;
+    if (managedId && (query.runId || query.messageRole)) {
+      // Provenance filters are a membership contract, not an ownership hint:
+      // prove the managed id belongs to the requested run/role through the same
+      // filtered lookup the ordinary download path uses before reading its bytes.
+      const filtered = await runArtifactSessionOperation(respond, () =>
+        findArtifact(query, access, { includeDownloadData: false }),
+      );
+      if (!filtered.ok) {
+        return "handled" as const;
+      }
+      if (!filtered.value.artifact || filtered.value.artifact.id !== query.artifactId) {
+        respondArtifactNotFound(respond, query.artifactId);
+        return "handled" as const;
+      }
+      if (!artifactResponseIsCurrent(filtered.value, respond)) {
+        return "handled" as const;
+      }
+      matched = filtered.value.artifact;
+      matchedLookup = filtered.value;
+    }
     if (managedId?.family === "image") {
       // Managed images are never Office; keep their ordinary managed delivery.
-      await respondManagedArtifactDownload(query, access, respond);
+      await respondManagedArtifactDownload(query, access, respond, matched);
       return "handled" as const;
     }
     if (managedId) {
@@ -370,13 +392,16 @@ async function respondArtifactOfficePreview(
         respondArtifactNotFound(respond, query.artifactId);
         return "handled" as const;
       }
+      if (matchedLookup && !artifactResponseIsCurrent(matchedLookup, respond)) {
+        return "handled" as const;
+      }
       if (
         !resolveOfficePreviewFamily({
           filename: content.filename,
           ...(content.mimeType ? { mimeType: content.mimeType } : {}),
         }).office
       ) {
-        await respondManagedArtifactDownload(query, access, respond);
+        await respondManagedArtifactDownload(query, access, respond, matched);
         return "handled" as const;
       }
       const preview = await buildOfficePreviewPayload({
@@ -386,8 +411,11 @@ async function respondArtifactOfficePreview(
         read: async () => content.buffer ?? null,
       });
       access.assertCurrent();
+      if (matchedLookup && !artifactResponseIsCurrent(matchedLookup, respond)) {
+        return "handled" as const;
+      }
       respond(true, {
-        artifact: managedArtifactSummary(content),
+        artifact: managedArtifactSummary(content, matched),
         ...(preview ? { preview } : {}),
       });
       return "handled" as const;
