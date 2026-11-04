@@ -503,5 +503,96 @@ describe.runIf(process.env.OPENCLAW_BROWSER_VAULT_E2E === "1")(
         await context.close();
       }
     }, 30_000);
+    it("rejects a username-triggered cross-origin navigation before password insertion", async () => {
+      const port = await getFreePort();
+      const cdpUrl = `http://127.0.0.1:${port}`;
+      const context = await getPlaywrightCore().chromium.launchPersistentContext(
+        path.join(tempDirs.make("openclaw-vault-cross-origin-username-"), "profile"),
+        {
+          headless: true,
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+          args: [`--remote-debugging-port=${port}`],
+        },
+      );
+      try {
+        const page = context.pages()[0] ?? (await context.newPage());
+        await page.route("http://127.0.0.1:11111/**", async (route) => {
+          await route.fulfill({
+            contentType: "text/html",
+            body: `<!doctype html><title>Origin A</title>
+              <input id="username" autocomplete="username" oninput="location.href='http://127.0.0.1:22222/b'">
+              <input id="password" type="password" autocomplete="current-password">`,
+          });
+        });
+        await page.route("http://127.0.0.1:22222/**", async (route) => {
+          await route.fulfill({
+            contentType: "text/html",
+            body: `<!doctype html><title>Origin B</title>
+              <input id="username" autocomplete="username">
+              <input id="password" type="password" autocomplete="current-password">`,
+          });
+        });
+        await page.goto("http://127.0.0.1:11111/a");
+        const session = await context.newCDPSession(page);
+        const { targetInfo } = await session.send("Target.getTargetInfo");
+        await session.detach();
+        const targetId = targetInfo.targetId;
+
+        const state: BrowserServerState = {
+          port: 0,
+          resolved: resolveBrowserConfig({
+            defaultProfile: "vault",
+            evaluateEnabled: true,
+            ssrfPolicy: { dangerouslyAllowPrivateNetwork: true },
+            profiles: { vault: { cdpUrl, color: "#123456", attachOnly: true } },
+          }),
+          profiles: new Map(),
+        };
+        const routes = createBrowserRouteApp();
+        const routeContext = createBrowserRouteContext({ getState: () => state });
+        registerBrowserVaultRoutes(routes.app, routeContext);
+        registerBrowserAgentSnapshotRoutes(routes.app, routeContext);
+        const observe = expectDefined(routes.postHandlers.get("/vault/observe"));
+        const fill = expectDefined(routes.postHandlers.get("/vault/fill"));
+
+        const observeResponse = createBrowserRouteResponse();
+        await observe(
+          { params: {}, query: { profile: "vault" }, body: { targetId } },
+          observeResponse.res,
+        );
+        const observation = observeResponse.body as VaultObservation;
+        expect(observation.ok).toBe(true);
+        expect(observation.origin).toEqual({ scheme: "http", host: "127.0.0.1", port: 11111 });
+
+        const fillResponse = createBrowserRouteResponse();
+        await fill(
+          {
+            params: {},
+            query: { profile: "vault" },
+            body: {
+              targetId,
+              username: "person@example.com",
+              password: CANARY,
+              expected: expectedFrom(observation),
+            },
+          },
+          fillResponse.res,
+        );
+        expect(fillResponse.statusCode, JSON.stringify(fillResponse.body)).toBe(200);
+        expect(fillResponse.body).toMatchObject({ ok: false, status: "document_changed" });
+        await page
+          .waitForURL("http://127.0.0.1:22222/b", { timeout: 5_000 })
+          .catch(() => undefined);
+        expect(page.url()).toBe("http://127.0.0.1:22222/b");
+        expect(await page.locator("#password").inputValue()).toBe("");
+        // No password was inserted on origin B; the armed session stays until
+        // navigation/close and can never return the canary.
+        expect(scrubVaultFillText(targetId, CANARY)).toBe("***");
+        clearVaultFillSession(targetId);
+      } finally {
+        await closePlaywrightBrowserConnection({ cdpUrl });
+        await context.close();
+      }
+    }, 30_000);
   },
 );

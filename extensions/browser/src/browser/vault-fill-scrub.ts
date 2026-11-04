@@ -166,8 +166,27 @@ export function scrubVaultFillText(targetId: string | undefined, text: string): 
   if (!session) {
     return text;
   }
+  return scrubTextWithSecrets(text, session.secrets);
+}
+
+function allFillSecrets(): string[] {
+  const secrets = new Set<string>();
+  for (const session of sessions.values()) {
+    for (const secret of session.secrets) {
+      secrets.add(secret);
+    }
+  }
+  return [...secrets].toSorted((a, b) => b.length - a.length);
+}
+
+/** Mask every active fill secret; use for aggregate or uncertain target results. */
+export function scrubVaultFillTextAll(text: string): string {
+  return scrubTextWithSecrets(text, allFillSecrets());
+}
+
+function scrubTextWithSecrets(text: string, secrets: readonly string[]): string {
   let scrubbed = text;
-  for (const secret of session.secrets) {
+  for (const secret of secrets) {
     if (scrubbed.includes(secret)) {
       scrubbed = scrubbed.split(secret).join(MASK);
     }
@@ -176,17 +195,19 @@ export function scrubVaultFillText(targetId: string | undefined, text: string): 
 }
 
 export function scrubVaultFillValue<T>(targetId: string | undefined, value: T): T {
-  if (!targetId) {
-    return value;
-  }
-  const session = sessions.get(targetId);
-  if (!session) {
-    return value;
-  }
+  return scrubValueWith(value, (text) => scrubVaultFillText(targetId, text));
+}
+
+/** Mask every active fill secret in a deep value. */
+export function scrubVaultFillValueAll<T>(value: T): T {
+  return scrubValueWith(value, scrubVaultFillTextAll);
+}
+
+function scrubValueWith<T>(value: T, scrubText: (text: string) => string): T {
   const seen = new WeakSet<object>();
   const scrub = (candidate: unknown): unknown => {
     if (typeof candidate === "string") {
-      return scrubVaultFillText(targetId, candidate);
+      return scrubText(candidate);
     }
     if (!candidate || typeof candidate !== "object") {
       return candidate;

@@ -224,6 +224,11 @@ function isLocalCdpUrl(cdpUrl: string): boolean {
   }
 }
 
+function isNavigationRaceError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : "";
+  return /execution context was destroyed|target closed|navigat/iu.test(message);
+}
+
 function readExpectedOrigin(value: unknown): ObservedOrigin | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
@@ -400,12 +405,49 @@ export function registerBrowserVaultRoutes(
           return;
         }
         const navigationPolicy = browserNavigationPolicyForProfile(ctx, profileCtx);
-        const observed = await observeVaultTarget({
-          cdpUrl,
-          targetId: tab.targetId,
-          signal,
-          ...(navigationPolicy.ssrfPolicy ? { ssrfPolicy: navigationPolicy.ssrfPolicy } : {}),
-        });
+        const observeNow = () =>
+          observeVaultTarget({
+            cdpUrl,
+            targetId: tab.targetId,
+            signal,
+            ...(navigationPolicy.ssrfPolicy ? { ssrfPolicy: navigationPolicy.ssrfPolicy } : {}),
+          });
+        const revalidate = async (): Promise<
+          { ok: true } | { ok: false; status: string; reasonCode: string }
+        > => {
+          let current: Awaited<ReturnType<typeof observeVaultTarget>>;
+          try {
+            current = await observeNow();
+          } catch {
+            return {
+              ok: false,
+              status: "document_changed",
+              reasonCode: "page_changed_after_approval",
+            };
+          }
+          if (!current.ok) {
+            return { ok: false, status: current.status, reasonCode: current.reasonCode };
+          }
+          const currentObservation = current.observation;
+          if (
+            !sameOrigin(currentObservation.origin, expectedOrigin) ||
+            currentObservation.documentId !== expectedDocumentId ||
+            currentObservation.frameId !== expectedFrameId ||
+            currentObservation.fieldSignature !== expectedFieldSignature
+          ) {
+            return {
+              ok: false,
+              status: "document_changed",
+              reasonCode: "page_changed_after_approval",
+            };
+          }
+          return { ok: true };
+        };
+        const observed = await observeNow().catch(() => undefined);
+        if (!observed) {
+          res.json({ ok: false, status: "unavailable", reasonCode: "observe_failed" });
+          return;
+        }
         if (!observed.ok) {
           res.json({ ok: false, status: observed.status, reasonCode: observed.reasonCode });
           return;
@@ -424,29 +466,93 @@ export function registerBrowserVaultRoutes(
           });
           return;
         }
-        const page = await getPageForTargetId({
-          cdpUrl,
-          targetId: tab.targetId,
-          ...(navigationPolicy.ssrfPolicy ? { ssrfPolicy: navigationPolicy.ssrfPolicy } : {}),
-        });
-        const inputs = page.locator("input");
+        const pageForFill = () =>
+          getPageForTargetId({
+            cdpUrl,
+            targetId: tab.targetId,
+            ...(navigationPolicy.ssrfPolicy ? { ssrfPolicy: navigationPolicy.ssrfPolicy } : {}),
+          });
         // Arm masking before insertion so a transport failure, partial fill, or
         // timeout cannot leave plaintext in the DOM unprotected. Bind the
         // document id so a later navigation can prove replacement.
         registerVaultFillSecret(tab.targetId, password, observation.documentId);
-        const passwordField = inputs.nth(observation.fields.passwordIndex);
-        try {
-          if (username !== undefined && observation.fields.usernameIndex >= 0) {
-            await inputs
+
+        if (username !== undefined && observation.fields.usernameIndex >= 0) {
+          const usernamePage = await pageForFill();
+          try {
+            await usernamePage
+              .locator("input")
               .nth(observation.fields.usernameIndex)
               .fill(username, { timeout: FILL_ACTION_TIMEOUT_MS });
+          } catch (error) {
+            res.json(
+              isNavigationRaceError(error)
+                ? {
+                    ok: false,
+                    status: "document_changed",
+                    reasonCode: "page_changed_after_approval",
+                  }
+                : { ok: false, status: "unavailable", reasonCode: "fill_failed" },
+            );
+            return;
           }
+          // A username input event can start a navigation. Let the new document
+          // settle before revalidating the approved origin/document/fields.
+          await usernamePage
+            .waitForLoadState("domcontentloaded", { timeout: 2_000 })
+            .catch(() => undefined);
+          const afterUsername = await revalidate();
+          if (!afterUsername.ok) {
+            res.json(afterUsername);
+            return;
+          }
+        }
+
+        const beforePassword = await revalidate();
+        if (!beforePassword.ok) {
+          res.json(beforePassword);
+          return;
+        }
+        const passwordPage = await pageForFill();
+        const passwordField = passwordPage.locator("input").nth(observation.fields.passwordIndex);
+        let navigatedDuringFill = false;
+        const onFrameNavigated = () => {
+          navigatedDuringFill = true;
+        };
+        passwordPage.on("framenavigated", onFrameNavigated);
+        try {
           await passwordField.fill(password, { timeout: FILL_ACTION_TIMEOUT_MS });
-        } catch {
+          await passwordPage
+            .waitForLoadState("domcontentloaded", { timeout: 2_000 })
+            .catch(() => undefined);
+        } catch (error) {
           // Best-effort cleanup; keep the scrub session armed until navigation,
           // close, or the approved submit path clears the document.
           await passwordField.fill("", { timeout: 1_000 }).catch(() => undefined);
-          res.json({ ok: false, status: "unavailable", reasonCode: "fill_failed" });
+          res.json(
+            isNavigationRaceError(error)
+              ? {
+                  ok: false,
+                  status: "document_changed",
+                  reasonCode: "page_changed_after_approval",
+                }
+              : { ok: false, status: "unavailable", reasonCode: "fill_failed" },
+          );
+          return;
+        } finally {
+          passwordPage.off("framenavigated", onFrameNavigated);
+        }
+        const afterPassword = await revalidate();
+        if (!afterPassword.ok) {
+          res.json(afterPassword);
+          return;
+        }
+        if (navigatedDuringFill) {
+          res.json({
+            ok: false,
+            status: "document_changed",
+            reasonCode: "page_changed_during_fill",
+          });
           return;
         }
         res.json({ ok: true, status: "filled", targetId: tab.targetId });

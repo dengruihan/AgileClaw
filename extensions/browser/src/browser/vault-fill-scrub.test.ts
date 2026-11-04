@@ -8,6 +8,7 @@ import {
   registerVaultFillSecret,
   scrubVaultFillText,
   scrubVaultFillValue,
+  scrubVaultFillValueAll,
 } from "./vault-fill-scrub.js";
 
 const CANARY = "canary-fill-0f9c2a7d";
@@ -88,6 +89,18 @@ describe("vault fill scrub", () => {
     expect(clearVaultFillSessionIfDocumentChanged("target-1", "doc-2")).toBe(true);
     expect(hasActiveVaultFill("target-1")).toBe(false);
     expect(scrubVaultFillText("target-1", CANARY)).toBe(CANARY);
+  });
+
+  it("masks every active fill secret for aggregate or uncertain results", () => {
+    registerVaultFillSecret("target-1", "canary-one", "doc-1");
+    registerVaultFillSecret("target-2", "canary-two", "doc-2");
+    const result = scrubVaultFillValueAll({
+      tabs: [{ title: "canary-one" }, { title: "canary-two" }],
+      text: "canary-one and canary-two",
+    });
+    expect(JSON.stringify(result)).not.toContain("canary-one");
+    expect(JSON.stringify(result)).not.toContain("canary-two");
+    expect(JSON.stringify(result)).toContain("***");
   });
 
   it("can be cleared explicitly on navigation or close", () => {
