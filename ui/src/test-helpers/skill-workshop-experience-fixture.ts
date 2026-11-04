@@ -2,7 +2,7 @@ import type {
   SkillExperienceListResult,
   SkillExperiencePromoteResult,
   SkillExperienceRecord,
-} from "../lib/skill-workshop/experience.ts";
+} from "@openclaw/gateway-protocol";
 
 const updatedAt = "2026-11-03T10:00:00.000Z";
 const revisionA = "a".repeat(64);

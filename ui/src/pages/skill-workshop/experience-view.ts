@@ -1,3 +1,4 @@
+import type { SkillExperienceStatus } from "@openclaw/gateway-protocol";
 import { html, nothing, type TemplateResult } from "lit";
 import { icons } from "../../components/icons.ts";
 import "../../components/modal-dialog.ts";
@@ -9,7 +10,6 @@ import {
   type SkillExperienceCapture,
   type SkillExperienceFilter,
   type SkillExperiencePromotionState,
-  type SkillExperienceStatus,
   type SkillExperienceVerification,
   type SkillWorkshopExperience,
 } from "../../lib/skill-workshop/experience.ts";

@@ -1,81 +1,25 @@
-import type { SkillsProposalRecordResult } from "@openclaw/gateway-protocol";
+import type {
+  SkillExperienceListResult,
+  SkillExperiencePromoteParams,
+  SkillExperienceRecord,
+  SkillExperienceStatus,
+  SkillExperienceUpdateResult,
+} from "@openclaw/gateway-protocol";
 
-// Wire contract owned by skills.experience.* (skill-experience schema). Mirrored
-// here so the Control UI can build before that protocol module merges; the
-// Gateway remains the only writer of these records.
-export type SkillExperienceStatus = "active" | "promoted" | "retired";
-export type SkillExperienceCapture = "manual" | "automatic" | "learning-session";
-export type SkillExperienceVerification = "observed" | "reported" | "unverified";
-export type SkillExperiencePromotionState = "pending" | "applied" | "rejected";
-
-export type SkillExperienceRecord = {
-  schema: "openclaw.skill-workshop.experience.v1";
-  id: string;
-  status: SkillExperienceStatus;
-  name: string;
-  description: string;
-  tags?: string[];
-  createdAt: string;
-  updatedAt: string;
-  revisionHash: string;
-  capture?: SkillExperienceCapture;
-  origin?: {
-    agentId?: string;
-    sessionKey?: string;
-    runId?: string;
-    messageId?: string;
-  };
-  evidence?: {
-    verification: SkillExperienceVerification;
-    summary?: string;
-  };
-  project?: { workspaceDir?: string; skillFile?: string };
-  promotion?: {
-    proposalId: string;
-    targetKind: "create" | "update";
-    targetSkillName: string;
-    state: SkillExperiencePromotionState;
-    updatedAt?: string;
-  };
-  retiredAt?: string;
-  retireReason?: string;
-};
-
-export type SkillExperienceCounts = {
-  active: number;
-  promoted: number;
-  retired: number;
-};
-
-export type SkillExperienceListResult = {
-  schema: "openclaw.skill-workshop.experiences-manifest.v1";
-  updatedAt: string;
-  experiences: SkillExperienceRecord[];
-  counts: SkillExperienceCounts;
-};
-
-export type SkillExperienceReadResult = {
-  record: SkillExperienceRecord;
-  revisionHash: string;
-  content: string;
-};
-
-// Writes and retire/restore return the record only; the body stays with the
-// document owner and arrives through read.
-export type SkillExperienceMutationResult = {
-  record: SkillExperienceRecord;
-  revisionHash: string;
-};
-
-export type SkillExperiencePromoteTarget =
-  | { kind: "create"; name: string; description: string }
-  | { kind: "update"; skillName: string; description?: string };
-
-export type SkillExperiencePromoteResult = {
-  record: SkillExperienceRecord;
-  revisionHash: string;
-  proposal: SkillsProposalRecordResult;
-};
+// The Gateway owns the Experience wire records (skill-experience schema); this
+// module adds the Control UI's nullable projections and draft models on top.
+export type SkillExperienceCapture = NonNullable<SkillExperienceRecord["capture"]>;
+export type SkillExperienceVerification = NonNullable<
+  SkillExperienceRecord["evidence"]
+>["verification"];
+export type SkillExperiencePromotionState = NonNullable<
+  SkillExperienceRecord["promotion"]
+>["state"];
+export type SkillExperienceCounts = SkillExperienceListResult["counts"];
+// Create/update/retire/restore share one record+revision result shape.
+export type SkillExperienceMutationResult = SkillExperienceUpdateResult;
+export type SkillExperiencePromoteTarget = SkillExperiencePromoteParams["target"];
+export type SkillExperienceFilter = SkillExperienceStatus;
 
 export const SKILL_EXPERIENCE_REVISION_CHANGED = "SKILL_EXPERIENCE_REVISION_CHANGED";
 
@@ -83,8 +27,6 @@ export type SkillWorkshopExperience = SkillExperienceRecord & {
   content: string;
   contentLoaded: boolean;
 };
-
-export type SkillExperienceFilter = SkillExperienceStatus;
 
 export type SkillExperienceDraft = {
   mode: "create" | "edit";

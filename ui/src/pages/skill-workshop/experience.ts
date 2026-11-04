@@ -1,14 +1,16 @@
+import type {
+  SkillExperienceListResult,
+  SkillExperiencePromoteResult,
+  SkillExperienceReadResult,
+  SkillExperienceRecord,
+} from "@openclaw/gateway-protocol";
 import { GatewayRequestError, resolveGatewayErrorDetailCode } from "../../api/gateway.ts";
 import { formatUiError } from "../../lib/format-error.ts";
 import {
   filterSkillExperiences,
   SKILL_EXPERIENCE_REVISION_CHANGED,
   sortSkillExperiences,
-  type SkillExperienceListResult,
   type SkillExperienceMutationResult,
-  type SkillExperiencePromoteResult,
-  type SkillExperienceReadResult,
-  type SkillExperienceRecord,
   type SkillWorkshopExperience,
 } from "../../lib/skill-workshop/experience.ts";
 import {

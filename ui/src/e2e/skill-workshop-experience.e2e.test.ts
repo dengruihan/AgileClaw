@@ -1,8 +1,8 @@
 // Control UI tests prove the Experience section against a deterministic mocked Gateway.
 import path from "node:path";
+import type { SkillExperienceRecord } from "@openclaw/gateway-protocol";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { SkillExperienceRecord } from "../lib/skill-workshop/experience.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
   defaultControlUiFeatureMethods,

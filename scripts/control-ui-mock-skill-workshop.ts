@@ -6,12 +6,11 @@ import type {
 } from "../packages/gateway-protocol/src/schema/agents-models-skills.js";
 import type {
   SkillExperienceListResult,
-  SkillExperienceMutationResult,
   SkillExperiencePromoteResult,
-  SkillExperiencePromotionState,
   SkillExperienceReadResult,
   SkillExperienceRecord,
-} from "../ui/src/lib/skill-workshop/experience.ts";
+  SkillExperienceUpdateResult,
+} from "../packages/gateway-protocol/src/schema/skill-experience.js";
 import type { ControlUiMockGateway } from "../ui/src/test-helpers/control-ui-e2e.ts";
 
 type ExperienceRecordFixture = SkillExperienceRecord;
@@ -513,7 +512,7 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
   const proposalStateFor = (
     proposalId: string,
     proposalScope: ReturnType<typeof proposalScopeFor>,
-  ): SkillExperiencePromotionState => {
+  ): NonNullable<SkillExperienceRecord["promotion"]>["state"] => {
     const detail = proposalScope.details.get(proposalId);
     const entry = proposalScope.list.proposals.find((proposal) => proposal.id === proposalId);
     const status = detail?.record.status ?? entry?.status;
@@ -645,7 +644,7 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
     };
     scope.records.set(id, record);
     scope.contents.set(id, params.content);
-    const result: SkillExperienceMutationResult = {
+    const result: SkillExperienceUpdateResult = {
       record,
       revisionHash: record.revisionHash,
     };
@@ -683,7 +682,7 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
     }
     record.updatedAt = nowIso();
     record.revisionHash = nextRevision();
-    const result: SkillExperienceMutationResult = {
+    const result: SkillExperienceUpdateResult = {
       record: projectExperience(record, proposalScopeFor(params.agentId ?? "main")),
       revisionHash: record.revisionHash,
     };
@@ -714,7 +713,7 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
     record.retireReason = params.reason?.trim() || undefined;
     record.updatedAt = now;
     record.revisionHash = nextRevision();
-    const result: SkillExperienceMutationResult = {
+    const result: SkillExperienceUpdateResult = {
       record: projectExperience(record, proposalScopeFor(params.agentId ?? "main")),
       revisionHash: record.revisionHash,
     };
@@ -748,7 +747,7 @@ function installSkillWorkshopMock(seed: ReturnType<typeof buildSkillWorkshopMock
     record.retireReason = undefined;
     record.updatedAt = nowIso();
     record.revisionHash = nextRevision();
-    const result: SkillExperienceMutationResult = {
+    const result: SkillExperienceUpdateResult = {
       record: projectExperience(record, proposalScope),
       revisionHash: record.revisionHash,
     };
