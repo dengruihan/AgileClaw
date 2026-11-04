@@ -1,6 +1,7 @@
 import type { Locator, Page } from "playwright";
 import { expect, it } from "vitest";
 import {
+  controlUiSessionUrl,
   defaultControlUiFeatureMethods,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
@@ -62,7 +63,7 @@ suite.define(() => {
               ),
             }),
           );
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const composer = page.locator(".agent-chat__composer-shell textarea");
           await composer.fill("Keep this draft through the composer change.");
           const source = page.locator(".chat-bubble .chat-text p").filter({ hasText: passage });
@@ -138,7 +139,7 @@ suite.define(() => {
         const gateway = await installMockGateway(page, {
           historyMessages: [{ role: "assistant", content: passage }],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const composer = page.locator(".agent-chat__composer-shell textarea");
         await composer.fill("Preserve the draft.");
         const source = page.locator(".chat-bubble .chat-text p").filter({ hasText: passage });
@@ -247,7 +248,7 @@ suite.define(() => {
               ),
           }),
         );
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const composer = page.locator(".agent-chat__composer-shell textarea");
         await composer.fill("Keep this draft.");
         const source = page.locator(".chat-bubble .chat-text p").filter({ hasText: passage });
@@ -298,7 +299,7 @@ suite.define(() => {
         await installMockGateway(page, {
           historyMessages: [{ role: "assistant", content: `${passage}\n\n${filler}` }],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const source = page.locator(".chat-bubble .chat-text p").filter({ hasText: passage });
         await source.scrollIntoViewIfNeeded();
         await waitForChatScrollIdle(page);

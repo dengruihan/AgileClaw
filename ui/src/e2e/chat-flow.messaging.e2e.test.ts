@@ -58,7 +58,7 @@ suite.define(() => {
           },
         ],
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByText("Ready for an end-to-end GUI check.").waitFor({ timeout: 10_000 });
 
       const prompt = "verify the control UI e2e harness";
@@ -96,7 +96,7 @@ suite.define(() => {
         deferredMethods: ["chat.send"],
       });
       const prompt = "Keep my browser-local prompt synchronized.";
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.locator(".agent-chat__composer-combobox textarea").fill(prompt);
       await page.getByRole("button", { name: "Send message" }).click();
 
@@ -168,7 +168,7 @@ suite.define(() => {
       const currentPrompt = "Why were my sessions missing?";
       const currentPartial = "Checking external sessions...";
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       await gateway.emitGatewayEvent("session.message", {
         activeRunIds: [],
@@ -292,7 +292,7 @@ suite.define(() => {
         role: "user",
         timestamp: 1_700_000_000_000 + index,
       }));
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       const historyCount = (await gateway.getRequests("chat.history")).length;
       await gateway.deferNext("chat.history");
@@ -381,7 +381,7 @@ suite.define(() => {
           ...secondUserMessage,
           __openclaw: { id: "shared-session-second-user", idempotencyKey: `${runId}:user`, seq: 2 },
         };
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await gateway.waitForRequest("chat.startup");
         // Even an envelope-only event reads back with its canonical transcript identity.
         await gateway.setHistoryMessages([persistedUserMessage]);
@@ -500,7 +500,7 @@ suite.define(() => {
           role: "assistant",
           timestamp: Date.now(),
         };
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await gateway.waitForRequest("chat.startup");
         await gateway.emitGatewayEvent("chat", {
           deltaText: finalText,
@@ -598,7 +598,7 @@ suite.define(() => {
           },
           { lowerSelector, lowerText, prompt },
         );
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.deferNext("chat.send");
       await page.locator(".agent-chat__composer-combobox textarea").fill(prompt);
       await page.getByRole("button", { name: "Send message" }).click();
@@ -648,7 +648,7 @@ suite.define(() => {
   it("reconciles authoritative history before a trailing final by run identity", async () => {
     await withChatPage(async (page) => {
       const gateway = await installMockGateway(page, { historyMessages: [] });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.fill("reconcile the terminal event ordering");
       await page.getByRole("button", { name: "Send message" }).click();
@@ -763,7 +763,7 @@ suite.define(() => {
   it("sends idle stop aliases as ordinary chat messages", async () => {
     await withChatPage(async (page) => {
       const gateway = await installMockGateway(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.waitFor({ state: "visible", timeout: 10_000 });
       await composer.fill("wait");
@@ -894,7 +894,7 @@ suite.define(() => {
         },
         sessionKey,
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByText("Active run is waiting for steering.").waitFor({ timeout: 10_000 });
       await gateway.waitForRequest("sessions.list");
       await page.getByRole("button", { name: "Stop generating" }).waitFor({ timeout: 10_000 });
@@ -921,7 +921,7 @@ suite.define(() => {
   it("keeps a targetless message-tool source reply beside the automatic final reply", async () => {
     await withChatPage(async (page) => {
       const gateway = await installMockGateway(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       const prompt = "send progress through the message tool and then finish";
       await page.locator(".agent-chat__composer-combobox textarea").fill(prompt);
@@ -972,7 +972,7 @@ suite.define(() => {
           },
         ],
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByText("Ready for stale replay check.").waitFor({ timeout: 10_000 });
 
       const prompt = "submitted message";

@@ -1,9 +1,9 @@
 import { expect, it } from "vitest";
 import { CONTROL_UI_BOOTSTRAP_CONFIG_PATH } from "../../../src/gateway/control-ui-bootstrap-contract.js";
 import {
+  type MockGatewayRequest,
   createControlUiMockBootstrapConfig,
   createControlUiMockGatewayInitScript,
-  type MockGatewayRequest,
 } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 import {
@@ -86,7 +86,7 @@ suite.define(() => {
     const page = await context.newPage();
     try {
       await installMockGateway(page, sessionsMock());
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const sidebar = page.locator("openclaw-app-sidebar");
       await sidebar.waitFor({ state: "visible", timeout: 10_000 });
       // The general chat surface is the app's main view; collapsing it here

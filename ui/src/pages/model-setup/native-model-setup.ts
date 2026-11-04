@@ -13,7 +13,7 @@ import {
   subscribeModelCatalogChanges,
 } from "../../lib/model-catalog-store.ts";
 import { readSessionDefaults } from "../../lib/sessions/session-key.ts";
-import type { captureModelSetupConnection } from "./first-run-setup.ts";
+import type { captureModelSetupConnection } from "./model-setup-connection.ts";
 import { formatModelSetupError } from "./model-setup-task-result.ts";
 
 type NativeModelSetupOptions = {

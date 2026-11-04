@@ -589,7 +589,7 @@ suite.define(() => {
             { role: "assistant", content: [{ type: "text", text: "Ordinary conversation." }] },
           ],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.locator(".agent-chat__composer-combobox textarea").waitFor();
         expect(await page.locator(".chat-pane__header").isVisible()).toBe(true);
         expect(await page.locator(".native-embed-header").count()).toBe(mode === "ios" ? 1 : 0);

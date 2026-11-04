@@ -3,9 +3,10 @@
 // inside the pane itself, where nothing re-renders the page.
 import { expect, it } from "vitest";
 import {
+  type MockGatewayControls,
+  controlUiSessionUrl,
   installMockGateway,
   pauseVirtualClock,
-  type MockGatewayControls,
 } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiSessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
@@ -67,7 +68,7 @@ suite.define(() => {
       },
     });
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       await page.locator(".chat-bubble", { hasText: "Main transcript" }).first().waitFor();
       await expect.poll(() => historyRequestCount(gateway, WARM_SESSION_KEY)).toBe(1);

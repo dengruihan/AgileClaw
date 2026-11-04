@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 import { createNestedToolActivity } from "../../../src/sessions/nested-tool-activity.ts";
 import { prepareChatHistoryFixture } from "../test-helpers/chat-activity-fixtures.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({
@@ -111,7 +111,7 @@ suite.define(() => {
             ]),
           },
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page
           .getByText("GitHub sign-in could not start because the GitHub CLI is unavailable.", {
             exact: true,
@@ -221,7 +221,7 @@ suite.define(() => {
             },
           ],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.getByText("Runtime checked.", { exact: true }).waitFor();
         const call = page.locator(".chat-tool-msg-summary", { hasText: "Check runtime version" });
         await call.waitFor();

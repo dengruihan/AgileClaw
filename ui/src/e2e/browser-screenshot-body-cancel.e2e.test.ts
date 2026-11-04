@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { beforeEach, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 import {
   createControlUiE2eContextOptions,
@@ -109,7 +109,9 @@ suite.define(() => {
         },
       });
 
-      const response = await page.goto(`${suite.server.baseUrl}chat`);
+      const response = await page.goto(
+        controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"),
+      );
       expect(response?.status()).toBe(200);
       await openChatSidePanelType(page, "Files");
       await openChatSidePanelType(page, "Browser");

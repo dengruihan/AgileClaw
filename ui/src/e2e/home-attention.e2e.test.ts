@@ -6,14 +6,14 @@ import type { GatewaySessionRow, SessionsListResult } from "../api/types.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
+  type MockGatewayControls,
   controlUiSessionUrl,
   installMockGateway,
-  type MockGatewayControls,
 } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({
-  name: "Control UI Home attention",
+  name: "Control UI main session attention",
   startServerBeforeBrowser: true,
   trackBrowserContexts: true,
   unavailableMessage: (executablePath) =>
@@ -45,7 +45,7 @@ function sessionRow(overrides: Partial<GatewaySessionRow> = {}): GatewaySessionR
   return {
     key: mainSessionKey,
     kind: "direct",
-    label: "Home",
+    label: "Main",
     displayName: "Quiet control state",
     updatedAt: Date.now(),
     status: "done",
@@ -92,7 +92,7 @@ async function captureState(
 }
 
 suite.define(() => {
-  it("projects question, failure, and agent-declared attention onto Home", async () => {
+  it("projects question, failure, and agent-declared attention onto the main session row", async () => {
     const context = await suite.newBrowserContext({
       locale: "en-US",
       serviceWorkers: "block",
@@ -113,7 +113,7 @@ suite.define(() => {
 
     await page.goto(controlUiSessionUrl(suite.server.baseUrl, mainSessionKey));
     await gateway.waitForRequest("sessions.list", { match: rosterMatch });
-    const home = page.locator(".nav-item--home");
+    const home = page.locator(`[data-session-key="${mainSessionKey}"]`);
     await home.waitFor();
     const observed = {
       quiet: await captureState(page, home, "00-non-attention"),

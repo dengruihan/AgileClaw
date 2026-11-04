@@ -24,7 +24,6 @@ import {
 } from "./app-sidebar-session-filter-summary.ts";
 import type { SidebarVisibleSections } from "./app-sidebar-session-projection.ts";
 import {
-  renderChildSessionLoadError,
   renderRecentSession,
   renderSessionTree,
   type SessionListHost,
@@ -58,7 +57,6 @@ type SidebarSessionListHost = SessionListHost & {
       | "sessionCatalogLive"
       | "loadingMoreSessionCatalogIds"
     >;
-  projectHomeSession(row: GatewaySessionRow, agentId: string): SidebarRecentSession;
 };
 
 type SessionCatalogRenderSnapshot = {
@@ -681,11 +679,6 @@ export function renderSessionList(params: {
 }
 
 export function renderSessionListFrame(host: SidebarSessionListHost, body: unknown) {
-  const home = host.sidebarAgentsMode === "roster" ? null : host.mainSessionRow();
-  const loadKeys = home
-    ? host.projectHomeSession(home, host.expandedAgentId()).childLoadParentKeys
-    : [];
-  const homeLoadKeys = loadKeys?.length ? loadKeys : home ? [home.key] : [];
   return html`
     <section
       class="sidebar-sessions ${
@@ -707,7 +700,6 @@ export function renderSessionListFrame(host: SidebarSessionListHost, body: unkno
             </div>`
           : nothing
       }
-      ${homeLoadKeys.map((key) => renderChildSessionLoadError(host, key))}
       ${renderSessionMutationError(host)} ${body}
     </section>
   `;

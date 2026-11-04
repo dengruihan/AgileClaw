@@ -6,6 +6,7 @@ import {
   defaultControlUiFeatureMethods,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
+import { openAssistantDock } from "./assistant-dock.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 // Closing a focused pane preserves keyboard ownership, independently of draft persistence.
@@ -138,7 +139,11 @@ suite.define(() => {
           await expect.poll(() => composerA.isVisible()).toBe(false);
         }
         if (editable) {
-          await page.locator(".sidebar-footer-bar__home").click();
+          await openAssistantDock(page, {
+            sessionKey: "agent:main:main",
+            agentId: "main",
+            label: "Main",
+          });
         }
         const homeComposer = page.locator(
           "openclaw-assistant-panel .agent-chat__composer-combobox textarea",

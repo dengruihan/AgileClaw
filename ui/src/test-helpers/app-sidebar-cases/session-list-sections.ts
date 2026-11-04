@@ -49,11 +49,9 @@ describe("AppSidebar session section visibility", () => {
   });
 
   it("keeps global session actions when every unpinned thread has a custom group", async () => {
-    const harness = createSessionsHarness("main", [
-      "agent:main:main",
-      "agent:main:research",
-      "agent:main:operations",
-    ]);
+    // The anchor row is an ordinary ungrouped row, so it is left out here to
+    // keep this case about an otherwise fully categorized list.
+    const harness = createSessionsHarness("main", ["agent:main:research", "agent:main:operations"]);
     const result = harness.sessions.state.result;
     if (!result) {
       throw new Error("expected categorized session fixtures");
@@ -122,7 +120,9 @@ describe("AppSidebar session section visibility", () => {
   });
 
   it("hides empty Other at rest but keeps empty categories and the drag drop target", async () => {
-    const harness = createSessionsHarness("main", ["agent:main:main", "agent:main:alpha"]);
+    // Without the anchor row nothing is ungrouped; the anchor otherwise fills
+    // Other as an ordinary row, which the sessions suite covers.
+    const harness = createSessionsHarness("main", ["agent:main:alpha"]);
     const result = harness.sessions.state.result;
     const alpha = result?.sessions.find((row) => row.key === "agent:main:alpha");
     if (!alpha) {
@@ -196,7 +196,7 @@ describe("AppSidebar session section visibility", () => {
     expect(groupNames()).toEqual(["category:Empty", "category:Alpha"]);
   });
 
-  it("renders no chat rows when only the main session exists", async () => {
+  it("renders the lone main session as its ordinary row", async () => {
     const gateway = createGateway({} as GatewayBrowserClient);
     const { sidebar } = await mountSidebar(
       gateway,
@@ -207,9 +207,9 @@ describe("AppSidebar session section visibility", () => {
     (sidebar as unknown as { activeRouteId: string }).activeRouteId = "chat";
     await sidebar.updateComplete;
 
-    // Home remains reachable while the main session stays outside the list.
-    expect(sidebar.querySelectorAll(".sidebar-recent-session")).toHaveLength(0);
-    expect(sidebar.querySelector(".nav-item--home")).not.toBeNull();
+    expect(sidebar.querySelectorAll(".sidebar-recent-session")).toHaveLength(1);
+    expect(sidebar.querySelector('[data-session-key="agent:main:main"]')).not.toBeNull();
+    expect(sidebar.querySelector(".nav-item--home")).toBeNull();
   });
 
   it("keeps a selected child reachable when its parent is outside the loaded window", async () => {

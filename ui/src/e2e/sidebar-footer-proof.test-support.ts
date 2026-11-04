@@ -3,9 +3,10 @@ import type { Locator, Page } from "playwright";
 import { expect } from "vitest";
 import type { ControlUiBuildInfo } from "../build-info.ts";
 import {
+  type ControlUiMockGatewayScenario,
+  controlUiSessionUrl,
   installMockGateway,
   startControlUiE2eServer,
-  type ControlUiMockGatewayScenario,
 } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
@@ -42,7 +43,7 @@ export async function openSidebarFooterProofPage(
     presenceUsers: [SIDEBAR_PROOF_USER],
     ...scenario,
   });
-  await page.goto(`${suite.server.baseUrl}chat`);
+  await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
   const sidebar = page.locator("openclaw-app-sidebar");
   await sidebar.locator(".sidebar-identity-card").waitFor();
   return { context, gateway, page, sidebar };

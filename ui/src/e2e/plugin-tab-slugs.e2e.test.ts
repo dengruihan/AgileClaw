@@ -1,9 +1,10 @@
 import type { Page } from "playwright";
 import { expect, it } from "vitest";
 import type { ApplicationRuntime } from "../app/bootstrap.ts";
-import type { PluginPage } from "../pages/plugin/plugin-page.ts";
+import { PluginPage } from "../pages/plugin/plugin-page.ts";
 import {
   controlUiBundledSettingsStorageKey,
+  controlUiSessionUrl,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
 import {
@@ -76,7 +77,7 @@ suite.define(() => {
   it("opens the advertised slug from the sidebar inside the plugin page shell", async () => {
     await suite.withPage(createControlUiE2eContextOptions(), async ({ page }) => {
       await installReports(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const entry = page.getByRole("link", { name: "Reports", exact: true });
       await entry.waitFor();
       expect(await entry.getAttribute("href")).toBe("/reports");
@@ -149,7 +150,7 @@ suite.define(() => {
       { ...createControlUiE2eContextOptions(), colorScheme: "light" },
       async ({ page }) => {
         const { frameRequests } = await installReports(page);
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         // Bootstrap must publish the script policy before the scripted fixture mounts.
         await page.waitForFunction(() => {
           const app = document.querySelector<HTMLElement & { runtime?: ApplicationRuntime }>(

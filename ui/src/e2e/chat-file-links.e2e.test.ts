@@ -2,17 +2,18 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { chromium, type Browser } from "playwright";
-import { beforeEach, afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type Browser, chromium } from "playwright";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
+  type ControlUiE2eServer,
   canRunPlaywrightChromium,
-  defaultControlUiFeatureMethods,
   controlUiE2eWaitTimeoutMs,
+  controlUiSessionUrl,
+  defaultControlUiFeatureMethods,
   installMockGateway,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
 import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 
@@ -49,7 +50,7 @@ describeControlUiE2e("Control UI chat file links", () => {
       const gateway = await installMockGateway(page, {
         historyMessages: [{ role: "user", content: [{ type: "text", text }], timestamp: 1 }],
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       const bubble = page.locator(".chat-bubble").filter({ hasText: "Please check" });
       await bubble.waitFor({ state: "visible" });
       // Capture the original wrong-label state too, before asserting the fixed behavior.
@@ -110,7 +111,7 @@ describeControlUiE2e("Control UI chat file links", () => {
             },
           },
         });
-        const response = await page.goto(`${server.baseUrl}chat`);
+        const response = await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
         expect(response?.status()).toBe(200);
         const indexSha256 = createHash("sha256")
           .update(await response!.body())
@@ -254,7 +255,7 @@ describeControlUiE2e("Control UI chat file links", () => {
           },
         },
       });
-      const response = await page.goto(`${server.baseUrl}chat`);
+      const response = await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       const links = page.locator(".chat-thread a.markdown-file-link");
       await links.nth(files.length).waitFor({ state: "visible" });
       const chatUrl = page.url();
@@ -447,7 +448,7 @@ describeControlUiE2e("Control UI chat file links", () => {
         },
       });
 
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await openChatSidePanelType(page, "Review");
       await gateway.waitForRequest("sessions.diff");
       await openChatSidePanelType(page, "Files");
@@ -633,7 +634,7 @@ describeControlUiE2e("Control UI chat file links", () => {
         await page.locator("openclaw-chat-detail-panel").waitFor({ state: "detached" });
       };
 
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await openChatSidePanelType(page, "Files");
       await page.getByRole("complementary", { name: "Session workspace" }).waitFor();
 

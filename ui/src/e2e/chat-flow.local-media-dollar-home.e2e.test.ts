@@ -6,6 +6,7 @@ import { createChatFlowE2eSuite, installMockGateway } from "./chat-flow.test-sup
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it.each([
@@ -74,7 +75,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const attachment = page.locator("openclaw-chat-audio-player");
       await attachment.waitFor({ state: "visible", timeout: 10_000 });
       await expect

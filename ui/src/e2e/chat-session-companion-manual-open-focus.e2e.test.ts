@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { requireRecord, requireString } from "./chat-flow.test-support.ts";
 import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 import { controlUiE2eBuiltModuleRequest } from "./control-ui-built-module.test-support.ts";
@@ -29,7 +29,7 @@ suite.define(() => {
         );
         try {
           const gateway = await installMockGateway(page);
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await openChatSidePanelType(page, "Side chat");
           await held.request;
           const main = page.locator(".agent-chat__composer-shell textarea");
@@ -94,7 +94,7 @@ suite.define(() => {
         );
         try {
           const gateway = await installMockGateway(page);
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await openChatSidePanelType(page, "Side chat");
           await held.request;
           let side = page.getByRole("textbox", { name: "Ask in side chat", exact: true });

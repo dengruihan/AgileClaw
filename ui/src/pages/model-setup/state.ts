@@ -1,16 +1,12 @@
 import type {
-  ProviderLoginOption,
   SystemAgentSetupActivateResult,
   SystemAgentSetupDetectResult,
-  SystemAgentSetupVerifyResult,
   WizardNextResult,
   WizardStep,
 } from "../../api/types.ts";
 import { formatUiExternalText } from "../../lib/format-error.ts";
 
 export const MODEL_SETUP_DETECT_TIMEOUT_MS = 40_000;
-// Match native setup: the Gateway's 90-second inference probe also needs startup allowance.
-export const MODEL_SETUP_VERIFY_TIMEOUT_MS = 150_000;
 const MODEL_SETUP_ACTIVATE_TIMEOUT_MS = 480_000;
 export const MODEL_SETUP_AUTH_START_TIMEOUT_MS = 30_000;
 export const MODEL_SETUP_WIZARD_NEXT_TIMEOUT_MS = null;
@@ -51,23 +47,9 @@ export type ModelSetupActivationState =
       warning?: string;
     };
 
-type ModelSetupVerifyFailure = Extract<SystemAgentSetupVerifyResult, { ok: false }>;
-
-export type ModelSetupVerifyState =
-  | { phase: "idle" }
-  | { phase: "checking" }
-  | { phase: "ok"; modelRef: string; modelTarget?: "utility"; latencyMs?: number }
-  | { phase: "failed"; status: ModelSetupVerifyFailure["status"]; error: string };
-
 export type ModelSetupWizardResult =
   | WizardNextResult
   | { done: true; status: "not-admitted"; error: string };
-
-export type ModelSetupWizardRecovery = {
-  sessionId: string;
-  authChoice: string;
-  authKind?: ProviderLoginOption["kind"];
-};
 
 type ModelSetupWizardPhase =
   | { phase: "idle" }
@@ -141,18 +123,6 @@ export function mapActivationResult(params: {
     status: result.status && result.status !== "ok" ? result.status : "unknown",
     error: formatUiExternalText(result.error, params.fallbackError),
   };
-}
-
-export function mapVerifyResult(result: SystemAgentSetupVerifyResult): ModelSetupVerifyState {
-  if (result.ok) {
-    return {
-      phase: "ok",
-      modelRef: result.modelRef,
-      ...(result.modelTarget ? { modelTarget: result.modelTarget } : {}),
-      ...(typeof result.latencyMs === "number" ? { latencyMs: result.latencyMs } : {}),
-    };
-  }
-  return { phase: "failed", status: result.status, error: formatUiExternalText(result.error) };
 }
 
 export function wizardStateFromResult(

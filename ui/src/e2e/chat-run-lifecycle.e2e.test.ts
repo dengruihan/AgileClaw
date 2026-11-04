@@ -221,7 +221,7 @@ suite.define(() => {
       },
     });
 
-    await currentPage.goto(`${suite.server?.baseUrl ?? ""}chat`);
+    await currentPage.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     const assistantGroup = currentPage.locator(".chat-group.assistant");
     await assistantGroup.getByText("First result is ready.", { exact: true }).waitFor();
     await assistantGroup.locator(".chat-working-indicator--continuation").waitFor();
@@ -258,7 +258,7 @@ suite.define(() => {
       },
     });
 
-    await currentPage.goto(`${suite.server?.baseUrl ?? ""}chat`);
+    await currentPage.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await currentPage.getByText("Older run result.", { exact: true }).waitFor();
     await currentPage.locator(".chat-reading-indicator").waitFor();
 
@@ -301,7 +301,7 @@ suite.define(() => {
       },
     });
 
-    await currentPage.goto(`${suite.server?.baseUrl ?? ""}chat`);
+    await currentPage.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await currentPage.getByText("Saved opening.", { exact: true }).waitFor();
     const stream = currentPage.locator(".chat-bubble.streaming", {
       hasText: "Still working after reconnect.",
@@ -715,7 +715,7 @@ suite.define(() => {
       ],
     });
 
-    await currentPage.goto(`${suite.server?.baseUrl ?? ""}chat`);
+    await currentPage.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await currentPage.getByText("saved 875.3k tokens", { exact: true }).waitFor();
     await currentPage.locator(".agent-chat__input textarea").fill("keep working");
     // Fix wall time without freezing the mock ACK and rendering timers.
@@ -754,7 +754,7 @@ suite.define(() => {
         ],
       });
 
-      await currentPage.goto(`${suite.server?.baseUrl ?? ""}chat`);
+      await currentPage.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await currentPage
         .getByText("Ready for run lifecycle verification.")
         .waitFor({ timeout: 10_000 });
@@ -767,8 +767,8 @@ suite.define(() => {
       const runId = params.idempotencyKey as string;
 
       await currentPage.getByRole("button", { name: "Stop generating" }).waitFor();
-      const mainSession = currentPage.locator(".nav-item--home");
-      // Home mirrors session rows: active-run state rings the leading glyph.
+      const mainSession = currentPage.locator('[data-session-key="agent:main:main"]');
+      // The main session row mirrors other rows: active-run state rings the leading glyph.
       const mainSessionRunIndicator = mainSession
         .locator(".session-glyph")
         .getByRole("img", { name: "Active run" });
@@ -814,7 +814,12 @@ suite.define(() => {
           });
           await currentPage.getByRole("alert").filter({ hasText: diagnostic }).waitFor();
           await mainSession.locator('[data-session-attention="error"]').waitFor();
-          expect(await mainSession.getAttribute("aria-label")).toContain(diagnostic);
+          // The leading attention icon carries the accessible failure label.
+          expect(
+            await mainSession
+              .locator('[data-session-attention="error"]')
+              .getAttribute("aria-label"),
+          ).toContain(diagnostic);
           expect(await currentPage.getByRole("button", { name: "Stop generating" }).count()).toBe(
             0,
           );
@@ -954,7 +959,7 @@ suite.define(() => {
       ],
     });
 
-    await currentPage.goto(`${suite.server?.baseUrl ?? ""}chat`);
+    await currentPage.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await currentPage
       .getByText("Ready for yielded lifecycle verification.")
       .waitFor({ timeout: 10_000 });
@@ -967,8 +972,8 @@ suite.define(() => {
     const runId = params.idempotencyKey as string;
 
     await currentPage.getByRole("button", { name: "Stop generating" }).waitFor();
-    const mainSession = currentPage.locator(".nav-item--home");
-    // Home mirrors session rows: active-run state rings the leading glyph.
+    const mainSession = currentPage.locator('[data-session-key="agent:main:main"]');
+    // The main session row mirrors other rows: active-run state rings the leading glyph.
     const mainSessionRunIndicator = mainSession
       .locator(".session-glyph")
       .getByRole("img", { name: "Active run" });
@@ -1027,7 +1032,7 @@ suite.define(() => {
     page = currentPage;
     const gateway = await installMockGateway(currentPage);
 
-    await currentPage.goto(`${suite.server?.baseUrl ?? ""}chat`);
+    await currentPage.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await currentPage.locator(".agent-chat__input textarea").fill("run the edit");
     await currentPage.getByRole("button", { name: "Send message" }).click();
     const send = await gateway.waitForRequest("chat.send");

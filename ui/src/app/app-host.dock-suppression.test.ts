@@ -193,11 +193,13 @@ describe("AgileClaw shell dock suppression", () => {
       ],
     } as unknown as RouterState<RouteId>);
     renderLit(shell.render(), container);
+    // A failed route no longer gates a built-in dock: the panel only renders an
+    // explicit destination, and none is open here.
     expect(
-      container.querySelector<HTMLElement & { pageRouteFailed: boolean }>(
+      container.querySelector<HTMLElement & { openSessionKey: string | null }>(
         "openclaw-assistant-panel",
-      )?.pageRouteFailed,
-    ).toBe(true);
+      )?.openSessionKey,
+    ).toBeNull();
 
     shell.routeState = {
       routeId: "new-session",
@@ -246,30 +248,39 @@ describe("AgileClaw shell dock suppression", () => {
     renderLit(shell.render(), container);
     expect(desktopAvailable()).toBe(true);
 
-    // The collapsed toolbar opens the shared dock through Home.
+    // The collapsed toolbar offers no built-in Home dock; the assistant panel
+    // keeps no destination across permission, phase, and connection changes.
+    const expectingNoDockDestination = () =>
+      expect(
+        container.querySelector<HTMLElement & { openSessionKey: string | null }>(
+          "openclaw-assistant-panel",
+        )?.openSessionKey,
+      ).toBeNull();
     context.navigation.snapshot.navCollapsed = true;
     renderLit(shell.render(), container);
-    expect(container.querySelector(".shell-chrome-controls__home")).not.toBeNull();
+    expect(container.querySelector(".shell-chrome-controls__home")).toBeNull();
+    expectingNoDockDestination();
     context.gateway.snapshot.hello!.auth = {
       role: "operator",
       scopes: ["operator.read", "operator.write"],
     };
     renderLit(shell.render(), container);
-    expect(container.querySelector(".shell-chrome-controls__home")).not.toBeNull();
+    expect(container.querySelector(".shell-chrome-controls__home")).toBeNull();
+    expectingNoDockDestination();
     context.gateway.snapshot.phase = "offline";
     renderLit(shell.render(), container);
-    expect(container.querySelector(".shell-chrome-controls__home")).not.toBeNull();
+    expect(container.querySelector(".shell-chrome-controls__home")).toBeNull();
+    expectingNoDockDestination();
     context.gateway.connection.gatewayUrl = "ws://another-gateway.test";
     renderLit(shell.render(), container);
     expect(container.querySelector(".shell-chrome-controls__home")).toBeNull();
+    expectingNoDockDestination();
     context.gateway.snapshot.phase = "connected";
     renderLit(shell.render(), container);
-    expect(container.querySelector(".shell-chrome-controls__home")).not.toBeNull();
+    expect(container.querySelector(".shell-chrome-controls__home")).toBeNull();
     context.gateway.snapshot.hello!.auth = { role: "operator", scopes: ["operator.read"] };
     renderLit(shell.render(), container);
     expect(container.querySelector(".shell-chrome-controls__home")).toBeNull();
-    context.gateway.snapshot.phase = "offline";
-    renderLit(shell.render(), container);
-    expect(container.querySelector(".shell-chrome-controls__home")).toBeNull();
+    expectingNoDockDestination();
   });
 });

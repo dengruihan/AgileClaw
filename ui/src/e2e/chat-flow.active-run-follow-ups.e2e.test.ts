@@ -4,6 +4,7 @@ import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-ar
 import { waitForControlUiGatewayReconnecting } from "../test-helpers/control-ui-e2e-readiness.ts";
 import {
   chatSessionListResponse,
+  controlUiSessionUrl,
   createChatFlowE2eSuite,
   expectRequestCountStable,
   installMockGateway,
@@ -77,7 +78,7 @@ suite.define(() => {
         .toContain("Server default (followup)");
       expect(await followUpSelect.inputValue()).toBe("server");
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       const activePrompt = "keep this run active";
       await page.locator(".agent-chat__composer-combobox textarea").fill(activePrompt);
@@ -138,7 +139,7 @@ suite.define(() => {
       const shortcut = page.locator("[data-settings-send-shortcut]");
       await shortcut.selectOption("enter");
       expect(await shortcut.inputValue()).toBe("enter");
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await page
@@ -440,7 +441,7 @@ suite.define(() => {
         });
 
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const transcript = page.locator(".chat-thread-inner");
         await transcript.getByText(initialText, { exact: true }).waitFor();
         await emitDelta(beforeText);
@@ -551,7 +552,7 @@ suite.define(() => {
     };
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const transcript = page.locator(".chat-thread-inner");
       const bubbleTexts = () =>
         transcript
@@ -662,7 +663,7 @@ suite.define(() => {
       await page.goto(`${suite.server.baseUrl}settings/appearance`);
       await page.locator("[data-settings-follow-up-mode]").selectOption("queue");
       await page.locator("[data-settings-send-shortcut]").selectOption("modifier-enter");
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.fill("keep the modifier shortcut run active");
@@ -691,7 +692,7 @@ suite.define(() => {
       await page.goto(`${suite.server.baseUrl}settings/appearance`);
       await page.locator("[data-settings-follow-up-mode]").selectOption("steer");
       await page.locator("[data-settings-send-shortcut]").selectOption("enter");
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.fill("keep the disconnect run active");
@@ -759,7 +760,7 @@ suite.define(() => {
     try {
       await page.goto(`${suite.server.baseUrl}settings/appearance`);
       await page.locator("[data-settings-follow-up-mode]").selectOption("queue");
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       const initialText = "keep this run active until session state settles it";
@@ -873,7 +874,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       await page.locator(".agent-chat__composer-combobox textarea").fill("keep this run active");
       await page.getByRole("button", { name: "Send message" }).click();
@@ -901,7 +902,7 @@ suite.define(() => {
     const gateway = await installMockGateway(page);
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page
         .locator(".agent-chat__composer-combobox textarea")
         .fill("/redirect start over cleanly");

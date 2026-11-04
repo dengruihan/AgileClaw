@@ -13,6 +13,7 @@ import {
 } from "./session-progress-submit.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it.each([
@@ -35,7 +36,7 @@ suite.define(() => {
       try {
         const scenario = progressSubmitScenario(name === "active run default mode");
         const gateway = await installMockGateway(page, scenario);
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const card = page.locator(".session-progress-card--composer");
         await card.waitFor();
         await waitForChatScrollIdle(page);

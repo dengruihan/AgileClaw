@@ -16,6 +16,7 @@ import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it("renders relative assistant media through the session-scoped ticket route", async () => {
@@ -61,7 +62,7 @@ suite.define(() => {
       ],
     });
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByText(caption, { exact: false }).first().waitFor();
       if (captureUiProofEnabled) {
         await page.screenshot({ path: path.join(suite.artifactDir, "relative-media-initial.png") });
@@ -131,7 +132,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const card = page
         .locator(".chat-assistant-attachment-card--compact")
         .filter({ hasText: "测试 report.pdf" });
@@ -197,7 +198,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const card = page
         .locator(".chat-assistant-attachment-card--compact")
         .filter({ hasText: "canvas-draft.docx" });
@@ -254,7 +255,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       const image = page.getByAltText("Tool result preview");
       await image.waitFor({ state: "visible", timeout: 10_000 });
@@ -321,7 +322,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const image = page.getByAltText("Ticketed generated image");
       await image.waitFor({ state: "visible", timeout: 10_000 });
       await expect
@@ -418,7 +419,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const cards = page.locator(".chat-assistant-attachment-card--compact");
       await cards.first().waitFor({ state: "visible", timeout: 10_000 });
       expect(await cards.count()).toBe(4);
@@ -572,7 +573,7 @@ suite.define(() => {
       });
 
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await expect.poll(() => requestedMediaUrls.length, { timeout: 10_000 }).toBe(2);
         const image = page.locator("img.chat-message-image");
         await image.waitFor({ state: "visible", timeout: 10_000 });
@@ -706,7 +707,7 @@ suite.define(() => {
     };
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       const frames = page.locator(".chat-image-frame");
       await expect.poll(() => frames.count()).toBe(64);
@@ -854,7 +855,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const copyButton = page.locator(".code-block-copy").first();
       await copyButton.waitFor({ timeout: 10_000 });
       await waitForChatScrollIdle(page);
@@ -928,7 +929,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await openChatSidePanelType(page, "Files");
       await page.locator(".chat-workspace-rail__file-name", { hasText: "AGENTS.md" }).waitFor({
         timeout: 10_000,

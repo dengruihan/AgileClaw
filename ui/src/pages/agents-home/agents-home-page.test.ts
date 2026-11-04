@@ -184,7 +184,7 @@ afterEach(() => {
 });
 
 describe("AgentsHomePage", () => {
-  it("shows the configured roster, prioritizes work across sessions, and opens the canonical main chat", async () => {
+  it("shows the configured roster, prioritizes work across sessions, and opens a draft for the agent", async () => {
     const { page, request, navigate } = createPage();
     await vi.waitFor(() => expect(page.querySelectorAll(".agents-home__card")).toHaveLength(2));
 
@@ -200,11 +200,13 @@ describe("AgentsHomePage", () => {
     );
     expect(cards[0]?.querySelector(".agents-home__working")?.textContent).toBe("Working now");
     expect(cards[1]?.querySelector(".agents-home__working")).toBeNull();
+    // The card previews the most recently active session; the rolling anchor is
+    // one ordinary session now, not a preferred preview source.
     expect(cards[0]?.querySelector(".agents-home__preview")?.textContent?.trim()).toBe(
-      "The main chat summary.",
+      "A newer side-task message.",
     );
     expect(page.textContent).not.toContain("System helper");
-    expect(page.textContent).not.toContain("A newer side-task message.");
+    expect(page.textContent).not.toContain("The main chat summary.");
     expect(request).toHaveBeenCalledWith(
       "sessions.list",
       expect.objectContaining({ includeLastMessage: true, archived: "all", limit: 100 }),
@@ -213,7 +215,8 @@ describe("AgentsHomePage", () => {
     const openChat = cards[0]?.querySelector<HTMLElement>(".agents-home__open");
     expect(openChat?.textContent).toBe("Open chat");
     openChat?.click();
-    expect(navigate).toHaveBeenCalledExactlyOnceWith("chat", { pathname: "/chat/ember" });
+    // Opening an agent starts a new unsent draft for it instead of its anchor chat.
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("new-session", { search: "?agent=ember" });
   });
 
   it("shares bounded activity loading between consumers and stops after the last detach", async () => {

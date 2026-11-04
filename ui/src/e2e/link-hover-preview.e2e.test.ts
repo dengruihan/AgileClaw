@@ -7,6 +7,7 @@ import {
   defaultControlUiFeatureMethods,
   installMockGateway,
   pauseVirtualClock,
+  controlUiSessionUrl,
 } from "../test-helpers/control-ui-e2e.ts";
 import { TEST_LINK_READER } from "../test-helpers/link-reader.ts";
 import { controlUiE2eBuiltModuleRequest } from "./control-ui-built-module.test-support.ts";
@@ -98,7 +99,7 @@ suite.define(() => {
             },
           },
         });
-        await page.goto(suite.server.baseUrl + "chat");
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const link = page.getByRole("link", { name: "Field guide", exact: true });
         await link.evaluate((element) => element.setAttribute("title", "Guide details"));
         await gateway.waitForRequest("forge.preview");
@@ -230,7 +231,7 @@ suite.define(() => {
           },
         ],
       });
-      await page.goto(suite.server.baseUrl + "chat");
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const link = page.getByRole("link", { name: "Field guide", exact: true });
       // A missing hashed chunk reloads the page; wait before hovering the new document.
       await Promise.all([
@@ -276,7 +277,7 @@ suite.define(() => {
         featureMethods: [...defaultControlUiFeatureMethods, "forge.detail"],
         methodResponses: { "controlUi.linkPreview": preview },
       });
-      await page.goto(suite.server.baseUrl + "chat");
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const link = page.getByRole("link", { name: "Guide", exact: true });
       await link.waitFor();
       await page.clock.install();
@@ -335,7 +336,7 @@ suite.define(() => {
         automaticallyFetchFavicons: false,
         historyMessages,
       });
-      await page.goto(suite.server.baseUrl + "chat");
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const link = page.getByRole("link", { name: "Field guide", exact: true });
       await link.hover();
       await page.keyboard.press("Tab");
@@ -356,7 +357,7 @@ suite.define(() => {
           automaticallyFetchFavicons: true,
           historyMessages,
         });
-        await page.goto(suite.server.baseUrl + "chat");
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const opened = context.waitForEvent("page");
         await page.getByRole("link", { name: "Field guide", exact: true }).tap();
         const destination = await opened;

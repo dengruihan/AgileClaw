@@ -83,7 +83,8 @@ openclaw agents list --bindings
 ```
 
 In the Control UI, **Agents** at `/agents` shows the roster, current work status,
-and recent chat previews, with **Open chat** opening each agent's main session.
+and a preview of each agent's most recently active session, with **Open chat**
+starting a new unsent session for that agent at `/new?agent=<id>`.
 Use **Manage agents** to configure the roster at `/settings/agents`.
 
 **Settings → Agents** updates model choices when the Gateway

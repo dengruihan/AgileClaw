@@ -5,19 +5,17 @@ import { WizardSession } from "../../../../src/wizard/session.js";
 import { createDeferred } from "../../../../test/helpers/promise.js";
 import { GatewayRequestError } from "../../api/gateway.ts";
 import { i18n } from "../../i18n/index.ts";
-import { createApplicationContextProvider } from "../../test-helpers/application-context.ts";
 import { createTestGatewayClient } from "../../test-helpers/gateway-client.ts";
 import { createStorageMock } from "../../test-helpers/storage.ts";
 import { waitForFast } from "../../test-helpers/wait-for.ts";
 import {
   candidate,
   clickCandidate,
-  createFirstRunContext,
+  createModelSetupContext,
   detection,
   mountPage,
   selectManualProvider,
-} from "./model-setup-first-run.test-support.ts";
-import { ModelSetupPage } from "./model-setup-page.ts";
+} from "./model-setup.test-support.ts";
 
 describe("Model Setup explicit discovery", () => {
   beforeEach(async () => {
@@ -34,41 +32,10 @@ describe("Model Setup explicit discovery", () => {
     vi.unstubAllGlobals();
   });
 
-  it("detects an existing first-run route without testing it until a click", async () => {
-    const { context, request } = createFirstRunContext();
-    request.mockImplementation(async (method) => {
-      if (method === "openclaw.setup.detect") {
-        return { ...detection, configuredModel: "openai/existing", setupComplete: true };
-      }
-      if (method === "openclaw.setup.verify") {
-        return { ok: true, modelRef: "openai/existing", latencyMs: 12 };
-      }
-      throw new Error(`Unexpected setup request: ${method}`);
-    });
-    const provider = createApplicationContextProvider(context);
-    const page = new ModelSetupPage();
-    page.routeData = { firstRun: true };
-    provider.append(page);
-    document.body.append(provider);
-    await waitForFast(() =>
-      expect(page.querySelector(".model-setup__current button")).not.toBeNull(),
-    );
-    await page.updateComplete;
-    expect(request.mock.calls.map(([method]) => method)).toEqual(["openclaw.setup.detect"]);
-    expect(context.navigate).not.toHaveBeenCalled();
-    expect(localStorage.getItem("openclaw.modelSetup.pendingActivation.v1")).toBeNull();
-    page.querySelector<HTMLButtonElement>(".model-setup__current button")!.click();
-    await waitForFast(() => expect(page.querySelector(".model-setup__verified")).not.toBeNull());
-    expect(request.mock.calls.map(([method]) => method)).toEqual([
-      "openclaw.setup.detect",
-      "openclaw.setup.verify",
-    ]);
-  });
-
   it.each(["cancel at credentials", "finish final commit"] as const)(
     "retains the admitted wizard after protected cancellation: %s",
     async (outcome) => {
-      const { context, client, request } = createFirstRunContext();
+      const { context, client, request } = createModelSetupContext();
       const installed = createDeferred();
       const allowInstall = createDeferred();
       const committed = createDeferred();
@@ -114,17 +81,10 @@ describe("Model Setup explicit discovery", () => {
           session!.cancel();
           return { status: session!.getStatus(), error: session!.getError() };
         }
-        if (method === "openclaw.setup.detect") {
-          return { ...detection, configuredModel: "openai/selected", setupComplete: true };
-        }
-        if (method === "openclaw.setup.verify") {
-          return { ok: true, modelRef: "openai/selected", latencyMs: 12 };
-        }
         throw new Error(`Unexpected setup request: ${method}`);
       });
       const { page } = await mountPage(context, {
         client,
-        firstRun: true,
         state: {
           phase: "ready",
           result: {
@@ -148,7 +108,6 @@ describe("Model Setup explicit discovery", () => {
           expect(page.textContent).toContain("Setup is finishing the current step"),
         );
         expect(page.querySelector("openclaw-modal-dialog")).not.toBeNull();
-        expect(localStorage.getItem("openclaw.modelSetup.pendingActivation.v1")).not.toBeNull();
         expect(session!.getStatus()).toBe("running");
         expect(answers).toEqual([true]);
         expect(starts).toBe(1);
@@ -157,10 +116,7 @@ describe("Model Setup explicit discovery", () => {
         if (outcome === "cancel at credentials") {
           cancel();
           await terminal.promise;
-          await waitForFast(() =>
-            expect(localStorage.getItem("openclaw.modelSetup.pendingActivation.v1")).toBeNull(),
-          );
-          expect(session!.getStatus()).toBe("cancelled");
+          await waitForFast(() => expect(session!.getStatus()).toBe("cancelled"));
           expect(answers).toEqual([true]);
         } else {
           const input = page.querySelector<HTMLInputElement>(
@@ -196,9 +152,9 @@ describe("Model Setup explicit discovery", () => {
   );
 
   it.each(["network", "denied", "missing wizard"] as const)(
-    "shows an explicit cancellation %s failure without discarding the clicked receipt",
+    "shows an explicit cancellation %s failure without discarding the wizard",
     async (failure) => {
-      const { context, client, request } = createFirstRunContext();
+      const { context, client, request } = createModelSetupContext();
       let cancels = 0;
       const error =
         failure === "missing wizard"
@@ -237,7 +193,6 @@ describe("Model Setup explicit discovery", () => {
       });
       const { page } = await mountPage(context, {
         client,
-        firstRun: true,
         state: {
           phase: "ready",
           result: {
@@ -248,24 +203,23 @@ describe("Model Setup explicit discovery", () => {
       });
       await clickCandidate(page, "openai-api-key");
       await waitForFast(() => expect(page.textContent).toContain("Provider credential"));
-      const receiptKey = "openclaw.modelSetup.pendingActivation.v1";
-      const receipt = localStorage.getItem(receiptKey);
-      expect(receipt).not.toBeNull();
       const cancel = () =>
         page.querySelector("openclaw-modal-dialog")!.dispatchEvent(new CustomEvent("modal-cancel"));
       cancel();
       if (failure === "missing wizard") {
         await waitForFast(() => expect(page.textContent).toContain("It may already have finished"));
         expect(cancels).toBe(1);
-        expect(localStorage.getItem(receiptKey)).toBe(receipt);
         const close = [
           ...page.querySelectorAll<HTMLButtonElement>("openclaw-modal-dialog button"),
         ].find((button) => button.textContent?.trim() === "Close");
         expect(close).toBeDefined();
         close!.click();
-        await waitForFast(() => expect(page.querySelector("openclaw-modal-dialog")).toBeNull());
-        expect(page.querySelector(".model-setup__recovery")).not.toBeNull();
-        expect(localStorage.getItem(receiptKey)).toBe(receipt);
+        await waitForFast(() =>
+          expect(page.querySelector("openclaw-modal-dialog")?.textContent).toContain(
+            "On this Gateway",
+          ),
+        );
+        expect(page.textContent).not.toContain("Provider credential");
       } else {
         await waitForFast(() =>
           expect(page.querySelector(".model-setup-wizard .callout.warning")?.textContent).toContain(
@@ -274,11 +228,9 @@ describe("Model Setup explicit discovery", () => {
         );
         expect(page.textContent).toContain(error.message);
         expect(page.textContent).toContain("Provider credential");
-        expect(localStorage.getItem(receiptKey)).toBe(receipt);
         expect(cancels).toBe(1);
         cancel();
-        await waitForFast(() => expect(page.querySelector("openclaw-modal-dialog")).toBeNull());
-        expect(localStorage.getItem(receiptKey)).toBeNull();
+        await waitForFast(() => expect(page.textContent).not.toContain("Provider credential"));
         expect(cancels).toBe(2);
       }
       expect(
@@ -291,11 +243,10 @@ describe("Model Setup explicit discovery", () => {
   it.each([false, true])(
     "sends only an explicit fresh-install discovery choice (%s)",
     async (enabled) => {
-      const { context, client, request } = createFirstRunContext();
+      const { context, client, request } = createModelSetupContext();
       request.mockResolvedValue({ done: true, status: "cancelled" });
       const { page } = await mountPage(context, {
         client,
-        firstRun: true,
         state: {
           phase: "ready",
           result: {
@@ -316,7 +267,6 @@ describe("Model Setup explicit discovery", () => {
       expect(checkbox.checked).toBe(false);
       expect(page.querySelector("[data-selected]")).toBeNull();
       expect(request).not.toHaveBeenCalled();
-      expect(localStorage.getItem("openclaw.modelSetup.pendingActivation.v1")).toBeNull();
       if (enabled) {
         checkbox.click();
         await page.updateComplete;
@@ -339,11 +289,10 @@ describe("Model Setup explicit discovery", () => {
   it.each(["install", "custom"] as const)(
     "offers %s choices without installing or starting auth on discovery",
     async (kind) => {
-      const { context, client, request } = createFirstRunContext();
+      const { context, client, request } = createModelSetupContext();
       request.mockResolvedValue({ done: true, status: "cancelled" });
       const { page } = await mountPage(context, {
         client,
-        firstRun: true,
         state: {
           phase: "ready",
           result: {
@@ -383,11 +332,10 @@ describe("Model Setup explicit discovery", () => {
   );
 
   it("does not change upgrade catalog choices or select a manual provider implicitly", async () => {
-    const { context, client, request } = createFirstRunContext();
+    const { context, client, request } = createModelSetupContext();
     request.mockResolvedValue({ done: true, status: "cancelled" });
     const { page } = await mountPage(context, {
       client,
-      firstRun: true,
       state: {
         phase: "ready",
         result: {
@@ -411,8 +359,10 @@ describe("Model Setup explicit discovery", () => {
     await waitForFast(() => expect(request).toHaveBeenCalledOnce());
     expect(request.mock.calls[0]![1]).not.toHaveProperty("nativeSessionCatalogsEnabled");
   });
+
   it("clears a pending credential and native discovery opt-in when the Gateway identity changes", async () => {
-    const { context, client, request, snapshot, publishGatewaySnapshot } = createFirstRunContext();
+    const { context, client, request, snapshot, publishGatewaySnapshot } =
+      createModelSetupContext();
     const fresh = {
       ...detection,
       nativeSessionCatalogPreferenceRequired: true,
@@ -422,7 +372,6 @@ describe("Model Setup explicit discovery", () => {
     request.mockResolvedValue(fresh);
     const { page } = await mountPage(context, {
       client,
-      firstRun: true,
       state: { phase: "ready", result: fresh },
     });
     page.querySelector<HTMLInputElement>(".model-setup__native-discovery input")!.click();
@@ -456,7 +405,7 @@ describe("Model Setup explicit discovery", () => {
     "keeps explicit discovery opt-in across a same-Gateway reconnect (%s)",
     async (replacement) => {
       const { context, client, request, snapshot, publishGatewaySnapshot } =
-        createFirstRunContext();
+        createModelSetupContext();
       const fresh = {
         ...detection,
         nativeSessionCatalogPreferenceRequired: true,
@@ -465,7 +414,6 @@ describe("Model Setup explicit discovery", () => {
       request.mockResolvedValue(fresh);
       const { page } = await mountPage(context, {
         client,
-        firstRun: true,
         state: { phase: "ready", result: fresh },
       });
       page.querySelector<HTMLInputElement>(".model-setup__native-discovery input")!.click();

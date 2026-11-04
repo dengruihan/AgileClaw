@@ -11,6 +11,7 @@ import {
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 async function expectCenteredToggle(bubble: Locator) {
   const { above, below } = await bubble.evaluate((element) => {
@@ -142,7 +143,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const bubble = page.locator(".chat-group.user .chat-bubble");
       await bubble.waitFor({ state: "visible", timeout: 10_000 });
       if (captureUiProofEnabled) {
@@ -229,7 +230,7 @@ suite.define(() => {
       });
 
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const bubbles = page.locator(".chat-group.user .chat-bubble");
         const bubble = bubbles.first();
         await bubble.waitFor({ state: "visible", timeout: 10_000 });
@@ -310,7 +311,7 @@ suite.define(() => {
       ],
     });
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const content = page.locator(".chat-message-disclosure__content");
       await content.waitFor();
       await page.evaluate(() => document.fonts.ready);
@@ -361,7 +362,7 @@ suite.define(() => {
             },
           ],
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const content = page.locator(".chat-message-disclosure__content");
         const details = content.locator("details");
         const summary = details.locator("summary");
@@ -428,7 +429,7 @@ suite.define(() => {
           },
         ],
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const content = page.locator(".chat-message-disclosure__content");
       await content.waitFor();
       await page.evaluate(() => document.fonts.ready);
@@ -485,7 +486,7 @@ suite.define(() => {
       });
 
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const bubble = page.locator(".chat-group.user .chat-bubble").first();
         const toggle = bubble.getByRole("button", { name: "Show more", exact: true });
         await toggle.waitFor({ state: "visible" });

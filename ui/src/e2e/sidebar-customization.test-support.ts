@@ -5,7 +5,7 @@ import {
   takeControlUiElementScreenshot,
   takeControlUiViewportScreenshot,
 } from "../test-helpers/control-ui-e2e-screenshot.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 export function createSidebarCustomizationSuite(name: string) {
@@ -75,7 +75,7 @@ export async function openSidebarCustomizationPage(
   });
   const page = await context.newPage();
   await installMockGateway(page);
-  await page.goto(`${suite.server.baseUrl}chat`);
+  await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
   await page.locator("openclaw-app-sidebar").waitFor();
   return { context, page };
 }

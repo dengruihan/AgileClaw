@@ -24,13 +24,8 @@ import { createChannelCapability } from "../lib/channels/index.ts";
 import { createRuntimeConfigCapability } from "../lib/config/runtime-config-capability.ts";
 import { loadCurrentDeviceAuthToken } from "../lib/nodes/index.ts";
 import { createSessionCapability } from "../lib/sessions/index.ts";
-import { parseAgentSessionKey } from "../lib/sessions/session-key.ts";
 import { loadChatObserverDisplayPreference } from "../pages/chat/chat-observer-display.ts";
 import { sendSessionObserverVisibility } from "../pages/chat/chat-observer.ts";
-import {
-  isDefaultChatLanding,
-  startModelSetupFirstRunRedirectAfterLocation,
-} from "../pages/model-setup/first-run.ts";
 import { ControlUiPluginRuntime } from "../plugins/control-ui-runtime.ts";
 import { createAgentSelectionCapability } from "./agent-selection.ts";
 import type { ShellRouteState } from "./app-host-route-state.ts";
@@ -38,8 +33,8 @@ import { resolveControlUiDocumentMode, type ControlUiDocumentMode } from "./appr
 import { AssistantDock } from "./assistant-dock.ts";
 import { readBootRecord } from "./boot-record.ts";
 import {
-  createInitialApplicationLocationResolver,
-  normalizeInitialApplicationLocation,
+  installResolvedInitialLocation,
+  isReleasedSessionLocation,
   resolveBootstrapModelCatalogTarget,
   resolveInitialApplicationLocation,
   subscribeForegroundChatBootstrap,
@@ -58,6 +53,11 @@ import { createChatSubmissions } from "./chat-submissions.ts";
 import { createApplicationConfigCapability } from "./config.ts";
 import { createConnectionBootstrapCoordinator } from "./connection-bootstrap.ts";
 import type { ApplicationNavigationOptions, ApplicationContext } from "./context.ts";
+import {
+  isNewSessionLanding,
+  newSessionLandingLocation,
+  startDefaultNewSessionLanding,
+} from "./default-landing.ts";
 import { createScopeUpgradeCapability } from "./device-scope-upgrade.ts";
 import { startGatewayPageActivation } from "./gateway-page-activation.ts";
 import { startGatewayPresenceActivity } from "./gateway-presence-activity.ts";
@@ -147,8 +147,16 @@ export function bootstrapApplication(): ApplicationRuntime {
   // Focus documents render before the shell; starting the application router
   // would rewrite their reserved presentation route into an ordinary page.
   const startsApplicationRouter = documentMode === null && focusLocation === null;
-  const firstRunDefaultLanding =
-    startsApplicationRouter && isDefaultChatLanding(applicationLocation, basePath, routeIdFromPath);
+  // A normal site entry opens an unsent draft. The URL changes before connection
+  // bootstrap or route preloads so nothing resolves a previous session.
+  const defaultNewSessionLanding =
+    startsApplicationRouter && isNewSessionLanding(applicationLocation, basePath);
+  const landingLocation = defaultNewSessionLanding
+    ? newSessionLandingLocation(applicationLocation, basePath, settings.selectedAgentId ?? null)
+    : applicationLocation;
+  if (defaultNewSessionLanding && !sameRouteLocation(landingLocation, applicationLocation)) {
+    history.replace(landingLocation);
+  }
   const hasPendingGateway = startup.pendingGatewayUrl !== null;
   const gateway = createApplicationGateway(
     settings,
@@ -202,7 +210,7 @@ export function bootstrapApplication(): ApplicationRuntime {
       : null;
   let warmBoot = bootRecord !== null && startsApplicationRouter && !hasPendingGateway;
   const warmBootConnectionRevision = gateway.connectionRevision;
-  if (warmBoot && bootRecord) {
+  if (warmBoot && bootRecord && !defaultNewSessionLanding) {
     prewarmBootChat(bootRecord, settings.sessionKey);
   }
   const stopWarmBootConnection = startsApplicationRouter
@@ -212,43 +220,23 @@ export function bootstrapApplication(): ApplicationRuntime {
     : undefined;
   const agents = createAgentCapability(gateway);
   const startupLifecycle = createStartupLifecycle();
-  const parsedInitialSession = parseAgentSessionKey(settings.sessionKey);
-  const deferInitialLocationUntilGateway = firstRunDefaultLanding && !parsedInitialSession;
-  let resolveInitialFirstRunDecision: (() => void) | null = null;
-  const initialFirstRunDecision = deferInitialLocationUntilGateway
-    ? new Promise<void>((resolve) => {
-        resolveInitialFirstRunDecision = resolve;
-      })
-    : null;
-  const resolveInitialLocation = createInitialApplicationLocationResolver({
-    fallback: applicationLocation,
-    signal: startupLifecycle.signal,
-    resolve: () =>
-      documentMode || focusLocation
-        ? Promise.resolve(applicationLocation)
-        : resolveInitialApplicationLocation({
-            location: applicationLocation,
-            basePath,
-            sessionKey: settings.sessionKey,
-            gateway,
-            agentsList: () => agents.state.agentsList,
-            ensureAgentsList: () => agents.ensureList(),
-            selectedAgentId: settings.selectedAgentId,
-            signal: startupLifecycle.signal,
-          }),
-  });
-  const initialRoutingLocation =
-    firstRunDefaultLanding && parsedInitialSession
-      ? normalizeInitialApplicationLocation(
-          applicationLocation,
+  // Start readiness before startup steps advance so an early stop retires it too.
+  const releasedLocation =
+    startsApplicationRouter && isReleasedSessionLocation(applicationLocation, basePath)
+      ? resolveInitialApplicationLocation({
+          location: applicationLocation,
           basePath,
-          settings.sessionKey,
-          parsedInitialSession.agentId,
-        )
-      : applicationLocation;
-  const initialRoutingLocationReady = firstRunDefaultLanding
-    ? Promise.resolve(initialRoutingLocation)
-    : resolveInitialLocation();
+          gateway,
+          agentsList: () => agents.state.agentsList,
+          selectedAgentId: settings.selectedAgentId,
+          signal: startupLifecycle.signal,
+        }).catch((error: unknown) => {
+          if (startupLifecycle.signal.aborted) {
+            return applicationLocation;
+          }
+          throw error;
+        })
+      : null;
   const agentIdentity = createAgentIdentityCapability(gateway);
   const theme = createApplicationTheme(settings, gateway);
   const agentSelection = createAgentSelectionCapability(
@@ -573,10 +561,9 @@ export function bootstrapApplication(): ApplicationRuntime {
           return () => plugins.dispose();
         },
       ];
-      if (startsApplicationRouter && !firstRunDefaultLanding) {
-        // Download explicit-route chunks alongside startup. Default landing must
-        // wait for setup's decision before fetching the Chat workspace graph.
-        steps.unshift(() => warmApplicationRouteModule(router, applicationLocation, basePath));
+      if (startsApplicationRouter) {
+        // The landing preloads its own New Session chunk, never the Chat graph.
+        steps.unshift(() => warmApplicationRouteModule(router, landingLocation, basePath));
       }
       // Native bridge parsers and listeners stay out of browser startup.
       // SAFETY: WebKit supplies the optional handler map; the native initializer checks each callable.
@@ -591,33 +578,10 @@ export function bootstrapApplication(): ApplicationRuntime {
           });
         });
       }
-      // Resolve first-run setup before routing: the default Chat route owns the
-      // workspace graph, which setup users would otherwise fetch and discard.
-      steps.push(() =>
-        startModelSetupFirstRunRedirectAfterLocation({
-          context,
-          enabled: firstRunDefaultLanding,
-          history,
-          initialLocationReady: initialRoutingLocationReady,
-          ...(deferInitialLocationUntilGateway
-            ? {
-                redirect: () =>
-                  history.replace({
-                    ...locationForRoute("model-setup", basePath),
-                    search: "?firstRun=1",
-                  }),
-                onInitialDecision: () => resolveInitialFirstRunDecision?.(),
-              }
-            : {}),
-        }),
-      );
       steps.push(() => {
         void config.refresh({ skipWithoutAuthCandidate: true });
       });
       if (startsApplicationRouter) {
-        if (initialFirstRunDecision) {
-          steps.push(() => initialFirstRunDecision);
-        }
         steps.push(async () => {
           const pendingNavigation = pendingRouterStartNavigation;
           pendingRouterStartNavigation = null;
@@ -629,34 +593,46 @@ export function bootstrapApplication(): ApplicationRuntime {
           return stopRouter;
         });
       }
-      if (firstRunDefaultLanding) {
-        steps.push(() => {
-          // Post-connect validation may replace only the provisional landing;
-          // navigation during startup remains authoritative.
-          startupLifecycle.trackDisposer(
-            startModelSetupFirstRunRedirectAfterLocation({
-              context,
-              enabled: false,
-              history,
-              initialLocationReady: resolveInitialLocation(),
-              installLocation: async (location) => {
-                const routeId = routeIdFromPath(location.pathname, basePath);
-                if (routeId) {
-                  await router.navigate(routeId, context, { history: "replace" }, location);
-                } else {
-                  history.replace(location);
-                }
-              },
-              shouldInstallLocation: () =>
-                parsedInitialSession
-                  ? sameRouteLocation(history.location(), initialRoutingLocation)
-                  : isDefaultChatLanding(history.location(), basePath, routeIdFromPath),
-            }),
-            (error) => {
-              console.error("[openclaw] initial session location failed", error);
+      if (releasedLocation) {
+        steps.push(() =>
+          installResolvedInitialLocation({
+            history,
+            expectedLocation: applicationLocation,
+            resolvedLocation: releasedLocation,
+            install: (location) => {
+              const routeId = routeIdFromPath(location.pathname, basePath);
+              if (routeId) {
+                return router.navigate(routeId, context, { history: "replace" }, location);
+              }
+              history.replace(location);
+              return undefined;
             },
-          );
-        });
+          }).catch((error: unknown) => {
+            if (!startupLifecycle.signal.aborted) {
+              console.error("[openclaw] released session location failed", error);
+            }
+          }),
+        );
+      }
+      if (defaultNewSessionLanding) {
+        steps.push(() =>
+          startDefaultNewSessionLanding({
+            gateway,
+            agentSelection,
+            history,
+            basePath,
+            landingPathname: landingLocation.pathname,
+            agentId: settings.selectedAgentId ?? null,
+            navigate: (location) => {
+              const routeId = routeIdFromPath(location.pathname, basePath);
+              if (routeId) {
+                void router.navigate(routeId, context, { history: "replace" }, location);
+              } else {
+                history.replace(location);
+              }
+            },
+          }),
+        );
       }
       return startupLifecycle.run(steps);
     },

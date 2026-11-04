@@ -1,13 +1,14 @@
 // Control UI E2E tests cover pointer activation near the mobile safe area.
-import { chromium, type Browser, type Locator, type Page } from "playwright";
+import { type Browser, type Locator, type Page, chromium } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runQaGatewayFixture } from "../../../test/helpers/qa-gateway-cleanup.ts";
 import {
+  type ControlUiE2eServer,
   canRunPlaywrightChromium,
+  controlUiSessionUrl,
   installMockGateway,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
 
 const chromiumExecutablePath = resolvePlaywrightChromiumExecutablePath(chromium.executablePath());
@@ -141,7 +142,7 @@ describeControlUiE2e("Control UI composer pointer controls", () => {
         assistantName: "AgileClaw",
         deferredMethods: ["chat.send"],
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       const protocol = await context.newCDPSession(page);
       await protocol.send("Emulation.setSafeAreaInsetsOverride", {
@@ -233,7 +234,7 @@ describeControlUiE2e("Control UI composer pointer controls", () => {
         assistantName: "AgileClaw",
         deferredMethods: ["chat.send"],
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       const protocol = await context.newCDPSession(page);
       await protocol.send("Emulation.setSafeAreaInsetsOverride", {
@@ -313,7 +314,7 @@ describeControlUiE2e("Control UI composer pointer controls", () => {
         assistantName: "AgileClaw",
         deferredMethods: ["chat.send"],
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       const textarea = page.locator(".agent-chat__input textarea");
       await textarea.fill("Verify wide desktop pointer controls");
@@ -389,7 +390,7 @@ describeControlUiE2e("Control UI composer pointer controls", () => {
     try {
       const page = await context.newPage();
       const gateway = await installMockGateway(page, { assistantName: "AgileClaw" });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       const protocol = await context.newCDPSession(page);
       await protocol.send("Emulation.setSafeAreaInsetsOverride", {

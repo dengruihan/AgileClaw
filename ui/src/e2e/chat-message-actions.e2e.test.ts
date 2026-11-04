@@ -1,16 +1,16 @@
 // Real-browser proof for inline and context-menu chat message actions.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium, type Browser, type Locator, type Page } from "playwright";
-import { beforeEach, afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type Browser, type Locator, type Page, chromium } from "playwright";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
+  type ControlUiE2eServer,
   canRunPlaywrightChromium,
   controlUiSessionUrl,
   installMockGateway,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
 
 const chromiumExecutablePath = resolvePlaywrightChromiumExecutablePath(chromium.executablePath());
@@ -357,7 +357,7 @@ describeControlUiE2e("Control UI chat message actions", () => {
                 ]
               : [source],
         });
-        await page.goto(`${server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
         await gateway.waitForRequest("chat.startup");
         const bubble = page.locator(`.chat-bubble[data-entry-id="${sourceId}"]`);
         await bubble.waitFor({ state: "visible" });
@@ -481,7 +481,7 @@ describeControlUiE2e("Control UI chat message actions", () => {
       });
 
     try {
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await page.mouse.move(0, 0);
       const assistantGroups = page.locator(".chat-group.assistant");
       await expect.poll(() => assistantGroups.count()).toBe(2);
@@ -601,7 +601,7 @@ describeControlUiE2e("Control UI chat message actions", () => {
         };
       });
     try {
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       const group = page.locator(".chat-group.assistant").filter({ hasText: "Tooltip proof." });
       await group
         .locator(".chat-text")
@@ -740,7 +740,7 @@ describeControlUiE2e("Control UI chat message actions", () => {
     });
 
     try {
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await setThemeMode(page, "dark");
       const applePlatform = process.platform === "darwin";
       const commandPaletteShortcut = applePlatform ? "⌘K" : "Ctrl+K";

@@ -26,7 +26,7 @@ After a Gateway restart, an agent may need a few minutes to prepare its database
 
 If the Gateway's request queue is full, automatic sidebar session discovery keeps the current rows and retries up to three times, respecting the server's retry delay. A persistent failure shows "The server is busy. Please try again in a moment." Other actions can show this message immediately; wait briefly, then retry the action.
 
-While the initial connection or a route loads, shimmer placeholders reserve the chat layout. Home and System busyness open directly in their destination panels, with working headers and Close controls while the content loads. Brief loads do not flash placeholders; slower loads show placeholders inside the panel, and load errors offer Retry in the same place. The rest of the page stays usable. Drag the System busyness title bar to move the panel; its position is remembered in this browser. You can also focus the title bar and use the arrow keys (Shift moves farther). Compact/expanded transitions animate briefly, respect reduced motion, and keep the panel inside the window. Loading indicators respect your theme and reduced-motion preference; Gateway startup progress remains visible when available.
+While the initial connection or a route loads, shimmer placeholders reserve the chat layout. System busyness opens directly in its destination panel, with a working header and Close control while the content loads. Brief loads do not flash placeholders; slower loads show placeholders inside the panel, and load errors offer Retry in the same place. The rest of the page stays usable. Drag the System busyness title bar to move the panel; its position is remembered in this browser. You can also focus the title bar and use the arrow keys (Shift moves farther). Compact/expanded transitions animate briefly, respect reduced motion, and keep the panel inside the window. Loading indicators respect your theme and reduced-motion preference; Gateway startup progress remains visible when available.
 
 The selected chat loads before automatic sidebar session lists refresh. Live events remain subscribed during startup, and explicit sidebar actions remain available. Background lists resume after the transcript loads or reports an error.
 
@@ -52,7 +52,7 @@ If a narration subscription encounters a retryable failure or times out, it retr
 
 Failed narration releases use the same backoff, including while the tab is hidden. If a session is needed again, its queued release is canceled and its subscription is renewed safely. Closing the Gateway connection cancels release retries.
 
-Closed Terminal, Browser, and Desktop panels initialize when you open them rather than during initial navigation. Home and System busyness keep lightweight frames ready and defer their conversation or diagnostic contents until opened. Home preserves its saved dock position and size throughout loading. Panels saved as open still restore after a reload.
+Closed Terminal, Browser, and Desktop panels initialize when you open them rather than during initial navigation. System busyness keeps a lightweight frame ready and defers its diagnostic contents until opened. A conversation dock keeps a lightweight frame ready and loads its conversation once a page or plugin opens an explicit session in it. Panels saved as open still restore after a reload.
 
 Hidden retained chats defer command and model metadata refreshes until you return to them. Returning to a recently opened chat reuses its completed metadata on the same connection until a Gateway change invalidates it. Concurrent readers share the same request. Ordinary session patches and command changes wait for a 2.5-second quiet period before refreshing commands and session facts. They reuse the model catalog unless the returned metadata indicates a changed model or account projection. Explicit model, account, and runtime selections refresh promptly. Configuration, catalog, and session lifecycle changes still invalidate the full metadata bundle. Repeated changes during a request share one trailing refresh instead of issuing overlapping requests.
 
@@ -214,8 +214,9 @@ Local onboarding generates a Gateway secret in token mode by default, without a 
 Open **Agents** in the sidebar, choose **All agents** in the agent switcher, or
 visit `/agents` to see your configured agents as a roster. Each card shows the
 agent's identity, model, current work status, last activity, and a preview from its
-main chat. **Open chat** opens that agent's
-main session. Working agents appear first, followed by the most recently active.
+most recently active session. **Open chat** starts a new unsent session for that
+agent at `/new?agent=<id>`. Working agents appear first, followed by the most
+recently active.
 
 **Manage agents** opens `/settings/agents`. **New agent** opens the existing
 agent creation flow when available, or agent settings otherwise. `/agents` now
@@ -228,13 +229,14 @@ name, or **OpenClaw**, and the OpenClaw mark. Its menu contains **Show one agent
 **Agent settings**, and the existing documentation, help, community, and changelog
 links. Pinned sessions stay in **Pages**, using their agent's avatar as the icon.
 Other sessions appear under collapsible agent headers in configured roster order,
-which stays stable as activity changes. **Home** disappears from Pages: click an agent header's avatar or name to
-open that agent's main chat. The separate collapse control only folds its sessions.
+which stays stable as activity changes. Pages has no Home row: each agent header is a
+non-navigating label, its separate collapse control only folds the group's
+sessions, and the agent's rolling session appears as an ordinary row in the group.
 The top **+**, labeled **New conversation**, opens an agent menu with avatars and names in
 the same order as the groups; choosing an agent opens New session for that agent.
 Each group's **+** does this directly, appearing on hover or keyboard focus and remaining visible on touch devices. Selecting a session switches the active
 agent for chat. Choose **Show one agent** in the workspace menu to restore the
-agent chip, Home row, and direct New session button.
+agent chip and direct New session button.
 
 Enabling team mode also defaults the shared page scope to **All agents**, while
 remembering the previous scope to restore when you turn it off. That scope,
@@ -247,8 +249,8 @@ Automations, Dashboards, Sessions, and Usage support all-agent views, with
 agent identity shown on mixed-agent rows. In Settings, choose an agent below the
 sidebar title to keep the same target across Agents, Models, Memory, and Skills.
 Global settings remain global. Skill Workshop uses the agent selected through
-chat; open an agent's main chat from its group header to select it. Chat actions
-always belong to the conversation's agent.
+chat; open one of an agent's sessions to select it. Chat actions always belong to
+the conversation's agent.
 
 Choose **All sessions** from an agent group’s options menu to open the Sessions
 page filtered to that agent. Open **Agents** in the sidebar to return to the roster
@@ -272,8 +274,8 @@ stops when neither roster is visible. Each refresh reads at most 300 sessions
 across agents, loading pinned sessions first and then the most recent sessions.
 Pinned sessions count toward that limit; sessions outside the window do not appear
 in the grouped sidebar or contribute to activity summaries, except that the open
-conversation remains visible so direct links keep a selected row. When a main session
-is absent from the window, its agent's most recent session supplies the preview.
+conversation remains visible so direct links keep a selected row. The roster card
+preview comes from each agent's most recently active session.
 
 ## What each page covers
 
@@ -281,7 +283,7 @@ is absent from the window, its agent's most recent session supplies the preview.
 - [Sessions and sidebar](/web/control-ui/sessions-and-sidebar) — sidebar zones, session menus, and the New session page.
 - [Systems workspace](/web/control-ui/sessions-and-sidebar#systems-workspace) — contextual machine navigation and a desktop-first workspace.
 - [Chat](/web/control-ui/chat) — composer controls, the session rail, transcript rendering, and hosted embeds.
-- [Panels and docks](/web/control-ui/panels) — the Home dock, the operator terminal, and the browser panel.
+- [Panels and docks](/web/control-ui/panels) — conversation docks, the operator terminal, and the browser panel.
 - [Settings](/web/control-ui/settings) — identity, appearance, plugins, updates, MCP, activity, and meetings.
 - [Feature and RPC reference](/web/control-ui/feature-reference) — every capability with the Gateway RPC behind it.
 - [Offline and reconnect](/web/control-ui/offline-and-reconnect) — what survives a dropped connection.
@@ -342,7 +344,7 @@ Every section heading from the previous single-page version keeps its anchor her
 - <a id="automations-panel-notes" />[automations panel notes](/web/control-ui/feature-reference#automations-panel-notes)
 - <a id="connection-loss-and-reconnect" />[Connection loss and reconnect](/web/control-ui/offline-and-reconnect#connection-loss-and-reconnect)
 - <a id="openclaw-system-care" />[OpenClaw system care](/web/control-ui/panels#openclaw-system-care)
-- <a id="home-dock" />[Home dock](/web/control-ui/panels#home-dock)
+- <a id="home-dock" />[Conversation docks](/web/control-ui/panels#home-dock)
 - <a id="operator-terminal" />[Operator terminal](/web/control-ui/panels#operator-terminal)
 - <a id="browser-panel" />[Browser panel](/web/control-ui/panels#browser-panel)
 - <a id="content-security-policy" />[Content security policy](/web/control-ui/security-model#content-security-policy)

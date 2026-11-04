@@ -10,6 +10,7 @@ import {
 } from "../../../src/gateway/control-ui-csp.js";
 import { createSandboxHostHttpServer } from "../../../src/gateway/mcp-app-sandbox-http.js";
 import {
+  controlUiSessionUrl,
   createControlUiMockBootstrapConfig,
   defaultControlUiFeatureMethods,
   installMockGateway,
@@ -116,7 +117,8 @@ suite.define(() => {
                 json: { ...createControlUiMockBootstrapConfig(), embedSandbox: "strict" },
               }),
             );
-            await page.route(suite.server.baseUrl + "chat", async (route) => {
+            const chatUrl = controlUiSessionUrl(suite.server.baseUrl, "agent:main:main");
+            await page.route(chatUrl, async (route) => {
               const response = await route.fetch();
               const body = await response.text();
               await route.fulfill({
@@ -130,7 +132,7 @@ suite.define(() => {
                 },
               });
             });
-            await page.goto(suite.server.baseUrl + "chat");
+            await page.goto(chatUrl);
             await gateway.waitForRequest("chat.startup");
             const preview = page.locator("openclaw-chat-html-preview");
             for (const mode of ["strict", "scripts", "strict"] as const) {

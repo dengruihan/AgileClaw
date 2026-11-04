@@ -4,6 +4,7 @@ import { expect, it } from "vitest";
 import {
   captureControlUiE2eFailureDiagnostics,
   installMockGateway,
+  controlUiSessionUrl,
 } from "../test-helpers/control-ui-e2e.ts";
 import { createUpdateRunFixture } from "../test-helpers/update-run.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
@@ -58,7 +59,9 @@ suite.define(() => {
           operatorScopes: ["operator.read"],
         });
 
-        expect((await page.goto(`${suite.server.baseUrl}chat`))?.status()).toBe(200);
+        expect(
+          (await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main")))?.status(),
+        ).toBe(200);
         await gateway.waitForRequest("chat.startup");
         await page.getByRole("button", { name: "Expand sidebar" }).click();
         await gateway.emitGatewayEvent("update.available", {
@@ -140,7 +143,9 @@ suite.define(() => {
           },
         });
 
-        expect((await page.goto(`${suite.server.baseUrl}chat`))?.status()).toBe(200);
+        expect(
+          (await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main")))?.status(),
+        ).toBe(200);
         await gateway.waitForRequest("chat.startup");
         await gateway.emitGatewayEvent("update.available", {
           updateAvailable: {
@@ -211,7 +216,9 @@ suite.define(() => {
           },
         });
 
-        expect((await page.goto(`${suite.server.baseUrl}chat`))?.status()).toBe(200);
+        expect(
+          (await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main")))?.status(),
+        ).toBe(200);
         await gateway.waitForRequest("chat.startup");
         await gateway.emitGatewayEvent("update.available", {
           updateAvailable: {
@@ -294,7 +301,9 @@ suite.define(() => {
           },
         });
 
-        expect((await page.goto(`${suite.server.baseUrl}chat`))?.status()).toBe(200);
+        expect(
+          (await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main")))?.status(),
+        ).toBe(200);
         await gateway.waitForRequest("chat.startup");
         await gateway.emitGatewayEvent("update.available", {
           updateAvailable: {
@@ -414,7 +423,9 @@ suite.define(() => {
       });
 
       try {
-        expect((await page.goto(`${suite.server.baseUrl}chat`))?.status()).toBe(200);
+        expect(
+          (await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main")))?.status(),
+        ).toBe(200);
         await gateway.waitForRequest("chat.startup");
         await gateway.emitGatewayEvent("update.available", {
           updateAvailable: {

@@ -1,6 +1,5 @@
 import { expect, it } from "vitest";
 import { SIDEBAR_SESSION_ROSTER_LIMIT } from "../../../src/shared/session-list-limits.ts";
-import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 import {
   captureUiProof,
   createSessionManagementE2eSuite,
@@ -9,6 +8,8 @@ import {
 } from "./session-management.test-support.ts";
 
 const suite = createSessionManagementE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
+import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 
 const MAIN_KEY = "agent:main:main";
 /** Categorized work sits below the recency cutoff a truncating roster applies,
@@ -108,7 +109,7 @@ suite.define(() => {
     const page = await context.newPage();
     try {
       await installMockGateway(page, rosterMock());
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const sidebar = page.locator("openclaw-app-sidebar");
       await sidebar.waitFor({ state: "visible", timeout: 10_000 });
       await sidebar

@@ -77,37 +77,48 @@ describe("AppSidebar session attention details", () => {
         status: "pending",
       });
       await sidebar.updateComplete;
-      expect(
-        sidebar
-          .querySelector(".nav-item--home [data-session-attention]")
-          ?.getAttribute("aria-label"),
-      ).toBe(ownsRequest ? "Waiting for your answer\nReview the changes?" : undefined);
-      expect(sidebar.querySelector('[data-session-key="global"]')).toBeNull();
+      // The raw global anchor is an ordinary row in global scope; request
+      // scoping stays observable through the owning agent's roster header.
+      expect(sidebar.querySelector('[data-session-key="global"]')).not.toBeNull();
       await toggleRoster(sidebar);
       const header = () =>
         sidebar.querySelector(`[data-agent-group="${agentId}"] .sidebar-agent-roster__header`);
       await waitForFast(() => expect(header()).not.toBeNull());
-      expect(sidebar.querySelector('[data-session-key="global"]')).toBeNull();
-      expect(header()?.querySelector("[data-session-attention]")?.getAttribute("aria-label")).toBe(
-        ownsRequest ? "Waiting for your answer\nReview the changes?" : undefined,
-      );
+      // Expanded headers no longer summarize a hidden anchor; the request
+      // itself stays scoped to the owning agent's row for the global session.
+      const globalRow = () =>
+        sidebar.querySelector(`[data-session-key="global"] [data-session-attention]`);
+      if (ownsRequest) {
+        await waitForFast(() =>
+          expect(globalRow()?.getAttribute("aria-label")).toBe(
+            "Waiting for your answer\nReview the changes?",
+          ),
+        );
+      } else {
+        expect(globalRow()?.getAttribute("aria-label")).toBeUndefined();
+      }
       gatewayHarness.publishEvent("question.resolved", {
         id: "global-question",
         status: "cancelled",
       });
       await sidebar.updateComplete;
-      expect(header()?.querySelector("[data-session-attention]")?.getAttribute("aria-label")).toBe(
-        ownsRequest ? "Waiting for approval\ngit status --short" : undefined,
+      await waitForFast(() =>
+        expect(globalRow()?.getAttribute("aria-label")).toBe(
+          ownsRequest ? "Waiting for approval\ngit status --short" : undefined,
+        ),
       );
-      await toggleRoster(sidebar);
-      await waitForFast(() => expect(sidebar.querySelector(".nav-item--home")).not.toBeNull());
       sessionsHarness.publishList({ result: { ...result, count: 0, sessions: [] } });
       await sidebar.updateComplete;
-      expect(
-        sidebar
-          .querySelector(".nav-item--home [data-session-attention]")
-          ?.getAttribute("aria-label"),
-      ).toBe(ownsRequest ? "Waiting for approval\ngit status --short" : undefined);
+      // The current global session stays reachable as its ordinary row; the
+      // still-pending approval remains scoped to the owning agent.
+      const retainedApproval = sidebar.querySelector(
+        `[data-session-key="global"] [data-session-attention="approval"]`,
+      );
+      if (ownsRequest) {
+        expect(retainedApproval).not.toBeNull();
+      } else {
+        expect(retainedApproval).toBeNull();
+      }
     },
   );
 
@@ -227,11 +238,9 @@ describe("AppSidebar session attention details", () => {
       await waitForFast(() =>
         expect(sidebar.querySelector('[data-agent-collapse="main"]')).not.toBeNull(),
       );
-      if (!isHome) {
-        await waitForFast(() =>
-          expect(sidebar.querySelector(`[data-session-key="${parentKey}"]`)).not.toBeNull(),
-        );
-      }
+      await waitForFast(() =>
+        expect(sidebar.querySelector(`[data-session-key="${parentKey}"]`)).not.toBeNull(),
+      );
       for (const [id, key, createdAtMs, question] of [
         ["parent-question", parentKey, now, "Which deployment region?"],
         ["child-question", childKey, now - 1, "Which environment?"],
@@ -284,6 +293,7 @@ describe("AppSidebar session attention details", () => {
         ],
       });
       sidebar.querySelector<HTMLButtonElement>('[data-agent-collapse="main"]')!.click();
+      // Main-row children promote to roots; ordinary parents nest behind a toggle.
       if (!isHome) {
         await waitForFast(() =>
           expect(
@@ -295,10 +305,9 @@ describe("AppSidebar session attention details", () => {
           .click();
       }
       const attention = (key: string) =>
-        (isHome && key === parentKey
-          ? header()?.querySelector("[data-session-attention]")
-          : sidebar.querySelector(`[data-session-key="${key}"] [data-session-attention]`)
-        )?.getAttribute("aria-label");
+        sidebar
+          .querySelector(`[data-session-key="${key}"] [data-session-attention]`)
+          ?.getAttribute("aria-label");
       await waitForFast(() =>
         expect(attention(persistentKey)).toBe("Waiting for your answer\nWhich revision?"),
       );
@@ -306,14 +315,23 @@ describe("AppSidebar session attention details", () => {
         "2 questions need your answer\nWhich environment?\n+1 more",
       );
       expect(sidebar.querySelector(`[data-session-key="${childKey}"]`)).toBeNull();
-      sidebar
-        .querySelector<HTMLButtonElement>(
-          isHome ? '[data-agent-collapse="main"]' : `[data-child-session-toggle="${parentKey}"]`,
-        )!
-        .click();
-      await waitForFast(() =>
-        expect(attention(parentKey)).toBe("3 questions need your answer\nWhich revision?\n+2 more"),
-      );
+      if (!isHome) {
+        sidebar
+          .querySelector<HTMLButtonElement>(`[data-child-session-toggle="${parentKey}"]`)!
+          .click();
+        await waitForFast(() =>
+          expect(attention(parentKey)).toBe(
+            "3 questions need your answer\nWhich revision?\n+2 more",
+          ),
+        );
+      } else {
+        // Promoted persistent children keep their own attention; the main row
+        // summarizes only its own and its nested child requests.
+        expect(attention(parentKey)).toBe(
+          "2 questions need your answer\nWhich environment?\n+1 more",
+        );
+        expect(attention(persistentKey)).toBe("Waiting for your answer\nWhich revision?");
+      }
     },
   );
 });

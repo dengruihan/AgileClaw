@@ -5,6 +5,7 @@ import type { ChatSendShortcut } from "../app/settings.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
   controlUiBundledSettingsStorageKey,
+  controlUiSessionUrl,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
 import { captureUiProofEnabled } from "./chat-flow.test-support.ts";
@@ -27,7 +28,7 @@ async function openSideChat(page: Page, chatSendShortcut: ChatSendShortcut = "en
       "sessions.companion.state": { exchanges: [] },
     },
   });
-  await page.goto(`${suite.server.baseUrl}chat`);
+  await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
   await openChatSidePanelType(page, "Side chat");
   return gateway;
 }

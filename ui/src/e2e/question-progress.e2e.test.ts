@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { CHAT_TRANSCRIPT_END_THRESHOLD_PX } from "../pages/chat/scroll.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import {
   chatThreadDistanceFromBottom,
   createChatFlowE2eSuite,
@@ -53,7 +53,7 @@ suite.define(() => {
           ],
         });
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const composer = page.locator(".agent-chat__composer-combobox textarea");
         await composer.fill("Keep this draft.");
         const progressCard = page.locator(".session-progress-card--composer");

@@ -5,136 +5,6 @@ import type { ApplicationContext } from "./context.ts";
 
 describe("resolveInitialApplicationLocation", () => {
   it.each([
-    { sessionKey: "telegram:12345", search: "", pathname: "/chat/main/telegram/12345" },
-    { sessionKey: "agent::broken", search: "?draft=hello", pathname: null },
-  ])(
-    "resolves persisted '$sessionKey' without aborting bootstrap",
-    async ({ sessionKey, search, pathname }) => {
-      const location = { pathname: "/", search, hash: "" };
-      const resolved = await resolveInitialApplicationLocation({
-        location,
-        basePath: "",
-        sessionKey,
-        gateway: {
-          snapshot: { phase: "connected", client: {}, hello: null },
-          subscribe: vi.fn(() => () => undefined),
-        } as unknown as ApplicationContext["gateway"],
-        agentsList: () => null,
-        signal: new AbortController().signal,
-      });
-      expect(resolved).toEqual({ ...location, pathname: pathname ?? location.pathname });
-      expect(resolved === location).toBe(pathname === null);
-    },
-  );
-
-  it.each([
-    { persistedSessionKey: "main", connectedSessionKey: "main" },
-    { persistedSessionKey: "", connectedSessionKey: "agent:research:workspace" },
-  ])(
-    "waits for gateway defaults before normalizing '$persistedSessionKey'",
-    async ({ persistedSessionKey, connectedSessionKey }) => {
-      type GatewayListener = Parameters<ApplicationContext["gateway"]["subscribe"]>[0];
-      let listener: GatewayListener | null = null;
-      let snapshot = {
-        phase: "connecting",
-        client: null,
-        hello: null,
-      } as unknown as ApplicationContext["gateway"]["snapshot"];
-      const gateway = {
-        get snapshot() {
-          return snapshot;
-        },
-        subscribe: (next: GatewayListener) => {
-          listener = next;
-          return () => undefined;
-        },
-      };
-      const pending = resolveInitialApplicationLocation({
-        location: { pathname: "/", search: "", hash: "" },
-        basePath: "",
-        sessionKey: persistedSessionKey,
-        gateway,
-        agentsList: () => null,
-        signal: new AbortController().signal,
-      });
-      let settled = false;
-      void pending.then(() => {
-        settled = true;
-      });
-      await Promise.resolve();
-      expect(settled).toBe(false);
-
-      snapshot = {
-        phase: "connected",
-        client: {},
-        sessionKey: connectedSessionKey,
-        hello: {
-          snapshot: {
-            sessionDefaults: { defaultAgentId: "research", mainKey: "workspace" },
-          },
-        },
-      } as unknown as ApplicationContext["gateway"]["snapshot"];
-      const connectedListener = listener as GatewayListener | null;
-      if (!connectedListener) {
-        throw new Error("expected gateway readiness subscription");
-      }
-      connectedListener(snapshot);
-
-      await expect(pending).resolves.toEqual({
-        pathname: "/chat/research",
-        search: "",
-        hash: "",
-      });
-    },
-  );
-
-  it.each(["main", ""])(
-    "does not wait for gateway defaults on an explicit startup route with '%s'",
-    async (sessionKey) => {
-      const subscribe = vi.fn(() => () => undefined);
-      const location = { pathname: "/settings/appearance", search: "", hash: "" };
-
-      await expect(
-        resolveInitialApplicationLocation({
-          location,
-          basePath: "",
-          sessionKey,
-          gateway: {
-            snapshot: { phase: "connecting", client: null, hello: null },
-            subscribe,
-          } as unknown as ApplicationContext["gateway"],
-          agentsList: () => null,
-          signal: new AbortController().signal,
-        }),
-      ).resolves.toBe(location);
-      expect(subscribe).not.toHaveBeenCalled();
-    },
-  );
-
-  it("canonicalizes a scoped persisted main key when defaults are already known", async () => {
-    const subscribe = vi.fn(() => () => undefined);
-
-    await expect(
-      resolveInitialApplicationLocation({
-        location: { pathname: "/", search: "", hash: "" },
-        basePath: "",
-        sessionKey: "agent:research:workspace",
-        gateway: {
-          snapshot: {
-            phase: "connected",
-            client: {},
-            hello: { snapshot: { sessionDefaults: { mainKey: "workspace" } } },
-          },
-          subscribe,
-        } as unknown as ApplicationContext["gateway"],
-        agentsList: () => null,
-        signal: new AbortController().signal,
-      }),
-    ).resolves.toEqual({ pathname: "/chat/research", search: "", hash: "" });
-    expect(subscribe).not.toHaveBeenCalled();
-  });
-
-  it.each([
     {
       location: {
         pathname: "/chat",
@@ -170,7 +40,6 @@ describe("resolveInitialApplicationLocation", () => {
     const resolved = await resolveInitialApplicationLocation({
       location: testCase.location,
       basePath: "",
-      sessionKey: "agent:main:main",
       gateway: {
         snapshot: { phase: "connecting", client: null, hello: null },
         subscribe,
@@ -188,6 +57,20 @@ describe("resolveInitialApplicationLocation", () => {
     expect(subscribe).not.toHaveBeenCalled();
   });
 
+  it("opens a new draft for a released link without a session key", async () => {
+    const resolved = await resolveInitialApplicationLocation({
+      location: { pathname: "/chat", search: "?session=", hash: "" },
+      basePath: "",
+      gateway: {
+        snapshot: { phase: "connected", client: {}, hello: null },
+        subscribe: vi.fn(() => () => undefined),
+      } as unknown as ApplicationContext["gateway"],
+      agentsList: () => ({ defaultId: "main", mainKey: "main", scope: "global", agents: [] }),
+      signal: new AbortController().signal,
+    });
+    expect(resolved).toEqual({ pathname: "/new", search: "?agent=main", hash: "" });
+  });
+
   it("preserves the UUID when rewriting a released session query", async () => {
     const resolved = await resolveInitialApplicationLocation({
       location: {
@@ -197,7 +80,6 @@ describe("resolveInitialApplicationLocation", () => {
         hash: "",
       },
       basePath: "",
-      sessionKey: "agent:main:main",
       gateway: {
         snapshot: { phase: "connected", client: {}, hello: null },
         subscribe: vi.fn(() => () => undefined),
@@ -219,7 +101,6 @@ describe("resolveInitialApplicationLocation", () => {
       resolveInitialApplicationLocation({
         location,
         basePath: "",
-        sessionKey: "agent:main:main",
         gateway: {
           snapshot: { phase: "connecting", client: null, hello: null },
           subscribe,
@@ -246,7 +127,6 @@ describe("resolveInitialApplicationLocation", () => {
         hash: "",
       },
       basePath: "",
-      sessionKey: "agent:main:main",
       gateway: {
         get snapshot() {
           return snapshot;

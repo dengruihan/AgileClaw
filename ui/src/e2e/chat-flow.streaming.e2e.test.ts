@@ -14,6 +14,7 @@ import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-su
 import { waitForCommittedState } from "./settle.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it.each([
@@ -44,7 +45,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByText("Earlier completed reply.").waitFor();
       const earlierAssistant = page.locator(".chat-group.assistant").first();
       const footerPresentation = (group: typeof earlierAssistant) =>
@@ -293,7 +294,7 @@ suite.define(() => {
     const gateway = await installMockGateway(page);
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       const prompt = "stream markdown through the GUI";
       await gateway.deferNext("chat.send");
@@ -347,7 +348,7 @@ suite.define(() => {
     const gateway = await installMockGateway(page);
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       await gateway.deferNext("chat.send");
       await page
@@ -429,7 +430,7 @@ suite.define(() => {
       const gateway = await installMockGateway(page);
 
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
         const prompt = "stream before terminal error";
         await page.locator(".agent-chat__composer-combobox textarea").fill(prompt);
@@ -580,7 +581,7 @@ suite.define(() => {
     const gateway = await installMockGateway(page);
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.deferNext("chat.send");
 
       const prompt = "hold this until the ack arrives";
@@ -744,7 +745,7 @@ suite.define(() => {
     const gateway = await installMockGateway(page);
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       const prompt = "use a tool then reconnect";
       await page.locator(".agent-chat__composer-combobox textarea").fill(prompt);
@@ -846,7 +847,7 @@ suite.define(() => {
     const gateway = await installMockGateway(page);
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       const connect = await gateway.waitForRequest("connect");
       expect(requireRecord(connect.params).caps).toContain("chat-only-assistant-text");
@@ -939,7 +940,7 @@ suite.define(() => {
     const gateway = await installMockGateway(page);
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.locator(".agent-chat__composer-combobox textarea").fill("prove prefix reuse");
       await page.getByRole("button", { name: "Send message" }).click();
       const sendRequest = await gateway.waitForRequest("chat.send");

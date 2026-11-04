@@ -19,6 +19,7 @@ import {
 
 const suite = createChatFlowE2eSuite();
 const sessionId = "durable-geometry-session";
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 function historyMessage(seq: number, text: string) {
   return {
@@ -70,7 +71,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByText("Restored message 18:", { exact: false }).waitFor({ timeout: 10_000 });
       const rowKeys = await page.locator(".chat-virtual-row").evaluateAll((rows) =>
         rows.flatMap((row) => {

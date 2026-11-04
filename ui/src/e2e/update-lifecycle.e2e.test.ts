@@ -5,7 +5,7 @@ import path from "node:path";
 import type { Page } from "playwright";
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { installMockGateway, controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 import { createUpdateRunFixture } from "../test-helpers/update-run.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
@@ -88,7 +88,11 @@ suite.define(() => {
             },
           });
 
-          expect((await page.goto(`${suite.server.baseUrl}chat`))?.status()).toBe(200);
+          expect(
+            (
+              await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"))
+            )?.status(),
+          ).toBe(200);
           await gateway.waitForRequest("chat.startup");
           await gateway.waitForRequest("update.status");
           await gateway.emitGatewayEvent("update.available", {
@@ -220,7 +224,11 @@ suite.define(() => {
             },
           });
 
-          expect((await page.goto(`${suite.server.baseUrl}chat`))?.status()).toBe(200);
+          expect(
+            (
+              await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"))
+            )?.status(),
+          ).toBe(200);
           await gateway.waitForRequest("chat.startup");
           await gateway.waitForRequest("update.status");
           await gateway.emitGatewayEvent("update.available", {

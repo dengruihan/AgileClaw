@@ -13,6 +13,7 @@ beforeEach(() => {
   }
 });
 const capture = process.env.OPENCLAW_CAPTURE_UI_PROOF === "1";
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it("preserves tool and approval activity received before the send ACK", async () => {
@@ -28,7 +29,7 @@ suite.define(() => {
       deferredMethods: ["exec.approval.list"],
     });
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       await gateway.waitForRequest("exec.approval.list");
       await gateway.deferNext("chat.send");
@@ -137,7 +138,7 @@ suite.define(() => {
       historyMessages: [],
     });
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       const working = page.locator('.chat-working-indicator[role="status"]');
       await expect.poll(() => working.textContent()).toContain("Naming worktree…");

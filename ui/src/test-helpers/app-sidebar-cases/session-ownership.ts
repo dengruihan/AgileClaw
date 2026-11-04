@@ -358,17 +358,19 @@ describe("AppSidebar session ownership", () => {
   it("owns People availability and fallback at the live session-owner roster", async () => {
     const gateway = createGatewayHarness({} as GatewayBrowserClient);
     gateway.publish({ hello: sessionSharingHello(true) });
-    const keys = ["main", "b1", "a1", "b2", "a2"].map((id) => `agent:main:${id}`);
+    // The agent anchor is an ordinary row covered by the sessions suite; this
+    // case stays on owner ordering, so it mounts without one.
+    const keys = ["b1", "a1", "b2", "a2"].map((id) => `agent:main:${id}`);
     const harness = createSessionsHarness("main", keys);
     const result = harness.sessions.state.result;
     if (!result) {
       throw new Error("expected session list");
     }
     for (const [index, id, label, updatedAt] of [
-      [1, "profile-bob", "Bob", 40],
-      [2, "profile-ada", "Ada", 40],
-      [3, "profile-bob", "Bob", 30],
-      [4, "profile-ada", "Ada", 20],
+      [0, "profile-bob", "Bob", 40],
+      [1, "profile-ada", "Ada", 40],
+      [2, "profile-bob", "Bob", 30],
+      [3, "profile-ada", "Ada", 20],
     ] as const) {
       Object.assign(result.sessions[index]!, {
         createdActor: { type: "human", id, label },
@@ -377,11 +379,11 @@ describe("AppSidebar session ownership", () => {
       });
     }
     result.owners = [{ type: "human", id: "profile-bob", label: "Bob" }];
-    const createdOrder = keys.slice(1);
+    const createdOrder = keys;
     // b1 and a1 tie at updatedAt 40; the ascending-key tie-break (mirroring
     // the gateway list order) puts a1 first.
-    const updatedOrder = [keys[2]!, keys[1]!, keys[3]!, keys[4]!];
-    const peopleOrder = [keys[2]!, keys[4]!, keys[1]!, keys[3]!];
+    const updatedOrder = [keys[1]!, keys[0]!, keys[2]!, keys[3]!];
+    const peopleOrder = [keys[1]!, keys[3]!, keys[0]!, keys[2]!];
 
     const { sidebar } = await mountSidebar(gateway.gateway, harness.sessions);
     harness.publishList({ result, agentId: "main" });

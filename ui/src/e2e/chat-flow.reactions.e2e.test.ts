@@ -3,6 +3,7 @@ import { createChatFlowE2eSuite, installMockGateway } from "./chat-flow.test-sup
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it("toggles reactions through both picker modes and receives a peer reaction live", async () => {
@@ -46,7 +47,7 @@ suite.define(() => {
           },
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const message = page.locator(".chat-group.user", {
         hasText: "Let's keep the launch checklist short.",
       });

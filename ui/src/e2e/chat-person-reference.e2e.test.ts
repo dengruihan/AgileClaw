@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import type { UsersListResult } from "../../../packages/gateway-protocol/src/schema/users.js";
 import { createDeferred } from "../../../test/helpers/promise.js";
-import { createControlUiMockSameOriginGatewayScript } from "../test-helpers/control-ui-e2e.ts";
+import {
+  createControlUiMockSameOriginGatewayScript,
+  controlUiSessionUrl,
+} from "../test-helpers/control-ui-e2e.ts";
 import {
   captureUiProof,
   chatSessionListResponse,
@@ -74,7 +77,7 @@ suite.define(() => {
           ],
         });
         try {
-          await page.goto(suite.server.baseUrl + "chat");
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const references = page.locator(".markdown-person-reference");
           await expect.poll(() => references.count()).toBe(2);
           await page.evaluate(async ({ scale, font }) => {
@@ -174,7 +177,7 @@ suite.define(() => {
             ]),
           },
         });
-        await page.goto(suite.server.baseUrl + "chat");
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const sidebarPerson = page.locator('[data-online-user-id="profile-ada"]');
         await sidebarPerson.hover();
         const card = page.locator(".person-activity-hovercard[role=dialog]");
@@ -257,7 +260,7 @@ suite.define(() => {
             historyMessages,
             methodResponses: { "users.list": directory },
           });
-          await page.goto(suite.server.baseUrl + "chat");
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await page.locator(".chat-bubble").filter({ hasText: text }).waitFor();
           const reference = page.locator(".markdown-person-reference");
           await reference.waitFor();
@@ -386,7 +389,7 @@ suite.define(() => {
         ],
         methodResponses: { "users.list": directory },
       });
-      await page.goto(suite.server.baseUrl + "chat");
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const reference = page.locator(".markdown-person-reference");
       const image = reference.locator("img");
       await expect
@@ -414,7 +417,7 @@ suite.define(() => {
         historyMessages,
         deferredMethods: ["users.list"],
       });
-      await page.goto(suite.server.baseUrl + "chat");
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const reference = page.locator(".markdown-person-reference");
       await reference.focus();
       await gateway.waitForRequest("users.list");
@@ -449,7 +452,7 @@ suite.define(() => {
           historyMessages,
           methodResponses: { "users.list": response },
         });
-        await page.goto(suite.server.baseUrl + "chat");
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const reference = page.locator(".markdown-person-reference");
         const avatar = reference.locator(".markdown-person-reference__avatar.is-fallback");
         await avatar.waitFor();

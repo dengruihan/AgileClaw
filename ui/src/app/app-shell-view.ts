@@ -51,10 +51,10 @@ import {
   renderFloatingUpdateCard,
 } from "./navigation-surface.ts";
 import { readGatewayOperatorAccess } from "./operator-access.ts";
-import { isDesktopPanelAvailable, isHomePanelAvailable } from "./panel-availability.ts";
+import { isDesktopPanelAvailable } from "./panel-availability.ts";
 import { NAV_WIDTH_MAX, NAV_WIDTH_MIN, normalizeCatalogOpenTarget } from "./settings.ts";
-import { renderCollapsedHomeToggle } from "./shell-assistant-toggles.ts";
 import type { ShellLayoutController } from "./shell-layout-traits.ts";
+import { resolveShellNavWidth } from "./shell-nav-width.ts";
 
 type SettingsSidebarHost = Parameters<typeof renderLazySettingsSidebar>[0];
 
@@ -131,7 +131,6 @@ export function renderApplicationShell(host: ShellViewHost) {
   const watchUpdateProgress = callbacks.watchUpdateProgress;
   const terminalAvailable = isTerminalAvailable(gatewaySnapshot, config.terminalEnabled ?? false);
   const desktopPanelAvailable = isDesktopPanelAvailable(gatewaySnapshot);
-  const homePanelAvailable = isHomePanelAvailable(context.gateway);
   const activeRoute = host.routeState.routeId ?? "chat";
   const sessionRoute = isSessionRouteId(activeRoute);
   // Session routes have an offline outbox, New Session keeps a local draft, and
@@ -203,6 +202,14 @@ export function renderApplicationShell(host: ShellViewHost) {
     host.lazyCustomElements.preload(SIDEBAR_ATTENTION_ELEMENT, { reportError: true });
   }
   const shellWidth = Math.max(globalThis.innerWidth || 0, NAV_WIDTH_MAX);
+  // A tablet splits its width between the rail and a narrow content column, so
+  // the rail gets a floor wide enough for session titles. The resizer reads the
+  // same resolved width, otherwise its handle would disagree with the grid.
+  const navWidth = resolveShellNavWidth({
+    navWidth: navigationSnapshot.navWidth,
+    viewportWidth: globalThis.innerWidth || 0,
+    coarsePointer: globalThis.matchMedia?.("(pointer: coarse)").matches ?? false,
+  });
   // A route query is navigation input, not an owner record. Let it override the
   // live selection only after the roster proves that agent exists.
   const requestedRouteAgentId = host.newSessionRouteAgentId();
@@ -356,12 +363,10 @@ export function renderApplicationShell(host: ShellViewHost) {
         navCollapsed ? "shell--nav-collapsed" : ""
       } ${mobileNavLayout ? "shell--mobile-nav" : ""} ${
         mergedChatChrome ? "shell--merged-chat-chrome" : ""
-      } ${navDrawerOpen ? "shell--nav-drawer-open" : ""} ${nativeEmbed ? "shell--embed" : ""} ${embedSettings ? "shell--embed-settings" : ""} ${settingsTakeover ? "shell--settings" : ""} ${
-        collapsedControls && homePanelAvailable ? "shell--home-control" : ""
-      } ${shellConnectionStatus ? "shell--connection-status" : ""} ${
+      } ${navDrawerOpen ? "shell--nav-drawer-open" : ""} ${nativeEmbed ? "shell--embed" : ""} ${embedSettings ? "shell--embed-settings" : ""} ${settingsTakeover ? "shell--settings" : ""} ${shellConnectionStatus ? "shell--connection-status" : ""} ${
         floatingSidebarAttentionVisible(floatingUpdateCard) ? "shell--floating-attention" : ""
       } ${host.navResizing ? "shell--nav-resizing" : ""}"
-      style=${`--shell-nav-expanded-width: ${navigationSnapshot.navWidth}px`}
+      style=${`--shell-nav-expanded-width: ${navWidth}px`}
       @theme-change=${(event: CustomEvent<ThemeModeChangeDetail>) => host.handleThemeChange(event)}
     >
       <a class="shell-skip-link" href="#control-ui-main" ?inert=${navDrawerOpen}>
@@ -439,7 +444,6 @@ export function renderApplicationShell(host: ShellViewHost) {
                     ${icons.search}
                   </button>
                 </openclaw-tooltip>
-                ${homePanelAvailable ? renderCollapsedHomeToggle() : nothing}
               </div>
             `
           : nothing
@@ -473,10 +477,10 @@ export function renderApplicationShell(host: ShellViewHost) {
               <resizable-divider
                 class="sidebar-resizer"
                 .label=${t("nav.resize")}
-                .splitRatio=${navigationSnapshot.navWidth / shellWidth}
+                .splitRatio=${navWidth / shellWidth}
                 .minRatio=${NAV_WIDTH_MIN / shellWidth}
                 .maxRatio=${NAV_WIDTH_MAX / shellWidth}
-                aria-valuetext=${`${navigationSnapshot.navWidth} pixels`}
+                aria-valuetext=${`${navWidth} pixels`}
                 title=${t("nav.resize")}
                 @resize-start=${() => {
                   host.navResizing = true;
@@ -553,11 +557,9 @@ export function renderApplicationShell(host: ShellViewHost) {
       ${sessionRoute ? nothing : renderShellDocks(context, navDrawerOpen, settingsTakeover || nativeEmbed, selectedAgentId, activeRoute)}
       <openclaw-assistant-panel
         ?inert=${navDrawerOpen}
-        .homeAvailable=${homePanelAvailable && !nativeEmbed}
         .pageSessionKey=${host.activeSessionKey}
         .pageAgentId=${selectedAgentId}
         .pageRouteId=${activeRoute}
-        .pageRouteFailed=${host.routeState.routeFailed === true}
       ></openclaw-assistant-panel>
       ${
         isOptionalElementDefined(host.execApprovalElement)

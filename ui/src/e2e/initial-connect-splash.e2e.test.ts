@@ -388,11 +388,12 @@ describeControlUiE2e("Control UI initial connect splash E2E", () => {
     expect(await loginGateMounted()).toBe(false);
   });
 
-  it("redirects before setup detection without loading the discarded workspace", async () => {
+  it("opens the draft landing without loading the discarded workspace", async () => {
     const page = await createPage();
     await page.emulateMedia({ colorScheme: "dark" });
+    // The draft landing renders in the standard shell, so only the discarded
+    // chat workspace graph must stay unloaded; the shell sidebar is expected.
     const workspaceModules = new Set([
-      "/src/components/app-sidebar.ts",
       "/src/components/browser/browser-panel.ts",
       "/src/components/assistant-panel-content.ts",
       "/src/pages/debug/debug-overlay-content.ts",
@@ -412,49 +413,41 @@ describeControlUiE2e("Control UI initial connect splash E2E", () => {
       deferredMethods: ["openclaw.setup.detect"],
       featureMethods: [
         "browser.request",
+        "chat.metadata",
+        "chat.send",
         "desktop.observe",
         "openclaw.chat",
         "openclaw.setup.detect",
         "openclaw.setup.prepare.start",
+        "projects.list",
+        "sessions.create",
+        "sessions.dispatch",
         "terminal.open",
       ],
+      methodResponses: {
+        "environments.list": { environments: [], profiles: [] },
+        "projects.list": { projects: [] },
+        "worktrees.branches": { branches: [], repositoryStatus: "git" },
+      },
       terminalEnabled: true,
     });
 
     await page.goto(server.baseUrl);
-    await page.waitForURL("**/settings/model-setup?firstRun=1");
-    expect(new URL(page.url()).pathname).toBe("/settings/model-setup");
-    await gateway.waitForRequest("openclaw.setup.detect");
-    expect(await gateway.getRequests("openclaw.setup.detect")).toHaveLength(1);
-    const loading = page.getByText("Checking this Gateway for available AI access…", {
-      exact: true,
-    });
-    await loading.waitFor();
-    const loadingSections = page.locator('.model-setup__loading[role="status"][aria-busy="true"]');
-    await loadingSections.locator(".model-setup__loading-sections").waitFor();
-    expect(await loadingSections.locator(".settings-section").count()).toBe(5);
-    expect(await loadingSections.locator(".model-setup__loading-row").count()).toBe(5);
-    expect(await loadingSections.locator("button, input, wa-dropdown").count()).toBe(0);
-    await page.evaluate(() => document.fonts.ready);
-    // Compare section layouts at rest, not the shell's translated entrance frame.
-    await waitForControlUiProofSurface(page.locator(".shell"), [loadingSections]);
-    const sectionTitles = [
-      "Use an installed agent",
-      "Found on this Gateway",
-      "Run a model locally",
-      "Set up and verify a model",
-      "Connect with an API key or token",
-    ];
-    const loadingSectionTops = await Promise.all(
-      sectionTitles.map(
-        async (name) =>
-          (await page.locator(".model-setup__loading-sections h2").getByText(name).boundingBox())!
-            .y,
-      ),
-    );
+    await page.waitForURL("**/new");
+    expect(new URL(page.url()).pathname).toBe("/new");
+    // Without a configured model the draft landing offers the current Models
+    // connection entry instead of the retired first-run setup page.
+    const connectGate = page.getByText("No AI provider configured", { exact: false }).first();
+    await connectGate.waitFor();
+    await page.getByRole("button", { name: "Connect an AI provider" }).waitFor();
+    // The draft landing never reaches for setup detection or a session row.
+    expect(await gateway.getRequests("openclaw.setup.detect")).toHaveLength(0);
+    expect(await gateway.getRequests("sessions.create")).toHaveLength(0);
     expect(await page.locator(".connect-splash").count()).toBe(0);
+    await page.evaluate(() => document.fonts.ready);
+    await waitForControlUiProofSurface(page.locator(".shell"), [connectGate]);
     expect([...requestedWorkspaceModules]).toEqual([]);
-    await captureProof(page, "06-first-run-routed-before-detection", [loadingSections]);
+    await captureProof(page, "06-draft-landing-without-workspace", [connectGate]);
     await page.setViewportSize({ height: 844, width: 390 });
     await expect
       .poll(() =>
@@ -463,65 +456,9 @@ describeControlUiE2e("Control UI initial connect splash E2E", () => {
         ),
       )
       .toBe(true);
-    await captureProof(page, "06b-first-run-routed-before-detection-mobile", [loadingSections]);
+    await captureProof(page, "06b-draft-landing-mobile", [connectGate]);
     await page.setViewportSize(viewport);
-
-    await gateway.resolveDeferred("openclaw.setup.detect", {
-      candidates: [
-        {
-          kind: "claude-cli",
-          brandId: "claude",
-          label: "Claude Code",
-          detail: "Installed, not signed in",
-          modelRef: "claude-cli/claude-opus-5",
-          recommended: false,
-          credentials: false,
-        },
-      ],
-      manualProviders: [{ id: "openai", brandId: "openai", label: "OpenAI" }],
-      authOptions: [
-        {
-          id: "openai-oauth",
-          brandId: "openai",
-          label: "OpenAI",
-          kind: "oauth",
-          featured: true,
-        },
-      ],
-      prepareOptions: [
-        { id: "ollama", brandId: "ollama", label: "Ollama" },
-        { id: "lmstudio", brandId: "lmstudio", label: "LM Studio" },
-      ],
-      setupComplete: false,
-      workspace: "/tmp/openclaw-e2e",
-    });
-    await loading.waitFor({ state: "detached" });
-    await page.getByRole("heading", { name: "Connect a verified AI model" }).waitFor();
-    // Restoring desktop starts a grid-row transition after the responsive Lit update.
-    await page.locator(".shell:not(.shell--mobile-nav)").waitFor();
-    await waitForControlUiProofSurface(page.locator(".shell"), [
-      page.getByRole("heading", { name: "Connect a verified AI model" }),
-    ]);
-    const readySectionTops = await Promise.all(
-      sectionTitles.map(
-        async (name) => (await page.getByRole("heading", { name }).boundingBox())!.y,
-      ),
-    );
-    expect(
-      Math.max(...readySectionTops.map((top, index) => Math.abs(top - loadingSectionTops[index]!))),
-    ).toBeLessThanOrEqual(13);
     expect([...requestedWorkspaceModules]).toEqual([]);
-    const setupHeading = page.getByRole("heading", { name: "Connect a verified AI model" });
-    await captureProof(page, "07-first-run-model-setup-ready", [setupHeading]);
-    await page.setViewportSize({ height: 844, width: 390 });
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-        ),
-      )
-      .toBe(true);
-    await captureProof(page, "07b-first-run-model-setup-ready-mobile", [setupHeading]);
   });
 
   it.each(["entrance", "ancestor entrance", "lazy content"] as const)(

@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import { CONTROL_UI_SESSION_PULL_REQUESTS_CHANGED_EVENT } from "../../../src/gateway/control-ui-contract.js";
 import { SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD } from "../lib/session-pull-requests.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { installMockGateway, controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 import { TEST_LINK_READER } from "../test-helpers/link-reader.ts";
 import {
   publicationMethods,
@@ -55,7 +55,7 @@ suite.define(() => {
           },
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await showPublicationBranch(gateway, "openclaw/review-request");
       await gateway.waitForRequest("sessions.github.options");
       const chip = page.locator(`a.markdown-github-item[href="${href}"]`);
@@ -97,7 +97,7 @@ suite.define(() => {
           "sessions.github.options": publicationOptions,
         },
       });
-      await page.goto(suite.server.baseUrl + "chat");
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const key = await waitForWatchedSessionKey(gateway);
       const repository = { owner: "synthetic", repo: "publication-demo" };
       const emit = (status: "ready" | "unavailable", state: "open" | "merged" = "open") =>
@@ -178,7 +178,7 @@ suite.define(() => {
           },
         },
       });
-      await page.goto(suite.server.baseUrl + "chat");
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const key = await waitForWatchedSessionKey(gateway);
       await page.getByText(failure.message, { exact: true }).waitFor();
       await gateway.emitGatewayEvent(CONTROL_UI_SESSION_PULL_REQUESTS_CHANGED_EVENT, {
@@ -400,7 +400,7 @@ suite.define(() => {
         });
         return key;
       };
-      await page.goto(suite.server.baseUrl + "chat");
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const key = await showBranch();
       const optionsRequest = await gateway.waitForRequest("sessions.github.options");
       const target = optionsRequest.params as { sessionKey: string; agentId?: string };

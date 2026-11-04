@@ -3,18 +3,19 @@
 import { copyFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { crc32 } from "node:zlib";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { type Browser, type BrowserContext, type Page, chromium } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createRequireRecord } from "../../../test/helpers/record.js";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
+  type ControlUiE2eServer,
   canRunPlaywrightChromium,
   controlUiE2eWaitTimeoutMs,
+  controlUiSessionUrl,
   installMockGateway,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
 
 const chromiumExecutablePath = resolvePlaywrightChromiumExecutablePath(chromium.executablePath());
@@ -202,7 +203,7 @@ describeControlUiE2e("Control UI #99213 large screenshot paste proof", () => {
         ],
       });
 
-      await recorded.page.goto(`${server.baseUrl}chat`);
+      await recorded.page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await recorded.page
         .getByText("The existing assistant reply is taller than the virtualizer estimate.")
         .waitFor({ timeout: 10_000 });

@@ -8,18 +8,18 @@ import {
   waitForControlUiGatewayReconnecting,
 } from "../test-helpers/control-ui-e2e-readiness.ts";
 import {
-  createChatFlowE2eSuite,
   controlUiSessionUrl,
+  createChatFlowE2eSuite,
   expectRequestCountStable,
   installMockGateway,
   requireRecord,
 } from "./chat-flow.test-support.ts";
 import {
+  countOutboxPayloads as payloadCount,
+  outboxComposerFor as composerFor,
+  outboxPaneFor as paneFor,
   outboxPayloadFile as file,
   outboxPayloadHistory as history,
-  outboxPaneFor as paneFor,
-  outboxComposerFor as composerFor,
-  countOutboxPayloads as payloadCount,
   readOutboxPayloadBytes as readPayloadBytes,
   stageOutboxAttachment as stage,
 } from "./chat-outbox-payloads.test-support.ts";
@@ -325,7 +325,9 @@ suite.define(() => {
         },
         inFlightRun: { runId: "mock-held-run", text: "Mock Gateway: keeping upgrade queue held." },
       });
-      await page.goto(`${suite.server.baseUrl}chat`, { waitUntil: "domcontentloaded" });
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"), {
+        waitUntil: "domcontentloaded",
+      });
       await expect
         .poll(() => composerFor(page).inputValue())
         .toBe("Mock Gateway: old durable draft");

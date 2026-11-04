@@ -10,6 +10,7 @@ import {
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it("reviews provider findings before explicit continuation and waits for the authoritative row", async () => {
@@ -40,7 +41,7 @@ suite.define(() => {
         },
         deferredMethods: ["sessions.providerReview.continue"],
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.fill("Clean up the selected project.");
       await page.getByRole("button", { name: "Send message", exact: true }).click();

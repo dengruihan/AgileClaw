@@ -1,7 +1,10 @@
 import path from "node:path";
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { defaultControlUiFeatureMethods } from "../test-helpers/control-ui-e2e.ts";
+import {
+  defaultControlUiFeatureMethods,
+  controlUiSessionUrl,
+} from "../test-helpers/control-ui-e2e.ts";
 import {
   createChatFlowE2eSuite,
   expectRequestCountStable,
@@ -37,7 +40,9 @@ suite.define(() => {
           ],
           methodResponses: { "users.mentionable": { users: people, truncated: false } },
         });
-        await page.goto(suite.server.baseUrl + "chat", { waitUntil: "domcontentloaded" });
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"), {
+          waitUntil: "domcontentloaded",
+        });
         const input = page.locator(".agent-chat__composer-combobox textarea");
         const menu = page.getByRole("listbox", { name: "Mention a person" });
         await input.fill("@h");

@@ -5,6 +5,7 @@ import { beforeEach, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
+  controlUiSessionUrl,
   installMockGateway,
   waitForControlUiSettingsTakeover,
 } from "../test-helpers/control-ui-e2e.ts";
@@ -437,7 +438,7 @@ suite.define(() => {
         ],
         operatorScopes: LIMITED_SCOPES,
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       const item = await openLimitedAccessItem(await openInbox(page));
       await item
@@ -464,7 +465,7 @@ suite.define(() => {
         "device.scopes.requestUpgrade": { requestId: "upgrade-insecure" },
       },
     });
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
     // Pure-JS Ed25519 keeps signed scope-upgrade requests available when
     // WebCrypto lacks subtle crypto (for example, an insecure LAN origin).
@@ -487,7 +488,7 @@ suite.define(() => {
       });
     });
     const gateway = await installMockGateway(page, { operatorScopes: LIMITED_SCOPES });
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
     // Without a secure RNG the client cannot mint the device identity that
     // binds an upgrade request, so Inbox must keep manual repair guidance.
@@ -504,7 +505,7 @@ suite.define(() => {
     const context = await createContext();
     const page = await context.newPage();
     const gateway = await installMockGateway(page, { operatorScopes: FULL_SCOPES });
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await page.locator("openclaw-app-shell").waitFor();
 
     expect(await page.locator(".sidebar-issues-button__count").count()).toBe(0);

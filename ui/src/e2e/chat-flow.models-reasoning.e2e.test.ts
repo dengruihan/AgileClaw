@@ -7,8 +7,8 @@ import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-
 import { revealChatModelOption } from "../test-helpers/select-picker-e2e.ts";
 import {
   chatSessionListResponse,
-  createChatFlowE2eSuite,
   controlUiSessionUrl,
+  createChatFlowE2eSuite,
   installMockGateway,
   requireRecord,
 } from "./chat-flow.test-support.ts";
@@ -116,7 +116,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
 
       const command = "/model openai/gpt-5.6-luna --runtime codex continue with the selected model";
       await page.locator(".agent-chat__composer-combobox textarea").fill(command);
@@ -150,7 +150,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const main = page.getByRole("main");
       await main.locator(".chat-composer-model-control").evaluate((element) => {
         Object.assign((element as HTMLElement).style, {

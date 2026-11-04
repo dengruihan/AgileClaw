@@ -1,9 +1,10 @@
 import type { RouteLoaderOptions, RouteLocation } from "@openclaw/uirouter";
-import { notFound } from "@openclaw/uirouter";
-import { INTERNAL_SESSION_PATH_PARAM } from "../../app-route-paths.ts";
+import { notFound, redirect } from "@openclaw/uirouter";
+import { INTERNAL_SESSION_PATH_PARAM, pathForRoute } from "../../app-route-paths.ts";
 import { pathForSession } from "../../app-session-path-builder.ts";
 import { sessionRefFromPath, type SessionPathTarget } from "../../app-session-route-paths.ts";
 import type { ApplicationContext as FullApplicationContext } from "../../app/context.ts";
+import { isNewSessionLanding } from "../../app/default-landing.ts";
 import { waitForGatewayClient } from "../../app/gateway-readiness.ts";
 import type { BoardFace } from "../../lib/board/settings.ts";
 import {
@@ -637,6 +638,18 @@ export async function loadSessionPage(
   face: BoardFace,
   { location, signal, cause, deps }: RouteLoaderOptions,
 ) {
+  if (
+    face === "chat" &&
+    location.pathname === pathForRoute("chat", context.basePath) &&
+    isNewSessionLanding(location, context.basePath)
+  ) {
+    const agent = new URLSearchParams(location.search).get("agent")?.trim() ?? "";
+    return redirect({
+      pathname: pathForRoute("new-session", context.basePath),
+      search: agent ? `?agent=${encodeURIComponent(agent)}` : "",
+      hash: "",
+    });
+  }
   const current =
     cause === "revalidate"
       ? context.router

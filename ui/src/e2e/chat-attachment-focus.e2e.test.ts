@@ -1,6 +1,6 @@
 import path from "node:path";
 import { expect, it } from "vitest";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { installMockGateway, controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 import {
   attachmentBrowserFixtures,
   installAttachmentBrowserIdentity,
@@ -25,7 +25,7 @@ suite.define(() => {
           // Keep the native chooser subscription alive before opening: raw keyboard
           // input must not race Playwright enabling interception on its first listener.
           page.on("filechooser", () => {});
-          await page.goto(suite.server.baseUrl + "chat");
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const trigger = page.getByRole("button", { name: "Add attachment", exact: true });
           const dropdown = page.locator("wa-dropdown:has(.agent-chat__attach-menu-option)");
           // Pause only the real CSS show animation. Native key input and the actual

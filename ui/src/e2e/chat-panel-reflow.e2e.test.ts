@@ -1,7 +1,7 @@
 import path from "node:path";
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import {
   activateChatHeaderPanelAction,
   openChatSidePanelType,
@@ -114,7 +114,9 @@ suite.define(() => {
         },
       });
 
-      const response = await page.goto(`${suite.server.baseUrl}chat`);
+      const response = await page.goto(
+        controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"),
+      );
       expect(response?.status()).toBe(200);
       await expect.poll(() => page.locator(".chat-group").count()).toBe(historyMessageCount);
       await page.locator(".chat-thread").evaluate((element) => {

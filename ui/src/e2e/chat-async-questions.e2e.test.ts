@@ -3,8 +3,8 @@ import { expect as expectBrowser } from "playwright/test";
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
-  reconnectMockGateway,
   defaultControlUiFeatureMethods,
+  reconnectMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
 import { readStoredQuestionDrafts } from "./chat-async-questions.test-support.ts";
 import {
@@ -34,7 +34,7 @@ suite.define(() => {
   it("keeps an admitted optional answer with its original outbox owner after reconnect", async () => {
     await suite.withPage(createControlUiE2eContextOptions(), async ({ page }) => {
       const gateway = await installMockGateway(page, { historyMessages: [questionMessage] });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const card = page.locator(".agent-chat__question-dock openclaw-chat-question-panel");
       const answer = "The customer support team";
       await card.getByRole("textbox", { name: `Your own answer for ${title}` }).fill(answer);
@@ -118,7 +118,7 @@ suite.define(() => {
             ...(recovery ? [] : [ownFinal]),
           ];
           const gateway = await installMockGateway(page, { historyMessages: history });
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const dock = page.locator(".agent-chat__question-dock");
           await expectBrowser(dock).toBeVisible();
           const draft = dock.getByRole("textbox", { name: `Your own answer for ${title}` });
@@ -189,7 +189,7 @@ suite.define(() => {
       // remembered dismissal or the first tab's reopened draft.
       await suite.withPage(createControlUiE2eContextOptions(), async ({ page }) => {
         const gateway = await installMockGateway(page, { historyMessages: completedHistory });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const dock = page.locator(".agent-chat__question-dock");
         const summary = page.locator(".chat-question-summary").filter({ hasText: title });
         await expectBrowser(
@@ -222,7 +222,7 @@ suite.define(() => {
       };
       const history = [prompt];
       const gateway = await installMockGateway(page, { historyMessages: history });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const dock = page.locator(".agent-chat__question-dock");
       const draft = dock.getByRole("textbox", { name: `Your own answer for ${title}` });
       await draft.fill("New contributors and maintainers");
@@ -288,7 +288,7 @@ suite.define(() => {
   it("dismisses durably with Undo and reopens after reload without resolving or stopping work", async () => {
     await suite.withPage(createControlUiE2eContextOptions(), async ({ page }) => {
       const gateway = await installMockGateway(page, { historyMessages: [questionMessage] });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const dock = page.locator(".agent-chat__question-dock");
       const draft = dock.getByRole("textbox", { name: `Your own answer for ${title}` });
       await draft.fill("My project team");
@@ -331,7 +331,7 @@ suite.define(() => {
         { viewport: { width: 1440, height: 1200 }, colorScheme: theme, reducedMotion: "reduce" },
         async ({ page }) => {
           await installMockGateway(page, { historyMessages: [questionMessage] });
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const panel = page.locator(".agent-chat__question-dock .chat-question-panel");
           const composer = page.locator(".agent-chat__input");
           await expectBrowser(panel).toBeVisible();
@@ -591,7 +591,7 @@ suite.define(() => {
       methodResponses: { "question.list": { questions: [] } },
     });
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.fill("Continue researching while I decide.");
       const card = page.locator(".agent-chat__question-dock openclaw-chat-question-panel");
@@ -698,7 +698,7 @@ suite.define(() => {
       const artifactDir = createControlUiE2eArtifactDir(`async-question-delivery-${confirmation}`);
       const answer = confirmation === "discard" ? "Engineers" : "The customer support team";
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const card = page.locator(".agent-chat__question-dock openclaw-chat-question-panel");
         const custom = card.getByRole("textbox", { name: `Your own answer for ${title}` });
         if (confirmation !== "discard") {
@@ -766,7 +766,7 @@ suite.define(() => {
               sessionStorage.setItem(key, JSON.stringify(stored));
             }
           });
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await failedSend.waitFor();
           expect((await readOutboxQueue(page))[0]?.asyncQuestionItemId).toBeUndefined();
         } else {
@@ -980,7 +980,7 @@ suite.define(() => {
       ],
     });
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const card = page.locator(".agent-chat__question-dock openclaw-chat-question-panel");
       await card.getByRole("radio", { name: /Engineers/ }).waitFor();
       await gateway.setOnline(false);
@@ -1003,7 +1003,7 @@ suite.define(() => {
       historyMessages: [{ ...questionMessage, openclawAsyncDelivery: undefined }],
     });
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.locator(".chat-text").getByText(title).waitFor();
       const artifactDir = createControlUiE2eArtifactDir("async-question-plain-text");
       await page.screenshot({

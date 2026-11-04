@@ -117,7 +117,7 @@ suite.define(() => {
         .getByRole("button", { name: "Compact", exact: true })
         .click();
       await page.keyboard.press("Escape");
-      await page.locator(".nav-item--home").click();
+      await page.locator('[data-session-key="agent:main:main"] a').click();
       await workboard.hover();
       await capture("after-workboard");
       const finalWidths = await widths();

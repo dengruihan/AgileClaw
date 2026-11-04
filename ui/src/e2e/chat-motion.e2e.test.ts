@@ -8,6 +8,7 @@ import {
   requireRecord,
   requireString,
   waitForChatScrollIdle,
+  controlUiSessionUrl,
 } from "./chat-flow.test-support.ts";
 const suite = createChatFlowE2eSuite();
 const artifactDir = process.env.OPENCLAW_UI_E2E_ARTIFACT_DIR;
@@ -180,7 +181,7 @@ suite.define(() => {
         })),
       });
       try {
-        await page.goto(suite.server.baseUrl + "chat");
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.getByText("Existing message 39", { exact: false }).waitFor();
         await waitForChatScrollIdle(page);
         expect(await page.evaluate(() => window.openclawMotionArrivals)).toHaveLength(0);

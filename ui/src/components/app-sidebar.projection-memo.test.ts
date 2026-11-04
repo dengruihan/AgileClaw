@@ -108,7 +108,6 @@ async function expectRowRefresh(sidebar: Sidebar, change: () => void) {
 
 describe("sidebar projection memo", () => {
   it("shares the projection across unrelated updates and refreshes route, list, and filter inputs", async () => {
-    const projectHome = vi.spyOn(sidebarAgentSessionRows, "projectSidebarHomeSession");
     const rows = [
       session("main", { lastMessagePreview: "Home before" }),
       session("first", { updatedAt: 2, createdAt: 3 }),
@@ -120,8 +119,6 @@ describe("sidebar projection memo", () => {
     ];
     const { sidebar, sessions, row, publish } = await mount(rows);
     const sections = vi.spyOn(SidebarSessionProjection.prototype, "project");
-    expect(projectHome).toHaveBeenCalled();
-    projectHome.mockClear();
     projectRows.mockClear();
     for (const change of [
       () => {
@@ -144,7 +141,6 @@ describe("sidebar projection memo", () => {
     }
     expect(projectRows).not.toHaveBeenCalled();
     expect(sections).not.toHaveBeenCalled();
-    expect(projectHome).not.toHaveBeenCalled();
 
     await expectRowRefresh(sidebar, () =>
       publish([
@@ -154,8 +150,7 @@ describe("sidebar projection memo", () => {
       ]),
     );
     expect(row(key("first"))?.textContent).toContain("Renamed first");
-    expect(projectHome).toHaveBeenCalled();
-    expect(projectHome.mock.results.at(-1)?.value.lastMessagePreview).toBe("Home after");
+    expect(sidebar.findSidebarSessionByKey(key("main"))?.lastMessagePreview).toBe("Home after");
     await expectRowRefresh(sidebar, () => {
       sidebar.activeRouteId = "chat";
       sidebar.sessionKey = key("first");

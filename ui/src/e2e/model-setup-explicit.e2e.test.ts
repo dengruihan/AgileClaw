@@ -44,93 +44,77 @@ const detection = {
 };
 
 suite.define(() => {
-  it.each(["", "?firstRun=1", "?firstRun=explicit"])(
-    "waits for an explicit choice on %s and preserves provider failure details",
-    async (query) => {
-      await suite.withPage(
-        {
-          locale: "en-US",
-          serviceWorkers: "block",
-          viewport: { width: 1080, height: 850 },
-          recordVideo: captureUiProof
-            ? { dir: suite.artifactDir, size: { width: 1080, height: 850 } }
-            : undefined,
-        },
-        async ({ page }) => {
-          const installGateway = query ? installMockGateway : installSetupGateway;
-          const gateway = await installGateway(page, {
-            featureMethods: [
-              "openclaw.setup.detect",
-              "openclaw.setup.activate.start",
-              "openclaw.setup.auth.start",
-              "wizard.next",
-            ],
-            methodResponses: {
-              "openclaw.setup.detect": detection,
-              "openclaw.setup.activate.start": {
-                done: true,
-                status: "error",
-                error: "HTTP 401: review this provider credential and try again.",
-                activationRejection: { disposition: "rejected-before-promotion", status: "auth" },
-              },
-            },
-          });
-          if (query) {
-            await page.goto(suite.server.baseUrl + "settings/model-setup" + query);
-          } else {
-            await openModelSetup(page, suite.server.baseUrl);
-          }
-          await page.getByRole("heading", { name: "Found on this Gateway" }).waitFor();
-          const choices = page.locator("[data-candidate-kind]");
-          expect(await choices.first().textContent()).toContain("Anthropic");
-          expect(await page.getByLabel("Show existing native conversations").isChecked()).toBe(
-            false,
-          );
-          expect(await page.locator("openclaw-model-setup-page [data-selected]").count()).toBe(0);
-          await page.getByRole("button", { name: "Check again", exact: true }).click();
-          await gateway.waitForRequest("openclaw.setup.detect", { after: 1 });
-          await page.getByRole("heading", { name: "Found on this Gateway" }).waitFor();
-          for (const method of [
+  it("waits for an explicit choice and preserves provider failure details", async () => {
+    await suite.withPage(
+      {
+        locale: "en-US",
+        serviceWorkers: "block",
+        viewport: { width: 1080, height: 850 },
+        recordVideo: captureUiProof
+          ? { dir: suite.artifactDir, size: { width: 1080, height: 850 } }
+          : undefined,
+      },
+      async ({ page }) => {
+        const gateway = await installSetupGateway(page, {
+          featureMethods: [
+            "openclaw.setup.detect",
             "openclaw.setup.activate.start",
             "openclaw.setup.auth.start",
-            "plugins.install",
-            "openclaw.setup.verify",
-            "config.set",
-            "config.patch",
-            "config.apply",
-          ]) {
-            expect(await gateway.getRequests(method)).toHaveLength(0);
-          }
-          if (captureUiProof) {
-            await page.screenshot({
-              path: path.join(
-                suite.artifactDir,
-                query ? "first-run-choices.png" : "settings-choices.png",
-              ),
-            });
-          }
-          await page.locator('[data-candidate-kind="anthropic-api-key"] button').click();
-          const activated = await gateway.waitForRequest("openclaw.setup.activate.start");
-          expect(activated.params).toMatchObject({
-            kind: "anthropic-api-key",
-            nativeSessionCatalogsEnabled: false,
+            "wizard.next",
+          ],
+          methodResponses: {
+            "openclaw.setup.detect": detection,
+            "openclaw.setup.activate.start": {
+              done: true,
+              status: "error",
+              error: "HTTP 401: review this provider credential and try again.",
+              activationRejection: { disposition: "rejected-before-promotion", status: "auth" },
+            },
+          },
+        });
+        await openModelSetup(page, suite.server.baseUrl);
+        await page.getByRole("heading", { name: "Found on this Gateway" }).waitFor();
+        const choices = page.locator("[data-candidate-kind]");
+        expect(await choices.first().textContent()).toContain("Anthropic");
+        expect(await page.getByLabel("Show existing native conversations").isChecked()).toBe(false);
+        expect(await page.locator("openclaw-model-setup-page [data-selected]").count()).toBe(0);
+        await page.getByRole("button", { name: "Check again", exact: true }).click();
+        await gateway.waitForRequest("openclaw.setup.detect", { after: 1 });
+        await page.getByRole("heading", { name: "Found on this Gateway" }).waitFor();
+        for (const method of [
+          "openclaw.setup.activate.start",
+          "openclaw.setup.auth.start",
+          "plugins.install",
+          "openclaw.setup.verify",
+          "config.set",
+          "config.patch",
+          "config.apply",
+        ]) {
+          expect(await gateway.getRequests(method)).toHaveLength(0);
+        }
+        if (captureUiProof) {
+          await page.screenshot({
+            path: path.join(suite.artifactDir, "settings-choices.png"),
           });
-          await page
-            .getByText("HTTP 401: review this provider credential and try again.", { exact: false })
-            .waitFor();
-          expect(await gateway.getRequests("openclaw.setup.activate.start")).toHaveLength(1);
-          if (captureUiProof) {
-            await page.screenshot({
-              path: path.join(
-                suite.artifactDir,
-                query ? "first-run-error.png" : "settings-error.png",
-              ),
-            });
-          }
-        },
-      );
-    },
-  );
+        }
+        await page.locator('[data-candidate-kind="anthropic-api-key"] button').click();
+        const activated = await gateway.waitForRequest("openclaw.setup.activate.start");
+        expect(activated.params).toMatchObject({
+          kind: "anthropic-api-key",
+          nativeSessionCatalogsEnabled: false,
+        });
+        await page
+          .getByText("HTTP 401: review this provider credential and try again.", { exact: false })
+          .waitFor();
+        expect(await gateway.getRequests("openclaw.setup.activate.start")).toHaveLength(1);
+        if (captureUiProof) {
+          await page.screenshot({
+            path: path.join(suite.artifactDir, "settings-error.png"),
+          });
+        }
+      },
+    );
+  });
 
   it("starts managed provider installation only after a click and waits at capability consent", async () => {
     await suite.withPage(
@@ -166,7 +150,7 @@ suite.define(() => {
             "wizard.cancel": { status: "cancelled" },
           },
         });
-        await page.goto(suite.server.baseUrl + "settings/model-setup?firstRun=1");
+        await openModelSetup(page, suite.server.baseUrl);
         const install = page
           .locator('[data-auth-choice="meta-api-key"]')
           .getByRole("button", { name: "Review & install" });
@@ -184,10 +168,10 @@ suite.define(() => {
           authChoice: "meta-api-key",
           nativeSessionCatalogsEnabled: true,
         });
-        const dialog = page.locator("openclaw-modal-dialog");
-        await dialog
-          .getByText("Allow this provider plugin to call its inference endpoint?", { exact: true })
-          .waitFor();
+        const dialog = page
+          .locator("openclaw-modal-dialog")
+          .filter({ hasText: "Allow this provider plugin to call its inference endpoint?" });
+        await dialog.waitFor();
         const next = await gateway.getRequests("wizard.next");
         expect(next).toHaveLength(1);
         expect(next[0]!.params).not.toHaveProperty("answer");
@@ -199,123 +183,6 @@ suite.define(() => {
         await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
         await gateway.waitForRequest("wizard.cancel");
         expect(await gateway.getRequests("openclaw.setup.auth.start")).toHaveLength(1);
-      },
-    );
-  });
-
-  it("continues Meta capability review into its auth form, then relaunches without replay", async () => {
-    await suite.withPage(
-      {
-        locale: "en-US",
-        serviceWorkers: "block",
-        viewport: { width: 1080, height: 850 },
-        recordVideo: captureUiProof
-          ? { dir: suite.artifactDir, size: { width: 1080, height: 850 } }
-          : undefined,
-      },
-      async ({ page, context }) => {
-        const modelRef = "meta/fixture-model";
-        const gateway = await installSetupGateway(page, {
-          featureMethods: [
-            "openclaw.setup.detect",
-            "openclaw.setup.auth.start",
-            "wizard.next",
-            "wizard.cancel",
-            "openclaw.setup.verify",
-          ],
-          methodResponses: {
-            "openclaw.setup.detect": detection,
-            "openclaw.setup.auth.start": { done: false, status: "running" },
-            "wizard.next": {
-              done: false,
-              status: "running",
-              step: {
-                id: "meta-capabilities",
-                type: "confirm",
-                message: "Accept Meta provider capabilities?",
-                initialValue: false,
-              },
-            },
-          },
-        });
-        await openModelSetup(page, suite.server.baseUrl);
-        await page.locator('[data-auth-choice="meta-api-key"] button').click();
-        const start = await gateway.waitForRequest("openclaw.setup.auth.start");
-        expect(start.params).toMatchObject({
-          agentId: "main",
-          authChoice: "meta-api-key",
-          nativeSessionCatalogsEnabled: false,
-        });
-        const dialog = page.locator("openclaw-modal-dialog");
-        await dialog.getByText("Accept Meta provider capabilities?", { exact: true }).waitFor();
-        if (captureUiProof) {
-          await page.screenshot({
-            path: path.join(suite.artifactDir, "meta-capability-review.png"),
-          });
-        }
-        await gateway.setMethodResponse("wizard.next", {
-          done: false,
-          status: "running",
-          step: {
-            id: "meta-api-key",
-            type: "text",
-            message: "Meta API key",
-            sensitive: true,
-          },
-        });
-        await dialog.getByRole("button", { name: "Yes", exact: true }).click();
-        const key = dialog.getByLabel("Meta API key", { exact: true });
-        await key.waitFor();
-        if (captureUiProof) {
-          await page.screenshot({ path: path.join(suite.artifactDir, "meta-auth-form.png") });
-        }
-        await key.fill("synthetic-meta-api-key");
-        await gateway.setMethodResponse("wizard.next", {
-          done: true,
-          status: "done",
-          modelActivation: { modelRef },
-        });
-        await dialog.getByRole("button", { name: "Submit", exact: true }).click();
-        await page.locator(".model-setup-success").waitFor();
-        const nextRequests = await gateway.getRequests("wizard.next");
-        expect(nextRequests.map(({ params }) => params)).toEqual([
-          { sessionId: expect.any(String) },
-          { sessionId: expect.any(String), answer: { stepId: "meta-capabilities", value: true } },
-          {
-            sessionId: expect.any(String),
-            answer: { stepId: "meta-api-key", value: "synthetic-meta-api-key" },
-          },
-        ]);
-        if (captureUiProof) {
-          await page.screenshot({ path: path.join(suite.artifactDir, "meta-selected.png") });
-        }
-        const relaunched = await context.newPage();
-        const afterRelaunch = await installMockGateway(relaunched, {
-          featureMethods: [
-            "openclaw.setup.detect",
-            "openclaw.setup.auth.start",
-            "openclaw.setup.activate.start",
-            "openclaw.setup.verify",
-          ],
-          methodResponses: {
-            "openclaw.setup.detect": {
-              ...detection,
-              configuredModel: modelRef,
-              setupComplete: true,
-              nativeSessionCatalogPreferenceRequired: false,
-            },
-          },
-        });
-        await relaunched.goto(suite.server.baseUrl + "settings/model-setup?firstRun=explicit");
-        await relaunched.locator(".model-setup__current").waitFor();
-        expect(await afterRelaunch.getRequests("openclaw.setup.auth.start")).toHaveLength(0);
-        expect(await afterRelaunch.getRequests("openclaw.setup.activate.start")).toHaveLength(0);
-        expect(await afterRelaunch.getRequests("openclaw.setup.verify")).toHaveLength(0);
-        if (captureUiProof) {
-          await relaunched.screenshot({
-            path: path.join(suite.artifactDir, "meta-relaunched.png"),
-          });
-        }
       },
     );
   });

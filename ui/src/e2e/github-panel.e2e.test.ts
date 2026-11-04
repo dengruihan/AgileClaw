@@ -1,20 +1,21 @@
 import path from "node:path";
-import { chromium, type Browser, type Page } from "playwright";
+import { type Browser, type Page, chromium } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   buildControlUiCspHeader,
   computeInlineScriptHashes,
 } from "../../../src/gateway/control-ui-csp.js";
 import type {
-  ControlUiLinkReaderDocument,
   ControlUiLinkReaderDescriptor,
+  ControlUiLinkReaderDocument,
 } from "../../../src/shared/control-ui-link-reader.js";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
+  type ControlUiE2eServer,
+  controlUiSessionUrl,
   installMockGateway,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
 
 const imageUrl = "https://user-images.githubusercontent.com/1/github-sidebar-proof.png";
@@ -267,7 +268,7 @@ describe("GitHub side panel", () => {
           },
         },
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       const chat = page
         .locator(".chat-text")
         .filter({ hasText: "without losing this conversation" });
@@ -451,7 +452,7 @@ describe("GitHub side panel", () => {
         ],
         methodResponses: { "github.detail": hostile },
       });
-      await page.goto(server.baseUrl + "chat");
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await page.getByRole("link", { name: "Image security fixture", exact: true }).click();
       const panel = page.locator("openclaw-link-reader-panel");
       await panel.getByRole("heading", { name: issue.title, exact: true }).waitFor();

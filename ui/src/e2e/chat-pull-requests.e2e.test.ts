@@ -1,14 +1,15 @@
 // Control UI tests cover session pull request chips above the chat composer.
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium, type Browser, type BrowserContext } from "playwright";
-import { beforeEach, afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { type Browser, type BrowserContext, chromium } from "playwright";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CONTROL_UI_SESSION_PULL_REQUESTS_CHANGED_EVENT } from "../../../src/gateway/control-ui-contract.js";
 import { SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD } from "../lib/session-pull-requests.ts";
 import { finishElementAnimations } from "../test-helpers/animations.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
+  type ControlUiE2eServer,
   canRunPlaywrightChromium,
   controlUiBundledSettingsStorageKey,
   controlUiSessionUrl,
@@ -16,7 +17,6 @@ import {
   navigateToControlUiSession,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
 import {
   sharedPublisher,
@@ -105,7 +105,7 @@ describeControlUiE2e("session pull request chips", () => {
         [SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD]: { subscribed: true },
       },
     });
-    await page.goto(`${server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
     const watchedKey = await waitForWatchedSessionKey(gateway);
     if (captureUiProof) {
       await page.screenshot({ path: path.join(stackingProofDir, "before-pr-discovery.png") });
@@ -260,7 +260,7 @@ describeControlUiE2e("session pull request chips", () => {
         historyMessages: [{ role: "assistant", content: "The changes are ready to inspect." }],
         methodResponses: { [SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD]: { subscribed: true } },
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       const watchedKey = await waitForWatchedSessionKey(gateway);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.dataset.themeMode))
@@ -336,7 +336,7 @@ describeControlUiE2e("session pull request chips", () => {
           [SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD]: { subscribed: true },
         },
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       const watchedKey = await waitForWatchedSessionKey(gateway);
       await gateway.emitGatewayEvent(CONTROL_UI_SESSION_PULL_REQUESTS_CHANGED_EVENT, {
         sessions: {
@@ -423,7 +423,7 @@ describeControlUiE2e("session pull request chips", () => {
         [SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD]: { subscribed: true },
       },
     });
-    await page.goto(`${server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
     const watchedKey = await waitForWatchedSessionKey(gateway);
     await gateway.emitGatewayEvent(CONTROL_UI_SESSION_PULL_REQUESTS_CHANGED_EVENT, {
       sessions: {
@@ -654,7 +654,7 @@ describeControlUiE2e("session pull request chips", () => {
         },
       },
     });
-    await page.goto(`${server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
     const watchedKey = await waitForWatchedSessionKey(gateway);
     await gateway.emitGatewayEvent(CONTROL_UI_SESSION_PULL_REQUESTS_CHANGED_EVENT, {
       sessions: {
@@ -723,7 +723,7 @@ describeControlUiE2e("session pull request chips", () => {
         "sessions.github.publish": terminalFailure,
       },
     });
-    await page.goto(`${server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
     const watchedKey = await waitForWatchedSessionKey(gateway);
     await gateway.emitGatewayEvent(CONTROL_UI_SESSION_PULL_REQUESTS_CHANGED_EVENT, {
       sessions: {
@@ -818,7 +818,7 @@ describeControlUiE2e("session pull request chips", () => {
         },
       },
     });
-    await page.goto(`${server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
     const watchedKey = await waitForWatchedSessionKey(gateway);
     await gateway.emitGatewayEvent(CONTROL_UI_SESSION_PULL_REQUESTS_CHANGED_EVENT, {
       sessions: {

@@ -456,7 +456,7 @@ describe("AgileClaw shell route session commits", () => {
     });
   });
 
-  it("defers an unscoped not-found fallback until agent defaults are connected", () => {
+  it("defers an unscoped not-found draft fallback until agent defaults are connected", () => {
     const replace = vi.fn();
     const snapshot = { phase: "connecting", hello: null };
     const shell = document.createElement(
@@ -484,7 +484,9 @@ describe("AgileClaw shell route session commits", () => {
 
     snapshot.phase = "connected";
     expect(shell.recoverNotFoundRoute()).toBe(true);
-    expect(replace).toHaveBeenCalledWith("chat", { pathname: "/chat/research" });
+    // The unresolved route becomes a draft for the resolved default agent; the
+    // agent's plain route is not guessed from a legacy anchor key.
+    expect(replace).toHaveBeenCalledWith("new-session", { search: "?agent=research" });
   });
 
   it("adopts a resolved chat session after path navigation from Cron", () => {

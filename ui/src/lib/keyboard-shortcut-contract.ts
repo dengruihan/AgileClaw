@@ -23,7 +23,6 @@ export const KEYBOARD_SHORTCUT_COMBOS = {
   newline: { modifiers: ["shift"], key: "Enter" },
   transcriptSearch: { modifiers: ["mod"], key: "f", platformSpecific: true },
   terminalPanel: { modifiers: ["ctrl"], key: "Backquote" },
-  homePanel: { modifiers: ["mod", "shift"], key: "h" },
   workspaceFiles: { modifiers: ["mod", "shift"], key: "b" },
   sideChat: { modifiers: ["mod", "shift"], key: "s" },
   browserPanel: { modifiers: ["mod", "alt", "shift"], key: "u" },

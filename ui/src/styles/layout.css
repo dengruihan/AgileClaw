@@ -180,10 +180,6 @@
   stroke-linejoin: round;
 }
 
-.shell.shell--home-control {
-  --shell-controls-width: 140px;
-}
-
 .shell--mobile-nav .shell-chrome-controls {
   display: none;
 }
@@ -3488,10 +3484,6 @@ a:is(
   .sidebar-nav__head-action {
     opacity: 1;
   }
-
-  .sidebar-home-session-states {
-    transform: translateX(-25px);
-  }
 }
 
 .sidebar-nav__head-action:hover,
@@ -3510,26 +3502,6 @@ a:is(
   stroke-linejoin: round;
 }
 
-/* Home keeps run state plus outbox/draft counts together at the row edge. */
-.nav-item__state {
-  flex: none;
-  margin-left: auto;
-}
-
-.sidebar-home-session-states {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: transform var(--duration-fast) ease;
-}
-
-/* The Pages editor shares Home's row. Move every trailing state together so
-   its hover/focus hitbox never covers progress, warning, or draft status. */
-.sidebar-nav:hover .sidebar-home-session-states,
-.sidebar-nav:focus-within .sidebar-home-session-states {
-  transform: translateX(-25px);
-}
-
 /* Zone 5: product chrome in one slim footer bar. The shell footer's top
    border is the only divider (and the pet's ledge); no second line here. */
 .sidebar-footer-bar {
@@ -3543,10 +3515,6 @@ a:is(
 
 .sidebar-footer-bar--one-action {
   padding-inline-end: 44px;
-}
-
-.sidebar-footer-bar:has(.sidebar-footer-bar__home) {
-  padding-inline-end: 84px;
 }
 
 .sidebar-footer-actions {

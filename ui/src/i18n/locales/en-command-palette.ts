@@ -112,7 +112,6 @@ const enCommandPalette = {
       panImageHorizontal: "Pan image horizontally",
       panImageVertical: "Pan image vertically",
       terminalPanel: "Toggle terminal panel",
-      homePanel: "Talk to your Home agent",
       workspaceFiles: "Toggle workspace files",
       sideChat: "Toggle side chat",
       browserPanel: "Toggle browser panel",

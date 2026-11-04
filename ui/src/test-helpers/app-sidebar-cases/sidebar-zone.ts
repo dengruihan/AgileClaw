@@ -219,7 +219,10 @@ describe("AppSidebar interleaved zone", () => {
     expect(pinnedRow?.hasAttribute("role")).toBe(false);
     expect(pinnedTree?.hasAttribute("role")).toBe(false);
     expect(pinnedRow?.closest('[role="list"]')).toBeNull();
-    expect(sidebar.querySelector(".nav-item--home")?.hasAttribute("draggable")).toBe(false);
+    // Every session row, including the agent anchor, uses the same row contract.
+    expect(
+      sidebar.querySelector('[data-session-key="agent:main:main"]')?.hasAttribute("role"),
+    ).toBe(false);
   });
 
   it.each([
@@ -526,10 +529,10 @@ describe("AppSidebar interleaved zone", () => {
     const onUpdate = vi.fn();
     sidebar.onUpdateSidebarEntries = onUpdate;
     await sidebar.updateComplete;
-    const source = sidebar.querySelector('[data-session-key="agent:main:alpha"]');
-    if (!source) {
-      throw new Error("expected promoted child session row");
-    }
+    await waitForFast(() =>
+      expect(sidebar.querySelector('[data-session-key="agent:main:alpha"]')).not.toBeNull(),
+    );
+    const source = sidebar.querySelector('[data-session-key="agent:main:alpha"]')!;
     const target = zoneEntry(sidebar, "route:systems");
     const dataTransfer = createDataTransferStub();
     dispatchDragEvent(source, "dragstart", dataTransfer);
@@ -654,10 +657,11 @@ describe("AppSidebar interleaved zone", () => {
     );
     await sidebar.updateComplete;
 
+    // The anchor row is an ordinary row, so it joins the range between them.
     expect(
       [...sidebar.querySelectorAll<HTMLElement>(".sidebar-recent-session--selected")].map(
         (row) => row.dataset.sessionKey,
       ),
-    ).toEqual(["agent:main:alpha", "agent:main:beta"]);
+    ).toEqual(["agent:main:alpha", "agent:main:main", "agent:main:beta"]);
   });
 });

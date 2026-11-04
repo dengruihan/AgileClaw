@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 import {
   createChatFlowE2eSuite,
   installMockGateway,
@@ -88,7 +89,7 @@ suite.define(() => {
       const card = page.locator(".session-progress-card--composer");
       const isOpen = () => card.evaluate((element) => (element as HTMLDetailsElement).open);
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await card.waitFor();
         await waitForChatScrollIdle(page);
         await page
@@ -202,7 +203,7 @@ suite.define(() => {
     const thread = page.locator(".chat-thread");
     const card = page.locator(".session-progress-card--composer");
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await card.waitFor();
       await waitForChatScrollIdle(page);
       const cdp = await context.newCDPSession(page);
@@ -307,7 +308,7 @@ suite.define(() => {
     const card = page.locator(".session-progress-card--composer");
     const isOpen = () => card.evaluate((element) => (element as HTMLDetailsElement).open);
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await card.waitFor();
       await waitForChatScrollIdle(page);
       await gateway.deferNext("chat.history");

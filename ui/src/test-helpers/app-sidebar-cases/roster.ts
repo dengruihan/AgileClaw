@@ -57,7 +57,7 @@ describe("AppSidebar agent roster", () => {
   });
 
   it.each(["active", "all", "archived"] as const)(
-    "preserves archived Home children under the %s filter",
+    "preserves the main row and its archived children under the %s filter",
     async (status) => {
       const homeKey = "agent:working:main";
       const childKey = "agent:working:archived-child";
@@ -74,21 +74,22 @@ describe("AppSidebar agent roster", () => {
       await vi.waitFor(() => expect(agentIds(sidebar)).toHaveLength(3));
       await selectFilter(sidebar, `status:${status}`);
       await vi.waitFor(() =>
-        expect(sessionKeys(sidebar)).toEqual(status === "active" ? [] : [childKey]),
+        expect(sessionKeys(sidebar)).toEqual(
+          status === "archived" ? [childKey] : status === "all" ? [homeKey, childKey] : [homeKey],
+        ),
       );
     },
   );
 
   it.each(
     (["chip", "roster"] as const).flatMap((mode) =>
-      [false, true].flatMap((cached) =>
-        [undefined, "Saved work"].map((category) => ({ mode, cached, category })),
-      ),
+      [undefined, "Saved work"].map((category) => ({ mode, category })),
     ),
   )(
-    "promotes Home descendants through parent-owned hidden-run lists ($mode, cached=$cached, category=$category)",
-    async ({ mode, cached, category }) => {
+    "promotes main descendants through parent-owned hidden-run lists ($mode, category=$category)",
+    async ({ mode, category }) => {
       const agentId = mode === "chip" ? "main" : "working";
+      const mainKey = `agent:${agentId}:main`;
       const runKey = `agent:${agentId}:subagent:bridge`;
       const childKey = `agent:${agentId}:project`;
       const descendants = [
@@ -99,20 +100,24 @@ describe("AppSidebar agent roster", () => {
         }),
         session(agentId, 8, { key: childKey, isMain: false, category }),
       ];
-      const { sidebar } = await mountRoster(
-        roster,
-        [session(agentId, 10, { childSessions: [runKey] }), ...(cached ? [] : descendants)],
-        undefined,
-        [],
-        [],
-        cached ? descendants : undefined,
-      );
+      const { sidebar } = await mountRoster(roster, [
+        session(agentId, 10, { childSessions: [runKey] }),
+        ...descendants,
+      ]);
       sidebar.sidebarAgentsMode = mode;
-      await vi.waitFor(() => expect(sessionKeys(sidebar)).toEqual([childKey]));
+      await vi.waitFor(() =>
+        expect(sessionKeys(sidebar)).toEqual(
+          mode === "chip"
+            ? category
+              ? [childKey, mainKey]
+              : [mainKey, childKey]
+            : [mainKey, childKey],
+        ),
+      );
       expect(sidebar.querySelector("[data-child-session-error]")).toBeNull();
       if (mode === "chip" && category) {
         const section = sidebar
-          .querySelector("[data-session-key]")
+          .querySelector(`[data-session-key="${childKey}"]`)
           ?.closest("[data-session-section]");
         expect(
           section?.querySelector(".sidebar-recent-sessions__label-text")?.textContent?.trim(),
@@ -121,24 +126,25 @@ describe("AppSidebar agent roster", () => {
     },
   );
 
-  it.each(
-    (["chip", "roster"] as const).flatMap((mode) =>
-      [false, true].map((backref) => ({ mode, backref })),
-    ),
-  )(
-    "loads descendants from a directly opened out-of-window Home ($mode, backref=$backref)",
-    async ({ mode, backref }) => {
-      const homeKey = "agent:working:main";
+  it.each([false, true])(
+    "loads descendants from a directly opened out-of-window session (backref=$backref)",
+    async (backref) => {
+      const mode = "roster";
+      const parentKey = "agent:working:coordination";
       const childKey = "agent:working:older-child";
-      const home = session("working", 1, { childSessions: [childKey] });
+      const parent = session("working", 1, {
+        key: parentKey,
+        isMain: false,
+        childSessions: [childKey],
+      });
       const { sidebar, context, sessions, result } = await mountRoster(
         roster,
         [session("main", 10, { key: "agent:main:recent", isMain: false })],
         undefined,
-        [home],
+        [parent],
       );
       sessions.list.mockImplementation(async (options) =>
-        options?.spawnedBy === homeKey
+        options?.spawnedBy === parentKey
           ? {
               ...result,
               count: 1,
@@ -146,7 +152,7 @@ describe("AppSidebar agent roster", () => {
                 session("working", 2, {
                   key: childKey,
                   isMain: false,
-                  ...(backref ? { spawnedBy: homeKey } : {}),
+                  ...(backref ? { spawnedBy: parentKey } : {}),
                 }),
               ],
             }
@@ -154,20 +160,24 @@ describe("AppSidebar agent roster", () => {
       );
       sidebar.sidebarAgentsMode = mode;
       sidebar.activeRouteId = "chat";
-      sidebar.sessionKey = homeKey;
+      sidebar.sessionKey = parentKey;
       context.agentSelection.set("working");
       await vi.waitFor(() =>
-        expect(sessions.list).toHaveBeenCalledWith(expect.objectContaining({ spawnedBy: homeKey })),
+        expect(sidebar.querySelector(`[data-session-key="${parentKey}"]`)).not.toBeNull(),
+      );
+      sidebar
+        .querySelector<HTMLButtonElement>(`[data-child-session-toggle="${parentKey}"]`)!
+        .click();
+      await vi.waitFor(() =>
+        expect(sessions.list).toHaveBeenCalledWith(
+          expect.objectContaining({ spawnedBy: parentKey }),
+        ),
       );
       await vi.waitFor(() =>
         expect(sessionKeys(sidebar).filter((key) => key === childKey)).toHaveLength(1),
       );
-      expect(sessionKeys(sidebar)).not.toContain(homeKey);
-      if (mode === "roster") {
-        expect(
-          sidebar.querySelector('[data-agent-id="working"]')?.getAttribute("aria-current"),
-        ).toBe("page");
-      }
+      const parentRow = sidebar.querySelector(`[data-session-key="${parentKey}"] a`);
+      expect(parentRow?.getAttribute("aria-current")).toBe("page");
     },
   );
 
@@ -180,11 +190,10 @@ describe("AppSidebar agent roster", () => {
       if (!group) {
         throw new Error(`Missing session group for ${id}`);
       }
-      await vi.waitFor(() => expect(sessionKeys(group)).toEqual([`agent:${id}:recent`]));
-      expect(group?.querySelector(`a[href="/new?agent=${id}"]`)).not.toBeNull();
-      expect(group?.querySelector(".sidebar-agent-roster__row")?.getAttribute("href")).toBe(
-        `/chat/${id}`,
+      await vi.waitFor(() =>
+        expect(sessionKeys(group)).toEqual([`agent:${id}:main`, `agent:${id}:recent`]),
       );
+      expect(group?.querySelector(`a[href="/new?agent=${id}"]`)).not.toBeNull();
     }
     expect(sidebar.querySelector('[data-agent-id="working"]')?.textContent?.trim()).toBe("Forge");
     expect(sidebar.querySelector(".sidebar-agent-roster__status")).toBeNull();
@@ -207,11 +216,11 @@ describe("AppSidebar agent roster", () => {
     expect(agentIds(sidebar)).toEqual(["main", "recent", "working"]);
   });
 
-  it("switches active agent when a grouped session or main chat is opened", async () => {
+  it("switches active agent when a grouped session or the agent main chat is opened", async () => {
     const { sidebar, context } = await mountRoster();
     const onNavigate = vi.fn();
     sidebar.onNavigate = onNavigate;
-    expect(sidebar.querySelector(".nav-item--home")).not.toBeNull();
+    expect(sidebar.querySelector(".nav-item--home")).toBeNull();
     await toggleRoster(sidebar);
     await vi.waitFor(() => expect(sessionKeys(sidebar)).toContain("agent:working:recent"));
     expect(sidebar.querySelector(".nav-item--home")).toBeNull();
@@ -231,16 +240,20 @@ describe("AppSidebar agent roster", () => {
       expect.objectContaining({ pathname: "/chat/working/recent" }),
     );
     expect(sidebar.querySelector(".sidebar-workspace-header")?.textContent).toContain("AgileClaw");
+    sidebar.querySelector<HTMLButtonElement>('[data-agent-collapse="recent"]')!.click();
+    await vi.waitFor(() => expect(sessionKeys(sidebar)).toContain("agent:recent:recent"));
     sidebar
-      .querySelector<HTMLAnchorElement>('[data-agent-group="recent"] .sidebar-agent-roster__row')
+      .querySelector<HTMLAnchorElement>(
+        '[data-session-key="agent:recent:recent"] .sidebar-recent-session__link',
+      )
       ?.click();
     await vi.waitFor(() => expect(context.agentSelection.state.selectedId).toBe("recent"));
     expect(onNavigate).toHaveBeenLastCalledWith(
       "chat",
-      expect.objectContaining({ pathname: "/chat/recent" }),
+      expect.objectContaining({ pathname: "/chat/recent/recent" }),
     );
     await toggleRoster(sidebar);
-    await vi.waitFor(() => expect(sidebar.querySelector(".nav-item--home")).not.toBeNull());
+    await vi.waitFor(() => expect(sidebar.querySelector(".sidebar-agent-roster")).toBeNull());
     expect(context.agentSelection.state.scopeId).toBe("main");
   });
 
@@ -457,7 +470,13 @@ describe("AppSidebar agent roster", () => {
       expect(rows).toHaveLength(1);
       expect(rows[0]?.classList.contains("sidebar-recent-session--active")).toBe(true);
     });
-    expect(sidebar.querySelector(`[data-session-key="${parentKey}"]`)).toBeNull();
+    // A directly opened main parent stays an ordinary row beside its child.
+    const parentRow = sidebar.querySelector(`[data-session-key="${parentKey}"]`);
+    if (mainParent) {
+      expect(parentRow).not.toBeNull();
+    } else {
+      expect(parentRow).toBeNull();
+    }
   });
 
   it("shows every agent beyond six with the global filter in the header", async () => {
@@ -485,7 +504,11 @@ describe("AppSidebar agent roster", () => {
   it("remembers collapsed agents after remount and keeps chip mode scoped to one agent", async () => {
     const { sidebar, provider } = await mountRoster();
     expect(sidebar.querySelector(".sidebar-agent-roster")).toBeNull();
-    expect(sessionKeys(sidebar)).toEqual(["agent:main:pinned", "agent:main:recent"]);
+    expect(sessionKeys(sidebar)).toEqual([
+      "agent:main:pinned",
+      "agent:main:main",
+      "agent:main:recent",
+    ]);
     await toggleRoster(sidebar);
     await vi.waitFor(() => expect(agentIds(sidebar)).toHaveLength(3));
     sidebar.querySelector<HTMLButtonElement>('[data-agent-collapse="working"]')?.click();
@@ -512,13 +535,17 @@ describe("AppSidebar agent roster", () => {
     await vi.waitFor(() =>
       expect(remounted.sidebar.querySelector(".sidebar-agent-roster")).toBeNull(),
     );
-    expect(sessionKeys(remounted.sidebar)).toEqual(["agent:main:pinned", "agent:main:recent"]);
+    expect(sessionKeys(remounted.sidebar)).toEqual([
+      "agent:main:pinned",
+      "agent:main:main",
+      "agent:main:recent",
+    ]);
   });
 
   it("applies owner and archived filters across all agent groups", async () => {
     const { sidebar } = await mountRoster();
     sidebar.sidebarAgentsMode = "roster";
-    await vi.waitFor(() => expect(sessionKeys(sidebar)).toHaveLength(6));
+    await vi.waitFor(() => expect(sessionKeys(sidebar)).toHaveLength(9));
     await selectFilter(sidebar, "owner:profile-ada");
     await vi.waitFor(() =>
       expect(sessionKeys(sidebar)).toEqual([
@@ -562,7 +589,11 @@ describe("AppSidebar agent roster", () => {
     ]);
     sidebar.sidebarAgentsMode = "roster";
     await vi.waitFor(() =>
-      expect(sessionKeys(sidebar)).toEqual(["agent:working:parent", "agent:working:main-child"]),
+      expect(sessionKeys(sidebar)).toEqual([
+        "agent:working:main",
+        "agent:working:parent",
+        "agent:working:main-child",
+      ]),
     );
     expect(sidebar.querySelector('[data-child-session-toggle="agent:working:parent"]')).toBeNull();
     await selectFilter(sidebar, "status:archived");

@@ -191,7 +191,8 @@ describe("AgileClaw shell document title", () => {
     const operation = sessions.delete(active.key);
     expect(sessions.deletionState(active.key)).toBe("pending");
     expect(sessions.state.deletedSessions).toEqual([]);
-    expect(replace).toHaveBeenCalledExactlyOnceWith("chat", { pathname: "/chat/main" });
+    // A pending deletion already leaves the conversation for an unsent draft.
+    expect(replace).toHaveBeenCalledExactlyOnceWith("new-session", { search: "?agent=main" });
     deletion.resolve({ deleted: false });
     await operation;
     await settleLitElement(shell);

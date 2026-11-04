@@ -5,10 +5,10 @@ import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { waitForControlUiGatewayReady } from "../test-helpers/control-ui-e2e-readiness.ts";
 import {
+  type ControlUiMockGatewayScenario,
   controlUiBundledSettingsStorageKey,
   controlUiSessionUrl,
   installMockGateway,
-  type ControlUiMockGatewayScenario,
 } from "../test-helpers/control-ui-e2e.ts";
 import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 import { controlUiE2eBuiltModuleRequest } from "./control-ui-built-module.test-support.ts";
@@ -250,7 +250,7 @@ async function openColdSidebar(page: Page, scenario = coldOpenScenario()) {
     route.fulfill({ body: ONE_PIXEL_PNG, contentType: "image/png" }),
   );
   const gateway = await installMockGateway(page, scenario);
-  await page.goto(`${suite.server.baseUrl}chat`);
+  await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
   await waitForControlUiGatewayReady(page);
   await gateway.waitForRequest("session.discussion.info");
   await gateway.waitForRequest("sessions.companion.state");
@@ -481,7 +481,7 @@ suite.define(() => {
         },
       });
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await waitForControlUiGatewayReady(page);
       await openChatSidePanelType(page, "Browser");
       const browser = page.locator("openclaw-browser-panel");

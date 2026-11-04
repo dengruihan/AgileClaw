@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
@@ -25,7 +25,6 @@ suite.define(() => {
         },
       });
       await page.goto(`${suite.server.baseUrl}new?agent=main`);
-
       const picker = page.locator(".new-session-page__select--agent openclaw-agent-select");
       const trigger = picker.locator(".agent-select__trigger");
       await trigger.waitFor({ state: "visible" });
@@ -126,7 +125,7 @@ suite.define(() => {
           },
         ],
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const bubble = page.locator(".chat-bubble").filter({ hasText: messageText });
       await bubble.waitFor();
       await bubble.click({ button: "right" });
@@ -178,7 +177,7 @@ suite.define(() => {
           "environments.list": { environments: [] },
         },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
 
       const composer = page.locator(".agent-chat__composer-combobox > textarea");
@@ -212,7 +211,7 @@ suite.define(() => {
   it("changes neutral focus styling in dark and light themes", async () => {
     await suite.withPage({ viewport: { width: 1440, height: 900 } }, async ({ page }) => {
       const gateway = await installMockGateway(page);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
 
       const composer = page.locator(".agent-chat__input");

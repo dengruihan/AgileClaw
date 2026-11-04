@@ -43,7 +43,6 @@ export function agentRosterCards(
       (latest, row) => (!latest || (row.updatedAt ?? 0) > (latest.updatedAt ?? 0) ? row : latest),
       undefined,
     );
-    const main = sessions.find((row) => row.key === mainKey) ?? sessions.find((row) => row.isMain);
     return {
       id: agent.id,
       name,
@@ -55,7 +54,7 @@ export function agentRosterCards(
       activeNow: sessions.some(isSessionRunActive),
       unreadCount: sessions.filter((row) => row.unread && !row.archived).length,
       lastActiveAt: recent?.updatedAt ?? 0,
-      preview: (main ?? recent)?.lastMessagePreview,
+      preview: recent?.lastMessagePreview,
     };
   });
 }

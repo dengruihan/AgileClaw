@@ -33,7 +33,6 @@ import "../styles/app-sidebar.css";
 import {
   renderAppSidebarBrand,
   renderAppSidebarFooterBar,
-  renderAppSidebarHomeRow,
   renderAppSidebarPagesHead,
   renderAppSidebarZoneEntry,
 } from "./app-sidebar-render.ts";
@@ -493,7 +492,6 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
                     this.sessionOrganizer.handleSidebarZoneDragLeave(event)}
                   @drop=${(event: DragEvent) => this.sessionOrganizer.handleSidebarZoneDrop(event)}
                 >
-                  ${renderAppSidebarHomeRow(this)}
                   <openclaw-mcp-app-catalog surface="sidebar"></openclaw-mcp-app-catalog>
                   ${repeat(sidebarZone.entries, serializeSidebarEntry, (entry) =>
                     renderAppSidebarZoneEntry(

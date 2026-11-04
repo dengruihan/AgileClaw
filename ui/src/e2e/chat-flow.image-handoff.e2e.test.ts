@@ -18,6 +18,7 @@ import { waitForCommittedState } from "./settle.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
 const orders = ["receipt-first", "event-first"] as const;
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it.each(orders)("keeps image previews through the history handoff (%s)", async (order) => {
@@ -97,7 +98,7 @@ suite.define(() => {
         };
 
         try {
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await gateway.waitForRequest("chat.startup");
           await page.locator(".agent-chat__composer-combobox textarea").fill(prompt);
           await page.locator(".agent-chat__file-input").setInputFiles({

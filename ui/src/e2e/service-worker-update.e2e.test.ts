@@ -18,6 +18,7 @@ import {
   resolvePlaywrightChromiumExecutablePath,
   startProductionControlUiE2eServer,
   type ControlUiE2eProductionServer,
+  controlUiSessionUrl,
 } from "../test-helpers/control-ui-e2e.ts";
 
 const useWebKit = process.env.OPENCLAW_CONTROL_UI_E2E_BROWSER === "webkit";
@@ -515,7 +516,9 @@ describe("Control UI service-worker production update E2E", () => {
     let installGate: InstallGate | null = null;
 
     try {
-      expect((await page.goto(`${server.baseUrl}chat`))?.status()).toBe(200);
+      expect(
+        (await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main")))?.status(),
+      ).toBe(200);
       await ensureControlledPage(page, pageErrors, buildA);
       await expect
         .poll(

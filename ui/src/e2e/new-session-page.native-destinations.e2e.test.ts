@@ -12,6 +12,7 @@ import {
   cliAgentCatalog,
 } from "./new-session-page.native-terminal.test-support.ts";
 import {
+  controlUiSessionUrl,
   createNewSessionPageE2eSuite,
   installMockGateway,
   navigateInApp,
@@ -152,7 +153,7 @@ suite.define(() => {
       },
     });
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const row = page.locator(
         '[data-catalog-session-key="catalog:codex:gateway%3Alocal:resume-thread"]',
       );

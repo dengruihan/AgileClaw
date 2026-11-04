@@ -20,33 +20,26 @@ is that the default DM scope collapses all direct messages into it, and that
 the rest of the system treats it as the agent's root: heartbeats wake it,
 background work reports back to it, and activity elsewhere flows up to it.
 
-## Home
+## The web app
 
-In the web app, the main session is the **Home** page — the first entry in the
-sidebar. The identity row at the top is your agent (click it for the agent
-menu); Home is where you talk to it. Sessions that fork off the main
-conversation appear under **Threads**, group chats under **Groups**, and
-coding/CLI sessions under **Coding**.
+Opening the Control UI starts a new, unsent draft. Nothing is stored until you
+send the first message, so a reload restores the same draft instead of creating
+an empty session. Explicit session links still open that session directly.
 
-### Talk to Home while working
+There is no separate Home page or main-session type in the web app. The rolling
+main session appears in the sidebar as one ordinary session row alongside every
+other conversation: you can rename it, move it into a custom group, pin it, or
+open it like any session. Group chats and coding sessions use the same rows and
+the same custom groups; assigning a group to a session replaces its automatic
+zone. Empty system-owned anchors stay hidden by the normal system-row rule,
+while an anchor with real direct-message history stays reachable as a row.
 
-Select **Talk to your Home agent** in the sidebar footer (or press
-`Cmd/Ctrl+Shift+H`) to open Home beside your current page. The assistant
-sidebar can dock on the right or bottom.
-It follows the agent selected in the sidebar's agent switcher, so there is one
-place to change agents.
+The Gateway keeps the internal routing anchor for direct messages, heartbeats,
+cron targets, and background work, so channel behavior and history do not
+change. That anchor is an implementation detail, not a user-facing category.
 
-The dock uses your real Home conversation, including its history, tools,
-approvals, and message queue. **Open Home full page** opens that conversation
-in the main area and temporarily hides its dock to avoid duplicate composers.
-
-Expand **Working on** to inspect the small reference snapshot accompanying your
-next message: the current page and, when available, the work session, workspace,
-and visible file path. Select text in the work area and use **Attach selected
-text** to include a bounded excerpt. Use **Remove work context** to send without
-the snapshot. It becomes part of the sent message and remains unchanged through
-queueing and retries; slash commands do not include it. References do not grant
-the Home agent additional access to another agent's sessions or files.
+Conversation docks are still available for plugin pages and explicit sessions;
+the sidebar no longer offers a built-in Home conversation.
 
 ## What flows into the main session
 
@@ -54,13 +47,13 @@ The main session is not just a chat log; it is the place where your agent's
 world converges:
 
 - **New sessions.** By default, creating a session queues a system notice in its
-  agent's Home conversation with the session key and available title, creator,
-  and creation source. Home sees it on its next turn or scheduled heartbeat;
+  agent's main session with the session key and available title, creator,
+  and creation source. The agent sees it on its next turn or scheduled heartbeat;
   creation does not trigger an extra wake-up. Set `session.notifyOnCreate: false`
-  to opt out. Home itself, drafts, incognito sessions, hidden internal sessions,
+  to opt out. The main session, drafts, incognito sessions, hidden internal sessions,
   and scheduled cron runs are excluded. Resetting or reopening an existing
   session does not send another creation notice. These notices use the bounded,
-  in-memory system-event queue and do not subscribe Home to future activity.
+  in-memory system-event queue and do not subscribe the main session to future activity.
 - **Group activity.** Under `session.groupScope: "per-group"` (the default),
   group and room sessions stay isolated while the main session automatically watches them.
   Activity queues up as compact notices — coalesced per conversation, never
@@ -71,7 +64,7 @@ world converges:
   its system prompt names watched groups so it knows where recent activity happened.
 - **Background work.** Sub-agents and spawned sessions announce their results
   back to the session that started them, so work the agent kicked off from
-  Home reports back to Home.
+  the main session reports back to the main session.
 - **Heartbeats.** Scheduled heartbeats target the main session, which is what
   turns queued notices into awareness even when you have not written anything.
 

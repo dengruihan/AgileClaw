@@ -107,7 +107,11 @@ describe("AppSidebar child-session load errors", () => {
           sessionResult([recoveredChild(childKey, parentKey, "Recovered child")]),
         );
       const { sidebar } = await mountSidebar(gateway, harness.sessions);
-      harness.publishList({ result: sessionResult([parentSession(parentKey, childKey)]) });
+      sidebar.connected = true;
+      harness.publishList({
+        result: sessionResult([parentSession(parentKey, childKey)]),
+        agentId: "main",
+      });
       await sidebar.updateComplete;
       sidebar.querySelector<HTMLButtonElement>("[data-child-session-toggle]")?.click();
 
@@ -184,7 +188,7 @@ describe("AppSidebar child-session load errors", () => {
   });
 
   it.each(["main", "agent:main:main"])(
-    "keeps Home unique while recovering conversations spawned by %s",
+    "keeps the %s anchor row unique while recovering its children",
     async (parentKey) => {
       const childKey = "agent:main:dashboard:recovered";
       const gateway = createGateway({} as GatewayBrowserClient);
@@ -195,11 +199,22 @@ describe("AppSidebar child-session load errors", () => {
           sessionResult([recoveredChild(childKey, parentKey, "Recovered main-session child")]),
         );
       const { sidebar } = await mountSidebar(gateway, harness.sessions);
-      harness.publishList({ result: sessionResult([parentSession(parentKey, childKey)]) });
+      sidebar.connected = true;
+      harness.publishList({
+        result: sessionResult([parentSession(parentKey, childKey)]),
+        agentId: "main",
+      });
 
+      await waitForFast(() =>
+        expect(sidebar.querySelector(`[data-session-key="${parentKey}"]`)).not.toBeNull(),
+      );
+      const toggle = sidebar.querySelector<HTMLButtonElement>(
+        `[data-child-session-toggle="${parentKey}"]`,
+      );
+      expect(toggle).not.toBeNull();
+      toggle!.click();
       await waitForFast(() => expect(harness.list).toHaveBeenCalledOnce());
-      expect(sidebar.querySelectorAll(".nav-item--home")).toHaveLength(1);
-      expect(sidebar.querySelector(`[data-session-key="${parentKey}"]`)).toBeNull();
+      expect(sidebar.querySelectorAll(`[data-session-key="${parentKey}"]`)).toHaveLength(1);
       await waitForFast(() => {
         const alert = sidebar.querySelector(`[data-child-session-error="${parentKey}"]`);
         expect(alert?.getAttribute("role")).toBe("alert");
@@ -217,7 +232,7 @@ describe("AppSidebar child-session load errors", () => {
       await waitForFast(() =>
         expect(sidebar.querySelector(`[data-session-key="${childKey}"]`)).not.toBeNull(),
       );
-      expect(sidebar.querySelector(`[data-session-key="${parentKey}"]`)).toBeNull();
+      expect(sidebar.querySelectorAll(`[data-session-key="${parentKey}"]`)).toHaveLength(1);
       expect(sidebar.querySelector("[data-child-session-error]")).toBeNull();
     },
   );

@@ -9,6 +9,7 @@ import {
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 suite.define(() => {
   it("reconciles a fallback notice around one streamed terminal answer", async () => {
@@ -48,7 +49,7 @@ suite.define(() => {
         },
       });
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByRole("button", { name: "Stop generating" }).waitFor();
       await gateway.emitGatewayEvent("chat", {
         sessionKey: "agent:main:main",
@@ -159,7 +160,7 @@ suite.define(() => {
             inFlightRun: { ...inFlightRun, text: "" },
             sessionInfo,
           });
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await page.getByRole("button", { name: "Stop generating" }).waitFor();
           await gateway.emitGatewayEvent("chat", {
             sessionKey: "agent:main:main",
@@ -295,7 +296,7 @@ suite.define(() => {
         return items.map(({ text }) => bubbles.filter((bubble) => bubble.trim() === text).length);
       };
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByRole("button", { name: "Stop generating" }).waitFor();
       for (const event of events) {
         await gateway.emitGatewayEvent("agent", event);
@@ -381,7 +382,7 @@ suite.define(() => {
         sessionInfo,
       });
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.getByRole("button", { name: "Stop generating" }).waitFor();
       const assistantTexts = async () =>
         (await page.locator(".chat-group.assistant .chat-text").allTextContents()).map((value) =>
@@ -407,7 +408,7 @@ suite.define(() => {
     async ({ persistence, terminal }) => {
       await suite.withPage(createControlUiE2eContextOptions(), async ({ page }) => {
         const gateway = await installMockGateway(page, { historyMessages: [] });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.locator(".agent-chat__composer-combobox textarea").fill("Check the workspace");
         await page.getByRole("button", { name: "Send message" }).click();
         const send = await gateway.waitForRequest("chat.send");

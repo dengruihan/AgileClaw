@@ -7,7 +7,11 @@ import type { SessionsUsageResult } from "../api/types.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { waitForControlUiGatewayReady } from "../test-helpers/control-ui-e2e-readiness.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
-import { installMockGateway, type MockGatewayControls } from "../test-helpers/control-ui-e2e.ts";
+import {
+  type MockGatewayControls,
+  controlUiSessionUrl,
+  installMockGateway,
+} from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({
@@ -315,7 +319,9 @@ suite.define(() => {
     });
 
     try {
-      const response = await page.goto(`${suite.server.baseUrl}chat`);
+      const response = await page.goto(
+        controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"),
+      );
       expect(response?.status()).toBe(200);
       const sidebar = page.locator("openclaw-app-sidebar");
       await sidebar.locator(".sidebar-identity-card").click();

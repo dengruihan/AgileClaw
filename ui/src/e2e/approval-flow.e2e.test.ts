@@ -211,7 +211,7 @@ suite.define(() => {
     page = currentPage;
     const gateway = await installMockGateway(currentPage);
 
-    await currentPage.goto(`${suite.server?.baseUrl ?? ""}chat`);
+    await currentPage.goto(controlUiSessionUrl(suite.server?.baseUrl ?? "", "agent:main:main"));
     await gateway.waitForRequest("sessions.list");
 
     const composer = currentPage.locator(".agent-chat__composer-combobox textarea");

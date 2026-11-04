@@ -2,10 +2,11 @@ import path from "node:path";
 import type { Page } from "playwright";
 import { expect, it } from "vitest";
 import { BUILTIN_THEME_IDS } from "../../../packages/gateway-protocol/src/theme-ids.ts";
-import { resolveTheme, type ThemeName } from "../app/theme.ts";
+import { type ThemeName, resolveTheme } from "../app/theme.ts";
 import {
-  controlUiBundledGatewayUrl,
   type MockGatewayControls,
+  controlUiBundledGatewayUrl,
+  controlUiSessionUrl,
 } from "../test-helpers/control-ui-e2e.ts";
 import { createImportedCustomThemeFixture } from "../test-helpers/custom-theme.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
@@ -324,7 +325,7 @@ suite.define(() => {
         const gateway = await installMockGateway(page, {
           methodResponses: { "config.get": themeConfig("custom", "dark") },
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const composer = page.locator(".agent-chat__input");
         await composer.locator("textarea").fill("Keep imported palettes local and quiet");
         const images = new Set<string>();

@@ -14,6 +14,7 @@ import {
 } from "../../../test/helpers/openclaw-test-instance.ts";
 import { runQaGatewayFixture } from "../../../test/helpers/qa-gateway-cleanup.ts";
 import { waitForControlUiGatewayReady } from "../test-helpers/control-ui-e2e-readiness.ts";
+import { openAssistantDock } from "./assistant-dock.test-support.ts";
 import { installHistoryPaginationProbe } from "./chat-history-pagination-probe.test-support.ts";
 import { installChatLoadingReadinessObserver } from "./chat-loading-readiness.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
@@ -441,7 +442,7 @@ suite.define(() => {
           })
           .waitFor();
         await selectedPane.locator(".agent-chat__composer-combobox textarea").waitFor();
-        await page.locator(".sidebar-footer-bar__home").click();
+        await openAssistantDock(page, { sessionKey: homeKey, agentId: "main", label: "Home" });
         await page
           .locator("openclaw-assistant-panel .chat-thread")
           .getByText("Synthetic Home message 900.", { exact: false })
@@ -449,7 +450,6 @@ suite.define(() => {
         if (captureUiProof) {
           await page.screenshot({ path: path.join(artifactDir, "01-restored-home-fixture.png") });
         }
-
         startedAt = Date.now();
         measuring = true;
         await page.reload();

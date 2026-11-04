@@ -55,7 +55,6 @@ import {
 } from "../../lib/sessions/route-navigation.ts";
 import {
   areUiSessionKeysEquivalent,
-  buildAgentMainSessionKey,
   parseAgentSessionKey,
   resolveUiConfiguredMainKey,
   scopedSessionArtifactKey,
@@ -717,17 +716,13 @@ class SessionsPage extends OpenClawLightDomElement {
             parseAgentSessionKey(deletedCurrent)?.agentId ??
             scope.context.agentSelection.state.selectedId ??
             "main";
+          // Clear the retired selection instead of promoting an anchor row;
+          // the next chat entry asks for a new session.
           selectApplicationSession({
             selection: scope.context.agentSelection,
             gateway: scope.gateway,
             agentId,
-            sessionKey: buildAgentMainSessionKey({
-              agentId,
-              mainKey: resolveUiConfiguredMainKey({
-                agentsList: scope.context.agents.state.agentsList,
-                hello: scope.gateway.snapshot.hello,
-              }),
-            }),
+            sessionKey: "",
           });
         }
       }

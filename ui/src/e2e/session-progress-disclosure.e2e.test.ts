@@ -3,7 +3,10 @@ import path from "node:path";
 import type { Locator, Page } from "playwright";
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { controlUiBundledSettingsStorageKey } from "../test-helpers/control-ui-e2e.ts";
+import {
+  controlUiBundledSettingsStorageKey,
+  controlUiSessionUrl,
+} from "../test-helpers/control-ui-e2e.ts";
 import {
   createChatFlowE2eSuite,
   installMockGateway,
@@ -113,7 +116,7 @@ suite.define(() => {
       await waitForChatScrollIdle(page);
     };
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await card.waitFor();
       await waitForChatScrollIdle(page);
       expect(await open()).toBe(true);
@@ -247,7 +250,7 @@ suite.define(() => {
       const thread = pane.locator(".chat-thread");
       const open = () => card.evaluate((element) => (element as HTMLDetailsElement).open);
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await card.waitFor();
         await expect
           .poll(() =>

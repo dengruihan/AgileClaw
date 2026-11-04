@@ -240,12 +240,14 @@ Pinned threads stay in **Pages** above the roster, show their owning agent's
 avatar, and keep their expandable children even when that agent is collapsed.
 **Selected agent** returns to that agent's pins, groups, and threads.
 
-Each agent header opens its main chat. Its menu offers **New Session**,
-**Open main chat**, **All sessions**, and **Collapse others**. **All sessions**
-opens that agent's thread manager without changing the active chat or draft.
-Expanded headers summarize Home activity; collapsed headers also summarize
-their hidden conversations. Use **Show more** and **See less** to adjust the
-visible rows. The scope and collapsed headers are remembered for each Gateway.
+Each agent header is a non-navigating label for its group. Beside it, **New
+conversation** starts a new unsent session for that agent, and the header menu
+offers **All sessions** and **Collapse others**. **All sessions** opens that
+agent's thread manager without changing the active chat or draft. The agent's
+rolling session is an ordinary row in the group, so its activity, unread state,
+and run indicator stay on that row; collapsed headers summarize the group's
+hidden conversations. Use **Show more** and **See less** to adjust the visible
+rows. The scope and collapsed headers are remembered for each Gateway.
 Expanded Pages summarize their own activity and hidden subagent runs; visible
 children show their own signals. Run indicators pause while disconnected.
 For older threads beyond the all-agent overview, switch to **Selected agent**

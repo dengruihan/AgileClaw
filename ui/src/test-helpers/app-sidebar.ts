@@ -146,7 +146,7 @@ export function createGatewayHarness(client: GatewayBrowserClient) {
     canvasPluginSurfaceUrl: null,
     hello: gatewayHelloForMethods([...SESSION_MUTATION_TEST_METHODS, "openclaw.chat"]),
     assistantAgentId: "main",
-    sessionKey: "agent:main:main",
+    sessionKey: "",
     lastError: null,
     lastErrorCode: null,
   };

@@ -1,7 +1,7 @@
 // Control UI E2E tests cover the redesigned chat composer.
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({
@@ -27,7 +27,7 @@ suite.define(() => {
         ],
       });
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       await gateway.emitGatewayEvent("chat", {
         errorDetail: {
@@ -64,7 +64,7 @@ suite.define(() => {
       const gateway = await installMockGateway(page, {
         deferredMethods: ["chat.startup", "models.list"],
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
 
       const composer = page.locator(".agent-chat__input");

@@ -7,6 +7,7 @@ import type {
 } from "../api/types.ts";
 import {
   controlUiBundledSettingsStorageKey,
+  controlUiSessionUrl,
   installMockGateway,
   waitForControlUiRoute,
 } from "../test-helpers/control-ui-e2e.ts";
@@ -143,7 +144,7 @@ suite.define(() => {
             ]),
           },
         });
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await waitForControlUiRoute(page, { routeId: "chat" });
         const sidebar = page.locator("openclaw-app-sidebar");
         const workspace = sidebar.locator(".sidebar-workspace-header__name");
@@ -158,7 +159,7 @@ suite.define(() => {
             headers.evaluateAll((rows) => rows.map((row) => row.getAttribute("data-agent-id"))),
           )
           .toEqual(["main", "forge", "scout", "bloom"]);
-        await expect.poll(() => sessionRows.count()).toBe(8);
+        await expect.poll(() => sessionRows.count()).toBe(12);
         expect(await sidebar.getByRole("link", { name: "Home", exact: true }).count()).toBe(0);
         await expectWorkspace();
         expect(await sidebar.locator(".sidebar-session-toolbar").count()).toBe(0);
@@ -173,17 +174,19 @@ suite.define(() => {
           expect(await pin.count()).toBe(1);
           expect(await pin.textContent()).toContain(`${agent.name} project`);
           expect(await pin.locator(".identity-avatar--agent").count()).toBe(1);
-          expect(await group.locator(".sidebar-recent-session").allTextContents()).toEqual([
-            expect.stringContaining(`${agent.name} notes`),
-          ]);
+          // Anchor and member rows share one list; the pinned project row lives in Pages.
+          expect(
+            await group
+              .locator(".sidebar-recent-session")
+              .evaluateAll((rows) => rows.map((row) => row.dataset.sessionKey)),
+          ).toEqual([`agent:${agent.id}:main`, `agent:${agent.id}:notes`]);
           expect(
             await group
               .getByRole("link", { name: `New conversation: ${agent.name}`, exact: true })
               .getAttribute("href"),
           ).toBe(`/new?agent=${agent.id}`);
-          expect(await group.locator(".sidebar-agent-roster__row").getAttribute("href")).toBe(
-            `/chat/${agent.id}`,
-          );
+          // The header labels the group; only the session rows navigate.
+          expect(await group.locator(".sidebar-agent-roster__row").getAttribute("href")).toBeNull();
         }
         expect(
           await sidebar
@@ -193,15 +196,44 @@ suite.define(() => {
         expect(
           (await headers.first().locator(".sidebar-agent-roster__copy").textContent())?.trim(),
         ).toBe("Harbor");
-        expect(await headers.first().getAttribute("aria-current")).toBe("page");
-        for (const row of await sessionRows.all()) {
-          const lead = await row.locator(".sidebar-session-indicator .session-glyph").boundingBox();
-          const title = await row.locator(".sidebar-recent-session__name").boundingBox();
-          expect(lead).not.toBeNull();
-          expect(title).not.toBeNull();
-          // The renderer reports fractional layout values; allow 0.01 px of rounding.
-          expect(title!.x - (lead!.x + lead!.width)).toBeGreaterThanOrEqual(8 - 0.01);
-        }
+        // The group header is a label now; the active conversation marks its row.
+        expect(await headers.first().getAttribute("aria-current")).toBeNull();
+        expect(
+          await sidebar
+            .locator('[data-session-key="agent:main:main"] .sidebar-recent-session__link')
+            .getAttribute("aria-current"),
+        ).toBe("page");
+        // Re-query every row by key: the sidebar commits again while the activity
+        // read is held, so element handles captured in one pass can detach.
+        const measuredLeads = await (async () => {
+          const keys = await sessionRows.evaluateAll((rows) =>
+            rows.map((row) => row.dataset.sessionKey ?? ""),
+          );
+          let measured = 0;
+          for (const key of keys) {
+            const row = sidebar
+              .locator(`.sidebar-recent-session[data-session-key="${key}"]`)
+              .first();
+            const title = await row.locator(".sidebar-recent-session__name").boundingBox();
+            expect(title, key).not.toBeNull();
+            const leadLocator = row.locator(".sidebar-session-indicator .session-glyph");
+            // Plain member rows render no lead glyph; every row that does keeps the
+            // documented gap before its title.
+            if ((await leadLocator.count()) === 0) {
+              continue;
+            }
+            const lead = await leadLocator.boundingBox();
+            if (!lead) {
+              continue;
+            }
+            measured += 1;
+            // The renderer reports fractional layout values (a pinned row measures
+            // 7.98 px for the 8 px gap); allow sub-pixel rounding only.
+            expect(title!.x - (lead.x + lead.width)).toBeGreaterThanOrEqual(8 - 0.05);
+          }
+          return measured;
+        })();
+        expect(measuredLeads).toBeGreaterThanOrEqual(8);
         await page.mouse.move(600, 60);
         await captureSidebarUiProof(suite, page, "sidebar-roster-after.png");
 
@@ -230,7 +262,7 @@ suite.define(() => {
         }
         await gateway.resolveDeferred("sessions.list");
         await expect.poll(async () => (await activityReads()).length).toBe(initialReads + 2);
-        await expect.poll(() => sessionRows.count()).toBe(8);
+        await expect.poll(() => sessionRows.count()).toBe(12);
 
         await sidebar.locator(".sidebar-brand__new-thread").click();
         const newMenu = sidebar.locator(".sidebar-brand .sidebar-new-session-menu");
@@ -243,12 +275,18 @@ suite.define(() => {
         await newMenu.locator('wa-dropdown-item[value="scout"]').click();
         await waitForControlUiRoute(page, { routeId: "new-session", pathname: "/new" });
         expect(new URL(page.url()).searchParams.get("agent")).toBe("scout");
-        await sidebar.locator('[data-agent-id="forge"]').click();
+        await sidebar
+          .locator('[data-session-key="agent:forge:main"] .sidebar-recent-session__link')
+          .click();
         await waitForControlUiRoute(page, { routeId: "chat", pathname: "/chat/forge" });
         await expect
-          .poll(() => sidebar.locator('[data-agent-id="forge"]').getAttribute("aria-current"))
+          .poll(() =>
+            sidebar
+              .locator('[data-session-key="agent:forge:main"] .sidebar-recent-session__link')
+              .getAttribute("aria-current"),
+          )
           .toBe("page");
-        expect(await sidebar.locator('[data-session-key="agent:forge:main"]').count()).toBe(0);
+        expect(await sidebar.locator('[data-session-key="agent:forge:main"]').count()).toBe(1);
         await sidebar.getByRole("link", { name: "Automations", exact: true }).click();
         await waitForControlUiRoute(page, { routeId: "cron" });
         await expect.poll(() => page.locator(".cron-table__row").count()).toBe(2);
@@ -265,7 +303,7 @@ suite.define(() => {
           .click();
         await waitForControlUiRoute(page, { routeId: "chat", pathname: "/chat/forge/notes" });
         await expectWorkspace();
-        await expect.poll(() => sessionRows.count()).toBe(8);
+        await expect.poll(() => sessionRows.count()).toBe(12);
         await sidebar.locator(".sidebar-session-sort").click();
         await openSidebarMenu(page);
         expect(
@@ -294,10 +332,11 @@ suite.define(() => {
         await openSidebarMenu(page);
         await chooseSidebarOwner(page, "all");
         await closeSidebarMenu(page);
-        await expect.poll(() => sessionRows.count()).toBe(8);
+        await expect.poll(() => sessionRows.count()).toBe(12);
 
         await sidebar.locator('[data-agent-collapse="bloom"]').click();
-        await expect.poll(() => sessionRows.count()).toBe(7);
+        // Collapsing the group hides its anchor and notes rows; its pinned row stays.
+        await expect.poll(() => sessionRows.count()).toBe(10);
         expect(new URL(page.url()).pathname).toBe("/chat/forge/notes");
         await page.reload();
         await expect.poll(() => headers.count()).toBe(4);
@@ -306,11 +345,14 @@ suite.define(() => {
             sidebar.locator('[data-agent-collapse="bloom"]').getAttribute("aria-expanded"),
           )
           .toBe("false");
-        await expect.poll(() => sessionRows.count()).toBe(7);
+        // Collapsing the group hides its anchor and notes rows; its pinned row stays.
+        await expect.poll(() => sessionRows.count()).toBe(10);
         await expectWorkspace();
         const forgeGroup = sidebar.locator('[data-agent-group="forge"]');
         const actions = forgeGroup.locator(".sidebar-agent-roster__actions");
-        await forgeGroup.locator(".sidebar-agent-roster__row").focus();
+        // The header label is not focusable now; the collapse control leads the
+        // group's keyboard order, then its actions.
+        await forgeGroup.locator("[data-agent-collapse]").focus();
         await page.keyboard.press("Tab");
         await expect
           .poll(() => actions.locator("a").evaluate((el) => el === document.activeElement))
@@ -321,7 +363,6 @@ suite.define(() => {
         await page.keyboard.press("Space");
         await actions.getByRole("menuitem", { name: "All sessions", exact: true }).waitFor();
         expect(await actions.locator("wa-dropdown-item").allTextContents()).toEqual([
-          expect.stringContaining("Open main chat"),
           expect.stringContaining("All sessions"),
           expect.stringContaining("Collapse others"),
         ]);
@@ -351,8 +392,13 @@ suite.define(() => {
         await expect
           .poll(() => sidebar.locator('[data-agent-collapse][aria-expanded="false"]').count())
           .toBe(3);
+        // The menu no longer offers "Open main chat"; dismiss it and open the
+        // agent's ordinary anchor row instead.
         await options.press("Enter");
-        await actions.getByRole("menuitem", { name: "Open main chat", exact: true }).click();
+        await page.keyboard.press("Escape");
+        await sidebar
+          .locator('[data-session-key="agent:forge:main"] .sidebar-recent-session__link')
+          .click();
         await waitForControlUiRoute(page, { routeId: "chat", pathname: "/chat/forge" });
         await actions.locator("a").press("Space");
         await waitForControlUiRoute(page, { routeId: "new-session", pathname: "/new" });

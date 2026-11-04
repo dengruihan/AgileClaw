@@ -119,7 +119,10 @@ async function collectBootChunkPaths(
             .waitFor({ timeout: READY_TIMEOUT_MS });
           await page.waitForTimeout(SETTLE_MS);
         };
-        await page.goto(`${baseUrl}/${route}${warm ? "#token=synthetic-boot-capture" : ""}`, {
+        // A bare /chat opens the unsent draft landing now, so the in-session
+        // graph is captured from an explicit conversation instead.
+        const routePath = route === "chat" ? "chat/main" : "new";
+        await page.goto(`${baseUrl}/${routePath}${warm ? "#token=synthetic-boot-capture" : ""}`, {
           waitUntil: "commit",
         });
         await waitForRoute();

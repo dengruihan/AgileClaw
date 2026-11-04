@@ -1,6 +1,9 @@
 import type { Page } from "playwright";
 import { expect, it } from "vitest";
-import { controlUiBundledSettingsStorageKey } from "../test-helpers/control-ui-e2e.ts";
+import {
+  controlUiBundledSettingsStorageKey,
+  controlUiSessionUrl,
+} from "../test-helpers/control-ui-e2e.ts";
 import { createChatFlowE2eSuite, installMockGateway } from "./chat-flow.test-support.ts";
 
 const suite = createChatFlowE2eSuite({
@@ -29,7 +32,7 @@ async function openProgress(page: Page) {
     inFlightRun: { runId: "polish-run" },
     methodResponses: { "progressCard.get": { card } },
   });
-  await page.goto(`${suite.server.baseUrl}chat`);
+  await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
   const disclosure = page.locator(".session-progress-card--composer");
   await disclosure.waitFor();
   if ((await disclosure.getAttribute("open")) === null) {

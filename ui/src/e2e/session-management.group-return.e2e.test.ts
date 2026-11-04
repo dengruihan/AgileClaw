@@ -1,6 +1,5 @@
 import type { Page } from "playwright";
 import { expect, it } from "vitest";
-import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 import {
   captureUiProof,
   createSessionManagementE2eSuite,
@@ -12,6 +11,8 @@ import {
 } from "./session-management.test-support.ts";
 
 const suite = createSessionManagementE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
+import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 
 async function setThemeMode(page: Page, mode: "dark" | "light"): Promise<void> {
   await page.emulateMedia({ colorScheme: mode });
@@ -61,7 +62,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const done = page.locator('[data-session-section="category:Done"]');
       const groups = page.locator('[data-session-section="groups"]');
       const row = done.locator('[data-session-key="agent:main:done-group"]');

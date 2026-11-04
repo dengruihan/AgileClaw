@@ -7,6 +7,10 @@ import {
   takeControlUiElementScreenshot,
   takeControlUiViewportScreenshot,
 } from "../test-helpers/control-ui-e2e-screenshot.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { registerItemOnlyOutcomeTest } from "./chat-tool-item-outcomes.test-support.ts";
+import { canonicalParallelBatchHistory } from "./chat-tool-parallel-batch.test-support.ts";
+import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 let artifactDir: string | undefined;
 beforeEach(() => {
@@ -15,10 +19,6 @@ beforeEach(() => {
     ? createControlUiE2eArtifactDir("chat-tool-turn-outcome", parent)
     : undefined;
 });
-import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
-import { registerItemOnlyOutcomeTest } from "./chat-tool-item-outcomes.test-support.ts";
-import { canonicalParallelBatchHistory } from "./chat-tool-parallel-batch.test-support.ts";
-import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({
   name: "Control UI autonomous tool-turn outcomes",
@@ -161,7 +161,7 @@ suite.define(() => {
         ],
       });
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const activitySummary = page.locator(".chat-activity-group__summary").first();
       await activitySummary.waitFor();
       await activitySummary.click();
@@ -315,7 +315,7 @@ suite.define(() => {
     const page = await context.newPage();
     await installMockGateway(page, { historyMessages: canonicalParallelBatchHistory() });
 
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     const activity = page.locator(".chat-group--activity .chat-activity-group__summary");
     await activity.waitFor();
     expect(await activity.textContent()).toContain("2 other operations");
@@ -491,7 +491,7 @@ suite.define(() => {
       ],
     });
 
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await page.getByText("Done. The summary module is in place", { exact: false }).waitFor();
     const activity = page.locator(".chat-group--activity");
     const summary = activity.locator(".chat-activity-group__summary");
@@ -544,7 +544,7 @@ suite.define(() => {
       ],
     });
 
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     const row = page.locator(".chat-tool-msg-summary");
     await row.waitFor();
     expect(await row.count()).toBe(1);
@@ -594,7 +594,7 @@ suite.define(() => {
       ],
     });
 
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     const row = page.locator(".chat-tool-msg-summary");
     await row.waitFor();
 
@@ -621,7 +621,7 @@ suite.define(() => {
       ],
     });
 
-    await page.goto(`${suite.server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     await page.getByText("Ready for the running tool wave proof.").waitFor();
     await page.locator(".agent-chat__input textarea").fill("run a long command");
     await page.getByRole("button", { name: "Send message" }).click();
@@ -837,7 +837,7 @@ suite.define(() => {
         ],
       });
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.locator(".agent-chat__input textarea").fill("run the reviewed command");
       await page.getByRole("button", { name: "Send message" }).click();
       const send = await gateway.waitForRequest("chat.send");

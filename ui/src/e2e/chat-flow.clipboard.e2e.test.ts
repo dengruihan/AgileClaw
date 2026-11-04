@@ -6,6 +6,7 @@ import { createChatFlowE2eSuite, installMockGateway } from "./chat-flow.test-sup
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 type ClipboardFailureProof = {
   asyncAttempts: number;
@@ -304,7 +305,7 @@ suite.define(() => {
         ],
       });
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const bubble = page.locator(".chat-bubble").filter({ hasText: text });
         await bubble.waitFor();
         await deferClipboard(page);
@@ -382,7 +383,7 @@ suite.define(() => {
       });
 
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.locator(".chat-pane__workspace-chip").click();
         await gateway.waitForRequest("worktrees.branches");
         await page.getByText(label, { exact: true }).click();
@@ -429,7 +430,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const button = page.locator(".code-block-copy");
       await button.click();
 
@@ -485,7 +486,7 @@ suite.define(() => {
         ],
       });
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const message = page.locator(".chat-group.assistant").filter({
           hasText: "Copy this complete message.",
         });

@@ -1,6 +1,7 @@
 import type { BrowserContext, Page } from "playwright";
 import { expect } from "vitest";
 import type { ChatQueueItem } from "../lib/chat/chat-types.ts";
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 import { readOutboxPayloadAttachments } from "./chat-flow.test-support.ts";
 
 export const outboxPayloadFile = {
@@ -72,7 +73,8 @@ export async function outboxChatUrl(
   baseUrl: string,
   origin: "localhost" | "plain HTTP",
 ) {
-  const url = new URL("chat", baseUrl);
+  // A bare /chat opens an unsent draft now; the outbox proofs need their conversation.
+  const url = new URL(controlUiSessionUrl(baseUrl, "agent:main:main"));
   if (origin === "plain HTTP") {
     url.hostname = "plain-http.test";
     await context.route(`${url.origin}/**`, async (route) => {

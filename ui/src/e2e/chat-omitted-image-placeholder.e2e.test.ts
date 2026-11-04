@@ -1,6 +1,6 @@
 import path from "node:path";
 import { expect, it } from "vitest";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({ name: "Omitted history image placeholder" });
@@ -95,7 +95,7 @@ suite.define(() => {
               },
             },
           });
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           await page.getByText("Here is the desktop screenshot.", { exact: true }).waitFor();
           if (running) {
             await page.getByRole("button", { name: "Stop generating" }).waitFor();
@@ -188,7 +188,7 @@ suite.define(() => {
         ],
       });
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const placeholder = page.locator(".chat-assistant-attachment-card", {
         hasText: "Omitted from history",
       });
@@ -220,7 +220,7 @@ suite.define(() => {
         ],
       });
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page
         .locator(`img.chat-message-image[src="${RETAINED_IMAGE_DATA_URL}"]`)
         .waitFor({ state: "visible" });

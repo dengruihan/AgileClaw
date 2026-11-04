@@ -16,7 +16,6 @@ import {
   sessionNavigationTarget,
 } from "../lib/sessions/route-navigation.ts";
 import {
-  areUiSessionKeysEquivalent,
   normalizeAgentId,
   resolveUiDefaultAgentId,
   resolveUiSessionRowAgentId,
@@ -78,7 +77,6 @@ import { SidebarEmptyGroupsController } from "./sidebar-empty-groups-controller.
 import type { SidebarMenusController } from "./sidebar-menus-controller.ts";
 import {
   memoizedSidebarCatalogs,
-  memoizedSidebarHome,
   memoizedSidebarSections,
   projectSidebarNavigation,
   sidebarNavigationInputs,
@@ -107,7 +105,6 @@ export class AppSidebarSessionNavigationElement extends AppSidebarBase {
   private readonly rowsMemo = new SidebarProjectionMemo<SidebarRecentSession[]>();
   private readonly catalogsMemo = new SidebarProjectionMemo<SidebarSessionCatalog[]>();
   private readonly sectionsMemo = new SidebarProjectionMemo<SidebarVisibleSections>();
-  private readonly homeMemos = new Map<string, SidebarProjectionMemo<SidebarRecentSession>>();
   readonly sessionData = new SessionDataController(this);
   readonly sessionPullRequests = new SessionPullRequestIndicatorsController(this, {
     getConnected: () => this.connected,
@@ -255,7 +252,6 @@ export class AppSidebarSessionNavigationElement extends AppSidebarBase {
 
   override disconnectedCallback() {
     this.sessionProjection.dispose();
-    this.homeMemos.clear();
     super.disconnectedCallback();
   }
 
@@ -280,18 +276,6 @@ export class AppSidebarSessionNavigationElement extends AppSidebarBase {
         (session.visuallyActive || this.isSessionChildrenExpanded(session))
       ) {
         for (const key of session.childLoadParentKeys ?? [session.key]) {
-          revalidating.add(key);
-        }
-      }
-    }
-    const grouped = this.groupedSessionSource;
-    const homeAgents = grouped
-      ? grouped.agentIds.filter((id) => !grouped.collapsedAgentIds.has(id))
-      : [this.expandedAgentId()];
-    for (const agentId of homeAgents) {
-      const mainRow = this.mainSessionRow(agentId);
-      if (mainRow?.childSessions?.length) {
-        for (const key of this.projectHomeSession(mainRow, agentId).childLoadParentKeys ?? []) {
           revalidating.add(key);
         }
       }
@@ -631,43 +615,6 @@ export class AppSidebarSessionNavigationElement extends AppSidebarBase {
   get resolveSessionAttention() {
     return this.attention.createResolver();
   }
-
-  projectHomeSession(row: GatewaySessionRow, agentId: string): SidebarRecentSession {
-    let memo = this.homeMemos.get(agentId);
-    if (!memo) {
-      memo = new SidebarProjectionMemo<SidebarRecentSession>();
-      this.homeMemos.set(agentId, memo);
-    }
-    return memoizedSidebarHome(memo, this, row, agentId);
-  }
-
-  /** Gateway row backing the identity card (unread/running state), if loaded. */
-  mainSessionRow(agentId?: string): GatewaySessionRow | null {
-    const normalized = normalizeAgentId(agentId ?? this.expandedAgentId());
-    const mainKey = this.selectedAgentMainSessionKey(normalized);
-    const rows =
-      this.groupedSessionSource?.result?.sessions ??
-      (normalized === normalizeAgentId(this.sessionData.sessionsAgentId ?? "")
-        ? (this.sessionData.sessionsResult?.sessions ?? [])
-        : (this.sessionData.sessionResultsByAgent[normalized]?.sessions ?? []));
-    const lineage = this.sessionData.activeSessionLineageRoot;
-    return (
-      (lineage ? [...rows, lineage] : rows).find((row) =>
-        areUiSessionKeysEquivalent(row.key, mainKey),
-      ) ?? null
-    );
-  }
-
-  /** Identity-card click: the agent's rolling main session, or Settings offline. */
-  readonly openMainSession = (agentId: string) => {
-    if (!this.connected) {
-      this.onNavigate?.("appearance");
-      return;
-    }
-    this.clearSessionSelection();
-    const mainAgentId = normalizeAgentId(agentId);
-    this.selectSession(this.selectedAgentMainSessionKey(mainAgentId), mainAgentId);
-  };
 
   isSessionChildrenExpanded(session: SidebarRecentSession): boolean {
     return this.sessionProjection.isChildrenExpanded(session.key);

@@ -1,16 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chromium, type Browser } from "playwright";
-import { beforeEach, afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type Browser, chromium } from "playwright";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
+  type ControlUiE2eServer,
   canRunPlaywrightChromium,
   captureControlUiE2eFailureDiagnostics,
   controlUiSessionUrl,
   installMockGateway,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
 import {
   auditMarkdownTable,
@@ -94,7 +94,7 @@ ${auditMarkdownTable}`,
       ],
     });
     try {
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       const message = page.locator('[data-entry-id="wrapping-table"]');
       const shell = message.locator(".markdown-table").first();
       const compact = message.locator(".markdown-table__viewport");
@@ -219,7 +219,7 @@ ${overflowTable}`,
       const widthInput = page.locator("[data-settings-chat-message-width]");
       await widthInput.fill("82%");
       await widthInput.press("Tab");
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       const tables = page.locator('[data-entry-id="percentage-table"] .markdown-table');
       const shell = tables.first();
       const overflow = tables.nth(1);
@@ -332,7 +332,7 @@ ${overflowTable}`,
     });
 
     try {
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       const bubble = page.locator('[data-entry-id="assistant-table"]');
       const shell = bubble.locator(".markdown-table");
       const viewport = shell.locator(".markdown-table__viewport");
@@ -666,7 +666,7 @@ ${overflowTable}`,
       ],
     });
     try {
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       const shell = page.locator('[data-entry-id="retained-table"] .markdown-table');
       const viewport = shell.locator(".markdown-table__viewport");
       await shell.waitFor({ state: "visible" });

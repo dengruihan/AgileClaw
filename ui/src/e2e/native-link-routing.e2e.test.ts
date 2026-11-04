@@ -1,15 +1,16 @@
 // Real-browser proof for native-host link routing and the bridge-free browser path.
 import path from "node:path";
-import { chromium, type Browser, type BrowserContext } from "playwright";
-import { beforeEach, afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { type Browser, type BrowserContext, chromium } from "playwright";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { NativeBrowserMessage, NativeBrowserReply } from "../app/native-browser-bridge.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
+  type ControlUiE2eServer,
   canRunPlaywrightChromium,
+  controlUiSessionUrl,
   installMockGateway,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
 
 const chromiumExecutablePath = resolvePlaywrightChromiumExecutablePath(chromium.executablePath());
@@ -119,7 +120,7 @@ describeControlUiE2e("native link routing", () => {
         },
       ],
     });
-    await page.goto(`${server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
     const link = page.getByRole("link", { name: "report" });
 
     await link.click();
@@ -356,7 +357,7 @@ describeControlUiE2e("native link routing", () => {
         },
       ],
     });
-    await page.goto(`${server.baseUrl}chat`);
+    await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
     const link = page.getByRole("link", { name: "report" });
 
     await link.click({ button: "right" });

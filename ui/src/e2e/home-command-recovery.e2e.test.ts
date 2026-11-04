@@ -5,6 +5,7 @@ import {
   defaultControlUiFeatureMethods,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
+import { openAssistantDock } from "./assistant-dock.test-support.ts";
 import {
   createControlUiE2eContextOptions,
   createControlUiE2eSuite,
@@ -55,10 +56,12 @@ suite.define(() => {
           "openclaw-assistant-panel .agent-chat__composer-combobox textarea",
         );
         if (handoff) {
-          await page.getByRole("link", { name: "Agents", exact: true }).click();
-          await page.waitForURL((url) => url.pathname.endsWith("/agents"));
-          await page.getByRole("region", { name: "Agents", exact: true }).waitFor();
-          await page.locator(".sidebar-footer-bar__home").click();
+          // Navigate to a page that a default sidebar still lists; the dock opens
+          // over that page and must recover the pending command for its session.
+          await page.getByRole("link", { name: "Dashboards", exact: true }).click();
+          await page.waitForURL((url) => url.pathname.endsWith("/dashboards"));
+          await page.locator("openclaw-dashboards-page").waitFor();
+          await openAssistantDock(page, { sessionKey: homeKey, agentId: "main", label: "Main" });
           await dockComposer.waitFor({ state: "visible" });
           await expect.poll(() => dockComposer.inputValue()).toBe("");
           if (newerDraft) {
@@ -77,7 +80,7 @@ suite.define(() => {
         const dockDraftBeforeReturn = handoff ? await dockComposer.inputValue() : null;
         if (handoff) {
           // Retained source DOM stays parked; observe the recovered presentation on return.
-          await page.locator("a.nav-item--home").click();
+          await page.locator('[data-session-key="agent:main:main"]').click();
           await composer.waitFor({ state: "visible" });
           await expect.poll(() => dockComposer.isVisible()).toBe(false);
         }

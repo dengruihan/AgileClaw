@@ -5,17 +5,16 @@ import type { ApplicationContext } from "../app/context.ts";
 import { OpenClawLightDomElement } from "../lit/openclaw-element.ts";
 import { SubscriptionsController } from "../lit/subscriptions-controller.ts";
 import {
-  buildHomeWorkContext,
+  buildPageWorkContext,
   subscribeChatWorkContext,
   type ChatWorkContext,
 } from "../pages/chat/chat-work-context.ts";
-import "./home-session.runtime.ts";
+import "./assistant-session.runtime.ts";
 import "../styles/assistant-panel-content.css";
 
 /** Conversation runtimes load inside the already-open dock. */
 export class OpenClawAssistantPanelContent extends OpenClawLightDomElement {
   @property({ type: Boolean }) active = false;
-  @property() destination: "home" | "session" = "home";
   @property() sessionKey = "";
   @property() agentId = "";
   @property({ attribute: false }) sessionContext: ChatWorkContext | undefined;
@@ -40,13 +39,13 @@ export class OpenClawAssistantPanelContent extends OpenClawLightDomElement {
     if (!this.active) {
       return nothing;
     }
-    return html`<openclaw-home-session
+    return html`<openclaw-assistant-session
       .sessionKey=${this.sessionKey}
       .agentId=${this.agentId}
       .workContext=${
         this.sessionContext ??
         (this.context
-          ? buildHomeWorkContext(
+          ? buildPageWorkContext(
               this.context,
               this.pageRouteId,
               this.pageSessionKey,
@@ -54,7 +53,7 @@ export class OpenClawAssistantPanelContent extends OpenClawLightDomElement {
             )
           : undefined)
       }
-    ></openclaw-home-session>`;
+    ></openclaw-assistant-session>`;
   }
 }
 

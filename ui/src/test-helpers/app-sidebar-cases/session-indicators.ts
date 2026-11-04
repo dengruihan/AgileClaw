@@ -279,7 +279,7 @@ describe("AppSidebar session indicators", () => {
   });
 
   it.each(["running", "queued"] as const)(
-    "rings Home for %s activity while keeping its draft and outbox badges trailing",
+    "rings the anchor row for %s activity while keeping its draft and outbox badges trailing",
     async (status) => {
       const mainKey = "agent:main:main";
       const workingKey = "agent:main:working";
@@ -308,20 +308,15 @@ describe("AppSidebar session indicators", () => {
       };
       await sidebar.updateComplete;
 
-      const home = sidebar.querySelector(".nav-item--home");
-      const homeRing = home?.querySelector(".session-glyph--running .session-glyph__ring");
-      expect(home?.querySelector(".session-glyph__content .nav-item__icon")).not.toBeNull();
-      expect(homeRing).not.toBeNull();
-      expect(home?.querySelector(".nav-item__state .session-run-spinner")).toBeNull();
-      expect(home?.querySelector(".session-unread-dot")).toBeNull();
+      const row = sidebar.querySelector(`[data-session-key="${mainKey}"]`);
+      const ring = row?.querySelector(".session-glyph--running .session-glyph__ring");
+      expect(ring).not.toBeNull();
       const activityLabel = status === "queued" ? "Queued" : "Active run";
-      expect(homeRing?.getAttribute("aria-label")).toBe(activityLabel);
-      expect(homeRing?.classList.contains("session-glyph__ring--queued")).toBe(status === "queued");
-      expect(home?.getAttribute("aria-label")).toBe(`Home · ${activityLabel} · Unread`);
-      expect(
-        home?.querySelector(".nav-item__state .session-row-badge--attention")?.textContent,
-      ).toContain("2");
-      expect(home?.querySelector(".nav-item__state .session-row-badge--draft")).not.toBeNull();
+      expect(ring?.getAttribute("aria-label")).toBe(activityLabel);
+      expect(ring?.classList.contains("session-glyph__ring--queued")).toBe(status === "queued");
+      expect(row?.querySelector(".session-unread-dot")).toBeNull();
+      expect(row?.querySelector(".session-row-badge--attention")?.textContent).toContain("2");
+      expect(row?.querySelector(".session-row-badge--draft")).not.toBeNull();
     },
   );
 

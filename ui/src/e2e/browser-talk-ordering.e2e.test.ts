@@ -3,11 +3,11 @@ import path from "node:path";
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import {
+  TALK_READY_HISTORY_MESSAGE,
   dispatchOpenAiTalkEvent,
   installOpenAiTalkFixture,
-  TALK_READY_HISTORY_MESSAGE,
   videoTalkCatalog,
   waitForTalkReady,
 } from "./browser-talk-start-stop.fixtures.ts";
@@ -43,7 +43,7 @@ suite.define(() => {
           },
         });
         await installOpenAiTalkFixture(page);
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await waitForTalkReady(page);
         await page.getByRole("button", { name: "Start voice input" }).click();
         await gateway.waitForRequest("talk.client.create");

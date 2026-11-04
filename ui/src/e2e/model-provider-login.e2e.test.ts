@@ -10,6 +10,7 @@ import {
 } from "../test-helpers/control-ui-e2e.ts";
 import { pickerValue as modelPickerValue } from "../test-helpers/select-picker-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
+import { installSetupGateway } from "./model-setup.test-support.ts";
 
 const suite = createControlUiE2eSuite({
   name: "Control UI model provider login mocked Gateway E2E",
@@ -29,7 +30,7 @@ async function captureProviderProof(fileName: string, content: Locator): Promise
 }
 
 suite.define(() => {
-  it("loads provider styles and hands first-run API keys to the selected setup method", async () => {
+  it("loads provider styles and hands setup API keys to the selected setup method", async () => {
     await suite.withPage(
       {
         colorScheme: "light",
@@ -39,7 +40,7 @@ suite.define(() => {
         viewport: { width: 1280, height: 900 },
       },
       async ({ page }) => {
-        const gateway = await installMockGateway(page, {
+        const gateway = await installSetupGateway(page, {
           featureMethods: [
             ...defaultControlUiFeatureMethods,
             "openclaw.setup.detect",
@@ -128,16 +129,18 @@ suite.define(() => {
           },
         });
         await page.goto(`${suite.server.baseUrl}settings/model-setup?firstRun=1`);
-        await page.locator(".model-setup__manual").waitFor();
-        await page.locator("[data-models-connect]").click();
+        await page.waitForURL(/\/settings\/model-providers/);
         const dialog = page.locator(".model-provider-login");
+        if (!(await dialog.isVisible())) {
+          await page.locator("[data-models-connect]").click();
+        }
         await dialog.locator('[data-models-login-provider="openai"]').waitFor();
         expect((await dialog.locator(".model-setup-wizard__body > p").textContent())?.trim()).toBe(
-          "Choose how to connect. Verifying an API key or token can also set this agent's active model.",
+          "Save credentials for this agent. Choose the active model separately.",
         );
         if (recordVisuals) {
           await writeFile(
-            path.join(suite.artifactDir, "first-run-provider-picker.png"),
+            path.join(suite.artifactDir, "setup-provider-picker.png"),
             await takeControlUiViewportScreenshot(
               page,
               page.locator("openclaw-modal-dialog dialog"),
@@ -156,30 +159,34 @@ suite.define(() => {
             .locator('[data-models-login-provider="anthropic"] .provider-brand-icon')
             .evaluate((element) => element.getBoundingClientRect().width),
         ).toBeGreaterThan(0);
+        // The credentials dialog offers connection methods only; setup-detect
+        // manual providers live in the setup wizard behind Discover.
         await dialog.locator('[data-models-login-provider="github-copilot"]').click();
         const copilotMethods = dialog.locator("[data-models-login-choice] button");
         expect(await copilotMethods.locator("strong").allTextContents()).toEqual([
           "GitHub Copilot",
-          "GitHub Copilot API key or token",
         ]);
-        expect(await copilotMethods.nth(1).textContent()).toContain("Paste an API key or token");
         await dialog.locator("[data-models-login-back]").click();
         await dialog.locator('[data-models-login-provider="anthropic"]').click();
         expect(
           await dialog.locator("[data-models-login-choice] button strong").allTextContents(),
-        ).toEqual(["Anthropic setup-token", "Anthropic API key"]);
-        await dialog.getByRole("button", { name: "Anthropic API key", exact: true }).click();
+        ).toEqual(["Anthropic setup-token"]);
+        await dialog.locator("[data-models-login-back]").click();
+        await dialog.locator("[data-models-login-discover]").click();
+        await page.getByRole("heading", { name: "On this Gateway", exact: true }).waitFor();
+
+        // The setup wizard owns manual provider keys: choosing one hands the
+        // pasted key to the selected setup method.
+        const providerTrigger = page.locator(".model-setup-provider-select__trigger");
+        await providerTrigger.click();
+        await page.locator('[data-manual-provider="apiKey"]').click();
+        await expect.poll(() => providerTrigger.textContent()).toContain("Anthropic");
+        await expect.poll(() => providerTrigger.textContent()).toContain("API key");
         const keyInput = page.locator('.model-setup__manual input[type="password"]');
-        await expect
-          .poll(() => keyInput.evaluate((element) => document.activeElement === element))
-          .toBe(true);
-        expect(
-          await page.locator('.model-setup-provider-select [slot="trigger"]').textContent(),
-        ).toContain("Anthropic API key");
         expect(await gateway.getRequests("openclaw.setup.activate.start")).toHaveLength(0);
-        await captureProviderProof("first-run-anthropic-key-form.png", keyInput);
+        await captureProviderProof("setup-anthropic-key-form.png", keyInput);
         await keyInput.fill("synthetic-anthropic-api-key");
-        await page.locator(".model-setup__manual button.primary").click();
+        await page.getByRole("button", { name: "Connect & use for this agent" }).click();
         const activation = await gateway.waitForRequest("openclaw.setup.activate.start");
         expect(activation.params).toEqual({
           sessionId: expect.any(String),

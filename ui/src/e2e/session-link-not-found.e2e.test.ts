@@ -37,7 +37,7 @@ suite.define(() => {
   it.each([
     ["missing session", "agent:main:15cf8259-0000-4000-8000-000000000001"],
     ["removed agent", "agent:retired:main"],
-  ])("opens a usable main chat with a remembered %s", async (name, savedKey) => {
+  ])("opens a new draft instead of a remembered %s", async (name, savedKey) => {
     const mainKey = "agent:main:main";
     await suite.withPage(
       { locale: "en-US", serviceWorkers: "block", viewport: { height: 900, width: 1280 } },
@@ -46,57 +46,19 @@ suite.define(() => {
         await rememberSession(page, savedKey);
 
         await page.goto(suite.server.baseUrl);
-        await expect.poll(() => new URL(page.url()).pathname).toBe("/chat/main");
-        const activeComposer = page.locator(
-          'openclaw-chat-pane[aria-hidden="false"] .agent-chat__input textarea',
-        );
-        await activeComposer.waitFor({ state: "visible" });
-        expect(await activeComposer.count()).toBe(1);
+        await expect.poll(() => new URL(page.url()).pathname).toBe("/new");
+        // The settled draft names the first usable agent, not the remembered key.
+        await expect.poll(() => new URL(page.url()).searchParams.get("agent")).toBe("main");
+        const draftComposer = page.locator("openclaw-new-session-page .new-session-page__message");
+        await draftComposer.waitFor({ state: "visible" });
         expect(await page.locator(".session-route-not-found").count()).toBe(0);
-        expect((await gateway.waitForRequest("chat.startup")).params).toMatchObject({
-          sessionKey: mainKey,
-        });
-        await captureUiProof(suite, page, `remembered-${name.replaceAll(" ", "-")}.png`);
+        // Nothing resolved or opened the remembered key before the first message.
+        expect(await gateway.getRequests("chat.startup")).toHaveLength(0);
+        expect(await gateway.getRequests("sessions.resolve")).toHaveLength(0);
+        expect(await gateway.getRequests("sessions.create")).toHaveLength(0);
+        await captureUiProof(suite, page, `bare-entry-${name.replaceAll(" ", "-")}.png`);
       },
     );
-  });
-
-  it("restores the exact remembered session when its short prefix collides", async () => {
-    const key = "agent:main:thread:12345678-0000-4000-8000-000000000001";
-    const otherKey = "agent:main:thread:12345678-0000-4000-8000-000000000002";
-    await suite.withPage({ locale: "en-US", serviceWorkers: "block" }, async ({ page }) => {
-      const gateway = await installMockGateway(page, {
-        sessions: [],
-        methodResponses: {
-          "sessions.resolve": {
-            cases: [
-              { match: { key }, response: { ok: true, key, agentId: "main" } },
-              {
-                match: { shortId: "12345678" },
-                response: {
-                  ok: false,
-                  candidates: [
-                    { key, agentId: "main" },
-                    { key: otherKey, agentId: "main" },
-                  ],
-                },
-              },
-            ],
-          },
-        },
-      });
-      await rememberSession(page, key);
-
-      await page.goto(suite.server.baseUrl);
-      await page.locator(".agent-chat__input textarea").waitFor({ state: "visible" });
-      expect((await gateway.waitForRequest("chat.startup")).params).toMatchObject({
-        sessionKey: key,
-      });
-      await expect.poll(() => new URL(page.url()).search).toBe("");
-      const requests = await gateway.getRequests("sessions.resolve");
-      expect(requests).toHaveLength(1);
-      expect(requests[0]?.params).toMatchObject({ key, allowMissing: true });
-    });
   });
 
   it("keeps an explicitly requested missing session as a visible dead end", async () => {

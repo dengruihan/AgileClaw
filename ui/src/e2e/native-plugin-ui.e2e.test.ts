@@ -15,13 +15,13 @@ import {
 } from "./chat-side-panel.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 import {
+  type NativePluginWindow,
   captureNativePluginUiProof,
   catalog,
   expectComposerFooterLayout,
   pluginId,
   pluginModule,
   waitForPendingPluginInitializer,
-  type NativePluginWindow,
 } from "./native-plugin-ui.test-support.ts";
 
 const suite = createControlUiE2eSuite({ name: "Native plugin UI ownership" });
@@ -624,7 +624,7 @@ suite.define(() => {
           .poll(() => page.getByLabel("Fixture outcome").textContent())
           .toContain("view has ended");
         await captureNativePluginUiProof(suite, page, "after.png", { fullPage: true });
-        await page.locator(".nav-item--home").click();
+        await page.locator(`.sidebar-recent-session[data-session-key="${sessionKey}"] a`).click();
         await expectOneAccessory();
         await page
           .locator(`.sidebar-recent-session[data-session-key="${otherSessionKey}"] a`)
@@ -632,7 +632,7 @@ suite.define(() => {
         await expectOneAccessory(otherSessionKey);
         await expect.poll(() => accessory.getAttribute("data-presented")).toBe("false");
         expect(await accessory.isVisible()).toBe(false);
-        await page.locator(".nav-item--home").click();
+        await page.locator(`.sidebar-recent-session[data-session-key="${sessionKey}"] a`).click();
         await expectOneAccessory();
         expect(await accessory.getAttribute("data-presented")).toBe("true");
         await captureNativePluginUiProof(suite, page, "session-accessory-returned.png", {

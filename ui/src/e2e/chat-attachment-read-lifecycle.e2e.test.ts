@@ -4,8 +4,8 @@ import type { Locator, Page } from "playwright";
 import { expect, it } from "vitest";
 import { storedChatOutboxScopeKey } from "../lib/chat/outbox-store.ts";
 import {
-  resolveUiConversationIdentity,
   type UiSessionDefaultsHost,
+  resolveUiConversationIdentity,
 } from "../lib/sessions/session-key.ts";
 import {
   controlUiSessionUrl,
@@ -13,6 +13,7 @@ import {
   installMockGateway,
   navigateToControlUiSession,
 } from "../test-helpers/control-ui-e2e.ts";
+import { openAssistantDock } from "./assistant-dock.test-support.ts";
 import {
   createControlUiE2eContextOptions,
   createControlUiE2eSuite,
@@ -122,10 +123,10 @@ suite.define(() => {
         buffer: Buffer.from("Synthetic attachment payload survives Home handoff."),
       });
       await home.locator('.chat-attachment-thumb[aria-busy="true"]').waitFor();
-      await page.getByRole("link", { name: "Agents", exact: true }).click();
-      await page.waitForURL((url) => url.pathname.endsWith("/agents"));
-      await page.getByRole("region", { name: "Agents", exact: true }).waitFor();
-      await page.locator(".sidebar-footer-bar__home").click();
+      await page.getByRole("link", { name: "Dashboards", exact: true }).click();
+      await page.waitForURL((url) => url.pathname.endsWith("/dashboards"));
+      await page.locator("openclaw-dashboards-page").waitFor();
+      await openAssistantDock(page, { sessionKey: homeKey, agentId: "main", label: "Main" });
       const dock = page.locator("openclaw-assistant-panel");
       const dockComposer = dock.locator(".agent-chat__composer-combobox textarea");
       await dockComposer.waitFor({ state: "visible" });
@@ -145,7 +146,7 @@ suite.define(() => {
         }
         await proof.finish();
       });
-      await page.locator("a.nav-item--home").click();
+      await page.locator(`.sidebar-recent-session[data-session-key="${homeKey}"] a`).click();
       await composer.waitFor({ state: "visible" });
       await expect.poll(() => dockComposer.isVisible()).toBe(false);
       const receipt = {
@@ -206,7 +207,7 @@ suite.define(() => {
       page.on("pageerror", (error) => pageErrors.push(error.message));
       const proofDir = path.join(suite.artifactDir, scenario);
       await mkdir(proofDir, { recursive: true });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       const send = page.getByRole("button", { name: "Send message", exact: true });
       await composer.fill(currentText);
@@ -802,7 +803,7 @@ suite.define(() => {
         maxPayload: 256 * 1024 + 400,
       });
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.fill("Send both files");
       await page.locator(".agent-chat__file-input").setInputFiles([
@@ -838,7 +839,7 @@ suite.define(() => {
       await installDeferredAttachmentReader(page);
       const gateway = await installMockGateway(page);
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       const send = page.getByRole("button", { name: "Send message" });
       await composer.fill("Include the image that is still loading");
@@ -957,7 +958,7 @@ suite.define(() => {
       const proofDir = path.join(suite.artifactDir, "stalled-attachment-read");
       await mkdir(proofDir, { recursive: true });
 
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       const send = page.getByRole("button", { name: "Send message" });
       const draftText = "Draft message while attachment read stalls";

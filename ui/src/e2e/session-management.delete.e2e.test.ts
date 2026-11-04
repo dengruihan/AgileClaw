@@ -1,13 +1,16 @@
 import path from "node:path";
 import { expect, it } from "vitest";
 import type { ApplicationContext } from "../app/context.ts";
-import { defaultControlUiFeatureMethods } from "../test-helpers/control-ui-e2e.ts";
+import {
+  controlUiSessionUrl,
+  defaultControlUiFeatureMethods,
+} from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 import { expectRequestCountStable } from "./chat-flow.test-support.ts";
 import {
+  activateSelfRemovingControl,
   captureUiProof,
   captureUiProofEnabled,
-  activateSelfRemovingControl,
   createSessionManagementE2eSuite,
   installMockGateway,
   sessionsListResponse,
@@ -71,7 +74,7 @@ suite.define(() => {
         return recovery;
       };
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const cancelled = await openRecovery(0);
         await cancelled.getByRole("button", { name: "Cancel", exact: true }).click();
         await cancelled.waitFor({ state: "detached" });
@@ -467,7 +470,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const row = page.locator(`.sidebar-recent-session[data-session-key="${key}"]`);
       await row.waitFor({ state: "visible", timeout: 10_000 });
       await row.hover();
@@ -557,7 +560,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const row = page.locator(`.sidebar-recent-session[data-session-key="${key}"]`);
       await row.waitFor({ state: "visible", timeout: 10_000 });
       await row.hover();

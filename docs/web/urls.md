@@ -145,10 +145,11 @@ display names, agents, and longer id prefixes. Use a longer prefix to make the
 URL unique. Current Gateways return at most ten recent candidates; when that
 bound is reached, the view treats the result as incomplete instead of guessing.
 
-Opening the Control UI at `/` or `/chat` restores the browser's last selected
-session. If that session no longer exists, the UI opens its agent's main session;
-if the agent was removed, it uses the current agent instead. Explicit links to
-missing sessions keep showing the "Session not found" recovery page.
+Opening the Control UI at `/` or `/chat` starts a new unsent draft at `/new`.
+The draft is not stored until the first message is sent, and reloading restores
+the same draft rather than creating an empty session. Read-only connections that
+cannot create a session land on `/sessions` instead. Explicit links to missing
+sessions keep showing the "Session not found" recovery page.
 
 To continue one of these links in the terminal or attach a coding harness, see
 [Session synchronization and attachment](/concepts/session-attachment).
@@ -444,6 +445,11 @@ With `gateway.controlUi.basePath: "/openclaw"`, use
 This table lists every Control UI application route. A dash means the route has
 no route-specific URL parameters.
 
+A bare `/` and a bare `/chat` open `/new` as an unsent draft. The draft is not
+persisted until the first message is sent, reloading restores the same draft, and
+explicit session links are never rewritten to the draft. Read-only connections
+that cannot create a session land on `/sessions` instead.
+
 | Page                | Canonical path                                 | Aliases                   | Parameters or dynamic forms                                                       |
 | ------------------- | ---------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------- |
 | Chat                | `/chat`                                        | -                         | Key-backed session forms above; `?draft=<text>`                                   |
@@ -474,7 +480,7 @@ no route-specific URL parameters.
 | Labs                | `/settings/labs`                               | -                         | Shared settings parameters below                                                  |
 | About               | `/settings/about`                              | -                         | Shared settings parameters below                                                  |
 | AI and agents       | `/settings/ai-agents`                          | `/ai-agents`              | Shared settings parameters below                                                  |
-| Model setup         | `/settings/model-setup`                        | `/model-setup`            | `?firstRun=1`                                                                     |
+| Model setup         | `/settings/model-setup`                        | `/model-setup`            | Redirects to `/settings/model-providers?connect=1`                                |
 | Model providers     | `/settings/model-providers`                    | `/model-providers`        | Shared settings parameters below                                                  |
 | Import memory       | `/memory-import`                               | `/settings/memory-import` | -                                                                                 |
 | Workboard           | `/workboard`                                   | -                         | `/workboard/<boardId>`                                                            |
@@ -512,7 +518,11 @@ Links to Settings sections that moved to another page replace the old URL with
 the current destination while keeping the setting anchor. Back returns to the
 page before the link, and Forward returns to the current destination.
 
-Model setup links with `?firstRun=1` or `?firstRun=explicit` retain the first-run onboarding flow. Without either marker, `/settings/model-setup` and `/model-setup` redirect to `/settings/model-providers?connect=1`, which opens the connection dialog on Models. The Models page otherwise stays in place while connecting a provider or reviewing Gateway discovery.
+`/settings/model-setup` and `/model-setup` are retired links. They redirect once
+to `/settings/model-providers?connect=1`, which opens the connection dialog on
+Models, and any `?firstRun=` marker is ignored. The pre-redesign setup page no
+longer exists; provider connection, embedded discovery, and the current model
+workspace live on Models.
 
 The retired General route and its `/config` alias are replaced once with
 `/settings/appearance?section=__appearance__#settings-language`. The historical
@@ -537,7 +547,6 @@ the agent path while keeping other query parameters and the fragment.
 
 These Gateway-served documents sit outside the application route table:
 
-- `/?onboarding=1` opens the first-run onboarding presentation.
 - `/approve/<approvalId>` opens a standalone approval document. With a base
   path, use `<basePath>/approve/<approvalId>`. The id identifies an approval but
   never authorizes it; normal Gateway authentication still applies. An approval

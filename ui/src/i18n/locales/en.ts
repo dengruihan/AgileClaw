@@ -770,6 +770,7 @@ export const en: TranslationMap & {
       "Could not load this dashboard: {error}. Check the Gateway connection and try again.",
   },
   sessionsView: {
+    sessionFallback: "Session",
     subagentPrefix: "Subagent:",
     automationPrefix: "Automation:",
     actionRequiresConnection: "Connect to the Gateway to change sessions.",
@@ -1617,7 +1618,6 @@ export const en: TranslationMap & {
     collapse: "Collapse sidebar",
     resize: "Resize sidebar",
     more: "More",
-    home: "Home",
     pages: "Pages",
     customize: "Edit pinned items",
     customizeReset: "Reset pinned items",
@@ -1976,9 +1976,6 @@ export const en: TranslationMap & {
   memoryImport: {},
   assistantPanel: {
     title: "Assistant sidebar",
-    home: "Home",
-    toggle: "Talk to your Home agent",
-    openHome: "Open Home full page",
     close: "Close assistant sidebar",
     resize: "Resize assistant sidebar",
     dockBottom: "Dock assistant sidebar at bottom",

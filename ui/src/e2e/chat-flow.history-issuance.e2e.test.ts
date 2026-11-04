@@ -288,7 +288,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       await gateway.rejectDeferred("chat.startup", {
         code: "GATEWAY_UNAVAILABLE",
@@ -339,7 +339,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       await gateway.rejectDeferred("chat.startup", {
         code: "GATEWAY_UNAVAILABLE",
@@ -384,7 +384,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const cachedMessage = page
         .locator(".chat-thread")
         .getByText("Cached transcript stays visible.");

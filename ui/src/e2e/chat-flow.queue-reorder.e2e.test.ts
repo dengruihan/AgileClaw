@@ -17,6 +17,7 @@ import { outboxPayloadFile, stageOutboxAttachment } from "./chat-outbox-payloads
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
 
 const QUEUED = ["review the migration", "then update the docs", "finally run the smoke"] as const;
 
@@ -53,7 +54,7 @@ suite.define(() => {
         historyMessages: [{ role: "assistant", content: "Synthetic queue ordering proof." }],
         sessionInfo: { key: "main", hasActiveRun: false, status: "done" },
       });
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await waitForControlUiGatewayReady(page);
       await page.locator(".agent-chat__composer-combobox textarea").waitFor();
       await page.getByText("Synthetic queue ordering proof.", { exact: true }).waitFor();
@@ -152,7 +153,7 @@ suite.define(() => {
     const gateway = await installMockGateway(page);
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.waitFor({ state: "visible", timeout: 15_000 });
 
@@ -195,7 +196,7 @@ suite.define(() => {
       const gateway = await installMockGateway(page);
 
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const composer = page.locator(".agent-chat__composer-combobox textarea");
         await composer.waitFor({ state: "visible", timeout: 15_000 });
         await gateway.deferNext("chat.send");
@@ -279,7 +280,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       const composer = page.locator(".agent-chat__composer-combobox textarea");
       await composer.waitFor({ state: "visible", timeout: 15_000 });
 

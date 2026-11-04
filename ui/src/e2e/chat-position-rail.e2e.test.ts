@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { SIDEBAR_GEOMETRY_COMMIT_EVENT } from "../pages/chat/sidebar-layout.ts";
 import {
   controlUiBundledSettingsStorageKey,
+  controlUiSessionUrl,
   createControlUiMockSameOriginGatewayScript,
 } from "../test-helpers/control-ui-e2e.ts";
 import {
@@ -71,7 +72,7 @@ suite.define(() => {
             },
             { key: controlUiBundledSettingsStorageKey(suite.server.baseUrl), mode: colorScheme },
           );
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const transcript = page.locator(".chat-thread");
           await transcript
             .locator(".chat-virtual-row")
@@ -649,7 +650,7 @@ suite.define(() => {
                 ),
               )
               .toBe(width);
-            await page.goto(`${suite.server.baseUrl}chat`);
+            await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
             await transcript.locator('.chat-bubble[data-entry-id="position-rail-239"]').waitFor();
             await expect
               .poll(() =>
@@ -799,7 +800,7 @@ suite.define(() => {
             },
             { key: controlUiBundledSettingsStorageKey(suite.server.baseUrl), mode: colorScheme },
           );
-          await page.goto(`${suite.server.baseUrl}chat`);
+          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
           const thread = page.locator(".chat-thread");
           const marks = thread.locator(".chat-position-rail__marker");
           await expect

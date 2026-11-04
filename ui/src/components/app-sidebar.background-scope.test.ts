@@ -100,12 +100,19 @@ describe("AppSidebar automatic list scope replacement", () => {
       ).toBe("false");
 
       context.connectionBootstrap.setForegroundRoute(null);
-      await waitForFast(() =>
-        expect(parents).toEqual(expect.arrayContaining([nextParent.key, mainParent.key])),
-      );
+      // Only the current parent is eagerly discovered. An anchor is an ordinary
+      // row now, so its children load when its own disclosure is expanded.
+      await waitForFast(() => expect(parents).toEqual([nextParent.key]));
       await settleLitElement(sidebar);
-      expect(parents).toHaveLength(2);
+      expect(parents).toHaveLength(1);
       expect(sidebar.sessionData.childSessionRowsByParent[previousParent.key]).toBeUndefined();
+      const anchorToggle = sidebar.querySelector<HTMLButtonElement>(
+        `[data-child-session-toggle="${mainParent.key}"]`,
+      );
+      expect(anchorToggle?.getAttribute("aria-expanded")).toBe("false");
+      anchorToggle!.click();
+      await waitForFast(() => expect(parents).toContain(mainParent.key));
+      await settleLitElement(sidebar);
       expect(sidebar.sessionData.childSessionRowsByParent[mainParent.key]?.[0]?.key).toBe(
         mainParent.childSessions![0],
       );

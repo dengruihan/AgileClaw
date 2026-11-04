@@ -3,7 +3,11 @@ import path from "node:path";
 import type { Page } from "playwright";
 import { beforeEach, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import { installMockGateway, startControlUiE2eServer } from "../test-helpers/control-ui-e2e.ts";
+import {
+  controlUiSessionUrl,
+  installMockGateway,
+  startControlUiE2eServer,
+} from "../test-helpers/control-ui-e2e.ts";
 import {
   createControlUiE2eContextOptions,
   createControlUiE2eSuite,
@@ -112,7 +116,9 @@ suite.define(() => {
     await suite.withPage(createControlUiE2eContextOptions(), async ({ page }) => {
       await installMockGateway(page, { serverBuildId: BUILD_ID, serverVersion: "2026.7.10" });
 
-      const response = await page.goto(`${suite.server.baseUrl}chat`);
+      const response = await page.goto(
+        controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"),
+      );
       expect(response?.status()).toBe(200);
       const identityCard = page.locator(".sidebar-identity-card");
       await expect

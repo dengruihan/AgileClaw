@@ -12,8 +12,8 @@ import {
   expectDefined,
   expectRequestCountStable,
   installMockGateway,
-  requireRecord,
   readOutboxPayloadAttachments,
+  requireRecord,
   requireString,
   scrollChatThreadToTop,
   visibleChatBubbleTexts,
@@ -283,7 +283,7 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await page.locator(".chat-thread").getByText(visibleAnswer, { exact: true }).waitFor({
         timeout: 10_000,
       });

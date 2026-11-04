@@ -1,5 +1,9 @@
 import { expect, it } from "vitest";
-import { installMockGateway, reconnectMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import {
+  installMockGateway,
+  reconnectMockGateway,
+  controlUiSessionUrl,
+} from "../test-helpers/control-ui-e2e.ts";
 import { requireRecord, requireString } from "./chat-flow.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
@@ -12,7 +16,7 @@ suite.define(() => {
       const sessionId = "session:" + sessionKey;
       const prompt = "Please also review the installation notes.";
       const gateway = await installMockGateway(page, { sessionKey });
-      await page.goto(suite.server.baseUrl + "chat");
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
       await gateway.setOnline(false);
       await page.locator(".agent-chat__input--offline").waitFor();

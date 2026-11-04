@@ -1,16 +1,17 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import { beforeEach, afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { type Browser, type BrowserContext, type Page, chromium } from "playwright";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { finishElementAnimations } from "../test-helpers/animations.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
+  type ControlUiE2eServer,
   canRunPlaywrightChromium,
+  controlUiSessionUrl,
   installMockGateway,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
 import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 
@@ -67,7 +68,7 @@ async function installImageGalleries(page: Page) {
       timestamp: 1_800_000_000_000 + count,
     })),
   });
-  await page.goto(`${server.baseUrl}chat`);
+  await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
   await gateway.waitForRequest("chat.startup");
 }
 
@@ -151,7 +152,7 @@ describeControlUiE2e("Control UI image lightbox", () => {
     });
 
     try {
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
 
       const transcriptTrigger = page.getByRole("button", { name: "Open image AgileClaw banner" });
@@ -489,7 +490,7 @@ describeControlUiE2e("Control UI image lightbox", () => {
         },
       ],
     });
-    await page.goto(server.baseUrl + "chat");
+    await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
     await gateway.waitForRequest("chat.startup");
     const trigger = page.getByRole("button", { name: "Open image before.png", exact: true });
     const lightbox = page.locator("openclaw-image-lightbox");

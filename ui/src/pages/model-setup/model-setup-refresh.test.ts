@@ -8,11 +8,11 @@ import { updatePickers } from "../../test-helpers/select-picker.ts";
 import { createStorageMock } from "../../test-helpers/storage.ts";
 import { waitForFast } from "../../test-helpers/wait-for.ts";
 import {
-  createFirstRunContext,
+  createModelSetupContext,
   detection,
   mountPage,
   selectManualProvider,
-} from "./model-setup-first-run.test-support.ts";
+} from "./model-setup.test-support.ts";
 
 const inventory: SystemAgentSetupDetectResult = {
   ...detection,
@@ -33,10 +33,9 @@ describe("Model setup refresh continuity", () => {
   it.each(["success", "failure"] as const)(
     "keeps editable drafts and focus through a rescan %s",
     async (outcome) => {
-      const { context, client, request } = createFirstRunContext();
+      const { context, client, request } = createModelSetupContext();
       const { page } = await mountPage(context, {
         client,
-        firstRun: false,
         state: { phase: "ready", result: inventory },
       });
       await selectManualProvider(page, "fixture-key");
@@ -82,7 +81,7 @@ describe("Model setup refresh continuity", () => {
   );
 
   it("reopens the published native inventory without restarting discovery and retries explicitly", async () => {
-    const { context, client, request } = createFirstRunContext();
+    const { context, client, request } = createModelSetupContext();
     const model = {
       provider: "acp-opencode",
       id: "fixture-model",
@@ -113,7 +112,6 @@ describe("Model setup refresh continuity", () => {
     });
     const { page } = await mountPage(context, {
       client,
-      firstRun: false,
       state: { phase: "ready", result: inventory },
     });
     const section = page.querySelector<HTMLElement>("[data-native-model-setup]")!;
@@ -184,10 +182,10 @@ describe("Model setup refresh continuity", () => {
   });
 
   it("clears the old owner's draft and ignores its late rescan", async () => {
-    const { context, client, request, snapshot, publishGatewaySnapshot } = createFirstRunContext();
+    const { context, client, request, snapshot, publishGatewaySnapshot } =
+      createModelSetupContext();
     const { page } = await mountPage(context, {
       client,
-      firstRun: false,
       state: { phase: "ready", result: inventory },
     });
     await selectManualProvider(page, "fixture-key");

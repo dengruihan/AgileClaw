@@ -1,5 +1,4 @@
 import { expect, it } from "vitest";
-import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 import {
   captureUiProof,
@@ -11,6 +10,8 @@ import {
 import { chooseSidebarMenuOption, closeSidebarMenu } from "./sidebar-session-menu.test-support.ts";
 
 const suite = createSessionManagementE2eSuite();
+import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
+import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
 
 suite.define(() => {
   it("searches Sessions through the Gateway, appends matches, and retires failed or replaced queries", async () => {
@@ -132,7 +133,7 @@ suite.define(() => {
       });
 
       try {
-        await page.goto(`${suite.server.baseUrl}chat`);
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         const selectFilter = async (label: "Archived" | "All" | "Active") => {
           await page.getByRole("button", { name: "Filter & sort", exact: true }).click();
           await chooseSidebarMenuOption(page, "Status", label);

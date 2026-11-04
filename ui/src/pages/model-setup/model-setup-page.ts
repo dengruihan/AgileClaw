@@ -11,18 +11,13 @@ import { applicationContext, type ApplicationContext } from "../../app/context.t
 import { hasOperatorAdminAccess } from "../../app/operator-access.ts";
 import { t } from "../../i18n/index.ts";
 import { isGatewayMethodAdvertised } from "../../lib/gateway-methods.ts";
-import { readSessionDefaults } from "../../lib/sessions/session-key.ts";
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
 import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
-import { ModelProviderLoginController } from "../model-providers/login-controller.ts";
 import {
   captureModelSetupConnection,
-  modelSetupAgentSelection,
   modelSetupOwnerChanges,
   reconcileModelSetupConnection,
-  FirstRunSetup,
-  type ModelSetupRouteData,
-} from "./first-run-setup.ts";
+} from "./model-setup-connection.ts";
 import { ModelSetupIconLoader } from "./model-setup-icon-loader.ts";
 import { formatModelSetupError } from "./model-setup-task-result.ts";
 import { NativeModelSetup } from "./native-model-setup.ts";
@@ -32,8 +27,8 @@ import {
   type ModelSetupPrepareOption,
   preparedModelActivation,
 } from "./prepare-options.ts";
-import { manualProviderActivation, revealManualProvider } from "./provider-picker.ts";
-import { createModelSetupDetectTask, createModelSetupVerifyTask } from "./rpc.ts";
+import { manualProviderActivation } from "./provider-picker.ts";
+import { createModelSetupDetectTask } from "./rpc.ts";
 import {
   activationTargetId,
   preparedModelPageState,
@@ -41,7 +36,6 @@ import {
   mapActivationResult,
   type ModelSetupActivationState,
   type ModelSetupPageState,
-  type ModelSetupVerifyState,
   type ModelSetupWizardState,
   type ModelSetupWizardDraft,
 } from "./state.ts";
@@ -50,10 +44,8 @@ import { ModelSetupWizardRunner, type ModelSetupWizardCompletion } from "./wizar
 
 export class ModelSetupPage extends OpenClawLightDomElement {
   private readonly actionsDisabled = (): boolean =>
-    this.login.busy ||
     this.nativeModels.saving ||
     this.activationState.phase === "testing" ||
-    this.verifyState.phase === "checking" ||
     this.wizardMutationActive ||
     (this.wizardState.phase !== "idle" &&
       this.wizardState.phase !== "error" &&
@@ -62,15 +54,12 @@ export class ModelSetupPage extends OpenClawLightDomElement {
   @consume({ context: applicationContext, subscribe: true })
   private context!: ApplicationContext;
 
-  @property({ attribute: false }) routeData: ModelSetupRouteData | undefined;
-  @property({ type: Boolean }) embedded = false;
   @property() agentLabel = "";
   @property({ attribute: false }) credentialChoices: readonly string[] = [];
   @property({ attribute: false }) onClose: (() => void) | undefined;
 
   @state() private pageState: ModelSetupPageState = { phase: "loading" };
   @state() private activationState: ModelSetupActivationState = { phase: "idle" };
-  @state() private verifyState: ModelSetupVerifyState = { phase: "idle" };
   @state() private wizardState: ModelSetupWizardState = { phase: "idle" };
   @state() private wizardMode: "auth" | "prepare" | "activate" = "auth";
   @state() private wizardDraft: ModelSetupWizardDraft = { stepId: null, value: undefined };
@@ -86,7 +75,7 @@ export class ModelSetupPage extends OpenClawLightDomElement {
   @state() private cancellationNotice: string | null = null;
 
   private get agentSelection() {
-    return modelSetupAgentSelection(this.context, this.routeData?.firstRun === true);
+    return this.context.settingsAgentSelection;
   }
 
   private observedConnection: ReturnType<typeof captureModelSetupConnection> | null = null;
@@ -94,54 +83,18 @@ export class ModelSetupPage extends OpenClawLightDomElement {
   private wizardMutationGeneration = 0;
   private wizardMutationActive = false;
   private wizardReturnFocus: HTMLElement | null = null;
-  private readonly firstRun = new FirstRunSetup({
-    context: () => this.context,
-    routeData: () => this.routeData,
-    pageState: () => this.pageState,
-    activationState: () => this.activationState,
-    actionsDisabled: () => this.actionsDisabled() || this.detectionRequest !== null,
-    canUseSetup: (client) => this.canUseSetup(client),
-    canVerify: (client) => this.canVerify(client),
-    verify: (modelTarget) => this.verifyConnection(modelTarget).then(() => this.verifyTask.value),
-    setVerifyState: (next) => (this.verifyState = next),
-    setActivationState: (next) => (this.activationState = next),
-    setRefreshWarning: (warning) => (this.setupRefreshWarning = warning),
-    resumeWizard: (recovery, observer) => {
-      this.wizard.restore(recovery, observer);
-      void this.runWizardMutation(() => this.wizard.resume());
-    },
-    closeWizard: () => this.closeWizard(),
-    notify: () => this.requestUpdate(),
-  });
   private readonly nativeModels = new NativeModelSetup(this, {
     getContext: () => this.context,
     getConnection: () => this.observedConnection,
     canUseSetup: (client) => this.canUseSetup(client),
-    blocked: () =>
-      this.actionsDisabled() || this.detectionRequest !== null || this.firstRun.unresolved,
-    onSelected: () => (this.embedded ? this.onClose?.() : this.context.navigate("chat")),
+    blocked: () => this.actionsDisabled() || this.detectionRequest !== null,
+    onSelected: () => this.onClose?.(),
   });
   private readonly iconLoader = new ModelSetupIconLoader(
     () => this.context,
     () => this.pageState,
     (urls) => (this.iconUrls = urls),
   );
-  private readonly login = new ModelProviderLoginController(this, {
-    getScope: () => ({ context: this.context, agentId: this.agentSelection.state.selectedId }),
-    getManualProviders: () =>
-      this.pageState.phase === "ready" ? this.pageState.result.manualProviders : [],
-    onManualProvider: (authChoice) => {
-      this.selectManualProvider(authChoice);
-      revealManualProvider(this.renderRoot);
-    },
-    canStart: () =>
-      this.canUseSetup(this.context.gateway.snapshot.client) &&
-      !this.firstRun.unresolved &&
-      !this.actionsDisabled(),
-    canContinue: () =>
-      this.canUseSetup(this.context.gateway.snapshot.client) && !this.firstRun.unresolved,
-    refresh: () => this.detect(),
-  });
   private readonly subscriptions = new SubscriptionsController(this)
     .watchStore(
       () => this.context?.gateway,
@@ -150,8 +103,7 @@ export class ModelSetupPage extends OpenClawLightDomElement {
     .watchStore(
       () => this.context && this.agentSelection,
       () => this.synchronizeGateway(this.context.gateway.snapshot),
-    )
-    .watchStore(() => this.firstRun);
+    );
   private readonly wizard = new ModelSetupWizardRunner({
     getClient: () => this.context?.gateway.snapshot.client ?? null,
     getAgentId: () => this.agentSelection.state.selectedId ?? null,
@@ -166,16 +118,9 @@ export class ModelSetupPage extends OpenClawLightDomElement {
         this.cancellationNotice = null;
       }
     },
-    onStart: (method, intent) =>
-      method === "openclaw.setup.prepare.start"
-        ? undefined
-        : this.firstRun.observeActivation(
-            this.firstRun.beginActivation(intent ?? { kind: "provider-auth" }),
-          ),
     onBackgroundCompletion: (completion) =>
       this.runWizardMutation(() => Promise.resolve(completion), true),
     onSessionMissing: () => {
-      this.firstRun.wizardMissing();
       void this.detect();
     },
     requestFailedMessage: () => t("modelSetup.errors.requestFailed"),
@@ -201,19 +146,12 @@ export class ModelSetupPage extends OpenClawLightDomElement {
         if (this.pageState.phase === "ready") {
           this.detectionError = message;
         } else {
-          this.firstRun.setReadyConnection(null);
           this.pageState = { phase: "detect-error", message };
         }
         return;
       }
       this.detectionError = null;
-      this.firstRun.setReadyConnection({
-        client: outcome.client,
-        hello: outcome.hello,
-        agentId: outcome.agentId,
-      });
       this.pageState = { phase: "ready", result: outcome.value };
-      this.firstRun.reconcileMissingWizard(outcome.value);
       if (
         !outcome.value.manualProviders.some((provider) => provider.id === this.manualProviderId)
       ) {
@@ -222,10 +160,7 @@ export class ModelSetupPage extends OpenClawLightDomElement {
     },
   });
 
-  private readonly verifyTask = createModelSetupVerifyTask(this);
-
   override disconnectedCallback() {
-    this.firstRun.dispose();
     this.resetActivity();
     this.observedConnection = null;
     this.nativeModels.reset();
@@ -249,18 +184,16 @@ export class ModelSetupPage extends OpenClawLightDomElement {
       this.querySelector("openclaw-modal-dialog")?.setReturnFocusTarget(this.wizardReturnFocus);
     }
     this.iconLoader.reconcile();
-    this.firstRun.start();
   }
 
   private synchronizeGateway(snapshot: ApplicationContext["gateway"]["snapshot"]): void {
-    const routeData = this.routeData;
-    if (!this.isConnected || !routeData) {
+    if (!this.isConnected) {
       return;
     }
     const previous = this.observedConnection;
     const observation = reconcileModelSetupConnection(
       previous,
-      captureModelSetupConnection(this.context, routeData.firstRun, previous?.recoveryScope),
+      captureModelSetupConnection(this.context, previous?.recoveryScope),
     );
     if (observation.kind === "unchanged") {
       return;
@@ -300,17 +233,9 @@ export class ModelSetupPage extends OpenClawLightDomElement {
       this.wizardMutationActive = false;
       this.wizard.suspend(suspendedNotice);
       if (this.canUseSetup(connection.client)) {
-        this.firstRun.reconnectActivation(connection);
         void this.runWizardMutation(() => this.wizard.resume());
       }
       return;
-    }
-    // The router refreshes cached loader objects during the same visit. Only
-    // a mode change or mounted/connection lifecycle can retire setup ownership.
-    if (connection.firstRun !== previous?.firstRun) {
-      this.firstRun.routeChanged();
-    } else {
-      this.firstRun.connectionChanged(connection);
     }
     this.resetActivity();
     this.pageState = { phase: "loading" };
@@ -320,14 +245,12 @@ export class ModelSetupPage extends OpenClawLightDomElement {
   }
 
   private resetActivity(): void {
-    this.login.reset();
     this.detectionRequest = null;
     this.detectionError = null;
     this.wizardMutationGeneration += 1;
     this.wizardMutationActive = false;
     void this.detectTask.run([null, null, null]);
     this.activationState = { phase: "idle" };
-    this.resetVerify();
     this.iconLoader.reset();
     this.pendingPrepareOption = null;
     void this.wizard.cancel();
@@ -337,7 +260,7 @@ export class ModelSetupPage extends OpenClawLightDomElement {
     const snapshot = this.context.gateway.snapshot;
     return Boolean(
       client &&
-      (this.routeData?.firstRun === true || this.agentSelection.state.selectedId !== null) &&
+      this.agentSelection.state.selectedId !== null &&
       snapshot.phase === "connected" &&
       hasOperatorAdminAccess(snapshot.hello?.auth ?? null) &&
       isGatewayMethodAdvertised(snapshot, "openclaw.setup.detect") === true,
@@ -349,7 +272,6 @@ export class ModelSetupPage extends OpenClawLightDomElement {
     if (!this.canUseSetup(client) || this.detectionRequest) {
       return null;
     }
-    this.resetVerify();
     this.detectionError = null;
     // Only a cold load replaces the content. Same-owner rescans keep forms and
     // focus mounted; a changed connection clears them in synchronizeGateway.
@@ -363,35 +285,9 @@ export class ModelSetupPage extends OpenClawLightDomElement {
     return outcome?.token === token && "value" in outcome ? outcome.value : null;
   }
 
-  private canVerify(client: GatewayBrowserClient | null): client is GatewayBrowserClient {
-    return (
-      this.canUseSetup(client) &&
-      isGatewayMethodAdvertised(this.context.gateway.snapshot, "openclaw.setup.verify") === true
-    );
-  }
-
-  private resetVerify(): void {
-    this.verifyState = { phase: "idle" };
-    void this.verifyTask.run([null, null, undefined]);
-  }
-
-  private async verifyConnection(modelTarget?: "utility"): Promise<void> {
-    const client = this.context.gateway.snapshot.client;
-    if (!this.canVerify(client) || this.actionsDisabled() || this.detectionRequest) {
-      return;
-    }
-    this.verifyState = { phase: "checking" };
-    await this.verifyTask.run([client, this.agentSelection.state.selectedId, modelTarget]);
-  }
-
   private async activate(params: SystemAgentSetupActivateParams, targetId: string): Promise<void> {
     const client = this.context.gateway.snapshot.client;
-    if (
-      !this.canUseSetup(client) ||
-      this.actionsDisabled() ||
-      this.detectionRequest ||
-      this.firstRun.unresolved
-    ) {
+    if (!this.canUseSetup(client) || this.actionsDisabled() || this.detectionRequest) {
       return;
     }
     this.manualError = null;
@@ -479,7 +375,6 @@ export class ModelSetupPage extends OpenClawLightDomElement {
       if (this.activationState.phase === "success") {
         this.manualApiKey = "";
       }
-      this.firstRun.finishActivation(result, activationTarget, this.setupRefreshWarning);
       return;
     }
     const result = await this.detect();
@@ -520,8 +415,7 @@ export class ModelSetupPage extends OpenClawLightDomElement {
     const client = this.context.gateway.snapshot.client;
     if (
       ((this.wizardMutationActive || this.detectionRequest !== null) && !settling) ||
-      !this.canUseSetup(client) ||
-      (this.wizard.state.phase === "idle" && this.firstRun.unresolved)
+      !this.canUseSetup(client)
     ) {
       return;
     }
@@ -625,7 +519,6 @@ export class ModelSetupPage extends OpenClawLightDomElement {
     return renderModelSetup({
       detecting: this.detectionRequest !== null,
       detectionError: this.detectionError,
-      embedded: this.embedded,
       agentLabel: this.agentLabel,
       credentialChoices: this.credentialChoices,
       onClose: this.onClose,
@@ -635,28 +528,18 @@ export class ModelSetupPage extends OpenClawLightDomElement {
           this.wizardReturnFocus = null;
         }
       },
-      page: this.firstRun.visiblePageState(
-        this.verifyState.phase === "ok" && this.verifyState.modelTarget !== "utility",
-      ),
+      page: this.pageState,
       activation: this.activationState,
-      verify: this.verifyState,
-      connection: this.embedded ? undefined : this.login.pageActions,
       wizard: this.wizardState,
       wizardMode: this.wizardMode,
       wizardValue: this.wizardDraft.value,
       canAdmin,
-      canVerify: this.canVerify(snapshot.client),
       canPrepare:
         this.canUseSetup(snapshot.client) &&
         isGatewayMethodAdvertised(snapshot, "openclaw.setup.prepare.start") === true,
-      modelConfigured: readSessionDefaults(snapshot)?.modelConfigured === true,
       gatewayTooOld,
       refreshWarning: this.setupRefreshWarning,
       cancellationNotice: this.cancellationNotice,
-      activationUnresolved: this.firstRun.unresolved,
-      onUseCurrentModel: this.firstRun.canUseCurrentModel
-        ? () => void this.firstRun.useCurrentModel()
-        : undefined,
       actionsDisabled: this.actionsDisabled(),
       manualProviderId: this.manualProviderId,
       manualApiKey: this.manualApiKey,
@@ -665,14 +548,12 @@ export class ModelSetupPage extends OpenClawLightDomElement {
       nativeSessionCatalogsEnabled: this.nativeSessionCatalogsEnabled,
       nativeModels: this.nativeModels,
       onNativeSessionCatalogsChange: (enabled) => (this.nativeSessionCatalogsEnabled = enabled),
-      firstRun: this.routeData?.firstRun === true,
       iconUrls: this.iconUrls,
       onDetect: () => {
-        if (!this.detectionRequest && this.firstRun.retryDetection()) {
+        if (!this.detectionRequest) {
           void this.detect();
         }
       },
-      onVerify: () => void this.firstRun.verify(),
       onActivateCandidate: (candidate) =>
         void this.activate(
           candidateActivation(candidate),
@@ -706,15 +587,11 @@ export class ModelSetupPage extends OpenClawLightDomElement {
       onManualConnect: () => this.connectManual(),
       onMoreSignInToggle: (open) => (this.moreSignInOpen = open),
       onIconError: (iconUrl) => this.iconLoader.invalidate(iconUrl),
-      onOpenChat: () => (this.embedded ? this.onClose?.() : this.firstRun.continueSetup()),
-      onOpenSetupAssistant: () => this.firstRun.continueSetup(),
+      onOpenChat: () => this.onClose?.(),
+      onOpenSetupAssistant: () => this.context.navigate("chat"),
       onSuccessClose: () => {
-        if (this.embedded) {
-          this.onClose?.();
-          return;
-        }
         this.activationState = { phase: "idle" };
-        void this.detect();
+        this.onClose?.();
       },
       onWizardValueChange: (value) => (this.wizardDraft = { ...this.wizardDraft, value }),
       onWizardAnswer: (value, includeValue) =>

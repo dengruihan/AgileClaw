@@ -4,6 +4,7 @@ import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-su
 import {
   captureUiProof,
   controlUiSessionPath,
+  controlUiSessionUrl,
   createNewSessionPageE2eSuite,
   createdSessionListResult,
   installMockGateway,
@@ -97,7 +98,7 @@ suite.define(() => {
           "sessions.list": createdSessionListResult(sessionKey),
         },
       });
-      await pageA.goto(`${suite.server.baseUrl}chat`);
+      await pageA.goto(controlUiSessionUrl(suite.server.baseUrl, sessionKey));
       const existingSession = pageA
         .locator(".sidebar-recent-session")
         .filter({ hasText: "Created session" });

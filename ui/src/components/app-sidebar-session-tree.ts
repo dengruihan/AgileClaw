@@ -73,6 +73,8 @@ function summarizeChildren(
 export function projectSessionTree(params: {
   roots: readonly GatewaySessionRow[];
   mainSessionKeys?: ReadonlySet<string>;
+  excludedChildKeys?: ReadonlySet<string>;
+  forcedRootKeys?: ReadonlySet<string>;
   rowsByKey: ReadonlyMap<string, GatewaySessionRow>;
   loadingChildKeys: ReadonlySet<string>;
   isChildSessionVisible?: (parentKey: string, childKey: string, row?: GatewaySessionRow) => boolean;
@@ -104,6 +106,7 @@ export function projectSessionTree(params: {
         ? []
         : (childKeysByParent.get(normalizeDefaultMainSessionAliasForUi(row.key)) ?? []).filter(
             (key) =>
+              !params.excludedChildKeys?.has(key) &&
               !hasRootCategory(rowsByKey.get(key)) &&
               (params.isChildSessionVisible?.(row.key, key, rowsByKey.get(key)) ?? true),
           );
@@ -196,6 +199,9 @@ export function projectSessionTree(params: {
     .filter((row) => {
       if (isSubagentSessionKey(row.key)) {
         return false;
+      }
+      if (params.forcedRootKeys?.has(row.key)) {
+        return true;
       }
       if (hasRootCategory(row)) {
         return true;

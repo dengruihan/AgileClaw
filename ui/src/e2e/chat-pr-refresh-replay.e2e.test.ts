@@ -12,6 +12,7 @@ import {
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
   type ControlUiE2eServer,
+  controlUiSessionUrl,
 } from "../test-helpers/control-ui-e2e.ts";
 import { waitForWatchedSessionKey } from "./chat-github-publication.test-support.ts";
 
@@ -57,7 +58,7 @@ describe("PR refresh replay through the Control UI", () => {
         featureMethods: ["chat.metadata", "chat.startup", SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD],
         methodResponses: { [SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD]: { subscribed: true } },
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       const key = await waitForWatchedSessionKey(gateway);
       const pullRequest = {
         number: 111532,

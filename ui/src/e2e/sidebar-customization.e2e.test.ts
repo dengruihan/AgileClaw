@@ -8,7 +8,6 @@ import {
   takeControlUiViewportScreenshot,
 } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
-  controlUiSessionPath,
   controlUiSessionUrl,
   installMockGateway,
   waitForControlUiRoute,
@@ -222,7 +221,10 @@ suite.define(() => {
     });
 
     try {
-      await page.goto(`${suite.server.baseUrl}chat`);
+      // A bare entry opens the draft landing; this case reloads on that landing
+      // to prove the persisted rail width is applied before the route commits.
+      await page.goto(suite.server.baseUrl);
+      await page.locator("openclaw-app-sidebar").waitFor({ state: "attached" });
 
       const sidebar = page.locator("openclaw-app-sidebar");
       const pinnedItems = sidebar.locator(
@@ -264,8 +266,8 @@ suite.define(() => {
 
       await page.reload();
       await expect.poll(() => roundedWidth(shellNav)).toBe(358);
-      // Persisted shell width is restored before the reloaded chat route commits.
-      await waitForControlUiRoute(page, { pathnamePrefix: "/chat", routeId: "chat" });
+      // Persisted shell width is restored before the reloaded landing route commits.
+      await waitForControlUiRoute(page, { pathnamePrefix: "/new", routeId: "new-session" });
       await page.setViewportSize({ height: 900, width: 1300 });
       await expect.poll(() => roundedWidth(shellNav)).toBe(358);
       await sidebarResizer.focus();
@@ -469,7 +471,8 @@ suite.define(() => {
       await captureSettingsSidebarProof(settingsSidebar, "01f-settings-search-navigated.png");
       await holdUiProof(page);
       await page.keyboard.press("Escape");
-      await expect.poll(() => new URL(page.url()).pathname).toBe(controlUiSessionPath("main"));
+      // Settings Escape returns to the page that opened it: the new-session landing.
+      await expect.poll(() => new URL(page.url()).pathname).toBe("/new");
       await expect.poll(() => sidebar.isVisible()).toBe(true);
       await openSettingsFromIdentity();
       await expect.poll(() => settingsSidebar.isVisible()).toBe(true);
@@ -482,7 +485,7 @@ suite.define(() => {
       // sidebar owns navigation there, not the app sidebar.
       await expect.poll(() => settingsSidebar.isVisible()).toBe(true);
       await expect.poll(() => sidebar.isVisible()).toBe(false);
-      await page.goto(`${suite.server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await captureUiProof(page, "01-default-pinned.png");
 
       const moreButton = sidebar.locator(".sidebar-nav__head-action");
@@ -692,101 +695,6 @@ suite.define(() => {
         await expect.poll(() => new URL(page.url()).searchParams.has("session")).toBe(false);
         await expect.poll(() => page.locator(".new-session-page").isVisible()).toBe(true);
         await captureUiProof(page, "07-sidebar-start-screen.png");
-      },
-    );
-  });
-
-  it("moves Home activity clear of the aligned Pages editor", async () => {
-    await suite.withPage(
-      {
-        locale: "en-US",
-        serviceWorkers: "block",
-        viewport: { height: 900, width: 1440 },
-      },
-      async ({ page }) => {
-        await installMockGateway(page, {
-          methodResponses: {
-            "sessions.list": {
-              count: 1,
-              defaults: {
-                contextTokens: null,
-                model: "gpt-5.5",
-                modelProvider: "openai",
-              },
-              path: "",
-              sessions: [
-                {
-                  hasActiveRun: true,
-                  key: "main",
-                  kind: "direct",
-                  status: "running",
-                  updatedAt: 100,
-                },
-              ],
-              ts: 100,
-            },
-          },
-        });
-
-        await page.goto(`${suite.server.baseUrl}chat`);
-        const sidebar = page.locator("openclaw-app-sidebar");
-        const home = sidebar.locator(".nav-item--home");
-        await expect.poll(() => home.isVisible()).toBe(true);
-        await sidebar.evaluate(async (element) => {
-          const host = element as HTMLElement & {
-            requestUpdate(): void;
-            updateComplete: Promise<unknown>;
-          };
-          // The shell refreshes this snapshot whenever its lazy outbox runtime
-          // loads. Keep the warning fixture stable until geometry is measured.
-          const storedOutboxes = {
-            total: 1,
-            attentionCountForSession: () => 1,
-            hasSessionDraft: () => false,
-          };
-          Object.defineProperty(host, "storedOutboxes", {
-            configurable: true,
-            get: () => storedOutboxes,
-            set: () => undefined,
-          });
-          host.requestUpdate();
-          await host.updateComplete;
-        });
-
-        const activity = home.locator(".sidebar-home-session-states");
-        const editor = sidebar.locator(".sidebar-nav__head-action");
-        await expect
-          .poll(() => home.locator(".session-glyph--running .session-glyph__ring").count())
-          .toBe(1);
-        await expect.poll(() => activity.locator(".session-row-badge--attention").count()).toBe(1);
-
-        await page.mouse.move(900, 400);
-        const restingActivity = await activity.boundingBox();
-        expect(restingActivity).not.toBeNull();
-        await sidebar.locator(".sidebar-nav").hover();
-        await expect
-          .poll(() => editor.evaluate((element) => getComputedStyle(element).opacity))
-          .toBe("1");
-        await expect
-          .poll(async () => {
-            const [homeBox, activityBox, editorBox] = await Promise.all([
-              home.boundingBox(),
-              activity.boundingBox(),
-              editor.boundingBox(),
-            ]);
-            if (!homeBox || !activityBox || !editorBox || !restingActivity) {
-              return null;
-            }
-            return {
-              activityShift: Math.round(restingActivity.x - activityBox.x),
-              centerDelta: Math.abs(
-                editorBox.y + editorBox.height / 2 - (homeBox.y + homeBox.height / 2),
-              ),
-              gap: Math.round(editorBox.x - (activityBox.x + activityBox.width)),
-            };
-          })
-          .toEqual({ activityShift: 25, centerDelta: 0, gap: 4 });
-        await captureUiProof(page, "07-home-activity-editor.png");
       },
     );
   });

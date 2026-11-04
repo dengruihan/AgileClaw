@@ -1,10 +1,11 @@
 import { consume } from "@lit/context";
 import { property } from "lit/decorators.js";
+import { pathForRoute } from "../../app-route-paths.ts";
 import { applicationContext, type ApplicationContext } from "../../app/context.ts";
 import { IdentityAvatarController } from "../../lib/identity-avatar-loader.ts";
-import { sessionNavigationTarget } from "../../lib/sessions/route-navigation.ts";
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
 import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
+import { newSessionSearch } from "../../pages/new-session/location.ts";
 import { rosterActivityStore } from "./roster-activity-store.ts";
 
 export abstract class AgentRosterElement extends OpenClawLightDomElement {
@@ -36,12 +37,10 @@ export abstract class AgentRosterElement extends OpenClawLightDomElement {
     return this.roster.cards.map((card) =>
       Object.assign({}, card, {
         avatar: card.avatar ? this.avatars.resolve(card.avatar) : null,
-        target: sessionNavigationTarget({
-          context: this.context,
-          face: "chat",
-          sessionKey: card.mainKey,
-          agentId: card.id,
-        }),
+        target: {
+          href: `${pathForRoute("new-session", this.context.basePath)}${newSessionSearch(card.id)}`,
+          options: { search: newSessionSearch(card.id) },
+        },
       }),
     );
   }

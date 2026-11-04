@@ -1,16 +1,17 @@
 // Real-browser proof for the Control UI Office preview in the chat side panel.
 import fs from "node:fs";
 import path from "node:path";
-import { chromium, type Browser } from "playwright";
+import { type Browser, chromium } from "playwright";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
+  type ControlUiE2eServer,
   canRunPlaywrightChromium,
   controlUiE2eWaitTimeoutMs,
+  controlUiSessionUrl,
   installMockGateway,
   resolvePlaywrightChromiumExecutablePath,
   startControlUiE2eServer,
-  type ControlUiE2eServer,
 } from "../test-helpers/control-ui-e2e.ts";
 import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 
@@ -199,7 +200,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
         featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
         methodResponses: officeResponses(),
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await openRailFile(page, "budget.xlsx");
 
       const workbook = page.locator('.sidebar-office-preview[data-office-format="xlsx"]');
@@ -233,7 +234,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
         featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
         methodResponses: officeResponses(),
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await openRailFile(page, "report.docx");
 
       const documentPreview = page.locator('.sidebar-office-preview[data-office-format="docx"]');
@@ -258,7 +259,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
         featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
         methodResponses: officeResponses(),
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await openRailFile(page, "deck.pptx");
 
       const presentationPreview = page.locator(
@@ -282,7 +283,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
         featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
         methodResponses: officeResponses(),
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await openRailFile(page, "legacy.xls");
       await expect
         .poll(() => page.locator(".sidebar-markdown-reader").textContent())
@@ -320,7 +321,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
           },
         },
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await openRailFile(page, "budget.xlsx");
       await expect
         .poll(() => page.locator(".sidebar-markdown-reader").textContent())
@@ -345,7 +346,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
         featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
         methodResponses: officeResponses(),
       });
-      await page.goto(`${server.baseUrl}chat`);
+      await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await openRailFile(page, "budget.xlsx");
       const workbook = page.locator('.sidebar-office-preview[data-office-format="xlsx"]');
       await workbook.waitFor({ state: "visible" });

@@ -38,6 +38,7 @@ const routes = [
   "automation",
   "security",
   "secrets",
+  "passwords",
   "approvals",
   "infrastructure",
   "labs",
