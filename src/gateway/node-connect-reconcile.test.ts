@@ -36,6 +36,7 @@ function makePairedNode(overrides?: Partial<PairedDeviceNode>): PairedDeviceNode
     nodeId: "openclaw-ios",
     createdAtMs: 1,
     approvedAtMs: 1,
+    enabled: true,
     ...overrides,
   };
 }

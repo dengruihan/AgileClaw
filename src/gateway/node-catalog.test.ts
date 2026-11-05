@@ -44,6 +44,7 @@ function pairedNode(overrides: Partial<TestPairedNode> = {}): TestPairedNode {
     commands: ["system.run"],
     createdAtMs: 1,
     approvedAtMs: 100,
+    enabled: true,
     ...overrides,
   };
 }
@@ -694,6 +695,7 @@ describe("gateway/node-catalog", () => {
       [
         "nodeId",
         "displayName",
+        "enabled",
         "platform",
         "version",
         "coreVersion",
