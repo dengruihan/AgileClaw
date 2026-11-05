@@ -92,6 +92,7 @@ type ChatPaneHeaderProps = {
   sharingControl?: TemplateResult | typeof nothing;
   publicAccessIndicator?: TemplateResult | typeof nothing;
   placementControl?: TemplateResult | typeof nothing;
+  deviceScopeControl?: TemplateResult | typeof nothing;
   sessionMenuAction: TemplateResult | typeof nothing;
   onBeginRename: () => void;
   onRenameInput: (value: string) => void;
@@ -392,7 +393,8 @@ export function renderChatPaneHeader(props: ChatPaneHeaderProps) {
               ></openclaw-viewer-facepile>`
             : nothing
         }
-        ${props.placementControl ?? nothing} ${props.presence ?? nothing}
+        ${props.placementControl ?? nothing} ${props.deviceScopeControl ?? nothing}
+        ${props.presence ?? nothing}
       </div>
       <div class="chat-pane__header-trailing">
         ${

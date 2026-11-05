@@ -25,6 +25,7 @@ import { resolveChatPaneDesktopTarget } from "./chat-pane-placement.ts";
 import type { createChatPaneRails } from "./chat-pane-rails.ts";
 import type { ResolvedBoardView } from "./chat-pane-shared.ts";
 import { renderSidebarRegion, sidebarRegionCallbacks } from "./chat-pane-sidebar-layout.ts";
+import { resolveChatSessionDeviceScope } from "./chat-session-device-scope.ts";
 import type { ChatPageHost } from "./chat-state-host.ts";
 import { selectedChatSessionRow } from "./chat-state-route.ts";
 import { ChatToolIconController } from "./chat-tool-icon-controller.ts";
@@ -180,6 +181,7 @@ export abstract class ChatPaneLayoutRender extends ChatPaneBrowserAnnotationRend
       transcriptVisible: slotPresentation("conversation"),
       latestBrowserTabs: this.active && this.presented ? latestBrowserTabs : undefined,
       historyState: catalog ? undefined : state,
+      leaseHeld: resolveChatSessionDeviceScope(state)?.leaseHeld === true,
     });
     const primary = html`<div class="chat-pane-primary-column">${chat}</div>`;
     const subagentStop =

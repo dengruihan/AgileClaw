@@ -273,9 +273,6 @@ export const CORE_GATEWAY_METHOD_SPECS = [
     { advertise: false },
   ],
   ["node.rename", "nodes", "operator.pairing", "<=2026.7"],
-  ["node.device.enable", "nodes", "operator.pairing", "2026.11", { advertise: false }],
-  ["node.device.disable", "nodes", "operator.pairing", "2026.11", { advertise: false }],
-  ["node.device.update", "nodes", "operator.pairing", "2026.11", { advertise: false }],
   ["node.list", "nodes", "operator.read", "<=2026.7"],
   ["node.describe", "nodes", "operator.read", "<=2026.7"],
   ["node.pluginSurface.refresh", "nodes", "node", "<=2026.7"],
@@ -684,4 +681,9 @@ export const CORE_GATEWAY_METHOD_SPECS = [
   ["skills.experience.retire", "skills", "operator.admin", "2026.11"],
   ["skills.experience.restore", "skills", "operator.admin", "2026.11"],
   ["skills.experience.promote", "skills", "operator.admin", "2026.11"],
+  // Device-registry transitions are advertised once the Devices settings
+  // registry consumes them; appending keeps every legacy method index stable.
+  ["node.device.enable", "nodes", "operator.pairing", "2026.11"],
+  ["node.device.disable", "nodes", "operator.pairing", "2026.11"],
+  ["node.device.update", "nodes", "operator.pairing", "2026.11"],
 ] as const satisfies readonly CoreGatewayMethodSpecRow[];

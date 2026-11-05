@@ -47,6 +47,7 @@ import type {
   HeaderMenuActionKind,
   HeaderMenuQuickAction,
 } from "./components/chat-header-session-menu.ts";
+import { renderChatPaneDeviceScope } from "./components/chat-pane-device-scope.ts";
 import {
   canRevealSessionWorkspace,
   renderChatPaneHeader,
@@ -556,6 +557,7 @@ export abstract class ChatPaneHeader extends ChatPaneDiscussion {
         onPlacementReclaim: () => row && void this.reclaimHeaderPlacement(row),
         onPlacementRecover: () => row && void this.changeHeaderPlacement(row, "recover"),
       }),
+      deviceScopeControl: renderChatPaneDeviceScope(row),
       sessionMenuAction:
         row && this.state
           ? html`<openclaw-chat-header-session-menu

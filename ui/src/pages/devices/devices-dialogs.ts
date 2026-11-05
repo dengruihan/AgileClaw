@@ -4,6 +4,7 @@ import { t } from "../../i18n/index.ts";
 import { registerDevicesEnglish } from "../../i18n/locales/en-devices.ts";
 import { formatUiError } from "../../lib/format-error.ts";
 import type {
+  DeviceCommandPolicy,
   DevicesPageDataState,
   InventoryRemovalRequest,
 } from "../../lib/nodes/page-operations.ts";
@@ -14,6 +15,8 @@ import {
   removeStaleInventoryEntries,
   renameDevice,
   revokeDeviceToken,
+  setDeviceExecutionEnabled,
+  updateDeviceCommandPolicy,
 } from "../../lib/nodes/page-operations.ts";
 
 registerDevicesEnglish();
@@ -80,6 +83,65 @@ export class DevicesDialogController {
         this.pending = null;
       }
     }
+  }
+
+  /** Edits the deny list; existing allow entries are preserved and the whole
+   *  policy is replaced, matching the node.device.update contract. */
+  async editDevicePolicy(device: {
+    id: string;
+    name: string;
+    commandPolicy: DeviceCommandPolicy | null;
+  }): Promise<void> {
+    if (!this.host.canManagePairing() || this.pending) {
+      return;
+    }
+    const controller = new AbortController();
+    this.pending = controller;
+    const allow = device.commandPolicy?.allow ?? [];
+    const deny = device.commandPolicy?.deny ?? [];
+    try {
+      const { showInputDialog } = await import("../../components/input-dialog.ts");
+      await showInputDialog({
+        signal: controller.signal,
+        title: t("devices.registry.editTitle", { name: device.name }),
+        label: `${t("devices.registry.editPrompt")} ${t("devices.registry.editHint")}`,
+        defaultValue: deny.join(", "),
+        submit: (value) => {
+          if (!this.host.canManagePairing()) {
+            return Promise.resolve(t("devices.readOnly.pairingRequired"));
+          }
+          const nextDeny = [...new Set(value.split(",").map((part) => part.trim()))].filter(
+            Boolean,
+          );
+          const nextPolicy: DeviceCommandPolicy | null =
+            nextDeny.length > 0
+              ? { ...(allow.length > 0 ? { allow } : {}), deny: nextDeny }
+              : allow.length > 0
+                ? { allow }
+                : null;
+          return this.host.runPageTask((pageState) =>
+            updateDeviceCommandPolicy(pageState, device.id, nextPolicy),
+          );
+        },
+      });
+    } catch (error) {
+      this.host.setDevicesError(formatUiError(error));
+    } finally {
+      if (this.pending === controller) {
+        this.pending = null;
+      }
+    }
+  }
+
+  confirmDeviceDisable(device: { id: string; name: string }): Promise<void> {
+    return this.confirmDestructiveAction(
+      {
+        title: t("devices.registry.disableTitle", { name: device.name }),
+        message: t("devices.registry.disableBody"),
+        confirmLabel: t("devices.registry.disableAction"),
+      },
+      (pageState) => setDeviceExecutionEnabled(pageState, device.id, false),
+    );
   }
 
   confirmInventoryRemoval(prompt: InventoryRemovalPrompt): Promise<void> {

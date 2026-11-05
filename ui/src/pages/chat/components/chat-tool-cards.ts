@@ -11,6 +11,7 @@ import {
 } from "../../../components/browser/browser-target.ts";
 import { icons, type IconName } from "../../../components/icons.ts";
 import { t } from "../../../i18n/index.ts";
+import { registerSessionPlacementEnglish } from "../../../i18n/locales/en-session-placement.ts";
 import { browserTabCardRevision } from "../../../lib/chat/browser-tab-preview.ts";
 import type { MessageGroup, ToolCard, ToolCardOutcome } from "../../../lib/chat/chat-types.ts";
 import { readToolApprovalReviews } from "../../../lib/chat/tool-approval-reviews.ts";
@@ -38,6 +39,8 @@ import {
 } from "./chat-tool-content.ts";
 import { renderToolOutcomeSummary } from "./chat-tool-outcome-summary.ts";
 import { renderToolPreview } from "./widget-card.ts";
+
+registerSessionPlacementEnglish();
 
 export function renderBrowserTabPreviews(
   groups: readonly MessageGroup[],
@@ -358,18 +361,38 @@ function resolveCollapsedToolSummaryParts(card: ToolCard): { label: string; name
 }
 
 function resolveToolRowText(card: ToolCard, view: ToolCallView, outcome: ToolCardOutcome): string {
-  if (view.title) {
-    return view.title;
+  const base = (() => {
+    if (view.title) {
+      return view.title;
+    }
+    if (view.kind === "command" && view.command) {
+      return `$ ${commandPreview(view.command)}`;
+    }
+    const verb = resolveToolRowVerb(view, outcome);
+    if (verb && view.target) {
+      return `${verb} ${view.target}`;
+    }
+    const summary = resolveCollapsedToolSummaryParts(card);
+    return [summary.label, summary.name].filter(Boolean).join(" ");
+  })();
+  return card.device
+    ? `${base} · ${t("sessionsView.deviceScope.toolTagAria", {
+        device: card.device.name ?? card.device.id,
+      })}`
+    : base;
+}
+
+function renderToolDeviceTag(card: ToolCard) {
+  if (!card.device) {
+    return nothing;
   }
-  if (view.kind === "command" && view.command) {
-    return `$ ${commandPreview(view.command)}`;
-  }
-  const verb = resolveToolRowVerb(view, outcome);
-  if (verb && view.target) {
-    return `${verb} ${view.target}`;
-  }
-  const summary = resolveCollapsedToolSummaryParts(card);
-  return [summary.label, summary.name].filter(Boolean).join(" ");
+  const label = card.device.name ?? card.device.id;
+  return html`<span
+    class="chat-tool-row__device"
+    title=${t("sessionsView.deviceScope.toolTagTitle", { device: card.device.id })}
+    ><span class="chat-tool-row__device-icon" aria-hidden="true">${icons.server}</span
+    ><span>${t("sessionsView.deviceScope.toolTag", { device: label })}</span></span
+  >`;
 }
 
 export function renderToolApprovalReviews(card: ToolCard) {
@@ -465,6 +488,7 @@ export function renderToolCard(
         opts.onOpenWorkspaceFile,
       )}</span
     >
+    ${renderToolDeviceTag(card)}
     ${expanded ? nothing : renderToolOutcomeSummary(activityCards, Boolean(opts.children))}
     <span class="chat-tool-row__chevron" aria-hidden="true">${icons.chevronRight}</span>
   `;

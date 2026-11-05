@@ -92,6 +92,8 @@ export type ChatComposerProps = ChatAttachmentControlsProps & {
   runError?: ChatRunError | null;
   sending: boolean;
   canAbort?: boolean;
+  /** The session still holds a device occupancy lease; Stop is its only release path. */
+  leaseHeld?: boolean;
   runStatus?: ChatRunUiStatus | null;
   waitingApproval?: boolean;
   fallbackStatus?: FallbackStatus | null;

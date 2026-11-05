@@ -303,6 +303,9 @@ describe("listGatewayMethods", () => {
       "skills.experience.retire",
       "skills.experience.restore",
       "skills.experience.promote",
+      "node.device.enable",
+      "node.device.disable",
+      "node.device.update",
     ];
     expect(listGatewayMethods().slice(-expectedSuffix.length)).toEqual(expectedSuffix);
     const methods = listGatewayMethods();
@@ -412,6 +415,9 @@ describe("listGatewayMethods", () => {
       "skills.experience.retire",
       "skills.experience.restore",
       "skills.experience.promote",
+      "node.device.enable",
+      "node.device.disable",
+      "node.device.update",
     ]);
   });
 
@@ -506,6 +512,20 @@ describe("listGatewayMethods", () => {
       scope: "operator.write",
       controlPlaneWrite: true,
     });
+  });
+
+  it("advertises device-registry transitions for the Devices settings page", () => {
+    const methods = listGatewayMethods();
+    const descriptors = createCoreGatewayMethodDescriptors(coreGatewayHandlers);
+    for (const method of ["node.device.enable", "node.device.disable", "node.device.update"]) {
+      expect(methods).toContain(method);
+      expect(coreGatewayHandlers[method]).toBeTypeOf("function");
+      expect(descriptors.find((descriptor) => descriptor.name === method)).toMatchObject({
+        name: method,
+        scope: "operator.pairing",
+        since: "2026.11",
+      });
+    }
   });
 
   it("registers the hidden node protocol feature publication method", () => {
@@ -649,6 +669,9 @@ describe("listGatewayMethods", () => {
       "skills.experience.retire",
       "skills.experience.restore",
       "skills.experience.promote",
+      "node.device.enable",
+      "node.device.disable",
+      "node.device.update",
     ];
     expect(coreMethods.slice(-expectedCoreSuffix.length)).toEqual(expectedCoreSuffix);
     expect(methods.indexOf("approval.get")).toBeGreaterThan(methods.indexOf("tts.speak"));

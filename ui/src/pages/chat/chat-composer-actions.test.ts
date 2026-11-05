@@ -89,6 +89,44 @@ describe("renderChatComposer controls", () => {
     expect(container.querySelector<HTMLTextAreaElement>("textarea")?.value).toBe(props.draft);
   });
 
+  it("keeps Stop while a held device lease outlives the terminal run toast", () => {
+    const onAbort = vi.fn();
+    const terminalRun = {
+      phase: "done" as const,
+      runId: "run-device",
+      sessionKey: "agent:main:device-scoped",
+      occurredAt: 1,
+    };
+    const { container } = renderComposer({
+      canAbort: true,
+      leaseHeld: true,
+      runStatus: terminalRun,
+      onAbort,
+      onSend: vi.fn(),
+    });
+    const stop = primaryButton(container);
+    expect(stop.getAttribute("aria-label")).toBe(t("chat.runControls.stopGenerating"));
+    expect(stop.disabled).toBe(false);
+    stop.click();
+    expect(onAbort).toHaveBeenCalledOnce();
+  });
+
+  it("suppresses Stop without a held lease once the turn reports terminal", () => {
+    const { container } = renderComposer({
+      canAbort: true,
+      leaseHeld: false,
+      runStatus: {
+        phase: "done",
+        runId: "run-device",
+        sessionKey: "agent:main:device-scoped",
+        occurredAt: 1,
+      },
+      onAbort: vi.fn(),
+      onSend: vi.fn(),
+    });
+    expect(container.querySelectorAll(".chat-send-btn--stop")).toHaveLength(0);
+  });
+
   it.each([true, false])(
     "keeps command submission gated while history is pending: %s",
     (pending) => {

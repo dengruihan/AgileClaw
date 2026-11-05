@@ -274,6 +274,16 @@ describe("chat pane header", () => {
     expect(crumbs?.nextElementSibling?.getAttribute("data-slot")).toBe("placement");
   });
 
+  it("places the device scope chip beside placement in the header-leading slot", () => {
+    const { container } = mountHeader({
+      placementControl: html`<span data-slot="placement"></span>`,
+      deviceScopeControl: html`<span class="chat-pane__device-scope"></span>`,
+    });
+    expect(container.querySelector(".chat-pane__device-scope")?.parentElement?.className).toBe(
+      "chat-pane__header-leading",
+    );
+  });
+
   it("places visibility in the owner slot beside placement and presence", () => {
     const { container } = mountHeader({
       placementControl: html`<span data-slot="placement"></span>`,

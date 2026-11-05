@@ -69,7 +69,10 @@ export function renderChatComposer(props: ChatComposerProps) {
   const canCompose = props.canCompose ?? props.canSend;
   const isBusy = props.sending || props.stream !== null;
   const canAbort = Boolean(props.canAbort && props.onAbort);
-  const showAbortableUi = canAbort && !hasTerminalRunStatus(props.runStatus);
+  // A held device lease keeps Stop past the terminal toast: it is the only
+  // manual release path for an idle session with detached processes.
+  const showAbortableUi =
+    canAbort && (props.leaseHeld === true || !hasTerminalRunStatus(props.runStatus));
   const submittedProgress = props.queue.find((item) =>
     isCurrentSessionSubmittedProgress(item, props.sessionKey, props.runStatus),
   );

@@ -1,7 +1,9 @@
 import type { EnvironmentSummary, SystemInfoResult } from "@openclaw/gateway-protocol";
 import type { PresenceEntry } from "../../api/types.ts";
+import type { DeviceOccupancyEntry } from "../../lib/nodes/device-occupancy.ts";
 import type { DevicePairingList } from "../../lib/nodes/index.ts";
 import type {
+  DeviceCommandPolicy,
   ExecApprovalsFile,
   ExecApprovalsSnapshot,
   InventoryRemovalRequest,
@@ -22,6 +24,10 @@ export type DevicesProps = {
   canPairDevice: boolean;
   canManagePairing: boolean;
   canAdmin: boolean;
+  /** Sessions holding a device occupancy lease, joined to registry rows. */
+  deviceOccupancy: DeviceOccupancyEntry[];
+  occupancyLoading: boolean;
+  occupancyError: string | null;
   configForm: Record<string, unknown> | null;
   configLoading: boolean;
   configSaving: boolean;
@@ -52,6 +58,20 @@ export type DevicesProps = {
   onNodeReject: (requestId: string) => void;
   onInventoryRemove: (entry: InventoryRemovalRequest) => void;
   onInventoryCleanup: (entries: InventoryRemovalRequest[]) => void;
+  onDeviceRegistryEdit: (device: {
+    id: string;
+    name: string;
+    commandPolicy: DeviceCommandPolicy | null;
+  }) => void;
+  /**
+   * Returns `false` when the change is deferred to a confirmation dialog, so
+   * the switch restores its checked state until the dialog resolves.
+   */
+  onDeviceRegistryEnabled: (
+    device: { id: string; name: string },
+    enabled: boolean,
+  ) => boolean | void;
+  onDeviceRegistryHolderOpen: (holder: DeviceOccupancyEntry) => void;
   onLoadConfig: () => void;
   onLoadExecApprovals: () => void;
   onBindDefault: (nodeId: string | null) => void;

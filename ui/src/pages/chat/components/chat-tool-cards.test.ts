@@ -52,6 +52,31 @@ function mountCard(
 }
 
 describe("tool-cards", () => {
+  it("marks results that executed on a device and keeps it out of gateway rows", () => {
+    const container = mountCard(
+      {
+        id: "exec:1",
+        callId: "call-1",
+        name: "exec",
+        completed: true,
+        outputText: "ok",
+        device: { id: "studio-mac", name: "Studio Mac" },
+      },
+      { expanded: false },
+    );
+    const tag = container.querySelector(".chat-tool-row__device");
+    expect(tag?.textContent?.trim()).toBe("on Studio Mac");
+    expect(tag?.getAttribute("title")).toBe("Executed on device studio-mac");
+    expect(container.querySelector("button.chat-tool-row")?.textContent).toContain("on Studio Mac");
+
+    const plain = mountCard(
+      { id: "exec:2", name: "exec", completed: true, outputText: "ok" },
+      { expanded: false },
+    );
+    expect(plain.querySelector(".chat-tool-row__device")).toBeNull();
+    expect(plain.querySelector("button.chat-tool-row")?.textContent).not.toContain("on Studio Mac");
+  });
+
   it("routes MCP App previews through the dedicated double-iframe host", async () => {
     const container = document.createElement("div");
     const preview = { ...canvas, viewId: "cv_app", mcpApp: { viewId: "cv_app" } } as const;

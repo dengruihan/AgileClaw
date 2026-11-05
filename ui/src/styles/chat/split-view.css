@@ -645,3 +645,77 @@
   overflow-wrap: anywhere;
   white-space: normal;
 }
+
+/* Device-scope chip: read-only; releasing stays in the composer Stop button. */
+.chat-pane__device-scope {
+  display: inline-flex;
+  align-items: center;
+}
+
+.chat-pane__device-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: var(--cursor-action);
+}
+
+.chat-pane__device-scope-chip:hover,
+.chat-pane__device-scope-chip:focus-visible {
+  border-color: var(--accent);
+  color: var(--text);
+  outline: none;
+}
+
+.chat-pane__device-scope-label {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-pane__device-scope-icon {
+  display: inline-flex;
+}
+
+.chat-pane__device-scope-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.chat-pane__device-scope-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--overlay-border);
+  font-size: 11px;
+}
+
+.chat-pane__device-scope-facts dt {
+  color: var(--muted);
+}
+
+.chat-pane__device-scope-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.chat-pane__device-scope-value {
+  font-family: var(--mono);
+}
+
+.chat-pane__device-scope-note {
+  max-width: 260px;
+  padding: 6px 8px;
+  color: var(--muted);
+  font-size: 11px;
+}

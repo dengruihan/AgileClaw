@@ -26,6 +26,7 @@ import { t } from "../../i18n/index.ts";
 import { registerDevicesEnglish } from "../../i18n/locales/en-devices.ts";
 import { currentConfigObject } from "../../lib/config/config-state-model.ts";
 import { isMissingOperatorReadScopeError } from "../../lib/gateway-errors.ts";
+import { loadDeviceOccupancy } from "../../lib/nodes/device-occupancy.ts";
 import { presenceConnectivitySignature } from "../../lib/nodes/inventory.ts";
 import {
   approveDevicePairing,
@@ -37,10 +38,12 @@ import {
   removeExecApprovalsFormValue,
   rotateDeviceToken,
   saveExecApprovals,
+  setDeviceExecutionEnabled,
   updateExecApprovalsFormValue,
   type ExecApprovalsTarget,
   type DevicesPageDataState,
 } from "../../lib/nodes/page-operations.ts";
+import { sessionNavigationTarget } from "../../lib/sessions/route-navigation.ts";
 import { canReadSystemInfo, readSystemInfo } from "../../lib/system-info.ts";
 import {
   GatewayPageController,
@@ -97,6 +100,9 @@ class DevicesPage extends OpenClawLightDomElement {
   });
 
   private routeDataInitialized = false;
+  // Session events arrive in bursts during a run; keep the registry's lease
+  // read on a short trailing debounce instead of one session list per event.
+  private occupancyRefreshTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   private readonly gateway = new GatewayPageController(this, {
     getGateway: () => this.context?.gateway,
     onIdentityChange: (change) => this.resetServerState(change.snapshot),
@@ -178,6 +184,7 @@ class DevicesPage extends OpenClawLightDomElement {
     DEVICES_ACTIVE_POLL_INTERVAL_MS,
     () => {
       this.refreshNodeInventory(true);
+      void this.runPageTask((pageState) => loadDeviceOccupancy(pageState, { quiet: true }));
       if (this.canManagePairing) {
         void this.runPageTask((pageState) => loadDevices(pageState, { quiet: true }));
       }
@@ -225,6 +232,18 @@ class DevicesPage extends OpenClawLightDomElement {
           ) {
             this.refreshNodeInventory(true);
           }
+          if (event.event === "sessions.changed") {
+            // Lease acquire/release publishes a scoped row update; bursty run
+            // events share one trailing lease read.
+            if (this.occupancyRefreshTimer === null) {
+              this.occupancyRefreshTimer = globalThis.setTimeout(() => {
+                this.occupancyRefreshTimer = null;
+                void this.runPageTask((pageState) =>
+                  loadDeviceOccupancy(pageState, { quiet: true }),
+                );
+              }, 2_000);
+            }
+          }
         }),
     );
 
@@ -243,6 +262,10 @@ class DevicesPage extends OpenClawLightDomElement {
   override disconnectedCallback() {
     this.dialogs.cancel();
     this.subscriptions.clear();
+    if (this.occupancyRefreshTimer !== null) {
+      globalThis.clearTimeout(this.occupancyRefreshTimer);
+      this.occupancyRefreshTimer = null;
+    }
     void this.presenceTask.run([null, null]);
     this.resetInventoryDetails();
     this.presence = [];
@@ -353,6 +376,9 @@ class DevicesPage extends OpenClawLightDomElement {
     }
     if (this.canManagePairing && !pageState.devicesList && !pageState.devicesLoading) {
       void this.runPageTask((current) => loadDevices(current));
+    }
+    if (pageState.deviceOccupancy === null && !pageState.occupancyLoading) {
+      void this.runPageTask((current) => loadDeviceOccupancy(current));
     }
     const config = this.context.runtimeConfig.state;
     if (!config.configSnapshot && !config.configLoading) {
@@ -501,6 +527,9 @@ class DevicesPage extends OpenClawLightDomElement {
           devicesLoading: devices.devicesLoading,
           devicesError: devices.devicesError,
           devicesList: devices.devicesList,
+          deviceOccupancy: devices.deviceOccupancy ?? [],
+          occupancyLoading: devices.occupancyLoading,
+          occupancyError: devices.occupancyError,
           canPairDevice: this.canAdmin,
           canManagePairing: this.canManagePairing,
           canAdmin: this.canAdmin,
@@ -541,6 +570,37 @@ class DevicesPage extends OpenClawLightDomElement {
             if (entries.length > 0) {
               void this.dialogs.confirmInventoryRemoval({ kind: "stale", entries });
             }
+          },
+          onDeviceRegistryEdit: (device) => {
+            if (this.canManagePairing) {
+              void this.dialogs.editDevicePolicy(device);
+            }
+          },
+          onDeviceRegistryEnabled: (device, enabled) => {
+            if (!this.canManagePairing) {
+              return false;
+            }
+            if (enabled) {
+              void this.runPageTask((pageState) =>
+                setDeviceExecutionEnabled(pageState, device.id, true),
+              );
+              return true;
+            }
+            // Disable is destructive; keep the switch checked until the
+            // confirmation resolves (and when it is cancelled).
+            void this.dialogs.confirmDeviceDisable(device);
+            return false;
+          },
+          onDeviceRegistryHolderOpen: (holder) => {
+            this.context.navigate("chat", {
+              ...sessionNavigationTarget({
+                context: this.context,
+                face: "chat",
+                sessionKey: holder.sessionKey,
+                agentId: holder.agentId,
+              }).options,
+              hash: "",
+            });
           },
           onDeviceRotate: (device, role, scopes) =>
             void this.reportRotationOutcome(device, role, scopes),
