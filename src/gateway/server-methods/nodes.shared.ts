@@ -18,6 +18,21 @@ export function respondPairingChanged(respond: RespondFn) {
   );
 }
 
+/** Reject execution against a device the operator disabled, naming the fix. */
+export function respondDeviceDisabled(respond: RespondFn, nodeId: string) {
+  respond(
+    false,
+    undefined,
+    errorShape(
+      ErrorCodes.INVALID_REQUEST,
+      `paired device ${nodeId} is disabled; enable it with node.device.enable`,
+      {
+        details: { code: "DEVICE_DISABLED", nodeId },
+      },
+    ),
+  );
+}
+
 export async function isNodePairingWorkCurrent(params: {
   nodeId: string;
   generation: NodePairingGeneration;

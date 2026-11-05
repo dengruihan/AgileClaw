@@ -8,6 +8,7 @@ import {
 import { normalizeSortedUniqueTrimmedStringList } from "@openclaw/normalization-core/string-normalization";
 import type { NodePairingPendingRequest, PairedDeviceNode } from "../infra/device-pairing-node.js";
 import { hasEffectivePairedDeviceRole, type PairedDevice } from "../infra/device-pairing.js";
+import { isPairedDeviceEnabled } from "../infra/device-pairing.types.js";
 import { filterPublicNodeCommands } from "../infra/node-commands.js";
 import {
   sameNodeApprovalSurfaceSet,
@@ -192,6 +193,16 @@ function buildEffectiveKnownNode(entry: {
     ),
     computerUse: live?.computerUse,
     sessionHost,
+    // Registry state comes from the persisted pairing record so disabled
+    // devices stay visible in the settings inventory while disconnected.
+    ...(nodePairing
+      ? { enabled: nodePairing.enabled }
+      : devicePairing
+        ? { enabled: isPairedDeviceEnabled(devicePairing) }
+        : {}),
+    ...(devicePairing?.commandPolicy || nodePairing?.commandPolicy
+      ? { commandPolicy: devicePairing?.commandPolicy ?? nodePairing?.commandPolicy }
+      : {}),
     ...(hostStats ? { hostStats: structuredClone(hostStats) } : {}),
     ...(live && workerSlots ? { workerSlots: { ...workerSlots } } : {}),
     ...(live && workerBundle ? { workerBundle: structuredClone(workerBundle) } : {}),

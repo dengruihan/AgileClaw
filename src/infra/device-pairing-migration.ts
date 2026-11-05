@@ -12,6 +12,7 @@ import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { preserveLegacyDesktopStreamOptOut } from "./device-pairing-node-desktop-migration.js";
 import { withPairedDeviceRecords, type PairedDevice } from "./device-pairing.js";
+import { normalizePairedDeviceCommandPolicy } from "./device-pairing.types.js";
 import {
   coercePairingStateRecord,
   readJsonIfExists,
@@ -156,4 +157,47 @@ export async function migrateLegacyDevicePairingStore(params?: {
     `device pairing store migrated to SQLite: imported ${imported} paired device(s), kept ${skippedExisting} existing record(s)`,
   );
   return result;
+}
+
+/**
+ * Backfill the device-registry columns onto pre-existing pairing rows: rows
+ * written before the `enabled` column existed load with the key absent and
+ * read as enabled; this writes that value explicitly so the registry state is
+ * durable. The same write round-trips every row, dropping malformed
+ * command-policy JSON that row readers already treat as no policy. Idempotent:
+ * rows with an explicit value are left untouched.
+ */
+export async function migratePairedDeviceRegistryPolicyFields(params?: {
+  baseDir?: string;
+  log?: { info: (message: string) => void; warn: (message: string) => void };
+}): Promise<{ changes: string[]; warnings: string[] } | null> {
+  let backfilled = 0;
+  let repaired = false;
+  await withPairedDeviceRecords(params?.baseDir, (pairedByDeviceId) => {
+    for (const device of Object.values(pairedByDeviceId)) {
+      if (device.enabled === undefined) {
+        device.enabled = true;
+        backfilled += 1;
+      }
+      if (device.commandPolicy !== undefined) {
+        // Normalize stored policy in place; a malformed shape reads as absent.
+        const normalized = normalizePairedDeviceCommandPolicy(device.commandPolicy);
+        if (normalized) {
+          device.commandPolicy = normalized;
+        } else {
+          delete device.commandPolicy;
+          repaired = true;
+        }
+      }
+    }
+    return { value: undefined, persist: backfilled > 0 || repaired };
+  });
+  if (backfilled === 0 && !repaired) {
+    return null;
+  }
+  const changes = [
+    `device registry fields backfilled: ${backfilled} paired device(s) set to enabled${repaired ? `, malformed command policy cleared on affected device(s)` : ""}`,
+  ];
+  params?.log?.info(changes[0]!);
+  return { changes, warnings: [] };
 }

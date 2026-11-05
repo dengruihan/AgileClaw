@@ -63,6 +63,77 @@ export type PairedDeviceApprovalKind =
   | "bootstrap";
 
 /**
+ * Operator-managed per-device command policy. `deny` removes commands from
+ * the device's pairing-approved surface; `allow` only selects within that
+ * surface and never overrides global gateway policy (gateway.nodes.commands
+ * deny entries or dangerous-command defaults). Both lists are optional;
+ * an entirely absent policy admits the full approved surface.
+ */
+export type PairedDeviceCommandPolicy = {
+  allow?: string[];
+  deny?: string[];
+};
+
+/**
+ * Normalize operator-supplied or stored policy. `allow`/`deny` keep their
+ * meaning when present-but-empty (`allow: []` selects nothing); null means
+ * no policy at all. Returns null for shapes that are not a policy object.
+ */
+export function normalizePairedDeviceCommandPolicy(
+  value: unknown,
+): PairedDeviceCommandPolicy | null {
+  if (value === null || value === undefined || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const policy: PairedDeviceCommandPolicy = {};
+  let keys = 0;
+  for (const key of ["allow", "deny"] as const) {
+    const raw = record[key];
+    if (raw === undefined) {
+      continue;
+    }
+    if (!Array.isArray(raw)) {
+      return null;
+    }
+    keys += 1;
+    policy[key] = [
+      ...new Set(
+        raw
+          .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+          .filter((entry) => entry !== ""),
+      ),
+    ];
+  }
+  return keys > 0 ? policy : null;
+}
+
+/** Apply one device's command policy to its pairing-approved command surface. */
+export function filterPairedDeviceCommandSurface(
+  policy: PairedDeviceCommandPolicy | undefined,
+  commands: readonly string[],
+): string[] {
+  if (!policy) {
+    return [...commands];
+  }
+  const allow = policy.allow ? new Set(policy.allow) : undefined;
+  const deny = policy.deny ? new Set(policy.deny) : undefined;
+  return commands.filter(
+    (command) => (!allow || allow.has(command)) && !(deny?.has(command) ?? false),
+  );
+}
+
+/**
+ * Paired-device registry state. New pairings default to `enabled: false`
+ * (devices are denied by default); legacy rows written before the field
+ * existed load with the key absent and read as enabled until Doctor
+ * backfills an explicit value. Enforcement gates node-role execution only.
+ */
+export function isPairedDeviceEnabled(device: Pick<PairedDevice, "enabled">): boolean {
+  return device.enabled !== false;
+}
+
+/**
  * Approved node capability surface for a node-role device. Device pairing
  * grants connection auth; this grants command/capability exposure (node
  * command gating). displayName here is the operator-facing node name set at
@@ -135,6 +206,9 @@ export type PairedDevice = {
   approvedVia?: PairedDeviceApprovalKind;
   nodeSurface?: PairedDeviceNodeSurface;
   pendingNodeSurface?: PairedDevicePendingNodeSurface;
+  /** Registry flag: absent (legacy) reads as enabled; new pairings write false. */
+  enabled?: boolean;
+  commandPolicy?: PairedDeviceCommandPolicy;
   createdAtMs: number;
   approvedAtMs: number;
   lastSeenAtMs?: number;

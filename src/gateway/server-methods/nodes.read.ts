@@ -9,7 +9,10 @@ import {
 } from "../../../packages/gateway-protocol/src/index.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { updatePairedNodeSessionHost } from "../../infra/device-pairing-node-facts.js";
-import { projectPairedDeviceNodeBindings } from "../../infra/device-pairing-node-state.js";
+import {
+  isPairedNodeDeviceDisabled,
+  projectPairedDeviceNodeBindings,
+} from "../../infra/device-pairing-node-state.js";
 import { listNodePairing, projectNodePairing } from "../../infra/device-pairing-node.js";
 import { listDevicePairing } from "../../infra/device-pairing.js";
 import { formatErrorMessage } from "../../infra/errors.js";
@@ -353,9 +356,16 @@ export const nodeReadHandlers: GatewayRequestHandlers = {
         ? currentSession.pairingGeneration
         : undefined;
     if (!connId || !pairingGeneration) {
-      // A registered session without a pairing generation usually means the
-      // node's capability surface is still awaiting operator approval; name
-      // that state and the exact approve command instead of a generic retry.
+      // A registered session without a pairing generation either awaits
+      // operator approval or belongs to a device the operator disabled; name
+      // the exact state and its fix instead of a generic retry.
+      if (await isPairedNodeDeviceDisabled(nodeId)) {
+        respondRunnerInventoryRetry(
+          respond,
+          "this paired device is disabled; enable it with node.device.enable, then this node retries automatically",
+        );
+        return;
+      }
       const pendingSurface = (await listNodePairing()).pending.find(
         (entry) => entry.nodeId === nodeId,
       );

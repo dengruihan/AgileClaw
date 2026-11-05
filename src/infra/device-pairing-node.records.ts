@@ -3,7 +3,12 @@ import { normalizeArrayBackedTrimmedStringList } from "@openclaw/normalization-c
 import type { NodeHostStats } from "../shared/node-host-stats.js";
 import type { NodePairingPendingSnapshot } from "./device-pairing-admission.types.js";
 import { resolveNodePairingGeneration } from "./device-pairing-identity.js";
-import type { PairedDevice, PairedDevicePendingNodeSurface } from "./device-pairing.types.js";
+import {
+  isPairedDeviceEnabled,
+  type PairedDevice,
+  type PairedDeviceCommandPolicy,
+  type PairedDevicePendingNodeSurface,
+} from "./device-pairing.types.js";
 import { type NodeApprovalScope, resolveNodePairApprovalScopes } from "./node-pairing-authz.js";
 import { sameNodeApprovalSurfaceSet, sameNodePermissionSurface } from "./node-pairing-surface.js";
 
@@ -47,6 +52,9 @@ export type RequestNodePairingResult = {
 export type PairedDeviceNode = NodeDeclaredSurface & {
   bins?: string[];
   sessionHost?: boolean;
+  /** Device registry flag: disabled devices stay listed but cannot execute. */
+  enabled: boolean;
+  commandPolicy?: PairedDeviceCommandPolicy;
   createdAtMs: number;
   approvedAtMs: number;
   lastConnectedAtMs?: number;
@@ -69,7 +77,8 @@ type ApprovedNodePairingResult = {
   requestId: string;
   node: PairedDeviceNode;
   pairingIdentity: string;
-  nextPairingGeneration: string;
+  /** Absent while the device is disabled; enable restores generation-bound work. */
+  nextPairingGeneration?: string;
   previousPairingGeneration?: string;
 };
 type ForbiddenNodePairingResult = { status: "forbidden"; missingScope: string };
@@ -149,6 +158,8 @@ export function toPairedNode(
     remoteIp: device.remoteIp,
     bins: surface.bins,
     ...(surface.sessionHost === true ? { sessionHost: true } : {}),
+    enabled: isPairedDeviceEnabled(device),
+    ...(device.commandPolicy ? { commandPolicy: device.commandPolicy } : {}),
     ...(pairingGeneration ? { pairingGeneration } : {}),
     createdAtMs: surface.createdAtMs,
     approvedAtMs: surface.approvedAtMs,

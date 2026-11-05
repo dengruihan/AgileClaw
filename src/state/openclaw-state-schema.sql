@@ -633,6 +633,8 @@ CREATE TABLE IF NOT EXISTS device_pairing_paired (
   approved_via TEXT,
   node_surface_json TEXT,
   pending_node_surface_json TEXT,
+  enabled INTEGER,
+  command_policy_json TEXT,
   created_at_ms INTEGER NOT NULL,
   approved_at_ms INTEGER NOT NULL,
   last_seen_at_ms INTEGER,

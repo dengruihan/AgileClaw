@@ -10,8 +10,9 @@ import {
   publicKeyRawBase64UrlFromPem,
 } from "../infra/device-identity.js";
 import { approveDevicePairing } from "../infra/device-pairing-approval.js";
+import { migratePairedDeviceRegistryPolicyFields } from "../infra/device-pairing-migration.js";
 import { revokeDeviceToken, rotateDeviceToken } from "../infra/device-pairing-tokens.js";
-import { requestDevicePairing } from "../infra/device-pairing.js";
+import { requestDevicePairing, withPairedDeviceRecords } from "../infra/device-pairing.js";
 import {
   detectLegacyDeviceAuth,
   migrateLegacyDeviceAuth,
@@ -552,5 +553,71 @@ describe("noteDevicePairingHealth", () => {
       expect(message).toContain("has no active operator device token");
       expect(message).not.toContain("no longer has a matching active gateway token");
     });
+  });
+
+  it("backfills legacy registry rows on repair and clears the warning", async () => {
+    await withOpenClawTestState(
+      { prefix: "openclaw-doctor-device-registry-", env: { OPENCLAW_TEST_FAST: "1" } },
+      async (state) => {
+        // Normal upgrade path: SQLite pairing rows predate the registry
+        // columns, there is no legacy JSON to import, and the only pending
+        // repair is the implicit enabled state.
+        await withPairedDeviceRecords(state.stateDir, (paired) => {
+          paired["legacy-node"] = {
+            deviceId: "legacy-node",
+            publicKey: "legacy-node-public-key",
+            role: "node",
+            roles: ["node"],
+            scopes: [],
+            approvedScopes: [],
+            tokens: {
+              node: {
+                token: "legacy-node-token",
+                role: "node",
+                scopes: [],
+                createdAtMs: 1_700_000_000_000,
+              },
+            },
+            createdAtMs: 1_700_000_000_000,
+            approvedAtMs: 1_700_000_000_000,
+          };
+          return { value: undefined, persist: true };
+        });
+        await expect(fs.stat(state.statePath("devices", "paired.json"))).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+
+        const before = await collectDevicePairingHealthFindings({
+          cfg: { gateway: { mode: "local" } },
+        });
+        expect(before).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              checkId: "core/doctor/device-pairing",
+              requirement: "device-registry-fields-unbackfilled",
+            }),
+          ]),
+        );
+
+        const repair = await migratePairedDeviceRegistryPolicyFields({
+          baseDir: state.stateDir,
+        });
+        expect(repair?.changes).toHaveLength(1);
+
+        const { db } = openOpenClawStateDatabase({ env: state.env });
+        expect(
+          db
+            .prepare("SELECT enabled FROM device_pairing_paired WHERE device_id = ?")
+            .get("legacy-node"),
+        ).toEqual({ enabled: 1 });
+
+        const after = await collectDevicePairingHealthFindings({
+          cfg: { gateway: { mode: "local" } },
+        });
+        expect(
+          after.filter((finding) => finding.requirement === "device-registry-fields-unbackfilled"),
+        ).toEqual([]);
+      },
+    );
   });
 });

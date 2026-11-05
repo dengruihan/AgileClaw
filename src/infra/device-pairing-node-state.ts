@@ -9,6 +9,7 @@ import {
   type NodePairingState,
   type PairedDevice,
 } from "./device-pairing.js";
+import { filterPairedDeviceCommandSurface, isPairedDeviceEnabled } from "./device-pairing.types.js";
 import type { NodeApprovalSurface } from "./node-pairing-surface.js";
 
 export type { NodePairingGeneration } from "./device-pairing.js";
@@ -79,16 +80,41 @@ export async function captureAuthenticatedNodePairingState(params: {
     return null;
   }
   const state = resolveNodePairingState(device);
-  return state
-    ? {
-        ...state,
-        approvedSurface: {
-          caps: device.nodeSurface?.caps ?? [],
-          commands: device.nodeSurface?.commands ?? [],
-          permissions: device.nodeSurface?.permissions,
-        },
-      }
-    : null;
+  if (!state) {
+    return null;
+  }
+  // A disabled device keeps its connection identity (it stays visible and
+  // connected in the inventory) but admits no command surface, and the null
+  // generation excludes it from async work and placement.
+  if (!isPairedDeviceEnabled(device)) {
+    return { ...state, approvedSurface: { caps: [], commands: [] } };
+  }
+  return {
+    ...state,
+    approvedSurface: {
+      caps: device.nodeSurface?.caps ?? [],
+      commands: filterPairedDeviceCommandSurface(
+        device.commandPolicy,
+        device.nodeSurface?.commands ?? [],
+      ),
+      permissions: device.nodeSurface?.permissions,
+    },
+  };
+}
+
+/**
+ * Distinguish a paired-but-disabled device from an absent pairing for callers
+ * that must reject execution with a precise reason instead of a generic
+ * pairing-changed error.
+ */
+export async function isPairedNodeDeviceDisabled(
+  nodeId: string,
+  baseDir?: string,
+): Promise<boolean> {
+  const device = await getPairedDevice(nodeId, baseDir);
+  return Boolean(
+    device && hasEffectivePairedDeviceRole(device, "node") && !isPairedDeviceEnabled(device),
+  );
 }
 
 export async function isNodePairingGenerationCurrent(

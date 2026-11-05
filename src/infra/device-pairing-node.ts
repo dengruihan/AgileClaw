@@ -26,7 +26,11 @@ import {
   executeDevicePairingMutation,
   withCurrentDevicePairingSnapshot,
 } from "./device-pairing-worker.js";
-import type { PairedDevice, PairedDevicePendingNodeSurface } from "./device-pairing.types.js";
+import type {
+  PairedDevice,
+  PairedDeviceCommandPolicy,
+  PairedDevicePendingNodeSurface,
+} from "./device-pairing.types.js";
 
 export { projectNodePairing } from "./device-pairing-node.records.js";
 export type {
@@ -325,6 +329,35 @@ export function renamePairedNode(
 ): Promise<PairedDeviceNode | null> {
   return executeDevicePairingMutation(
     { type: "node.rename", input: { nodeId, displayName } },
+    { baseDir },
+  );
+}
+
+/** Result of a device-registry state mutation (enable/disable/policy update). */
+export type PairedNodeDeviceRegistryState = {
+  nodeId: string;
+  enabled: boolean;
+  commandPolicy?: PairedDeviceCommandPolicy;
+};
+
+export function setPairedNodeDeviceEnabled(
+  nodeId: string,
+  enabled: boolean,
+  baseDir?: string,
+): Promise<PairedNodeDeviceRegistryState | null> {
+  return executeDevicePairingMutation(
+    { type: "node.setDeviceRegistryState", input: { nodeId, enabled } },
+    { baseDir },
+  );
+}
+
+export function setPairedNodeDeviceCommandPolicy(
+  nodeId: string,
+  commandPolicy: unknown,
+  baseDir?: string,
+): Promise<PairedNodeDeviceRegistryState | null> {
+  return executeDevicePairingMutation(
+    { type: "node.setDeviceRegistryState", input: { nodeId, commandPolicy } },
     { baseDir },
   );
 }

@@ -5,6 +5,7 @@ import {
   normalizeDevicePairingRole,
 } from "./device-pairing-state.kernel.js";
 import type { DeviceAuthToken, PairedDevice } from "./device-pairing.types.js";
+import { isPairedDeviceEnabled } from "./device-pairing.types.js";
 export type { NodePairingGeneration, NodePairingState } from "./device-pairing-core.types.js";
 
 function listActiveTokenRoles(
@@ -85,7 +86,12 @@ function resolveNodePairingIdentity(
 export function resolveNodePairingGeneration(
   device: PairedDevice | null,
 ): NodePairingGeneration | null {
-  if (!device || !hasEffectivePairedDeviceRole(device, "node") || !device.nodeSurface) {
+  if (
+    !device ||
+    !isPairedDeviceEnabled(device) ||
+    !hasEffectivePairedDeviceRole(device, "node") ||
+    !device.nodeSurface
+  ) {
     return null;
   }
   const nodeToken = device.tokens?.node;

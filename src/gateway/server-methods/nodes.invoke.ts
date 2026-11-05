@@ -5,7 +5,10 @@ import {
   missingScopeErrorShape,
   validateNodeInvokeParams,
 } from "../../../packages/gateway-protocol/src/index.js";
-import { captureNodePairingGeneration } from "../../infra/device-pairing-node-state.js";
+import {
+  captureNodePairingGeneration,
+  isPairedNodeDeviceDisabled,
+} from "../../infra/device-pairing-node-state.js";
 import {
   isAdminOnlyNodeInvokeCommand,
   isBrowserProxyNodeInvokeCommand,
@@ -44,6 +47,7 @@ import { toPendingParamsJSON } from "./nodes.pending.js";
 import {
   isNodePairingWorkCurrent,
   resolveDispatchableNodeSession,
+  respondDeviceDisabled,
   respondPairingChanged,
 } from "./nodes.shared.js";
 import { wakeNodeForReconnect } from "./nodes.wake-reconnect.js";
@@ -185,6 +189,18 @@ export const nodeInvokeHandlers: GatewayRequestHandlers = {
         return;
       }
       if (!generation) {
+        // A paired-but-disabled device must fail immediately with its own
+        // reason, not a generic pairing-changed retry hint.
+        if (
+          (await awaitWithinDeadline(
+            () => isPairedNodeDeviceDisabled(nodeId),
+            invokeDeadlineAtMs,
+            () => performance.now(),
+          )) === true
+        ) {
+          respondDeviceDisabled(respond, nodeId);
+          return;
+        }
         respondPairingChanged(respond);
         return;
       }

@@ -3,6 +3,7 @@ summary: "Pair a node to the Gateway, read its status, and upgrade a fleet in th
 read_when:
   - Pairing iOS/watchOS/Android nodes to a gateway
   - Reading node status, host stats, or approval scope
+  - Enabling, disabling, or restricting a paired node device
   - Upgrading a Gateway and its nodes across a protocol window
 title: "Node pairing and status"
 sidebarTitle: "Pairing and status"
@@ -81,6 +82,41 @@ and `openclaw nodes describe` show a compact stats summary with a last-known age
 for offline nodes. Windows omits load averages, and unavailable disk capacity is
 omitted. See
 [Node host stats](/gateway/protocol/presence#node-host-stats) for the wire contract.
+
+## Device registry
+
+The paired-device record owns a small device registry: an `enabled` flag and an
+optional per-device command policy. Both live in the Gateway state database
+inside the pairing store — there is no `devices` block in `openclaw.json`.
+
+- Devices pair disabled. Approving the node command surface
+  (`openclaw nodes approve <nodeRequestId>`) is the operator's execution consent
+  and enables the device; the Settings device inventory can disable it again.
+  Approving a _later_ surface expansion for a disabled device enables it again
+  too, because that approval is fresh execution consent. A plain reconnect never
+  changes the flag, so a disable stays in effect until an operator enables the
+  device or approves a new surface.
+- A disabled device stays connected and listed. `node.list` reports
+  `enabled: false` together with the approved surface, so the inventory keeps
+  showing the device while it cannot run anything.
+- `node.device.disable` (`operator.pairing`) keeps the pairing record but drops
+  the device's pairing generation, empties its live command surface, aborts
+  queued and in-flight node work, reconciles device-backed workers away, and
+  disconnects the node's sessions. A `node.invoke` against a disabled device
+  fails immediately with the `DEVICE_DISABLED` detail code instead of the
+  retryable `PAIRING_CHANGED`, so callers do not wait for a reconnect.
+- `node.device.enable` invalidates the device's node clients so the node
+  reconnects and is re-admitted against the enabled record.
+- `node.device.update` replaces the device's per-device command policy
+  (`commands.allow` / `commands.deny`). `deny` removes commands from the
+  pairing-approved surface; `allow` only selects within it — it never widens the
+  node-declared surface or the Gateway's `gateway.nodes.commands` policy.
+  Omitting `commands` clears the policy. A policy change invalidates the node's
+  clients so the narrowed surface applies on reconnect.
+
+`openclaw doctor` reports pairing rows that predate these columns and
+`openclaw doctor --fix` backfills explicit `enabled` state for them. Legacy rows
+load as enabled, so upgrading a Gateway does not disable a working fleet.
 
 ## Version skew and upgrade order
 

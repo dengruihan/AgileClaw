@@ -17,6 +17,12 @@ can be invoked:
 2. The command must be in the node's approved command surface on its paired-device record.
 3. The Gateway's platform-and-approval-derived allowlist must include the declared command.
 
+An optional per-device command policy narrows steps 1-2 further: `commands.deny`
+removes commands from the pairing-approved surface, and `commands.allow` selects
+within it without widening the surface. Set it from Settings, or with the
+`node.device.update` gateway method (`operator.pairing`). See
+[Device registry](/nodes/pairing-and-status#device-registry).
+
 Use `openclaw nodes pending` and `openclaw nodes approve <nodeRequestId>` to
 approve a pending surface. This request ID differs from the device request ID.
 An initial unapproved surface has no effective commands. During a pending
