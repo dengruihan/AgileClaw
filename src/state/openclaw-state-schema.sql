@@ -214,6 +214,15 @@ CREATE TABLE IF NOT EXISTS outbound_message_execution_bindings (
 CREATE INDEX IF NOT EXISTS outbound_message_execution_bindings_execution_event_idx
   ON outbound_message_execution_bindings (context_id, execution_id, run_id, event_id);
 
+CREATE TABLE IF NOT EXISTS tool_action_device_bindings (
+  event_id TEXT NOT NULL PRIMARY KEY,
+  device_ref TEXT NOT NULL CHECK (length(device_ref) BETWEEN 1 AND 64),
+  occurred_at INTEGER NOT NULL CHECK (occurred_at >= 0),
+  FOREIGN KEY (event_id) REFERENCES audit_events(event_id) ON DELETE CASCADE
+) STRICT;
+CREATE INDEX IF NOT EXISTS tool_action_device_bindings_occurred_idx
+  ON tool_action_device_bindings (occurred_at);
+
 CREATE TABLE IF NOT EXISTS outbound_message_progress (
   sequence INTEGER PRIMARY KEY AUTOINCREMENT,
   progress_id TEXT NOT NULL UNIQUE CHECK (length(progress_id) BETWEEN 1 AND 256),

@@ -1,4 +1,7 @@
 import { afterEach, expect, it } from "vitest";
+import { configureExecutionDecisionWorkSink } from "../audit/execution-decision-work.js";
+import type { ExecutionDecisionWork } from "../audit/execution-decision-work.types.js";
+import { createExecutionIdentityAdmissionToken } from "../audit/execution-identity-admission.js";
 import type { SessionEntry } from "../config/sessions.js";
 import type { DeviceScopeRegistry } from "./server-methods/session-device-scope.js";
 import {
@@ -17,7 +20,10 @@ function entry(scopeDeviceId?: string): SessionEntry {
 }
 
 function fakeRegistry(
-  handler: (params: Record<string, unknown>) => { ok: boolean; error?: unknown },
+  handler: (params: Record<string, unknown>) => {
+    ok: boolean;
+    error?: unknown;
+  },
 ): DeviceScopeRegistry & { calls: Array<Record<string, unknown>> } {
   const calls: Array<Record<string, unknown>> = [];
   return {
@@ -102,4 +108,43 @@ it("does nothing for a gateway-scoped session", async () => {
     ),
   ).resolves.toBe(false);
   expect(fake.calls).toHaveLength(0);
+});
+
+it("attributes the stop release to the acquiring execution with the stop reason", async () => {
+  const admissionToken = createExecutionIdentityAdmissionToken("run-stop", {
+    contextId: "context-stop",
+    executionId: "execution-stop",
+    now: 5,
+  });
+  recordSessionScopeLease({
+    rootSessionKey: "agent:main:root",
+    deviceId: "device-a",
+    holder: "agent:main:root",
+    leaseToken: "lease-1",
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    admissionToken,
+  });
+  const work: ExecutionDecisionWork[] = [];
+  const clear = configureExecutionDecisionWorkSink((item) => {
+    work.push(item);
+    return true;
+  });
+  try {
+    const fake = fakeRegistry(() => ({ ok: true }));
+    await expect(
+      releaseScopeLeaseOnStop(
+        contextFor(fake),
+        entry("device-a"),
+        "agent:main:root",
+        "agent:main:root",
+        "main",
+      ),
+    ).resolves.toBe(true);
+  } finally {
+    clear();
+  }
+  expect(work).toHaveLength(1);
+  expect(work[0]?.receipt.decision.reasonCode).toBe("device_lease_stop");
+  expect(work[0]?.receipt.action.operation).toBe("device.lease.release");
+  expect(work[0]?.token).toEqual(admissionToken);
 });

@@ -9,7 +9,7 @@ type ExecutionDecisionReceiptFacts = Omit<
 };
 
 type ExecutionDecisionResourceRef = {
-  namespace: "credential-profile";
+  namespace: "credential-profile" | "device";
   value: string;
 };
 

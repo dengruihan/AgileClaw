@@ -105,6 +105,8 @@ export type ToolActionAuditEventInput = AuditEventInputBase &
     kind: "tool_action";
     toolCallId?: string;
     toolName: string;
+    /** Hashed device scope placement tools executed under; absent for gateway execution. */
+    deviceRef?: string;
   };
 
 type MessageAuditEventInputBase = {
@@ -293,10 +295,13 @@ type AgentAuditEventRecordBase = AuditEventRecordBase & {
 
 export type AgentRunAuditEventRecord = AgentAuditEventRecordBase & {
   kind: "agent_run";
+  deviceRef?: never;
 } & AgentRunAuditLifecycle;
 
 export type ToolActionAuditEventRecord = AgentAuditEventRecordBase & {
   kind: "tool_action";
+  /** Hashed device scope placement tools executed under; absent for gateway execution. */
+  deviceRef?: string;
 } & ToolActionAuditLifecycle;
 
 type MessageAuditEventRecordBase = AuditEventRecordBase & {
@@ -308,6 +313,7 @@ type MessageAuditEventRecordBase = AuditEventRecordBase & {
   sessionId?: never;
   toolCallId?: never;
   toolName?: never;
+  deviceRef?: never;
   channel: string;
   conversationKind: AuditMessageConversationKind;
   durationMs?: number;

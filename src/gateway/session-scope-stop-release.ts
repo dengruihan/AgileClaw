@@ -53,5 +53,6 @@ export async function releaseScopeLeaseOnStop(
     registry: context.nodeRegistry,
     rootSessionKey,
     deviceId: entry.scopeDeviceId,
+    releaseReason: "stop",
   });
 }

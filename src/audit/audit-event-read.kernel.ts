@@ -2,7 +2,35 @@ import type { DatabaseSync } from "node:sqlite";
 import { executeSqliteQuerySync, getNodeSqliteKysely } from "../infra/kysely-sync.js";
 import type { DB as OpenClawStateKyselyDatabase } from "../state/openclaw-state-db.generated.js";
 import { AUDIT_EVENT_RETENTION_MS, rowToAuditEvent } from "./audit-event-store.js";
-import type { AuditEventListQuery, AuditEventListPage } from "./audit-event-types.js";
+import type {
+  AuditEventListQuery,
+  AuditEventListPage,
+  AuditEventRecord,
+} from "./audit-event-types.js";
+import { readToolActionDeviceBindingsInDatabase } from "./tool-action-device-binding.js";
+
+/** Attach retained device refs from the lazy companion to one read page. */
+function attachToolActionDeviceRefs(
+  db: DatabaseSync,
+  rows: readonly { event_id: string }[],
+  events: readonly AuditEventRecord[],
+): AuditEventRecord[] {
+  if (events.every((event) => event.kind !== "tool_action" || event.deviceRef !== undefined)) {
+    return [...events];
+  }
+  const refs = readToolActionDeviceBindingsInDatabase(
+    db,
+    rows.map((row) => row.event_id),
+  );
+  if (refs.size === 0) {
+    return [...events];
+  }
+  return events.map((event, index) => {
+    const deviceRef =
+      event.kind === "tool_action" ? refs.get(rows[index]?.event_id ?? "") : undefined;
+    return deviceRef && event.kind === "tool_action" ? { ...event, deviceRef } : event;
+  });
+}
 
 /** Connection-bound query kernel; production list reads execute only in the state worker. */
 export function listAuditEventsInDatabase(
@@ -56,7 +84,7 @@ export function listAuditEventsInDatabase(
   ).rows;
   const hasMore = rows.length > params.limit;
   const pageRows = hasMore ? rows.slice(0, params.limit) : rows;
-  const events = pageRows.map(rowToAuditEvent);
+  const events = attachToolActionDeviceRefs(db, pageRows, pageRows.map(rowToAuditEvent));
   return {
     events,
     ...(hasMore && events.length > 0 ? { nextCursor: events[events.length - 1]?.sequence } : {}),

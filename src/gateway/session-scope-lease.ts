@@ -1,4 +1,5 @@
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
+import type { ExecutionIdentityAdmissionToken } from "../audit/execution-identity-admission.js";
 
 /**
  * Gateway-side (A) cache of the device lease a scoped session tree holds.
@@ -25,6 +26,14 @@ export type SessionScopeLeaseRecord = {
   expiresAt: number;
   /** Owning agent, retained for diagnostics only; the root key already scopes identity. */
   agentId?: string;
+  /**
+   * Admission correlation of the turn that acquired the lease. Audit-only: it
+   * lets later release boundaries attribute the transition to the acquiring
+   * execution; it never establishes live authority.
+   */
+  admissionToken?: ExecutionIdentityAdmissionToken;
+  /** Session permission mode captured at acquire; audit correlation only. */
+  permissionMode?: string;
 };
 
 const leasesByRootSessionKey = new Map<string, SessionScopeLeaseRecord>();
@@ -89,6 +98,8 @@ export function recordSessionScopeLease(params: {
   leaseToken: string;
   expiresAt: number;
   agentId?: string;
+  admissionToken?: ExecutionIdentityAdmissionToken;
+  permissionMode?: string;
   /** Holder transport signal; the cached record dies with its connection. */
   connectionSignal?: AbortSignal;
 }): void {
@@ -109,6 +120,8 @@ export function recordSessionScopeLease(params: {
     leaseToken,
     expiresAt,
     ...(params.agentId ? { agentId: params.agentId } : {}),
+    ...(params.admissionToken ? { admissionToken: params.admissionToken } : {}),
+    ...(params.permissionMode ? { permissionMode: params.permissionMode } : {}),
   });
   if (params.connectionSignal && !params.connectionSignal.aborted) {
     watchDisconnect(params.connectionSignal, rootSessionKey);
@@ -157,48 +170,35 @@ export function releaseSessionScopeLease(
   return record;
 }
 
-/** Drop every mirrored lease for one device (node release or device disconnect). */
-export function clearSessionScopeLeasesForDevice(deviceId: string): string[] {
-  const device = normalizeOptionalString(deviceId);
-  if (!device) {
-    return [];
-  }
-  const released: string[] = [];
-  for (const [key, record] of leasesByRootSessionKey) {
-    if (record.deviceId === device) {
-      leasesByRootSessionKey.delete(key);
-      detachDisconnectWatch(key);
-      released.push(key);
-    }
-  }
-  return released;
-}
-
 /**
- * Mirrored grants for one device. Revocation and disable paths need the holder
- * keys and tokens the Gateway was granted; the node remains the authority.
+ * Remove and return every mirrored lease for one device so release boundaries
+ * can attribute each dropped mirror before it disappears. Used when the device
+ * is disabled, removed, or reports itself free.
  */
-export function listSessionScopeLeasesForDevice(
+export function takeSessionScopeLeasesForDevice(
   deviceId: string,
-  now: number = Date.now(),
-): Array<{ rootSessionKey: string; leaseToken: string }> {
+  now: number,
+): Array<{ rootSessionKey: string; record: SessionScopeLeaseRecord }> {
   const device = normalizeOptionalString(deviceId);
   if (!device) {
     return [];
   }
-  const grants: Array<{ rootSessionKey: string; leaseToken: string }> = [];
+  const taken: Array<{
+    rootSessionKey: string;
+    record: SessionScopeLeaseRecord;
+  }> = [];
   for (const [key, record] of leasesByRootSessionKey) {
     if (record.deviceId !== device) {
       continue;
     }
+    leasesByRootSessionKey.delete(key);
+    detachDisconnectWatch(key);
     if (isExpired(record, now)) {
-      leasesByRootSessionKey.delete(key);
-      detachDisconnectWatch(key);
       continue;
     }
-    grants.push({ rootSessionKey: key, leaseToken: record.leaseToken });
+    taken.push({ rootSessionKey: key, record });
   }
-  return grants;
+  return taken;
 }
 
 /**
@@ -213,7 +213,9 @@ export function applyNodeOccupancyStatus(params: {
   if (params.occupied) {
     return [];
   }
-  return clearSessionScopeLeasesForDevice(params.deviceId);
+  return takeSessionScopeLeasesForDevice(params.deviceId, Date.now()).map(
+    (entry) => entry.rootSessionKey,
+  );
 }
 
 export function clearAllSessionScopeLeasesForTest(): void {

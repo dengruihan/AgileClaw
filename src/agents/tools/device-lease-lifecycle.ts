@@ -35,6 +35,7 @@ export async function releaseTurnDeviceScopeLease(params: {
     return await releaseDeviceScopeLease({
       registry,
       rootSessionKey: params.rootSessionKey,
+      releaseReason: "turn-end",
       ...(params.deviceId ? { deviceId: params.deviceId } : {}),
       ...(params.leaseToken ? { leaseToken: params.leaseToken } : {}),
     });

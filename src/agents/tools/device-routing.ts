@@ -7,6 +7,8 @@
  * Gateway. A call that has no device adapter fails loudly instead of falling
  * back to Gateway execution.
  */
+import { recordDeviceLeaseDecision } from "../../audit/device-lease-decision.js";
+import { publishToolActionDeviceScope } from "../../audit/tool-action-device-scope.js";
 import { getRuntimeConfig } from "../../config/config.js";
 import {
   acquireDeviceScopeLease,
@@ -23,6 +25,7 @@ import {
   resolveDevicePlacementToolKind,
   unsupportedDeviceToolMessage,
 } from "./device-scope.js";
+import { getGatewayToolCallerIdentity } from "./gateway-caller-context.js";
 import { getInProcessGatewayToolContext } from "./in-process-gateway.js";
 
 export type DeviceScopeRoutingState = {
@@ -45,7 +48,14 @@ export type DeviceScopeRoutingState = {
   readonly leaseRootSessionKey: string | undefined;
   /** Registry captured with the lease, so turn-end release outlives tool context. */
   readonly leaseRegistry: DeviceScopeRegistry | undefined;
-  resolveRoot(): { rootSessionKey: string; agentId: string; scopeDeviceId?: string } | undefined;
+  resolveRoot():
+    | {
+        rootSessionKey: string;
+        agentId: string;
+        scopeDeviceId?: string;
+        permissionMode?: string;
+      }
+    | undefined;
 };
 
 export function createDeviceScopeRoutingState(params: {
@@ -54,7 +64,14 @@ export function createDeviceScopeRoutingState(params: {
   sessionId?: string;
   runId?: string;
 }): DeviceScopeRoutingState {
-  let cached: { rootSessionKey: string; agentId: string; scopeDeviceId?: string } | undefined;
+  let cached:
+    | {
+        rootSessionKey: string;
+        agentId: string;
+        scopeDeviceId?: string;
+        permissionMode?: string;
+      }
+    | undefined;
   let resolved = false;
   let leaseRootSessionKey: string | undefined;
   let leaseRegistry: DeviceScopeRegistry | undefined;
@@ -94,6 +111,7 @@ export function createDeviceScopeRoutingState(params: {
               rootSessionKey: root.rootSessionKey,
               agentId: root.agentId,
               ...(root.entry.scopeDeviceId ? { scopeDeviceId: root.entry.scopeDeviceId } : {}),
+              ...(root.entry.permissionMode ? { permissionMode: root.entry.permissionMode } : {}),
             }
           : undefined;
         resolved = true;
@@ -122,6 +140,7 @@ async function ensureDeviceScopeLease(params: {
   agentId: string;
   runId?: string;
   deviceId: string;
+  permissionMode?: string;
   signal?: AbortSignal;
 }): Promise<string> {
   const mirrored = readMirroredLeaseToken(params.rootSessionKey, params.deviceId);
@@ -136,6 +155,7 @@ async function ensureDeviceScopeLease(params: {
   }
   const session = context.nodeRegistry.get(params.deviceId);
   if (!session || session.client?.invalidated === true) {
+    recordRoutingLeaseReject({ ...params, rejectReason: "disconnected" });
     throw new Error(
       `scoped device ${params.deviceId} is not connected; reconnect it before running placement tools. There is no gateway fallback.`,
     );
@@ -147,12 +167,48 @@ async function ensureDeviceScopeLease(params: {
     sessionId: params.sessionId,
     agentId: params.agentId,
     ...(params.runId ? { runId: params.runId } : {}),
+    ...(params.permissionMode ? { permissionMode: params.permissionMode } : {}),
     ...(params.signal ? { signal: params.signal } : {}),
   });
   if (!grant.ok) {
     throw new Error(grant.message);
   }
   return grant.lease.leaseToken;
+}
+
+/**
+ * Best-effort reject fact for a placement call the routing layer itself
+ * refuses before the lease owner is involved; never blocks the failing call.
+ */
+function recordRoutingLeaseReject(params: {
+  rootSessionKey: string;
+  deviceId: string;
+  agentId: string;
+  permissionMode?: string;
+  rejectReason: "disconnected";
+}): void {
+  try {
+    const caller = getGatewayToolCallerIdentity();
+    if (!caller?.executionIdentityToken) {
+      return;
+    }
+    if (caller.receiptAuthority) {
+      if (caller.receiptAuthority() === false) {
+        return;
+      }
+    }
+    recordDeviceLeaseDecision({
+      token: caller.executionIdentityToken,
+      phase: "reject",
+      rejectReason: params.rejectReason,
+      deviceId: params.deviceId,
+      rootSessionKey: params.rootSessionKey,
+      agentId: params.agentId,
+      ...(params.permissionMode ? { permissionMode: params.permissionMode } : {}),
+    });
+  } catch {
+    // Audit must never turn a routing failure into a different failure.
+  }
 }
 
 type AdapterCall = (params: {
@@ -182,7 +238,12 @@ function deviceFileAdapter(toolName: string): AdapterCall | undefined {
 async function executeOnDevice(params: {
   toolName: string;
   state: DeviceScopeRoutingState;
-  root: { rootSessionKey: string; agentId: string; scopeDeviceId?: string };
+  root: {
+    rootSessionKey: string;
+    agentId: string;
+    scopeDeviceId?: string;
+    permissionMode?: string;
+  };
   toolParams: Record<string, unknown>;
   signal?: AbortSignal;
 }): Promise<unknown> {
@@ -208,12 +269,19 @@ async function executeOnDevice(params: {
   if (!adapter) {
     throw new Error(unsupportedDeviceToolMessage(params.toolName, deviceId));
   }
+  // Placement tools execute under the session's device scope from here on, so
+  // the tool-action audit projection can carry the executing device.
+  publishToolActionDeviceScope({
+    sessionKey: params.state.sessionKey,
+    deviceId,
+  });
   const leaseToken = await ensureDeviceScopeLease({
     rootSessionKey: params.root.rootSessionKey,
     sessionId: params.state.sessionId,
     agentId: params.state.agentId,
     ...(params.state.runId ? { runId: params.state.runId } : {}),
     deviceId,
+    ...(params.root.permissionMode ? { permissionMode: params.root.permissionMode } : {}),
     ...(params.signal ? { signal: params.signal } : {}),
   });
   // Record the grant for turn-end release only after the lease is real.
@@ -258,6 +326,12 @@ export function applyDeviceScopeToolRouting(
         }
         const root = state.resolveRoot();
         if (!root?.scopeDeviceId) {
+          // A placement call that resolves to gateway scope must stop carrying
+          // any earlier device fact into its tool-action records.
+          publishToolActionDeviceScope({
+            sessionKey: state.sessionKey,
+            deviceId: null,
+          });
           return await source.execute(toolCallId, toolParams, signal, onUpdate);
         }
         const callParams =

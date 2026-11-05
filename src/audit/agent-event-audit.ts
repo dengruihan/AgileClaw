@@ -23,6 +23,7 @@ import type {
   ToolActionAuditEventInput,
 } from "./audit-event-types.js";
 import type { AuditEventWriter } from "./audit-event-writer.js";
+import { readToolActionDeviceRef } from "./tool-action-device-scope.js";
 
 const MAX_TRACKED_RUN_INSTANCES = 1_024;
 
@@ -188,6 +189,9 @@ function projectToolExecutionEventToAudit(
   const toolCallId = auditToolCallId(event.toolCallId);
   const provenance = projectExplicitAttribution(event);
   const occurredAt = asDateTimestampMs(event.sourceTimestampMs) ?? event.ts;
+  // The device scope comes from the routing layer's live session fact; its id
+  // is hashed here so raw device ids never enter the writer queue.
+  const deviceRef = readToolActionDeviceRef(provenance.sessionKey);
   const attribution = {
     sourceSequence: event.seq,
     occurredAt,
@@ -200,6 +204,7 @@ function projectToolExecutionEventToAudit(
     runId,
     ...(toolCallId ? { toolCallId } : {}),
     toolName,
+    ...(deviceRef ? { deviceRef } : {}),
   };
   if (event.type === "tool.execution.started") {
     const action = "tool.action.started" as const;

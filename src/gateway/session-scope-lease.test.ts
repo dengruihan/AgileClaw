@@ -1,11 +1,13 @@
 import { afterEach, expect, it } from "vitest";
+import { createExecutionIdentityAdmissionToken } from "../audit/execution-identity-admission.js";
 import {
+  applyNodeOccupancyStatus,
   clearAllSessionScopeLeasesForTest,
-  clearSessionScopeLeasesForDevice,
   readSessionScopeLease,
   recordSessionScopeLease,
   releaseSessionScopeLease,
   sessionScopeLeaseHeld,
+  takeSessionScopeLeasesForDevice,
 } from "./session-scope-lease.js";
 
 afterEach(() => {
@@ -86,7 +88,9 @@ it("drops the mirror when the holder connection disconnects or the device releas
     leaseToken: "token-3",
     expiresAt: Number.MAX_SAFE_INTEGER,
   });
-  expect(clearSessionScopeLeasesForDevice("device-a")).toEqual(["agent:main:scoped"]);
+  expect(
+    takeSessionScopeLeasesForDevice("device-a", 2).map((entry) => entry.rootSessionKey),
+  ).toEqual(["agent:main:scoped"]);
   expect(sessionScopeLeaseHeld("agent:main:scoped")).toBe(false);
 });
 
@@ -164,7 +168,9 @@ it("cleans holder watches on release and device-cleared mirrors", () => {
     expiresAt: Number.MAX_SAFE_INTEGER,
     connectionSignal: previousConnection.signal,
   });
-  expect(releaseSessionScopeLease("agent:main:scoped")).toMatchObject({ leaseToken: "token-1" });
+  expect(releaseSessionScopeLease("agent:main:scoped")).toMatchObject({
+    leaseToken: "token-1",
+  });
 
   // A released key can be re-recorded under another connection without the old
   // abort reaching it; the old watch was dropped with the release.
@@ -180,8 +186,72 @@ it("cleans holder watches on release and device-cleared mirrors", () => {
   previousConnection.abort("disconnect");
   expect(sessionScopeLeaseHeld("agent:main:scoped")).toBe(true);
 
-  expect(clearSessionScopeLeasesForDevice("device-a")).toEqual(["agent:main:scoped"]);
+  expect(
+    takeSessionScopeLeasesForDevice("device-a", 2).map((entry) => entry.rootSessionKey),
+  ).toEqual(["agent:main:scoped"]);
   // The cleared holder's later disconnect is a no-op, not a second clear.
   currentConnection.abort("disconnect");
+  expect(sessionScopeLeaseHeld("agent:main:scoped")).toBe(false);
+});
+
+it("retains the acquiring execution correlation and permission mode with the mirror", () => {
+  const admissionToken = createExecutionIdentityAdmissionToken("run-9", {
+    contextId: "context-9",
+    executionId: "execution-9",
+    now: 5,
+  });
+  recordSessionScopeLease({
+    rootSessionKey: "agent:main:scoped",
+    deviceId: "device-a",
+    holder: "conn-1",
+    leaseToken: "token-1",
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    admissionToken,
+    permissionMode: "full",
+  });
+  expect(readSessionScopeLease("agent:main:scoped")).toMatchObject({
+    admissionToken,
+    permissionMode: "full",
+  });
+  const taken = takeSessionScopeLeasesForDevice("device-a", 2);
+  expect(taken).toHaveLength(1);
+  expect(taken[0]?.record.admissionToken).toEqual(admissionToken);
+  expect(taken[0]?.record.permissionMode).toBe("full");
+  expect(readSessionScopeLease("agent:main:scoped")).toBeUndefined();
+});
+
+it("drops expired mirrors silently while taking unexpired records for a device", () => {
+  recordSessionScopeLease({
+    rootSessionKey: "agent:main:expired",
+    deviceId: "device-a",
+    holder: "conn-1",
+    leaseToken: "token-expired",
+    expiresAt: 1,
+  });
+  recordSessionScopeLease({
+    rootSessionKey: "agent:main:live",
+    deviceId: "device-a",
+    holder: "conn-2",
+    leaseToken: "token-live",
+    expiresAt: Number.MAX_SAFE_INTEGER,
+  });
+  expect(
+    takeSessionScopeLeasesForDevice("device-a", 2).map((entry) => entry.rootSessionKey),
+  ).toEqual(["agent:main:live"]);
+  expect(readSessionScopeLease("agent:main:expired", 2)).toBeUndefined();
+  expect(readSessionScopeLease("agent:main:live", 2)).toBeUndefined();
+});
+
+it("clears every device mirror from a node-reported release", () => {
+  recordSessionScopeLease({
+    rootSessionKey: "agent:main:scoped",
+    deviceId: "device-a",
+    holder: "conn-1",
+    leaseToken: "token-1",
+    expiresAt: Number.MAX_SAFE_INTEGER,
+  });
+  expect(applyNodeOccupancyStatus({ deviceId: "device-a", occupied: false })).toEqual([
+    "agent:main:scoped",
+  ]);
   expect(sessionScopeLeaseHeld("agent:main:scoped")).toBe(false);
 });
