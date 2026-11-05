@@ -260,6 +260,14 @@ Key design choices:
 - Codex Responses and Anthropic Vertex requests are routed through boundary-aware cache shaping so cache reuse stays aligned with what providers actually receive.
 - System-prompt fingerprints are normalized (whitespace, line endings, hook-added context, runtime capability ordering) so semantically unchanged prompts share cache across turns.
 
+Changing the stable prefix itself invalidates the cached prefix once. Adding the
+device-scope instructions above did exactly that: the first turn where a build
+exposes the `use_device` tool adds those two lines to `## Runtime Context`, so the
+prefix cached by the previous build is missed one time. The next turn reuses the
+new prefix, and later device switches or device-presence changes stay in the
+per-turn `## Device Scope` fact without touching it. Expect the same one-time
+`systemPrompt` change in cache traces and a corresponding `cacheWrite` spike.
+
 If you see unexpected `cacheWrite` spikes after a config or workspace change, check whether the change lands above or below the cache boundary. Moving volatile content below the boundary (or stabilizing it) usually resolves the issue.
 
 Chat Completions routes without an explicit message-cache breakpoint move the
@@ -274,6 +282,7 @@ separate transient carrier; they do not become permanent first-message context.
 ## OpenClaw cache-stability guards
 
 - Active exec sessions, subagent state, and media-generation progress travel in compact Runtime Context carriers after the current user message, so changes do not rewrite the system prompt ahead of conversation history. Project Memory facts, channel-specific ACP hints, delegation/orchestration mode, and the current elevated level stay below the system-prompt cache boundary; static recall, safety, and capability guidance stay above it.
+- Device scope follows the same split: the stable prefix only states that tool execution may run on the Gateway host or on an enabled paired device and that switching requires the `use_device` tool after a confirming result. The per-turn `## Device Scope` fact carries the current scope (Gateway host/os/cwd, or node id/name/os/cwd) and the enabled device list (up to 10 devices, one sanitized line each, sorted by device id, with connected state), so changing devices or device presence never rewrites the cached prefix. The fact is transient: it lives in the current turn's runtime-context carrier and is stripped from retained history like every other Runtime Context snapshot.
 - Delivery instructions live after the system-prompt cache boundary. Native Codex carries the current delivery and target policy in late turn context, so alternating delivery modes does not rebuild its static prompt or message tool catalog when the available capabilities remain unchanged. Actual capability changes still update the catalog.
 - Bundled MCP tool catalogs are sorted deterministically (by server name, then tool name) before tool registration, so `listTools()` order changes do not churn the tools block and bust prompt-cache prefixes.
 - Message-tool action enums are sorted after policy filtering, keeping identical capabilities stable across channel discovery order changes.

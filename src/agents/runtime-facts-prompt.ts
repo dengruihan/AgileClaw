@@ -7,6 +7,11 @@ import { listActiveProcessSessionReferences } from "./bash-process-references.js
 import { resolveProcessToolScopeKey } from "./bash-process-scope.js";
 import type { RuntimeContextFragment } from "./internal-runtime-context.js";
 import { buildMediaTaskRuntimeContext } from "./media-generation-task-status.js";
+import {
+  readPromptDeviceScopeSnapshot,
+  renderPromptDeviceScopeFact,
+  type PromptDeviceScopeSnapshot,
+} from "./prompt-device-scope.js";
 import { sanitizeForPromptLiteral } from "./sanitize-for-prompt.js";
 import { buildActiveSubagentRuntimeContext } from "./subagents/registry/subagent-active-context.js";
 
@@ -18,6 +23,8 @@ type RuntimeFactsParams = {
   cfg: OpenClawConfig;
   /** Retained carriers need explicit empty snapshots to supersede older facts. */
   includeEmptySnapshots?: boolean;
+  /** Prepared turn scope; falls back to the process-stable snapshot for this session. */
+  deviceScope?: PromptDeviceScopeSnapshot;
 };
 
 function buildApprovedExecutablesRuntimeContext(
@@ -68,6 +75,13 @@ export async function buildRuntimeFactsContext(
 ): Promise<RuntimeContextFragment[]> {
   const sections: string[] = [];
   const includeEmptySnapshots = params.includeEmptySnapshots === true;
+  if (params.capabilityToolNames.has("use_device")) {
+    // Scope is only actionable with the switching tool, so the fact stays absent otherwise.
+    const snapshot = params.deviceScope ?? readPromptDeviceScopeSnapshot(params.sessionKey);
+    if (snapshot) {
+      sections.push(renderPromptDeviceScopeFact({ snapshot, includeEmptySnapshots }));
+    }
+  }
   if (process.platform === "win32" && params.capabilityToolNames.has("exec")) {
     const approved = buildApprovedExecutablesRuntimeContext(params.agentId, includeEmptySnapshots);
     if (approved) {
