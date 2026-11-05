@@ -6,12 +6,15 @@ import {
   NODE_AGENT_CLI_CLAUDE_RUN_COMMAND,
   NODE_DEVICE_APPS_COMMAND,
   NODE_EXEC_APPROVALS_COMMANDS,
+  NODE_EXECUTOR_PROFILE,
+  NODE_EXECUTOR_PROFILE_COMMANDS,
   NODE_FS_LIST_DIR_COMMAND,
   NODE_MCP_TOOLS_CALL_COMMAND,
   NODE_OCCUPANCY_CAP,
   NODE_OCCUPANCY_COMMANDS,
   NODE_SYSTEM_RUN_COMMANDS,
   NODE_TERMINAL_UPLOAD_COMMAND,
+  type NodeExecutorProfile,
 } from "../infra/node-commands.js";
 import type { ComputerUseCapabilityDescriptor } from "../plugins/computer-use-contract.js";
 import { NODE_DESKTOP_STREAM_COMMAND } from "../shared/node-desktop-stream.js";
@@ -100,6 +103,39 @@ export type NodeHostInventory = {
   skills: unknown[] | null;
   pluginTools: NodePluginToolDescriptor[];
 };
+
+/**
+ * Resolve the requested command surface: the executor profile supplies the
+ * default command set, and an explicit list always wins.
+ */
+export function resolveNodeCommandSurface(params?: {
+  profile?: NodeExecutorProfile;
+  commands?: readonly string[];
+}): { executorProfile: boolean; commandAllowlist: Set<string> | undefined } {
+  const executorProfile = params?.profile === NODE_EXECUTOR_PROFILE;
+  const commandSource =
+    executorProfile && params?.commands === undefined
+      ? NODE_EXECUTOR_PROFILE_COMMANDS
+      : params?.commands;
+  return {
+    executorProfile,
+    commandAllowlist: commandSource === undefined ? undefined : new Set(commandSource),
+  };
+}
+
+/** A restricted surface that retained no command would advertise an empty node. */
+export function assertNodeHostManifestUsable(
+  manifest: NodeHostManifest,
+  commandAllowlist: ReadonlySet<string> | undefined,
+): void {
+  if (!commandAllowlist || manifest.commands.length > 0) {
+    return;
+  }
+  const requested = [...commandAllowlist].toSorted().join(", ") || "(empty allowlist)";
+  throw new Error(
+    `Node command allowlist retained no available commands. Unknown or unavailable ids: ${requested}. Check --commands and enable the plugin that provides each command.`,
+  );
+}
 
 export function createNodeHostInventory(
   skills: unknown[] | null,

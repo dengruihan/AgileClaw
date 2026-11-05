@@ -244,6 +244,19 @@ describe("node-host SQLite config", () => {
     },
   );
 
+  it("clears a saved executor profile when all commands are selected", async () => {
+    const { env } = makeTestEnv();
+    const params = { fallbackDisplayName: "node", gateway: {}, env };
+    const profiled = await configureNodeHost({ ...params, profile: "executor" });
+    expect(profiled.profile).toBe("executor");
+    await expect(configureNodeHost(params)).resolves.toMatchObject({ profile: "executor" });
+
+    const cleared = await configureNodeHost({ ...params, allCommands: true });
+    expect(cleared).not.toHaveProperty("profile");
+    closeOpenClawStateDatabaseForTest();
+    await expect(loadNodeHostConfig(env)).resolves.not.toHaveProperty("profile");
+  });
+
   it("keeps the first committed implicit node id across processes", async ({ signal }) => {
     const { env, stateDir } = makeTestEnv();
     const [first, second] = await fixture.run(() =>

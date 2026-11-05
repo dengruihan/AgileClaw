@@ -108,7 +108,7 @@ function normalizeStoredNodeHostProfile(value: unknown): NodeExecutorProfile | u
   if (value === NODE_EXECUTOR_PROFILE) {
     return NODE_EXECUTOR_PROFILE;
   }
-  throw new Error(`invalid node-host SQLite row: unsupported profile ${String(value)}`);
+  throw new Error(`invalid node-host SQLite row: unsupported profile ${JSON.stringify(value)}`);
 }
 
 function normalizeStoredNodeHostConfig(value: unknown): NodeHostConfig {
@@ -252,6 +252,7 @@ export async function configureNodeHost(params: {
 
   const stateOptions = { env };
   let clearedCommands = false;
+  let clearedProfile = false;
   const config = runOpenClawStateWriteTransaction(({ db }) => {
     const stateDb = getNodeSqliteKysely<NodeHostConfigDatabase>(db);
     const stored = executeSqliteQueryTakeFirstSync(
@@ -266,6 +267,10 @@ export async function configureNodeHost(params: {
       : undefined;
     clearedCommands = params.allCommands === true && existing?.commands !== undefined;
     const nextCommands = params.allCommands ? undefined : (commands ?? existing?.commands);
+    // `--all-commands` restores the full default surface, including leaving the
+    // restricted executor profile.
+    clearedProfile = params.allCommands === true && existing?.profile !== undefined;
+    const nextProfile = params.allCommands ? undefined : (params.profile ?? existing?.profile);
     const next: NodeHostConfig = {
       version: 1,
       nodeId: explicitNodeId ?? existing?.nodeId ?? candidateNodeId,
@@ -273,11 +278,7 @@ export async function configureNodeHost(params: {
       gateway,
       installedAppsSharing: params.installedAppsSharing ?? existing?.installedAppsSharing ?? false,
       ...(nextCommands !== undefined ? { commands: nextCommands } : {}),
-      ...(params.profile !== undefined
-        ? { profile: params.profile }
-        : existing?.profile !== undefined
-          ? { profile: existing.profile }
-          : {}),
+      ...(nextProfile !== undefined ? { profile: nextProfile } : {}),
     };
     const valueJson = JSON.stringify(next);
     executeSqliteQuerySync(
@@ -304,6 +305,9 @@ export async function configureNodeHost(params: {
     logInfo(
       "node-host: cleared saved command allowlist; advertising the full default command surface",
     );
+  }
+  if (clearedProfile) {
+    logInfo("node-host: cleared the saved executor profile; advertising the full default surface");
   }
   return config;
 }

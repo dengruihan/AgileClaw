@@ -255,9 +255,20 @@ export class NodeOccupancyOwner {
     return { ok: true, released: true, holder };
   }
 
-  status(): NodeOccupancyStatus {
+  /**
+   * Current occupancy. The holder identity is visible only to the holder
+   * session or an operator view (no viewer session); other sessions learn only
+   * whether the device is occupied.
+   */
+  status(viewerSessionKey?: string): NodeOccupancyStatus {
     const holder = this.holderView();
-    return holder ? { occupied: true, holder } : { occupied: false };
+    if (!holder) {
+      return { occupied: false };
+    }
+    if (viewerSessionKey !== undefined && viewerSessionKey !== holder.sessionKey) {
+      return { occupied: true };
+    }
+    return { occupied: true, holder };
   }
 
   /** Lease-tagged processes must not be killed by a surprise auto-update. */

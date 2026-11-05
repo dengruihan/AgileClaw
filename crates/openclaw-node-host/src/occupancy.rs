@@ -49,11 +49,15 @@ pub struct OccupancyLeaseTokenParams {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OccupancyStatusParams {}
 
+/// A session call names its holder identity and proves it with the lease token;
+/// an operator call with neither force-clears the lease.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OccupancyRevokeParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease_token: Option<String>,
 }
 
 /// Holder identity as reported to callers; never includes the lease token.
@@ -70,6 +74,55 @@ pub struct OccupancyHolder {
     pub acquired_at_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub renewed_at_ms: Option<u64>,
+    /// Host-launched background processes still holding the lease; part of the
+    /// wire holder shape, so it is always serialized.
+    #[serde(default)]
+    pub detached_processes: u64,
+}
+
+/// Acquire/identity fields are bounded like the TypeScript node host.
+const OCCUPANCY_IDENTITY_MAX_LEN: usize = 256;
+const OCCUPANCY_LEASE_TOKEN_MAX_LEN: usize = 256;
+
+fn validate_bounded(value: &str, field: &str, max_len: usize) -> Result<(), HandlerError> {
+    if value.trim().is_empty() || value.len() > max_len || value.contains('\0') {
+        return Err(HandlerError::new(
+            "INVALID_REQUEST",
+            format!("occupancy {field} must be a bounded non-empty string"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_acquire(params: &OccupancyAcquireParams) -> Result<(), HandlerError> {
+    validate_bounded(
+        &params.session_key,
+        "sessionKey",
+        OCCUPANCY_IDENTITY_MAX_LEN,
+    )?;
+    validate_bounded(&params.session_id, "sessionId", OCCUPANCY_IDENTITY_MAX_LEN)?;
+    validate_bounded(&params.run_id, "runId", OCCUPANCY_IDENTITY_MAX_LEN)?;
+    validate_bounded(
+        &params.lease_token,
+        "leaseToken",
+        OCCUPANCY_LEASE_TOKEN_MAX_LEN,
+    )?;
+    if let Some(agent_id) = params.agent_id.as_deref() {
+        validate_bounded(agent_id, "agentId", OCCUPANCY_IDENTITY_MAX_LEN)?;
+    }
+    if let Some(turn_id) = params.turn_id.as_deref() {
+        validate_bounded(turn_id, "turnId", OCCUPANCY_IDENTITY_MAX_LEN)?;
+    }
+    Ok(())
+}
+
+/// Extracts the `leaseToken` an execution command carries beside its own params.
+fn lease_token_from_params(params: &Value) -> Option<&str> {
+    params.get("leaseToken").and_then(Value::as_str)
+}
+
+fn require_bounded_token(value: &str) -> Result<(), HandlerError> {
+    validate_bounded(value, "leaseToken", OCCUPANCY_LEASE_TOKEN_MAX_LEN)
 }
 
 struct OccupancyLease {
@@ -182,6 +235,7 @@ impl NodeOccupancy {
             turn_id: params.turn_id,
             acquired_at_ms,
             renewed_at_ms: None,
+            detached_processes: 0,
         };
         *lease = Some(OccupancyLease {
             holder: holder.clone(),
@@ -261,18 +315,22 @@ impl NodeOccupancy {
     }
 
     /// Force-clear occupancy; embedding hosts tree-kill holder-owned processes
-    /// before calling this.
+    /// before calling this. Naming a session requires the current lease token,
+    /// exactly like the TypeScript node host; passing neither is the operator
+    /// force-clear path.
     ///
     /// # Errors
     ///
     /// Returns [`OccupancyError::DeviceOccupied`] when a different session was
-    /// named and currently holds the device.
+    /// named, and [`OccupancyError::LeaseTokenMismatch`] when a named session did
+    /// not present the current token.
     /// # Panics
     ///
     /// Panics if the occupancy lock is poisoned.
     pub fn revoke(
         &self,
         session_key: Option<&str>,
+        lease_token: Option<&str>,
     ) -> Result<Option<OccupancyHolder>, OccupancyError> {
         let mut lease = self.lease.lock().expect("occupancy lock poisoned");
         let Some(current) = lease.as_ref() else {
@@ -282,6 +340,11 @@ impl NodeOccupancy {
             if current.holder.session_key != requested {
                 return Err(OccupancyError::DeviceOccupied {
                     holder: Box::new(current.holder.clone()),
+                });
+            }
+            if lease_token != Some(current.lease_token.as_str()) {
+                return Err(OccupancyError::LeaseTokenMismatch {
+                    session_key: current.holder.session_key.clone(),
                 });
             }
         }
@@ -319,10 +382,29 @@ impl NodeOccupancy {
         Ok(())
     }
 
+    /// Admission helper for embedding hosts: pass the invoke's session key and
+    /// the command's decoded params. The `leaseToken` rides inside the params,
+    /// so no extra wire field is needed for non-occupancy commands.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same rejections as [`NodeOccupancy::admit`].
+    /// # Panics
+    ///
+    /// Panics if the occupancy lock is poisoned.
+    pub fn admit_invocation(
+        &self,
+        session_key: Option<&str>,
+        params: &Value,
+    ) -> Result<(), OccupancyError> {
+        self.admit(session_key, lease_token_from_params(params))
+    }
+
     fn handle_request(&self, command: &str, params: &Value) -> Result<Value, HandlerError> {
         match command {
             OCCUPANCY_ACQUIRE_COMMAND => {
                 let params = parse_params::<OccupancyAcquireParams>(params)?;
+                validate_acquire(&params)?;
                 let holder = self
                     .acquire(params)
                     .map_err(OccupancyError::into_handler_error)?;
@@ -330,6 +412,12 @@ impl NodeOccupancy {
             }
             OCCUPANCY_RENEW_COMMAND => {
                 let params = parse_params::<OccupancyLeaseTokenParams>(params)?;
+                validate_bounded(
+                    &params.session_key,
+                    "sessionKey",
+                    OCCUPANCY_IDENTITY_MAX_LEN,
+                )?;
+                require_bounded_token(&params.lease_token)?;
                 let holder = self
                     .renew(&params)
                     .map_err(OccupancyError::into_handler_error)?;
@@ -337,6 +425,12 @@ impl NodeOccupancy {
             }
             OCCUPANCY_RELEASE_COMMAND => {
                 let params = parse_params::<OccupancyLeaseTokenParams>(params)?;
+                validate_bounded(
+                    &params.session_key,
+                    "sessionKey",
+                    OCCUPANCY_IDENTITY_MAX_LEN,
+                )?;
+                require_bounded_token(&params.lease_token)?;
                 let released = self
                     .release(&params)
                     .map_err(OccupancyError::into_handler_error)?;
@@ -345,8 +439,18 @@ impl NodeOccupancy {
             OCCUPANCY_STATUS_COMMAND => Ok(self.status()),
             OCCUPANCY_REVOKE_COMMAND => {
                 let params = parse_params::<OccupancyRevokeParams>(params)?;
+                if let Some(session_key) = params.session_key.as_deref() {
+                    validate_bounded(session_key, "sessionKey", OCCUPANCY_IDENTITY_MAX_LEN)?;
+                    let token = params.lease_token.as_deref().ok_or_else(|| {
+                        HandlerError::new(
+                            "LEASE_TOKEN_MISMATCH",
+                            "lease token does not match the current lease; a session revoke requires the current token".to_string(),
+                        )
+                    })?;
+                    require_bounded_token(token)?;
+                }
                 let holder = self
-                    .revoke(params.session_key.as_deref())
+                    .revoke(params.session_key.as_deref(), params.lease_token.as_deref())
                     .map_err(OccupancyError::into_handler_error)?;
                 Ok(json!({"ok": true, "revoked": holder.is_some(), "holder": holder}))
             }
@@ -369,9 +473,14 @@ fn parse_params<T: for<'de> Deserialize<'de>>(params: &Value) -> Result<T, Handl
 
 /// Register the five occupancy lifecycle commands on a runtime builder.
 ///
-/// The commands do not consult `invocation.session_key`; acquire/renew/release
-/// carry the root session identity in their parameters because the holder is
-/// the root session, not the dispatching subagent.
+/// Embedding contract: these handlers own the lease decisions only. The host
+/// still owns process spawning, process-tree cleanup on revoke/disconnect, boot
+/// clearing, and per-call admission for every other command — call
+/// [`NodeOccupancy::admit_invocation`] before dispatching anything that is not
+/// an occupancy lifecycle command or operator approval policy. Only the
+/// TypeScript node host currently ships a process registry and durable boot
+/// clearing; a Rust host that executes tools must supply both or advertise no
+/// execution commands.
 #[must_use]
 pub fn occupancy_commands(
     builder: CommandRuntimeBuilder,
@@ -495,12 +604,113 @@ mod tests {
             .acquire(acquire_params("agent:root:1", "token-1"))
             .unwrap();
         assert_eq!(
-            occupancy.revoke(Some("agent:root:2")).unwrap_err().code(),
+            occupancy
+                .revoke(Some("agent:root:2"), Some("token-1"))
+                .unwrap_err()
+                .code(),
             "DEVICE_OCCUPIED"
         );
-        let cleared = occupancy.revoke(None).unwrap();
+        // A named session must prove the current token, like the TypeScript host.
+        assert_eq!(
+            occupancy
+                .revoke(Some("agent:root:1"), Some("stale"))
+                .unwrap_err()
+                .code(),
+            "LEASE_TOKEN_MISMATCH"
+        );
+        assert_eq!(
+            occupancy
+                .revoke(Some("agent:root:1"), None)
+                .unwrap_err()
+                .code(),
+            "LEASE_TOKEN_MISMATCH"
+        );
+        let cleared = occupancy
+            .revoke(Some("agent:root:1"), Some("token-1"))
+            .unwrap();
         assert_eq!(cleared.unwrap().session_key, "agent:root:1");
         assert!(!occupancy.status()["occupied"].as_bool().unwrap());
+    }
+
+    #[test]
+    fn holder_serializes_the_detached_process_count() {
+        let occupancy = NodeOccupancy::new();
+        occupancy
+            .acquire(acquire_params("agent:root:1", "token-1"))
+            .unwrap();
+        assert_eq!(occupancy.status()["holder"]["detachedProcesses"], 0);
+    }
+
+    #[test]
+    fn admission_helper_reads_the_lease_token_from_command_params() {
+        let occupancy = NodeOccupancy::new();
+        occupancy
+            .acquire(acquire_params("agent:root:1", "token-1"))
+            .unwrap();
+        let params = json!({"leaseToken": "token-1", "command": ["true"]});
+        assert!(occupancy
+            .admit_invocation(Some("agent:root:1"), &params)
+            .is_ok());
+        assert_eq!(
+            occupancy
+                .admit_invocation(Some("agent:root:1"), &json!({}))
+                .unwrap_err()
+                .code(),
+            "LEASE_TOKEN_MISMATCH"
+        );
+        assert_eq!(
+            occupancy
+                .admit_invocation(Some("agent:root:2"), &params)
+                .unwrap_err()
+                .code(),
+            "DEVICE_OCCUPIED"
+        );
+    }
+
+    #[test]
+    fn acquire_rejects_empty_or_unbounded_identity() {
+        let occupancy = NodeOccupancy::new();
+        let mut params = acquire_params("agent:root:1", "token-1");
+        params.session_key = "  ".into();
+        let error = occupancy
+            .handle_request(
+                OCCUPANCY_ACQUIRE_COMMAND,
+                &serde_json::to_value(params).unwrap(),
+            )
+            .unwrap_err();
+        assert_eq!(error.code, "INVALID_REQUEST");
+
+        let mut params = acquire_params("agent:root:1", "token-1");
+        params.lease_token = "t".repeat(OCCUPANCY_LEASE_TOKEN_MAX_LEN + 1);
+        let error = occupancy
+            .handle_request(
+                OCCUPANCY_ACQUIRE_COMMAND,
+                &serde_json::to_value(params).unwrap(),
+            )
+            .unwrap_err();
+        assert_eq!(error.code, "INVALID_REQUEST");
+    }
+
+    #[test]
+    fn revoke_command_requires_a_token_when_a_session_is_named() {
+        let occupancy = NodeOccupancy::new();
+        occupancy
+            .acquire(acquire_params("agent:root:1", "token-1"))
+            .unwrap();
+        let error = occupancy
+            .handle_request(
+                OCCUPANCY_REVOKE_COMMAND,
+                &json!({"sessionKey": "agent:root:1"}),
+            )
+            .unwrap_err();
+        assert_eq!(error.code, "LEASE_TOKEN_MISMATCH");
+        let revoked = occupancy
+            .handle_request(
+                OCCUPANCY_REVOKE_COMMAND,
+                &json!({"sessionKey": "agent:root:1", "leaseToken": "token-1"}),
+            )
+            .unwrap();
+        assert_eq!(revoked["revoked"], true);
     }
 
     #[test]

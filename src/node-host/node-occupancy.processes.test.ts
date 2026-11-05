@@ -36,7 +36,7 @@ describe("NodeOccupancyOwner disconnect cleanup", () => {
       runId: "run-1",
       leaseToken: "token-1",
     });
-    const extinct = createDeferred<void>();
+    const extinct = createDeferred();
     let killRequested = false;
     owner.registerLeaseProcess(
       { sessionKey: "agent:root:1", leaseToken: "token-1" },
@@ -72,7 +72,7 @@ describe("NodeOccupancyOwner disconnect cleanup", () => {
       runId: "run-1",
       leaseToken: "token-1",
     });
-    const detachedExit = createDeferred<void>();
+    const detachedExit = createDeferred();
     const detached = owner.registerLeaseProcess(
       { sessionKey: "agent:root:1", leaseToken: "token-1" },
       {

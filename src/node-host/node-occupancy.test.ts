@@ -177,6 +177,21 @@ describe("NodeOccupancyOwner state machine", () => {
       JSON.stringify(readConfigMachineState(NODE_OCCUPANCY_MACHINE_STATE_KEY, { env })),
     ).not.toContain("secret-lease-token");
   });
+
+  it("shows the holder identity only to the holder session or an operator view", () => {
+    const { owner } = makeOwner();
+    owner.acquire(acquireSession("agent:root:1", "token-1"));
+
+    expect(owner.status("agent:root:2")).toEqual({ occupied: true });
+    expect(owner.status("agent:root:1")).toMatchObject({
+      occupied: true,
+      holder: { sessionKey: "agent:root:1" },
+    });
+    expect(owner.status()).toMatchObject({
+      occupied: true,
+      holder: { sessionKey: "agent:root:1" },
+    });
+  });
 });
 
 describe("NodeOccupancyOwner durable row", () => {

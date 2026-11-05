@@ -151,8 +151,8 @@ The node advertises the `occupancy` capability alongside those commands. Worker
 session hosting, worker bundle installation, skill publication, plugin-tool
 publication, and MCP servers stay off, exactly as with any explicit command
 allowlist. Exec runs foreground on the node: an exec invoke holds the lease until
-its process tree is extinct, and `process` follow-ups remain a Gateway-side
-surface.
+its process tree is extinct, including any descendants it tried to background,
+and `process` follow-ups remain a Gateway-side surface.
 
 Select the profile with `profile: "executor"` in the node-host runtime options
 (the value persists in node-host state, so later starts keep it), or run the same
@@ -161,6 +161,13 @@ pairing approval shows the declared commands, and
 [Gateway command policy](/nodes/command-policy) still applies to every
 invocation. See [Session device occupancy](/nodes/node-exec#session-device-occupancy)
 for the lease rules that make the executor exclusive.
+
+The persisted profile is one-way until it is cleared: `openclaw node run
+--all-commands` (or `openclaw node install --force --all-commands`) clears both
+the saved allowlist and the saved executor profile and advertises the full
+default surface again. Without a profile, `--commands` remains the operator-facing
+way to publish the executor surface, and a node whose allowlist advertises the
+`occupancy.*` commands enforces the lease the same way.
 
 ### Start a node host (service)
 

@@ -19,6 +19,35 @@ function requireString(value: unknown, label: string): string {
   return normalized;
 }
 
+/**
+ * Resolve the calling session. The invoke envelope is authoritative: a claimed
+ * `sessionKey` must match it, so one session can never act as another. Without
+ * an envelope the invoke is an operator call and may name a session in params.
+ */
+function resolveCallerSessionKey(
+  envelopeSessionKey: string | undefined,
+  claimedSessionKey: unknown,
+): string | undefined {
+  const envelope = normalizeOptionalString(envelopeSessionKey);
+  const claimed = normalizeOptionalString(claimedSessionKey);
+  if (envelope && claimed && envelope !== claimed) {
+    throw new Error("INVALID_REQUEST: occupancy sessionKey does not match the invoking session");
+  }
+  return envelope ?? claimed;
+}
+
+function requireCallerSessionKey(
+  envelopeSessionKey: string | undefined,
+  claimedSessionKey: unknown,
+  command: string,
+): string {
+  const sessionKey = resolveCallerSessionKey(envelopeSessionKey, claimedSessionKey);
+  if (!sessionKey) {
+    throw new Error(`INVALID_REQUEST: ${command} requires the invoking session key`);
+  }
+  return sessionKey;
+}
+
 export async function handleOccupancyInvoke(params: {
   command: string;
   paramsJSON?: string | null;
@@ -35,7 +64,7 @@ export async function handleOccupancyInvoke(params: {
       case NODE_OCCUPANCY_ACQUIRE_COMMAND: {
         const raw = decode();
         const result = occupancy.acquire({
-          sessionKey: requireString(raw.sessionKey, "sessionKey"),
+          sessionKey: requireCallerSessionKey(params.sessionKey, raw.sessionKey, command),
           sessionId: requireString(raw.sessionId, "sessionId"),
           agentId: normalizeOptionalString(raw.agentId) ?? undefined,
           runId: requireString(raw.runId, "runId"),
@@ -52,7 +81,7 @@ export async function handleOccupancyInvoke(params: {
       case NODE_OCCUPANCY_RENEW_COMMAND: {
         const raw = decode();
         const result = occupancy.renew({
-          sessionKey: requireString(raw.sessionKey, "sessionKey"),
+          sessionKey: requireCallerSessionKey(params.sessionKey, raw.sessionKey, command),
           leaseToken: requireString(raw.leaseToken, "leaseToken"),
         });
         if (!result.ok) {
@@ -65,7 +94,7 @@ export async function handleOccupancyInvoke(params: {
       case NODE_OCCUPANCY_RELEASE_COMMAND: {
         const raw = decode();
         const result = occupancy.release({
-          sessionKey: requireString(raw.sessionKey, "sessionKey"),
+          sessionKey: requireCallerSessionKey(params.sessionKey, raw.sessionKey, command),
           leaseToken: requireString(raw.leaseToken, "leaseToken"),
         });
         if (!result.ok) {
@@ -76,18 +105,25 @@ export async function handleOccupancyInvoke(params: {
         return;
       }
       case NODE_OCCUPANCY_STATUS_COMMAND: {
-        await response.json(occupancy.status());
+        // A session sees the holder identity only for its own lease; anyone may
+        // learn whether the device is occupied.
+        await response.json(occupancy.status(normalizeOptionalString(params.sessionKey)));
         return;
       }
       case NODE_OCCUPANCY_REVOKE_COMMAND: {
         const raw = params.paramsJSON ? decode() : {};
-        // A dispatching session may only revoke its own lease, and must present
-        // the current token; operator invokes carry no session identity.
-        const callerSessionKey = normalizeOptionalString(params.sessionKey) ?? undefined;
-        const result = await occupancy.revoke({
-          sessionKey: callerSessionKey ?? normalizeOptionalString(raw.sessionKey) ?? undefined,
-          ...(callerSessionKey ? { leaseToken: requireString(raw.leaseToken, "leaseToken") } : {}),
-        });
+        // Naming a session turns this into a session call: the caller must be
+        // the holder and present the current token. An invoke with no session
+        // identity anywhere is the operator force-clear path.
+        const callerSessionKey = resolveCallerSessionKey(params.sessionKey, raw.sessionKey);
+        const result = await occupancy.revoke(
+          callerSessionKey
+            ? {
+                sessionKey: callerSessionKey,
+                leaseToken: requireString(raw.leaseToken, "leaseToken"),
+              }
+            : {},
+        );
         if (!result.ok) {
           await respondRejection(response, result);
           return;

@@ -11,7 +11,6 @@ import {
 } from "../infra/node-commands.js";
 import { closeOpenClawStateDatabaseForTest } from "../state/openclaw-state-db.js";
 import type { NodeHostClient } from "./client.js";
-import { NodeOccupancyControlGate } from "./node-occupancy-control-gate.js";
 import {
   createNodeHostClient,
   frame as baseFrame,
@@ -174,6 +173,172 @@ describe("node host runtime occupancy commands", () => {
   });
 });
 
+describe("node host occupancy caller binding", () => {
+  it("rejects a claimed holder identity that differs from the invoking session", async () => {
+    const { client, results } = captureClient();
+    const runtime = await startOccupancyRuntime(occupancyEnv(), client);
+
+    // The envelope session (agent:root:2) may not acquire as agent:root:1.
+    await runtime.invoke(
+      invokeFrame({
+        id: "mismatch",
+        command: "occupancy.acquire.v1",
+        sessionKey: "agent:root:2",
+        paramsJSON: acquireParams("lease-token"),
+      }),
+    );
+    expect(results.find((result) => result.id === "mismatch")).toMatchObject({
+      ok: false,
+      error: {
+        code: "INVALID_REQUEST",
+        message: expect.stringContaining("does not match the invoking session"),
+      },
+    });
+
+    await runtime.invoke(invokeFrame({ id: "status", command: "occupancy.status.v1" }));
+    expect(
+      JSON.parse(results.find((result) => result.id === "status")?.payloadJSON ?? "{}"),
+    ).toEqual({ occupied: false });
+
+    await runtime.close();
+  });
+
+  it("never lets a second session re-acquire or squat the holder lease", async () => {
+    const { client, results } = captureClient();
+    const runtime = await startOccupancyRuntime(occupancyEnv(), client);
+    await runtime.invoke(
+      invokeFrame({
+        id: "acquire-a",
+        command: "occupancy.acquire.v1",
+        sessionKey: "agent:root:1",
+        paramsJSON: acquireParams("lease-token"),
+      }),
+    );
+
+    // B claims A's identity: rejected before the lease is touched.
+    await runtime.invoke(
+      invokeFrame({
+        id: "hijack",
+        command: "occupancy.acquire.v1",
+        sessionKey: "agent:root:2",
+        paramsJSON: acquireParams("hijack-token"),
+      }),
+    );
+    expect(results.find((result) => result.id === "hijack")).toMatchObject({
+      ok: false,
+      error: { code: "INVALID_REQUEST" },
+    });
+
+    // B acquires as itself: the single holder rejects with its identity.
+    await runtime.invoke(
+      invokeFrame({
+        id: "squat",
+        command: "occupancy.acquire.v1",
+        sessionKey: "agent:root:2",
+        paramsJSON: JSON.stringify({
+          sessionKey: "agent:root:2",
+          sessionId: "session-2",
+          runId: "run-2",
+          leaseToken: "other-token",
+        }),
+      }),
+    );
+    expect(results.find((result) => result.id === "squat")).toMatchObject({
+      ok: false,
+      error: {
+        code: NODE_DEVICE_OCCUPIED_ERROR_CODE,
+        message: expect.stringContaining("agent:root:1"),
+      },
+    });
+
+    // A's lease and token still work after both attempts.
+    await runtime.invoke(
+      invokeFrame({
+        id: "holder-exec",
+        command: "test.duplex",
+        sessionKey: "agent:root:1",
+        paramsJSON: JSON.stringify({ leaseToken: "lease-token" }),
+      }),
+    );
+    expect(mocks.handleInvoke).toHaveBeenCalledTimes(1);
+
+    await runtime.close();
+  });
+
+  it("shows the holder identity only to the holder session", async () => {
+    const { client, results } = captureClient();
+    const runtime = await startOccupancyRuntime(occupancyEnv(), client);
+    await runtime.invoke(
+      invokeFrame({
+        id: "acquire",
+        command: "occupancy.acquire.v1",
+        sessionKey: "agent:root:1",
+        paramsJSON: acquireParams("lease-token"),
+      }),
+    );
+
+    await runtime.invoke(
+      invokeFrame({
+        id: "foreign-status",
+        command: "occupancy.status.v1",
+        sessionKey: "agent:root:2",
+      }),
+    );
+    expect(
+      JSON.parse(results.find((result) => result.id === "foreign-status")?.payloadJSON ?? "{}"),
+    ).toEqual({ occupied: true });
+
+    await runtime.invoke(
+      invokeFrame({
+        id: "holder-status",
+        command: "occupancy.status.v1",
+        sessionKey: "agent:root:1",
+      }),
+    );
+    expect(
+      JSON.parse(results.find((result) => result.id === "holder-status")?.payloadJSON ?? "{}"),
+    ).toMatchObject({ occupied: true, holder: { sessionKey: "agent:root:1" } });
+
+    await runtime.invoke(invokeFrame({ id: "operator-status", command: "occupancy.status.v1" }));
+    expect(
+      JSON.parse(results.find((result) => result.id === "operator-status")?.payloadJSON ?? "{}"),
+    ).toMatchObject({ occupied: true, holder: { sessionKey: "agent:root:1" } });
+
+    await runtime.close();
+  });
+
+  it("revokes with the token from params when no envelope is present", async () => {
+    const { client, results } = captureClient();
+    const runtime = await startOccupancyRuntime(occupancyEnv(), client);
+    await runtime.invoke(
+      invokeFrame({
+        id: "acquire",
+        command: "occupancy.acquire.v1",
+        sessionKey: "agent:root:1",
+        paramsJSON: acquireParams("lease-token"),
+      }),
+    );
+
+    await runtime.invoke(
+      invokeFrame({
+        id: "revoke",
+        command: "occupancy.revoke.v1",
+        paramsJSON: JSON.stringify({ sessionKey: "agent:root:1", leaseToken: "lease-token" }),
+      }),
+    );
+    expect(
+      JSON.parse(results.find((result) => result.id === "revoke")?.payloadJSON ?? "{}"),
+    ).toMatchObject({ ok: true, revoked: true });
+
+    await runtime.invoke(invokeFrame({ id: "status", command: "occupancy.status.v1" }));
+    expect(
+      JSON.parse(results.find((result) => result.id === "status")?.payloadJSON ?? "{}"),
+    ).toEqual({ occupied: false });
+
+    await runtime.close();
+  });
+});
+
 describe("node host runtime per-call lease admission", () => {
   it("validates holder and lease token before every execution command", async () => {
     const { client, results } = captureClient();
@@ -282,7 +447,7 @@ describe("node host runtime control serialization", () => {
       }),
     );
 
-    const held = createDeferred<void>();
+    const held = createDeferred();
     const dispatched: string[] = [];
     mocks.handleInvoke.mockImplementation(async (...args: unknown[]) => {
       const frame = args[0] as { id: string };
@@ -398,7 +563,21 @@ describe("node host occupancy revoke authority", () => {
         paramsJSON: JSON.stringify({ sessionKey: "agent:root:1", leaseToken: "lease-token" }),
       }),
     );
+    // B cannot even name A's session: the envelope is authoritative.
     expect(results.find((result) => result.id === "foreign-revoke")).toMatchObject({
+      ok: false,
+      error: { code: "INVALID_REQUEST" },
+    });
+
+    await runtime.invoke(
+      invokeFrame({
+        id: "self-revoke",
+        command: "occupancy.revoke.v1",
+        sessionKey: "agent:root:2",
+        paramsJSON: JSON.stringify({ sessionKey: "agent:root:2", leaseToken: "lease-token" }),
+      }),
+    );
+    expect(results.find((result) => result.id === "self-revoke")).toMatchObject({
       ok: false,
       error: { code: NODE_DEVICE_OCCUPIED_ERROR_CODE },
     });
@@ -453,7 +632,7 @@ describe("node host occupancy disconnect cleanup", () => {
       }),
     );
 
-    const held = createDeferred<void>();
+    const held = createDeferred();
     let execSignal: AbortSignal | undefined;
     mocks.handleInvoke.mockImplementationOnce(async (...args: unknown[]) => {
       const runtimeOptions = args[4] as { signal?: AbortSignal };

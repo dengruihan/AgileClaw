@@ -119,6 +119,18 @@ export function isNodeOccupancyAdmissionExemptCommand(command: unknown): boolean
   );
 }
 
+/**
+ * Lease mutations change who controls the device, so the Gateway requires admin
+ * scope for them on the direct `node.invoke` RPC. `occupancy.status.v1` stays
+ * available to sessions: it reports the holder identity only to its holder.
+ */
+export const NODE_OCCUPANCY_MUTATING_COMMANDS = [
+  NODE_OCCUPANCY_ACQUIRE_COMMAND,
+  NODE_OCCUPANCY_RENEW_COMMAND,
+  NODE_OCCUPANCY_RELEASE_COMMAND,
+  NODE_OCCUPANCY_REVOKE_COMMAND,
+] as const;
+
 // The restricted executor profile: tool execution only. No worker session
 // hosting and no bundle installation. Exec approvals stay listed because exec
 // runs under the node's existing approval policy. Plugin-provided entries stay
@@ -159,6 +171,9 @@ const NODE_ADMIN_ONLY_INVOKE_COMMANDS = [
   ...NODE_BROWSER_PROXY_COMMANDS,
   NODE_FS_LIST_DIR_COMMAND,
   NODE_TERMINAL_UPLOAD_COMMAND,
+  // Lease mutations cross session ownership: a model-facing generic invoke must
+  // never acquire, renew, release, or revoke another session's device.
+  ...NODE_OCCUPANCY_MUTATING_COMMANDS,
 ] as const;
 
 const NODE_ADMIN_ONLY_INVOKE_COMMAND_SET = new Set<string>(NODE_ADMIN_ONLY_INVOKE_COMMANDS);
