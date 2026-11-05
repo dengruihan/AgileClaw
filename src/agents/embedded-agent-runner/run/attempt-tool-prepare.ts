@@ -44,6 +44,7 @@ import type {
   CronCreatorToolAllowlistEntry,
   CronToolsAllowCaptureRef,
 } from "../../tools/cron-tool.js";
+import { applyDeviceControlSerialization } from "../../tools/device-serialization.js";
 import { log } from "../logger.js";
 import { createAttemptNestedToolActivityState } from "./attempt-nested-tool-activity.js";
 import type { EmbeddedAttemptSetup } from "./attempt-setup.js";
@@ -54,6 +55,7 @@ import {
   resolveEmbeddedAttemptToolConstructionPlan,
 } from "./attempt-tool-construction-plan.js";
 import { buildEmbeddedAttemptToolRunContext } from "./attempt-tool-run-context.js";
+import { applyDeviceStepRuleBatchGuard } from "./device-step-rule.js";
 import type { EmbeddedRunAttemptInternalParams } from "./internal-params.js";
 import type { EmbeddedRunAttemptParams } from "./types.js";
 
@@ -367,7 +369,17 @@ export async function prepareEmbeddedAttemptToolBase(params: {
             toolMeta: (tool) => getPluginToolMeta(tool),
           });
           params.markCoreToolStage("attempt:tools-allow");
-          return filteredTools;
+          // Device routing guards wrap the final surface: control tools queue
+          // per lease at the Gateway, and a batch mixing use_device with other
+          // placement calls is rejected at the step boundary.
+          return applyDeviceStepRuleBatchGuard(
+            applyDeviceControlSerialization({
+              tools: filteredTools,
+              sessionKey:
+                attempt.sessionKey?.trim() || attempt.sessionId || params.setup.sandboxSessionKey,
+              agentId: params.setup.sessionAgentId,
+            }),
+          );
         })();
     const toolsRaw = attempt.forceRestartSafeTools
       ? constructedToolsRaw.filter((tool) => isAgentToolRestartSafe(tool, restartSafetyOptions))
