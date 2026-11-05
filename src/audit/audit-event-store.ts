@@ -44,9 +44,10 @@ import {
   recordConfirmedTerminalMessageExecutionBinding,
 } from "./message-execution-binding.js";
 import {
+  clearToolActionDeviceBindingRowCountCache,
   ensureToolActionDeviceBindingSchema,
   pruneToolActionDeviceBindingsInDatabase,
-  recordToolActionDeviceBindingInDatabase,
+  recordToolActionDeviceBindingAfterInsert,
   TOOL_ACTION_DEVICE_REF_MAX_LENGTH,
 } from "./tool-action-device-binding.js";
 
@@ -679,12 +680,11 @@ export function recordAuditEventInDatabase(
       if (row && toolDeviceRef) {
         // The device companion joins the same committed row; an older Gateway
         // without the additive table ignores it entirely.
-        recordToolActionDeviceBindingInDatabase(db, {
-          eventId: row.event_id,
-          deviceRef: toolDeviceRef,
-          occurredAt: input.occurredAt,
-        });
-        pruneToolActionDeviceBindingsInDatabase(db, Date.now(), AUDIT_EVENT_RETENTION_MS);
+        recordToolActionDeviceBindingAfterInsert(
+          db,
+          { eventId: row.event_id, deviceRef: toolDeviceRef, occurredAt: input.occurredAt },
+          AUDIT_EVENT_RETENTION_MS,
+        );
       }
       if (!row) {
         return undefined;
@@ -697,6 +697,7 @@ export function recordAuditEventInDatabase(
   } catch (error) {
     if (countCacheDatabase) {
       auditEventRowCounts.delete(countCacheDatabase);
+      clearToolActionDeviceBindingRowCountCache(countCacheDatabase);
       clearAuditIdentityKeyCacheForDatabase(countCacheDatabase);
     }
     throw error;

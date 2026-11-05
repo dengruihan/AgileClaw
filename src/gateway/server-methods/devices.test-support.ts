@@ -6,6 +6,7 @@ import {
 } from "../../infra/diagnostic-events.js";
 import { runNodeWakeAttempt, runNodeWakeNudgeAttempt } from "../node-wake-state.js";
 import { resetNodeWakeStateForTest } from "../node-wake-state.test-support.js";
+import { clearAllSessionScopeLeasesForTest } from "../session-scope-lease.js";
 import type { GatewayRequestHandlerOptions } from "./types.js";
 
 const {
@@ -196,5 +197,6 @@ export async function seedNodeWakeState(nodeId: string): Promise<void> {
 export function resetDeviceHandlerTestState(): void {
   resetDiagnosticEventsForTest();
   resetNodeWakeStateForTest();
+  clearAllSessionScopeLeasesForTest();
   vi.clearAllMocks();
 }

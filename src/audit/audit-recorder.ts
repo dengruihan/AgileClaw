@@ -1,6 +1,7 @@
 /** Gateway-owned recorder joining trusted run, tool, and message lifecycle streams. */
 import { randomUUID } from "node:crypto";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { resolveSessionScopeRoot } from "../gateway/server-methods/session-device-scope.js";
 import type { GatewayScheduler } from "../infra/gateway-scheduler.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import {
@@ -50,6 +51,19 @@ export function createAuditEventRecorder(options: {
     writer,
     getConfig: options.getConfig,
     terminalSettleMs: options.terminalSettleMs,
+    // Seed the tool-action device scope from the committed session entry once
+    // per session; the projection caches it (including gateway scope).
+    resolveSessionDeviceScope: (sessionKey) => {
+      try {
+        const root = resolveSessionScopeRoot({
+          cfg: options.getConfig(),
+          sessionKey,
+        });
+        return root ? (root.entry.scopeDeviceId ?? null) : undefined;
+      } catch {
+        return undefined;
+      }
+    },
   });
 
   return {

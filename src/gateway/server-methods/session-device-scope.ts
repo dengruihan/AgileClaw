@@ -22,6 +22,10 @@ import {
   type DeviceLeaseReleaseReason,
   type DeviceLeaseRejectReason,
 } from "../../audit/device-lease-decision.js";
+import {
+  invalidateToolActionDeviceScopes,
+  publishToolActionDeviceScope,
+} from "../../audit/tool-action-device-scope.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { updateSessionEntry } from "../../config/sessions/session-accessor.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
@@ -713,10 +717,21 @@ export async function writeSessionDeviceScope(params: {
   agentId: string;
   deviceId: string | null;
 }): Promise<SessionEntry | null> {
-  return await updateSessionEntry(
+  const written = await updateSessionEntry(
     { agentId: params.agentId, sessionKey: params.rootSessionKey },
     () => ({ scopeDeviceId: params.deviceId ?? undefined }),
   );
+  if (written) {
+    // A committed scope change is authoritative for the audit projection:
+    // drop cached child scopes and publish the root's new scope immediately so
+    // a switch back to gateway cannot leave a stale deviceRef behind.
+    invalidateToolActionDeviceScopes();
+    publishToolActionDeviceScope({
+      sessionKey: params.rootSessionKey,
+      deviceId: params.deviceId,
+    });
+  }
+  return written;
 }
 
 /**

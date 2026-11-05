@@ -79,8 +79,12 @@ openclaw audit --kind message --direction outbound --channel telegram --json
 The CLI queries the versioned activity RPC so one command shows the complete
 configured ledger. Text output shows time, kind, direction, channel, status,
 agent, run, and action. Missing message provenance renders as `-`; OpenClaw
-does not invent agent or run ids. Tool actions also show the tool name. JSON
-output includes `nextCursor` when another page exists. Pass that value to
+does not invent agent or run ids. Tool actions also show the tool name, and a
+device-scoped session appends its hashed device reference to the action column
+as `@<deviceRef>` (for example
+`tool.action.finished:read@sha256:0123456789ab`); gateway-scoped sessions omit
+it. JSON output includes the optional `deviceRef` field when retained, and
+`nextCursor` when another page exists. Pass that value to
 `--cursor` to continue without reordering records that arrive during paging.
 
 These exports remain sensitive operational metadata even though message bodies
@@ -294,7 +298,9 @@ timeout, and policy blocks with closed status and error codes. `unknown` is an
 explicit non-success result when an upstream runtime does not expose an
 authoritative terminal outcome. Tool call ids are exported only as stable
 fingerprints. Tool names must match the compact model-facing name
-contract; other values become `unknown`.
+contract; other values become `unknown`. Tool-action records may also carry
+`deviceRef`, the session's hashed placement-device reference over the paired
+device id; a gateway-scoped session omits it.
 
 Message records add direction, channel, conversation kind, outcome, and
 optional delivery kind, failure stage, duration, result count, normalized

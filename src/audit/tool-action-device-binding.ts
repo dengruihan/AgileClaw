@@ -1,6 +1,11 @@
 /** Lazy companion retaining the executing device for tool-action audit rows. */
 import type { DatabaseSync } from "node:sqlite";
-import { executeSqliteQuerySync, getNodeSqliteKysely } from "../infra/kysely-sync.js";
+import {
+  executeSqliteQuerySync,
+  executeSqliteQueryTakeFirstSync,
+  getNodeSqliteKysely,
+} from "../infra/kysely-sync.js";
+import { normalizeSqliteNumber } from "../infra/sqlite-number.js";
 import { tableExists } from "../state/openclaw-state-db-schema-helpers.js";
 import type { DB as OpenClawStateKyselyDatabase } from "../state/openclaw-state-db.generated.js";
 import {
@@ -18,7 +23,17 @@ type ToolActionDeviceBindingDatabase = Pick<
 export const TOOL_ACTION_DEVICE_REF_MAX_LENGTH = 64;
 const TOOL_ACTION_DEVICE_BINDING_MAX_ROWS = 100_000;
 const TOOL_ACTION_DEVICE_BINDING_PRUNE_BATCH_ROWS = 1_024;
+const DEFAULT_BINDING_LIMITS = {
+  maxRows: TOOL_ACTION_DEVICE_BINDING_MAX_ROWS,
+  pruneBatchRows: TOOL_ACTION_DEVICE_BINDING_PRUNE_BATCH_ROWS,
+} as const;
+export type ToolActionDeviceBindingLimits = {
+  maxRows: number;
+  pruneBatchRows: number;
+};
 const ensuredBindingDatabases = new WeakSet<DatabaseSync>();
+/** Cached row count keeps the cap check off every device-scoped write. */
+const bindingRowCounts = new WeakMap<DatabaseSync, number>();
 
 function toolActionDeviceBindingSchemaSql(): string {
   const start = OPENCLAW_STATE_SCHEMA_SQL.indexOf(
@@ -63,12 +78,12 @@ export function ensureToolActionDeviceBindingSchema(options: OpenClawStateDataba
 export function recordToolActionDeviceBindingInDatabase(
   db: DatabaseSync,
   params: { eventId: string; deviceRef: string; occurredAt: number },
-): void {
+): boolean {
   const deviceRef = params.deviceRef.trim();
   if (!params.eventId || !deviceRef || deviceRef.length > TOOL_ACTION_DEVICE_REF_MAX_LENGTH) {
     throw new Error("tool action device binding violates its bounded ref contract");
   }
-  executeSqliteQuerySync(
+  const inserted = executeSqliteQuerySync(
     db,
     getNodeSqliteKysely<ToolActionDeviceBindingDatabase>(db)
       .insertInto("tool_action_device_bindings")
@@ -79,6 +94,7 @@ export function recordToolActionDeviceBindingInDatabase(
       })
       .onConflict((conflict) => conflict.column("event_id").doNothing()),
   );
+  return Number(inserted.numAffectedRows ?? 0n) > 0;
 }
 
 /** Device refs for one read page, keyed by their tool-action event id. */
@@ -105,32 +121,71 @@ export function readToolActionDeviceBindingsInDatabase(
   return refs;
 }
 
+function countToolActionDeviceBindings(db: DatabaseSync): number {
+  const row = executeSqliteQueryTakeFirstSync(
+    db,
+    getNodeSqliteKysely<ToolActionDeviceBindingDatabase>(db)
+      .selectFrom("tool_action_device_bindings")
+      .select((expression) => expression.fn.countAll<number>().as("count")),
+  );
+  return normalizeSqliteNumber(row?.count ?? null) ?? 0;
+}
+
 function deleteExpiredToolActionDeviceBindings(
   db: DatabaseSync,
   now: number,
   retentionMs: number,
   limit: number,
-) {
+): number {
   const kysely = getNodeSqliteKysely<ToolActionDeviceBindingDatabase>(db);
   const expiredIds = kysely
     .selectFrom("tool_action_device_bindings")
-    .select("event_id")
+    .select("sequence")
     .where("occurred_at", "<", now - retentionMs)
     .orderBy("occurred_at", "asc")
+    .orderBy("sequence", "asc")
     .limit(limit);
-  return executeSqliteQuerySync(
+  const deleted = executeSqliteQuerySync(
     db,
-    kysely.deleteFrom("tool_action_device_bindings").where("event_id", "in", expiredIds),
+    kysely.deleteFrom("tool_action_device_bindings").where("sequence", "in", expiredIds),
   );
+  return Number(deleted.numAffectedRows ?? 0n);
 }
 
-/** Prune one bounded batch with the ledger's retention clock and row cap. */
-export function pruneToolActionDeviceBindingsInDatabase(
+/** Delete the oldest overflow by a monotonic sequence cutoff, never a retained-id scan. */
+function pruneOverflowToolActionDeviceBindings(
+  db: DatabaseSync,
+  limits: ToolActionDeviceBindingLimits,
+): number {
+  const kysely = getNodeSqliteKysely<ToolActionDeviceBindingDatabase>(db);
+  const retainedRows = Math.max(0, limits.maxRows - limits.pruneBatchRows);
+  const overflow = executeSqliteQueryTakeFirstSync(
+    db,
+    kysely
+      .selectFrom("tool_action_device_bindings")
+      .select("sequence")
+      .orderBy("sequence", "desc")
+      .offset(retainedRows)
+      .limit(1),
+  );
+  const cutoff = normalizeSqliteNumber(overflow?.sequence ?? null);
+  if (cutoff === undefined) {
+    return 0;
+  }
+  const deleted = executeSqliteQuerySync(
+    db,
+    kysely.deleteFrom("tool_action_device_bindings").where("sequence", "<=", cutoff),
+  );
+  return Number(deleted.numAffectedRows ?? 0n);
+}
+
+function pruneToolActionDeviceBindings(
   db: DatabaseSync,
   now: number,
   retentionMs: number,
+  limits: ToolActionDeviceBindingLimits,
+  insertedRows: number,
 ): void {
-  const kysely = getNodeSqliteKysely<ToolActionDeviceBindingDatabase>(db);
   if (!tableExists(db, "tool_action_device_bindings")) {
     return;
   }
@@ -138,26 +193,54 @@ export function pruneToolActionDeviceBindingsInDatabase(
     db,
     now,
     retentionMs,
-    TOOL_ACTION_DEVICE_BINDING_PRUNE_BATCH_ROWS,
+    limits.pruneBatchRows,
   );
-  const remaining =
-    TOOL_ACTION_DEVICE_BINDING_PRUNE_BATCH_ROWS - Number(expired.numAffectedRows ?? 0n);
-  if (remaining <= 0) {
-    return;
+  const cached = bindingRowCounts.get(db);
+  let rowCount =
+    cached === undefined
+      ? countToolActionDeviceBindings(db)
+      : Math.max(0, cached + insertedRows - expired);
+  if (rowCount > limits.maxRows) {
+    rowCount = Math.max(0, rowCount - pruneOverflowToolActionDeviceBindings(db, limits));
   }
-  const retainedIds = kysely
-    .selectFrom("tool_action_device_bindings")
-    .select("event_id")
-    .orderBy("occurred_at", "desc")
-    .limit(TOOL_ACTION_DEVICE_BINDING_MAX_ROWS);
-  const overflowIds = kysely
-    .selectFrom("tool_action_device_bindings")
-    .select("event_id")
-    .where("event_id", "not in", retainedIds)
-    .orderBy("occurred_at", "asc")
-    .limit(remaining);
-  executeSqliteQuerySync(
-    db,
-    kysely.deleteFrom("tool_action_device_bindings").where("event_id", "in", overflowIds),
-  );
+  bindingRowCounts.set(db, rowCount);
+}
+
+/** Prune after one companion insert without rescanning the retained id set. */
+export function pruneToolActionDeviceBindingsAfterInsert(
+  db: DatabaseSync,
+  now: number,
+  retentionMs: number,
+  limits: ToolActionDeviceBindingLimits = DEFAULT_BINDING_LIMITS,
+): void {
+  pruneToolActionDeviceBindings(db, now, retentionMs, limits, 1);
+}
+
+/** Retain one binding and prune its bounded overflow inside the same write transaction. */
+export function recordToolActionDeviceBindingAfterInsert(
+  db: DatabaseSync,
+  params: { eventId: string; deviceRef: string; occurredAt: number },
+  retentionMs: number,
+  limits: ToolActionDeviceBindingLimits = DEFAULT_BINDING_LIMITS,
+): boolean {
+  if (!recordToolActionDeviceBindingInDatabase(db, params)) {
+    return false;
+  }
+  pruneToolActionDeviceBindingsAfterInsert(db, Date.now(), retentionMs, limits);
+  return true;
+}
+
+/** Maintenance prune: same retention/cap contract, no insert to account for. */
+export function pruneToolActionDeviceBindingsInDatabase(
+  db: DatabaseSync,
+  now: number,
+  retentionMs: number,
+  limits: ToolActionDeviceBindingLimits = DEFAULT_BINDING_LIMITS,
+): void {
+  pruneToolActionDeviceBindings(db, now, retentionMs, limits, 0);
+}
+
+/** Drop the cached count after a rolled-back transaction; the next write recounts. */
+export function clearToolActionDeviceBindingRowCountCache(db: DatabaseSync): void {
+  bindingRowCounts.delete(db);
 }

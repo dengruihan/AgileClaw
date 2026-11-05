@@ -392,7 +392,10 @@ Tool-action records also report where the session executes: while a session has
 an active device execution scope, its `tool.action.started/finished` records
 carry that scope's hashed device reference (`deviceRef`). The reference reports
 the session's placement scope at event time; records for a gateway-scoped
-session intentionally omit it.
+session intentionally omit it. The projection reads the committed session
+scope once per session (the first tool event after a Gateway restart or session
+creation) and caches it, then refreshes it on every committed scope write, so
+a started record and its finished record agree.
 
 ## Message lifecycle events
 

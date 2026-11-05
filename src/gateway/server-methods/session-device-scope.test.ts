@@ -1,11 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NodeOccupancyHolder } from "../../../packages/gateway-protocol/src/schema/nodes.js";
 import { withGatewayToolCallerIdentity } from "../../agents/tools/gateway-caller-context.js";
+import { createAgentEventAuditRecorder } from "../../audit/agent-event-audit.js";
+import type { AuditEventWriter } from "../../audit/audit-event-writer.js";
 import { configureExecutionDecisionWorkSink } from "../../audit/execution-decision-work.js";
 import type { ExecutionDecisionWork } from "../../audit/execution-decision-work.types.js";
 import { createExecutionIdentityAdmissionToken } from "../../audit/execution-identity-admission.js";
+import {
+  clearToolActionDeviceScopesForTest,
+  hashAuditDeviceRef,
+  publishToolActionDeviceScope,
+  readToolActionDeviceRef,
+} from "../../audit/tool-action-device-scope.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import type { PairedDevice } from "../../infra/device-pairing.js";
+import type { TrustedToolExecutionEvent } from "../../infra/diagnostic-events.js";
 import type { NodeSession } from "../node-session.types.js";
 import {
   clearAllSessionScopeLeasesForTest,
@@ -23,6 +32,7 @@ import {
   resolveSessionScopeRoot,
   revokeDeviceScopeLeases,
   validateDeviceScopeDevice,
+  writeSessionDeviceScope,
   type DeviceScopeRegistry,
 } from "./session-device-scope.js";
 
@@ -33,6 +43,12 @@ const SESSION_LINEAGE: Record<
   { canonicalKey: string; agentId: string; entry: SessionEntry }
 > = {};
 
+const updateSessionEntryMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../config/sessions/session-accessor.js", () => ({
+  updateSessionEntry: updateSessionEntryMock,
+}));
+
 vi.mock("../session-sharing.js", () => ({
   resolveSessionSharingTarget: (params: { sessionKey: string }) =>
     SESSION_LINEAGE[params.sessionKey] ?? null,
@@ -40,6 +56,8 @@ vi.mock("../session-sharing.js", () => ({
 
 afterEach(() => {
   clearAllSessionScopeLeasesForTest();
+  clearToolActionDeviceScopesForTest();
+  updateSessionEntryMock.mockReset();
   for (const key of Object.keys(SESSION_LINEAGE)) {
     delete SESSION_LINEAGE[key];
   }
@@ -919,5 +937,90 @@ describe("device lease audit facts", () => {
     } finally {
       clear();
     }
+  });
+});
+
+describe("writeSessionDeviceScope", () => {
+  it("publishes committed scope changes and clears cached child scopes", async () => {
+    publishToolActionDeviceScope({ sessionKey: "agent:main:root", deviceId: "device-a" });
+    publishToolActionDeviceScope({ sessionKey: "agent:main:child", deviceId: "device-a" });
+
+    updateSessionEntryMock.mockResolvedValueOnce({ sessionId: "sess-1" });
+    await writeSessionDeviceScope({
+      cfg: {} as never,
+      rootSessionKey: "agent:main:root",
+      agentId: "main",
+      deviceId: null,
+    });
+
+    expect(readToolActionDeviceRef("agent:main:root")).toBeUndefined();
+    // Child caches are dropped so their next event re-reads the new root scope.
+    expect(readToolActionDeviceRef("agent:main:child")).toBeUndefined();
+
+    updateSessionEntryMock.mockResolvedValueOnce({ sessionId: "sess-1" });
+    await writeSessionDeviceScope({
+      cfg: {} as never,
+      rootSessionKey: "agent:main:root",
+      agentId: "main",
+      deviceId: "device-b",
+    });
+    expect(readToolActionDeviceRef("agent:main:root")).toBe(hashAuditDeviceRef("device-b"));
+  });
+
+  it("keeps the previous published scope when the entry write does not commit", async () => {
+    publishToolActionDeviceScope({ sessionKey: "agent:main:root", deviceId: "device-a" });
+
+    updateSessionEntryMock.mockResolvedValueOnce(null);
+    await writeSessionDeviceScope({
+      cfg: {} as never,
+      rootSessionKey: "agent:main:root",
+      agentId: "main",
+      deviceId: null,
+    });
+
+    expect(readToolActionDeviceRef("agent:main:root")).toBe(hashAuditDeviceRef("device-a"));
+  });
+
+  it("keeps a gateway-kind tool event clean after a committed switch to gateway", async () => {
+    publishToolActionDeviceScope({ sessionKey: "agent:main:root", deviceId: "device-a" });
+    updateSessionEntryMock.mockResolvedValueOnce({ sessionId: "sess-1" });
+    await writeSessionDeviceScope({
+      cfg: {} as never,
+      rootSessionKey: "agent:main:root",
+      agentId: "main",
+      deviceId: null,
+    });
+
+    const inputs: unknown[] = [];
+    const writer = {
+      ready: Promise.resolve(),
+      record: (input: unknown) => {
+        inputs.push(input);
+        return true;
+      },
+      recordExecutionIdentity: () => true,
+      recordExecutionDecision: () => true,
+      recordExecutionDecisionWork: () => true,
+      stop: async () => {},
+    } as AuditEventWriter;
+    const recorder = createAgentEventAuditRecorder({
+      writer,
+      getConfig: () => ({}),
+      // A stale owner answer must not override the committed gateway publish.
+      resolveSessionDeviceScope: () => "device-a",
+    });
+    recorder.recordTool({
+      type: "tool.execution.started",
+      seq: 1,
+      ts: 1,
+      runId: "run-1",
+      sessionKey: "agent:main:root",
+      sessionId: "sess-1",
+      toolName: "process",
+      toolCallId: "call-1",
+    } as TrustedToolExecutionEvent);
+    await recorder.stop();
+
+    expect(inputs.at(-1)).not.toHaveProperty("deviceRef");
   });
 });

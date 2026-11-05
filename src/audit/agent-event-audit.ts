@@ -23,7 +23,10 @@ import type {
   ToolActionAuditEventInput,
 } from "./audit-event-types.js";
 import type { AuditEventWriter } from "./audit-event-writer.js";
-import { readToolActionDeviceRef } from "./tool-action-device-scope.js";
+import {
+  resolveToolActionDeviceRef,
+  type ToolActionDeviceScopeResolver,
+} from "./tool-action-device-scope.js";
 
 const MAX_TRACKED_RUN_INSTANCES = 1_024;
 
@@ -171,6 +174,7 @@ function projectAgentEvent(event: AgentEventPayload): AgentAuditProjection | und
 /** Project the complete trusted tool-execution lifecycle without private diagnostic content. */
 function projectToolExecutionEventToAudit(
   event: TrustedToolExecutionEvent,
+  resolveSessionDeviceScope?: ToolActionDeviceScopeResolver,
 ): ToolActionAuditEventInput | undefined {
   // Schema quarantine describes tool availability before invocation. Without
   // a call identity it must not become a durable tool-action claim.
@@ -189,9 +193,9 @@ function projectToolExecutionEventToAudit(
   const toolCallId = auditToolCallId(event.toolCallId);
   const provenance = projectExplicitAttribution(event);
   const occurredAt = asDateTimestampMs(event.sourceTimestampMs) ?? event.ts;
-  // The device scope comes from the routing layer's live session fact; its id
-  // is hashed here so raw device ids never enter the writer queue.
-  const deviceRef = readToolActionDeviceRef(provenance.sessionKey);
+  // The device scope comes from the session owner; the hashed ref never
+  // exposes the paired device id, and the first event per session seeds it.
+  const deviceRef = resolveToolActionDeviceRef(provenance.sessionKey, resolveSessionDeviceScope);
   const attribution = {
     sourceSequence: event.seq,
     occurredAt,
@@ -272,6 +276,8 @@ export function createAgentEventAuditRecorder(options: {
   writer: AuditEventWriter;
   getConfig: () => OpenClawConfig;
   terminalSettleMs?: number;
+  /** Session-owner lookup used once per session to seed the tool-action scope. */
+  resolveSessionDeviceScope?: ToolActionDeviceScopeResolver;
 }): AgentEventAuditRecorder {
   const { writer } = options;
   type PendingTerminal = NonNullable<AgentAuditProjection["terminal"]> & {
@@ -388,7 +394,7 @@ export function createAgentEventAuditRecorder(options: {
       if (!isAuditLedgerEnabled(options.getConfig())) {
         return;
       }
-      const input = projectToolExecutionEventToAudit(event);
+      const input = projectToolExecutionEventToAudit(event, options.resolveSessionDeviceScope);
       if (input) {
         writer.record(input);
       }

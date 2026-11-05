@@ -1,5 +1,8 @@
 import { expectDefined } from "@openclaw/normalization-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { configureExecutionDecisionWorkSink } from "../../audit/execution-decision-work.js";
+import type { ExecutionDecisionWork } from "../../audit/execution-decision-work.types.js";
+import { createExecutionIdentityAdmissionToken } from "../../audit/execution-identity-admission.js";
 import {
   onInternalDiagnosticEvent,
   type DiagnosticEventPayload,
@@ -9,6 +12,7 @@ import { drainNodePendingWork, enqueueNodePendingWork } from "../node-pending-wo
 import { captureNodeWakeLifecycle, releaseNodeWakeLifecycle } from "../node-wake-state.js";
 import { getNodeWakeStateSnapshot } from "../node-wake-state.test-support.js";
 import { registerGatewayPolicyResponse } from "../server/ws-policy-close.js";
+import { readSessionScopeLease, recordSessionScopeLease } from "../session-scope-lease.js";
 import { bindDeviceWorkerReconciliation } from "../worker-environments/device-provider.js";
 import {
   getPairedDeviceMock,
@@ -144,9 +148,31 @@ describe("device lifecycle", () => {
     await seedNodeWakeState(nodeId);
     enqueueNodePendingWork({ nodeId, type: "location.request" });
     const wakeLifecycle = captureNodeWakeLifecycle(nodeId);
+    const admissionToken = createExecutionIdentityAdmissionToken("run-remove", {
+      contextId: "context-remove",
+      executionId: "execution-remove",
+      now: 5,
+    });
+    recordSessionScopeLease({
+      rootSessionKey: "agent:main:root",
+      deviceId: nodeId,
+      holder: "agent:main:root",
+      leaseToken: "lease-1",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      admissionToken,
+    });
     const opts = createOptions("device.pair.remove", { deviceId: nodeId });
+    const work: ExecutionDecisionWork[] = [];
+    const clearWorkSink = configureExecutionDecisionWorkSink((item) => {
+      work.push(item);
+      return true;
+    });
 
-    await invokeDevice(opts);
+    try {
+      await invokeDevice(opts);
+    } finally {
+      clearWorkSink();
+    }
 
     expect(getNodeWakeStateSnapshot(nodeId)).toBeUndefined();
     expect(wakeLifecycle.aborted).toBe(true);
@@ -162,6 +188,13 @@ describe("device lifecycle", () => {
     expect(opts.context.invalidateClientsForDevice).toHaveBeenCalledWith(nodeId, {
       reason: "device-pair-removed",
     });
+    // Full pairing removal retires the mirrored occupancy lease and records
+    // the delete release fact for the acquiring execution.
+    expect(readSessionScopeLease("agent:main:root")).toBeUndefined();
+    expect(work.map((item) => item.receipt.decision)).toEqual([
+      { outcome: "not-applicable", reasonCode: "device_lease_delete" },
+    ]);
+    expect(work[0]?.token).toEqual(admissionToken);
   });
 
   it("clears node runtime state and reconciles workers after revoking a node token", async () => {
