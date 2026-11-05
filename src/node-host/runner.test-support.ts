@@ -217,6 +217,7 @@ vi.mock("./runtime.js", async (importOriginal) => {
         preparedWorkspacesEnabled: false,
         workerHostingDisabledReason: mocks.fakeRuntimeWorkerHostingDisabledReason,
         initialInventory: { skills: [], pluginTools: [] },
+        occupancy: undefined,
         start: (params) => {
           mocks.runtimeClient = params.client;
           mocks.runnerCapacityChanged = params.onRunnerCapacityChanged;

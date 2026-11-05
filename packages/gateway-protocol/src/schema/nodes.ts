@@ -252,6 +252,59 @@ export const NodeInvokeRequestEventSchema = closedObject({
   idempotencyKey: Type.Optional(NonEmptyString),
 });
 
+/** Identity of the root session holding a device occupancy lease. */
+export const NodeOccupancyHolderSchema = closedObject({
+  sessionKey: NonEmptyString,
+  sessionId: NonEmptyString,
+  agentId: Type.Optional(NonEmptyString),
+  runId: NonEmptyString,
+  turnId: Type.Optional(NonEmptyString),
+  acquiredAtMs: Type.Integer({ minimum: 0 }),
+  renewedAtMs: Type.Optional(Type.Integer({ minimum: 0 })),
+  detachedProcesses: Type.Integer({ minimum: 0 }),
+});
+
+/** Requests the device occupancy lease for one root session turn. */
+export const NodeOccupancyAcquireParamsSchema = closedObject({
+  sessionKey: NonEmptyString,
+  sessionId: NonEmptyString,
+  agentId: Type.Optional(NonEmptyString),
+  runId: NonEmptyString,
+  turnId: Type.Optional(NonEmptyString),
+  leaseToken: NonEmptyString,
+});
+
+/** Refreshes a held lease; stale tokens are rejected explicitly. */
+export const NodeOccupancyRenewParamsSchema = closedObject({
+  sessionKey: NonEmptyString,
+  leaseToken: NonEmptyString,
+});
+
+/** Releases a held lease; idempotent when the lease is already gone. */
+export const NodeOccupancyReleaseParamsSchema = closedObject({
+  sessionKey: NonEmptyString,
+  leaseToken: NonEmptyString,
+});
+
+/** Reads the current occupancy lease without authority material. */
+export const NodeOccupancyStatusParamsSchema = closedObject({});
+
+/**
+ * Force-clears occupancy, killing holder-owned processes first. A dispatching
+ * session must present the holder's sessionKey and leaseToken; an operator
+ * invoke without session identity force-clears.
+ */
+export const NodeOccupancyRevokeParamsSchema = closedObject({
+  sessionKey: Type.Optional(NonEmptyString),
+  leaseToken: Type.Optional(NonEmptyString),
+});
+
+/** Occupancy state as observed on the node; holder omits the lease token. */
+export const NodeOccupancyStatusSchema = closedObject({
+  occupied: Type.Boolean(),
+  holder: Type.Optional(NodeOccupancyHolderSchema),
+});
+
 /** Ordered input frame sent by the gateway to one long-lived node invoke. */
 export const NodeInvokeInputEventSchema = closedObject({
   id: NonEmptyString,
@@ -283,6 +336,13 @@ export type NodeInvokeInputEvent = Static<typeof NodeInvokeInputEventSchema>;
 export type NodeInvokeCancelEvent = Static<typeof NodeInvokeCancelEventSchema>;
 export type NodeEventParams = Static<typeof NodeEventParamsSchema>;
 export type NodeEventResult = Static<typeof NodeEventResultSchema>;
+export type NodeOccupancyHolder = Static<typeof NodeOccupancyHolderSchema>;
+export type NodeOccupancyAcquireParams = Static<typeof NodeOccupancyAcquireParamsSchema>;
+export type NodeOccupancyRenewParams = Static<typeof NodeOccupancyRenewParamsSchema>;
+export type NodeOccupancyReleaseParams = Static<typeof NodeOccupancyReleaseParamsSchema>;
+export type NodeOccupancyStatusParams = Static<typeof NodeOccupancyStatusParamsSchema>;
+export type NodeOccupancyRevokeParams = Static<typeof NodeOccupancyRevokeParamsSchema>;
+export type NodeOccupancyStatus = Static<typeof NodeOccupancyStatusSchema>;
 export type NodePresenceAlivePayload = Static<typeof NodePresenceAlivePayloadSchema>;
 export type NodePresenceAliveReason = Static<typeof NodePresenceAliveReasonSchema>;
 export type NodePresenceActivityPayload = Static<typeof NodePresenceActivityPayloadSchema>;

@@ -10,6 +10,7 @@ import {
   executeSqliteQueryTakeFirstSync,
   getNodeSqliteKysely,
 } from "../infra/kysely-sync.js";
+import { NODE_EXECUTOR_PROFILE, type NodeExecutorProfile } from "../infra/node-commands.js";
 import { logInfo } from "../logger.js";
 import { executeExistingOpenClawStateRead } from "../state/openclaw-state-db-readonly.js";
 import type { DB as OpenClawStateKyselyDatabase } from "../state/openclaw-state-db.generated.js";
@@ -40,6 +41,8 @@ export type NodeHostConfig = {
   installedAppsSharing?: boolean;
   /** Restrict this host to these exact command ids; omission keeps the full surface. */
   commands?: string[];
+  /** Restricted executor profile: tool execution only, occupancy lease required. */
+  profile?: NodeExecutorProfile;
 };
 
 export const NODE_HOST_CONFIG_KEY = "nodeHost.config";
@@ -98,6 +101,16 @@ function validatePort(value: unknown, label: string): number | undefined {
   return value;
 }
 
+function normalizeStoredNodeHostProfile(value: unknown): NodeExecutorProfile | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === NODE_EXECUTOR_PROFILE) {
+    return NODE_EXECUTOR_PROFILE;
+  }
+  throw new Error(`invalid node-host SQLite row: unsupported profile ${String(value)}`);
+}
+
 function normalizeStoredNodeHostConfig(value: unknown): NodeHostConfig {
   if (!isRecord(value)) {
     throw new Error("invalid node-host SQLite row: expected a configuration object");
@@ -109,6 +122,7 @@ function normalizeStoredNodeHostConfig(value: unknown): NodeHostConfig {
   if (!nodeId) {
     throw new Error("invalid node-host SQLite row: node_id must not be empty");
   }
+  const profile = normalizeStoredNodeHostProfile(value.profile);
   const storedGateway = value.gateway;
   if (storedGateway !== undefined && !isRecord(storedGateway)) {
     throw new Error("invalid node-host SQLite row: gateway must be an object");
@@ -144,6 +158,7 @@ function normalizeStoredNodeHostConfig(value: unknown): NodeHostConfig {
     ...(value.commands !== undefined
       ? { commands: normalizeNodeHostCommands(value.commands) }
       : {}),
+    ...(profile !== undefined ? { profile } : {}),
   };
 }
 
@@ -219,6 +234,7 @@ export async function configureNodeHost(params: {
   installedAppsSharing?: boolean;
   commands?: string[];
   allCommands?: boolean;
+  profile?: NodeExecutorProfile;
 }): Promise<NodeHostConfig> {
   const env = params.env ?? process.env;
   assertNodeHostLegacyStateMigrated(env);
@@ -257,6 +273,11 @@ export async function configureNodeHost(params: {
       gateway,
       installedAppsSharing: params.installedAppsSharing ?? existing?.installedAppsSharing ?? false,
       ...(nextCommands !== undefined ? { commands: nextCommands } : {}),
+      ...(params.profile !== undefined
+        ? { profile: params.profile }
+        : existing?.profile !== undefined
+          ? { profile: existing.profile }
+          : {}),
     };
     const valueJson = JSON.stringify(next);
     executeSqliteQuerySync(

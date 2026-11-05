@@ -6,6 +6,15 @@ import { NODE_CLAUDE_SKILLS_MESSAGE_BYTES } from "../infra/node-claude-skill-pro
 import {
   NODE_AGENT_CLI_CLAUDE_RUN_COMMAND,
   NODE_DUPLEX_INVOKE_IDLE_TIMEOUT_MS,
+  NODE_EXECUTOR_PROFILE,
+  NODE_EXECUTOR_PROFILE_COMMANDS,
+  NODE_OCCUPANCY_COMMANDS,
+  NODE_OCCUPANCY_STATUS_EVENT,
+  NODE_SYSTEM_RUN_COMMAND,
+  type NodeExecutorProfile,
+  isNodeOccupancyAdmissionExemptCommand,
+  isNodeOccupancyCommand,
+  isNodeOccupancyControlCommand,
 } from "../infra/node-commands.js";
 import { createNodeDuplexEndpoint } from "../infra/node-duplex-framing.js";
 import type { NodeWorkerCapacitySnapshot } from "../infra/node-runner-inventory.js";
@@ -20,6 +29,7 @@ import { NODE_DESKTOP_STREAM_COMMAND } from "../shared/node-desktop-stream.js";
 import { createNodeInvokeResponder, type NodeHostClient } from "./client.js";
 import { resolveNodeDesktopHostConfig } from "./desktop-stream-command.js";
 import { requestsClaudeNodeSkillRuntime } from "./invoke-agent-cli-claude-params.js";
+import { handleOccupancyInvoke } from "./invoke-occupancy.js";
 import { handleInvoke, type NodeInvokeRequestPayload } from "./invoke.js";
 import { startNodeHostMcpManager, type NodeHostMcpManager } from "./mcp.js";
 import { buildNodeEventParams } from "./node-event-params.js";
@@ -29,6 +39,8 @@ import {
   type NodeInvokeInputTarget,
 } from "./node-invoke-input.js";
 import { createNodeInvokeProgressWriter } from "./node-invoke-progress.js";
+import { NodeOccupancyControlGate } from "./node-occupancy-control-gate.js";
+import { NodeOccupancyOwner, extractOccupancyLeaseToken } from "./node-occupancy.js";
 import { NodeWorkerBundleInstaller } from "./node-worker-bundle-installer.js";
 import { resolveNodeWorkerContainerEngine } from "./node-worker-container-engine.js";
 import { NodeWorkerContainerContextMismatchError } from "./node-worker-container-lifecycle.js";
@@ -64,6 +76,8 @@ type PreparedNodeHostRuntime = {
   restrictedSurface?: true;
   workerHostingDisabledReason?: string;
   initialInventory: NodeHostInventory;
+  /** Node-side occupancy lease authority; present on the executor profile. */
+  occupancy: NodeOccupancyOwner | undefined;
   start(params: {
     client: NodeHostClient;
     onInventoryChanged?: (inventory: NodeHostInventory) => void;
@@ -136,8 +150,17 @@ export async function prepareNodeHostRuntime(params?: {
   desktopSharingEnabled?: boolean;
   commands?: readonly string[];
   platform?: NodeJS.Platform;
+  /** Restricted executor profile: tool execution only, node-authoritative occupancy. */
+  profile?: NodeExecutorProfile;
+  /** Node-side occupancy admission without the full executor command set. */
+  enableOccupancy?: boolean;
 }): Promise<PreparedNodeHostRuntime> {
-  const commandAllowlist = params?.commands === undefined ? undefined : new Set(params.commands);
+  const executorProfile = params?.profile === NODE_EXECUTOR_PROFILE;
+  const commandSource =
+    executorProfile && params?.commands === undefined
+      ? NODE_EXECUTOR_PROFILE_COMMANDS
+      : params?.commands;
+  const commandAllowlist = commandSource === undefined ? undefined : new Set(commandSource);
   if (!commandAllowlist) {
     void ensureTerminalUploadCleanup();
   }
@@ -157,6 +180,25 @@ export async function prepareNodeHostRuntime(params?: {
     platform,
     ephemeral: params?.ephemeral,
   });
+  // The executor profile is the default command set; a custom allowlist that
+  // advertises occupancy commands opts into the same lease admission.
+  const occupancyEnabled =
+    executorProfile ||
+    params?.enableOccupancy === true ||
+    (commandAllowlist !== undefined &&
+      NODE_OCCUPANCY_COMMANDS.some((command) => commandAllowlist.has(command)));
+  let occupancyStatusSink: ((payload: unknown) => void) | undefined;
+  const occupancy = occupancyEnabled
+    ? new NodeOccupancyOwner({
+        env,
+        onStatusEvent: (status) => occupancyStatusSink?.(status),
+      })
+    : undefined;
+  try {
+    occupancy?.initialize();
+  } catch (error) {
+    logDebug(`node-host: occupancy boot clearing failed: ${String(error)}`);
+  }
   const availabilityContext = { config, env };
   const resolvePluginNodeHost = () =>
     listRegisteredNodeHostCapsAndCommands(availabilityContext, {
@@ -254,6 +296,7 @@ export async function prepareNodeHostRuntime(params?: {
       desktopStreamingEnabled: desktopHostConfig.enabled,
       ephemeral: params?.ephemeral === true,
       pathEnv,
+      occupancyEnabled,
     });
   const manifest = buildManifest(pluginNodeHost);
   if (commandAllowlist && manifest.commands.length === 0) {
@@ -271,6 +314,7 @@ export async function prepareNodeHostRuntime(params?: {
     ...(commandAllowlist ? { restrictedSurface: true as const } : {}),
     ...(workerHostingDisabledReason ? { workerHostingDisabledReason } : {}),
     initialInventory,
+    occupancy,
     start({
       client,
       onInventoryChanged,
@@ -338,6 +382,16 @@ export async function prepareNodeHostRuntime(params?: {
       }
       let skillBins = new SkillBinsCache(client, pathEnv);
       const activeInvokes = new Map<string, ActiveNodeInvoke>();
+      const occupancyControlGate = new NodeOccupancyControlGate();
+      if (occupancy) {
+        occupancyStatusSink = (payload) => {
+          void client
+            .request("node.event", buildNodeEventParams(NODE_OCCUPANCY_STATUS_EVENT, payload))
+            .catch(() => {
+              // Status events are best-effort; the durable row stays diagnostic.
+            });
+        };
+      }
       let disconnectCleanup: Promise<void> = Promise.resolve();
       let pendingDisconnectCleanups = 0;
       let disconnectCleanupFailed = false;
@@ -422,7 +476,8 @@ export async function prepareNodeHostRuntime(params?: {
           pendingDisconnectCleanups > 0 ||
           disconnectCleanupFailed ||
           hasRegisteredNodeHostCommandActiveWork() ||
-          workerCleanupIncomplete,
+          workerCleanupIncomplete ||
+          (occupancy?.hasActiveWork() ?? false),
         hasWorkerActiveWork: async () => {
           if (await workerSupervisor?.hasActiveWork()) {
             return true;
@@ -467,6 +522,42 @@ export async function prepareNodeHostRuntime(params?: {
                 "command not advertised by this node",
               );
               return;
+            }
+            let leaseAdmission: { sessionKey: string; leaseToken: string } | undefined;
+            if (occupancy) {
+              // Occupancy lifecycle commands are quick local decisions that
+              // need no cancellation machinery and are never lease-admitted.
+              if (isNodeOccupancyCommand(frame.command)) {
+                await handleOccupancyInvoke({
+                  command: frame.command,
+                  paramsJSON: frame.paramsJSON,
+                  sessionKey: frame.sessionKey ?? undefined,
+                  occupancy,
+                  response: createNodeInvokeResponder(client, frame),
+                });
+                return;
+              }
+              // Every execution command revalidates the holder session and the
+              // current lease token on this node before dispatch. Operator
+              // approval policy is exempt: it governs the device, not a turn.
+              if (!isNodeOccupancyAdmissionExemptCommand(frame.command)) {
+                const admission = occupancy.admitExecution({
+                  command: frame.command,
+                  sessionKey: frame.sessionKey ?? undefined,
+                  leaseToken: extractOccupancyLeaseToken(frame.paramsJSON),
+                });
+                if (!admission.ok) {
+                  await createNodeInvokeResponder(client, frame).error(
+                    admission.code,
+                    admission.message,
+                  );
+                  return;
+                }
+                leaseAdmission = {
+                  sessionKey: admission.sessionKey,
+                  leaseToken: admission.leaseToken,
+                };
+              }
             }
             const claudeSkills =
               frame.command === NODE_AGENT_CLI_CLAUDE_RUN_COMMAND &&
@@ -555,43 +646,72 @@ export async function prepareNodeHostRuntime(params?: {
                     },
                   }
                 : undefined;
-            try {
-              await handleInvoke(frame, client, skillBins, manager, {
-                ...(claudePath ? { claudePath } : {}),
-                signal: controller.signal,
-                pluginCommandIo,
-                flushPluginCommandIo: framedIo?.drain,
-                canReportAbortedFailure: (error) =>
-                  controller.signal.aborted &&
-                  error === active.framedFailure &&
-                  error === controller.signal.reason &&
-                  activeInvokes.get(frame.id) === active,
-                ...(gatewayConnection?.url ? { gatewayUrl: gatewayConnection.url } : {}),
-                ...(gatewayConnection?.tlsFingerprint
-                  ? { gatewayTlsFingerprint: gatewayConnection.tlsFingerprint }
-                  : {}),
-                ...(gatewayConnection?.cloudflareAccess
-                  ? { gatewayCloudflareAccess: gatewayConnection.cloudflareAccess }
-                  : {}),
-                desktopHostConfig,
-                ...(progress ? { emitProgress: (text) => progress.write(text) } : {}),
-                installedAppsSharingEnabled,
-                installedAppsPlatform: platform,
-                pluginCommandContext,
-                ...(params?.ephemeral === true && !commandAllowlist
-                  ? { workerComputer: { capabilities: () => resolvePluginNodeHost().computerUse } }
-                  : {}),
-                ...(workerBundleInstaller ? { workerBundleInstaller } : {}),
-                ...(workerSupervisor ? { workerSupervisor } : {}),
-                ...(workerWorkspace ? { workerWorkspace } : {}),
-              });
-            } finally {
-              framedIo?.close();
-              progress?.stop();
-              await progress?.flush();
-              if (activeInvokes.get(frame.id) === active) {
-                activeInvokes.delete(frame.id);
+            // A lease-tagged exec keeps occupancy until its process tree is
+            // extinct; revoke and disconnect tree-kill through this handle.
+            const invokeSettled = createDeferredCore<void>();
+            let settleLeaseProcess: (() => void) | undefined;
+            if (occupancy && leaseAdmission && frame.command === NODE_SYSTEM_RUN_COMMAND) {
+              settleLeaseProcess = occupancy.registerLeaseProcess(leaseAdmission, {
+                detached: false,
+                kill: async () => {
+                  controller.abort();
+                  await invokeSettled.promise;
+                },
+              }).settle;
+            }
+            const dispatch = async () => {
+              try {
+                await handleInvoke(frame, client, skillBins, manager, {
+                  ...(claudePath ? { claudePath } : {}),
+                  signal: controller.signal,
+                  pluginCommandIo,
+                  flushPluginCommandIo: framedIo?.drain,
+                  canReportAbortedFailure: (error) =>
+                    controller.signal.aborted &&
+                    error === active.framedFailure &&
+                    error === controller.signal.reason &&
+                    activeInvokes.get(frame.id) === active,
+                  ...(gatewayConnection?.url ? { gatewayUrl: gatewayConnection.url } : {}),
+                  ...(gatewayConnection?.tlsFingerprint
+                    ? { gatewayTlsFingerprint: gatewayConnection.tlsFingerprint }
+                    : {}),
+                  ...(gatewayConnection?.cloudflareAccess
+                    ? { gatewayCloudflareAccess: gatewayConnection.cloudflareAccess }
+                    : {}),
+                  desktopHostConfig,
+                  ...(progress ? { emitProgress: (text) => progress.write(text) } : {}),
+                  installedAppsSharingEnabled,
+                  installedAppsPlatform: platform,
+                  pluginCommandContext,
+                  ...(params?.ephemeral === true && !commandAllowlist
+                    ? {
+                        workerComputer: { capabilities: () => resolvePluginNodeHost().computerUse },
+                      }
+                    : {}),
+                  ...(workerBundleInstaller ? { workerBundleInstaller } : {}),
+                  ...(workerSupervisor ? { workerSupervisor } : {}),
+                  ...(workerWorkspace ? { workerWorkspace } : {}),
+                });
+              } finally {
+                framedIo?.close();
+                progress?.stop();
+                await progress?.flush();
+                if (activeInvokes.get(frame.id) === active) {
+                  activeInvokes.delete(frame.id);
+                }
               }
+            };
+            try {
+              // Interactive control surfaces share one device resource; the gate
+              // serializes them while exec and file commands stay parallel.
+              if (occupancy && isNodeOccupancyControlCommand(frame.command)) {
+                await occupancyControlGate.run(dispatch);
+              } else {
+                await dispatch();
+              }
+            } finally {
+              settleLeaseProcess?.();
+              invokeSettled.resolve();
             }
           } finally {
             inFlightInvokes -= 1;
@@ -613,9 +733,13 @@ export async function prepareNodeHostRuntime(params?: {
           // Close can reenter from an abort listener and must see this cleanup barrier.
           pendingDisconnectCleanups += 1;
           const idleCleanup = workerSupervisor?.retireIdle();
+          // Disconnect kills holder-owned processes and clears occupancy unless
+          // detached lease processes still keep it alive.
+          const occupancyCleanup = occupancy?.handleDisconnect();
           const cleanup = settleNodeHostCleanup([
             disconnectCleanup.catch(() => {}).then(notifyRegisteredNodeHostCommandDisconnect),
             idleCleanup,
+            occupancyCleanup,
           ]).finally(() => {
             pendingDisconnectCleanups -= 1;
           });

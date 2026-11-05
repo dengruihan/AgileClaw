@@ -22,6 +22,7 @@ import {
 } from "../infra/device-identity.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { getMachineDisplayName } from "../infra/machine-name.js";
+import type { NodeExecutorProfile } from "../infra/node-commands.js";
 import { logInfo } from "../logger.js";
 import { createDeferredCore } from "../shared/deferred.js";
 import { VERSION } from "../version.js";
@@ -76,6 +77,7 @@ type NodeHostRunOptions = {
   parentStdin?: boolean;
   commands?: string[];
   allCommands?: boolean;
+  profile?: NodeExecutorProfile;
 };
 
 function writeStderrLine(message: string): void {
@@ -231,6 +233,7 @@ export async function runNodeHost(opts: NodeHostRunOptions): Promise<void> {
     installedAppsSharing: opts.installedAppsSharing,
     commands: opts.commands,
     allCommands: opts.allCommands,
+    profile: opts.profile,
   });
   const nodeId = config.nodeId;
   const displayName = config.displayName ?? fallbackDisplayName;
@@ -277,6 +280,7 @@ export async function runNodeHost(opts: NodeHostRunOptions): Promise<void> {
     installedAppsSharingEnabled: config.installedAppsSharing,
     desktopSharingEnabled: opts.desktopSharingEnabled,
     commands: config.commands,
+    profile: config.profile,
   });
   logInfo(`node-host: advertised commands: ${preparedRuntime.manifest.commands.join(", ")}`);
   const deviceIdentity = loadOrCreateDeviceIdentity();

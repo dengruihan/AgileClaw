@@ -8,6 +8,8 @@ import {
   NODE_EXEC_APPROVALS_COMMANDS,
   NODE_FS_LIST_DIR_COMMAND,
   NODE_MCP_TOOLS_CALL_COMMAND,
+  NODE_OCCUPANCY_CAP,
+  NODE_OCCUPANCY_COMMANDS,
   NODE_SYSTEM_RUN_COMMANDS,
   NODE_TERMINAL_UPLOAD_COMMAND,
 } from "../infra/node-commands.js";
@@ -34,6 +36,7 @@ export function buildNodeHostManifest(params: {
   desktopStreamingEnabled: boolean;
   ephemeral: boolean;
   pathEnv: string;
+  occupancyEnabled?: boolean;
 }): NodeHostManifest {
   const { pluginManifest, commandAllowlist } = params;
   const builtins: Array<[string, readonly string[]]> = [
@@ -54,6 +57,7 @@ export function buildNodeHostManifest(params: {
       params.claudeEnabled ? [NODE_AGENT_CLI_CLAUDE_RUN_COMMAND] : [],
     ],
     ["screen", params.desktopStreamingEnabled ? [NODE_DESKTOP_STREAM_COMMAND] : []],
+    [NODE_OCCUPANCY_CAP, params.occupancyEnabled ? NODE_OCCUPANCY_COMMANDS : []],
   ];
   const commands = [
     ...new Set([
