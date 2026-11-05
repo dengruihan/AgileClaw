@@ -128,6 +128,7 @@ describe("linux-node node-host integration", () => {
           nodeId: "node-host",
           createdAtMs: 1,
           approvedAtMs: 1,
+          enabled: true,
           caps: registered.caps,
           commands: registered.commands,
         },

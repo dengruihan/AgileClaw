@@ -192,6 +192,7 @@ function startConnectionFixture(workerHostingEnabled = false, preparedWorkspaces
     manifest: { commands: [], caps: [], pathEnv: "/bin" },
     workerHostingEnabled,
     preparedWorkspacesEnabled,
+    occupancy: undefined,
     initialInventory: { skills: [], pluginTools: [] },
     start,
   };
