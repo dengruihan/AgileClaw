@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  CORE_TOOL_GROUPS,
+  CORE_WORKER_LAUNCH_TOOL_NAMES,
   listCoreToolSections,
+  resolveCoreToolExecutionLocation,
   resolveCoreToolProfilePolicy,
   resolveCoreToolProfiles,
 } from "./tool-catalog.js";
@@ -19,6 +22,16 @@ function requireCoreToolProfilePolicy(profile: Parameters<typeof resolveCoreTool
 }
 
 describe("tool-catalog", () => {
+  it("classifies use_device as a gateway tool in the nodes and openclaw groups", () => {
+    const ids = listCoreToolSections().flatMap((section) => section.tools.map((tool) => tool.id));
+    expect(ids).toContain("use_device");
+    expect(resolveCoreToolExecutionLocation("use_device")).toBe("gateway");
+    expect(CORE_TOOL_GROUPS["group:nodes"]).toContain("use_device");
+    expect(CORE_TOOL_GROUPS["group:openclaw"]).toContain("use_device");
+    // Worker surfaces still receive it because the Gateway serves gateway-kind tools.
+    expect(CORE_WORKER_LAUNCH_TOOL_NAMES).toContain("use_device");
+  });
+
   it.each([
     ["personal_instructions", { personalInstructionsEnabled: true }],
     ["agents_wait", { swarmEnabled: true }],

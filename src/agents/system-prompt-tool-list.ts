@@ -36,6 +36,8 @@ export function buildSystemPromptToolLines(params: SystemPromptToolListParams): 
       "List/read/resize/close operator-opened session terminals; input follows exec policy and may require exact-input approval; never open shells",
     canvas: "Present/eval/snapshot Canvas",
     nodes: "Paired node status/control/media",
+    use_device:
+      "Switch this session's placement-tool device (exec/files/control). Call it alone in its step; scope applies from the next step. Busy or disabled devices fail without gateway fallback.",
     [AUTOMATIONS_TOOL_NAME]:
       "Schedule/wake. Reminder text must read as reminder when fired; mention reminder for delayed gaps; include useful recent context. This feature is called automations; never call it cron.",
     message: "Message/channel actions",

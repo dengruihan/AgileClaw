@@ -166,6 +166,58 @@ serialize through one FIFO gate, because they share one browser or desktop.
 - **Revoke** force-clears occupancy and kills the holder's processes. A session-dispatched revoke names its session (envelope or parameters) and must present the current token; an operator invoke without session identity can force-clear a stuck lease.
 - **Node restart** clears occupancy, because the holder's processes died with the previous node process.
 
+## Use Device and tool routing
+
+`use_device` is a Gateway tool that switches the session's **placement** scope.
+It is the only model-facing way to move execution; the direct `node.invoke` RPC
+cannot mutate occupancy because lease mutations are admin-only there.
+
+| Surface                                                   | Where it runs                                  |
+| --------------------------------------------------------- | ---------------------------------------------- |
+| `use_device`, `sessions_*`, `portal`, other Gateway tools | Always the Gateway                             |
+| `exec`, `process`                                         | Scoped device (exec) or the Gateway            |
+| `read`, `write`, `ls`                                     | Scoped device (file commands) or the Gateway   |
+| `browser`, `computer`, `screen`                           | Gateway only today; a device-scoped call fails |
+
+Scope rules:
+
+- A session holds at most one device. Switches write `scopeDeviceId` on the
+  session row; `use_device device="gateway"` clears it.
+- Scope belongs to the session-tree root. Subagents share the root's device and
+  present the root session identity on every device call; call `use_device` from
+  the root session. A fork is a new root with its own switch and its own lease.
+- The tool catalog never changes. Device-scoped tools keep their names and
+  schemas; a tool with no device adapter fails per call instead of running on
+  the Gateway.
+- Scope changes apply to subsequent calls at the next step boundary. `use_device`
+  must be the only placement-affecting call in its step.
+
+Lease behavior:
+
+- The Gateway validates the device first: it must be paired with the node role,
+  enabled, connected, and advertising the executor surface (`system.run` plus the
+  occupancy commands).
+- A successful switch acquires the device's occupancy lease for the session-tree
+  root and mirrors the grant. Every device call carries the root session key in
+  the invoke envelope and the lease token in its command params, so the node can
+  reject a call that does not belong to the holder.
+- `DEVICE_OCCUPIED` fails the switch immediately and names the holder. Nothing
+  queues, nothing falls back to the Gateway, and the session keeps its previous
+  scope.
+- Disabling or disconnecting a device fails its in-flight calls; the session
+  stays scoped so it can resume once the device returns, and the Gateway's
+  mirror is dropped when the device releases or its connection closes.
+- Stopping the session releases its mirrored lease and cancels its scoped
+  background processes. The node still owns occupancy, so a stale mirror never
+  proves the device is free.
+
+Device exec is foreground: `background`, `yieldMs`, `pty`, and `elevated` are
+rejected under device scope, and output is truncated at 32 KB with an explicit
+marker. Device file tools run under the file-transfer policy configured for that
+device (`allowReadPaths` / `allowWritePaths`); exec runs under the device's own
+exec approval policy. Device-scoped execution requires a Gateway-hosted session,
+because the Gateway owns the lease.
+
 ## Codex sessions on a node
 
 A session host using the Codex runtime also needs the `codex` plugin installed and

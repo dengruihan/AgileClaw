@@ -75,6 +75,12 @@ const SessionsPatchMutationProperties = {
   execSecurity: Type.Optional(Type.Union([NonEmptyString, Type.Null()])),
   execAsk: Type.Optional(Type.Union([NonEmptyString, Type.Null()])),
   execNode: Type.Optional(Type.Union([NonEmptyString, Type.Null()])),
+  /**
+   * Device that executes this session's placement tools; null returns the
+   * session to the Gateway. Requires a paired, enabled, connected device that
+   * advertises the executor surface, and acquires that device's occupancy lease.
+   */
+  scopeDeviceId: Type.Optional(Type.Union([NonEmptyString, Type.Null()])),
   permissionMode: Type.Optional(Type.Union([SessionPermissionModeSchema, Type.Null()])),
   /** Null restores configured containment; required session isolation cannot be relaxed. */
   sandboxMode: Type.Optional(Type.Union([Type.Literal("off"), Type.Null()])),
