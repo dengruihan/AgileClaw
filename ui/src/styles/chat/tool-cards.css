@@ -1282,3 +1282,32 @@ openclaw-chat-tool-output {
   overflow-wrap: anywhere;
   font-family: var(--mono);
 }
+
+/* Executing-device tag: only results stamped with the device that ran them. */
+.chat-tool-row__device {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  max-width: 160px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.chat-tool-row__device > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-tool-row__device-icon {
+  display: inline-flex;
+}
+
+.chat-tool-row__device-icon svg {
+  width: 12px;
+  height: 12px;
+}

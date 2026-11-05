@@ -107,6 +107,7 @@ describe("settings search target manifest", () => {
       ["usage", "/usage", "", ""],
       ["sessions", "/sessions", "", ""],
       ["worktrees", "/worktrees", "", ""],
+      ["devices", "/settings/devices", "", ""],
     ]);
   });
 

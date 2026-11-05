@@ -495,7 +495,8 @@ export function renderChat(props: ChatProps) {
       )}
       ${renderChatComposerQueue(
         composerProps,
-        Boolean(props.canAbort && props.onAbort) && !hasTerminalRunStatus(props.runStatus),
+        Boolean(props.canAbort && props.onAbort) &&
+          (props.leaseHeld === true || !hasTerminalRunStatus(props.runStatus)),
       )}
       ${
         props.suggestionComposer

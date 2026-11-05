@@ -142,3 +142,76 @@ describe("DevicesDialogController editAlias", () => {
     await pending;
   });
 });
+
+describe("DevicesDialogController editDevicePolicy", () => {
+  function policyHost(request: ReturnType<typeof vi.fn>) {
+    const state = createInitialDevicesState({
+      client: { request } as unknown as GatewayBrowserClient,
+      connected: true,
+    });
+    let captured: InputDialogOptions | undefined;
+    vi.mocked(showInputDialog).mockImplementation(async (options) => {
+      captured = options;
+      return null;
+    });
+    const controller = new DevicesDialogController(
+      createHost({ runPageTask: async (task) => task(state) }),
+    );
+    return { controller, state, captured: () => captured };
+  }
+
+  it("replaces the deny list while preserving an existing allow list", async () => {
+    const request = vi.fn(async () => ({ paired: [], pending: [], sessions: [] }));
+    const { controller, captured } = policyHost(request);
+    const pending = controller.editDevicePolicy({
+      id: "studio-mac",
+      name: "Studio Mac",
+      commandPolicy: { allow: ["system.info"], deny: ["system.run"] },
+    });
+    await vi.waitFor(() => expect(captured()).toBeDefined());
+    expect(captured()?.defaultValue).toBe("system.run");
+    expect(captured()?.title).toBe(t("devices.registry.editTitle", { name: "Studio Mac" }));
+
+    const outcome = await captured()?.submit?.("system.run, system.info, system.run");
+    expect(outcome).toBeNull();
+    expect(request).toHaveBeenCalledWith("node.device.update", {
+      nodeId: "studio-mac",
+      commands: { allow: ["system.info"], deny: ["system.run", "system.info"] },
+    });
+    await pending;
+  });
+
+  it("clears the policy when the deny list is emptied and there is no allow list", async () => {
+    const request = vi.fn(async () => ({ paired: [], pending: [], sessions: [] }));
+    const { controller, captured } = policyHost(request);
+    const pending = controller.editDevicePolicy({
+      id: "studio-mac",
+      name: "Studio Mac",
+      commandPolicy: { deny: ["system.run"] },
+    });
+    await vi.waitFor(() => expect(captured()).toBeDefined());
+
+    expect(await captured()?.submit?.("")).toBeNull();
+    expect(request).toHaveBeenCalledWith("node.device.update", { nodeId: "studio-mac" });
+    await pending;
+  });
+
+  it("keeps the dialog open with the Gateway's error when the update fails", async () => {
+    const request = vi.fn(async (method: string) => {
+      if (method === "node.device.update") {
+        throw new Error("node.device.update failed");
+      }
+      return { paired: [], pending: [], sessions: [] };
+    });
+    const { controller, captured } = policyHost(request);
+    const pending = controller.editDevicePolicy({
+      id: "studio-mac",
+      name: "Studio Mac",
+      commandPolicy: null,
+    });
+    await vi.waitFor(() => expect(captured()).toBeDefined());
+
+    expect(await captured()?.submit?.("system.run")).toContain("node.device.update failed");
+    await pending;
+  });
+});

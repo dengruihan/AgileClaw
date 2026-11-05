@@ -10,6 +10,7 @@ import type { DevicePairingList } from "../../../../src/gateway/device-pairing-l
 import type { NodeListNode } from "../../../../src/shared/node-list-types.js";
 import { removePathValue, setPathValue } from "../config-form-utils.ts";
 import { formatUiError } from "../format-error.ts";
+import type { DeviceOccupancyEntry } from "./device-occupancy.ts";
 import { clearDeviceAuthToken, loadOrCreateDeviceIdentity, storeDeviceAuthToken } from "./index.ts";
 
 type GatewayRequestClient = {
@@ -98,7 +99,24 @@ type ExecApprovalsState = NodesRequestState & {
   chatError?: string | null;
 };
 
-export type DevicesPageDataState = NodesState & DevicesState & ExecApprovalsState;
+/**
+ * One session tree holding a paired device's occupancy lease, projected from
+ * the session row's scope facts. The node stays occupancy authority; this is
+ * only the row the Gateway last reported.
+ */
+export type { DeviceOccupancyEntry } from "./device-occupancy.ts";
+
+type DeviceOccupancyState = NodesRequestState & {
+  occupancyLoading: boolean;
+  /** null until the first read; [] is a read that found no held lease. */
+  deviceOccupancy: DeviceOccupancyEntry[] | null;
+  occupancyError: string | null;
+};
+
+export type DevicesPageDataState = NodesState &
+  DevicesState &
+  ExecApprovalsState &
+  DeviceOccupancyState;
 
 export function createInitialDevicesState(
   snapshot: Partial<NodesGatewaySnapshot> = {},
@@ -121,6 +139,9 @@ export function createInitialDevicesState(
     execApprovalsSnapshot: null,
     execApprovalsForm: null,
     execApprovalsSelectedAgent: null,
+    occupancyLoading: false,
+    deviceOccupancy: null,
+    occupancyError: null,
   };
 }
 
@@ -322,6 +343,47 @@ export async function removeStaleInventoryEntries(
         }
       : undefined,
   );
+}
+
+/** Operator-managed command policy from the device registry (settings). */
+export type DeviceCommandPolicy = {
+  allow?: string[];
+  deny?: string[];
+};
+
+export function setDeviceExecutionEnabled(state: InventoryState, nodeId: string, enabled: boolean) {
+  return runInventoryMutation(state, (client) =>
+    client.request(enabled ? "node.device.enable" : "node.device.disable", { nodeId }),
+  );
+}
+
+/** Replaces the whole policy; omitting `commands` clears it back to the approved surface.
+ *  Returns a message to keep the edit dialog open, null when the write was accepted. */
+export async function updateDeviceCommandPolicy(
+  state: InventoryState,
+  nodeId: string,
+  commands: DeviceCommandPolicy | null,
+): Promise<string | null> {
+  const client = state.client;
+  if (!client || !state.connected) {
+    const message = formatUiError(new Error("The Gateway connection is not available."));
+    state.devicesError = message;
+    return message;
+  }
+  const generation = state.requestGeneration;
+  try {
+    await client.request("node.device.update", { nodeId, ...(commands ? { commands } : {}) });
+    if (isCurrentNodesRequest(state, client, generation)) {
+      await reloadInventory(state);
+    }
+    return null;
+  } catch (err) {
+    const message = formatUiError(err);
+    if (isCurrentNodesRequest(state, client, generation)) {
+      state.devicesError = message;
+    }
+    return message;
+  }
 }
 
 /** Null closes the rename dialog; an error leaves the attempted alias retryable. */

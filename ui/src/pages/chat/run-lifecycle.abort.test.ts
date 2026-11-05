@@ -59,6 +59,42 @@ describe("hasAbortableSessionRun", () => {
       }),
     ).toBe(true);
   });
+
+  it("keeps Stop abortable for an idle session that still holds its device lease", () => {
+    const host = {
+      chatRunId: null,
+      sessionKey: "agent:main:device-scoped",
+      sessionsResult: makeSessionsResult([
+        {
+          key: "agent:main:device-scoped",
+          hasActiveRun: false,
+          status: "done",
+          scopeDeviceId: "studio-mac",
+          scopeLeaseHeld: true,
+        },
+      ]),
+    };
+    expect(hasDirectSessionRun(host)).toBe(false);
+    expect(hasAbortableSessionRun(host)).toBe(true);
+  });
+
+  it("does not keep Stop for a scoped session whose lease was released", () => {
+    expect(
+      hasAbortableSessionRun({
+        chatRunId: null,
+        sessionKey: "agent:main:device-scoped",
+        sessionsResult: makeSessionsResult([
+          {
+            key: "agent:main:device-scoped",
+            hasActiveRun: false,
+            status: "done",
+            scopeDeviceId: "studio-mac",
+            scopeLeaseHeld: false,
+          },
+        ]),
+      }),
+    ).toBe(false);
+  });
 });
 
 type AbortHost = Parameters<typeof replayPendingChatAbort>[0] &

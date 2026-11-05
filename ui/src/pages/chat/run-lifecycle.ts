@@ -202,7 +202,10 @@ type SessionRunHost = {
   sessionsResult?: SessionsListResult | null;
 };
 
-function hasSessionRun(host: SessionRunHost, includeSubagents: boolean): boolean {
+function hasSessionRun(
+  host: SessionRunHost,
+  options: { includeSubagents: boolean; includeLease: boolean },
+): boolean {
   if (host.chatRunId) {
     return true;
   }
@@ -212,18 +215,23 @@ function hasSessionRun(host: SessionRunHost, includeSubagents: boolean): boolean
     host.sessionsResult?.sessions.some(
       (session) =>
         normalizeDefaultMainSessionAliasForUi(session.key) === key &&
-        (isSessionRunActive(session) ||
-          (includeSubagents && session.hasActiveSubagentRun === true)),
+        // A device-scoped session keeps its Stop affordance while the node
+        // still holds the occupancy lease, including after the turn settled:
+        // Stop is the only manual release path. Lease alone never makes the
+        // session look like a working run.
+        ((options.includeLease && session.scopeLeaseHeld === true) ||
+          isSessionRunActive(session) ||
+          (options.includeSubagents && session.hasActiveSubagentRun === true)),
     ),
   );
 }
 
 export function hasDirectSessionRun(host: SessionRunHost): boolean {
-  return hasSessionRun(host, false);
+  return hasSessionRun(host, { includeSubagents: false, includeLease: false });
 }
 
 export function hasAbortableSessionRun(host: SessionRunHost): boolean {
-  return hasSessionRun(host, true);
+  return hasSessionRun(host, { includeSubagents: true, includeLease: true });
 }
 
 export function isChatStopCommand(text: string) {

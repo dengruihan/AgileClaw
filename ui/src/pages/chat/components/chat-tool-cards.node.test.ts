@@ -41,6 +41,71 @@ describe("tool-card extraction", () => {
     },
   );
 
+  it("tags only results whose details name the executing device", () => {
+    const [deviceCard] = assistantCards([
+      {
+        type: "tool_result",
+        name: "exec",
+        text: "ok",
+        details: { status: "completed", exitCode: 0, nodeId: "studio-mac" },
+      },
+    ]);
+    expect(deviceCard?.device).toEqual({ id: "studio-mac" });
+
+    const [namedCard] = assistantCards([
+      {
+        type: "tool_result",
+        name: "exec",
+        text: "ok",
+        details: { status: "completed", device: { id: "studio-mac", name: "Studio Mac" } },
+      },
+    ]);
+    expect(namedCard?.device).toEqual({ id: "studio-mac", name: "Studio Mac" });
+
+    const [gatewayCard] = assistantCards([
+      {
+        type: "tool_result",
+        name: "exec",
+        text: "ok",
+        details: { status: "completed", exitCode: 0 },
+      },
+    ]);
+    expect(gatewayCard?.device).toBeUndefined();
+
+    const [pendingApproval] = assistantCards([
+      {
+        type: "tool_result",
+        name: "exec",
+        text: "waiting",
+        details: { status: "approval-pending", approvalId: "a1", nodeId: "studio-mac" },
+      },
+    ]);
+    expect(pendingApproval?.device).toBeUndefined();
+
+    const [notDispatched] = assistantCards([
+      {
+        type: "tool_result",
+        name: "exec",
+        text: "denied",
+        details: {
+          status: "failed",
+          exitCode: null,
+          reason: "not-dispatched",
+          nodeId: "studio-mac",
+        },
+      },
+    ]);
+    expect(notDispatched?.device).toBeUndefined();
+
+    const [standalone] = extractToolCards({
+      role: "tool",
+      toolName: "exec",
+      text: "ok",
+      details: { status: "completed", nodeId: "office-pc" },
+    });
+    expect(standalone?.device).toEqual({ id: "office-pc" });
+  });
+
   it("does not borrow browser origin from a call with a different ID", () => {
     const cards = assistantCards([
       { type: "toolcall", id: "browser-call", name: "browser", arguments: {} },

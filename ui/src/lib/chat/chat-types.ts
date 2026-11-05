@@ -485,6 +485,8 @@ export type ToolCard = {
   liveDiffStat?: { added: number; removed: number };
   /** Producer-reported process exit code, when the result supplies one. */
   exitCode?: number;
+  /** Device the result executed on, only when the producing result stamped it. */
+  device?: { id: string; name?: string };
   isError?: boolean;
   /** Prepared presentation facts; never replace the raw execution fields above. */
   activity?: AgentActivityItem;

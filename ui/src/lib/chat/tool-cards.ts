@@ -54,6 +54,33 @@ function readToolOutputMetadata(value: unknown): ToolOutputMetadata | undefined 
     : undefined;
 }
 
+/**
+ * Device a tool result executed on, read from the producing result's details
+ * (`nodeId` for node-dispatched exec, or an explicit `device` identity).
+ * Results without that stamp stay untagged even inside a device-scoped session.
+ */
+function readToolExecutingDevice(value: unknown): ToolCard["device"] {
+  const record = asNullableRecord(value);
+  if (!record) {
+    return undefined;
+  }
+  const nested = asNullableRecord(record.device);
+  const explicitId =
+    normalizeOptionalString(nested?.id) ?? normalizeOptionalString(record.deviceId);
+  // Exec reports the chosen node as soon as the call starts; only a terminal
+  // result that actually dispatched proves execution there.
+  const terminal = record.status === "completed" || record.status === "failed";
+  const failure = asNullableRecord(record.nodeInvokeFailure);
+  const dispatched =
+    terminal && record.reason !== "not-dispatched" && failure?.nodeCommandDispatched !== false;
+  const id = explicitId ?? (dispatched ? normalizeOptionalString(record.nodeId) : undefined);
+  if (!id) {
+    return undefined;
+  }
+  const name = normalizeOptionalString(nested?.name);
+  return { id, ...(name ? { name } : {}) };
+}
+
 function normalizeContent(content: unknown): Array<Record<string, unknown>> {
   if (!Array.isArray(content)) {
     return [];
@@ -423,6 +450,7 @@ function extractToolCards(message: unknown): ToolCard[] {
           : asNullableRecord(m["__openclaw"])
         )?.truncated === true;
       const details = item.details ?? m.details;
+      const device = readToolExecutingDevice(details);
       // Browser previews trigger I/O. Nested content cannot override its tool
       // envelope, and a paired result cannot override the authoritative call.
       const envelopeName = isStandaloneToolMessage ? resolveToolName({}, m) : undefined;
@@ -465,6 +493,9 @@ function extractToolCards(message: unknown): ToolCard[] {
         if (exitCode !== undefined) {
           existing.exitCode = exitCode;
         }
+        if (device) {
+          existing.device = device;
+        }
         continue;
       }
       cards.push({
@@ -482,6 +513,7 @@ function extractToolCards(message: unknown): ToolCard[] {
         messageId: transcriptMessageId,
         ...(isError !== undefined ? { isError } : {}),
         ...(exitCode !== undefined ? { exitCode } : {}),
+        ...(device ? { device } : {}),
         ...presentation,
       });
     }
@@ -494,6 +526,7 @@ function extractToolCards(message: unknown): ToolCard[] {
       "tool";
     const text = extractToolText(m);
     const callId = resolveToolCallId({}, m);
+    const standaloneDevice = readToolExecutingDevice(m.details);
     const exitCode = readToolExitCode(
       m,
       m.details,
@@ -513,6 +546,7 @@ function extractToolCards(message: unknown): ToolCard[] {
       messageId: transcriptMessageId,
       ...(messageIsError !== undefined ? { isError: messageIsError } : {}),
       ...(exitCode !== undefined ? { exitCode } : {}),
+      ...(standaloneDevice ? { device: standaloneDevice } : {}),
       ...extractToolPresentation(m.details, text, name),
     });
   }

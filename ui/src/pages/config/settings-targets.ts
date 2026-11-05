@@ -450,4 +450,12 @@ export const SETTINGS_SEARCH_TARGETS = {
     searchKeys: ["worktrees.subtitle"],
     aliases: "git checkout branch cleanup",
   },
+  devices: {
+    routeId: "devices",
+    labelKey: "tabs.devices",
+    hash: "",
+    searchKeys: ["subtitles.devices"],
+    aliases:
+      "execution devices nodes registry enabled disabled command policy occupancy lease paired pairing",
+  },
 } as const satisfies Record<string, SettingsSearchTarget>;
