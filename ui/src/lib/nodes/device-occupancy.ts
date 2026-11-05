@@ -36,7 +36,8 @@ function isCurrentRequest(
   return state.connected && state.client === client && state.requestGeneration === generation;
 }
 
-function parseDeviceOccupancy(rows: unknown): DeviceOccupancyEntry[] {
+/** Projects lease-holding session rows onto registry occupancy entries. */
+export function parseDeviceOccupancy(rows: unknown): DeviceOccupancyEntry[] {
   if (!Array.isArray(rows)) {
     return [];
   }

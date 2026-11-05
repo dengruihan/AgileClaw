@@ -2,11 +2,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
+import { showConfirmDialog } from "../../components/confirm-dialog.ts";
 import { showInputDialog } from "../../components/input-dialog.ts";
 import { t } from "../../i18n/index.ts";
 import { createInitialDevicesState } from "../../lib/nodes/page-operations.ts";
 import { DevicesDialogController, type DevicesDialogHost } from "./devices-dialogs.ts";
 
+vi.mock("../../components/confirm-dialog.ts", () => ({ showConfirmDialog: vi.fn() }));
 vi.mock("../../components/input-dialog.ts", () => ({ showInputDialog: vi.fn() }));
 
 type InputDialogOptions = Parameters<typeof showInputDialog>[0];
@@ -30,6 +32,7 @@ function createHost(overrides: Partial<DevicesDialogHost> = {}): DevicesDialogHo
 
 beforeEach(() => {
   vi.mocked(showInputDialog).mockReset();
+  vi.mocked(showConfirmDialog).mockReset();
 });
 
 afterEach(() => {
@@ -213,5 +216,62 @@ describe("DevicesDialogController editDevicePolicy", () => {
 
     expect(await captured()?.submit?.("system.run")).toContain("node.device.update failed");
     await pending;
+  });
+});
+
+describe("DevicesDialogController confirmDeviceDisable", () => {
+  function disableHost(request: ReturnType<typeof vi.fn>) {
+    const state = createInitialDevicesState({
+      client: { request } as unknown as GatewayBrowserClient,
+      connected: true,
+    });
+    return new DevicesDialogController(createHost({ runPageTask: async (task) => task(state) }));
+  }
+
+  it("states the destructive consequence and disables only after confirmation", async () => {
+    const request = vi.fn(async () => ({ paired: [], pending: [], sessions: [] }));
+    vi.mocked(showConfirmDialog).mockResolvedValue(true);
+
+    await disableHost(request).confirmDeviceDisable({ id: "studio-mac", name: "Studio Mac" });
+
+    expect(showConfirmDialog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        danger: true,
+        title: t("devices.registry.disableTitle", { name: "Studio Mac" }),
+        message: t("devices.registry.disableBody"),
+        confirmLabel: t("devices.registry.disableAction"),
+      }),
+    );
+    expect(request).toHaveBeenCalledWith("node.device.disable", { nodeId: "studio-mac" });
+  });
+
+  it("performs no write when the confirmation is cancelled", async () => {
+    const request = vi.fn(async () => ({ paired: [], pending: [], sessions: [] }));
+    vi.mocked(showConfirmDialog).mockResolvedValue(false);
+
+    await disableHost(request).confirmDeviceDisable({ id: "studio-mac", name: "Studio Mac" });
+
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("performs no write when pairing access is lost while the dialog is open", async () => {
+    const request = vi.fn(async () => ({ paired: [], pending: [], sessions: [] }));
+    vi.mocked(showConfirmDialog).mockResolvedValue(true);
+    const state = createInitialDevicesState({
+      client: { request } as unknown as GatewayBrowserClient,
+      connected: true,
+    });
+    let canManagePairing = true;
+    const controller = new DevicesDialogController(
+      createHost({
+        canManagePairing: () => canManagePairing,
+        runPageTask: async (task) => task(state),
+      }),
+    );
+    const pending = controller.confirmDeviceDisable({ id: "studio-mac", name: "Studio Mac" });
+    canManagePairing = false;
+    await pending;
+
+    expect(request).not.toHaveBeenCalled();
   });
 });

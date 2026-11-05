@@ -578,15 +578,18 @@ class DevicesPage extends OpenClawLightDomElement {
           },
           onDeviceRegistryEnabled: (device, enabled) => {
             if (!this.canManagePairing) {
-              return;
+              return false;
             }
             if (enabled) {
               void this.runPageTask((pageState) =>
                 setDeviceExecutionEnabled(pageState, device.id, true),
               );
-              return;
+              return true;
             }
+            // Disable is destructive; keep the switch checked until the
+            // confirmation resolves (and when it is cancelled).
             void this.dialogs.confirmDeviceDisable(device);
+            return false;
           },
           onDeviceRegistryHolderOpen: (holder) => {
             this.context.navigate("chat", {

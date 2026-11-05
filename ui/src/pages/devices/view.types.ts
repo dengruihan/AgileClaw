@@ -63,7 +63,14 @@ export type DevicesProps = {
     name: string;
     commandPolicy: DeviceCommandPolicy | null;
   }) => void;
-  onDeviceRegistryEnabled: (device: { id: string; name: string }, enabled: boolean) => void;
+  /**
+   * Returns `false` when the change is deferred to a confirmation dialog, so
+   * the switch restores its checked state until the dialog resolves.
+   */
+  onDeviceRegistryEnabled: (
+    device: { id: string; name: string },
+    enabled: boolean,
+  ) => boolean | void;
   onDeviceRegistryHolderOpen: (holder: DeviceOccupancyEntry) => void;
   onLoadConfig: () => void;
   onLoadExecApprovals: () => void;
