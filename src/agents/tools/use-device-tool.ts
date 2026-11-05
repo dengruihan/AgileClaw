@@ -16,6 +16,7 @@ import type { AnyAgentTool } from "../agent-tools.types.js";
 import type { DeviceScopeRoutingState } from "./device-routing.js";
 import { deviceScopeSwitchGuidance, parseUseDeviceTarget } from "./device-scope.js";
 import { callGatewayTool, readGatewayCallOptions } from "./gateway.js";
+import { getInProcessGatewayToolContext } from "./in-process-gateway.js";
 import { listNodes, resolveNodeIdFromList } from "./nodes-utils.js";
 import { textResult } from "./tool-results.js";
 
@@ -149,6 +150,10 @@ export function createUseDeviceTool(params: {
       const writtenScope = readEntryScopeDeviceId(result) ?? deviceId;
       const rootSessionKey = params.state.resolveRoot()?.rootSessionKey ?? params.sessionKey;
       const mirror = readSessionScopeLease(rootSessionKey);
+      if (writtenScope) {
+        // The switch acquired a real lease; turn end must hand it back.
+        params.state.noteLeaseUsed(rootSessionKey, getInProcessGatewayToolContext()?.nodeRegistry);
+      }
       const leaseHeld = Boolean(mirror && (!deviceId || mirror.deviceId === deviceId));
       const details: UseDeviceDetails = {
         scope: writtenScope ? "device" : "gateway",

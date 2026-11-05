@@ -27,8 +27,10 @@ const { createUseDeviceTool, USE_DEVICE_TOOL_NAME } = await import("./use-device
 function makeState(overrides: Partial<DeviceScopeRoutingState> = {}): {
   state: DeviceScopeRoutingState;
   markScope: ReturnType<typeof vi.fn>;
+  noteLeaseUsed: ReturnType<typeof vi.fn>;
 } {
   const markScope = vi.fn();
+  const noteLeaseUsed = vi.fn();
   return {
     state: {
       sessionKey: "agent:main:root",
@@ -37,10 +39,14 @@ function makeState(overrides: Partial<DeviceScopeRoutingState> = {}): {
       runId: "run-1",
       switchPending: false,
       markScope: () => markScope(),
+      noteLeaseUsed: (rootSessionKey) => noteLeaseUsed(rootSessionKey),
+      leaseRootSessionKey: undefined,
+      leaseRegistry: undefined,
       resolveRoot: () => ({ rootSessionKey: "agent:main:root", agentId: "main" }),
       ...overrides,
     },
     markScope,
+    noteLeaseUsed,
   };
 }
 
@@ -69,7 +75,7 @@ describe("use_device", () => {
   });
 
   it("writes the device scope through the session patch owner and reports the lease", async () => {
-    const { state, markScope } = makeState();
+    const { state, markScope, noteLeaseUsed } = makeState();
     resolveSessionScopeRoot.mockReturnValue({
       rootSessionKey: "agent:main:root",
       agentId: "main",
@@ -100,6 +106,8 @@ describe("use_device", () => {
     );
     expect(state.switchPending).toBe(false);
     expect(markScope).toHaveBeenCalled();
+    // A committed switch acquired a real lease; turn end must release it.
+    expect(noteLeaseUsed).toHaveBeenCalledWith("agent:main:root");
     expect(result.details).toMatchObject({
       scope: "device",
       deviceId: "device-a",

@@ -35,11 +35,14 @@ import {
   emitGatewaySessionEndPluginHook,
   emitSessionUnboundLifecycleEvent,
 } from "../session-reset-service.js";
-import { releaseSessionScopeLease } from "../session-scope-lease.js";
 import { resolveGatewaySessionStoreTargetInWorker } from "../session-utils-store-worker.js";
 import { loadGatewaySessionEntryReadOnly, loadSessionEntry } from "../session-utils.js";
 import { prepareSessionWorkerPlacementRetirement } from "../worker-environments/session-placement-lifecycle.js";
 import { emitSessionsChanged } from "./session-change-event.js";
+import {
+  publishSessionDeviceScopePrompt,
+  releaseDeviceScopeLease,
+} from "./session-device-scope.js";
 import {
   prepareSessionLifecycleDrain,
   SessionLifecycleWorkspaceRecoveryError,
@@ -325,9 +328,17 @@ export async function deleteGatewaySession({
             // this fence opens, so a same-key successor cannot be mistaken for it.
             const deletedSessionKey = target.canonicalKey ?? key;
             handleSessionStateSessionDeleted(deletedSessionKey, requestedAgentId);
-            // A deleted root releases its mirrored device lease; the node keeps
-            // occupancy authority, so child trees keep their own leases.
-            releaseSessionScopeLease(deletedSessionKey);
+            // A deleted root releases its device lease at the node too: occupancy
+            // has no TTL, so dropping only the mirror would keep the device
+            // reserved for other sessions. A deleted child has no mirror of its
+            // own, so the tree lease stays with its root.
+            await releaseDeviceScopeLease({
+              registry: context.nodeRegistry,
+              rootSessionKey: deletedSessionKey,
+            });
+            // The session is gone, so withdraw its scope fact instead of leaving
+            // stale prompt prose behind.
+            publishSessionDeviceScopePrompt({ sessionKey: deletedSessionKey });
             worktreePreserved = await removeSessionWorktree({
               id: deletedWorktreeId,
               sessionKey: deletedSessionKey,

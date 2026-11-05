@@ -126,10 +126,13 @@ function createSessionPatchHandler(
           sessionMutationAuthorization?.assertCurrent();
         }
       };
-      // A scope switch leases a device from its node: prepare before patching.
+      // Authorize and lease the device before patching: neither an unauthorized
+      // client nor a failed patch may make a device acquire real occupancy.
       const scopeResult = await beginSessionPatchRequestDeviceScope({
         request,
         context,
+        assertCurrent,
+        ...(sessionMutationAuthorization ? { sessionMutationAuthorization } : {}),
         ...(signal ? { signal } : {}),
         ...(client?.connectionSignal ? { connectionSignal: client.connectionSignal } : {}),
       });
@@ -170,16 +173,14 @@ function createSessionPatchHandler(
         })),
       });
       if (!executed.ok) {
-        await rollbackSessionPatchDeviceScope({
-          registry: context.nodeRegistry,
-          change: scopeChange,
-        });
+        await rollbackSessionPatchDeviceScope(context.nodeRegistry, scopeChange);
         respond(false, undefined, executed.error);
         return;
       }
       if (patch.archived === true) {
-        releaseArchivedSessionDeviceScopes({
+        await releaseArchivedSessionDeviceScopes({
           context,
+          registry: context.nodeRegistry,
           cfg: executed.cfg,
           targets,
           outcomes: executed.outcomes,
@@ -205,10 +206,7 @@ function createSessionPatchHandler(
       }
       const outcome = executed.outcomes[0]!;
       if (!outcome.ok) {
-        await rollbackSessionPatchDeviceScope({
-          registry: context.nodeRegistry,
-          change: scopeChange,
-        });
+        await rollbackSessionPatchDeviceScope(context.nodeRegistry, scopeChange);
         respond(false, undefined, outcome.error);
         return;
       }

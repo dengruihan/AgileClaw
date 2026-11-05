@@ -1,3 +1,4 @@
+import { asNullableRecord } from "@openclaw/normalization-core/record-coerce";
 import { validateNodeEventParams } from "../../../packages/gateway-protocol/src/index.js";
 import {
   captureNodePairingGeneration,
@@ -5,12 +6,27 @@ import {
 } from "../../infra/device-pairing-node-state.js";
 import { recordPairedNodeHostStats } from "../../infra/device-pairing-node.js";
 import { formatErrorMessage } from "../../infra/errors.js";
+import { NODE_OCCUPANCY_STATUS_EVENT } from "../../infra/node-commands.js";
 import { ApnsRegistrationPairingChangedError } from "../../infra/push-apns-store.errors.js";
 import type { NodeEventContext } from "../server-node-events-types.js";
 import { resolveDispatchableNodeSession, respondPairingChanged } from "./nodes.shared.js";
 import { respondUnavailableOnThrow } from "./response.js";
+import { applyNodeOccupancyStatusForDevice } from "./session-device-scope.js";
 import type { GatewayRequestHandlers } from "./types.js";
 import { assertValidParams } from "./validation.js";
+
+/** Node occupancy status payload: `{occupied, holder?}`; ignore anything else. */
+function readOccupancyStatusFlag(payloadJSON: string | null): boolean | undefined {
+  if (!payloadJSON) {
+    return undefined;
+  }
+  try {
+    const record = asNullableRecord(JSON.parse(payloadJSON) as unknown);
+    return typeof record?.occupied === "boolean" ? record.occupied : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export const nodeEventHandlers: GatewayRequestHandlers = {
   "node.event": async ({ params, respond, context, client }) => {
@@ -24,6 +40,17 @@ export const nodeEventHandlers: GatewayRequestHandlers = {
         : p.payload !== undefined
           ? JSON.stringify(p.payload)
           : null;
+    // The node owns occupancy and reports releases here; consume the status
+    // before ordinary event dispatch so a released device never keeps a stale
+    // Gateway mirror. The connection identifies the device, so a node can only
+    // report its own occupancy.
+    if (p.event === NODE_OCCUPANCY_STATUS_EVENT) {
+      const occupied = readOccupancyStatusFlag(payloadJSON);
+      const nodeId = client?.connect?.device?.id ?? client?.connect?.client?.id;
+      if (occupied !== undefined && nodeId) {
+        applyNodeOccupancyStatusForDevice({ deviceId: nodeId, occupied });
+      }
+    }
     await respondUnavailableOnThrow(respond, async () => {
       const nodeId = client?.connect?.device?.id ?? client?.connect?.client?.id ?? "node";
       const nodeSession = context.nodeRegistry.get(nodeId);

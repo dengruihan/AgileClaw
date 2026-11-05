@@ -74,6 +74,7 @@ import {
   TOOL_SEARCH_RAW_TOOL_NAME,
 } from "./tool-search.js";
 import { replaceWithEffectiveCronCreatorToolAllowlist } from "./tools/cron-tool.js";
+import { releaseTurnDeviceScopeLease } from "./tools/device-lease-lifecycle.js";
 import {
   applyDeviceScopeToolRouting,
   createDeviceScopeRoutingState,
@@ -411,6 +412,21 @@ export function createOpenClawCodingToolsInternal(
           ...(options?.runId ? { runId: options.runId } : {}),
         })
       : undefined;
+  if (deviceScopeRoutingState && options?.registerRunCleanup) {
+    const scopeState = deviceScopeRoutingState;
+    // Turn end releases the node lease: occupancy has no TTL, so an idle turn
+    // must not keep the device reserved. Only a turn that used a lease pays.
+    options.registerRunCleanup(async () => {
+      const rootSessionKey = scopeState.leaseRootSessionKey;
+      if (!rootSessionKey) {
+        return;
+      }
+      await releaseTurnDeviceScopeLease({
+        rootSessionKey,
+        ...(scopeState.leaseRegistry ? { registry: scopeState.leaseRegistry } : {}),
+      });
+    });
+  }
   const messageInvocationPolicy = createEmbeddedMessageInvocationPolicy({
     config: options?.config,
     capabilityProfile,

@@ -204,12 +204,17 @@ Lease behavior:
 - `DEVICE_OCCUPIED` fails the switch immediately and names the holder. Nothing
   queues, nothing falls back to the Gateway, and the session keeps its previous
   scope.
-- Disabling or disconnecting a device fails its in-flight calls; the session
-  stays scoped so it can resume once the device returns, and the Gateway's
-  mirror is dropped when the device releases or its connection closes.
-- Stopping the session releases its mirrored lease and cancels its scoped
-  background processes. The node still owns occupancy, so a stale mirror never
-  proves the device is free.
+- The lease is per turn. A turn that used the device releases it when the turn
+  ends; a failed release is recorded as a warning and never fails the turn,
+  because a disconnected node clears its own occupancy.
+- Stop, archive, and delete release the lease at the node too, so a stopped or
+  removed session never keeps the device reserved for other sessions. Stop also
+  cancels the session's scoped background processes.
+- Disabling a device revokes its occupancy through the Gateway's operator
+  invoke: the node tree-kills the holder's processes and clears occupancy, and
+  the Gateway mirror is dropped even when the node is already gone. A node that
+  reports `occupancy.status` as released clears the mirror as well; a stale
+  mirror never proves the device is free.
 
 Device exec is foreground: `background`, `yieldMs`, `pty`, and `elevated` are
 rejected under device scope, and output is truncated at 32 KB with an explicit

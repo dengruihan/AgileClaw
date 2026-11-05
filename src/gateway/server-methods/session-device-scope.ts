@@ -12,6 +12,10 @@
 import { randomUUID } from "node:crypto";
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import type { NodeOccupancyHolder } from "../../../packages/gateway-protocol/src/schema/nodes.js";
+import {
+  publishPromptDeviceScopeSnapshot,
+  type PromptDeviceScopeSnapshot,
+} from "../../agents/prompt-device-scope.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { updateSessionEntry } from "../../config/sessions/session-accessor.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
@@ -21,14 +25,19 @@ import {
   type PairedDevice,
 } from "../../infra/device-pairing.js";
 import { isPairedDeviceEnabled } from "../../infra/device-pairing.types.js";
+import { formatErrorMessage } from "../../infra/errors.js";
 import {
   NODE_OCCUPANCY_ACQUIRE_COMMAND,
   NODE_OCCUPANCY_RELEASE_COMMAND,
+  NODE_OCCUPANCY_REVOKE_COMMAND,
   NODE_DEVICE_OCCUPIED_ERROR_CODE,
 } from "../../infra/node-commands.js";
+import { logWarn } from "../../logger.js";
 import type { NodeRegistry } from "../node-registry.js";
 import type { NodeSession } from "../node-session.types.js";
 import {
+  applyNodeOccupancyStatus,
+  clearSessionScopeLeasesForDevice,
   readSessionScopeLease,
   recordSessionScopeLease,
   releaseSessionScopeLease,
@@ -39,6 +48,7 @@ import { resolveSessionSharingTarget } from "../session-sharing.js";
 export type DeviceScopeRegistry = {
   invoke: NodeRegistry["invoke"];
   get?: (nodeId: string) => NodeSession | undefined;
+  listConnected?: () => NodeSession[];
 };
 
 /** How long a mirrored grant is trusted before the next device call re-acquires. */
@@ -285,9 +295,64 @@ export async function releaseDeviceScopeLease(params: {
         timeoutMs: 10_000,
         ...(params.signal ? { signal: params.signal } : {}),
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        // A disconnected node clears its own occupancy; anything else means the
+        // lease may survive, so say so instead of pretending the release landed.
+        logWarn(
+          `device scope: occupancy release failed device=${deviceId} session=${rootSessionKey}: ${formatErrorMessage(error)}`,
+        );
+      });
   }
   return Boolean(releaseSessionScopeLease(rootSessionKey, leaseToken ? { leaseToken } : undefined));
+}
+
+/**
+ * Force-clear every lease the node holds for one device. Used when the device
+ * is disabled or deleted: the Gateway is the operator here, so the invoke
+ * carries no session identity and the node tree-kills holder processes before
+ * clearing occupancy. The A-side mirrors are dropped either way.
+ */
+export async function revokeDeviceScopeLeases(params: {
+  registry?: DeviceScopeRegistry;
+  deviceId: string;
+  signal?: AbortSignal;
+}): Promise<{ revoked: boolean; clearedRootSessionKeys: string[] }> {
+  const deviceId = normalizeOptionalString(params.deviceId) ?? "";
+  if (!deviceId) {
+    return { revoked: false, clearedRootSessionKeys: [] };
+  }
+  let revoked = false;
+  if (params.registry) {
+    try {
+      const result = await params.registry.invoke({
+        nodeId: deviceId,
+        command: NODE_OCCUPANCY_REVOKE_COMMAND,
+        // No session identity: the operator force-clear path.
+        params: {},
+        timeoutMs: 10_000,
+        ...(params.signal ? { signal: params.signal } : {}),
+      });
+      revoked = result.ok;
+      if (!result.ok) {
+        logWarn(
+          `device scope: occupancy revoke failed device=${deviceId}: ${formatErrorMessage(result.error?.message ?? "unknown")}`,
+        );
+      }
+    } catch (error) {
+      logWarn(
+        `device scope: occupancy revoke failed device=${deviceId}: ${formatErrorMessage(error)}`,
+      );
+    }
+  }
+  return { revoked, clearedRootSessionKeys: clearSessionScopeLeasesForDevice(deviceId) };
+}
+
+/** Mirror a node-reported release: only the node can prove the lease ended. */
+export function applyNodeOccupancyStatusForDevice(params: {
+  deviceId: string;
+  occupied: boolean;
+}): string[] {
+  return applyNodeOccupancyStatus(params);
 }
 
 /**
@@ -429,4 +494,77 @@ export async function writeSessionDeviceScope(params: {
     { agentId: params.agentId, sessionKey: params.rootSessionKey },
     () => ({ scopeDeviceId: params.deviceId ?? undefined }),
   );
+}
+
+/**
+ * Build M64's turn-boundary device-scope snapshot. The device list is the live
+ * connected set: a disconnected or disabled device cannot execute, so listing
+ * it would invite a call that must fail. No pairing store read happens here.
+ */
+export function buildSessionDeviceScopeSnapshot(params: {
+  scopeDeviceId?: string;
+  scopeCwd?: string;
+  connectedDevices: ReadonlyArray<{ nodeId: string; displayName?: string; platform?: string }>;
+}): PromptDeviceScopeSnapshot {
+  const devices = params.connectedDevices.map((device) => ({
+    deviceId: device.nodeId,
+    ...(device.displayName ? { displayName: device.displayName } : {}),
+    ...(device.platform ? { platform: device.platform } : {}),
+    connected: true,
+  }));
+  const scopeDeviceId = normalizeOptionalString(params.scopeDeviceId);
+  if (!scopeDeviceId) {
+    return { target: { kind: "gateway" }, devices };
+  }
+  const matched = params.connectedDevices.find((device) => device.nodeId === scopeDeviceId);
+  return {
+    target: {
+      kind: "node",
+      deviceId: scopeDeviceId,
+      ...(matched?.displayName ? { displayName: matched.displayName } : {}),
+      ...(matched?.platform ? { platform: matched.platform } : {}),
+      ...(normalizeOptionalString(params.scopeCwd) ? { cwd: params.scopeCwd!.trim() } : {}),
+    },
+    devices,
+  };
+}
+
+/**
+ * Publish the turn-boundary scope fact for one session. Publishing no snapshot
+ * withdraws it, so a missing session never leaves stale scope prose behind.
+ */
+export function publishSessionDeviceScopePrompt(params: {
+  sessionKey: string;
+  registry?: Pick<DeviceScopeRegistry, "listConnected">;
+  scopeDeviceId?: string;
+  scopeCwd?: string;
+  isCurrent?: () => boolean;
+}): PromptDeviceScopeSnapshot | undefined {
+  const sessionKey = normalizeOptionalString(params.sessionKey);
+  if (!sessionKey) {
+    return undefined;
+  }
+  if (!params.registry?.listConnected) {
+    publishPromptDeviceScopeSnapshot({ sessionKey });
+    return undefined;
+  }
+  const connectedDevices: Array<{ nodeId: string; displayName?: string; platform?: string }> = [];
+  for (const session of params.registry.listConnected()) {
+    connectedDevices.push({
+      nodeId: session.nodeId,
+      ...(session.displayName ? { displayName: session.displayName } : {}),
+      ...(session.platform ? { platform: session.platform } : {}),
+    });
+  }
+  const snapshot = buildSessionDeviceScopeSnapshot({
+    ...(params.scopeDeviceId ? { scopeDeviceId: params.scopeDeviceId } : {}),
+    ...(params.scopeCwd ? { scopeCwd: params.scopeCwd } : {}),
+    connectedDevices,
+  });
+  publishPromptDeviceScopeSnapshot({
+    sessionKey,
+    snapshot,
+    ...(params.isCurrent ? { isCurrent: params.isCurrent } : {}),
+  });
+  return snapshot;
 }

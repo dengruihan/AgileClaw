@@ -11,9 +11,12 @@ import {
 import {
   DEVICE_SCOPE_LEASE_TTL_MS,
   acquireDeviceScopeLease,
+  applyNodeOccupancyStatusForDevice,
+  buildSessionDeviceScopeSnapshot,
   prepareDeviceScopeSwitch,
   releaseDeviceScopeLease,
   resolveSessionScopeRoot,
+  revokeDeviceScopeLeases,
   validateDeviceScopeDevice,
   type DeviceScopeRegistry,
 } from "./session-device-scope.js";
@@ -83,7 +86,7 @@ function holder(overrides: Partial<NodeOccupancyHolder> = {}): NodeOccupancyHold
   };
 }
 
-function fakeRegistry(
+function fixtureRegistry(
   handler: (invoke: Record<string, unknown>) => { ok: boolean; payload?: unknown; error?: unknown },
   session?: NodeSession,
 ): DeviceScopeRegistry & { calls: Array<Record<string, unknown>> } {
@@ -158,7 +161,7 @@ describe("validateDeviceScopeDevice", () => {
 
 describe("acquireDeviceScopeLease", () => {
   it("ascends the root session identity and mirrors the granted lease", async () => {
-    const registry = fakeRegistry(() => ({
+    const registry = fixtureRegistry(() => ({
       ok: true,
       payload: { ok: true, holder: holder(), leaseToken: "node-token", acquiredAtMs: 5 },
     }));
@@ -195,7 +198,7 @@ describe("acquireDeviceScopeLease", () => {
 
   it("reports DEVICE_OCCUPIED with the holder identity and never falls back", async () => {
     const result = await acquireDeviceScopeLease({
-      registry: fakeRegistry(() => ({
+      registry: fixtureRegistry(() => ({
         ok: false,
         error: { code: "DEVICE_OCCUPIED", message: "device occupied by session agent:other" },
       })),
@@ -214,7 +217,7 @@ describe("acquireDeviceScopeLease", () => {
 
   it("fails a malformed grant instead of inventing a lease", async () => {
     const result = await acquireDeviceScopeLease({
-      registry: fakeRegistry(() => ({ ok: true, payload: { ok: true } })),
+      registry: fixtureRegistry(() => ({ ok: true, payload: { ok: true } })),
       deviceId: "device-a",
       rootSessionKey: "agent:main:root",
       sessionId: "sess-1",
@@ -233,7 +236,7 @@ describe("releaseDeviceScopeLease", () => {
       leaseToken: "token-1",
       expiresAt: Number.MAX_SAFE_INTEGER,
     });
-    const registry = fakeRegistry(() => ({ ok: true, payload: { ok: true, released: true } }));
+    const registry = fixtureRegistry(() => ({ ok: true, payload: { ok: true, released: true } }));
     await expect(
       releaseDeviceScopeLease({ registry, rootSessionKey: "agent:main:root" }),
     ).resolves.toBe(true);
@@ -257,7 +260,7 @@ describe("releaseDeviceScopeLease", () => {
         rootSessionKey: "agent:main:root",
         deviceId: "device-a",
         leaseToken: "token-1",
-        registry: fakeRegistry(() => ({ ok: true, payload: { ok: true } })),
+        registry: fixtureRegistry(() => ({ ok: true, payload: { ok: true } })),
       }),
     ).resolves.toBe(false);
     expect(readSessionScopeLease("agent:main:root")).toMatchObject({ leaseToken: "token-2" });
@@ -326,7 +329,7 @@ describe("prepareDeviceScopeSwitch", () => {
       leaseToken: "old-token",
       expiresAt: Number.MAX_SAFE_INTEGER,
     });
-    const registry = fakeRegistry(() => ({
+    const registry = fixtureRegistry(() => ({
       ok: true,
       payload: { ok: true, holder: holder(), leaseToken: "new-token", acquiredAtMs: 5 },
     }));
@@ -350,7 +353,7 @@ describe("prepareDeviceScopeSwitch", () => {
   });
 
   it("does not touch the lease when the device is disabled", async () => {
-    const registry = fakeRegistry(() => ({ ok: true, payload: {} }));
+    const registry = fixtureRegistry(() => ({ ok: true, payload: {} }));
     const result = await prepareDeviceScopeSwitch({
       cfg: {} as never,
       registry,
@@ -373,7 +376,7 @@ describe("prepareDeviceScopeSwitch", () => {
       leaseToken: "token-1",
       expiresAt: Number.MAX_SAFE_INTEGER,
     });
-    const registry = fakeRegistry(() => ({ ok: true, payload: {} }));
+    const registry = fixtureRegistry(() => ({ ok: true, payload: {} }));
     const result = await prepareDeviceScopeSwitch({
       cfg: {} as never,
       registry,
@@ -386,5 +389,114 @@ describe("prepareDeviceScopeSwitch", () => {
       previousLease: { deviceId: "device-a", leaseToken: "token-1" },
     });
     expect(readSessionScopeLease("agent:main:root")).toMatchObject({ leaseToken: "token-1" });
+  });
+});
+
+describe("revokeDeviceScopeLeases", () => {
+  it("force-clears occupancy as the operator invoke and drops every mirror for the device", async () => {
+    recordSessionScopeLease({
+      rootSessionKey: "agent:main:root",
+      deviceId: "device-a",
+      holder: "agent:main:root",
+      leaseToken: "lease-1",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+    });
+    recordSessionScopeLease({
+      rootSessionKey: "agent:main:other",
+      deviceId: "device-a",
+      holder: "agent:main:other",
+      leaseToken: "lease-2",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+    });
+    const rest = fixtureRegistry(() => ({ ok: true, payload: { ok: true, revoked: true } }));
+    const result = await revokeDeviceScopeLeases({ registry: rest, deviceId: "device-a" });
+    expect(result.revoked).toBe(true);
+    expect(result.clearedRootSessionKeys.toSorted()).toEqual([
+      "agent:main:other",
+      "agent:main:root",
+    ]);
+    // Operator force-clear path: no session identity on the envelope or params.
+    expect(rest.calls[0]).toMatchObject({ nodeId: "device-a", command: "occupancy.revoke.v1" });
+    expect(rest.calls[0]).not.toHaveProperty("sessionKey");
+    expect(rest.calls[0]).toMatchObject({ params: {} });
+    expect(readSessionScopeLease("agent:main:root")).toBeUndefined();
+    expect(readSessionScopeLease("agent:main:other")).toBeUndefined();
+  });
+
+  it("still clears the mirrors when the node rejects the revoke", async () => {
+    recordSessionScopeLease({
+      rootSessionKey: "agent:main:root",
+      deviceId: "device-a",
+      holder: "agent:main:root",
+      leaseToken: "lease-1",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+    });
+    const rest = fixtureRegistry(() => ({
+      ok: false,
+      error: { code: "NOT_CONNECTED", message: "node not connected" },
+    }));
+    await expect(
+      revokeDeviceScopeLeases({ registry: rest, deviceId: "device-a" }),
+    ).resolves.toMatchObject({ revoked: false, clearedRootSessionKeys: ["agent:main:root"] });
+    expect(readSessionScopeLease("agent:main:root")).toBeUndefined();
+  });
+});
+
+describe("applyNodeOccupancyStatusForDevice", () => {
+  it("clears the mirror when the node reports the device released", () => {
+    recordSessionScopeLease({
+      rootSessionKey: "agent:main:root",
+      deviceId: "device-a",
+      holder: "agent:main:root",
+      leaseToken: "lease-1",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+    });
+    expect(applyNodeOccupancyStatusForDevice({ deviceId: "device-a", occupied: false })).toEqual([
+      "agent:main:root",
+    ]);
+    expect(readSessionScopeLease("agent:main:root")).toBeUndefined();
+  });
+
+  it("never invents or clears a mirror from an occupied report", () => {
+    recordSessionScopeLease({
+      rootSessionKey: "agent:main:root",
+      deviceId: "device-a",
+      holder: "agent:main:root",
+      leaseToken: "lease-1",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+    });
+    expect(applyNodeOccupancyStatusForDevice({ deviceId: "device-a", occupied: true })).toEqual([]);
+    expect(readSessionScopeLease("agent:main:root")).toMatchObject({ leaseToken: "lease-1" });
+  });
+});
+
+describe("buildSessionDeviceScopeSnapshot", () => {
+  it("renders the gateway target plus the live device list", () => {
+    const snapshot = buildSessionDeviceScopeSnapshot({
+      connectedDevices: [
+        { nodeId: "device-a", displayName: "Desk", platform: "darwin" },
+        { nodeId: "device-b" },
+      ],
+    });
+    expect(snapshot.target).toEqual({ kind: "gateway" });
+    expect(snapshot.devices).toEqual([
+      { deviceId: "device-a", displayName: "Desk", platform: "darwin", connected: true },
+      { deviceId: "device-b", connected: true },
+    ]);
+  });
+
+  it("names the node target with its device facts", () => {
+    const snapshot = buildSessionDeviceScopeSnapshot({
+      scopeDeviceId: "device-a",
+      scopeCwd: "/ws",
+      connectedDevices: [{ nodeId: "device-a", displayName: "Desk", platform: "darwin" }],
+    });
+    expect(snapshot.target).toEqual({
+      kind: "node",
+      deviceId: "device-a",
+      displayName: "Desk",
+      platform: "darwin",
+      cwd: "/ws",
+    });
   });
 });

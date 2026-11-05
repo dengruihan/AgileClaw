@@ -17,11 +17,11 @@ import {
 } from "../../../packages/gateway-protocol/src/index.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
-import { releaseSessionScopeLease } from "../session-scope-lease.js";
 import { resolveSessionStoreKey } from "../session-store-key.js";
 import { emitSessionsChanged } from "./session-change-event.js";
 import {
   prepareDeviceScopeSwitch,
+  publishSessionDeviceScopePrompt,
   releaseDeviceScopeLease,
   resolveSessionScopeRoot,
   writeSessionDeviceScope,
@@ -29,6 +29,7 @@ import {
   type DeviceScopeRegistry,
   type DeviceScopeSwitch,
 } from "./session-device-scope.js";
+import type { SessionMutationAuthorization } from "./shared-types.js";
 import type { GatewayRequestContext } from "./types.js";
 
 export type PreparedSessionDeviceScope = {
@@ -63,6 +64,8 @@ export async function beginSessionPatchDeviceScope(params: {
   requestedAgentId?: string;
   /** `null` returns the session to the Gateway. */
   requestedScopeDeviceId: string | null;
+  /** Per-target patch authorization; runs before any real occupancy acquire. */
+  assertAuthorized?: () => void;
   signal?: AbortSignal;
   connectionSignal?: AbortSignal;
 }): Promise<BeginSessionPatchDeviceScopeResult> {
@@ -106,6 +109,9 @@ export async function beginSessionPatchDeviceScope(params: {
       error: scopeError("DEVICE_NOT_FOUND", "scopeDeviceId must be a device id or null"),
     };
   }
+  // Authorization precedes the lease: an unauthorized client must never make a
+  // device acquire real occupancy, even transiently.
+  params.assertAuthorized?.();
   const prepared = await prepareDeviceScopeSwitch({
     cfg: params.cfg,
     registry: params.registry,
@@ -134,6 +140,9 @@ export async function beginSessionPatchRequestDeviceScope(params: {
     | { many: true; params: SessionsPatchManyParams }
     | { many: false; params: SessionsPatchParams };
   context: GatewayRequestContext;
+  /** RPC-level authority assertion, rechecked before any real occupancy acquire. */
+  assertCurrent: () => void;
+  sessionMutationAuthorization?: SessionMutationAuthorization;
   signal?: AbortSignal;
   connectionSignal?: AbortSignal;
 }): Promise<BeginSessionPatchDeviceScopeResult | undefined> {
@@ -155,6 +164,13 @@ export async function beginSessionPatchRequestDeviceScope(params: {
       request.scopeDeviceId === null
         ? null
         : (normalizeOptionalString(request.scopeDeviceId) ?? ""),
+    assertAuthorized: () => {
+      params.assertCurrent();
+      params.sessionMutationAuthorization?.assertTargetCurrent({
+        sessionKey: request.key.trim(),
+        ...(request.agentId ? { agentId: request.agentId } : {}),
+      });
+    },
     ...(params.signal ? { signal: params.signal } : {}),
     ...(params.connectionSignal ? { connectionSignal: params.connectionSignal } : {}),
   });
@@ -188,6 +204,14 @@ export async function commitSessionPatchDeviceScope(params: {
       leaseToken: previousLease.leaseToken,
     });
   }
+  // M64 publishes one scope fact per session at the turn boundary; the switch
+  // itself is a scope change, so refresh the fact here instead of waiting for
+  // the next turn to notice a stale value.
+  publishSessionDeviceScopePrompt({
+    sessionKey: target.rootSessionKey,
+    registry: params.registry,
+    ...(target.deviceId ? { scopeDeviceId: target.deviceId } : {}),
+  });
   emitSessionsChanged(
     params.context,
     {
@@ -209,33 +233,36 @@ export async function commitSessionPatchDeviceScope(params: {
 }
 
 /** A patch that failed after preparation must not leave a phantom holder. */
-export async function rollbackSessionPatchDeviceScope(params: {
-  registry: DeviceScopeRegistry;
-  change: PreparedSessionDeviceScope | undefined;
-}): Promise<void> {
-  const lease = params.change?.scopeSwitch.lease;
-  if (!lease || !params.change?.target.deviceId) {
+export async function rollbackSessionPatchDeviceScope(
+  registry: DeviceScopeRegistry,
+  change: PreparedSessionDeviceScope | undefined,
+): Promise<void> {
+  const lease = change?.scopeSwitch.lease;
+  if (!lease || !change?.target.deviceId) {
     return;
   }
   await releaseDeviceScopeLease({
-    registry: params.registry,
-    rootSessionKey: params.change.target.rootSessionKey,
-    deviceId: params.change.target.deviceId,
+    registry,
+    rootSessionKey: change.target.rootSessionKey,
+    deviceId: change.target.deviceId,
     leaseToken: lease.leaseToken,
   });
 }
 
 /**
- * Archiving retires a row's device occupancy on the Gateway side. The node
- * stays the occupancy authority, so only the mirrored lease is dropped.
+ * Archiving retires a row's device occupancy. The node owns occupancy, so this
+ * releases the node lease (tree-killing its holder processes per the node
+ * contract) before dropping the Gateway mirror; an archived session must not
+ * keep the device occupied for every other session.
  */
-export function releaseArchivedSessionDeviceScopes(params: {
+export async function releaseArchivedSessionDeviceScopes(params: {
   context: GatewayRequestContext;
+  registry: DeviceScopeRegistry;
   cfg: OpenClawConfig;
   targets: ReadonlyArray<{ key: string; agentId?: string }>;
   outcomes: ReadonlyArray<{ ok: boolean }>;
   targetAgentIds: ReadonlyArray<string | undefined>;
-}): void {
+}): Promise<void> {
   for (const [index, outcome] of params.outcomes.entries()) {
     if (!outcome.ok) {
       continue;
@@ -250,8 +277,18 @@ export function releaseArchivedSessionDeviceScopes(params: {
       sessionKey: target.key,
       storeAgentId: agentId,
     });
-    const released = releaseSessionScopeLease(canonicalKey) ?? releaseSessionScopeLease(target.key);
+    const rootSessionKey =
+      resolveSessionScopeRoot({
+        cfg: params.cfg,
+        sessionKey: canonicalKey,
+        ...(agentId ? { agentId } : {}),
+      })?.rootSessionKey ?? canonicalKey;
+    const released = await releaseDeviceScopeLease({
+      registry: params.registry,
+      rootSessionKey,
+    });
     if (released) {
+      publishSessionDeviceScopePrompt({ sessionKey: rootSessionKey, registry: params.registry });
       emitSessionsChanged(params.context, {
         sessionKey: canonicalKey,
         ...(agentId ? { agentId } : {}),

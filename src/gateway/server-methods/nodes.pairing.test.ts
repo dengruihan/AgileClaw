@@ -69,6 +69,7 @@ function createContext() {
     },
     nodeRegistry: {
       get: vi.fn(),
+      invoke: vi.fn(async () => ({ ok: true, payload: { ok: true, revoked: true } })),
       updateSurface: vi.fn(),
     },
   };
@@ -135,6 +136,14 @@ describe("node.device registry RPCs", () => {
       permissions: undefined,
     });
     expect(reconcileActive).toHaveBeenCalledWith("environment-1");
+    // Disabling revokes occupancy through the internal registry operator invoke.
+    expect(context.nodeRegistry.invoke).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodeId: "node-1",
+        command: "occupancy.revoke.v1",
+        params: {},
+      }),
+    );
     expect(context.invalidateClientsForDevice).toHaveBeenCalledWith("node-1", {
       role: "node",
       reason: "device-disabled",

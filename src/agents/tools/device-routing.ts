@@ -11,6 +11,7 @@ import { getRuntimeConfig } from "../../config/config.js";
 import {
   acquireDeviceScopeLease,
   resolveSessionScopeRoot,
+  type DeviceScopeRegistry,
 } from "../../gateway/server-methods/session-device-scope.js";
 import { readSessionScopeLease } from "../../gateway/session-scope-lease.js";
 import { getAgentToolExecutionLocation, copyAgentToolMetadata } from "../agent-tool-metadata.js";
@@ -34,6 +35,16 @@ export type DeviceScopeRoutingState = {
   switchPending: boolean;
   /** Set by use_device so the next call re-reads the committed scope. */
   markScope(): void;
+  /**
+   * Root session whose device lease this turn actually used. Turn-end release
+   * only fires when a device call (or a switch) really happened, so a
+   * gateway-scoped turn never pays for a session read at cleanup.
+   */
+  noteLeaseUsed(rootSessionKey: string, registry?: DeviceScopeRegistry): void;
+  /** Root whose lease the turn used; undefined means no device work happened. */
+  readonly leaseRootSessionKey: string | undefined;
+  /** Registry captured with the lease, so turn-end release outlives tool context. */
+  readonly leaseRegistry: DeviceScopeRegistry | undefined;
   resolveRoot(): { rootSessionKey: string; agentId: string; scopeDeviceId?: string } | undefined;
 };
 
@@ -45,12 +56,26 @@ export function createDeviceScopeRoutingState(params: {
 }): DeviceScopeRoutingState {
   let cached: { rootSessionKey: string; agentId: string; scopeDeviceId?: string } | undefined;
   let resolved = false;
+  let leaseRootSessionKey: string | undefined;
+  let leaseRegistry: DeviceScopeRegistry | undefined;
   const state: DeviceScopeRoutingState = {
     sessionKey: params.sessionKey,
     agentId: params.agentId,
     ...(params.sessionId ? { sessionId: params.sessionId } : {}),
     ...(params.runId ? { runId: params.runId } : {}),
     switchPending: false,
+    get leaseRootSessionKey() {
+      return leaseRootSessionKey;
+    },
+    noteLeaseUsed(rootSessionKey, registry) {
+      leaseRootSessionKey = rootSessionKey;
+      if (registry) {
+        leaseRegistry = registry;
+      }
+    },
+    get leaseRegistry() {
+      return leaseRegistry;
+    },
     markScope() {
       // The scope write is committed by the patch owner; drop the cached read
       // so the next placement call observes the new value.
@@ -191,6 +216,11 @@ async function executeOnDevice(params: {
     deviceId,
     ...(params.signal ? { signal: params.signal } : {}),
   });
+  // Record the grant for turn-end release only after the lease is real.
+  params.state.noteLeaseUsed(
+    params.root.rootSessionKey,
+    getInProcessGatewayToolContext()?.nodeRegistry,
+  );
   const platform = getInProcessGatewayToolContext()?.nodeRegistry.get(deviceId)?.platform;
   return await adapter({
     params: params.toolParams,
