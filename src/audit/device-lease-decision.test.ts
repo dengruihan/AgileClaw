@@ -296,6 +296,106 @@ describe("device lease decision facts", () => {
       }).receipts,
     ).toHaveLength(0);
   });
+
+  it("persists token-less reject receipt ids with the keyed projection and deduplicates replays", () => {
+    const database = databaseOptions();
+    const context = seedExecutionContext(database);
+    const token = createExecutionIdentityAdmissionToken(context.runId, {
+      contextId: context.contextId,
+      executionId: context.executionId,
+      now: context.createdAt,
+    });
+    const clear = persistingSink(database);
+    try {
+      // A disabled-device reject carries no lease token, so its identity tuple
+      // is only the low-entropy device id; the persisted id must be keyed.
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        expect(
+          recordDeviceLeaseDecision({
+            token,
+            phase: "reject",
+            rejectReason: "disabled",
+            deviceId: "device-a",
+            rootSessionKey: "agent:main:root",
+            occurredAt: 100,
+          }),
+        ).toBe(true);
+      }
+    } finally {
+      clear();
+    }
+    const opened = openOpenClawStateDatabase(database);
+    const page = pageExecutionDecisionFactsForContextInDatabase(opened.db, {
+      context: {
+        contextId: context.contextId,
+        executionId: context.executionId,
+        runId: context.runId,
+      },
+      limit: 10,
+      now: 100,
+    });
+    expect(page.receipts).toHaveLength(1);
+    const receipt = page.receipts[0]!;
+    expect(receipt.receiptId).toMatch(/^device-lease:hmac-sha256:v1:[a-f0-9]{32}:[a-f0-9]{64}$/u);
+    expect(receipt.source.recordRef).toBe(receipt.receiptId);
+    const retained = JSON.stringify(page.receipts);
+    expect(retained).not.toContain("device-a");
+    expect(retained).not.toContain("agent:main:root");
+  });
+
+  it("keys the same token-less reject differently per installation and keeps devices distinct", () => {
+    const databaseA = databaseOptions();
+    const databaseB = databaseOptions();
+    const contextA = seedExecutionContext(databaseA);
+    const contextB = seedExecutionContext(databaseB);
+    const tokenA = createExecutionIdentityAdmissionToken(contextA.runId, {
+      contextId: contextA.contextId,
+      executionId: contextA.executionId,
+      now: contextA.createdAt,
+    });
+    const tokenB = createExecutionIdentityAdmissionToken(contextB.runId, {
+      contextId: contextB.contextId,
+      executionId: contextB.executionId,
+      now: contextB.createdAt,
+    });
+    const recordAll = (database: typeof databaseA, token: typeof tokenA) => {
+      const clear = persistingSink(database);
+      try {
+        for (const deviceId of ["device-a", "device-b"]) {
+          recordDeviceLeaseDecision({
+            token,
+            phase: "reject",
+            rejectReason: "disconnected",
+            deviceId,
+            rootSessionKey: "agent:main:root",
+            occurredAt: 100,
+          });
+        }
+      } finally {
+        clear();
+      }
+    };
+    recordAll(databaseA, tokenA);
+    recordAll(databaseB, tokenB);
+    const idsFor = (database: typeof databaseA, context: typeof contextA) =>
+      pageExecutionDecisionFactsForContextInDatabase(openOpenClawStateDatabase(database).db, {
+        context: {
+          contextId: context.contextId,
+          executionId: context.executionId,
+          runId: context.runId,
+        },
+        limit: 10,
+        now: 100,
+      }).receipts.map((receipt) => receipt.receiptId);
+    const idsA = idsFor(databaseA, contextA);
+    const idsB = idsFor(databaseB, contextB);
+    // Two devices rejected in one execution stay two facts.
+    expect(idsA).toHaveLength(2);
+    expect(new Set(idsA).size).toBe(2);
+    // The same transition under another installation key projects differently.
+    expect(idsA[0]).not.toBe(idsB[0]);
+    expect(idsA[1]).not.toBe(idsB[1]);
+  });
 });
 
 describe("tool action device scope projection facts", () => {

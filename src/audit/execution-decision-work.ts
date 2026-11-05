@@ -9,6 +9,10 @@ import {
   type OpenClawStateDatabaseOptions,
 } from "../state/openclaw-state-db.js";
 import { pseudonymizeExecutionIdentityRef } from "./audit-identity.js";
+import {
+  DEVICE_LEASE_RECEIPT_ID_PREFIX,
+  deviceLeaseProducerDigest,
+} from "./device-lease-receipt-id.js";
 import { recordExecutionDecisionFactInDatabase } from "./execution-decision-facts.js";
 import type { ExecutionDecisionWork } from "./execution-decision-work.types.js";
 import {
@@ -178,9 +182,28 @@ export function processExecutionDecisionWorkInDatabase(
         value: work.refs.target.value,
       })
     : undefined;
+  // Device-lease receipt ids arrive as producer digests over raw identity
+  // tuples; key them with the installation audit HMAC so low-entropy device
+  // ids cannot be brute-forced from the retained id. The same tuple always
+  // projects to the same keyed id, so replays keep deduplicating.
+  const deviceLeaseDigest = deviceLeaseProducerDigest(work.receipt.receiptId);
+  const keyedReceiptId = deviceLeaseDigest
+    ? `${DEVICE_LEASE_RECEIPT_ID_PREFIX}${pseudonymizeExecutionIdentityRef({
+        db,
+        kind: "evidence",
+        scope: "device-lease-receipt",
+        value: deviceLeaseDigest,
+      })}`
+    : undefined;
   const receipt = buildReceipt({
     token: work.token,
-    receipt: work.receipt,
+    receipt: keyedReceiptId
+      ? {
+          ...work.receipt,
+          receiptId: keyedReceiptId,
+          source: { ...work.receipt.source, recordRef: keyedReceiptId },
+        }
+      : work.receipt,
     ...(resourceRef ? { resourceRef } : {}),
     ...(targetRef ? { targetRef } : {}),
   });

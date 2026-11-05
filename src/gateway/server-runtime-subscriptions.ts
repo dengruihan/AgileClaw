@@ -59,6 +59,7 @@ import type {
 } from "./server-chat-state.js";
 import type { ToolEventRecipientRegistry } from "./server-chat-tool-recipients.js";
 import { resolveVisibleActiveSessionRunState } from "./server-methods/session-active-runs.js";
+import { resolveSessionScopeRoot } from "./server-methods/session-device-scope.js";
 import { createSessionActivitySummaries } from "./session-activity-summaries.js";
 import { broadcastSessionActivitySummary } from "./session-activity-summary-events.js";
 import { defaultSessionCompanionContextReader } from "./session-companion-context.js";
@@ -115,6 +116,17 @@ export function startGatewayEventSubscriptions(params: {
   const auditRecorder = createAuditEventRecorder({
     getConfig: getRuntimeConfig,
     scheduler: params.scheduler,
+    // The audit layer must stay free of gateway session-graph imports, so the
+    // composition root injects the committed-entry scope resolver here: one
+    // committed-session read per session seeds the tool-action device scope.
+    resolveSessionDeviceScope: (sessionKey) => {
+      try {
+        const root = resolveSessionScopeRoot({ cfg: getRuntimeConfig(), sessionKey });
+        return root ? (root.entry.scopeDeviceId ?? null) : undefined;
+      } catch {
+        return undefined;
+      }
+    },
   });
   const clearAuditSinks = [
     configureExecutionIdentityAdmissionSink(auditRecorder.recordExecutionIdentity),

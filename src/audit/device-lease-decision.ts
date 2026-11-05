@@ -1,6 +1,7 @@
 /** Device occupancy lease facts for the generic execution decision owner. */
 import { createHash } from "node:crypto";
 import type { DecisionReceiptV1 } from "../../packages/gateway-protocol/src/index.js";
+import { DEVICE_LEASE_RECEIPT_ID_PREFIX } from "./device-lease-receipt-id.js";
 import { recordExecutionDecisionWork } from "./execution-decision-work.js";
 import type { ExecutionIdentityAdmissionToken } from "./execution-identity-admission.js";
 
@@ -35,7 +36,9 @@ function receiptId(params: {
     )
     .digest("base64url")
     .slice(0, 32);
-  return `device-lease:${digest}`;
+  // Transport identity only: the decision writer re-keys this digest with the
+  // installation audit HMAC before the fact persists.
+  return `${DEVICE_LEASE_RECEIPT_ID_PREFIX}${digest}`;
 }
 
 const REJECT_SUMMARIES: Record<DeviceLeaseRejectReason, string> = {
@@ -88,8 +91,8 @@ function boundedRef(value: string | undefined, max: number): string | undefined 
 
 /**
  * Queue one device lease transition fact. Raw device, session, and lease-token
- * bytes never reach persistence: the writer HMAC-projects the refs and only the
- * token discriminator's digest is retained inside the receipt id. Without an
+ * bytes never reach persistence: the writer HMAC-projects the refs and replaces
+ * the receipt id's transport digest with the keyed audit projection. Without an
  * admitted execution token the owner records nothing.
  */
 export function recordDeviceLeaseDecision(params: {
