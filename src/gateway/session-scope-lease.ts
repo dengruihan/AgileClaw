@@ -174,6 +174,48 @@ export function clearSessionScopeLeasesForDevice(deviceId: string): string[] {
   return released;
 }
 
+/**
+ * Mirrored grants for one device. Revocation and disable paths need the holder
+ * keys and tokens the Gateway was granted; the node remains the authority.
+ */
+export function listSessionScopeLeasesForDevice(
+  deviceId: string,
+  now: number = Date.now(),
+): Array<{ rootSessionKey: string; leaseToken: string }> {
+  const device = normalizeOptionalString(deviceId);
+  if (!device) {
+    return [];
+  }
+  const grants: Array<{ rootSessionKey: string; leaseToken: string }> = [];
+  for (const [key, record] of leasesByRootSessionKey) {
+    if (record.deviceId !== device) {
+      continue;
+    }
+    if (isExpired(record, now)) {
+      leasesByRootSessionKey.delete(key);
+      detachDisconnectWatch(key);
+      continue;
+    }
+    grants.push({ rootSessionKey: key, leaseToken: record.leaseToken });
+  }
+  return grants;
+}
+
+/**
+ * Apply a node-reported occupancy status. A released device clears every mirror
+ * for it, because only the node can prove the lease ended; an occupied report
+ * never invents a holder the Gateway did not acquire.
+ */
+export function applyNodeOccupancyStatus(params: {
+  deviceId: string;
+  occupied: boolean;
+}): string[] {
+  if (params.occupied) {
+    return [];
+  }
+  return clearSessionScopeLeasesForDevice(params.deviceId);
+}
+
 export function clearAllSessionScopeLeasesForTest(): void {
   leasesByRootSessionKey.clear();
   ownerSignalByRootSessionKey.clear();

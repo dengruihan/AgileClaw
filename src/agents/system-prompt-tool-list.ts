@@ -36,6 +36,9 @@ export function buildSystemPromptToolLines(params: SystemPromptToolListParams): 
       "List/read/resize/close operator-opened session terminals; input follows exec policy and may require exact-input approval; never open shells",
     canvas: "Present/eval/snapshot Canvas",
     nodes: "Paired node status/control/media",
+    // Scope semantics live in M64's runtime fact and the tool description; this
+    // line stays a tool summary so the prompt does not describe scope twice.
+    use_device: "Switch the scope device; call alone in its step",
     [AUTOMATIONS_TOOL_NAME]:
       "Schedule/wake. Reminder text must read as reminder when fired; mention reminder for delayed gaps; include useful recent context. This feature is called automations; never call it cron.",
     message: "Message/channel actions",

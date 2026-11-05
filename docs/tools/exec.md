@@ -233,6 +233,23 @@ When a session has a permission mode, per-turn `/exec` overrides can only tighte
 
 To hard-disable exec, deny it via tool policy (`tools.deny: ["exec"]` or per-agent). Outside the full-access session exception above, host approval-file floors still apply.
 
+## Device scope (`use_device`)
+
+`use_device` switches where this session's **placement** tools run: on the Gateway
+or on one paired device. The tool itself always runs on the Gateway. Gateway
+tools (`sessions_send`, `sessions_spawn`, `portal`, `use_device`, and other
+control-plane tools) keep running on the Gateway no matter what the scope is.
+
+```text
+use_device device="studio-mac"   # exec/read/write/ls now run on studio-mac
+use_device device="gateway"      # back to Gateway execution
+```
+
+The switch applies to subsequent calls at the next step boundary, so call
+`use_device` alone: a placement tool in the same step is refused while the
+switch is in flight. See [Node exec](/nodes/node-exec#session-device-occupancy)
+for the lease contract and the routing rules.
+
 ## Exec approvals (companion app / node host)
 
 Sandboxed agents can require per-request approval before `exec` runs on the gateway or node host. See [Exec approvals](/tools/exec-approvals) for the policy, allowlist, and UI flow.

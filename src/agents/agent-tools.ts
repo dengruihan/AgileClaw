@@ -74,7 +74,13 @@ import {
   TOOL_SEARCH_RAW_TOOL_NAME,
 } from "./tool-search.js";
 import { replaceWithEffectiveCronCreatorToolAllowlist } from "./tools/cron-tool.js";
+import { releaseTurnDeviceScopeLease } from "./tools/device-lease-lifecycle.js";
+import {
+  applyDeviceScopeToolRouting,
+  createDeviceScopeRoutingState,
+} from "./tools/device-routing.js";
 import { prepareSessionPortalToolAccess } from "./tools/session-portal-target.js";
+import { createUseDeviceTool } from "./tools/use-device-tool.js";
 
 export { resolveToolLoopDetectionConfig } from "./tool-loop-detection-config.js";
 
@@ -395,6 +401,32 @@ export function createOpenClawCodingToolsInternal(
           : tool,
       )
     : coreTools;
+  // One routing state per turn: use_device and the placement wrappers share it,
+  // so a committed switch is visible to the very next placement call.
+  const deviceScopeRoutingState =
+    executionSessionKey && executionAgentId
+      ? createDeviceScopeRoutingState({
+          sessionKey: executionSessionKey,
+          agentId: executionAgentId,
+          ...(options?.sessionId ? { sessionId: options.sessionId } : {}),
+          ...(options?.runId ? { runId: options.runId } : {}),
+        })
+      : undefined;
+  if (deviceScopeRoutingState && options?.registerRunCleanup) {
+    const scopeState = deviceScopeRoutingState;
+    // Turn end releases the node lease: occupancy has no TTL, so an idle turn
+    // must not keep the device reserved. Only a turn that used a lease pays.
+    options.registerRunCleanup(async () => {
+      const rootSessionKey = scopeState.leaseRootSessionKey;
+      if (!rootSessionKey) {
+        return;
+      }
+      await releaseTurnDeviceScopeLease({
+        rootSessionKey,
+        ...(scopeState.leaseRegistry ? { registry: scopeState.leaseRegistry } : {}),
+      });
+    });
+  }
   const messageInvocationPolicy = createEmbeddedMessageInvocationPolicy({
     config: options?.config,
     capabilityProfile,
@@ -478,6 +510,18 @@ export function createOpenClawCodingToolsInternal(
           }),
         )
       : pluginToolsOnly),
+    // Device scope switcher: a gateway-kind tool, so it keeps the catalog
+    // constant while placement tools stay bound to the current scope.
+    ...(includeOpenClawTools && !isMemoryFlushRun && deviceScopeRoutingState
+      ? [
+          createUseDeviceTool({
+            state: deviceScopeRoutingState,
+            sessionKey: deviceScopeRoutingState.sessionKey,
+            agentId: deviceScopeRoutingState.agentId,
+            ...(options?.config ? { cfg: options.config } : {}),
+          }),
+        ]
+      : []),
     ...toolSearchTools,
   ];
   options?.recordToolPrepStage?.("openclaw-tools");
@@ -593,9 +637,15 @@ export function createOpenClawCodingToolsInternal(
     onToolOutcome: options?.onToolOutcome,
     allocateToolOutcomeOrdinal: options?.allocateToolOutcomeOrdinal,
   };
+  // Placement tools route per call; gateway-kind tools are left untouched so
+  // they always execute on the Gateway. The catalog itself never changes.
+  const scopeRoutedTools =
+    includeOpenClawTools && deviceScopeRoutingState
+      ? applyDeviceScopeToolRouting(authorizedTools, deviceScopeRoutingState)
+      : authorizedTools;
   return finalizeAgentTools({
     ...options,
-    tools: filterRequesterYieldTools(authorizedTools, executionSessionKey),
+    tools: filterRequesterYieldTools(scopeRoutedTools, executionSessionKey),
     wrapBeforeToolCallHook: preparedTools
       ? (tool) =>
           options?.wrapBeforeToolCallHook !== false &&

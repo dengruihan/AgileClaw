@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDeferred } from "../../../test/helpers/promise.js";
 import {
   createSessionEventSubscriberRegistry,
@@ -6,6 +6,11 @@ import {
 } from "../server-chat-state.js";
 import { createGatewayNodeSessionRuntime } from "../server-node-session-runtime.js";
 import type { GatewayWsClient } from "../server/ws-types.js";
+import {
+  clearAllSessionScopeLeasesForTest,
+  recordSessionScopeLease,
+  sessionScopeLeaseHeld,
+} from "../session-scope-lease.js";
 import { nodeEventHandlers } from "./nodes.event.js";
 import type { GatewayRequestHandlerOptions } from "./types.js";
 
@@ -315,4 +320,37 @@ describe("registered node presence activity events", () => {
       }
     },
   );
+});
+
+describe("node occupancy status receipt", () => {
+  afterEach(() => {
+    clearAllSessionScopeLeasesForTest();
+  });
+
+  it("clears the Gateway mirror when the node reports the device released", async () => {
+    recordSessionScopeLease({
+      rootSessionKey: "agent:main:root",
+      deviceId: "node-1",
+      holder: "agent:main:root",
+      leaseToken: "lease-1",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+    });
+    const respond = vi.fn();
+    const params = { event: "node.occupancy.status", payload: { occupied: false } };
+    await nodeEventHandlers["node.event"]!({
+      req: { type: "req", id: "occupancy", method: "node.event", params },
+      params,
+      client: {
+        connId: "conn-1",
+        connect: { device: { id: "node-1" } },
+      } as GatewayRequestHandlerOptions["client"],
+      isWebchatConnect: () => false,
+      respond,
+      context: {
+        nodeRegistry: { get: () => undefined },
+        logGateway: { warn: vi.fn() },
+      } as unknown as GatewayRequestHandlerOptions["context"],
+    });
+    expect(sessionScopeLeaseHeld("agent:main:root")).toBe(false);
+  });
 });

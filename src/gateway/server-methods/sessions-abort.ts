@@ -407,6 +407,8 @@ export const sessionAbortHandlers: GatewayRequestHandlers = {
     // and it must work while idle too: detached background processes can hold the
     // lease after the last run ends. See session-scope-stop-release.ts.
     let releasedScopeLease: boolean;
+    const releaseStopScope = () =>
+      releaseScopeLeaseOnStop(context, sessionEntry, canonicalKey, key, targetAgentId);
     // Controller-backed runs must keep the requester checks and lifecycle cleanup below.
     if (embeddedRun && !activeRun) {
       let aborted = false;
@@ -433,7 +435,7 @@ export const sessionAbortHandlers: GatewayRequestHandlers = {
         respond(false, undefined, error);
         return;
       }
-      releasedScopeLease = releaseScopeLeaseOnStop(sessionEntry, canonicalKey, key, targetAgentId);
+      releasedScopeLease = await releaseStopScope();
       respond(true, {
         ok: true,
         abortedRunId: aborted ? embeddedRun.runId : null,
@@ -601,8 +603,7 @@ export const sessionAbortHandlers: GatewayRequestHandlers = {
         abortWarning = result.value.warning;
       }
       await settleAbortPersistence(result.ok ? result.value.runIds : []);
-      releasedScopeLease =
-        result.ok && releaseScopeLeaseOnStop(sessionEntry, canonicalKey, key, targetAgentId);
+      releasedScopeLease = result.ok && (await releaseStopScope());
       if (releasedScopeLease) {
         emitSessionsChanged(context, {
           sessionKey: canonicalKey,
@@ -700,7 +701,7 @@ export const sessionAbortHandlers: GatewayRequestHandlers = {
       }
       return;
     }
-    releasedScopeLease = releaseScopeLeaseOnStop(sessionEntry, canonicalKey, key, targetAgentId);
+    releasedScopeLease = await releaseStopScope();
     respond(
       true,
       {

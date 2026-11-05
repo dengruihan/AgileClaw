@@ -43,6 +43,7 @@ import {
 import { emitDeviceManagementSecurityEvent } from "./device-management-security.js";
 import { refreshConnectedNodeSurfaceCaches } from "./nodes.read.js";
 import { respondUnavailableOnThrow } from "./response.js";
+import { revokeDeviceScopeLeases } from "./session-device-scope.js";
 import type { GatewayClient, GatewayRequestContext, RespondFn } from "./shared-types.js";
 import type { GatewayRequestHandlers } from "./types.js";
 import { assertValidParams } from "./validation.js";
@@ -566,6 +567,13 @@ export const nodePairingHandlers: GatewayRequestHandlers = {
         return;
       }
       try {
+        // Revoke the device's occupancy lease while the node is still connected:
+        // a disabled device must not stay reserved, and the node tree-kills the
+        // holder's processes as part of the revoke contract.
+        await revokeDeviceScopeLeases({
+          registry: context.nodeRegistry,
+          deviceId: disabled.nodeId,
+        });
         // Empty the live surface and abort queued/in-flight work before the
         // response so no further command dispatch can be admitted.
         clearRemovedNodeRuntimeState({ nodeId: disabled.nodeId, context });

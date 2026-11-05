@@ -29,7 +29,6 @@ import {
   projectSessionActor,
 } from "../session-identity-projection.js";
 import { resolveRequestedSessionAgentId } from "../session-request-agent.js";
-import { releaseSessionScopeLease } from "../session-scope-lease.js";
 import { prepareSessionMutationFacts } from "../session-sharing-preparation.js";
 import {
   authorizeIncognitoSessionTarget,
@@ -37,10 +36,7 @@ import {
   resolveSessionSharingTarget,
   SessionMutationAuthorizationChangedError,
 } from "../session-sharing.js";
-import {
-  resolveSessionStoreKey,
-  resolveStoredSessionKeyForAgentStore,
-} from "../session-store-key.js";
+import { resolveStoredSessionKeyForAgentStore } from "../session-store-key.js";
 import type { SessionActorProfileIdentity } from "../session-utils-contracts.js";
 import { projectSessionPatchResult } from "../session-utils-model.js";
 import { gatewayClientSessionCreator } from "./gateway-client-identity.js";
@@ -48,6 +44,12 @@ import { isSyntheticGatewayCaller } from "./gateway-personal-caller.js";
 import { emitSessionsChanged } from "./session-change-event.js";
 import { readGatewayRequestMutationAuthority } from "./session-mutation-guards.js";
 import type { SessionPatchTargetIdentity } from "./session-unread-ack.js";
+import {
+  beginSessionPatchRequestDeviceScope,
+  commitSessionPatchDeviceScope,
+  releaseArchivedSessionDeviceScopes,
+  rollbackSessionPatchDeviceScope,
+} from "./sessions-patch-device-scope.js";
 import { startSessionPatchDiagnostics } from "./sessions-patch-diagnostics.js";
 import { executeSessionPatchMutations } from "./sessions-patch-engine.js";
 import { createCommitGuard } from "./sessions-patch-errors.js";
@@ -124,6 +126,21 @@ function createSessionPatchHandler(
           sessionMutationAuthorization?.assertCurrent();
         }
       };
+      // Authorize and lease the device before patching: neither an unauthorized
+      // client nor a failed patch may make a device acquire real occupancy.
+      const scopeResult = await beginSessionPatchRequestDeviceScope({
+        request,
+        context,
+        assertCurrent,
+        ...(sessionMutationAuthorization ? { sessionMutationAuthorization } : {}),
+        ...(signal ? { signal } : {}),
+        ...(client?.connectionSignal ? { connectionSignal: client.connectionSignal } : {}),
+      });
+      if (scopeResult && !scopeResult.ok) {
+        respond(false, undefined, scopeResult.error);
+        return;
+      }
+      const scopeChange = scopeResult?.change;
       if (patch.model !== undefined) {
         preparingOperator = captureGatewayOperatorRunAuthority({
           client,
@@ -156,33 +173,19 @@ function createSessionPatchHandler(
         })),
       });
       if (!executed.ok) {
+        await rollbackSessionPatchDeviceScope(context.nodeRegistry, scopeChange);
         respond(false, undefined, executed.error);
         return;
       }
       if (patch.archived === true) {
-        // Archiving retires the row's device occupancy on the Gateway side; the
-        // node stays occupancy authority, so only the mirrored lease is dropped.
-        for (const [index, outcome] of executed.outcomes.entries()) {
-          if (!outcome.ok) {
-            continue;
-          }
-          const target = targets[index]!;
-          const agentId = executed.preparedByIndex[index]?.targetAgentId ?? target.agentId;
-          const canonicalKey = resolveSessionStoreKey({
-            cfg: executed.cfg,
-            sessionKey: target.key,
-            storeAgentId: agentId,
-          });
-          const released =
-            releaseSessionScopeLease(canonicalKey) ?? releaseSessionScopeLease(target.key);
-          if (released) {
-            emitSessionsChanged(context, {
-              sessionKey: canonicalKey,
-              ...(agentId ? { agentId } : {}),
-              reason: "update",
-            });
-          }
-        }
+        await releaseArchivedSessionDeviceScopes({
+          context,
+          registry: context.nodeRegistry,
+          cfg: executed.cfg,
+          targets,
+          outcomes: executed.outcomes,
+          targetAgentIds: executed.preparedByIndex.map((prepared) => prepared?.targetAgentId),
+        });
       }
       if (request.many) {
         diagnostics?.scope("response");
@@ -203,8 +206,21 @@ function createSessionPatchHandler(
       }
       const outcome = executed.outcomes[0]!;
       if (!outcome.ok) {
+        await rollbackSessionPatchDeviceScope(context.nodeRegistry, scopeChange);
         respond(false, undefined, outcome.error);
         return;
+      }
+      let patchedEntry = outcome.entry;
+      if (scopeChange) {
+        // The entry write is the commit point for the switch: only now may the
+        // previous lease be released, and the response reflects the new scope.
+        patchedEntry = await commitSessionPatchDeviceScope({
+          cfg: executed.cfg,
+          registry: context.nodeRegistry,
+          change: scopeChange,
+          fallbackEntry: patchedEntry,
+          context,
+        });
       }
       const prepared = executed.preparedByIndex[0]!;
       diagnostics?.scope("response");
@@ -227,8 +243,8 @@ function createSessionPatchHandler(
           cfg: executed.cfg,
           preparedAcpMeta: acpMeta ?? null,
           entry: {
-            ...outcome.entry,
-            fastMode: prepareSessionFastModePresentation(client)(outcome.entry.fastMode),
+            ...patchedEntry,
+            fastMode: prepareSessionFastModePresentation(client)(patchedEntry.fastMode),
           },
           modelCatalog: catalog?.entries,
           modelCatalogRouteVariants: catalog?.routeVariants,

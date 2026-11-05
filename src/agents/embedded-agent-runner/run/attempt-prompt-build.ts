@@ -34,6 +34,7 @@ import {
   appendModelIdentitySystemPrompt,
   buildModelIdentityPromptLine,
 } from "../../system-prompt.js";
+import { resolveTurnDeviceScopePrompt } from "../../tools/device-scope-prompt.js";
 import { log } from "../logger.js";
 import { normalizeAssistantReplayContent } from "../replay-history.js";
 import {
@@ -577,6 +578,18 @@ export async function prepareEmbeddedAttemptPromptContext(input: {
         }
       : undefined;
   const systemPromptForHook = input.systemPromptText;
+  // Publish this turn's scope fact before building runtime facts, so a scope
+  // switch made in the previous turn is reflected without a mid-turn registry read.
+  const deviceScope =
+    input.isRawModelRun ||
+    attempt.operation === "settled-tool-finalization" ||
+    !input.capabilityToolNames.has("use_device")
+      ? undefined
+      : resolveTurnDeviceScopePrompt({
+          cfg: attempt.config ?? {},
+          sessionKey: attempt.sessionKey,
+          agentId: input.sessionAgentId,
+        });
   const runtimeFacts =
     input.isRawModelRun || attempt.operation === "settled-tool-finalization"
       ? []
@@ -586,6 +599,7 @@ export async function prepareEmbeddedAttemptPromptContext(input: {
           sessionKey: attempt.sessionKey,
           sessionId: attempt.sessionId,
           agentId: input.sessionAgentId,
+          ...(deviceScope ? { deviceScope } : {}),
           includeEmptySnapshots: input.appendOnlyRuntimeContext === true,
         });
   const contextFragments = [...fragments, ...runtimeFacts];

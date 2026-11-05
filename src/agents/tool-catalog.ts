@@ -425,6 +425,14 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     includeInOpenClawGroup: true,
   },
   {
+    id: "use_device",
+    executionLocation: "gateway",
+    description: "Switch this session's tool-execution device",
+    sectionId: "nodes",
+    profiles: [],
+    includeInOpenClawGroup: true,
+  },
+  {
     id: "mobile_ui",
     description: "Observe and control a paired Android app",
     sectionId: "nodes",
@@ -588,7 +596,7 @@ const CORE_TOOL_PROFILES: Record<ToolProfileId, ToolProfilePolicy> = {
   },
 };
 
-function buildCoreToolGroupMap() {
+function buildCoreToolGroupMap(): Record<string, string[]> {
   const sectionToolMap = new Map<string, string[]>();
   for (const tool of CORE_TOOL_DEFINITIONS) {
     if (tool.includeInSectionGroup === false) {
@@ -609,7 +617,7 @@ function buildCoreToolGroupMap() {
 }
 
 /** Built-in core tool groups keyed by group id. */
-export const CORE_TOOL_GROUPS = buildCoreToolGroupMap();
+export const CORE_TOOL_GROUPS: Record<string, string[]> = buildCoreToolGroupMap();
 
 /** Profile options shown in model/tool configuration UIs. */
 export const PROFILE_OPTIONS = [
