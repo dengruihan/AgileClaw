@@ -99,6 +99,73 @@ state. Caller cancellation emits `node.invoke.cancel` with the published
 `NodeInvokeCancelEvent` payload (`invokeId` and `nodeId`); the node host then
 terminates the matching process tree. Existing request/response commands are unchanged.
 
+## Session device occupancy
+
+A session that uses a device as its executor holds an **occupancy lease**. The
+node host is the sole authority for that lease: it decides who holds the device,
+records the holder, and rejects every mismatched call. The Gateway only relays
+results and surfaces the rejection text.
+
+The holder is the root session (`sessionKey`, `sessionId`, optional `agentId`)
+plus the run and turn IDs of the acquiring turn. Exactly one holder exists at a
+time; the whole session tree routes through the root session identity.
+
+The invoke envelope's `sessionKey` is authoritative. A command that names a
+session in its parameters must match the envelope, and a session can only
+acquire, renew, release, or revoke its own lease. Operator invokes carry no
+envelope session identity. Because lease mutations change who controls the
+device, the Gateway requires admin scope for them on the direct `node.invoke`
+RPC; an agent session acquires its lease through Gateway device routing, not by
+calling the command itself.
+
+Node commands, all on the existing `node.invoke` channel:
+
+| Command                | Params                                                                         | Success payload                        |
+| ---------------------- | ------------------------------------------------------------------------------ | -------------------------------------- |
+| `occupancy.acquire.v1` | `sessionKey`, `sessionId`, `runId`, `leaseToken`, optional `agentId`, `turnId` | `holder`, `leaseToken`, `acquiredAtMs` |
+| `occupancy.renew.v1`   | `sessionKey`, `leaseToken`                                                     | `holder` with `renewedAtMs`            |
+| `occupancy.release.v1` | `sessionKey`, `leaseToken`                                                     | `released` (idempotent)                |
+| `occupancy.status.v1`  | none                                                                           | `occupied`, optional `holder`          |
+| `occupancy.revoke.v1`  | `sessionKey` and `leaseToken` for a session call; none for an operator call    | `revoked`, `holder`, `killedProcesses` |
+
+Rejections carry a structured code:
+
+- `DEVICE_OCCUPIED` names the current holder (`sessionKey`, `sessionId`, `agentId`, acquire time) so the rejected session can report who owns the device.
+- `LEASE_TOKEN_MISMATCH` means the caller is the holder session but presented a stale token, usually because a newer turn re-acquired the lease.
+- `DEVICE_UNOCCUPIED` means no session holds the lease.
+- `INVALID_REQUEST` covers a claimed session that does not match the invoking session and a missing required identity.
+
+Lease tokens never appear in `occupancy.status.v1`, in status events, or in the
+node's durable occupancy row. The row under
+`openclaw.sqlite#config_machine_state` (`nodeHost.occupancy.v1`) mirrors the
+holder identity for diagnostics and is cleared on node boot. A session reading
+`occupancy.status.v1` sees the holder identity only for its own lease; other
+sessions learn only that the device is occupied, and an operator invoke sees the
+full status.
+
+### Per-call admission
+
+While a lease is held, every execution command is admitted per call: the invoke
+must carry the holder's `sessionKey` in the invoke's session field and the
+current `leaseToken` inside its parameters. This covers `system.run`, `system.which`,
+file and directory commands, browser proxy commands, and computer control. The
+`occupancy.*` lifecycle commands and the operator approval commands
+(`system.execApprovals.get` / `system.execApprovals.set`) do not require the
+lease: approval policy governs the device, so the Gateway's approvals UI and CLI
+stay usable while a session holds it.
+
+Exec and file commands keep running in parallel. Interactive control commands
+(`browser.proxy*`, `screen.snapshot`, `computer.act`, `worker.desktop.*`)
+serialize through one FIFO gate, because they share one browser or desktop.
+
+### Lease lifecycle
+
+- **Turn start** acquires the lease automatically; a newer turn of the same root session re-acquires and invalidates the previous token.
+- **Disconnect** tree-kills the holder's attached processes, waits for their process trees to be extinct, and clears occupancy.
+- **Node exec is foreground.** A lease-tagged exec holds the lease until its whole process tree is extinct: a command that backgrounds a child (`sh -c 'sleep 30 &'`) has that child killed before the invoke settles. Detached spawn is not supported yet; the owner's detached-process bookkeeping is a tested extension path for a future detached command.
+- **Revoke** force-clears occupancy and kills the holder's processes. A session-dispatched revoke names its session (envelope or parameters) and must present the current token; an operator invoke without session identity can force-clear a stuck lease.
+- **Node restart** clears occupancy, because the holder's processes died with the previous node process.
+
 ## Codex sessions on a node
 
 A session host using the Codex runtime also needs the `codex` plugin installed and

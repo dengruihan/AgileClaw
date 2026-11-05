@@ -12,6 +12,7 @@ mod host;
 mod identity;
 mod lifecycle;
 mod node;
+mod occupancy;
 mod reconnect;
 mod runtime;
 mod sidecar_handshake;
@@ -29,6 +30,12 @@ pub use node::{
     ClientError, ConnectAuth, ConnectChallenge, DeviceProof, Event, EventSubscription,
     InvocationResult, NodeClient, NodeClientConfig, NodeConnectOptions, NodeInvocation,
     NodeProtocolVersion, NodeSession, NodeSessionEvent,
+};
+pub use occupancy::{
+    occupancy_commands, NodeOccupancy, OccupancyAcquireParams, OccupancyError, OccupancyHolder,
+    OccupancyLeaseTokenParams, OccupancyRevokeParams, OccupancyStatusParams,
+    OCCUPANCY_ACQUIRE_COMMAND, OCCUPANCY_RELEASE_COMMAND, OCCUPANCY_RENEW_COMMAND,
+    OCCUPANCY_REVOKE_COMMAND, OCCUPANCY_STATUS_COMMAND,
 };
 pub use reconnect::{
     DevicePairingReason, DevicePairingRequest, ReconnectAction, ReconnectPause, ReconnectPolicy,

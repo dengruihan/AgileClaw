@@ -134,6 +134,41 @@ and optionally `--service`. This durably removes the saved allowlist and
 replaces the service's `--commands` arguments. Do not combine `--all-commands`
 with `--commands`.
 
+### Executor profile
+
+The **executor** profile turns a node into a tool executor: it runs commands for
+one session at a time and hosts no sessions itself. It reuses the node's existing
+pairing, authentication, and exec approvals; there is no separate enrollment.
+
+The profile is a restricted command surface plus the occupancy lease:
+
+- `system.run.prepare`, `system.run`, `system.which`, and the exec approval read/write commands.
+- File and directory commands: `fs.listDir`, `terminal.upload`, and the File Transfer plugin's `file.stat`, `file.fetch`, `file.create`, `file.write`, `dir.list`, and `dir.fetch` when that plugin is enabled.
+- Browser and computer control: `browser.proxy*`, `screen.snapshot`, and `computer.act` when those capabilities are available.
+- `occupancy.acquire.v1`, `occupancy.renew.v1`, `occupancy.release.v1`, `occupancy.status.v1`, and `occupancy.revoke.v1`.
+
+The node advertises the `occupancy` capability alongside those commands. Worker
+session hosting, worker bundle installation, skill publication, plugin-tool
+publication, and MCP servers stay off, exactly as with any explicit command
+allowlist. Exec runs foreground on the node: an exec invoke holds the lease until
+its process tree is extinct, including any descendants it tried to background,
+and `process` follow-ups remain a Gateway-side surface.
+
+Select the profile with `profile: "executor"` in the node-host runtime options
+(the value persists in node-host state, so later starts keep it), or run the same
+surface manually by listing the commands above with `--commands`. The Gateway
+pairing approval shows the declared commands, and
+[Gateway command policy](/nodes/command-policy) still applies to every
+invocation. See [Session device occupancy](/nodes/node-exec#session-device-occupancy)
+for the lease rules that make the executor exclusive.
+
+The persisted profile is one-way until it is cleared: `openclaw node run
+--all-commands` (or `openclaw node install --force --all-commands`) clears both
+the saved allowlist and the saved executor profile and advertises the full
+default surface again. Without a profile, `--commands` remains the operator-facing
+way to publish the executor surface, and a node whose allowlist advertises the
+`occupancy.*` commands enforces the lease the same way.
+
 ### Start a node host (service)
 
 ```bash

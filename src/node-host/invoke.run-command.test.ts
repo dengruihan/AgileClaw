@@ -221,4 +221,30 @@ describe("runCommand", () => {
       expect(await runCommandError(enoent(message), "/unreadable")).toBe(message);
     });
   });
+
+  it.skipIf(process.platform === "win32")(
+    "kills backgrounded descendants before the invoke settles",
+    async () => {
+      const result = await runCommand(
+        ["/bin/sh", "-c", "sleep 30 >/dev/null 2>&1 & echo child=$!"],
+        undefined,
+        undefined,
+        5_000,
+      );
+      expect(result).toMatchObject({ success: true, timedOut: false });
+      const childPid = Number(/child=(\d+)/u.exec(result.stdout)?.[1]);
+      expect(Number.isSafeInteger(childPid) && childPid > 0).toBe(true);
+      // The lease settles when the invoke returns, so no descendant may outlive it.
+      expect(isProcessAlive(childPid)).toBe(false);
+    },
+  );
 });
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}

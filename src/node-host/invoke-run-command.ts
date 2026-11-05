@@ -52,6 +52,9 @@ export async function runCommand(
       baseEnv: env,
       cwd,
       killProcessTree: true,
+      // Node exec is foreground: descendants a command backgrounds must not
+      // outlive the invoke, or they would escape the occupancy lease.
+      requireProcessTreeExtinction: true,
       maxCombinedOutputBytes: OUTPUT_CAP,
       maxOutputBytes: OUTPUT_CAP,
       outputCapture: "head",
