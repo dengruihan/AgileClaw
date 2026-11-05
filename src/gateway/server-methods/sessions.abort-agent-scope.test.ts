@@ -85,6 +85,11 @@ import {
   setActiveEmbeddedRun,
 } from "../../agents/embedded-agent-runner/runs.js";
 import { createSessionRowProjectionFixture } from "../session-row-projection.test-support.js";
+import {
+  clearAllSessionScopeLeasesForTest,
+  recordSessionScopeLease,
+  sessionScopeLeaseHeld,
+} from "../session-scope-lease.js";
 import { callSessions } from "./sessions.abort-agent-scope.request.test-support.js";
 import {
   createActiveRun,
@@ -147,6 +152,7 @@ describe("sessions.abort agent scope", () => {
       projection.dispose();
     }
     projections.clear();
+    clearAllSessionScopeLeasesForTest();
     await resetSubagentRegistryForTests({ persist: false });
   });
 
@@ -875,5 +881,74 @@ describe("sessions.abort agent scope", () => {
 
       expectRespondErrorMessage(respond, 'Unknown agent id "typo"');
     }
+  });
+
+  it("releases a held device lease when Stop arrives while the scoped session is idle", async () => {
+    const sessionKey = "agent:main:dashboard:device-scoped";
+    loadSessionEntryMock.mockImplementationOnce((key: string) => ({
+      canonicalKey: key,
+      entry: { sessionId: "scoped-session", scopeDeviceId: "device-a" },
+    }));
+    mockChatSuccess(chatAbortMock, { ok: true, aborted: false, runIds: [] });
+    recordSessionScopeLease({
+      rootSessionKey: sessionKey,
+      deviceId: "device-a",
+      holder: "conn-device",
+      leaseToken: "token-idle",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      agentId: "main",
+    });
+    const context = createContext({
+      extra: { getSessionEventSubscriberConnIds: () => new Set<string>() },
+    });
+
+    const respond = await callSessions(
+      "sessions.abort",
+      { key: sessionKey },
+      { context, reqId: "req-idle-scope-stop" },
+    );
+
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      { ok: true, abortedRunId: null, status: "no-active-run" },
+      undefined,
+      undefined,
+    );
+    expect(sessionScopeLeaseHeld(sessionKey)).toBe(false);
+  });
+
+  it("keeps gateway-scoped sessions on the legacy stop path without touching the lease mirror", async () => {
+    const sessionKey = "agent:main:dashboard:gateway-hosted";
+    loadSessionEntryMock.mockImplementationOnce((key: string) => ({
+      canonicalKey: key,
+      entry: { sessionId: "gateway-session" },
+    }));
+    mockChatSuccess(chatAbortMock, { ok: true, aborted: false, runIds: [] });
+    const otherRoot = "agent:work:dashboard:device-scoped";
+    recordSessionScopeLease({
+      rootSessionKey: otherRoot,
+      deviceId: "device-b",
+      holder: "conn-device",
+      leaseToken: "token-other",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      agentId: "work",
+    });
+    const context = createContext({
+      extra: { getSessionEventSubscriberConnIds: () => new Set<string>() },
+    });
+
+    const respond = await callSessions(
+      "sessions.abort",
+      { key: sessionKey },
+      { context, reqId: "req-idle-legacy-stop" },
+    );
+
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      { ok: true, abortedRunId: null, status: "no-active-run" },
+      undefined,
+      undefined,
+    );
+    expect(sessionScopeLeaseHeld(otherRoot)).toBe(true);
   });
 });

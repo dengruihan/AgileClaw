@@ -17,6 +17,11 @@ import { createEmptyPluginRegistry } from "../plugins/registry-empty.js";
 import { resetPluginRuntimeStateForTest, setActivePluginRegistry } from "../plugins/runtime.js";
 import { withStateDirEnv } from "../test-helpers/state-dir-env.js";
 import { projectSessionActivitySummary } from "./session-activity-summary-state.js";
+import {
+  clearAllSessionScopeLeasesForTest,
+  recordSessionScopeLease,
+  releaseSessionScopeLease,
+} from "./session-scope-lease.js";
 import { buildSessionListRowMetadataContext } from "./session-utils-projection.js";
 import {
   buildGatewaySessionRow,
@@ -441,6 +446,7 @@ afterEach(() => {
   clearAgentRunContext(LIVE_RUN);
   resetConfigRuntimeState();
   resetPluginRuntimeStateForTest();
+  clearAllSessionScopeLeasesForTest();
   vi.restoreAllMocks();
 });
 
@@ -580,5 +586,46 @@ test("preserves complete base rows across time and caller presentation fixtures"
       }
       expect(fixture.entry).toStrictEqual(originalEntry);
     }
+  });
+});
+
+test("projects a device-scoped row and the held-lease stop affordance", async () => {
+  await withStateDirEnv("openclaw-row-scope-", async () => {
+    const cfg = config();
+    setRuntimeConfigSnapshot(cfg);
+    setActivePluginRegistry(createEmptyPluginRegistry());
+    const key = "agent:main:scoped";
+    const entry: InternalSessionEntry = {
+      sessionId: "scoped-session",
+      updatedAt: START,
+      scopeDeviceId: "device-a",
+    };
+    const rowParams = {
+      cfg,
+      agentId: "main",
+      key,
+      entry,
+      store: { [key]: entry },
+      storePath: "/tmp/openclaw-sessions.json",
+      now: START,
+      skipTranscriptUsageFallback: true,
+      lightweightListRow: true,
+    };
+
+    const gatewayScoped = buildGatewaySessionRow(rowParams);
+    expect(gatewayScoped.scopeDeviceId).toBe("device-a");
+    expect(gatewayScoped.scopeLeaseHeld).toBeUndefined();
+
+    recordSessionScopeLease({
+      rootSessionKey: key,
+      deviceId: "device-a",
+      holder: "conn-1",
+      leaseToken: "token-1",
+      expiresAt: START + 60_000,
+    });
+    expect(buildGatewaySessionRow(rowParams).scopeLeaseHeld).toBe(true);
+
+    releaseSessionScopeLease(key);
+    expect(buildGatewaySessionRow(rowParams).scopeLeaseHeld).toBeUndefined();
   });
 });

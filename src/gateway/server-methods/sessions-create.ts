@@ -18,6 +18,7 @@ import { acceptGatewayDeviceSourceAuthority } from "../device-revocation.js";
 import { ADMIN_SCOPE, authorizeOperatorScopesForRequiredScope } from "../method-scopes.js";
 import { ModelAccountConnectAuthorityError } from "../model-account-connect.js";
 import { captureGatewayOperatorRunAuthority } from "../operator-run-authority.js";
+import { resolveCreatingClientScopeDeviceId } from "../session-create-device-scope.js";
 import { startSessionCreateDiagnostics } from "../session-create-diagnostics.js";
 import { buildDashboardSessionKey } from "../session-create-key.js";
 import { resolveSessionCreateCatalogSelectionError } from "../session-create-model-selection.js";
@@ -472,6 +473,11 @@ export const sessionCreateHandlers: GatewayRequestHandlers = {
     if (!authority.ensureActive()) {
       return;
     }
+    const scopeDeviceId = await resolveCreatingClientScopeDeviceId(client);
+    // Delegated authority can close while the pairing record resolves.
+    if (!authority.ensureActive()) {
+      return;
+    }
     const createParams: Parameters<typeof createGatewaySession>[0] = {
       cfg,
       getCurrentConfig,
@@ -482,6 +488,9 @@ export const sessionCreateHandlers: GatewayRequestHandlers = {
       label: p.label,
       displayName: preparedDisplayName,
       category: p.category,
+      // Server-verified device identity of this connection; parented rows
+      // inherit their tree's scope instead, inside the creation owner.
+      ...(scopeDeviceId ? { scopeDeviceId } : {}),
       ...(catalogTarget
         ? { catalogTarget: catalogTarget.target }
         : { model: requestedModel, agentRuntime: p.agentRuntime }),

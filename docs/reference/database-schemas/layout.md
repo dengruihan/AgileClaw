@@ -60,6 +60,42 @@ Payload version 1 records the recap text, generation time, session ID and lifecy
 
 The latest recap survives restart and archival. Deleting the session removes it; reset or replacement makes the prior lifecycle's recap unusable. Incognito sessions do not persist or generate this cache. A shared, bounded Gateway queue deduplicates generation across viewers, retains the previous recap on failure, and uses only the configured utility route. Disabling that route stops new generation. Removing or ignoring the optional field is a rollback path that leaves session and transcript data intact; removing the feature does not require reversing a database migration.
 
+### Session device scope
+
+Session scope marks which paired device a session tree belongs to. It is one
+optional `scopeDeviceId` string in the existing `session_nodes.entry_json`
+session metadata — the same approved-persistence shape as `activitySummary` — so
+it adds no SQL table, column, or database schema-version change, needs no
+backfill, and needs no Doctor migration. Absent means gateway-hosted. Scope is
+independent of the legacy `execHost`/`execNode` binding, which is unchanged for
+sessions without a scope.
+
+Scope is node-creation metadata: it is stamped from the verified paired device
+of a device-token-authenticated creating client, inherited explicitly by forks
+(from the parent, clearing any stale target value), inherited by spawned
+children and subagents so a tree shares one device, never set on incognito
+children, and pinned against later merges — compaction, resume, and reset
+patches cannot clear it. `sessions.delete` and archiving release the tree's
+device lease; Stop (`sessions.abort`) releases it and cancels the session's
+detached background processes. The device node is the authority for occupancy:
+the Gateway keeps only a process-local in-memory lease cache (holder, token,
+expiry) keyed by the root session, cleared on holder disconnect or device
+release, and projected as the `scopeLeaseHeld` session-row fact so Stop stays
+available while a lease is held with no active run. The cache is never written
+to `state_leases` or any durable store, and an absent cache entry never proves
+a release.
+
+Downgrade behavior follows the optional-entry rule: current and
+`v2026.9.4`-metadata serializers preserve unknown optional fields, so an older
+build only drops `scopeDeviceId` if it rewrites the entry, silently returning
+that session to gateway scope (the in-memory lease cache and row fields simply
+disappear with the older build). Removing or ignoring the field is a rollback
+path that leaves session and transcript data intact. If SQL filtering by device
+is ever needed, the migration path is a same-version additive nullable
+`scope_device_id` column on `session_nodes` (see the
+[same-version contract](/reference/database-schemas/versioning#versioning-contract)),
+mirroring the `owner_actor_*` precedent; nothing in this design requires it.
+
 ### Transcript search row ownership
 
 In agent schema 23, `session_transcript_fts_rows` maps each FTS `rowid` to its

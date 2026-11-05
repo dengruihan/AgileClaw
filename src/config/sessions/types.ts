@@ -489,6 +489,14 @@ type SessionEntryCore = SessionRestartRecoveryState &
     execNode?: string;
     /** Working directory interpreted only by the bound exec node. */
     execCwd?: string;
+    /**
+     * Device whose scope this session belongs to; absent means gateway-hosted.
+     * Independent of the legacy execHost/execNode binding: stamped once from the
+     * verified creating client (create/fork/spawn), preserved across compaction,
+     * resume, and reset. The device node owns occupancy; the Gateway keeps only
+     * an in-memory lease cache.
+     */
+    scopeDeviceId?: string;
     responseUsage?: "on" | "off" | "tokens" | "full";
     providerOverride?: string;
     modelOverride?: string;
@@ -803,6 +811,12 @@ function mergeSessionEntryWithPolicy(
   }
   if (existing.forkSource !== undefined) {
     next.forkSource = existing.forkSource;
+  }
+  // Device scope survives every later merge. Only a creation patch that names the
+  // field may set or clear it, so a fork transfers the parent's scope explicitly
+  // (including clearing a stale value when the parent is gateway-hosted).
+  if (existing.scopeDeviceId !== undefined && !Object.hasOwn(patch, "scopeDeviceId")) {
+    next.scopeDeviceId = existing.scopeDeviceId;
   }
 
   // Guard against stale provider carry-over when callers patch runtime model

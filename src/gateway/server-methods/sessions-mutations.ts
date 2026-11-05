@@ -29,6 +29,7 @@ import {
   projectSessionActor,
 } from "../session-identity-projection.js";
 import { resolveRequestedSessionAgentId } from "../session-request-agent.js";
+import { releaseSessionScopeLease } from "../session-scope-lease.js";
 import { prepareSessionMutationFacts } from "../session-sharing-preparation.js";
 import {
   authorizeIncognitoSessionTarget,
@@ -36,7 +37,10 @@ import {
   resolveSessionSharingTarget,
   SessionMutationAuthorizationChangedError,
 } from "../session-sharing.js";
-import { resolveStoredSessionKeyForAgentStore } from "../session-store-key.js";
+import {
+  resolveSessionStoreKey,
+  resolveStoredSessionKeyForAgentStore,
+} from "../session-store-key.js";
 import type { SessionActorProfileIdentity } from "../session-utils-contracts.js";
 import { projectSessionPatchResult } from "../session-utils-model.js";
 import { gatewayClientSessionCreator } from "./gateway-client-identity.js";
@@ -154,6 +158,31 @@ function createSessionPatchHandler(
       if (!executed.ok) {
         respond(false, undefined, executed.error);
         return;
+      }
+      if (patch.archived === true) {
+        // Archiving retires the row's device occupancy on the Gateway side; the
+        // node stays occupancy authority, so only the mirrored lease is dropped.
+        for (const [index, outcome] of executed.outcomes.entries()) {
+          if (!outcome.ok) {
+            continue;
+          }
+          const target = targets[index]!;
+          const agentId = executed.preparedByIndex[index]?.targetAgentId ?? target.agentId;
+          const canonicalKey = resolveSessionStoreKey({
+            cfg: executed.cfg,
+            sessionKey: target.key,
+            storeAgentId: agentId,
+          });
+          const released =
+            releaseSessionScopeLease(canonicalKey) ?? releaseSessionScopeLease(target.key);
+          if (released) {
+            emitSessionsChanged(context, {
+              sessionKey: canonicalKey,
+              ...(agentId ? { agentId } : {}),
+              reason: "update",
+            });
+          }
+        }
       }
       if (request.many) {
         diagnostics?.scope("response");

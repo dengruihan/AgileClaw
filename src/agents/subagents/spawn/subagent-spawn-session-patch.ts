@@ -247,6 +247,11 @@ export async function createInitialSubagentSession(params: {
           ...childSessionIdentity,
           // Stamp after all request patches so model input cannot create a grant.
           ...parentLineage.receipt,
+          // Subagents share the parent session tree's device scope and lease
+          // lineage; an incognito child never carries a durable scope.
+          ...(parentEntry?.scopeDeviceId && !params.incognito
+            ? { scopeDeviceId: parentEntry.scopeDeviceId }
+            : {}),
           ...(parentEntry?.skillLibrarySelections
             ? {
                 skillLibrarySelections: parentEntry.skillLibrarySelections.map((selection) => ({

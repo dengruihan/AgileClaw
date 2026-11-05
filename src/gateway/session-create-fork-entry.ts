@@ -31,5 +31,8 @@ export function buildForkedGatewaySessionEntry(
     cliSessionBindings: forkCliSessionBindings(parent.entry, cliBackendSupportsSessionFork),
     cliSessionIds: undefined,
     claudeCliSessionId: undefined,
+    // The fork copies the parent's device scope explicitly (the creating client's
+    // device never re-scopes it) while receiving a fresh lease of its own.
+    scopeDeviceId: parent.entry.scopeDeviceId,
   };
 }

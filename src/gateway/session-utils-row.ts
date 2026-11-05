@@ -55,6 +55,7 @@ import {
 import { isSessionPermissionChangePending } from "./session-permission-change.js";
 import { projectSessionProviderReview } from "./session-provider-review-projection.js";
 import { readSessionRowModelFacts } from "./session-row-model-facts.js";
+import { sessionScopeLeaseHeld } from "./session-scope-lease.js";
 import { buildSessionSwarmSummary } from "./session-swarm-summary.js";
 import { readSessionTitleFieldsFromTranscript as readScopedSessionTitleFieldsFromTranscript } from "./session-transcript-title-reader.js";
 import type {
@@ -473,6 +474,7 @@ export function materializeSessionRow(input: ReturnType<typeof readSessionRowInp
     ...(input.repository ? { repository: input.repository } : {}),
     execNode: entry?.execNode,
     execCwd: entry?.execCwd,
+    ...(entry?.scopeDeviceId ? { scopeDeviceId: entry.scopeDeviceId } : {}),
     forkedFromParent: sessionEntryForkedFromParent(entry) ? true : undefined,
     spawnDepth: entry?.spawnDepth,
     subagentRole: entry?.subagentRole,
@@ -707,5 +709,8 @@ export function presentSessionRow(
   row.childSessions = children?.length ? children : undefined;
   row.activeModelProvider = options.activeModel?.provider;
   row.activeModel = options.activeModel?.model;
+  if (sessionScopeLeaseHeld(row.key, now)) {
+    row.scopeLeaseHeld = true;
+  }
   return row;
 }

@@ -35,6 +35,7 @@ import {
   emitGatewaySessionEndPluginHook,
   emitSessionUnboundLifecycleEvent,
 } from "../session-reset-service.js";
+import { releaseSessionScopeLease } from "../session-scope-lease.js";
 import { resolveGatewaySessionStoreTargetInWorker } from "../session-utils-store-worker.js";
 import { loadGatewaySessionEntryReadOnly, loadSessionEntry } from "../session-utils.js";
 import { prepareSessionWorkerPlacementRetirement } from "../worker-environments/session-placement-lifecycle.js";
@@ -324,6 +325,9 @@ export async function deleteGatewaySession({
             // this fence opens, so a same-key successor cannot be mistaken for it.
             const deletedSessionKey = target.canonicalKey ?? key;
             handleSessionStateSessionDeleted(deletedSessionKey, requestedAgentId);
+            // A deleted root releases its mirrored device lease; the node keeps
+            // occupancy authority, so child trees keep their own leases.
+            releaseSessionScopeLease(deletedSessionKey);
             worktreePreserved = await removeSessionWorktree({
               id: deletedWorktreeId,
               sessionKey: deletedSessionKey,

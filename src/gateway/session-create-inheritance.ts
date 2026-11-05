@@ -30,7 +30,7 @@ export function inheritSessionCreateParentFields(params: {
   existing: SessionEntry | undefined;
   overrides: Pick<
     CreateGatewaySessionParams,
-    "catalogTarget" | "model" | "toolOverrides" | "fastMode"
+    "catalogTarget" | "model" | "toolOverrides" | "fastMode" | "scopeDeviceId"
   >;
 }): Partial<InternalSessionEntry> {
   const { parent, existing, overrides } = params;
@@ -45,9 +45,17 @@ export function inheritSessionCreateParentFields(params: {
     // Explicit choices have already been validated by the canonical patch owner.
     delete inherited.fastMode;
   }
+  const creationScopeDeviceId = parent
+    ? parent.scopeDeviceId
+    : normalizeOptionalString(overrides.scopeDeviceId);
   return {
     ...inherited,
     ...(!existing && parent?.conversationLink ? { conversationLink: parent.conversationLink } : {}),
+    // Scope is node-creation metadata: only a genuinely new row takes one, from
+    // its parent's tree or else the creating client's verified device. Parented
+    // rows join the tree's scope so the creating client's own device never wins,
+    // and adoption never restamps.
+    ...(!existing && creationScopeDeviceId ? { scopeDeviceId: creationScopeDeviceId } : {}),
   };
 }
 

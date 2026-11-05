@@ -44,6 +44,7 @@ import {
   tryResolveSessionCompatibilityOwnerAgentId,
 } from "../session-request-agent.js";
 import { getSessionRowProjection } from "../session-row-projection-access.js";
+import { releaseScopeLeaseOnStop } from "../session-scope-stop-release.js";
 import {
   resolveSessionStoreKey,
   resolveStoredSessionKeyForAgentStore,
@@ -402,6 +403,10 @@ export const sessionAbortHandlers: GatewayRequestHandlers = {
           },
         },
       });
+    // Stop is the only manual release path for a device-scoped session's lease,
+    // and it must work while idle too: detached background processes can hold the
+    // lease after the last run ends. See session-scope-stop-release.ts.
+    let releasedScopeLease: boolean;
     // Controller-backed runs must keep the requester checks and lifecycle cleanup below.
     if (embeddedRun && !activeRun) {
       let aborted = false;
@@ -431,7 +436,8 @@ export const sessionAbortHandlers: GatewayRequestHandlers = {
           status: aborted ? "aborted" : "no-active-run",
         });
       }
-      if (aborted) {
+      releasedScopeLease = releaseScopeLeaseOnStop(sessionEntry, canonicalKey, key, targetAgentId);
+      if (aborted || releasedScopeLease) {
         emitSessionsChanged(context, {
           sessionKey: canonicalKey,
           agentId: targetAgentId,
@@ -593,6 +599,15 @@ export const sessionAbortHandlers: GatewayRequestHandlers = {
         abortWarning = result.value.warning;
       }
       await settleAbortPersistence(result.ok ? result.value.runIds : []);
+      releasedScopeLease =
+        result.ok && releaseScopeLeaseOnStop(sessionEntry, canonicalKey, key, targetAgentId);
+      if (releasedScopeLease) {
+        emitSessionsChanged(context, {
+          sessionKey: canonicalKey,
+          agentId: targetAgentId,
+          reason: "abort",
+        });
+      }
       if (!result.ok) {
         respond(false, undefined, result.error);
       } else {
@@ -683,6 +698,7 @@ export const sessionAbortHandlers: GatewayRequestHandlers = {
       }
       return;
     }
+    releasedScopeLease = releaseScopeLeaseOnStop(sessionEntry, canonicalKey, key, targetAgentId);
     respond(
       true,
       {
@@ -694,7 +710,7 @@ export const sessionAbortHandlers: GatewayRequestHandlers = {
       undefined,
       responseMeta,
     );
-    if (aborted) {
+    if (aborted || releasedScopeLease) {
       emitSessionsChanged(context, {
         sessionKey: canonicalKey,
         agentId: targetAgentId,

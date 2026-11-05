@@ -156,6 +156,11 @@ export type CreateGatewaySessionParams = {
   execCwd?: string;
   /** Clear a prior node binding when a new Gateway-host session replaces it. */
   clearExecBinding?: boolean;
+  /**
+   * Verified paired-device identity of the creating client, stamped once on a
+   * genuinely new row; absent means gateway scope. Never a wire parameter.
+   */
+  scopeDeviceId?: string;
   clearSpawnedCwd?: boolean;
   fork?: boolean;
   forkFrom?: "last-completed";
