@@ -67,6 +67,45 @@ export const DeviceTokenRevokeParamsSchema = closedObject({
   role: NonEmptyString,
 });
 
+/**
+ * Enables a paired node device for execution. Devices pair disabled by
+ * default; enabling admits the device's pairing-approved command surface.
+ */
+export const NodeDeviceEnableParamsSchema = closedObject({
+  nodeId: NonEmptyString,
+});
+
+/**
+ * Disables a paired node device. Disabled devices stay visible in the
+ * inventory but never execute: node clients are invalidated, in-flight work
+ * fails its pairing-currency checks, and workers are reconciled away.
+ */
+export const NodeDeviceDisableParamsSchema = closedObject({
+  nodeId: NonEmptyString,
+});
+
+const DeviceCommandPolicyListSchema = Type.Array(NonEmptyString, {
+  minItems: 1,
+  maxItems: 256,
+  uniqueItems: true,
+});
+
+/**
+ * Replaces one device's per-device command policy. `commands.allow` selects
+ * within the node-declared, pairing-approved surface; `commands.deny` removes
+ * commands from it. Neither overrides global gateway.nodes.commands policy.
+ * Omitting `commands` or passing an empty object clears the policy.
+ */
+export const NodeDeviceUpdateParamsSchema = closedObject({
+  nodeId: NonEmptyString,
+  commands: Type.Optional(
+    closedObject({
+      allow: Type.Optional(DeviceCommandPolicyListSchema),
+      deny: Type.Optional(DeviceCommandPolicyListSchema),
+    }),
+  ),
+});
+
 export const ScopeUpgradeRequestSchema = closedObject({
   scopes: Type.Array(NonEmptyString, { minItems: 1, maxItems: 8, uniqueItems: true }),
 });
@@ -233,6 +272,9 @@ export type DevicePairRenameParams = Static<typeof DevicePairRenameParamsSchema>
 export type DeviceTokenRotateParams = Static<typeof DeviceTokenRotateParamsSchema>;
 export type DeviceTokenRotateResult = Static<typeof DeviceTokenRotateResultSchema>;
 export type DeviceTokenRevokeParams = Static<typeof DeviceTokenRevokeParamsSchema>;
+export type NodeDeviceEnableParams = Static<typeof NodeDeviceEnableParamsSchema>;
+export type NodeDeviceDisableParams = Static<typeof NodeDeviceDisableParamsSchema>;
+export type NodeDeviceUpdateParams = Static<typeof NodeDeviceUpdateParamsSchema>;
 export type ScopeUpgradeRequest = Static<typeof ScopeUpgradeRequestSchema>;
 export type ScopeUpgradeWait = Static<typeof ScopeUpgradeWaitSchema>;
 export type ScopeUpgradeRegistration = Static<typeof ScopeUpgradeRegistrationSchema>;

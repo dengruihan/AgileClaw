@@ -96,6 +96,10 @@ function buildApprovedPairedDevice(params: {
     // Operator-assigned label is owner-side state; device repair or role
     // re-approval must not silently drop it.
     ...(params.existing?.operatorLabel ? { operatorLabel: params.existing.operatorLabel } : {}),
+    // Registry state is owner-side: a brand-new pairing is denied by default,
+    // while repairs and role re-approvals keep the operator's current choice.
+    enabled: params.existing ? (params.existing.enabled ?? true) : false,
+    ...(params.existing?.commandPolicy ? { commandPolicy: params.existing.commandPolicy } : {}),
     createdAtMs: params.existing?.createdAtMs ?? params.now,
     approvedAtMs: params.now,
     lastSeenAtMs: params.accessMetadata?.lastSeenAtMs ?? params.existing?.lastSeenAtMs,

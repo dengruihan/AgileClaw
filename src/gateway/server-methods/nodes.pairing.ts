@@ -8,6 +8,12 @@ import {
   validateNodePairRemoveParams,
   validateNodeRenameParams,
 } from "../../../packages/gateway-protocol/src/index.js";
+import { lazyCompile } from "../../../packages/gateway-protocol/src/protocol-validator.js";
+import {
+  NodeDeviceDisableParamsSchema,
+  NodeDeviceEnableParamsSchema,
+  NodeDeviceUpdateParamsSchema,
+} from "../../../packages/gateway-protocol/src/schema/devices.js";
 import { captureNodePairingState } from "../../infra/device-pairing-node-state.js";
 import {
   approveNodePairing,
@@ -15,6 +21,8 @@ import {
   listNodePairing,
   rejectNodePairing,
   renamePairedNode,
+  setPairedNodeDeviceCommandPolicy,
+  setPairedNodeDeviceEnabled,
 } from "../../infra/device-pairing-node.js";
 import {
   getPairedDevice,
@@ -119,6 +127,33 @@ function emitNodeRoleRemovalSecurityEvent(params: {
     },
   });
 }
+
+function emitNodeDeviceRegistrySecurityEvent(params: {
+  authz: DeviceManagementAuthz;
+  nodeId: string;
+  controlId: "node.device.enable" | "node.device.disable" | "node.device.update";
+  outcome: "success" | "denied";
+  reason?: string;
+  attributes?: Record<string, string | number | boolean>;
+}): void {
+  emitDeviceManagementSecurityEvent({
+    action:
+      params.outcome === "denied" ? "device.registry.update_denied" : "device.registry.updated",
+    outcome: params.outcome,
+    severity: "medium",
+    authz: params.authz,
+    targetDeviceId: params.nodeId,
+    policyId: "gateway.device-pairing",
+    decision: params.outcome === "denied" ? "deny" : "allow",
+    controlId: params.controlId,
+    ...(params.reason ? { reason: params.reason } : {}),
+    ...(params.attributes ? { attributes: params.attributes } : {}),
+  });
+}
+
+const validateNodeDeviceEnableParams = lazyCompile(NodeDeviceEnableParamsSchema);
+const validateNodeDeviceDisableParams = lazyCompile(NodeDeviceDisableParamsSchema);
+const validateNodeDeviceUpdateParams = lazyCompile(NodeDeviceUpdateParamsSchema);
 
 async function removePairedDeviceBackedNode(params: {
   nodeId: string;
@@ -262,11 +297,13 @@ export const nodePairingHandlers: GatewayRequestHandlers = {
         pairingStateBeforeApproval?.identity.key === approved.pairingIdentity &&
         sessionBeforeApproval.pairingIdentity === approved.pairingIdentity &&
         approved.previousPairingGeneration === previousGenerationKey &&
-        sessionBeforeApproval.pairingGeneration === previousGenerationKey,
+        sessionBeforeApproval.pairingGeneration === previousGenerationKey &&
+        approved.nextPairingGeneration !== undefined,
       );
       const updatedNode =
         liveSessionOwnsPreviousPairingState &&
         sessionBeforeApproval &&
+        approved.nextPairingGeneration &&
         persistedApprovedState?.identity.key === approved.pairingIdentity &&
         persistedApprovedState.generation?.key === approved.nextPairingGeneration
           ? context.nodeRegistry.updateSurface(
@@ -425,6 +462,168 @@ export const nodePairingHandlers: GatewayRequestHandlers = {
         return;
       }
       respond(true, { nodeId: updated.nodeId, displayName: updated.displayName }, undefined);
+    });
+  },
+  // Device-registry transitions (settings: enable/disable a device, edit its
+  // per-device command policy). Both directions invalidate the device's node
+  // clients so the node reconnects and is re-admitted against fresh registry
+  // state; disable additionally empties the live surface, aborts pending and
+  // in-flight work, and reconciles device-backed workers — the same cleanup
+  // trio as node.pair.remove, minus deleting the pairing record.
+  "node.device.enable": async ({ params, respond, context, client }) => {
+    if (!assertValidParams(params, validateNodeDeviceEnableParams, "node.device.enable", respond)) {
+      return;
+    }
+    const { nodeId } = params;
+    await respondUnavailableOnThrow(respond, async () => {
+      const authz = resolveDeviceManagementAuthz(client, nodeId);
+      if (deniesCrossDeviceManagement(authz)) {
+        context.logGateway.warn(
+          `node device enable denied node=${authz.normalizedTargetDeviceId} reason=device-ownership-mismatch`,
+        );
+        emitNodeDeviceRegistrySecurityEvent({
+          authz,
+          nodeId: authz.normalizedTargetDeviceId,
+          controlId: "node.device.enable",
+          outcome: "denied",
+          reason: "device-ownership-mismatch",
+        });
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "node device enable denied"),
+        );
+        return;
+      }
+      const updated = await setPairedNodeDeviceEnabled(nodeId, true);
+      if (!updated) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown nodeId"));
+        return;
+      }
+      emitNodeDeviceRegistrySecurityEvent({
+        authz,
+        nodeId: updated.nodeId,
+        controlId: "node.device.enable",
+        outcome: "success",
+        attributes: { enabled: true },
+      });
+      context.logGateway.info(`node device enabled device=${updated.nodeId}`);
+      context.invalidateClientsForDevice?.(updated.nodeId, {
+        role: "node",
+        reason: "device-enabled",
+      });
+      respond(true, updated, undefined);
+    });
+  },
+  "node.device.disable": async ({ params, respond, context, client }) => {
+    if (
+      !assertValidParams(params, validateNodeDeviceDisableParams, "node.device.disable", respond)
+    ) {
+      return;
+    }
+    const { nodeId } = params;
+    await respondUnavailableOnThrow(respond, async () => {
+      const authz = resolveDeviceManagementAuthz(client, nodeId);
+      if (deniesCrossDeviceManagement(authz)) {
+        context.logGateway.warn(
+          `node device disable denied node=${authz.normalizedTargetDeviceId} reason=device-ownership-mismatch`,
+        );
+        emitNodeDeviceRegistrySecurityEvent({
+          authz,
+          nodeId: authz.normalizedTargetDeviceId,
+          controlId: "node.device.disable",
+          outcome: "denied",
+          reason: "device-ownership-mismatch",
+        });
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "node device disable denied"),
+        );
+        return;
+      }
+      const disabled = await setPairedNodeDeviceEnabled(nodeId, false);
+      if (!disabled) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown nodeId"));
+        return;
+      }
+      try {
+        // Empty the live surface and abort queued/in-flight work before the
+        // response so no further command dispatch can be admitted.
+        clearRemovedNodeRuntimeState({ nodeId: disabled.nodeId, context });
+        await reconcileRevokedDeviceWorker(context, disabled.nodeId);
+        emitNodeDeviceRegistrySecurityEvent({
+          authz,
+          nodeId: disabled.nodeId,
+          controlId: "node.device.disable",
+          outcome: "success",
+          attributes: { enabled: false },
+        });
+        context.logGateway.info(`node device disabled device=${disabled.nodeId}`);
+        context.invalidateClientsForDevice?.(disabled.nodeId, {
+          role: "node",
+          reason: "device-disabled",
+        });
+        respond(true, disabled, undefined);
+      } finally {
+        // Preserve response-first shutdown on success, while guaranteeing the
+        // hard close when runtime cleanup or later bookkeeping throws.
+        queueMicrotask(() => {
+          context.disconnectClientsForDevice?.(disabled.nodeId, {
+            role: "node",
+          });
+        });
+      }
+    });
+  },
+  "node.device.update": async ({ params, respond, context, client }) => {
+    if (!assertValidParams(params, validateNodeDeviceUpdateParams, "node.device.update", respond)) {
+      return;
+    }
+    const { nodeId, commands } = params;
+    await respondUnavailableOnThrow(respond, async () => {
+      const authz = resolveDeviceManagementAuthz(client, nodeId);
+      if (deniesCrossDeviceManagement(authz)) {
+        context.logGateway.warn(
+          `node device update denied node=${authz.normalizedTargetDeviceId} reason=device-ownership-mismatch`,
+        );
+        emitNodeDeviceRegistrySecurityEvent({
+          authz,
+          nodeId: authz.normalizedTargetDeviceId,
+          controlId: "node.device.update",
+          outcome: "denied",
+          reason: "device-ownership-mismatch",
+        });
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "node device update denied"),
+        );
+        return;
+      }
+      const updated = await setPairedNodeDeviceCommandPolicy(nodeId, commands ?? null);
+      if (!updated) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown nodeId"));
+        return;
+      }
+      emitNodeDeviceRegistrySecurityEvent({
+        authz,
+        nodeId: updated.nodeId,
+        controlId: "node.device.update",
+        outcome: "success",
+        attributes: {
+          ...(updated.commandPolicy?.deny ? { deny_count: updated.commandPolicy.deny.length } : {}),
+          ...(updated.commandPolicy?.allow
+            ? { allow_count: updated.commandPolicy.allow.length }
+            : {}),
+        },
+      });
+      context.logGateway.info(`node device policy updated device=${updated.nodeId}`);
+      context.invalidateClientsForDevice?.(updated.nodeId, {
+        role: "node",
+        reason: "device-policy-updated",
+      });
+      respond(true, updated, undefined);
     });
   },
 };

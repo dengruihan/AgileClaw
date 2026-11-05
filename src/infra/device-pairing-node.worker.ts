@@ -7,6 +7,7 @@ import { devicePairingMutation } from "./device-pairing-dispatch.worker.js";
 import {
   type NodePairingGeneration,
   clearNodePairingGenerationState,
+  listApprovedPairedDeviceRoles,
   resolveNodePairingGeneration,
   resolveNodePairingState,
 } from "./device-pairing-identity.js";
@@ -28,7 +29,12 @@ import {
   readDevicePairingStoreStateFromDatabase,
   updatePairedDeviceInTransaction,
 } from "./device-pairing-store.js";
-import type { PairedDevice } from "./device-pairing.types.js";
+import {
+  isPairedDeviceEnabled,
+  normalizePairedDeviceCommandPolicy,
+  type PairedDevice,
+  type PairedDeviceCommandPolicy,
+} from "./device-pairing.types.js";
 import { resolveNodePairApprovalScopes } from "./node-pairing-authz.js";
 
 function mutatePairedDevices<T>(
@@ -167,6 +173,11 @@ export const nodePairingOperations = {
         if (missingScope) {
           return { value: { status: "forbidden", missingScope }, persist: false };
         }
+        // Approving the node surface is the operator's explicit execution
+        // consent, so it enables the registry flag a new pairing left disabled.
+        // Auto-approval reaches here only through admin-consent paths (local
+        // silent pairing, SSH ownership proof, or an admin-minted setup code).
+        device.enabled = true;
         const previousPairingGeneration = resolveNodePairingGeneration(device);
         const now = Math.max(nowMs, (device.nodeSurface?.approvedAtMs ?? -1) + 1);
         device.nodeSurface = {
@@ -187,7 +198,7 @@ export const nodePairingOperations = {
         delete device.pendingNodeSurface;
         const nextPairingState = resolveNodePairingState(device);
         const nextPairingGeneration = nextPairingState?.generation?.key;
-        if (!nextPairingState || !nextPairingGeneration) {
+        if (!nextPairingState) {
           return { value: null, persist: false };
         }
         clearNodePairingGenerationState(device, previousPairingGeneration);
@@ -198,7 +209,9 @@ export const nodePairingOperations = {
                 requestId,
                 node,
                 pairingIdentity: nextPairingState.identity.key,
-                nextPairingGeneration,
+                // A disabled device keeps its approved surface but admits no
+                // pairing generation until the operator enables it.
+                ...(nextPairingGeneration ? { nextPairingGeneration } : {}),
                 ...(previousPairingGeneration
                   ? { previousPairingGeneration: previousPairingGeneration.key }
                   : {}),
@@ -245,6 +258,54 @@ export const nodePairingOperations = {
         });
         device.nodeSurface = { ...device.nodeSurface, displayName };
         return { value: toPairedNode(device), persist: true };
+      });
+    },
+  ),
+  "node.setDeviceRegistryState": devicePairingMutation(
+    (
+      input: { nodeId: string; enabled?: boolean; commandPolicy?: unknown },
+      { database },
+    ): {
+      nodeId: string;
+      enabled: boolean;
+      commandPolicy?: PairedDeviceCommandPolicy;
+    } | null => {
+      const nodeId = input.nodeId.trim();
+      if (!nodeId) {
+        throw new Error("nodeId required");
+      }
+      if (input.enabled === undefined && input.commandPolicy === undefined) {
+        throw new Error("enabled or commandPolicy required");
+      }
+      return mutatePairedDevices(database, (paired) => {
+        const device = paired[nodeId];
+        if (!device || !listApprovedPairedDeviceRoles(device).includes("node")) {
+          return { value: null, persist: false };
+        }
+        requestDevicePairingMutationAdmission({
+          kind: "node-surface",
+          nodeId: device.deviceId,
+          pairingGeneration: resolveNodePairingGeneration(device)?.key,
+        });
+        if (input.enabled !== undefined) {
+          device.enabled = input.enabled;
+        }
+        if (input.commandPolicy !== undefined) {
+          const normalized = normalizePairedDeviceCommandPolicy(input.commandPolicy);
+          if (normalized) {
+            device.commandPolicy = normalized;
+          } else {
+            delete device.commandPolicy;
+          }
+        }
+        return {
+          value: {
+            nodeId: device.deviceId,
+            enabled: isPairedDeviceEnabled(device),
+            ...(device.commandPolicy ? { commandPolicy: device.commandPolicy } : {}),
+          },
+          persist: true,
+        };
       });
     },
   ),

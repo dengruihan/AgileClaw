@@ -35,16 +35,18 @@ import {
   invalidateDevicePairingStoreCache,
   readCachedDevicePairingStoreSnapshot,
 } from "./device-pairing-store-cache.js";
-import type {
-  DeviceAuthToken,
-  DeviceBootstrapTokenRecord,
-  DevicePairingPendingRecord,
-  DevicePairingStoreState,
-  DevicePairSetupCompletionRecord,
-  PairedDevice,
-  PairedDeviceApprovalKind,
-  PairedDeviceNodeSurface,
-  PairedDevicePendingNodeSurface,
+import {
+  normalizePairedDeviceCommandPolicy,
+  type DeviceAuthToken,
+  type DeviceBootstrapTokenRecord,
+  type DevicePairingPendingRecord,
+  type DevicePairingStoreState,
+  type DevicePairSetupCompletionRecord,
+  type PairedDevice,
+  type PairedDeviceApprovalKind,
+  type PairedDeviceCommandPolicy,
+  type PairedDeviceNodeSurface,
+  type PairedDevicePendingNodeSurface,
 } from "./device-pairing.types.js";
 import {
   executeSqliteQuerySync,
@@ -220,6 +222,8 @@ function toPairedRow(device: PairedDevice): DevicePairingPaired {
     approved_via: device.approvedVia ?? null,
     node_surface_json: toJsonColumn(device.nodeSurface),
     pending_node_surface_json: toJsonColumn(device.pendingNodeSurface),
+    enabled: toBooleanColumn(device.enabled),
+    command_policy_json: toJsonColumn(device.commandPolicy),
     created_at_ms: device.createdAtMs,
     approved_at_ms: device.approvedAtMs,
     last_seen_at_ms: device.lastSeenAtMs ?? null,
@@ -265,6 +269,19 @@ function fromSetupCompletionRow(
   };
 }
 
+// Stored policy can predate schema tightening; a malformed payload must fail
+// closed to "no policy" instead of poisoning every pairing read.
+function fromCommandPolicyColumn(value: string | null): PairedDeviceCommandPolicy | null {
+  if (value === null) {
+    return null;
+  }
+  try {
+    return normalizePairedDeviceCommandPolicy(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
 function fromPairedRow(row: DevicePairingPaired): PairedDevice {
   const nodeSurface = fromJsonColumn<PairedDeviceNodeSurface>(row.node_surface_json);
   if (nodeSurface?.lastHostStats !== undefined && !isNodeHostStats(nodeSurface.lastHostStats)) {
@@ -292,6 +309,8 @@ function fromPairedRow(row: DevicePairingPaired): PairedDevice {
       "pendingNodeSurface",
       fromJsonColumn<PairedDevicePendingNodeSurface>(row.pending_node_surface_json) ?? null,
     ),
+    ...optional("enabled", row.enabled === null ? null : row.enabled !== 0),
+    ...optional("commandPolicy", fromCommandPolicyColumn(row.command_policy_json) ?? null),
     createdAtMs: row.created_at_ms,
     approvedAtMs: row.approved_at_ms,
     ...optional("lastSeenAtMs", row.last_seen_at_ms),

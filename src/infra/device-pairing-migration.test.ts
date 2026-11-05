@@ -5,11 +5,15 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createSuiteTempRootTracker } from "../test-helpers/temp-dir.js";
 import { closeStateDatabaseForTest } from "../test-utils/database-cleanup.js";
 import { approveDevicePairing } from "./device-pairing-approval.js";
-import { migrateLegacyDevicePairingStore } from "./device-pairing-migration.js";
+import {
+  migrateLegacyDevicePairingStore,
+  migratePairedDeviceRegistryPolicyFields,
+} from "./device-pairing-migration.js";
 import {
   getPairedDevice,
   listDevicePairing,
   requestDevicePairing,
+  withPairedDeviceRecords,
   type PairedDevice,
 } from "./device-pairing.js";
 import { migrateLegacyNodePairingStore } from "./node-pairing-migration.js";
@@ -243,5 +247,53 @@ describe("migrateLegacyDevicePairingStore", () => {
       displayName: "Kitchen Display",
       caps: ["screen"],
     });
+  });
+});
+
+describe("migratePairedDeviceRegistryPolicyFields", () => {
+  test("backfills explicit enabled state for rows that predate the registry columns", async () => {
+    const baseDir = await suiteRootTracker.make("registry-backfill");
+    await writeLegacyFiles(baseDir, {
+      paired: { "device-a": legacyPairedDevice("device-a") },
+    });
+    await migrateLegacyDevicePairingStore({ baseDir });
+    expect((await getPairedDevice("device-a", baseDir))?.enabled).toBeUndefined();
+
+    const result = await migratePairedDeviceRegistryPolicyFields({ baseDir });
+    expect(result?.changes).toHaveLength(1);
+    expect((await getPairedDevice("device-a", baseDir))?.enabled).toBe(true);
+
+    // Idempotent: explicit state is left untouched on the next run.
+    expect(await migratePairedDeviceRegistryPolicyFields({ baseDir })).toBeNull();
+  });
+
+  test("preserves an explicit disabled registry choice", async () => {
+    const baseDir = await suiteRootTracker.make("registry-explicit");
+    const pending = await requestDevicePairing(
+      { deviceId: "device-a", publicKey: "pk-a", role: "node", roles: ["node"], scopes: [] },
+      baseDir,
+    );
+    await approveDevicePairing(pending.request.requestId, { callerScopes: [] }, baseDir);
+    expect((await getPairedDevice("device-a", baseDir))?.enabled).toBe(false);
+
+    expect(await migratePairedDeviceRegistryPolicyFields({ baseDir })).toBeNull();
+    expect((await getPairedDevice("device-a", baseDir))?.enabled).toBe(false);
+  });
+
+  test("drops a malformed stored command policy", async () => {
+    const baseDir = await suiteRootTracker.make("registry-malformed-policy");
+    await writeLegacyFiles(baseDir, {
+      paired: { "device-a": legacyPairedDevice("device-a") },
+    });
+    await migrateLegacyDevicePairingStore({ baseDir });
+    await withPairedDeviceRecords(baseDir, (paired) => {
+      const device = paired["device-a"]!;
+      device.commandPolicy = { allow: "system.run" } as unknown as PairedDevice["commandPolicy"];
+      return { value: undefined, persist: true };
+    });
+
+    const result = await migratePairedDeviceRegistryPolicyFields({ baseDir });
+    expect(result?.changes).toHaveLength(1);
+    expect((await getPairedDevice("device-a", baseDir))?.commandPolicy).toBeUndefined();
   });
 });

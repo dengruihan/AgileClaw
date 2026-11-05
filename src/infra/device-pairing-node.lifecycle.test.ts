@@ -7,6 +7,10 @@ import { resolveOpenClawStateSqlitePath } from "../state/openclaw-state-db.paths
 import { createSuiteTempRootTracker } from "../test-helpers/temp-dir.js";
 import { approveDevicePairing } from "./device-pairing-approval.js";
 import {
+  captureAuthenticatedNodePairingState,
+  isPairedNodeDeviceDisabled,
+} from "./device-pairing-node-state.js";
+import {
   approveNodePairing,
   beginNodePairingConnect,
   finalizeNodePairingCleanupClaim,
@@ -15,6 +19,8 @@ import {
   recordPairedNodeDisconnection,
   rejectNodePairing,
   requestNodePairing,
+  setPairedNodeDeviceCommandPolicy,
+  setPairedNodeDeviceEnabled,
 } from "./device-pairing-node.js";
 import { seedNodeDevice, setupPairedNode } from "./device-pairing-node.test-support.js";
 import {
@@ -22,6 +28,7 @@ import {
   listDevicePairingReadOnly,
   removePairedDeviceRole,
   requestDevicePairing,
+  resolveNodePairingGeneration,
   updatePairedDeviceMetadata,
 } from "./device-pairing.js";
 
@@ -246,6 +253,133 @@ describe("node surface approval lifetime", () => {
       } finally {
         now.mockRestore();
       }
+    });
+  });
+
+  describe("device registry", () => {
+    // Registry tests use per-run device ids so a reused state database cannot
+    // turn a fresh pairing into a repair of an earlier run.
+    function registryNodeId(label: string): string {
+      return `${label}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    async function approveSurface(baseDir: string, nodeId: string) {
+      const pending = await requestNodePairing(
+        { nodeId, platform: "darwin", commands: ["system.run", "canvas.snapshot"] },
+        baseDir,
+      );
+      await approveNodePairing(
+        pending.request.requestId,
+        { callerScopes: ["operator.pairing", "operator.admin"] },
+        baseDir,
+      );
+    }
+
+    async function captureNodeSurface(baseDir: string, nodeId: string) {
+      const device = await getPairedDevice(nodeId, baseDir);
+      if (!device?.tokens?.node) {
+        throw new Error("expected a paired node token");
+      }
+      return await captureAuthenticatedNodePairingState({
+        nodeId,
+        publicKey: device.publicKey,
+        token: device.tokens.node.token,
+        baseDir,
+      });
+    }
+
+    test("registers a new pairing disabled and enables it on surface approval", async () => {
+      await withNodePairingDir(async (baseDir) => {
+        const nodeId = registryNodeId("registry-new");
+        await seedNodeDevice(baseDir, nodeId);
+        expect((await getPairedDevice(nodeId, baseDir))?.enabled).toBe(false);
+
+        await approveSurface(baseDir, nodeId);
+
+        const device = await getPairedDevice(nodeId, baseDir);
+        expect(device?.enabled).toBe(true);
+        expect(resolveNodePairingGeneration(device)?.key).toBeTruthy();
+      });
+    });
+
+    test("disabling a paired node removes execution eligibility but keeps the record", async () => {
+      await withNodePairingDir(async (baseDir) => {
+        const nodeId = registryNodeId("registry-disable");
+        await seedNodeDevice(baseDir, nodeId);
+        await approveSurface(baseDir, nodeId);
+        expect((await captureNodeSurface(baseDir, nodeId))?.approvedSurface.commands).toEqual([
+          "system.run",
+          "canvas.snapshot",
+        ]);
+
+        const disabled = await setPairedNodeDeviceEnabled(nodeId, false, baseDir);
+        expect(disabled).toEqual({ nodeId, enabled: false });
+        await expect(isPairedNodeDeviceDisabled(nodeId, baseDir)).resolves.toBe(true);
+
+        const state = await captureNodeSurface(baseDir, nodeId);
+        expect(state?.identity.nodeId).toBe(nodeId);
+        expect(state?.approvedSurface).toEqual({ caps: [], commands: [] });
+        expect(state?.generation).toBeNull();
+
+        // The approved surface stays on the record so the inventory keeps it visible.
+        expect((await listNodePairing(baseDir)).paired[0]?.commands).toEqual([
+          "system.run",
+          "canvas.snapshot",
+        ]);
+
+        await expect(setPairedNodeDeviceEnabled(nodeId, true, baseDir)).resolves.toEqual({
+          nodeId,
+          enabled: true,
+        });
+        await expect(isPairedNodeDeviceDisabled(nodeId, baseDir)).resolves.toBe(false);
+        expect((await captureNodeSurface(baseDir, nodeId))?.generation?.key).toBeTruthy();
+      });
+    });
+
+    test("filters the approved surface with the per-device command policy", async () => {
+      await withNodePairingDir(async (baseDir) => {
+        const nodeId = registryNodeId("registry-policy");
+        await seedNodeDevice(baseDir, nodeId);
+        await approveSurface(baseDir, nodeId);
+
+        await setPairedNodeDeviceCommandPolicy(nodeId, { deny: ["canvas.snapshot"] }, baseDir);
+        expect((await captureNodeSurface(baseDir, nodeId))?.approvedSurface.commands).toEqual([
+          "system.run",
+        ]);
+
+        // allow selects within the approved surface and cannot widen it.
+        await setPairedNodeDeviceCommandPolicy(nodeId, { allow: ["canvas.snapshot"] }, baseDir);
+        expect((await captureNodeSurface(baseDir, nodeId))?.approvedSurface.commands).toEqual([
+          "canvas.snapshot",
+        ]);
+        await setPairedNodeDeviceCommandPolicy(nodeId, { allow: ["system.which"] }, baseDir);
+        expect((await captureNodeSurface(baseDir, nodeId))?.approvedSurface.commands).toEqual([]);
+
+        await setPairedNodeDeviceCommandPolicy(nodeId, null, baseDir);
+        expect((await captureNodeSurface(baseDir, nodeId))?.approvedSurface.commands).toEqual([
+          "system.run",
+          "canvas.snapshot",
+        ]);
+      });
+    });
+
+    test("rejects registry updates for devices without an approved node role", async () => {
+      await withNodePairingDir(async (baseDir) => {
+        await expect(setPairedNodeDeviceEnabled("missing", false, baseDir)).resolves.toBeNull();
+
+        const operatorId = registryNodeId("registry-operator");
+        const request = await requestDevicePairing(
+          {
+            deviceId: operatorId,
+            publicKey: `operator-key-${operatorId}`,
+            role: "operator",
+            scopes: [],
+          },
+          baseDir,
+        );
+        await approveDevicePairing(request.request.requestId, { callerScopes: [] }, baseDir);
+        await expect(setPairedNodeDeviceEnabled(operatorId, false, baseDir)).resolves.toBeNull();
+      });
     });
   });
 });

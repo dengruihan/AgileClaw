@@ -193,6 +193,7 @@ function collectPendingPairingFindings(snapshot: DoctorPairingSnapshot): HealthF
 
 function collectPairedRecordFindings(snapshot: DoctorPairingSnapshot): HealthFinding[] {
   const findings: HealthFinding[] = [];
+  let unbackfilledRegistryDevices = 0;
   for (const device of snapshot.paired) {
     const deviceLabel = describeDevice(device);
     const finding = {
@@ -201,6 +202,9 @@ function collectPairedRecordFindings(snapshot: DoctorPairingSnapshot): HealthFin
       path: "devices.paired",
       target: device.deviceId,
     };
+    if (device.enabled === undefined) {
+      unbackfilledRegistryDevices += 1;
+    }
     const approvedRoles = listApprovedPairedDeviceRoles(device);
     const approvedScopes = resolveApprovedScopes(device);
     if (approvedRoles.includes("operator") && approvedScopes.length === 0) {
@@ -249,6 +253,18 @@ function collectPairedRecordFindings(snapshot: DoctorPairingSnapshot): HealthFin
         });
       }
     }
+  }
+  if (unbackfilledRegistryDevices > 0) {
+    findings.push({
+      checkId: DEVICE_PAIRING_CHECK_ID,
+      severity: "warning",
+      path: "devices.paired",
+      target: "devices.paired",
+      requirement: "device-registry-fields-unbackfilled",
+      message: `${unbackfilledRegistryDevices} paired device record(s) predate the device registry columns and still load their enabled state implicitly. This preserves current behavior, but explicit state keeps the settings inventory accurate.`,
+      fixHint:
+        "Run openclaw doctor --fix to backfill explicit enabled state for legacy pairing rows.",
+    });
   }
   return findings;
 }
