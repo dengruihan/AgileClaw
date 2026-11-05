@@ -5,32 +5,32 @@ import type { GatewayClient } from "./server-methods/types.js";
 /**
  * Resolve the session device scope for a `sessions.create` caller.
  *
- * Only a client that authenticated through device-token auth carries a
- * server-verified pairing identity; its paired device becomes the created
- * session's scope. Everything else — shared-secret operators, Control UI,
- * local clients, unverified client ids — stays gateway-scoped (absent), and a
- * device that no longer resolves from the pairing store is never guessed from
- * wire-declared client identity.
+ * Only device-token auth carries a device identity the handshake verified
+ * (`connect.device.id` against the paired record's public key). That id names the
+ * physical device, unlike wire client ids, which name an app and can match several
+ * paired devices. Everything else — shared-secret operators, Control UI, local
+ * clients, wire-declared ids — stays gateway-scoped, and the pairing row is
+ * rechecked so a device retired after the handshake grants no scope.
  */
 export async function resolveCreatingClientScopeDeviceId(
-  client: Pick<GatewayClient, "isDeviceTokenAuth" | "pairedClientId"> | null | undefined,
+  client: Pick<GatewayClient, "isDeviceTokenAuth" | "connect"> | null | undefined,
   deps: {
-    listPairedDevices?: () => Promise<{ paired: PairedDevice[] }>;
+    getPairedDevice?: (deviceId: string) => Promise<PairedDevice | null>;
   } = {},
 ): Promise<string | undefined> {
-  const pairedClientId = normalizeOptionalString(client?.pairedClientId);
-  if (client?.isDeviceTokenAuth !== true || !pairedClientId) {
+  const deviceId = normalizeOptionalString(client?.connect?.device?.id);
+  if (client?.isDeviceTokenAuth !== true || !deviceId) {
     return undefined;
   }
-  const listPairedDevices =
-    deps.listPairedDevices ??
-    (async () => {
-      const { listDevicePairingReadOnly } = await import("../infra/device-pairing.js");
-      return listDevicePairingReadOnly();
+  const readPairedDevice =
+    deps.getPairedDevice ??
+    (async (id: string) => {
+      const { getPairedDevice } = await import("../infra/device-pairing.js");
+      return getPairedDevice(id);
     });
   try {
-    const { paired } = await listPairedDevices();
-    return paired.find((device) => device.clientId === pairedClientId)?.deviceId;
+    const paired = await readPairedDevice(deviceId);
+    return paired?.deviceId === deviceId ? deviceId : undefined;
   } catch {
     // A pairing store that cannot be read grants no scope; the session stays
     // gateway-scoped rather than failing creation over a diagnostic lookup.

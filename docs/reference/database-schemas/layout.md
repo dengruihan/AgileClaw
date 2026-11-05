@@ -70,20 +70,22 @@ backfill, and needs no Doctor migration. Absent means gateway-hosted. Scope is
 independent of the legacy `execHost`/`execNode` binding, which is unchanged for
 sessions without a scope.
 
-Scope is node-creation metadata: it is stamped from the verified paired device
-of a device-token-authenticated creating client, inherited explicitly by forks
-(from the parent, clearing any stale target value), inherited by spawned
-children and subagents so a tree shares one device, never set on incognito
-children, and pinned against later merges — compaction, resume, and reset
-patches cannot clear it. `sessions.delete` and archiving release the tree's
-device lease; Stop (`sessions.abort`) releases it and cancels the session's
-detached background processes. The device node is the authority for occupancy:
-the Gateway keeps only a process-local in-memory lease cache (holder, token,
-expiry) keyed by the root session, cleared on holder disconnect or device
-release, and projected as the `scopeLeaseHeld` session-row fact so Stop stays
-available while a lease is held with no active run. The cache is never written
-to `state_leases` or any durable store, and an absent cache entry never proves
-a release.
+Scope is node-creation metadata: it is stamped from the device identity
+device-token authentication verified at handshake (the connect frame's
+`device.id`, rechecked against the live pairing record), never from an app client
+id, which can match several paired devices. It is inherited explicitly by forks
+(from the parent, clearing any stale target value), inherited by spawned children
+and subagents so a tree shares one device, never set on incognito children, and
+pinned against later merges — compaction, resume, and reset cannot clear it, and a
+restart-recovery successor carries it forward. `sessions.delete` and archiving
+release the tree's device lease; Stop (`sessions.abort`) releases it and cancels
+the session's detached background processes, and a failed Stop keeps it. The
+device node is the authority for occupancy: the Gateway keeps only a
+process-local in-memory lease cache (holder, token, expiry) keyed by the root
+session, cleared on holder disconnect or device release, and projected as the
+`scopeLeaseHeld` session-row fact so Stop stays available while a lease is held
+with no active run. The cache is never written to `state_leases` or any durable
+store, and an absent cache entry never proves a release.
 
 Downgrade behavior follows the optional-entry rule: current and
 `v2026.9.4`-metadata serializers preserve unknown optional fields, so an older

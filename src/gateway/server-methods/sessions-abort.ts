@@ -428,15 +428,17 @@ export const sessionAbortHandlers: GatewayRequestHandlers = {
       }
       const error = descendantAbortError(descendants, "Parent run");
       if (error) {
+        // A failed Stop keeps the mirror: the node may still hold the lease, and
+        // dropping it here would retire the stop affordance for the next attempt.
         respond(false, undefined, error);
-      } else {
-        respond(true, {
-          ok: true,
-          abortedRunId: aborted ? embeddedRun.runId : null,
-          status: aborted ? "aborted" : "no-active-run",
-        });
+        return;
       }
       releasedScopeLease = releaseScopeLeaseOnStop(sessionEntry, canonicalKey, key, targetAgentId);
+      respond(true, {
+        ok: true,
+        abortedRunId: aborted ? embeddedRun.runId : null,
+        status: aborted ? "aborted" : "no-active-run",
+      });
       if (aborted || releasedScopeLease) {
         emitSessionsChanged(context, {
           sessionKey: canonicalKey,

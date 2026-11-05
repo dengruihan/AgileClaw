@@ -101,3 +101,87 @@ it("treats a locally expired mirror as absent without deciding node occupancy", 
   expect(readSessionScopeLease("agent:main:scoped", 2)).toBeUndefined();
   expect(sessionScopeLeaseHeld("agent:main:scoped", 2)).toBe(false);
 });
+
+it("never lets a replaced holder's connection clear the newer lease mirror", () => {
+  const previousConnection = new AbortController();
+  recordSessionScopeLease({
+    rootSessionKey: "agent:main:scoped",
+    deviceId: "device-a",
+    holder: "conn-1",
+    leaseToken: "token-1",
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    connectionSignal: previousConnection.signal,
+  });
+  const currentConnection = new AbortController();
+  recordSessionScopeLease({
+    rootSessionKey: "agent:main:scoped",
+    deviceId: "device-a",
+    holder: "conn-2",
+    leaseToken: "token-2",
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    connectionSignal: currentConnection.signal,
+  });
+
+  previousConnection.abort("disconnect");
+  expect(readSessionScopeLease("agent:main:scoped")).toMatchObject({
+    holder: "conn-2",
+    leaseToken: "token-2",
+  });
+
+  currentConnection.abort("disconnect");
+  expect(sessionScopeLeaseHeld("agent:main:scoped")).toBe(false);
+});
+
+it("detaches a previous holder watch when the replacement reports no connection", () => {
+  const previousConnection = new AbortController();
+  recordSessionScopeLease({
+    rootSessionKey: "agent:main:scoped",
+    deviceId: "device-a",
+    holder: "conn-1",
+    leaseToken: "token-1",
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    connectionSignal: previousConnection.signal,
+  });
+  recordSessionScopeLease({
+    rootSessionKey: "agent:main:scoped",
+    deviceId: "device-a",
+    holder: "node-transport",
+    leaseToken: "token-2",
+    expiresAt: Number.MAX_SAFE_INTEGER,
+  });
+
+  previousConnection.abort("disconnect");
+  expect(sessionScopeLeaseHeld("agent:main:scoped")).toBe(true);
+});
+
+it("cleans holder watches on release and device-cleared mirrors", () => {
+  const previousConnection = new AbortController();
+  recordSessionScopeLease({
+    rootSessionKey: "agent:main:scoped",
+    deviceId: "device-a",
+    holder: "conn-1",
+    leaseToken: "token-1",
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    connectionSignal: previousConnection.signal,
+  });
+  expect(releaseSessionScopeLease("agent:main:scoped")).toMatchObject({ leaseToken: "token-1" });
+
+  // A released key can be re-recorded under another connection without the old
+  // abort reaching it; the old watch was dropped with the release.
+  const currentConnection = new AbortController();
+  recordSessionScopeLease({
+    rootSessionKey: "agent:main:scoped",
+    deviceId: "device-a",
+    holder: "conn-2",
+    leaseToken: "token-2",
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    connectionSignal: currentConnection.signal,
+  });
+  previousConnection.abort("disconnect");
+  expect(sessionScopeLeaseHeld("agent:main:scoped")).toBe(true);
+
+  expect(clearSessionScopeLeasesForDevice("device-a")).toEqual(["agent:main:scoped"]);
+  // The cleared holder's later disconnect is a no-op, not a second clear.
+  currentConnection.abort("disconnect");
+  expect(sessionScopeLeaseHeld("agent:main:scoped")).toBe(false);
+});

@@ -27,6 +27,9 @@ export function buildRestartRecoverySuccessorEntry(params: {
     ...(source.execHost ? { execHost: source.execHost } : {}),
     ...(source.execNode ? { execNode: source.execNode } : {}),
     ...(source.execCwd ? { execCwd: source.execCwd } : {}),
+    // The successor continues the same session tree, so it keeps the tree's device
+    // scope; recovery never returns a device-scoped session to gateway scope.
+    ...(source.scopeDeviceId ? { scopeDeviceId: source.scopeDeviceId } : {}),
   });
   return { ...entry, ...buildMainSessionRecoveryClearPatch(entry), sessionId: params.sessionId };
 }

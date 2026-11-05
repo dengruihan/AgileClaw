@@ -28,6 +28,8 @@ export type SessionScopeLeaseRecord = {
 };
 
 const leasesByRootSessionKey = new Map<string, SessionScopeLeaseRecord>();
+/** Holder connection signal that owns each mirrored record, so a replaced lease detaches. */
+const ownerSignalByRootSessionKey = new Map<string, AbortSignal>();
 
 type DisconnectWatch = {
   handler: () => void;
@@ -35,7 +37,18 @@ type DisconnectWatch = {
 };
 const disconnectWatches = new Map<AbortSignal, DisconnectWatch>();
 
-function stopWatchingDisconnect(signal: AbortSignal, watch: DisconnectWatch): void {
+/**
+ * Detach one root from its holder signal's watch. A record replaced under a new
+ * connection must leave the old watch, or aborting the old holder would clear the
+ * newer lease and remove the stop affordance while the node still holds it.
+ */
+function detachDisconnectWatch(rootSessionKey: string): void {
+  const signal = ownerSignalByRootSessionKey.get(rootSessionKey);
+  ownerSignalByRootSessionKey.delete(rootSessionKey);
+  const watch = signal ? disconnectWatches.get(signal) : undefined;
+  if (!signal || !watch?.rootKeys.delete(rootSessionKey)) {
+    return;
+  }
   if (watch.rootKeys.size > 0) {
     return;
   }
@@ -51,6 +64,7 @@ function watchDisconnect(signal: AbortSignal, rootSessionKey: string): void {
       disconnectWatches.delete(signal);
       for (const key of registered?.rootKeys ?? []) {
         leasesByRootSessionKey.delete(key);
+        ownerSignalByRootSessionKey.delete(key);
       }
     };
     watch = { handler, rootKeys: new Set() };
@@ -58,6 +72,7 @@ function watchDisconnect(signal: AbortSignal, rootSessionKey: string): void {
     signal.addEventListener("abort", watch.handler, { once: true });
   }
   watch.rootKeys.add(rootSessionKey);
+  ownerSignalByRootSessionKey.set(rootSessionKey, signal);
 }
 
 function isExpired(record: SessionScopeLeaseRecord, now: number): boolean {
@@ -85,6 +100,9 @@ export function recordSessionScopeLease(params: {
   if (!rootSessionKey || !deviceId || !holder || !leaseToken) {
     throw new Error("session scope lease records require a root key, device, holder, and token");
   }
+  // A replacing record owns its holder connection exclusively, including when the
+  // replacement reports no signal (a detached holder must not clear it later).
+  detachDisconnectWatch(rootSessionKey);
   leasesByRootSessionKey.set(rootSessionKey, {
     deviceId,
     holder,
@@ -106,6 +124,7 @@ export function readSessionScopeLease(
   const record = leasesByRootSessionKey.get(key);
   if (record && isExpired(record, now)) {
     leasesByRootSessionKey.delete(key);
+    detachDisconnectWatch(key);
     return undefined;
   }
   return record;
@@ -134,11 +153,7 @@ export function releaseSessionScopeLease(
     return undefined;
   }
   leasesByRootSessionKey.delete(key);
-  for (const [signal, watch] of disconnectWatches) {
-    if (watch.rootKeys.delete(key)) {
-      stopWatchingDisconnect(signal, watch);
-    }
-  }
+  detachDisconnectWatch(key);
   return record;
 }
 
@@ -152,6 +167,7 @@ export function clearSessionScopeLeasesForDevice(deviceId: string): string[] {
   for (const [key, record] of leasesByRootSessionKey) {
     if (record.deviceId === device) {
       leasesByRootSessionKey.delete(key);
+      detachDisconnectWatch(key);
       released.push(key);
     }
   }
@@ -160,6 +176,7 @@ export function clearSessionScopeLeasesForDevice(deviceId: string): string[] {
 
 export function clearAllSessionScopeLeasesForTest(): void {
   leasesByRootSessionKey.clear();
+  ownerSignalByRootSessionKey.clear();
   for (const [signal, watch] of disconnectWatches) {
     signal.removeEventListener("abort", watch.handler);
   }

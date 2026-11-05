@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import type { PairedDevice } from "../infra/device-pairing.types.js";
+import type { GatewayClient } from "./server-methods/types.js";
 import { resolveCreatingClientScopeDeviceId } from "./session-create-device-scope.js";
 
 const paired = (deviceId: string, clientId?: string): PairedDevice => ({
@@ -10,54 +11,80 @@ const paired = (deviceId: string, clientId?: string): PairedDevice => ({
   approvedAtMs: 1,
 });
 
-const listPairedDevices = async () => ({
-  paired: [
-    paired("device-a", "client-a"),
-    paired("device-b", "client-b"),
-    paired("device-unbound"),
-  ],
-});
+// The handshake-verified device identity lives on the connect frame, as it does
+// for every real device-token connection; `pairedClientId` is browser-copilot only.
+const deviceTokenClient = (deviceId: string | undefined, clientId = "openclaw-ios") =>
+  ({
+    isDeviceTokenAuth: true,
+    connect: {
+      minProtocol: 1,
+      maxProtocol: 1,
+      role: "operator",
+      client: { id: clientId, version: "test", platform: "ios", mode: "node" },
+      ...(deviceId
+        ? {
+            device: {
+              id: deviceId,
+              publicKey: `key-${deviceId}`,
+              signature: "signature",
+              signedAt: 1,
+              nonce: "nonce",
+            },
+          }
+        : {}),
+    },
+  }) as GatewayClient;
 
-it("scopes a session to the verified paired device of a device-token client", async () => {
+const readPairedDevice =
+  (pairedDevices: PairedDevice[]) =>
+  async (deviceId: string): Promise<PairedDevice | null> =>
+    pairedDevices.find((device) => device.deviceId === deviceId) ?? null;
+
+it("scopes a session to the handshake-verified device of a device-token client", async () => {
   await expect(
-    resolveCreatingClientScopeDeviceId(
-      { isDeviceTokenAuth: true, pairedClientId: "client-a" },
-      { listPairedDevices },
-    ),
+    resolveCreatingClientScopeDeviceId(deviceTokenClient("device-a"), {
+      getPairedDevice: readPairedDevice([paired("device-a", "openclaw-ios")]),
+    }),
   ).resolves.toBe("device-a");
+
+  // Several paired devices may share the same app client id; the verified device
+  // id still selects exactly one of them.
+  await expect(
+    resolveCreatingClientScopeDeviceId(deviceTokenClient("device-b", "openclaw-ios"), {
+      getPairedDevice: readPairedDevice([
+        paired("device-a", "openclaw-ios"),
+        paired("device-b", "openclaw-ios"),
+      ]),
+    }),
+  ).resolves.toBe("device-b");
 });
 
-it("keeps every other client gateway-scoped rather than guessing from wire identity", async () => {
-  const deps = { listPairedDevices };
-  // Shared-secret and local clients carry no verified device.
+it("keeps every client without a verified device gateway-scoped", async () => {
+  const deps = { getPairedDevice: readPairedDevice([paired("device-a", "openclaw-ios")]) };
+  // Shared-secret, local, and Control UI clients carry no verified device.
+  expect(
+    await resolveCreatingClientScopeDeviceId(
+      { ...deviceTokenClient("device-a"), isDeviceTokenAuth: false },
+      deps,
+    ),
+  ).toBeUndefined();
   await expect(resolveCreatingClientScopeDeviceId(null, deps)).resolves.toBeUndefined();
+  // A device-token frame without a device identity grants no scope.
   await expect(
-    resolveCreatingClientScopeDeviceId(
-      { isDeviceTokenAuth: false, pairedClientId: "client-a" },
-      deps,
-    ),
+    resolveCreatingClientScopeDeviceId(deviceTokenClient(undefined), deps),
   ).resolves.toBeUndefined();
-  // A client id that no longer resolves to a paired device grants no scope.
+  // A wire client id that no longer resolves to a paired device grants no scope.
   await expect(
-    resolveCreatingClientScopeDeviceId(
-      { isDeviceTokenAuth: true, pairedClientId: "client-revoked" },
-      deps,
-    ),
-  ).resolves.toBeUndefined();
-  await expect(
-    resolveCreatingClientScopeDeviceId({ isDeviceTokenAuth: true }, deps),
+    resolveCreatingClientScopeDeviceId(deviceTokenClient("device-retired"), deps),
   ).resolves.toBeUndefined();
 });
 
 it("fails open to gateway scope when the pairing store cannot be read", async () => {
   await expect(
-    resolveCreatingClientScopeDeviceId(
-      { isDeviceTokenAuth: true, pairedClientId: "client-a" },
-      {
-        listPairedDevices: async () => {
-          throw new Error("store unavailable");
-        },
+    resolveCreatingClientScopeDeviceId(deviceTokenClient("device-a"), {
+      getPairedDevice: async () => {
+        throw new Error("store unavailable");
       },
-    ),
+    }),
   ).resolves.toBeUndefined();
 });
