@@ -230,14 +230,29 @@ export function recordToolActionDeviceBindingAfterInsert(
   return true;
 }
 
-/** Maintenance prune: same retention/cap contract, no insert to account for. */
+/** Maintenance prune: recount from the table, then enforce cap/retention. */
 export function pruneToolActionDeviceBindingsInDatabase(
   db: DatabaseSync,
   now: number,
   retentionMs: number,
   limits: ToolActionDeviceBindingLimits = DEFAULT_BINDING_LIMITS,
 ): void {
-  pruneToolActionDeviceBindings(db, now, retentionMs, limits, 0);
+  if (!tableExists(db, "tool_action_device_bindings")) {
+    return;
+  }
+  try {
+    // Ledger retention and other cascades can remove companion rows without
+    // passing through the write-path count cache, so maintenance recounts.
+    deleteExpiredToolActionDeviceBindings(db, now, retentionMs, limits.pruneBatchRows);
+    let rowCount = countToolActionDeviceBindings(db);
+    if (rowCount > limits.maxRows) {
+      rowCount = Math.max(0, rowCount - pruneOverflowToolActionDeviceBindings(db, limits));
+    }
+    bindingRowCounts.set(db, rowCount);
+  } catch (error) {
+    bindingRowCounts.delete(db);
+    throw error;
+  }
 }
 
 /** Drop the cached count after a rolled-back transaction; the next write recounts. */

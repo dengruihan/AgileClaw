@@ -250,15 +250,15 @@ are `released`, `revoked`, `turn-end`, `stop`, and `delete`. Acquire and reject
 facts are `enforced` because the node occupancy owner changed the outcome;
 release facts are `attribution-only` with a `not-applicable` outcome. Facts are
 emitted at every lifecycle boundary — acquire through `use_device` or a
-placement call, release at turn end, Stop, scope change, session archive or
-delete, device disable or removal, and node-reported occupancy release — but a
-fact persists only while its execution context is retained: operator-side
-release boundaries attribute
-the transition to the execution that acquired the lease when the Gateway still
-mirrors its admission token, and a boundary with no retained execution (identity
-collection disabled, or a mirror lost to a Gateway restart) records nothing. A
-gateway-scoped turn writes no lease facts, and an audit failure logs a bounded
-warning without blocking or failing the lease transition or tool call.
+placement call, release at turn end, Stop, a switch back to gateway scope,
+session archive or delete, device disable or removal, and node-reported
+occupancy release — but a fact persists only while its execution context is
+retained: operator-side release boundaries attribute the transition to the
+execution that acquired the lease when the Gateway still mirrors its admission
+token, and a boundary with no retained execution (identity collection disabled,
+or a mirror lost to a Gateway restart) records nothing. A gateway-scoped turn
+writes no lease facts, and an audit failure logs a bounded warning without
+blocking or failing the lease transition or tool call.
 
 Direct session-sharing methods do not admit model runs,
 so they do not synthesize run selectors. Sharing events preserve a verified
