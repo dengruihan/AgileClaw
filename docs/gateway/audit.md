@@ -240,6 +240,26 @@ conflicts and definitive no-ops. These mechanics are `attribution-only`; the
 public generic display remains unverified rather than presenting their private
 reason or target as trusted evidence.
 
+Device-scoped execution queues occupancy lease transitions through the same
+generic decision-fact owner. A `device.lease.acquire`, `device.lease.reject`,
+or `device.lease.release` fact records the exact execution correlation, a
+keyed-pseudonym device reference, the session permission mode as a policy
+reference, a stable reason code, the outcome, and `occurredAt`. Reject reasons
+are `occupied`, `disabled`, `disconnected`, and `not-executor`; release reasons
+are `released`, `revoked`, `turn-end`, `stop`, and `delete`. Acquire and reject
+facts are `enforced` because the node occupancy owner changed the outcome;
+release facts are `attribution-only` with a `not-applicable` outcome. Facts are
+emitted at every lifecycle boundary — acquire through `use_device` or a
+placement call, release at turn end, Stop, a switch back to gateway scope,
+session archive or delete, device disable or removal, and node-reported
+occupancy release — but a fact persists only while its execution context is
+retained: operator-side release boundaries attribute the transition to the
+execution that acquired the lease when the Gateway still mirrors its admission
+token, and a boundary with no retained execution (identity collection disabled,
+or a mirror lost to a Gateway restart) records nothing. A gateway-scoped turn
+writes no lease facts, and an audit failure logs a bounded warning without
+blocking or failing the lease transition or tool call.
+
 Direct session-sharing methods do not admit model runs,
 so they do not synthesize run selectors. Sharing events preserve a verified
 profile actor when one exists; an expected but unresolved profile is reported
@@ -368,6 +388,15 @@ timestamp, actor, action, status, `schemaVersion: 1`, and
 rows; run inspection obtains nonterminal outbound progress from its companion.
 See [Audit records](/cli/audit) for the full field reference and query filters.
 
+Tool-action records also report where the session executes: while a session has
+an active device execution scope, its `tool.action.started/finished` records
+carry that scope's hashed device reference (`deviceRef`). The reference reports
+the session's placement scope at event time; records for a gateway-scoped
+session intentionally omit it. The projection reads the committed session
+scope once per session (the first tool event after a Gateway restart or session
+creation) and caches it, then refreshes it on every committed scope write, so
+a started record and its finished record agree.
+
 ## Message lifecycle events
 
 Choose message audit metadata in **Settings → Advanced → Logging**, or set
@@ -422,7 +451,10 @@ only as installation-local keyed pseudonyms
 
 Run and tool records retain `sessionKey` and `sessionId` for correlation;
 canonical session keys can themselves contain platform account or peer ids.
-Message records intentionally omit both.
+Message records intentionally omit both. A tool-action `deviceRef` is a one-way
+`sha256:` hash of the paired device id — the same convention as device
+management security events — so rows correlate by executing device without
+retaining the id itself.
 
 Execution identity contexts use the same installation-local key owner with a
 separate HMAC domain. Raw runtime, invoker, ingress-source, assurance, grant,
@@ -486,6 +518,11 @@ Exact terminal linkage lives in the lazy
 released `audit_events` shape. It is created only for a host-validated exact
 binding; run-only terminal writes leave it absent. Compatible older Gateways
 ignore this additive table as well.
+Tool-action device references live in the same kind of lazy companion:
+`tool_action_device_bindings` is created only on the first retained
+device-scoped tool event, stores one hashed `device_ref` beside its tool-action
+row, keeps the ledger's 30-day retention with a 100,000-row cap, and is equally
+ignored by compatible older Gateways.
 
 Upgrading from a Gateway with the earlier run/tool-only ledger migrates the
 schema automatically at startup (or via `openclaw doctor --fix`); existing
@@ -522,7 +559,8 @@ Terminal approvals remain in their owner-native `operator_approvals` table for
 30 days. Inspection applies that cutoff even when physical pruning has not run.
 The additive `execution_decision_facts` table is reserved for action boundaries
 that have no owner-native durable record, including portable message actions,
-policy denials, and early intentional suppressions. It is created lazily on
+policy denials, early intentional suppressions, and device occupancy lease
+transitions. It is created lazily on
 first generic fact write, retains facts for 30 days, caps the table at 250,000
 rows, and prunes at most 1,024 rows per write or maintenance tick. Approval
 paths never write this table. Its facts and approval rows are authoritative for

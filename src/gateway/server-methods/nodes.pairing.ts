@@ -43,7 +43,10 @@ import {
 import { emitDeviceManagementSecurityEvent } from "./device-management-security.js";
 import { refreshConnectedNodeSurfaceCaches } from "./nodes.read.js";
 import { respondUnavailableOnThrow } from "./response.js";
-import { revokeDeviceScopeLeases } from "./session-device-scope.js";
+import {
+  releaseRemovedDeviceScopeLeases,
+  revokeDeviceScopeLeases,
+} from "./session-device-scope.js";
 import type { GatewayClient, GatewayRequestContext, RespondFn } from "./shared-types.js";
 import type { GatewayRequestHandlers } from "./types.js";
 import { assertValidParams } from "./validation.js";
@@ -422,6 +425,10 @@ export const nodePairingHandlers: GatewayRequestHandlers = {
       try {
         clearRemovedNodeRuntimeState({ nodeId: deviceBacked.nodeId, context });
         await reconcileRevokedDeviceWorker(context, deviceBacked.nodeId);
+        // Removing the pairing retires the device's mirrored occupancy leases:
+        // the node clears its own occupancy when the hard close lands, so no
+        // revoke invoke happens here. The dropped mirrors record the delete.
+        releaseRemovedDeviceScopeLeases({ deviceId: deviceBacked.nodeId });
         context.broadcast(
           "node.pair.resolved",
           {

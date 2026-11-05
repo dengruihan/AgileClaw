@@ -16,6 +16,16 @@ import {
   publishPromptDeviceScopeSnapshot,
   type PromptDeviceScopeSnapshot,
 } from "../../agents/prompt-device-scope.js";
+import { getGatewayToolCallerIdentity } from "../../agents/tools/gateway-caller-context.js";
+import {
+  recordDeviceLeaseDecision,
+  type DeviceLeaseReleaseReason,
+  type DeviceLeaseRejectReason,
+} from "../../audit/device-lease-decision.js";
+import {
+  invalidateToolActionDeviceScopes,
+  publishToolActionDeviceScope,
+} from "../../audit/tool-action-device-scope.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { updateSessionEntry } from "../../config/sessions/session-accessor.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
@@ -37,10 +47,11 @@ import type { NodeRegistry } from "../node-registry.js";
 import type { NodeSession } from "../node-session.types.js";
 import {
   applyNodeOccupancyStatus,
-  clearSessionScopeLeasesForDevice,
   readSessionScopeLease,
   recordSessionScopeLease,
   releaseSessionScopeLease,
+  takeSessionScopeLeasesForDevice,
+  type SessionScopeLeaseRecord,
 } from "../session-scope-lease.js";
 import { resolveSessionSharingTarget } from "../session-sharing.js";
 
@@ -117,6 +128,81 @@ export function describeDeviceScopeFailure(result: DeviceScopeFailure): string {
 
 function failure(code: DeviceScopeFailureCode, message: string): DeviceScopeFailure {
   return { ok: false, code, message };
+}
+
+/**
+ * Queue one lease fact for the transition this owner just observed. Best
+ * effort: a missing admitted execution (operator-side boundaries, restart-lost
+ * mirrors) or a closed audit sink records nothing, and any audit failure only
+ * logs so it can never block or fail the lease transition itself.
+ */
+function recordDeviceScopeLeaseFact(params: {
+  deviceId: string;
+  rootSessionKey: string;
+  phase: "acquire" | "release" | "reject";
+  rejectReason?: DeviceLeaseRejectReason;
+  releaseReason?: DeviceLeaseReleaseReason;
+  agentId?: string;
+  permissionMode?: string;
+  leaseToken?: string;
+  admissionToken?: SessionScopeLeaseRecord["admissionToken"];
+  occurredAt?: number;
+}): void {
+  try {
+    const caller = getGatewayToolCallerIdentity();
+    const token = params.admissionToken ?? caller?.executionIdentityToken;
+    if (!token) {
+      return;
+    }
+    if (params.phase !== "release" && caller?.receiptAuthority) {
+      // Enforced facts revalidate the live admitted run after the node await.
+      if (caller.receiptAuthority() === false) {
+        return;
+      }
+    }
+    recordDeviceLeaseDecision({
+      token,
+      phase: params.phase,
+      deviceId: params.deviceId,
+      rootSessionKey: params.rootSessionKey,
+      ...(params.agentId ? { agentId: params.agentId } : {}),
+      ...(params.permissionMode ? { permissionMode: params.permissionMode } : {}),
+      ...(params.rejectReason ? { rejectReason: params.rejectReason } : {}),
+      ...(params.releaseReason ? { releaseReason: params.releaseReason } : {}),
+      ...(params.leaseToken ? { leaseToken: params.leaseToken } : {}),
+      ...(params.occurredAt !== undefined ? { occurredAt: params.occurredAt } : {}),
+    });
+  } catch (error) {
+    logWarn(`device scope: lease audit fact failed: ${formatErrorMessage(error)}`);
+  }
+}
+
+/** Reject codes that describe an occupancy eligibility denial worth a fact. */
+const LEASE_REJECT_CODES: Partial<Record<DeviceScopeFailureCode, DeviceLeaseRejectReason>> = {
+  DEVICE_OCCUPIED: "occupied",
+  DEVICE_DISABLED: "disabled",
+  DEVICE_NOT_CONNECTED: "disconnected",
+  DEVICE_NOT_EXECUTOR: "not-executor",
+};
+
+const SCOPE_PERMISSION_MODES = new Set(["read-only", "guarded", "workspace", "full"]);
+
+/** Bounded session permission mode at the scope root; absent when unrecorded. */
+function readScopePermissionMode(params: {
+  cfg: OpenClawConfig;
+  rootSessionKey: string;
+  agentId?: string;
+}): string | undefined {
+  try {
+    const mode = resolveSessionScopeRoot({
+      cfg: params.cfg,
+      sessionKey: params.rootSessionKey,
+      ...(params.agentId ? { agentId: params.agentId } : {}),
+    })?.entry.permissionMode?.trim();
+    return mode && SCOPE_PERMISSION_MODES.has(mode) ? mode : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeCommands(commands: readonly string[] | undefined): string[] {
@@ -201,6 +287,8 @@ export async function acquireDeviceScopeLease(params: {
   connectionSignal?: AbortSignal;
   now?: () => number;
   mintLeaseToken?: () => string;
+  /** Session permission mode retained with the grant for audit correlation. */
+  permissionMode?: string;
 }): Promise<{ ok: true; lease: DeviceScopeLeaseGrant } | DeviceScopeFailure> {
   const deviceId = normalizeOptionalString(params.deviceId) ?? "";
   const rootSessionKey = normalizeOptionalString(params.rootSessionKey) ?? "";
@@ -235,6 +323,15 @@ export async function acquireDeviceScopeLease(params: {
     const message =
       normalizeOptionalString(nodeError?.message) ?? "device occupancy acquire failed";
     if (nodeError?.code === NODE_DEVICE_OCCUPIED_ERROR_CODE) {
+      recordDeviceScopeLeaseFact({
+        deviceId,
+        rootSessionKey,
+        phase: "reject",
+        rejectReason: "occupied",
+        ...(agentId ? { agentId } : {}),
+        ...(params.permissionMode ? { permissionMode: params.permissionMode } : {}),
+        leaseToken,
+      });
       return failure(
         "DEVICE_OCCUPIED",
         `${deviceId} is occupied: ${message}. No queueing and no gateway fallback; retry after the holder releases the device or switch to gateway scope.`,
@@ -243,7 +340,11 @@ export async function acquireDeviceScopeLease(params: {
     return resolveLeaseInvokeFailure(`${deviceId} refused the occupancy lease: ${message}`);
   }
   const payload = result.payload as
-    | { holder?: NodeOccupancyHolder; leaseToken?: string; acquiredAtMs?: number }
+    | {
+        holder?: NodeOccupancyHolder;
+        leaseToken?: string;
+        acquiredAtMs?: number;
+      }
     | undefined;
   const holder = payload?.holder;
   if (!holder || typeof holder.sessionKey !== "string") {
@@ -254,6 +355,7 @@ export async function acquireDeviceScopeLease(params: {
       ? payload.acquiredAtMs
       : (params.now?.() ?? Date.now());
   const grantToken = normalizeOptionalString(payload?.leaseToken) ?? leaseToken;
+  const admissionToken = getGatewayToolCallerIdentity()?.executionIdentityToken;
   recordSessionScopeLease({
     rootSessionKey,
     deviceId,
@@ -261,7 +363,19 @@ export async function acquireDeviceScopeLease(params: {
     leaseToken: grantToken,
     expiresAt: (params.now?.() ?? Date.now()) + DEVICE_SCOPE_LEASE_TTL_MS,
     ...(agentId ? { agentId } : {}),
+    ...(admissionToken ? { admissionToken } : {}),
+    ...(params.permissionMode ? { permissionMode: params.permissionMode } : {}),
     ...(params.connectionSignal ? { connectionSignal: params.connectionSignal } : {}),
+  });
+  recordDeviceScopeLeaseFact({
+    deviceId,
+    rootSessionKey,
+    phase: "acquire",
+    ...(agentId ? { agentId } : {}),
+    ...(params.permissionMode ? { permissionMode: params.permissionMode } : {}),
+    ...(admissionToken ? { admissionToken } : {}),
+    leaseToken: grantToken,
+    occurredAt: acquiredAtMs,
   });
   return { ok: true, lease: { holder, leaseToken: grantToken, acquiredAtMs } };
 }
@@ -277,6 +391,8 @@ export async function releaseDeviceScopeLease(params: {
   leaseToken?: string;
   deviceId?: string;
   signal?: AbortSignal;
+  /** Lifecycle boundary that owns this release; audit correlation only. */
+  releaseReason?: DeviceLeaseReleaseReason;
 }): Promise<boolean> {
   const rootSessionKey = normalizeOptionalString(params.rootSessionKey) ?? "";
   if (!rootSessionKey) {
@@ -303,7 +419,25 @@ export async function releaseDeviceScopeLease(params: {
         );
       });
   }
-  return Boolean(releaseSessionScopeLease(rootSessionKey, leaseToken ? { leaseToken } : undefined));
+  const released = releaseSessionScopeLease(
+    rootSessionKey,
+    leaseToken ? { leaseToken } : undefined,
+  );
+  if (released) {
+    // Exactly one fact per real mirror drop: a replaced or absent mirror is a
+    // no-op, so a transition cannot emit twice.
+    recordDeviceScopeLeaseFact({
+      deviceId: released.deviceId,
+      rootSessionKey,
+      phase: "release",
+      releaseReason: params.releaseReason ?? "released",
+      ...(released.agentId ? { agentId: released.agentId } : {}),
+      ...(released.permissionMode ? { permissionMode: released.permissionMode } : {}),
+      ...(released.admissionToken ? { admissionToken: released.admissionToken } : {}),
+      ...(released.leaseToken ? { leaseToken: released.leaseToken } : {}),
+    });
+  }
+  return Boolean(released);
 }
 
 /**
@@ -344,7 +478,53 @@ export async function revokeDeviceScopeLeases(params: {
       );
     }
   }
-  return { revoked, clearedRootSessionKeys: clearSessionScopeLeasesForDevice(deviceId) };
+  const cleared = takeSessionScopeLeasesForDevice(deviceId, Date.now());
+  for (const { rootSessionKey, record } of cleared) {
+    recordDeviceScopeLeaseFact({
+      deviceId,
+      rootSessionKey,
+      phase: "release",
+      releaseReason: "revoked",
+      ...(record.agentId ? { agentId: record.agentId } : {}),
+      ...(record.permissionMode ? { permissionMode: record.permissionMode } : {}),
+      ...(record.admissionToken ? { admissionToken: record.admissionToken } : {}),
+      ...(record.leaseToken ? { leaseToken: record.leaseToken } : {}),
+    });
+  }
+  return {
+    revoked,
+    clearedRootSessionKeys: cleared.map((entry) => entry.rootSessionKey),
+  };
+}
+
+/**
+ * Retire the mirrored leases of a removed device pairing without contacting the
+ * node: unpairing disconnects it, and the node clears its own occupancy then.
+ * Audit-only release semantics for the delete boundary.
+ */
+export function releaseRemovedDeviceScopeLeases(params: { deviceId: string }): {
+  clearedRootSessionKeys: string[];
+} {
+  const deviceId = normalizeOptionalString(params.deviceId) ?? "";
+  if (!deviceId) {
+    return { clearedRootSessionKeys: [] };
+  }
+  const cleared = takeSessionScopeLeasesForDevice(deviceId, Date.now());
+  for (const { rootSessionKey, record } of cleared) {
+    recordDeviceScopeLeaseFact({
+      deviceId,
+      rootSessionKey,
+      phase: "release",
+      releaseReason: "delete",
+      ...(record.agentId ? { agentId: record.agentId } : {}),
+      ...(record.permissionMode ? { permissionMode: record.permissionMode } : {}),
+      ...(record.admissionToken ? { admissionToken: record.admissionToken } : {}),
+      ...(record.leaseToken ? { leaseToken: record.leaseToken } : {}),
+    });
+  }
+  return {
+    clearedRootSessionKeys: cleared.map((entry) => entry.rootSessionKey),
+  };
 }
 
 /** Mirror a node-reported release: only the node can prove the lease ended. */
@@ -352,6 +532,22 @@ export function applyNodeOccupancyStatusForDevice(params: {
   deviceId: string;
   occupied: boolean;
 }): string[] {
+  if (!params.occupied) {
+    const cleared = takeSessionScopeLeasesForDevice(params.deviceId, Date.now());
+    for (const { rootSessionKey, record } of cleared) {
+      recordDeviceScopeLeaseFact({
+        deviceId: params.deviceId,
+        rootSessionKey,
+        phase: "release",
+        releaseReason: "released",
+        ...(record.agentId ? { agentId: record.agentId } : {}),
+        ...(record.permissionMode ? { permissionMode: record.permissionMode } : {}),
+        ...(record.admissionToken ? { admissionToken: record.admissionToken } : {}),
+        ...(record.leaseToken ? { leaseToken: record.leaseToken } : {}),
+      });
+    }
+    return cleared.map((entry) => entry.rootSessionKey);
+  }
   return applyNodeOccupancyStatus(params);
 }
 
@@ -373,7 +569,11 @@ export function resolveSessionScopeRoot(params: {
   if (!target) {
     return undefined;
   }
-  let root = { rootSessionKey: target.canonicalKey, agentId: target.agentId, entry: target.entry };
+  let root = {
+    rootSessionKey: target.canonicalKey,
+    agentId: target.agentId,
+    entry: target.entry,
+  };
   for (let depth = 0; depth < MAX_SCOPE_ROOT_DEPTH; depth += 1) {
     // A fork is a new root: it keeps its own scope and its own lease.
     if (root.entry.forkSource) {
@@ -427,7 +627,12 @@ export async function prepareDeviceScopeSwitch(params: {
     return {
       ok: true,
       ...(previous
-        ? { previousLease: { deviceId: previous.deviceId, leaseToken: previous.leaseToken } }
+        ? {
+            previousLease: {
+              deviceId: previous.deviceId,
+              leaseToken: previous.leaseToken,
+            },
+          }
         : {}),
     };
   }
@@ -437,12 +642,28 @@ export async function prepareDeviceScopeSwitch(params: {
   }
   const readDevice = params.getPairedDevice ?? ((id) => getPairedDevice(id));
   const readSession = params.getNodeSession ?? ((id) => params.registry?.get?.(id));
+  const permissionMode = readScopePermissionMode({
+    cfg: params.cfg,
+    rootSessionKey: params.rootSessionKey,
+    ...(params.agentId ? { agentId: params.agentId } : {}),
+  });
   const device = await readDevice(deviceId);
   const validated = validateDeviceScopeDevice({
     device,
     session: readSession ? readSession(deviceId) : undefined,
   });
   if (!validated.ok) {
+    const rejectReason = LEASE_REJECT_CODES[validated.code];
+    if (rejectReason) {
+      recordDeviceScopeLeaseFact({
+        deviceId,
+        rootSessionKey: params.rootSessionKey,
+        phase: "reject",
+        rejectReason,
+        ...(params.agentId ? { agentId: params.agentId } : {}),
+        ...(permissionMode ? { permissionMode } : {}),
+      });
+    }
     return validated;
   }
   if (!params.registry) {
@@ -463,6 +684,7 @@ export async function prepareDeviceScopeSwitch(params: {
     ...(params.connectionSignal ? { connectionSignal: params.connectionSignal } : {}),
     ...(params.now ? { now: params.now } : {}),
     ...(params.mintLeaseToken ? { mintLeaseToken: params.mintLeaseToken } : {}),
+    ...(permissionMode ? { permissionMode } : {}),
   });
   if (!grant.ok) {
     return grant;
@@ -474,7 +696,12 @@ export async function prepareDeviceScopeSwitch(params: {
     // Released by the caller once the scope write commits; a failed patch must
     // keep the tree's previous grant intact.
     ...(previous && previous.deviceId !== deviceId
-      ? { previousLease: { deviceId: previous.deviceId, leaseToken: previous.leaseToken } }
+      ? {
+          previousLease: {
+            deviceId: previous.deviceId,
+            leaseToken: previous.leaseToken,
+          },
+        }
       : {}),
   };
 }
@@ -490,10 +717,21 @@ export async function writeSessionDeviceScope(params: {
   agentId: string;
   deviceId: string | null;
 }): Promise<SessionEntry | null> {
-  return await updateSessionEntry(
+  const written = await updateSessionEntry(
     { agentId: params.agentId, sessionKey: params.rootSessionKey },
     () => ({ scopeDeviceId: params.deviceId ?? undefined }),
   );
+  if (written) {
+    // A committed scope change is authoritative for the audit projection:
+    // drop cached child scopes and publish the root's new scope immediately so
+    // a switch back to gateway cannot leave a stale deviceRef behind.
+    invalidateToolActionDeviceScopes();
+    publishToolActionDeviceScope({
+      sessionKey: params.rootSessionKey,
+      deviceId: params.deviceId,
+    });
+  }
+  return written;
 }
 
 /**
@@ -504,7 +742,11 @@ export async function writeSessionDeviceScope(params: {
 export function buildSessionDeviceScopeSnapshot(params: {
   scopeDeviceId?: string;
   scopeCwd?: string;
-  connectedDevices: ReadonlyArray<{ nodeId: string; displayName?: string; platform?: string }>;
+  connectedDevices: ReadonlyArray<{
+    nodeId: string;
+    displayName?: string;
+    platform?: string;
+  }>;
 }): PromptDeviceScopeSnapshot {
   const devices = params.connectedDevices.map((device) => ({
     deviceId: device.nodeId,
@@ -548,7 +790,11 @@ export function publishSessionDeviceScopePrompt(params: {
     publishPromptDeviceScopeSnapshot({ sessionKey });
     return undefined;
   }
-  const connectedDevices: Array<{ nodeId: string; displayName?: string; platform?: string }> = [];
+  const connectedDevices: Array<{
+    nodeId: string;
+    displayName?: string;
+    platform?: string;
+  }> = [];
   for (const session of params.registry.listConnected()) {
     connectedDevices.push({
       nodeId: session.nodeId,

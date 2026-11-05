@@ -187,11 +187,21 @@ describe("audit command parsing", () => {
           status: "failed",
           agentId: `${"x".repeat(16)}🚀tail`,
         },
+        {
+          occurredAt: 0,
+          kind: "tool_action",
+          action: "tool.action.finished",
+          status: "succeeded",
+          agentId: "main",
+          runId: "run-1",
+          toolName: "read",
+          deviceRef: "sha256:0123456789ab",
+        },
       ],
     });
 
     await auditListCommand({}, runtime);
-    const [header, unsafeRow, messageRow, truncatedRow] = vi
+    const [header, unsafeRow, messageRow, truncatedRow, deviceRow] = vi
       .mocked(runtime.log)
       .mock.calls.map(([line]) => line);
 
@@ -203,6 +213,8 @@ describe("audit command parsing", () => {
     expect(messageRow).toContain("message\tinbound\ttelegram\tsucceeded\t-\t-");
     expect(truncatedRow).toContain(`${"x".repeat(16)}…`);
     expect(truncatedRow).not.toContain("\uD83D");
+    // The device scope rides with the action so the row stays one column wide.
+    expect(deviceRow).toContain("tool.action.finished:read@sha256:0123456789ab");
   });
 });
 

@@ -118,7 +118,7 @@ export function parseExecutionDecisionWork(value: unknown): ExecutionDecisionWor
         ? {
             resource: parseRawRef({
               value: value.refs.resource,
-              namespaces: ["credential-profile"] as const,
+              namespaces: ["credential-profile", "device"] as const,
             }),
           }
         : {}),

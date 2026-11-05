@@ -1,8 +1,10 @@
 /** Gateway-owned recorder joining trusted run, tool, and message lifecycle streams. */
 import { randomUUID } from "node:crypto";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { resolveSessionScopeRoot } from "../gateway/server-methods/session-device-scope.js";
 import type { GatewayScheduler } from "../infra/gateway-scheduler.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { onSessionIdentityMutation } from "../sessions/session-lifecycle-events.js";
 import {
   createAgentEventAuditRecorder,
   type AgentEventAuditRecorder,
@@ -14,6 +16,10 @@ import {
 } from "./audit-config.js";
 import { createAuditEventWriter, type AuditEventWriter } from "./audit-event-writer.js";
 import type { TrustedMessageAuditEvent } from "./message-audit-events.js";
+import {
+  invalidateToolActionDeviceScopes,
+  type ToolActionDeviceScopeResolver,
+} from "./tool-action-device-scope.js";
 
 const log = createSubsystemLogger("audit/events");
 let persistenceFailureWarned = false;
@@ -31,6 +37,8 @@ export function createAuditEventRecorder(options: {
   writer?: AuditEventWriter;
   stateDir?: string;
   terminalSettleMs?: number;
+  /** Test/composition override; production reads the committed session entry. */
+  resolveSessionDeviceScope?: ToolActionDeviceScopeResolver;
 }): AuditEventRecorder {
   let nextAcceptedMessageSequence = 0;
   const writer =
@@ -50,10 +58,37 @@ export function createAuditEventRecorder(options: {
     writer,
     getConfig: options.getConfig,
     terminalSettleMs: options.terminalSettleMs,
+    // Seed the tool-action device scope from the committed session entry once
+    // per session; the projection caches it (including gateway scope).
+    resolveSessionDeviceScope:
+      options.resolveSessionDeviceScope ??
+      ((sessionKey) => {
+        try {
+          const root = resolveSessionScopeRoot({
+            cfg: options.getConfig(),
+            sessionKey,
+          });
+          return root ? (root.entry.scopeDeviceId ?? null) : undefined;
+        } catch {
+          return undefined;
+        }
+      }),
+  });
+
+  // Session create/delete/reset/replace can retire or reuse a stable key
+  // without any scope write, so a cached tool-action scope may belong to a
+  // previous generation. Drop the cache on every committed identity mutation;
+  // the next event re-reads the committed entry through the resolver.
+  const disposeSessionIdentityListener = onSessionIdentityMutation(() => {
+    invalidateToolActionDeviceScopes();
   });
 
   return {
     ...agentRecorder,
+    stop: async () => {
+      disposeSessionIdentityListener();
+      await agentRecorder.stop();
+    },
     recordExecutionIdentity: (work) =>
       isExecutionIdentityCollectionEnabled(options.getConfig()) &&
       writer.recordExecutionIdentity(work),

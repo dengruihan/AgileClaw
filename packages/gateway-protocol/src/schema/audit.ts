@@ -55,6 +55,7 @@ export const AuditEventSchema = closedObject({
   runId: NonEmptyString,
   toolCallId: Type.Optional(NonEmptyString),
   toolName: Type.Optional(NonEmptyString),
+  deviceRef: Type.Optional(NonEmptyString),
   redaction: Type.Literal("metadata_only"),
 });
 

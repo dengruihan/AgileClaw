@@ -1,4 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { configureExecutionDecisionWorkSink } from "../../audit/execution-decision-work.js";
+import type { ExecutionDecisionWork } from "../../audit/execution-decision-work.types.js";
+import { createExecutionIdentityAdmissionToken } from "../../audit/execution-identity-admission.js";
+import {
+  clearToolActionDeviceScopesForTest,
+  publishToolActionDeviceScope,
+  readToolActionDeviceRef,
+} from "../../audit/tool-action-device-scope.js";
 import {
   clearAllSessionScopeLeasesForTest,
   recordSessionScopeLease,
@@ -8,6 +16,7 @@ import {
   getAgentToolExecutionLocation,
 } from "../agent-tool-metadata.js";
 import type { AnyAgentTool } from "../agent-tools.types.js";
+import { withGatewayToolCallerIdentity } from "./gateway-caller-context.js";
 import { textResult } from "./tool-results.js";
 
 const acquireDeviceScopeLease = vi.fn();
@@ -66,6 +75,7 @@ function routingState() {
 
 afterEach(() => {
   clearAllSessionScopeLeasesForTest();
+  clearToolActionDeviceScopesForTest();
   acquireDeviceScopeLease.mockReset();
   resolveSessionScopeRoot.mockReset();
   gatewayContext.mockReset();
@@ -91,11 +101,28 @@ describe("applyDeviceScopeToolRouting", () => {
       agentId: "main",
       entry: { sessionId: "sess-1" },
     });
+    // A stale device fact must not outlive the return to gateway scope.
+    publishToolActionDeviceScope({
+      sessionKey: "agent:main:root",
+      deviceId: "device-a",
+    });
     const exec = placementTool("exec");
     const [routed] = applyDeviceScopeToolRouting([exec.tool], routingState());
-    await routed!.execute("call-1", { command: "uname" });
+    const work: ExecutionDecisionWork[] = [];
+    const clear = configureExecutionDecisionWorkSink((item) => {
+      work.push(item);
+      return true;
+    });
+    try {
+      await routed!.execute("call-1", { command: "uname" });
+    } finally {
+      clear();
+    }
     expect(exec.execute).toHaveBeenCalledWith("call-1", { command: "uname" }, undefined, undefined);
     expect(callGatewayTool).not.toHaveBeenCalled();
+    expect(readToolActionDeviceRef("agent:main:root")).toBeUndefined();
+    // A gateway-scoped turn owns no device lease transition, so it writes no fact.
+    expect(work).toHaveLength(0);
   });
 
   it("routes exec to the scoped device with the mirrored lease token", async () => {
@@ -113,7 +140,9 @@ describe("applyDeviceScopeToolRouting", () => {
       leaseToken: "lease-1",
       expiresAt: Number.MAX_SAFE_INTEGER,
     });
-    callGatewayTool.mockResolvedValue({ payload: { success: true, exitCode: 0, stdout: "ok" } });
+    callGatewayTool.mockResolvedValue({
+      payload: { success: true, exitCode: 0, stdout: "ok" },
+    });
     const exec = placementTool("exec");
     const [routed] = applyDeviceScopeToolRouting([exec.tool], routingState());
     const result = await routed!.execute("call-1", { command: "uname" });
@@ -134,6 +163,8 @@ describe("applyDeviceScopeToolRouting", () => {
       undefined,
     );
     expect(result.content[0]).toMatchObject({ type: "text" });
+    // The routed call published the executing device for the audit projection.
+    expect(readToolActionDeviceRef("agent:main:root")).toMatch(/^sha256:[0-9a-f]{12}$/);
   });
 
   it("acquires a lease when no mirror exists and surfaces DEVICE_OCCUPIED without gateway fallback", async () => {
@@ -237,7 +268,9 @@ describe("applyDeviceScopeToolRouting", () => {
       leaseToken: "lease-1",
       expiresAt: Number.MAX_SAFE_INTEGER,
     });
-    callGatewayTool.mockResolvedValue({ payload: { success: true, exitCode: 0, stdout: "ok" } });
+    callGatewayTool.mockResolvedValue({
+      payload: { success: true, exitCode: 0, stdout: "ok" },
+    });
     const state = routingState();
     const exec = placementTool("exec");
     const [routed] = applyDeviceScopeToolRouting([exec.tool], state);
@@ -274,6 +307,53 @@ describe("applyDeviceScopeToolRouting", () => {
     await expect(routed!.execute("call-1", { command: "uname" })).rejects.toThrow(
       /Gateway-hosted session/,
     );
+    expect(exec.execute).not.toHaveBeenCalled();
+  });
+
+  it("queues a disconnected reject fact for an admitted turn before failing the call", async () => {
+    resolveSessionScopeRoot.mockReturnValue({
+      rootSessionKey: "agent:main:root",
+      agentId: "main",
+      entry: {
+        sessionId: "sess-1",
+        scopeDeviceId: "device-a",
+        permissionMode: "guarded",
+      },
+    });
+    gatewayContext.mockReturnValue({ nodeRegistry: { get: nodeGet } });
+    nodeGet.mockReturnValue(undefined);
+    const exec = placementTool("exec");
+    const [routed] = applyDeviceScopeToolRouting([exec.tool], routingState());
+    const work: ExecutionDecisionWork[] = [];
+    const clear = configureExecutionDecisionWorkSink((item) => {
+      work.push(item);
+      return true;
+    });
+    try {
+      await expect(
+        withGatewayToolCallerIdentity(
+          {
+            agentId: "main",
+            sessionKey: "agent:main:root",
+            executionIdentityToken: createExecutionIdentityAdmissionToken("run-1", {
+              contextId: "context-1",
+              executionId: "execution-1",
+              now: 5,
+            }),
+            receiptAuthority: () => true,
+          },
+          () => routed!.execute("call-1", { command: "uname" }),
+        ),
+      ).rejects.toThrow(/not connected/);
+    } finally {
+      clear();
+    }
+    expect(work).toHaveLength(1);
+    expect(work[0]?.receipt.decision).toEqual({
+      outcome: "denied",
+      reasonCode: "device_lease_rejected_disconnected",
+    });
+    expect(work[0]?.receipt.enforcement.policyRefs).toEqual(["session-permission-mode:guarded"]);
     expect(exec.execute).not.toHaveBeenCalled();
   });
 });

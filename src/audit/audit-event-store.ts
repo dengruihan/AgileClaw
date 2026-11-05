@@ -43,6 +43,13 @@ import {
   planMessageExecutionBinding,
   recordConfirmedTerminalMessageExecutionBinding,
 } from "./message-execution-binding.js";
+import {
+  clearToolActionDeviceBindingRowCountCache,
+  ensureToolActionDeviceBindingSchema,
+  pruneToolActionDeviceBindingsInDatabase,
+  recordToolActionDeviceBindingAfterInsert,
+  TOOL_ACTION_DEVICE_REF_MAX_LENGTH,
+} from "./tool-action-device-binding.js";
 
 type AuditEventsTable = OpenClawStateKyselyDatabase["audit_events"];
 type AuditDatabase = Pick<OpenClawStateKyselyDatabase, "audit_events">;
@@ -232,7 +239,10 @@ function parseAgentRunRow(row: AuditEventRow): AgentRunAuditEventRecord {
       : row.status === "cancelled"
         ? { status: "cancelled" as const, errorCode: "run_cancelled" as const }
         : row.status === "timed_out"
-          ? { status: "timed_out" as const, errorCode: "run_timed_out" as const }
+          ? {
+              status: "timed_out" as const,
+              errorCode: "run_timed_out" as const,
+            }
           : row.status === "blocked"
             ? { status: "blocked" as const, errorCode: "run_blocked" as const }
             : corruptAuditRow(row, "invalid run terminal status");
@@ -265,11 +275,17 @@ function parseToolActionRow(row: AuditEventRow): ToolActionAuditEventRecord {
       : row.status === "cancelled"
         ? { status: "cancelled" as const, errorCode: "tool_cancelled" as const }
         : row.status === "timed_out"
-          ? { status: "timed_out" as const, errorCode: "tool_timed_out" as const }
+          ? {
+              status: "timed_out" as const,
+              errorCode: "tool_timed_out" as const,
+            }
           : row.status === "blocked"
             ? { status: "blocked" as const, errorCode: "tool_blocked" as const }
             : row.status === "unknown"
-              ? { status: "unknown" as const, errorCode: "tool_outcome_unknown" as const }
+              ? {
+                  status: "unknown" as const,
+                  errorCode: "tool_outcome_unknown" as const,
+                }
               : corruptAuditRow(row, "invalid tool terminal status");
   requiredEnum(row, row.error_code, "errorCode", [terminal.errorCode]);
   return { ...common, action, ...terminal };
@@ -399,12 +415,20 @@ function parseOutboundMessageRow(row: AuditEventRow): OutboundMessageAuditEventR
     }
     if (action === "message.outbound.platform-started") {
       requiredEnum(row, row.message_outcome, "outcome", ["platform_started"]);
-      return { ...common, action, status: "started", outcome: "platform_started" };
+      return {
+        ...common,
+        action,
+        status: "started",
+        outcome: "platform_started",
+      };
     }
     return corruptAuditRow(row, "invalid outbound lifecycle action");
   }
   requiredEnum(row, action, "action", ["message.outbound.finished"]);
-  const terminalCommon = { ...common, action: "message.outbound.finished" as const };
+  const terminalCommon = {
+    ...common,
+    action: "message.outbound.finished" as const,
+  };
   if (row.status === "succeeded") {
     const deliveryKind = optionalEnum(row, row.delivery_kind, "deliveryKind", DELIVERY_KINDS);
     requiredEnum(row, row.message_outcome, "outcome", ["sent"]);
@@ -622,6 +646,16 @@ export function recordAuditEventInDatabase(
   if (executionToken) {
     ensureTerminalMessageExecutionBindingSchema(options);
   }
+  const toolDeviceRefCandidate = input.kind === "tool_action" ? input.deviceRef?.trim() : undefined;
+  // Over-length refs cannot be retained by the bounded companion; the tool
+  // action row itself is still recorded without a device binding.
+  const toolDeviceRef =
+    toolDeviceRefCandidate && toolDeviceRefCandidate.length <= TOOL_ACTION_DEVICE_REF_MAX_LENGTH
+      ? toolDeviceRefCandidate
+      : undefined;
+  if (toolDeviceRef) {
+    ensureToolActionDeviceBindingSchema(options);
+  }
   let countCacheDatabase: DatabaseSync | undefined;
   try {
     return runOpenClawStateWriteTransaction(({ db }) => {
@@ -643,11 +677,27 @@ export function recordAuditEventInDatabase(
         eventId: row?.event_id,
         token: executionToken,
       });
-      return row ? rowToAuditEvent(row) : undefined;
+      if (row && toolDeviceRef) {
+        // The device companion joins the same committed row; an older Gateway
+        // without the additive table ignores it entirely.
+        recordToolActionDeviceBindingAfterInsert(
+          db,
+          { eventId: row.event_id, deviceRef: toolDeviceRef, occurredAt: input.occurredAt },
+          AUDIT_EVENT_RETENTION_MS,
+        );
+      }
+      if (!row) {
+        return undefined;
+      }
+      const record = rowToAuditEvent(row);
+      return record.kind === "tool_action" && toolDeviceRef
+        ? { ...record, deviceRef: toolDeviceRef }
+        : record;
     }, options);
   } catch (error) {
     if (countCacheDatabase) {
       auditEventRowCounts.delete(countCacheDatabase);
+      clearToolActionDeviceBindingRowCountCache(countCacheDatabase);
       clearAuditIdentityKeyCacheForDatabase(countCacheDatabase);
     }
     throw error;
@@ -669,7 +719,10 @@ export async function listAuditEvents(
   };
   const context = captureOpenClawStateWorkerContext(params.database);
   const { executeOpenClawStateWorker } = await import("../state/openclaw-state-worker-store.js");
-  return executeOpenClawStateWorker(context, { type: "audit.events.list", input });
+  return executeOpenClawStateWorker(context, {
+    type: "audit.events.list",
+    input,
+  });
 }
 
 /** Delete one bounded batch during Gateway startup and periodic audit maintenance. */
@@ -678,7 +731,9 @@ export function pruneExpiredAuditEventsInDatabase(params: {
   database: OpenClawStateDatabaseOptions & { database: OpenClawStateDatabase };
 }): number {
   return runOpenClawStateWriteTransaction(({ db }) => {
-    const deleted = deleteExpiredAuditEvents(db, params.now ?? Date.now());
+    const now = params.now ?? Date.now();
+    const deleted = deleteExpiredAuditEvents(db, now);
+    pruneToolActionDeviceBindingsInDatabase(db, now, AUDIT_EVENT_RETENTION_MS);
     auditEventRowCounts.delete(db);
     return Number(deleted.numAffectedRows ?? 0n);
   }, params.database);

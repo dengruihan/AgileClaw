@@ -8,6 +8,7 @@
  * be the only placement-affecting call in its step.
  */
 import { Type } from "typebox";
+import { publishToolActionDeviceScope } from "../../audit/tool-action-device-scope.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { resolveSessionScopeRoot } from "../../gateway/server-methods/session-device-scope.js";
 import { readSessionScopeLease } from "../../gateway/session-scope-lease.js";
@@ -150,6 +151,9 @@ export function createUseDeviceTool(params: {
       const writtenScope = readEntryScopeDeviceId(result) ?? deviceId;
       const rootSessionKey = params.state.resolveRoot()?.rootSessionKey ?? params.sessionKey;
       const mirror = readSessionScopeLease(rootSessionKey);
+      // The committed scope feeds the tool-action audit projection: placement
+      // calls from the next step on carry the executing device.
+      publishToolActionDeviceScope({ sessionKey: params.sessionKey, deviceId: writtenScope });
       if (writtenScope) {
         // The switch acquired a real lease; turn end must hand it back.
         params.state.noteLeaseUsed(rootSessionKey, getInProcessGatewayToolContext()?.nodeRegistry);

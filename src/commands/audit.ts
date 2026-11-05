@@ -63,6 +63,7 @@ type AuditCliEvent = {
   agentId?: string;
   runId?: string;
   toolName?: string;
+  deviceRef?: string;
 };
 
 function parseAuditTimestamp(value: string | undefined, flag: string): number | undefined {
@@ -120,7 +121,11 @@ function formatAuditRows(events: readonly AuditCliEvent[]): string[] {
         event.status,
         short(event.agentId, 18),
         short(event.runId, 18),
-        event.toolName ? `${event.action}:${short(event.toolName, 28)}` : event.action,
+        event.toolName
+          ? `${event.action}:${short(event.toolName, 28)}${
+              event.deviceRef ? `@${short(event.deviceRef, 26)}` : ""
+            }`
+          : event.action,
       ].join("\t"),
     );
   }

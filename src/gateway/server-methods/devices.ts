@@ -51,6 +51,7 @@ import {
 import type { DeviceManagementAuthz, DeviceSessionAuthz } from "./device-management-authz.js";
 import { emitDeviceManagementSecurityEvent } from "./device-management-security.js";
 import { scopeUpgradeHandlers } from "./device-scope-upgrade.js";
+import { releaseRemovedDeviceScopeLeases } from "./session-device-scope.js";
 import type {
   GatewayClient,
   GatewayRequestContext,
@@ -428,6 +429,10 @@ export const deviceHandlers: GatewayRequestHandlers = {
           return;
         }
         clearRemovedNodeRuntimeState({ nodeId: removed.deviceId, context });
+        // Removing the whole pairing retires its mirrored occupancy leases:
+        // the disconnect clears node-side occupancy, so no revoke invoke runs
+        // here, but the dropped mirrors still record the delete release.
+        releaseRemovedDeviceScopeLeases({ deviceId: removed.deviceId });
         // Removal can retire its requester. Keep only its final reply, without
         // letting a failed claim or worker reconciliation skip client teardown.
         try {

@@ -1,6 +1,9 @@
 // Covers the device-registry RPCs (enable/disable/update) and the disabled
 // device's execution boundary on node.invoke.
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { configureExecutionDecisionWorkSink } from "../../audit/execution-decision-work.js";
+import type { ExecutionDecisionWork } from "../../audit/execution-decision-work.types.js";
+import { createExecutionIdentityAdmissionToken } from "../../audit/execution-identity-admission.js";
 import { approveDevicePairing } from "../../infra/device-pairing-approval.js";
 import { approveNodePairing, requestNodePairing } from "../../infra/device-pairing-node.js";
 import {
@@ -15,6 +18,10 @@ import {
 } from "../../test-utils/openclaw-test-state.js";
 import { captureNodeWakeLifecycle } from "../node-wake-state.js";
 import { resetNodeWakeStateForTest } from "../node-wake-state.test-support.js";
+import {
+  clearAllSessionScopeLeasesForTest,
+  recordSessionScopeLease,
+} from "../session-scope-lease.js";
 import { bindDeviceWorkerReconciliation } from "../worker-environments/device-provider.js";
 import { nodeInvokeHandlers } from "./nodes.invoke.js";
 import { nodePairingHandlers } from "./nodes.pairing.js";
@@ -24,6 +31,7 @@ const createdStates: OpenClawTestState[] = [];
 
 afterEach(async () => {
   resetNodeWakeStateForTest();
+  clearAllSessionScopeLeasesForTest();
   vi.clearAllMocks();
   await closeStateDatabaseForTest();
   while (createdStates.length > 0) {
@@ -32,7 +40,10 @@ afterEach(async () => {
 });
 
 async function createState(): Promise<void> {
-  const state = await createOpenClawTestState({ label: "node-registry", layout: "state-only" });
+  const state = await createOpenClawTestState({
+    label: "node-registry",
+    layout: "state-only",
+  });
   createdStates.push(state);
 }
 
@@ -69,7 +80,10 @@ function createContext() {
     },
     nodeRegistry: {
       get: vi.fn(),
-      invoke: vi.fn(async () => ({ ok: true, payload: { ok: true, revoked: true } })),
+      invoke: vi.fn(async () => ({
+        ok: true,
+        payload: { ok: true, revoked: true },
+      })),
       updateSurface: vi.fn(),
     },
   };
@@ -120,7 +134,31 @@ describe("node.device registry RPCs", () => {
       workerPlacementDispatchService: { reconcileActive },
     });
 
-    const respond = await invokePairingRpc("node.device.disable", { nodeId: "node-1" }, context);
+    const admissionToken = createExecutionIdentityAdmissionToken("run-disable", {
+      contextId: "context-disable",
+      executionId: "execution-disable",
+      now: 5,
+    });
+    recordSessionScopeLease({
+      rootSessionKey: "agent:main:root",
+      deviceId: "node-1",
+      holder: "agent:main:root",
+      leaseToken: "lease-disable",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      admissionToken,
+    });
+    const work: ExecutionDecisionWork[] = [];
+    const clearWorkSink = configureExecutionDecisionWorkSink((item) => {
+      work.push(item);
+      return true;
+    });
+
+    let respond: ReturnType<typeof vi.fn>;
+    try {
+      respond = await invokePairingRpc("node.device.disable", { nodeId: "node-1" }, context);
+    } finally {
+      clearWorkSink();
+    }
     await Promise.resolve();
 
     expect(respond).toHaveBeenCalledWith(true, { nodeId: "node-1", enabled: false }, undefined);
@@ -148,7 +186,14 @@ describe("node.device registry RPCs", () => {
       role: "node",
       reason: "device-disabled",
     });
-    expect(context.disconnectClientsForDevice).toHaveBeenCalledWith("node-1", { role: "node" });
+    expect(context.disconnectClientsForDevice).toHaveBeenCalledWith("node-1", {
+      role: "node",
+    });
+    // The disable/revoke boundary records one attribution-only release fact.
+    expect(work.map((item) => item.receipt.decision)).toEqual([
+      { outcome: "not-applicable", reasonCode: "device_lease_revoked" },
+    ]);
+    expect(work[0]?.token).toEqual(admissionToken);
   });
 
   it("enables a disabled node and invalidates its clients to reconnect", async () => {
@@ -182,10 +227,16 @@ describe("node.device registry RPCs", () => {
     );
     expect(respond).toHaveBeenCalledWith(
       true,
-      { nodeId: "node-1", enabled: true, commandPolicy: { deny: ["system.run"] } },
+      {
+        nodeId: "node-1",
+        enabled: true,
+        commandPolicy: { deny: ["system.run"] },
+      },
       undefined,
     );
-    expect((await getPairedDevice("node-1"))?.commandPolicy).toEqual({ deny: ["system.run"] });
+    expect((await getPairedDevice("node-1"))?.commandPolicy).toEqual({
+      deny: ["system.run"],
+    });
     expect(context.invalidateClientsForDevice).toHaveBeenLastCalledWith("node-1", {
       role: "node",
       reason: "device-policy-updated",
@@ -241,7 +292,10 @@ describe("node.device registry RPCs", () => {
       expect(respond).toHaveBeenCalledWith(
         false,
         undefined,
-        expect.objectContaining({ code: "INVALID_REQUEST", message: "nodeId required" }),
+        expect.objectContaining({
+          code: "INVALID_REQUEST",
+          message: "nodeId required",
+        }),
       );
       expect(context.invalidateClientsForDevice).not.toHaveBeenCalled();
     },

@@ -25,9 +25,11 @@ describe("releaseTurnDeviceScopeLease", () => {
     await expect(releaseTurnDeviceScopeLease({ rootSessionKey: "agent:main:root" })).resolves.toBe(
       true,
     );
+    // Turn end owns the release boundary, so its audit fact carries the reason.
     expect(releaseDeviceScopeLease).toHaveBeenCalledWith({
       registry,
       rootSessionKey: "agent:main:root",
+      releaseReason: "turn-end",
     });
   });
 

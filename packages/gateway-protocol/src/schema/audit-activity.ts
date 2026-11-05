@@ -222,6 +222,7 @@ const toolActionProperties = {
   kind: Type.Literal("tool_action"),
   toolCallId: Type.Optional(NonEmptyString),
   toolName: Type.Optional(NonEmptyString),
+  deviceRef: Type.Optional(NonEmptyString),
 };
 
 /** V1 tool-action activity record. */

@@ -21,6 +21,18 @@ import {
 } from "./audit-event-store.js";
 import type { AuditEventInput, ToolActionAuditEventInput } from "./audit-event-types.js";
 import type { AuditEventWriter } from "./audit-event-writer.js";
+import {
+  ensureToolActionDeviceBindingSchema,
+  pruneToolActionDeviceBindingsAfterInsert,
+  pruneToolActionDeviceBindingsInDatabase,
+  recordToolActionDeviceBindingInDatabase,
+} from "./tool-action-device-binding.js";
+import {
+  clearToolActionDeviceScopesForTest,
+  hashAuditDeviceRef,
+  publishToolActionDeviceScope,
+  type ToolActionDeviceScopeResolver,
+} from "./tool-action-device-scope.js";
 
 const tempDirs: string[] = [];
 const AUDIT_EVENT_MAX_ROWS_CONTRACT = 100_000;
@@ -112,11 +124,13 @@ function projectAgentEventToAudit(event: AgentEventPayload): AuditEventInput | u
 
 function projectToolExecutionEventToAudit(
   event: TrustedToolExecutionEvent,
+  resolveSessionDeviceScope?: ToolActionDeviceScopeResolver,
 ): ToolActionAuditEventInput | undefined {
   const inputs: AuditEventInput[] = [];
   const recorder = createAgentEventAuditRecorder({
     writer: captureAuditWriter(inputs),
     getConfig: () => ({}),
+    ...(resolveSessionDeviceScope ? { resolveSessionDeviceScope } : {}),
   });
   recorder.recordTool(event);
   void recorder.stop();
@@ -131,6 +145,7 @@ afterEach(async () => {
   await closeOpenClawStateDatabaseAsync();
   closeOpenClawStateDatabaseForTest();
   resetDiagnosticEventsForTest();
+  clearToolActionDeviceScopesForTest();
 });
 
 afterAll(() => {
@@ -224,6 +239,163 @@ describe("audit event persistence", () => {
       errorCode: "tool_failed",
       redaction: "metadata_only",
     });
+  });
+
+  it("retains the hashed device scope for tool actions in the lazy companion", async () => {
+    const database = createDatabaseOptions();
+    const now = Date.now();
+    const deviceRef = "sha256:0123456789ab";
+    const recorded = recordAuditEventInDatabase(
+      auditInput({
+        occurredAt: now,
+        sourceSequence: 1,
+        kind: "tool_action",
+        action: "tool.action.started",
+        runId: "run-device",
+        toolCallId: "call-device",
+        toolName: "read",
+        deviceRef,
+      }),
+      { ...database, database: openOpenClawStateDatabase(database) },
+    );
+    expect(recorded).toMatchObject({ kind: "tool_action", deviceRef });
+    recordAuditEventInDatabase(
+      auditInput({
+        occurredAt: now + 1,
+        sourceSequence: 2,
+        kind: "tool_action",
+        action: "tool.action.finished",
+        status: "succeeded",
+        runId: "run-device",
+        toolCallId: "call-device",
+        toolName: "read",
+      }),
+      { ...database, database: openOpenClawStateDatabase(database) },
+    );
+    recordAuditEventInDatabase(
+      auditInput({
+        occurredAt: now + 2,
+        sourceSequence: 3,
+        action: "agent.run.finished",
+        status: "succeeded",
+      }),
+      { ...database, database: openOpenClawStateDatabase(database) },
+    );
+
+    const page = await listAuditEvents({ database, limit: 10 });
+    const toolEvents = page.events.filter((event) => event.kind === "tool_action");
+    expect(toolEvents.map((event) => event.deviceRef ?? null)).toEqual([null, deviceRef]);
+    // Only tool actions carry the field on the read surface.
+    expect(
+      page.events
+        .filter((event) => event.kind === "agent_run")
+        .every((event) => !("deviceRef" in event)),
+    ).toBe(true);
+    const opened = openOpenClawStateDatabase(database);
+    expect(
+      opened.db.prepare("SELECT COUNT(*) AS count FROM tool_action_device_bindings").get(),
+    ).toEqual({ count: 1 });
+    // Retention maintenance prunes the companion with the ledger's clock.
+    pruneExpiredAuditEventsInDatabase({
+      now: now + AUDIT_EVENT_RETENTION_MS_CONTRACT + 1,
+      database: { ...database, database: opened },
+    });
+    expect(
+      opened.db.prepare("SELECT COUNT(*) AS count FROM tool_action_device_bindings").get(),
+    ).toEqual({ count: 0 });
+  });
+
+  it("keeps the device companion absent until a device-scoped tool event is retained", async () => {
+    const database = createDatabaseOptions();
+    recordAuditEventInDatabase(auditInput({ action: "agent.run.started", status: "started" }), {
+      ...database,
+      database: openOpenClawStateDatabase(database),
+    });
+    const opened = openOpenClawStateDatabase(database);
+    expect(
+      opened.db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'tool_action_device_bindings'",
+        )
+        .get(),
+    ).toEqual({ count: 0 });
+  });
+
+  it("records the tool action without a companion when the device ref exceeds its bound", async () => {
+    const database = createDatabaseOptions();
+    const recorded = recordAuditEventInDatabase(
+      auditInput({
+        kind: "tool_action",
+        action: "tool.action.started",
+        runId: "run-oversize",
+        toolCallId: "call-oversize",
+        toolName: "read",
+        deviceRef: "x".repeat(65),
+      }),
+      { ...database, database: openOpenClawStateDatabase(database) },
+    );
+    expect(recorded).toMatchObject({ kind: "tool_action" });
+    expect(recorded && "deviceRef" in recorded).toBe(false);
+    const page = await listAuditEvents({ database, limit: 10 });
+    expect(page.events).toHaveLength(1);
+    expect(page.events[0]?.kind).toBe("tool_action");
+  });
+
+  it("bounds the device companion by sequence cutoff and retention", () => {
+    const database = createDatabaseOptions();
+    const now = Date.now();
+    const opened = openOpenClawStateDatabase(database);
+    ensureToolActionDeviceBindingSchema({ ...database, database: opened });
+    const limits = { maxRows: 4, pruneBatchRows: 1 };
+    const eventIds: string[] = [];
+    for (let index = 0; index < 6; index += 1) {
+      const recorded = recordAuditEventInDatabase(
+        auditInput({
+          occurredAt: now + index,
+          sourceSequence: index + 1,
+          kind: "tool_action",
+          action: "tool.action.started",
+          runId: "run-cap",
+          toolCallId: `call-cap-${index}`,
+          toolName: "read",
+        }),
+        { ...database, database: opened },
+      );
+      if (!recorded) {
+        throw new Error("expected a recorded tool action");
+      }
+      eventIds.push(recorded.eventId);
+    }
+    for (const [index, eventId] of eventIds.entries()) {
+      // The production after-insert path; exercise its cached-count overflow
+      // with a tiny cap instead of 100k rows.
+      expect(
+        recordToolActionDeviceBindingInDatabase(opened.db, {
+          eventId,
+          deviceRef: "sha256:0123456789ab",
+          occurredAt: now + index,
+        }),
+      ).toBe(true);
+      pruneToolActionDeviceBindingsAfterInsert(
+        opened.db,
+        now + 10,
+        AUDIT_EVENT_RETENTION_MS_CONTRACT,
+        limits,
+      );
+    }
+    const rows = opened.db
+      .prepare("SELECT event_id FROM tool_action_device_bindings ORDER BY sequence")
+      .all();
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toEqual({ event_id: eventIds[2] });
+    pruneToolActionDeviceBindingsInDatabase(
+      opened.db,
+      now + AUDIT_EVENT_RETENTION_MS_CONTRACT + 10,
+      AUDIT_EVENT_RETENTION_MS_CONTRACT,
+    );
+    expect(
+      opened.db.prepare("SELECT COUNT(*) AS count FROM tool_action_device_bindings").get(),
+    ).toEqual({ count: 0 });
   });
 
   it("deduplicates replayed source events", async () => {
@@ -365,20 +537,29 @@ describe("audit event persistence", () => {
     expect((await listAuditEvents({ database, limit: 10, now: expiredAt })).events).toEqual([]);
     expect(
       pruneExpiredAuditEventsInDatabase({
-        database: { ...database, database: openOpenClawStateDatabase(database) },
+        database: {
+          ...database,
+          database: openOpenClawStateDatabase(database),
+        },
         now: expiredAt,
       }),
     ).toBe(AUDIT_EVENT_PRUNE_BATCH_ROWS_CONTRACT);
     expect(db.prepare("SELECT COUNT(*) AS count FROM audit_events").get()).toEqual({ count: 1 });
     expect(
       pruneExpiredAuditEventsInDatabase({
-        database: { ...database, database: openOpenClawStateDatabase(database) },
+        database: {
+          ...database,
+          database: openOpenClawStateDatabase(database),
+        },
         now: expiredAt,
       }),
     ).toBe(1);
     expect(
       pruneExpiredAuditEventsInDatabase({
-        database: { ...database, database: openOpenClawStateDatabase(database) },
+        database: {
+          ...database,
+          database: openOpenClawStateDatabase(database),
+        },
         now: expiredAt,
       }),
     ).toBe(0);
@@ -414,7 +595,11 @@ describe("agent activity audit projection", () => {
 
   it("keeps an explicit agent id named unknown distinct from missing identity", () => {
     const projected = projectAgentEventToAudit(
-      agentEvent({ agentId: "unknown", sessionKey: undefined, sessionId: undefined }),
+      agentEvent({
+        agentId: "unknown",
+        sessionKey: undefined,
+        sessionId: undefined,
+      }),
     );
 
     expect(projected).toMatchObject({
@@ -501,6 +686,52 @@ describe("agent activity audit projection", () => {
     );
   });
 
+  it("attaches the hashed device scope to tool events of a device-scoped session", () => {
+    const sessionKey = "agent:main:scoped";
+    publishToolActionDeviceScope({ sessionKey, deviceId: "device-a" });
+    const projected = projectToolExecutionEventToAudit(toolEvent({ sessionKey }));
+    expect(projected?.deviceRef).toBe(hashAuditDeviceRef("device-a"));
+    expect(projected?.deviceRef).toMatch(/^sha256:[0-9a-f]{12}$/);
+    // The raw device id never enters the projection contract.
+    expect(JSON.stringify(projected)).not.toContain("device-a");
+
+    publishToolActionDeviceScope({ sessionKey, deviceId: null });
+    expect(projectToolExecutionEventToAudit(toolEvent({ sessionKey }))?.deviceRef).toBeUndefined();
+    // A gateway-scoped session never reports a device.
+    expect(
+      projectToolExecutionEventToAudit(toolEvent({ sessionKey: "agent:main:gateway" }))?.deviceRef,
+    ).toBeUndefined();
+  });
+
+  it("seeds the device scope on the first event so started and finished agree", () => {
+    const sessionKey = "agent:main:restarted";
+    const resolve = vi.fn(() => "device-a");
+
+    const started = projectToolExecutionEventToAudit(toolEvent({ sessionKey, seq: 1 }), resolve);
+    const failed = projectToolExecutionEventToAudit(
+      toolEvent({ sessionKey, seq: 2, type: "tool.execution.error" }),
+      resolve,
+    );
+
+    expect(started?.deviceRef).toBe(hashAuditDeviceRef("device-a"));
+    expect(failed?.deviceRef).toBe(started?.deviceRef);
+    // The session owner is read once, not for every event.
+    expect(resolve).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report a device after a committed switch back to gateway", () => {
+    const sessionKey = "agent:main:switched";
+    publishToolActionDeviceScope({ sessionKey, deviceId: "device-a" });
+    // writeSessionDeviceScope publishes the committed gateway scope.
+    publishToolActionDeviceScope({ sessionKey, deviceId: null });
+    const resolve = vi.fn(() => "device-a");
+
+    expect(
+      projectToolExecutionEventToAudit(toolEvent({ sessionKey }), resolve)?.deviceRef,
+    ).toBeUndefined();
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
   it("prefers authoritative run lifecycle time over listener observation time", () => {
     const startedAt = 1_750_000_000_000;
     const endedAt = startedAt + 1_000;
@@ -521,7 +752,10 @@ describe("agent activity audit projection", () => {
     ).toBe(endedAt);
     expect(
       projectAgentEventToAudit(
-        agentEvent({ ts: observedAt, data: { phase: "start", startedAt: "invalid" } }),
+        agentEvent({
+          ts: observedAt,
+          data: { phase: "start", startedAt: "invalid" },
+        }),
       )?.occurredAt,
     ).toBe(observedAt);
   });
@@ -579,7 +813,12 @@ describe("agent activity audit projection", () => {
     [{ phase: "error", error: "raw failure" }, "failed", "run_failed"],
     [{ phase: "end", aborted: true }, "cancelled", "run_cancelled"],
     [
-      { phase: "end", aborted: true, stopReason: "timeout", timeoutPhase: "provider" },
+      {
+        phase: "end",
+        aborted: true,
+        stopReason: "timeout",
+        timeoutPhase: "provider",
+      },
       "timed_out",
       "run_timed_out",
     ],
@@ -649,7 +888,10 @@ describe("agent activity audit projection", () => {
         }),
       );
 
-      expect(projected).toMatchObject({ status: "cancelled", errorCode: "tool_cancelled" });
+      expect(projected).toMatchObject({
+        status: "cancelled",
+        errorCode: "tool_cancelled",
+      });
     },
   );
 
@@ -728,7 +970,9 @@ describe("agent activity audit projection", () => {
     let collectionEnabled = true;
     const recorder = createAgentEventAuditRecorder({
       writer,
-      getConfig: () => ({ logging: { audit: { enabled: collectionEnabled } } }),
+      getConfig: () => ({
+        logging: { audit: { enabled: collectionEnabled } },
+      }),
     });
     const lifecycleGeneration = "gateway-1";
 
@@ -806,7 +1050,10 @@ describe("agent activity audit projection", () => {
   it("merges multiple terminal observations through the canonical outcome contract", async () => {
     const inputs: AuditEventInput[] = [];
     const writer = captureAuditWriter(inputs);
-    const recorder = createAgentEventAuditRecorder({ writer, getConfig: () => ({}) });
+    const recorder = createAgentEventAuditRecorder({
+      writer,
+      getConfig: () => ({}),
+    });
 
     recorder.record(agentEvent({ seq: 1 }));
     recorder.record(agentEvent({ seq: 2, data: { phase: "error" } }));
