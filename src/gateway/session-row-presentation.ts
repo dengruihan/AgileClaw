@@ -16,6 +16,7 @@ import { tryResolveSessionCompatibilityOwnerAgentId } from "./session-request-ag
 import type { SessionRowReadView } from "./session-row-prepared-read.js";
 import type * as records from "./session-row-projection-record.js";
 import type { SessionRowProjection } from "./session-row-projection.js";
+import { sessionScopeLeaseHeld } from "./session-scope-lease.js";
 import {
   authorizeIncognitoSessionTarget,
   authorizeSessionAgentRun,
@@ -235,6 +236,8 @@ export function prepareProjectedSessionPresentation(
         // Transient owners can cycle without publishing a row; retire the earlier sample.
         JSON.stringify([run, preparedFacts]),
         resolveActiveSessionAgentStatus(record.entry.agentStatus, now),
+        // A mirrored device lease flips without an entry write; retire held-state views.
+        sessionScopeLeaseHeld(record.key, now),
         // Active budgeted goals can stamp budgetLimitedAt from enriched usage at this clock.
         record.entry.goal?.status === "active" && record.entry.goal.tokenBudget !== undefined
           ? now

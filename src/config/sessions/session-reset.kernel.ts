@@ -36,8 +36,16 @@ export function applySessionResetInDatabase(
       projection,
     ),
   );
-  const written = writeSessionEntry(database, input.target.canonicalKey, input.nextEntry, {
-    previousEntry: current?.entry ?? null,
-  });
+  const previousScopeDeviceId = current?.entry.scopeDeviceId;
+  const written = writeSessionEntry(
+    database,
+    input.target.canonicalKey,
+    // Node-creation metadata survives a reset of the same row, so a reset never
+    // returns a device-scoped session to gateway scope.
+    previousScopeDeviceId && !input.nextEntry.scopeDeviceId
+      ? { ...input.nextEntry, scopeDeviceId: previousScopeDeviceId }
+      : input.nextEntry,
+    { previousEntry: current?.entry ?? null },
+  );
   return { current, written, progressCardReset };
 }

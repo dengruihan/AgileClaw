@@ -353,6 +353,9 @@ export async function forkSessionEntryFromParentTarget(
             cliSessionBindings,
             cliSessionIds: undefined,
             claudeCliSessionId: undefined,
+            // Explicit inherit-or-clear: the fork carries the parent's device
+            // scope, never a stale scope left on a reused target row.
+            scopeDeviceId: freshParent.scopeDeviceId,
           };
           const previousIdentity = readSessionIdentitySnapshot(writeDatabase, [
             sessionTarget.canonicalKey,

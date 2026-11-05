@@ -31,6 +31,26 @@ it("publishes snooze metadata and clears it when a subscribed session wakes", ()
   expect({ ...previous, ...cleared }).toMatchObject({ snoozedUntil: null, snoozedAt: null });
 });
 
+it("publishes the device scope and explicitly clears it and a stale held-lease flag", () => {
+  const sessionRow = { key: "agent:main:scoped", kind: "direct" as const, updatedAt: 1 };
+  const scoped = buildGatewaySessionSnapshot({
+    sessionRow: {
+      ...sessionRow,
+      scopeDeviceId: "device-a",
+      scopeLeaseHeld: true,
+    },
+  });
+  expect(scoped).toMatchObject({ scopeDeviceId: "device-a", scopeLeaseHeld: true });
+
+  const gatewayHosted = buildGatewaySessionSnapshot({ sessionRow });
+  expect(gatewayHosted).toMatchObject({ scopeDeviceId: null, scopeLeaseHeld: false });
+  // A subscribed client merging the later snapshot drops both stale facts.
+  expect({ ...scoped, ...gatewayHosted }).toMatchObject({
+    scopeDeviceId: null,
+    scopeLeaseHeld: false,
+  });
+});
+
 it("projects session actors and explicitly clears absent attribution", () => {
   expect(
     buildGatewaySessionSnapshot({

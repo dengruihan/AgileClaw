@@ -12,7 +12,10 @@ import { recordSessionParticipantBestEffort } from "../../../sessions/session-pa
 import { AsyncWorkScope } from "../../../shared/async-work-scope.js";
 import { createDeferredCore } from "../../../shared/deferred.js";
 import { openOpenClawAgentDatabase } from "../../../state/openclaw-agent-db.js";
-import { resolveOpenClawAgentSqlitePath } from "../../../state/openclaw-agent-db.paths.js";
+import {
+  resolveIncognitoOpenClawAgentSqlitePath,
+  resolveOpenClawAgentSqlitePath,
+} from "../../../state/openclaw-agent-db.paths.js";
 import { runOpenClawAgentWriteAdmission } from "../../../state/openclaw-agent-write-admission.js";
 import { withOpenClawTestState } from "../../../test-utils/openclaw-test-state.js";
 import { prepareSubagentSessionContext } from "./subagent-spawn-context.js";
@@ -374,5 +377,43 @@ it("spawns from a parent without a stored row, as before lineage receipts", asyn
       spawnedBy: sessionKey,
       spawnedBySenderIsOwner: false,
     });
+  });
+});
+
+it("shares the parent tree's device scope, except for incognito children", async () => {
+  await withOpenClawTestState({ label: "spawn-scope-device" }, async () => {
+    const sessionKey = "agent:main:scoped-parent";
+    const storePath = resolveOpenClawAgentSqlitePath({ agentId: "main" });
+    await upsertSessionEntryCore(
+      { storePath, sessionKey },
+      { sessionId: "scoped-parent", updatedAt: 1, scopeDeviceId: "device-parent" },
+    );
+    expect(
+      await createInitialSubagentSession(
+        lineageSpawnParams(sessionKey, "agent:main:subagent:scoped-child", {
+          senderIsOwner: true,
+        }),
+      ),
+    ).toMatchObject({ status: "ok" });
+    expect(
+      loadSessionEntry({ storePath, sessionKey: "agent:main:subagent:scoped-child" })
+        ?.scopeDeviceId,
+    ).toBe("device-parent");
+
+    expect(
+      await createInitialSubagentSession({
+        ...lineageSpawnParams(sessionKey, "agent:main:subagent:incognito-child", {
+          senderIsOwner: true,
+        }),
+        incognito: true,
+      }),
+    ).toMatchObject({ status: "ok" });
+    const incognitoStorePath = resolveIncognitoOpenClawAgentSqlitePath({ agentId: "main" });
+    expect(
+      loadSessionEntry({
+        storePath: incognitoStorePath,
+        sessionKey: "agent:main:subagent:incognito-child",
+      })?.scopeDeviceId,
+    ).toBeUndefined();
   });
 });

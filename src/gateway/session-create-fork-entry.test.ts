@@ -65,6 +65,27 @@ describe("buildForkedGatewaySessionEntry", () => {
     expect(forked.previousSessionId).toBeUndefined();
   });
 
+  it("inherits the parent's device scope and clears a stale scope when the parent is gateway-hosted", () => {
+    const forkFromScopedParent = buildForkedGatewaySessionEntry(
+      // A creating device stamped the provisional row, but the fork belongs to
+      // the parent's tree, never to whichever client requested the fork.
+      { sessionId: "provisional", updatedAt: 1, scopeDeviceId: "device-creator" },
+      { sessionId: "forked", sessionFile: "/tmp/forked.jsonl" },
+      {
+        sessionKey: "agent:main:parent",
+        entry: { sessionId: "parent-generation", updatedAt: 1, scopeDeviceId: "device-parent" },
+      },
+    );
+    expect(forkFromScopedParent.scopeDeviceId).toBe("device-parent");
+
+    const forkFromGatewayParent = buildForkedGatewaySessionEntry(
+      { sessionId: "provisional", updatedAt: 1, scopeDeviceId: "device-creator" },
+      { sessionId: "forked", sessionFile: "/tmp/forked.jsonl" },
+      { sessionKey: "agent:main:parent", entry: { sessionId: "parent-generation", updatedAt: 1 } },
+    );
+    expect(forkFromGatewayParent.scopeDeviceId).toBeUndefined();
+  });
+
   it("branches the parent native CLI sessions into the child with a one-shot fork resume", () => {
     const parent: SessionEntry = {
       sessionId: "parent-generation",

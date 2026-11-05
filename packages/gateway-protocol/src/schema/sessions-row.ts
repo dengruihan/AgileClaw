@@ -203,6 +203,13 @@ export const SessionRowSchema = Type.Object(
     ),
     execNode: Type.Optional(Type.String()),
     execCwd: Type.Optional(Type.String()),
+    /** Paired device owning this session's scope; absent means gateway-hosted. */
+    scopeDeviceId: Type.Optional(NonEmptyString),
+    /**
+     * The session's device lease is still held while no run is active; Stop is
+     * the only manual release path and must stay available while this is true.
+     */
+    scopeLeaseHeld: Type.Optional(Type.Boolean()),
     spawnedWorkspaceDir: Type.Optional(Type.String()),
     spawnedCwd: Type.Optional(Type.String()),
     /** Persisted project registry association, distinct from a cloud repository workspace. */
