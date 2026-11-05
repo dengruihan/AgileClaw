@@ -285,8 +285,8 @@
   }
 }
 
-/* Execution-device registry: registry rows keep the inventory grid but carry a
-   plain status set, a policy editor, and an occupancy drill-in instead of a menu. */
+/* Execution facts on consolidated device rows: a paired node row carries the
+   registry status set, policy editor, and occupancy drill-in beside its menu. */
 .device-registry__row .settings-row__control {
   align-items: center;
   gap: var(--space-2);

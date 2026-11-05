@@ -127,6 +127,11 @@ function parseNodeListEntry(raw: Record<string, unknown>): NodeListEntry | null 
     workerSlots: parseWorkerCapacity(raw.workerSlots) ?? undefined,
     workerBundle: parseWorkerBundleStatus(raw.workerBundle),
     hostStats: hostStatsSchema.safeParse(raw.hostStats).data,
+    // Execution-registry facts for the consolidated row; validated at the row.
+    ...(raw.enabled === true || raw.enabled === false ? { enabled: raw.enabled } : {}),
+    ...(isRecord(raw.commandPolicy)
+      ? { commandPolicy: raw.commandPolicy as NodeListEntry["commandPolicy"] }
+      : {}),
     connected: raw.connected === true,
     paired: raw.paired === true,
     connectedAtMs: optionalNumber(raw.connectedAtMs),

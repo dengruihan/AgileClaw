@@ -45,6 +45,38 @@ describe("chat pane device scope", () => {
     );
   });
 
+  it("names the device from the session row and keeps the id available", () => {
+    const container = mount(
+      session({
+        scopeDeviceId: "studio-mac",
+        scopeDeviceName: "Studio Mac",
+        scopeLeaseHeld: true,
+      }),
+    );
+    expect(container.querySelector(".chat-pane__device-scope-chip")?.textContent?.trim()).toBe(
+      "On Studio Mac",
+    );
+    expect(
+      container.querySelector(".chat-pane__device-scope-chip")?.getAttribute("aria-label"),
+    ).toBe("Execution device: Studio Mac. Held (session idle)");
+    const facts = Array.from(
+      container.querySelectorAll(
+        ".chat-pane__device-scope-facts dt, .chat-pane__device-scope-facts dd",
+      ),
+    ).map((node) => node.textContent?.trim());
+    expect(facts).toContain("Studio Mac");
+    expect(facts).toContain("studio-mac");
+  });
+
+  it("falls back to the device id when the row carries no display name", () => {
+    const container = mount(
+      session({ scopeDeviceId: "studio-mac", scopeDeviceName: "  ", scopeLeaseHeld: false }),
+    );
+    expect(container.querySelector(".chat-pane__device-scope-chip")?.textContent?.trim()).toBe(
+      "On studio-mac",
+    );
+  });
+
   it("reports a released lease without claiming the device is free for others", () => {
     const container = mount(session({ scopeDeviceId: "studio-mac", scopeLeaseHeld: false }));
     expect(

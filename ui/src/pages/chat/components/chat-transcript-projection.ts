@@ -286,6 +286,13 @@ export function projectChatTranscript(
     githubRepo: props.githubRepo,
     githubRepositories: props.githubRepositories,
     showAssistantAvatar: avatarPlacement === "gutter",
+    // The selected session's row owns the scope device's display name; tool
+    // results only stamp the device id, so they fall back to it when absent.
+    resolveDeviceLabel:
+      activeSession?.scopeDeviceId && activeSession.scopeDeviceName
+        ? (deviceId: string) =>
+            deviceId === activeSession.scopeDeviceId ? activeSession.scopeDeviceName : undefined
+        : undefined,
   } satisfies StreamGroupOptions;
   const streamGroupOptions = {
     ...sharedMessageRenderOptions,

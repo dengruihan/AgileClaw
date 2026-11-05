@@ -360,7 +360,19 @@ function resolveCollapsedToolSummaryParts(card: ToolCard): { label: string; name
   };
 }
 
-function resolveToolRowText(card: ToolCard, view: ToolCallView, outcome: ToolCardOutcome): string {
+function resolveToolDeviceLabel(
+  device: NonNullable<ToolCard["device"]>,
+  resolveDeviceLabel: ToolRenderOptions["resolveDeviceLabel"],
+): string {
+  return resolveDeviceLabel?.(device.id) ?? device.name ?? device.id;
+}
+
+function resolveToolRowText(
+  card: ToolCard,
+  view: ToolCallView,
+  outcome: ToolCardOutcome,
+  resolveDeviceLabel: ToolRenderOptions["resolveDeviceLabel"],
+): string {
   const base = (() => {
     if (view.title) {
       return view.title;
@@ -377,21 +389,27 @@ function resolveToolRowText(card: ToolCard, view: ToolCallView, outcome: ToolCar
   })();
   return card.device
     ? `${base} · ${t("sessionsView.deviceScope.toolTagAria", {
-        device: card.device.name ?? card.device.id,
+        device: resolveToolDeviceLabel(card.device, resolveDeviceLabel),
       })}`
     : base;
 }
 
-function renderToolDeviceTag(card: ToolCard) {
+function renderToolDeviceTag(
+  card: ToolCard,
+  resolveDeviceLabel: ToolRenderOptions["resolveDeviceLabel"],
+) {
   if (!card.device) {
     return nothing;
   }
-  const label = card.device.name ?? card.device.id;
   return html`<span
     class="chat-tool-row__device"
     title=${t("sessionsView.deviceScope.toolTagTitle", { device: card.device.id })}
     ><span class="chat-tool-row__device-icon" aria-hidden="true">${icons.server}</span
-    ><span>${t("sessionsView.deviceScope.toolTag", { device: label })}</span></span
+    ><span
+      >${t("sessionsView.deviceScope.toolTag", {
+        device: resolveToolDeviceLabel(card.device, resolveDeviceLabel),
+      })}</span
+    ></span
   >`;
 }
 
@@ -488,7 +506,7 @@ export function renderToolCard(
         opts.onOpenWorkspaceFile,
       )}</span
     >
-    ${renderToolDeviceTag(card)}
+    ${renderToolDeviceTag(card, opts.resolveDeviceLabel)}
     ${expanded ? nothing : renderToolOutcomeSummary(activityCards, Boolean(opts.children))}
     <span class="chat-tool-row__chevron" aria-hidden="true">${icons.chevronRight}</span>
   `;
@@ -514,7 +532,7 @@ export function renderToolCard(
                   class="chat-tool-row__toggle"
                   type="button"
                   aria-expanded=${String(expanded)}
-                  aria-label=${resolveToolRowText(card, view, outcome)}
+                  aria-label=${resolveToolRowText(card, view, outcome, opts.resolveDeviceLabel)}
                   @click=${() => opts.onToggleExpanded(card.id)}
                 ></button>
                 ${rowContent}

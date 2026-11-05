@@ -29,6 +29,7 @@ import {
   projectGatewaySessionActiveRun,
   projectGatewaySessionRunState,
 } from "./session-utils-display.js";
+import { sessionScopeDeviceLabel } from "./session-utils-row.js";
 import type { GatewaySessionRow } from "./session-utils.types.js";
 
 type PresentationOptions = Omit<
@@ -238,6 +239,9 @@ export function prepareProjectedSessionPresentation(
         resolveActiveSessionAgentStatus(record.entry.agentStatus, now),
         // A mirrored device lease flips without an entry write; retire held-state views.
         sessionScopeLeaseHeld(record.key, now),
+        // The scope device label mirrors the published device-scope snapshot, so
+        // a rename or reconnect retires held views instead of pinning the old name.
+        sessionScopeDeviceLabel(record.key, record.entry?.scopeDeviceId),
         // Active budgeted goals can stamp budgetLimitedAt from enriched usage at this clock.
         record.entry.goal?.status === "active" && record.entry.goal.tokenBudget !== undefined
           ? now

@@ -14,7 +14,6 @@ import { registerDevicesEnglish } from "../../i18n/locales/en-devices.ts";
 import "../../styles/devices.css";
 import { renderExecApprovals, resolveExecApprovalsState } from "./view-exec-approvals.ts";
 import { renderDeviceInventory } from "./view-inventory.ts";
-import { renderExecutionDeviceRegistry } from "./view-registry.ts";
 import { resolveConfigAgents, resolveNodeTargets } from "./view-shared.ts";
 import type { DevicesProps } from "./view.types.ts";
 
@@ -38,8 +37,8 @@ export function renderDevices(props: DevicesProps) {
             </div>`
           : nothing
       }
-      ${renderDeviceInventory(props)} ${renderExecutionDeviceRegistry(props)}
-      ${renderExecApprovals(approvalsState)} ${renderBindings(bindingState)}
+      ${renderDeviceInventory(props)} ${renderExecApprovals(approvalsState)}
+      ${renderBindings(bindingState)}
     `,
     { wide: true },
   );

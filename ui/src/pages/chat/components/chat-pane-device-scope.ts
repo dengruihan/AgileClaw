@@ -9,9 +9,10 @@ registerSessionPlacementEnglish();
 
 /**
  * Read-only device-scope chip for the chat header. It names the paired device a
- * session's tools execute on and whether the session still holds its occupancy
- * lease. Releasing is deliberately absent here: the composer's Stop button is
- * the only manual release path.
+ * session's tools execute on — its display name when the session row carries
+ * one, the device id otherwise — and whether the session still holds its
+ * occupancy lease. Releasing is deliberately absent here: the composer's Stop
+ * button is the only manual release path.
  */
 export function renderChatPaneDeviceScope(
   session: GatewaySessionRow | undefined,
@@ -20,11 +21,12 @@ export function renderChatPaneDeviceScope(
   if (!deviceId) {
     return nothing;
   }
+  const deviceName = normalizeOptionalString(session?.scopeDeviceName) ?? deviceId;
   const leaseHeld = session?.scopeLeaseHeld === true;
   const lease = leaseHeld
     ? t("sessionsView.deviceScope.leaseHeld")
     : t("sessionsView.deviceScope.leaseFree");
-  const announcement = t("sessionsView.deviceScope.chipLabel", { device: deviceId, lease });
+  const announcement = t("sessionsView.deviceScope.chipLabel", { device: deviceName, lease });
   return html`
     <div class="chat-pane__device-scope">
       <wa-dropdown class="chat-pane__device-scope-menu" placement="bottom-start">
@@ -36,11 +38,13 @@ export function renderChatPaneDeviceScope(
         >
           <span class="chat-pane__device-scope-icon" aria-hidden="true">${icons.monitor}</span>
           <span class="chat-pane__device-scope-label"
-            >${t("sessionsView.deviceScope.chip", { device: deviceId })}</span
+            >${t("sessionsView.deviceScope.chip", { device: deviceName })}</span
           >
         </button>
         <dl class="chat-pane__device-scope-facts">
           <dt>${t("sessionsView.deviceScope.factDevice")}</dt>
+          <dd class="chat-pane__device-scope-value">${deviceName}</dd>
+          <dt>${t("sessionsView.deviceScope.factDeviceId")}</dt>
           <dd class="chat-pane__device-scope-value">${deviceId}</dd>
           <dt>${t("sessionsView.deviceScope.factLease")}</dt>
           <dd>${lease}</dd>

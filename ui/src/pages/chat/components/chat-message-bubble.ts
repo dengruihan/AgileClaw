@@ -217,6 +217,7 @@ export function renderGroupedMessage(
     githubRepo?: MarkdownRenderOptions["githubRepo"];
     githubRepositories?: MarkdownRenderOptions["githubRepositories"];
     onOpenWorkspaceFile?: (target: { path: string; line?: number | null }) => void;
+    resolveDeviceLabel?: (deviceId: string) => string | undefined;
     fileLinkSessionKey?: string;
     avatar?: TemplateResult | typeof nothing;
     entryId?: string;

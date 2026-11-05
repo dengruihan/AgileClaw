@@ -783,7 +783,7 @@ describe("devices inventory rendering", () => {
     expect(row.querySelectorAll(".capacity-meter-pips__pip--filled")).toHaveLength(0);
     expect(
       Array.from(row.querySelectorAll(".settings-status"), (status) => status.textContent?.trim()),
-    ).toEqual(["offline", "manual wake required"]);
+    ).toEqual(["offline", "Enabled", "Idle", "manual wake required"]);
   });
 
   it.each([

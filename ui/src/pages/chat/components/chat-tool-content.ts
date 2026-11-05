@@ -316,6 +316,11 @@ export type ToolRenderOptions = {
   runActive?: boolean;
   onOpenSidebar?: (content: SidebarContent) => void;
   onOpenWorkspaceFile?: (target: { path: string; line?: number | null }) => void;
+  /**
+   * Resolves the display label for a device a tool result executed on; the
+   * device id is used when neither this nor the result's own stamp names it.
+   */
+  resolveDeviceLabel?: (deviceId: string) => string | undefined;
 };
 
 export function renderExpandedToolCardContent(

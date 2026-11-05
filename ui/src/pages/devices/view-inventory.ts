@@ -31,6 +31,15 @@ import { renderCapabilityChips } from "./capability-chips.ts";
 import { deviceDesktopEnvironment, renderDeviceEntryMenu } from "./entry-menu.ts";
 import { renderHostStats } from "./host-stats.ts";
 import { renderPendingDeviceRows } from "./view-pending-devices.ts";
+import {
+  executionPolicySummary,
+  renderExecutionControls,
+  renderExecutionHolder,
+  renderExecutionReleaseHint,
+  renderExecutionStatuses,
+  resolveExecutionDeviceRow,
+  type ExecutionDeviceRow,
+} from "./view-registry.ts";
 import { deviceIcon, renderDeviceTile } from "./view-shared.ts";
 import type { DevicesProps } from "./view.types.ts";
 
@@ -71,6 +80,11 @@ export function renderDeviceInventory(props: DevicesProps) {
   const unpairedPresence = listUnpairedPresence(props.presence, groups);
   const stale = listStaleInventoryEntries(groups);
   const loading = props.loading || props.devicesLoading;
+  // One row per machine carries both pairing facts and execution controls, so
+  // a paired node never appears twice on the page.
+  const hasExecutionRows = groups.some(({ primary, duplicates }) =>
+    [primary, ...duplicates].some((entry) => entry.node?.paired === true),
+  );
   const actions = html`
     ${
       stale.length > 0
@@ -111,10 +125,16 @@ export function renderDeviceInventory(props: DevicesProps) {
           ? renderSettingsEmpty(t("devices.inventory.empty"))
           : groups.map((group) => renderInventoryGroup(group, props))
     }
+    ${hasExecutionRows ? renderExecutionReleaseHint() : nothing}
   `;
   return html`
     ${props.devicesError ? html`<div class="callout danger">${props.devicesError}</div>` : nothing}
     ${props.lastError ? html`<div class="callout danger">${props.lastError}</div>` : nothing}
+    ${
+      props.occupancyError
+        ? html`<div class="callout danger">${props.occupancyError}</div>`
+        : nothing
+    }
     ${
       pending.length > 0
         ? renderSettingsSection(
@@ -384,15 +404,32 @@ function renderInventoryEntry(entry: DeviceInventoryEntry, props: DevicesProps) 
   const connectionStatus = rowConnected
     ? renderSettingsStatus({ kind: "ok", label: t("devices.inventory.connected") })
     : renderSettingsStatus({ kind: "muted", label: t("devices.inventory.offline") });
+  // Paired node rows own the execution controls the registry section used to
+  // duplicate; non-node devices render the same row without them.
+  const exec: ExecutionDeviceRow | undefined =
+    entry.node?.paired === true
+      ? resolveExecutionDeviceRow(entry, props.deviceOccupancy)
+      : undefined;
+  const metaParts = [entryMetaLine(entry)];
+  if (exec) {
+    metaParts.push(executionPolicySummary(exec));
+  }
   return html`
-    <div class="settings-row device-entry" title=${capacity?.title ?? nothing}>
+    <div
+      class="settings-row device-entry ${exec ? "device-registry__row" : ""}"
+      data-device-id=${entry.id}
+      title=${capacity?.title ?? nothing}
+    >
       ${renderDeviceTile(deviceIcon(entry))}
       <div class="device-entry__body">
         <div class="device-entry__heading">
           <span class="settings-row__title">${entry.name}</span>
-          <span class="device-entry__status">${connectionStatus}</span>
+          <span class="device-entry__status">
+            ${connectionStatus} ${exec ? renderExecutionStatuses(exec) : nothing}
+          </span>
         </div>
-        <span class="settings-row__desc">${entryMetaLine(entry)}</span>
+        <span class="settings-row__desc">${metaParts.join(" · ")}</span>
+        ${exec ? renderExecutionHolder(exec, props) : nothing}
         ${renderHostStats(
           entry.node?.hostStats,
           !rowConnected ? entry.node?.hostStats?.updatedAtMs : undefined,
@@ -401,6 +438,7 @@ function renderInventoryEntry(entry: DeviceInventoryEntry, props: DevicesProps) 
       </div>
       <div class="settings-row__control">
         ${capacity?.meter ?? nothing} ${entryWarnStatuses(entry, props.gatewayVersion)}
+        ${exec ? renderExecutionControls(exec, props) : nothing}
         ${renderDesktopControl(props, desktopEnvironment, entry.node?.commands)}
         ${renderDeviceEntryMenu(props, {
           name: entry.name,

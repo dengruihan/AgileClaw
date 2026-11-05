@@ -149,4 +149,12 @@ describe("SessionRowSchema", () => {
       }),
     ).toBe(false);
   });
+
+  it("accepts a scope device label only as a bounded non-empty string", () => {
+    const row = { key: "agent:main:main", kind: "global", scopeDeviceId: "studio-mac" };
+    expect(Value.Check(SessionRowSchema, { ...row, scopeDeviceName: "Studio Mac" })).toBe(true);
+    expect(Value.Check(SessionRowSchema, { ...row, scopeDeviceName: "" })).toBe(false);
+    expect(Value.Check(SessionRowSchema, { ...row, scopeDeviceName: "a".repeat(129) })).toBe(false);
+    expect(Value.Check(SessionRowSchema, { ...row, scopeDeviceName: 7 })).toBe(false);
+  });
 });

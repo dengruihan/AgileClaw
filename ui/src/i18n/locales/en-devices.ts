@@ -13,13 +13,6 @@ const enDevices = {
         "Browsing only. Device changes require operator.pairing; exec approvals and node bindings require operator.admin.",
     },
     registry: {
-      title: "Execution devices",
-      subtitle:
-        "Paired devices that can run tools for sessions. Enabling admits a device's approved commands; disabling stops execution immediately.",
-      add: "Pair device…",
-      addTitle: "Pairing a device needs operator.admin access.",
-      empty: "No execution devices paired yet.",
-      loading: "Loading execution devices…",
       enabled: "Enabled",
       disabled: "Disabled",
       connected: "connected",

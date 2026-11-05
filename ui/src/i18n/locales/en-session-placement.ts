@@ -15,6 +15,7 @@ const enSessionPlacement = {
       chip: "On {device}",
       chipLabel: "Execution device: {device}. {lease}",
       factDevice: "Device",
+      factDeviceId: "Device ID",
       factLease: "Lease",
       leaseHeld: "Held (session idle)",
       leaseFree: "Released",
