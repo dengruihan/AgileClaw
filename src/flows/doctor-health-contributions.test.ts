@@ -128,6 +128,7 @@ const mocks = vi.hoisted(() => ({
   detectLegacyStateMigrations: vi.fn(),
   runLegacyStateMigrations: vi.fn(),
   repairObsoleteGeneratedExecApprovals: vi.fn(() => 0),
+  migratePairedDeviceRegistryPolicyFields: vi.fn(),
   collectLegacyPluginManifestContractMigrations: vi.fn(() => [] as unknown[]),
   legacyPluginManifestContractMigrationToHealthFinding: vi.fn(
     (migration: { pluginId: string }) => ({
@@ -368,6 +369,10 @@ vi.mock("../infra/state-migrations.doctor.js", () => ({
 
 vi.mock("../infra/exec-approvals-generated-migration.js", () => ({
   repairObsoleteGeneratedExecApprovals: mocks.repairObsoleteGeneratedExecApprovals,
+}));
+
+vi.mock("../infra/device-pairing-migration.js", () => ({
+  migratePairedDeviceRegistryPolicyFields: mocks.migratePairedDeviceRegistryPolicyFields,
 }));
 
 vi.mock("../commands/doctor-plugin-manifests.js", () => ({
@@ -2075,6 +2080,55 @@ describe("doctor health contributions", () => {
     expect(mocks.note).toHaveBeenCalledWith(
       expect.stringContaining("removed 1 older generated approval"),
       "Doctor changes",
+    );
+  });
+
+  it("backfills legacy pairing registry rows when no legacy state is pending", async () => {
+    const contribution = requireDoctorContribution("doctor:legacy-state");
+    mocks.detectLegacyStateMigrations.mockResolvedValue({
+      preview: [],
+      warnings: [],
+      notices: [],
+    });
+    mocks.migratePairedDeviceRegistryPolicyFields.mockResolvedValue({
+      changes: ["device registry fields backfilled: 2 paired device(s) set to enabled"],
+      warnings: [],
+    });
+    const ctx = createDoctorContext({
+      shouldRepair: true,
+      options: { repair: true },
+    });
+
+    await contribution.run(ctx);
+
+    expect(mocks.runLegacyStateMigrations).not.toHaveBeenCalled();
+    expect(mocks.migratePairedDeviceRegistryPolicyFields).toHaveBeenCalledOnce();
+    expect(mocks.note).toHaveBeenCalledWith(
+      expect.stringContaining("device registry fields backfilled"),
+      "Doctor changes",
+    );
+  });
+
+  it("records a warning instead of aborting when the registry repair cannot read the store", async () => {
+    const contribution = requireDoctorContribution("doctor:legacy-state");
+    mocks.detectLegacyStateMigrations.mockResolvedValue({
+      preview: [],
+      warnings: [],
+      notices: [],
+    });
+    mocks.migratePairedDeviceRegistryPolicyFields.mockRejectedValue(
+      new Error("shared-state admission unavailable"),
+    );
+    const ctx = createDoctorContext({
+      shouldRepair: true,
+      options: { repair: true },
+    });
+
+    await contribution.run(ctx);
+
+    expect(mocks.note).toHaveBeenCalledWith(
+      expect.stringContaining("Device registry repair skipped"),
+      "Doctor warnings",
     );
   });
 

@@ -92,6 +92,10 @@ inside the pairing store — there is no `devices` block in `openclaw.json`.
 - Devices pair disabled. Approving the node command surface
   (`openclaw nodes approve <nodeRequestId>`) is the operator's execution consent
   and enables the device; the Settings device inventory can disable it again.
+  Approving a _later_ surface expansion for a disabled device enables it again
+  too, because that approval is fresh execution consent. A plain reconnect never
+  changes the flag, so a disable stays in effect until an operator enables the
+  device or approves a new surface.
 - A disabled device stays connected and listed. `node.list` reports
   `enabled: false` together with the approved surface, so the inventory keeps
   showing the device while it cannot run anything.

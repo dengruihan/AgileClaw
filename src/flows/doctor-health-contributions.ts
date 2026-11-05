@@ -307,6 +307,27 @@ async function runLegacyStateHealth(ctx: DoctorHealthFlowContext): Promise<void>
   if (!doctorOnlyStateMigrations) {
     return;
   }
+  // Pairing rows written before the device-registry columns need an explicit
+  // enabled value. Unlike the legacy-store pass, this repair is not gated on
+  // legacy JSON files: an install with only SQLite pairing rows reaches doctor
+  // through the empty-preview path. It runs before the exec-approvals gate so
+  // that gate cannot skip it, and a store that cannot be opened is a recorded
+  // warning rather than a failed doctor run.
+  const { migratePairedDeviceRegistryPolicyFields } =
+    await import("../infra/device-pairing-migration.js");
+  try {
+    const registryRepair = await migratePairedDeviceRegistryPolicyFields();
+    if (registryRepair) {
+      if (registryRepair.changes.length > 0) {
+        note(registryRepair.changes.join("\n"), "Doctor changes");
+      }
+      if (registryRepair.warnings.length > 0) {
+        note(registryRepair.warnings.join("\n"), "Doctor warnings");
+      }
+    }
+  } catch (error) {
+    note(`Device registry repair skipped: ${scrubDoctorErrorMessage(error)}`, "Doctor warnings");
+  }
   const { repairObsoleteGeneratedExecApprovals } =
     await import("../infra/exec-approvals-generated-migration.js");
   const { ExecApprovalsMigrationRequiredError } =

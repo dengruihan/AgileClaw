@@ -220,6 +220,23 @@ describe("node.device registry RPCs", () => {
       expect.objectContaining({ message: "unknown nodeId" }),
     );
   });
+
+  it.each(["node.device.enable", "node.device.disable", "node.device.update"])(
+    "rejects a whitespace-only nodeId for %s",
+    async (method) => {
+      await createState();
+      const context = createContext();
+
+      const respond = await invokePairingRpc(method, { nodeId: "   " }, context);
+
+      expect(respond).toHaveBeenCalledWith(
+        false,
+        undefined,
+        expect.objectContaining({ code: "INVALID_REQUEST", message: "nodeId required" }),
+      );
+      expect(context.invalidateClientsForDevice).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("node.invoke against a disabled device", () => {

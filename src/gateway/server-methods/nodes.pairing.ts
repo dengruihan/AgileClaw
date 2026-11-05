@@ -155,6 +155,18 @@ const validateNodeDeviceEnableParams = lazyCompile(NodeDeviceEnableParamsSchema)
 const validateNodeDeviceDisableParams = lazyCompile(NodeDeviceDisableParamsSchema);
 const validateNodeDeviceUpdateParams = lazyCompile(NodeDeviceUpdateParamsSchema);
 
+// A whitespace-only id is invalid input, not a store failure; reject it before
+// the pairing owner throws its own `nodeId required` (which surfaces as
+// UNAVAILABLE through respondUnavailableOnThrow).
+function readDeviceNodeId(params: { nodeId: string }, respond: RespondFn): string | null {
+  const nodeId = params.nodeId.trim();
+  if (!nodeId) {
+    respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "nodeId required"));
+    return null;
+  }
+  return nodeId;
+}
+
 async function removePairedDeviceBackedNode(params: {
   nodeId: string;
   client: GatewayClient | null;
@@ -474,7 +486,10 @@ export const nodePairingHandlers: GatewayRequestHandlers = {
     if (!assertValidParams(params, validateNodeDeviceEnableParams, "node.device.enable", respond)) {
       return;
     }
-    const { nodeId } = params;
+    const nodeId = readDeviceNodeId(params, respond);
+    if (!nodeId) {
+      return;
+    }
     await respondUnavailableOnThrow(respond, async () => {
       const authz = resolveDeviceManagementAuthz(client, nodeId);
       if (deniesCrossDeviceManagement(authz)) {
@@ -521,7 +536,10 @@ export const nodePairingHandlers: GatewayRequestHandlers = {
     ) {
       return;
     }
-    const { nodeId } = params;
+    const nodeId = readDeviceNodeId(params, respond);
+    if (!nodeId) {
+      return;
+    }
     await respondUnavailableOnThrow(respond, async () => {
       const authz = resolveDeviceManagementAuthz(client, nodeId);
       if (deniesCrossDeviceManagement(authz)) {
@@ -580,7 +598,11 @@ export const nodePairingHandlers: GatewayRequestHandlers = {
     if (!assertValidParams(params, validateNodeDeviceUpdateParams, "node.device.update", respond)) {
       return;
     }
-    const { nodeId, commands } = params;
+    const nodeId = readDeviceNodeId(params, respond);
+    if (!nodeId) {
+      return;
+    }
+    const { commands } = params;
     await respondUnavailableOnThrow(respond, async () => {
       const authz = resolveDeviceManagementAuthz(client, nodeId);
       if (deniesCrossDeviceManagement(authz)) {
