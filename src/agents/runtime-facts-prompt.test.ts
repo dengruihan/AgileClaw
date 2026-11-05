@@ -4,10 +4,17 @@ import * as execApprovals from "../infra/exec-approvals.js";
 import { withMockedPlatform } from "../test-utils/vitest-spies.js";
 import type { MediaGenerationOperation } from "./media-generation-activity.js";
 import * as mediaActivity from "./media-generation-activity.js";
+import {
+  clearPromptDeviceScopeSnapshotsForTest,
+  publishPromptDeviceScopeSnapshot,
+} from "./prompt-device-scope.js";
 import { buildRuntimeFactsContext } from "./runtime-facts-prompt.js";
 
 const params = { capabilityToolNames: new Set(["exec"]), agentId: "main", cfg: {} };
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  clearPromptDeviceScopeSnapshotsForTest();
+});
 
 describe("approved executable runtime facts", () => {
   it("sorts current agent and wildcard hints, preserves paths and argument notes, and clears stale hints", () =>
@@ -233,4 +240,154 @@ describe("media task runtime facts", () => {
       expect(read).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("device scope runtime facts", () => {
+  const sessionKey = "agent:main:device-scope";
+  const deviceScopeParams = {
+    ...params,
+    capabilityToolNames: new Set(["use_device"]),
+    sessionKey,
+  };
+
+  it("renders the current scope and a sorted, sanitized enabled device list", async () => {
+    publishPromptDeviceScopeSnapshot({
+      sessionKey,
+      snapshot: {
+        target: { kind: "gateway", host: "gateway-host", os: "Linux 6.8", cwd: "/srv/ws" },
+        devices: [
+          { deviceId: "node-b", displayName: "Studio\nMac", platform: "darwin", connected: false },
+          { deviceId: "node-a", displayName: "Kitchen", platform: "linux", connected: true },
+          { deviceId: "node-c", enabled: false, connected: true },
+        ],
+      },
+    });
+
+    expect(await buildRuntimeFactsContext(deviceScopeParams)).toEqual([
+      {
+        kind: "conversation-data",
+        text: [
+          "## Device Scope",
+          "Current scope device: gateway (host=gateway-host, os=Linux 6.8, cwd=/srv/ws)",
+          "Enabled devices (max 10):",
+          "- node-a (Kitchen): linux, connected",
+          "- node-b (StudioMac): darwin, disconnected",
+        ].join("\n"),
+      },
+    ]);
+  });
+
+  it("supersedes a node scope with explicit empty snapshots", async () => {
+    publishPromptDeviceScopeSnapshot({
+      sessionKey,
+      snapshot: {
+        target: { kind: "gateway", host: "gateway-host" },
+        devices: [{ deviceId: "node-a", connected: true }],
+      },
+    });
+    publishPromptDeviceScopeSnapshot({
+      sessionKey,
+      snapshot: {
+        target: { kind: "node", deviceId: "node-a", displayName: "Kitchen", platform: "linux" },
+        devices: [],
+      },
+    });
+
+    expect(await buildRuntimeFactsContext(deviceScopeParams)).toEqual([
+      {
+        kind: "conversation-data",
+        text: "## Device Scope\nCurrent scope device: node:node-a (Kitchen), os=linux, cwd=node default",
+      },
+    ]);
+    expect(
+      await buildRuntimeFactsContext({ ...deviceScopeParams, includeEmptySnapshots: true }),
+    ).toEqual([
+      {
+        kind: "conversation-data",
+        text: [
+          "## Device Scope",
+          "Current scope device: node:node-a (Kitchen), os=linux, cwd=node default",
+          "Enabled devices (max 10):",
+          "- none",
+        ].join("\n"),
+      },
+    ]);
+  });
+
+  it("caps the enabled device list at ten lines and bounds every field", async () => {
+    publishPromptDeviceScopeSnapshot({
+      sessionKey,
+      snapshot: {
+        target: { kind: "node", deviceId: "node-00", cwd: "/Users/agent/ws" },
+        devices: Array.from({ length: 13 }, (_, index) => ({
+          deviceId: `node-${String(index).padStart(2, "0")}`,
+          displayName: `Device ${index}`,
+          platform: "x".repeat(200),
+          connected: index % 2 === 0,
+        })).toReversed(),
+      },
+    });
+
+    const facts = expectDefined(
+      (await buildRuntimeFactsContext(deviceScopeParams)).at(0),
+      "device scope facts",
+    ).text;
+
+    expect(facts.match(/^- node-/gmu)).toHaveLength(10);
+    expect(facts).toContain("- node-00 (Device 0): ");
+    expect(facts).toContain("- node-09 (Device 9): ");
+    expect(facts).not.toMatch(/node-1[0-2]/u);
+    expect(facts).toContain("Current scope device: node:node-00, cwd=/Users/agent/ws");
+    expect(facts.length).toBeLessThan(3000);
+    expect(facts).not.toContain("x".repeat(65));
+  });
+
+  it("omits the family without the switching tool or a published snapshot", async () => {
+    publishPromptDeviceScopeSnapshot({
+      sessionKey,
+      snapshot: { target: { kind: "gateway", host: "gateway-host" }, devices: [] },
+    });
+
+    expect(
+      await buildRuntimeFactsContext({
+        ...deviceScopeParams,
+        capabilityToolNames: new Set(["exec"]),
+      }),
+    ).toEqual([]);
+    expect(
+      await buildRuntimeFactsContext({ ...deviceScopeParams, sessionKey: "agent:main:other" }),
+    ).toEqual([]);
+    expect(await buildRuntimeFactsContext({ ...deviceScopeParams, sessionKey: undefined })).toEqual(
+      [],
+    );
+  });
+
+  it("prefers a prepared turn scope and drops stale publications", async () => {
+    expect(
+      await buildRuntimeFactsContext({
+        ...deviceScopeParams,
+        deviceScope: {
+          target: { kind: "gateway", host: "prepared-host" },
+          devices: [{ deviceId: "node-a", connected: true }],
+        },
+      }),
+    ).toEqual([
+      {
+        kind: "conversation-data",
+        text: [
+          "## Device Scope",
+          "Current scope device: gateway (host=prepared-host)",
+          "Enabled devices (max 10):",
+          "- node-a: connected",
+        ].join("\n"),
+      },
+    ]);
+
+    publishPromptDeviceScopeSnapshot({
+      sessionKey,
+      snapshot: { target: { kind: "gateway", host: "stale-host" }, devices: [] },
+      isCurrent: () => false,
+    });
+    expect(await buildRuntimeFactsContext(deviceScopeParams)).toEqual([]);
+  });
 });

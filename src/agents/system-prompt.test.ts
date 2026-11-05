@@ -15,6 +15,10 @@ import {
 import { createChannelTestPluginBase, createTestRegistry } from "../test-utils/channel-plugins.js";
 import { prepareAgentMemoryPrompt } from "./memory-prompt-prepare.js";
 import { resolveOwnerPromptNumbers } from "./owner-display.js";
+import {
+  clearPromptDeviceScopeSnapshotsForTest,
+  publishPromptDeviceScopeSnapshot,
+} from "./prompt-device-scope.js";
 import { resolveAgentPromptSurfaceForSessionKey } from "./prompt-surface.js";
 import { buildSystemPromptParams } from "./system-prompt-params.js";
 import { buildAgentSystemPrompt } from "./system-prompt.js";
@@ -1035,5 +1039,81 @@ describe("system prompt memory and runtime cache boundary", () => {
     expect(first.prefix).not.toContain("Current elevated level:");
     expect(first.suffix).toContain("Current elevated level: ask");
     expect(next.suffix).toContain("Current elevated level: full");
+  });
+});
+
+describe("device scope prompt contract", () => {
+  afterEach(() => {
+    clearPromptDeviceScopeSnapshotsForTest();
+  });
+
+  const scopeInstruction =
+    "Tool execution may run on this host or on an enabled paired device; the current scope device and the enabled device list arrive per turn in runtime context, never here.";
+  const switchInstruction =
+    "Switching the scope device requires `use_device`; later tool calls follow it only after its result confirms the switch. Never claim a switch without that result.";
+
+  it("keeps the off-host execution contract in the stable prefix when use_device is available", () => {
+    const { prefix = "", suffix = "" } = buildPromptParts({
+      toolNames: ["read", "use_device"],
+    });
+
+    expect(prefix.split(scopeInstruction)).toHaveLength(2);
+    expect(prefix.split(switchInstruction)).toHaveLength(2);
+    expect(prefix).toContain("## Runtime Context");
+    expect(suffix).not.toContain(scopeInstruction);
+    expect(suffix).not.toContain(switchInstruction);
+  });
+
+  it.each([
+    { name: "no tools", toolNames: [] },
+    { name: "unrelated tools", toolNames: ["read", "exec"] },
+  ])("omits the device scope contract with $name", ({ toolNames }) => {
+    const prompt = renderPrompt({ toolNames });
+
+    expect(prompt).not.toContain(scopeInstruction);
+    expect(prompt).not.toContain(switchInstruction);
+  });
+
+  it("keeps the stable prefix byte-identical across device scope changes", () => {
+    const sessionKey = "agent:main:scope-stability";
+    const build = () => {
+      const { runtimeInfo } = buildSystemPromptParams({
+        agentId: "main",
+        runtime: {
+          sessionKey,
+          sessionId: "session-1",
+          host: "host",
+          os: "linux",
+          arch: "x64",
+          node: "v24",
+          model: "test/model",
+        },
+      });
+      return renderPrompt({ toolNames: ["read", "use_device"], runtimeInfo });
+    };
+
+    publishPromptDeviceScopeSnapshot({
+      sessionKey,
+      snapshot: {
+        target: { kind: "gateway", host: "gateway-host", os: "Linux", cwd: "/srv/ws" },
+        devices: [{ deviceId: "node-a", platform: "darwin", connected: true }],
+      },
+    });
+    const gatewayScoped = build();
+    publishPromptDeviceScopeSnapshot({
+      sessionKey,
+      snapshot: {
+        target: { kind: "node", deviceId: "node-a", displayName: "Kitchen", platform: "darwin" },
+        devices: [{ deviceId: "node-a", platform: "darwin", connected: true }],
+      },
+    });
+    const nodeScoped = build();
+
+    expect(nodeScoped).toBe(gatewayScoped);
+    expect(nodeScoped.split(SYSTEM_PROMPT_CACHE_BOUNDARY)[0]).toBe(
+      gatewayScoped.split(SYSTEM_PROMPT_CACHE_BOUNDARY)[0],
+    );
+    expect(nodeScoped).not.toContain("node:node-a");
+    expect(nodeScoped).not.toContain("## Device Scope");
   });
 });
