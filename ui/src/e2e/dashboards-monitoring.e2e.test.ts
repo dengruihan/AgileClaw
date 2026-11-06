@@ -107,8 +107,7 @@ suite.define(() => {
       // One owner for the whole page: a sidebar re-render must not start another
       // inventory reader, and the removed Systems page never polled backups here.
       const before = (await gateway.getRequests("environments.list")).length;
-      await page.locator(".sidebar-brand__search").click();
-      await page.keyboard.press("Escape");
+      await page.locator('.sidebar-nav a[href$="/dashboards"]').click();
       await page.locator(".dashboards-toolbar input[type=search]").fill("release");
       await page.locator(".dashboards-toolbar input[type=search]").fill("");
       expect((await gateway.getRequests("environments.list")).length).toBe(before);
