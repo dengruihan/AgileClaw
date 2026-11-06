@@ -1,0 +1,94 @@
+/**
+ * Gateway-level serialization for device-scoped control tools.
+ *
+ * Control tools (browser, computer, desktop) mutate one interactive surface
+ * per occupancy lease. The node already serializes their commands through its
+ * occupancy control gate; until now nothing serialized them at the Gateway, so
+ * concurrent control calls sharing one lease (one turn, or a session tree with
+ * parallel subagent runs) raced each other to the node FIFO and interleaved
+ * Gateway-side ordering. This module enforces the same exclusive FIFO contract
+ * at the Gateway routing layer, keyed by the lease identity (root session +
+ * device). Exec and file tools are never wrapped: they stay parallel with each
+ * other and with one active control call.
+ */
+import { getRuntimeConfig } from "../../config/config.js";
+import { resolveSessionScopeRoot } from "../../gateway/server-methods/session-device-scope.js";
+import { NodeOccupancyControlGate } from "../../node-host/node-occupancy-control-gate.js";
+import { copyAgentToolMetadata, getAgentToolExecutionLocation } from "../agent-tool-metadata.js";
+import type { AnyAgentTool } from "../agent-tools.types.js";
+import { resolveDevicePlacementToolKind } from "./device-scope.js";
+
+const SERIALIZED_TOOLS = new WeakSet<object>();
+
+// One gate per lease identity, shared by every run in this Gateway process, so
+// concurrent turns of one session tree queue together. Idle gates drop out.
+const leaseGates = new Map<string, NodeOccupancyControlGate>();
+
+function leaseGateKey(rootSessionKey: string, deviceId: string): string {
+  return `${rootSessionKey}\u0000${deviceId}`;
+}
+
+/**
+ * Wrap every control-kind placement tool so its device-scoped calls run through
+ * the per-lease FIFO gate. The tool catalog stays constant: names, schemas, and
+ * metadata are preserved, gateway-scoped calls run untouched, and non-control
+ * placement tools (exec, file) are returned as-is.
+ */
+export function applyDeviceControlSerialization(params: {
+  tools: AnyAgentTool[];
+  /** Session whose device scope resolves the lease; absent means no device work. */
+  sessionKey?: string;
+  agentId: string;
+}): AnyAgentTool[] {
+  const { sessionKey } = params;
+  if (!sessionKey) {
+    return params.tools;
+  }
+  return params.tools.map((tool) => {
+    if (getAgentToolExecutionLocation(tool).kind !== "placement") {
+      return tool;
+    }
+    if (resolveDevicePlacementToolKind(tool.name) !== "control") {
+      return tool;
+    }
+    // A wrapped tool already carries its serialization; re-wrapping would queue
+    // the same call twice.
+    if (SERIALIZED_TOOLS.has(tool)) {
+      return tool;
+    }
+    const source = tool;
+    const serialized: AnyAgentTool = {
+      ...source,
+      execute: async (toolCallId, toolParams, signal, onUpdate) => {
+        // Resolve the lease per call: the scope may have switched mid-turn, and
+        // a lease is owned by the session-tree root, not by one tool surface.
+        const root = resolveSessionScopeRoot({
+          cfg: getRuntimeConfig(),
+          sessionKey,
+          agentId: params.agentId,
+        });
+        const deviceId = root?.entry.scopeDeviceId;
+        if (!root || !deviceId) {
+          // No device lease: gateway-scoped control keeps its own transport
+          // scheduling and is not queued here.
+          return await source.execute(toolCallId, toolParams, signal, onUpdate);
+        }
+        const key = leaseGateKey(root.rootSessionKey, deviceId);
+        let gate = leaseGates.get(key);
+        if (!gate) {
+          gate = new NodeOccupancyControlGate();
+          leaseGates.set(key, gate);
+        }
+        try {
+          return await gate.run(() => source.execute(toolCallId, toolParams, signal, onUpdate));
+        } finally {
+          if (gate.isIdle() && leaseGates.get(key) === gate) {
+            leaseGates.delete(key);
+          }
+        }
+      },
+    };
+    SERIALIZED_TOOLS.add(serialized);
+    return copyAgentToolMetadata(source, serialized);
+  });
+}
