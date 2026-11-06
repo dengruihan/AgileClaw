@@ -277,13 +277,6 @@ suite.define(() => {
                   details: { code: "VAULT_LOCKED_OUT", lockedUntilMs: 1_786_353_000_000 },
                 },
               },
-              {
-                __mockError: {
-                  code: "FORBIDDEN",
-                  message: "The password vault reveal scope is required.",
-                  details: { code: "VAULT_REVEAL_SCOPE_REQUIRED" },
-                },
-              },
               { ...UNLOCKED },
             ],
           },
@@ -325,20 +318,6 @@ suite.define(() => {
 
       await page.locator('input[name="master-passphrase"]').fill("synthetic master passphrase");
       await page.getByRole("button", { name: "解锁" }).click();
-      await page
-        .locator(".passwords-vault__error")
-        .getByText("当前连接缺少 operator.vault.reveal 权限")
-        .waitFor();
-      expect(
-        await page
-          .locator(".passwords-vault__error")
-          .getByText("reveal scope is required", { exact: false })
-          .count(),
-      ).toBe(0);
-      await capture(page, "passwords-zh-cn-unlock-error.png");
-
-      await page.locator('input[name="master-passphrase"]').fill("synthetic master passphrase");
-      await page.getByRole("button", { name: "解锁" }).click();
       await page.getByRole("button", { name: "添加密码" }).waitFor();
       await page.getByText("密码库已解锁。", { exact: true }).waitFor();
       await page
@@ -347,6 +326,61 @@ suite.define(() => {
         .waitFor();
       expect(await page.getByText("Add password").count()).toBe(0);
       await capture(page, "passwords-zh-cn-unlocked-after-unlock.png");
+    });
+  });
+
+  it("unlocks with the default Control UI scopes and keeps reveal actions hidden", async () => {
+    await suite.withPage({}, async ({ page }) => {
+      const gateway = await installMockGateway(page, {
+        featureMethods: [
+          "vault.status",
+          "vault.list",
+          "vault.lock",
+          "vault.unlock",
+          "vault.audit.list",
+        ],
+        methodResponses: {
+          "vault.status": { sequence: [UNLOCKED, LOCKED, UNLOCKED, UNLOCKED] },
+          "vault.lock": { ok: true },
+          "vault.unlock": {
+            sequence: [
+              {
+                __mockError: {
+                  code: "INVALID_REQUEST",
+                  message: "Incorrect master passphrase.",
+                  details: { code: "VAULT_WRONG_PASSPHRASE" },
+                },
+              },
+              { ...UNLOCKED },
+            ],
+          },
+          "vault.list": { entries: [ENTRY] },
+          "vault.audit.list": { events: [] },
+        },
+      });
+
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      await page.getByRole("row", { name: /person@example.com/u }).waitFor();
+      await page.getByRole("button", { name: "Lock", exact: true }).click();
+      await gateway.waitForRequest("vault.lock");
+      await page.getByRole("heading", { name: "Unlock the password vault" }).waitFor();
+
+      await page.locator('input[name="master-passphrase"]').fill("synthetic wrong passphrase");
+      await page.getByRole("button", { name: "Unlock", exact: true }).click();
+      await page
+        .locator(".passwords-vault__error")
+        .getByText("Incorrect master passphrase.")
+        .waitFor();
+
+      await page.locator('input[name="master-passphrase"]').fill("synthetic master passphrase");
+      await page.getByRole("button", { name: "Unlock", exact: true }).click();
+      const request = await gateway.waitForRequest("vault.unlock");
+      expect(request.params).toEqual({ passphrase: "synthetic master passphrase" });
+      await page.getByRole("row", { name: /person@example.com/u }).waitFor();
+      expect(await page.locator(".passwords-vault__error").count()).toBe(0);
+      expect(await page.getByRole("button", { name: "Show" }).count()).toBe(0);
+      expect(await page.getByRole("button", { name: /Copy/u }).count()).toBe(0);
+      expect(await page.getByRole("button", { name: "Add password" }).count()).toBe(1);
     });
   });
 

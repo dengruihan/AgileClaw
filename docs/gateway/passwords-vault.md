@@ -40,7 +40,7 @@ The vault never adds a plaintext password or notes column. The `secret_store_ent
 - Five consecutive wrong passphrases trigger a 30-second lockout. Further groups of five back off to five minutes, then one hour. Attempts and the timeout are persisted, so a restart does not clear them.
 - No agent tool is registered for the vault. Agent/model context, transcripts, and logs never include passwords or notes.
 - Agent fill is a separate, per-request flow that uses an opaque `itemRef`; it never exposes a vault read verb to the model. See [Agent fill](#agent-fill).
-- `operator.admin` does not imply `operator.vault.reveal`. Unlock, reveal, and copy need that explicit scope on the connection.
+- `operator.admin` does not imply `operator.vault.reveal`. Unlock needs only `operator.vault`, which `operator.admin` satisfies; reveal and copy need the explicit reveal scope on the connection.
 - Audit records contain actions, item references, and timestamps. They never contain passwords, notes, or account names.
 
 ## Use the vault
@@ -57,12 +57,12 @@ The list is grouped by website and supports multiple accounts per site. Search c
 
 The vault adds two operator scopes:
 
-| Scope                   | Allows                                                                                                                                       |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `operator.vault`        | Status, initialize, list, create, update, soft delete, restore, permanent delete, auto-lock settings, audit list, agent fill preview/execute |
-| `operator.vault.reveal` | Unlock, reveal, and copy                                                                                                                     |
+| Scope                   | Allows                                                                                                                                               |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `operator.vault`        | Status, initialize, unlock, list, create, update, soft delete, restore, permanent delete, auto-lock settings, audit list, agent fill preview/execute |
+| `operator.vault.reveal` | Reveal and copy                                                                                                                                      |
 
-Grant the vault scopes explicitly in an operator role or device authorization. CLI and operator clients do not receive them by default. A client with only `operator.admin` can manage entries but cannot unlock or see values; `operator.vault.reveal` must be granted explicitly.
+Grant the vault scopes explicitly in an operator role or device authorization. CLI and operator clients do not receive them by default. A client with only `operator.vault` (or `operator.admin`, which satisfies it) can unlock and manage entries but cannot see values; `operator.vault.reveal` must be granted explicitly.
 
 Gateway methods are `vault.status`, `vault.initialize`, `vault.unlock`, `vault.lock`, `vault.list`, `vault.create`, `vault.update`, `vault.delete`, `vault.restore`, `vault.purge`, `vault.reveal`, `vault.copy`, `vault.generate`, `vault.setAutoLock`, `vault.audit.list`, `vault.fill.approval.request`, `vault.fill.preview`, and `vault.fill.execute`.
 

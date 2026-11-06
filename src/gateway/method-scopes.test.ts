@@ -835,6 +835,14 @@ describe("operator scope authorization", () => {
     });
   });
 
+  it("classifies vault unlock and reveal scopes", () => {
+    expect(
+      ["vault.unlock", "vault.reveal", "vault.copy"].map((method) =>
+        resolveLeastPrivilegeOperatorScopesForMethod(method),
+      ),
+    ).toEqual([["operator.vault"], ["operator.vault.reveal"], ["operator.vault.reveal"]]);
+  });
+
   it("allows operator.talk and legacy operator.write clients to use unified Talk sessions", () => {
     for (const method of [
       "talk.client.create",
