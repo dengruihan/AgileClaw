@@ -63,7 +63,7 @@ type UpdateFileHunk = {
   chunks: UpdateFileChunk[];
 };
 
-type Hunk = AddFileHunk | DeleteFileHunk | UpdateFileHunk;
+export type Hunk = AddFileHunk | DeleteFileHunk | UpdateFileHunk;
 
 export type ApplyPatchSummary = {
   added: string[];
@@ -81,7 +81,7 @@ type ApplyPatchToolDetails = {
   summary: ApplyPatchSummary;
 };
 
-function normalizeUpdateComparison(content: string): string {
+export function normalizeUpdateComparison(content: string): string {
   const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   if (normalized.length === 0 || normalized.endsWith("\n")) {
     return normalized;
@@ -316,7 +316,7 @@ async function resolvePatchInputPaths(
   return resolved;
 }
 
-function formatSummary(summary: ApplyPatchSummary): string {
+export function formatSummary(summary: ApplyPatchSummary): string {
   const lines = ["Success. Updated the following files:"];
   for (const file of summary.added) {
     lines.push(`A ${file}`);
@@ -412,7 +412,7 @@ async function resolvePatchPath(
   };
 }
 
-function parsePatchText(input: string): Hunk[] {
+export function parsePatchText(input: string): Hunk[] {
   const trimmed = input.trim();
   if (!trimmed) {
     throw new Error("Invalid patch: input is empty.");

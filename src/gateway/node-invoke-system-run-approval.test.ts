@@ -314,6 +314,37 @@ describe("sanitizeSystemRunParamsForForwarding", () => {
     expect(forwarded.approvalDecision).toBeUndefined();
   });
 
+  test("keeps the occupancy lease token and stream flag while stripping control fields", async () => {
+    // Regression: the forwarding allowlist dropped leaseToken, so every
+    // device-scoped system.run failed node admission with LEASE_TOKEN_MISMATCH.
+    const result = await sanitizeSystemRunParamsForForwarding({
+      rawParams: {
+        command: echoSafeArgv,
+        rawCommand: echoSafeCommand,
+        sessionKey: "agent:main:root",
+        leaseToken: "lease-1",
+        streamOutput: true,
+        approved: false,
+        approvalDecision: "deny",
+      },
+      nodeId: "device-a",
+      client,
+      nowMs: now,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+    const forwarded = result.params as Record<string, unknown>;
+    expect(forwarded.leaseToken).toBe("lease-1");
+    expect(forwarded.streamOutput).toBe(true);
+    expect(forwarded.command).toEqual(echoSafeArgv);
+    // Caller assertions never travel: control fields stay stripped.
+    expect(forwarded.approved).toBeUndefined();
+    expect(forwarded.approvalDecision).toBeUndefined();
+  });
+
   test("derives marker-only auto-review provenance from the consumed Gateway record", async () => {
     const record = makeRecord(echoSafeCommand, echoSafeArgv);
     record.resolutionSource = "auto-review";

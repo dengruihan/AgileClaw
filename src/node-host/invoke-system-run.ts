@@ -199,6 +199,8 @@ type HandleSystemRunInvokeOptions = {
   getRuntimeConfig?: () => OpenClawConfig;
   autoReviewer?: ExecAutoReviewer;
   commitExecAuthorization?: typeof commitExecAuthorizationLocked;
+  /** Streams decoded output chunks when the invoke opts in via streamOutput. */
+  onOutputChunk?: (text: string) => Promise<void> | void;
 };
 
 async function sendSystemRunDenied(
@@ -297,6 +299,14 @@ async function parseSystemRunPhase(opts: HandleSystemRunInvokeOptions) {
   const runId = normalizeOptionalString(opts.params.runId) ?? crypto.randomUUID();
   const cwd = normalizeOptionalString(opts.params.cwd);
   const suppressNotifyOnExit = opts.params.suppressNotifyOnExit === true;
+  if (
+    opts.params.streamOutput !== undefined &&
+    opts.params.streamOutput !== null &&
+    typeof opts.params.streamOutput !== "boolean"
+  ) {
+    return invalid("streamOutput must be boolean");
+  }
+  const streamOutput = opts.params.streamOutput === true;
   const approvalSource = opts.params.approvalSource;
   if (
     approvalSource != null &&
@@ -397,6 +407,7 @@ async function parseSystemRunPhase(opts: HandleSystemRunInvokeOptions) {
     timeoutMs: opts.params.timeoutMs ?? undefined,
     needsScreenRecording: opts.params.needsScreenRecording === true,
     approved,
+    streamOutput,
   };
 }
 
@@ -997,6 +1008,14 @@ async function executeSystemRunPhase(
     }
   };
   let result: RunResult;
+  const onOutputChunk =
+    phase.streamOutput && opts.onOutputChunk
+      ? (text: string) => {
+          void Promise.resolve(opts.onOutputChunk?.(text)).catch(() => {
+            // Progress delivery must never fail the run; writer errors abort separately.
+          });
+        }
+      : undefined;
   try {
     assertCurrent();
     result = await opts.runCommand(
@@ -1006,6 +1025,7 @@ async function executeSystemRunPhase(
       phase.timeoutMs,
       opts.signal,
       assertCurrent,
+      onOutputChunk,
     );
     // Some launch adapters translate spawn errors into a RunResult. A revoked
     // authorization still belongs on the denial route, never exec.finished.

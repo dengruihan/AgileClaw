@@ -27,6 +27,10 @@ export type SystemRunParams = {
   approvalSource?: string | null;
   runId?: string | null;
   suppressNotifyOnExit?: boolean | null;
+  /** Opt-in exec output streaming over node.invoke.progress frames. */
+  streamOutput?: boolean | null;
+  /** Occupancy admission token; rides params so the invoke wire is unchanged. */
+  leaseToken?: string | null;
 };
 
 export type RunResult = {

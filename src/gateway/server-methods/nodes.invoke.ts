@@ -99,7 +99,8 @@ export const nodeInvokeHandlers: GatewayRequestHandlers = {
       return;
     }
     const nodeInvokeStream =
-      client?.internal?.syntheticClient === true && client.internal.pluginRuntimeOwnerId
+      client?.internal?.syntheticClient === true &&
+      (client.internal.pluginRuntimeOwnerId || client.internal.agentToolCaller?.assertCurrent)
         ? client.internal.nodeInvokeStream
         : undefined;
     if (!nodeId || !command) {

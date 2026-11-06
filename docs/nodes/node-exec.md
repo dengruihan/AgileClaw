@@ -176,7 +176,7 @@ cannot mutate occupancy because lease mutations are admin-only there.
 | --------------------------------------------------------- | ---------------------------------------------- |
 | `use_device`, `sessions_*`, `portal`, other Gateway tools | Always the Gateway                             |
 | `exec`, `process`                                         | Scoped device (exec) or the Gateway            |
-| `read`, `write`, `ls`                                     | Scoped device (file commands) or the Gateway   |
+| `read`, `write`, `edit`, `apply_patch`, `ls`              | Scoped device (file commands) or the Gateway   |
 | `browser`, `computer`, `screen`                           | Gateway only today; a device-scoped call fails |
 
 Scope rules:
@@ -218,10 +218,24 @@ Lease behavior:
 
 Device exec is foreground: `background`, `yieldMs`, `pty`, and `elevated` are
 rejected under device scope, and output is truncated at 32 KB with an explicit
-marker. Device file tools run under the file-transfer policy configured for that
-device (`allowReadPaths` / `allowWritePaths`); exec runs under the device's own
-exec approval policy. Device-scoped execution requires a Gateway-hosted session,
+marker. When the caller accepts streaming updates, device exec also forwards
+live output chunks to the tool's progress callback over the bounded
+`node.invoke.progress` channel (16 KB frames, a 32 KB forwarding budget, and a
+rolling tail); the final result remains the single authoritative outcome, and
+cancel or timeout still terminates the command's process tree. Device file
+tools run under the file-transfer policy configured for that device
+(`allowReadPaths` / `allowWritePaths`); exec runs under the device's own exec
+approval policy. Device-scoped execution requires a Gateway-hosted session,
 because the Gateway owns the lease.
+
+Device `edit` and `apply_patch` reuse the Gateway's edit planning and patch
+envelope parser over the device `file.stat`, `file.fetch`, and `file.write`
+commands: the stat-resolved canonical path pins the write target, the content
+hash proves integrity, and a post-write stat verifies the persisted size.
+Whole-file edits are capped at the 16 MB device ceiling. The node command
+surface has no delete or move, so `*** Delete File` and `*** Move to` hunks
+fail per call with a pointer to the gateway-scoped alternative; patch paths
+must be absolute device paths.
 
 ## Codex sessions on a node
 

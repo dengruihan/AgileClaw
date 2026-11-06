@@ -68,7 +68,7 @@ export function unsupportedDeviceToolMessage(toolName: string, deviceId: string)
     return `tool ${toolName} has no device-routed transport yet; interactive browser/desktop control runs through its plugin transport on the Gateway. Switch back with use_device device='gateway' to use it.`;
   }
   if (kind === "file") {
-    return `tool ${toolName} has no device-routed file adapter; device file tools support read, write, and ls. Switch back with use_device device='gateway' to use it on the Gateway.`;
+    return `tool ${toolName} has no device-routed file adapter; device file tools support read, write, edit, apply_patch, and ls. Switch back with use_device device='gateway' to use it on the Gateway.`;
   }
   return `tool ${toolName} has no device-routed adapter for device ${deviceId}; it runs only on the Gateway. Switch back with use_device device='gateway' to use it.`;
 }

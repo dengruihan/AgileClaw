@@ -15,6 +15,7 @@ import { resolveLeastPrivilegeOperatorScopesForMethod } from "../../gateway/meth
 import type {
   GatewayAgentRunTaskOwner,
   GatewayContextResolver,
+  GatewayNodeInvokeStream,
   GatewayRequestContext,
   TrustedAgentToolCaller,
 } from "../../gateway/server-methods/types.js";
@@ -69,6 +70,8 @@ type AgentToolGatewayRequest = Pick<
   agentToolCaller?: TrustedAgentToolCaller;
   /** Target policy checked at the mutation boundary, not after its own committed change. */
   sessionMutationCommitGuard?: () => void;
+  /** In-process node.invoke progress hooks; owner-bound at the dispatch authority. */
+  nodeInvokeStream?: GatewayNodeInvokeStream;
 };
 
 const agentToolGatewayRuntimeIdentities = new WeakMap<object, AgentRuntimeIdentity>();
@@ -292,11 +295,28 @@ async function callAgentToolGatewayRequestBound<T>(
           request.sessionMutationCommitGuard?.();
         }
       : request.sessionMutationCommitGuard;
+  // Streaming node invokes stay owner-bound: the synthetic client carries the
+  // tool caller's identity and lifetime assertion, never an anonymous actor.
+  let streamAgentToolCaller: NonNullable<AgentToolGatewayRequest["agentToolCaller"]> | undefined;
+  if (request.nodeInvokeStream && !request.agentToolCaller) {
+    const streamCallerIdentity = getGatewayToolCallerIdentity();
+    if (!streamCallerIdentity || !assertCallerCurrent) {
+      throw new Error("node invoke streaming requires the trusted local agent tool caller context");
+    }
+    streamAgentToolCaller = {
+      agentId: streamCallerIdentity.agentId,
+      sessionKey: streamCallerIdentity.sessionKey,
+      assertCurrent: assertCallerCurrent,
+    };
+  }
   const dispatchOptions = {
     forceSyntheticClient: true,
     operatorRoleActor: { kind: "system" as const },
     ...(request.agentRunTracking ? { agentRunTracking: request.agentRunTracking } : {}),
-    ...(request.agentToolCaller ? { agentToolCaller: request.agentToolCaller } : {}),
+    ...(request.agentToolCaller || streamAgentToolCaller
+      ? { agentToolCaller: request.agentToolCaller ?? streamAgentToolCaller }
+      : {}),
+    ...(request.nodeInvokeStream ? { nodeInvokeStream: request.nodeInvokeStream } : {}),
     ...(positional?.sessionCreation ? { sessionCreation: positional.sessionCreation } : {}),
     ...(positional?.onExecution ? { onExecution: positional.onExecution } : {}),
     syntheticScopes: scopes,

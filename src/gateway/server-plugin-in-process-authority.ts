@@ -366,7 +366,11 @@ export function resolveInProcessGatewayDispatch(
       : undefined;
   if (
     options?.nodeInvokeStream &&
-    (method !== "node.invoke" || !pluginRuntimeOwnerId || options.forceSyntheticClient !== true)
+    (method !== "node.invoke" ||
+      options.forceSyntheticClient !== true ||
+      // Streaming stays owner-bound: a plugin owns its commands, and an agent
+      // tool owns its node invoke through its lifetime-asserted caller identity.
+      (!pluginRuntimeOwnerId && !options.agentToolCaller?.assertCurrent))
   ) {
     throw new Error("Node invoke streaming requires an owner-bound trusted synthetic client.");
   }

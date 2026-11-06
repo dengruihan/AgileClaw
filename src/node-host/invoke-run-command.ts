@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { StringDecoder } from "node:string_decoder";
 import { runCommandWithTimeout } from "../process/exec.js";
 import type { RunResult } from "./invoke-types.js";
 
@@ -45,8 +46,14 @@ export async function runCommand(
   timeoutMs: number | undefined,
   signal?: AbortSignal,
   assertCurrent?: () => void,
+  onOutputChunk?: (text: string, stream: "stdout" | "stderr") => void,
 ): Promise<RunResult> {
   assertCurrent?.();
+  // One decoder per stream so multibyte sequences split across chunk
+  // boundaries survive the incremental handoff.
+  const decoders = onOutputChunk
+    ? { stdout: new StringDecoder("utf8"), stderr: new StringDecoder("utf8") }
+    : undefined;
   try {
     const result = await runCommandWithTimeout(argv, {
       baseEnv: env,
@@ -61,6 +68,14 @@ export async function runCommand(
       input: Buffer.alloc(0),
       signal,
       timeoutMs: timeoutMs && timeoutMs > 0 ? timeoutMs : undefined,
+      ...(onOutputChunk
+        ? {
+            onOutputChunk: (chunk: Buffer, stream: "stdout" | "stderr") => {
+              const decoder = stream === "stdout" ? decoders!.stdout : decoders!.stderr;
+              onOutputChunk(decoder.write(chunk), stream);
+            },
+          }
+        : {}),
     });
     const timedOut = result.termination === "timeout";
     const exitCode = result.code ?? undefined;

@@ -24,6 +24,7 @@ const resolveSessionScopeRoot = vi.fn();
 const gatewayContext = vi.fn();
 const nodeGet = vi.fn();
 const callGatewayTool = vi.fn();
+const planFileEdit = vi.fn();
 
 vi.mock("../../config/config.js", () => ({ getRuntimeConfig: () => ({}) }));
 vi.mock("../../gateway/server-methods/session-device-scope.js", () => ({
@@ -35,6 +36,9 @@ vi.mock("./in-process-gateway.js", () => ({
 }));
 vi.mock("./gateway.js", () => ({
   callGatewayTool: (...args: unknown[]) => callGatewayTool(...args),
+}));
+vi.mock("../sessions/tools/file-tool-planning.js", () => ({
+  planFileEdit: (...args: unknown[]) => planFileEdit(...args),
 }));
 
 const { applyDeviceScopeToolRouting, createDeviceScopeRoutingState } =
@@ -81,7 +85,25 @@ afterEach(() => {
   gatewayContext.mockReset();
   nodeGet.mockReset();
   callGatewayTool.mockReset();
+  planFileEdit.mockReset();
 });
+
+function scopedDeviceFixture() {
+  resolveSessionScopeRoot.mockReturnValue({
+    rootSessionKey: "agent:main:root",
+    agentId: "main",
+    entry: { sessionId: "sess-1", scopeDeviceId: "device-a" },
+  });
+  gatewayContext.mockReturnValue({ nodeRegistry: { get: nodeGet } });
+  nodeGet.mockReturnValue({ nodeId: "device-a", platform: "linux" });
+  recordSessionScopeLease({
+    rootSessionKey: "agent:main:root",
+    deviceId: "device-a",
+    holder: "agent:main:root",
+    leaseToken: "lease-1",
+    expiresAt: Number.MAX_SAFE_INTEGER,
+  });
+}
 
 describe("applyDeviceScopeToolRouting", () => {
   it("keeps the tool catalog constant and leaves gateway tools untouched", () => {
@@ -160,11 +182,93 @@ describe("applyDeviceScopeToolRouting", () => {
           leaseToken: "lease-1",
         }),
       }),
-      undefined,
+      expect.any(Object),
     );
     expect(result.content[0]).toMatchObject({ type: "text" });
     // The routed call published the executing device for the audit projection.
     expect(readToolActionDeviceRef("agent:main:root")).toMatch(/^sha256:[0-9a-f]{12}$/);
+  });
+
+  it("routes edit to the device file adapter with the lease token on every invoke", async () => {
+    scopedDeviceFixture();
+    const fileText = "hello world";
+    let statCalls = 0;
+    callGatewayTool.mockImplementation(async (_method: string, _opts: unknown, invoke: unknown) => {
+      const command = (invoke as { command: string }).command;
+      if (command === "file.stat") {
+        statCalls += 1;
+        const size = statCalls > 1 ? "hello device".length : fileText.length;
+        return { payload: { ok: true, path: "/ws/a.txt", type: "file", size } };
+      }
+      if (command === "file.fetch") {
+        return {
+          payload: {
+            ok: true,
+            path: "/ws/a.txt",
+            size: fileText.length,
+            mimeType: "text/plain",
+            base64: Buffer.from(fileText).toString("base64"),
+          },
+        };
+      }
+      return { payload: { ok: true, path: "/ws/a.txt", size: 12, sha256: "z" } };
+    });
+    planFileEdit.mockResolvedValue({
+      changed: true,
+      editCount: 1,
+      content: "hello device",
+      receipt: { diff: "- world\n+ device", patch: "", firstChangedLine: 1 },
+    });
+    const edit = placementTool("edit");
+    const [routed] = applyDeviceScopeToolRouting([edit.tool], routingState());
+    const result = await routed!.execute("call-1", {
+      path: "/ws/a.txt",
+      edits: [{ oldText: "world", newText: "device" }],
+    });
+    expect(edit.execute).not.toHaveBeenCalled();
+    const commands = callGatewayTool.mock.calls.map(
+      (call) => (call[2] as { command: string }).command,
+    );
+    expect(commands).toEqual(["file.stat", "file.fetch", "file.write", "file.stat"]);
+    for (const call of callGatewayTool.mock.calls) {
+      expect((call[2] as { params: Record<string, unknown> }).params).toMatchObject({
+        leaseToken: "lease-1",
+      });
+    }
+    expect(result.content[0]).toMatchObject({
+      text: "Successfully replaced 1 block(s) in /ws/a.txt.",
+    });
+  });
+
+  it("routes apply_patch to the device file adapter and keeps unsupported hunks per-call failures", async () => {
+    scopedDeviceFixture();
+    const applyPatch = placementTool("apply_patch");
+    const [routed] = applyDeviceScopeToolRouting([applyPatch.tool], routingState());
+    await expect(
+      routed!.execute("call-1", {
+        input: ["*** Begin Patch", "*** Delete File: /ws/a.txt", "*** End Patch"].join("\n"),
+      }),
+    ).rejects.toThrow(/cannot delete/);
+    expect(applyPatch.execute).not.toHaveBeenCalled();
+    expect(callGatewayTool).not.toHaveBeenCalled();
+  });
+
+  it("passes the tool's onUpdate consumer through to the device exec adapter", async () => {
+    scopedDeviceFixture();
+    callGatewayTool.mockResolvedValue({
+      payload: { success: true, exitCode: 0, stdout: "ok", stderr: "" },
+    });
+    const exec = placementTool("exec");
+    const [routed] = applyDeviceScopeToolRouting([exec.tool], routingState());
+    const updates: unknown[] = [];
+    await routed!.execute("call-1", { command: "uname" }, undefined, () => {
+      updates.push(true);
+    });
+    const extra = callGatewayTool.mock.calls[0]![3] as { nodeInvokeStream?: unknown };
+    expect(extra.nodeInvokeStream).toBeDefined();
+    const invoke = callGatewayTool.mock.calls[0]![2] as { params: Record<string, unknown> };
+    expect(invoke.params.streamOutput).toBe(true);
+    expect(typeof extra.nodeInvokeStream).toBe("object");
   });
 
   it("acquires a lease when no mirror exists and surfaces DEVICE_OCCUPIED without gateway fallback", async () => {
@@ -243,6 +347,37 @@ describe("applyDeviceScopeToolRouting", () => {
     const [routed] = applyDeviceScopeToolRouting([process.tool], routingState());
     await expect(routed!.execute("call-1", { action: "list" })).rejects.toThrow(/foreground/);
     expect(process.execute).not.toHaveBeenCalled();
+  });
+
+  it("re-reads the committed scope after a failed switch attempt with unknown outcome", async () => {
+    // Warm the cached root read on gateway scope.
+    resolveSessionScopeRoot.mockReturnValueOnce({
+      rootSessionKey: "agent:main:root",
+      agentId: "main",
+      entry: { sessionId: "sess-1" },
+    });
+    const state = routingState();
+    const exec = placementTool("exec");
+    const [routed] = applyDeviceScopeToolRouting([exec.tool], state);
+    await routed!.execute("call-1", { command: "uname" });
+    expect(exec.execute).toHaveBeenCalledTimes(1);
+    expect(callGatewayTool).not.toHaveBeenCalled();
+
+    // The switch committed on the Gateway but its response was lost, so the
+    // tool call failed after the entry write: the committed scope now names a
+    // device even though the switch never reported success.
+    scopedDeviceFixture();
+    callGatewayTool.mockResolvedValue({
+      payload: { success: true, exitCode: 0, stdout: "ok" },
+    });
+    state.switchPending = true;
+    state.switchPending = false;
+
+    // The next placement call must route on the committed device scope, not the
+    // stale pre-switch cache.
+    await routed!.execute("call-2", { command: "uname" });
+    expect(exec.execute).toHaveBeenCalledTimes(1);
+    expect(callGatewayTool).toHaveBeenCalledTimes(1);
   });
 
   it("applies a committed switch to the next placement call", async () => {

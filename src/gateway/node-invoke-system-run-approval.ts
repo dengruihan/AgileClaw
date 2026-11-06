@@ -174,6 +174,10 @@ function pickSystemRunParams(raw: Record<string, unknown>): Record<string, unkno
     "sessionKey",
     "runId",
     "suppressNotifyOnExit",
+    // Occupancy admission reads this key on the node; stripping it would fail
+    // every device-scoped system.run with LEASE_TOKEN_MISMATCH.
+    "leaseToken",
+    "streamOutput",
   ]) {
     if (key in raw) {
       next[key] = raw[key];

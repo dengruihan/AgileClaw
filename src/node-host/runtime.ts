@@ -6,6 +6,7 @@ import { NODE_CLAUDE_SKILLS_MESSAGE_BYTES } from "../infra/node-claude-skill-pro
 import {
   NODE_AGENT_CLI_CLAUDE_RUN_COMMAND,
   NODE_DUPLEX_INVOKE_IDLE_TIMEOUT_MS,
+  NODE_SYSTEM_RUN_COMMAND,
   type NodeExecutorProfile,
 } from "../infra/node-commands.js";
 import { createNodeDuplexEndpoint } from "../infra/node-duplex-framing.js";
@@ -505,7 +506,10 @@ export async function prepareNodeHostRuntime(params?: {
               requestsClaudeNodeSkillRuntime(frame.paramsJSON);
             const duplexCommand =
               duplexEnabled && (claudeSkills || isRegisteredNodeHostCommandDuplex(frame.command));
-            const progressEnabled = duplexCommand || frame.command === NODE_DESKTOP_STREAM_COMMAND;
+            const streamableInvoke = duplexCommand || frame.command === NODE_DESKTOP_STREAM_COMMAND;
+            // system.run streams only when its params request it; the writer
+            // stays inert for invokes that never write a chunk.
+            const progressEnabled = streamableInvoke || frame.command === NODE_SYSTEM_RUN_COMMAND;
             const controller = new AbortController();
             // Every command must remain cancellable after dispatch; only duplex
             // commands own ordered input and its pre-spawn buffer.
@@ -746,3 +750,4 @@ export async function prepareNodeHostRuntime(params?: {
     },
   };
 }
+/* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

@@ -18,8 +18,15 @@ import {
 import { readSessionScopeLease } from "../../gateway/session-scope-lease.js";
 import { getAgentToolExecutionLocation, copyAgentToolMetadata } from "../agent-tool-metadata.js";
 import type { AnyAgentTool } from "../agent-tools.types.js";
+import type { AgentToolResult } from "../runtime/index.js";
 import { runDeviceExec } from "./device-exec.js";
-import { listDeviceDirectory, readDeviceFile, writeDeviceFile } from "./device-files.js";
+import {
+  applyDevicePatch,
+  editDeviceFile,
+  listDeviceDirectory,
+  readDeviceFile,
+  writeDeviceFile,
+} from "./device-files.js";
 import {
   deviceScopeSwitchPendingMessage,
   resolveDevicePlacementToolKind,
@@ -73,6 +80,7 @@ export function createDeviceScopeRoutingState(params: {
       }
     | undefined;
   let resolved = false;
+  let switchPending = false;
   let leaseRootSessionKey: string | undefined;
   let leaseRegistry: DeviceScopeRegistry | undefined;
   const state: DeviceScopeRoutingState = {
@@ -80,7 +88,20 @@ export function createDeviceScopeRoutingState(params: {
     agentId: params.agentId,
     ...(params.sessionId ? { sessionId: params.sessionId } : {}),
     ...(params.runId ? { runId: params.runId } : {}),
-    switchPending: false,
+    get switchPending() {
+      return switchPending;
+    },
+    set switchPending(pending) {
+      switchPending = pending;
+      if (!pending) {
+        // Every completed switch attempt invalidates the cached root read. A
+        // switch whose response was lost may still have committed, so the next
+        // placement call must re-read the committed scope instead of routing on
+        // the pre-switch cache.
+        resolved = false;
+        cached = undefined;
+      }
+    },
     get leaseRootSessionKey() {
       return leaseRootSessionKey;
     },
@@ -220,6 +241,7 @@ type AdapterCall = (params: {
   agentId: string;
   runId?: string;
   signal?: AbortSignal;
+  onUpdate?: (update: AgentToolResult<unknown>) => void;
 }) => Promise<unknown>;
 
 function deviceFileAdapter(toolName: string): AdapterCall | undefined {
@@ -231,6 +253,12 @@ function deviceFileAdapter(toolName: string): AdapterCall | undefined {
   }
   if (toolName === "write") {
     return (params) => writeDeviceFile(params);
+  }
+  if (toolName === "edit") {
+    return (params) => editDeviceFile(params);
+  }
+  if (toolName === "apply_patch") {
+    return (params) => applyDevicePatch(params);
   }
   return undefined;
 }
@@ -246,6 +274,7 @@ async function executeOnDevice(params: {
   };
   toolParams: Record<string, unknown>;
   signal?: AbortSignal;
+  onUpdate?: (update: AgentToolResult<unknown>) => void;
 }): Promise<unknown> {
   const deviceId = params.root.scopeDeviceId;
   if (!deviceId) {
@@ -299,6 +328,7 @@ async function executeOnDevice(params: {
     ...(platform ? { platform } : {}),
     ...(params.state.runId ? { runId: params.state.runId } : {}),
     ...(params.signal ? { signal: params.signal } : {}),
+    ...(params.onUpdate ? { onUpdate: params.onUpdate } : {}),
   });
 }
 
@@ -344,6 +374,7 @@ export function applyDeviceScopeToolRouting(
           root,
           toolParams: callParams,
           ...(signal ? { signal } : {}),
+          ...(onUpdate ? { onUpdate } : {}),
         });
         return result as Awaited<ReturnType<typeof source.execute>>;
       },
