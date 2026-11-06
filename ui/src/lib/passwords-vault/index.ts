@@ -4,6 +4,7 @@ import type {
   VaultStatus,
 } from "../../../../packages/gateway-protocol/src/index.js";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
+import { t } from "../../i18n/index.ts";
 import { formatUiError } from "../format-error.ts";
 
 export type PasswordsVaultClientError = {
@@ -11,6 +12,49 @@ export type PasswordsVaultClientError = {
   vaultCode?: string;
   lockedUntilMs?: number;
 };
+
+/**
+ * Localized hint for a known vault failure; unknown codes keep the raw diagnostic.
+ * Literal `t()` calls keep the canonical key references visible to
+ * `ui:i18n:verify`; `VAULT_ORIGIN_MISMATCH` belongs to the agent fill surface,
+ * which the Passwords page never calls.
+ */
+export function passwordsVaultErrorHint(error: PasswordsVaultClientError): string | null {
+  switch (error.vaultCode) {
+    case "VAULT_WRONG_PASSPHRASE":
+      return t("passwords.wrongPassphrase");
+    case "VAULT_LOCKED_OUT":
+      return error.lockedUntilMs === undefined
+        ? t("passwords.lockedOut")
+        : t("passwords.lockedOutUntil", {
+            time: new Date(error.lockedUntilMs).toLocaleTimeString(),
+          });
+    case "VAULT_CORRUPTED":
+      return t("passwords.corrupted");
+    case "VAULT_CONFLICT":
+      return t("passwords.conflict");
+    case "VAULT_DUPLICATE":
+      return t("passwords.duplicate");
+    case "VAULT_REVEAL_SCOPE_REQUIRED":
+      return t("passwords.revealScopeRequired");
+    case "VAULT_LOCKED":
+      return t("passwords.locked");
+    case "VAULT_UNINITIALIZED":
+      return t("passwords.uninitialized");
+    case "VAULT_ALREADY_INITIALIZED":
+      return t("passwords.alreadyInitialized");
+    case "VAULT_NOT_FOUND":
+      return t("passwords.notFound");
+    case "VAULT_DELETED":
+      return t("passwords.deletedEntry");
+    case "VAULT_INVALID_INPUT":
+      return t("passwords.invalidInput");
+    case "VAULT_UNAVAILABLE":
+      return t("passwords.unavailable");
+    default:
+      return null;
+  }
+}
 
 export type PasswordsVaultState = {
   client: GatewayBrowserClient | null;
@@ -48,7 +92,7 @@ export function toPasswordsVaultError(error: unknown): PasswordsVaultClientError
   const lockedUntilMs =
     typeof details?.lockedUntilMs === "number" ? details.lockedUntilMs : undefined;
   return {
-    message: formatUiError(error, "The password vault request failed."),
+    message: formatUiError(error, t("passwords.requestFailed")),
     ...(vaultCode ? { vaultCode } : {}),
     ...(lockedUntilMs !== undefined ? { lockedUntilMs } : {}),
   };
