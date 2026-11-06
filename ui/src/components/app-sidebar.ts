@@ -62,7 +62,6 @@ import {
 import { icons } from "./icons.ts";
 import { renderPanelRefreshStatus } from "./panel-refresh-status.ts";
 import { SessionOrganizerController } from "./session-organizer-controller.ts";
-import { SidebarContextController } from "./sidebar-context-controller.ts";
 import { SidebarMenusController } from "./sidebar-menus-controller.ts";
 import { SidebarPeopleController } from "./sidebar-people-controller.ts";
 
@@ -130,7 +129,6 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
   // dropped because the controller aligns from cumulative snapshots.
   private narration: SidebarSessionNarrationController | null = null;
   private narrationLoad: Promise<void> | null = null;
-  private readonly sidebarContext = new SidebarContextController(this);
   private readonly subscriptions = new SubscriptionsController(this)
     .effect(
       () => this.context?.gateway,
@@ -142,6 +140,12 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
   private readonly nativeGatewaysChanged = () => this.sidebarMenus.closeSessionMenu();
   private readonly hiddenSessionCatalogsChanged = () => {
     this.hiddenSessionCatalogIds = loadStoredHiddenSessionCatalogIds();
+  };
+  // The shared scroller drives the fade classes; nested lists keep their own scroll.
+  private readonly handleShellScroll = (event: Event): void => {
+    if (event.currentTarget instanceof HTMLElement) {
+      this.sessionData.updateSessionsScrollState(event.currentTarget);
+    }
   };
 
   // Catalog rows are non-startup content. Load their renderer through the same
@@ -477,7 +481,7 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
           <div class="sidebar-shell__content">
             <div
               class="sidebar-shell__body sidebar-shell__body--scroll-${this.sessionData.sessionsScrollState}"
-              @scroll=${(event: Event) => this.sidebarContext.handleScroll(event)}
+              @scroll=${this.handleShellScroll}
             >
               <nav
                 class="sidebar-nav"
@@ -503,13 +507,12 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
                   )}
                 </div>
               </nav>
-              <div class="sidebar-session-content" ?hidden=${Boolean(this.contextualSidebar)}>
+              <div class="sidebar-session-content">
                 ${renderAppSidebarOnline(this)} ${this.renderSessions()}
               </div>
-              ${this.contextualSidebar?.render(this.contextualSidebar.data, this.contextualSidebar.loaderPending, true) ?? nothing}
             </div>
             ${
-              this.contextualSidebar || this.sessionsStatusFilter === "archived"
+              this.sessionsStatusFilter === "archived"
                 ? nothing
                 : renderPanelRefreshStatus({
                     status: this.sessionData.sessionCatalogRefreshStatus,

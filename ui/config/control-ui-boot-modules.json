@@ -1599,8 +1599,6 @@
   "ui/src/components/sidebar-attention.ts",
   "ui/src/components/sidebar-build-chip-format.ts",
   "ui/src/components/sidebar-build-chip.ts",
-  "ui/src/components/sidebar-context-controller.ts",
-  "ui/src/components/sidebar-context-state.ts",
   "ui/src/components/sidebar-empty-groups-controller.ts",
   "ui/src/components/sidebar-issue-item.ts",
   "ui/src/components/sidebar-issues-tabs.ts",

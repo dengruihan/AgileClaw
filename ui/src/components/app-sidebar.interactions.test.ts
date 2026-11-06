@@ -11,7 +11,7 @@ import "../test-helpers/app-sidebar-cases/new-group-dialog.ts";
 import "../test-helpers/app-sidebar-cases/section-reordering.ts";
 import "../test-helpers/app-sidebar-cases/session-delete-access.ts";
 import "../test-helpers/app-sidebar-cases/session-mutations.ts";
-import "../test-helpers/app-sidebar-cases/sidebar-scroll.ts";
+import "../test-helpers/app-sidebar-cases/sidebar-shell-scroll.ts";
 import "../test-helpers/app-sidebar-cases/transient-menus.ts";
 
 it.each([0, 1])("resolves %i sidebar rows before agent selection is available", (count) => {

@@ -233,7 +233,6 @@ export function renderApplicationShell(host: ShellViewHost) {
     Object.assign(host.navigationSidebar, {
       basePath: context.basePath,
       activeRouteId: activeRoute,
-      router: host.runtime.router,
       activePluginTabId: activePluginRef ? pluginTabKey(activePluginRef) : "",
       enabledRouteIds: APP_ROUTE_IDS,
       sessionKey: host.activeSessionKey,
