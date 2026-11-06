@@ -117,7 +117,6 @@ const pageStyles = {
     "ui/src/styles/chat/working-indicator.css",
     "ui/src/styles/new-session-attachment-panel.css",
     "ui/src/styles/new-session.css",
-    "ui/src/styles/palette-session-settings.css",
   ],
   plugin: ["ui/src/styles/logbook.css"],
   plugins: [

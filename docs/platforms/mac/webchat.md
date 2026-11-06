@@ -454,8 +454,7 @@ windows opened separately. While connected, the sidebar footer also shows the
 current Gateway and marks it when it is primary. Password-only and browser
 sign-in profiles can be viewed but cannot be made primary.
 
-Dashboard commands such as New Session and the command palette act on
-the frontmost Gateway window.
+Dashboard commands such as New Session act on the frontmost Gateway window.
 
 Native approval cards and dialogs apply only to the Gateway connection that
 requested them. Changing Primary does not transfer a pending approval to the

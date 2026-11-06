@@ -105,18 +105,6 @@ export class OpenClawModalDialog extends OpenClawLitElement {
       height: 100%;
     }
 
-    :host(.palette) wa-dialog::part(dialog) {
-      margin-block-start: min(20dvh, 160px);
-      margin-block-end: auto;
-    }
-
-    :host(.palette) wa-dialog {
-      --openclaw-modal-backdrop-filter: none;
-      --wa-color-overlay-modal: color-mix(in oklab, black 12%, transparent);
-      --show-duration: 0ms;
-      --hide-duration: 0ms;
-    }
-
     :host(.drawer) wa-dialog {
       --width: min(var(--openclaw-modal-width, 100vw), 100vw);
       --show-duration: 200ms;

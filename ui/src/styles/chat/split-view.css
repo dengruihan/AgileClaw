@@ -584,7 +584,6 @@
   .chat-pane__header.chat-pane__header--closable .chat-side-panel-toggle,
   .chat-pane__header.chat-pane__header--closable .chat-pane__sharing-menu,
   .chat-pane__header.chat-pane__header--closable .chat-pane__nav-toggle,
-  .chat-pane__header.chat-pane__header--closable .chat-pane__palette-open,
   .chat-pane__header.chat-pane__header--closable .chat-pane__participants,
   .chat-pane__header.chat-pane__header--closable openclaw-session-owner-chip {
     display: none;
