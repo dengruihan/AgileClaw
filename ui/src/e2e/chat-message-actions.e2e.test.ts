@@ -743,16 +743,11 @@ describeControlUiE2e("Control UI chat message actions", () => {
       await page.goto(controlUiSessionUrl(server.baseUrl, "agent:main:main"));
       await setThemeMode(page, "dark");
       const applePlatform = process.platform === "darwin";
-      const commandPaletteShortcut = applePlatform ? "⌘K" : "Ctrl+K";
       const sidebarShortcut = applePlatform ? "⌘B" : "Ctrl+B";
       const newSessionShortcut = applePlatform ? "⌘⇧O" : "Ctrl+Shift+O";
       await expectHoverTooltip(
-        page.locator(".sidebar-brand").getByRole("link", { name: "New conversation" }),
-        `New conversation (${newSessionShortcut})`,
-      );
-      await expectHoverTooltip(
-        page.getByRole("button", { name: "Open command palette" }),
-        `Open command palette (${commandPaletteShortcut})`,
+        page.locator(".sidebar-brand").getByRole("link", { name: "New session" }),
+        `New session (${newSessionShortcut})`,
       );
       await expectHoverTooltip(
         page.getByRole("button", { name: "Collapse sidebar" }),

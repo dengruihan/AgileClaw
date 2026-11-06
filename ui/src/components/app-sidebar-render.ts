@@ -123,7 +123,7 @@ function renderAppSidebarNewSessionAction(host: AppSidebarRenderHost, rosterNewS
               basePath: host.basePath,
               agentId: host.expandedAgentId(),
               className: "sidebar-brand__new-thread sidebar-new-session-action",
-              label: t("agentChip.newConversation"),
+              label: t("chat.runControls.newSession"),
               visibleLabel: t("chat.runControls.newSession"),
               showShortcut: true,
               disabledReason: newSessionAccess.allowed ? undefined : newSessionAccess.reason,

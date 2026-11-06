@@ -265,6 +265,10 @@ describe("AppSidebar agent roster", () => {
     await vi.waitFor(() => expect(agentIds(sidebar)).toHaveLength(3));
     const menus = sidebar.querySelectorAll(".sidebar-new-session-menu");
     expect(menus).toHaveLength(1);
+    const trigger = menus[0]?.querySelector("button");
+    expect(trigger?.textContent?.trim()).toBe("New session");
+    expect(trigger?.getAttribute("aria-label")).toBe("New session");
+    expect(trigger?.getAttribute("title")).toBe("New session");
     for (const menu of menus) {
       const options = [...menu.querySelectorAll("wa-dropdown-item")];
       expect(options.map((item) => item.getAttribute("value"))).toEqual(agentIds(sidebar));

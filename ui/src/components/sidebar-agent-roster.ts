@@ -269,8 +269,8 @@ class SidebarNewSessionMenu extends AgentRosterElement {
           slot="trigger"
           type="button"
           class=${this.triggerClass}
-          aria-label=${t("agentChip.newConversation")}
-          title=${access.allowed ? t("agentChip.newConversation") : access.reason}
+          aria-label=${t("chat.runControls.newSession")}
+          title=${access.allowed ? t("chat.runControls.newSession") : access.reason}
           ?disabled=${!access.allowed || cards.length === 0}
         >
           ${icons.plus}
