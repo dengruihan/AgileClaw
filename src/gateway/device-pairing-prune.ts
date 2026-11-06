@@ -5,6 +5,7 @@ import {
 } from "../infra/device-pairing.js";
 import { reconcileRevokedDeviceWorker } from "./device-worker-revocation.js";
 import { clearRemovedNodeRuntimeState } from "./node-runtime-state.js";
+import { releaseRemovedDeviceScopeLeases } from "./server-methods/session-device-scope.js";
 import type { GatewayRequestContext } from "./server-methods/types.js";
 
 type PruneContext = Pick<
@@ -48,6 +49,10 @@ export async function pruneSupersededSilentPairingsAfterApproval(params: {
       // queues, wake lifecycles, and runtime metadata before session teardown.
       clearRemovedNodeRuntimeState({ nodeId: entry.deviceId, context });
     }
+    // Persistent pruning is a pairing removal owner too: retire the device's
+    // mirrored occupancy leases and record the attribution-only delete fact,
+    // matching device.pair.remove/node.pair.remove.
+    releaseRemovedDeviceScopeLeases({ deviceId: entry.deviceId });
     // Invalidate before credential and placement teardown so racing reconnects
     // fail authorization through the same owner used by explicit removal.
     context.invalidateClientsForDevice?.(entry.deviceId, { reason: "device-pair-removed" });

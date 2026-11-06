@@ -116,6 +116,23 @@ function toolEvent(sessionKey: string, seq: number): TrustedToolExecutionEvent {
 }
 
 describe("tool action device scope lifecycle", () => {
+  it("reports no device ref without an injected resolver", async () => {
+    // The CLI local-audit path has no gateway session owner: the projection
+    // is cache-only, so an unpublished session stays gateway-scoped.
+    const inputs: AuditEventInput[] = [];
+    const recorder = createAuditEventRecorder({
+      scheduler: createTestGatewayScheduler(),
+      getConfig: () => ({}),
+      writer: captureWriter(inputs),
+    });
+
+    recorder.recordTool(toolEvent("agent:main:main", 1));
+    await recorder.stop();
+
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]).not.toHaveProperty("deviceRef");
+  });
+
   it("forgets a cached device scope when the session is deleted and recreated gateway-scoped", async () => {
     const sessionKey = "agent:main:main";
     const inputs: AuditEventInput[] = [];

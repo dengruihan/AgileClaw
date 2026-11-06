@@ -1,5 +1,8 @@
 // Covers gateway-side cleanup when silent pairing supersedes stale sibling records.
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
+import { configureExecutionDecisionWorkSink } from "../audit/execution-decision-work.js";
+import type { ExecutionDecisionWork } from "../audit/execution-decision-work.types.js";
+import { createExecutionIdentityAdmissionToken } from "../audit/execution-identity-admission.js";
 import { approveDevicePairing } from "../infra/device-pairing-approval.js";
 import {
   approveNodePairing,
@@ -27,6 +30,11 @@ import {
   getNodeWakeStateSnapshot,
   resetNodeWakeStateForTest,
 } from "./node-wake-state.test-support.js";
+import {
+  clearAllSessionScopeLeasesForTest,
+  readSessionScopeLease,
+  recordSessionScopeLease,
+} from "./session-scope-lease.js";
 import { bindDeviceWorkerReconciliation } from "./worker-environments/device-provider.js";
 
 const pairingStateDirs: string[] = [];
@@ -149,6 +157,7 @@ describe("pruneSupersededSilentPairingsAfterApproval", () => {
 
   afterEach(() => {
     resetNodeWakeStateForTest();
+    clearAllSessionScopeLeasesForTest();
   });
 
   test("retires stale node siblings across both pairing stores", async () => {
@@ -305,5 +314,70 @@ describe("pruneSupersededSilentPairingsAfterApproval", () => {
     await expect(loadApnsRegistration("cli-stale", baseDir)).resolves.toBeNull();
     expect(harness.broadcasts).toEqual([]);
     expect(harness.disconnected).toEqual(["cli-stale"]);
+  });
+
+  test("retires mirrored occupancy leases and records one delete fact per pruned device", async () => {
+    const baseDir = await suiteRootTracker.make("case");
+    pairingStateDirs.push(baseDir);
+    await pairSilentDevice({
+      baseDir,
+      deviceId: "lease-stale",
+      roles: ["node"],
+      clientId: "node-host",
+      clientMode: "node",
+      displayName: "megaclaw",
+    });
+    const anchor = await pairSilentDevice({
+      baseDir,
+      deviceId: "lease-anchor",
+      roles: ["node"],
+      clientId: "node-host",
+      clientMode: "node",
+      displayName: "megaclaw",
+    });
+    const admissionToken = createExecutionIdentityAdmissionToken("run-prune", {
+      contextId: "context-prune",
+      executionId: "execution-prune",
+      now: 5,
+    });
+    recordSessionScopeLease({
+      rootSessionKey: "agent:main:root",
+      deviceId: "lease-stale",
+      holder: "agent:main:root",
+      leaseToken: "lease-1",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      admissionToken,
+    });
+    const work: ExecutionDecisionWork[] = [];
+    const clearWorkSink = configureExecutionDecisionWorkSink((item) => {
+      work.push(item);
+      return true;
+    });
+    const harness = createPruneContext();
+
+    try {
+      const pruned = await pruneSupersededSilentPairingsAfterApproval({
+        deviceId: anchor.deviceId,
+        context: harness.context,
+        baseDir,
+        nowMs: Date.now() + 120_000,
+      });
+      expect(pruned.map((entry) => entry.deviceId)).toEqual(["lease-stale"]);
+    } finally {
+      clearWorkSink();
+    }
+
+    // Superseded pruning is a pairing removal owner too: the mirrored lease is
+    // retired and exactly one attribution-only delete fact records it, matching
+    // device.pair.remove/node.pair.remove.
+    expect(readSessionScopeLease("agent:main:root")).toBeUndefined();
+    expect(work.map((item) => item.receipt.decision)).toEqual([
+      { outcome: "not-applicable", reasonCode: "device_lease_delete" },
+    ]);
+    expect(work[0]?.token).toEqual(admissionToken);
+    expect(work[0]?.receipt.enforcement).toMatchObject({ coverageState: "attribution-only" });
+    // Raw device and session bytes ride only in the private work item; the
+    // writer projects them and the keyed receipt id before persistence.
+    expect(work[0]?.refs?.resource).toEqual({ namespace: "device", value: "lease-stale" });
   });
 });

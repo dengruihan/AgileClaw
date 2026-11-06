@@ -53,7 +53,7 @@ const ensureExecutionDecisionFactSchema = createOpenClawStateSchemaEnsurer({
   operationLabel: "audit.execution-decision.schema.ensure",
 });
 
-type ExecutionDecisionFactOptions = OpenClawStateDatabaseOptions & {
+export type ExecutionDecisionFactOptions = OpenClawStateDatabaseOptions & {
   now?: number;
   limits?: { maxRows: number; pruneBatchRows: number };
 };

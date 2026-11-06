@@ -6,10 +6,16 @@ import { resolveGlobalSingleton } from "../shared/global-singleton.js";
 import {
   openOpenClawStateDatabase,
   type OpenClawStateDatabase,
-  type OpenClawStateDatabaseOptions,
 } from "../state/openclaw-state-db.js";
 import { pseudonymizeExecutionIdentityRef } from "./audit-identity.js";
-import { recordExecutionDecisionFactInDatabase } from "./execution-decision-facts.js";
+import {
+  DEVICE_LEASE_RECEIPT_ID_PREFIX,
+  deviceLeaseProducerDigest,
+} from "./device-lease-receipt-id.js";
+import {
+  recordExecutionDecisionFactInDatabase,
+  type ExecutionDecisionFactOptions,
+} from "./execution-decision-facts.js";
 import type { ExecutionDecisionWork } from "./execution-decision-work.types.js";
 import {
   parseExecutionIdentityAdmissionToken,
@@ -158,7 +164,7 @@ export function parseExecutionDecisionWork(value: unknown): ExecutionDecisionWor
 /** Project raw private refs at the audit owner, then persist only the bounded receipt. */
 export function processExecutionDecisionWorkInDatabase(
   value: unknown,
-  options: OpenClawStateDatabaseOptions & { database: OpenClawStateDatabase },
+  options: ExecutionDecisionFactOptions & { database: OpenClawStateDatabase },
 ): "inserted" | "existing" {
   const work = parseExecutionDecisionWork(value);
   const db = openOpenClawStateDatabase(options).db;
@@ -178,9 +184,28 @@ export function processExecutionDecisionWorkInDatabase(
         value: work.refs.target.value,
       })
     : undefined;
+  // Device-lease receipt ids arrive as producer digests over raw identity
+  // tuples; key them with the installation audit HMAC so low-entropy device
+  // ids cannot be brute-forced from the retained id. The same tuple always
+  // projects to the same keyed id, so replays keep deduplicating.
+  const deviceLeaseDigest = deviceLeaseProducerDigest(work.receipt.receiptId);
+  const keyedReceiptId = deviceLeaseDigest
+    ? `${DEVICE_LEASE_RECEIPT_ID_PREFIX}${pseudonymizeExecutionIdentityRef({
+        db,
+        kind: "evidence",
+        scope: "device-lease-receipt",
+        value: deviceLeaseDigest,
+      })}`
+    : undefined;
   const receipt = buildReceipt({
     token: work.token,
-    receipt: work.receipt,
+    receipt: keyedReceiptId
+      ? {
+          ...work.receipt,
+          receiptId: keyedReceiptId,
+          source: { ...work.receipt.source, recordRef: keyedReceiptId },
+        }
+      : work.receipt,
     ...(resourceRef ? { resourceRef } : {}),
     ...(targetRef ? { targetRef } : {}),
   });

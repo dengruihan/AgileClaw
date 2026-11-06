@@ -248,10 +248,17 @@ reference, a stable reason code, the outcome, and `occurredAt`. Reject reasons
 are `occupied`, `disabled`, `disconnected`, and `not-executor`; release reasons
 are `released`, `revoked`, `turn-end`, `stop`, and `delete`. Acquire and reject
 facts are `enforced` because the node occupancy owner changed the outcome;
-release facts are `attribution-only` with a `not-applicable` outcome. Facts are
+release facts are `attribution-only` with a `not-applicable` outcome. The
+persisted receipt id is keyed with the installation audit HMAC: the writer
+re-projects the producer's digest over the transition tuple, so a low-entropy
+device id cannot be brute-forced from a retained id, and replays of the same
+transition deduplicate to one keyed id. One migration seam: facts recorded
+before the keyed id keep their earlier unkeyed id for the retention window, so
+a transition re-recorded across that upgrade can appear twice. Facts are
 emitted at every lifecycle boundary — acquire through `use_device` or a
 placement call, release at turn end, Stop, a switch back to gateway scope,
-session archive or delete, device disable or removal, and node-reported
+session archive or delete, device disable or removal, superseded silent-pairing
+pruning, and node-reported
 occupancy release — but a fact persists only while its execution context is
 retained: operator-side release boundaries attribute the transition to the
 execution that acquired the lease when the Gateway still mirrors its admission
@@ -392,10 +399,12 @@ Tool-action records also report where the session executes: while a session has
 an active device execution scope, its `tool.action.started/finished` records
 carry that scope's hashed device reference (`deviceRef`). The reference reports
 the session's placement scope at event time; records for a gateway-scoped
-session intentionally omit it. The projection reads the committed session
+session intentionally omit it. The Gateway composition root injects the
+session-owner resolver, so the projection reads the committed session
 scope once per session (the first tool event after a Gateway restart or session
-creation) and caches it, then refreshes it on every committed scope write, so
-a started record and its finished record agree.
+creation) and caches it, then refreshes it on every committed scope write and
+drops the cache on every committed session identity mutation, so a started
+record and its finished record agree.
 
 ## Message lifecycle events
 

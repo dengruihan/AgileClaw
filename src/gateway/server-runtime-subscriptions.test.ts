@@ -59,6 +59,9 @@ const auditTestState = vi.hoisted(() => ({
   identityRecorded: 0,
   decisionRecorded: 0,
   stopped: 0,
+  lastOptions: [] as Array<
+    Parameters<(typeof import("../audit/audit-recorder.js"))["createAuditEventRecorder"]>[0]
+  >,
 }));
 const agentEventHandlerMocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -102,6 +105,7 @@ vi.mock("../audit/audit-recorder.js", async (importOriginal) => {
   return {
     createAuditEventRecorder: (options: Parameters<typeof actual.createAuditEventRecorder>[0]) => {
       auditTestState.created += 1;
+      auditTestState.lastOptions.push(options);
       return actual.createAuditEventRecorder({
         ...options,
         writer: {
@@ -187,6 +191,7 @@ describe("startGatewayEventSubscriptions", () => {
     auditTestState.identityRecorded = 0;
     auditTestState.decisionRecorded = 0;
     auditTestState.stopped = 0;
+    auditTestState.lastOptions.length = 0;
     transcriptBroadcastMocks.useActualHandler = false;
     transcriptBroadcastMocks.readMessageById.mockReset();
     runtimeConfigState.value = {};
@@ -260,6 +265,18 @@ describe("startGatewayEventSubscriptions", () => {
     admitted = true;
     prepared.resolve();
     await waitForFast(() => expect(delivered).toHaveBeenCalledWith(null));
+  });
+
+  it("injects the session-device-scope resolver so the audit layer stays gateway-import-free", () => {
+    unsubs = startGatewayEventSubscriptions(createParams());
+    expect(auditTestState.lastOptions).toHaveLength(1);
+    const options = auditTestState.lastOptions[0];
+    // The composition root owns the committed-entry resolver; the recorder
+    // must receive it instead of importing the gateway session graph.
+    expect(options?.resolveSessionDeviceScope).toBeTypeOf("function");
+    // An unknown session resolves to undefined (retryable) without throwing,
+    // so a bad session key never disturbs the tool-event path.
+    expect(options?.resolveSessionDeviceScope?.("agent:main:missing")).toBeUndefined();
   });
 
   registerActivitySummaryPublicationTests(

@@ -1,7 +1,6 @@
 /** Gateway-owned recorder joining trusted run, tool, and message lifecycle streams. */
 import { randomUUID } from "node:crypto";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import { resolveSessionScopeRoot } from "../gateway/server-methods/session-device-scope.js";
 import type { GatewayScheduler } from "../infra/gateway-scheduler.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { onSessionIdentityMutation } from "../sessions/session-lifecycle-events.js";
@@ -37,7 +36,12 @@ export function createAuditEventRecorder(options: {
   writer?: AuditEventWriter;
   stateDir?: string;
   terminalSettleMs?: number;
-  /** Test/composition override; production reads the committed session entry. */
+  /**
+   * Composition seam for the session-owner scope resolver. The audit layer
+   * never imports the gateway session graph, so the composition root injects
+   * the committed-entry reader; without one the tool-action projection seeds
+   * only from explicitly published scopes.
+   */
   resolveSessionDeviceScope?: ToolActionDeviceScopeResolver;
 }): AuditEventRecorder {
   let nextAcceptedMessageSequence = 0;
@@ -59,20 +63,11 @@ export function createAuditEventRecorder(options: {
     getConfig: options.getConfig,
     terminalSettleMs: options.terminalSettleMs,
     // Seed the tool-action device scope from the committed session entry once
-    // per session; the projection caches it (including gateway scope).
-    resolveSessionDeviceScope:
-      options.resolveSessionDeviceScope ??
-      ((sessionKey) => {
-        try {
-          const root = resolveSessionScopeRoot({
-            cfg: options.getConfig(),
-            sessionKey,
-          });
-          return root ? (root.entry.scopeDeviceId ?? null) : undefined;
-        } catch {
-          return undefined;
-        }
-      }),
+    // per session through the injected owner resolver; the projection caches
+    // the answer (including gateway scope).
+    ...(options.resolveSessionDeviceScope
+      ? { resolveSessionDeviceScope: options.resolveSessionDeviceScope }
+      : {}),
   });
 
   // Session create/delete/reset/replace can retire or reuse a stable key
