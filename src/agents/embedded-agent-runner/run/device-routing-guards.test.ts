@@ -169,6 +169,39 @@ describe("applyDeviceStepRuleBatchGuard", () => {
     expect(exec.execute).not.toHaveBeenCalled();
   });
 
+  it("rejects a second use_device in the same step after a committed switch", async () => {
+    const first = makeTool("use_device", "gateway");
+    const second = makeTool("use_device", "gateway");
+    const tools = applyDeviceStepRuleBatchGuard([first.tool, second.tool]);
+    const stepOne = batchStep("m1");
+    await runWithAgentToolExecutionContext(stepOne, () => tools[0]!.execute("call-1", {}));
+    await expect(
+      runWithAgentToolExecutionContext(stepOne, () => tools[1]!.execute("call-2", {})),
+    ).rejects.toThrow(/use_device already ran in this step.*keeps the scope committed/s);
+    expect(first.execute).toHaveBeenCalledTimes(1);
+    expect(second.execute).not.toHaveBeenCalled();
+    // The next step accepts a switch again.
+    const stepTwo = batchStep("m2");
+    await runWithAgentToolExecutionContext(stepTwo, () => tools[1]!.execute("call-3", {}));
+    expect(second.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a second use_device in the same step after a failed switch attempt", async () => {
+    const first = makeTool("use_device", "gateway", async () => {
+      throw new Error("device-a is occupied: device occupied by session agent:other");
+    });
+    const second = makeTool("use_device", "gateway");
+    const tools = applyDeviceStepRuleBatchGuard([first.tool, second.tool]);
+    const stepOne = batchStep("m1");
+    await expect(
+      runWithAgentToolExecutionContext(stepOne, () => tools[0]!.execute("call-1", {})),
+    ).rejects.toThrow(/occupied/);
+    await expect(
+      runWithAgentToolExecutionContext(stepOne, () => tools[1]!.execute("call-2", {})),
+    ).rejects.toThrow(/use_device already ran in this step/);
+    expect(second.execute).not.toHaveBeenCalled();
+  });
+
   it("does not guard calls outside an agent-loop batch context", async () => {
     const exec = makeTool("exec", "placement");
     const useDevice = makeTool("use_device", "gateway");

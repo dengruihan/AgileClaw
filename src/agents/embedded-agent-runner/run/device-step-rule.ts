@@ -13,9 +13,11 @@
  * the batch identity. Any batch that mixes the two is rejected per call with a
  * clear error before the scope-affecting work runs: `use_device` refuses to
  * start after placement calls already ran (the switch is not attempted and the
- * session keeps its committed scope), and placement calls refuse to run after
- * a switch attempt in the same batch, whatever its outcome. Calls outside an
- * agent-loop batch context keep the routing layer's in-flight guard only.
+ * session keeps its committed scope), placement calls refuse to run after
+ * a switch attempt in the same batch, whatever its outcome, and a second
+ * use_device in the same batch is rejected before it can override the first.
+ * Calls outside an agent-loop batch context keep the routing layer's in-flight
+ * guard only.
  */
 import { getAgentToolExecutionContext } from "../../../../packages/agent-core/src/tool-execution-context.js";
 import { copyAgentToolMetadata, getAgentToolExecutionLocation } from "../../agent-tool-metadata.js";
@@ -47,6 +49,14 @@ function deviceStepSwitchBlockedMessage(placementTools: readonly string[]): stri
     `use_device must be the only placement-affecting call in its step; ${names} already ran in ` +
     "this step. The switch was not attempted and the session keeps its committed scope; call " +
     "use_device alone, then run placement tools in the next step."
+  );
+}
+
+function deviceStepSecondSwitchBlockedMessage(): string {
+  return (
+    "use_device already ran in this step, and it must be the only placement-affecting call in " +
+    "its step. This switch was not attempted and the session keeps the scope committed by the " +
+    "earlier use_device call; call use_device again in the next step."
   );
 }
 
@@ -87,6 +97,11 @@ export function applyDeviceStepRuleBatchGuard(tools: AnyAgentTool[]): AnyAgentTo
       execute: async (toolCallId, toolParams, signal, onUpdate) => {
         const stepScope = currentStep();
         if (isSwitch) {
+          // A second switch in the same batch would silently override the
+          // first: reject it before it reaches the session patch owner.
+          if (stepScope?.switchSeen) {
+            throw new Error(deviceStepSecondSwitchBlockedMessage());
+          }
           if (stepScope && stepScope.placementTools.length > 0) {
             throw new Error(deviceStepSwitchBlockedMessage(stepScope.placementTools));
           }
