@@ -7,7 +7,7 @@
  */
 export const DEVICE_LEASE_RECEIPT_ID_PREFIX = "device-lease:";
 
-export function isDeviceLeaseReceiptId(receiptId: string): boolean {
+function isDeviceLeaseReceiptId(receiptId: string): boolean {
   return receiptId.startsWith(DEVICE_LEASE_RECEIPT_ID_PREFIX);
 }
 

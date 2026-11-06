@@ -251,8 +251,10 @@ facts are `enforced` because the node occupancy owner changed the outcome;
 release facts are `attribution-only` with a `not-applicable` outcome. The
 persisted receipt id is keyed with the installation audit HMAC: the writer
 re-projects the producer's digest over the transition tuple, so a low-entropy
-device id cannot be brute-forced from a retained id, while replays of the same
-transition still deduplicate. Facts are
+device id cannot be brute-forced from a retained id, and replays of the same
+transition deduplicate to one keyed id. One migration seam: facts recorded
+before the keyed id keep their earlier unkeyed id for the retention window, so
+a transition re-recorded across that upgrade can appear twice. Facts are
 emitted at every lifecycle boundary — acquire through `use_device` or a
 placement call, release at turn end, Stop, a switch back to gateway scope,
 session archive or delete, device disable or removal, superseded silent-pairing

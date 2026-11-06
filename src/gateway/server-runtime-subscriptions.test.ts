@@ -60,7 +60,7 @@ const auditTestState = vi.hoisted(() => ({
   decisionRecorded: 0,
   stopped: 0,
   lastOptions: [] as Array<
-    Parameters<typeof import("../audit/audit-recorder.js").createAuditEventRecorder>
+    Parameters<(typeof import("../audit/audit-recorder.js"))["createAuditEventRecorder"]>[0]
   >,
 }));
 const agentEventHandlerMocks = vi.hoisted(() => ({
