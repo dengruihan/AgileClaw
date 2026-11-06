@@ -302,6 +302,87 @@ describe("runDeviceComputerControl", () => {
     expect(second.content.some((block) => block.type === "image")).toBe(false);
   });
 
+  it("rejects take_control under device scope without dispatching computer.act", async () => {
+    gatewayContext.mockReturnValue({ nodeRegistry: { get: nodeGet } });
+    nodeGet.mockReturnValue(computerCapableDevice());
+    const state = createDeviceScopeRoutingState({
+      sessionKey: "agent:main:root",
+      agentId: "main",
+      sessionId: "sess-1",
+    });
+    await expect(
+      runDeviceComputerControl({
+        toolCallId: "call-1",
+        params: { action: "take_control" },
+        deviceId: "device-a",
+        rootSessionKey: "agent:main:root",
+        leaseToken: "lease-1",
+        state,
+      }),
+    ).rejects.toThrow(/only available for an attached or session desktop/);
+    expect(callGatewayTool).not.toHaveBeenCalled();
+  });
+
+  it("closes the previous device on a mid-run switch and reopens it fresh later", async () => {
+    gatewayContext.mockReturnValue({ nodeRegistry: { get: nodeGet } });
+    nodeGet.mockImplementation((deviceId: string) => computerCapableDevice(deviceId));
+    callGatewayTool.mockResolvedValue({ payload: screenshotPayload });
+    const state = createDeviceScopeRoutingState({
+      sessionKey: "agent:main:root",
+      agentId: "main",
+      sessionId: "sess-1",
+    });
+    await runDeviceComputerControl({
+      toolCallId: "call-a",
+      params: { action: "screenshot" },
+      deviceId: "device-a",
+      rootSessionKey: "agent:main:root",
+      leaseToken: "lease-a",
+      state,
+    });
+    // use_device closes the previous device's sessions before the switch
+    // commits, while that device's lease still admits the close.
+    await state.closeDeviceControlSessions("device-a", "scope-switched");
+    const closeInvokes = nodeInvokeCalls("computer.act").filter((call) =>
+      (call[2] as { params?: { action?: string } }).params?.action?.startsWith("__close"),
+    );
+    expect(closeInvokes).toHaveLength(1);
+    expect(closeInvokes[0]![2]).toMatchObject({
+      nodeId: "device-a",
+      sessionKey: "agent:main:root",
+      params: expect.objectContaining({ leaseToken: "lease-a" }),
+    });
+    // The new device opens normally after the switch.
+    await runDeviceComputerControl({
+      toolCallId: "call-b",
+      params: { action: "screenshot" },
+      deviceId: "device-b",
+      rootSessionKey: "agent:main:root",
+      leaseToken: "lease-b",
+      state,
+    });
+    expect(
+      nodeInvokeCalls("screen.snapshot").map((call) => (call[2] as { nodeId: string }).nodeId),
+    ).toEqual(["device-a", "device-b"]);
+    // Switching back reopens device-a with a fresh session: another snapshot
+    // dispatch, and no second close for the already-closed execution.
+    await runDeviceComputerControl({
+      toolCallId: "call-a2",
+      params: { action: "screenshot" },
+      deviceId: "device-a",
+      rootSessionKey: "agent:main:root",
+      leaseToken: "lease-a2",
+      state,
+    });
+    expect(
+      nodeInvokeCalls("screen.snapshot").map((call) => (call[2] as { nodeId: string }).nodeId),
+    ).toEqual(["device-a", "device-b", "device-a"]);
+    const closeCount = nodeInvokeCalls("computer.act").filter((call) =>
+      (call[2] as { params?: { action?: string } }).params?.action?.startsWith("__close"),
+    ).length;
+    expect(closeCount).toBe(1);
+  });
+
   it("fails per call when the scoped device is not connected", async () => {
     gatewayContext.mockReturnValue({ nodeRegistry: { get: nodeGet } });
     nodeGet.mockReturnValue(undefined);

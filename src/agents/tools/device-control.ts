@@ -175,6 +175,14 @@ export async function runDeviceComputerControl(params: {
   runId?: string;
   signal?: AbortSignal;
 }): Promise<unknown> {
+  if (params.params.action === "take_control") {
+    // Same boundary as the paired path: there is no takeover arbitration for a
+    // scoped device, and `computer.act __take_control` is outside the closed
+    // command contract. Fail per call instead of dispatching a doomed invoke.
+    throw new Error(
+      "take_control is only available for an attached or session desktop; a device-scoped computer has no takeover arbitration. Switch back with use_device device='gateway' for a desktop that supports it.",
+    );
+  }
   const sessions = routedComputerSessions.get(params.state) ?? new Map();
   routedComputerSessions.set(params.state, sessions);
   let session = sessions.get(params.deviceId);
@@ -188,10 +196,15 @@ export async function runDeviceComputerControl(params: {
       tool: createComputerTool({
         config: getRuntimeConfig(),
         transport: createDeviceComputerTransport({ deviceId: params.deviceId, identity }),
-        // Turn cleanup closes the device execution before the lease releases.
-        ...(params.state.registerDeviceControlCleanup
-          ? { registerRunCleanup: params.state.registerDeviceControlCleanup }
-          : {}),
+        // Turn cleanup and a mid-turn use_device switch close this device's
+        // execution before its lease releases; a closed session is purged so
+        // returning to the device opens a fresh execution, never a wedged tool.
+        registerRunCleanup: (cleanup) => {
+          params.state.registerDeviceControlCleanup?.(params.deviceId, async (reason) => {
+            await cleanup(reason);
+            routedComputerSessions.get(params.state)?.delete(params.deviceId);
+          });
+        },
         ...(params.contextEpoch ? { contextEpoch: params.contextEpoch } : {}),
         // Run ids expire before later assistant runs can reuse a provider call id.
         ...(params.runId ? { idempotencyScope: params.runId } : {}),

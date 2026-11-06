@@ -42,7 +42,8 @@ function makeState(overrides: Partial<DeviceScopeRoutingState> = {}): {
       switchPending: false,
       markScope: () => markScope(),
       noteLeaseUsed: (rootSessionKey) => noteLeaseUsed(rootSessionKey),
-      closeDeviceControlSessions: () => closeDeviceControlSessions(),
+      closeDeviceControlSessions: (deviceId, reason) =>
+        closeDeviceControlSessions(deviceId, reason),
       leaseRootSessionKey: undefined,
       leaseRegistry: undefined,
       resolveRoot: () => ({ rootSessionKey: "agent:main:root", agentId: "main" }),
@@ -122,7 +123,7 @@ describe("use_device", () => {
   });
 
   it("returns the session to the gateway with a null scope write", async () => {
-    const { state } = makeState();
+    const { state, closeDeviceControlSessions } = makeState();
     resolveSessionScopeRoot.mockReturnValue({
       rootSessionKey: "agent:main:root",
       agentId: "main",
@@ -130,6 +131,8 @@ describe("use_device", () => {
     });
     callGatewayTool.mockResolvedValue({ ok: true, entry: {} });
     const result = await toolFor(state).execute("call-1", { device: "gateway" });
+    // The previous device's desktop closes while its lease still admits it.
+    expect(closeDeviceControlSessions).toHaveBeenCalledWith("device-a", "scope-switched");
     expect(callGatewayTool).toHaveBeenCalledWith(
       "sessions.patch",
       {},
@@ -163,6 +166,56 @@ describe("use_device", () => {
     );
     expect(state.switchPending).toBe(false);
     expect(markScope).not.toHaveBeenCalled();
+  });
+
+  it("closes the previous device's routed sessions before the switch commits", async () => {
+    const events: string[] = [];
+    const { state } = makeState({
+      resolveRoot: () => ({
+        rootSessionKey: "agent:main:root",
+        agentId: "main",
+        scopeDeviceId: "device-a",
+      }),
+      closeDeviceControlSessions: async (deviceId, reason) => {
+        // The close only admits while the old lease is held: it must run
+        // before sessions.patch releases it.
+        expect(state.switchPending).toBe(true);
+        events.push(`close:${deviceId}:${reason}`);
+      },
+    });
+    resolveSessionScopeRoot.mockReturnValue({
+      rootSessionKey: "agent:main:root",
+      agentId: "main",
+      entry: { sessionId: "sess-1", scopeDeviceId: "device-a" },
+    });
+    listNodes.mockResolvedValue([{ nodeId: "device-b", connected: true }]);
+    resolveNodeIdFromList.mockReturnValue("device-b");
+    callGatewayTool.mockImplementation(async () => {
+      events.push("patch");
+      return { ok: true, entry: { scopeDeviceId: "device-b" } };
+    });
+    await toolFor(state).execute("call-1", { device: "device-b" });
+    expect(events).toEqual(["close:device-a:scope-switched", "patch"]);
+  });
+
+  it("keeps the current device's sessions when the switch does not change scope", async () => {
+    const { state, closeDeviceControlSessions } = makeState({
+      resolveRoot: () => ({
+        rootSessionKey: "agent:main:root",
+        agentId: "main",
+        scopeDeviceId: "device-a",
+      }),
+    });
+    resolveSessionScopeRoot.mockReturnValue({
+      rootSessionKey: "agent:main:root",
+      agentId: "main",
+      entry: { sessionId: "sess-1", scopeDeviceId: "device-a" },
+    });
+    listNodes.mockResolvedValue([{ nodeId: "device-a", connected: true }]);
+    resolveNodeIdFromList.mockReturnValue("device-a");
+    callGatewayTool.mockResolvedValue({ ok: true, entry: { scopeDeviceId: "device-a" } });
+    await toolFor(state).execute("call-1", { device: "device-a" });
+    expect(closeDeviceControlSessions).not.toHaveBeenCalled();
   });
 
   it("rejects a switch from a subagent: scope belongs to the root session", async () => {

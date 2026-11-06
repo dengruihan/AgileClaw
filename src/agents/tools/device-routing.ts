@@ -71,13 +71,14 @@ export type DeviceScopeRoutingState = {
    */
   computerContextEpoch?: ComputerContextEpoch;
   /**
-   * Register one routed control session's turn cleanup. The turn owner runs
-   * these before releasing the occupancy lease: the device close must be
-   * admitted while the lease is still held.
+   * Register one routed control session's turn cleanup, tagged with its
+   * device. The turn owner runs these before releasing the occupancy lease,
+   * and use_device closes one device's sessions before committing a switch —
+   * both while the closing device's lease still admits the close.
    */
-  registerDeviceControlCleanup?(cleanup: (reason: string) => Promise<void>): void;
+  registerDeviceControlCleanup?(deviceId: string, cleanup: (reason: string) => Promise<void>): void;
   /** Run registered control-session cleanups; best effort, never throws. */
-  closeDeviceControlSessions(): Promise<void>;
+  closeDeviceControlSessions(deviceId?: string, reason?: string): Promise<void>;
 };
 
 export function createDeviceScopeRoutingState(params: {
@@ -99,7 +100,10 @@ export function createDeviceScopeRoutingState(params: {
   let switchPending = false;
   let leaseRootSessionKey: string | undefined;
   let leaseRegistry: DeviceScopeRegistry | undefined;
-  const deviceControlCleanups: Array<(reason: string) => Promise<void>> = [];
+  const deviceControlCleanups: Array<{
+    deviceId: string;
+    cleanup: (reason: string) => Promise<void>;
+  }> = [];
   const state: DeviceScopeRoutingState = {
     sessionKey: params.sessionKey,
     agentId: params.agentId,
@@ -138,19 +142,25 @@ export function createDeviceScopeRoutingState(params: {
       resolved = false;
       cached = undefined;
     },
-    registerDeviceControlCleanup(cleanup) {
-      deviceControlCleanups.push(cleanup);
+    registerDeviceControlCleanup(deviceId, cleanup) {
+      deviceControlCleanups.push({ deviceId, cleanup });
     },
-    async closeDeviceControlSessions() {
-      const cleanups = deviceControlCleanups.splice(0);
-      for (const cleanup of cleanups) {
+    async closeDeviceControlSessions(deviceId, reason = "turn-complete") {
+      const active = deviceControlCleanups.splice(0);
+      const keep: typeof active = [];
+      for (const entry of active) {
+        if (deviceId !== undefined && entry.deviceId !== deviceId) {
+          keep.push(entry);
+          continue;
+        }
         try {
-          await cleanup("turn-complete");
+          await entry.cleanup(reason);
         } catch {
           // A failed device close never blocks the lease release: the node
           // clears its occupancy and executions on disconnect or release.
         }
       }
+      deviceControlCleanups.push(...keep);
     },
     resolveRoot() {
       if (!resolved) {

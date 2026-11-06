@@ -172,13 +172,13 @@ serialize through one FIFO gate, because they share one browser or desktop.
 It is the only model-facing way to move execution; the direct `node.invoke` RPC
 cannot mutate occupancy because lease mutations are admin-only there.
 
-| Surface                                                   | Where it runs                                   |
-| --------------------------------------------------------- | ----------------------------------------------- |
-| `use_device`, `sessions_*`, `portal`, other Gateway tools | Always the Gateway                              |
-| `exec`, `process`                                         | Scoped device (exec) or the Gateway             |
-| `read`, `write`, `edit`, `apply_patch`, `ls`              | Scoped device (file commands) or the Gateway    |
-| `browser`, `computer`                                     | Scoped device (control commands) or the Gateway |
-| `screen`, `mobile_ui`, `canvas`                           | Gateway only; a device-scoped call fails        |
+| Surface                                                   | Where it runs                                                     |
+| --------------------------------------------------------- | ----------------------------------------------------------------- |
+| `use_device`, `sessions_*`, `portal`, other Gateway tools | Always the Gateway                                                |
+| `exec`, `process`                                         | Scoped device (exec) or the Gateway                               |
+| `read`, `write`, `edit`, `apply_patch`, `ls`              | Scoped device (file commands) or the Gateway                      |
+| `browser`, `computer`                                     | Scoped device (control commands) or the Gateway                   |
+| `screen`, `mobile_ui`, `canvas`                           | Always the Gateway (gateway-kind); `use_device` never routes them |
 
 Scope rules:
 
