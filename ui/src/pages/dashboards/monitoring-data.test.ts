@@ -187,7 +187,7 @@ describe("monitoring inventory loading", () => {
     expect(
       request.mock.calls.map(([method, params, options]) => [method, params, options?.signal]),
     ).toEqual([
-      ["environments.list", { includeDesktopSetup: true }, controller.signal],
+      ["environments.list", {}, controller.signal],
       ["node.list", {}, controller.signal],
       ["system.info", {}, expect.any(AbortSignal)],
     ]);

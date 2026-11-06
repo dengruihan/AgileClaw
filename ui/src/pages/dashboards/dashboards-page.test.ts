@@ -556,4 +556,106 @@ describe("DashboardsPage", () => {
       vi.useRealTimers();
     }
   });
+  it("re-keys the monitoring owner when the presentation scope changes in place", async () => {
+    let environmentsCalls = 0;
+    let inFlight = 0;
+    let maxInFlight = 0;
+    let releaseScopeLoad: (() => void) | undefined;
+    const client = createTestGatewayClient(async (method) => {
+      switch (method) {
+        case "environments.list": {
+          environmentsCalls += 1;
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          if (environmentsCalls === 2) {
+            await new Promise<void>((resolve) => {
+              releaseScopeLoad = resolve;
+            });
+          }
+          inFlight -= 1;
+          return {
+            environments: [
+              { id: "gateway", type: "local", label: "Gateway machine", status: "available" },
+            ],
+          };
+        }
+        case "node.list":
+          return { nodes: [] };
+        case "system.info":
+          return {
+            machineName: "Gateway machine",
+            hostname: "gateway-host",
+            platform: "linux",
+            release: "test",
+            arch: "x64",
+            osLabel: "Linux",
+            nodeVersion: "v26",
+            pid: 1,
+            uptimeMs: 1_000,
+            cpuCount: 4,
+            memoryTotalBytes: 8_192,
+            memoryFreeBytes: 4_096,
+            loadAverage: [0.5, 0.4, 0.3],
+          };
+        default:
+          throw new Error(`Unexpected Gateway method: ${method}`);
+      }
+    });
+    const gateway = createApplicationGateway({
+      client,
+      phase: "connected",
+      hello: gatewayHelloForMethods(["system.info"]),
+      sessionKey: "",
+      offlineStable: false,
+      canvasPluginSurfaceUrl: null,
+      assistantAgentId: null,
+      lastError: null,
+      lastErrorCode: null,
+    } as ApplicationGatewaySnapshot);
+    const context = {
+      basePath: "",
+      gateway: gateway.gateway,
+      sessions: {
+        state: { result: null },
+        subscribe: () => () => undefined,
+        listSnapshot: () => ({ result: null, agentId: null, loading: false, error: null }),
+        subscribeList: () => () => undefined,
+        refreshList: vi.fn(async () => undefined),
+      },
+      agentSelection: {
+        state: { selectedId: "main", scopeId: null },
+        subscribe: () => () => undefined,
+      },
+      agents: { state: { agentsList: null } },
+    } as unknown as ApplicationContext;
+    const element = document.createElement("openclaw-dashboards-page") as DashboardsPageElement;
+    element.routeData = routeData(row("agent:main:before", "Before"));
+    const provider = createApplicationContextProvider(context);
+    provider.append(element);
+    document.body.append(provider);
+
+    await vi.waitFor(() =>
+      expect(element.querySelectorAll("[data-monitoring-machine]")).toHaveLength(1),
+    );
+    expect(environmentsCalls).toBe(1);
+
+    // A credential/recovery-scope revision retires the captured scope without remounting.
+    (gateway.gateway as unknown as { connectionRevision: number }).connectionRevision = 1;
+    gateway.publish({ ...gateway.gateway.snapshot });
+
+    await vi.waitFor(() => expect(environmentsCalls).toBe(2));
+    expect(inFlight).toBe(1);
+    expect(maxInFlight).toBe(1);
+    expect(element.querySelectorAll("[data-monitoring-machine]")).toHaveLength(0);
+
+    releaseScopeLoad?.();
+    await vi.waitFor(() =>
+      expect(element.querySelectorAll("[data-monitoring-machine]")).toHaveLength(1),
+    );
+    expect(environmentsCalls).toBe(2);
+    expect(maxInFlight).toBe(1);
+
+    element.remove();
+    expect(environmentsCalls).toBe(2);
+  });
 });

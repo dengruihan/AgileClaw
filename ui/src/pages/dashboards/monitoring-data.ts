@@ -41,11 +41,7 @@ export async function loadMonitoringInventory(
   }
   const requestOptions = { signal: options.signal };
   const [inventory, nodes, systemInfo] = await Promise.allSettled([
-    client.request<EnvironmentsListResult>(
-      "environments.list",
-      { includeDesktopSetup: true },
-      requestOptions,
-    ),
+    client.request<EnvironmentsListResult>("environments.list", {}, requestOptions),
     client.request<{ nodes: NodeListNode[] }>("node.list", {}, requestOptions),
     readSystemInfo(gateway, options.signal, { fresh: options.fresh }),
   ]);

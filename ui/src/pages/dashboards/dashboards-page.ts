@@ -2,6 +2,7 @@ import { consume } from "@lit/context";
 import type { PropertyValues } from "lit";
 import { property, state } from "lit/decorators.js";
 import { applicationContext, type ApplicationContext } from "../../app/context.ts";
+import { gatewayPresentationScope } from "../../app/gateway-presentation-scope.ts";
 import {
   DASHBOARD_DOCUMENT_ELEMENT,
   ensureCustomElementDefined,
@@ -113,7 +114,10 @@ class DashboardsPage extends OpenClawLightDomElement {
     if (!context) {
       return;
     }
-    if (this.monitoring?.context !== context) {
+    // The route is not scope-keyed, so an in-place credential/recovery-scope
+    // revision must replace the owner that captured the retired scope.
+    const scope = gatewayPresentationScope(context.gateway);
+    if (this.monitoring?.context !== context || this.monitoring.scope !== scope) {
       this.monitoring?.setPresented(false);
       this.monitoring = new MonitoringController(context);
     }
