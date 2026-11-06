@@ -9,7 +9,6 @@ import { resolveModelContextTokenProjection } from "../agents/context.js";
 import { resolveFastModeState } from "../agents/fast-mode.js";
 import type { ModelCatalogEntry } from "../agents/model-catalog.js";
 import { resolveModelContextWindowProfile } from "../agents/model-context-window.js";
-import { readPromptDeviceScopeSnapshot } from "../agents/prompt-device-scope.js";
 import { buildSubagentRunReadIndexFromRuns } from "../agents/subagents/registry/subagent-registry-queries.js";
 import { resolveSelectedAndActiveModel } from "../auto-reply/model-runtime.js";
 import { resolveQueueSettingsCore } from "../auto-reply/reply/queue/settings.js";
@@ -56,6 +55,7 @@ import {
 import { isSessionPermissionChangePending } from "./session-permission-change.js";
 import { projectSessionProviderReview } from "./session-provider-review-projection.js";
 import { readSessionRowModelFacts } from "./session-row-model-facts.js";
+import { sessionScopeDeviceLabel } from "./session-scope-device-label.js";
 import { sessionScopeLeaseHeld } from "./session-scope-lease.js";
 import { buildSessionSwarmSummary } from "./session-swarm-summary.js";
 import { readSessionTitleFieldsFromTranscript as readScopedSessionTitleFieldsFromTranscript } from "./session-transcript-title-reader.js";
@@ -301,27 +301,6 @@ export function buildGatewaySessionRow(
 ): GatewaySessionRow {
   const { inputs, presentation } = readSessionRowInputs(params);
   return presentSessionRow(materializeSessionRow(inputs), presentation);
-}
-
-/**
- * Row/event display label for a session's scope device, read from the
- * process-stable device-scope snapshot the device-scope owner publishes per
- * turn and scope switch. Synchronous by contract: with no snapshot, or when
- * the snapshot's device no longer matches the committed scope, callers get no
- * label and clients fall back to the device id.
- */
-export function sessionScopeDeviceLabel(
-  rootSessionKey: string,
-  scopeDeviceId: string | undefined,
-): string | undefined {
-  const deviceId = normalizeOptionalString(scopeDeviceId);
-  if (!deviceId) {
-    return undefined;
-  }
-  const target = readPromptDeviceScopeSnapshot(rootSessionKey)?.target;
-  return target?.kind === "node" && target.deviceId === deviceId
-    ? normalizeOptionalString(target.displayName)
-    : undefined;
 }
 
 export function resolveGatewaySessionActiveModel(params: {

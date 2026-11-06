@@ -40,12 +40,14 @@ export function resolveChatSessionDeviceScope(host: {
 /**
  * Label resolver for device-tagged tool results: the selected session's row
  * owns its scope device's display name, and results only stamp the device id.
+ * Whitespace-only names stay absent so the tag falls back to the id.
  */
 export function sessionScopeDeviceLabelResolver(
   row: Pick<GatewaySessionRow, "scopeDeviceId" | "scopeDeviceName"> | undefined,
 ): (deviceId: string) => string | undefined {
   const { scopeDeviceId, scopeDeviceName } = row ?? {};
-  return scopeDeviceId && scopeDeviceName
-    ? (deviceId) => (deviceId === scopeDeviceId ? scopeDeviceName : undefined)
+  const label = normalizeOptionalString(scopeDeviceName);
+  return scopeDeviceId && label
+    ? (deviceId) => (deviceId === scopeDeviceId ? label : undefined)
     : () => undefined;
 }

@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
+import {
+  clearPromptDeviceScopeSnapshotsForTest,
+  publishPromptDeviceScopeSnapshot,
+} from "../agents/prompt-device-scope.js";
 import { createSubagentRunRecord } from "../agents/subagent-test-fixtures.test-helpers.js";
 import { buildSubagentRunReadIndexFromRuns } from "../agents/subagents/registry/subagent-registry-queries.js";
 import type { SubagentRunRecord } from "../agents/subagents/registry/subagent-registry.types.js";
@@ -17,6 +21,7 @@ import { createEmptyPluginRegistry } from "../plugins/registry-empty.js";
 import { resetPluginRuntimeStateForTest, setActivePluginRegistry } from "../plugins/runtime.js";
 import { withStateDirEnv } from "../test-helpers/state-dir-env.js";
 import { projectSessionActivitySummary } from "./session-activity-summary-state.js";
+import { buildGatewaySessionSnapshot } from "./session-event-payload.js";
 import {
   clearAllSessionScopeLeasesForTest,
   recordSessionScopeLease,
@@ -627,5 +632,44 @@ test("projects a device-scoped row and the held-lease stop affordance", async ()
 
     releaseSessionScopeLease(key);
     expect(buildGatewaySessionRow(rowParams).scopeLeaseHeld).toBeUndefined();
+
+    // The device-scope snapshot owns the display label: a matching node target
+    // names the row and the event payload, anything else falls back to the id.
+    publishPromptDeviceScopeSnapshot({
+      sessionKey: key,
+      snapshot: {
+        target: { kind: "node", deviceId: "device-a", displayName: "Studio Mac" },
+        devices: [],
+      },
+    });
+    const named = buildGatewaySessionRow(rowParams);
+    expect(named.scopeDeviceName).toBe("Studio Mac");
+    expect(buildGatewaySessionSnapshot({ sessionRow: named }).scopeDeviceName).toBe("Studio Mac");
+
+    publishPromptDeviceScopeSnapshot({
+      sessionKey: key,
+      snapshot: {
+        target: { kind: "node", deviceId: "device-a", displayName: "   " },
+        devices: [],
+      },
+    });
+    expect(buildGatewaySessionRow(rowParams).scopeDeviceName).toBeUndefined();
+    expect(
+      buildGatewaySessionSnapshot({ sessionRow: buildGatewaySessionRow(rowParams) })
+        .scopeDeviceName,
+    ).toBeNull();
+
+    publishPromptDeviceScopeSnapshot({
+      sessionKey: key,
+      snapshot: {
+        target: { kind: "node", deviceId: "device-b", displayName: "Other device" },
+        devices: [],
+      },
+    });
+    expect(buildGatewaySessionRow(rowParams).scopeDeviceName).toBeUndefined();
+    expect(
+      buildGatewaySessionSnapshot({ sessionRow: { key, kind: "direct" } }).scopeDeviceName,
+    ).toBeNull();
+    clearPromptDeviceScopeSnapshotsForTest();
   });
 });

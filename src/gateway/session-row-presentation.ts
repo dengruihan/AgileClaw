@@ -16,6 +16,7 @@ import { tryResolveSessionCompatibilityOwnerAgentId } from "./session-request-ag
 import type { SessionRowReadView } from "./session-row-prepared-read.js";
 import type * as records from "./session-row-projection-record.js";
 import type { SessionRowProjection } from "./session-row-projection.js";
+import { sessionScopeDeviceLabel } from "./session-scope-device-label.js";
 import { sessionScopeLeaseHeld } from "./session-scope-lease.js";
 import {
   authorizeIncognitoSessionTarget,
@@ -29,7 +30,6 @@ import {
   projectGatewaySessionActiveRun,
   projectGatewaySessionRunState,
 } from "./session-utils-display.js";
-import { sessionScopeDeviceLabel } from "./session-utils-row.js";
 import type { GatewaySessionRow } from "./session-utils.types.js";
 
 type PresentationOptions = Omit<

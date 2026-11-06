@@ -15,8 +15,6 @@ const enDevices = {
     registry: {
       enabled: "Enabled",
       disabled: "Disabled",
-      connected: "connected",
-      offline: "offline",
       inUse: "In use by {session}",
       idle: "Idle",
       holderLabel: "Held by",

@@ -40,16 +40,6 @@ function readCommandPolicy(value: unknown): DeviceCommandPolicy | null {
   return allow || deny ? { ...(allow ? { allow } : {}), ...(deny ? { deny } : {}) } : null;
 }
 
-/**
- * First paired node record of one machine group. Duplicate pairings of the
- * same machine share its execution facts; the freshest paired entry wins.
- */
-export function resolveExecutionDeviceEntry(
-  entries: readonly DeviceInventoryEntry[],
-): DeviceInventoryEntry | undefined {
-  return entries.find((entry) => entry.node?.paired === true);
-}
-
 /** Execution facts for one consolidated device row, joined with its occupancy holder. */
 export function resolveExecutionDeviceRow(
   entry: DeviceInventoryEntry,
