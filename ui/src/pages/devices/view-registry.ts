@@ -62,7 +62,7 @@ export function resolveExecutionDeviceRow(
     // aria labels naming the same device the operator sees.
     name: entry.name,
     platform: node.platform,
-    connected: node.connected === true,
+    connected: node.connected,
     // Absent on legacy rows written before the device registry existed;
     // those devices keep executing until an operator disables them.
     enabled: node.enabled !== false,
