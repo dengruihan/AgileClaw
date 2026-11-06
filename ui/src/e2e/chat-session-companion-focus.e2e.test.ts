@@ -324,7 +324,6 @@ suite.define(() => {
     "cleared draft",
     "history",
     "click",
-    "command palette",
     "sidebar menu",
     "sidebar menu before mount",
   ])("preserves newer input intent while a side answer is pending: %s", async (intent) => {
@@ -366,12 +365,6 @@ suite.define(() => {
           expect(await mainInput.inputValue()).toBe("/btw what is this?");
           await page.keyboard.press("ArrowDown");
           expect(await mainInput.inputValue()).toBe("");
-        } else if (intent === "command palette") {
-          await page.keyboard.press("ControlOrMeta+k");
-          foregroundInput = page
-            .locator("openclaw-command-palette")
-            .getByRole("textbox", { name: "Search or start a task…" });
-          await foregroundInput.fill("Keep typing here");
         } else if (intent === "sidebar menu" || intent === "sidebar menu before mount") {
           await page
             .locator('[data-session-key="agent:main:sidebar-focus"] .sidebar-recent-session__link')

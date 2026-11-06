@@ -8,7 +8,7 @@ import {
 } from "../lib/keyboard-shortcut-contract.ts";
 import { OpenClawLightDomContentsElement } from "../lit/openclaw-element.ts";
 import { icons } from "./icons.ts";
-import { renderKbd, renderShortcutHint, renderShortcutText } from "./kbd.ts";
+import { renderShortcutHint } from "./kbd.ts";
 import "./tooltip.ts";
 
 class MacosTitlebarControls extends OpenClawLightDomContentsElement {
@@ -18,7 +18,6 @@ class MacosTitlebarControls extends OpenClawLightDomContentsElement {
   @property({ attribute: false }) canGoForward = false;
   @property({ attribute: false }) newSessionDisabledReason?: string;
   @property({ attribute: false }) onToggleSidebar?: () => void;
-  @property({ attribute: false }) onOpenPalette?: () => void;
   @property({ attribute: false }) onOpenNewSession?: () => void;
 
   override render() {
@@ -53,17 +52,6 @@ class MacosTitlebarControls extends OpenClawLightDomContentsElement {
         ${
           !this.historyOnly
             ? html`
-                ${this.renderButton({
-                  label: t("chat.openCommandPalette"),
-                  tooltip: t("chat.commandPaletteTitle"),
-                  tooltipTemplate: renderShortcutText(
-                    t("chat.commandPaletteTitle").replace("⌘K", "{shortcut}"),
-                    renderKbd(["⌘", "K"], { inline: true }),
-                  ),
-                  icon: icons.search,
-                  onClick: this.onOpenPalette,
-                  className: "macos-titlebar-controls__search",
-                })}
                 ${
                   this.navCollapsed
                     ? this.renderButton({

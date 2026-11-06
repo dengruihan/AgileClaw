@@ -1033,7 +1033,6 @@ describeBrowserLayout.concurrent("chat responsive browser layout", () => {
                 <button class="btn btn--ghost btn--icon chat-icon-btn chat-pane__split-down" type="button">V</button>
                 <button class="btn btn--ghost btn--icon chat-icon-btn chat-pane__split-right" type="button">H</button>
                 <button class="btn btn--ghost btn--icon chat-icon-btn chat-pane__close-pane" type="button">X</button>
-                <button class="btn btn--ghost btn--icon chat-icon-btn chat-pane__palette-open" type="button">P</button>
               </div>
             </div>
           </div>
@@ -1045,7 +1044,6 @@ describeBrowserLayout.concurrent("chat responsive browser layout", () => {
         ".chat-side-panel-toggle",
         ".chat-pane__sharing-menu",
         ".chat-pane__nav-toggle",
-        ".chat-pane__palette-open",
         ".chat-pane__split-down",
         ".chat-pane__split-right",
       ];

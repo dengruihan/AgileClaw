@@ -3,7 +3,11 @@ import { expect, it } from "vitest";
 import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { activateChatHeaderPanelAction } from "./chat-side-panel.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
-import { openDesktopPanel, openPalette, sessionsList } from "./desktop-panel.test-support.ts";
+import {
+  openDesktopPanel,
+  openDesktopPanelInPlace,
+  sessionsList,
+} from "./desktop-panel.test-support.ts";
 import {
   createRfbClipboardProvide,
   createRfbRawFrame,
@@ -79,27 +83,6 @@ async function openScriptedDesktop(
 }
 
 suite.define(() => {
-  it("hides the desktop command without the method or operator.admin", async () => {
-    for (const testCase of [
-      {
-        featureMethods: ["environments.list"],
-        methodResponses: { "sessions.list": sessionsList("active") },
-      },
-      {
-        featureMethods: ["environments.list", "desktop.observe"],
-        methodResponses: { "sessions.list": sessionsList("active") },
-        operatorScopes: ["operator.read"],
-      },
-    ]) {
-      await suite.withPage({ serviceWorkers: "block" }, async ({ page }) => {
-        await installMockGateway(page, testCase);
-        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
-        await openPalette(page);
-        expect(await page.getByRole("option", { name: "Desktop", exact: true }).count()).toBe(0);
-      });
-    }
-  });
-
   it.each(["local", "active"] as const)(
     "opens only the assigned desktop on a %s chat session",
     async (placement) => {
@@ -127,13 +110,8 @@ suite.define(() => {
           },
         });
         await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
-        await openPalette(page);
-        expect(await page.getByRole("option", { name: "Desktop", exact: true }).count()).toBe(1);
-
         await gateway.deferNext("environments.status");
-        await page.getByRole("option", { name: "Desktop", exact: true }).click();
-        const panel = page.locator("openclaw-desktop-panel");
-        await panel.locator("section[aria-label='Desktop']").waitFor();
+        const panel = await openDesktopPanelInPlace(page);
         const target = await gateway.waitForRequest("environments.status");
         expect(target.params).toEqual({
           environmentId: placement === "local" ? "gateway" : workerDesktopEnvironment.id,
@@ -170,20 +148,14 @@ suite.define(() => {
             message: "desktop inventory temporarily unavailable",
           },
         });
-        await openPalette(page);
-        await page.getByRole("option", { name: "Desktop", exact: true }).click();
-        await page
-          .locator("openclaw-command-palette")
-          .getByRole("textbox", { name: "Search or start a task…" })
-          .waitFor({ state: "hidden" });
+        await openDesktopPanelInPlace(page);
         expect(await passwordInput?.evaluate((element) => element.isConnected)).toBe(true);
         expect(await password.inputValue()).toBe("synthetic-unsent-password");
         expect(await gateway.getRequests("environments.status")).toEqual(inventoryReads);
 
         await activateChatHeaderPanelAction(page, "Desktop");
         await panel.waitFor({ state: "detached" });
-        await openPalette(page);
-        await page.getByRole("option", { name: "Desktop", exact: true }).click();
+        await openDesktopPanelInPlace(page);
         await gateway.waitForRequest("environments.status", { after: inventoryReads.length });
         await panel.getByRole("alert").filter({ hasText: "inventory" }).waitFor();
         await gateway.setMethodResponse(
@@ -447,10 +419,7 @@ suite.define(() => {
         },
       });
       await page.goto(`${suite.server.baseUrl}activity`);
-      await openPalette(page);
-      await page.getByRole("option", { name: "Desktop", exact: true }).click();
-      const panel = page.locator("openclaw-desktop-panel");
-      await panel.locator("section[aria-label='Desktop']").waitFor();
+      const panel = await openDesktopPanelInPlace(page);
       await panel.getByRole("button", { name: "Dock to right", exact: true }).click();
       const bottom = await panel.evaluate((element) => {
         document.documentElement.style.setProperty("--oc-terminal-reserve-bottom", "40px");

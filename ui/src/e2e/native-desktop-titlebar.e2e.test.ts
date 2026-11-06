@@ -237,8 +237,8 @@ suite.define(() => {
           .toHaveLength(beforeSettingsDrag + 2);
         await capture("settings");
         const beforeModal = (await actions()).length;
-        await page.keyboard.press("ControlOrMeta+K");
-        await page.locator(".cmd-palette-overlay").waitFor();
+        await page.keyboard.press("ControlOrMeta+/");
+        await page.locator("openclaw-keyboard-shortcuts-dialog openclaw-modal-dialog").waitFor();
         await expect
           .poll(async () => (await actions()).slice(beforeModal))
           .toEqual(["native-frame"]);

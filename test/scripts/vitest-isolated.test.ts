@@ -160,7 +160,7 @@ describe("isolated Vitest admission", () => {
     ["test/vitest/vitest.unit-fast.config.ts", "src/plugins/source-checkout-runtime.test.ts"],
     [
       "test/vitest/vitest.ui-e2e.config.ts",
-      "ui/src/e2e/command-palette-catalog.real-gateway.e2e.test.ts",
+      "ui/src/e2e/chat-widget-sandbox.real-gateway.e2e.test.ts",
     ],
   ])("reserves bounded build capacity for %s", (selectedConfig, selectedFile) => {
     const args = isolatedVitestCreateArgs({

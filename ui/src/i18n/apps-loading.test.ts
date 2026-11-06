@@ -9,10 +9,6 @@ const loadI18n = useLazyEnglishTest();
 describe("Apps English loading", () => {
   it.each([
     { surface: "Apps", load: () => import("../pages/apps/view.ts") },
-    {
-      surface: "command palette",
-      load: () => import("../components/command-palette-catalog-search.ts"),
-    },
     { surface: "device settings", load: () => import("../pages/device/device-page.ts") },
   ])("loads complete fallback copy before $surface can render", async ({ load }) => {
     const { manager } = await loadI18n();

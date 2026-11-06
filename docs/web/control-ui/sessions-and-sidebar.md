@@ -219,11 +219,7 @@ device and platform labels are combined. Architecture labels such as **ARM** app
 when explicitly reported; a browser's `MacIntel` value does not identify an Intel
 CPU because Apple silicon Macs and desktop-mode iPads also report it.
 
-Toggle the sidebar with **⌘B** on Mac or **Ctrl+B** on Windows/Linux. Open the command palette with **⌘K** on Mac or **Ctrl+K** on Windows/Linux. Mac **Ctrl+B** and **Ctrl+K** remain available for native text editing.
-
-The search field updates immediately, while command filtering and session searches wait until you pause typing for 200 ms. Previous results stay in place during that pause but cannot be selected until the new query applies. Press Enter to apply a pending query immediately and select an available matching result. Clearing the field restores the default commands immediately.
-
-During text composition, the command palette pauses searches and leaves Enter, Escape, and arrow keys to the input method.
+Toggle the sidebar with **⌘B** on Mac or **Ctrl+B** on Windows/Linux. Mac **Ctrl+B** remains available for native text editing.
 
 After token or device-token authentication, the sidebar can show its cached session roster on reload only when the browser will present the Gateway token that authenticated the previous connection, or the paired device token retained from that connection. The cached roster has no live run state and is replaced by the live list after connecting. Other authentication methods wait for the connection; see [Warm reload](/web/control-ui/offline-and-reconnect#warm-reload).
 
@@ -380,68 +376,6 @@ In the macOS app, these additional shortcuts apply while the Dashboard web view
 has keyboard focus. A separate native reading pane does not forward Archive to
 the Dashboard or another window. The existing native **⌘N** New Gateway Window
 and **⌘⇧N** New Thread commands are unchanged.
-
-These direct shortcuts do not change the command palette's **⌘K / Ctrl+K**, then
-**⌘Enter / Ctrl+Enter** workflow for starting a task in the background.
-
-## Command palette
-
-The command palette can start an independent task without leaving your current
-conversation or settings page. Search sessions, settings, and commands as usual,
-or write a prompt in the same field. Multiline text or a prompt of 60 or more
-characters pauses palette searches and gently hides the search tabs, results, and
-hints. The input stays anchored in place. Search returns when the text is
-single-line and shortened to 50 characters or fewer, or cleared. Between 51 and
-59 characters, the palette keeps its current mode to avoid flickering while you
-edit. Counts exclude leading and trailing whitespace. Session-creation errors and
-recovery actions remain visible in either mode.
-
-Pasted images appear as small, removable thumbnails below the text. Pasting or
-removing them leaves the input, **New session** action, and settings control in
-place; the palette grows downward. Images can start a session on their own or
-accompany text. There is no attachment picker in the palette.
-
-Type **@** to search eligible people by name or verified GitHub handle, just as
-in the chat composer. Use **↑/↓** or **Home/End**, then **Enter** or **Tab** to
-select a person; **Escape** dismisses the people picker before the palette.
-The compact **Will notify** row shows selected people once each, with **+N**
-when space is tight. You can select up to ten mention references. Editing or
-deleting a selected name removes that reference; **Remove mention** clears all
-recipient selections without deleting the text. Pasted names and email addresses
-remain ordinary text. The picker replaces search results while open, and selected
-mentions keep the palette in composer mode. Mentions travel with the first message
-of the new session; they never share a session, invite people, or grant access.
-
-- **Enter** selects a person while the people picker is open; otherwise it opens
-  or runs the selected search result. With no result, Enter does not send.
-- **Shift+Enter** adds a line. The field grows downward to three lines, then scrolls
-  without moving the palette or its top-right controls.
-- **Command+Enter** on macOS or **Ctrl+Enter** on Windows/Linux starts a new session
-  in the background. You can also choose **New session** beside the input.
-
-Selecting an installed plugin search result opens that plugin's overview, including
-disabled plugins. An uninstalled plugin with a catalog entry opens its catalog
-page directly. Search results show the plugin artwork when available. The
-**Plugins** navigation command opens the catalog hub.
-
-Open **New session settings** beside the input to choose the agent, workspace and
-machine, or whether to use a new worktree. These controls reuse the permissions
-and device/cloud availability rules of the full New session page. Model,
-attachment, and visibility controls remain on that page.
-
-The palette starts with your usual defaults. Turn on **Remember settings** to
-reuse different choices for Cmd/Ctrl+K without changing those defaults. Clearing
-the checkbox restores your usual choices immediately and leaves the prompt
-intact. One-off choices are not remembered for the next palette session.
-
-Accepted creation closes the palette and offers **Open session** without changing
-the foreground view or its draft. Creation and completion notices can open a session
-only while the original Gateway and account remain selected; reconnecting to the
-same account keeps the action available. A failed submission retains the prompt, selected mentions, images, and
-choices with an error. These settings do not affect sessions opened from search,
-and the existing conversation composer keeps its own send and steer/queue
-shortcuts. Long prompts remain intact for session creation and are never sent as
-search queries.
 
 ## New session page
 

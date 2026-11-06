@@ -95,7 +95,7 @@ describe.runIf(browserMode)("modal native focus ownership", () => {
     await expect.poll(() => dialog.open).toBe(false);
   });
 
-  it.each(["", "palette", "drawer"])(
+  it.each(["", "drawer"])(
     "preserves selected content through chrome focus and retained reopen (%s)",
     async (variant) => {
       const { userEvent } = await import("vitest/browser");

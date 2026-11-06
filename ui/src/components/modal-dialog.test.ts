@@ -280,9 +280,6 @@ describe("openclaw-modal-dialog", () => {
     const styles = OpenClawModalDialog.styles.cssText;
 
     expect(styles).toMatch(
-      /:host\(\.palette\)\s+wa-dialog\s*\{[^}]*--show-duration:\s*0ms;[^}]*--hide-duration:\s*0ms;/u,
-    );
-    expect(styles).toMatch(
       /:host\(\.drawer\)\s+wa-dialog\s*\{[^}]*--show-duration:\s*200ms;[^}]*--hide-duration:\s*0ms;/u,
     );
     expect(styles).toMatch(

@@ -1,57 +1,73 @@
-import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
-import { createKeyboardShortcutMatcher } from "./keyboard-shortcuts.js";
+import {
+  isApplePlatform,
+  matchesKeyboardShortcut,
+  resolveAsciiShortcutKey,
+} from "./keyboard-shortcuts.js";
 
-describe("serialized keyboard shortcut matcher", () => {
-  it("preserves native Unicode and shortcut matching after widget prototype changes", () => {
-    const result: unknown = runInNewContext(`
-      const matcher = (${createKeyboardShortcutMatcher.toString()})();
-      const event = (key, code, overrides = {}) => ({
-        key, code, keyCode: 0, isComposing: false,
-        metaKey: true, ctrlKey: false, altKey: false, shiftKey: false,
-        ...overrides,
-      });
-      const check = () => [
-        matcher.isApplePlatform("MacIntel"),
-        matcher.isApplePlatform("Linux"),
-        matcher.resolveAsciiShortcutKey(event("K", "KeyQ")),
-        matcher.resolveAsciiShortcutKey(event("л", "KeyK")),
-        matcher.resolveAsciiShortcutKey(event("😀", "KeyA")),
-        matcher.resolveAsciiShortcutKey(event("\\uD800", "KeyB")),
-        matcher.resolveAsciiShortcutKey(event("٢", "Digit2")),
-        matcher.resolveAsciiShortcutKey(event("Dead", "KeyE")),
-        matcher.matchesKeyboardShortcut(
-          { modifiers: ["mod"], key: "k", platformSpecific: true },
-          event("k", "KeyK"), true, "k",
-        ),
-        matcher.matchesKeyboardShortcut(
-          { modifiers: ["mod", "alt"], key: "ß" },
-          event("Dead", "KeySS", { altKey: true }), true, null,
-        ),
-        matcher.matchesKeyboardShortcut(
-          { modifiers: ["mod", "alt"], key: "ß" },
-          event("∂", "KeySS", { altKey: true }), true, null,
-        ),
-        matcher.matchesKeyboardShortcut(
-          { modifiers: ["mod"], key: "/" },
-          event("ж", "Slash"), true, null,
-        ),
-        matcher.matchesKeyboardShortcut(
-          { modifiers: ["mod"], key: "/" },
-          event("-", "Slash"), true, null,
-        ),
-      ];
-      const before = check();
-      const poisoned = () => { throw new Error("widget-owned prototype used"); };
-      String.prototype.toLowerCase = poisoned;
-      String.prototype.toUpperCase = poisoned;
-      String.prototype.codePointAt = poisoned;
-      RegExp.prototype.exec = poisoned;
-      Array.prototype.includes = poisoned;
-      Object.prototype[Symbol.toPrimitive] = poisoned;
-      ({ before, after: check() });
-    `);
-    const expected = [true, false, "k", "k", "a", "b", "2", null, true, false, true, true, false];
-    expect(result).toEqual({ before: expected, after: expected });
+function keyboardEvent(
+  key: string,
+  code: string,
+  overrides: Partial<{
+    altKey: boolean;
+    ctrlKey: boolean;
+    isComposing: boolean;
+    keyCode: number;
+    metaKey: boolean;
+    shiftKey: boolean;
+  }> = {},
+) {
+  return {
+    key,
+    code,
+    keyCode: 0,
+    isComposing: false,
+    metaKey: true,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    ...overrides,
+  };
+}
+
+describe("keyboard shortcut matching", () => {
+  it("preserves native Unicode and physical-key fallbacks", () => {
+    const match = (
+      combo: Parameters<typeof matchesKeyboardShortcut>[0],
+      event: ReturnType<typeof keyboardEvent>,
+      applePlatform: boolean,
+      asciiKey: string | null,
+    ) => matchesKeyboardShortcut(combo, event, applePlatform, asciiKey);
+
+    expect([
+      isApplePlatform("MacIntel"),
+      isApplePlatform("Linux"),
+      resolveAsciiShortcutKey(keyboardEvent("K", "KeyQ")),
+      resolveAsciiShortcutKey(keyboardEvent("л", "KeyK")),
+      resolveAsciiShortcutKey(keyboardEvent("😀", "KeyA")),
+      resolveAsciiShortcutKey(keyboardEvent("\uD800", "KeyB")),
+      resolveAsciiShortcutKey(keyboardEvent("٢", "Digit2")),
+      resolveAsciiShortcutKey(keyboardEvent("Dead", "KeyE")),
+      match(
+        { modifiers: ["mod"], key: "k", platformSpecific: true },
+        keyboardEvent("k", "KeyK"),
+        true,
+        "k",
+      ),
+      match(
+        { modifiers: ["mod", "alt"], key: "ß" },
+        keyboardEvent("Dead", "KeySS", { altKey: true }),
+        true,
+        null,
+      ),
+      match(
+        { modifiers: ["mod", "alt"], key: "ß" },
+        keyboardEvent("∂", "KeySS", { altKey: true }),
+        true,
+        null,
+      ),
+      match({ modifiers: ["mod"], key: "/" }, keyboardEvent("ж", "Slash"), true, null),
+      match({ modifiers: ["mod"], key: "/" }, keyboardEvent("-", "Slash"), true, null),
+    ]).toEqual([true, false, "k", "k", "a", "b", "2", null, true, false, true, true, false]);
   });
 });

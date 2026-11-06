@@ -7,7 +7,6 @@ import { isDesktopPanelAvailable } from "../../app/panel-availability.ts";
 import type { ApplicationPlacementStartupStatus } from "../../app/session-placement-startup.ts";
 import type { UiSettings } from "../../app/settings.ts";
 import type { BoardWidgetPageMenu } from "../../components/board/board-widget-cell-render.ts";
-import { COMMAND_PALETTE_OPEN_EVENT } from "../../components/command-palette-contract.ts";
 import { icons } from "../../components/icons.ts";
 import { personActivityRouting } from "../../components/person-activity-link.ts";
 import { sessionMenuReasons } from "../../components/session-menu-access.ts";
@@ -100,8 +99,6 @@ export abstract class ChatPaneHeader extends ChatPaneDiscussion {
       );
     }
   };
-  private readonly onHeaderCommandPalette = () =>
-    window.dispatchEvent(new Event(COMMAND_PALETTE_OPEN_EVENT));
   private readonly onHeaderSettingsChange = (patch: Partial<UiSettings>) =>
     this.state?.applySettings(patch);
   private readonly onHeaderAction = (action: HeaderMenuAction) => {
@@ -591,7 +588,6 @@ export abstract class ChatPaneHeader extends ChatPaneDiscussion {
               .archiveShortcut=${this.active && this.presented}
               .deleteAllowed=${deleteAllowed}
               .onOpen=${this.onHeaderMenuOpen}
-              .onOpenCommandPalette=${this.onHeaderCommandPalette}
               .onSettingsChange=${this.onHeaderSettingsChange}
               .onAction=${this.onHeaderAction}
             ></openclaw-chat-header-session-menu>`

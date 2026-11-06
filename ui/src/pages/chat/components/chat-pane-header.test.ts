@@ -4,10 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GatewayBrowserClient } from "../../../api/gateway.ts";
 import type { GatewaySessionRow, PresenceEntry, SessionsListResult } from "../../../api/types.ts";
 import {
-  COMMAND_PALETTE_OPEN_EVENT,
   SHELL_NAV_DRAWER_TOGGLE_EVENT,
   type ShellNavDrawerToggleDetail,
-} from "../../../components/command-palette-contract.ts";
+} from "../../../app/shell-nav-drawer-event.ts";
 import { resolveSessionWorkspace } from "../../../lib/sessions/workspace.ts";
 import {
   activePlacementSession,
@@ -93,34 +92,23 @@ function mountIntegratedPresenceHeader(params: {
 describe("chat pane header", () => {
   it("renders and dispatches merged chrome actions for catalog sessions", () => {
     const drawerEvents: CustomEvent<ShellNavDrawerToggleDetail>[] = [];
-    const paletteEvents: Event[] = [];
     const onDrawer = (event: Event) =>
       drawerEvents.push(event as CustomEvent<ShellNavDrawerToggleDetail>);
-    const onPalette = (event: Event) => paletteEvents.push(event);
     window.addEventListener(SHELL_NAV_DRAWER_TOGGLE_EVENT, onDrawer);
-    window.addEventListener(COMMAND_PALETTE_OPEN_EVENT, onPalette);
     const { container } = mountHeader({ mergedChrome: true, catalog: true, session: undefined });
     const drawer = container.querySelector<HTMLButtonElement>('[aria-label="Expand sidebar"]');
-    const palette = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Open command palette"]',
-    );
 
     drawer?.click();
-    palette?.click();
 
     expect(drawer).not.toBeNull();
-    expect(palette).not.toBeNull();
     expect(drawerEvents).toHaveLength(1);
     expect(drawerEvents[0]?.detail.trigger).toBe(drawer);
-    expect(paletteEvents).toHaveLength(1);
     window.removeEventListener(SHELL_NAV_DRAWER_TOGGLE_EVENT, onDrawer);
-    window.removeEventListener(COMMAND_PALETTE_OPEN_EVENT, onPalette);
   });
 
   it("omits shell chrome actions when the header is not merged", () => {
     const { container } = mountHeader();
     expect(container.querySelector(".chat-pane__nav-toggle")).toBeNull();
-    expect(container.querySelector(".chat-pane__palette-open")).toBeNull();
   });
 
   it("places the session menu last in the header action row", () => {
@@ -136,7 +124,6 @@ describe("chat pane header", () => {
         .at(-1)
         ?.getAttribute("data-action"),
     ).toBe("session-menu");
-    expect(actions?.querySelector(".chat-pane__palette-open")).not.toBeNull();
     expect(actions?.querySelector(".chat-pane__close-pane")).not.toBeNull();
     const header = container.querySelector(".chat-pane__header")!;
     expect(header.classList.contains("chat-pane__header--closable")).toBe(true);
@@ -160,7 +147,6 @@ describe("chat pane header", () => {
     expect(container.querySelector('[aria-label="Swap Chat and Dashboard"]')).not.toBeNull();
     expect(container.querySelector('[data-action="session-menu"]')).not.toBeNull();
     expect(container.querySelector(".chat-pane__nav-toggle")).not.toBeNull();
-    expect(container.querySelector(".chat-pane__palette-open")).toBeNull();
     expect(container.querySelector(".chat-open-split-view")).toBeNull();
   });
 

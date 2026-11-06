@@ -74,14 +74,16 @@ describe("I18nManager pending locale retry", () => {
   it("uses lazy English as fallback without replacing the active language", async () => {
     const { manager } = createManager();
     manager.registerTranslation("de", {
-      commandPalette: { newSessionSettings: "Neue Sitzung" },
+      sessionsView: { transcriptSearchTitle: "Transkripte durchsuchen" },
     });
     await manager.setLocale("de");
     registerCommandPaletteEnglish();
-    expect(manager.t("commandPalette.newSessionSettings")).toBe("Neue Sitzung");
-    expect(manager.t("commandPalette.rememberUnavailable")).toBe("Reconnect to remember settings.");
+    expect(manager.t("sessionsView.transcriptSearchTitle")).toBe("Transkripte durchsuchen");
+    expect(manager.t("sessionsView.transcriptSearchPlaceholder")).toBe(
+      "Search exact words or phrases…",
+    );
     await manager.setLocale("en");
-    expect(manager.t("commandPalette.newSessionSettings")).toBe("New session settings");
+    expect(manager.t("sessionsView.transcriptSearchTitle")).toBe("Search transcripts");
   });
 
   it("deduplicates an in-flight target and permits retry after the shared load settles", async () => {

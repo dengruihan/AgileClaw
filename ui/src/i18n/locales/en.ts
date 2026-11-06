@@ -85,10 +85,7 @@ export const en: TranslationMap & {
   newSession: TranslationMap &
     Record<"title" | "hint" | "placementReloadBlocked" | "discardUnsavedAndReload", string>;
   commandPalette: TranslationMap;
-  palette: TranslationMap & {
-    placeholder: string;
-    categories: TranslationMap & { navigation: string };
-  };
+  palette: TranslationMap;
   sessionsView: TranslationMap;
   skillWorkshop: TranslationMap;
   systems: TranslationMap;
@@ -1614,6 +1611,7 @@ export const en: TranslationMap & {
     settingsSearchClear: "Clear settings search",
     settingsLoadFailed: "Settings navigation could not load.",
     exitSettings: "Back to app",
+    navigationLabel: "Navigation",
     expand: "Expand sidebar",
     collapse: "Collapse sidebar",
     resize: "Resize sidebar",
@@ -2571,10 +2569,7 @@ export const en: TranslationMap & {
     },
   },
   commandPalette: {},
-  palette: {
-    placeholder: "Search or start a task…",
-    categories: { navigation: "Navigation" },
-  },
+  palette: {},
   dreaming: {},
   modelProviders: {},
   searchPage: {},
@@ -3168,8 +3163,6 @@ export const en: TranslationMap & {
     catalogOpenTargetViewer: "AgileClaw viewer",
     catalogOpenTargetTerminal: "Terminal",
     catalogOutputTruncated: "[Output truncated]",
-    commandPaletteTitle: "Search or jump to… (⌘K)",
-    openCommandPalette: "Open command palette",
     updating: "Updating…",
     actions: {
       copyAsMarkdown: "Copy as markdown",

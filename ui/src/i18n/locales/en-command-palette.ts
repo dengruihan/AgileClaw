@@ -1,58 +1,13 @@
 import type { TranslationMap } from "../lib/types.ts";
 import { en } from "./en.ts";
 
-// Discovery copy loads with the palette or transcript search, not the shell.
+// Chat discovery copy loads with transcript search, the composer, and the
+// shortcuts dialog rather than the shell.
 const enCommandPalette = {
-  commandPalette: {
-    newSessionSettings: "New session settings",
-    rememberSettings: "Remember settings for {shortcut}",
-    rememberUnavailable: "Reconnect to remember settings.",
-    settingsSaveFailed: "Could not save settings.",
-  },
-  palette: {
-    placeholder: en.palette.placeholder,
-    noResults: "No results found",
-    noResultsStart: "Press {shortcut} to start a new session.",
-    startSession: "New session",
-    startSessionBackground: "Start new session in background",
-    startingSession: "Starting…",
-    promptRequired: "Write a prompt to start a session.",
-    searchingSessions: "Searching sessions…",
-    searchingCommands: "Searching commands…",
-    clearSearch: "Clear search",
-    escapeKey: "esc",
-    filterLabel: "Filter search results",
-    filters: { all: "All", sessions: "Sessions", messages: "Messages" },
-    searchFailed: "Chat search failed — check the gateway logs and retry",
-    modelSearchFailed: "Model search unavailable. Change your search to retry.",
-    searchPartial: "Transcript search unavailable — showing chat titles and metadata",
-    searchIndexing: "Indexing older messages — search again shortly.",
-    categories: {
-      search: "Search",
-      navigation: en.palette.categories.navigation,
-      skills: "Skills",
-      messages: "In messages",
-    },
-    items: {
-      apps: "Apps",
-      sessions: "Sessions",
-      scheduled: "Automations",
-      skills: "Skills",
-      plugins: "Plugins",
-      settings: "Settings",
-      agents: "Agents",
-      desktop: "Desktop",
-    },
-    descriptions: {
-      verboseMode: "Toggle verbose mode.",
-    },
-    footer: {
-      navigate: "navigate",
-      select: "select",
-      close: "close",
-      newline: "newline",
-    },
-  },
+  // Empty anchors keep the canonical catalog composition stable; the feature
+  // copy that used to live here is gone.
+  commandPalette: {},
+  palette: {},
   sessionsView: {
     transcriptSearchTitle: "Search transcripts",
     transcriptSearchDescription:
@@ -85,10 +40,8 @@ const enCommandPalette = {
       approvals: "Approvals",
     },
     labels: {
-      commandPalette: "Open command palette",
       newSession: "Open New Session",
       archiveSession: "Archive current session",
-      paletteStartSession: "Start a background session (in the command palette)",
       keyboardShortcuts: "Show keyboard shortcuts",
       toggleSidebar: "Toggle sidebar",
       debugOverlay: "Toggle debug overlay",
@@ -159,8 +112,6 @@ export const registerCommandPaletteEnglish = Object.assign(
     Object.assign(en.shortcutsOverlay, enCommandPalette.shortcutsOverlay);
     Object.assign(en.chat.welcome, enCommandPalette.chat.welcome);
     Object.assign(en.chat.commands, enCommandPalette.chat.commands);
-    Object.assign(en.commandPalette, enCommandPalette.commandPalette);
-    Object.assign(en.palette, enCommandPalette.palette);
     Object.assign(en.sessionsView, enCommandPalette.sessionsView);
   },
   { catalog: enCommandPalette },

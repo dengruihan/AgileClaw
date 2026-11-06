@@ -610,15 +610,6 @@ suite.define(() => {
         .poll(() => composer.evaluate((element) => element === document.activeElement))
         .toBe(true);
 
-      await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
-      const paletteInput = page.locator(".cmd-palette__input");
-      await paletteInput.waitFor({ state: "visible", timeout: 10_000 });
-      await expect
-        .poll(() => paletteInput.evaluate((element) => element === document.activeElement))
-        .toBe(true);
-      await page.keyboard.type("session search");
-
-      expect(await paletteInput.inputValue()).toBe("session search");
       expect(await composer.inputValue()).toBe("first character preserved");
     } finally {
       await suite.closeBrowserContext(context);

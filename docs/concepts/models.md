@@ -161,7 +161,7 @@ configured models and independent native runtime catalogs remain.
 Changes to aliases or model restrictions reuse compatible inventory. Changes to
 the provider, plugin, credentials, environment, or workspace can invalidate it.
 
-Automations and command-palette model search show a warning when a provider refresh
+Automations model search shows a warning when a provider refresh
 fails, while keeping the models returned by the Gateway. Open Models to retry the
 refresh. A successful empty result clears the discovered choices and warning.
 

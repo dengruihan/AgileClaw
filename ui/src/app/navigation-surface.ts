@@ -1,5 +1,4 @@
 import { html, nothing } from "lit";
-import { isCommandPaletteShortcut } from "../components/command-palette-contract.ts";
 import { isTerminalPanelShortcut } from "../components/panel-toggle-contract.ts";
 import {
   KEYBOARD_SHORTCUT_COMBOS,
@@ -78,7 +77,6 @@ export function handleNavDrawerKeydown(
   } else if (event.key === "Tab") {
     trapNavDrawerFocus(host, event);
   } else if (
-    isCommandPaletteShortcut(event) ||
     isTerminalPanelShortcut(event) ||
     matchesShortcutCombo(KEYBOARD_SHORTCUT_COMBOS.workspaceFiles, event) ||
     matchesShortcutCombo(KEYBOARD_SHORTCUT_COMBOS.sideChat, event)

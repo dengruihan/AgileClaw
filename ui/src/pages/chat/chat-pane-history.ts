@@ -3,10 +3,6 @@ import {
   reduceSessionProjection,
 } from "@openclaw/gateway-client/browser";
 import type { SessionsCatalogContinueResult } from "../../../../packages/gateway-protocol/src/index.js";
-import {
-  COMMAND_PALETTE_TARGET_EVENT,
-  type CommandPaletteTargetDetail,
-} from "../../components/command-palette-contract.ts";
 import { prependUniqueNativeMessages } from "../../lib/chat/history-message-identity.ts";
 import { formatUiError } from "../../lib/format-error.ts";
 import {
@@ -733,29 +729,5 @@ export abstract class ChatPaneHistory extends ChatPaneReplyNavigation {
     }
     await switchChatHistoryBranch(state, leafEntryId);
     state.requestUpdate?.();
-  }
-
-  protected readonly handleCommandPaletteSlashCommand = (command: string) => {
-    const state = this.state;
-    if (!state) {
-      return;
-    }
-    state.handleChatDraftChange(command.endsWith(" ") ? command : `${command} `);
-    state.requestUpdate?.();
-  };
-
-  protected announceCommandPaletteTarget(
-    onSlashCommand: CommandPaletteTargetDetail["onSlashCommand"],
-  ) {
-    this.dispatchEvent(
-      new CustomEvent<CommandPaletteTargetDetail>(COMMAND_PALETTE_TARGET_EVENT, {
-        bubbles: true,
-        composed: true,
-        detail: {
-          owner: this,
-          onSlashCommand,
-        },
-      }),
-    );
   }
 }

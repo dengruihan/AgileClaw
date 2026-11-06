@@ -18,8 +18,6 @@ import {
 type ShellNavigationState = {
   runtime: { context: ApplicationContext };
   handleNativeToggleSidebar: () => void;
-  handleNativeOpenSearch: () => void;
-  handleNativeToggleSearch: (event: Event) => void;
   handleNativeNewSession: () => void;
   handleNativeNavigate: (event: Event) => void;
   updated: (changedProperties: Map<string, unknown>) => void;
@@ -44,7 +42,6 @@ type MacosTitlebarControlsState = HTMLElement & {
   historyOnly: boolean;
   newSessionDisabledReason?: string;
   onToggleSidebar?: () => void;
-  onOpenPalette?: () => void;
   onOpenNewSession?: () => void;
   updateComplete: Promise<boolean>;
 };
@@ -296,28 +293,15 @@ describe("AgileClaw native shell", () => {
   });
 
   it.each(["operator.write", "operator.sessions.write"])(
-    "opens search and starts a session from native titlebar events with %s",
+    "starts a session from native titlebar events with %s",
     (scope) => {
       const navigate = vi.fn();
-      const openPalette = vi.fn();
-      const togglePalette = vi.fn();
       const shell = document.createElement("openclaw-app-shell") as unknown as ShellNavigationState;
-      Object.defineProperty(shell, "commandPalette", {
-        configurable: true,
-        value: { openPalette, togglePalette },
-      });
       shell.runtime = {
         context: nativeSessionContext(navigate, "agent/a", { scopes: [scope] }),
       };
-      shell.handleNativeOpenSearch();
-      const toggleEvent = new CustomEvent("openclaw:native-toggle-search", { cancelable: true });
-      shell.handleNativeToggleSearch(toggleEvent);
       shell.handleNativeNewSession();
 
-      expect(openPalette).toHaveBeenCalledOnce();
-      expect(togglePalette).toHaveBeenCalledOnce();
-      // preventDefault is the handled signal for the native legacy fallback.
-      expect(toggleEvent.defaultPrevented).toBe(true);
       expect(navigate).toHaveBeenCalledWith("new-session", { search: "?agent=agent%2Fa" });
     },
   );
@@ -446,7 +430,6 @@ describe("AgileClaw native shell", () => {
     const drawerTrigger = shell.appendChild(document.createElement("button"));
     drawerTrigger.className = "topbar-nav-toggle";
     Object.defineProperty(drawerTrigger, "checkVisibility", { value: () => true });
-    const onOpenPalette = vi.fn();
     const onOpenNewSession = vi.fn();
     const controls = document.createElement(
       "openclaw-macos-titlebar-controls",
@@ -454,7 +437,6 @@ describe("AgileClaw native shell", () => {
     controls.navCollapsed = false;
     controls.historyOnly = false;
     controls.onToggleSidebar = shell.viewCallbacks.toggleSidebar;
-    controls.onOpenPalette = onOpenPalette;
     controls.onOpenNewSession = onOpenNewSession;
     document.body.append(controls);
     await controls.updateComplete;
@@ -462,14 +444,12 @@ describe("AgileClaw native shell", () => {
     controls.querySelector<HTMLButtonElement>(".macos-titlebar-controls__sidebar-toggle")?.click();
     expect(shell.navDrawerOpen).toBe(true);
     expect(shell.navDrawerTrigger).toBe(drawerTrigger);
-    controls.querySelector<HTMLButtonElement>(".macos-titlebar-controls__search")?.click();
     expect(controls.querySelector(".macos-titlebar-controls__new-session")).toBeNull();
 
     controls.navCollapsed = true;
     await controls.updateComplete;
     controls.querySelector<HTMLButtonElement>(".macos-titlebar-controls__new-session")?.click();
 
-    expect(onOpenPalette).toHaveBeenCalledOnce();
     expect(onOpenNewSession).toHaveBeenCalledOnce();
     controls.remove();
   });

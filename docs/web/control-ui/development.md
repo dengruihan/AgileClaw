@@ -149,10 +149,8 @@ preserves unchanged attributes instead of rewriting them on each roster update.
 
 Transcript enhancement inspects inserted or changed Markdown blocks; settled code
 blocks and tables do not need another scan when neighboring prose streams. Resize
-observers own geometry changes. The command palette likewise retains its measured
-input layout while navigating results, and remeasures edits, width changes, and
-reconnected fields. Status clocks pause in hidden tabs and render only when their
-displayed value or properties change.
+observers own geometry changes. Status clocks pause in hidden tabs and render only
+when their displayed value or properties change.
 
 The first connected, presented transcript commit renders two neighboring rows beyond each
 viewport edge. The next animation frame restores the six-row scrolling buffer;

@@ -35,52 +35,19 @@ describeControlUiE2e("Control UI installed plugin catalog", () => {
       }, gatewayUrl);
       await installMockGateway(page, {
         featureMethods: pluginMethods,
-        methodResponses: {
-          ...pluginMethodResponses(),
-          "plugins.list": inventory([
-            {
-              ...remoteIconPlugin,
-              id: "matrix",
-              name: "Matrix",
-              clawhubPackage: "matrix",
-              catalogId: "ch_bWF0cml4",
-            },
-          ]),
-        },
-      });
-      let iconAuthorization = "";
-      await page.route("**/__openclaw__/plugin-icon/matrix", async (route) => {
-        iconAuthorization = route.request().headers().authorization ?? "";
-        await route.fulfill({
-          body: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><circle cx="12" cy="12" r="10" fill="#f97316"/></svg>',
-          contentType: "image/svg+xml",
-        });
+        methodResponses: pluginMethodResponses(),
       });
       try {
-        await page.goto(`${server.baseUrl}chat`);
-        // Navigation can finish before the shell installs its palette shortcut.
-        await page.locator(".agent-chat__composer-combobox textarea:visible").waitFor();
-        await page.keyboard.press("ControlOrMeta+K");
-        await page.locator(".cmd-palette__input").fill("Matrix");
-        const result = page
-          .locator('.cmd-palette__item[role="option"]')
-          .filter({ hasText: "Matrix" });
+        await page.goto(`${server.baseUrl}plugins`);
+        const catalog = page.getByRole("region", { name: "Explore plugins" });
+        await catalog.getByRole("searchbox", { name: "Search plugins" }).fill("Matrix");
+        const result = catalog.locator(".plugin-catalog-card").filter({ hasText: "Matrix" });
         await result.waitFor();
-        await expect
-          .poll(() => page.locator(".cmd-palette__results").getAttribute("aria-busy"))
-          .toBe("false");
-        await captureScreenshot(page, `palette-plugin-search-${viewport.width}.png`, "viewport");
-        const icon = result.locator(".cmd-palette__plugin-icon img");
-        await icon.waitFor();
-        await expect
-          .poll(() => icon.evaluate((image: HTMLImageElement) => image.naturalWidth))
-          .toBeGreaterThan(0);
-        expect(iconAuthorization).toBe("Bearer e2e-device-token");
-        await captureScreenshot(page, `palette-plugin-${viewport.width}.png`, "viewport");
-        await result.click();
+        await captureScreenshot(page, `catalog-plugin-search-${viewport.width}.png`, "viewport");
+        await result.getByRole("link", { name: "Matrix", exact: true }).click();
         await expect.poll(() => new URL(page.url()).pathname).toBe("/plugins/ch_bWF0cml4");
         await page.getByRole("heading", { level: 1, name: "Matrix", exact: true }).waitFor();
-        await captureScreenshot(page, `palette-plugin-detail-${viewport.width}.png`, "viewport");
+        await captureScreenshot(page, `catalog-plugin-detail-${viewport.width}.png`, "viewport");
       } finally {
         await context.close();
       }

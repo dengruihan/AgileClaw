@@ -2,7 +2,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectErrorDetailCodes } from "../../../packages/gateway-protocol/src/connect-error-details.js";
 import { createDeferred } from "../../../test/helpers/promise.js";
-import { loadCommandPaletteCatalogItems } from "../components/command-palette-catalog-search.ts";
 import { setAvatarGatewayOrigin } from "../lib/identity-avatar-context.ts";
 import { resolveAvatar } from "../lib/identity-avatar.ts";
 import {
@@ -484,40 +483,6 @@ describe("createApplicationGateway connection ownership", () => {
     publish(1);
     expect(gateway.snapshot.usagePublications?.main?.usageUpdatedAt).toBe(1);
     stop();
-  });
-
-  it("invalidates palette automation reads before delivering owner events and reconnects", async () => {
-    connect();
-    const client = gateway.snapshot.client!;
-    current().request.mockImplementation(async (method) =>
-      method === "cron.list" ? { jobs: [{ id: "job", name: "Automation" }] } : { models: [] },
-    );
-    const load = () =>
-      loadCommandPaletteCatalogItems({
-        client,
-        agentId: "main",
-        agents: async () => null,
-        methodAvailable: (method) => method === "cron.list",
-      });
-    const count = () =>
-      current().request.mock.calls.filter(([method]) => method === "cron.list").length;
-    const [first, shared] = await Promise.all([load(), load()]);
-    expect(first).toEqual(shared);
-    expect(first).toContainEqual(expect.objectContaining({ label: "Automation" }));
-    expect(count()).toBe(1);
-    for (const event of ["cron", "config.changed"]) {
-      let pending: ReturnType<typeof load> | undefined;
-      const unsubscribe = gateway.subscribeEvents(() => {
-        pending = load();
-      });
-      current().opts.onEvent?.({ type: "event", event, payload: {} });
-      await pending;
-      unsubscribe();
-    }
-    expect(count()).toBe(3);
-    current().opts.onHello?.({ ...HELLO });
-    await load();
-    expect(count()).toBe(4);
   });
 
   it("retires event-log delivery when the first observer replaces its client", () => {

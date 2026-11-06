@@ -1,5 +1,4 @@
 import {
-  COMMAND_PALETTE_SHORTCUT,
   isApplePlatform,
   matchesKeyboardShortcut,
   resolveAsciiShortcutKey,
@@ -10,7 +9,6 @@ import {
 export { isApplePlatform } from "../../../src/shared/keyboard-shortcuts.ts";
 
 export const KEYBOARD_SHORTCUT_COMBOS = {
-  commandPalette: COMMAND_PALETTE_SHORTCUT,
   newSession: { modifiers: ["mod", "shift"], key: "o", platformSpecific: true },
   archiveSession: { modifiers: ["mod", "shift"], key: "a", platformSpecific: true },
   keyboardShortcuts: { modifiers: ["mod"], key: "/" },

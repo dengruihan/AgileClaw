@@ -1,15 +1,13 @@
-import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   type ControlUiFocusBuildTarget,
   buildControlUiFocusPath,
 } from "@openclaw/session-url-contract";
-import type { Page, Route, Video } from "playwright";
+import type { Page, Route } from "playwright";
 import { beforeEach, expect, it } from "vitest";
 import { ConnectErrorDetailCodes } from "../../../packages/gateway-protocol/src/connect-error-details.js";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { waitForControlUiGatewayReady } from "../test-helpers/control-ui-e2e-readiness.ts";
-import { takeControlUiViewportScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
 import {
   controlUiSessionUrl,
   defaultControlUiFeatureMethods,
@@ -361,96 +359,6 @@ suite.define(() => {
     );
   });
 
-  it("does not reload after a lazy surface is dismissed during its retry probe", async () => {
-    let releaseProbe = () => {};
-    const manualProbe = new Promise<void>((resolve) => {
-      releaseProbe = resolve;
-    });
-    try {
-      await suite.withPage(
-        { locale: "en-US", serviceWorkers: "block", viewport },
-        async ({ page }) => {
-          await page.clock.install();
-          await page.addInitScript(() => {
-            const observed = window as Window & { completedHeadFrames?: number };
-            const originalFetch = window.fetch;
-            window.fetch = async (...args) => {
-              const response = await originalFetch(...args);
-              if (args[1]?.method === "HEAD") {
-                // Observe the frame after the real fetch and its reload promise chain settle.
-                requestAnimationFrame(() => {
-                  observed.completedHeadFrames = (observed.completedHeadFrames ?? 0) + 1;
-                });
-              }
-              return response;
-            };
-          });
-          const failure = await installChunkFailure(
-            page,
-            controlUiE2eBuiltModuleRequest("ui/src/components/command-palette.ts"),
-            { manualProbe },
-          );
-          await installMockGateway(page);
-          let documentRequests = 0;
-          page.on("request", (request) => {
-            if (request.resourceType() === "document") {
-              documentRequests += 1;
-            }
-          });
-          await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
-          await waitForControlUiGatewayReady(page);
-          await page.keyboard.press("ControlOrMeta+k");
-          const error = await expectRealChunkFailure(page, "command palette");
-          await expect.poll(failure.headCount).toBe(1);
-          if (captureUiProof) {
-            await page.screenshot({ path: path.join(artifactDir, "dismissed-retry-before.png") });
-          }
-
-          const reloaded = new Promise<void>((resolve) => {
-            page.once("domcontentloaded", () => resolve());
-          });
-          await error.getByRole("button", { name: "Retry", exact: true }).click();
-          await expect.poll(failure.headCount).toBe(2);
-          await page.keyboard.press("Escape");
-          const paletteModal = page.locator('openclaw-modal-dialog[label="command palette"]');
-          await expect.poll(() => paletteModal.count()).toBe(0);
-          releaseProbe();
-          await expect
-            .poll(
-              async () =>
-                documentRequests > 1 ||
-                (await page.evaluate(
-                  () =>
-                    (window as Window & { completedHeadFrames?: number }).completedHeadFrames ?? 0,
-                )) >= 2,
-            )
-            .toBe(true);
-          // A generic automatic retry used to wake one second after this
-          // first settled frame. Close must remain authoritative beyond it.
-          await page.clock.runFor(1_500);
-          if (documentRequests > 1) {
-            await reloaded;
-          }
-          await waitForControlUiGatewayReady(page);
-          if (captureUiProof) {
-            await page.screenshot({ path: path.join(artifactDir, "dismissed-retry-after.png") });
-          }
-          console.info("LAZY_RETRY_DISMISSED", {
-            documentRequests,
-            headCount: failure.headCount(),
-          });
-          expect(documentRequests).toBe(1);
-          expect(await paletteModal.count()).toBe(0);
-          expect(
-            await page.evaluate(() => sessionStorage.getItem("openclaw:lazy-event")),
-          ).toBeNull();
-        },
-      );
-    } finally {
-      releaseProbe();
-    }
-  });
-
   for (const testCase of focusedCases) {
     it(`reloads the focused ${testCase.name} after its real hashed chunk fails`, async () => {
       await suite.withPage(
@@ -487,68 +395,6 @@ suite.define(() => {
       );
     });
   }
-
-  it("restores the command-palette action after a real stale-chunk reload", async () => {
-    const context = await suite.newBrowserContext({
-      locale: "en-US",
-      serviceWorkers: "block",
-      viewport,
-      ...(captureUiProof ? { recordVideo: { dir: artifactDir, size: viewport } } : {}),
-    });
-    let video: Video | null = null;
-    try {
-      const page = await context.newPage();
-      if (captureUiProof) {
-        video = page.video();
-      }
-      const failure = await installChunkFailure(
-        page,
-        controlUiE2eBuiltModuleRequest("ui/src/components/command-palette.ts"),
-      );
-      await installMockGateway(page);
-      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
-      await waitForControlUiGatewayReady(page);
-
-      await page.evaluate(() => {
-        window.dispatchEvent(new CustomEvent("openclaw:command-palette-open"));
-      });
-      const error = await expectRealChunkFailure(page, "command palette");
-      await expect.poll(failure.headCount).toBe(1);
-      expect(failure.chunkRequestCount()).toBe(1);
-      if (captureUiProof) {
-        await writeFile(
-          path.join(artifactDir, "failure.png"),
-          await takeControlUiViewportScreenshot(page, error, [
-            error.getByRole("button", { name: "Retry", exact: true }),
-          ]),
-        );
-      }
-
-      await retryThroughReload(page, error);
-      await page
-        .locator("openclaw-command-palette")
-        .getByRole("textbox", { name: "Search or start a task…" })
-        .waitFor();
-
-      await expect.poll(failure.chunkRequestCount).toBe(2);
-      expect(await page.locator("openclaw-command-palette").count()).toBe(1);
-      if (captureUiProof) {
-        await writeFile(
-          path.join(artifactDir, "recovered.png"),
-          await takeControlUiViewportScreenshot(page, page.locator(".cmd-palette"), [
-            page
-              .locator("openclaw-command-palette")
-              .getByRole("textbox", { name: "Search or start a task…" }),
-          ]),
-        );
-      }
-    } finally {
-      await suite.closeBrowserContext(context);
-      if (captureUiProof && video) {
-        await video.saveAs(path.join(artifactDir, "recovery.webm"));
-      }
-    }
-  });
 
   it.each(["new", "chat"] as const)(
     "keeps the outer System busyness frame nonmodal and transfers its current mode on %s",

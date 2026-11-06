@@ -1,5 +1,4 @@
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
-import { COMMAND_PALETTE_OPEN_EVENT } from "../components/command-palette-contract.ts";
 import {
   BROWSER_PANEL_TOGGLE_EVENT,
   LINK_READER_PANEL_TOGGLE_EVENT,
@@ -13,7 +12,6 @@ import { getSafeSessionStorage } from "../local-storage.ts";
 const STORAGE_KEY = "openclaw:lazy-event";
 export const SHELL_APPROVALS_OPEN_EVENT = "openclaw:approvals-open";
 const eventTypes = [
-  COMMAND_PALETTE_OPEN_EVENT,
   DEBUG_OVERLAY_REQUEST_EVENT,
   KEYBOARD_SHORTCUTS_REQUEST_EVENT,
   TERMINAL_PANEL_TOGGLE_EVENT,

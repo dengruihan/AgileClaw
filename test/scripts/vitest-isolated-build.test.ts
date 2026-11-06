@@ -39,7 +39,7 @@ describe("isolated Vitest build selection", () => {
           "run",
           "--config",
           "test/vitest/vitest.ui-e2e.config.ts",
-          "ui/src/e2e/command-palette-catalog.real-gateway.e2e.test.ts",
+          "ui/src/e2e/chat-widget-sandbox.real-gateway.e2e.test.ts",
         ],
         {},
       ),

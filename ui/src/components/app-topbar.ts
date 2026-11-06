@@ -6,17 +6,15 @@ import { controlUiPublicAssetPath } from "../app/public-assets.ts";
 import { t } from "../i18n/index.ts";
 import { OpenClawLightDomContentsElement } from "../lit/openclaw-element.ts";
 import { icons } from "./icons.ts";
-import { renderKbd, renderShortcutText } from "./kbd.ts";
 import "./tooltip.ts";
 
-/** Narrow-viewport header: drawer toggle, brand, and command-palette search.
+/** Narrow-viewport header: drawer toggle and brand.
  * Desktop hides it entirely (layout.css) — the sidebar owns navigation there. */
 class AppTopbar extends OpenClawLightDomContentsElement {
   @property({ attribute: false }) navDrawerOpen = false;
   @property({ attribute: false }) resourceBasePath = "";
   @property({ attribute: false }) environment: ControlUiEnvironment | null = null;
   @property({ attribute: false }) onToggleDrawer!: (trigger: HTMLElement) => void;
-  @property({ attribute: false }) onOpenPalette!: () => void;
 
   override render() {
     const drawerLabel = this.navDrawerOpen ? t("nav.collapse") : t("nav.expand");
@@ -51,20 +49,6 @@ class AppTopbar extends OpenClawLightDomContentsElement {
                 html`<span class="control-ui-environment-pill">${this.environment.label}</span>`
               }
             </div>
-          </div>
-          <div class="topnav-shell__actions">
-            <openclaw-tooltip
-              .content=${t("chat.commandPaletteTitle")}
-              .contentTemplate=${renderShortcutText(t("chat.commandPaletteTitle").replace("⌘K", "{shortcut}"), renderKbd(["⌘", "K"], { inline: true }))}
-            >
-              <button
-                class="topbar-search"
-                @click=${this.onOpenPalette}
-                aria-label=${t("chat.openCommandPalette")}
-              >
-                ${icons.search}
-              </button>
-            </openclaw-tooltip>
           </div>
         </div>
       </header>
