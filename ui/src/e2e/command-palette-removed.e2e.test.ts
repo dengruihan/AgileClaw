@@ -3,11 +3,8 @@
 import path from "node:path";
 import { expect, it } from "vitest";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
-import {
-  controlUiSessionUrl,
-  installMockGateway,
-  waitForControlUiGatewayReady,
-} from "../test-helpers/control-ui-e2e.ts";
+import { waitForControlUiGatewayReady } from "../test-helpers/control-ui-e2e-readiness.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
 const suite = createControlUiE2eSuite({
@@ -55,7 +52,8 @@ suite.define(() => {
         await page.keyboard.type("/");
         const slashMenu = page.locator(".slash-menu");
         await slashMenu.waitFor({ state: "visible" });
-        expect(await slashMenu.getByText("Slash commands", { exact: true }).count()).toBe(1);
+        await expect.poll(() => slashMenu.getAttribute("aria-label")).toBe("Slash commands");
+        expect(await slashMenu.getByRole("option").count()).toBeGreaterThan(0);
 
         if (captureUiProof) {
           await page.screenshot({
@@ -74,7 +72,7 @@ suite.define(() => {
         await installMockGateway(page);
         await page.goto(`${suite.server.baseUrl}sessions`);
         await waitForControlUiGatewayReady(page);
-        await page.getByRole("button", { name: "Search transcripts" }).waitFor();
+        await page.locator(".sessions-transcript-search").waitFor();
       },
     );
   });
