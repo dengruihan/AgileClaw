@@ -1,7 +1,10 @@
 import path from "node:path";
 import { beforeEach, expect, it } from "vitest";
 import type { VaultEntryMetadata } from "../../../../packages/gateway-protocol/src/index.js";
-import { createControlUiE2eSuite } from "../../e2e/control-ui-e2e-suite.test-support.ts";
+import {
+  createControlUiE2eContextOptions,
+  createControlUiE2eSuite,
+} from "../../e2e/control-ui-e2e-suite.test-support.ts";
 import { createControlUiE2eArtifactDir } from "../../test-helpers/control-ui-e2e-artifacts.ts";
 import { installMockGateway } from "../../test-helpers/control-ui-e2e.ts";
 
@@ -93,6 +96,17 @@ const REVEAL = {
   notes: "synthetic notes",
 };
 
+const ZH_CN_CONTEXT = { ...createControlUiE2eContextOptions(), locale: "zh-CN" };
+
+const LOCKED = {
+  initialized: true,
+  state: "locked",
+  autoLockSeconds: 300,
+  failedAttempts: 0,
+  itemCount: 2,
+  deletedCount: 0,
+};
+
 suite.define(() => {
   it("creates the vault from Settings → Passwords and renders encrypted entries", async () => {
     await suite.withPage({}, async ({ page }) => {
@@ -133,6 +147,139 @@ suite.define(() => {
       expect(await page.getByText("person@example.com", { exact: true }).count()).toBe(1);
       expect(await page.getByText("second@example.com", { exact: true }).count()).toBe(1);
       expect(await page.getByText("synthetic-revealed-password").count()).toBe(0);
+    });
+  });
+
+  it("renders vault setup, entries, the entry dialog, and audit activity in Simplified Chinese", async () => {
+    await suite.withPage(ZH_CN_CONTEXT, async ({ page }) => {
+      const gateway = await installMockGateway(page, {
+        featureMethods: ["vault.status", "vault.initialize", "vault.list", "vault.audit.list"],
+        operatorScopes: ["operator.vault", "operator.vault.reveal"],
+        methodResponses: {
+          "vault.status": { sequence: [UNINITIALIZED, UNLOCKED, UNLOCKED] },
+          "vault.initialize": { ...UNLOCKED },
+          "vault.list": { entries: [ENTRY, SECOND_ENTRY] },
+          "vault.audit.list": {
+            events: [
+              {
+                sequence: 1,
+                action: "initialize",
+                status: "succeeded",
+                occurredAtMs: 1_786_352_400_000,
+              },
+            ],
+          },
+        },
+      });
+
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      await page.getByRole("heading", { name: "创建密码库" }).waitFor();
+      await page.getByText("设置一个主密码短语。").waitFor();
+      await page.getByText("确认密码短语", { exact: true }).waitFor();
+      await page.getByRole("button", { name: "创建密码库" }).waitFor();
+      expect(await page.getByText("Create your password vault").count()).toBe(0);
+      await capture(page, "passwords-zh-cn-setup.png");
+
+      await page.locator('input[name="master-passphrase"]').fill("synthetic master passphrase");
+      await page.locator('input[name="confirm-passphrase"]').fill("synthetic master passphrase");
+      await page.getByRole("button", { name: "创建密码库" }).click();
+
+      const request = await gateway.waitForRequest("vault.initialize");
+      expect(request.params).toMatchObject({ autoLockSeconds: 300 });
+      await page.getByRole("button", { name: "添加密码" }).waitFor();
+      await page.getByPlaceholder("搜索站点、账号或标签").waitFor();
+      await page.getByText("显示已删除", { exact: true }).waitFor();
+      await page.getByRole("button", { name: "锁定" }).waitFor();
+      await page.getByText("2 个有效，0 个已删除").waitFor();
+      await page.getByText("闲置 5 分钟后自动锁定").waitFor();
+      await page.getByRole("columnheader", { name: "账号" }).waitFor();
+      await page.getByRole("columnheader", { name: "最近修改" }).waitFor();
+      await page.getByRole("columnheader", { name: "上次使用" }).waitFor();
+      await page.getByRole("button", { name: "显示" }).first().waitFor();
+      await page.getByRole("button", { name: "编辑" }).first().waitFor();
+      await page.getByText("最近的密码库活动").waitFor();
+      await page
+        .locator(".passwords-vault__audit")
+        .getByText("密码库已创建", { exact: true })
+        .waitFor();
+      expect(await page.getByText("No saved passwords yet.").count()).toBe(0);
+      await capture(page, "passwords-zh-cn-unlocked.png");
+
+      await page.getByRole("button", { name: "添加密码" }).click();
+      await page.getByRole("heading", { name: "添加密码" }).waitFor();
+      await page.getByText("站点名称", { exact: true }).waitFor();
+      await page.getByText("标签（可选）", { exact: true }).waitFor();
+      await page.getByText("备注", { exact: true }).waitFor();
+      await page.getByRole("button", { name: "生成" }).waitFor();
+      await page.getByRole("button", { name: "取消" }).waitFor();
+      await page.getByRole("button", { name: "保存" }).waitFor();
+      await capture(page, "passwords-zh-cn-dialog.png");
+    });
+  });
+
+  it("reports vault unlock failures and the unlocked vault in Simplified Chinese", async () => {
+    await suite.withPage(ZH_CN_CONTEXT, async ({ page }) => {
+      await installMockGateway(page, {
+        featureMethods: ["vault.status", "vault.unlock", "vault.list", "vault.audit.list"],
+        operatorScopes: ["operator.vault"],
+        methodResponses: {
+          "vault.status": { sequence: [LOCKED, UNLOCKED, UNLOCKED] },
+          "vault.unlock": {
+            sequence: [
+              {
+                __mockError: {
+                  code: "INVALID_REQUEST",
+                  message: "Incorrect master passphrase.",
+                  details: { code: "VAULT_WRONG_PASSPHRASE" },
+                },
+              },
+              {
+                __mockError: {
+                  code: "INVALID_REQUEST",
+                  message: "Too many failed attempts. Try again later.",
+                  details: { code: "VAULT_LOCKED_OUT", lockedUntilMs: 1_786_353_000_000 },
+                },
+              },
+              { ...UNLOCKED },
+            ],
+          },
+          "vault.list": { entries: [ENTRY, SECOND_ENTRY] },
+          "vault.audit.list": {
+            events: [
+              {
+                sequence: 2,
+                action: "unlock",
+                status: "succeeded",
+                occurredAtMs: 1_786_352_400_000,
+              },
+            ],
+          },
+        },
+      });
+
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      await page.getByRole("heading", { name: "解锁密码库" }).waitFor();
+      await page.getByText("输入主密码短语以查看或复制已保存的密码。").waitFor();
+      expect(await page.getByText("Unlock the password vault").count()).toBe(0);
+
+      await page.locator('input[name="master-passphrase"]').fill("synthetic wrong passphrase");
+      await page.getByRole("button", { name: "解锁" }).click();
+      await page.locator(".passwords-vault__error").getByText("主密码短语不正确。").waitFor();
+
+      await page.locator('input[name="master-passphrase"]').fill("synthetic wrong passphrase");
+      await page.getByRole("button", { name: "解锁" }).click();
+      await page.locator(".passwords-vault__error").getByText("失败次数过多。请在").waitFor();
+
+      await page.locator('input[name="master-passphrase"]').fill("synthetic master passphrase");
+      await page.getByRole("button", { name: "解锁" }).click();
+      await page.getByRole("button", { name: "添加密码" }).waitFor();
+      await page.getByText("密码库已解锁。", { exact: true }).waitFor();
+      await page
+        .locator(".passwords-vault__audit")
+        .getByText("密码库已解锁", { exact: true })
+        .waitFor();
+      expect(await page.getByText("Add password").count()).toBe(0);
+      await capture(page, "passwords-zh-cn-unlocked-after-unlock.png");
     });
   });
 
