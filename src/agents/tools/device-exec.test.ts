@@ -161,11 +161,35 @@ describe("runDeviceExec streaming", () => {
     const stream = getStream()!;
     stream.onProgress(`${"a".repeat(20 * 1024)}\n`);
     expect(updates).toBe(1);
-    expect(lastText.length).toBeLessThanOrEqual(4 * 1024 + 1);
+    expect(Buffer.byteLength(lastText, "utf8")).toBeLessThanOrEqual(4 * 1024);
     // Once the total budget is spent, further chunks are dropped, not forwarded.
     stream.onProgress(`${"b".repeat(20 * 1024)}\n`);
     stream.onProgress("more");
     expect(updates).toBe(1);
+    expect(stream.isRuntimeCurrent()).toBe(false);
+  });
+
+  it("counts the stream budget in UTF-8 bytes, not UTF-16 units", async () => {
+    const getStream = captureStream();
+    const tails: string[] = [];
+    await runDeviceExec({
+      ...base,
+      params: { command: "cjk" },
+      onUpdate: (update) => {
+        const text = update.content[0];
+        tails.push(text?.type === "text" ? text.text : "");
+      },
+    });
+    const stream = getStream()!;
+    // 10_000 CJK chars are 30_000 UTF-8 bytes but only 10_000 UTF-16 units.
+    stream.onProgress("你".repeat(10_000));
+    expect(tails).toHaveLength(1);
+    expect(Buffer.byteLength(tails[0]!, "utf8")).toBeLessThanOrEqual(4 * 1024);
+    // +3_000 bytes crosses the 32 KiB byte budget even though the UTF-16
+    // count would still be far under it.
+    stream.onProgress("好".repeat(1_000));
+    stream.onProgress("x");
+    expect(tails).toHaveLength(1);
     expect(stream.isRuntimeCurrent()).toBe(false);
   });
 

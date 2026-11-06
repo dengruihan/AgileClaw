@@ -13,6 +13,7 @@
  * degrading.
  */
 import { createHash, randomUUID } from "node:crypto";
+import path from "node:path";
 import { asNullableRecord } from "@openclaw/normalization-core/record-coerce";
 import { truncateUtf8Prefix } from "../../utils/utf8-truncate.js";
 import { createPatchTarget, type PatchFileOps } from "../apply-patch-file-ops.js";
@@ -259,7 +260,8 @@ export async function editDeviceFile(
 }
 
 function assertAbsoluteDevicePath(rawPath: string, hunkKind: string): void {
-  if (rawPath.startsWith("/")) {
+  // The scoped device may run any platform; accept both absolute forms.
+  if (path.posix.isAbsolute(rawPath) || path.win32.isAbsolute(rawPath)) {
     return;
   }
   throw new ToolInputError(
@@ -298,7 +300,9 @@ function createDevicePatchOps(params: DeviceFileCall): PatchFileOps {
         return "created";
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        if (message.includes("CANONICAL_PATH_CHANGED")) {
+        // EXISTS_NO_OVERWRITE is the ordinary existing-target reply; the
+        // canonical-path code covers a create race with a concurrent writer.
+        if (message.includes("EXISTS_NO_OVERWRITE") || message.includes("CANONICAL_PATH_CHANGED")) {
           return "exists";
         }
         throw error;

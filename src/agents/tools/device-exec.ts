@@ -17,7 +17,7 @@ import { randomUUID } from "node:crypto";
 import { asNullableRecord } from "@openclaw/normalization-core/record-coerce";
 import type { GatewayNodeInvokeStream } from "../../gateway/server-methods/types.js";
 import { buildNodeShellCommand } from "../../infra/node-shell.js";
-import { truncateUtf8Prefix } from "../../utils/utf8-truncate.js";
+import { truncateUtf8Prefix, truncateUtf8Suffix } from "../../utils/utf8-truncate.js";
 import type { AgentToolResult } from "../runtime/index.js";
 import { readPositiveIntegerParam, readToolStringParam, ToolInputError } from "./common.js";
 import { callGatewayTool } from "./gateway.js";
@@ -88,8 +88,8 @@ function createDeviceExecStream(params: {
   signal?: AbortSignal;
   onUpdate: (update: AgentToolResult<DeviceExecDetails>) => void;
 }): GatewayNodeInvokeStream {
-  let aggregated = "";
-  let forwarded = 0;
+  let tail = "";
+  let forwardedBytes = 0;
   let quiet = false;
   const isRuntimeCurrent = () => !(params.signal?.aborted ?? false) && !quiet;
   return {
@@ -99,25 +99,23 @@ function createDeviceExecStream(params: {
       if (!chunk || !isRuntimeCurrent()) {
         return;
       }
-      aggregated += chunk;
-      if (aggregated.length > DEVICE_EXEC_STREAM_TAIL_BYTES) {
-        aggregated = aggregated.slice(aggregated.length - DEVICE_EXEC_STREAM_TAIL_BYTES);
-      }
-      forwarded += chunk.length;
-      if (forwarded > DEVICE_EXEC_STREAM_MAX_BYTES) {
+      // Budgets are UTF-8 bytes so multibyte output cannot exceed the bound.
+      tail = truncateUtf8Suffix(tail + chunk, DEVICE_EXEC_STREAM_TAIL_BYTES);
+      forwardedBytes += Buffer.byteLength(chunk, "utf8");
+      if (forwardedBytes > DEVICE_EXEC_STREAM_MAX_BYTES) {
         quiet = true;
         return;
       }
       params.onUpdate({
-        content: [{ type: "text", text: aggregated }],
+        content: [{ type: "text", text: tail }],
         details: {
           status: "running",
           nodeId: params.deviceId,
           deviceScope: params.deviceId,
           exitCode: null,
           durationMs: Date.now() - params.startedAt,
-          aggregated,
-          ...(forwarded >= DEVICE_EXEC_STREAM_MAX_BYTES ? { truncated: true as const } : {}),
+          aggregated: tail,
+          ...(forwardedBytes >= DEVICE_EXEC_STREAM_MAX_BYTES ? { truncated: true as const } : {}),
         },
       });
     },

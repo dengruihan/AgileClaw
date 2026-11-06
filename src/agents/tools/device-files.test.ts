@@ -345,6 +345,26 @@ describe("applyDevicePatch", () => {
     callGatewayTool.mockResolvedValue({
       payload: {
         ok: false,
+        code: "EXISTS_NO_OVERWRITE",
+        message: "file already exists and overwrite is false: /ws/there.txt",
+      },
+    });
+    await expect(
+      applyDevicePatch({
+        ...base,
+        params: {
+          input: ["*** Begin Patch", "*** Add File: /ws/there.txt", "+x", "*** End Patch"].join(
+            "\n",
+          ),
+        },
+      }),
+    ).rejects.toThrow(/the file already exists\./);
+  });
+
+  it("maps a create-race canonical-path change to the same Update File hint", async () => {
+    callGatewayTool.mockResolvedValue({
+      payload: {
+        ok: false,
         code: "CANONICAL_PATH_CHANGED",
         message: "filesystem identity differs from the authorized target",
       },
@@ -353,7 +373,7 @@ describe("applyDevicePatch", () => {
       applyDevicePatch({
         ...base,
         params: {
-          input: ["*** Begin Patch", "*** Add File: /ws/there.txt", "+x", "*** End Patch"].join(
+          input: ["*** Begin Patch", "*** Add File: /ws/raced.txt", "+x", "*** End Patch"].join(
             "\n",
           ),
         },
@@ -411,6 +431,25 @@ describe("applyDevicePatch", () => {
       }),
     ).rejects.toThrow(/absolute device paths/);
     expect(callGatewayTool).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["posix", "/ws/win-new.txt"],
+    ["windows drive", "C:\\ws\\win-new.txt"],
+    ["windows UNC", "\\\\node-share\\ws\\win-new.txt"],
+  ])("accepts a %s absolute device path in an Add File hunk", async (_kind, hunkPath) => {
+    callGatewayTool.mockResolvedValue(filePayload({ path: hunkPath, size: 6 }));
+    const result = await applyDevicePatch({
+      ...base,
+      params: {
+        input: ["*** Begin Patch", `*** Add File: ${hunkPath}`, "+hello", "*** End Patch"].join(
+          "\n",
+        ),
+      },
+    });
+    const invoke = callGatewayTool.mock.calls[0]![2] as { params: Record<string, unknown> };
+    expect(invoke.params).toMatchObject({ path: hunkPath, overwrite: false });
+    expect(result.content[0]).toMatchObject({ text: expect.stringContaining("A ") });
   });
 
   it("reports a pure no-op patch without writing", async () => {
