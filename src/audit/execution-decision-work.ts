@@ -6,14 +6,16 @@ import { resolveGlobalSingleton } from "../shared/global-singleton.js";
 import {
   openOpenClawStateDatabase,
   type OpenClawStateDatabase,
-  type OpenClawStateDatabaseOptions,
 } from "../state/openclaw-state-db.js";
 import { pseudonymizeExecutionIdentityRef } from "./audit-identity.js";
 import {
   DEVICE_LEASE_RECEIPT_ID_PREFIX,
   deviceLeaseProducerDigest,
 } from "./device-lease-receipt-id.js";
-import { recordExecutionDecisionFactInDatabase } from "./execution-decision-facts.js";
+import {
+  recordExecutionDecisionFactInDatabase,
+  type ExecutionDecisionFactOptions,
+} from "./execution-decision-facts.js";
 import type { ExecutionDecisionWork } from "./execution-decision-work.types.js";
 import {
   parseExecutionIdentityAdmissionToken,
@@ -162,7 +164,7 @@ export function parseExecutionDecisionWork(value: unknown): ExecutionDecisionWor
 /** Project raw private refs at the audit owner, then persist only the bounded receipt. */
 export function processExecutionDecisionWorkInDatabase(
   value: unknown,
-  options: OpenClawStateDatabaseOptions & { database: OpenClawStateDatabase },
+  options: ExecutionDecisionFactOptions & { database: OpenClawStateDatabase },
 ): "inserted" | "existing" {
   const work = parseExecutionDecisionWork(value);
   const db = openOpenClawStateDatabase(options).db;
