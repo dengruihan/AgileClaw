@@ -4,8 +4,6 @@ import { normalizeDefaultMainSessionAliasForUi } from "../../lib/sessions/sessio
 
 export type ChatSessionDeviceScope = {
   deviceId: string;
-  /** Display name from the session row; absent falls back to the device id. */
-  deviceName?: string;
   leaseHeld: boolean;
 };
 
@@ -26,15 +24,7 @@ export function resolveChatSessionDeviceScope(host: {
     (session) => normalizeDefaultMainSessionAliasForUi(session.key) === key,
   );
   const deviceId = normalizeOptionalString(row?.scopeDeviceId);
-  if (!deviceId) {
-    return null;
-  }
-  const deviceName = normalizeOptionalString(row?.scopeDeviceName);
-  return {
-    deviceId,
-    ...(deviceName ? { deviceName } : {}),
-    leaseHeld: row?.scopeLeaseHeld === true,
-  };
+  return deviceId ? { deviceId, leaseHeld: row?.scopeLeaseHeld === true } : null;
 }
 
 /**

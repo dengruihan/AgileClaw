@@ -240,7 +240,8 @@ export function prepareProjectedSessionPresentation(
         // A mirrored device lease flips without an entry write; retire held-state views.
         sessionScopeLeaseHeld(record.key, now),
         // The scope device label mirrors the published device-scope snapshot, so
-        // a rename or reconnect retires held views instead of pinning the old name.
+        // held views retire only when the next turn or scope switch republishes
+        // a changed name; a rename alone does not refresh it.
         sessionScopeDeviceLabel(record.key, record.entry?.scopeDeviceId),
         // Active budgeted goals can stamp budgetLimitedAt from enriched usage at this clock.
         record.entry.goal?.status === "active" && record.entry.goal.tokenBudget !== undefined

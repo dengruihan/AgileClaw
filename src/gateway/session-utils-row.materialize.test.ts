@@ -670,6 +670,20 @@ test("projects a device-scoped row and the held-lease stop affordance", async ()
     expect(
       buildGatewaySessionSnapshot({ sessionRow: { key, kind: "direct" } }).scopeDeviceName,
     ).toBeNull();
+
+    // Device-reported names are unbounded; the row schema caps the label at 128.
+    publishPromptDeviceScopeSnapshot({
+      sessionKey: key,
+      snapshot: {
+        target: { kind: "node", deviceId: "device-a", displayName: "l".repeat(200) },
+        devices: [],
+      },
+    });
+    const bounded = buildGatewaySessionRow(rowParams);
+    expect(bounded.scopeDeviceName).toBe("l".repeat(128));
+    expect(buildGatewaySessionSnapshot({ sessionRow: bounded }).scopeDeviceName).toBe(
+      "l".repeat(128),
+    );
     clearPromptDeviceScopeSnapshotsForTest();
   });
 });

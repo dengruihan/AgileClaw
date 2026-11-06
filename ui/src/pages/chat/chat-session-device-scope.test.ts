@@ -25,7 +25,7 @@ function sessionsResult(rows: GatewaySessionRow[]): SessionsListResult {
 }
 
 describe("chat session device scope", () => {
-  it("reads the device name with the id and lease facts", () => {
+  it("reads the device id and lease facts from the selected row", () => {
     expect(
       resolveChatSessionDeviceScope({
         sessionKey: "agent:main:device-scoped",
@@ -33,7 +33,7 @@ describe("chat session device scope", () => {
           row({ scopeDeviceId: "studio-mac", scopeDeviceName: "Studio Mac", scopeLeaseHeld: true }),
         ]),
       }),
-    ).toEqual({ deviceId: "studio-mac", deviceName: "Studio Mac", leaseHeld: true });
+    ).toEqual({ deviceId: "studio-mac", leaseHeld: true });
   });
 
   it("names only the scope device and falls back on whitespace-only names", () => {

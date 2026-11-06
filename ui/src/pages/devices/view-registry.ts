@@ -13,8 +13,6 @@ registerDevicesEnglish();
 export type ExecutionDeviceRow = {
   id: string;
   name: string;
-  platform?: string;
-  connected: boolean;
   enabled: boolean;
   commandPolicy: DeviceCommandPolicy | null;
   holder?: DevicesProps["deviceOccupancy"][number];
@@ -51,8 +49,6 @@ export function resolveExecutionDeviceRow(
     // The row's resolved display name (operator label first) keeps dialogs and
     // aria labels naming the same device the operator sees.
     name: entry.name,
-    platform: node.platform,
-    connected: node.connected,
     // Absent on legacy rows written before the device registry existed;
     // those devices keep executing until an operator disables them.
     enabled: node.enabled !== false,
