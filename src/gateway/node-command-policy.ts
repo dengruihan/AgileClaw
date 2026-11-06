@@ -4,6 +4,7 @@ import {
   normalizeUniqueTrimmedStringList,
 } from "@openclaw/normalization-core/string-normalization";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import type { PairedDeviceCommandPolicy } from "../infra/device-pairing.types.js";
 import {
   NODE_AGENT_CLI_CLAUDE_RUN_COMMAND,
   NODE_BROWSER_PROXY_COMMANDS,
@@ -282,6 +283,8 @@ type NodeCommandPolicyNode = {
   connId?: string;
   nodeId?: string;
   approvedCommands?: readonly string[];
+  /** Pairing-store per-device policy joined at the runtime refresh owner. */
+  commandPolicy?: PairedDeviceCommandPolicy;
 };
 
 function isLiveNodeSession(node: NodeCommandPolicyNode | undefined): boolean {
@@ -373,6 +376,23 @@ function resolveNodeCommandAllowlistInternal(
   }
   for (const privateCommand of NODE_WORKER_PRIVATE_COMMANDS) {
     allow.delete(privateCommand);
+  }
+  // Per-device policy joins the runtime allowlist last: an explicit `allow`
+  // selects within the pairing-approved/declared surface — it can never widen
+  // that surface nor override the global deny/dangerous handling above — and
+  // `deny` removes even commands `allow` selected. Pairing admission stays
+  // policy-free so a later per-device change never forces a re-pairing.
+  const perDevicePolicy = pairing ? undefined : node?.commandPolicy;
+  if (perDevicePolicy?.allow) {
+    const selected = new Set(perDevicePolicy.allow);
+    for (const command of allow) {
+      if (!selected.has(command)) {
+        allow.delete(command);
+      }
+    }
+  }
+  for (const blocked of perDevicePolicy?.deny ?? []) {
+    allow.delete(blocked);
   }
   return allow;
 }
@@ -474,7 +494,7 @@ function formatRequiredNodeCommandUnavailable(
   if (state === "pending-approval") {
     return `${prefix} is awaiting pairing approval for node ${nodeId}; find its updated command surface request with openclaw nodes pending, then run openclaw nodes approve <requestId>`;
   }
-  return `${prefix} is blocked by Gateway policy for node ${nodeId}; allow it in gateway.nodes.commands.allow and remove any matching gateway.nodes.commands.deny entry`;
+  return `${prefix} is blocked by Gateway policy for node ${nodeId}; allow it in gateway.nodes.commands.allow, remove any matching gateway.nodes.commands.deny entry, and check the device's per-device command policy`;
 }
 
 /**

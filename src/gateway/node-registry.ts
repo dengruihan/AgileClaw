@@ -18,6 +18,10 @@ import type {
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { setActiveNodeContexts } from "../infra/active-node-context.js";
 import type { PairedDeviceNodeBinding } from "../infra/device-pairing-node-state.js";
+import {
+  filterPairedDeviceCommandSurface,
+  type PairedDeviceCommandPolicy,
+} from "../infra/device-pairing.types.js";
 import { isPrivateNodeInvokeCommand, NODE_MCP_TOOLS_CALL_COMMAND } from "../infra/node-commands.js";
 import {
   intersectNodePermissionSurface,
@@ -122,6 +126,8 @@ type NodeSessionPolicy = {
   approvedCommands: string[];
   skills: NodeSkillDescriptor[];
   withheldCommands: readonly string[];
+  /** Pairing-store per-device policy captured with the authenticated surface. */
+  commandPolicy?: PairedDeviceCommandPolicy;
 };
 const NODE_SESSION_POLICIES = new WeakMap<object, NodeSessionPolicy>();
 
@@ -170,6 +176,8 @@ type NodeSessionRegistrationOptions = {
   pairingIdentity: string;
   pairingGeneration?: string | undefined;
   approvedSurface?: NodeApprovalSurface;
+  /** Current per-device command policy from the pairing store, joined into refreshes. */
+  commandPolicy?: PairedDeviceCommandPolicy;
 };
 
 export type NodeRegistryOptions = {
@@ -385,6 +393,7 @@ export class NodeRegistry {
           caps: node.sessionCapsCeiling ?? node.declaredCaps,
           commands: declaredCommands,
           approvedCommands: declaredCommands,
+          ...(policy.commandPolicy ? { commandPolicy: policy.commandPolicy } : {}),
         })
       : undefined;
     node.commands = policy.approvedCommands.filter(
@@ -442,9 +451,14 @@ export class NodeRegistry {
       return true;
     }
     const node = this.nodesById.get(nodeId);
+    const commandPolicy = node ? NODE_SESSION_POLICIES.get(node)?.commandPolicy : undefined;
     return Boolean(
       node?.commands.includes(command) &&
-      (!liveConfig || resolveNodeCommandAllowlist(liveConfig, node).has(command)),
+      (!liveConfig ||
+        resolveNodeCommandAllowlist(liveConfig, {
+          ...node,
+          ...(commandPolicy ? { commandPolicy } : {}),
+        }).has(command)),
     );
   }
 
@@ -543,17 +557,21 @@ export class NodeRegistry {
       pathEnv: connect.pathEnv,
       connectedAtMs: Date.now(),
     };
-    // Preserve the approved declaration independently of policy, so re-enabling
-    // a command cannot invent approval or require this connection to republish.
+    // Preserve the approved declaration independently of config policy, so
+    // re-enabling a command cannot invent approval or require this connection
+    // to republish. Per-device policy joins here as well: the capture filters
+    // the approved surface, and this filter also covers the connect fallback.
     NODE_SESSION_POLICIES.set(session, {
       approvedCaps: (opts.approvedSurface?.caps ?? caps).filter((cap) =>
         sessionCapsCeiling.includes(cap),
       ),
-      approvedCommands: (opts.approvedSurface?.commands ?? commands).filter((command) =>
-        sessionCommandsCeiling.includes(command),
-      ),
+      approvedCommands: filterPairedDeviceCommandSurface(
+        opts.commandPolicy,
+        opts.approvedSurface?.commands ?? commands,
+      ).filter((command) => sessionCommandsCeiling.includes(command)),
       skills: [],
       withheldCommands: connect.withheldCommands ?? [],
+      ...(opts.commandPolicy ? { commandPolicy: opts.commandPolicy } : {}),
     });
     const replacesPresence = previousSession?.lastActiveAtMs !== undefined;
     forgetNodeRunnerInventory(this, client.connId);
@@ -1047,9 +1065,12 @@ export class NodeRegistry {
     // Runtime approvals can only narrow capabilities/commands/permissions declared at connect.
     const policy = expectDefined(NODE_SESSION_POLICIES.get(node), "registered node policy missing");
     const sessionCommandsCeiling = new Set(node.sessionCommandsCeiling ?? node.declaredCommands);
-    policy.approvedCommands = surface.commands.filter((command) =>
-      sessionCommandsCeiling.has(command),
-    );
+    // Surface approval carries the raw stored surface; the device policy keeps
+    // selecting within it so a live approval cannot bypass a per-device deny.
+    policy.approvedCommands = filterPairedDeviceCommandSurface(
+      policy.commandPolicy,
+      surface.commands,
+    ).filter((command) => sessionCommandsCeiling.has(command));
 
     if ("caps" in surface) {
       const sessionCapsCeiling = new Set(node.sessionCapsCeiling ?? node.declaredCaps);

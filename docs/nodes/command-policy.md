@@ -17,10 +17,24 @@ can be invoked:
 2. The command must be in the node's approved command surface on its paired-device record.
 3. The Gateway's platform-and-approval-derived allowlist must include the declared command.
 
-An optional per-device command policy narrows steps 1-2 further: `commands.deny`
-removes commands from the pairing-approved surface, and `commands.allow` selects
-within it without widening the surface. Set it from Settings, or with the
-`node.device.update` gateway method (`operator.pairing`). See
+An optional per-device command policy joins the effective surface with this
+precedence, from strongest to weakest:
+
+1. Global policy always wins: `gateway.nodes.commands.deny` entries and the
+   dangerous-command defaults above can never be re-admitted per device.
+2. The pairing-approved, node-declared surface is the base.
+3. The policy's `commands.allow` selects within that base; it never widens it.
+4. The policy's `commands.deny` applies last and removes even commands that
+   `commands.allow` selected.
+
+The paired-device store owns the policy: the pairing-state capture applies it to
+the approved surface, and the node registry joins it into every runtime policy
+refresh, so a live surface approval stays narrowed as well. Changing the policy
+(from Settings, or with the `node.device.update` gateway method under
+`operator.pairing`) invalidates the device's node clients; the narrowed or
+widened surface applies when the node reconnects. Disabled devices keep an empty
+command surface regardless of policy, and commands the per-device policy
+excludes report as blocked by Gateway policy rather than awaiting approval. See
 [Device registry](/nodes/pairing-and-status#device-registry).
 
 Use `openclaw nodes pending` and `openclaw nodes approve <nodeRequestId>` to

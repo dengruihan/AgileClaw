@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { GATEWAY_CLIENT_IDS } from "../../packages/gateway-protocol/src/client-info.js";
 import { createDeferred } from "../../test/helpers/promise.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import type { PairedDeviceCommandPolicy } from "../infra/device-pairing.types.js";
 import { NODE_WORKER_SUPERVISOR_LAUNCH_COMMAND } from "../infra/node-commands.js";
 import {
   mergeRemoteNodeSkillEntries,
@@ -456,5 +457,142 @@ describe("connected node runtime policy", () => {
     registry.updateNodeSkills(node.nodeId, node.connId, []);
     reload({});
     expect(node.nodeSkills).toEqual([]);
+  });
+});
+
+describe("per-device command policy join", () => {
+  // The raw stored approval surface a live approval or a capture-less caller
+  // hands the registry; the per-device policy must select within it here.
+  const rawApprovedSurface = {
+    caps: ["computer", "screen"],
+    commands: ["computer.act", "system.run", "screen.snapshot"],
+  };
+
+  function registerWithDevicePolicy(
+    fixture: ReturnType<typeof createFixture>,
+    commandPolicy: PairedDeviceCommandPolicy | undefined,
+    approvedSurface: { caps: string[]; commands: string[] } = rawApprovedSurface,
+  ) {
+    return fixture.registry.register(fixture.client, {
+      pairingIdentity: "policy-identity",
+      pairingGeneration: "policy-generation",
+      approvedSurface,
+      ...(commandPolicy ? { commandPolicy } : {}),
+    });
+  }
+
+  it("selects a per-device allow within the approved surface without widening it", () => {
+    const fixture = createFixture();
+    const node = registerWithDevicePolicy(fixture, { allow: ["system.run", "camera.snap"] });
+
+    expect(node.commands).toEqual(["system.run"]);
+    // Every command fulfilling the computer/screen families was deselected.
+    expect(node.caps).toEqual([]);
+    expect(node.client.connect.commands).toEqual(["system.run"]);
+  });
+
+  it.each([
+    {
+      name: "global deny wins over a per-device allow",
+      commandPolicy: { allow: ["system.run"] },
+      config: { gateway: { nodes: { commands: { deny: ["system.run"] } } } },
+      expected: [] as string[],
+    },
+    {
+      name: "per-device deny removes an allowed command last",
+      commandPolicy: { allow: ["system.run", "computer.act"], deny: ["system.run"] },
+      config: {},
+      expected: ["computer.act"],
+    },
+  ])("$name", ({ commandPolicy, config, expected }) => {
+    const fixture = createFixture(config);
+    const node = registerWithDevicePolicy(fixture, commandPolicy);
+
+    expect(node.commands).toEqual(expected);
+  });
+
+  it("keeps dangerous-command defaults above a per-device allow", () => {
+    const fixture = createFixture();
+    Object.assign(fixture.client.connect, {
+      declaredCommands: [...rawApprovedSurface.commands, "screen.record"],
+      sessionCommandsCeiling: [...rawApprovedSurface.commands, "screen.record"],
+    });
+    const node = registerWithDevicePolicy(
+      fixture,
+      { allow: ["screen.record"] },
+      {
+        caps: [],
+        commands: [...rawApprovedSurface.commands, "screen.record"],
+      },
+    );
+
+    expect(node.commands).toEqual([]);
+  });
+
+  it("keeps a per-device deny on a live surface approval", () => {
+    const fixture = createFixture();
+    const node = registerWithDevicePolicy(
+      fixture,
+      { deny: ["system.run"] },
+      { caps: rawApprovedSurface.caps, commands: ["computer.act", "screen.snapshot"] },
+    );
+    expect(node.commands).toEqual(["computer.act", "screen.snapshot"]);
+
+    // node.pair.approve passes the raw stored surface; the device policy keeps
+    // selecting within it so a live approval cannot bypass the deny.
+    const updated = fixture.registry.updateSurface(node.nodeId, {
+      caps: rawApprovedSurface.caps,
+      commands: rawApprovedSurface.commands,
+    });
+
+    expect(updated?.commands).toEqual(["computer.act", "screen.snapshot"]);
+  });
+
+  it("reports a per-device-denied command as gateway policy, not pending approval", () => {
+    const fixture = createFixture();
+    const node = registerWithDevicePolicy(
+      fixture,
+      { deny: ["computer.act"] },
+      { caps: rawApprovedSurface.caps, commands: ["system.run", "screen.snapshot"] },
+    );
+
+    expect(node.commands).toEqual(["system.run", "screen.snapshot"]);
+    expect(readNodeSessionWithheldCommands(node)).toContain("computer.act");
+    expect(readCommandState(node, {}, "computer.act")).toBe("unauthorized");
+    expect(readCommandState(node, {}, "system.run")).toBe("invocable");
+  });
+
+  it("keeps the per-device selection across config refreshes and applies a changed policy on reconnect", () => {
+    const fixture = createFixture();
+    const node = registerWithDevicePolicy(fixture, { allow: ["system.run"] });
+    expect(node.commands).toEqual(["system.run"]);
+
+    // A global allow entry cannot widen the per-device selection.
+    fixture.reload({ gateway: { nodes: { commands: { allow: ["screen.snapshot"] } } } });
+    expect(node.commands).toEqual(["system.run"]);
+
+    // node.device.update invalidates the client; the reconnect captures the new policy.
+    const reconnected = registerWithDevicePolicy(fixture, { allow: ["computer.act"] });
+    expect(reconnected.commands).toEqual(["computer.act"]);
+    expect(reconnected.pairingGeneration).toBe("policy-generation");
+  });
+
+  it("keeps a disabled device's surface empty regardless of the per-device policy", async () => {
+    const fixture = createFixture();
+    // captureAuthenticatedNodePairingState yields an empty surface for disabled devices.
+    const node = registerWithDevicePolicy(
+      fixture,
+      { allow: ["system.run"] },
+      {
+        caps: [],
+        commands: [],
+      },
+    );
+
+    expect(node.commands).toEqual([]);
+    expect(node.caps).toEqual([]);
+    await expect(
+      fixture.registry.invoke({ nodeId: node.nodeId, command: "system.run", timeoutMs: 0 }),
+    ).resolves.toMatchObject({ ok: false, error: { code: "POLICY_CHANGED" } });
   });
 });

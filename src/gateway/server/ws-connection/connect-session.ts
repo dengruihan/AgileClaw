@@ -605,6 +605,9 @@ export async function attachAuthenticatedGatewayConnect(
       remoteIp: reportedClientIp,
       pairingIdentity: admittedNodePairing.identity.key,
       approvedSurface: admittedNodePairing.approvedSurface,
+      ...(admittedNodePairing.commandPolicy
+        ? { commandPolicy: admittedNodePairing.commandPolicy }
+        : {}),
       ...(pairingGeneration ? { pairingGeneration } : {}),
     });
     recordRemoteNodeInfo({
