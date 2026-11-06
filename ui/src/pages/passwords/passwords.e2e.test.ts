@@ -334,6 +334,31 @@ suite.define(() => {
     });
   });
 
+  it("localizes known vault failures raised after unlock in Simplified Chinese", async () => {
+    await suite.withPage(ZH_CN_CONTEXT, async ({ page }) => {
+      await installMockGateway(page, {
+        featureMethods: ["vault.status", "vault.list"],
+        operatorScopes: ["operator.vault"],
+        methodResponses: {
+          "vault.status": { ...UNLOCKED, itemCount: 0 },
+          "vault.list": {
+            __mockError: {
+              code: "INVALID_REQUEST",
+              message: "Unlock the password vault first.",
+              details: { code: "VAULT_LOCKED" },
+            },
+          },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      const alert = page.locator(".passwords-vault__error");
+      await alert.getByText("密码库已锁定。请解锁后继续。").waitFor();
+      expect(
+        await alert.getByText("Unlock the password vault first.", { exact: false }).count(),
+      ).toBe(0);
+    });
+  });
+
   it("reveals and copies one entry only with the explicit reveal scope", async () => {
     await suite.withPage({}, async ({ page }) => {
       const gateway = await installMockGateway(page, {

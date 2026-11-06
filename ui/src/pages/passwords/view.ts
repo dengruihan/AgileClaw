@@ -18,7 +18,10 @@ import { renderSettingsWorkspace } from "../../components/settings-workspace.ts"
 import "../../components/web-awesome.ts";
 import { t } from "../../i18n/index.ts";
 import { formatRelativeTimestamp } from "../../lib/format.ts";
-import type { PasswordsVaultClientError } from "../../lib/passwords-vault/index.ts";
+import {
+  passwordsVaultErrorHint,
+  type PasswordsVaultClientError,
+} from "../../lib/passwords-vault/index.ts";
 import "../../styles/passwords-vault.css";
 
 export type PasswordsDialogMode = "add" | "edit" | null;
@@ -110,31 +113,11 @@ function errorText(error: PasswordsVaultClientError | null): TemplateResult | ty
   if (!error) {
     return nothing;
   }
-  const code = error.vaultCode;
-  let hint: string | null = null;
-  if (code === "VAULT_WRONG_PASSPHRASE") {
-    hint = t("passwords.wrongPassphrase");
-  } else if (code === "VAULT_LOCKED_OUT") {
-    hint =
-      error.lockedUntilMs !== undefined
-        ? t("passwords.lockedOutUntil", {
-            time: new Date(error.lockedUntilMs).toLocaleTimeString(),
-          })
-        : t("passwords.lockedOut");
-  } else if (code === "VAULT_CORRUPTED") {
-    hint = t("passwords.corrupted");
-  } else if (code === "VAULT_CONFLICT") {
-    hint = t("passwords.conflict");
-  } else if (code === "VAULT_DUPLICATE") {
-    hint = t("passwords.duplicate");
-  } else if (code === "VAULT_REVEAL_SCOPE_REQUIRED") {
-    hint = t("passwords.revealScopeRequired");
-  }
   // A localized hint fully replaces the gateway's English message; unknown
   // codes keep that message as the only diagnostic available.
   return html`
     <div class="passwords-vault__error" role="alert">
-      <strong>${hint ?? error.message}</strong>
+      <strong>${passwordsVaultErrorHint(error) ?? error.message}</strong>
     </div>
   `;
 }

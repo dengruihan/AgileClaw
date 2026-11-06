@@ -4225,6 +4225,15 @@ export const en: TranslationMap & {
     duplicate: "An entry for this site and account already exists.",
     revealScopeRequired:
       "This connection is missing the operator.vault.reveal scope, so it cannot unlock or view saved passwords. Ask an operator to grant that scope.",
+    locked: "The password vault is locked. Unlock it to continue.",
+    uninitialized: "The password vault is not set up yet. Refresh the page to create it.",
+    alreadyInitialized: "The password vault already exists. Refresh the page to unlock it.",
+    notFound: "That entry no longer exists. Refresh the list and try again.",
+    deletedEntry: "The entry was deleted. Restore it before viewing it.",
+    invalidInput:
+      "That input is not valid. Check the website, account, and password, then try again.",
+    unavailable:
+      "The password vault is unavailable. Try again shortly, and check the Gateway logs if it persists.",
     account: "Account",
     password: "Password",
     actions: "Actions",
