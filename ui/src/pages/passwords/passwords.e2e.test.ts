@@ -240,6 +240,13 @@ suite.define(() => {
                   details: { code: "VAULT_LOCKED_OUT", lockedUntilMs: 1_786_353_000_000 },
                 },
               },
+              {
+                __mockError: {
+                  code: "FORBIDDEN",
+                  message: "The password vault reveal scope is required.",
+                  details: { code: "VAULT_REVEAL_SCOPE_REQUIRED" },
+                },
+              },
               { ...UNLOCKED },
             ],
           },
@@ -265,10 +272,33 @@ suite.define(() => {
       await page.locator('input[name="master-passphrase"]').fill("synthetic wrong passphrase");
       await page.getByRole("button", { name: "解锁" }).click();
       await page.locator(".passwords-vault__error").getByText("主密码短语不正确。").waitFor();
+      expect((await page.locator(".passwords-vault__error").textContent())?.trim()).toBe(
+        "主密码短语不正确。",
+      );
 
       await page.locator('input[name="master-passphrase"]').fill("synthetic wrong passphrase");
       await page.getByRole("button", { name: "解锁" }).click();
       await page.locator(".passwords-vault__error").getByText("失败次数过多。请在").waitFor();
+      expect(
+        await page
+          .locator(".passwords-vault__error")
+          .getByText("Too many failed attempts", { exact: false })
+          .count(),
+      ).toBe(0);
+
+      await page.locator('input[name="master-passphrase"]').fill("synthetic master passphrase");
+      await page.getByRole("button", { name: "解锁" }).click();
+      await page
+        .locator(".passwords-vault__error")
+        .getByText("当前连接缺少 operator.vault.reveal 权限")
+        .waitFor();
+      expect(
+        await page
+          .locator(".passwords-vault__error")
+          .getByText("reveal scope is required", { exact: false })
+          .count(),
+      ).toBe(0);
+      await capture(page, "passwords-zh-cn-unlock-error.png");
 
       await page.locator('input[name="master-passphrase"]').fill("synthetic master passphrase");
       await page.getByRole("button", { name: "解锁" }).click();
@@ -280,6 +310,27 @@ suite.define(() => {
         .waitFor();
       expect(await page.getByText("Add password").count()).toBe(0);
       await capture(page, "passwords-zh-cn-unlocked-after-unlock.png");
+    });
+  });
+
+  it("keeps unknown vault diagnostics in Simplified Chinese instead of the generic fallback", async () => {
+    await suite.withPage(ZH_CN_CONTEXT, async ({ page }) => {
+      await installMockGateway(page, {
+        featureMethods: ["vault.status"],
+        operatorScopes: ["operator.vault"],
+        methodResponses: {
+          "vault.status": {
+            __mockError: { code: "UNAVAILABLE", message: "synthetic vault backend offline" },
+          },
+        },
+      });
+      await page.goto(`${suite.server.baseUrl}settings/passwords`);
+      await page.getByRole("heading", { name: "解锁密码库" }).waitFor();
+      await page
+        .locator(".passwords-vault__error")
+        .getByText("synthetic vault backend offline")
+        .waitFor();
+      expect(await page.getByText("密码库请求失败。").count()).toBe(0);
     });
   });
 

@@ -4223,6 +4223,8 @@ export const en: TranslationMap & {
       "The vault key material is damaged or was modified. Restore a backup or reset the vault.",
     conflict: "This entry changed elsewhere. Refresh and try again.",
     duplicate: "An entry for this site and account already exists.",
+    revealScopeRequired:
+      "This connection is missing the operator.vault.reveal scope, so it cannot unlock or view saved passwords. Ask an operator to grant that scope.",
     account: "Account",
     password: "Password",
     actions: "Actions",
@@ -4264,6 +4266,7 @@ export const en: TranslationMap & {
     notesLoaded: "Loaded the current notes for editing.",
     passwordRequired: "Enter a password.",
     badWebsite: "Enter a website host such as https://example.com.",
+    requestFailed: "The password vault request failed.",
     saveFailed: "The entry was not saved. Reload and try again.",
     saved: "Password saved.",
     searchPlaceholder: "Search sites, accounts, or labels",

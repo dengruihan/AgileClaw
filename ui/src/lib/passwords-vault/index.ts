@@ -4,6 +4,7 @@ import type {
   VaultStatus,
 } from "../../../../packages/gateway-protocol/src/index.js";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
+import { t } from "../../i18n/index.ts";
 import { formatUiError } from "../format-error.ts";
 
 export type PasswordsVaultClientError = {
@@ -48,7 +49,7 @@ export function toPasswordsVaultError(error: unknown): PasswordsVaultClientError
   const lockedUntilMs =
     typeof details?.lockedUntilMs === "number" ? details.lockedUntilMs : undefined;
   return {
-    message: formatUiError(error, "The password vault request failed."),
+    message: formatUiError(error, t("passwords.requestFailed")),
     ...(vaultCode ? { vaultCode } : {}),
     ...(lockedUntilMs !== undefined ? { lockedUntilMs } : {}),
   };

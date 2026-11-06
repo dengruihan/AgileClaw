@@ -127,11 +127,14 @@ function errorText(error: PasswordsVaultClientError | null): TemplateResult | ty
     hint = t("passwords.conflict");
   } else if (code === "VAULT_DUPLICATE") {
     hint = t("passwords.duplicate");
+  } else if (code === "VAULT_REVEAL_SCOPE_REQUIRED") {
+    hint = t("passwords.revealScopeRequired");
   }
+  // A localized hint fully replaces the gateway's English message; unknown
+  // codes keep that message as the only diagnostic available.
   return html`
     <div class="passwords-vault__error" role="alert">
       <strong>${hint ?? error.message}</strong>
-      ${hint ? html`<span>${error.message}</span>` : nothing}
     </div>
   `;
 }
