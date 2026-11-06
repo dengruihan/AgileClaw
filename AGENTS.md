@@ -32,6 +32,7 @@ Update instructions at their owner instead of adding competing rules here.
 - Real failing entry point first. Bypassed boundary != proof.
 - Separate product bugs from tool/fixture failures.
 - Check relevant prerequisites early. Parallelize independent work.
+- **This machine has limited memory.** Before working across multiple worktrees, spawning multiple subagents, building, or starting other memory-intensive work, check memory pressure and scale concurrency to avoid OOM. When memory is tight, reduce or serialize work and free task-owned resources first; never kill unrelated processes or remove unrelated work to make room.
 - New check needs named unknown, risk, or required gate. Reuse valid proof.
 - Two identical tooling failures without new evidence, or 10 min without progress: switch to an authorized supported alternative with the reviewed head pinned; reconcile uncertain writes first. No blind retries or guard bypasses.
 - Behavior proven + required gates green: finish/land. No optional proof polish or speculative scope growth.
