@@ -470,7 +470,7 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
             this.sidebarAgentsMode === "roster"
               ? this.rosterRenderer?.renderSidebarNewSessionMenu(
                   this,
-                  "sidebar-brand__icon sidebar-brand__header-control sidebar-brand__new-thread",
+                  "sidebar-brand__new-thread sidebar-new-session-action",
                 )
               : nothing,
           )}

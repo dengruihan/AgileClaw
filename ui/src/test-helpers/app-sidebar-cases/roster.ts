@@ -257,7 +257,7 @@ describe("AppSidebar agent roster", () => {
     expect(context.agentSelection.state.scopeId).toBe("main");
   });
 
-  it("offers new sessions for agents in group order from the brand menu", async () => {
+  it("offers new sessions for agents in group order from the primary action menu", async () => {
     const { sidebar } = await mountRoster();
     const onOpen = vi.fn();
     sidebar.onOpenNewSession = onOpen;

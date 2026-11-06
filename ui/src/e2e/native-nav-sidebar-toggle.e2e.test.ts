@@ -186,10 +186,13 @@ suite.define(() => {
     });
     expect(initialWidth).toBeGreaterThan(0);
 
-    // Expanded native-nav hosts keep sidebar search (no native search control
-    // exists while the rail is open) but hide the duplicate web nav toggle.
-    await expect.poll(() => page.locator(".sidebar-brand__search").isVisible()).toBe(true);
+    // Expanded native-nav hosts keep the primary new-session action in the
+    // sidebar but hide the duplicate web nav toggle and header search.
+    await expect
+      .poll(() => page.locator(".sidebar-primary-actions .sidebar-brand__new-thread").isVisible())
+      .toBe(true);
     await expect.poll(() => page.locator(".sidebar-brand__collapse").isVisible()).toBe(false);
+    await expect.poll(() => page.locator(".sidebar-brand__search").count()).toBe(0);
 
     // Collapse through the native titlebar path; the whole web chrome cluster
     // hides (native titlebar provides search and new-thread while collapsed).
@@ -244,22 +247,22 @@ suite.define(() => {
     const toolbar = page.locator(".macos-titlebar-controls");
     await expect.poll(() => toolbar.isVisible()).toBe(true);
     await expect.poll(() => page.locator(".shell-chrome-controls").isVisible()).toBe(false);
-    const sidebarBrand = page.locator(".sidebar-brand");
-    const sidebarNewThread = sidebarBrand.locator(".sidebar-brand__new-thread");
-    await expect.poll(() => sidebarNewThread.isVisible()).toBe(true);
+    const sidebarPrimary = page.locator(".sidebar-primary-actions .sidebar-brand__new-thread");
+    await expect.poll(() => sidebarPrimary.isVisible()).toBe(true);
+    await expect.poll(() => sidebarPrimary.textContent()).toContain("New session");
     await expect
       .poll(() =>
-        sidebarNewThread.evaluate((element) => {
+        sidebarPrimary.evaluate((element) => {
           const style = getComputedStyle(element);
           return { borderStyle: style.borderTopStyle, boxShadow: style.boxShadow };
         }),
       )
-      .toEqual({ borderStyle: "none", boxShadow: "none" });
+      .toEqual({ borderStyle: "solid", boxShadow: "none" });
     await page.keyboard.press("Tab");
-    await sidebarNewThread.focus();
+    await sidebarPrimary.focus();
     await expect
       .poll(() =>
-        sidebarNewThread.evaluate((element) => {
+        sidebarPrimary.evaluate((element) => {
           const style = getComputedStyle(element);
           return {
             focusVisible: element.matches(":focus-visible"),
@@ -270,16 +273,19 @@ suite.define(() => {
       .toEqual({ focusVisible: true, boxShadow: expect.not.stringMatching(/^none$/) });
     await expect
       .poll(async () => {
-        const [brandBox, newThreadBox] = await Promise.all([
-          sidebarBrand.boundingBox(),
-          sidebarNewThread.boundingBox(),
+        const [actionBox, navBox] = await Promise.all([
+          sidebarPrimary.boundingBox(),
+          page.locator(".sidebar-nav").boundingBox(),
         ]);
-        if (!brandBox || !newThreadBox) {
+        if (!actionBox || !navBox) {
           return null;
         }
-        return Math.round(brandBox.x + brandBox.width - (newThreadBox.x + newThreadBox.width));
+        return {
+          left: Math.round(actionBox.x - navBox.x),
+          coversNavWidth: actionBox.width + 2 >= navBox.width,
+        };
       })
-      .toBe(2);
+      .toEqual({ left: 0, coversNavWidth: true });
 
     const back = toolbar.getByRole("button", { name: "Back" });
     const forward = toolbar.getByRole("button", { name: "Forward" });

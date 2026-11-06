@@ -274,6 +274,7 @@ class SidebarNewSessionMenu extends AgentRosterElement {
           ?disabled=${!access.allowed || cards.length === 0}
         >
           ${icons.plus}
+          <span class="new-session-link__label">${t("chat.runControls.newSession")}</span>
         </button>
         ${cards.map(
           (card) => html`<wa-dropdown-item

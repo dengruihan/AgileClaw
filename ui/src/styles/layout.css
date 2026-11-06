@@ -191,18 +191,16 @@ html.openclaw-native-macos .shell-chrome-controls {
 /* Newer Mac apps host a native sidebar toggle in the titlebar next to
    back/forward and add openclaw-native-nav; the in-page nav toggles would
    duplicate it, so they disappear (⌘B and the accessible titlebar button
-   cover keyboard/screen-reader use). Search stays: native-nav-only hosts
-   provide native search/new-thread controls only while the rail is
-   collapsed, so expanded sidebar search keeps the pointer path to the palette.
-   Older apps only add openclaw-native-macos and keep all web controls. */
+   cover keyboard/screen-reader use). The native titlebar also owns palette
+   and new-session controls. Older apps only add openclaw-native-macos and
+   keep all web controls. */
 html.openclaw-native-nav .shell-chrome-controls__nav-toggle,
 html.openclaw-native-nav .shell--nav-collapsed .shell-chrome-controls,
 html.openclaw-native-nav .topbar .topbar-nav-toggle {
   display: none;
 }
 
-/* Native-nav hosts provide the expanded sidebar toggle in AppKit, while the
-   in-sidebar search remains the only pointer path to the palette. */
+/* Native-nav hosts provide the expanded sidebar toggle in AppKit. */
 html.openclaw-native-nav .sidebar-brand__collapse {
   display: none;
 }
@@ -1118,6 +1116,7 @@ openclaw-settings-save-indicator:empty {
   --shell-chrome-control-size: 28px;
   --sidebar-agent-avatar-size: 28px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 2px;
   min-height: 34px;
@@ -1149,6 +1148,67 @@ openclaw-settings-save-indicator:empty {
   /* Keep navigation controls at the edge as the brand label shrinks. */
   margin-inline-start: auto;
   flex: 0 0 auto;
+}
+
+/* Primary new-session action: the one full-width control above Pages. It wraps
+   onto its own row inside the brand block. */
+.sidebar-primary-actions {
+  flex: 1 0 100%;
+  margin: 8px 0 0 2px;
+}
+
+.sidebar-primary-actions > openclaw-sidebar-new-session-menu,
+.sidebar-primary-actions wa-dropdown {
+  display: block;
+}
+
+.sidebar-new-session-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+  color: var(--text-strong);
+  font-size: var(--control-ui-text-md);
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
+}
+
+.sidebar-new-session-action:hover:not(:disabled, [aria-disabled="true"]),
+.sidebar-new-session-action:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--border));
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-elevated));
+}
+
+.sidebar-new-session-action:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.sidebar-new-session-action:is(:disabled, [aria-disabled="true"]) {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.sidebar-new-session-action svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .sidebar-brand__header-control svg {
@@ -3410,6 +3470,8 @@ a:is(
   width: var(--sidebar-agent-avatar-size);
   height: var(--sidebar-agent-avatar-size);
   flex: none;
+  border-radius: var(--radius-md);
+  object-fit: contain;
 }
 
 .sidebar-workspace-header__text {

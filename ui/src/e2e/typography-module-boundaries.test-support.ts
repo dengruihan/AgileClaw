@@ -29,7 +29,7 @@ export function defineTypographyModuleBoundaryTests(
         );
         try {
           await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
-          const trigger = page.locator(".sidebar-brand__search");
+          const trigger = page.locator(".sidebar-brand__collapse");
           await trigger.waitFor();
           expect(popupModule.requests()).toBe(0);
           await trigger.focus();
