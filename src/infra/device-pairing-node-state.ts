@@ -9,7 +9,11 @@ import {
   type NodePairingState,
   type PairedDevice,
 } from "./device-pairing.js";
-import { filterPairedDeviceCommandSurface, isPairedDeviceEnabled } from "./device-pairing.types.js";
+import {
+  filterPairedDeviceCommandSurface,
+  isPairedDeviceEnabled,
+  type PairedDeviceCommandPolicy,
+} from "./device-pairing.types.js";
 import type { NodeApprovalSurface } from "./node-pairing-surface.js";
 
 export type { NodePairingGeneration } from "./device-pairing.js";
@@ -69,7 +73,14 @@ export async function captureAuthenticatedNodePairingState(params: {
   publicKey: string;
   token: string;
   baseDir?: string;
-}): Promise<(NodePairingState & { approvedSurface: NodeApprovalSurface }) | null> {
+}): Promise<
+  | (NodePairingState & {
+      approvedSurface: NodeApprovalSurface;
+      /** Current per-device policy so the registry can join it into runtime refreshes. */
+      commandPolicy?: PairedDeviceCommandPolicy;
+    })
+  | null
+> {
   const device = await getPairedDevice(params.nodeId, params.baseDir);
   if (
     !device ||
@@ -91,6 +102,7 @@ export async function captureAuthenticatedNodePairingState(params: {
   }
   return {
     ...state,
+    ...(device.commandPolicy ? { commandPolicy: device.commandPolicy } : {}),
     approvedSurface: {
       caps: device.nodeSurface?.caps ?? [],
       commands: filterPairedDeviceCommandSurface(

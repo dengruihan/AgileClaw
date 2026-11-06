@@ -924,6 +924,9 @@ export function createWatchNodeHttpRuntime(options: WatchNodeHttpRuntimeOptions)
             pairingIdentity: nodePairingState.identity.key,
             pairingGeneration: nodePairingGeneration.key,
             approvedSurface: nodePairingState.approvedSurface,
+            ...(nodePairingState.commandPolicy
+              ? { commandPolicy: nodePairingState.commandPolicy }
+              : {}),
           },
           createTransport(session),
         );
