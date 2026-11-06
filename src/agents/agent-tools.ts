@@ -410,17 +410,23 @@ export function createOpenClawCodingToolsInternal(
           agentId: executionAgentId,
           ...(options?.sessionId ? { sessionId: options.sessionId } : {}),
           ...(options?.runId ? { runId: options.runId } : {}),
+          ...(options?.computerContextEpoch
+            ? { computerContextEpoch: options.computerContextEpoch }
+            : {}),
         })
       : undefined;
   if (deviceScopeRoutingState && options?.registerRunCleanup) {
     const scopeState = deviceScopeRoutingState;
     // Turn end releases the node lease: occupancy has no TTL, so an idle turn
     // must not keep the device reserved. Only a turn that used a lease pays.
+    // Device control sessions close first, while the lease still admits their
+    // close, so the next session on that device never meets a stale execution.
     options.registerRunCleanup(async () => {
       const rootSessionKey = scopeState.leaseRootSessionKey;
       if (!rootSessionKey) {
         return;
       }
+      await scopeState.closeDeviceControlSessions();
       await releaseTurnDeviceScopeLease({
         rootSessionKey,
         ...(scopeState.leaseRegistry ? { registry: scopeState.leaseRegistry } : {}),

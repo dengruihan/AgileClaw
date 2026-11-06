@@ -1,6 +1,7 @@
 /**
  * Node invoke plugin-policy regression tests.
  */
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,6 +14,7 @@ import {
   MAX_PLUGIN_APPROVAL_TIMEOUT_MS,
   type PluginApprovalRequestPayload,
 } from "../infra/plugin-approvals.js";
+import { parseComputerActParamsJSON } from "../plugins/computer-use-contract.js";
 import { createEmptyPluginRegistry } from "../plugins/registry-empty.js";
 import { resetPluginRuntimeStateForTest, setActivePluginRegistry } from "../plugins/runtime.js";
 import type { OpenClawPluginNodeInvokePolicyContext } from "../plugins/types.js";
@@ -324,6 +326,51 @@ describe("applyPluginNodeInvokePolicy", () => {
       expect(invoke).not.toHaveBeenCalled();
       resetPluginRuntimeStateForTest();
     }
+  });
+
+  it("classifies the handler payload, stripped of the admission lease token", async () => {
+    // Mirrors the shipped CUA policy: risk classification parses arguments with
+    // the canonical closed computer.act contract parser.
+    const policy = createDemoPolicy((ctx: OpenClawPluginNodeInvokePolicyContext) =>
+      ctx.invokeNode(),
+    );
+    policy.policy.commands = ["computer.act"];
+    policy.policy.classifyRisk = ({ params }) => {
+      const payload = params as Record<string, unknown>;
+      expect("leaseToken" in payload).toBe(false);
+      const parsed = parseComputerActParamsJSON(JSON.stringify(payload));
+      expect(parsed.action).toBe("left_click");
+      return { level: "ordinary", family: "input" };
+    };
+    setDangerousDemoCommandRegistry([policy]);
+    const { context, invoke } = createContext({
+      getRuntimeConfig: () => nodeCommandsConfig({ allow: ["computer.act"] }),
+      nodeSession: { ...createNodeSession(), commands: ["computer.act"] },
+    });
+    const admitted = {
+      action: "left_click",
+      x: 10,
+      y: 20,
+      executionId: randomUUID(),
+      // Occupancy admission reads the token from command params; the command
+      // contract itself is closed and the node strips it after admission.
+      leaseToken: "lease-token",
+    };
+
+    const result = await applyPluginNodeInvokePolicy({
+      context,
+      client: null,
+      nodeSession: createNodeSession(),
+      command: "computer.act",
+      params: admitted,
+      timeoutMs: 1_000,
+      resolveRemainingTimeoutMs: () => 250,
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    // The forwarded invoke still carries the token for node-side admission.
+    expect(invoke).toHaveBeenCalledOnce();
+    expect((invoke.mock.calls[0]![0] as { params?: unknown }).params).toEqual(admitted);
   });
 
   it.each([

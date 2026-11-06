@@ -7,10 +7,11 @@
  * `computer.act` plus `screen.snapshot` for computer/desktop control. Every
  * invoke carries the root session identity in the envelope and the occupancy
  * lease token inside the command params, which is exactly what the node's
- * per-call admission checks. The token is server-side truth carried in call
- * context, never a model-visible tool param. A device that is offline or lacks
- * the command fails that call with a reason; there is no Gateway fallback and
- * no second device.
+ * per-call admission checks; admission is the token's only consumer, and the
+ * node strips it again before the command's closed contract parses the payload.
+ * The token is server-side truth carried in call context, never a
+ * model-visible tool param. A device that is offline or lacks the command fails
+ * that call with a reason; there is no Gateway fallback and no second device.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
@@ -18,38 +19,49 @@ import { getRuntimeConfig } from "../../config/config.js";
 import type { AnyAgentTool } from "../agent-tools.types.js";
 import {
   COMPUTER_ACT_COMMAND,
+  type ComputerContextEpoch,
   type ComputerToolTransport,
   SCREEN_SNAPSHOT_COMMAND,
 } from "./computer-tool-shared.js";
 import { createComputerTool } from "./computer-tool.js";
+import type { DeviceScopeRoutingState } from "./device-routing.js";
 import { callGatewayTool } from "./gateway.js";
 import { getInProcessGatewayToolContext } from "./in-process-gateway.js";
 
-/** Device-control facts of the current routed call. */
+/** Device-control facts of the current routed browser call. */
 export type BrowserDeviceControlScope = {
   readonly deviceId: string;
   readonly rootSessionKey: string;
   readonly leaseToken: string;
 };
 
-const deviceControlScopes = new AsyncLocalStorage<BrowserDeviceControlScope>();
+const browserDeviceControlScopes = new AsyncLocalStorage<BrowserDeviceControlScope>();
 
-/** Run one delegated control-tool execution bound to its device-control facts. */
+/** Run one delegated browser tool execution bound to its device-control facts. */
 export function withBrowserDeviceControlScope<T>(
   scope: BrowserDeviceControlScope,
   run: () => T,
 ): T {
-  return deviceControlScopes.run(scope, run);
+  return browserDeviceControlScopes.run(scope, run);
 }
 
 /**
- * The device-control facts of the current routed control call, if any. Exposed
+ * The device-control facts of the current routed browser call, if any. Exposed
  * to plugins through `openclaw/plugin-sdk/agent-harness-runtime` so the browser
  * tool can pin its node routing and admit its node commands under the lease.
  */
 export function readBrowserDeviceControlScope(): BrowserDeviceControlScope | undefined {
-  return deviceControlScopes.getStore();
+  return browserDeviceControlScopes.getStore();
 }
+
+/**
+ * Admission identity the routed computer transport holds for itself. Run
+ * cleanup fires after the turn's calls, outside any routed-call context, so the
+ * transport cannot rely on call context for its `__close_execution` invoke.
+ * Each routed call refreshes the token so a mid-turn lease re-acquisition is
+ * observed before the next dispatch.
+ */
+type DeviceComputerIdentity = { rootSessionKey: string; leaseToken: string };
 
 /** The registry session of the scoped device; undefined means not connected. */
 function readScopedDeviceSession(deviceId: string) {
@@ -60,10 +72,15 @@ function readScopedDeviceSession(deviceId: string) {
 /**
  * Device-pinned computer transport. Observation and input run over the public
  * `computer.act`/`screen.snapshot` node commands — the same policy, approval,
- * and lease admission path any node computer invoke takes — with the root
- * session identity and lease token injected on every call.
+ * and lease admission path any node computer invoke takes. The command params
+ * carry only the admission lease token: `computer.act` and `screen.snapshot`
+ * params are closed schemas, the envelope carries the session identity, and the
+ * node strips the token after admission.
  */
-function createDeviceComputerTransport(params: { deviceId: string }): ComputerToolTransport {
+function createDeviceComputerTransport(params: {
+  deviceId: string;
+  identity: DeviceComputerIdentity;
+}): ComputerToolTransport {
   return {
     resolveNode: async (query, signal) => {
       signal?.throwIfAborted();
@@ -92,10 +109,7 @@ function createDeviceComputerTransport(params: { deviceId: string }): ComputerTo
       };
     },
     invoke: async (request) => {
-      const scope = readBrowserDeviceControlScope();
-      if (!scope || scope.deviceId !== request.nodeId) {
-        throw new Error("device computer control was invoked outside its routed call");
-      }
+      const identity = params.identity;
       const gatewayOpts = request.timeoutMs === undefined ? {} : { timeoutMs: request.timeoutMs };
       const raw = await callGatewayTool<{ payload?: unknown }>(
         "node.invoke",
@@ -105,14 +119,14 @@ function createDeviceComputerTransport(params: { deviceId: string }): ComputerTo
           command: request.command,
           params: {
             ...request.commandParams,
-            // Admission identity rides inside params so the invoke wire is unchanged.
-            sessionKey: scope.rootSessionKey,
-            leaseToken: scope.leaseToken,
+            // Admission token only; the node strips it before the closed
+            // command contract parses the payload.
+            leaseToken: identity.leaseToken,
           },
           ...(request.timeoutMs === undefined ? {} : { timeoutMs: request.timeoutMs }),
           idempotencyKey: request.idempotencyKey ?? randomUUID(),
           // Envelope identity is what the node's occupancy admission checks.
-          sessionKey: scope.rootSessionKey,
+          sessionKey: identity.rootSessionKey,
         },
         request.signal ? { signal: request.signal } : undefined,
       );
@@ -121,16 +135,33 @@ function createDeviceComputerTransport(params: { deviceId: string }): ComputerTo
   };
 }
 
-/** One routed computer session per turn: frames and observations stay per scope. */
-const routedComputerTools = new WeakMap<object, AnyAgentTool>();
+/** Per-turn routed computer sessions, one per scoped device (a switch rebuilds). */
+const routedComputerSessions = new WeakMap<
+  object,
+  Map<string, { tool: AnyAgentTool; identity: DeviceComputerIdentity }>
+>();
+
+/**
+ * Host selectors are meaningless under device scope: the routing wrapper owns
+ * placement, so a per-call `target`/`node`/`environmentId` from the model is
+ * dropped instead of failing the call.
+ */
+function pinComputerParams(params: Record<string, unknown>): Record<string, unknown> {
+  const pinned = { ...params };
+  delete pinned.target;
+  delete pinned.node;
+  delete pinned.environmentId;
+  return pinned;
+}
 
 /**
  * Execute one already-authorized `computer` tool call on the scoped device.
  * Delegates to a real computer tool instance bound to the device transport, so
  * validation, frames, screenshots, and result projection stay with their one
  * owner instead of gaining a device duplicate. The routing state keys the
- * delegated session: one per turn, the same lifetime the assembled computer
- * tool has.
+ * delegated sessions — one per turn per device — and turn cleanup closes them
+ * (`__close_execution`) before the occupancy lease releases, so a later
+ * device-scoped session never meets `COMPUTER_HOST_BUSY` from this turn.
  */
 export async function runDeviceComputerControl(params: {
   toolCallId: string;
@@ -138,29 +169,44 @@ export async function runDeviceComputerControl(params: {
   deviceId: string;
   rootSessionKey: string;
   leaseToken: string;
-  /** Routing state; keys the routed computer session for this turn. */
-  cacheKey: object;
+  /** Routing state; owns the routed sessions and their turn cleanup. */
+  state: DeviceScopeRoutingState;
+  contextEpoch?: ComputerContextEpoch;
   runId?: string;
   signal?: AbortSignal;
 }): Promise<unknown> {
-  let delegated = routedComputerTools.get(params.cacheKey);
-  if (!delegated) {
-    delegated = createComputerTool({
-      config: getRuntimeConfig(),
-      transport: createDeviceComputerTransport({ deviceId: params.deviceId }),
-      // Run ids expire before later assistant runs can reuse a provider call id.
-      ...(params.runId ? { idempotencyScope: params.runId } : {}),
-    });
-    routedComputerTools.set(params.cacheKey, delegated);
-  }
-  const tool = delegated;
-  return await withBrowserDeviceControlScope(
-    {
-      deviceId: params.deviceId,
+  const sessions = routedComputerSessions.get(params.state) ?? new Map();
+  routedComputerSessions.set(params.state, sessions);
+  let session = sessions.get(params.deviceId);
+  if (!session) {
+    const identity: DeviceComputerIdentity = {
       rootSessionKey: params.rootSessionKey,
       leaseToken: params.leaseToken,
-    },
-    () => tool.execute(params.toolCallId, params.params, params.signal),
+    };
+    session = {
+      identity,
+      tool: createComputerTool({
+        config: getRuntimeConfig(),
+        transport: createDeviceComputerTransport({ deviceId: params.deviceId, identity }),
+        // Turn cleanup closes the device execution before the lease releases.
+        ...(params.state.registerDeviceControlCleanup
+          ? { registerRunCleanup: params.state.registerDeviceControlCleanup }
+          : {}),
+        ...(params.contextEpoch ? { contextEpoch: params.contextEpoch } : {}),
+        // Run ids expire before later assistant runs can reuse a provider call id.
+        ...(params.runId ? { idempotencyScope: params.runId } : {}),
+      }),
+    };
+    sessions.set(params.deviceId, session);
+  }
+  // A mid-turn lease re-acquisition mints a fresh token; carry it into the
+  // transport so the next dispatch and the turn close both admit.
+  session.identity.rootSessionKey = params.rootSessionKey;
+  session.identity.leaseToken = params.leaseToken;
+  return await session.tool.execute(
+    params.toolCallId,
+    pinComputerParams(params.params),
+    params.signal,
   );
 }
 
@@ -206,12 +252,12 @@ export type DeviceControlAdapterCall = {
 
 /**
  * Adapter selector the routing layer consults for placement control tools.
- * `cacheKey` is the routing state, so the routed computer session lives exactly
- * as long as the turn's tool assembly.
+ * `state` owns the routed computer sessions for this turn: their lifetime,
+ * per-device identity, and turn cleanup.
  */
 export function deviceControlAdapter(
   toolName: string,
-  cacheKey: object,
+  state: DeviceScopeRoutingState,
 ): ((params: DeviceControlAdapterCall) => Promise<unknown>) | undefined {
   if (toolName === "computer") {
     return (params) =>
@@ -221,7 +267,8 @@ export function deviceControlAdapter(
         deviceId: params.deviceId,
         rootSessionKey: params.rootSessionKey,
         leaseToken: params.leaseToken,
-        cacheKey,
+        state,
+        ...(state.computerContextEpoch ? { contextEpoch: state.computerContextEpoch } : {}),
         ...(params.runId ? { runId: params.runId } : {}),
         ...(params.signal ? { signal: params.signal } : {}),
       });

@@ -19,6 +19,7 @@ import { readSessionScopeLease } from "../../gateway/session-scope-lease.js";
 import { getAgentToolExecutionLocation, copyAgentToolMetadata } from "../agent-tool-metadata.js";
 import type { AnyAgentTool } from "../agent-tools.types.js";
 import type { AgentToolResult } from "../runtime/index.js";
+import type { ComputerContextEpoch } from "./computer-tool-shared.js";
 import { deviceControlAdapter } from "./device-control.js";
 import { runDeviceExec } from "./device-exec.js";
 import {
@@ -64,6 +65,19 @@ export type DeviceScopeRoutingState = {
         permissionMode?: string;
       }
     | undefined;
+  /**
+   * Frame/context identity the assembled computer tool shares with its routed
+   * device session, so unchanged-frame suppression survives device routing.
+   */
+  computerContextEpoch?: ComputerContextEpoch;
+  /**
+   * Register one routed control session's turn cleanup. The turn owner runs
+   * these before releasing the occupancy lease: the device close must be
+   * admitted while the lease is still held.
+   */
+  registerDeviceControlCleanup?(cleanup: (reason: string) => Promise<void>): void;
+  /** Run registered control-session cleanups; best effort, never throws. */
+  closeDeviceControlSessions(): Promise<void>;
 };
 
 export function createDeviceScopeRoutingState(params: {
@@ -71,6 +85,7 @@ export function createDeviceScopeRoutingState(params: {
   agentId: string;
   sessionId?: string;
   runId?: string;
+  computerContextEpoch?: ComputerContextEpoch;
 }): DeviceScopeRoutingState {
   let cached:
     | {
@@ -84,11 +99,13 @@ export function createDeviceScopeRoutingState(params: {
   let switchPending = false;
   let leaseRootSessionKey: string | undefined;
   let leaseRegistry: DeviceScopeRegistry | undefined;
+  const deviceControlCleanups: Array<(reason: string) => Promise<void>> = [];
   const state: DeviceScopeRoutingState = {
     sessionKey: params.sessionKey,
     agentId: params.agentId,
     ...(params.sessionId ? { sessionId: params.sessionId } : {}),
     ...(params.runId ? { runId: params.runId } : {}),
+    ...(params.computerContextEpoch ? { computerContextEpoch: params.computerContextEpoch } : {}),
     get switchPending() {
       return switchPending;
     },
@@ -120,6 +137,20 @@ export function createDeviceScopeRoutingState(params: {
       // so the next placement call observes the new value.
       resolved = false;
       cached = undefined;
+    },
+    registerDeviceControlCleanup(cleanup) {
+      deviceControlCleanups.push(cleanup);
+    },
+    async closeDeviceControlSessions() {
+      const cleanups = deviceControlCleanups.splice(0);
+      for (const cleanup of cleanups) {
+        try {
+          await cleanup("turn-complete");
+        } catch {
+          // A failed device close never blocks the lease release: the node
+          // clears its occupancy and executions on disconnect or release.
+        }
+      }
     },
     resolveRoot() {
       if (!resolved) {

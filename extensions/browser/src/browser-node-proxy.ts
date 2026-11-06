@@ -125,14 +125,10 @@ async function callBrowserProxy(
           timeoutMs: proxyTimeoutMs,
           profile: params.profile,
           errorEnvelope: BROWSER_PROXY_ERROR_ENVELOPE,
-          // Occupancy admission reads the root session and lease token from the
-          // command params; the invoke wire shape is otherwise unchanged.
-          ...(deviceScope
-            ? {
-                sessionKey: deviceScope.rootSessionKey,
-                leaseToken: deviceScope.leaseToken,
-              }
-            : {}),
+          // Occupancy admission reads the lease token from the command params
+          // and the node strips it after admission; the session identity rides
+          // the invoke envelope, so params stay on the proxy contract.
+          ...(deviceScope ? { leaseToken: deviceScope.leaseToken } : {}),
         },
         idempotencyKey: crypto.randomUUID(),
         ...(deviceScope ? { sessionKey: deviceScope.rootSessionKey } : {}),

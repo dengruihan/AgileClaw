@@ -40,7 +40,7 @@ export async function resolveBrowserNodeTarget<T extends BrowserNodeTarget>(para
         `scoped device ${deviceScope.deviceId} is not connected; reconnect it before using browser control. There is no gateway fallback.`,
       );
     }
-    if (!device.caps?.includes("browser") && !device.commands?.includes(BROWSER_PROXY_COMMAND)) {
+    if (!device.commands?.includes(BROWSER_PROXY_COMMAND)) {
       throw new Error(
         `scoped device ${deviceScope.deviceId} does not advertise browser control (${BROWSER_PROXY_COMMAND}); it cannot run the browser tool under device scope. There is no gateway fallback.`,
       );

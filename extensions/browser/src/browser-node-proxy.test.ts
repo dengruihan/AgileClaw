@@ -420,17 +420,15 @@ describe("Browser node proxy device scope", () => {
     deviceScopeControl.scope = undefined;
   });
 
-  it("admits every proxy invoke under the root session identity and lease token", async () => {
+  it("admits every proxy invoke under the envelope identity and a params-only token", async () => {
     await createSessionProxy()({ method: "GET", path: "/" });
     const { node } = readGatewayCall();
     expect(node).toMatchObject({
       nodeId: "node-1",
       sessionKey: "agent:main:root",
-      params: expect.objectContaining({
-        sessionKey: "agent:main:root",
-        leaseToken: "lease-1",
-      }),
+      params: expect.objectContaining({ leaseToken: "lease-1" }),
     });
+    expect((node.params as Record<string, unknown>).sessionKey).toBeUndefined();
   });
 
   it("rejects a proxy request for a node other than the scoped device", async () => {

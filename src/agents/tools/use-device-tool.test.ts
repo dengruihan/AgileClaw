@@ -28,9 +28,11 @@ function makeState(overrides: Partial<DeviceScopeRoutingState> = {}): {
   state: DeviceScopeRoutingState;
   markScope: ReturnType<typeof vi.fn>;
   noteLeaseUsed: ReturnType<typeof vi.fn>;
+  closeDeviceControlSessions: ReturnType<typeof vi.fn>;
 } {
   const markScope = vi.fn();
   const noteLeaseUsed = vi.fn();
+  const closeDeviceControlSessions = vi.fn(async () => {});
   return {
     state: {
       sessionKey: "agent:main:root",
@@ -40,6 +42,7 @@ function makeState(overrides: Partial<DeviceScopeRoutingState> = {}): {
       switchPending: false,
       markScope: () => markScope(),
       noteLeaseUsed: (rootSessionKey) => noteLeaseUsed(rootSessionKey),
+      closeDeviceControlSessions: () => closeDeviceControlSessions(),
       leaseRootSessionKey: undefined,
       leaseRegistry: undefined,
       resolveRoot: () => ({ rootSessionKey: "agent:main:root", agentId: "main" }),
@@ -47,6 +50,7 @@ function makeState(overrides: Partial<DeviceScopeRoutingState> = {}): {
     },
     markScope,
     noteLeaseUsed,
+    closeDeviceControlSessions,
   };
 }
 

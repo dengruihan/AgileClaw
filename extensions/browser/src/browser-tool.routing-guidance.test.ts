@@ -182,18 +182,20 @@ describe("device-scoped browser routing", () => {
       nodeId: "device-9",
       command: "browser.proxy",
       sessionKey: "agent:main:root",
-      params: expect.objectContaining({
-        sessionKey: "agent:main:root",
-        leaseToken: "lease-9",
-      }),
+      params: expect.objectContaining({ leaseToken: "lease-9" }),
     });
+    expect(
+      (nodeInvoke![2] as { params: Record<string, unknown> }).params.sessionKey,
+    ).toBeUndefined();
     expect(client.browserStatus).not.toHaveBeenCalled();
   });
 
   it("fails per call when the scoped device does not advertise browser control", async () => {
     deviceScopeMocks.readBrowserDeviceControlScope.mockReturnValue(scopedDevice);
     config.loadConfig.mockReturnValue({ browser: {} });
-    nodes.listNodes.mockResolvedValue([scopedDeviceNode({ caps: [], commands: [] })]);
+    // A browser capability alone is not enough: the proxy command must be
+    // advertised, because that is what device-scope control dispatches to.
+    nodes.listNodes.mockResolvedValue([scopedDeviceNode({ caps: ["browser"], commands: [] })]);
     const tool = registeredTool({
       config: { gateway: { nodes: { browser: { mode: "off" } } } },
       getRuntimeConfig: () => ({ browser: {} }),
