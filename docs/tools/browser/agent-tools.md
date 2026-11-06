@@ -46,6 +46,7 @@ How it maps:
   - Explicit `target="host"` selects the Gateway host and bypasses configured node routing. Explicit `target="node"` or a `node` selector requests node routing; `gateway.nodes.browser.mode="off"` rejects it.
   - In sandboxed sessions, both host and node control require `agents.defaults.sandbox.browser.allowHostControl=true`. Existing-session profiles cannot use the sandbox browser. When a bridge is available, they use the host unless a node is explicitly selected, subject to the same host-control policy.
   - With an enabled node pin, no sandbox bridge, and host control allowed, the tool description identifies the configured node as the default. Other configurations retain the existing tool description; the guidance does not depend on live node connectivity.
+  - Under a session device scope (`use_device`), routing ignores these selectors: every action runs on the scoped device through its `browser.proxy` commands, admitted per call with the session's root identity and occupancy lease token. Host, sandbox, dashboard, and host-only lifecycle actions are rejected; an offline device or one that does not advertise `browser.proxy` fails the call with a reason. The tool never falls back to the Gateway host or another node. See [Node execution and device scope](/nodes/node-exec#use-device-and-tool-routing).
 
 This keeps the agent deterministic and avoids brittle selectors.
 

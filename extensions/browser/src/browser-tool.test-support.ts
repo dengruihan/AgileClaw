@@ -182,6 +182,12 @@ const gatewayMocks = vi.hoisted(() => ({
   })),
 }));
 
+const deviceScopeMocks = vi.hoisted(() => ({
+  readBrowserDeviceControlScope: vi.fn<
+    () => { deviceId: string; rootSessionKey: string; leaseToken: string } | undefined
+  >(() => undefined),
+}));
+
 const configMocks = vi.hoisted(() => ({
   loadConfig: vi.fn<
     () => {
@@ -237,6 +243,7 @@ vi.mock("openclaw/plugin-sdk/agent-harness-runtime", async (importOriginal) => (
   callGatewayTool: gatewayMocks.callGatewayTool,
   hasGatewayToolRoutingContext: gatewayMocks.hasGatewayToolRoutingContext,
   listNodes: nodesUtilsMocks.listNodes,
+  readBrowserDeviceControlScope: deviceScopeMocks.readBrowserDeviceControlScope,
 }));
 vi.mock("openclaw/plugin-sdk/channel-actions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("openclaw/plugin-sdk/channel-actions")>()),
@@ -375,6 +382,7 @@ export function resetBrowserToolMocks() {
   vi.clearAllMocks();
   gatewayMocks.hasGatewayToolRoutingContext.mockReturnValue(true);
   gatewayMocks.readGatewayToolOperatorScopes.mockReturnValue(undefined);
+  deviceScopeMocks.readBrowserDeviceControlScope.mockReset().mockReturnValue(undefined);
   browserHostAvailabilityMocks.isBrowserHostAvailable.mockReset().mockReturnValue(false);
   configMocks.loadConfig.mockReturnValue({ browser: {} });
   browserConfigMocks.resolveBrowserConfig.mockReturnValue({
@@ -425,6 +433,7 @@ export {
   browserConfigMocks,
   browserHostAvailabilityMocks,
   configMocks,
+  deviceScopeMocks,
   gatewayMocks,
   nodesUtilsMocks,
   pathValidationMocks,

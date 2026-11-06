@@ -65,7 +65,7 @@ export function unsupportedDeviceToolMessage(toolName: string, deviceId: string)
     return "device-scoped exec is foreground, so the process tool has no background work to control on the device. Switch back with use_device device='gateway' to manage Gateway background processes.";
   }
   if (kind === "control") {
-    return `tool ${toolName} has no device-routed transport yet; interactive browser/desktop control runs through its plugin transport on the Gateway. Switch back with use_device device='gateway' to use it.`;
+    return `tool ${toolName} drives a Gateway-owned surface with no device-routed transport; browser and computer control are the device-routed control tools. Switch back with use_device device='gateway' to use it.`;
   }
   if (kind === "file") {
     return `tool ${toolName} has no device-routed file adapter; device file tools support read, write, edit, apply_patch, and ls. Switch back with use_device device='gateway' to use it on the Gateway.`;

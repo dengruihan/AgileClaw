@@ -5,7 +5,7 @@ import type {
   OpenClawPluginToolContext,
 } from "openclaw/plugin-sdk/plugin-entry";
 import { createTestPluginApi } from "openclaw/plugin-sdk/plugin-test-api";
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerBrowserPlugin } from "../plugin-registration.js";
 import { createBrowserTool } from "./browser-tool.js";
 const {
@@ -15,6 +15,7 @@ const {
   gatewayMocks: gateway,
   nodesUtilsMocks: nodes,
   resetBrowserToolMocks,
+  deviceScopeMocks,
 } = await import("./browser-tool.test-support.js");
 
 vi.mock("../register.runtime.js", () => ({
@@ -142,4 +143,97 @@ it.each<{
     expect(tool.description).toContain("it bypasses configured node routing");
     expect(tool.description).toContain("report the routing error rather than switching to host");
   }
+});
+
+describe("device-scoped browser routing", () => {
+  const scopedDevice = {
+    deviceId: "device-9",
+    rootSessionKey: "agent:main:root",
+    leaseToken: "lease-9",
+  };
+
+  function scopedDeviceNode(overrides: Record<string, unknown> = {}) {
+    return {
+      nodeId: "device-9",
+      connected: true,
+      caps: ["browser"],
+      commands: ["browser.proxy", "browser.proxy.upload.v1"],
+      ...overrides,
+    };
+  }
+
+  it("pins the browser tool to the session's device and admits the proxy under the lease", async () => {
+    deviceScopeMocks.readBrowserDeviceControlScope.mockReturnValue(scopedDevice);
+    config.loadConfig.mockReturnValue({ browser: {} });
+    // An available host must not win, and neither may another browser node.
+    host.isBrowserHostAvailable.mockReturnValue(true);
+    nodes.listNodes.mockResolvedValue([
+      { nodeId: "node-1", connected: true, caps: ["browser"], commands: ["browser.proxy"] },
+      scopedDeviceNode(),
+    ]);
+    const tool = registeredTool({
+      config: { gateway: { nodes: { browser: { mode: "off" } } } },
+      getRuntimeConfig: () => ({ browser: {} }),
+    });
+    await tool.execute("device-proof", { action: "status" });
+    const nodeInvoke = gateway.callGatewayTool.mock.calls.find((call) => call[0] === "node.invoke");
+    expect(nodeInvoke).toBeDefined();
+    expect(nodeInvoke?.[2]).toMatchObject({
+      nodeId: "device-9",
+      command: "browser.proxy",
+      sessionKey: "agent:main:root",
+      params: expect.objectContaining({ leaseToken: "lease-9" }),
+    });
+    expect(
+      (nodeInvoke![2] as { params: Record<string, unknown> }).params.sessionKey,
+    ).toBeUndefined();
+    expect(client.browserStatus).not.toHaveBeenCalled();
+  });
+
+  it("fails per call when the scoped device does not advertise browser control", async () => {
+    deviceScopeMocks.readBrowserDeviceControlScope.mockReturnValue(scopedDevice);
+    config.loadConfig.mockReturnValue({ browser: {} });
+    // A browser capability alone is not enough: the proxy command must be
+    // advertised, because that is what device-scope control dispatches to.
+    nodes.listNodes.mockResolvedValue([scopedDeviceNode({ caps: ["browser"], commands: [] })]);
+    const tool = registeredTool({
+      config: { gateway: { nodes: { browser: { mode: "off" } } } },
+      getRuntimeConfig: () => ({ browser: {} }),
+    });
+    await expect(tool.execute("device-proof", { action: "status" })).rejects.toThrow(
+      /device-9 does not advertise browser control \(browser\.proxy\).*no gateway fallback/is,
+    );
+    expect(gateway.callGatewayTool).not.toHaveBeenCalled();
+  });
+
+  it("fails per call when the scoped device is not connected", async () => {
+    deviceScopeMocks.readBrowserDeviceControlScope.mockReturnValue(scopedDevice);
+    config.loadConfig.mockReturnValue({ browser: {} });
+    nodes.listNodes.mockResolvedValue([scopedDeviceNode({ connected: false })]);
+    const tool = registeredTool({
+      config: { gateway: { nodes: { browser: { mode: "off" } } } },
+      getRuntimeConfig: () => ({ browser: {} }),
+    });
+    await expect(tool.execute("device-proof", { action: "status" })).rejects.toThrow(
+      /device-9 is not connected.*no gateway fallback/is,
+    );
+    expect(gateway.callGatewayTool).not.toHaveBeenCalled();
+  });
+
+  it("fails per call when node browser proxying is disabled", async () => {
+    deviceScopeMocks.readBrowserDeviceControlScope.mockReturnValue(scopedDevice);
+    config.loadConfig.mockReturnValue({
+      browser: {},
+      gateway: { nodes: { browser: { mode: "off" } } },
+    });
+    nodes.listNodes.mockResolvedValue([scopedDeviceNode()]);
+    const tool = registeredTool({
+      config: { gateway: { nodes: { browser: { mode: "off" } } } },
+      getRuntimeConfig: () => ({ browser: {}, gateway: { nodes: { browser: { mode: "off" } } } }),
+    });
+    await expect(tool.execute("device-proof", { action: "status" })).rejects.toThrow(
+      /gateway\.nodes\.browser\.mode=off/,
+    );
+    expect(gateway.callGatewayTool).not.toHaveBeenCalled();
+  });
 });

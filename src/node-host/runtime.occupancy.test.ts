@@ -406,6 +406,36 @@ describe("node host runtime per-call lease admission", () => {
     );
     expect(mocks.handleInvoke).toHaveBeenCalledTimes(1);
 
+    // Admission is the token's only consumer: the dispatched command payload
+    // never carries it, because command contracts are closed schemas.
+    await runtime.invoke(
+      invokeFrame({
+        id: "admitted-with-params",
+        command: "test.duplex",
+        sessionKey: "agent:root:1",
+        paramsJSON: JSON.stringify({ leaseToken: "lease-token", keep: "me" }),
+      }),
+    );
+    expect(mocks.handleInvoke).toHaveBeenCalledTimes(2);
+    const dispatched = (
+      mocks.handleInvoke.mock.calls as unknown as Array<
+        [{ command: string; paramsJSON: string | null }]
+      >
+    )[1]?.[0];
+    expect(dispatched?.command).toBe("test.duplex");
+    expect(JSON.parse(dispatched?.paramsJSON ?? "{}")).toEqual({ keep: "me" });
+    // The occupancy lifecycle keeps its own params: renew and release read the
+    // token from them by contract.
+    await runtime.invoke(
+      invokeFrame({
+        id: "renew",
+        command: "occupancy.renew.v1",
+        paramsJSON: JSON.stringify({ sessionKey: "agent:root:1", leaseToken: "lease-token" }),
+      }),
+    );
+    const renewResult = results.find((result) => result.id === "renew");
+    expect(renewResult?.ok).toBe(true);
+
     // A newer turn invalidates the previous token on the very next call.
     await runtime.invoke(
       invokeFrame({
@@ -429,7 +459,7 @@ describe("node host runtime per-call lease admission", () => {
     // Operator approval policy governs the device rather than a turn, so the
     // Gateway's approvals UI and CLI stay reachable while the lease is held.
     await runtime.invoke(invokeFrame({ id: "approvals", command: "system.execApprovals.get" }));
-    expect(mocks.handleInvoke).toHaveBeenCalledTimes(2);
+    expect(mocks.handleInvoke).toHaveBeenCalledTimes(3);
 
     await runtime.close();
   });

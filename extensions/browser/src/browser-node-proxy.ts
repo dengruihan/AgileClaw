@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { readBrowserDeviceControlScope } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { createSubsystemLogger } from "openclaw/plugin-sdk/runtime-env";
 import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import {
@@ -82,6 +83,13 @@ async function callBrowserProxy(
   const { proxyTimeoutMs, nodeInvokeTimeoutMs, gatewayTimeoutMs } = resolveBrowserProxyTimeouts(
     params.timeoutMs,
   );
+  // A device-scoped session runs its browser on the leased device: every proxy
+  // invoke carries that session's root identity and occupancy lease token, and
+  // the call may never fall back to the Gateway host.
+  const deviceScope = readBrowserDeviceControlScope();
+  if (deviceScope && deviceScope.deviceId !== params.nodeId) {
+    throw new Error("Browser control is bound to the session's scoped device by use_device.");
+  }
   if (
     isBrowserProxyUploadRequest(params) &&
     !params.declaredCommands.includes(BROWSER_PROXY_UPLOAD_COMMAND)
@@ -117,8 +125,13 @@ async function callBrowserProxy(
           timeoutMs: proxyTimeoutMs,
           profile: params.profile,
           errorEnvelope: BROWSER_PROXY_ERROR_ENVELOPE,
+          // Occupancy admission reads the lease token from the command params
+          // and the node strips it after admission; the session identity rides
+          // the invoke envelope, so params stay on the proxy contract.
+          ...(deviceScope ? { leaseToken: deviceScope.leaseToken } : {}),
         },
         idempotencyKey: crypto.randomUUID(),
+        ...(deviceScope ? { sessionKey: deviceScope.rootSessionKey } : {}),
       },
       {
         scopes: ["operator.admin"],
@@ -126,7 +139,11 @@ async function callBrowserProxy(
       },
     );
   } catch (error) {
-    if (params.allowAutomaticHostFallback && isBrowserControlHostUnavailableError(error)) {
+    if (
+      !deviceScope &&
+      params.allowAutomaticHostFallback &&
+      isBrowserControlHostUnavailableError(error)
+    ) {
       throw new BrowserNodeSafeFallbackError("browser node control host unavailable", error);
     }
     throw error;

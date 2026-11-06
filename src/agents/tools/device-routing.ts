@@ -19,6 +19,8 @@ import { readSessionScopeLease } from "../../gateway/session-scope-lease.js";
 import { getAgentToolExecutionLocation, copyAgentToolMetadata } from "../agent-tool-metadata.js";
 import type { AnyAgentTool } from "../agent-tools.types.js";
 import type { AgentToolResult } from "../runtime/index.js";
+import type { ComputerContextEpoch } from "./computer-tool-shared.js";
+import { deviceControlAdapter } from "./device-control.js";
 import { runDeviceExec } from "./device-exec.js";
 import {
   applyDevicePatch,
@@ -63,6 +65,20 @@ export type DeviceScopeRoutingState = {
         permissionMode?: string;
       }
     | undefined;
+  /**
+   * Frame/context identity the assembled computer tool shares with its routed
+   * device session, so unchanged-frame suppression survives device routing.
+   */
+  computerContextEpoch?: ComputerContextEpoch;
+  /**
+   * Register one routed control session's turn cleanup, tagged with its
+   * device. The turn owner runs these before releasing the occupancy lease,
+   * and use_device closes one device's sessions before committing a switch —
+   * both while the closing device's lease still admits the close.
+   */
+  registerDeviceControlCleanup?(deviceId: string, cleanup: (reason: string) => Promise<void>): void;
+  /** Run registered control-session cleanups; best effort, never throws. */
+  closeDeviceControlSessions(deviceId?: string, reason?: string): Promise<void>;
 };
 
 export function createDeviceScopeRoutingState(params: {
@@ -70,6 +86,7 @@ export function createDeviceScopeRoutingState(params: {
   agentId: string;
   sessionId?: string;
   runId?: string;
+  computerContextEpoch?: ComputerContextEpoch;
 }): DeviceScopeRoutingState {
   let cached:
     | {
@@ -83,11 +100,16 @@ export function createDeviceScopeRoutingState(params: {
   let switchPending = false;
   let leaseRootSessionKey: string | undefined;
   let leaseRegistry: DeviceScopeRegistry | undefined;
+  const deviceControlCleanups: Array<{
+    deviceId: string;
+    cleanup: (reason: string) => Promise<void>;
+  }> = [];
   const state: DeviceScopeRoutingState = {
     sessionKey: params.sessionKey,
     agentId: params.agentId,
     ...(params.sessionId ? { sessionId: params.sessionId } : {}),
     ...(params.runId ? { runId: params.runId } : {}),
+    ...(params.computerContextEpoch ? { computerContextEpoch: params.computerContextEpoch } : {}),
     get switchPending() {
       return switchPending;
     },
@@ -119,6 +141,26 @@ export function createDeviceScopeRoutingState(params: {
       // so the next placement call observes the new value.
       resolved = false;
       cached = undefined;
+    },
+    registerDeviceControlCleanup(deviceId, cleanup) {
+      deviceControlCleanups.push({ deviceId, cleanup });
+    },
+    async closeDeviceControlSessions(deviceId, reason = "turn-complete") {
+      const active = deviceControlCleanups.splice(0);
+      const keep: typeof active = [];
+      for (const entry of active) {
+        if (deviceId !== undefined && entry.deviceId !== deviceId) {
+          keep.push(entry);
+          continue;
+        }
+        try {
+          await entry.cleanup(reason);
+        } catch {
+          // A failed device close never blocks the lease release: the node
+          // clears its occupancy and executions on disconnect or release.
+        }
+      }
+      deviceControlCleanups.push(...keep);
     },
     resolveRoot() {
       if (!resolved) {
@@ -233,7 +275,10 @@ function recordRoutingLeaseReject(params: {
 }
 
 type AdapterCall = (params: {
+  toolCallId: string;
   params: Record<string, unknown>;
+  /** The assembled tool the routing wrapper replaced; control adapters delegate to it. */
+  source: AnyAgentTool;
   deviceId: string;
   rootSessionKey: string;
   leaseToken: string;
@@ -272,6 +317,8 @@ async function executeOnDevice(params: {
     scopeDeviceId?: string;
     permissionMode?: string;
   };
+  toolCallId: string;
+  source: AnyAgentTool;
   toolParams: Record<string, unknown>;
   signal?: AbortSignal;
   onUpdate?: (update: AgentToolResult<unknown>) => void;
@@ -294,7 +341,9 @@ async function executeOnDevice(params: {
       ? runDeviceExec
       : kind === "file"
         ? deviceFileAdapter(params.toolName)
-        : undefined;
+        : kind === "control"
+          ? deviceControlAdapter(params.toolName, params.state)
+          : undefined;
   if (!adapter) {
     throw new Error(unsupportedDeviceToolMessage(params.toolName, deviceId));
   }
@@ -320,7 +369,9 @@ async function executeOnDevice(params: {
   );
   const platform = getInProcessGatewayToolContext()?.nodeRegistry.get(deviceId)?.platform;
   return await adapter({
+    toolCallId: params.toolCallId,
     params: params.toolParams,
+    source: params.source,
     deviceId,
     rootSessionKey: params.root.rootSessionKey,
     leaseToken,
@@ -372,6 +423,8 @@ export function applyDeviceScopeToolRouting(
           toolName: source.name,
           state,
           root,
+          toolCallId,
+          source,
           toolParams: callParams,
           ...(signal ? { signal } : {}),
           ...(onUpdate ? { onUpdate } : {}),

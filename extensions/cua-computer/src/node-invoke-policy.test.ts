@@ -1,3 +1,4 @@
+import { parseScreenSnapshotParamsJSON } from "openclaw/plugin-sdk/computer-use";
 import type { OpenClawPluginNodeInvokePolicyContext } from "openclaw/plugin-sdk/plugin-entry";
 import { describe, expect, it, vi } from "vitest";
 import { createCuaComputerNodeInvokePolicy } from "./node-invoke-policy.js";
@@ -95,5 +96,39 @@ describe("cua-computer node invoke policy", () => {
       policy.handle({ invokeNode } as unknown as OpenClawPluginNodeInvokePolicyContext),
     ).resolves.toMatchObject({ ok: false, code: "COMPUTER_RISK_UNCLASSIFIED" });
     expect(invokeNode).not.toHaveBeenCalled();
+  });
+});
+
+describe("cua-computer admission-field contract", () => {
+  it("classifies exactly the handler payload after admission strips the lease token", () => {
+    const classifyRisk = createCuaComputerNodeInvokePolicy().classifyRisk;
+    if (!classifyRisk) {
+      throw new Error("missing CUA Computer risk classifier");
+    }
+    const handlerPayload = {
+      action: "left_click",
+      x: 10,
+      y: 20,
+      executionId: "123e4567-e89b-42d3-a456-426614174000",
+    };
+    expect(classifyRisk({ command: "computer.act", params: handlerPayload })).toEqual({
+      level: "ordinary",
+      family: "input",
+    });
+    // The occupancy admission token rides the wire params; the closed
+    // computer.act contract rejects it, so classification only ever sees the
+    // stripped payload. This pins that contract, not an incidental pass.
+    const admittedWire = { ...handlerPayload, leaseToken: "lease-token" };
+    expect(() => classifyRisk({ command: "computer.act", params: admittedWire })).toThrow(
+      /COMPUTER_INVALID_REQUEST/,
+    );
+    const snapshotWire = {
+      executionId: "123e4567-e89b-42d3-a456-426614174000",
+      screenIndex: 0,
+    };
+    expect(() =>
+      parseScreenSnapshotParamsJSON(JSON.stringify({ ...snapshotWire, leaseToken: "lease-token" })),
+    ).toThrow(/COMPUTER_INVALID_REQUEST/);
+    expect(parseScreenSnapshotParamsJSON(JSON.stringify(snapshotWire))).toEqual(snapshotWire);
   });
 });

@@ -309,3 +309,30 @@ describe("private worker computer runtime", () => {
     });
   });
 });
+
+describe("public computer command admission contract", () => {
+  it.each(["screen.snapshot", "computer.act"] as const)(
+    "rejects invalid %s params without opening an execution",
+    async (command) => {
+      await withComputer(async (host) => {
+        const invalid =
+          command === "screen.snapshot"
+            ? { executionId, leaseToken: "lease-token" }
+            : { executionId, action: "type", text: "fixture", leaseToken: "lease-token" };
+        expect(await host.invoke(invalid, command)).toMatchObject({
+          ok: false,
+          error: { message: expect.stringContaining("COMPUTER_INVALID_REQUEST") },
+        });
+        expect(host.openExecution).not.toHaveBeenCalled();
+        // The rejected call leaves no execution behind: the next call opens
+        // cleanly instead of meeting COMPUTER_HOST_BUSY.
+        const valid =
+          command === "screen.snapshot"
+            ? { executionId }
+            : { executionId, action: "type", text: "fixture" };
+        expect(await host.invoke(valid, command)).toMatchObject({ ok: true });
+        expect(host.openExecution).toHaveBeenCalledOnce();
+      }, false);
+    },
+  );
+});

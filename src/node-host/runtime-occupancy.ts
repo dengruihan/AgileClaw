@@ -18,6 +18,7 @@ import { NodeOccupancyControlGate } from "./node-occupancy-control-gate.js";
 import {
   NodeOccupancyOwner,
   extractOccupancyLeaseToken,
+  stripOccupancyLeaseToken,
   type NodeOccupancyAdmission,
 } from "./node-occupancy.js";
 
@@ -79,6 +80,9 @@ export class NodeOccupancyRuntime {
       await response.error(admission.code, admission.message);
       return { handoff: "answered" };
     }
+    // Admission consumed the token; command contracts are closed schemas and
+    // never see it. The envelope keeps carrying the session identity.
+    frame.paramsJSON = stripOccupancyLeaseToken(frame.paramsJSON);
     return { handoff: "dispatch", admission };
   }
 

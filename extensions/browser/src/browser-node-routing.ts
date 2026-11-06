@@ -1,4 +1,7 @@
-import { resolveNodeIdFromList } from "openclaw/plugin-sdk/agent-harness-runtime";
+import {
+  readBrowserDeviceControlScope,
+  resolveNodeIdFromList,
+} from "openclaw/plugin-sdk/agent-harness-runtime";
 /** Shared browser-node selection for agent tools and Gateway requests. */
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import { BROWSER_PROXY_COMMAND } from "./browser-node-commands.js";
@@ -21,6 +24,29 @@ export async function resolveBrowserNodeTarget<T extends BrowserNodeTarget>(para
   explicitTarget?: boolean;
   requireConnected?: boolean;
 }): Promise<T | null> {
+  const deviceScope = readBrowserDeviceControlScope();
+  if (deviceScope) {
+    // A device-scoped session pins browser control to its scoped device: the
+    // node proxy injects that session's lease identity, and no host or other
+    // node may answer. Selection fails per call with its own reason.
+    if (params.config.gateway?.nodes?.browser?.mode === "off") {
+      throw new Error(
+        "Node browser proxy is disabled (gateway.nodes.browser.mode=off); browser control cannot run on the session's device.",
+      );
+    }
+    const device = (await params.nodes()).find((node) => node.nodeId === deviceScope.deviceId);
+    if (!device || (params.requireConnected && !device.connected)) {
+      throw new Error(
+        `scoped device ${deviceScope.deviceId} is not connected; reconnect it before using browser control. There is no gateway fallback.`,
+      );
+    }
+    if (!device.commands?.includes(BROWSER_PROXY_COMMAND)) {
+      throw new Error(
+        `scoped device ${deviceScope.deviceId} does not advertise browser control (${BROWSER_PROXY_COMMAND}); it cannot run the browser tool under device scope. There is no gateway fallback.`,
+      );
+    }
+    return device;
+  }
   const policy = params.config.gateway?.nodes?.browser;
   const mode = policy?.mode ?? "auto";
   const explicit = params.explicitTarget || Boolean(params.requestedNode?.trim());

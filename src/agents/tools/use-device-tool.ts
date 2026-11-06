@@ -128,6 +128,13 @@ export function createUseDeviceTool(params: {
       params.state.switchPending = true;
       let result: unknown;
       try {
+        // The patch owner releases the previous device's lease once the new
+        // scope commits. Close that device's routed computer sessions first,
+        // while its lease still admits the close — otherwise the stale
+        // execution wedges the device for other sessions until a node restart.
+        if (previous && previous !== deviceId) {
+          await params.state.closeDeviceControlSessions(previous, "scope-switched");
+        }
         result = await callGatewayTool(
           "sessions.patch",
           gatewayOpts,

@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import {
   COMPUTER_EXECUTION_ID_PATTERN,
+  parseComputerActParamsJSON,
+  parseScreenSnapshotParamsJSON,
   type ComputerUseCapabilityDescriptor,
 } from "./computer-use-contract.js";
 import type {
@@ -184,6 +186,9 @@ export function registerComputerUseProvider(
     onDisconnect: async () => await closeExecution(undefined, "gateway-disconnect"),
     handle: async (paramsJSON, _io, context) => {
       const envelope = executionEnvelopeFromParams(paramsJSON);
+      // Validate before opening an execution so a rejected call never leaves
+      // one behind blocking the next session with COMPUTER_HOST_BUSY.
+      parseScreenSnapshotParamsJSON(paramsJSON);
       if (envelope.executionId) {
         return await (
           await getExecution(envelope.executionId, context)
@@ -220,6 +225,10 @@ export function registerComputerUseProvider(
         );
         return JSON.stringify({ ok: true });
       }
+      // Validate before opening an execution so a rejected call never leaves
+      // one behind blocking the next session with COMPUTER_HOST_BUSY. The node
+      // host owns the close envelope, not the command contract.
+      parseComputerActParamsJSON(paramsJSON);
       return await (
         await getExecution(envelope.executionId, context)
       ).act(paramsJSON, context?.signal);

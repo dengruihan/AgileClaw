@@ -97,6 +97,28 @@ export function extractOccupancyLeaseToken(paramsJSON?: string | null): string |
   }
 }
 
+/**
+ * Remove the admission lease token from one command's params. Admission is the
+ * token's only consumer, and command contracts are closed schemas that reject
+ * unknown fields, so the handler payload never carries it.
+ */
+export function stripOccupancyLeaseToken(paramsJSON?: string | null): string | null | undefined {
+  if (!paramsJSON) {
+    return paramsJSON;
+  }
+  let params: unknown;
+  try {
+    params = JSON.parse(paramsJSON);
+  } catch {
+    return paramsJSON;
+  }
+  if (typeof params !== "object" || params === null || !("leaseToken" in params)) {
+    return paramsJSON;
+  }
+  const { leaseToken: _admission, ...command } = params as Record<string, unknown>;
+  return JSON.stringify(command);
+}
+
 function validateIdentityField(value: string, label: string): string {
   const normalized = value.trim();
   if (!normalized || normalized.length > IDENTITY_MAX_LENGTH || normalized.includes("\0")) {

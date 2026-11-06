@@ -41,6 +41,19 @@ vi.mock("../sessions/tools/file-tool-planning.js", () => ({
   planFileEdit: (...args: unknown[]) => planFileEdit(...args),
 }));
 
+// The control adapters have their own focused suite; here a stub proves the
+// routing layer dispatches control tools to them with the call identity.
+const deviceControlCalls: Array<Record<string, unknown>> = [];
+vi.mock("./device-control.js", () => ({
+  deviceControlAdapter: (toolName: string, cacheKey: object) =>
+    toolName === "browser" || toolName === "computer"
+      ? (params: Record<string, unknown>) => {
+          deviceControlCalls.push({ toolName, cacheKey, ...params });
+          return Promise.resolve(textResult(`routed ${toolName}`, {}));
+        }
+      : undefined,
+}));
+
 const { applyDeviceScopeToolRouting, createDeviceScopeRoutingState } =
   await import("./device-routing.js");
 
@@ -86,6 +99,7 @@ afterEach(() => {
   nodeGet.mockReset();
   callGatewayTool.mockReset();
   planFileEdit.mockReset();
+  deviceControlCalls.length = 0;
 });
 
 function scopedDeviceFixture() {
@@ -291,14 +305,14 @@ describe("applyDeviceScopeToolRouting", () => {
     expect(callGatewayTool).not.toHaveBeenCalled();
   });
 
-  it("fails an unsupported control tool per call instead of running it on A", async () => {
+  it("routes the browser control tool to the scoped device with the call identity", async () => {
     resolveSessionScopeRoot.mockReturnValue({
       rootSessionKey: "agent:main:root",
       agentId: "main",
       entry: { sessionId: "sess-1", scopeDeviceId: "device-a" },
     });
     gatewayContext.mockReturnValue({ nodeRegistry: { get: nodeGet } });
-    nodeGet.mockReturnValue({ nodeId: "device-a" });
+    nodeGet.mockReturnValue({ nodeId: "device-a", platform: "linux" });
     recordSessionScopeLease({
       rootSessionKey: "agent:main:root",
       deviceId: "device-a",
@@ -307,11 +321,66 @@ describe("applyDeviceScopeToolRouting", () => {
       expiresAt: Number.MAX_SAFE_INTEGER,
     });
     const browser = placementTool("browser");
-    const [routed] = applyDeviceScopeToolRouting([browser.tool], routingState());
-    await expect(routed!.execute("call-1", { action: "snapshot" })).rejects.toThrow(
-      /no device-routed transport/,
-    );
+    const state = routingState();
+    const [routed] = applyDeviceScopeToolRouting([browser.tool], state);
+    await routed!.execute("call-9", { action: "snapshot" });
+    expect(deviceControlCalls).toHaveLength(1);
+    expect(deviceControlCalls[0]).toMatchObject({
+      toolName: "browser",
+      toolCallId: "call-9",
+      deviceId: "device-a",
+      rootSessionKey: "agent:main:root",
+      leaseToken: "lease-1",
+      params: { action: "snapshot" },
+    });
+    expect(deviceControlCalls[0]).toHaveProperty("source", browser.tool);
+    expect(deviceControlCalls[0]).toHaveProperty("cacheKey", state);
     expect(browser.execute).not.toHaveBeenCalled();
+  });
+
+  it("routes the computer control tool to the scoped device with the call identity", async () => {
+    resolveSessionScopeRoot.mockReturnValue({
+      rootSessionKey: "agent:main:root",
+      agentId: "main",
+      entry: { sessionId: "sess-1", scopeDeviceId: "device-a" },
+    });
+    gatewayContext.mockReturnValue({ nodeRegistry: { get: nodeGet } });
+    nodeGet.mockReturnValue({ nodeId: "device-a", platform: "linux" });
+    recordSessionScopeLease({
+      rootSessionKey: "agent:main:root",
+      deviceId: "device-a",
+      holder: "agent:main:root",
+      leaseToken: "lease-1",
+      expiresAt: Number.MAX_SAFE_INTEGER,
+    });
+    const computer = placementTool("computer");
+    const state = routingState();
+    const [routed] = applyDeviceScopeToolRouting([computer.tool], state);
+    await routed!.execute("call-10", { action: "screenshot" });
+    expect(deviceControlCalls).toHaveLength(1);
+    expect(deviceControlCalls[0]).toMatchObject({
+      toolName: "computer",
+      toolCallId: "call-10",
+      deviceId: "device-a",
+      leaseToken: "lease-1",
+    });
+    expect(computer.execute).not.toHaveBeenCalled();
+  });
+
+  it("fails a gateway-only control tool per call with a clear reason", async () => {
+    resolveSessionScopeRoot.mockReturnValue({
+      rootSessionKey: "agent:main:root",
+      agentId: "main",
+      entry: { sessionId: "sess-1", scopeDeviceId: "device-a" },
+    });
+    gatewayContext.mockReturnValue({ nodeRegistry: { get: nodeGet } });
+    nodeGet.mockReturnValue({ nodeId: "device-a" });
+    const screen = placementTool("screen");
+    const [routed] = applyDeviceScopeToolRouting([screen.tool], routingState());
+    await expect(routed!.execute("call-1", { action: "list" })).rejects.toThrow(
+      /Gateway-owned surface/,
+    );
+    expect(screen.execute).not.toHaveBeenCalled();
   });
 
   it("fails an unknown placement tool per call with a clear reason", async () => {

@@ -248,6 +248,10 @@ export { classifyEmbeddedAgentRunResultForModelFallback } from "../agents/embedd
 export { resolveUserPath } from "../utils.js";
 export { callGatewayTool, readGatewayToolOperatorScopes } from "../agents/tools/gateway.js";
 export { hasGatewayToolRoutingContext } from "../agents/tools/in-process-gateway.js";
+export {
+  readBrowserDeviceControlScope,
+  type BrowserDeviceControlScope,
+} from "../agents/tools/device-control.js";
 export type { NodeListNode } from "../agents/tools/nodes-utils.js";
 export {
   listNodes,

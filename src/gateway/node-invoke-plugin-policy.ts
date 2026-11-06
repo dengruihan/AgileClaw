@@ -66,6 +66,20 @@ function validateRiskClassification(
   return { level: value.level, family };
 }
 
+/**
+ * Drop the occupancy admission lease token from params for risk classification.
+ * The token rides inside command params so node admission can check it, but it
+ * is not part of any command contract; the node strips it again after
+ * admission, and classifiers only ever see the handler payload.
+ */
+function omitNodeInvokeAdmissionFields(params: unknown): unknown {
+  if (typeof params !== "object" || params === null || !("leaseToken" in params)) {
+    return params;
+  }
+  const { leaseToken: _admission, ...command } = params as Record<string, unknown>;
+  return command;
+}
+
 function resolveStandingApprovalScope(value: unknown): string | undefined {
   const approval = asOptionalRecord(value);
   const scope = normalizeOptionalString(approval?.scope);
@@ -186,7 +200,13 @@ export async function applyPluginNodeInvokePolicy(params: {
     try {
       risk =
         validateRiskClassification(
-          entry.policy.classifyRisk({ command: params.command, params: params.params }),
+          // Risk classifiers validate the command's own closed contract, and the
+          // node strips the admission lease token after occupancy admission, so
+          // classify exactly the payload the command handler will see.
+          entry.policy.classifyRisk({
+            command: params.command,
+            params: omitNodeInvokeAdmissionFields(params.params),
+          }),
         ) ?? undefined;
     } catch {
       // Argument classifiers run before the policy handler and transport. Do
