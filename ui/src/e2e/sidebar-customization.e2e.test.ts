@@ -232,7 +232,7 @@ suite.define(() => {
       );
       await expect
         .poll(() => trimmedTextContents(pinnedItems))
-        .toEqual(["Dashboards", "Systems", "Automations"]);
+        .toEqual(["Dashboards", "Automations"]);
       // Desktop renders no topbar row: the sidebar owns navigation.
       await expect.poll(() => page.locator(".topbar").isVisible()).toBe(false);
       const shellNav = page.locator(".shell-nav");
@@ -536,11 +536,11 @@ suite.define(() => {
       await usageItem.click();
       await expect
         .poll(() => trimmedTextContents(pinnedItems))
-        .toEqual(["Dashboards", "Systems", "Automations", "Usage"]);
+        .toEqual(["Dashboards", "Automations", "Usage"]);
       await page.reload();
       await expect
         .poll(() => trimmedTextContents(pinnedItems))
-        .toEqual(["Dashboards", "Systems", "Automations", "Usage"]);
+        .toEqual(["Dashboards", "Automations", "Usage"]);
       // The More menu is transient: closed after reload, unpinned routes inside.
       await expect.poll(() => moreButton.getAttribute("aria-expanded")).toBe("false");
       await openSidebarMoreMenu(page);
@@ -562,7 +562,7 @@ suite.define(() => {
       await menu.getByRole("menuitem", { name: "Reset pinned items" }).click();
       await expect
         .poll(() => trimmedTextContents(pinnedItems))
-        .toEqual(["Dashboards", "Systems", "Automations"]);
+        .toEqual(["Dashboards", "Automations"]);
 
       // The primary new-session action sits above Pages; the old header
       // search/new-session icons are gone.

@@ -184,13 +184,11 @@ machine. It can attach to an existing loopback RFB server, or supervise a
 headless TigerVNC/XFCE desktop on Linux. It is a Labs feature and is off by
 default.
 
-In **Systems**, select the **Gateway host** to check for an existing screen-sharing
-server. When one is available, **Enable desktop access in OpenClaw** turns on Host
-Desktop without restarting the Gateway; the desktop becomes available on the
-same connection. Gateway administrator access is required. Detection does not
-expose the desktop or change system permissions. Existing managed Linux desktops
-can be enabled from the same view. **Settings → Labs → Host Desktop** remains
-available to turn access off or manage it separately.
+**Settings → Labs → Host Desktop** turns Host Desktop on or off without
+restarting the Gateway; the desktop then becomes available to the Control UI
+Desktop panel on the same connection. Gateway administrator access is required.
+Turning the setting on does not change system permissions: attach an existing
+loopback RFB server, or let the Gateway supervise a managed Linux desktop.
 
 Enabling macOS Screen Sharing, a paired node's Desktop sharing, or screenshot
 capture alone does not enable the Gateway's desktop. On macOS, Remote Management
@@ -334,7 +332,7 @@ shared SQLite migration ledger; it does not rewrite your config. Doctor applies
 the same preservation when importing older pairing files.
 
 A paired macOS, Windows, or Linux node can expose its own desktop in the same
-Control UI Desktop panel and **Systems**. Desktop sharing is enabled by default and always
+Control UI Desktop panel. Desktop sharing is enabled by default and always
 uses an existing node-local RFB server on `127.0.0.1`; the Gateway never asks a
 node to connect to a caller-selected host or port.
 

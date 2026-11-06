@@ -3243,7 +3243,6 @@
       "ui/src/e2e/stale-build-recovery.e2e.test.ts": 2,
       "ui/src/e2e/subagent-inspector.e2e.test.ts": 1,
       "ui/src/e2e/subagent-task-notice.e2e.test.ts": 3,
-      "ui/src/e2e/systems-workspace.e2e.test.ts": 9,
       "ui/src/e2e/task-activity-overview.e2e.test.ts": 4,
       "ui/src/e2e/task-command-detail.e2e.test.ts": 3,
       "ui/src/e2e/task-panel-full-message.e2e.test.ts": 2,

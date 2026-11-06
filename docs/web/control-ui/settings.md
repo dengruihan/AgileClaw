@@ -502,8 +502,9 @@ Inside the [macOS app](/platforms/macos), Settings includes a **This Mac** group
 for settings on that Mac. **This Mac** (`/settings/device`) contains app behavior,
 device capabilities, browser login import and cookie sync, and developer tools.
 **Capabilities → Desktop sharing** is enabled by default and makes this Mac's
-existing Screen Sharing service available in **Systems** after pairing approval.
-It is separate from agent **Computer Control** and **Keep computer awake**.
+existing Screen Sharing service available in the Control UI Desktop panel after
+pairing approval. It is separate from agent **Computer Control** and
+**Keep computer awake**.
 Changing it reconnects this Mac automatically; it does not change the remote
 Gateway host's desktop setting or enable macOS Screen Sharing.
 **Permissions** (`/settings/device/permissions`) shows macOS permission status

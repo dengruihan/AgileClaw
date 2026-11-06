@@ -23,7 +23,6 @@ export const SIDEBAR_NAV_ROUTES = [
   "usage",
   "cron",
   "sessions",
-  "systems",
   "activity",
   "meetings",
   "apps",
@@ -55,7 +54,7 @@ export type SidebarZoneEntry =
 
 // Keep the highest-value operational destinations visible on first use. Users
 // can still replace this route set through the customize menu.
-export const DEFAULT_SIDEBAR_ENTRIES = (["dashboards", "systems", "cron"] as const).map((route) =>
+export const DEFAULT_SIDEBAR_ENTRIES = (["dashboards", "cron"] as const).map((route) =>
   serializeSidebarEntry({ type: "route", route }),
 );
 
@@ -336,7 +335,6 @@ const NAVIGATION_PRESENTATION: Record<NavigationRouteId, NavigationPresentation>
   channels: navigationPresentation("link", "channels"),
   connection: navigationPresentation("radio", "connection"),
   sessions: navigationPresentation("fileText", "sessions"),
-  systems: navigationPresentation("monitor", "systems"),
   usage: navigationPresentation("coins", "usage"),
   cron: navigationPresentation("calendarClock", "cron"),
   skills: navigationPresentation("bookOpenText", "skills"),

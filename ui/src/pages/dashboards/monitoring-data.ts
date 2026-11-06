@@ -9,7 +9,7 @@ import type { ApplicationGateway } from "../../app/gateway.ts";
 import { formatUiError } from "../../lib/format-error.ts";
 import { readSystemInfo } from "../../lib/system-info.ts";
 
-export type SystemsInventory = {
+export type MonitoringInventory = {
   environments: EnvironmentSummary[];
   nodes: NodeListNode[];
   gatewaySystemInfo: SystemInfoResult | null;
@@ -17,24 +17,24 @@ export type SystemsInventory = {
   errors: { nodes?: string; systemInfo?: string };
 };
 
-type SystemsSessionRelation = {
+export type MonitoringSessionRelation = {
   // These are recorded bindings, not proof that a model turn ran on the host.
   kind: "placement" | "retained-placement" | "runner" | "exec-binding" | "gateway";
   session: GatewaySessionRow;
 };
 
-export type SystemsInventoryRow = {
+export type MonitoringRow = {
   environment: EnvironmentSummary;
   node?: NodeListNode;
   gatewaySystemInfo?: SystemInfoResult;
-  sessions: SystemsSessionRelation[];
+  sessions: MonitoringSessionRelation[];
 };
 
-/** The route owns connection epochs, refresh scheduling and publication of this snapshot. */
-export async function loadSystemsInventory(
+/** The dashboards monitoring owner schedules refreshes and publishes this snapshot. */
+export async function loadMonitoringInventory(
   gateway: ApplicationGateway,
   options: { isCurrent: () => boolean; signal?: AbortSignal; fresh?: boolean },
-): Promise<SystemsInventory | undefined> {
+): Promise<MonitoringInventory | undefined> {
   const client = gateway.snapshot.client;
   if (!client || !options.isCurrent() || options.signal?.aborted) {
     return undefined;
@@ -52,10 +52,14 @@ export async function loadSystemsInventory(
   if (!options.isCurrent() || options.signal?.aborted) {
     return undefined;
   }
+  // A hidden document cancels its reads and the next visibility check owns the
+  // retry. An unavailable `system.info` method is not a cancelled load: publish
+  // the inventory without measurements instead of retrying forever.
   if (
     systemInfo.status === "rejected" &&
     systemInfo.reason instanceof DOMException &&
-    systemInfo.reason.name === "AbortError"
+    systemInfo.reason.name === "AbortError" &&
+    document.visibilityState === "hidden"
   ) {
     return undefined;
   }
@@ -77,13 +81,13 @@ export async function loadSystemsInventory(
 }
 
 /** Join only exact Gateway identities; desktop capability never determines row membership. */
-export function projectSystemsInventory(
-  inventory: SystemsInventory,
+export function projectMonitoringInventory(
+  inventory: MonitoringInventory,
   sessions: readonly GatewaySessionRow[],
-): SystemsInventoryRow[] {
+): MonitoringRow[] {
   const nodes = new Map(inventory.nodes.map((node) => [`node:${node.nodeId}`, node]));
-  const relations = new Map<string, SystemsSessionRelation[]>();
-  const add = (id: string, kind: SystemsSessionRelation["kind"], session: GatewaySessionRow) => {
+  const relations = new Map<string, MonitoringSessionRelation[]>();
+  const add = (id: string, kind: MonitoringSessionRelation["kind"], session: GatewaySessionRow) => {
     const existing = relations.get(id);
     const relation = { kind, session };
     if (existing) {

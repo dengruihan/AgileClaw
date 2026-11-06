@@ -12,8 +12,12 @@ import {
 } from "../../app/lazy-custom-element.ts";
 import { i18n } from "../../i18n/index.ts";
 import type { SessionListOptions, SessionListSnapshot } from "../../lib/sessions/index.ts";
-import { createApplicationContextProvider } from "../../test-helpers/application-context.ts";
+import {
+  createApplicationContextProvider,
+  createApplicationGateway,
+} from "../../test-helpers/application-context.ts";
 import { createTestGatewayClient } from "../../test-helpers/gateway-client.ts";
+import { gatewayHelloForMethods } from "../../test-helpers/gateway-methods.ts";
 import { settleLitElement } from "../../test-helpers/lit-settle.ts";
 import type { DashboardsRouteData } from "./view.ts";
 import "./dashboards-page.ts";
@@ -66,6 +70,29 @@ function routeData(sessionRow: GatewaySessionRow): DashboardsRouteData {
 
 function createDashboardClient() {
   return createTestGatewayClient(async (method, params) => {
+    if (method === "environments.list") {
+      return { environments: [] };
+    }
+    if (method === "node.list") {
+      return { nodes: [] };
+    }
+    if (method === "system.info") {
+      return {
+        machineName: "Gateway host",
+        hostname: "gateway-host",
+        platform: "linux",
+        release: "test",
+        arch: "x64",
+        osLabel: "Linux",
+        nodeVersion: "v26",
+        pid: 1,
+        uptimeMs: 1_000,
+        cpuCount: 4,
+        memoryTotalBytes: 8_192,
+        memoryFreeBytes: 4_096,
+        loadAverage: [0.5, 0.4, 0.3],
+      };
+    }
     if (method !== "board.get") {
       throw new Error(`Unexpected Gateway method: ${method}`);
     }
@@ -149,12 +176,15 @@ describe("DashboardsPage", () => {
       gateway: {
         snapshot: { client: createDashboardClient(), phase: "connected", hello: null },
         subscribe: () => () => undefined,
+        subscribeEvents: () => () => undefined,
       },
       sessions: {
+        state: { result: null },
         listSnapshot(query: SessionListOptions) {
           return snapshots.get(queryKey(query))!;
         },
         subscribeList,
+        subscribe: () => () => undefined,
         refreshList,
       },
       agentSelection: {
@@ -272,20 +302,28 @@ describe("DashboardsPage", () => {
         resolvePage = resolve;
       });
       const list = vi.fn(async () => (retired ? pendingPage : second));
-      let publishGateway: () => void = () => undefined;
+      const gatewayListeners = new Set<(snapshot: ApplicationGatewaySnapshot) => void>();
+      const publishGateway = () => {
+        for (const listener of gatewayListeners) {
+          listener(context.gateway.snapshot);
+        }
+      };
       const context = {
         basePath: "",
         gateway: {
           snapshot: { client: createDashboardClient(), phase: "connected", hello: null },
           subscribe: (listener: (snapshot: ApplicationGatewaySnapshot) => void) => {
-            publishGateway = () => listener(context.gateway.snapshot);
-            return () => undefined;
+            gatewayListeners.add(listener);
+            return () => gatewayListeners.delete(listener);
           },
+          subscribeEvents: () => () => undefined,
         },
         sessions: {
+          state: { result: null },
           list,
           listSnapshot: () => snapshot,
           subscribeList: () => () => undefined,
+          subscribe: () => () => undefined,
           refreshList: vi.fn(async () => undefined),
         },
         agentSelection: {
@@ -408,5 +446,114 @@ describe("DashboardsPage", () => {
         heading.textContent?.trim(),
       ),
     ).toEqual(["Alpha signals", "Bravo health", "Zulu monitor"]);
+  });
+  it("renders machine monitoring from the dashboards owner with one poll per interval", async () => {
+    vi.useFakeTimers();
+    try {
+      const requests = new Map<string, number>();
+      const systemInfo = {
+        machineName: "Gateway machine",
+        hostname: "gateway-host",
+        platform: "linux",
+        release: "test",
+        arch: "x64",
+        osLabel: "Linux",
+        nodeVersion: "v26",
+        pid: 1,
+        uptimeMs: 1_000,
+        cpuCount: 4,
+        memoryTotalBytes: 8_192,
+        memoryFreeBytes: 4_096,
+        loadAverage: [0.5, 0.4, 0.3],
+        diskTotalBytes: 16_384,
+        diskAvailableBytes: 8_192,
+      };
+      const client = createTestGatewayClient(async (method) => {
+        requests.set(method, (requests.get(method) ?? 0) + 1);
+        switch (method) {
+          case "environments.list":
+            return {
+              environments: [
+                { id: "gateway", type: "local", label: "Gateway machine", status: "available" },
+                { id: "worker-one", type: "worker", label: "Cloud worker", status: "available" },
+                {
+                  id: "worker-off",
+                  type: "worker",
+                  label: "Offline worker",
+                  status: "unavailable",
+                },
+              ],
+            };
+          case "node.list":
+            return { nodes: [] };
+          case "system.info":
+            return systemInfo;
+          default:
+            throw new Error(`Unexpected Gateway method: ${method}`);
+        }
+      });
+      const gateway = createApplicationGateway({
+        client,
+        phase: "connected",
+        hello: gatewayHelloForMethods(["system.info"]),
+        sessionKey: "",
+        offlineStable: false,
+        canvasPluginSurfaceUrl: null,
+        assistantAgentId: null,
+        lastError: null,
+        lastErrorCode: null,
+      } as ApplicationGatewaySnapshot);
+      const context = {
+        basePath: "",
+        gateway: gateway.gateway,
+        sessions: {
+          state: { result: null },
+          subscribe: () => () => undefined,
+          listSnapshot: () => ({ result: null, agentId: null, loading: false, error: null }),
+          subscribeList: () => () => undefined,
+          refreshList: vi.fn(async () => undefined),
+        },
+        agentSelection: {
+          state: { selectedId: "main", scopeId: null },
+          subscribe: () => () => undefined,
+        },
+        agents: { state: { agentsList: null } },
+      } as unknown as ApplicationContext;
+      const element = document.createElement("openclaw-dashboards-page") as DashboardsPageElement;
+      element.routeData = routeData(row("agent:main:before", "Before"));
+      const provider = createApplicationContextProvider(context);
+      provider.append(element);
+      document.body.append(provider);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await settleLitElement(element);
+      await vi.advanceTimersByTimeAsync(1);
+      await settleLitElement(element);
+
+      const monitoring = element.querySelector("[data-monitoring]");
+      expect(monitoring).not.toBeNull();
+      expect(monitoring?.textContent).toContain("Gateway machine");
+      expect(monitoring?.textContent).toContain("Cloud worker");
+      expect(
+        Array.from(
+          element.querySelectorAll<HTMLElement>("[data-monitoring-machine]"),
+          (machine) => machine.dataset.status,
+        ),
+      ).toEqual(["available", "available", "unavailable"]);
+      expect(element.querySelectorAll("[data-monitoring] openclaw-sparkline")).toHaveLength(3);
+      expect(requests.get("environments.list")).toBe(1);
+      expect(requests.get("node.list")).toBe(1);
+      expect(requests.get("system.info")).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(requests.get("environments.list")).toBe(2);
+      expect(requests.has("backup.status")).toBe(false);
+
+      element.remove();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(requests.get("environments.list")).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

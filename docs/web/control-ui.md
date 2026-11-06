@@ -280,7 +280,7 @@ preview comes from each agent's most recently active session.
 
 - [Connect and pair](/web/control-ui/connect-and-pair) — pair a browser or phone, reach the UI over Tailscale, and fix a blank page.
 - [Sessions and sidebar](/web/control-ui/sessions-and-sidebar) — sidebar zones, session menus, and the New session page.
-- [Systems workspace](/web/control-ui/sessions-and-sidebar#systems-workspace) — contextual machine navigation and a desktop-first workspace.
+- [Machine monitoring](/web/control-ui/sessions-and-sidebar#machine-monitoring) — machine status and resource readings on the Dashboards page.
 - [Chat](/web/control-ui/chat) — composer controls, the session rail, transcript rendering, and hosted embeds.
 - [Panels and docks](/web/control-ui/panels) — conversation docks, the operator terminal, and the browser panel.
 - [Settings](/web/control-ui/settings) — identity, appearance, plugins, updates, MCP, activity, and meetings.

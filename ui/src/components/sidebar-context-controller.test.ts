@@ -19,12 +19,12 @@ it("updates contextual navigation from its router and retires the subscription o
   const router = createRouter<RouteId, unknown, RouteModule>({
     routes: [
       definePage({
-        id: "systems",
-        path: "/systems",
+        id: "sessions",
+        path: "/sessions",
         component: () => ({
           render: () => "workspace",
           renderSidebar: (_data: unknown, pending: boolean) =>
-            pending ? "loading machines" : "machine inventory",
+            pending ? "loading sessions" : "session filters",
         }),
         loader: () => loaded.promise,
       }),
@@ -38,20 +38,20 @@ it("updates contextual navigation from its router and retires the subscription o
   );
   sidebar.router = router;
   await sidebar.updateComplete;
-  const navigation = router.navigate("systems", {});
+  const navigation = router.navigate("sessions", {});
   await vi.waitFor(() => expect(sidebar.contextualSidebar?.loaderPending).toBe(true));
   const pending = sidebar.contextualSidebar;
-  const data = { machine: "worker-one" };
+  const data = { session: "alpha" };
   loaded.resolve(data);
   await navigation;
   await sidebar.updateComplete;
   expect(sidebar.contextualSidebar?.loaderPending).toBe(false);
   expect(sidebar.contextualSidebar?.data).toBe(data);
   expect(pending?.loaderPending).toBe(true);
-  expect(sidebar.querySelector(".sidebar-shell__body")?.textContent).toContain("machine inventory");
+  expect(sidebar.querySelector(".sidebar-shell__body")?.textContent).toContain("session filters");
   sidebar.remove();
   expect(sidebar.contextualSidebar).toBeUndefined();
   await router.navigate("cron", {});
-  await router.navigate("systems", {});
+  await router.navigate("sessions", {});
   expect(sidebar.contextualSidebar).toBeUndefined();
 });

@@ -2165,7 +2165,6 @@
   "ui/src/pages/sessions/route.ts",
   "ui/src/pages/skill-workshop/route.ts",
   "ui/src/pages/skills/route.ts",
-  "ui/src/pages/systems/route.ts",
   "ui/src/pages/terminal/route.ts",
   "ui/src/pages/usage/route.ts",
   "ui/src/pages/workboard/route-location.ts",

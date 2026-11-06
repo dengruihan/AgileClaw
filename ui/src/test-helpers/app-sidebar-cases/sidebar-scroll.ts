@@ -15,7 +15,7 @@ describe("AppSidebar scroll", () => {
     scroller.scrollTop = 75;
     scroller.dispatchEvent(new Event("scroll"));
     sidebar.contextualSidebar = {
-      key: "systems",
+      key: "activity",
       data: undefined,
       loaderPending: false,
       render: () => html`<p>Gateway machine</p>`,
@@ -32,7 +32,7 @@ describe("AppSidebar scroll", () => {
     expect(sessions.hidden).toBe(false);
     expect(scroller.scrollTop).toBe(75);
     sidebar.contextualSidebar = {
-      key: "systems",
+      key: "activity",
       data: undefined,
       loaderPending: false,
       render: () => html`<p>Gateway machine</p>`,
@@ -47,7 +47,7 @@ describe("AppSidebar scroll", () => {
     const gateway = createGateway({} as GatewayBrowserClient);
     const { sidebar } = await mountSidebar(gateway, createSessions("main", ["agent:main:main"]));
     sidebar.contextualSidebar = {
-      key: "systems",
+      key: "activity",
       data: undefined,
       loaderPending: false,
       render: () => html`<p>Gateway machine</p>`,

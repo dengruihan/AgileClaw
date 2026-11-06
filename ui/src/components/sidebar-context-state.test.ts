@@ -7,26 +7,26 @@ import { equalSidebarContext, selectSidebarContext } from "./sidebar-context-sta
 describe("sidebar route state", () => {
   it("binds contextual navigation to the same rendered route as the workspace", () => {
     const data = { source: "host" };
-    const renderSidebar = vi.fn(() => "Machine inventory");
-    const state = committedRouterState("systems", "/systems", data);
+    const renderSidebar = vi.fn(() => "Session filters");
+    const state = committedRouterState("sessions", "/sessions", data);
     Object.assign(state.matches[0]!, { status: "success", module: { renderSidebar } });
     const sidebar = selectSidebarContext(state);
-    expect(sidebar?.key).toBe("systems");
-    expect(sidebar?.render(sidebar.data, sidebar.loaderPending, true)).toBe("Machine inventory");
+    expect(sidebar?.key).toBe("sessions");
+    expect(sidebar?.render(sidebar.data, sidebar.loaderPending, true)).toBe("Session filters");
     expect(renderSidebar).toHaveBeenCalledWith(data, false, true);
 
     // A cold import keeps the current main page, so its contextual list stays too.
     state.pendingMatches = [
       { ...state.matches[0]!, routeId: "cron", status: "pending", module: undefined },
     ];
-    expect(selectSidebarContext(state)?.key).toBe("systems");
+    expect(selectSidebarContext(state)?.key).toBe("sessions");
     Object.assign(state.pendingMatches[0]!, { status: "error", error: new Error("Route failed") });
     expect(selectSidebarContext(state)).toBeUndefined();
   });
 
   it("updates a contextual sidebar when its loader settles without a route change", () => {
-    const renderSidebar = vi.fn(() => "Machine inventory");
-    const state = committedRouterState("systems", "/systems");
+    const renderSidebar = vi.fn(() => "Session filters");
+    const state = committedRouterState("sessions", "/sessions");
     Object.assign(state.matches[0]!, {
       status: "pending",
       module: { renderSidebar },
