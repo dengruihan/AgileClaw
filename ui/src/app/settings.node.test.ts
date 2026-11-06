@@ -318,11 +318,7 @@ describe("gateway settings and layout persistence", () => {
 
     // Corrupt the persisted list; load falls back to the default pinned set.
     writeStored({ ...readStored(), sidebarEntries: "route:tasks", navWidth: 220 });
-    expect(loadSettings().sidebarEntries).toEqual([
-      "route:dashboards",
-      "route:systems",
-      "route:cron",
-    ]);
+    expect(loadSettings().sidebarEntries).toEqual(["route:dashboards", "route:cron"]);
     expect(loadSettings().navWidth).toBe(258);
   });
 

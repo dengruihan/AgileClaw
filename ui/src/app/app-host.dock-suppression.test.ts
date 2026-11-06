@@ -157,13 +157,6 @@ describe("AgileClaw shell dock suppression", () => {
       ).suppressed,
     ).toBe(true);
 
-    shell.routeState = { routeId: "systems" };
-    renderLit(shell.render(), container);
-    expect(
-      container.querySelector<HTMLElement & { suppressed: boolean }>("openclaw-desktop-panel")
-        ?.suppressed,
-    ).toBe(true);
-
     shell.routeState = { routeId: "chat" };
     renderLit(shell.render(), container);
     expect(

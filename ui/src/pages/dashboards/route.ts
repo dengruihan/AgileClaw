@@ -47,7 +47,10 @@ export const page = definePage({
   component: () =>
     import("./dashboards-page.ts").then(() => ({
       header: true,
-      render: (data: DashboardsRouteData | undefined) =>
-        html`<openclaw-dashboards-page .routeData=${data}></openclaw-dashboards-page>`,
+      render: (data: DashboardsRouteData | undefined, _pending: boolean, presented = true) =>
+        html`<openclaw-dashboards-page
+          .routeData=${data}
+          .presented=${presented}
+        ></openclaw-dashboards-page>`,
     })),
 });

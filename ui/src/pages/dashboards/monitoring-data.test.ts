@@ -11,10 +11,10 @@ import type { ApplicationGatewaySnapshot } from "../../app/gateway.ts";
 import { createApplicationGateway } from "../../test-helpers/application-context.ts";
 import { gatewayHelloForMethods } from "../../test-helpers/gateway-methods.ts";
 import {
-  loadSystemsInventory,
-  projectSystemsInventory,
-  type SystemsInventory,
-} from "./systems-data.ts";
+  loadMonitoringInventory,
+  projectMonitoringInventory,
+  type MonitoringInventory,
+} from "./monitoring-data.ts";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -40,7 +40,7 @@ const systemInfo: SystemInfoResult = {
   memoryFreeBytes: 4_096,
 };
 const hostStats = { cpuCount: 2, memoryTotalBytes: 4_096, memoryFreeBytes: 1_024, updatedAtMs: 50 };
-const inventory: SystemsInventory = {
+const inventory: MonitoringInventory = {
   environments,
   nodes: [
     { nodeId: "headless", connected: true },
@@ -65,7 +65,7 @@ function session(key: string, fields: Partial<GatewaySessionRow> = {}): GatewayS
   return { key, sessionId: key, kind: "direct", updatedAt: 1, ...fields };
 }
 
-describe("Systems inventory projection", () => {
+describe("monitoring inventory projection", () => {
   it("omits completed worker history while keeping running workers and unresolved cleanup", () => {
     const states = ["attached", "destroying", "orphaned", "destroyed", "failed"] as const;
     const workers: EnvironmentSummary[] = states.map((state) => ({
@@ -82,7 +82,7 @@ describe("Systems inventory projection", () => {
         tunnelStatus: "stopped",
       },
     }));
-    const rows = projectSystemsInventory({ ...inventory, environments: workers }, [
+    const rows = projectMonitoringInventory({ ...inventory, environments: workers }, [
       session("archived", {
         archivedAt: 2,
         placement: {
@@ -101,7 +101,7 @@ describe("Systems inventory projection", () => {
   });
 
   it("keeps headless, offline and same-named targets without resurrecting managed node rows", () => {
-    const rows = projectSystemsInventory(inventory, []);
+    const rows = projectMonitoringInventory(inventory, []);
     expect(rows.map((row) => row.environment.id)).toEqual(environments.map((entry) => entry.id));
     expect(rows[0]?.gatewaySystemInfo).toBe(systemInfo);
     expect(rows[2]?.node?.hostStats).toEqual(hostStats);
@@ -116,7 +116,7 @@ describe("Systems inventory projection", () => {
     });
     const bound = session("bound", { execNode: "headless" });
     const local = session("local", { placement: { state: "local", ...timing } });
-    const rows = projectSystemsInventory(inventory, [placed, bound, local]);
+    const rows = projectMonitoringInventory(inventory, [placed, bound, local]);
     expect(rows[0]?.sessions).toEqual([{ kind: "gateway", session: local }]);
     expect(rows[1]?.sessions).toEqual([{ kind: "exec-binding", session: bound }]);
     expect(rows[2]?.sessions).toEqual([{ kind: "runner", session: placed }]);
@@ -144,7 +144,7 @@ describe("Systems inventory projection", () => {
       placement: active,
       placementMove: { target: { kind: "device", deviceId: "headless" }, updatedAtMs: 2 },
     });
-    const rows = projectSystemsInventory(inventory, [reclaimed, failed, requested, moved]);
+    const rows = projectMonitoringInventory(inventory, [reclaimed, failed, requested, moved]);
     expect(rows[0]?.sessions).toEqual([]);
     expect(rows[1]?.sessions).toEqual([]);
     expect(rows[4]?.sessions).toEqual([{ kind: "retained-placement", session: reclaimed }]);
@@ -152,7 +152,7 @@ describe("Systems inventory projection", () => {
   });
 
   it("does not fabricate rows for a removed target or resolve exec aliases by display name", () => {
-    const rows = projectSystemsInventory(inventory, [
+    const rows = projectMonitoringInventory(inventory, [
       session("removed", { placement: { ...active, environmentId: "worker:removed" } }),
       session("alias", { execNode: "Same name" }),
     ]);
@@ -161,7 +161,7 @@ describe("Systems inventory projection", () => {
   });
 });
 
-describe("Systems inventory loading", () => {
+describe("monitoring inventory loading", () => {
   function gateway(client: GatewayBrowserClient) {
     return createApplicationGateway({
       client,
@@ -179,7 +179,7 @@ describe("Systems inventory loading", () => {
       .mockResolvedValueOnce(systemInfo);
     const controller = new AbortController();
     expect(
-      await loadSystemsInventory(gateway(client), {
+      await loadMonitoringInventory(gateway(client), {
         isCurrent: () => true,
         signal: controller.signal,
       }),
@@ -187,7 +187,7 @@ describe("Systems inventory loading", () => {
     expect(
       request.mock.calls.map(([method, params, options]) => [method, params, options?.signal]),
     ).toEqual([
-      ["environments.list", { includeDesktopSetup: true }, controller.signal],
+      ["environments.list", {}, controller.signal],
       ["node.list", {}, controller.signal],
       ["system.info", {}, expect.any(AbortSignal)],
     ]);
@@ -199,7 +199,7 @@ describe("Systems inventory loading", () => {
       .mockResolvedValueOnce({ environments })
       .mockRejectedValueOnce(new Error("Node inventory denied"))
       .mockRejectedValueOnce(new Error("System info unavailable"));
-    const result = await loadSystemsInventory(gateway(client), { isCurrent: () => true });
+    const result = await loadMonitoringInventory(gateway(client), { isCurrent: () => true });
     expect(result).toMatchObject({ environments, nodes: [], gatewaySystemInfo: null });
     expect(result?.errors.nodes).toContain("Node inventory denied");
     expect(result?.errors.systemInfo).toContain("System info unavailable");
@@ -212,7 +212,7 @@ describe("Systems inventory loading", () => {
       .mockRejectedValueOnce(failure)
       .mockResolvedValueOnce({ nodes: inventory.nodes })
       .mockResolvedValueOnce(systemInfo);
-    await expect(loadSystemsInventory(gateway(client), { isCurrent: () => true })).rejects.toBe(
+    await expect(loadMonitoringInventory(gateway(client), { isCurrent: () => true })).rejects.toBe(
       failure,
     );
   });
@@ -226,7 +226,7 @@ describe("Systems inventory loading", () => {
       .mockResolvedValueOnce(systemInfo);
     let current = true;
     const controller = new AbortController();
-    const result = loadSystemsInventory(gateway(client), {
+    const result = loadMonitoringInventory(gateway(client), {
       isCurrent: () => current,
       signal: controller.signal,
     });
@@ -243,7 +243,7 @@ describe("Systems inventory loading", () => {
     const client = new GatewayBrowserClient({ url: "ws://gateway.test" });
     const request = vi.spyOn(client, "request");
     await expect(
-      loadSystemsInventory(gateway(client), { isCurrent: () => false }),
+      loadMonitoringInventory(gateway(client), { isCurrent: () => false }),
     ).resolves.toBeUndefined();
     expect(request).not.toHaveBeenCalled();
   });

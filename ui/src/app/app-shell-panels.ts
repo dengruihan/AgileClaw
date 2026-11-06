@@ -67,11 +67,7 @@ export class ShellPanelOwner {
     for (const [element, layout, available] of [
       [host.terminalPanelElement, terminalPanelLayout, terminalAvailable],
       [host.browserPanelElement, browserPanelLayout, browserAvailable],
-      [
-        host.desktopPanelElement,
-        desktopPanelLayout,
-        !sessionRoute && host.routeState.routeId !== "systems" && desktopAvailable,
-      ],
+      [host.desktopPanelElement, desktopPanelLayout, !sessionRoute && desktopAvailable],
     ] as const) {
       if (!available) {
         continue;
@@ -163,10 +159,6 @@ export class ShellPanelOwner {
 
   readonly handleDeferredDesktopToggle = (event: Event): void => {
     const host = this.host;
-    // Systems owns its embedded viewer; never materialize a second shell dock.
-    if (host.routeState.routeId === "systems") {
-      return;
-    }
     if (this.isSessionRoute()) {
       rememberSessionPanelToggle("desktop", event);
       return;

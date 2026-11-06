@@ -18,6 +18,7 @@ import {
 } from "../../lib/sessions/route-navigation.ts";
 import "../../styles/dashboards.css";
 import "./dashboard-preview.ts";
+import { renderMonitoring, type MonitoringViewState } from "./monitoring-view.ts";
 
 export type DashboardsRouteData = {
   result: SessionsListResult | null;
@@ -299,6 +300,7 @@ export function renderDashboards(
   handlers: DashboardGalleryHandlers = NOOP_HANDLERS,
   gatewaySnapshot?: ApplicationGatewaySnapshot,
   previewError: string | null = null,
+  monitoring?: MonitoringViewState,
 ) {
   const body =
     data && (data.result || data.error)
@@ -332,6 +334,6 @@ export function renderDashboards(
           : nothing
       }
     </section>
-    ${renderSettingsWorkspace(body)}
+    ${renderSettingsWorkspace(html`${renderMonitoring(monitoring)} ${body}`)}
   `;
 }

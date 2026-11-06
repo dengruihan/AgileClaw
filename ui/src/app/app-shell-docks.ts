@@ -1,5 +1,4 @@
 import { html } from "lit";
-import type { RouteId } from "../app-routes.ts";
 import type { ApplicationContext } from "./context.ts";
 import { resolveControlUiAuthToken } from "./control-ui-auth.ts";
 import { availableLinkReaders } from "./link-reader-routing.ts";
@@ -13,7 +12,6 @@ export function renderShellDocks(
   navDrawerOpen: boolean,
   suppressed: boolean,
   selectedAgentId: string,
-  activeRoute: RouteId,
 ) {
   const gatewaySnapshot = context.gateway.snapshot;
   const gatewayConnected = gatewaySnapshot.phase === "connected";
@@ -36,7 +34,7 @@ export function renderShellDocks(
       data-chat-autotype-exempt
       .client=${gatewayConnected ? gatewaySnapshot.client : null}
       .available=${isDesktopPanelAvailable(gatewaySnapshot)}
-      .suppressed=${suppressed || activeRoute === "systems"}
+      .suppressed=${suppressed}
       .basePath=${context.basePath}
     ></openclaw-desktop-panel>
     <openclaw-link-reader-panel

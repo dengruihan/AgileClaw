@@ -4425,7 +4425,6 @@ export const PR_PROTECTED_RUNTIME_TEST_FILES: readonly string[] = [
   "ui/src/e2e/skill-workshop-collection.e2e.test.ts",
   "ui/src/e2e/skills-library.e2e.test.ts",
   "ui/src/e2e/subagent-task-notice.e2e.test.ts",
-  "ui/src/e2e/systems-workspace.e2e.test.ts",
   "ui/src/e2e/theme-background.e2e.test.ts",
   "ui/src/e2e/theme-muted-contrast.e2e.test.ts",
   "ui/src/e2e/theme-typography.e2e.test.ts",

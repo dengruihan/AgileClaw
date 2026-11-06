@@ -141,8 +141,15 @@ describe("sidebar entries", () => {
     }
   });
   it("keeps operational destinations visible by default", () => {
-    expect(DEFAULT_SIDEBAR_ENTRIES).toEqual(["route:dashboards", "route:systems", "route:cron"]);
+    expect(DEFAULT_SIDEBAR_ENTRIES).toEqual(["route:dashboards", "route:cron"]);
     expect(isSettingsNavigationRoute("agents-home")).toBe(false);
+  });
+
+  it("drops the retired Systems entry from persisted sidebar order", () => {
+    expect(normalizeSidebarEntries(["route:usage", "route:systems", "route:cron"])).toEqual([
+      "route:usage",
+      "route:cron",
+    ]);
   });
 
   it("treats worktrees as a sessions hub tab without its own pin", () => {
@@ -222,7 +229,7 @@ describe("sidebar entries", () => {
       type: "plugin",
       key: "workboard/board-ops",
     });
-    expect(serializeSidebarEntry({ type: "route", route: "systems" })).toBe("route:systems");
+    expect(serializeSidebarEntry({ type: "route", route: "meetings" })).toBe("route:meetings");
     expect(serializeSidebarEntry({ type: "session", key: "agent:main:test" })).toBe(
       "session:agent:main:test",
     );

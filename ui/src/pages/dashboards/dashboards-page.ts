@@ -2,6 +2,7 @@ import { consume } from "@lit/context";
 import type { PropertyValues } from "lit";
 import { property, state } from "lit/decorators.js";
 import { applicationContext, type ApplicationContext } from "../../app/context.ts";
+import { gatewayPresentationScope } from "../../app/gateway-presentation-scope.ts";
 import {
   DASHBOARD_DOCUMENT_ELEMENT,
   ensureCustomElementDefined,
@@ -12,7 +13,9 @@ import { fetchPagedSessionRows } from "../../lib/sessions/paged-session-rows.ts"
 import { dashboardSessionListQuery } from "../../lib/sessions/session-requests.ts";
 import { GatewayPageController } from "../../lit/gateway-page-controller.ts";
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
+import { PollController } from "../../lit/poll-controller.ts";
 import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
+import { MonitoringController } from "./monitoring-controller.ts";
 import { dashboardsRouteData } from "./route.ts";
 import {
   renderDashboards,
@@ -20,11 +23,14 @@ import {
   type DashboardsRouteData,
 } from "./view.ts";
 
+const MONITORING_POLL_INTERVAL_MS = 15_000;
+
 class DashboardsPage extends OpenClawLightDomElement {
   @consume({ context: applicationContext, subscribe: true })
   private context?: ApplicationContext;
 
   @property({ attribute: false }) routeData?: DashboardsRouteData;
+  @property({ type: Boolean }) presented = true;
 
   @state() private filters: DashboardGalleryFilters = {
     query: "",
@@ -38,16 +44,32 @@ class DashboardsPage extends OpenClawLightDomElement {
   private unsubscribeList?: () => void;
   private data?: DashboardsRouteData;
   private listGeneration = 0;
+  private monitoring?: MonitoringController;
   private readonly gateway = new GatewayPageController(this, {
     getGateway: () => this.context?.gateway,
   });
-  private readonly subscriptions = new SubscriptionsController(this).effect(
-    () => this.context?.agentSelection,
-    (agentSelection) => {
-      this.bindList();
-      return agentSelection.subscribe(() => this.bindList());
-    },
+  private readonly subscriptions = new SubscriptionsController(this)
+    .effect(
+      () => this.context?.agentSelection,
+      (agentSelection) => {
+        this.bindList();
+        return agentSelection.subscribe(() => this.bindList());
+      },
+    )
+    .watchStore(() => this.monitoring);
+
+  private readonly poll = new PollController(
+    this,
+    MONITORING_POLL_INTERVAL_MS,
+    () => void this.monitoring?.refresh(),
+    true,
+    "visible",
   );
+
+  constructor() {
+    super();
+    void this.poll;
+  }
 
   override connectedCallback() {
     super.connectedCallback();
@@ -67,6 +89,7 @@ class DashboardsPage extends OpenClawLightDomElement {
     this.unsubscribeList = undefined;
     this.observedSessions = undefined;
     this.observedScopeId = undefined;
+    this.monitoring?.setPresented(false);
     this.subscriptions.clear();
     super.disconnectedCallback();
   }
@@ -75,7 +98,32 @@ class DashboardsPage extends OpenClawLightDomElement {
     if (changed.has("routeData")) {
       this.data = this.routeData;
     }
+    this.bindMonitoring();
     this.bindList();
+  }
+
+  override updated(changed: PropertyValues<this>) {
+    if (changed.has("presented")) {
+      this.monitoring?.setPresented(this.presented && this.isConnected);
+    }
+  }
+
+  /** One monitoring owner per mounted dashboards page; leaving the route releases its reads. */
+  private bindMonitoring(): void {
+    const context = this.context;
+    if (!context) {
+      return;
+    }
+    // The route is not scope-keyed, so an in-place credential/recovery-scope
+    // revision must replace the owner that captured the retired scope.
+    const scope = gatewayPresentationScope(context.gateway);
+    if (this.monitoring?.context !== context || this.monitoring.scope !== scope) {
+      this.monitoring?.setPresented(false);
+      this.monitoring = new MonitoringController(context);
+    }
+    // A queued update can still flush after the element leaves the document;
+    // presenting there would restart reads nothing can retire.
+    this.monitoring.setPresented(this.presented && this.isConnected);
   }
 
   private bindList(): void {
@@ -184,6 +232,7 @@ class DashboardsPage extends OpenClawLightDomElement {
       },
       this.context?.gateway.snapshot,
       this.previewError,
+      this.monitoring,
     );
   }
 }

@@ -198,7 +198,7 @@ of **Keep computer awake**.
 Sharing requires a local OpenClaw CLI, including when your Gateway is remote,
 and an authenticated local VNC server. On macOS, enable **Screen Sharing** in
 System Settings. Approve the computer's desktop capability on the Primary Gateway
-when requested, then open its desktop from **Systems**. See
+when requested, then open its desktop from the Control UI Desktop panel. See
 [paired node desktops](/gateway/config-browser-ui-desktop#paired-node-desktops)
 for authentication, pairing, and upgrade behavior.
 

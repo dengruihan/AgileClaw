@@ -228,12 +228,11 @@ export function renderApplicationShell(host: ShellViewHost) {
   const uiSettings = context.theme.settings;
   // The new-session draft shares the chat layout: full-height pane that owns
   // its scrolling and pins the composer dock to the bottom.
-  const chatLikeRoute = sessionRoute || activeRoute === "new-session" || activeRoute === "systems";
+  const chatLikeRoute = sessionRoute || activeRoute === "new-session";
   if (!settingsTakeover && !nativeEmbed) {
     Object.assign(host.navigationSidebar, {
       basePath: context.basePath,
       activeRouteId: activeRoute,
-      router: host.runtime.router,
       activePluginTabId: activePluginRef ? pluginTabKey(activePluginRef) : "",
       enabledRouteIds: APP_ROUTE_IDS,
       sessionKey: host.activeSessionKey,
@@ -536,7 +535,7 @@ export function renderApplicationShell(host: ShellViewHost) {
         .themeMode=${context.theme.resolvedMode}
         .basePath=${context.basePath}
       ></openclaw-terminal-panel>
-      ${sessionRoute ? nothing : renderShellDocks(context, navDrawerOpen, settingsTakeover || nativeEmbed, selectedAgentId, activeRoute)}
+      ${sessionRoute ? nothing : renderShellDocks(context, navDrawerOpen, settingsTakeover || nativeEmbed, selectedAgentId)}
       <openclaw-assistant-panel
         ?inert=${navDrawerOpen}
         .pageSessionKey=${host.activeSessionKey}

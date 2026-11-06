@@ -150,9 +150,9 @@ Workspaces containing symbolic links require Windows Developer Mode in the image
 
 ## Desktop size
 
-Open **Systems** in the Control UI sidebar to select a worker and use its desktop
-as the main workspace. The docked and chat-side Desktop panels remain available;
-all presentations reuse the desktop connection implementation and Gateway control arbitration.
+Open the Control UI Desktop panel, or its chat-side dock, and select the worker
+to use its desktop. Every presentation reuses the desktop connection
+implementation and Gateway control arbitration.
 
 The **Desktop size** menu is available in the panel and the standalone desktop view:
 
