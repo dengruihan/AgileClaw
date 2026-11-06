@@ -449,7 +449,7 @@ suite.define(() => {
       home: false,
       deviceLess: false,
       direction: "ltr",
-      expectedControl: ".sidebar-brand__search",
+      expectedControl: ".sidebar-primary-actions .sidebar-brand__new-thread",
       name: "expanded navigation",
       navCollapsed: false,
       operatorScopes: undefined,

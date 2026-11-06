@@ -265,7 +265,7 @@ suite.define(() => {
         await expect.poll(() => sessionRows.count()).toBe(12);
 
         await sidebar.locator(".sidebar-brand__new-thread").click();
-        const newMenu = sidebar.locator(".sidebar-brand .sidebar-new-session-menu");
+        const newMenu = sidebar.locator(".sidebar-primary-actions .sidebar-new-session-menu");
         await expect.poll(() => newMenu.locator("wa-dropdown-item").first().isVisible()).toBe(true);
         expect(
           await newMenu

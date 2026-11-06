@@ -146,7 +146,7 @@ suite.define(() => {
                 return { x: rect.x, width: rect.width, height: rect.height };
               }),
             );
-          expect(headerControls).toHaveLength(4);
+          expect(headerControls).toHaveLength(2);
           for (const [index, control] of headerControls.entries()) {
             expect(control.width).toBeCloseTo(28, 4);
             expect(control.height).toBeCloseTo(28, 4);
@@ -291,9 +291,11 @@ suite.define(() => {
           expect(await actions.evaluate((element) => getComputedStyle(element).opacity)).toBe("1");
           expect(await geometry()).toEqual(beforeFocus);
           expect(await add.getAttribute("href")).toBe("/new?agent=main");
-          await sidebar.locator(".sidebar-brand .sidebar-new-session-menu button").click();
+          await sidebar
+            .locator(".sidebar-primary-actions .sidebar-new-session-menu button")
+            .click();
           const menuFace = sidebar.locator(
-            '.sidebar-brand .sidebar-new-session-menu [value="main"] .identity-avatar__agent-face',
+            '.sidebar-primary-actions .sidebar-new-session-menu [value="main"] .identity-avatar__agent-face',
           );
           await menuFace.waitFor();
           await expect.poll(async () => (await menuFace.boundingBox())?.width).toBe(36);

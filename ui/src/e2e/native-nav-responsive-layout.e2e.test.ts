@@ -3,7 +3,7 @@ import path from "node:path";
 import type { BrowserContext } from "playwright";
 import { afterEach, expect, it } from "vitest";
 import { takeControlUiElementScreenshot } from "../test-helpers/control-ui-e2e-screenshot.ts";
-import { installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 import { installNativeWebChrome } from "./native-nav.test-support.ts";
 
@@ -51,7 +51,7 @@ suite.define(() => {
     await installMockGateway(page, {
       featureMethods: ["chat.metadata", "chat.startup", "sessions.create"],
     });
-    const response = await page.goto(suite.server.baseUrl);
+    const response = await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
     expect(response?.status()).toBe(200);
     await page.locator(".sidebar-brand").waitFor({ state: "attached" });
     return page;
@@ -127,103 +127,42 @@ suite.define(() => {
 
     await expect
       .poll(() =>
-        sidebarBrand
-          .locator(".sidebar-brand__collapse, .sidebar-brand__search")
-          .evaluateAll((buttons) =>
-            buttons.map((button) => {
-              const icon = button.querySelector("svg");
-              if (!icon) {
-                return null;
-              }
-              const buttonBox = button.getBoundingClientRect();
-              const iconBox = icon.getBoundingClientRect();
-              return Math.round(
-                buttonBox.left + buttonBox.width / 2 - (iconBox.left + iconBox.width / 2),
-              );
-            }),
-          ),
+        sidebarBrand.locator(".sidebar-brand__collapse").evaluate((button) => {
+          const icon = button.querySelector("svg");
+          if (!icon) {
+            return null;
+          }
+          const buttonBox = button.getBoundingClientRect();
+          const iconBox = icon.getBoundingClientRect();
+          return Math.round(
+            buttonBox.left + buttonBox.width / 2 - (iconBox.left + iconBox.width / 2),
+          );
+        }),
       )
-      .toEqual([0, 0]);
+      .toBe(0);
     await expect
       .poll(() =>
         sidebarBrand.locator(".sidebar-workspace-header__mark").evaluate((avatar) => {
           const style = getComputedStyle(avatar);
-          return [style.width, style.height];
+          return [style.width, style.height, style.borderTopLeftRadius];
         }),
       )
-      .toEqual(["28px", "28px"]);
-    await expect
-      .poll(() =>
-        sidebarBrand.locator(".sidebar-brand__new-thread").evaluate((button) => {
-          const style = getComputedStyle(button);
-          return [style.width, style.height, style.boxShadow];
-        }),
-      )
-      .toEqual(["28px", "28px", "none"]);
-    const actionStyles = await sidebarBrand
-      .locator(".sidebar-brand__collapse, .sidebar-brand__search, .sidebar-brand__new-thread")
-      .evaluateAll((actions) =>
-        actions.map((action) => {
-          const icon = action.querySelector("svg");
-          const actionStyle = getComputedStyle(action);
-          const iconStyle = icon ? getComputedStyle(icon) : null;
-          return {
-            backgroundColor: actionStyle.backgroundColor,
-            borderStyle: actionStyle.borderTopStyle,
-            borderWidth: actionStyle.borderTopWidth,
-            boxShadow: actionStyle.boxShadow,
-            color: actionStyle.color,
-            iconOpacity: iconStyle?.opacity,
-            iconStrokeWidth: iconStyle?.strokeWidth,
-          };
-        }),
-      );
-    expect(actionStyles).toHaveLength(3);
-    expect(actionStyles[1]).toEqual(actionStyles[0]);
-    expect(actionStyles[2]).toEqual(actionStyles[0]);
-    await expect
-      .poll(() =>
-        sidebarBrand
-          .locator(".sidebar-brand__collapse, .sidebar-brand__search, .sidebar-brand__new-thread")
-          .evaluateAll((actions) =>
-            actions.map((action) => {
-              const icon = action.querySelector("svg");
-              if (!icon) {
-                return null;
-              }
-              const shapes = Array.from(
-                icon.querySelectorAll<SVGGraphicsElement>(
-                  "circle, ellipse, line, path, polygon, polyline, rect",
-                ),
-              );
-              const bounds = shapes.map((shape) => shape.getBBox());
-              const left = Math.min(...bounds.map((box) => box.x));
-              const right = Math.max(...bounds.map((box) => box.x + box.width));
-              return Math.round((right - left) * (icon.getBoundingClientRect().width / 24));
-            }),
-          ),
-      )
-      .toEqual([12, 12, 12]);
+      .toEqual(["28px", "28px", "10px"]);
+    await expect.poll(() => page.locator(".sidebar-brand__search").count()).toBe(0);
 
-    // One rail, one gap: adjacent controls touch in both directions, so no
-    // button carries a private optical offset left over from a bordered box.
-    const controlGaps = () =>
-      sidebarBrand
-        .locator(".sidebar-brand__collapse, .sidebar-brand__search, .sidebar-brand__new-thread")
-        .evaluateAll((actions) => {
-          const [first, ...rest] = actions.map((action) => action.getBoundingClientRect());
-          if (!first) {
-            return [];
-          }
-          let previous = first;
-          return rest.map((box) => {
-            const gap = Math.round(Math.max(box.left - previous.right, previous.left - box.right));
-            previous = box;
-            return gap;
-          });
-        });
-
-    await expect.poll(controlGaps).toEqual([0, 0]);
+    // The primary new-session action replaces the header plus and sits directly
+    // above Pages.
+    const primary = page.locator(".sidebar-primary-actions .sidebar-brand__new-thread");
+    await expect.poll(() => primary.textContent()).toContain("New session");
+    const actionAboveNav = await page.evaluate(() => {
+      const actionBox = document.querySelector(".sidebar-primary-actions")?.getBoundingClientRect();
+      const navBox = document.querySelector(".sidebar-nav")?.getBoundingClientRect();
+      if (!actionBox || !navBox) {
+        return null;
+      }
+      return Math.round(navBox.top - actionBox.bottom);
+    });
+    expect(actionAboveNav).toBeGreaterThanOrEqual(0);
 
     const actionInset = async (direction: "ltr" | "rtl") => {
       const [brandBox, actionsBox] = await Promise.all([
@@ -242,7 +181,6 @@ suite.define(() => {
       document.documentElement.dir = "rtl";
     });
     await expect.poll(() => actionInset("rtl")).toBe(0);
-    await expect.poll(controlGaps).toEqual([0, 0]);
   });
 
   it("keeps the native sidebar avatar larger", async () => {
@@ -257,7 +195,7 @@ suite.define(() => {
       .toEqual(["32px", "32px"]);
   });
 
-  it("opens search from the phone drawer while keeping the chat header compact", async () => {
+  it("opens the phone drawer with the primary new session action", async () => {
     const page = await openPage({ hasTouch: true, height: 852, phone: true, width: 393 });
     const shell = page.locator(".shell");
     await expect.poll(() => shell.getAttribute("class")).toContain("shell--mobile-nav");
@@ -277,33 +215,25 @@ suite.define(() => {
 
     await drawerButton.tap();
     await expect.poll(() => shell.getAttribute("class")).toContain("shell--nav-drawer-open");
-    const drawerSearch = page.locator(".shell-nav .sidebar-brand__search");
-    await expect.poll(() => drawerSearch.isVisible()).toBe(true);
+    const primary = page.locator(".shell-nav .sidebar-primary-actions .sidebar-brand__new-thread");
+    await expect.poll(() => primary.isVisible()).toBe(true);
+    await expect.poll(() => primary.textContent()).toContain("New session");
     await expect
       .poll(() => page.locator(".shell-nav .sidebar-brand__collapse").isVisible())
       .toBe(false);
+    await expect.poll(() => page.locator(".shell-nav .sidebar-brand__search").count()).toBe(0);
 
     if (captureProof) {
       await writeFile(
         path.join(suite.artifactDir, "02-sidebar-drawer.png"),
-        await takeControlUiElementScreenshot(page, page.locator(".sidebar-brand").first(), [
-          drawerSearch,
+        await takeControlUiElementScreenshot(page, page.locator(".sidebar-primary-actions"), [
+          primary,
         ]),
       );
     }
 
-    await drawerSearch.tap();
-    const paletteInput = page.locator(".cmd-palette__input");
-    await paletteInput.waitFor({ state: "visible" });
-    await expect.poll(() => paletteInput.evaluate((input) => input.matches(":focus"))).toBe(true);
-    if (captureProof) {
-      await writeFile(
-        path.join(suite.artifactDir, "03-command-palette.png"),
-        await takeControlUiElementScreenshot(page, page.locator(".cmd-palette").first(), [
-          paletteInput,
-        ]),
-      );
-    }
+    await primary.tap();
+    await page.waitForURL((url) => url.pathname === "/new");
   });
 
   it.each([

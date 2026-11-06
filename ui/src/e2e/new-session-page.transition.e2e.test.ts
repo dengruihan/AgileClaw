@@ -231,7 +231,7 @@ suite.define(() => {
       const firstKey = firstParams.key;
       await expect.poll(() => new URL(page.url()).pathname).toBe(controlUiSessionPath(firstKey));
 
-      await page.getByRole("link", { name: "New conversation" }).first().click();
+      await page.getByRole("link", { name: "New session" }).first().click();
       await expect.poll(() => new URL(page.url()).pathname).toBe("/new");
       await page.locator(".new-session-page__message").fill("verify another default mock");
       await page.getByRole("button", { name: "Start session" }).click();

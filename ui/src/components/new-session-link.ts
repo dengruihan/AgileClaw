@@ -16,6 +16,7 @@ export function renderNewSessionLink(params: {
   target?: NewSessionTarget;
   className: string;
   label: string;
+  visibleLabel?: string;
   disabledReason?: string;
   showShortcut?: boolean;
   onOpen?: (agentId: string, target?: NewSessionTarget) => void;
@@ -56,6 +57,11 @@ export function renderNewSessionLink(params: {
       }}
     >
       ${icons.plus}
+      ${
+        params.visibleLabel
+          ? html`<span class="new-session-link__label">${params.visibleLabel}</span>`
+          : nothing
+      }
     </a>
   </openclaw-tooltip>`;
 }

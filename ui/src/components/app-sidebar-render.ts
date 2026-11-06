@@ -78,9 +78,8 @@ function renderSidebarWorkspaceHeader(host: AppSidebarRenderHost) {
 
 export function renderAppSidebarBrand(
   host: AppSidebarRenderHost,
-  teamNewSession: unknown = nothing,
+  rosterNewSession: unknown = nothing,
 ) {
-  const newSessionAccess = host.readNewSessionAccess();
   const collapseLabel = t("nav.collapse");
   return html`
     <div class="sidebar-brand">
@@ -101,40 +100,36 @@ export function renderAppSidebarBrand(
             ${icons.panelLeftClose}
           </button>
         </openclaw-tooltip>
-        <openclaw-tooltip
-          .content=${`${t("chat.openCommandPalette")} (${formatKeyboardShortcutCombo(KEYBOARD_SHORTCUT_COMBOS.commandPalette)})`}
-          .contentTemplate=${renderShortcutHint(t("chat.openCommandPalette"), KEYBOARD_SHORTCUT_COMBOS.commandPalette)}
-        >
-          <button
-            type="button"
-            class="sidebar-brand__icon sidebar-brand__header-control sidebar-brand__desktop-control sidebar-brand__search"
-            aria-label=${t("chat.openCommandPalette")}
-            ?disabled=${!host.onOpenPalette}
-            @click=${() => host.onOpenPalette?.()}
-          >
-            ${icons.search}
-          </button>
-        </openclaw-tooltip>
         ${
           host.sidebarAgentsMode === "roster"
             ? renderSidebarSessionFilter(host, "sidebar-brand__icon sidebar-brand__header-control")
             : nothing
         }
-        ${
-          host.sidebarAgentsMode === "roster"
-            ? teamNewSession
-            : renderNewSessionLink({
-                basePath: host.basePath,
-                agentId: host.expandedAgentId(),
-                className:
-                  "sidebar-brand__icon sidebar-brand__header-control sidebar-brand__new-thread",
-                label: t("agentChip.newConversation"),
-                showShortcut: true,
-                disabledReason: newSessionAccess.allowed ? undefined : newSessionAccess.reason,
-                onOpen: (agentId, target) => host.requestOpenNewSession(agentId, target),
-              })
-        }
       </div>
+      ${renderAppSidebarNewSessionAction(host, rosterNewSession)}
+    </div>
+  `;
+}
+
+/** Primary new-session action above the Pages navigation. */
+function renderAppSidebarNewSessionAction(host: AppSidebarRenderHost, rosterNewSession: unknown) {
+  const newSessionAccess = host.readNewSessionAccess();
+  return html`
+    <div class="sidebar-primary-actions">
+      ${
+        host.sidebarAgentsMode === "roster"
+          ? rosterNewSession
+          : renderNewSessionLink({
+              basePath: host.basePath,
+              agentId: host.expandedAgentId(),
+              className: "sidebar-brand__new-thread sidebar-new-session-action",
+              label: t("chat.runControls.newSession"),
+              visibleLabel: t("chat.runControls.newSession"),
+              showShortcut: true,
+              disabledReason: newSessionAccess.allowed ? undefined : newSessionAccess.reason,
+              onOpen: (agentId, target) => host.requestOpenNewSession(agentId, target),
+            })
+      }
     </div>
   `;
 }

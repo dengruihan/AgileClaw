@@ -564,13 +564,12 @@ suite.define(() => {
         .poll(() => trimmedTextContents(pinnedItems))
         .toEqual(["Dashboards", "Systems", "Automations"]);
 
-      // The sidebar header search button is the command palette entry point.
-      const searchButton = page.locator(".sidebar-brand__search");
-      await searchButton.click();
-      const paletteInput = page.locator("#cmd-palette-input");
-      await expect.poll(() => paletteInput.isVisible()).toBe(true);
-      await page.keyboard.press("Escape");
-      await expect.poll(() => paletteInput.isVisible()).toBe(false);
+      // The primary new-session action sits above Pages; the old header
+      // search/new-session icons are gone.
+      await expect
+        .poll(() => page.locator(".sidebar-primary-actions .sidebar-brand__new-thread").isVisible())
+        .toBe(true);
+      await expect.poll(() => page.locator(".sidebar-brand__search").count()).toBe(0);
 
       // The sidebar header toggle collapses the rail; collapsed shell chrome
       // then provides the matching expand control.
