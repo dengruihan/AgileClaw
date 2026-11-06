@@ -4230,8 +4230,7 @@ export const en: TranslationMap & {
     alreadyInitialized: "The password vault already exists. Refresh the page to unlock it.",
     notFound: "That entry no longer exists. Refresh the list and try again.",
     deletedEntry: "The entry was deleted. Restore it before viewing it.",
-    invalidInput:
-      "That input is not valid. Check the website, account, and password, then try again.",
+    invalidInput: "That input is not valid. Check the values you entered and try again.",
     unavailable:
       "The password vault is unavailable. Try again shortly, and check the Gateway logs if it persists.",
     account: "Account",
@@ -4315,6 +4314,7 @@ export const en: TranslationMap & {
       reveal: "Password revealed",
       copy: "Password copied",
       generate: "Password generated",
+      fill: "Password filled",
       purgeExpired: "Expired entries removed",
     },
   },

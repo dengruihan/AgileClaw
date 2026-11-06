@@ -153,12 +153,25 @@ suite.define(() => {
   it("renders vault setup, entries, the entry dialog, and audit activity in Simplified Chinese", async () => {
     await suite.withPage(ZH_CN_CONTEXT, async ({ page }) => {
       const gateway = await installMockGateway(page, {
-        featureMethods: ["vault.status", "vault.initialize", "vault.list", "vault.audit.list"],
+        featureMethods: [
+          "vault.status",
+          "vault.initialize",
+          "vault.list",
+          "vault.create",
+          "vault.audit.list",
+        ],
         operatorScopes: ["operator.vault", "operator.vault.reveal"],
         methodResponses: {
           "vault.status": { sequence: [UNINITIALIZED, UNLOCKED, UNLOCKED] },
           "vault.initialize": { ...UNLOCKED },
           "vault.list": { entries: [ENTRY, SECOND_ENTRY] },
+          "vault.create": {
+            __mockError: {
+              code: "INVALID_REQUEST",
+              message: "An entry for this site and account already exists.",
+              details: { code: "VAULT_DUPLICATE" },
+            },
+          },
           "vault.audit.list": {
             events: [
               {
@@ -166,6 +179,12 @@ suite.define(() => {
                 action: "initialize",
                 status: "succeeded",
                 occurredAtMs: 1_786_352_400_000,
+              },
+              {
+                sequence: 2,
+                action: "fill",
+                status: "succeeded",
+                occurredAtMs: 1_786_352_460_000,
               },
             ],
           },
@@ -202,6 +221,10 @@ suite.define(() => {
         .locator(".passwords-vault__audit")
         .getByText("密码库已创建", { exact: true })
         .waitFor();
+      await page
+        .locator(".passwords-vault__audit")
+        .getByText("已填充密码", { exact: true })
+        .waitFor();
       expect(await page.getByText("No saved passwords yet.").count()).toBe(0);
       await capture(page, "passwords-zh-cn-unlocked.png");
 
@@ -214,6 +237,20 @@ suite.define(() => {
       await page.getByRole("button", { name: "取消" }).waitFor();
       await page.getByRole("button", { name: "保存" }).waitFor();
       await capture(page, "passwords-zh-cn-dialog.png");
+
+      const dialog = page.locator("openclaw-modal-dialog");
+      await page.locator('input[name="website"]').fill("https://example.com");
+      await page.locator('input[name="site-label"]').fill("Example");
+      await page.locator('input[name="account"]').fill("duplicate@example.com");
+      await page.locator('input[name="password"]').fill("synthetic-duplicate-password");
+      await dialog.getByRole("button", { name: "保存" }).click();
+      const formError = dialog.locator(".passwords-vault__error");
+      await formError.getByText("该站点和账号下已存在条目。").waitFor();
+      expect(
+        await formError
+          .getByText("An entry for this site and account already exists.", { exact: false })
+          .count(),
+      ).toBe(0);
     });
   });
 

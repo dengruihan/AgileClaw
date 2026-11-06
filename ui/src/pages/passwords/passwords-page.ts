@@ -13,6 +13,7 @@ import {
   generatePasswordsEntry,
   initializePasswordsVault,
   lockPasswordsVault,
+  passwordsVaultErrorHint,
   purgePasswordsEntry,
   refreshPasswordsVault,
   restorePasswordsEntry,
@@ -290,7 +291,11 @@ class PasswordsPage extends OpenClawLightDomElement {
             revision: draft.revision ?? 0,
           });
     if (!saved) {
-      this.formError = store.error?.message ?? t("passwords.saveFailed");
+      const error = store.error;
+      this.formError =
+        (error ? passwordsVaultErrorHint(error) : null) ??
+        error?.message ??
+        t("passwords.saveFailed");
       this.requestUpdate();
       return;
     }

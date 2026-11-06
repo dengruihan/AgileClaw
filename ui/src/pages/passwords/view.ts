@@ -567,6 +567,7 @@ function renderAudit(props: PasswordsVaultViewProps): TemplateResult | typeof no
     reveal: t("passwords.audit.reveal"),
     copy: t("passwords.audit.copy"),
     generate: t("passwords.audit.generate"),
+    fill: t("passwords.audit.fill"),
     "purge-expired": t("passwords.audit.purgeExpired"),
   };
   return renderSettingsSection(
