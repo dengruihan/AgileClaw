@@ -58,8 +58,7 @@ Hidden retained chats defer command and model metadata refreshes until you retur
 
 New Session keeps previously fetched model choices selectable while their catalog
 refreshes in the background. Before the first catalog arrives, it does not turn a
-configured default into a model option. Command palette model results use the same
-catalog cache and appear independently of slower search categories.
+configured default into a model option.
 
 Provider authentication status is shared across views and refreshes after account changes and near credential warning or expiry deadlines. Credentials without an expiry do not need periodic refreshes. Hidden tabs defer deadline refreshes until visible again.
 
