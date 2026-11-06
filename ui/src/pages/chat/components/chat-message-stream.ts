@@ -62,6 +62,7 @@ type StreamMessageOptions = Pick<
   | "githubRepo"
   | "githubRepositories"
   | "onOpenWorkspaceFile"
+  | "resolveDeviceLabel"
 >;
 
 export type StreamGroupOptions = StreamMessageOptions & {

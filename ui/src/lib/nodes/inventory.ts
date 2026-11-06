@@ -12,6 +12,7 @@ import {
 } from "@openclaw/normalization-core/string-normalization";
 import { z } from "zod";
 import { parseWorkerCapacity } from "../../../../packages/gateway-protocol/src/worker-capacity.js";
+import { normalizePairedDeviceCommandPolicy } from "../../../../src/infra/device-pairing.types.js";
 import type {
   NodeListNode,
   NodeWorkerBundleStatus,
@@ -105,6 +106,8 @@ function parseNodeListEntry(raw: Record<string, unknown>): NodeListEntry | null 
     return null;
   }
   const approvalState = normalizeOptionalString(raw.approvalState);
+  // Execution-registry facts for the consolidated row; normalized here.
+  const commandPolicy = normalizePairedDeviceCommandPolicy(raw.commandPolicy);
   return {
     nodeId,
     displayName: normalizeOptionalString(raw.displayName),
@@ -127,6 +130,8 @@ function parseNodeListEntry(raw: Record<string, unknown>): NodeListEntry | null 
     workerSlots: parseWorkerCapacity(raw.workerSlots) ?? undefined,
     workerBundle: parseWorkerBundleStatus(raw.workerBundle),
     hostStats: hostStatsSchema.safeParse(raw.hostStats).data,
+    ...(raw.enabled === true || raw.enabled === false ? { enabled: raw.enabled } : {}),
+    ...(commandPolicy ? { commandPolicy } : {}),
     connected: raw.connected === true,
     paired: raw.paired === true,
     connectedAtMs: optionalNumber(raw.connectedAtMs),

@@ -206,6 +206,12 @@ export const SessionRowSchema = Type.Object(
     /** Paired device owning this session's scope; absent means gateway-hosted. */
     scopeDeviceId: Type.Optional(NonEmptyString),
     /**
+     * Display label of the scope device at publication time, resolved from the
+     * Gateway's current device facts. Absent means the client falls back to
+     * `scopeDeviceId`.
+     */
+    scopeDeviceName: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+    /**
      * The session's device lease is still held while no run is active; Stop is
      * the only manual release path and must stay available while this is true.
      */

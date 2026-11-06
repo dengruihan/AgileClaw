@@ -9,6 +9,7 @@ import { localParticipantIdentityKey } from "../../../lib/chat/sender-label.ts";
 import { chatItemGroups } from "../chat-agent-run-grouping.ts";
 import { messageRecoveryKey } from "../chat-message-recovery.ts";
 import { resolveTurnRecap, type TurnRecap } from "../chat-progress.ts";
+import { sessionScopeDeviceLabelResolver } from "../chat-session-device-scope.ts";
 import { resolveChatSubagentWait } from "../chat-subagent-wait.ts";
 import {
   assistantGroupCanOwnActiveRunStatus,
@@ -286,6 +287,8 @@ export function projectChatTranscript(
     githubRepo: props.githubRepo,
     githubRepositories: props.githubRepositories,
     showAssistantAvatar: avatarPlacement === "gutter",
+    // Tool results stamp only the device id; the selected row carries its name.
+    resolveDeviceLabel: sessionScopeDeviceLabelResolver(activeSession),
   } satisfies StreamGroupOptions;
   const streamGroupOptions = {
     ...sharedMessageRenderOptions,

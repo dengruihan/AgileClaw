@@ -1,5 +1,5 @@
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
-import type { SessionsListResult } from "../../api/types.ts";
+import type { GatewaySessionRow, SessionsListResult } from "../../api/types.ts";
 import { normalizeDefaultMainSessionAliasForUi } from "../../lib/sessions/session-key.ts";
 
 export type ChatSessionDeviceScope = {
@@ -25,4 +25,19 @@ export function resolveChatSessionDeviceScope(host: {
   );
   const deviceId = normalizeOptionalString(row?.scopeDeviceId);
   return deviceId ? { deviceId, leaseHeld: row?.scopeLeaseHeld === true } : null;
+}
+
+/**
+ * Label resolver for device-tagged tool results: the selected session's row
+ * owns its scope device's display name, and results only stamp the device id.
+ * Whitespace-only names stay absent so the tag falls back to the id.
+ */
+export function sessionScopeDeviceLabelResolver(
+  row: Pick<GatewaySessionRow, "scopeDeviceId" | "scopeDeviceName"> | undefined,
+): (deviceId: string) => string | undefined {
+  const { scopeDeviceId, scopeDeviceName } = row ?? {};
+  const label = normalizeOptionalString(scopeDeviceName);
+  return scopeDeviceId && label
+    ? (deviceId) => (deviceId === scopeDeviceId ? label : undefined)
+    : () => undefined;
 }

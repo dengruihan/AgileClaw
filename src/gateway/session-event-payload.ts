@@ -74,6 +74,7 @@ function buildGatewaySessionEventFields(params: {
     spawnedWorkspaceDir: sessionRow.spawnedWorkspaceDir,
     spawnedCwd: sessionRow.spawnedCwd,
     scopeDeviceId: sessionRow.scopeDeviceId ?? null,
+    scopeDeviceName: sessionRow.scopeDeviceName ?? null,
     scopeLeaseHeld: sessionRow.scopeLeaseHeld ?? false,
     permissionMode: sessionRow.permissionMode ?? null,
     permissionModePending: sessionRow.permissionModePending ?? false,

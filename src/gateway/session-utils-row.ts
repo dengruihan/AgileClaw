@@ -55,6 +55,7 @@ import {
 import { isSessionPermissionChangePending } from "./session-permission-change.js";
 import { projectSessionProviderReview } from "./session-provider-review-projection.js";
 import { readSessionRowModelFacts } from "./session-row-model-facts.js";
+import { sessionScopeDeviceLabel } from "./session-scope-device-label.js";
 import { sessionScopeLeaseHeld } from "./session-scope-lease.js";
 import { buildSessionSwarmSummary } from "./session-swarm-summary.js";
 import { readSessionTitleFieldsFromTranscript as readScopedSessionTitleFieldsFromTranscript } from "./session-transcript-title-reader.js";
@@ -711,6 +712,10 @@ export function presentSessionRow(
   row.activeModel = options.activeModel?.model;
   if (sessionScopeLeaseHeld(row.key, now)) {
     row.scopeLeaseHeld = true;
+  }
+  const scopeDeviceName = sessionScopeDeviceLabel(row.key, row.scopeDeviceId);
+  if (scopeDeviceName) {
+    row.scopeDeviceName = scopeDeviceName;
   }
   return row;
 }

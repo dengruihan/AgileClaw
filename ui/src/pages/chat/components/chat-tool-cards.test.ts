@@ -77,6 +77,54 @@ describe("tool-cards", () => {
     expect(plain.querySelector("button.chat-tool-row")?.textContent).not.toContain("on Studio Mac");
   });
 
+  it("prefers the session's scope device name and falls back to the id", () => {
+    const idOnly = mountCard(
+      {
+        id: "exec:3",
+        name: "exec",
+        completed: true,
+        outputText: "ok",
+        device: { id: "studio-mac" },
+      },
+      { expanded: false },
+    );
+    expect(idOnly.querySelector(".chat-tool-row__device")?.textContent?.trim()).toBe(
+      "on studio-mac",
+    );
+
+    const named = mountCard(
+      {
+        id: "exec:4",
+        name: "exec",
+        completed: true,
+        outputText: "ok",
+        device: { id: "studio-mac" },
+      },
+      {
+        expanded: false,
+        resolveDeviceLabel: (deviceId) => (deviceId === "studio-mac" ? "Studio Mac" : undefined),
+      },
+    );
+    expect(named.querySelector(".chat-tool-row__device")?.textContent?.trim()).toBe(
+      "on Studio Mac",
+    );
+    // The title keeps the stable device id for operator copy and CLI use.
+    expect(named.querySelector(".chat-tool-row__device")?.getAttribute("title")).toBe(
+      "Executed on device studio-mac",
+    );
+
+    const otherDevice = mountCard(
+      { id: "exec:5", name: "exec", completed: true, outputText: "ok", device: { id: "other-pc" } },
+      {
+        expanded: false,
+        resolveDeviceLabel: (deviceId) => (deviceId === "studio-mac" ? "Studio Mac" : undefined),
+      },
+    );
+    expect(otherDevice.querySelector(".chat-tool-row__device")?.textContent?.trim()).toBe(
+      "on other-pc",
+    );
+  });
+
   it("routes MCP App previews through the dedicated double-iframe host", async () => {
     const container = document.createElement("div");
     const preview = { ...canvas, viewId: "cv_app", mcpApp: { viewId: "cv_app" } } as const;

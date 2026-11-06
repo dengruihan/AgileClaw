@@ -16,6 +16,7 @@ import { tryResolveSessionCompatibilityOwnerAgentId } from "./session-request-ag
 import type { SessionRowReadView } from "./session-row-prepared-read.js";
 import type * as records from "./session-row-projection-record.js";
 import type { SessionRowProjection } from "./session-row-projection.js";
+import { sessionScopeDeviceLabel } from "./session-scope-device-label.js";
 import { sessionScopeLeaseHeld } from "./session-scope-lease.js";
 import {
   authorizeIncognitoSessionTarget,
@@ -238,6 +239,10 @@ export function prepareProjectedSessionPresentation(
         resolveActiveSessionAgentStatus(record.entry.agentStatus, now),
         // A mirrored device lease flips without an entry write; retire held-state views.
         sessionScopeLeaseHeld(record.key, now),
+        // The scope device label mirrors the published device-scope snapshot, so
+        // held views retire only when the next turn or scope switch republishes
+        // a changed name; a rename alone does not refresh it.
+        sessionScopeDeviceLabel(record.key, record.entry?.scopeDeviceId),
         // Active budgeted goals can stamp budgetLimitedAt from enriched usage at this clock.
         record.entry.goal?.status === "active" && record.entry.goal.tokenBudget !== undefined
           ? now
