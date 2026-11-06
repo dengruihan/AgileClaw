@@ -418,6 +418,7 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
       undefined,
       undefined,
       expect.any(Function),
+      undefined,
     );
   }
 
@@ -443,6 +444,10 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
     requestExecHost?: typeof requestExecHostViaSocket;
     sendInvokeResult?: InvokeOptions["sendInvokeResult"];
     sendNodeEvent?: InvokeOptions["sendNodeEvent"];
+    onOutputChunk?: InvokeOptions["onOutputChunk"];
+    streamOutput?: boolean;
+    /** Raw wire value for invalid-flag coverage; wins over streamOutput when set. */
+    paramsStreamOutput?: unknown;
     skillBinsCurrent?: () => Promise<Array<{ name: string; resolvedPath: string }>>;
     autoReviewer?: ExecAutoReviewer;
     commitExecAuthorization?: InvokeOptions["commitExecAuthorization"];
@@ -513,6 +518,11 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
         needsScreenRecording: params.needsScreenRecording,
         suppressNotifyOnExit: params.suppressNotifyOnExit,
         sessionKey: "agent:main:main",
+        ...(params.paramsStreamOutput !== undefined
+          ? { streamOutput: params.paramsStreamOutput as boolean }
+          : params.streamOutput !== undefined
+            ? { streamOutput: params.streamOutput }
+            : {}),
       },
       skillBins: {
         current: params.skillBinsCurrent ?? (async () => []),
@@ -522,6 +532,7 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
       sendInvokeResult: spies.sendInvokeResult,
       sendNodeEvent: spies.sendNodeEvent,
       preferMacAppExecHost: params.preferMacAppExecHost,
+      ...(params.onOutputChunk ? { onOutputChunk: params.onOutputChunk } : {}),
       getRuntimeConfig: () => {
         const cfg = getRuntimeConfigSnapshot() ?? {};
         return {
@@ -1907,6 +1918,48 @@ describe("handleSystemRunInvoke mac app exec host routing", () => {
     );
     expect(rerun.runCommand).toHaveBeenCalledTimes(1);
     expectOk(rerun.sendInvokeResult, "safe-builtin-ok");
+  });
+
+  it("forwards decoded output chunks only when the invoke opts into streaming", async () => {
+    const chunks: Array<{ text: string; stream: string }> = [];
+    const streamed = await runLocal({
+      streamOutput: true,
+      onOutputChunk: async (text) => {
+        chunks.push({ text, stream: "stdout" });
+      },
+      runCommand: vi.fn(async (_argv, _cwd, _env, _timeout, _signal, _assert, onOutputChunk) => {
+        onOutputChunk?.("hello", "stdout");
+        onOutputChunk?.(" world", "stdout");
+        return localResult("hello world");
+      }),
+    });
+    expect(chunks).toEqual([
+      { text: "hello", stream: "stdout" },
+      { text: " world", stream: "stdout" },
+    ]);
+    expectOk(streamed.sendInvokeResult, "hello world");
+  });
+
+  it("keeps non-streaming invokes free of chunk plumbing", async () => {
+    const onOutputChunk = vi.fn();
+    const result = await runLocal({
+      onOutputChunk,
+      runCommand: vi.fn(async (...args) => {
+        expect(args[6]).toBeUndefined();
+        return localResult("quiet");
+      }),
+    });
+    expect(onOutputChunk).not.toHaveBeenCalled();
+    expectOk(result.sendInvokeResult, "quiet");
+  });
+
+  it("rejects a non-boolean streamOutput flag", async () => {
+    const result = await runLocal({
+      // The wire contract validates the flag before any policy work.
+      paramsStreamOutput: "yes" as unknown as boolean,
+    });
+    expectError(result.sendInvokeResult, "streamOutput must be boolean");
+    expect(result.runCommand).not.toHaveBeenCalled();
   });
 });
 /* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

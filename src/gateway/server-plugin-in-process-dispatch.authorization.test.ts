@@ -782,6 +782,14 @@ describe("typed in-process agent authorization", () => {
       options: { forceSyntheticClient: true },
     },
     {
+      name: "agent tool caller without a lifetime assertion",
+      method: "node.invoke",
+      options: {
+        forceSyntheticClient: true,
+        agentToolCaller: { agentId: "main", sessionKey: "agent:main:root" },
+      },
+    },
+    {
       name: "different gateway method",
       method: "node.list",
       options: { forceSyntheticClient: true, pluginRuntimeOwnerId: "duplex-fixture" },
@@ -806,6 +814,45 @@ describe("typed in-process agent authorization", () => {
     ).rejects.toThrow("owner-bound trusted synthetic client");
 
     expect(onDispatchReady).not.toHaveBeenCalled();
+  });
+
+  it("allows a lifetime-asserted agent tool caller to stream node invokes", async () => {
+    const dispatched: { client: GatewayRequestOptions["client"] } = { client: null };
+    const context = createContext();
+    context.getGatewayMethodRegistry = () =>
+      createGatewayMethodRegistry([
+        {
+          name: "node.invoke",
+          scope: "operator.write",
+          owner: { kind: "core", area: "nodes" },
+          handler: ({ client: resolvedClient, respond }: GatewayRequestHandlerOptions) => {
+            dispatched.client = resolvedClient;
+            respond(true, { ok: true });
+          },
+        },
+      ]);
+    const onProgress = vi.fn();
+    await dispatchGatewayMethodInProcess(
+      "node.invoke",
+      {},
+      {
+        forceSyntheticClient: true,
+        operatorRoleActor: { kind: "system" },
+        syntheticScopes: ["operator.write"],
+        agentToolCaller: {
+          agentId: "main",
+          sessionKey: "agent:main:root",
+          assertCurrent: () => {},
+        },
+        nodeInvokeStream: { onProgress, onDispatchReady: vi.fn(), isRuntimeCurrent: () => true },
+        resolveGatewayContext: () => context,
+      },
+    );
+    expect(dispatched.client?.internal).toMatchObject({
+      syntheticClient: true,
+      agentToolCaller: { agentId: "main", sessionKey: "agent:main:root" },
+    });
+    expect(dispatched.client?.internal?.nodeInvokeStream?.onProgress).toBe(onProgress);
   });
 
   it("retains the authenticated caller and its closure-bound authority for node duplex", async () => {

@@ -665,6 +665,7 @@ async function dispatchInvoke(
     sendNodeEvent: (event, payload) => sendNodeEvent(client, event, payload),
     sendInvokeResult: response.send,
     preferMacAppExecHost,
+    ...(runtime.emitProgress ? { onOutputChunk: (text) => runtime.emitProgress!(text) } : {}),
   });
 }
 

@@ -33,6 +33,53 @@ describe("runCommand", () => {
     });
   });
 
+  it("streams decoded output chunks, including split multibyte sequences", async () => {
+    const chunks: Array<{ text: string; stream: string }> = [];
+    const script = [
+      "process.stdout.write(Buffer.from([0xe4,0xbd]));",
+      "setTimeout(() => {",
+      "  process.stdout.write(Buffer.from([0xa0,0xe5,0xa5,0xbd]));",
+      "  process.stdout.write(' done');",
+      "}, 10);",
+    ].join(" ");
+    const result = await runCommand(
+      [process.execPath, "-e", script],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (text, stream) => {
+        chunks.push({ text, stream });
+      },
+    );
+    expect(result.stdout).toBe("你好 done");
+    expect(chunks.map((chunk) => chunk.text).join("")).toBe("你好 done");
+    // A split sequence must never surface as a replacement character.
+    expect(chunks.some((chunk) => chunk.text.includes("\uFFFD"))).toBe(false);
+  });
+
+  it("keeps stdout and stderr chunks labeled by their stream", async () => {
+    const chunks: Array<{ text: string; stream: string }> = [];
+    await runCommand(
+      [
+        process.execPath,
+        "-e",
+        "process.stdout.write('out-line'); process.stderr.write('err-line')",
+      ],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (text, stream) => {
+        chunks.push({ text, stream });
+      },
+    );
+    expect(chunks).toContainEqual({ text: "out-line", stream: "stdout" });
+    expect(chunks).toContainEqual({ text: "err-line", stream: "stderr" });
+  });
+
   it.each(["before", "after"] as const)(
     "checks node launch policy %s native execution",
     async (timing) => {

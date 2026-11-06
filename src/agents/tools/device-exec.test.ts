@@ -47,9 +47,11 @@ describe("runDeviceExec", () => {
           leaseToken: "lease-1",
         }),
       }),
-      undefined,
+      expect.any(Object),
     );
     expect(result.details).toMatchObject({ status: "completed", exitCode: 0, nodeId: "device-a" });
+    // The lease token is admission material; it never reaches model-visible output.
+    expect(JSON.stringify(result)).not.toContain("lease-1");
   });
 
   it("reports a failed exit without pretending success", async () => {
@@ -92,5 +94,146 @@ describe("runDeviceExec", () => {
     expect(result.details).toMatchObject({ truncated: true });
     expect((result.details as { aggregated: string }).aggregated.length).toBeLessThan(200_000);
     expect(result.content[0]).toMatchObject({ text: expect.stringContaining("output truncated") });
+  });
+
+  it("rejects per-call gateway overrides that would retarget the invoke", async () => {
+    await expect(
+      runDeviceExec({ ...base, params: { command: "uname", gatewayUrl: "ws://elsewhere" } }),
+    ).rejects.toThrow(/gateway overrides/);
+    expect(callGatewayTool).not.toHaveBeenCalled();
+  });
+});
+
+describe("runDeviceExec streaming", () => {
+  function captureStream() {
+    let stream:
+      | { onProgress: (chunk: string) => void; isRuntimeCurrent: () => boolean }
+      | undefined;
+    callGatewayTool.mockImplementation(
+      async (_method: string, _opts: unknown, _invoke: unknown, extra: unknown) => {
+        stream = (extra as { nodeInvokeStream?: typeof stream })?.nodeInvokeStream;
+        return { payload: { success: true, exitCode: 0, stdout: "done", stderr: "" } };
+      },
+    );
+    return () => stream;
+  }
+
+  it("opts into streamOutput and forwards bounded chunks to onUpdate", async () => {
+    const getStream = captureStream();
+    const updates: Array<{ text: string; status: string }> = [];
+    const result = await runDeviceExec({
+      ...base,
+      params: { command: "build" },
+      onUpdate: (update) => {
+        const text = update.content[0];
+        updates.push({
+          text: text?.type === "text" ? text.text : "",
+          status: (update.details as { status: string }).status,
+        });
+      },
+    });
+    const invoke = callGatewayTool.mock.calls[0]![2] as { params: Record<string, unknown> };
+    expect(invoke.params.streamOutput).toBe(true);
+    const stream = getStream();
+    expect(stream).toBeDefined();
+    stream!.onProgress("step 1\n");
+    stream!.onProgress("step 2\n");
+    expect(updates).toHaveLength(2);
+    expect(updates[0]).toMatchObject({ text: "step 1\n", status: "running" });
+    expect(updates[1]).toMatchObject({ text: "step 1\nstep 2\n", status: "running" });
+    // The final result stays the single authoritative outcome.
+    expect(result.details).toMatchObject({ status: "completed", aggregated: "done" });
+  });
+
+  it("keeps only a rolling tail and goes quiet after the stream budget", async () => {
+    const getStream = captureStream();
+    let updates = 0;
+    let lastText = "";
+    await runDeviceExec({
+      ...base,
+      params: { command: "flood" },
+      onUpdate: (update) => {
+        updates += 1;
+        const text = update.content[0];
+        lastText = text?.type === "text" ? text.text : "";
+      },
+    });
+    const stream = getStream()!;
+    stream.onProgress(`${"a".repeat(20 * 1024)}\n`);
+    expect(updates).toBe(1);
+    expect(Buffer.byteLength(lastText, "utf8")).toBeLessThanOrEqual(4 * 1024);
+    // Once the total budget is spent, further chunks are dropped, not forwarded.
+    stream.onProgress(`${"b".repeat(20 * 1024)}\n`);
+    stream.onProgress("more");
+    expect(updates).toBe(1);
+    expect(stream.isRuntimeCurrent()).toBe(false);
+  });
+
+  it("counts the stream budget in UTF-8 bytes, not UTF-16 units", async () => {
+    const getStream = captureStream();
+    const tails: string[] = [];
+    await runDeviceExec({
+      ...base,
+      params: { command: "cjk" },
+      onUpdate: (update) => {
+        const text = update.content[0];
+        tails.push(text?.type === "text" ? text.text : "");
+      },
+    });
+    const stream = getStream()!;
+    // 10_000 CJK chars are 30_000 UTF-8 bytes but only 10_000 UTF-16 units.
+    stream.onProgress("你".repeat(10_000));
+    expect(tails).toHaveLength(1);
+    expect(Buffer.byteLength(tails[0]!, "utf8")).toBeLessThanOrEqual(4 * 1024);
+    // +3_000 bytes crosses the 32 KiB byte budget even though the UTF-16
+    // count would still be far under it.
+    stream.onProgress("好".repeat(1_000));
+    stream.onProgress("x");
+    expect(tails).toHaveLength(1);
+    expect(stream.isRuntimeCurrent()).toBe(false);
+  });
+
+  it("ignores empty heartbeat chunks without emitting an update", async () => {
+    const getStream = captureStream();
+    let updates = 0;
+    await runDeviceExec({
+      ...base,
+      params: { command: "silent" },
+      onUpdate: () => {
+        updates += 1;
+      },
+    });
+    const stream = getStream()!;
+    stream.onProgress("");
+    expect(updates).toBe(0);
+  });
+
+  it("stops forwarding once the caller aborts", async () => {
+    const getStream = captureStream();
+    const controller = new AbortController();
+    let updates = 0;
+    await runDeviceExec({
+      ...base,
+      params: { command: "long" },
+      signal: controller.signal,
+      onUpdate: () => {
+        updates += 1;
+      },
+    });
+    const stream = getStream()!;
+    controller.abort();
+    stream.onProgress("late");
+    expect(updates).toBe(0);
+    expect(stream.isRuntimeCurrent()).toBe(false);
+  });
+
+  it("stays final-result-only when no onUpdate consumer exists", async () => {
+    callGatewayTool.mockResolvedValue({
+      payload: { success: true, exitCode: 0, stdout: "ok", stderr: "" },
+    });
+    await runDeviceExec({ ...base, params: { command: "uname" } });
+    const invoke = callGatewayTool.mock.calls[0]![2] as { params: Record<string, unknown> };
+    expect(invoke.params.streamOutput).toBeUndefined();
+    expect(callGatewayTool.mock.calls[0]![3]).toEqual({});
   });
 });

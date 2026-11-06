@@ -30,6 +30,7 @@ import {
   type OperatorScope,
 } from "../../gateway/method-scopes.js";
 import { getOperatorApprovalRuntimeToken } from "../../gateway/operator-approval-runtime-token.js";
+import type { GatewayNodeInvokeStream } from "../../gateway/server-methods/types.js";
 import {
   claimAgentRunApprovalAuthority,
   getActiveAgentRunDelegatedAuthority,
@@ -629,6 +630,8 @@ export async function callGatewayTool<T = Record<string, unknown>>(
     signal?: AbortSignal;
     onHelloOk?: CallGatewayOptions["onHelloOk"];
     dispatchAuthority?: { version: 2; kind: "run" | "source-bound"; assertCurrent: () => void };
+    /** In-process node.invoke streaming; ignored on the transport fallback. */
+    nodeInvokeStream?: GatewayNodeInvokeStream;
   },
 ) {
   const dispatchAuthority = extra?.dispatchAuthority;
@@ -669,6 +672,7 @@ export async function callGatewayTool<T = Record<string, unknown>>(
           signal: extra?.signal,
           expectFinal: extra?.expectFinal,
           assertDispatchCurrent: dispatchAuthority?.assertCurrent,
+          ...(extra?.nodeInvokeStream ? { nodeInvokeStream: extra.nodeInvokeStream } : {}),
           ...(Array.isArray(extra?.scopes) ? { scopes } : {}),
         },
         runtimeIdentity,
@@ -748,3 +752,4 @@ export async function callGatewayTool<T = Record<string, unknown>>(
     throw error;
   }
 }
+/* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

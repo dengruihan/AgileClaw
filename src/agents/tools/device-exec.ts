@@ -7,11 +7,18 @@
  * command params, which is exactly what M61 per-call admission checks. Exec is
  * foreground by contract: detached spawn is rejected here instead of silently
  * escaping the lease.
+ *
+ * Output streams to the tool's onUpdate through the registry progress channel
+ * (`node.invoke.progress` → PendingInvoke.onProgress) when the caller provides
+ * an update callback; frames are bounded and the final result stays the single
+ * authoritative outcome, so cancel and timeout behavior is unchanged.
  */
 import { randomUUID } from "node:crypto";
 import { asNullableRecord } from "@openclaw/normalization-core/record-coerce";
+import type { GatewayNodeInvokeStream } from "../../gateway/server-methods/types.js";
 import { buildNodeShellCommand } from "../../infra/node-shell.js";
-import { truncateUtf8Prefix } from "../../utils/utf8-truncate.js";
+import { truncateUtf8Prefix, truncateUtf8Suffix } from "../../utils/utf8-truncate.js";
+import type { AgentToolResult } from "../runtime/index.js";
 import { readPositiveIntegerParam, readToolStringParam, ToolInputError } from "./common.js";
 import { callGatewayTool } from "./gateway.js";
 import { textResult } from "./tool-results.js";
@@ -22,9 +29,13 @@ const DEVICE_EXEC_DEFAULT_TIMEOUT_SEC = 1_800;
 const DEVICE_EXEC_TIMEOUT_GRACE_MS = 15_000;
 /** Model-facing bound; a longer result is truncated instead of dropped. */
 const DEVICE_EXEC_OUTPUT_MAX_BYTES = 32 * 1024;
+/** Total streamed bytes forwarded to onUpdate before the stream goes quiet. */
+const DEVICE_EXEC_STREAM_MAX_BYTES = 32 * 1024;
+/** Rolling tail kept for each partial update so late output stays visible. */
+const DEVICE_EXEC_STREAM_TAIL_BYTES = 4 * 1024;
 
 export type DeviceExecDetails = {
-  status: "completed" | "failed";
+  status: "completed" | "failed" | "running";
   nodeId: string;
   deviceScope: string;
   exitCode: number | null;
@@ -57,6 +68,58 @@ function rejectUnsupportedExecParams(params: Record<string, unknown>): void {
       `device-scoped exec runs on the session's device; a per-call host override (${host}) is not allowed. Switch scope with use_device instead.`,
     );
   }
+  const gatewayOverride =
+    readToolStringParam(params, "gatewayUrl") ?? readToolStringParam(params, "gatewayToken");
+  if (gatewayOverride !== undefined) {
+    throw new ToolInputError(
+      "device-scoped exec targets the session's Gateway; per-call gateway overrides are not allowed.",
+    );
+  }
+}
+
+/**
+ * Bounded progress consumer for one device exec. Chunks append to a capped
+ * rolling tail; updates stop after the stream budget is spent so a chatty
+ * command can never flood the model context.
+ */
+function createDeviceExecStream(params: {
+  deviceId: string;
+  startedAt: number;
+  signal?: AbortSignal;
+  onUpdate: (update: AgentToolResult<DeviceExecDetails>) => void;
+}): GatewayNodeInvokeStream {
+  let tail = "";
+  let forwardedBytes = 0;
+  let quiet = false;
+  const isRuntimeCurrent = () => !(params.signal?.aborted ?? false) && !quiet;
+  return {
+    isRuntimeCurrent,
+    onDispatchReady: () => undefined,
+    onProgress: (chunk: string) => {
+      if (!chunk || !isRuntimeCurrent()) {
+        return;
+      }
+      // Budgets are UTF-8 bytes so multibyte output cannot exceed the bound.
+      tail = truncateUtf8Suffix(tail + chunk, DEVICE_EXEC_STREAM_TAIL_BYTES);
+      forwardedBytes += Buffer.byteLength(chunk, "utf8");
+      if (forwardedBytes > DEVICE_EXEC_STREAM_MAX_BYTES) {
+        quiet = true;
+        return;
+      }
+      params.onUpdate({
+        content: [{ type: "text", text: tail }],
+        details: {
+          status: "running",
+          nodeId: params.deviceId,
+          deviceScope: params.deviceId,
+          exitCode: null,
+          durationMs: Date.now() - params.startedAt,
+          aggregated: tail,
+          ...(forwardedBytes >= DEVICE_EXEC_STREAM_MAX_BYTES ? { truncated: true as const } : {}),
+        },
+      });
+    },
+  };
 }
 
 /** Execute one already-authorized placement call on the scoped device. */
@@ -69,6 +132,7 @@ export async function runDeviceExec(params: {
   agentId: string;
   runId?: string;
   signal?: AbortSignal;
+  onUpdate?: (update: AgentToolResult<DeviceExecDetails>) => void;
 }) {
   const command = readToolStringParam(params.params, "command", { required: true });
   rejectUnsupportedExecParams(params.params);
@@ -87,6 +151,14 @@ export async function runDeviceExec(params: {
   const invokeWaitMs = runTimeoutMs + DEVICE_EXEC_TIMEOUT_GRACE_MS;
   const startedAt = Date.now();
   const runId = params.runId ?? randomUUID();
+  const stream = params.onUpdate
+    ? createDeviceExecStream({
+        deviceId: params.deviceId,
+        startedAt,
+        ...(params.signal ? { signal: params.signal } : {}),
+        onUpdate: params.onUpdate,
+      })
+    : undefined;
   const raw = await callGatewayTool(
     "node.invoke",
     { timeoutMs: invokeWaitMs },
@@ -108,9 +180,13 @@ export async function runDeviceExec(params: {
         // Admission token; rides inside params so the invoke wire is unchanged.
         leaseToken: params.leaseToken,
         suppressNotifyOnExit: true,
+        ...(stream ? { streamOutput: true } : {}),
       },
     },
-    params.signal ? { signal: params.signal } : undefined,
+    {
+      ...(params.signal ? { signal: params.signal } : {}),
+      ...(stream ? { nodeInvokeStream: stream } : {}),
+    },
   );
   const payload = asNullableRecord(asNullableRecord(raw)?.payload) ?? {};
   const stdout = typeof payload.stdout === "string" ? payload.stdout : "";
