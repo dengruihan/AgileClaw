@@ -5,10 +5,7 @@ import type { GatewayBrowserClient } from "../api/gateway.ts";
 import type { AgentsListResult, GatewayAgentRow } from "../api/types.ts";
 import type { RouteId } from "../app-routes.ts";
 import {
-  COMMAND_PALETTE_OPEN_EVENT,
-  SHELL_NAV_DRAWER_TOGGLE_EVENT,
-} from "../components/command-palette-contract.ts";
-import {
+  DEBUG_OVERLAY_REQUEST_EVENT,
   TERMINAL_PANEL_TOGGLE_EVENT,
   PLUGIN_PANEL_TOGGLE_EVENT,
   UI_COMMAND_EVENT,
@@ -25,7 +22,6 @@ import {
   resetAppHostTestGlobals,
   type ShellKeyboardState,
   type TestOptionalCustomElement,
-  stubRenderedWhenDefined,
 } from "./app-host.test-support.ts";
 import { ShellGatewayOwner, type ShellGatewayHost } from "./app-shell-gateway.ts";
 import { createApplicationNavigationPreferences } from "./bootstrap-navigation-preferences.ts";
@@ -37,15 +33,16 @@ import type {
   ApplicationGatewaySnapshot,
 } from "./context.ts";
 import type { LazyCustomElementRequestController } from "./lazy-custom-element.ts";
-import "./app-host.ts";
 import {
   persistLazyShellAction,
   readLazyShellAction,
   SHELL_APPROVALS_OPEN_EVENT,
 } from "./lazy-shell-action.ts";
+import "./app-host.ts";
 import { shouldMergeChatChrome } from "./mobile-nav-layout.ts";
 import { resetServerUiPrefsSync } from "./server-prefs.ts";
 import { loadSettings } from "./settings.ts";
+import { SHELL_NAV_DRAWER_TOGGLE_EVENT } from "./shell-nav-drawer-event.ts";
 import { scheduleStaleChunkReload } from "./stale-chunk-reload.ts";
 
 vi.mock("./stale-chunk-reload.ts", async () => {
@@ -99,9 +96,8 @@ type ShellLifecycle = Pick<ShellChromeEventState, "connectedCallback" | "disconn
 
 type ShellLazySurfaceState = ShellKeyboardState &
   ShellLifecycle & {
-    commandPaletteElement: TestOptionalCustomElement;
+    execApprovalElement: TestOptionalCustomElement;
     lazyCustomElements: LazyCustomElementRequestController;
-    openPalette: () => void;
     restorePendingLazyAction: () => void;
   };
 
@@ -122,7 +118,6 @@ type ShellChromeEventState = {
   runtime: { context: ApplicationContext };
   navDrawerOpen: boolean;
   handleShellNavDrawerToggle: (event: Event) => void;
-  openPalette: () => void;
   connectedCallback: () => void;
   disconnectedCallback: () => void;
 };
@@ -150,22 +145,19 @@ type ShellSettingsSearchLoadState = {
   handleSettingsSearchQueryChange: (query: string) => Promise<void>;
 };
 
-function configureLazyPaletteShell(
+function configureLazyApprovalsShell(
   element: TestOptionalCustomElement,
-  openPalette: () => void,
+  show: () => void,
 ): ShellLazySurfaceState {
   const shell = document.createElement("openclaw-app-shell") as unknown as ShellLazySurfaceState;
-  shell.commandPaletteElement = element;
+  shell.execApprovalElement = element;
   Object.defineProperty(shell, "updateComplete", {
     configurable: true,
     get: () => Promise.resolve(true),
   });
-  Object.defineProperty(shell, "commandPalette", {
+  Object.defineProperty(shell, "approvalOverlay", {
     configurable: true,
-    get: () =>
-      customElements.get(element.tagName)
-        ? { isOpen: false, openPalette, togglePalette: vi.fn() }
-        : undefined,
+    get: () => (customElements.get(element.tagName) ? { show } : undefined),
   });
   return shell;
 }
@@ -188,7 +180,6 @@ type ShellEpochState = {
   navDrawerTrigger: HTMLElement | null;
   lastWorkspaceLocation: { routeId: string; search: string } | null;
   activeSessionKey: string;
-  commandPaletteTarget: unknown;
   agentsListClient: GatewayBrowserClient | null;
   agentsListSource: ApplicationContext["agents"] | null;
   sessionKeyClient: GatewayBrowserClient | null;
@@ -210,7 +201,6 @@ type ShellSessionNavigationState = {
   activeSessionKey: string;
   routeState: { routeId?: RouteId };
   navigate: (routeId: RouteId) => void;
-  handleCommandPaletteSlashCommand: (command: string) => void;
   recoverNotFoundRoute: () => boolean;
 };
 
@@ -258,13 +248,13 @@ describe("AgileClaw app lifecycle", () => {
 describe("AgileClaw shell source initialization", () => {
   it("preserves reload intent on disconnect but clears it on context replacement", () => {
     vi.stubGlobal("sessionStorage", createStorageMock());
-    persistLazyShellAction({ eventType: COMMAND_PALETTE_OPEN_EVENT });
+    persistLazyShellAction({ eventType: SHELL_APPROVALS_OPEN_EVENT });
     const shell = document.createElement(
       "openclaw-app-shell",
     ) as unknown as ShellLazyLifecycleState;
 
     shell.resetForDocumentDisconnect();
-    expect(readLazyShellAction()).toEqual({ eventType: COMMAND_PALETTE_OPEN_EVENT });
+    expect(readLazyShellAction()).toEqual({ eventType: SHELL_APPROVALS_OPEN_EVENT });
 
     shell.resetForContextEpoch();
     expect(readLazyShellAction()).toBeNull();
@@ -335,7 +325,6 @@ describe("AgileClaw shell source initialization", () => {
     shell.navDrawerTrigger = trigger;
     shell.lastWorkspaceLocation = { routeId: "usage", search: "?agent=old" };
     shell.activeSessionKey = "agent:old:main";
-    shell.commandPaletteTarget = {};
     shell.agentsListClient = client;
     shell.agentsListSource = agents;
     shell.sessionKeyClient = client;
@@ -352,7 +341,6 @@ describe("AgileClaw shell source initialization", () => {
     expect(shell.navDrawerTrigger).toBeNull();
     expect(shell.lastWorkspaceLocation).toBeNull();
     expect(shell.activeSessionKey).toBe("");
-    expect(shell.commandPaletteTarget).toBeUndefined();
     expect(shell.agentsListClient).toBeNull();
     expect(shell.agentsListSource).toBeNull();
     expect(shell.sessionKeyClient).toBeNull();
@@ -426,33 +414,6 @@ describe("AgileClaw shell route session commits", () => {
     shell.navigate("chat");
     expect(navigate).toHaveBeenLastCalledWith("chat", {
       pathname: "/chat/main/1234567890abcdef1234567890abcdef",
-    });
-  });
-
-  it("preserves catalog identity when routing a slash-command draft", () => {
-    const navigate = vi.fn();
-    const shell = document.createElement(
-      "openclaw-app-shell",
-    ) as unknown as ShellSessionNavigationState;
-    shell.runtime = {
-      context: {
-        basePath: "",
-        agents: { state: { agentsList: { defaultId: "research", mainKey: "main" } } },
-        agentSelection: { state: { selectedId: "research" } },
-        gateway: { snapshot: { hello: null } },
-        sessions: createRouteSessions(),
-        chatSubmissions: createChatSubmissions(),
-        navigate,
-      } as unknown as ApplicationContext,
-    };
-    shell.activeSessionKey = "catalog:claude:gateway%3Alocal:thread-1";
-    shell.routeState = { routeId: "chat" };
-
-    shell.handleCommandPaletteSlashCommand("/review");
-
-    expect(navigate).toHaveBeenCalledWith("chat", {
-      pathname: "/chat/research",
-      search: "?catalog=claude&host=gateway%3Alocal&thread=thread-1&draft=%2Freview+",
     });
   });
 
@@ -756,12 +717,11 @@ describe("AgileClaw shell keyboard shortcuts", () => {
     trigger.remove();
   });
 
-  it("handles merged header drawer and palette requests", () => {
+  it("handles merged header drawer requests", () => {
     vi.stubGlobal(
       "matchMedia",
       vi.fn(() => ({ matches: true })),
     );
-    const openPalette = vi.fn();
     const trigger = document.createElement("button");
     const shell = document.createElement("openclaw-app-shell") as unknown as ShellChromeEventState;
     shell.runtime = {
@@ -769,88 +729,48 @@ describe("AgileClaw shell keyboard shortcuts", () => {
         navigation: { snapshot: { navCollapsed: false }, update: vi.fn() },
       } as unknown as ApplicationContext,
     };
-    Object.defineProperty(shell, "commandPalette", {
-      configurable: true,
-      value: { isOpen: false, openPalette, togglePalette: vi.fn() },
-    });
 
-    const handlePaletteOpen = () => openPalette();
-    window.addEventListener(COMMAND_PALETTE_OPEN_EVENT, handlePaletteOpen);
-    try {
-      shell.handleShellNavDrawerToggle(
-        new CustomEvent(SHELL_NAV_DRAWER_TOGGLE_EVENT, { detail: { trigger } }),
-      );
-      shell.openPalette();
+    shell.handleShellNavDrawerToggle(
+      new CustomEvent(SHELL_NAV_DRAWER_TOGGLE_EVENT, { detail: { trigger } }),
+    );
 
-      expect(shell.navDrawerOpen).toBe(true);
-      expect(openPalette).toHaveBeenCalledOnce();
-    } finally {
-      window.removeEventListener(COMMAND_PALETTE_OPEN_EVENT, handlePaletteOpen);
-    }
+    expect(shell.navDrawerOpen).toBe(true);
   });
 
-  it.each(["MacIntel", "Win32"])(
-    "opens an unloaded palette only with the platform shortcut on %s",
-    async (platform) => {
-      vi.spyOn(navigator, "platform", "get").mockReturnValue(platform);
-      const element = createLazyElementSpec("command palette");
-      const openPalette = vi.fn();
-      const shell = configureLazyPaletteShell(element, openPalette);
-      stubRenderedWhenDefined(shell);
-      const chord = (metaKey: boolean) =>
-        new KeyboardEvent("keydown", {
-          key: "л",
-          code: "KeyK",
-          metaKey,
-          ctrlKey: !metaKey,
-          cancelable: true,
-        });
-      const other = chord(platform !== "MacIntel");
-      shell.handleDocumentKeydown(other);
-      expect(other.defaultPrevented).toBe(false);
-      expect(openPalette).not.toHaveBeenCalled();
-
-      const primary = chord(platform === "MacIntel");
-      shell.handleDocumentKeydown(primary);
-      expect(primary.defaultPrevented).toBe(true);
-      await vi.waitFor(() => expect(openPalette).toHaveBeenCalledOnce());
-    },
-  );
-
-  it("clears a rejected command palette action on Close", async () => {
+  it("clears a rejected lazy action on Close", async () => {
     vi.stubGlobal("sessionStorage", createStorageMock());
-    const element = createLazyElementSpec("cancelled command palette", {
-      firstError: new Error("command palette chunk unavailable"),
+    const element = createLazyElementSpec("cancelled approvals dialog", {
+      firstError: new Error("approvals chunk unavailable"),
     });
-    const openPalette = vi.fn();
-    const shell = configureLazyPaletteShell(element, openPalette);
+    const show = vi.fn();
+    const shell = configureLazyApprovalsShell(element, show);
 
     await withConnectedShell(shell, async () => {
-      shell.openPalette();
+      window.dispatchEvent(new CustomEvent(SHELL_APPROVALS_OPEN_EVENT));
       await vi.waitFor(() => expect(shell.lazyCustomElements.visibleState?.status).toBe("error"));
       shell.lazyCustomElements.close();
 
       expect(readLazyShellAction()).toBeNull();
-      const replacement = configureLazyPaletteShell(element, openPalette);
+      const replacement = configureLazyApprovalsShell(element, show);
       replacement.restorePendingLazyAction();
       await Promise.resolve();
-      expect(openPalette).not.toHaveBeenCalled();
+      expect(show).not.toHaveBeenCalled();
     });
   });
 
-  it("does not clear an unrelated pending action from an already-loaded palette", async () => {
+  it("does not clear an unrelated pending action from an already-loaded surface", async () => {
     vi.stubGlobal("sessionStorage", createStorageMock());
-    persistLazyShellAction({ eventType: SHELL_APPROVALS_OPEN_EVENT });
-    const element = createLazyElementSpec("loaded command palette");
+    persistLazyShellAction({ eventType: DEBUG_OVERLAY_REQUEST_EVENT });
+    const element = createLazyElementSpec("loaded approvals dialog");
     customElements.define(element.tagName, class extends HTMLElement {});
-    const openPalette = vi.fn();
-    const shell = configureLazyPaletteShell(element, openPalette);
+    const show = vi.fn();
+    const shell = configureLazyApprovalsShell(element, show);
 
     await withConnectedShell(shell, () => {
-      shell.openPalette();
+      window.dispatchEvent(new CustomEvent(SHELL_APPROVALS_OPEN_EVENT));
 
-      expect(openPalette).toHaveBeenCalledOnce();
-      expect(readLazyShellAction()).toEqual({ eventType: SHELL_APPROVALS_OPEN_EVENT });
+      expect(show).toHaveBeenCalledOnce();
+      expect(readLazyShellAction()).toEqual({ eventType: DEBUG_OVERLAY_REQUEST_EVENT });
     });
   });
 

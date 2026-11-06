@@ -323,7 +323,7 @@ For trusted, keyless local tests, run the complete invocation in an isolated Lin
 ```bash
 node scripts/run-vitest.mjs --isolated-image "$IMAGE_ID" run \
   --config test/vitest/vitest.ui-e2e.config.ts --configLoader runner \
-  ui/src/e2e/command-palette-catalog.real-gateway.e2e.test.ts
+  ui/src/e2e/chat-widget-sandbox.real-gateway.e2e.test.ts
 ```
 
 The adapter requires Linux, an existing rootless Podman installation with its native init helper (normally catatonit), checkout-local `pnpm install --frozen-lockfile` dependencies, and native Node and pnpm executables compatible with the image. Put the native pnpm executable matching `package.json` on `PATH`, or select it through the existing `npm_execpath` environment variable; a Corepack/download shim is not an offline executable. The image must already contain the Chromium revision required by the installed Playwright package under `/ms-playwright`, including its headless shell and system libraries. The runner checks versions and launches Chromium before starting the test command. SELinux-labeled hosts are not supported by this initial adapter: it refuses before creating a container rather than relabeling shared host files or disabling enforcement. Use an already supported isolated runner instead of changing host security policy.

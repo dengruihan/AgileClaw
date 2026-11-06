@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createStorageMock } from "../../test-helpers/storage.ts";
 import {
   decodeIdentityPreferences,
-  decodePalettePreference,
   encodeIdentityPreferences,
   loadBrowserPreferences,
   loadNewSessionPreference,
@@ -196,44 +195,5 @@ describe("new-session browser preferences", () => {
     replaceBrowserPreference(gateway, "main", {});
     expect(loadNewSessionPreference(gateway, "main")).toBeNull();
     expect(loadBrowserPreferences(gateway)).toEqual({ research: { folder: "/research" } });
-  });
-});
-
-describe("palette placement overrides", () => {
-  it("preserves cleared placement fields without taking over model defaults or one-use names", () => {
-    expect(
-      decodePalettePreference({
-        agentId: "Main",
-        selection: {
-          workspace: "/workspace",
-          folder: "/workspace",
-          projectId: "",
-          remoteProject: null,
-          baseRef: "",
-          worktreeName: "foreground-task",
-          where: { kind: "local" },
-          worktree: false,
-          freshWorkspace: false,
-          model: "do-not-restore",
-          thinkingLevel: "high",
-          fastMode: true,
-        },
-      }),
-    ).toEqual({
-      agentId: "main",
-      selection: {
-        workspace: "/workspace",
-        folder: "/workspace",
-        projectId: "",
-        remoteProject: null,
-        baseRef: "",
-        where: { kind: "local" },
-        worktree: false,
-        freshWorkspace: false,
-      },
-    });
-    expect(decodePalettePreference(null)).toBeNull();
-    expect(decodePalettePreference({ agentId: "", selection: { worktree: true } })).toBeNull();
-    expect(decodePalettePreference({ agentId: "main", selection: "invalid" })).toBeNull();
   });
 });

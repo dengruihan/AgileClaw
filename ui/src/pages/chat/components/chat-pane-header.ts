@@ -6,10 +6,9 @@ import type { ApplicationContext } from "../../../app/context.ts";
 import { resolveControlUiAuthCandidates } from "../../../app/control-ui-auth.ts";
 import { beginNativeWindowDrag } from "../../../app/native-window-drag.ts";
 import {
-  COMMAND_PALETTE_OPEN_EVENT,
   SHELL_NAV_DRAWER_TOGGLE_EVENT,
   type ShellNavDrawerToggleDetail,
-} from "../../../components/command-palette-contract.ts";
+} from "../../../app/shell-nav-drawer-event.ts";
 import { icons } from "../../../components/icons.ts";
 import {
   personActivityLink,
@@ -500,13 +499,6 @@ export function renderChatPaneHeader(props: ChatPaneHeaderProps) {
                   "chat.splitView.closePane",
                   icons.x,
                   () => props.onClosePane?.(props.paneId),
-                ],
-                [
-                  props.mergedChrome && !compactSessionActions,
-                  "chat-pane__palette-open",
-                  "chat.openCommandPalette",
-                  icons.search,
-                  () => window.dispatchEvent(new Event(COMMAND_PALETTE_OPEN_EVENT)),
                 ],
               ] as const
             ).map(([visible, className, label, icon, onClick]) =>

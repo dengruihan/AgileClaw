@@ -7,15 +7,14 @@ import {
   type RouterHistory,
 } from "@openclaw/uirouter";
 import { describe, expect, it, vi } from "vitest";
-import { isRouteId, locationForRoute, routePageSpec, type RouteId } from "../app-route-paths.ts";
-import { filterCommandPaletteItems } from "../components/command-palette-catalog-search.ts";
+import { locationForRoute, routePageSpec, type RouteId } from "../app-route-paths.ts";
 import { pages as configPages } from "../pages/config/route.ts";
 import { selectShellRouteState } from "./app-host-route-state.ts";
 import { ShellNavigationOwner, type ShellNavigationHost } from "./app-shell-navigation.ts";
 import type { ApplicationContext } from "./context.ts";
 
 describe("Settings return navigation", () => {
-  it.each(["palette", "/settings/general", "/config"])(
+  it.each(["/settings/general", "/config"])(
     "returns to the complete workspace URL after entering Settings through %s",
     async (entry) => {
       const workspace = {
@@ -80,23 +79,7 @@ describe("Settings return navigation", () => {
       try {
         await router.start(history, "", context);
         await router.navigate("chat", context, { history: "replace" }, workspace);
-        if (entry === "palette") {
-          const item = filterCommandPaletteItems({
-            query: "Settings",
-            includeSlashCommands: false,
-            sessionItems: [],
-            catalogItems: [],
-            desktopAvailable: false,
-          })[0];
-          const routeId = item?.action.slice(4);
-          if (!routeId || !isRouteId(routeId)) {
-            throw new Error("Settings palette action is missing");
-          }
-          shell.navigate(routeId);
-          await navigation;
-        } else {
-          await router.navigateLocation({ pathname: entry, search: "", hash: "" }, context);
-        }
+        await router.navigateLocation({ pathname: entry, search: "", hash: "" }, context);
         expect(router.getState().matches[0]?.routeId).toBe("appearance");
         shell.navigate("model-providers");
         await navigation;

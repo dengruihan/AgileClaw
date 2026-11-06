@@ -12,10 +12,6 @@ import "../components/modal-dialog.ts";
 import { isSessionRouteId } from "../app-route-paths.ts";
 import "../components/resizable-divider.ts";
 import type { RouteId } from "../app-routes.ts";
-import type {
-  CommandPaletteElement,
-  CommandPaletteTargetDetail,
-} from "../components/command-palette-contract.ts";
 import type { ThemeModeChangeDetail } from "../components/theme-mode-toggle.ts";
 import { i18n, t } from "../i18n/index.ts";
 import { normalizeAgentLabel } from "../lib/agents/display.ts";
@@ -57,7 +53,6 @@ import { createGatewayControlUiReloadOptions } from "./gateway-control-ui-reload
 import {
   APP_SIDEBAR_ELEMENT,
   BROWSER_PANEL_ELEMENT,
-  COMMAND_PALETTE_ELEMENT,
   DESKTOP_PANEL_ELEMENT,
   EXEC_APPROVAL_ELEMENT,
   LazyCustomElementRequestController,
@@ -102,7 +97,6 @@ class OpenClawShell
   @state() settingsSearchQuery = "";
   @state() routeState: ShellRouteState = {};
   @state() nativeHistoryState: NativeHistoryState = readNativeHistoryState();
-  readonly commandPaletteElement = COMMAND_PALETTE_ELEMENT;
   readonly terminalPanelElement = TERMINAL_PANEL_ELEMENT;
   readonly browserPanelElement = BROWSER_PANEL_ELEMENT;
   readonly linkReaderPanelElement = LINK_READER_PANEL_ELEMENT;
@@ -117,10 +111,8 @@ class OpenClawShell
   // still splash-gated, replaying would loop through the open handlers forever.
   readonly queryRenderedElement = (tagName: string): Element | null =>
     this.renderRoot?.querySelector(tagName) ?? null;
-  @query("openclaw-command-palette") commandPalette: CommandPaletteElement | undefined;
   @query("openclaw-exec-approval")
   approvalOverlay: (HTMLElement & { show(): void; dialogOpen?: boolean }) | undefined;
-  commandPaletteTarget: CommandPaletteTargetDetail | undefined;
   navDrawerTrigger: HTMLElement | null = null;
   // Desktop and modal navigation are two slots for the same live sidebar.
   // Moving its element preserves session controllers and the resident pet
@@ -319,7 +311,6 @@ class OpenClawShell
       .watchStore(
         () => this.context?.gateway,
         (gateway) => {
-          this.shellChrome.synchronizeCommandPaletteScope();
           this.shellGateway.synchronizeGateway(gateway.snapshot);
           this.refreshStoredOutboxSummary();
         },
@@ -467,7 +458,6 @@ class OpenClawShell
     this.lastWorkspaceLocation = null;
     this.activeSessionKey = "";
     this.settingsSearchQuery = "";
-    this.commandPaletteTarget = undefined;
     this.lastDeletedSessions = null;
     this.storedOutboxes = undefined;
     this.shellGateway.reset();
@@ -570,8 +560,6 @@ class OpenClawShell
 
   // Shipped Mac app builds without web chrome still drive these handlers.
   readonly handleNativeToggleSidebar = this.shellChrome.handleNativeToggleSidebar;
-  readonly handleNativeOpenSearch = this.shellChrome.handleNativeOpenSearch;
-  readonly handleNativeToggleSearch = this.shellChrome.handleNativeToggleSearch;
   readonly handleNativeNewSession = this.shellChrome.handleNativeNewSession;
   readonly handleNativeNavigate = this.shellChrome.handleNativeNavigate;
   readonly handleNativeHistoryState = this.shellChrome.handleNativeHistoryState;
@@ -583,11 +571,6 @@ class OpenClawShell
   readonly togglePendingDebugOverlayMode = this.shellChrome.togglePendingDebugOverlayMode.bind(
     this.shellChrome,
   );
-  readonly openPalette = this.shellChrome.openPalette;
-  readonly closePendingPalette = this.shellChrome.closePendingPalette;
-  get commandPaletteLoading() {
-    return this.shellChrome.commandPaletteLoading;
-  }
   readonly refreshControlUi = (): Promise<boolean> => {
     const context = this.context;
     if (!context) {
@@ -602,7 +585,6 @@ class OpenClawShell
     });
   };
   readonly handleShellNavDrawerToggle = this.shellChrome.handleShellNavDrawerToggle;
-  readonly handleCommandPaletteSlashCommand = this.shellChrome.handleCommandPaletteSlashCommand;
   readonly restorePendingLazyAction = this.shellChrome.restorePendingLazyAction;
   readonly nativeNavCollapsed = this.shellChrome.nativeNavCollapsed;
   /** Session publications update the title directly; renders capture route and

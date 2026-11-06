@@ -1742,7 +1742,6 @@ export function createUiRealGatewayTestShards(
     "ui/src/e2e/chat-loading-performance.real-gateway.e2e.test.ts",
     "ui/src/e2e/chat-project-media.real-gateway.e2e.test.ts",
     "ui/src/e2e/chat-widget-sandbox.real-gateway.e2e.test.ts",
-    "ui/src/e2e/command-palette-catalog.real-gateway.e2e.test.ts",
     "ui/src/e2e/model-api-keys.real-gateway.e2e.test.ts",
     "ui/src/e2e/model-catalog-partial-refresh.real-gateway.e2e.test.ts",
   ]);

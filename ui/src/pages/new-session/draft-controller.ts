@@ -8,7 +8,7 @@ import { showToast } from "../../lib/toast.ts";
 import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
 import { reviewPrivateComposerDraft } from "../chat/components/private-composer-recovery-dialog.ts";
 import { isTarget as isCatalogTarget } from "./catalog-target.ts";
-import { DraftGatewayState, type DraftPreferenceOptions } from "./draft-gateway-state.ts";
+import { DraftGatewayState } from "./draft-gateway-state.ts";
 import { DraftPlaceBrowser } from "./draft-place-browser.ts";
 import { DraftPlaceState } from "./draft-place-state.ts";
 import type {
@@ -128,15 +128,14 @@ export class NewSessionDraftController {
   constructor(
     host: ReactiveControllerHost,
     private readonly read: () => DraftSubmissionSnapshot,
-    callbacks: DraftSubmissionCallbacks &
-      DraftPreferenceOptions & {
-        querySelector: (selector: string) => Element | null;
-        activeElement: () => Element | null;
-        body: () => HTMLElement | null;
-        onInvalidate: () => void;
-        onRecoveryReady: (gatewayUrl: string, recoveryScope: string) => void;
-        pickerIdPrefix?: string;
-      },
+    callbacks: DraftSubmissionCallbacks & {
+      querySelector: (selector: string) => Element | null;
+      activeElement: () => Element | null;
+      body: () => HTMLElement | null;
+      onInvalidate: () => void;
+      onRecoveryReady: (gatewayUrl: string, recoveryScope: string) => void;
+      pickerIdPrefix?: string;
+    },
   ) {
     const requestUpdate = () => {
       if (this.privateDraftReview && !this.privateDraftReview.isCurrent()) {
@@ -161,8 +160,6 @@ export class NewSessionDraftController {
         runtimeId: this.place?.devicePlacementRuntime()?.id ?? "",
       }),
       {
-        preferenceScope: callbacks.preferenceScope,
-        readPalettePreference: callbacks.readPalettePreference,
         requestUpdate,
         updateComplete: () => host.updateComplete,
         onInvalidate: (reset, outcome) => {

@@ -63,13 +63,8 @@ async function openDesktopPanel(page: Page) {
   await page.goto(`${suite.server.baseUrl}activity`);
   await waitForControlUiGatewayReady(page);
   await page.evaluate(() => {
-    window.dispatchEvent(new CustomEvent("openclaw:command-palette-open"));
+    window.dispatchEvent(new CustomEvent("openclaw:desktop-toggle", { detail: { open: true } }));
   });
-  await page
-    .locator("openclaw-command-palette")
-    .getByRole("textbox", { name: "Search or start a task…" })
-    .waitFor();
-  await page.getByRole("option", { name: "Desktop", exact: true }).click();
   const panel = page.locator("openclaw-desktop-panel");
   await panel.locator("section[aria-label='Desktop']").waitFor();
   return panel;

@@ -35,7 +35,7 @@ function cronListResponse(jobs: CronJob[]) {
 
 suite.define(() => {
   it.each([false, true])(
-    "keeps catalog warnings in Automations and out of model search (retained rows: %s)",
+    "keeps catalog refresh warnings in Automations without replacing the draft (retained rows: %s)",
     async (hasRows) => {
       await suite.withPage(
         { locale: "en-US", serviceWorkers: "block", viewport: { height: 900, width: 1_280 } },
@@ -59,13 +59,8 @@ suite.define(() => {
           await expect
             .poll(() => picker.locator('[role="option"][data-value="fixture/old"]').count())
             .toBe(1);
-          await page.keyboard.press("ControlOrMeta+K");
-          const palette = page.locator(".cmd-palette");
-          await page.locator(".cmd-palette__input").fill("needle");
-          await palette.getByText("Needle old", { exact: true }).waitFor();
           const readView = async () => ({
             automations: await automations.textContent(),
-            palette: await palette.textContent(),
             draft: await page.locator("#cron-name").inputValue(),
             modelOptions: await picker.locator('[role="option"]').allTextContents(),
           });
@@ -85,40 +80,14 @@ suite.define(() => {
             ? "Some models could not be refreshed. Open Models to try again."
             : "Models unavailable";
           await automations.getByText(warning, { exact: true }).waitFor();
-          await expect.poll(() => palette.getByText("Needle old", { exact: true }).count()).toBe(0);
-          expect(await palette.getByText(warning, { exact: true }).count()).toBe(0);
-          expect(await palette.getByText("Needle current", { exact: true }).count()).toBe(
-            hasRows ? 1 : 0,
-          );
           expect(await picker.locator('[role="option"][data-value="fixture/old"]').count()).toBe(0);
           const failure = await readView();
           await page.screenshot({
-            path: path.join(suite.artifactDir, `internal-catalog-palette-${hasRows}.png`),
+            path: path.join(suite.artifactDir, `internal-catalog-warning-${hasRows}.png`),
           });
-          await page.keyboard.press("Escape");
-          await palette.waitFor({ state: "hidden" });
-          await automations.getByText(warning, { exact: true }).waitFor();
-          await page.screenshot({
-            path: path.join(suite.artifactDir, `internal-catalog-automations-${hasRows}.png`),
-          });
-          const searchesBeforeReopen = (await gateway.getRequests("sessions.search")).length;
-          await page.keyboard.press("ControlOrMeta+K");
-          await page.locator(".cmd-palette__input").fill("needle");
-          await expect
-            .poll(async () => (await gateway.getRequests("sessions.search")).length)
-            .toBeGreaterThan(searchesBeforeReopen);
-          await expect
-            .poll(() => palette.locator(".cmd-palette__results").getAttribute("aria-busy"))
-            .toBe("false");
-          expect(await palette.getByText(warning, { exact: true }).count()).toBe(0);
-
           await gateway.setMethodResponse("models.list", { models: [] });
           await gateway.emitGatewayEvent("chat.metadata.changed", {});
           await expect.poll(() => automations.getByText(warning, { exact: true }).count()).toBe(0);
-          await expect
-            .poll(() => palette.locator(".cmd-palette__search").getByRole("status").count())
-            .toBe(0);
-          expect(await palette.getByText("Needle current", { exact: true }).count()).toBe(0);
           expect(await page.locator("#cron-name").inputValue()).toBe("Keep this draft");
           const requests = await gateway.getRequests();
           await writeFile(

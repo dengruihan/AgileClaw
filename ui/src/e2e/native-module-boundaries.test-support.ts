@@ -155,15 +155,16 @@ export function defineNativeModuleBoundaryTests(
         },
       });
 
-      await page.keyboard.press("ControlOrMeta+K");
-      // The loading dialog is replaced during handoff; measure the full palette.
-      const palette = page.locator("openclaw-command-palette .cmd-palette");
-      const paletteDialog = page.locator("openclaw-command-palette openclaw-modal-dialog.palette");
-      await palette.locator(".cmd-palette__input:not([disabled])").waitFor({ state: "visible" });
-      const paletteAnimationName = await palette.evaluate(
+      await page.keyboard.press("ControlOrMeta+/");
+      const overlay = page.locator("openclaw-keyboard-shortcuts-dialog .dialog");
+      const overlayDialog = page.locator(
+        "openclaw-keyboard-shortcuts-dialog openclaw-modal-dialog",
+      );
+      await overlay.waitFor({ state: "visible" });
+      const overlayAnimationName = await overlay.evaluate(
         (element) => getComputedStyle(element).animationName,
       );
-      const paletteDialogAnimationDuration = await paletteDialog.evaluate((element) => {
+      const overlayDialogAnimationDuration = await overlayDialog.evaluate((element) => {
         const webAwesomeDialog = element.shadowRoot?.querySelector("wa-dialog");
         const dialog = webAwesomeDialog?.shadowRoot?.querySelector<HTMLElement>('[part~="dialog"]');
         return dialog ? getComputedStyle(dialog).animationDuration : "missing";
@@ -220,8 +221,8 @@ export function defineNativeModuleBoundaryTests(
         (element) => getComputedStyle(element).animationName,
       );
 
-      expect(paletteAnimationName).toBe("none");
-      expect(paletteDialogAnimationDuration).toBe("0s");
+      expect(overlayAnimationName).toBe("none");
+      expect(overlayDialogAnimationDuration).toBe("0s");
       expect(drawerAnimationName).toBe("none");
       expect(hoverCardMotion.animationDuration).toBe("0.14s");
       expect(hoverCardMotion.placement).toMatch(/^top(?:-|$)/u);

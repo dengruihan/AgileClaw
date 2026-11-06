@@ -818,7 +818,6 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
     "ui/src/e2e/chat-session-companion-focus.e2e.test.ts",
     ["chat"],
     [
-      "ui/src/components/command-palette.ts",
       "ui/src/components/modal-dialog.ts",
       "ui/src/components/session-menu.ts",
       "ui/src/lib/sessions/session-capability.ts",
@@ -830,11 +829,7 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
   pageWatch(
     "ui/src/e2e/chat-session-companion-manual-open-focus.e2e.test.ts",
     ["chat", "config"],
-    [
-      "ui/src/components/command-palette.ts",
-      "ui/src/pages/chat/chat-pane.ts",
-      "ui/src/pages/chat/components/chat-header-session-menu.ts",
-    ],
+    ["ui/src/pages/chat/chat-pane.ts", "ui/src/pages/chat/components/chat-header-session-menu.ts"],
   ),
   pageWatch(
     "ui/src/e2e/chat-session-companion-retry.e2e.test.ts",
@@ -1026,28 +1021,6 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
     ["chat", "profile"],
     ["ui/src/pages/chat/chat-pane.ts"],
   ),
-  pageWatch("ui/src/e2e/command-palette-avatars.e2e.test.ts", ["chat", "profile"]),
-  pageWatch("ui/src/e2e/command-palette-composition.e2e.test.ts", ["chat"]),
-  pageWatch(
-    "ui/src/e2e/command-palette-create.e2e.test.ts",
-    ["chat", "config", "device"],
-    ["ui/src/components/agent-select-registration.ts", "ui/src/components/command-palette.ts"],
-  ),
-  pageWatch(
-    "ui/src/e2e/command-palette-first-open.e2e.test.ts",
-    ["chat", "config"],
-    ["ui/src/components/command-palette.ts", "ui/src/components/modal-dialog.ts"],
-  ),
-  pageWatch(
-    "ui/src/e2e/command-palette-images.e2e.test.ts",
-    ["chat"],
-    ["ui/src/components/command-palette.ts"],
-  ),
-  pageWatch(
-    "ui/src/e2e/command-palette-mentions.e2e.test.ts",
-    ["chat", "profile"],
-    ["ui/src/components/command-palette.ts"],
-  ),
   pageWatch("ui/src/e2e/composer-text-readability.e2e.test.ts", ["chat", "new-session"]),
   pageWatch("ui/src/e2e/config-enum-controls.e2e.test.ts", ["config"]),
   pageWatch(
@@ -1204,26 +1177,17 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
   pageWatch(
     "ui/src/e2e/desktop-panel-credentials.e2e.test.ts",
     ["activity"],
-    [
-      "ui/src/components/command-palette.ts",
-      "ui/src/components/desktop/desktop-client.ts",
-      "ui/src/components/desktop/desktop-panel.ts",
-    ],
+    ["ui/src/components/desktop/desktop-client.ts", "ui/src/components/desktop/desktop-panel.ts"],
   ),
   pageWatch(
     "ui/src/e2e/desktop-panel-fullscreen.e2e.test.ts",
     ["activity", "terminal"],
-    [
-      "ui/src/components/command-palette.ts",
-      "ui/src/components/desktop/desktop-client.ts",
-      "ui/src/components/desktop/desktop-panel.ts",
-    ],
+    ["ui/src/components/desktop/desktop-client.ts", "ui/src/components/desktop/desktop-panel.ts"],
   ),
   pageWatch(
     "ui/src/e2e/desktop-panel.e2e.test.ts",
     ["activity", "chat", "terminal"],
     [
-      "ui/src/components/command-palette.ts",
       "ui/src/components/desktop/desktop-client.ts",
       "ui/src/components/desktop/desktop-panel.ts",
       "ui/src/pages/chat/components/chat-header-session-menu.ts",

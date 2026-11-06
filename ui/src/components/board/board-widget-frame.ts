@@ -11,7 +11,6 @@ import { isLoopbackHostname } from "../../lib/gateway-locality.ts";
 import { generateUUID } from "../../lib/uuid.ts";
 import { WidgetRenderTimeoutError } from "../../lib/widget-sandbox-host.ts";
 import { installWidgetThemeObserver, postWidgetTheme } from "../../lib/widget-theme.ts";
-import { COMMAND_PALETTE_OPEN_EVENT } from "../command-palette-contract.ts";
 import { McpAppConfirm } from "../mcp-app-confirm.ts";
 import { renderPanelLoadingSkeleton } from "../panel-loading-skeleton.ts";
 import { resolveGatewayHttpOrigin, resolveSandboxHostUrl } from "../sandbox-host.ts";
@@ -21,8 +20,6 @@ import { resolveGatewayHttpOrigin, resolveSandboxHostUrl } from "../sandbox-host
 const WIDGET_SIZE_MESSAGE_TYPE = "openclaw:widget-size";
 const WIDGET_BOARD_HOST_MESSAGE_TYPE = "openclaw:widget-board-host";
 const WIDGET_SCROLL_MESSAGE_TYPE = "openclaw:widget-scroll";
-const WIDGET_COMMAND_PALETTE_MESSAGE_TYPE = "openclaw:widget-command-palette";
-const WIDGET_SHORTCUT_HOST_MESSAGE_TYPE = "openclaw:widget-shortcut-host";
 const MAX_FRAME_REFRESH_ATTEMPTS = 3;
 const TICKET_REFRESH_LEAD_MS = 15_000;
 const TICKET_REFRESH_MIN_DELAY_MS = 1_000;
@@ -151,7 +148,6 @@ export class BoardWidgetFrameLifecycle {
   private frameRefreshAttempts = 0;
   private frameProbeGeneration = 0;
   private boardHostNonce = "";
-  private keyboardHostNonce = "";
   private lastFrameUrl = "";
   private messageListening = false;
   private visibilityListening = false;
@@ -291,20 +287,6 @@ export class BoardWidgetFrameLifecycle {
             loading="eager"
             title=${widget.title || widget.name}
             src=${sandboxSrc}
-            @openclaw:restore-focus=${(event: Event) => {
-              const frame = event.currentTarget;
-              if (
-                frame instanceof HTMLIFrameElement &&
-                this.host.active() &&
-                document.activeElement === frame &&
-                this.keyboardHostNonce
-              ) {
-                frame.contentWindow?.postMessage(
-                  { type: "openclaw:widget-shortcut-focus", nonce: this.keyboardHostNonce },
-                  this.sandboxOrigin,
-                );
-              }
-            }}
             @error=${() => {
               if (this.sandboxHost) {
                 this.sandboxHost.handleFrameError();
@@ -455,18 +437,11 @@ export class BoardWidgetFrameLifecycle {
 
   private postBoardHostState(frame: HTMLIFrameElement): void {
     this.boardHostNonce = generateUUID();
-    this.keyboardHostNonce = this.sandboxOrigin ? generateUUID() : "";
     postWidgetTheme(frame, this.sandboxOrigin || "*");
     frame.contentWindow?.postMessage(
       { type: WIDGET_BOARD_HOST_MESSAGE_TYPE, nonce: this.boardHostNonce },
       this.sandboxOrigin || "*",
     );
-    if (this.keyboardHostNonce) {
-      frame.contentWindow?.postMessage(
-        { type: WIDGET_SHORTCUT_HOST_MESSAGE_TYPE, nonce: this.keyboardHostNonce },
-        this.sandboxOrigin,
-      );
-    }
   }
 
   private resolveSandboxFrameUrl(widget: BoardWidget): string | undefined {
@@ -652,18 +627,6 @@ export class BoardWidgetFrameLifecycle {
       data.deltaY !== 0
     ) {
       this.host.scrollBy(data.deltaY);
-    }
-    if (
-      widget &&
-      data?.type === WIDGET_COMMAND_PALETTE_MESSAGE_TYPE &&
-      this.keyboardHostNonce &&
-      data.nonce === this.keyboardHostNonce &&
-      event.origin === this.sandboxOrigin &&
-      frame.isConnected &&
-      document.activeElement === frame &&
-      !document.openClawModalLayers?.size
-    ) {
-      window.dispatchEvent(new CustomEvent(COMMAND_PALETTE_OPEN_EVENT));
     }
     if (!widget?.viewTicket || event.origin !== this.sandboxOrigin) {
       return;

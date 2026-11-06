@@ -1,7 +1,6 @@
 import path from "node:path";
 import { expect, it } from "vitest";
 import type { GatewaySessionRow } from "../api/types.ts";
-import type { CommandPaletteTargetDetail } from "../components/command-palette-contract.ts";
 import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
@@ -156,15 +155,6 @@ suite.define(() => {
               messages: [{ role: "assistant", content: "The regression is traced." }],
             },
           },
-        });
-        await page.addInitScript(() => {
-          window.addEventListener("openclaw-command-palette-target", (event) => {
-            const { owner, onSlashCommand } = (event as CustomEvent<CommandPaletteTargetDetail>)
-              .detail;
-            if (onSlashCommand && owner.closest("openclaw-chat-subagents-panel")) {
-              document.documentElement.dataset.subagentClaimedInput = "true";
-            }
-          });
         });
         await page.goto(controlUiSessionUrl(suite.server.baseUrl, parent.key));
         const parentPane = page.locator("openclaw-chat-pane.chat-pane-cache__pane--active");

@@ -14,7 +14,6 @@ import {
 } from "./app-navigation.ts";
 import type { NativeDeviceSettingsCapability } from "./app/native-device-settings.ts";
 import { readGatewayOperatorAccess } from "./app/operator-access.ts";
-import { getStaticCommandPaletteCatalogItems } from "./components/command-palette-catalog-search.ts";
 import { findSettingsSearchBlocks } from "./pages/config/settings-search.ts";
 import { createChromeExtensionSetupResult } from "./test-helpers/chrome-extension-setup.ts";
 import {
@@ -66,11 +65,6 @@ describe("sidebar entries", () => {
     expect(search("Check for updates", capability)).toContainEqual(
       expect.objectContaining({ routeId: "updates" }),
     );
-    expect(
-      getStaticCommandPaletteCatalogItems(canAdmin, capability).some(
-        (item) => item.action === "nav:updates",
-      ),
-    ).toBe(true);
     expect(browserGroups.some((group) => group.labelKey === "nav.settingsGroupDevice")).toBe(false);
     expect(nativeGroups[1]).toEqual({
       labelKey: "nav.settingsGroupDevice",
@@ -144,16 +138,6 @@ describe("sidebar entries", () => {
       expect(isSettingsNavigationRouteVisible(route, canAdmin)).toBe(false);
       expect(isSettingsNavigationRouteVisible(route, canAdmin, capability)).toBe(true);
       expect(browserGroups.flatMap((group) => group.routes)).not.toContain(route);
-      expect(
-        getStaticCommandPaletteCatalogItems(canAdmin).some(
-          (item) => item.action === `nav:${route}`,
-        ),
-      ).toBe(false);
-      expect(
-        getStaticCommandPaletteCatalogItems(canAdmin, capability).some(
-          (item) => item.action === `nav:${route}`,
-        ),
-      ).toBe(true);
     }
   });
   it("keeps operational destinations visible by default", () => {

@@ -481,17 +481,16 @@ suite.define(() => {
               2,
             ),
           );
-          // Saved HTML has no generated wrapper; the sandbox runtime owns shortcuts.
+          // Saved HTML has no generated wrapper and cannot open host surfaces.
           await page.route(`${new URL(boardPath, proxy.baseUrl).href}?*`, (route) =>
             route.fulfill({
               contentType: "text/html",
               body: `<!doctype html><input aria-label="Saved dashboard note">
                 <button onclick="parent.postMessage({type:'openclaw:widget-command-palette',
-                  nonce:window.shortcutNonce||window.scrollNonce},'*');
+                  nonce:window.scrollNonce},'*');
                   parent.postMessage({type:'fixture-shortcut-attempted'},'*');">Attempt shortcut</button>
                 <script>window.addEventListener('message',event=>{
                   if(event.data?.type==='openclaw:widget-board-host')window.scrollNonce=event.data.nonce;
-                  if(event.data?.type==='openclaw:widget-shortcut-host')window.shortcutNonce=event.data.nonce;
                 });</script>`,
             }),
           );
@@ -517,12 +516,7 @@ suite.define(() => {
             }),
           ).toBe(false);
           await page.keyboard.press("ControlOrMeta+K");
-          const paletteInput = page.locator(".cmd-palette__input");
-          await paletteInput.waitFor();
-          await page.keyboard.type("Settings");
-          expect(await paletteInput.inputValue()).toBe("Settings");
-          await page.keyboard.press("Escape");
-          await paletteInput.waitFor({ state: "hidden" });
+          await expect.poll(() => page.locator("openclaw-command-palette").count()).toBe(0);
           await expect
             .poll(() =>
               savedNote.evaluate(
@@ -545,7 +539,7 @@ suite.define(() => {
           });
           await board.getByRole("button", { name: "Attempt shortcut", exact: true }).click();
           await page.waitForFunction(() => Reflect.get(window, "shortcutForgerySettled") === true);
-          expect(await page.locator(".cmd-palette__input").count()).toBe(0);
+          expect(await page.locator("openclaw-command-palette").count()).toBe(0);
           await savedNote.focus();
           await savedNote.evaluate(() => {
             Reflect.set(
@@ -561,7 +555,7 @@ suite.define(() => {
           });
           await page.keyboard.press("j");
           expect(await savedNote.inputValue()).toBe("Saved draft!j");
-          expect(await page.locator(".cmd-palette__input").count()).toBe(0);
+          expect(await page.locator("openclaw-command-palette").count()).toBe(0);
           await savedNote.evaluate(() => {
             Object.defineProperties(
               KeyboardEvent.prototype,

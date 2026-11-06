@@ -105,7 +105,6 @@ class ChatHeaderSessionMenu extends OpenClawLightDomElement {
   @property({ attribute: false }) archiveShortcut = false;
   @property({ attribute: false }) deleteAllowed = false;
   @property({ attribute: false }) onOpen: () => void = () => {};
-  @property({ attribute: false }) onOpenCommandPalette: () => void = () => {};
   @property({ attribute: false }) onSettingsChange: (patch: Partial<UiSettings>) => void = () => {};
   @property({ attribute: false }) onAction: (action: HeaderMenuAction) => void = () => {};
   @state() private compactView: CompactMenuView = "root";
@@ -159,10 +158,6 @@ class ChatHeaderSessionMenu extends OpenClawLightDomElement {
         this.sharing?.onOpen();
       }
       this.managementActions.focusCurrentView();
-      return;
-    }
-    if (value === "open-command-palette") {
-      this.onOpenCommandPalette();
       return;
     }
     if (value.startsWith("quick:")) {
@@ -334,17 +329,6 @@ class ChatHeaderSessionMenu extends OpenClawLightDomElement {
 
   private renderRootView() {
     return html`
-      ${
-        this.compact
-          ? html`<wa-dropdown-item class="session-menu__item" value="open-command-palette">
-                <span slot="icon" class="session-menu__icon" aria-hidden="true"
-                  >${icons.search}</span
-                >
-                <span class="session-menu__text">${t("chat.openCommandPalette")}</span>
-              </wa-dropdown-item>
-              <div class="session-menu__separator" role="separator"></div>`
-          : nothing
-      }
       ${
         this.boardWidgetMenu
           ? html`

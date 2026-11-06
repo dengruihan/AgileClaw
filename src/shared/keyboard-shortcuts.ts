@@ -16,15 +16,8 @@ type KeyboardShortcutEvent = {
   readonly shiftKey: boolean;
 };
 
-export const COMMAND_PALETTE_SHORTCUT = {
-  modifiers: ["mod"],
-  key: "k",
-  platformSpecific: true,
-} as const satisfies KeyboardShortcutDefinition;
-
-// Serialized into sandbox documents before widget scripts run. Object methods
-// keep the factory self-contained through bundling, with pristine operations
-// captured once so widget prototype changes cannot redefine a host shortcut.
+// Object methods keep the factory self-contained through bundling, with pristine
+// operations captured once so host prototype changes cannot redefine a shortcut.
 export function createKeyboardShortcutMatcher() {
   // A private receiver keeps String intrinsics bound without consulting widget-
   // mutable prototypes. Conversion is synchronous and returns only our string.

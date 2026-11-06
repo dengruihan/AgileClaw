@@ -135,7 +135,7 @@ describe("optional custom element requests", () => {
     };
     const foregroundElement = {
       tagName: uniqueTag(),
-      label: "command palette",
+      label: "foreground dialog",
       loadModule: vi.fn(
         () =>
           new Promise<void>((resolve) => {

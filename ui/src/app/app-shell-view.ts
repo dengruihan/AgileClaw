@@ -51,7 +51,6 @@ import {
   renderFloatingUpdateCard,
 } from "./navigation-surface.ts";
 import { readGatewayOperatorAccess } from "./operator-access.ts";
-import { isDesktopPanelAvailable } from "./panel-availability.ts";
 import { NAV_WIDTH_MAX, NAV_WIDTH_MIN, normalizeCatalogOpenTarget } from "./settings.ts";
 import type { ShellLayoutController } from "./shell-layout-traits.ts";
 import { resolveShellNavWidth } from "./shell-nav-width.ts";
@@ -81,7 +80,6 @@ export interface ShellViewHost
   handleSettingsSearchQueryChange(query: string): Promise<void>;
   handleThemeChange(event: CustomEvent<ThemeModeChangeDetail>): void;
   nativeNavCollapsed(): boolean;
-  readonly openPalette: () => void;
   readonly navigate: (routeId: string, options?: ApplicationNavigationOptions) => void;
   refreshControlUi: () => Promise<boolean>;
   recoverNotFoundRoute: () => boolean;
@@ -130,7 +128,6 @@ export function renderApplicationShell(host: ShellViewHost) {
   const updateBusy = overlaySnapshot.updateRunning || overlaySnapshot.updateReconciliationPending;
   const watchUpdateProgress = callbacks.watchUpdateProgress;
   const terminalAvailable = isTerminalAvailable(gatewaySnapshot, config.terminalEnabled ?? false);
-  const desktopPanelAvailable = isDesktopPanelAvailable(gatewaySnapshot);
   const activeRoute = host.routeState.routeId ?? "chat";
   const sessionRoute = isSessionRouteId(activeRoute);
   // Session routes have an offline outbox, New Session keeps a local draft, and
@@ -256,7 +253,6 @@ export function renderApplicationShell(host: ShellViewHost) {
       gatewayVersion: config.serverVersion ?? gatewaySnapshot.hello?.server?.version ?? null,
       devGitBranch: config.devGitBranch,
       watchUpdateProgress,
-      onOpenPalette: host.openPalette,
       onRetryConnect: callbacks.retryGateway,
       onToggleSidebar: callbacks.toggleSidebar,
       onOpenNewSession: openNewSession,
@@ -357,7 +353,7 @@ export function renderApplicationShell(host: ShellViewHost) {
   // Optional tags stay mounted before definition. Lit replays their properties on upgrade,
   // and the upgraded panels catch the first toggle instead of dropping the event.
   const workspace = html`
-    ${renderShellLazyOverlays(host, desktopPanelAvailable, nativeEmbed)}
+    ${renderShellLazyOverlays(host, nativeEmbed)}
     <div
       class="shell ${chatLikeRoute ? "shell--chat" : ""} ${
         navCollapsed ? "shell--nav-collapsed" : ""
@@ -385,7 +381,6 @@ export function renderApplicationShell(host: ShellViewHost) {
                   newSessionAccess.allowed ? undefined : newSessionAccess.reason
                 }
                 .onToggleSidebar=${callbacks.toggleSidebar}
-                .onOpenPalette=${host.openPalette}
                 .onOpenNewSession=${host.handleNativeNewSession}
               ></openclaw-macos-titlebar-controls>
             `
@@ -399,7 +394,6 @@ export function renderApplicationShell(host: ShellViewHost) {
               .resourceBasePath=${context.resourceBasePath}
               .environment=${config.environment}
               .navDrawerOpen=${navDrawerOpen}
-              .onOpenPalette=${host.openPalette}
               .onToggleDrawer=${host.toggleNavigationSurface}
             ></openclaw-app-topbar>`
       }
@@ -432,18 +426,6 @@ export function renderApplicationShell(host: ShellViewHost) {
                   disabledReason: newSessionAccess.allowed ? undefined : newSessionAccess.reason,
                   onOpen: openNewSession,
                 })}
-                <openclaw-tooltip
-                  .content=${`${t("chat.openCommandPalette")} (${formatKeyboardShortcutCombo(KEYBOARD_SHORTCUT_COMBOS.commandPalette)})`}
-                >
-                  <button
-                    type="button"
-                    class="shell-chrome-controls__button shell-chrome-controls__search"
-                    aria-label=${t("chat.openCommandPalette")}
-                    @click=${host.openPalette}
-                  >
-                    ${icons.search}
-                  </button>
-                </openclaw-tooltip>
               </div>
             `
           : nothing
@@ -463,7 +445,7 @@ export function renderApplicationShell(host: ShellViewHost) {
                 class="shell-nav ${mobileNavLayout ? "nav-drawer" : ""}"
                 role=${mobileNavLayout ? "dialog" : nothing}
                 aria-modal=${mobileNavLayout && navDrawerOpen ? "true" : nothing}
-                aria-label=${mobileNavLayout ? t("palette.categories.navigation") : nothing}
+                aria-label=${mobileNavLayout ? t("nav.navigationLabel") : nothing}
                 aria-hidden=${mobileNavLayout && navigationSurfaceHidden ? "true" : nothing}
                 tabindex=${mobileNavLayout ? -1 : nothing}
                 ?inert=${navigationSurfaceHidden}

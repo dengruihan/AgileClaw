@@ -83,7 +83,6 @@ async function mountMenu(
     archiveShortcut?: boolean;
     deleteAllowed?: boolean;
     onOpen?: () => void;
-    onOpenCommandPalette?: () => void;
     onSettingsChange?: (patch: Partial<UiSettings>) => void;
     onAction?: (action: HeaderMenuAction) => void;
   } = {},
@@ -126,7 +125,6 @@ async function mountMenu(
       .archiveShortcut=${options.archiveShortcut ?? false}
       .deleteAllowed=${options.deleteAllowed ?? true}
       .onOpen=${options.onOpen ?? (() => {})}
-      .onOpenCommandPalette=${options.onOpenCommandPalette ?? (() => {})}
       .onSettingsChange=${options.onSettingsChange ?? (() => {})}
       .onAction=${options.onAction ?? (() => {})}
     ></openclaw-chat-header-session-menu>`,
@@ -579,7 +577,6 @@ describe("chat header session menu", () => {
 
   it("drills into compact menu groups without rendering side flyouts", async () => {
     const showFiles = vi.fn();
-    const onOpenCommandPalette = vi.fn();
     const onSettingsChange = vi.fn<(patch: Partial<UiSettings>) => void>();
     const onAction = vi.fn<(action: HeaderMenuAction) => void>();
     const { context } = createSessionOwnerMenuHarness();
@@ -605,7 +602,6 @@ describe("chat header session menu", () => {
       ],
       context,
       currentOwner: { type: "agent", id: "research:one" },
-      onOpenCommandPalette,
       onSettingsChange,
       onAction,
     });
@@ -614,7 +610,6 @@ describe("chat header session menu", () => {
       menu.querySelectorAll<MenuItemElement>(":scope > wa-dropdown > wa-dropdown-item"),
     ).map(itemLabel);
     expect(rootLabels).toEqual([
-      "Open command palette",
       "Panels",
       "Layout",
       "View",
@@ -631,8 +626,6 @@ describe("chat header session menu", () => {
       "Delete…",
     ]);
     expect(menu.querySelector("[slot='submenu']")).toBeNull();
-    select(menu, "open-command-palette");
-    expect(onOpenCommandPalette).toHaveBeenCalledOnce();
     select(menu, "compact:open-copy");
     await menu.updateComplete;
     expect(

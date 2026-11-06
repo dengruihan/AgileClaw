@@ -219,17 +219,12 @@ suite.define(() => {
       .toBe(true);
 
     await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent("openclaw:native-open-search"));
-    });
-    await expect.poll(() => page.locator(".cmd-palette-overlay").isVisible()).toBe(true);
-
-    await page.evaluate(() => {
       window.dispatchEvent(new CustomEvent("openclaw:native-new-session"));
     });
     await expect.poll(() => new URL(page.url()).pathname).toBe("/new");
   });
 
-  it("hosts navigation, search, sessions, and history in web titlebar chrome", async () => {
+  it("hosts navigation, sessions, and history in web titlebar chrome", async () => {
     const page = await openPage({
       colorScheme: "dark",
       scenario: {
@@ -289,11 +284,9 @@ suite.define(() => {
 
     const back = toolbar.getByRole("button", { name: "Back" });
     const forward = toolbar.getByRole("button", { name: "Forward" });
-    const search = toolbar.getByRole("button", { name: "Open command palette" });
     const newThread = toolbar.getByRole("button", { name: "New session" });
     await expect.poll(() => back.isDisabled()).toBe(true);
     await expect.poll(() => forward.isDisabled()).toBe(true);
-    await expect.poll(() => search.isVisible()).toBe(true);
     await expect.poll(() => newThread.count()).toBe(0);
     await page.locator(".sidebar-issues-button__count").waitFor();
 
@@ -382,10 +375,6 @@ suite.define(() => {
     await expect.poll(() => page.locator("#sidebar-issues-panel").isVisible()).toBe(true);
     await page.keyboard.press("Escape");
     await expect.poll(() => inbox.getAttribute("aria-expanded")).toBe("false");
-
-    await search.click();
-    await expect.poll(() => page.locator(".cmd-palette-overlay").isVisible()).toBe(true);
-    await page.keyboard.press("Escape");
 
     await page.evaluate(() => {
       window.dispatchEvent(

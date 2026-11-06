@@ -20,13 +20,6 @@
       "kind": "object-property",
       "name": "label",
       "path": "ui/src/app/lazy-custom-element.ts",
-      "text": "command palette"
-    },
-    {
-      "count": 1,
-      "kind": "object-property",
-      "name": "label",
-      "path": "ui/src/app/lazy-custom-element.ts",
       "text": "dashboard document"
     },
     {
@@ -175,13 +168,6 @@
       "name": "title",
       "path": "ui/src/components/board/board-view.test-support.ts",
       "text": "Queue depth"
-    },
-    {
-      "count": 1,
-      "kind": "object-property",
-      "name": "label",
-      "path": "ui/src/components/command-palette-catalog-search.ts",
-      "text": "/verbose"
     },
     {
       "count": 1,

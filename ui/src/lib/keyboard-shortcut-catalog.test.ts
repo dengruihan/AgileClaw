@@ -1,7 +1,6 @@
 /* @vitest-environment jsdom */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isCommandPaletteShortcut } from "../components/command-palette-contract.ts";
 import { isTerminalPanelShortcut } from "../components/panel-toggle-contract.ts";
 import { t } from "../i18n/index.ts";
 import { resolveKeyboardShortcutSections } from "./keyboard-shortcut-catalog.ts";
@@ -50,31 +49,6 @@ describe("keyboard shortcut catalog matching", () => {
       }
     },
   );
-  it.each([
-    { name: "Command", platform: "MacIntel", modifiers: { metaKey: true } },
-    { name: "Control", platform: "Win32", modifiers: { ctrlKey: true } },
-  ])(
-    "accepts the $name primary modifier and non-Latin physical letters",
-    ({ platform, modifiers }) => {
-      vi.spyOn(navigator, "platform", "get").mockReturnValue(platform);
-      const event = new KeyboardEvent("keydown", { key: "л", code: "KeyK", ...modifiers });
-
-      expect(matchesShortcutCombo(KEYBOARD_SHORTCUT_COMBOS.commandPalette, event)).toBe(true);
-      expect(isCommandPaletteShortcut(event)).toBe(true);
-    },
-  );
-
-  it.each([
-    { name: "both primary modifiers", modifiers: { metaKey: true, ctrlKey: true } },
-    { name: "an extra Shift modifier", modifiers: { metaKey: true, shiftKey: true } },
-    { name: "an extra Alt modifier", modifiers: { ctrlKey: true, altKey: true } },
-  ])("rejects $name for an exact primary-modifier chord", ({ modifiers }) => {
-    const event = new KeyboardEvent("keydown", { key: "k", code: "KeyK", ...modifiers });
-
-    expect(matchesShortcutCombo(KEYBOARD_SHORTCUT_COMBOS.commandPalette, event)).toBe(false);
-    expect(isCommandPaletteShortcut(event)).toBe(false);
-  });
-
   it.each([
     { name: "the slash character", key: "/", code: "Digit7", shiftKey: true },
     { name: "the physical slash key", key: "?", code: "Slash", shiftKey: true },

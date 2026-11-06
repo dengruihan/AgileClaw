@@ -226,12 +226,6 @@ export class LazyCustomElementRequestController {
   }
 }
 
-export const COMMAND_PALETTE_ELEMENT = {
-  tagName: "openclaw-command-palette",
-  label: "command palette",
-  loadModule: () => import("../components/command-palette.ts"),
-} satisfies OptionalCustomElement;
-
 export const DEBUG_OVERLAY_ELEMENT = {
   tagName: "openclaw-debug-overlay",
   get label() {

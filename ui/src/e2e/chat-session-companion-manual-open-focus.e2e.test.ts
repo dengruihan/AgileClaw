@@ -81,7 +81,7 @@ suite.define(() => {
     },
   );
 
-  it.each(["another pane", "command palette"])(
+  it.each(["another pane"])(
     "preserves newer focus in %s while a manually opened Side chat loads",
     async (target) => {
       await suite.withPage({ viewport: { width: 2200, height: 1000 } }, async ({ page }) => {
@@ -106,11 +106,6 @@ suite.define(() => {
             await expect.poll(() => panes.count()).toBe(2);
             foreground = panes.last().locator(".agent-chat__composer-shell textarea");
             side = panes.first().getByRole("textbox", { name: "Ask in side chat", exact: true });
-          } else {
-            await page.keyboard.press("ControlOrMeta+k");
-            foreground = page
-              .locator("openclaw-command-palette")
-              .getByRole("textbox", { name: "Search or start a task…" });
           }
           await foreground.click();
           await page.keyboard.type("Keep typing here");

@@ -1,9 +1,7 @@
 import path from "node:path";
 import { expect, it } from "vitest";
-import type { CronJobsListResult } from "../api/types.ts";
 import { defaultControlUiFeatureMethods } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
-import { cronListResponseFixture } from "../test-helpers/cron.ts";
 import { createControlUiE2eContextOptions } from "./control-ui-e2e-suite.test-support.ts";
 import {
   actionOpacity,
@@ -239,7 +237,7 @@ suite.define(() => {
     }
   });
 
-  it("manages sessions through the sidebar groups and command palette", async () => {
+  it("manages sessions through the sidebar groups", async () => {
     const baseTime = Date.parse("2026-07-01T16:00:00.000Z");
     const context = await suite.browser.newContext({
       colorScheme: "dark",
@@ -247,37 +245,11 @@ suite.define(() => {
       serviceWorkers: "block",
       viewport: { height: 900, width: 1280 },
     });
-    const automationPage: CronJobsListResult = {
-      jobs: [
-        {
-          id: "nightly-invoices",
-          name: "Nightly invoices",
-          enabled: true,
-          createdAtMs: baseTime,
-          updatedAtMs: baseTime,
-          schedule: { kind: "every", everyMs: 60_000 },
-          sessionTarget: "isolated",
-          wakeMode: "now",
-          payload: { kind: "agentTurn", message: "Prepare customer invoices." },
-          state: {},
-        },
-      ],
-      snapshotRevision: "1",
-      total: 1,
-      limit: 50,
-      offset: 0,
-      nextOffset: null,
-      hasMore: false,
-    };
     const page = await context.newPage();
     await page.clock.install();
     const gateway = await installMockGateway(page, {
-      featureMethods: [...defaultControlUiFeatureMethods, "cron.list"],
+      featureMethods: defaultControlUiFeatureMethods,
       methodResponses: {
-        "cron.list": cronListResponseFixture([
-          { match: { limit: 200 }, response: { ...automationPage, limit: 200 } },
-          { response: automationPage },
-        ]),
         "sessions.list": {
           cases: [
             {
@@ -294,19 +266,6 @@ suite.define(() => {
                 }),
                 sessionRow("agent:main:research", "Research notes", baseTime - 120_000),
               ]),
-            },
-          ],
-        },
-        "sessions.search": {
-          results: [
-            {
-              messageId: "message-release-context",
-              role: "assistant",
-              score: 4.2,
-              sessionId: "release",
-              sessionKey: "agent:main:release",
-              snippet: "The view-only handshake is ready for final review.",
-              timestamp: baseTime - 45_000,
             },
           ],
         },
@@ -413,53 +372,6 @@ suite.define(() => {
             .evaluate((row) => row.classList.contains("sidebar-recent-session--active")),
         )
         .toBe(true);
-
-      // The same palette lazily loads small non-session catalogs once and
-      // matches compact automation names without involving FTS.
-      const commandPaletteShortcut = process.platform === "darwin" ? "Meta+K" : "Control+K";
-      const cronRequestsBeforePalette = (await gateway.getRequests("cron.list")).length;
-      const transcriptRequestsBeforePalette = (await gateway.getRequests("sessions.search")).length;
-      await page.keyboard.press(commandPaletteShortcut);
-      const paletteInput = page.locator(".cmd-palette__input");
-      await paletteInput.waitFor({ state: "visible", timeout: 10_000 });
-      await paletteInput.fill("nightly invoices");
-      await page.clock.runFor(50);
-      const automationOption = page.getByRole("option", { name: /Nightly invoices/u });
-      await automationOption.waitFor({ state: "visible", timeout: 10_000 });
-      expect(await gateway.getRequests("cron.list")).toHaveLength(cronRequestsBeforePalette + 1);
-      await page.keyboard.press("Escape");
-
-      // Command palette is the single search surface: metadata and indexed
-      // conversation text share one field, and selecting either navigates.
-      await page.keyboard.press(commandPaletteShortcut);
-      await paletteInput.waitFor({ state: "visible", timeout: 10_000 });
-      await paletteInput.fill("view-only handshake");
-      await page.clock.runFor(50);
-      const paletteOption = page
-        .locator(".cmd-palette__item")
-        .filter({ hasText: "Release planning" });
-      await paletteOption.waitFor({ state: "visible", timeout: 10_000 });
-      await expect.poll(() => paletteOption.textContent()).toContain("view-only handshake");
-      expect(await gateway.getRequests("cron.list")).toHaveLength(cronRequestsBeforePalette + 1);
-      const transcriptRequests = await gateway.getRequests("sessions.search");
-      expect(transcriptRequests).toHaveLength(transcriptRequestsBeforePalette + 2);
-      expect(requireRecord(transcriptRequests.at(-1)?.params)).toMatchObject({
-        query: "view-only handshake",
-        limit: 25,
-        scope: {
-          includeGlobal: false,
-          includeUnknown: false,
-          configuredAgentsOnly: true,
-          excludeSubagents: true,
-          excludeCron: true,
-          excludeSystem: true,
-        },
-      });
-      await captureUiProof(suite, page, "command-palette-session-search.png");
-      await paletteOption.click();
-      await expect
-        .poll(() => new URL(page.url()).pathname)
-        .toBe(controlUiSessionPath("agent:main:release"));
     } finally {
       await context.close();
     }

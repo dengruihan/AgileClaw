@@ -72,9 +72,6 @@ suite.define(() => {
     await expect
       .poll(() => toolbar.getByRole("button", { name: "Expand sidebar" }).count())
       .toBe(0);
-    await expect
-      .poll(() => toolbar.getByRole("button", { name: "Open command palette" }).count())
-      .toBe(0);
     await expect.poll(() => toolbar.getByRole("button", { name: "New session" }).count()).toBe(0);
   });
 
@@ -103,7 +100,7 @@ suite.define(() => {
     expect(metrics).toEqual({ bodyScrollTop: 0, htmlScrollTop: 0, rootScrollY: 0 });
   });
 
-  it("keeps drawer and search reachable from the narrow chat title bar", async () => {
+  it("keeps the drawer reachable from the narrow chat title bar", async () => {
     const page = await openPage({ width: 900 });
     const header = page.locator(".chat-pane__header").first();
     await expect
@@ -113,10 +110,9 @@ suite.define(() => {
     await expect
       .poll(() => header.getByRole("button", { name: "Expand sidebar" }).isVisible())
       .toBe(true);
-    await expect.poll(() => header.locator(".chat-pane__palette-open").count()).toBe(0);
-    await header.locator(".chat-header-session-menu__trigger").click();
-    await page.getByText("Open command palette", { exact: true }).click();
-    await page.locator(".cmd-palette__input").waitFor({ state: "visible" });
+    await expect
+      .poll(() => header.getByRole("button", { name: "Open command palette" }).count())
+      .toBe(0);
   });
 
   it("keeps browser sidebar header geometry aligned in LTR and RTL", async () => {
@@ -205,7 +201,9 @@ suite.define(() => {
     const header = page.locator(".chat-pane__header").first();
     const drawerButton = header.getByRole("button", { name: "Expand sidebar" });
     await drawerButton.waitFor({ state: "visible" });
-    await expect.poll(() => header.locator(".chat-pane__palette-open").count()).toBe(0);
+    await expect
+      .poll(() => header.getByRole("button", { name: "Open command palette" }).count())
+      .toBe(0);
     if (captureProof) {
       await writeFile(
         path.join(suite.artifactDir, "01-chat-title-bar.png"),

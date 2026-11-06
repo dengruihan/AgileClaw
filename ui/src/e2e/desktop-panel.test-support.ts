@@ -21,22 +21,17 @@ export function sessionsList(placement: "local" | "active") {
   };
 }
 
-export async function openPalette(page: import("playwright").Page) {
+export async function openDesktopPanelInPlace(page: import("playwright").Page) {
   await waitForControlUiGatewayReady(page);
   await page.evaluate(() => {
-    window.dispatchEvent(new CustomEvent("openclaw:command-palette-open"));
+    window.dispatchEvent(new CustomEvent("openclaw:desktop-toggle", { detail: { open: true } }));
   });
-  await page
-    .locator("openclaw-command-palette")
-    .getByRole("textbox", { name: "Search or start a task…" })
-    .waitFor();
+  const panel = page.locator("openclaw-desktop-panel");
+  await panel.locator("section[aria-label='Desktop']").waitFor();
+  return panel;
 }
 
 export async function openDesktopPanel(page: import("playwright").Page, baseUrl: string) {
   await page.goto(`${baseUrl}activity`);
-  await openPalette(page);
-  await page.getByRole("option", { name: "Desktop", exact: true }).click();
-  const panel = page.locator("openclaw-desktop-panel");
-  await panel.locator("section[aria-label='Desktop']").waitFor();
-  return panel;
+  return openDesktopPanelInPlace(page);
 }
