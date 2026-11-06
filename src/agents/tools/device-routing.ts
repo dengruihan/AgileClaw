@@ -19,6 +19,7 @@ import { readSessionScopeLease } from "../../gateway/session-scope-lease.js";
 import { getAgentToolExecutionLocation, copyAgentToolMetadata } from "../agent-tool-metadata.js";
 import type { AnyAgentTool } from "../agent-tools.types.js";
 import type { AgentToolResult } from "../runtime/index.js";
+import { deviceControlAdapter } from "./device-control.js";
 import { runDeviceExec } from "./device-exec.js";
 import {
   applyDevicePatch,
@@ -233,7 +234,10 @@ function recordRoutingLeaseReject(params: {
 }
 
 type AdapterCall = (params: {
+  toolCallId: string;
   params: Record<string, unknown>;
+  /** The assembled tool the routing wrapper replaced; control adapters delegate to it. */
+  source: AnyAgentTool;
   deviceId: string;
   rootSessionKey: string;
   leaseToken: string;
@@ -272,6 +276,8 @@ async function executeOnDevice(params: {
     scopeDeviceId?: string;
     permissionMode?: string;
   };
+  toolCallId: string;
+  source: AnyAgentTool;
   toolParams: Record<string, unknown>;
   signal?: AbortSignal;
   onUpdate?: (update: AgentToolResult<unknown>) => void;
@@ -294,7 +300,9 @@ async function executeOnDevice(params: {
       ? runDeviceExec
       : kind === "file"
         ? deviceFileAdapter(params.toolName)
-        : undefined;
+        : kind === "control"
+          ? deviceControlAdapter(params.toolName, params.state)
+          : undefined;
   if (!adapter) {
     throw new Error(unsupportedDeviceToolMessage(params.toolName, deviceId));
   }
@@ -320,7 +328,9 @@ async function executeOnDevice(params: {
   );
   const platform = getInProcessGatewayToolContext()?.nodeRegistry.get(deviceId)?.platform;
   return await adapter({
+    toolCallId: params.toolCallId,
     params: params.toolParams,
+    source: params.source,
     deviceId,
     rootSessionKey: params.root.rootSessionKey,
     leaseToken,
@@ -372,6 +382,8 @@ export function applyDeviceScopeToolRouting(
           toolName: source.name,
           state,
           root,
+          toolCallId,
+          source,
           toolParams: callParams,
           ...(signal ? { signal } : {}),
           ...(onUpdate ? { onUpdate } : {}),

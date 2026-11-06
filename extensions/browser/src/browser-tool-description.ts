@@ -50,6 +50,8 @@ export function createBrowserToolDefinition(
       label: "Browser",
       name: "browser",
       resultContentSource: "network" as const,
+      // Interactive control mutates one shared browser; calls apply in model order.
+      executionMode: "sequential" as const,
       description: describeBrowserTool({
         config,
         sandboxBridgeUrl: opts?.sandboxBridgeUrl,

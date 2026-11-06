@@ -1,6 +1,6 @@
 // Browser tests cover independently bounded delegated node-proxy requests.
 import { MAX_TIMER_TIMEOUT_MS } from "openclaw/plugin-sdk/number-runtime";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type BrowserNodeRequest = {
   nodeId: string;
@@ -48,6 +48,13 @@ const uploadMocks = vi.hoisted(() => ({
 
 vi.mock("./browser-tool.runtime.js", () => runtimeMocks);
 vi.mock("./browser-proxy-upload.js", () => uploadMocks);
+
+const deviceScopeControl = vi.hoisted(() => ({
+  scope: undefined as { deviceId: string; rootSessionKey: string; leaseToken: string } | undefined,
+}));
+vi.mock("openclaw/plugin-sdk/agent-harness-runtime", () => ({
+  readBrowserDeviceControlScope: () => deviceScopeControl.scope,
+}));
 
 import { createBrowserNodeProxyRequest } from "./browser-node-proxy.js";
 import { BrowserServiceError } from "./browser/client-fetch.js";
@@ -398,4 +405,57 @@ describe("Browser node proxy nested watchdogs", () => {
       expect(gateway.timeoutMs).toBeLessThanOrEqual(MAX_TIMER_TIMEOUT_MS);
     },
   );
+});
+
+describe("Browser node proxy device scope", () => {
+  beforeEach(() => {
+    deviceScopeControl.scope = {
+      deviceId: "node-1",
+      rootSessionKey: "agent:main:root",
+      leaseToken: "lease-1",
+    };
+  });
+
+  afterEach(() => {
+    deviceScopeControl.scope = undefined;
+  });
+
+  it("admits every proxy invoke under the root session identity and lease token", async () => {
+    await createSessionProxy()({ method: "GET", path: "/" });
+    const { node } = readGatewayCall();
+    expect(node).toMatchObject({
+      nodeId: "node-1",
+      sessionKey: "agent:main:root",
+      params: expect.objectContaining({
+        sessionKey: "agent:main:root",
+        leaseToken: "lease-1",
+      }),
+    });
+  });
+
+  it("rejects a proxy request for a node other than the scoped device", async () => {
+    deviceScopeControl.scope = {
+      deviceId: "device-9",
+      rootSessionKey: "agent:main:root",
+      leaseToken: "lease-1",
+    };
+    await expect(createSessionProxy()({ method: "GET", path: "/" })).rejects.toThrow(
+      "Browser control is bound to the session's scoped device by use_device.",
+    );
+    expect(runtimeMocks.callGatewayTool).not.toHaveBeenCalled();
+  });
+
+  it("never converts a node failure into a Gateway host fallback under device scope", async () => {
+    runtimeMocks.callGatewayTool.mockRejectedValueOnce(
+      new Error("browser control host is not reachable"),
+    );
+    const proxy = createBrowserNodeProxyRequest({
+      nodeTarget: { nodeId: "node-1", commands: ["browser.proxy"] },
+      allowAutomaticHostFallback: true,
+    });
+    await expect(proxy({ method: "GET", path: "/" })).rejects.toThrow(
+      "browser control host is not reachable",
+    );
+    expect(runtimeMocks.fetchBrowserJson).not.toHaveBeenCalled();
+  });
 });

@@ -117,4 +117,20 @@ describe("tool-catalog", () => {
     const policy = requireCoreToolProfilePolicy("full");
     expect(policy.allow).toEqual(["*"]);
   });
+
+  it("keeps the control tool catalog constant while device routing serves them", () => {
+    // Device-scope routing wraps placement control tools per call; the catalog
+    // entries themselves must not move between locations, profiles, or groups.
+    expect(resolveCoreToolExecutionLocation("browser")).toBe("placement");
+    expect(resolveCoreToolExecutionLocation("computer")).toBe("placement");
+    for (const tool of ["screen", "mobile_ui", "canvas"]) {
+      expect(resolveCoreToolExecutionLocation(tool)).toBe("gateway");
+    }
+    expect(resolveCoreToolProfiles("browser")).toEqual([]);
+    expect(resolveCoreToolProfiles("computer")).toEqual([]);
+    expect(CORE_TOOL_GROUPS["group:openclaw"]).toEqual(
+      expect.arrayContaining(["browser", "computer"]),
+    );
+    expect(CORE_WORKER_LAUNCH_TOOL_NAMES).toEqual(expect.arrayContaining(["browser", "computer"]));
+  });
 });

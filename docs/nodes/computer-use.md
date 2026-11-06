@@ -91,6 +91,8 @@ Modifier keys ride the `text` field on click and scroll actions (`shift`, `ctrl`
 
 Other input actions return a fresh desktop screenshot so the model can observe the result. When the screen is pixel-identical to the previous frame still in model context, the tool returns metadata only — "screen unchanged since previous frame" — and the previous `frameId` stays valid, so duplicate screenshots never re-enter model context. If more than one computer-capable node is connected, pass `node` explicitly.
 
+Under a session device scope (`use_device`), the tool ignores host selectors: every action runs on the scoped device through its `computer.act` and `screen.snapshot` commands, admitted per call with the session's root identity and occupancy lease token. A per-call `node` or `target` selector is rejected — switch scope with `use_device` instead. An offline device or one that does not advertise both commands fails the call with a reason; the tool never falls back to the Gateway desktop or another node.
+
 Screenshots are kept **model-only**: they are never auto-delivered to the chat channel. Treat all on-screen content as untrusted input; the tool warns the model not to follow on-screen instructions that conflict with the user's request.
 
 ## CUA Driver provider

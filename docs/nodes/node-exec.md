@@ -172,12 +172,13 @@ serialize through one FIFO gate, because they share one browser or desktop.
 It is the only model-facing way to move execution; the direct `node.invoke` RPC
 cannot mutate occupancy because lease mutations are admin-only there.
 
-| Surface                                                   | Where it runs                                  |
-| --------------------------------------------------------- | ---------------------------------------------- |
-| `use_device`, `sessions_*`, `portal`, other Gateway tools | Always the Gateway                             |
-| `exec`, `process`                                         | Scoped device (exec) or the Gateway            |
-| `read`, `write`, `edit`, `apply_patch`, `ls`              | Scoped device (file commands) or the Gateway   |
-| `browser`, `computer`, `screen`                           | Gateway only today; a device-scoped call fails |
+| Surface                                                   | Where it runs                                   |
+| --------------------------------------------------------- | ----------------------------------------------- |
+| `use_device`, `sessions_*`, `portal`, other Gateway tools | Always the Gateway                              |
+| `exec`, `process`                                         | Scoped device (exec) or the Gateway             |
+| `read`, `write`, `edit`, `apply_patch`, `ls`              | Scoped device (file commands) or the Gateway    |
+| `browser`, `computer`                                     | Scoped device (control commands) or the Gateway |
+| `screen`, `mobile_ui`, `canvas`                           | Gateway only; a device-scoped call fails        |
 
 Scope rules:
 
@@ -236,6 +237,15 @@ Whole-file edits are capped at the 16 MB device ceiling. The node command
 surface has no delete or move, so `*** Delete File` and `*** Move to` hunks
 fail per call with a pointer to the gateway-scoped alternative; patch paths
 must be absolute device paths.
+
+Device control routing keeps the same tools: under device scope, `browser` runs
+its actions through the device's `browser.proxy` commands and `computer` observes
+and acts through `computer.act` plus `screen.snapshot`, each invoke admitted per
+call with the root session key and lease token. Neither tool falls back to the
+Gateway host, another node, or a sandbox; a device that is offline, disabled, or
+lacking the command fails that call with a reason. Control tools run
+sequentially: the Gateway serializes their tool calls, and the node's control
+gate serializes the commands, because they share one browser or desktop.
 
 ## Codex sessions on a node
 
