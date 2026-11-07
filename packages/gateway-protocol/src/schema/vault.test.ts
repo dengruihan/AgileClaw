@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   validateVaultCreateParams,
   validateVaultRevealResult,
+  validateVaultSaveLoginParams,
   validateVaultStatusResult,
   validateVaultUpdateParams,
 } from "../validator-registry.js";
@@ -95,5 +96,78 @@ describe("vault protocol schemas", () => {
         deletedCount: 0,
       }),
     ).toBe(false);
+  });
+
+  it("accepts an agent save with only an origin and blank optional fields", () => {
+    expect(
+      validateVaultSaveLoginParams({
+        originScheme: "https",
+        originHost: "example.com",
+        originPort: 443,
+      }),
+    ).toBe(true);
+    expect(
+      validateVaultSaveLoginParams({
+        originScheme: "https",
+        originHost: "example.com",
+        originPort: 443,
+        account: "",
+        password: "",
+        notes: "",
+        label: "",
+      }),
+    ).toBe(true);
+    expect(
+      validateVaultSaveLoginParams({
+        originScheme: "https",
+        originHost: "example.com",
+        originPort: 443,
+        extra: true,
+      }),
+    ).toBe(false);
+    expect(
+      validateVaultSaveLoginParams({
+        originScheme: "ftp",
+        originHost: "example.com",
+        originPort: 443,
+      }),
+    ).toBe(false);
+    expect(
+      validateVaultSaveLoginParams({
+        originScheme: "https",
+        originPort: 443,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps an empty account and empty revealed password valid payloads", () => {
+    expect(
+      validateVaultCreateParams({
+        originScheme: "https",
+        originHost: "example.com",
+        originPort: 443,
+        siteLabel: "example.com",
+        account: "",
+        password: "synthetic-password",
+      }),
+    ).toBe(true);
+    expect(
+      validateVaultRevealResult({
+        entry: {
+          itemRef: "vault_11111111-1111-4111-8111-111111111111",
+          originScheme: "https",
+          originHost: "example.com",
+          originPort: 443,
+          siteLabel: "example.com",
+          account: "",
+          hasNotes: false,
+          revision: 1,
+          createdAtMs: 1,
+          updatedAtMs: 1,
+        },
+        password: "",
+        notes: "",
+      }),
+    ).toBe(true);
   });
 });

@@ -10,6 +10,7 @@ import {
   VAULT_PASSWORD_MAX_BYTES,
   VAULT_SITE_LABEL_MAX_LENGTH,
   VaultError,
+  type VaultAgentSaveInput,
   type VaultEntryCreateInput,
   type VaultEntryUpdateInput,
 } from "./vault-types.js";
@@ -68,9 +69,36 @@ function normalizeText(
   return trimmed;
 }
 
+function normalizeOptionalText(value: unknown, field: string, maxLength: number): string {
+  if (value === undefined) {
+    return "";
+  }
+  if (typeof value !== "string") {
+    throw new VaultError("VAULT_INVALID_INPUT", `${field} must be text.`);
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    throw new VaultError("VAULT_INVALID_INPUT", `${field} is too long.`);
+  }
+  return trimmed;
+}
+
 function normalizePassword(value: unknown): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new VaultError("VAULT_INVALID_INPUT", "Password is required.");
+  }
+  if (Buffer.byteLength(value, "utf8") > VAULT_PASSWORD_MAX_BYTES) {
+    throw new VaultError("VAULT_INVALID_INPUT", "Password is too long.");
+  }
+  return value;
+}
+
+function normalizeOptionalPassword(value: unknown): string {
+  if (value === undefined) {
+    return "";
+  }
+  if (typeof value !== "string") {
+    throw new VaultError("VAULT_INVALID_INPUT", "Password must be text.");
   }
   if (Buffer.byteLength(value, "utf8") > VAULT_PASSWORD_MAX_BYTES) {
     throw new VaultError("VAULT_INVALID_INPUT", "Password is too long.");
@@ -144,10 +172,9 @@ export function normalizeCreateInput(input: VaultEntryCreateInput) {
     siteLabel: normalizeText(input.siteLabel, "Site label", VAULT_SITE_LABEL_MAX_LENGTH, {
       required: true,
     }),
-    account: normalizeText(input.account, "Account", VAULT_ACCOUNT_MAX_LENGTH, {
-      required: true,
-    }),
-    label: normalizeText(input.label, "Label", VAULT_LABEL_MAX_LENGTH, { required: false }),
+    // An empty account marks an incomplete entry the operator can complete later.
+    account: normalizeOptionalText(input.account, "Account", VAULT_ACCOUNT_MAX_LENGTH),
+    label: normalizeOptionalText(input.label, "Label", VAULT_LABEL_MAX_LENGTH),
     password: normalizePassword(input.password),
     notes: normalizeNotes(input.notes),
   };
@@ -168,11 +195,30 @@ export function normalizeUpdateInput(input: VaultEntryUpdateInput) {
     siteLabel: normalizeText(input.siteLabel, "Site label", VAULT_SITE_LABEL_MAX_LENGTH, {
       required: true,
     }),
-    account: normalizeText(input.account, "Account", VAULT_ACCOUNT_MAX_LENGTH, {
-      required: true,
-    }),
-    label: normalizeText(input.label, "Label", VAULT_LABEL_MAX_LENGTH, { required: false }),
+    account: normalizeOptionalText(input.account, "Account", VAULT_ACCOUNT_MAX_LENGTH),
+    label: normalizeOptionalText(input.label, "Label", VAULT_LABEL_MAX_LENGTH),
     password: input.password === undefined ? undefined : normalizePassword(input.password),
     notes: input.notes === undefined ? undefined : normalizeNotes(input.notes),
+  };
+}
+
+/**
+ * Agent saves only require the site. A missing site label falls back to the
+ * host so a bare-origin save still lists cleanly in the password manager.
+ */
+export function normalizeAgentSaveInput(input: VaultAgentSaveInput) {
+  const origin = normalizeOrigin(input);
+  return {
+    ...origin,
+    siteLabel:
+      input.siteLabel === undefined || input.siteLabel.trim().length === 0
+        ? origin.host
+        : normalizeText(input.siteLabel, "Site label", VAULT_SITE_LABEL_MAX_LENGTH, {
+            required: true,
+          }),
+    account: normalizeOptionalText(input.account, "Account", VAULT_ACCOUNT_MAX_LENGTH),
+    label: normalizeOptionalText(input.label, "Label", VAULT_LABEL_MAX_LENGTH),
+    password: normalizeOptionalPassword(input.password),
+    notes: normalizeNotes(input.notes),
   };
 }

@@ -686,4 +686,7 @@ export const CORE_GATEWAY_METHOD_SPECS = [
   ["node.device.enable", "nodes", "operator.pairing", "2026.11"],
   ["node.device.disable", "nodes", "operator.pairing", "2026.11"],
   ["node.device.update", "nodes", "operator.pairing", "2026.11"],
+  // Agent-facing vault save appends after the device registry block so every
+  // legacy advertised method index stays stable.
+  ["vault.saveLogin", null, "operator.vault", "2026.11", CONTROL_PLANE_WRITE],
 ] as const satisfies readonly CoreGatewayMethodSpecRow[];

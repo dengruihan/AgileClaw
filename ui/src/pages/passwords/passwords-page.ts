@@ -251,10 +251,6 @@ class PasswordsPage extends OpenClawLightDomElement {
       this.formError = t("passwords.siteLabelRequired");
       return;
     }
-    if (!this.draft.account.trim()) {
-      this.formError = t("passwords.accountRequired");
-      return;
-    }
     if (this.dialogMode === "add" && !this.draft.password) {
       this.formError = t("passwords.passwordRequired");
       return;
@@ -369,7 +365,10 @@ class PasswordsPage extends OpenClawLightDomElement {
       !this.canManage ||
       !(await showConfirmDialog({
         title: t("passwords.deleteTitle"),
-        message: t("passwords.deleteMessage", { site: entry.siteLabel, account: entry.account }),
+        message: t("passwords.deleteMessage", {
+          site: entry.siteLabel,
+          account: entry.account || t("passwords.noAccount"),
+        }),
         confirmLabel: t("common.delete"),
         danger: true,
       }))

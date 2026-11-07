@@ -8,6 +8,7 @@ import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveDatabasePath } from "../state/openclaw-state-db.paths.js";
 import {
   VaultError,
+  type VaultAgentSaveInput,
   type VaultAuditEvent,
   type VaultEntryCreateInput,
   type VaultEntryMetadata,
@@ -113,6 +114,11 @@ export class VaultService {
 
   create(input: VaultEntryCreateInput): Promise<VaultEntryMetadata> {
     return this.request<VaultEntryMetadata>({ type: "create", input });
+  }
+
+  /** Agent save: site required, other fields optional, works while locked. */
+  saveLogin(input: VaultAgentSaveInput): Promise<VaultEntryMetadata> {
+    return this.request<VaultEntryMetadata>({ type: "saveLogin", input });
   }
 
   update(input: VaultEntryUpdateInput): Promise<VaultEntryMetadata> {
@@ -327,6 +333,7 @@ function extractResult(type: VaultWorkerOperation["type"], result: VaultWorkerRe
       }
       break;
     case "create":
+    case "saveLogin":
     case "update":
       if (result.type === type) {
         return result.entry;

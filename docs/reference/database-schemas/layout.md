@@ -131,12 +131,21 @@ for the schema and update contract.
 
 The shared state database holds the personal website password vault in
 `vault_entries`, `vault_entry_secrets`, `vault_keys`, `vault_key_wraps`,
+`vault_write_keys`, `vault_write_key_wraps`, `vault_pending_entry_secrets`,
 `vault_meta`, and `vault_audit_events`. Entry metadata is queryable while the
 vault is locked; password and notes values exist only as authenticated ciphertext
-in `vault_entry_secrets`. The vault is independent of `secret_store_entries` and
+in `vault_entry_secrets`, or — for agent saves that land while the vault is
+locked — as ciphertext sealed to the write public key in
+`vault_pending_entry_secrets` until the next unlock migrates it. An empty
+`account` marks an agent-saved entry the operator has not completed; those rows
+are exempt from the one-account-per-site unique index. The vault is independent
+of `secret_store_entries` and
 is created on first use by the dedicated vault worker. A build that adds an
 audit action rebuilds `vault_audit_events` in place during writable shared-state
-admission, preserving audit rows, the sequence high-water mark, and indexes. See
+admission, preserving audit rows, the sequence high-water mark, and indexes; the
+agent-save release likewise rebuilds `vault_entries` in place to relax the
+account constraint and to exempt blank accounts from the one-account-per-site
+unique index, preserving every entry and its ciphertext. See
 [Password vault](/gateway/passwords-vault) and the
 [versioning contract](/reference/database-schemas/versioning).
 

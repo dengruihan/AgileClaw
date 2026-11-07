@@ -52,6 +52,7 @@ import { migrateSessionWatchCursorProvenance } from "./openclaw-state-db-session
 import { isUninitializedNativeStartupDatabase } from "./openclaw-state-db-startup-checkpoint.js";
 import * as retirements from "./openclaw-state-db-table-retirements.js";
 import { repairVaultAuditActionConstraint } from "./openclaw-state-db-vault-audit-repair.js";
+import { repairVaultEntriesAccountConstraint } from "./openclaw-state-db-vault-entries-repair.js";
 import { describeAgentPathMigration, warnAgentPathMigration } from "./openclaw-state-db.paths.js";
 import { assertOpenClawStateWriteAllowed } from "./openclaw-state-ownership.js";
 import { getOpenClawStateRuntimeSchema } from "./openclaw-state-schema-compatibility.js";
@@ -108,6 +109,9 @@ export function ensureOpenClawStateRuntimeSchema(
           const vaultAuditChanges = repairVaultAuditActionConstraint(db)
             ? ["Repaired shared-state vault audit action constraint"]
             : [];
+          if (repairVaultEntriesAccountConstraint(db)) {
+            vaultAuditChanges.push("Relaxed shared-state vault entry account constraint");
+          }
           const indexes = verifyAndRepairCanonicalSqliteIndexes(
             db,
             pathname,
@@ -149,6 +153,9 @@ export function ensureOpenClawStateRuntimeSchema(
         changes.push(...describeAgentPathMigration(pathMigration));
         if (repairVaultAuditActionConstraint(db)) {
           changes.push("Repaired shared-state vault audit action constraint");
+        }
+        if (repairVaultEntriesAccountConstraint(db)) {
+          changes.push("Relaxed shared-state vault entry account constraint");
         }
         ensureAdditiveStateColumns(db, "repair");
         for (const migration of versionedStateMigrations) {

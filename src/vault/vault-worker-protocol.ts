@@ -1,4 +1,5 @@
 import type {
+  VaultAgentSaveInput,
   VaultAuditEvent,
   VaultEntryCreateInput,
   VaultEntryMetadata,
@@ -15,6 +16,7 @@ export type VaultWorkerOperation =
   | { type: "lock" }
   | { type: "list"; includeDeleted: boolean }
   | { type: "create"; input: VaultEntryCreateInput }
+  | { type: "saveLogin"; input: VaultAgentSaveInput }
   | { type: "update"; input: VaultEntryUpdateInput }
   | { type: "delete"; itemRef: string; revision: number }
   | { type: "restore"; itemRef: string }
@@ -39,6 +41,7 @@ export type VaultWorkerResult =
   | { type: "lock" }
   | { type: "list"; entries: VaultEntryMetadata[] }
   | { type: "create"; entry: VaultEntryMetadata }
+  | { type: "saveLogin"; entry: VaultEntryMetadata }
   | { type: "update"; entry: VaultEntryMetadata }
   | { type: "delete" }
   | { type: "restore" }

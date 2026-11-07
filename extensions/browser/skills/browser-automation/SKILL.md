@@ -39,6 +39,7 @@ Use this skill when you need the `browser` tool for anything beyond a single pag
    - Debug network failures with `action="requests"`, optional URL/type `filter`, and `limit` (default 50 recent entries). `clear=true` clears the collected log after reading. Use a managed profile; existing-session profiles do not support this log.
    - Debug page errors with `action="errors"` and `limit` (default 50 recent entries). `clear=true` clears the collected log after reading. Existing-session profiles do not support this log.
    - If the page needs login, permission, captcha, 2FA, camera/microphone approval, or another manual step, stop and tell the user exactly what is needed.
+   - When you create an account or the user shares new credentials, offer to store them with the `vault_save_login` tool: the site is required, other fields are optional, and blanks wait for the user to complete in Settings → Passwords. Saves work while the vault is locked and never need an approval.
    - Do not claim the browser is not logged in just because the current page shows a permission or onboarding dialog. Inspect the visible UI first.
 
 ## Browser batch CLI

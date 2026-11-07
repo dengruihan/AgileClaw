@@ -230,7 +230,13 @@ function renderRow(props: PasswordsVaultViewProps, entry: VaultEntryMetadata): T
       class=${deleted ? "passwords-vault__row passwords-vault__row--deleted" : "passwords-vault__row"}
     >
       <td data-label=${t("passwords.account")}>
-        <span class="passwords-vault__account">${entry.account}</span>
+        ${
+          entry.account
+            ? html`<span class="passwords-vault__account">${entry.account}</span>`
+            : html`<span class="passwords-vault__muted passwords-vault__account--empty"
+                >${t("passwords.noAccount")}</span
+              >`
+        }
         ${entry.label ? html`<span class="passwords-vault__label">${entry.label}</span>` : nothing}
         ${deleted ? html`<wa-badge variant="warning">${t("passwords.deleted")}</wa-badge>` : nothing}
       </td>

@@ -6,8 +6,8 @@ import { closedObject } from "./closed-object.js";
  * Personal website-password vault protocol.
  *
  * These payloads carry metadata and, only for reveal/copy, decrypted values.
- * The vault worker owns encryption and the data key; no agent tool registers
- * these methods.
+ * The vault worker owns encryption and the data key; the agent-facing save
+ * method never returns decrypted values.
  */
 
 const VaultItemRefSchema = Type.String({ minLength: 1, maxLength: 128 });
@@ -16,9 +16,11 @@ const VaultSchemeSchema = Type.Union([Type.Literal("https"), Type.Literal("http"
 const VaultHostSchema = Type.String({ minLength: 1, maxLength: 253 });
 const VaultPortSchema = Type.Integer({ minimum: 1, maximum: 65535 });
 const VaultSiteLabelSchema = Type.String({ minLength: 1, maxLength: 256 });
-const VaultAccountSchema = Type.String({ minLength: 1, maxLength: 512 });
+// An empty account marks an incomplete entry the operator can complete later.
+const VaultAccountSchema = Type.String({ maxLength: 512 });
 const VaultLabelSchema = Type.String({ maxLength: 256 });
-const VaultPasswordSchema = Type.String({ minLength: 1, maxLength: 4096 });
+const VaultRequiredPasswordSchema = Type.String({ minLength: 1, maxLength: 4096 });
+const VaultPasswordSchema = Type.String({ maxLength: 4096 });
 const VaultNotesSchema = Type.String({ maxLength: 64 * 1024 });
 const VaultPassphraseSchema = Type.String({ minLength: 8, maxLength: 1024 });
 const VaultAutoLockSecondsSchema = Type.Integer({ minimum: 15, maximum: 86_400 });
@@ -89,7 +91,7 @@ const VaultEntryFieldsSchema = {
 
 export const VaultCreateParamsSchema = closedObject({
   ...VaultEntryFieldsSchema,
-  password: VaultPasswordSchema,
+  password: VaultRequiredPasswordSchema,
   notes: Type.Optional(VaultNotesSchema),
 });
 
@@ -97,6 +99,21 @@ export const VaultUpdateParamsSchema = closedObject({
   itemRef: VaultItemRefSchema,
   revision: VaultRevisionSchema,
   ...VaultEntryFieldsSchema,
+  password: Type.Optional(VaultRequiredPasswordSchema),
+  notes: Type.Optional(VaultNotesSchema),
+});
+
+/**
+ * Agent save. The origin is required; every other field is optional and an
+ * omitted or empty field is stored empty for the operator to complete later.
+ */
+export const VaultSaveLoginParamsSchema = closedObject({
+  originScheme: VaultSchemeSchema,
+  originHost: VaultHostSchema,
+  originPort: VaultPortSchema,
+  siteLabel: Type.Optional(VaultSiteLabelSchema),
+  account: Type.Optional(VaultAccountSchema),
+  label: Type.Optional(VaultLabelSchema),
   password: Type.Optional(VaultPasswordSchema),
   notes: Type.Optional(VaultNotesSchema),
 });
@@ -252,6 +269,7 @@ export type VaultEntryMetadata = Static<typeof VaultEntryMetadataSchema>;
 export type VaultStatus = Static<typeof VaultStatusResultSchema>;
 export type VaultAuditEvent = Static<typeof VaultAuditEventSchema>;
 export type VaultCreateParams = Static<typeof VaultCreateParamsSchema>;
+export type VaultSaveLoginParams = Static<typeof VaultSaveLoginParamsSchema>;
 export type VaultUpdateParams = Static<typeof VaultUpdateParamsSchema>;
 export type VaultRevealResult = Static<typeof VaultRevealResultSchema>;
 export type VaultAuditListResult = Static<typeof VaultAuditListResultSchema>;

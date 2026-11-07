@@ -28,6 +28,8 @@ export type VaultFillWorkerDeps = {
   ) => void;
   clockNow: () => number;
   touchActivity: () => void;
+  /** Claims a still-sealed agent save before the fill reads its secrets. */
+  ensureSecretsMigrated?: (itemRef: string) => void;
 };
 
 /** Decrypt one entry for the fill broker after exact revision and origin checks. */
@@ -68,6 +70,7 @@ export function fillVaultEntry(
       "The browser origin does not match this vault entry.",
     );
   }
+  deps.ensureSecretsMigrated?.(itemRef);
   const secret = readVaultEntrySecret(handle.db, itemRef);
   if (!secret) {
     deps.write("vault.fill.corrupted", (transaction) => {

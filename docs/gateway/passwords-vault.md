@@ -18,15 +18,15 @@ The vault uses a master passphrase. If you forget it, the encrypted passwords an
 
 Each entry is one account on one website:
 
-| Field                     | Stored form     | Notes                                                             |
-| ------------------------- | --------------- | ----------------------------------------------------------------- |
-| `itemRef`                 | Plaintext       | Opaque random identifier. Never derived from the site or account. |
-| Scheme, host, port        | Plaintext       | Exact origin. Paths, query strings, and fragments are rejected.   |
-| Site name, account, label | Plaintext       | Account names are visible to operators who can list the vault.    |
-| Password                  | Ciphertext only | AES-256-GCM with authenticated metadata.                          |
-| Notes                     | Ciphertext only | Encrypted even when empty.                                        |
-| Revision and timestamps   | Plaintext       | Optimistic concurrency, last change, last use.                    |
-| Deleted marker            | Plaintext       | Soft-deleted entries remain restorable for 7 days.                |
+| Field                     | Stored form     | Notes                                                                                                                                                               |
+| ------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `itemRef`                 | Plaintext       | Opaque random identifier. Never derived from the site or account.                                                                                                   |
+| Scheme, host, port        | Plaintext       | Exact origin. Paths, query strings, and fragments are rejected.                                                                                                     |
+| Site name, account, label | Plaintext       | Account names are visible to operators who can list the vault. An empty account marks an incomplete entry, saved by an agent, that the operator can complete later. |
+| Password                  | Ciphertext only | AES-256-GCM with authenticated metadata.                                                                                                                            |
+| Notes                     | Ciphertext only | Encrypted even when empty.                                                                                                                                          |
+| Revision and timestamps   | Plaintext       | Optimistic concurrency, last change, last use.                                                                                                                      |
+| Deleted marker            | Plaintext       | Soft-deleted entries remain restorable for 7 days.                                                                                                                  |
 
 The vault never adds a plaintext password or notes column. The `secret_store_entries` table is not modified or reused.
 
@@ -38,7 +38,8 @@ The vault never adds a plaintext password or notes column. The `secret_store_ent
 - Authenticated associated data binds the entry reference, owner, exact origin, revision, key identity, and field name. Moving ciphertext to another entry, origin, or revision makes decryption fail.
 - The vault starts locked after a Gateway restart. It auto-locks after the configured idle interval (default five minutes).
 - Five consecutive wrong passphrases trigger a 30-second lockout. Further groups of five back off to five minutes, then one hour. Attempts and the timeout are persisted, so a restart does not clear them.
-- No agent tool is registered for the vault. Agent/model context, transcripts, and logs never include passwords or notes.
+- Agents can save logins with the `vault_save_login` tool but cannot list, reveal, read, update, or delete entries. Agent/model context, transcripts, logs, and tool results never include passwords or notes. See [Agent save](#agent-save).
+- Agent saves work while the vault is locked through a write-only key: an X25519 public key seals the values, and the matching private key exists only wrapped under the DEK, so nothing sealed while locked can be decrypted until the next unlock. No plaintext or staging table is ever written.
 - Agent fill is a separate, per-request flow that uses an opaque `itemRef`; it never exposes a vault read verb to the model. See [Agent fill](#agent-fill).
 - `operator.admin` does not imply `operator.vault.reveal`. Unlock needs only `operator.vault`, which `operator.admin` satisfies; reveal and copy need the explicit reveal scope on the connection.
 - Audit records contain actions, item references, and timestamps. They never contain passwords, notes, or account names.
@@ -57,14 +58,28 @@ The list is grouped by website and supports multiple accounts per site. Search c
 
 The vault adds two operator scopes:
 
-| Scope                   | Allows                                                                                                                                               |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `operator.vault`        | Status, initialize, unlock, list, create, update, soft delete, restore, permanent delete, auto-lock settings, audit list, agent fill preview/execute |
-| `operator.vault.reveal` | Reveal and copy                                                                                                                                      |
+| Scope                   | Allows                                                                                                                                                                                                                                          |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `operator.vault`        | Status, initialize, unlock, list, create, update, soft delete, restore, permanent delete, auto-lock settings, audit list, agent fill preview/execute, agent save (`vault.saveLogin`, which additionally requires a live agent runtime identity) |
+| `operator.vault.reveal` | Reveal and copy                                                                                                                                                                                                                                 |
 
-Grant the vault scopes explicitly in an operator role or device authorization. CLI and operator clients do not receive them by default. A client with only `operator.vault` (or `operator.admin`, which satisfies it) can unlock and manage entries but cannot see values; `operator.vault.reveal` must be granted explicitly.
+Grant the vault scopes explicitly in an operator role or device authorization. CLI and operator clients do not receive them by default. A client with only `operator.vault` (or `operator.admin`, which satisfies it) can unlock and manage entries but cannot see values; `operator.vault.reveal` must be granted explicitly. Agent saves never require or honor the reveal scope.
 
-Gateway methods are `vault.status`, `vault.initialize`, `vault.unlock`, `vault.lock`, `vault.list`, `vault.create`, `vault.update`, `vault.delete`, `vault.restore`, `vault.purge`, `vault.reveal`, `vault.copy`, `vault.generate`, `vault.setAutoLock`, `vault.audit.list`, `vault.fill.approval.request`, `vault.fill.preview`, and `vault.fill.execute`.
+Gateway methods are `vault.status`, `vault.initialize`, `vault.unlock`, `vault.lock`, `vault.list`, `vault.create`, `vault.saveLogin`, `vault.update`, `vault.delete`, `vault.restore`, `vault.purge`, `vault.reveal`, `vault.copy`, `vault.generate`, `vault.setAutoLock`, `vault.audit.list`, `vault.fill.approval.request`, `vault.fill.preview`, and `vault.fill.execute`.
+
+## Agent save
+
+An agent can save a website login directly into the vault with the `vault_save_login` tool from the bundled **Passwords vault** plugin. There is no approval flow; the user asked for saves to be direct:
+
+1. The model supplies the required `site` (a URL or bare host; the path is ignored) and optional `account`, `password`, `notes`, and `label`. Blank fields are stored blank — the entry appears in **Settings → Passwords** with an empty account, and the user completes it later with **Edit**.
+2. The Gateway method `vault.saveLogin` requires `operator.vault` plus a live agent runtime identity on the connection. Ordinary operator clients cannot call it, and the reveal scope is neither required nor accepted.
+3. While the vault is unlocked the values are encrypted immediately with the normal per-entry DEK keys.
+4. While the vault is locked the values are sealed to the write public key (`vault_write_keys`), stored as authenticated ciphertext in `vault_pending_entry_secrets`, and the matching private key is wrapped under the DEK (`vault_write_key_wraps`). Nothing can decrypt them until the next unlock, when each sealed row is decrypted once and rewritten into `vault_entry_secrets`; the sealed copy is deleted. There is no plaintext or unlocked-readable staging state.
+5. Duplicates are rejected: a save with a non-empty `account` fails when an active entry for the same site and account exists. Multiple blank-account entries for one site are allowed so several incomplete saves can wait for the user.
+6. Vaults created by this release get the write key at setup. A vault carried over from an earlier release creates it at the next unlock; until then a locked save fails with a clear `setup_required` result asking for one unlock.
+7. Saves are audited as action `create` with reason code `agent`, without values.
+
+Results are explicit and value-free: `saved` (with `itemRef`, site, origin, account, and the blank field list), `duplicate`, `invalid_input`, `vault_uninitialized`, `setup_required`, or `unavailable`. The tool never returns the saved password or notes, and it offers no list, reveal, update, or delete surface; use [Agent fill](#agent-fill) to apply a saved login later.
 
 ## Agent fill
 
@@ -98,10 +113,10 @@ When `browser_login` observes a human gate (CAPTCHA, verification code, or a pag
 ## Retention and backups
 
 - Soft-deleted entries are hard-deleted after 7 days. Restore rejects an expired entry, and the vault worker sweeps expired rows at startup and on its scheduled maintenance interval, even when nobody lists or creates entries.
-- Database backups contain only ciphertext. A backup without the master passphrase cannot decrypt passwords or notes. This is intentional: keep the passphrase separately if you need to restore a backup.
+- Database backups contain only ciphertext. A backup without the master passphrase cannot decrypt passwords or notes — including agent saves sealed while locked, whose write private key is itself wrapped under the DEK. This is intentional: keep the passphrase separately if you need to restore a backup.
 - Git push backups omit the vault tables through the credential-table redaction policy, along with `secret_store_entries`.
 - Restoring a database does not restore an unlocked state. The vault starts locked and the worker holds no key after restart.
-- Updating from the first vault release upgrades the value-free audit table in place during shared-state schema admission. Existing audit rows, their sequence, and the audit index are retained; rolling back to that build needs the verified pre-update backup. See the [versioning contract](/reference/database-schemas/versioning).
+- Updating from the first vault release upgrades the value-free audit table in place during shared-state schema admission. Existing audit rows, their sequence, and the audit index are retained; rolling back to that build needs the verified pre-update backup. Updating to this release also relaxes the `vault_entries.account` constraint and the one-account-per-site index in place during the same admission, preserving every entry and its ciphertext; see the [versioning contract](/reference/database-schemas/versioning).
 
 ## What this release does not do
 

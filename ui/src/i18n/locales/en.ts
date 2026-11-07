@@ -4259,7 +4259,7 @@ export const en: TranslationMap & {
     websiteHint: "For example https://example.com. HTTP is only for sites without HTTPS.",
     siteLabel: "Site name",
     siteLabelRequired: "Enter a site name.",
-    accountRequired: "Enter the account.",
+    noAccount: "No account yet — choose Edit to add one.",
     label: "Label (optional)",
     generate: "Generate",
     generated: "Generated a random password.",
