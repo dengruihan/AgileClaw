@@ -17,13 +17,6 @@ export const CONTROL_UI_IMAGE_HTTP_ROUTES = [
     ),
   ],
   [
-    ["workspaceIcon"],
-    createLazyRuntimeNamedExport(
-      () => import("./workspace-icon-http.js"),
-      "handleWorkspaceIconHttpRequest",
-    ),
-  ],
-  [
     ["channelAvatar"],
     createLazyRuntimeNamedExport(
       () => import("./channel-avatar-http.js"),

@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { expect, test } from "vitest";
 import {
@@ -26,26 +25,10 @@ export function registerControlUiOwnerBootstrapSuite(): void {
       await import("../shared/device-bootstrap-profile.js");
     const { resolveSharedGatewaySessionGeneration } =
       await import("./server/ws-shared-generation.js");
-    const { mutateConfigFile } = await import("../config/config.js");
     const stateDir = process.env.OPENCLAW_STATE_DIR;
     if (!stateDir) {
       throw new Error("OPENCLAW_STATE_DIR must be set by the gateway test hooks");
     }
-    const workspace = path.join(stateDir, "owner-icon-workspace");
-    await fs.mkdir(workspace, { recursive: true });
-    const icon = Buffer.from(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><path d="M0 0h1v1H0z"/></svg>',
-    );
-    await fs.writeFile(path.join(workspace, "favicon.svg"), icon);
-    await mutateConfigFile({
-      mutate(config) {
-        config.agents = {
-          ...config.agents,
-          defaults: { ...config.agents?.defaults, workspace },
-        };
-      },
-      afterWrite: { mode: "auto" },
-    });
     const sessionKey = "agent:main:owner-icon";
     testState.sessionStorePath = path.join(stateDir, "sessions.sqlite");
     await writeSessionStore({
@@ -100,12 +83,18 @@ export function registerControlUiOwnerBootstrapSuite(): void {
       expect((await rpcReq(wsBootstrap, "set-heartbeats", { enabled: false })).ok).toBe(true);
       wsBootstrap.close();
 
-      const iconResponse = await fetch(
-        `http://127.0.0.1:${port}/__openclaw__/workspace-icon/${encodeURIComponent(sessionKey)}`,
+      // The bootstrap device token must authorize Control UI HTTP reads: a
+      // session-scoped resource replies as an authorized miss (404, no channel
+      // avatar for this session), not an authentication failure.
+      const authorized = await fetch(
+        `http://127.0.0.1:${port}/__openclaw__/channel-avatar/${encodeURIComponent(sessionKey)}`,
         { headers: { Authorization: `Bearer ${deviceToken}` } },
       );
-      expect(iconResponse.status).toBe(200);
-      expect(Buffer.from(await iconResponse.arrayBuffer())).toEqual(icon);
+      expect(authorized.status).toBe(404);
+      const unauthenticated = await fetch(
+        `http://127.0.0.1:${port}/__openclaw__/channel-avatar/${encodeURIComponent(sessionKey)}`,
+      );
+      expect(unauthenticated.status).toBe(401);
 
       const pending = (await listDevicePairing()).pending.filter(
         (entry) => entry.deviceId === identity.deviceId,

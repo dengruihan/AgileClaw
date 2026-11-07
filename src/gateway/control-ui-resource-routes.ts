@@ -24,7 +24,6 @@ const CONTROL_UI_RESOURCE_ROUTES = {
     prefix: CONTROL_UI_USER_AVATAR_PATH_PREFIX.slice(0, -1),
     suffix: CONTROL_UI_USER_AVATAR_PATH_SUFFIX,
   },
-  workspaceIcon: { prefix: "/__openclaw__/workspace-icon", suffix: "" },
 } as const;
 
 export type ControlUiResourceRoute = keyof typeof CONTROL_UI_RESOURCE_ROUTES;
