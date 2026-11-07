@@ -161,6 +161,185 @@ suite.define(() => {
     }
   });
 
+  it("lets users choose machine panels and keeps the choice after a reload", async () => {
+    const artifacts = createControlUiE2eArtifactDir("dashboards-panel-library");
+    const context = await suite.browser.newContext({
+      locale: "en-US",
+      serviceWorkers: "block",
+      reducedMotion: "reduce",
+      viewport: { width: 1440, height: 900 },
+    });
+    const page = await context.newPage();
+    const gatewayMachine = page.locator('[data-monitoring-machine="gateway"]');
+    try {
+      await installMonitoringGateway(page);
+      await page.goto(`${suite.server.baseUrl}dashboards`);
+      const monitoring = page.locator("[data-monitoring]");
+      await monitoring.getByText("Gateway machine", { exact: true }).waitFor();
+      expect(await gatewayMachine.locator("openclaw-sparkline").count()).toBe(3);
+      await page.screenshot({ path: `${artifacts}/01-default-desktop.png` });
+
+      await page.locator(".dashboards-monitoring__panels").click();
+      const library = page.locator("[data-panel-library]");
+      await library.waitFor();
+      await expect.poll(() => library.locator("[data-panel-option]").count()).toBe(3);
+      // The drawer sits inside the viewport and leaves its close control reachable.
+      const drawer = await library.boundingBox();
+      expect(drawer!.x).toBeGreaterThan(0);
+      expect(drawer!.x + drawer!.width).toBeLessThanOrEqual(1440);
+      await page.screenshot({ path: `${artifacts}/02-panel-library-desktop.png` });
+
+      // Removing the CPU panel keeps memory and disk visible.
+      await library.locator('[data-panel-option="load"] input').uncheck();
+      await expect
+        .poll(() => gatewayMachine.locator(".dashboards-monitoring__vital--load").count())
+        .toBe(0);
+      expect(await gatewayMachine.locator("openclaw-sparkline").count()).toBe(2);
+      await page.screenshot({ path: `${artifacts}/03-customized-desktop.png` });
+      await library.getByRole("button", { name: "Done" }).click();
+      await expect.poll(() => page.locator("[data-panel-library]").count()).toBe(0);
+
+      // A reload keeps this browser's selection; the Gateway is never asked to store it.
+      await page.reload();
+      await page
+        .locator("[data-monitoring]")
+        .getByText("Gateway machine", { exact: true })
+        .waitFor();
+      await expect
+        .poll(() =>
+          page
+            .locator('[data-monitoring-machine="gateway"] .dashboards-monitoring__vital--load')
+            .count(),
+        )
+        .toBe(0);
+      expect(
+        await page.locator('[data-monitoring-machine="gateway"] openclaw-sparkline').count(),
+      ).toBe(2);
+      await page.screenshot({ path: `${artifacts}/04-after-reload-desktop.png` });
+
+      // Adding it back restores the third panel.
+      await page.locator(".dashboards-monitoring__panels").click();
+      await page.locator('[data-panel-option="load"] input').check();
+      await page.locator("[data-panel-library]").getByRole("button", { name: "Done" }).click();
+      await expect
+        .poll(() =>
+          page
+            .locator('[data-monitoring-machine="gateway"] .dashboards-monitoring__vital--load')
+            .count(),
+        )
+        .toBe(1);
+      expect(
+        await page.locator('[data-monitoring-machine="gateway"] openclaw-sparkline').count(),
+      ).toBe(3);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("keeps the panel library usable and dismissible on a narrow screen", async () => {
+    const artifacts = createControlUiE2eArtifactDir("dashboards-panel-library-narrow");
+    const context = await suite.browser.newContext({
+      locale: "en-US",
+      serviceWorkers: "block",
+      reducedMotion: "reduce",
+      viewport: { width: 560, height: 900 },
+    });
+    const page = await context.newPage();
+    try {
+      await installMonitoringGateway(page);
+      await page.goto(`${suite.server.baseUrl}dashboards`);
+      await page
+        .locator("[data-monitoring]")
+        .getByText("Gateway machine", { exact: true })
+        .waitFor();
+      await page.screenshot({ path: `${artifacts}/01-default-narrow.png` });
+
+      await page.locator(".dashboards-monitoring__panels").click();
+      const library = page.locator("[data-panel-library]");
+      await library.waitFor();
+      const drawer = await library.boundingBox();
+      expect(drawer!.x).toBeGreaterThanOrEqual(0);
+      expect(drawer!.x + drawer!.width).toBeLessThanOrEqual(560);
+      await page.screenshot({ path: `${artifacts}/02-panel-library-narrow.png` });
+
+      await library.locator('[data-panel-option="load"] input').uncheck();
+      await library.getByRole("button", { name: "Close panel library" }).click();
+      await expect.poll(() => page.locator("[data-panel-library]").count()).toBe(0);
+      await expect
+        .poll(() =>
+          page
+            .locator('[data-monitoring-machine="gateway"] .dashboards-monitoring__vital--load')
+            .count(),
+        )
+        .toBe(0);
+      expect(
+        await page.locator('[data-monitoring-machine="gateway"] openclaw-sparkline').count(),
+      ).toBe(2);
+      await page.screenshot({ path: `${artifacts}/03-customized-narrow.png` });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("explains an empty panel choice and reopens the library from it", async () => {
+    const artifacts = createControlUiE2eArtifactDir("dashboards-panel-library-empty");
+    const context = await suite.browser.newContext({
+      locale: "en-US",
+      serviceWorkers: "block",
+      reducedMotion: "reduce",
+      viewport: { width: 1440, height: 900 },
+    });
+    const page = await context.newPage();
+    try {
+      await installMonitoringGateway(page);
+      await page.goto(`${suite.server.baseUrl}dashboards`);
+      await page
+        .locator("[data-monitoring]")
+        .getByText("Gateway machine", { exact: true })
+        .waitFor();
+
+      await page.locator(".dashboards-monitoring__panels").click();
+      const library = page.locator("[data-panel-library]");
+      await library.waitFor();
+      for (const id of ["load", "memory", "disk"]) {
+        await library.locator(`[data-panel-option="${id}"] input`).uncheck();
+      }
+      await library.getByRole("button", { name: "Done" }).click();
+
+      const empty = page.locator("[data-monitoring-no-panels]");
+      await empty.waitFor();
+      await expect.poll(() => empty.getByText("No machine panels selected").count()).toBe(1);
+      expect(await page.locator("[data-monitoring-machine]").count()).toBe(0);
+      // Machine availability stays honest while panels are hidden.
+      expect(await page.locator("[data-monitoring]").textContent()).toContain("3 Online");
+      await page.screenshot({ path: `${artifacts}/01-empty-desktop.png` });
+
+      await empty.getByRole("button", { name: "Open panel library" }).click();
+      await library.waitFor();
+      await page.screenshot({ path: `${artifacts}/02-empty-library-desktop.png` });
+      await library.getByRole("button", { name: "Show all panels" }).click();
+      await library.getByRole("button", { name: "Done" }).click();
+
+      // The empty-state action is gone after "Show all panels"; focus must land
+      // on the persistent Panels trigger instead of the document body.
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => document.activeElement?.hasAttribute("data-monitoring-panels") ?? false,
+          ),
+        )
+        .toBe(true);
+
+      await expect.poll(() => page.locator("[data-monitoring-machine]").count()).toBe(3);
+      expect(
+        await page.locator('[data-monitoring-machine="gateway"] openclaw-sparkline').count(),
+      ).toBe(3);
+      await page.screenshot({ path: `${artifacts}/03-restored-desktop.png` });
+    } finally {
+      await context.close();
+    }
+  });
+
   it("keeps the retired Systems route and sidebar entry gone", async () => {
     const context = await suite.browser.newContext({
       locale: "en-US",

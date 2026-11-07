@@ -141,6 +141,7 @@ async function settleDashboardPreviews(element: DashboardsPageElement, runFrame:
 
 describe("DashboardsPage", () => {
   beforeEach(async () => {
+    localStorage.clear();
     await i18n.setLocale("en");
     await ensureCustomElementDefined(
       DASHBOARD_DOCUMENT_ELEMENT.tagName,
@@ -150,6 +151,7 @@ describe("DashboardsPage", () => {
 
   afterEach(() => {
     document.body.replaceChildren();
+    localStorage.clear();
     vi.restoreAllMocks();
   });
 
@@ -174,6 +176,7 @@ describe("DashboardsPage", () => {
     const context = {
       basePath: "",
       gateway: {
+        connection: { gatewayUrl: "ws://gateway.example.test", token: "", password: "" },
         snapshot: { client: createDashboardClient(), phase: "connected", hello: null },
         subscribe: () => () => undefined,
         subscribeEvents: () => () => undefined,
@@ -311,6 +314,7 @@ describe("DashboardsPage", () => {
       const context = {
         basePath: "",
         gateway: {
+          connection: { gatewayUrl: "ws://gateway.example.test", token: "", password: "" },
           snapshot: { client: createDashboardClient(), phase: "connected", hello: null },
           subscribe: (listener: (snapshot: ApplicationGatewaySnapshot) => void) => {
             gatewayListeners.add(listener);
@@ -555,6 +559,135 @@ describe("DashboardsPage", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+  it("remembers the machine panels chosen in the panel library", async () => {
+    localStorage.clear();
+    const systemInfo = {
+      machineName: "Gateway machine",
+      hostname: "gateway-host",
+      platform: "linux",
+      release: "test",
+      arch: "x64",
+      osLabel: "Linux",
+      nodeVersion: "v26",
+      pid: 1,
+      uptimeMs: 1_000,
+      cpuCount: 4,
+      memoryTotalBytes: 8_192,
+      memoryFreeBytes: 4_096,
+      loadAverage: [0.5, 0.4, 0.3],
+      diskTotalBytes: 16_384,
+      diskAvailableBytes: 8_192,
+    };
+    const client = createTestGatewayClient(async (method) => {
+      switch (method) {
+        case "environments.list":
+          return {
+            environments: [
+              { id: "gateway", type: "local", label: "Gateway machine", status: "available" },
+            ],
+          };
+        case "node.list":
+          return { nodes: [] };
+        case "system.info":
+          return systemInfo;
+        default:
+          throw new Error(`Unexpected Gateway method: ${method}`);
+      }
+    });
+    const gateway = createApplicationGateway({
+      client,
+      phase: "connected",
+      hello: gatewayHelloForMethods(["system.info"]),
+      sessionKey: "",
+      offlineStable: false,
+      canvasPluginSurfaceUrl: null,
+      assistantAgentId: null,
+      lastError: null,
+      lastErrorCode: null,
+    } as ApplicationGatewaySnapshot);
+    const context = {
+      basePath: "",
+      gateway: gateway.gateway,
+      sessions: {
+        state: { result: null },
+        subscribe: () => () => undefined,
+        listSnapshot: () => ({ result: null, agentId: null, loading: false, error: null }),
+        subscribeList: () => () => undefined,
+        refreshList: vi.fn(async () => undefined),
+      },
+      agentSelection: {
+        state: { selectedId: "main", scopeId: null },
+        subscribe: () => () => undefined,
+      },
+      agents: { state: { agentsList: null } },
+    } as unknown as ApplicationContext;
+    const mount = () => {
+      const page = document.createElement("openclaw-dashboards-page") as DashboardsPageElement;
+      page.routeData = routeData(row("agent:main:before", "Before"));
+      const provider = createApplicationContextProvider(context);
+      provider.append(page);
+      document.body.append(provider);
+      return page;
+    };
+
+    const first = mount();
+    await vi.waitFor(() =>
+      expect(first.querySelectorAll("[data-monitoring] openclaw-sparkline")).toHaveLength(3),
+    );
+
+    first.querySelector<HTMLButtonElement>(".dashboards-monitoring__panels")!.click();
+    await settleLitElement(first);
+    expect(first.querySelector("[data-panel-library]")).not.toBeNull();
+
+    first
+      .querySelector<HTMLInputElement>('[data-panel-option="load"] input')!
+      .dispatchEvent(new Event("change", { bubbles: true }));
+    await settleLitElement(first);
+    expect(first.querySelector(".dashboards-monitoring__vital--load")).toBeNull();
+    expect(first.querySelectorAll("[data-monitoring] openclaw-sparkline")).toHaveLength(2);
+
+    // A fresh page instance is the refresh path: only the stored choice survives.
+    first.remove();
+    const second = mount();
+    await vi.waitFor(() =>
+      expect(second.querySelectorAll("[data-monitoring-machine]")).toHaveLength(1),
+    );
+    expect(second.querySelector(".dashboards-monitoring__vital--load")).toBeNull();
+    expect(second.querySelectorAll("[data-monitoring] openclaw-sparkline")).toHaveLength(2);
+
+    // Empty selection, then restore from the empty-state action: that opener is
+    // gone once panels return, so closing must return focus to the Panels trigger.
+    second.querySelector<HTMLButtonElement>(".dashboards-monitoring__panels")!.click();
+    await settleLitElement(second);
+    for (const id of ["memory", "disk"]) {
+      second
+        .querySelector<HTMLInputElement>(`[data-panel-option="${id}"] input`)!
+        .dispatchEvent(new Event("change", { bubbles: true }));
+      await settleLitElement(second);
+    }
+    second
+      .querySelector<HTMLButtonElement>(".dashboards-panel-library__footer .btn.primary")!
+      .click();
+    await settleLitElement(second);
+    const empty = second.querySelector("[data-monitoring-no-panels]");
+    expect(empty).not.toBeNull();
+
+    empty!.querySelector<HTMLButtonElement>("button")!.click();
+    await settleLitElement(second);
+    second
+      .querySelector<HTMLButtonElement>(".dashboards-panel-library__footer .btn--ghost")!
+      .click();
+    await settleLitElement(second);
+    second
+      .querySelector<HTMLButtonElement>(".dashboards-panel-library__footer .btn.primary")!
+      .click();
+    await settleLitElement(second);
+    expect(second.querySelector("[data-monitoring-no-panels]")).toBeNull();
+    expect(document.activeElement?.hasAttribute("data-monitoring-panels")).toBe(true);
+
+    second.remove();
+    localStorage.clear();
   });
   it("re-keys the monitoring owner when the presentation scope changes in place", async () => {
     let environmentsCalls = 0;
