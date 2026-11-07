@@ -304,7 +304,7 @@ describe("Control UI service worker notification scope", () => {
 
       for (const [index, client] of worker.windowClients.entries()) {
         if (index === focusedClientIndex) {
-          expect(client.focus).toHaveBeenCalledOnce();
+          expect(client.focus).toHaveBeenCalled();
         } else {
           expect(client.focus).not.toHaveBeenCalled();
         }
@@ -312,6 +312,10 @@ describe("Control UI service worker notification scope", () => {
           expect(client.navigate).toHaveBeenCalledExactlyOnceWith(navigatedUrl);
         } else {
           expect(client.navigate).not.toHaveBeenCalled();
+        }
+        if (target === null) {
+          // Implicit targets keep their existing tab and never run the handshake.
+          expect(client.postMessage).not.toHaveBeenCalled();
         }
       }
 
@@ -379,7 +383,7 @@ describe("Control UI service worker notification scope", () => {
     const close = await worker.dispatchNotificationClick({ url: "chat?session=42" });
 
     expect(close).toHaveBeenCalledOnce();
-    expect(worker.windowClients[0]?.focus).toHaveBeenCalledOnce();
+    expect(worker.windowClients[0]?.focus).toHaveBeenCalled();
     expect(worker.windowClients[0]?.navigate).toHaveBeenCalledExactlyOnceWith(
       `${nestedScope}chat?session=42`,
     );
@@ -396,7 +400,7 @@ describe("Control UI service worker notification scope", () => {
     expect(worker.windowClients[0]?.navigate).not.toHaveBeenCalled();
     expect(worker.windowClients[0]?.focus).not.toHaveBeenCalled();
     expect(worker.windowClients[1]?.navigate).toHaveBeenCalledExactlyOnceWith(target);
-    expect(worker.windowClients[1]?.focus).toHaveBeenCalledOnce();
+    expect(worker.windowClients[1]?.focus).toHaveBeenCalled();
     expect(worker.clients.openWindow).not.toHaveBeenCalled();
   });
 
@@ -411,10 +415,115 @@ describe("Control UI service worker notification scope", () => {
     expect(worker.windowClients[0]?.navigate).toHaveBeenCalledExactlyOnceWith(
       `${nestedScope}chat?session=42#latest`,
     );
-    expect(worker.windowClients[0]?.focus).not.toHaveBeenCalled();
+    // The target tab is focused before the handshake; navigation was rejected,
+    // so the validated open-window fallback still owns the exact destination.
+    expect(worker.windowClients[0]?.focus).toHaveBeenCalledOnce();
     expect(worker.clients.openWindow).toHaveBeenCalledExactlyOnceWith(
       `${nestedScope}chat?session=42#latest`,
     );
+  });
+});
+
+describe("Control UI service worker notification handshake", () => {
+  const nestedScope = "https://control.example/openclaw/";
+
+  it.each([
+    {
+      name: "the already-open target",
+      clientUrl: `${nestedScope}chat?session=42`,
+      target: "chat?session=42",
+    },
+    {
+      name: "a different session",
+      clientUrl: `${nestedScope}chat?session=7`,
+      target: "chat?session=42",
+    },
+  ])(
+    "focuses $name without document navigation when the app handles it",
+    async ({ clientUrl, target }) => {
+      const worker = createNotificationServiceWorker(nestedScope, [clientUrl], {
+        appReply: "handled",
+      });
+
+      const close = await worker.dispatchNotificationClick({ url: target });
+
+      expect(close).toHaveBeenCalledOnce();
+      expect(worker.windowClients[0]?.postMessage).toHaveBeenCalledExactlyOnceWith(
+        {
+          type: "openclaw-notification-navigate",
+          url: `${nestedScope}${target}`,
+        },
+        [expect.anything()],
+      );
+      expect(worker.windowClients[0]?.focus).toHaveBeenCalledOnce();
+      expect(worker.windowClients[0]?.navigate).not.toHaveBeenCalled();
+      expect(worker.clients.openWindow).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps the handshake off implicit targets", async () => {
+    const worker = createNotificationServiceWorker(nestedScope, [`${nestedScope}chat?session=7`], {
+      appReply: "handled",
+    });
+
+    const close = await worker.dispatchNotificationClick({ url: "./" });
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(worker.windowClients[0]?.postMessage).not.toHaveBeenCalled();
+    expect(worker.windowClients[0]?.navigate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: "the app declines the route",
+      options: { appReply: "unhandled" as const },
+    },
+    {
+      name: "the handshake delivery throws",
+      options: { appReply: "throw" as const },
+    },
+    {
+      name: "this worker cannot build a message channel",
+      options: { messageChannel: false },
+    },
+  ])("navigates the document when $name", async ({ options }) => {
+    const worker = createNotificationServiceWorker(
+      nestedScope,
+      [`${nestedScope}chat?session=7`],
+      options,
+    );
+
+    const close = await worker.dispatchNotificationClick({ url: "chat?session=42" });
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(worker.windowClients[0]?.navigate).toHaveBeenCalledExactlyOnceWith(
+      `${nestedScope}chat?session=42`,
+    );
+    expect(worker.clients.openWindow).not.toHaveBeenCalled();
+  });
+
+  it("navigates the document when the app never answers", async () => {
+    const worker = createNotificationServiceWorker(nestedScope, [`${nestedScope}chat?session=7`], {
+      appReply: "silent",
+      manualTimers: true,
+    });
+
+    const click = worker.dispatchNotificationClick({ url: "chat?session=42" });
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+
+    expect(worker.windowClients[0]?.focus).toHaveBeenCalled();
+    expect(worker.windowClients[0]?.navigate).not.toHaveBeenCalled();
+
+    worker.runNextTimer();
+    const close = await click;
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(worker.windowClients[0]?.navigate).toHaveBeenCalledExactlyOnceWith(
+      `${nestedScope}chat?session=42`,
+    );
+    expect(worker.clients.openWindow).not.toHaveBeenCalled();
   });
 });
 
@@ -461,17 +570,38 @@ type ServiceWorkerNotificationEventStub = {
   waitUntil(promise: Promise<unknown>): void;
 };
 
+type NotificationAppReply = "handled" | "unhandled" | "silent" | "throw";
+
 function createNotificationServiceWorker(
   scope: string,
   clientUrls: string[],
-  options: { rejectNavigation?: boolean } = {},
+  options: {
+    appReply?: NotificationAppReply;
+    manualTimers?: boolean;
+    messageChannel?: boolean;
+    rejectNavigation?: boolean;
+  } = {},
 ) {
   const listeners = new Map<string, (event: ServiceWorkerNotificationEventStub) => void>();
+  const pendingTimers = new Map<number, () => void>();
+  let nextTimerId = 1;
   const windowClients = clientUrls.map((url) => {
     const focus = vi.fn(async () => undefined);
     return {
       url,
       focus,
+      postMessage: vi.fn(
+        (_message: unknown, transfer: { postMessage(data: unknown): void }[] = []) => {
+          const reply = options.appReply ?? "unhandled";
+          if (reply === "throw") {
+            throw new Error("Client is not controlled by this worker");
+          }
+          if (reply === "silent") {
+            return;
+          }
+          transfer[0]?.postMessage({ handled: reply === "handled" });
+        },
+      ),
       navigate: vi.fn(async (_url: string) => {
         if (options.rejectNavigation) {
           throw new Error("Window is controlled by a previous service worker");
@@ -500,10 +630,29 @@ function createNotificationServiceWorker(
     registration: { scope, showNotification },
     skipWaiting: vi.fn(),
   };
+  const timers = options.manualTimers
+    ? {
+        setTimeout(callback: () => void, _delay?: number) {
+          const id = nextTimerId++;
+          pendingTimers.set(id, callback);
+          return id;
+        },
+        clearTimeout(id?: number) {
+          if (id !== undefined) {
+            pendingTimers.delete(id);
+          }
+        },
+      }
+    : {
+        setTimeout,
+        clearTimeout,
+      };
   const context = vm.createContext({
+    ...timers,
     URL,
     caches: {},
     fetch: vi.fn(),
+    ...(options.messageChannel === false ? {} : { MessageChannel }),
     self: serviceWorkerGlobal,
   });
 
@@ -514,6 +663,15 @@ function createNotificationServiceWorker(
   return {
     clients,
     windowClients,
+    runNextTimer() {
+      const next = pendingTimers.entries().next().value;
+      if (!next) {
+        throw new Error("Service worker did not schedule a pending timer");
+      }
+      const [id, callback] = next;
+      pendingTimers.delete(id);
+      callback();
+    },
     async dispatchPush(payload: ServiceWorkerPushPayload) {
       const listener = listeners.get("push");
       if (!listener) {

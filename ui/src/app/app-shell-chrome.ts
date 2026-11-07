@@ -1,5 +1,7 @@
+import { gatewayOriginScope } from "@openclaw/gateway-client/browser";
+import { asOptionalRecord } from "@openclaw/normalization-core/record-coerce";
 import { isSettingsTakeover } from "../app-navigation.ts";
-import { isSessionRouteId, routeIdFromPath } from "../app-route-paths.ts";
+import { isSessionRouteId, routeIdFromPath, type RouteId } from "../app-route-paths.ts";
 import {
   BROWSER_PANEL_TOGGLE_EVENT,
   LINK_READER_PANEL_TOGGLE_EVENT,
@@ -29,7 +31,8 @@ import {
 } from "../pages/debug/debug-overlay-frame.ts";
 import { openShellNewSession, type ShellNewSessionHost } from "./app-shell-new-session.ts";
 import { ShellPanelOwner, type ShellPanelHost } from "./app-shell-panels.ts";
-import type { ApplicationNavigationOptions } from "./context.ts";
+import { resolveControlUiDocumentMode } from "./approval-deep-link.ts";
+import type { ApplicationContext, ApplicationNavigationOptions } from "./context.ts";
 import {
   isOptionalElementDefined,
   DEBUG_OVERLAY_ELEMENT,
@@ -66,6 +69,15 @@ import {
 import { retryStaleChunkReloadWhenReachable } from "./stale-chunk-reload.ts";
 
 let nativeCommandsOwner: AbortController | undefined;
+
+const NOTIFICATION_NAVIGATE_MESSAGE = "openclaw-notification-navigate";
+
+function activeServiceWorkerContainer(): ServiceWorkerContainer | undefined {
+  if (typeof navigator === "undefined") {
+    return undefined;
+  }
+  return "serviceWorker" in navigator ? navigator.serviceWorker : undefined;
+}
 
 export interface ShellChromeHost extends ShellNewSessionHost, ShellPanelHost {
   readonly activeSessionKey: string;
@@ -133,6 +145,13 @@ export class ShellChromeOwner {
     ] as const) {
       window.addEventListener(type, listener, options);
     }
+    // A controlled document answers notification clicks so the service worker
+    // can route in app and keep the Gateway connection and unsaved state.
+    activeServiceWorkerContainer()?.addEventListener(
+      "message",
+      this.handleServiceWorkerMessage,
+      options,
+    );
     this.navDrawerSwipe.connect();
     if (isMobileNavLayout()) {
       this.navDrawerSwipe.load();
@@ -253,22 +272,127 @@ export class ShellChromeOwner {
     ) {
       return;
     }
-    const routeId = routeIdFromPath(path);
     const context = this.host.context;
-    if (!routeId || !context) {
+    if (!context) {
       // Unhandled native routes remain eligible for the host's URL fallback.
       return;
     }
-    event.preventDefault();
+    const search = detail?.search;
     // Native paths are relative to the Gateway mount. A route ID alone loses
     // the destination and can reopen the current session instead.
-    const options: ApplicationNavigationOptions = { pathname: `${context.basePath}${path}` };
-    const search = detail?.search;
-    if (typeof search === "string" && search.startsWith("?") && !search.includes("#")) {
-      options.search = search;
+    const destination = this.appRouteDestination(
+      `${context.basePath}${path}`,
+      typeof search === "string" && search.startsWith("?") && !search.includes("#") ? search : "",
+      "",
+    );
+    if (!destination) {
+      return;
     }
-    this.host.navigate(routeId, options);
+    event.preventDefault();
+    this.host.navigate(destination.routeId, destination.options);
   };
+
+  /**
+   * Answers the service worker's notification-click handshake. The worker keeps
+   * its document navigation unless this document explicitly accepts the target.
+   */
+  readonly handleServiceWorkerMessage = (event: MessageEvent): void => {
+    const replyPort = event.ports[0];
+    if (!replyPort) {
+      return;
+    }
+    const container = activeServiceWorkerContainer();
+    // Only this document's controlling worker may route it. Anything else is
+    // left unanswered, so the worker keeps its document-level fallback.
+    if (!container?.controller || event.source !== container.controller) {
+      return;
+    }
+    const message = asOptionalRecord(event.data);
+    const handled =
+      message?.type === NOTIFICATION_NAVIGATE_MESSAGE &&
+      typeof message.url === "string" &&
+      this.navigateNotificationTarget(message.url);
+    // oxlint-disable-next-line unicorn/require-post-message-target-origin -- MessagePort reply, not Window.
+    replyPort.postMessage({ handled });
+  };
+
+  /** One owner for app-internal destinations shared by native and push clicks. */
+  private appRouteDestination(
+    pathname: string,
+    search: string,
+    hash: string,
+  ): { routeId: RouteId; options: ApplicationNavigationOptions } | null {
+    const context = this.host.context;
+    const routeId = context && routeIdFromPath(pathname, context.basePath);
+    if (!context || !routeId) {
+      return null;
+    }
+    return {
+      routeId,
+      options: {
+        pathname,
+        ...(search ? { search } : {}),
+        ...(hash ? { hash } : {}),
+      },
+    };
+  }
+
+  private navigateNotificationTarget(target: string): boolean {
+    const context = this.host.context;
+    if (!context) {
+      return false;
+    }
+    let url: URL;
+    try {
+      url = new URL(target);
+    } catch {
+      return false;
+    }
+    // The worker already checked its scope; this document keeps the same
+    // origin and mount boundary before trusting a notification destination.
+    if (url.origin !== window.location.origin) {
+      return false;
+    }
+    // Approvals and questions are shellless documents with their own bootstrap
+    // and credential handoff; the SPA router cannot reproduce that flow.
+    if (resolveControlUiDocumentMode(url.pathname, context.basePath)) {
+      return false;
+    }
+    const hash = this.notificationNavigationHash(url, context);
+    const destination =
+      hash === null ? null : this.appRouteDestination(url.pathname, url.search, hash);
+    if (!destination) {
+      return false;
+    }
+    this.host.navigate(destination.routeId, destination.options);
+    return true;
+  }
+
+  /**
+   * Notification URLs name their owning Gateway in the fragment when that
+   * Gateway has a public origin. Another Gateway needs its own document
+   * bootstrap and credential scope, so it stays a worker navigation.
+   */
+  private notificationNavigationHash(url: URL, context: ApplicationContext): string | null {
+    if (!url.hash) {
+      return "";
+    }
+    const params = new URLSearchParams(url.hash.slice(1));
+    const owningGatewayUrl = params.get("gatewayUrl");
+    if (!owningGatewayUrl) {
+      return url.hash;
+    }
+    if (
+      gatewayOriginScope(owningGatewayUrl) !==
+      gatewayOriginScope(context.gateway.connection.gatewayUrl)
+    ) {
+      return null;
+    }
+    // The handoff fragment has done its job once the owning Gateway matches.
+    params.delete("gatewayUrl");
+    const remaining = params.toString();
+    return remaining ? `#${remaining}` : "";
+  }
 
   readonly handleNativeHistoryState = (event: Event): void => {
     const detail = (event as CustomEvent<NativeHistoryState>).detail;

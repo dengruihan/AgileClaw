@@ -366,6 +366,46 @@ self.addEventListener("fetch", (event) => {
 
 // --- Web Push ---
 
+// In-app navigation handshake for notification clicks. A controlled page owns
+// its own routing and answers only after validating the destination itself;
+// any missing, late, or failing answer keeps the document-level fallback.
+const NOTIFICATION_NAVIGATE_MESSAGE = "openclaw-notification-navigate";
+const NOTIFICATION_NAVIGATE_TIMEOUT_MS = 1_000;
+
+function requestAppNotificationNavigation(client, url) {
+  return new Promise((resolve) => {
+    let channel;
+    let timeout;
+    let settled = false;
+    const settle = (handled) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      try {
+        channel?.port1.close();
+      } catch {
+        // A closed or already collected port must not replace the outcome.
+      }
+      resolve(handled);
+    };
+    try {
+      channel = new MessageChannel();
+      channel.port1.addEventListener("message", (event) => settle(event.data?.handled === true));
+      channel.port1.start();
+      // Older pages have no listener and never answer; do not strand the click
+      // on a tab that cannot route the target itself.
+      timeout = setTimeout(() => settle(false), NOTIFICATION_NAVIGATE_TIMEOUT_MS);
+      // Only a document this worker controls can answer over the port; an
+      // uncontrolled tab, delivery failure, or unsupported channel stays unhandled.
+      client.postMessage({ type: NOTIFICATION_NAVIGATE_MESSAGE, url }, [channel.port2]);
+    } catch {
+      settle(false);
+    }
+  });
+}
+
 self.addEventListener("push", (event) => {
   if (!event.data) {
     return;
@@ -460,12 +500,22 @@ self.addEventListener("notificationclick", (event) => {
         return self.clients.openWindow(targetUrl.href);
       }
 
-      // Always navigate explicit targets; old or uncontrolled workers can
-      // reject navigation, so preserve the validated open-window fallback.
-      return targetClient
-        .navigate(targetUrl.href)
-        .then((navigatedClient) => (navigatedClient ?? targetClient).focus())
-        .catch(() => self.clients.openWindow(targetUrl.href));
+      // Bring the target tab forward while the app decides whether it can route
+      // the destination itself. Both start together: a frozen or slow focus
+      // must not delay the handshake past its bounded wait.
+      const focusTarget = targetClient.focus().catch(() => undefined);
+      const appNavigation = requestAppNotificationNavigation(targetClient, targetUrl.href);
+      return Promise.all([focusTarget, appNavigation]).then(
+        ([, handled]) =>
+          // The app declined (document route, other Gateway, unknown path,
+          // old or uncontrolled client): document navigation remains the
+          // exact-target owner and openWindow keeps its last-resort fallback.
+          handled ||
+          targetClient
+            .navigate(targetUrl.href)
+            .then((navigatedClient) => (navigatedClient ?? targetClient).focus())
+            .catch(() => self.clients.openWindow(targetUrl.href)),
+      );
     }),
   );
 });
