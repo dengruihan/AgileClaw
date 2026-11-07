@@ -427,10 +427,10 @@
     --openclaw-corner-radius-scale: 1.25;
   }
 
-  /* The shell's rounded content panel owns its radius in layout.css
-     (--shell-content-radius), because drawer shells and native embeds drop it
+  /* The shell's rounded base plate owns its radius in layout.css
+     (--shell-plate-radius), because drawer shells and native embeds drop it
      to zero; only the curvature is opted in here. */
-  .content {
+  .shell {
     corner-shape: superellipse(1.5);
   }
 

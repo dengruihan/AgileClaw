@@ -36,17 +36,29 @@
   );
   --shell-focus-duration: 200ms;
   --shell-focus-ease: var(--ease-out);
-  /* The main column floats as a rounded inset panel over the shared canvas;
-     navigation and the frame keep the canvas layer visible without moving
-     either surface's internal layout. Drawer shells and native embeds drop
-     both to zero below so phone and in-app content stays full-bleed. */
-  --shell-content-inset: 8px;
-  --shell-content-radius: var(--radius-lg);
-  /* Below --card in both modes, so cards, groups, and bubbles inside the panel
-     still read as the top layer while the panel itself lifts off the canvas. */
-  --shell-content-surface: color-mix(in srgb, var(--card) 70%, var(--bg-content, var(--bg)));
-  --shell-content-border: color-mix(in srgb, var(--border) 82%, transparent);
-  height: var(--shell-content-height);
+  /* One rounded base plate: the whole application — navigation, the settings
+     rail, and the main content — floats on the window canvas, which stays
+     exposed around the plate on every side. The plate keeps the app artwork as
+     its fill; sidebar tone and the nav divider carry the internal hierarchy, so
+     no nested second card appears inside. Drawer shells and native embeds drop
+     the frame below so phone and in-app content stays full-bleed. */
+  --shell-plate-inset: 8px;
+  --shell-plate-radius: var(--radius-xl);
+  --shell-plate-border: color-mix(in srgb, var(--border) 82%, transparent);
+  height: calc(
+    var(--shell-content-height) - var(--shell-plate-inset) * 2 - var(--shell-dock-reserve-bottom)
+  );
+  /* Docked operator panels reshape the plate (shrink it) instead of overlaying
+     the chat. The panels set these vars; they are 0 when closed. */
+  margin: var(--shell-plate-inset)
+    calc(
+      var(--oc-terminal-reserve-right, 0px) + var(--oc-browser-reserve-right, 0px) +
+        var(--oc-link-reader-reserve-right, 0px) + var(--oc-assistant-reserve-right, 0px) +
+        var(--shell-plate-inset)
+    )
+    calc(var(--shell-dock-reserve-bottom) + var(--shell-plate-inset)) var(--shell-plate-inset);
+  border: 1px solid var(--shell-plate-border);
+  border-radius: var(--shell-plate-radius);
   display: grid;
   grid-template-columns: var(--shell-nav-width) minmax(0, 1fr);
   grid-template-rows: var(--shell-topbar-height) 1fr;
@@ -58,6 +70,18 @@
     grid-template-columns var(--shell-focus-duration) var(--shell-focus-ease),
     grid-template-rows var(--shell-focus-duration) var(--shell-focus-ease);
   overflow: hidden;
+}
+
+/* The plate geometry eases only for dock-panel reshaping on framed shells.
+   Drawer and embed shells snap: their breakpoint relayout swaps the grid, and
+   an easing frame there leaves pointer targets moving after click stability. */
+.shell:not(.shell--mobile-nav, .shell--embed) {
+  transition:
+    grid-template-columns var(--shell-focus-duration) var(--shell-focus-ease),
+    grid-template-rows var(--shell-focus-duration) var(--shell-focus-ease),
+    height 0.16s ease,
+    margin-bottom 0.16s ease,
+    margin-right 0.16s ease;
 }
 
 .control-ui-environment-stripe {
@@ -3972,7 +3996,9 @@ button.gateway-status:focus-visible {
 }
 
 .shell:not(.shell--mobile-nav) > .shell-connection-status {
-  margin-bottom: calc(6px + var(--shell-dock-reserve-bottom));
+  /* The plate frame owns bottom-dock clearance; the status row keeps only its
+     own resting gap from the plate edge. */
+  margin-bottom: 6px;
 }
 
 .sidebar-session-group-running {
@@ -4205,44 +4231,15 @@ wa-dropdown.sidebar-identity-menu::part(menu) {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  /* The rounded reading surface: routes keep their own padding and scrolling;
-     only the panel frame, fill, and corner belong to the shell. */
-  border: 1px solid var(--shell-content-border);
-  border-radius: var(--shell-content-radius);
-  background: var(--shell-content-surface);
-  /* Reserve space for the docked operator terminal and browser panels so they
-     reshape the content area (shrink it) instead of overlaying the chat. The
-     panels set these vars; they are 0 when closed. The inset keeps the panel
-     frame clear of the window edge on every side. */
-  margin: var(--shell-content-inset)
-    calc(
-      var(--oc-terminal-reserve-right, 0px) + var(--oc-browser-reserve-right, 0px) +
-        var(--oc-link-reader-reserve-right, 0px) + var(--oc-assistant-reserve-right, 0px) +
-        var(--shell-content-inset)
-    )
-    calc(var(--shell-dock-reserve-bottom) + var(--shell-content-inset)) var(--shell-content-inset);
-  transition:
-    margin-bottom 0.16s ease,
-    margin-right 0.16s ease;
 }
 
-/* The separate status row owns bottom-dock clearance while navigation is hidden. */
-.shell:not(.shell--mobile-nav).shell--connection-status > .content {
-  margin-bottom: var(--shell-content-inset);
-}
-
-/* Drawer shells and native embeds own their window edge; the panel drops to the
-   bare content column instead of squeezing phone or in-app content inward. */
+/* Drawer shells and native embeds own their window edge; the plate drops to a
+   full-bleed surface instead of squeezing phone or in-app content inward. */
 .shell--mobile-nav,
 .shell--embed {
-  --shell-content-inset: 0px;
-  --shell-content-radius: 0px;
-}
-
-.shell--mobile-nav > .content,
-.shell--embed > .content {
+  --shell-plate-inset: 0px;
+  --shell-plate-radius: 0px;
   border: none;
-  background: none;
 }
 
 /* Programmatic focus anchor (tabindex="-1") used when collapsing the sidebar
