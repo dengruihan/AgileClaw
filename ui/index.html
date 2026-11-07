@@ -8,9 +8,9 @@
     />
     <title>AgileClaw Control</title>
     <meta name="color-scheme" content="dark light" />
-    <!-- These mirror the claw theme's --bg tokens for first paint; runtime theme application keeps them synchronized. -->
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#faf9f7" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e1015" />
+    <!-- These mirror the Phosphor style's --bg tokens for first paint; runtime theme application keeps them synchronized. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f7f4" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0f0a" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
@@ -21,28 +21,7 @@
       globalThis.__zod_globalConfig.jitless = true;
 
       (function () {
-        var THEMES = {
-          claw: 1,
-          knot: 1,
-          dash: 1,
-          absolutely: 1,
-          tide: 1,
-          beacon: 1,
-          phosphor: 1,
-          crt: 1,
-          manuscript: 1,
-          rose: 1,
-          miami: 1,
-        };
         var MODES = { system: 1, light: 1, dark: 1 };
-        var LEGACY = {
-          dark: "claw:dark",
-          light: "claw:light",
-          openknot: "knot:dark",
-          fieldmanual: "dash:dark",
-          clawdash: "dash:light",
-          system: "claw:system",
-        };
         try {
           var keys = Object.keys(localStorage);
           var raw;
@@ -53,57 +32,16 @@
             }
           }
           var s = raw ? JSON.parse(raw) : null;
-          var t = s && s.theme;
           var m = s && s.themeMode;
-          if (typeof t !== "string") t = "";
           if (typeof m !== "string") m = "";
-          var legacy = LEGACY[t];
-          var theme = THEMES[t] ? t : legacy ? legacy.split(":")[0] : "claw";
-          var mode = MODES[m] ? m : legacy ? legacy.split(":")[1] : "system";
+          var mode = MODES[m] ? m : "system";
           if (mode === "system") {
             mode = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
           }
-          // family -> [dark, light] resolved names. Kept in lockstep with
-          // resolveTheme() in app/theme.ts and the files in public/themes.
-          var FAMILIES = {
-            knot: ["openknot", "openknot-light"],
-            dash: ["dash", "dash-light"],
-            absolutely: ["absolutely", "absolutely-light"],
-            tide: ["tide", "tide-light"],
-            beacon: ["beacon", "beacon-light"],
-            phosphor: ["phosphor", "phosphor-light"],
-            crt: ["crt", "crt-light"],
-            manuscript: ["manuscript", "manuscript-light"],
-            rose: ["rose", "rose-light"],
-            miami: ["miami", "miami-light"],
-          };
-          var pair = FAMILIES[theme];
-          var resolved = pair
-            ? pair[mode === "light" ? 1 : 0]
-            : mode === "light"
-              ? "light"
-              : "dark";
-          if (pair) {
-            // Script-created links need explicit render blocking before first paint.
-            // The gateway stamps the mount prefix and asset version before this runs.
-            var base =
-              document.documentElement.getAttribute("data-openclaw-control-ui-base-path") || "";
-            var buildId = document.documentElement.getAttribute(
-              "data-openclaw-control-ui-build-id",
-            );
-            var version = buildId ? "?v=" + encodeURIComponent(buildId) : "";
-            var palette = document.createElement("link");
-            palette.rel = "stylesheet";
-            palette.setAttribute("blocking", "render");
-            palette.id = "openclaw-theme-palette-" + theme;
-            palette.onerror = function () {
-              palette.remove();
-            };
-            palette.href = base + "/themes/" + theme + ".css" + version;
-            document.head.appendChild(palette);
-          }
+          // Kept in lockstep with resolveTheme() in app/theme.ts.
+          var resolved = mode === "light" ? "phosphor-light" : "phosphor";
           document.documentElement.setAttribute("data-theme", resolved);
-          var resolvedMode = resolved.includes("light") ? "light" : "dark";
+          var resolvedMode = mode === "light" ? "light" : "dark";
           document.documentElement.setAttribute("data-theme-mode", resolvedMode);
           // Plugin semantic styles select on [data-theme-resolved]; keep in lockstep.
           document.documentElement.setAttribute("data-theme-resolved", resolvedMode);
@@ -119,93 +57,13 @@
       }
 
       html {
-        background: #0e1015;
+        background: #0a0f0a;
         color-scheme: dark;
       }
 
       html[data-theme-mode="light"] {
-        background: #faf9f7;
-        color-scheme: light;
-      }
-
-      html[data-theme="openknot"] {
-        background: #080808;
-      }
-
-      html[data-theme="openknot-light"] {
-        background: #f9f9fb;
-      }
-
-      html[data-theme="dash"] {
-        background: #1a1210;
-      }
-
-      html[data-theme="dash-light"] {
-        background: #f7f2ec;
-      }
-
-      html[data-theme="absolutely"] {
-        background: #1c1c1a;
-      }
-
-      html[data-theme="absolutely-light"] {
-        background: #faf9f5;
-      }
-
-      html[data-theme="tide"] {
-        background: #10151b;
-      }
-
-      html[data-theme="tide-light"] {
-        background: #f7f9fb;
-      }
-
-      html[data-theme="beacon"] {
-        background: #000000;
-      }
-
-      html[data-theme="beacon-light"] {
-        background: #ffffff;
-      }
-
-      html[data-theme="phosphor"] {
-        background: #0a0f0a;
-      }
-
-      html[data-theme="phosphor-light"] {
         background: #f4f7f4;
-      }
-
-      html[data-theme="crt"] {
-        background: #090a09;
-      }
-
-      html[data-theme="crt-light"] {
-        background: #f5f5f4;
-      }
-
-      html[data-theme="manuscript"] {
-        background: #211e18;
-      }
-
-      html[data-theme="manuscript-light"] {
-        background: #f6f1e4;
-      }
-
-      html[data-theme="rose"] {
-        background: #191724;
-      }
-
-      html[data-theme="rose-light"] {
-        background: #faf4ed;
-      }
-
-      html[data-theme="miami"] {
-        background: #140f1e;
-      }
-
-      html[data-theme="miami-light"] {
-        background: #f7f3f6;
+        color-scheme: light;
       }
 
       body {
@@ -216,24 +74,25 @@
       }
 
       body.openclaw-mount-fallback-active {
-        --mount-fallback-bg: var(--bg, #0e1015);
-        --mount-fallback-card: var(--card, #161920);
-        --mount-fallback-text: var(--text-strong, #f4f4f5);
-        --mount-fallback-muted: var(--muted, #8b8b94);
-        --mount-fallback-link: var(--link, #ff7070);
-        --mount-fallback-ring: var(--ring, #ff5c5c);
+        --mount-fallback-bg: var(--bg, #0a0f0a);
+        --mount-fallback-card: var(--card, #0e150e);
+        --mount-fallback-text: var(--text-strong, #e8f5e9);
+        --mount-fallback-muted: var(--muted, #93ac95);
+        --mount-fallback-link: var(--link, #6ee79b);
+        --mount-fallback-ring: var(--ring, #4ade80);
 
         margin: 0;
         color: var(--mount-fallback-text);
         background: var(--mount-fallback-bg);
         font-family: var(
           --font-body,
-          ui-sans-serif,
-          system-ui,
-          -apple-system,
-          BlinkMacSystemFont,
-          "Segoe UI",
-          sans-serif
+          ui-monospace,
+          SFMono-Regular,
+          "SF Mono",
+          Menlo,
+          Monaco,
+          Consolas,
+          monospace
         );
         -webkit-font-smoothing: antialiased;
       }
@@ -345,13 +204,13 @@
       }
 
       .mount-fallback__button--primary {
-        color: var(--primary-foreground, #ffffff);
-        background: var(--primary, #d13c3c);
+        color: var(--primary-foreground, #07120a);
+        background: var(--primary, #4ade80);
       }
 
       .mount-fallback__button--primary:hover,
       .mount-fallback__button--primary:active {
-        background: var(--primary-hover, #c22e2e);
+        background: var(--primary-hover, #6ee79b);
       }
 
       .mount-fallback__panel:focus {
@@ -365,12 +224,12 @@
       }
 
       html[data-theme-mode="light"] body.openclaw-mount-fallback-active {
-        --mount-fallback-bg: var(--bg, #faf9f7);
+        --mount-fallback-bg: var(--bg, #f4f7f4);
         --mount-fallback-card: var(--card, #ffffff);
-        --mount-fallback-text: var(--text-strong, #18181b);
-        --mount-fallback-muted: var(--muted, #64646e);
-        --mount-fallback-link: var(--link, #b91c1c);
-        --mount-fallback-ring: var(--ring, #dc2626);
+        --mount-fallback-text: var(--text-strong, #16201a);
+        --mount-fallback-muted: var(--muted, #566b58);
+        --mount-fallback-link: var(--link, #0b512c);
+        --mount-fallback-ring: var(--ring, #10693a);
       }
 
       html[data-theme-mode="light"] .mount-fallback__panel {

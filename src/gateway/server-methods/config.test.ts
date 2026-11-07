@@ -500,7 +500,7 @@ describe("config schema response cache", () => {
 
   it("rebuilds after config writes change schema inputs", async () => {
     await invokeConfigSchema();
-    const patch = await invokeConfigPatch({ raw: { ui: { prefs: { theme: "knot" } } } });
+    const patch = await invokeConfigPatch({ raw: { ui: { prefs: { themeMode: "dark" } } } });
 
     expect(patch.respond).toHaveBeenCalledWith(
       true,
@@ -625,9 +625,9 @@ describe("config write source preparation", () => {
 
 describe("config.patch hash-free ui.prefs LWW", () => {
   it("persists a ui.prefs-only patch and returns the committed hash", async () => {
-    const { respond } = await invokeConfigPatch({ raw: { ui: { prefs: { theme: "knot" } } } });
+    const { respond } = await invokeConfigPatch({ raw: { ui: { prefs: { themeMode: "dark" } } } });
 
-    expect(storedConfig.ui?.prefs?.theme).toBe("knot");
+    expect(storedConfig.ui?.prefs?.themeMode).toBe("dark");
     expect(respond).toHaveBeenCalledWith(
       true,
       expect.objectContaining({ ok: true, hash: "next-hash-1" }),
@@ -637,7 +637,7 @@ describe("config.patch hash-free ui.prefs LWW", () => {
 
   it("rejects a mixed hash-free patch and names the guarded path", async () => {
     const { respond } = await invokeConfigPatch({
-      raw: { ui: { prefs: { theme: "knot" } }, gateway: { port: 19_001 } },
+      raw: { ui: { prefs: { themeMode: "dark" } }, gateway: { port: 19_001 } },
     });
 
     expect(respond).toHaveBeenCalledWith(
@@ -654,7 +654,7 @@ describe("config.patch hash-free ui.prefs LWW", () => {
 
   it("rejects an empty-object structural change outside the LWW subtree", async () => {
     const { respond } = await invokeConfigPatch({
-      raw: { ui: { prefs: { theme: "knot" } }, gateway: {} },
+      raw: { ui: { prefs: { themeMode: "dark" } }, gateway: {} },
     });
 
     expect(respond).toHaveBeenCalledWith(
@@ -669,7 +669,7 @@ describe("config.patch hash-free ui.prefs LWW", () => {
     { name: "ui deletion", raw: { ui: null } },
     { name: "scalar ui.prefs", raw: { ui: { prefs: "stale-container" } } },
   ])("rejects hash-free container operation: $name", async ({ raw }) => {
-    storedConfig = { ui: { prefs: { theme: "claw" } } };
+    storedConfig = { ui: { prefs: { themeMode: "light" } } };
 
     const { respond } = await invokeConfigPatch({ raw });
 
@@ -682,7 +682,7 @@ describe("config.patch hash-free ui.prefs LWW", () => {
   });
 
   it("allows a hash-free per-key null deletion below ui.prefs", async () => {
-    storedConfig = { ui: { prefs: { chatFollowUpMode: "queue", theme: "claw" } } };
+    storedConfig = { ui: { prefs: { chatFollowUpMode: "queue", themeMode: "light" } } };
 
     const { respond } = await invokeConfigPatch({
       raw: { ui: { prefs: { chatFollowUpMode: null } } },
@@ -693,7 +693,7 @@ describe("config.patch hash-free ui.prefs LWW", () => {
       expect.objectContaining({ hash: "next-hash-1" }),
       undefined,
     );
-    expect(storedConfig.ui?.prefs).toEqual({ theme: "claw" });
+    expect(storedConfig.ui?.prefs).toEqual({ themeMode: "light" });
   });
 
   it("keeps destructive array replacement explicit for hash-free patches", async () => {
@@ -723,10 +723,10 @@ describe("config.patch hash-free ui.prefs LWW", () => {
   });
 
   it("returns a noop for an unchanged hash-free patch", async () => {
-    storedConfig = { ui: { prefs: { theme: "knot" } } };
+    storedConfig = { ui: { prefs: { themeMode: "dark" } } };
 
     const { respond } = await invokeConfigPatch({
-      raw: { ui: { prefs: { theme: "knot" } } },
+      raw: { ui: { prefs: { themeMode: "dark" } } },
     });
 
     expect(respond).toHaveBeenCalledWith(true, expect.objectContaining({ noop: true }), undefined);
@@ -735,7 +735,7 @@ describe("config.patch hash-free ui.prefs LWW", () => {
 
   it("preserves stale-hash rejection for strict patches", async () => {
     const { respond } = await invokeConfigPatch({
-      raw: { ui: { prefs: { theme: "knot" } } },
+      raw: { ui: { prefs: { themeMode: "dark" } } },
       baseHash: "stale-hash",
     });
 
@@ -756,7 +756,7 @@ describe("config.patch hash-free ui.prefs LWW", () => {
     });
 
     const { respond } = await invokeConfigPatch({
-      raw: { ui: { prefs: { theme: "knot" } } },
+      raw: { ui: { prefs: { themeMode: "dark" } } },
     });
 
     expect(configWriteMocks.commitGatewayConfigWrite).toHaveBeenCalledOnce();
@@ -778,7 +778,7 @@ describe("config.patch hash-free ui.prefs LWW", () => {
     });
 
     const { respond } = await invokeConfigPatch({
-      raw: { ui: { prefs: { theme: "knot" } } },
+      raw: { ui: { prefs: { themeMode: "dark" } } },
     });
 
     expect(respond).toHaveBeenCalledWith(

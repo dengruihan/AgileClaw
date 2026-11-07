@@ -353,8 +353,6 @@ export function isMutatingToolCall(toolName: string, args: unknown): boolean {
       return action == null || !GATEWAY_REPLAY_SAFE_ACTIONS.has(action);
     case "portal":
       return action !== "list";
-    case "theme":
-      return action !== "list" && action !== "get";
     case "nodes":
       return action == null || !NODES_REPLAY_SAFE_ACTIONS.has(action);
     case "presence":
@@ -408,8 +406,6 @@ export function isReplaySafeToolCall(toolName: string, args: unknown): boolean {
       return action != null && GATEWAY_REPLAY_SAFE_ACTIONS.has(action);
     case "portal":
       return action === "list";
-    case "theme":
-      return action === "list" || action === "get";
     case "nodes":
       return action != null && NODES_REPLAY_SAFE_ACTIONS.has(action);
     case "presence":

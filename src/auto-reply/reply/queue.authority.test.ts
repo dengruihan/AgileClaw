@@ -305,9 +305,9 @@ describe("followup queue authority", () => {
   it.each([
     { mode: "enabled", groups: [[0], [1, 2], [3], [4], [5]] },
     { mode: "disabled", groups: [[0, 1, 2, 3, 4, 5]] },
-    { mode: "policy-deny", groups: [[0, 1, 2], [3], [4], [5]] },
+    { mode: "policy-deny", groups: [[0, 1, 2, 3, 4, 5]] },
   ])(
-    "collects turns in order within effective screen and theme authority: $mode",
+    "collects turns in order within effective screen authority: $mode",
     async ({ mode, groups }) => {
       const q = createQueueCase({}, 1);
       const targets = [

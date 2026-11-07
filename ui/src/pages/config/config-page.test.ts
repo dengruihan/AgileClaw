@@ -6,15 +6,8 @@ import { createDeferred as deferred } from "../../../../test/helpers/promise.js"
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import type { ApplicationContext } from "../../app/context.ts";
 import { changedServerUiPrefs } from "../../app/server-prefs-intent.ts";
-import { createServerPrefsWriter } from "../../app/server-prefs.test-support.ts";
-import {
-  applyServerUiPrefs,
-  flushServerUiPrefs,
-  pushServerUiPrefs,
-  refreshProfileAppearancePrefs,
-  resetServerUiPrefsSync,
-} from "../../app/server-prefs.ts";
-import { loadSettings, patchSettings } from "../../app/settings.ts";
+import { refreshProfileAppearancePrefs, resetServerUiPrefsSync } from "../../app/server-prefs.ts";
+import { loadSettings } from "../../app/settings.ts";
 import {
   installDialogPolyfill,
   nextFrame,
@@ -116,9 +109,7 @@ describe("ConfigPage synced preference provenance", () => {
   ])("$label", ({ selfUser, scopes, canPatch, appearanceCanSync, localeCanSync }) => {
     const page = new ConfigPage() as unknown as {
       context: ApplicationContext;
-      serverUiPrefsCanSync: (
-        key?: "theme" | "themeMode" | "accent" | "fontUi" | "fontChat",
-      ) => boolean | null;
+      serverUiPrefsCanSync: (key?: "themeMode" | "fontUi" | "fontChat") => boolean | null;
     };
     page.context = {
       gateway: {
@@ -127,18 +118,16 @@ describe("ConfigPage synced preference provenance", () => {
       runtimeConfig: { state: { connected: true }, canPatch },
     } as unknown as ApplicationContext;
 
-    expect(page.serverUiPrefsCanSync("theme")).toBe(appearanceCanSync);
     expect(page.serverUiPrefsCanSync("themeMode")).toBe(appearanceCanSync);
-    expect(page.serverUiPrefsCanSync("accent")).toBe(appearanceCanSync);
     expect(page.serverUiPrefsCanSync("fontUi")).toBe(Boolean(selfUser) && appearanceCanSync);
     expect(page.serverUiPrefsCanSync("fontChat")).toBe(Boolean(selfUser) && appearanceCanSync);
     expect(page.serverUiPrefsCanSync()).toBe(localeCanSync);
   });
 
-  it("restores the gateway appearance default while queuing deletion of the profile override", async () => {
-    const configObject = { ui: { prefs: { theme: "dash" } } };
+  it("restores the gateway color mode default while queuing deletion of the profile override", async () => {
+    const configObject = { ui: { prefs: { themeMode: "light" } } };
     const client = {
-      request: vi.fn(async () => ({ status: "ok", entries: { "ui.theme": "knot" } })),
+      request: vi.fn(async () => ({ status: "ok", entries: { "ui.themeMode": "dark" } })),
     } as unknown as GatewayBrowserClient;
     await refreshProfileAppearancePrefs({
       client,
@@ -150,7 +139,7 @@ describe("ConfigPage synced preference provenance", () => {
     const page = new ConfigPage() as unknown as {
       context: ApplicationContext;
       settings: ReturnType<typeof loadSettings>;
-      resetSyncedAppearancePref: (key: "theme") => void;
+      resetSyncedAppearancePref: (key: "themeMode") => void;
     };
     page.context = {
       gateway: {
@@ -169,100 +158,13 @@ describe("ConfigPage synced preference provenance", () => {
     const beforeReset = loadSettings();
     page.settings = beforeReset;
 
-    page.resetSyncedAppearancePref("theme");
+    page.resetSyncedAppearancePref("themeMode");
 
-    expect(page.settings.theme).toBe("dash");
+    expect(page.settings.themeMode).toBe("light");
     expect(changedServerUiPrefs(beforeReset, page.settings)).toEqual({
-      theme: null,
-      accent: "theme",
-      fontUi: null,
-      fontChat: null,
+      themeMode: null,
     });
   });
-
-  it.each([
-    ["loading", "#123456", true],
-    ["loading", "#55bb77", true],
-    ["loading", undefined, true],
-    ["disconnected", "#123456", true],
-    ["disconnected", "#55bb77", true],
-    ["disconnected", undefined, true],
-    ["before-load-disconnect", "#55bb77", true],
-    ["before-load-disconnect", "#123456", true],
-    ["disconnected", "#123456", false],
-    ["disconnected", "#55bb77", false],
-    ["before-load-disconnect", undefined, false],
-  ] as const)(
-    "reconciles the returned accent after a %s reset with server value %s (edited: %s)",
-    async (connection, returnedAccent, edited) => {
-      const profileId = "profile-viewer";
-      const scope = "ws://profile.test";
-      const configObject = { ui: { prefs: { accent: "#abcdef" } } };
-      const saved = { status: "ok", entries: { "ui.accent": "#123456" } };
-      const initial = createServerPrefsWriter(
-        vi.fn(async () => saved),
-        scope,
-      );
-      const options = { profileId, configObject, scope, onApplied: vi.fn() };
-      patchSettings({ gatewayUrl: scope });
-      await refreshProfileAppearancePrefs({ ...options, client: initial.state.client! });
-      resetServerUiPrefsSync();
-      flushServerUiPrefs(initial, { profileId, canWrite: false });
-      if (edited) {
-        patchSettings({ accent: "#654321" });
-        pushServerUiPrefs(initial, { accent: "#654321" }, { profileId, canWrite: false });
-      }
-
-      const delayed = deferred<unknown>();
-      const request = vi.fn((_method: string) => delayed.promise);
-      const writer = createServerPrefsWriter(request, scope);
-      const connected = connection === "loading";
-      let pending: Promise<boolean> | undefined;
-      if (connection !== "before-load-disconnect") {
-        applyServerUiPrefs(configObject, options);
-        pending = refreshProfileAppearancePrefs({ ...options, client: writer.state.client! });
-        await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
-      }
-      const page = new ConfigPage() as unknown as {
-        context: ApplicationContext;
-        settings: ReturnType<typeof loadSettings>;
-        resetSyncedAppearancePref: (key: "accent") => void;
-      };
-      page.context = {
-        gateway: {
-          connection: { gatewayUrl: scope },
-          snapshot: {
-            selfUser: connected ? { id: profileId } : null,
-            hello: { auth: { role: "operator", scopes: ["operator.read"] } },
-          },
-        },
-        runtimeConfig: {
-          state: { connected, configSnapshot: connected ? { config: configObject } : null },
-          canPatch: false,
-        },
-        theme: { refresh: vi.fn() },
-      } as unknown as ApplicationContext;
-      const previous = loadSettings();
-      page.settings = previous;
-      page.resetSyncedAppearancePref("accent");
-      expect(page.settings.accent).toBe("#123456");
-      expect(changedServerUiPrefs(previous, page.settings)).toBeNull();
-
-      const reconnected = connected
-        ? undefined
-        : refreshProfileAppearancePrefs({
-            ...options,
-            client: createServerPrefsWriter(request, scope).state.client!,
-          });
-      delayed.resolve({
-        status: "ok",
-        entries: returnedAccent ? { "ui.accent": returnedAccent } : {},
-      });
-      await Promise.all([pending, reconnected]);
-      expect(loadSettings().accent).toBe(returnedAccent ?? "#abcdef");
-      expect(request.mock.calls.every(([method]) => method === "users.prefs.get")).toBe(true);
-    },
-  );
 
   it.each(["fontUi", "fontChat"] as const)(
     "resets the %s profile override when its picker sentinel is selected",
@@ -307,10 +209,10 @@ describe("ConfigPage synced preference provenance", () => {
     },
   );
 
-  it("uses the committed snapshot for both display and reset while the form draft differs", () => {
+  it("uses the committed snapshot for color mode display while the form draft differs", () => {
     const page = new ConfigPage();
-    const committedConfig = { ui: { prefs: { theme: "claw" } } };
-    const draftConfig = { ui: { prefs: { theme: "knot" } } };
+    const committedConfig = { ui: { prefs: { themeMode: "light" } } };
+    const draftConfig = { ui: { prefs: { themeMode: "dark" } } };
     const runtimeConfig = {
       state: {
         client: null,
@@ -379,20 +281,13 @@ describe("ConfigPage synced preference provenance", () => {
     };
     state.context = context;
     state.pageId = "appearance";
-    const beforeReset = loadSettings();
     const container = document.createElement("div");
 
     render(page.render(), container);
 
     const themeSection = container.querySelector<HTMLElement>("#settings-appearance-theme");
-    expect(themeSection?.textContent).toContain("Default: Claw");
-    expect(themeSection?.textContent).toContain("Synced across your devices");
-    expect(themeSection?.textContent).not.toContain("Default: Knot");
-    expect(themeSection?.textContent).not.toContain("Stored in this browser only");
-
-    themeSection?.querySelector<HTMLButtonElement>(".settings-theme-card--claw")?.click();
-
-    expect(changedServerUiPrefs(beforeReset, state.settings)).toEqual({ theme: null });
+    expect(themeSection?.textContent).toContain("Default: Light");
+    expect(themeSection?.textContent).not.toContain("Default: Dark");
   });
 });
 

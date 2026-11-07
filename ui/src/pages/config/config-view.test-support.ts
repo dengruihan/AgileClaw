@@ -1,6 +1,6 @@
 import { render } from "lit";
 import { vi } from "vitest";
-import type { ThemeMode, ThemeName } from "../../app/theme.ts";
+import type { ThemeMode } from "../../app/theme.ts";
 import { createConfigViewState, renderConfig, type ConfigProps } from "./view.ts";
 
 export const baseProps = () => ({
@@ -34,10 +34,6 @@ export const baseProps = () => ({
   onSave: vi.fn(),
   onRawDiscard: vi.fn(),
   onSubsectionChange: vi.fn(),
-  theme: "claw" as ThemeName,
-  themeOverridden: false,
-  themeProvenance: "default" as const,
-  themeResetValue: "claw" as ThemeName,
   themeMode: "system" as ThemeMode,
   themeModeOverridden: false,
   themeModeProvenance: "default" as const,
@@ -48,30 +44,13 @@ export const baseProps = () => ({
   fontChatProvenance: "default" as const,
   setFontUi: vi.fn(),
   setFontChat: vi.fn(),
-  accent: undefined,
-  accentProvenance: "default" as const,
-  accentResetValue: undefined,
   systemLocale: "en" as const,
   localeOverride: undefined,
   localeOverridden: false,
   localeProvenance: "default" as const,
   localeResetValue: undefined,
   onLocaleChange: vi.fn(),
-  setTheme: vi.fn(),
   setThemeMode: vi.fn(),
-  setAccent: vi.fn(),
-  hasCustomTheme: false,
-  customThemeLabel: null,
-  customThemeSourceUrl: null,
-  customThemeImportUrl: "",
-  customThemeImportBusy: false,
-  customThemeImportMessage: null,
-  customThemeImportExpanded: false,
-  customThemeImportFocusToken: 0,
-  onCustomThemeImportUrlChange: vi.fn(),
-  onImportCustomTheme: vi.fn(),
-  onClearCustomTheme: vi.fn(),
-  onOpenCustomThemeImport: vi.fn(),
   textScale: 100,
   textScaleOverridden: false,
   setTextScale: vi.fn(),

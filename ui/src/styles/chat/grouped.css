@@ -850,16 +850,15 @@ img.chat-avatar.user {
   display: grid;
 }
 
-.chat-avatar-slot > :not(img, .identity-avatar__hat) {
+.chat-avatar-slot > :not(img) {
   display: none;
 }
 
-.chat-avatar-slot.is-fallback > img.chat-avatar,
-.chat-avatar-slot.is-fallback > .identity-avatar__hat {
+.chat-avatar-slot.is-fallback > img.chat-avatar {
   display: none;
 }
 
-.chat-avatar-slot.is-fallback > :not(img, .identity-avatar__hat) {
+.chat-avatar-slot.is-fallback > :not(img) {
   display: grid;
 }
 

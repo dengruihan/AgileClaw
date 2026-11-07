@@ -1,38 +1,38 @@
 :root {
-  /* Background - Deep, rich dark with layered depth */
-  --bg: #0e1015;
-  --bg-accent: #13151b;
-  --bg-elevated: #191c24;
-  --bg-hover: #1f2330;
-  --bg-muted: #1f2330;
+  /* Phosphor — luminous green on green-cast black (the single style). */
+  --bg: #0a0f0a;
+  --bg-accent: #0e150e;
+  --bg-elevated: #121a12;
+  --bg-hover: #18221a;
+  --bg-muted: #18221a;
 
   /* Card / Surface - Clear hierarchy between levels */
-  --card: #161920;
-  --card-foreground: #f0f0f2;
-  --card-highlight: rgba(255, 255, 255, 0.04);
-  --popover: #191c24;
-  --popover-foreground: #f0f0f2;
+  --card: #0e150e;
+  --card-foreground: #e8f5e9;
+  --card-highlight: rgba(200, 255, 210, 0.04);
+  --popover: #121a12;
+  --popover-foreground: #e8f5e9;
   --session-hovercard-surface: color-mix(in srgb, var(--card) 94%, black 6%);
   --session-hovercard-progress-surface: color-mix(in srgb, var(--card) 58%, var(--bg) 42%);
 
   /* Panel */
-  --panel: #0e1015;
-  --panel-strong: #191c24;
-  --panel-hover: #1f2330;
-  --chrome: rgba(14, 16, 21, 0.96);
-  --chrome-strong: rgba(14, 16, 21, 0.98);
+  --panel: #0a0f0a;
+  --panel-strong: #121a12;
+  --panel-hover: #18221a;
+  --chrome: rgba(10, 15, 10, 0.96);
+  --chrome-strong: rgba(10, 15, 10, 0.98);
 
   /* Text - Clean contrast
    * Keep --muted AA on dark surfaces; do not dim muted body text with opacity.
-   * --text targets ~10:1 on --bg #0e1015 (10.1; 9.3 on --card) — the dark
-   * comfort band is ~10-12 and brighter body text halates on dark. */
+   * --text #cfe0cf sits ≈12:1 on --bg #0a0f0a; the dark comfort band is
+   * ~10-12 and brighter body text halates on this green-cast black. */
 
-  --text: #bcbcc0;
-  --text-strong: #f4f4f5;
-  --chat-text: #bcbcc0;
-  --muted: #8b8b94;
-  --muted-strong: #898990;
-  --muted-foreground: #8b8b94;
+  --text: #cfe0cf;
+  --text-strong: #e8f5e9;
+  --chat-text: #cfe0cf;
+  --muted: #93ac95;
+  --muted-strong: #a4bba6;
+  --muted-foreground: #93ac95;
   --file-icon-glyph: var(--muted);
 
   /* GitHub references share an opaque neutral surface; only their ink carries status. */
@@ -40,11 +40,11 @@
   --github-item-hover-bg: color-mix(in srgb, var(--text) 10%, var(--bg));
 
   /* Border - Whisper-thin, barely there */
-  --border: #1e2028;
-  --border-strong: #2e3040;
-  --border-hover: #3e4050;
-  --input: #1e2028;
-  --ring: #ff5c5c;
+  --border: #1d291f;
+  --border-strong: #2c3d2f;
+  --border-hover: #3e5442;
+  --input: #1d291f;
+  --ring: #4ade80;
 
   /* Shared rail chrome. Light and dark themes inherit their actual colors
      through --border/--accent while keeping one geometry contract. */
@@ -73,23 +73,20 @@
   --resize-handle-active-color: color-mix(in srgb, var(--text) 42%, transparent);
 
   /*
-   * Accent - Punchy signature red
+   * Accent - Phosphor green
    *
-   * WCAG 2.1 AA audit (bg = #0e1015, relative luminance ≈ 0.005):
-   *   --accent #ff5c5c on bg: 6.3:1 AA text ✓
-   *   --primary-foreground #ffffff on #d13c3c button: 4.75:1 AA ✓
-   *   --primary-foreground #ffffff on #c22e2e hover: 5.64:1 AA ✓
+   * WCAG 2.1 AA audit (bg = #0a0f0a, relative luminance ≈ 0.0045):
+   *   --accent #4ade80  contrast ≈ 11.1:1 AAA ✓
+   *   --primary-foreground #07120a on #4ade80 button: 11.0:1 ✓
    *   --destructive-foreground #fafafa on #d32f2f button: 4.77:1 AA ✓
-   *   --destructive-foreground #fafafa on #bc2a2a hover: 5.74:1 AA ✓
-   *   --card/--popover/--secondary foreground pairs: 15.4:1 / 14.9:1 / 15.4:1 ✓
-   *   --selection-fg #ffffff on --selection-bg #005fcc: 6.0:1 AA ✓
+   *   worst text pairing --muted on --bg-muted: 6.69:1 ✓
    */
-  --accent: #ff5c5c;
-  --accent-hover: #ff7070;
-  --accent-muted: #ff5c5c;
-  --accent-subtle: rgba(255, 92, 92, 0.1);
-  --accent-foreground: #0e1015;
-  --accent-glow: rgba(255, 92, 92, 0.2);
+  --accent: #4ade80;
+  --accent-hover: #6ee79b;
+  --accent-muted: #4ade80;
+  --accent-subtle: rgba(74, 222, 128, 0.12);
+  --accent-foreground: #07120a;
+  --accent-glow: rgba(74, 222, 128, 0.22);
   --inbox-attention: #e5243b;
   --inbox-attention-hover: color-mix(in srgb, var(--inbox-attention) 88%, black);
   --inbox-attention-foreground: #ffffff;
@@ -103,28 +100,26 @@
 
   /* Link text keeps the accent hue but cannot be --accent: chat paints user
      bubbles from that same token, so a link there fights its own background.
-     Derived, not per-theme — --accent-hover is every palette's audited lifted
-     accent and custom themes derive it too, and the extra 15% of --text buys
-     the margin the sender-tinted peer bubbles need (the lightest tint hue on
-     openknot sits at 4.3:1 against bare --accent-hover). Both steps move toward
-     the text color, which raises contrast in light and dark alike, so hover is
-     feedback that never costs readability. */
+     Derived, not hand-picked — --accent-hover is the audited lifted accent,
+     and the extra 15% of --text buys the margin the sender-tinted peer
+     bubbles need (the lightest tint hue sits at 4.3:1 against bare
+     --accent-hover). Both steps move toward the text color, which raises
+     contrast in light and dark alike, so hover is feedback that never costs
+     readability. */
   --link: color-mix(in srgb, var(--accent-hover) 85%, var(--text));
   --link-hover: color-mix(in srgb, var(--link) 82%, var(--text));
   --selection-bg: #005fcc;
   --selection-fg: #ffffff;
-  --primary: #d13c3c;
-  /* Imported palettes supply a fill/ink pair, not a hover pair. Keep their
-     contrast intact; built-in palettes override with audited hover colors. */
-  --primary-hover: var(--primary);
-  --primary-foreground: #ffffff;
+  --primary: #4ade80;
+  --primary-hover: #6ee79b;
+  --primary-foreground: #07120a;
 
   /* Secondary */
-  --secondary: #161920;
-  --secondary-foreground: #f0f0f2;
-  --accent-2: #14b8a6;
-  --accent-2-muted: rgba(20, 184, 166, 0.7);
-  --accent-2-subtle: rgba(20, 184, 166, 0.1);
+  --secondary: #0e150e;
+  --secondary-foreground: #e8f5e9;
+  --accent-2: #8fd6a5;
+  --accent-2-muted: rgba(143, 214, 165, 0.7);
+  --accent-2-subtle: rgba(143, 214, 165, 0.12);
 
   /* Theme-invariant presentation colors. */
   --task-suggestion-action-fg: #fafafa;
@@ -176,13 +171,12 @@
    *
    * Each `--x` doubles as label text on its own `--x-subtle` tint, so the pair
    * is one contrast decision: the 8% tint composites onto the surface and the
-   * label must still clear WCAG AA 4.5:1 on the lightest dark surface
-   * (dash `--card` #221a16, worse than claw `--card` #161920). Keep every
-   * `-subtle`/`-muted` rgba in sync with its base hex — they are the same
-   * color at 8%/75%, and re-tinting one without the other silently drops the
-   * pair below AA. Bases stay literal hex: `widget-theme.ts` publishes them to
-   * MCP app guest documents, where a `color-mix(... var(--x) ...)` string
-   * would not resolve.
+   * label must still clear WCAG AA 4.5:1 on the dark surfaces here (worst is
+   * --card #0e150e). Keep every `-subtle`/`-muted` rgba in sync with its base
+   * hex — they are the same color at 8%/75%, and re-tinting one without the
+   * other silently drops the pair below AA. Bases stay literal hex:
+   * `widget-theme.ts` publishes them to MCP app guest documents, where a
+   * `color-mix(... var(--x) ...)` string would not resolve.
    *
    * WCAG 2.1 AA audit (label on own subtle tint, worst of --card / --bg):
    *   --ok     #22c55e  6.66:1 ✓    --warn  #f59e0b  6.93:1 ✓
@@ -194,8 +188,8 @@
   --ok: #22c55e;
   --ok-muted: rgba(34, 197, 94, 0.75);
   --ok-subtle: rgba(34, 197, 94, 0.08);
-  --destructive: #ef4444;
-  --destructive-hover: var(--destructive);
+  --destructive: #d32f2f;
+  --destructive-hover: #bc2a2a;
   --destructive-foreground: #fafafa;
   --warn: #f59e0b;
   --warn-muted: rgba(245, 158, 11, 0.75);
@@ -210,12 +204,12 @@
   --pr-merged: #a78bfa;
 
   /* Focus */
-  --focus: rgba(255, 92, 92, 0.2);
-  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 3px color-mix(in srgb, var(--ring) 80%, transparent);
+  --focus: rgba(74, 222, 128, 0.2);
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 3px color-mix(in srgb, var(--ring) 75%, transparent);
   --focus-glow: 0 0 0 2px var(--bg), 0 0 0 3px var(--ring), 0 0 16px var(--accent-glow);
 
   /* Grid */
-  --grid-line: rgba(255, 255, 255, 0.03);
+  --grid-line: rgba(200, 255, 210, 0.04);
 
   /* GitHub syntax palette shared by highlighted code and file previews. */
   --hljs-keyword: #ff8a80;
@@ -263,13 +257,13 @@
   --mono:
     "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
   --font-shortcut: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Symbol", sans-serif;
-  /* Claw's own face (fonts/instrument-sans.css, loaded by app/typography.ts); the
-     stack keeps system fallbacks so a failed font load degrades gracefully. */
-  --font-body: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* The whole surface is one face, prose included. Mono is a deliberate
+     character choice for an operator console, not a readability claim; the
+     user-facing typeface overrides (Settings → Appearance) can still lift the
+     UI or chat slots onto another family. */
+  --font-body: var(--mono);
   --font-display: var(--font-body);
-  /* Chat prose only. Defaults to the UI face; a theme may point it at a
-     reading face without changing chrome, chips, tables, or code. */
-  --font-chat: var(--font-body);
+  --font-chat: var(--mono);
   --control-ui-text-scale: 1;
   --control-ui-text-xs: calc(11px * var(--control-ui-text-scale));
   --control-ui-text-sm: calc(12px * var(--control-ui-text-scale));
@@ -279,17 +273,36 @@
   --chat-text-size: var(--control-ui-text-md);
   --chat-block-gap: var(--chat-text-size);
 
-  /* Shadows - Subtle, layered depth */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
-  --shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.5);
+  /* Shadows - Neumorphic soft light. Every elevated surface carries one
+     light stroke from the top-left and one dark stroke to the bottom-right,
+     so controls read as extruded from or pressed into the plate instead of
+     floating over a border. --neu-light/--neu-dark are the only hue inputs;
+     every shadow below composes them, keeping one light direction app-wide. */
+  --neu-light: rgba(170, 235, 185, 0.05);
+  --neu-dark: rgba(0, 6, 2, 0.55);
+  --shadow-sm: -2px -2px 5px var(--neu-light), 2px 3px 7px var(--neu-dark);
+  --shadow-md: -3px -4px 8px var(--neu-light), 5px 7px 16px var(--neu-dark);
+  --shadow-lg: -5px -6px 12px var(--neu-light), 9px 13px 28px var(--neu-dark);
+  --shadow-xl: -6px -8px 16px var(--neu-light), 14px 18px 40px var(--neu-dark);
   --shadow-glow: 0 0 24px var(--accent-glow);
+
+  /* Interaction states for the shared control vocabulary. Raised = resting
+     extrusion on cards, buttons, and chips; pressed = the same surface pushed
+     in (used for :active and toggled-in controls); well = a recessed field
+     that inputs and segmented containers sit inside. */
+  --surface-raised: -2px -2px 5px var(--neu-light), 2px 3px 7px var(--neu-dark);
+  --surface-raised-strong: -3px -4px 8px var(--neu-light), 4px 6px 14px var(--neu-dark);
+  --surface-pressed: inset 2px 2px 5px var(--neu-dark), inset -2px -2px 4px var(--neu-light);
+  --surface-well: inset 2px 2px 4px var(--neu-dark), inset -1px -1px 2px var(--neu-light);
+
+  /* Window canvas around the shell plate; one step off the plate fill so the
+     rounded base plate reads as raised from it in both modes. */
+  --shell-canvas: #070b07;
 
   /* Transient surfaces use one edge and elevation treatment. Persistent
      panels and dialogs keep their independent elevation hierarchy. */
   --overlay-border: color-mix(in srgb, var(--border-strong) 64%, transparent);
-  --overlay-shadow: 0 1px 2px rgb(0 0 0 / 0.18), 0 8px 24px rgb(0 0 0 / 0.24);
+  --overlay-shadow: -3px -4px 8px var(--neu-light), 5px 8px 22px var(--neu-dark);
 
   /* Spacing scale. Settings surfaces use these (see
      ui/docs/design-system/settings-design.md); elsewhere raw px padding/gap is
@@ -461,14 +474,9 @@
     corner-shape: superellipse(1.5);
   }
 
-  /* CRT owns its near-square geometry; rounded transcript bubbles share the fence shape. */
   .code-block-wrapper.code-block-wrapper,
-  :where(:root:not([data-theme="crt"], [data-theme="crt-light"]))
-    :is(.chat-thread, .chat-session-rail__thread)
-    .chat-group.user
-    .chat-bubble,
-  :where(:root:not([data-theme="crt"], [data-theme="crt-light"]))
-    :is(.chat-thread, .chat-session-rail__thread)
+  :is(.chat-thread, .chat-session-rail__thread) .chat-group.user .chat-bubble,
+  :is(.chat-thread, .chat-session-rail__thread)
     .chat-group.user
     :is(.chat-bubble--with-images, .chat-bubble--with-images > .chat-message-avatar-anchor)
     > :is(.chat-text, .chat-message-disclosure, .chat-json-collapse) {
@@ -549,75 +557,62 @@
   }
 }
 
-/* The claw family deepens text-bearing primary and destructive fills. */
-:root[data-theme="dark"] {
-  --primary-hover: #c22e2e;
-  --destructive: #d32f2f;
-  --destructive-hover: #bc2a2a;
-}
-
-:root[data-theme="light"] {
-  --primary-hover: var(--accent-hover);
-}
-
-/* Light theme tokens apply to every light-mode family. */
-/* Defaults must lose to named palettes even when their link precedes the app CSS. */
+/* Light mode tokens — Phosphor light: deep green on cool paper. */
 :root:where([data-theme-mode="light"]) {
   /*
-   * Warm paper light mode - terracotta accent on ivory
-   *
-   * WCAG 2.1 AA audit (bg = #faf9f7, relative luminance ≈ 0.941):
-   *   --accent #bd4531  contrast ≈ 4.9:1  AA text ✓
-   *   --primary-foreground #ffffff on #bd4531 button: 5.2:1 AA ✓
-   *   --text #403c35 ≈ 10.4:1 AAA ✓, --muted #6e6960 ≈ 5.2:1 AA ✓
+   * WCAG 2.1 AA audit (bg = #f4f7f4, relative luminance ≈ 0.897):
+   *   --accent #10693a  contrast ≈ 6.3:1  AA text ✓
+   *   --primary-foreground #ffffff on #10693a button: 6.8:1 AA ✓
+   *   worst text pairing --muted on --bg-muted: 4.76:1 ✓
    */
-  --bg: #faf9f7;
-  --bg-accent: #f4f1ec;
+  --bg: #f4f7f4;
+  --bg-accent: #ecf1ec;
   --bg-elevated: #ffffff;
-  --bg-hover: #efebe4;
-  --bg-muted: #efebe4;
-  --bg-content: #f4f1ec;
+  --bg-hover: #e4ebe5;
+  --bg-muted: #e4ebe5;
+  --bg-content: #ecf1ec;
 
   --card: #ffffff;
-  --card-foreground: #211e1a;
-  --card-highlight: rgba(60, 42, 24, 0.03);
+  --card-foreground: #16201a;
+  --card-highlight: rgba(20, 50, 30, 0.02);
   --popover: #ffffff;
-  --popover-foreground: #211e1a;
+  --popover-foreground: #16201a;
   --session-hovercard-surface: var(--card);
   --session-hovercard-progress-surface: color-mix(
     in srgb,
-    var(--card) 54%,
-    var(--panel-strong) 46%
+    var(--card) 52%,
+    var(--panel-strong) 48%
   );
 
-  --panel: #faf9f7;
-  --panel-strong: #f4f1ec;
-  --panel-hover: #e9e4dc;
-  --chrome: rgba(250, 249, 247, 0.96);
-  --chrome-strong: rgba(250, 249, 247, 0.98);
+  --panel: #f4f7f4;
+  --panel-strong: #ecf1ec;
+  --panel-hover: #dde6de;
+  --chrome: rgba(244, 247, 244, 0.96);
+  --chrome-strong: rgba(244, 247, 244, 0.98);
 
-  --text: #403c35;
-  --text-strong: #211e1a;
-  --chat-text: #403c35;
-  --muted: #6e6960;
-  --muted-strong: #56524a;
-  --muted-foreground: #6e6960;
+  --text: #2a352b;
+  --text-strong: #16201a;
+  --chat-text: #2a352b;
+  --muted: #566b58;
+  --muted-strong: #455947;
+  --muted-foreground: #566b58;
   --github-item-bg: color-mix(in srgb, var(--text) 5%, var(--bg));
   --github-item-hover-bg: color-mix(in srgb, var(--text) 9%, var(--bg));
 
-  --border: #e8e4dc;
-  --border-strong: #d6d0c5;
-  --border-hover: #b4ac9e;
-  --input: #e8e4dc;
-  --ring: #bd4531;
+  --border: #dbe4dc;
+  --border-strong: #bfcdc1;
+  --border-hover: #9aad9d;
+  --input: #dbe4dc;
+  --ring: #10693a;
 
-  --accent: #bd4531;
-  --accent-hover: #a83c29;
-  --accent-muted: #bd4531;
-  --accent-subtle: rgba(189, 69, 49, 0.08);
+  --accent: #10693a;
+  --accent-hover: #0b512c;
+  --accent-muted: #10693a;
+  --accent-subtle: rgba(16, 105, 58, 0.1);
   --accent-foreground: #ffffff;
-  --accent-glow: rgba(189, 69, 49, 0.12);
-  --primary: #bd4531;
+  --accent-glow: rgba(16, 105, 58, 0.14);
+  --primary: #10693a;
+  --primary-hover: var(--accent-hover);
   --primary-foreground: #ffffff;
 
   /* Original jade disc artwork reads well on light surfaces. */
@@ -625,11 +620,11 @@
   --lobster-icon-shade: #55703f;
   --lobster-icon-eye: #f6f5e4;
 
-  --secondary: #f4f1ec;
-  --secondary-foreground: #403c35;
-  --accent-2: #0d9488;
-  --accent-2-muted: rgba(13, 148, 136, 0.75);
-  --accent-2-subtle: rgba(13, 148, 136, 0.08);
+  --secondary: #ecf1ec;
+  --secondary-foreground: #2a352b;
+  --accent-2: #2f6b47;
+  --accent-2-muted: rgba(47, 107, 71, 0.75);
+  --accent-2-subtle: rgba(47, 107, 71, 0.1);
 
   --session-color-red: #c74646;
   --session-color-blue: #376fbd;
@@ -680,11 +675,11 @@
   --info-subtle: rgba(29, 78, 216, 0.08);
   --pr-merged: #7c3aed;
 
-  --focus: rgba(189, 69, 49, 0.15);
+  --focus: rgba(16, 105, 58, 0.15);
   --focus-ring: 0 0 0 2px var(--bg), 0 0 0 3px color-mix(in srgb, var(--ring) 70%, transparent);
   --focus-glow: 0 0 0 2px var(--bg), 0 0 0 3px var(--ring), 0 0 12px var(--accent-glow);
 
-  --grid-line: rgba(60, 42, 24, 0.05);
+  --grid-line: rgba(20, 50, 30, 0.04);
 
   --hljs-keyword: #cf222e;
   --hljs-number: #0550ae;
@@ -696,14 +691,22 @@
   --hljs-deletion: #a40e26;
   --hljs-addition: #116329;
 
-  /* Light shadows - Subtle, warm-tinted */
-  --shadow-sm: 0 1px 2px rgba(60, 42, 24, 0.05);
-  --shadow-md: 0 4px 12px rgba(60, 42, 24, 0.07);
-  --shadow-lg: 0 12px 28px rgba(60, 42, 24, 0.09);
-  --shadow-xl: 0 24px 48px rgba(60, 42, 24, 0.11);
+  /* Light neumorphic shadows - the same one-light-direction model with a
+     bright top-left stroke and a sage-tinted shade. */
+  --neu-light: rgba(255, 255, 255, 0.9);
+  --neu-dark: rgba(29, 56, 38, 0.16);
+  --shadow-sm: -2px -2px 5px var(--neu-light), 2px 3px 7px var(--neu-dark);
+  --shadow-md: -3px -4px 8px var(--neu-light), 5px 7px 16px var(--neu-dark);
+  --shadow-lg: -5px -6px 12px var(--neu-light), 9px 13px 28px var(--neu-dark);
+  --shadow-xl: -6px -8px 16px var(--neu-light), 14px 18px 40px var(--neu-dark);
   --shadow-glow: 0 0 20px var(--accent-glow);
+  --surface-raised: -2px -2px 5px var(--neu-light), 2px 3px 7px var(--neu-dark);
+  --surface-raised-strong: -3px -4px 8px var(--neu-light), 4px 6px 14px var(--neu-dark);
+  --surface-pressed: inset 2px 2px 5px var(--neu-dark), inset -2px -2px 4px var(--neu-light);
+  --surface-well: inset 2px 2px 4px var(--neu-dark), inset -1px -1px 2px var(--neu-light);
+  --shell-canvas: #e7eee8;
   --overlay-border: color-mix(in srgb, var(--border-strong) 64%, transparent);
-  --overlay-shadow: 0 1px 2px rgb(60 42 24 / 0.035), 0 8px 24px rgb(60 42 24 / 0.065);
+  --overlay-shadow: -3px -4px 8px var(--neu-light), 5px 8px 22px var(--neu-dark);
 
   color-scheme: light;
 }
@@ -763,7 +766,9 @@ body {
   margin: 0;
   font: 400 14px/1.55 var(--font-body);
   letter-spacing: -0.01em;
-  background: var(--bg);
+  /* The window canvas sits one step below the shell plate so the rounded
+     base plate reads as raised from it (neumorphic base.css tokens). */
+  background: var(--shell-canvas, var(--bg));
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

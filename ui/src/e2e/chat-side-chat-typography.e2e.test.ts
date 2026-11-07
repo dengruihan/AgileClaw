@@ -41,7 +41,7 @@ suite.define(() => {
             ],
             methodResponses: {
               "config.get": {
-                config: { ui: { prefs: { theme: "dash", themeMode: "dark" } } },
+                config: { ui: { prefs: { themeMode: "dark" } } },
                 hash: "side-chat-typography",
                 valid: true,
               },

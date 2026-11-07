@@ -1,6 +1,6 @@
 import type { ImportGlobFunction } from "vite/types/importGlob.js";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { fetchPluginActivityIconBlobUrl, fetchPluginThemeArtworkBlobUrl } from "./icon-loader.ts";
+import { fetchPluginActivityIconBlobUrl } from "./icon-loader.ts";
 
 declare global {
   interface ImportMeta {
@@ -143,38 +143,6 @@ describe.runIf("__vitest_browser__" in globalThis)("plugin activity icon decoder
         URL.revokeObjectURL(url);
       }
     }
-  });
-
-  it("rasterizes plugin theme artwork once per content URL, including concurrent callers", async () => {
-    const fetch = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(
-        async () =>
-          new Response(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#ff0000" d="M4 4h16v16H4Z"/></svg>',
-            { headers: { "content-type": "image/svg+xml" } },
-          ),
-      );
-    const params = { ...common, url: "/__openclaw__/plugin-theme-art/test/theme/hat/beret?v=1" };
-    const [first, concurrent] = await Promise.all([
-      fetchPluginThemeArtworkBlobUrl(params),
-      fetchPluginThemeArtworkBlobUrl(params),
-    ]);
-    expect(first).not.toBeNull();
-    expect(concurrent).toBe(first);
-    expect(await fetchPluginThemeArtworkBlobUrl(params)).toBe(first);
-    expect(fetch).toHaveBeenCalledTimes(1);
-    const blob = await (await nativeFetch(first!)).blob();
-    expect(blob.type).toBe("image/png");
-    const bitmap = await createImageBitmap(blob);
-    expect([bitmap.width, bitmap.height]).toEqual([256, 256]);
-    bitmap.close();
-    const second = await fetchPluginThemeArtworkBlobUrl({
-      ...params,
-      url: params.url.replace("v=1", "v=2"),
-    });
-    expect(second).not.toBe(first);
-    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it.each([

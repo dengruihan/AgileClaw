@@ -125,7 +125,7 @@ export function renderConfig(props: ConfigProps) {
     (key === "__appearance__" || include?.has(key) === true);
   const resolveNavSectionLabel = (key: string) => {
     const sectionKey =
-      key === "__appearance__" ? "theme" : key === "__notifications__" ? "notifications" : key;
+      key === "__appearance__" ? "appearance" : key === "__notifications__" ? "notifications" : key;
     return t(`configView.sections.${sectionKey}`);
   };
   const visibleCategories: SectionCategory[] = SECTION_CATEGORIES.map((category) => ({

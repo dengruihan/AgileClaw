@@ -14,7 +14,6 @@ import { normalizeConfigGroups } from "./manifest-config-groups.js";
 import * as modelProviderNormalizers from "./manifest-model-provider-normalizers.js";
 import { normalizeManifestPlatforms } from "./manifest-platforms.js";
 import * as setupNormalizers from "./manifest-setup-normalizers.js";
-import { normalizeManifestThemes } from "./manifest-themes.js";
 import type {
   PluginManifestBackupResource,
   PluginManifestDoctorContract,
@@ -332,15 +331,6 @@ export function loadPluginManifest(
     });
   }
 
-  const themesResult = normalizeManifestThemes(raw.themes, id, file.contents.toString("utf8"));
-  if (!themesResult.ok) {
-    return cacheResult({
-      ok: false,
-      error: `invalid plugin manifest themes: ${themesResult.error}`,
-      manifestPath,
-    });
-  }
-
   return cacheResult({
     ok: true,
     // Older readers ignored this advisory field; invalid display metadata must
@@ -355,7 +345,6 @@ export function loadPluginManifest(
       ...(uiCapabilities.ok && uiCapabilities.capabilities !== undefined
         ? { uiCapabilities: uiCapabilities.capabilities }
         : {}),
-      themes: themesResult.themes,
       mcpServers: capabilityNormalizers.normalizeManifestMcpServers(raw.mcpServers),
       skills: normalizeTrimmedStringList(raw.skills),
       name: normalizeOptionalString(raw.name),

@@ -219,6 +219,10 @@
       "destination": "/plugins/adding-capabilities"
     },
     {
+      "source": "/tools/theme",
+      "destination": "/web/control-ui/settings#appearance"
+    },
+    {
       "source": "/reference/code-mode",
       "destination": "/tools/code-mode"
     },
@@ -2004,8 +2008,7 @@
                       "tools/progress-card",
                       "tools/reactions",
                       "tools/screen",
-                      "tools/show-widget",
-                      "tools/theme"
+                      "tools/show-widget"
                     ]
                   },
                   {

@@ -59,6 +59,10 @@
     calc(var(--shell-dock-reserve-bottom) + var(--shell-plate-inset)) var(--shell-plate-inset);
   border: 1px solid var(--shell-plate-border);
   border-radius: var(--shell-plate-radius);
+  /* The plate is the neumorphic base slab: soft light on its top-left edge,
+     shade to the bottom-right, so the whole app reads as one raised piece on
+     the darker window canvas (base.css --shell-canvas). */
+  box-shadow: var(--surface-raised-strong);
   display: grid;
   grid-template-columns: var(--shell-nav-width) minmax(0, 1fr);
   grid-template-rows: var(--shell-topbar-height) 1fr;
@@ -3436,8 +3440,8 @@ a:is(
   border-color: color-mix(in srgb, var(--border) 72%, transparent);
 }
 
-.nav-item:hover .nav-item__icon {
-  opacity: 1;
+.nav-item:active:not(.active):not(.nav-item--active) {
+  box-shadow: var(--surface-pressed);
 }
 
 .nav-item.active,
@@ -3445,6 +3449,13 @@ a:is(
   color: var(--text-strong);
   background: color-mix(in srgb, var(--accent-subtle) 88%, var(--bg-elevated) 12%);
   border-color: color-mix(in srgb, var(--accent) 16%, transparent);
+  /* The selected row sits as an extruded chip on the rail: one soft pair,
+     slightly stronger than the resting rail so current location is scannable. */
+  box-shadow: var(--surface-raised);
+}
+
+.nav-item:hover .nav-item__icon {
+  opacity: 1;
 }
 
 .nav-item.active .nav-item__icon,

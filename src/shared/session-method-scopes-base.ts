@@ -38,8 +38,6 @@ const SESSION_READ_METHODS: ReadonlySet<string> = new Set([
   "chat.message.get",
   "session.members.list",
   "session.members.listEvidence",
-  "themes.get",
-  "themes.list",
   "users.prefs.get",
   "users.self",
 ]);

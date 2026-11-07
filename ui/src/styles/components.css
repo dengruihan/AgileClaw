@@ -1029,10 +1029,11 @@ openclaw-session-owner-chip .viewer-avatar__initials {
 }
 
 .card {
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   background: var(--card);
   border-radius: var(--radius-lg);
   padding: 18px;
+  box-shadow: var(--surface-raised);
   animation: rise 0.25s var(--ease-out) backwards;
   transition:
     border-color var(--duration-normal) var(--ease-out),
@@ -1041,7 +1042,7 @@ openclaw-session-owner-chip .viewer-avatar__initials {
 
 .card:hover {
   border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--surface-raised-strong);
 }
 
 .card-title {
@@ -1078,7 +1079,8 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   background: var(--card);
   border-radius: var(--radius-md);
   padding: 14px 16px;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  box-shadow: var(--surface-raised);
   transition:
     border-color var(--duration-normal) var(--ease-out),
     box-shadow var(--duration-normal) var(--ease-out);
@@ -1086,6 +1088,7 @@ openclaw-session-owner-chip .viewer-avatar__initials {
 
 .stat:hover {
   border-color: var(--border-strong);
+  box-shadow: var(--surface-raised-strong);
 }
 
 .stat-value {
@@ -1183,7 +1186,7 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
   background: var(--bg-elevated);
   padding: 8px 14px;
   border-radius: var(--radius-md);
@@ -1193,6 +1196,7 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   /* Labels never break mid-text; tight clusters wrap whole buttons instead
      (see .settings-row--actions). */
   white-space: nowrap;
+  box-shadow: var(--surface-raised);
   transition:
     border-color var(--duration-fast) var(--ease-out),
     background var(--duration-fast) var(--ease-out),
@@ -1202,10 +1206,14 @@ openclaw-session-owner-chip .viewer-avatar__initials {
 .btn:hover:where(:not(:disabled, [aria-disabled="true"])) {
   background: var(--bg-hover);
   border-color: var(--border-strong);
+  box-shadow: var(--surface-raised-strong);
 }
 
+/* Pressed controls sink into the plate: the resting extrusion flips into an
+   inset pair while the fill darkens one step. Geometry never moves. */
 .btn:active:where(:not(:disabled, [aria-disabled="true"])) {
-  background: var(--secondary);
+  background: var(--bg-muted);
+  box-shadow: var(--surface-pressed);
 }
 
 .btn svg {
@@ -1223,18 +1231,29 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   border-color: transparent;
   background: var(--primary);
   color: var(--primary-foreground);
-  box-shadow: 0 1px 3px var(--accent-subtle);
+  box-shadow:
+    var(--surface-raised),
+    0 0 12px var(--accent-glow);
 }
 
 .btn.primary:hover:where(:not(:disabled, [aria-disabled="true"])) {
   background: var(--primary-hover);
-  box-shadow: 0 2px 12px var(--accent-glow);
+  box-shadow:
+    var(--surface-raised-strong),
+    0 2px 16px var(--accent-glow);
+}
+
+.btn.primary:active:where(:not(:disabled, [aria-disabled="true"])) {
+  box-shadow:
+    var(--surface-pressed),
+    0 0 10px var(--accent-glow);
 }
 
 .btn.active {
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   background: var(--accent-subtle);
   color: var(--text);
+  box-shadow: var(--surface-pressed);
 }
 
 .btn.danger {
@@ -1836,6 +1855,8 @@ openclaw-session-progress-hovercard-provider {
 .btn:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.5;
   cursor: not-allowed;
+  /* An unavailable control settles flush with the plate instead of extruded. */
+  box-shadow: none;
 }
 
 .field {
@@ -1857,12 +1878,12 @@ openclaw-session-progress-hovercard-provider {
 .field textarea,
 .field select,
 .input {
-  border: 1px solid var(--input);
+  border: 1px solid color-mix(in srgb, var(--input) 75%, transparent);
   background: var(--card);
   border-radius: var(--radius-md);
   padding: 8px 12px;
   outline: none;
-  box-shadow: inset 0 1px 0 var(--card-highlight);
+  box-shadow: var(--surface-well);
   transition:
     border-color var(--duration-fast) ease,
     box-shadow var(--duration-fast) ease;
@@ -1900,10 +1921,10 @@ select.input {
   min-width: 0;
   min-height: 44px;
   align-items: stretch;
-  border: 1px solid var(--input);
+  border: 1px solid color-mix(in srgb, var(--input) 75%, transparent);
   border-radius: var(--radius-md);
   background: var(--card);
-  box-shadow: inset 0 1px 0 var(--card-highlight);
+  box-shadow: var(--surface-well);
   transition:
     border-color var(--duration-fast) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out);

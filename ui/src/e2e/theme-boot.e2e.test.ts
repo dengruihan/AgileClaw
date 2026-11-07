@@ -120,19 +120,12 @@ suite.define(() => {
             viewport: { width, height: 900 },
           },
           async ({ page }) => {
-            const theme = saved ? "rose" : "claw";
             const resolvedMode = mode === "system" ? system : mode;
-            const resolvedTheme = saved
-              ? resolvedMode === "light"
-                ? "rose-light"
-                : "rose"
-              : resolvedMode;
-            const config = saved
-              ? { ui: { prefs: { theme: "absolutely", themeMode: system } } }
-              : {};
+            const resolvedTheme = resolvedMode === "light" ? "phosphor-light" : "phosphor";
+            const config = saved ? { ui: { prefs: { themeMode: system } } } : {};
             const profileResponse = {
               status: "ok",
-              entries: saved ? { "ui.theme": theme, "ui.themeMode": mode } : {},
+              entries: saved ? { "ui.themeMode": mode } : {},
             };
             const gateway = await installMockGateway(page, {
               // App scripts stay held while this fixture inspects pre-module paint.
@@ -164,18 +157,16 @@ suite.define(() => {
                   `openclaw.control.settings.v1:${seed.gatewayUrl}`,
                   JSON.stringify({
                     gatewayUrl: seed.gatewayUrl,
-                    theme: seed.theme,
                     themeMode: seed.mode,
                   }),
                 );
                 localStorage.setItem(
                   `openclaw.control.serverPrefs.v1:${seed.gatewayUrl}:profile:${seed.profileId}`,
-                  JSON.stringify({ theme: seed.theme, themeMode: seed.mode }),
+                  JSON.stringify({ themeMode: seed.mode }),
                 );
               },
               {
                 gatewayUrl: controlUiBundledGatewayUrl(suite.server.baseUrl),
-                theme,
                 mode,
                 saved,
                 profileId,
@@ -274,14 +265,14 @@ suite.define(() => {
       async ({ context, page }) => {
         const profileResponse = {
           status: "ok",
-          entries: { "ui.theme": "rose", "ui.themeMode": "dark" },
+          entries: { "ui.themeMode": "dark" },
         };
         const scenario = {
           presenceUsers: [{ id: profileId, name: "Theme Reader", self: true }],
           historyMessages: [{ role: "assistant", content: "Theme continuity is ready." }],
         };
         const config = {
-          ui: { prefs: { theme: "claw", themeMode: "light", chatShowThinking: true } },
+          ui: { prefs: { themeMode: "light", chatShowThinking: true } },
         };
         await installMockGateway(page, {
           ...scenario,
@@ -292,10 +283,10 @@ suite.define(() => {
         });
         await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         await page.getByText("Theme continuity is ready.", { exact: true }).waitFor();
-        // With no seeded mirror, Rosé proves this tab has applied the resolved profile.
+        // With no seeded mirror, the profile's dark mode proves this tab has applied it.
         await page.waitForFunction(
           () =>
-            document.documentElement.dataset.theme === "rose" &&
+            document.documentElement.dataset.theme === "phosphor" &&
             document.documentElement.dataset.themeMode === "dark",
         );
         await page.evaluate(themeFrameObserver);
@@ -340,13 +331,13 @@ suite.define(() => {
         await page.waitForFunction(() => window.themeSiblingStorageObserved, undefined, {
           polling: 25,
         });
-        await assertThemeFrames(page, { theme: "rose", mode: "dark" });
+        await assertThemeFrames(page, { theme: "phosphor", mode: "dark" });
 
         await pendingGateway.resolveDeferred("users.prefs.get", profileResponse);
         await pendingPage.bringToFront();
         await pendingPage.getByText("Theme continuity is ready.", { exact: true }).waitFor();
         await page.bringToFront();
-        await assertThemeFrames(page, { theme: "rose", mode: "dark" });
+        await assertThemeFrames(page, { theme: "phosphor", mode: "dark" });
       },
     );
   });

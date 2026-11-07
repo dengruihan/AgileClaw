@@ -547,6 +547,28 @@ it.each([
   expect(result.raw).toEqual("seamColor" in ui ? { ...expected, agents } : expected);
 });
 
+it.each([
+  {
+    ui: { prefs: { theme: "knot", accent: "#123456", themeMode: "light" } },
+    expected: { ui: { prefs: { themeMode: "light" } } },
+  },
+  { ui: { prefs: { theme: "custom" } }, expected: {} },
+  {
+    ui: { seamColor: "#ff4500", prefs: { accent: "theme" } },
+    expected: { ui: { seamColor: "#ff4500" } },
+  },
+])(
+  "removes retired UI theme and accent preferences: $ui",
+  ({ ui, expected }: { ui: Record<string, unknown>; expected: Record<string, unknown> }) => {
+    const migration = LEGACY_CONFIG_MIGRATIONS_RUNTIME_RETIRED.filter(
+      (entry) => entry.id === "runtime.ui-appearance-single-style",
+    );
+    const result = applyMigrations(migration, { ui: structuredClone(ui) });
+    expect(result.raw).toEqual(expected);
+    expect(findLegacyConfigIssues(result.raw)).toEqual([]);
+  },
+);
+
 it.each<[string, Record<string, unknown>, Record<string, unknown>]>([
   ["tools", { experimental: { planTool: false } }, { updatePlan: false }],
   ["tools", { updatePlan: true, experimental: { planTool: false } }, { updatePlan: true }],

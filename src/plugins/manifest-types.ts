@@ -17,15 +17,6 @@ export type PluginConfigUiHint = Pick<
   "label" | "help" | "tags" | "advanced" | "sensitive" | "placeholder" | "presentation"
 >;
 
-/** Static, portable palettes; no plugin JavaScript or native UI activation is required. */
-export type PluginManifestTheme = {
-  id: string;
-  name: string;
-  description: string;
-  source: string;
-  hats?: Record<string, string>;
-};
-
 /** Top-level plugin manifest format. */
 export type PluginFormat = "openclaw" | "bundle";
 
@@ -504,7 +495,6 @@ export type PluginManifest = {
   controlUi?: PluginManifestControlUi;
   /** Static UI contributions; omission is unspecified and an empty list declares none. */
   uiCapabilities?: PluginUiCapability[];
-  themes?: PluginManifestTheme[];
   /** Static MCP servers contributed while this plugin is enabled. */
   mcpServers?: Record<string, PluginManifestMcpServer>;
   skills?: string[];

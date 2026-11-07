@@ -688,28 +688,9 @@ describe("bootstrapApplication", () => {
     }
   });
 
-  it("applies and refreshes the saved accent before the gateway connects", () => {
-    saveSettings({ ...previousSettings, accent: "#48D6C2" });
-    const runtime = bootstrapApplication();
-
-    try {
-      expect(runtime.context.gateway.snapshot.phase).toBe("stopped");
-      expect(document.documentElement.style.getPropertyValue("--accent")).toBe("#48d6c2");
-      expect(runtime.context.theme.settings.accent).toBe("#48d6c2");
-
-      saveSettings({ ...loadSettings(), accent: "#f4b740" });
-      expect(document.documentElement.style.getPropertyValue("--accent")).toBe("#f4b740");
-      expect(runtime.context.theme.settings.accent).toBe("#f4b740");
-    } finally {
-      saveSettings(previousSettings);
-      runtime.context.theme.refresh();
-      runtime.stop();
-    }
-  });
-
   it("synchronizes every theme-color meta with the resolved theme background", () => {
     const style = document.createElement("style");
-    style.textContent = ':root[data-theme="light"] { --bg: #123456; }';
+    style.textContent = ':root[data-theme-mode="light"] { --bg: #123456; }';
     const lightMeta = document.createElement("meta");
     lightMeta.name = "theme-color";
     lightMeta.media = "(prefers-color-scheme: light)";
@@ -717,7 +698,7 @@ describe("bootstrapApplication", () => {
     darkMeta.name = "theme-color";
     darkMeta.media = "(prefers-color-scheme: dark)";
     document.head.append(style, lightMeta, darkMeta);
-    saveSettings({ ...previousSettings, theme: "claw", themeMode: "light" });
+    saveSettings({ ...previousSettings, theme: "phosphor", themeMode: "light" });
     const runtime = bootstrapApplication();
 
     try {
@@ -748,11 +729,11 @@ describe("bootstrapApplication", () => {
       })),
     );
     const style = document.createElement("style");
-    style.textContent = ':root[data-theme="light"] { --bg: #123456; --bg-content: #abcdef; }';
+    style.textContent = ':root[data-theme-mode="light"] { --bg: #123456; --bg-content: #abcdef; }';
     const meta = document.createElement("meta");
     meta.name = "theme-color";
     document.head.append(style, meta);
-    saveSettings({ ...previousSettings, theme: "claw", themeMode: "light" });
+    saveSettings({ ...previousSettings, theme: "phosphor", themeMode: "light" });
     const runtime = bootstrapApplication();
 
     try {

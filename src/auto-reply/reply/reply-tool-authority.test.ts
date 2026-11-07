@@ -303,7 +303,7 @@ describe("reply tool authority", () => {
       grant: { pluginId: "access-policy", grantId: "original-grant" },
       toolsAllow: withModelPolicy ? undefined : ["screen"],
     })),
-    { withModelPolicy: true, grantKind: "independent", grant: null, toolsAllow: ["theme"] },
+    { withModelPolicy: true, grantKind: "independent", grant: null, toolsAllow: ["screen"] },
     { withModelPolicy: true, grantKind: "unclassified", grant: undefined, toolsAllow: undefined },
   ])(
     "preserves steering across profiles and reconnects (model policy: $withModelPolicy, grant: $grantKind)",
@@ -615,79 +615,4 @@ describe("reply tool authority", () => {
       expect(queueMessage).toHaveBeenCalledOnce();
     }
   });
-
-  it.each([
-    { restriction: "disabled", themeAvailable: false },
-    { restriction: "no-capability", themeAvailable: true },
-    { restriction: "runtime-intersection", themeAvailable: false },
-    { restriction: "policy-deny", themeAvailable: true },
-    { restriction: "policy-theme-deny", themeAvailable: false },
-    { restriction: "non-owner", themeAvailable: true },
-  ])(
-    "preserves steering within available theme authority when screen is unavailable: $restriction",
-    async ({ restriction, themeAvailable }) => {
-      const run = createQueueTestRun({ prompt: "cross-browser steering" });
-      run.run.gatewayUiCommandTarget = { connId: "browser-a", profileId: "profile-a" };
-      run.run.clientCaps = ["ui-commands"];
-      run.run.senderIsOwner = restriction !== "non-owner";
-      if (restriction === "disabled") {
-        run.disableTools = true;
-      }
-      if (restriction === "no-capability") {
-        run.run.clientCaps = [];
-      }
-      if (restriction === "runtime-intersection") {
-        run.toolsAllow = attachToolAllowlistIntersection(
-          ["read", "screen"],
-          [["read", "screen"], ["read"]],
-        );
-      }
-      if (restriction === "policy-deny") {
-        run.run.config = { tools: { deny: ["screen"] } };
-      }
-      if (restriction === "policy-theme-deny") {
-        run.run.config = { tools: { deny: ["screen", "theme"] } };
-      }
-      const queueMessage = vi.fn(async () => {});
-      const operation = createTestReplyOperation({ sessionId: "screen-unavailable" });
-      operation.bindToolAuthoritySnapshot(prepareReplyToolAuthority(run));
-      operation.bindToolAuthorityRoute({ provider: run.run.provider, model: run.run.model });
-      operation.attachBackend({
-        kind: "embedded",
-        cancel: vi.fn(),
-        isStreaming: () => true,
-        queueMessage,
-      });
-      operation.setPhase("running");
-
-      await expect(
-        queueCurrentReplyRunMessage("screen-unavailable", "steer from another browser", {
-          isInboundUserMessage: true,
-          toolAuthorityOverlay: {
-            ...toolAuthorityOverlay(run),
-            gatewayUiCommandTarget: { connId: "browser-b", profileId: "profile-a" },
-          },
-        }),
-      ).resolves.toEqual({ status: "accepted" });
-      expect(queueMessage).toHaveBeenCalledOnce();
-
-      for (const gatewayUiCommandTarget of [
-        { connId: "browser-b", profileId: "profile-b" },
-        { connId: "browser-b" },
-        undefined,
-      ]) {
-        await expect(
-          queueCurrentReplyRunMessage("screen-unavailable", "steer with another profile", {
-            isInboundUserMessage: true,
-            toolAuthorityOverlay: { ...toolAuthorityOverlay(run), gatewayUiCommandTarget },
-          }),
-        ).resolves.toEqual(
-          themeAvailable
-            ? { status: "rejected", reason: "tool_authority_mismatch" }
-            : { status: "accepted" },
-        );
-      }
-      expect(queueMessage).toHaveBeenCalledTimes(themeAvailable ? 1 : 4);
-    },
-  );
 });

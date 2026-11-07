@@ -1,16 +1,12 @@
 import path from "node:path";
 import type { Page } from "playwright";
 import { expect, it } from "vitest";
-import { BUILTIN_THEME_IDS } from "../../../packages/gateway-protocol/src/theme-ids.ts";
-import { type ThemeName, resolveTheme } from "../app/theme.ts";
 import {
   type MockGatewayControls,
-  controlUiBundledGatewayUrl,
   controlUiSessionUrl,
+  installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
-import { createImportedCustomThemeFixture } from "../test-helpers/custom-theme.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
-import { installMockGateway } from "./new-session-page.test-support.ts";
 import {
   expectAppArtwork,
   expectComposerSurface,
@@ -18,24 +14,20 @@ import {
   readArtwork,
 } from "./theme-background.test-support.ts";
 
-const builtinThemes = BUILTIN_THEME_IDS.flatMap((family) =>
-  (["dark", "light"] as const).map((mode) => ({
-    family,
-    mode,
-    resolved: resolveTheme(family, mode),
-  })),
-);
+const styleCases = [
+  { mode: "dark", resolved: "phosphor" },
+  { mode: "light", resolved: "phosphor-light" },
+] as const;
+
 const captureUiProof = process.env.OPENCLAW_CAPTURE_UI_PROOF === "1";
 
-const suite = createControlUiE2eSuite({ name: "Control UI app theme artwork" });
+const suite = createControlUiE2eSuite({ name: "Control UI app style artwork" });
 
-type ColorMode = "dark" | "light";
-
-function themeConfig(family: ThemeName, mode: ColorMode | "system") {
+function styleConfig(mode: "dark" | "light" | "system") {
   const config = {
-    ui: { prefs: { theme: family === "claw" ? undefined : family, themeMode: mode } },
+    ui: { prefs: { themeMode: mode } },
   };
-  const hash = `theme-background-${family}-${mode}`;
+  const hash = `style-background-${mode}`;
   return {
     appliedConfigHash: hash,
     config,
@@ -47,15 +39,15 @@ function themeConfig(family: ThemeName, mode: ColorMode | "system") {
   };
 }
 
-async function changeTheme(
+async function changeMode(
   page: Page,
   gateway: MockGatewayControls,
-  selection: { family: ThemeName; mode: ColorMode; resolved: string },
+  selection: { mode: "dark" | "light"; resolved: string },
 ) {
   // Exercise the live preference-refresh boundary, not synthetic root attributes.
-  // A synced theme change must repaint the app without resetting a mounted draft.
+  // A synced mode change must repaint the app without resetting a mounted draft.
   const configGets = (await gateway.getRequests("config.get")).length;
-  await gateway.setMethodResponse("config.get", themeConfig(selection.family, selection.mode));
+  await gateway.setMethodResponse("config.get", styleConfig(selection.mode));
   await gateway.emitGatewayEvent("config.changed", {});
   await expect
     .poll(async () => (await gateway.getRequests("config.get")).length)
@@ -66,37 +58,15 @@ async function changeTheme(
     .toBe(selection.mode);
 }
 
-async function captureProof(page: Page, name: string, compareBefore = false) {
+async function captureProof(page: Page, name: string) {
   if (!captureUiProof) {
     return;
   }
-  const capture = (suffix: string) =>
-    page.screenshot({
-      animations: "disabled",
-      fullPage: true,
-      path: path.join(suite.artifactDir, `${name}-${suffix}.png`),
-    });
-  await capture("after");
-  if (compareBefore) {
-    // Same DOM/content/viewport; restore only the exact pre-feature CSS rules.
-    const override = await page.addStyleTag({
-      content: `
-      .shell { background: none !important; }
-      :root[data-theme-mode="light"] .content { background: var(--bg-content) !important; }
-      .agent-chat__input { background: var(--chat-composer-surface) !important;
-        backdrop-filter: blur(12px) saturate(1.6) !important;
-        -webkit-backdrop-filter: blur(12px) saturate(1.6) !important; }
-      .agent-chat__composer-combobox > :is(textarea, input)::placeholder,
-      .agent-chat__composer-placeholder {
-        color: var(--chat-composer-tertiary) !important; }
-    `,
-    });
-    try {
-      await capture("before");
-    } finally {
-      await override.evaluate((element) => element.parentNode?.removeChild(element));
-    }
-  }
+  await page.screenshot({
+    animations: "disabled",
+    fullPage: true,
+    path: path.join(suite.artifactDir, `${name}.png`),
+  });
 }
 
 suite.define(() => {
@@ -112,7 +82,7 @@ suite.define(() => {
         const gateway = await installMockGateway(page, {
           agentModel: "example/demo",
           models: [{ id: "demo", name: "Demo model", provider: "example" }],
-          methodResponses: { "config.get": themeConfig("claw", "dark") },
+          methodResponses: { "config.get": styleConfig("dark") },
           historyMessages: [
             {
               role: "user",
@@ -145,7 +115,11 @@ suite.define(() => {
         const images = new Map<string, string>();
         const decoded = new Set<string>();
         for (const route of ["new", "chat", "settings/appearance"] as const) {
-          await page.goto(`${suite.server.baseUrl}${route}`);
+          const url =
+            route === "chat"
+              ? controlUiSessionUrl(suite.server.baseUrl, "agent:main:main")
+              : `${suite.server.baseUrl}${route}`;
+          await page.goto(url);
           await gateway.waitForRequest("config.get");
           if (route === "chat") {
             await page
@@ -158,16 +132,14 @@ suite.define(() => {
           const composer =
             route === "settings/appearance" ? null : page.locator(".agent-chat__input");
           const textarea = composer?.locator("textarea");
-          const draft = `An unsent ${route} draft stays here while the theme changes.`;
+          const draft = `An unsent ${route} draft stays here while the mode changes.`;
           if (textarea) {
             await textarea.fill(draft);
           } else {
             await page.locator(".settings-section__desc").first().waitFor({ state: "visible" });
           }
-          for (const selection of route === "new"
-            ? builtinThemes
-            : builtinThemes.filter(({ family }) => family === "claw" || family === "dash")) {
-            await changeTheme(page, gateway, selection);
+          for (const selection of styleCases) {
+            await changeMode(page, gateway, selection);
             for (const viewport of ["desktop", "mobile"] as const) {
               await page.setViewportSize(
                 viewport === "desktop" ? { width: 1440, height: 900 } : { width: 390, height: 844 },
@@ -183,17 +155,16 @@ suite.define(() => {
               const label = `${selection.resolved}-${route.replace("/", "-")}-${viewport}`;
               const artwork = await readArtwork(shell);
               expectAppArtwork(artwork, label);
-              const minimumContrast = selection.family === "beacon" ? 7 : 4.5;
               expect
                 .soft(artwork.canvasContrast, `${label}: muted text on app artwork`)
-                .toBeGreaterThanOrEqual(minimumContrast);
+                .toBeGreaterThanOrEqual(4.5);
               if (composer) {
                 expect
                   .soft(
                     artwork.composerContrast,
                     `${label}: placeholder contrast (opaque reference ${artwork.opaqueComposerContrast})`,
                   )
-                  .toBeGreaterThanOrEqual(minimumContrast);
+                  .toBeGreaterThanOrEqual(4.5);
               }
               if (route === "chat") {
                 expect(
@@ -207,7 +178,7 @@ suite.define(() => {
               } else {
                 expect(artwork.backgroundImage, label).toBe(images.get(selection.resolved));
               }
-              await captureProof(page, label, selection.family === "claw");
+              await captureProof(page, label);
             }
           }
           if (composer && textarea) {
@@ -218,11 +189,6 @@ suite.define(() => {
               .waitFor({ state: "visible" });
             await page.keyboard.press("Escape");
           }
-          await changeTheme(page, gateway, {
-            family: "dash",
-            mode: "light",
-            resolved: "dash-light",
-          });
           const background = () =>
             shell.evaluate((element) => getComputedStyle(element).backgroundImage);
           for (const media of [
@@ -237,7 +203,7 @@ suite.define(() => {
             }
           }
           await page.emulateMedia({ contrast: "no-preference", forcedColors: "none" });
-          await expect.poll(background).toBe(images.get("dash-light"));
+          await expect.poll(background).toBe(images.get("phosphor-light"));
           if (composer && textarea) {
             // Playwright's media options do not expose reduced transparency;
             // exercise the real browser media query through Chromium's protocol.
@@ -255,18 +221,18 @@ suite.define(() => {
                 ),
               ).toBe(true);
               await expectComposerSurface(composer, true);
-              expect(await background()).toBe(images.get("dash-light"));
+              expect(await background()).toBe(images.get("phosphor-light"));
               expect(await textarea.inputValue()).toBe(draft);
             } finally {
               await session.send("Emulation.setEmulatedMedia", { features: [] });
               await session.detach();
             }
           }
-          await gateway.setMethodResponse("config.get", themeConfig("dash", "system"));
+          await gateway.setMethodResponse("config.get", styleConfig("system"));
           await gateway.emitGatewayEvent("config.changed", {});
           for (const mode of ["dark", "light"] as const) {
             await page.emulateMedia({ colorScheme: mode });
-            const resolved = mode === "dark" ? "dash" : "dash-light";
+            const resolved = mode === "dark" ? "phosphor" : "phosphor-light";
             await expect.poll(() => page.locator("html").getAttribute("data-theme")).toBe(resolved);
             expect(await background()).toBe(images.get(resolved));
             if (composer && textarea) {
@@ -276,90 +242,10 @@ suite.define(() => {
           }
           await page.setViewportSize({ width: 1440, height: 900 });
         }
-        expect(new Set(images.values()).size).toBe(builtinThemes.length);
-        expect(decoded.size).toBe(builtinThemes.length);
+        expect(new Set(images.values()).size).toBe(styleCases.length);
+        expect(decoded.size).toBe(styleCases.length);
         expect(await gateway.getRequests("sessions.create")).toHaveLength(0);
         expect(await gateway.getRequests("chat.send")).toHaveLength(0);
-      },
-    );
-  });
-
-  it("keeps custom palettes on bundled mode-specific neutral artwork instead of imported image URLs", async () => {
-    await suite.withPage(
-      {
-        colorScheme: "dark",
-        locale: "en-US",
-        serviceWorkers: "block",
-        viewport: { width: 1440, height: 900 },
-      },
-      async ({ context, page }) => {
-        const imported = createImportedCustomThemeFixture();
-        const externalImage = 'url("https://theme-artwork.invalid/tracker.svg")';
-        await context.addInitScript(
-          ({ gatewayUrl, customTheme, image }) => {
-            localStorage.setItem(
-              `openclaw.control.settings.v1:${gatewayUrl}`,
-              JSON.stringify({
-                gatewayUrl,
-                theme: "custom",
-                themeMode: "dark",
-                customTheme: {
-                  ...customTheme,
-                  light: { ...customTheme.light, "app-background-image": image },
-                  dark: { ...customTheme.dark, "app-background-image": image },
-                },
-              }),
-            );
-          },
-          {
-            gatewayUrl: controlUiBundledGatewayUrl(suite.server.baseUrl),
-            customTheme: imported,
-            image: externalImage,
-          },
-        );
-        const externalRequests: string[] = [];
-        await page.route("https://theme-artwork.invalid/**", async (route) => {
-          externalRequests.push(route.request().url());
-          await route.abort();
-        });
-        const gateway = await installMockGateway(page, {
-          methodResponses: { "config.get": themeConfig("custom", "dark") },
-        });
-        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
-        const composer = page.locator(".agent-chat__input");
-        await composer.locator("textarea").fill("Keep imported palettes local and quiet");
-        const images = new Set<string>();
-        for (const mode of ["dark", "light"] as const) {
-          await changeTheme(page, gateway, {
-            family: "custom",
-            mode,
-            resolved: mode === "dark" ? "custom" : "custom-light",
-          });
-          const artwork = await readArtwork(page.locator(".shell"));
-          expectAppArtwork(artwork, `custom ${mode}`);
-          await expectComposerSurface(composer);
-          expect(artwork.maxColorSpread).toBeLessThanOrEqual(32);
-          images.add(artwork.backgroundImage);
-          // Removing palette declarations must not remove static bundled artwork.
-          const withoutPalette = await page.locator(".shell").evaluate((element) => {
-            const palette = document.querySelector<HTMLStyleElement>("#openclaw-custom-theme");
-            if (!palette?.sheet) {
-              throw new Error("The imported custom palette was not applied");
-            }
-            palette.sheet.disabled = true;
-            try {
-              return getComputedStyle(element).backgroundImage;
-            } finally {
-              palette.sheet.disabled = false;
-            }
-          });
-          expect(withoutPalette).toBe(artwork.backgroundImage);
-        }
-        expect(images.size).toBe(2);
-        expect(await composer.locator("textarea").inputValue()).toBe(
-          "Keep imported palettes local and quiet",
-        );
-        expect(externalRequests).toEqual([]);
       },
     );
   });

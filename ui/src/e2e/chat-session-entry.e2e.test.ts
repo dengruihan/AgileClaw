@@ -112,7 +112,7 @@ suite.define(() => {
                 ({ key, gatewayUrl, mode }) => {
                   localStorage.setItem(
                     key,
-                    JSON.stringify({ gatewayUrl, theme: "claw", themeMode: mode }),
+                    JSON.stringify({ gatewayUrl, theme: "phosphor", themeMode: mode }),
                   );
                 },
                 {

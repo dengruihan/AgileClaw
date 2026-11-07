@@ -121,13 +121,3 @@ export function fetchLinkFaviconBlobUrl(
   );
   return fetchProxiedIconBlobUrl(params, routeUrl);
 }
-
-export type PluginThemeArtworkFetchParams = { url: string } & Partial<FetchProxiedIconParams>;
-
-export function fetchPluginThemeArtworkBlobUrl(
-  params: PluginThemeArtworkFetchParams,
-): Promise<string | null> {
-  return import("./theme-artwork-loader.ts").then(({ loadPluginThemeArtwork }) =>
-    loadPluginThemeArtwork(params),
-  );
-}

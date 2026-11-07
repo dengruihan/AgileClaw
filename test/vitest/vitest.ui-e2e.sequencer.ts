@@ -90,7 +90,6 @@ const UI_E2E_FILE_SECONDS_HINTS = new Map<string, number>([
   ["session-ownership.e2e.test.ts", 39],
   ["session-placement.move.e2e.test.ts", 34],
   ["session-progress-hovercard.e2e.test.ts", 19],
-  ["settings-prefs-reconnect.e2e.test.ts", 19],
   ["sidebar-account-footer.e2e.test.ts", 17],
   ["sidebar-customization.e2e.test.ts", 17],
   ["sidebar-interactions.e2e.test.ts", 11],

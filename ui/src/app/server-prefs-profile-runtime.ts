@@ -16,24 +16,11 @@ export async function writeProfileAppearancePrefs(
   if (!client || !canDispatch) {
     return { ok: false, reason: "unavailable", error: "Profile preferences are unavailable." };
   }
-  const writesTheme = batch.theme !== undefined || batch.themeMode !== undefined;
-  if (writesTheme) {
+  const writesAppearance = Object.keys(batch).some((key) => isAppearancePref(key));
+  if (writesAppearance) {
     invalidateUserPreferences(client);
   }
   try {
-    if (writesTheme) {
-      const appearance = {
-        ...(batch.accent !== undefined ? { accent: batch.accent } : {}),
-        ...(batch.fontUi !== undefined ? { fontUi: batch.fontUi } : {}),
-        ...(batch.fontChat !== undefined ? { fontChat: batch.fontChat } : {}),
-      };
-      const value = await client.request("themes.set", {
-        ...(batch.theme !== undefined ? { id: batch.theme } : {}),
-        ...(batch.themeMode !== undefined ? { mode: batch.themeMode } : {}),
-        ...(Object.keys(appearance).length ? { appearance } : {}),
-      });
-      return { ok: true, value, refresh: { ok: true } };
-    }
     const entries = Object.fromEntries(
       Object.entries(batch).flatMap(([key, value]) =>
         isAppearancePref(key) ? [[UI_APPEARANCE_PREFERENCE_KEYS[key], value]] : [],
@@ -53,7 +40,7 @@ export async function writeProfileAppearancePrefs(
       error: error instanceof Error ? error.message : String(error),
     };
   } finally {
-    if (writesTheme) {
+    if (writesAppearance) {
       invalidateUserPreferences(client);
     }
   }

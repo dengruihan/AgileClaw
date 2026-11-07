@@ -165,10 +165,10 @@ tools.swarm.waitTimeoutSecondsMax tools.swarm.defaultAgentId
 tools.web transcripts.enabled
 tts.auto tts.persona tts.personas.*.providers.*.apiKey tts.provider
 tts.providers.* tts.providers.*.apiKey
-ui.prefs.accent ui.prefs.chatFollowUpMode
+ui.prefs.chatFollowUpMode
 ui.prefs.chatPersistCommentary ui.prefs.chatSendShortcut ui.prefs.chatShowThinking
 ui.prefs.chatShowToolCalls ui.prefs.locale
-ui.prefs.theme ui.prefs.themeMode update.auto.enabled update.channel
+ui.prefs.themeMode update.auto.enabled update.channel
 wizard.accessMode wizard.appRecommendations
 `
   .trim()

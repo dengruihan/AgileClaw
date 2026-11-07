@@ -1,7 +1,6 @@
 import { createContext } from "@lit/context";
 import type { RouteLocation, Router } from "@openclaw/uirouter";
 import type { HumanMention } from "../../../packages/gateway-protocol/src/index.js";
-import type { ThemeBranding } from "../../../packages/gateway-protocol/src/theme.ts";
 import type { AgentsListResult } from "../api/types.ts";
 import type { RouteId } from "../app-route-paths.ts";
 import type { AgentIdentityCapability } from "../lib/agents/identity.ts";
@@ -33,8 +32,8 @@ import type { ApplicationOverlays } from "./overlays-types.ts";
 import type { ApplicationPlacementStartup } from "./session-placement-startup.ts";
 import type { UiPreferences } from "./settings.ts";
 import type { SidebarAttentionStore } from "./sidebar-attention-store.ts";
-import type { ThemeCatalogSnapshot } from "./theme-catalog.ts";
-import type { ThemeMode, ThemeName } from "./theme.ts";
+import type { ThemeBranding } from "./theme-branding.ts";
+import type { ThemeMode } from "./theme.ts";
 import type { WebPushCapability } from "./web-push.ts";
 
 export type {
@@ -44,21 +43,11 @@ export type {
   ApplicationGatewaySnapshot,
 } from "./gateway.ts";
 
-export type ApplicationThemeServerSelection = {
-  readonly revision: number;
-  readonly scope: string;
-  readonly theme: ThemeName | null;
-};
-
 export type ApplicationTheme = {
   readonly branding: ThemeBranding;
-  readonly catalog?: ThemeCatalogSnapshot;
-  retryCatalog?: () => void;
   readonly settings: UiPreferences;
   readonly mode: ThemeMode;
   readonly resolvedMode: "dark" | "light";
-  readonly serverSelection: ApplicationThemeServerSelection | null;
-  recordServerSelection: (theme: ThemeName | null, scope: string) => void;
   setMode: (mode: ThemeMode, element?: HTMLElement | null) => void;
   refresh: () => void;
   subscribe: (listener: () => void) => () => void;

@@ -12,7 +12,6 @@ export function resolveControlUiBootstrapPresentation(config: OpenClawConfig | u
           : "scripts",
     allowExternalEmbedUrls: config?.gateway?.controlUi?.allowExternalEmbedUrls === true,
     automaticallyFetchFavicons: config?.gateway?.controlUi?.automaticallyFetchFavicons !== false,
-    seamColor: config?.ui?.seamColor,
     environment: config?.gateway?.controlUi?.environment,
     newSessionModelDefaults: config?.gateway?.controlUi?.newSessionModelDefaults ?? "last-used",
     uploadsEnabled: config?.gateway?.uploads?.enabled !== false,

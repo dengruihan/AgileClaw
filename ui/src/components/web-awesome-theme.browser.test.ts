@@ -6,8 +6,6 @@ import "./web-awesome-tabs.ts";
 import "@awesome.me/webawesome/dist/styles/themes/default.css";
 import "../styles/base.css";
 import "../styles/layout.css";
-import "../../public/themes/absolutely.css";
-import "../../public/themes/phosphor.css";
 
 const root = document.documentElement;
 const originalTheme = root.getAttribute("data-theme");
@@ -107,26 +105,14 @@ describe.runIf("__vitest_browser__" in globalThis)("Web Awesome theme inheritanc
     const currentOption = select.querySelector<HTMLElement>("wa-option:state(current)")!;
     expect(currentOption).not.toBeNull();
 
-    for (const theme of [
-      "dark",
-      "absolutely",
-      "absolutely-light",
-      "phosphor",
-      "phosphor-light",
-      "custom",
-    ]) {
-      const mode = theme.endsWith("light") ? "light" : "dark";
+    for (const [theme, mode] of [
+      ["phosphor", "dark"],
+      ["phosphor-light", "light"],
+    ] as const) {
       root.dataset.theme = theme;
       root.dataset.themeMode = mode;
       root.classList.toggle("wa-dark", mode === "dark");
       root.classList.toggle("wa-light", mode === "light");
-      if (theme === "custom") {
-        root.style.setProperty("--muted", "rgb(120, 190, 160)");
-        root.style.setProperty("--text", "rgb(220, 235, 210)");
-        root.style.setProperty("--accent", "rgb(190, 130, 220)");
-        root.style.setProperty("--popover", "rgb(32, 45, 38)");
-        root.style.setProperty("--danger", "rgb(240, 135, 150)");
-      }
       // Finish existing library color transitions; this test checks settled palette inheritance.
       for (const animation of document.getAnimations()) {
         animation.finish();

@@ -370,10 +370,7 @@ describe("handleControlUiHttpRequest", () => {
     ).toBe(
       `script-src 'self' 'sha256-${createHash("sha256").update(script).digest("base64")}' 'wasm-unsafe-eval'`,
     );
-    expect(String(csp)).toContain(
-      "connect-src 'self' ws: wss: data: blob: https://api.openai.com https://tweakcn.com",
-    );
-    expect(String(csp)).not.toContain("https://*.tweakcn.com");
+    expect(String(csp)).toContain("connect-src 'self' ws: wss: data: blob: https://api.openai.com");
     expect(String(csp)).not.toContain("script-src 'self' 'unsafe-inline'");
     expect(setHeader).toHaveBeenCalledWith(
       "Permissions-Policy",

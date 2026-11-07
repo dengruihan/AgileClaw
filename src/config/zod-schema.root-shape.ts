@@ -267,26 +267,9 @@ export const OpenClawSchemaShape = {
       // storage for instant boot and offline fallback.
       prefs: z
         .strictObject({
-          theme: z
-            .union([
-              z.literal("claw"),
-              z.literal("knot"),
-              z.literal("dash"),
-              z.literal("absolutely"),
-              z.literal("tide"),
-              z.literal("beacon"),
-              z.literal("phosphor"),
-              z.literal("crt"),
-              z.literal("manuscript"),
-              z.literal("rose"),
-              z.literal("miami"),
-              z.literal("custom"),
-            ])
-            .optional(),
           themeMode: z
             .union([z.literal("light"), z.literal("dark"), z.literal("system")])
             .optional(),
-          accent: z.union([z.literal("theme"), HexColorSchema.startsWith("#")]).optional(),
           locale: z.string().max(20).optional(),
           chatShowThinking: z.boolean().optional(),
           chatShowToolCalls: z.boolean().optional(),

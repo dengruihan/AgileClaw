@@ -355,13 +355,6 @@
       "count": 1,
       "kind": "html-attribute",
       "name": "placeholder",
-      "path": "ui/src/pages/config/view-appearance.ts",
-      "text": "https://tweakcn.com/editor/theme?theme=... or amethyst-haze"
-    },
-    {
-      "count": 1,
-      "kind": "html-attribute",
-      "name": "placeholder",
       "path": "ui/src/pages/connection/view.ts",
       "text": "wss://gateway.example:443"
     },

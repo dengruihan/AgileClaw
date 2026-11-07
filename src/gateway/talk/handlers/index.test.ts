@@ -38,7 +38,6 @@ import { prepareTalkAgentConsultTranscript } from "../agent-consult-transcript.j
 import { buildTalkRealtimeConfig } from "../session-config.js";
 import { preparedTalkSessionProjection as projection } from "../test-helpers.js";
 import { forgetLegacyVoiceBinding } from "./client-legacy-voice-bindings.js";
-import { talkConfigAccentCases } from "./config-accent.test-support.js";
 import {
   createTalkConfig,
   defineRealtimeConfigProjectionTests,
@@ -1259,16 +1258,36 @@ describe("talk.config handler", () => {
     },
   );
 
-  it.each(talkConfigAccentCases)("$name", async ({ profileId, profileAccent, expectedAccent }) => {
+  it.each([
+    {
+      name: "passes the operator seam color to native surfaces",
+      ui: { seamColor: "#123456" },
+      profileId: undefined,
+      expectedUi: { seamColor: "#123456" },
+    },
+    {
+      name: "omits the accent when no seam color is configured",
+      ui: {},
+      profileId: undefined,
+      expectedUi: undefined,
+    },
+    {
+      name: "ignores the retired ui.prefs.accent fallback",
+      ui: { prefs: { accent: "#52c99a" } },
+      profileId: undefined,
+      expectedUi: undefined,
+    },
+    {
+      name: "does not read a profile accent for the seam color",
+      ui: { seamColor: "#123456" },
+      profileId: "profile-1",
+      expectedUi: { seamColor: "#123456" },
+    },
+  ])("$name", async ({ ui, profileId, expectedUi }) => {
     markTalkOwnerCold("tts");
     const runtimeConfig = createTalkConfig("healthy-talk-key");
     mocks.getSpeechProvider.mockReturnValue({ id: "acme" });
-    mocks.getCanonicalUserPreferences.mockResolvedValue(
-      profileId ? { profileId, entries: { "ui.accent": profileAccent } } : undefined,
-    );
-    mocks.readConfigFileSnapshot.mockResolvedValue({
-      config: { ...runtimeConfig, ui: { seamColor: "#123456", prefs: { accent: "#52c99a" } } },
-    });
+    mocks.readConfigFileSnapshot.mockResolvedValue({ config: { ...runtimeConfig, ui } });
     const respond = vi.fn();
 
     await callTalkHandler("talk.config", {
@@ -1282,14 +1301,8 @@ describe("talk.config handler", () => {
     });
 
     expect(respond.mock.calls[0]?.[0]).toBe(true);
-    expect(respond.mock.calls[0]?.[1]?.config?.ui).toEqual(
-      expectedAccent ? { seamColor: expectedAccent } : undefined,
-    );
-    if (profileId) {
-      expect(mocks.getCanonicalUserPreferences).toHaveBeenCalledWith(profileId, ["ui.accent"]);
-    } else {
-      expect(mocks.getCanonicalUserPreferences).not.toHaveBeenCalled();
-    }
+    expect(respond.mock.calls[0]?.[1]?.config?.ui).toEqual(expectedUi);
+    expect(mocks.getCanonicalUserPreferences).not.toHaveBeenCalled();
   });
 
   it("projects the runtime realtime transport when source config is invalid", async () => {

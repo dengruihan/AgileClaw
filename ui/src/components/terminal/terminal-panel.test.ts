@@ -350,7 +350,7 @@ describe("OpenClawTerminalPanel", () => {
 
     controller.terminal.renderer.setTheme.mockClear();
     controller.terminal.renderer.render.mockClear();
-    root.dataset.theme = "knot";
+    root.dataset.theme = "phosphor-light";
     root.style.setProperty("--bg", "#080808");
     root.style.setProperty("--text", "#e0e0e2");
     root.style.setProperty("--accent", "#14b8a6");

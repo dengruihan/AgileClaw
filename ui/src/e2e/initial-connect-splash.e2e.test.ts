@@ -165,7 +165,7 @@ describeControlUiE2e("Control UI initial connect splash E2E", () => {
     await page.addInitScript(() => {
       localStorage.setItem(
         `openclaw.control.settings.v1:ws://${location.hostname}:18789`,
-        JSON.stringify({ theme: "rose", themeMode: "dark" }),
+        JSON.stringify({ theme: "phosphor", themeMode: "dark" }),
       );
     });
     const loginGateMounted = await traceLoginGateMounts(page);
@@ -194,7 +194,7 @@ describeControlUiE2e("Control UI initial connect splash E2E", () => {
     const painted = await proofContentPainted(page, proof, skeleton);
     expect(painted, "connecting proof must contain the skeleton").toBe(true);
     const highlight = skeleton.locator(".loading-skeleton__composer");
-    expect(await page.locator("html").getAttribute("data-theme")).toBe("rose");
+    expect(await page.locator("html").getAttribute("data-theme")).toBe("phosphor");
     const bounds = (await highlight.boundingBox())!;
     const duration = await highlight.evaluate(
       (element) => getComputedStyle(element, "::after").animationDuration,

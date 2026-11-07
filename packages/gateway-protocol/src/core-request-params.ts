@@ -17,12 +17,6 @@ import type * as PortalSchema from "./schema/portals.js";
 import type { PresenceActivityParams, PresenceQueryParams } from "./schema/presence.js";
 import type * as GitHubSchema from "./schema/session-github-publication.js";
 import type { StorageLocationsListParams, StorageLocationsProbeParams } from "./schema/storage.js";
-import type {
-  ThemesListParams,
-  ThemesGetParams,
-  ThemesSetParams,
-  ThemesImportParams,
-} from "./schema/themes.js";
 import type { UiCommandParams } from "./schema/ui-command.js";
 import type { UpdateRunsGetParams, UpdateRunsListParams } from "./schema/update-runs.js";
 import type * as UsersSchema from "./schema/users.js";
@@ -95,8 +89,4 @@ export type GatewayCoreRequestParams = {
   "users.github.disconnect": Static<typeof UsersSchema.UsersGitHubDisconnectParamsSchema>;
   "users.mentionable": HumanMentionsSchema.UsersMentionableParams;
   "ui.command": UiCommandParams;
-  "themes.list": ThemesListParams;
-  "themes.get": ThemesGetParams;
-  "themes.set": ThemesSetParams;
-  "themes.import": ThemesImportParams;
 };

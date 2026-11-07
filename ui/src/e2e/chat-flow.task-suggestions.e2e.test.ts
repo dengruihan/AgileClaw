@@ -38,11 +38,10 @@ async function expectReadableButton(button: Locator) {
 
 suite.define(() => {
   it.each([
-    { mode: "local", label: "Start in a new session", accent: "#da7756" },
-    { mode: "worktree", label: "Start in a new worktree", accent: "#ffffff" },
-    { mode: "session", label: "Start in this session", accent: "#ffffff" },
-    { mode: "worktree", label: "Start in a new worktree", accent: "#00ff00" },
-  ])("starts task without changing sessions ($mode, $accent)", async ({ mode, label, accent }) => {
+    { mode: "local", label: "Start in a new session" },
+    { mode: "worktree", label: "Start in a new worktree" },
+    { mode: "session", label: "Start in this session" },
+  ])("starts task without changing sessions ($mode, $label)", async ({ mode, label }) => {
     const context = await suite.newBrowserContext({
       ...createControlUiE2eContextOptions(),
       colorScheme: mode === "worktree" ? "dark" : "light",
@@ -79,9 +78,7 @@ suite.define(() => {
     });
 
     await page.route("**/control-ui-config.json", (route) =>
-      route.fulfill({
-        json: { ...createControlUiMockBootstrapConfig(), seamColor: accent },
-      }),
+      route.fulfill({ json: createControlUiMockBootstrapConfig() }),
     );
 
     try {
@@ -118,7 +115,12 @@ suite.define(() => {
         await button.evaluate(finishElementAnimations);
         await expectReadableButton(button);
       }
-      await captureUiProof(suite, page, "task-suggestions", `${mode}-${accent.slice(1)}-menu.png`);
+      await captureUiProof(
+        suite,
+        page,
+        "task-suggestions",
+        `${mode}-${label.replaceAll(" ", "-").toLowerCase()}-menu.png`,
+      );
       await page.keyboard.press("Escape");
       await expect
         .poll(() => options.evaluate((element) => element === document.activeElement))
@@ -129,7 +131,7 @@ suite.define(() => {
         suite,
         page,
         "task-suggestions",
-        `${mode}-${accent.slice(1)}-split-button.png`,
+        `${mode}-${label.replaceAll(" ", "-").toLowerCase()}-split-button.png`,
       );
       await page.getByText("Show instructions", { exact: true }).click();
       await page
@@ -183,7 +185,7 @@ suite.define(() => {
         suite,
         page,
         "task-suggestions",
-        `${mode}-${accent.slice(1)}-started.png`,
+        `${mode}-${label.replaceAll(" ", "-").toLowerCase()}-started.png`,
       );
     } finally {
       await suite.closeBrowserContext(context);

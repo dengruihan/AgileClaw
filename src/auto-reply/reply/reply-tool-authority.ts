@@ -251,17 +251,6 @@ export function resolveReplyScreenToolTarget(
     : undefined;
 }
 
-/** Profile appearance remains requester-scoped even without browser control. */
-export function resolveReplyThemeProfileId(
-  input: ReplyToolAuthorityInput,
-  preparedProfile?: ResolvedConversationCapabilityProfile,
-): string | undefined {
-  return input.run.gatewayUiCommandTarget?.profileId &&
-    isReplyToolAllowed(input, "theme", preparedProfile)
-    ? input.run.gatewayUiCommandTarget.profileId
-    : undefined;
-}
-
 const operatorAuthorityIdentities = resolveGlobalSingleton(
   Symbol.for("openclaw.replyOperatorAuthorityIdentities"),
   () => ({ keys: new WeakMap<object, number>(), nextId: 1 }),
@@ -306,7 +295,6 @@ export function resolveFollowupRunToolAuthorityFingerprint(
   const authority = snapshot.operatorAuthority;
   assertCurrentOperatorAuthority(authority);
   const screenTarget = resolveReplyScreenToolTarget(snapshot, capabilityProfile);
-  const themeProfileId = resolveReplyThemeProfileId(snapshot, capabilityProfile);
   return createHash("sha256")
     .update(
       stableStringify({
@@ -352,10 +340,6 @@ export function resolveFollowupRunToolAuthorityFingerprint(
           authority && screenTarget?.profileId === authority.profileId
             ? { ownProfile: true }
             : screenTarget,
-        themeProfileId:
-          authority && themeProfileId === authority.profileId
-            ? { ownProfile: true }
-            : themeProfileId,
         toolBindings: execution.toolBindings,
       }),
     )

@@ -1,4 +1,3 @@
-import type { ThemeDefinition } from "../../packages/gateway-protocol/src/theme.js";
 import type {
   PluginBundleFormat,
   PluginConfigUiHint,
@@ -37,17 +36,7 @@ type PluginManifestRecordStatic = Omit<
   | "uiHints"
 >;
 
-export type PluginThemeArtwork = {
-  hats?: Record<string, { svg: string }>;
-};
-
 export type PluginManifestRecord = PluginManifestRecordStatic & {
-  /** Validated palettes and artwork captured by the immutable metadata generation. */
-  themeDefinitions?: Array<{
-    id: string;
-    definition: ThemeDefinition;
-    artwork?: PluginThemeArtwork;
-  }>;
   /** Process-local source selection, never persisted in the installed index. */
   sourcePreferred?: true;
   iconPath?: string;

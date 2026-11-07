@@ -535,13 +535,13 @@ suite.define(() => {
           ({ gatewayUrl }) => {
             localStorage.setItem(
               `openclaw.control.settings.v1:${gatewayUrl}`,
-              JSON.stringify({ gatewayUrl, theme: "dash", themeMode: "dark" }),
+              JSON.stringify({ gatewayUrl, theme: "phosphor", themeMode: "dark" }),
             );
           },
           { gatewayUrl: controlUiBundledGatewayUrl(suite.server.baseUrl) },
         );
         await installOwnerGateway(page);
-        await expect.poll(() => page.locator("html").getAttribute("data-theme")).toBe("dash");
+        await expect.poll(() => page.locator("html").getAttribute("data-theme")).toBe("phosphor");
 
         const row = page.locator(`[data-session-key="${sessionKey}"]`);
         await row.hover();

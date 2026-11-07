@@ -14,7 +14,7 @@ import "../../../styles/chat/text.css";
 let host: HTMLDivElement;
 
 beforeEach(async () => {
-  const typefaces = resolveTypefaces("claw");
+  const typefaces = resolveTypefaces();
   syncTypefaceStylesheets(typefaces);
   await expect
     .poll(() =>

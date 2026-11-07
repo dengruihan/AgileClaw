@@ -1,6 +1,5 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createImportedCustomThemeFixture } from "../test-helpers/custom-theme.ts";
 import {
   expectedGatewayUrl,
   installSettingsStorageLifecycle,
@@ -196,16 +195,6 @@ describe("settings preference persistence", () => {
     expect(loadSettings().textScale).toBe(125);
   });
 
-  it("persists the browser-local custom theme payload when present", () => {
-    const gwUrl = expectedGatewayUrl("");
-    const customTheme = createImportedCustomThemeFixture();
-    saveSettings(makeUiSettings(gwUrl, { theme: "custom", customTheme }));
-    const settings = loadSettings();
-    expect(settings.theme).toBe("custom");
-    expect(settings.customTheme?.label).toBe("Light Green");
-    expect(settings.customTheme?.themeId).toBe("cmlhfpjhw000004l4f4ax3m7z");
-  });
-
   it("loads local user identity separately from gateway settings", () => {
     localStorage.setItem(
       "openclaw.control.user.v1",
@@ -223,22 +212,6 @@ describe("settings preference persistence", () => {
       }),
     );
     expect(loadLocalUserIdentity()).toEqual({ name: null, avatar: null });
-  });
-
-  it("falls back to claw when persisted custom theme palettes are invalid", () => {
-    localStorage.setItem(
-      `openclaw.control.settings.v1:${expectedGatewayUrl("")}`,
-      JSON.stringify({
-        theme: "custom",
-        themeMode: "dark",
-        customTheme: {
-          ...createImportedCustomThemeFixture(),
-          light: {},
-          dark: {},
-        },
-      }),
-    );
-    expect(loadSettings()).toMatchObject({ theme: "claw", themeMode: "dark" });
   });
 
   it("round-trips explicit camera intent and rejects invalid stored values", () => {

@@ -105,7 +105,7 @@ async function seedSettings(page: Page, themeMode: "light" | "dark") {
       localStorage.setItem(
         key,
         JSON.stringify({
-          theme: "claw",
+          theme: "phosphor",
           themeMode: seededThemeMode,
           sidebarSessionLayouts: {
             [seededSessionKey]: { columns: [], open: false, expanded: false },

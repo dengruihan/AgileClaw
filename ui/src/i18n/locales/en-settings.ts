@@ -1285,8 +1285,6 @@ const enSettings = {
         "Trigger words have not been saved. Your edits are retained. Reconnect to this Gateway, then retry.",
       saved: "Saved",
     },
-    themeImported: "Imported {name}.",
-    themeRemoved: "Custom theme removed.",
   },
   configView: {
     categories: {
@@ -1334,55 +1332,9 @@ const enSettings = {
       discovery: "Discovery",
       acp: "ACP",
       mcp: "MCP",
-      theme: "Theme",
       ui: "UI",
+      appearance: "Appearance",
       wizard: "Setup",
-    },
-    themes: {
-      claw: {
-        label: "Claw",
-        description: "Chroma family",
-      },
-      knot: {
-        label: "Knot",
-        description: "Black & red",
-      },
-      dash: {
-        label: "Dash",
-        description: "Chocolate blueprint",
-      },
-      absolutely: {
-        label: "Absolutely",
-        description: "Clay on graphite",
-      },
-      tide: {
-        label: "Tide",
-        description: "Slate & steel",
-      },
-      beacon: {
-        label: "Beacon",
-        description: "Maximum contrast",
-      },
-      phosphor: {
-        label: "Phosphor",
-        description: "Green on glass",
-      },
-      crt: {
-        label: "CRT",
-        description: "Console mono",
-      },
-      manuscript: {
-        label: "Manuscript",
-        description: "Ink on paper",
-      },
-      rose: {
-        label: "Rosé",
-        description: "Plum & rose",
-      },
-      miami: {
-        label: "Miami",
-        description: "Magenta & cyan",
-      },
     },
     textSizes: {
       small: "Small",
@@ -1448,15 +1400,13 @@ const enSettings = {
       overrideAgents: "Override for this device",
     },
     appearance: {
-      intro: "Theme, chat, and sidebar preferences for this Control UI client.",
-      theme: "Theme",
-      chooseTheme: "Choosing a different theme resets its fonts and accent colors.",
-      themeUnavailable: "{id} is unavailable. Using Claw until the theme becomes available again.",
+      intro: "Style, chat, and sidebar preferences for this Control UI client.",
+      colorModeHint: "Phosphor is the single UI style; choose when it follows light or dark.",
       typography: "Typography",
       fonts: {
         ui: "Interface",
         chat: "Chat prose",
-        themeDefault: "Theme default",
+        themeDefault: "Style default",
         themeFace: "{theme} · {face}",
         system: "System",
         previewCaption: "AgileClaw · A little clarity goes a long way",
@@ -1476,39 +1426,6 @@ const enSettings = {
         "jetbrains-mono": "Clear, evenly spaced letters",
         system: "No webfont",
       },
-      accent: "Accent color",
-      accentHint: "Choose an accent color for buttons, highlights, and other controls.",
-      customAccent: "Custom color",
-      usingThemeAccent: "Using theme accent",
-      usingAccent: "Using {value}",
-      accents: {
-        default: "Theme default",
-        claw: "Claw red",
-        coral: "Coral",
-        amber: "Amber",
-        mint: "Mint",
-        teal: "Teal",
-        blue: "Blue",
-        violet: "Violet",
-        pink: "Pink",
-        slate: "Slate",
-      },
-      importedTheme: "Imported theme",
-      import: "Import",
-      importedFrom: "Imported from tweakcn: {name}",
-      importHint: "Import a tweakcn theme into this browser-local slot",
-      importFromTweakcn: "Import from tweakcn",
-      tweakcnInstructions:
-        "Open tweakcn.com, choose or create a theme, click Share, then paste the copied theme link here. Share links, editor URLs, registry URLs, theme IDs, and default theme names like amethyst-haze are accepted.",
-      browseTweakcn: "Browse tweakcn themes",
-      themeLink: "Theme link or ID",
-      replace: "Replace {name}",
-      importTheme: "Import theme",
-      clear: "Clear {name}",
-      loaded: "Loaded",
-      inlineHintBefore: "Click",
-      inlineHintAfter:
-        "to add one browser-local tweakcn theme. In tweakcn, use Share and paste the copied link here.",
       textSize: "Text size",
     },
     chatPrefs: {

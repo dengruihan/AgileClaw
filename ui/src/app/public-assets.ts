@@ -8,7 +8,6 @@ import { resolveControlUiPaths } from "./browser.ts";
 type ControlUiPublicAsset =
   | ControlUiRootPublicAsset
   | `fonts/${string}.css`
-  | `themes/${string}.css`
   | `provider-icons/ProviderIcon-${string}.svg`
   | `cloud-provider-icons/${string}.svg`
   | `file-icons/${string}.svg`

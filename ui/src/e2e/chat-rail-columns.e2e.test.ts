@@ -166,7 +166,7 @@ async function seedSettings(page: Page, themeMode: "light" | "dark") {
       localStorage.setItem(
         key,
         JSON.stringify({
-          theme: "claw",
+          theme: "phosphor",
           themeMode: seededThemeMode,
           sidebarSessionLayouts: {
             [seededSessionKey]: { columns: [], open: false, expanded: false },
@@ -185,7 +185,7 @@ async function seedDockReservationRegression(page: Page, dock: "bottom" | "right
       localStorage.setItem(
         key,
         JSON.stringify({
-          theme: "claw",
+          theme: "phosphor",
           themeMode: "light",
           sidebarSessionLayouts: {
             [seededSessionKey]: { columns: [], dock: seededDock, open: false, expanded: false },

@@ -31,7 +31,6 @@ export function buildSystemPromptToolLines(params: SystemPromptToolListParams): 
     // Channel docking: add login tools here when a channel needs interactive linking.
     browser: "Control browser",
     screen: "Drive operator web UI",
-    theme: "List, select, and create appearance themes",
     terminal:
       "List/read/resize/close operator-opened session terminals; input follows exec policy and may require exact-input approval; never open shells",
     canvas: "Present/eval/snapshot Canvas",

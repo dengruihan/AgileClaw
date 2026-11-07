@@ -8,11 +8,7 @@ import type { ConfigPatchAck } from "../lib/config/config-gateway-operations.ts"
 import type { RuntimeConfigCapability } from "../lib/config/runtime-config-capability.ts";
 import type { ApplicationGatewaySnapshot } from "./gateway.ts";
 import { hasOperatorWriteAccess } from "./operator-access.ts";
-import {
-  requestServerUiPrefReset,
-  resetServerUiPrefIntent,
-  selectThemeSettings,
-} from "./server-prefs-intent.ts";
+import { requestServerUiPrefReset, resetServerUiPrefIntent } from "./server-prefs-intent.ts";
 import {
   loadProfileAppearancePrefs,
   rememberProfileAppearanceIdentity,
@@ -47,7 +43,6 @@ import {
   writeStorage,
 } from "./server-prefs-storage.ts";
 import { loadSettings, patchSettings, type UiSettings } from "./settings.ts";
-import type { ThemeName } from "./theme.ts";
 import { invalidateUserPreferences } from "./user-prefs-cache.ts";
 
 type ServerUiPrefsWriter = Pick<RuntimeConfigCapability, "canPatch" | "runExternalMutation"> & {
@@ -266,10 +261,7 @@ export function resetServerUiPref<K extends ResettableServerUiPrefKey>(
   profileId?: string | null,
 ): UiSettings {
   const specification = SYNCED_PREFS[key];
-  const applyReset = (patch: Partial<UiSettings>) =>
-    key === "theme" && patch.theme !== undefined
-      ? selectThemeSettings(patch.theme)
-      : patchSettings(patch);
+  const applyReset = (patch: Partial<UiSettings>) => patchSettings(patch);
   // Disconnected clients retain their last known profile for local cancellation.
   const activeProfile = isAppearancePref(key)
     ? (profileId ?? resolveProfileAppearanceProfileId(scope))
@@ -288,10 +280,7 @@ export function resetServerUiPref<K extends ResettableServerUiPrefKey>(
       throw new Error(`Server UI preference cannot restore a retained local value: ${key}`);
     }
     const patch = write(state.resetValue);
-    const keys: SyncedPrefKey[] =
-      key === "theme" && patch.theme !== loadSettings().theme
-        ? [key, "accent", "fontUi", "fontChat"]
-        : [key];
+    const keys: SyncedPrefKey[] = [key];
     cancelPendingKeys(effectiveScope, keys);
     // Edits made after disconnect lose the profile and queue in the Gateway scope.
     if (effectiveScope !== scope) {
@@ -317,7 +306,6 @@ export function applyServerUiPrefs(
     scope?: string;
     profileId?: string | null;
     onApplied: (patch: Partial<UiSettings>) => void;
-    onThemeChanged?: (theme: ThemeName | null) => void;
   },
 ): boolean {
   const gatewayScope = hooks.scope ?? "";
@@ -379,9 +367,6 @@ export function applyServerUiPrefs(
     updateRetainedLocalKeys(scope, reconciledRetainedKeys, false);
   }
   recordReconciledObject();
-  if (Object.hasOwn(changed, "theme")) {
-    hooks.onThemeChanged?.(changed.theme ?? null);
-  }
   const patch = serverPrefsLocalPatch(changed, loadSettings(gatewayScope || undefined));
   if (!patch) {
     return false;
@@ -402,7 +387,6 @@ export async function refreshProfileAppearancePrefs(options: {
   configObject: unknown;
   scope?: string;
   onApplied: (patch: Partial<UiSettings>) => void;
-  onThemeChanged?: (theme: ThemeName | null) => void;
 }): Promise<boolean> {
   const scope = options.scope ?? options.client.gatewayUrl;
   if (!(await loadProfileAppearancePrefs(options.client, options.profileId, scope))) {
@@ -492,10 +476,7 @@ async function drainPendingPrefs(writer: ServerUiPrefsWriter, epoch: number): Pr
     const localOnlyKeys = SYNCED_PREF_KEYS.filter(
       (key) =>
         pendingPrefs?.[key] !== undefined &&
-        (SYNCED_PREFS[key].configSync === false ||
-          (key === "theme" &&
-            typeof pendingPrefs.theme === "string" &&
-            pendingPrefs.theme.includes("/"))) &&
+        SYNCED_PREFS[key].configSync === false &&
         !(pushProfileId && pushCanWrite),
     );
     if (localOnlyKeys.length) {
@@ -507,13 +488,6 @@ async function drainPendingPrefs(writer: ServerUiPrefsWriter, epoch: number): Pr
       cancelPendingKeys(pendingScope, localOnlyKeys);
       updateRetainedLocalKeys(pendingScope, localOnlyKeys, true);
       pushAfterCommit?.({ needsRefresh: false, retainedLocal: true });
-      continue;
-    }
-    if (pushProfileId && pendingPrefs.theme === "custom") {
-      // Offline-queued custom theme reaching a profile connection: browser-local
-      // by contract, so retain it here instead of syncing it to the profile.
-      cancelPendingKeys(pendingScope, ["theme"]);
-      updateRetainedLocalKeys(pendingScope, ["theme"], true);
       continue;
     }
     const profileBatch: ServerUiPrefs = {};
@@ -693,9 +667,7 @@ export function pushServerUiPrefs(
           return true;
         }
         if (pushProfileId && isAppearancePref(key)) {
-          // Imported custom palettes are browser-local by contract; a profile
-          // must never carry a theme another browser cannot render.
-          return !pushCanWrite || (key === "theme" && prefs.theme === "custom");
+          return !pushCanWrite;
         }
         return writer.canPatch === false;
       })

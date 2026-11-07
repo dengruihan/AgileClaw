@@ -13,7 +13,7 @@ import {
 } from "./server-prefs.ts";
 import { loadSettings, patchSettings } from "./settings.ts";
 
-const profileId = "profile-theme-writer";
+const profileId = "profile-appearance-writer";
 const scope = "ws://appearance-batch";
 
 beforeEach(() => {
@@ -30,8 +30,7 @@ it.each([false, true])(
   "keeps mixed profile appearance edits in one mutation (rejected=%s)",
   async (rejected) => {
     const entries = {
-      "ui.theme": "knot",
-      "ui.accent": "#123456",
+      "ui.themeMode": "dark",
       "ui.fontUi": "geist",
     };
     const request = vi.fn(async (method: string) => {
@@ -41,13 +40,13 @@ it.each([false, true])(
       if (rejected) {
         throw new GatewayRequestError({
           code: "INVALID_REQUEST",
-          message: "Theme is no longer available.",
+          message: "Preference is no longer available.",
         });
       }
-      return { application: "saved" };
+      return { status: "ok" };
     });
     const writer = createServerPrefsWriter(request, scope, true, { ok: true }, false);
-    const config = configWithPrefs({ theme: "claw" });
+    const config = configWithPrefs({ themeMode: "light", fontUi: "lora" });
     const profileRead = {
       client: writer.state.client!,
       profileId,
@@ -59,9 +58,7 @@ it.each([false, true])(
     request.mockClear();
 
     const local = {
-      theme: "space-pack/xenovessel",
       themeMode: "dark",
-      accent: "#654321",
       fontUi: undefined,
       fontChat: "lora",
     } as const;
@@ -74,10 +71,8 @@ it.each([false, true])(
     );
     await waitForFast(() => expect(afterCommit).toHaveBeenCalledOnce());
 
-    expect(request).toHaveBeenCalledExactlyOnceWith("themes.set", {
-      id: "space-pack/xenovessel",
-      mode: "dark",
-      appearance: { accent: "#654321", fontUi: null, fontChat: "lora" },
+    expect(request).toHaveBeenCalledExactlyOnceWith("users.prefs.set", {
+      entries: { "ui.themeMode": "dark", "ui.fontUi": null, "ui.fontChat": "lora" },
     });
     expect(afterCommit).toHaveBeenCalledWith(
       rejected ? { needsRefresh: false, retainedLocal: true } : { needsRefresh: false },
@@ -88,7 +83,7 @@ it.each([false, true])(
       expect(loadSettings()).toMatchObject(local);
     }
     expect(
-      resolveServerUiPrefState(config, "theme", scope, loadSettings(), { profileId }),
-    ).toMatchObject({ provenance: rejected ? "device-local" : "profile", value: local.theme });
+      resolveServerUiPrefState(config, "themeMode", scope, loadSettings(), { profileId }),
+    ).toMatchObject({ value: local.themeMode });
   },
 );

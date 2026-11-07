@@ -21,7 +21,7 @@ beforeEach(() => {
 });
 
 function notificationStatusConfigMocks() {
-  const config = { ui: { prefs: { theme: "claw" } } };
+  const config = { ui: { prefs: { themeMode: "dark" } } };
   return {
     "config.get": {
       appliedConfigHash: "notification-status-e2e",
@@ -44,13 +44,13 @@ function notificationStatusConfigMocks() {
               prefs: {
                 type: "object",
                 title: "Prefs",
-                properties: { theme: { type: "string", title: "Theme" } },
+                properties: { themeMode: { type: "string", title: "Theme mode" } },
               },
             },
           },
         },
       },
-      uiHints: { "ui.prefs.theme": { advanced: false } },
+      uiHints: { "ui.prefs.themeMode": { advanced: false } },
       version: "e2e",
     },
   };
@@ -147,7 +147,7 @@ suite.define(() => {
         viewport: { height: 1000, width: 1440 },
       },
       async ({ page }) => {
-        const config = { ui: { prefs: { theme: "claw" } } };
+        const config = { ui: { prefs: { themeMode: "dark" } } };
         const gateway = await installMockGateway(page, {
           methodResponses: {
             "config.get": {
@@ -173,7 +173,7 @@ suite.define(() => {
                         type: "object",
                         title: "Prefs",
                         properties: {
-                          theme: { type: "string", title: "Theme" },
+                          themeMode: { type: "string", title: "Theme mode" },
                           sidebarEntries: {
                             type: "array",
                             title: "Sidebar Entries",
@@ -186,7 +186,7 @@ suite.define(() => {
                 },
               },
               uiHints: {
-                "ui.prefs.theme": { advanced: false },
+                "ui.prefs.themeMode": { advanced: false },
                 "ui.prefs.sidebarEntries": { advanced: true },
                 "ui.seamColor": { advanced: true },
               },
@@ -264,10 +264,10 @@ suite.define(() => {
 
         const themeInput = page
           .locator(".settings-row")
-          .filter({ hasText: "Theme" })
+          .filter({ hasText: "Theme mode" })
           .locator("input.settings-input");
         await expect.poll(() => themeInput.count()).toBe(1);
-        await themeInput.fill("knot");
+        await themeInput.fill("light");
         await gateway.waitForRequest("config.set");
         await page.getByRole("button", { name: "Apply changes", exact: true }).click();
         await gateway.waitForRequest("config.apply");

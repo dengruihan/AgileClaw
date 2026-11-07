@@ -1,5 +1,4 @@
 import type { UserProfile } from "../../../packages/gateway-protocol/src/index.ts";
-import { BUILTIN_THEMES } from "../../../packages/gateway-protocol/src/theme.js";
 import type { ControlUiBuildInfo } from "../build-info.ts";
 import type { ControlUiMockPresenceUser } from "./control-ui-e2e-contract.ts";
 
@@ -59,10 +58,6 @@ export const defaultControlUiFeatureMethods = [
   "sessions.github.options",
   "sessions.github.status",
   "sessions.github.confirm",
-  "themes.list",
-  "themes.get",
-  "themes.set",
-  "themes.import",
   "tools.github.status",
   "tools.github.configure",
   "tools.github.authorize.start",
@@ -93,17 +88,11 @@ export function createControlUiDefaultResponses(scenario: {
         updatedAt: 1,
       }
     : null;
-  const selection = {
-    theme: BUILTIN_THEMES[0],
-    current: { id: "claw", mode: "system", scope: "gateway", overrides: {} },
-  };
   return {
     "users.self": profile
       ? { profile }
       : {
           __mockError: { code: "FORBIDDEN", message: "users.self requires an authenticated user" },
         },
-    "themes.list": { ...selection, themes: BUILTIN_THEMES },
-    "themes.get": selection,
   };
 }

@@ -137,7 +137,6 @@ For the full key index and the other top-level config domains, see [Configuratio
   ui: {
     seamColor: "#FF4500",
     prefs: {
-      theme: "claw", // claw | knot | dash | absolutely | tide | beacon | phosphor | crt | manuscript | rose | miami | custom
       themeMode: "system", // light | dark | system
       locale: "en",
       chatShowThinking: true,
@@ -152,12 +151,9 @@ For the full key index and the other top-level config domains, see [Configuratio
 
 Agent display names, emoji, and avatars belong to each agent's `identity` block under `agents.entries`; see [Agent configuration](/gateway/config-agents/entries-and-multi-agent#agentsentries-per-agent-overrides).
 
-- `seamColor`: operator accent color for native app UI chrome (Talk Mode bubble
-  tint, etc.). The Control UI user accent (`ui.prefs.accent`) takes precedence in
-  `talk.config` payloads and the macOS app's config snapshot. If neither is set,
-  the theme default applies. `prefs.accent` also accepts `"theme"` to explicitly
-  select the Control UI theme palette without inheriting `seamColor`; `talk.config`
-  omits its hex-only accent in that case.
+- `seamColor`: operator accent color for native app surfaces such as the Talk
+  Mode bubble tint and the voice-wake glow. The Control UI owns its own Phosphor
+  palette and ignores this value.
 - `prefs`: cross-device operator preferences. This is the canonical home so agents can
   change them through the approval gate and every Control UI client stays in
   sync; browsers mirror the values into local storage for instant boot. An

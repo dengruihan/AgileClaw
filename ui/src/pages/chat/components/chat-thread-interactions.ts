@@ -4,7 +4,6 @@ import { ref } from "lit/directives/ref.js";
 import type { ModelRetryStatus } from "../../../../../packages/gateway-protocol/src/chat-retry.ts";
 import type { MessageReactionSummary } from "../../../../../packages/gateway-protocol/src/index.js";
 import type { ChatPendingInputsPage } from "../../../../../packages/gateway-protocol/src/schema/logs-chat.js";
-import type { ThemeBranding } from "../../../../../packages/gateway-protocol/src/theme.ts";
 import type { GatewayBrowserClient } from "../../../api/gateway.ts";
 import type {
   AgentsListResult,
@@ -12,6 +11,7 @@ import type {
   SessionsListResult,
 } from "../../../api/types.ts";
 import type { QuestionPrompt } from "../../../app/question-prompt.ts";
+import type { ThemeBranding } from "../../../app/theme-branding.ts";
 import type { BrowserTabSelection } from "../../../components/browser/browser-target.ts";
 import { copyMarkdownLabel, handleCopyButton } from "../../../components/copy-button.ts";
 import { icons } from "../../../components/icons.ts";
