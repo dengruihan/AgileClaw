@@ -5,20 +5,14 @@ import type { ApplicationContext } from "../app/context.ts";
 import { client, createGatewayHarness } from "../app/overlays-access.test-support.ts";
 import "../test-helpers/load-styles.ts";
 import "../styles/hub-tabs.css";
-import "../styles/sidebar-attention-floating.css";
 import "../styles/sidebar-issues.css";
 import "./web-awesome-tabs.ts";
-// Upgrade the real element: the floating layout once regressed because a base
-// class stamped inline `display: contents`, which only a live upgrade reveals.
-import "./sidebar-attention.ts";
 import {
   buildSidebarInboxEntries,
   type SidebarAttentionItem,
   type SidebarInboxEntry,
 } from "./sidebar-attention-entries.ts";
 import { renderSidebarAttentionPanel } from "./sidebar-attention-panel.runtime.ts";
-import layoutCss from "../styles/layout.css?inline";
-import floatingCss from "../styles/sidebar-attention-floating.css?inline";
 
 const authWarning: SidebarAttentionItem = {
   type: "attention",
@@ -88,11 +82,6 @@ function panelParams(
 
 afterEach(() => {
   document.body.replaceChildren();
-  document.documentElement.classList.remove(
-    "openclaw-native-nav",
-    "openclaw-native-macos",
-    "openclaw-native-web-chrome",
-  );
 });
 
 describe.runIf("__vitest_browser__" in globalThis)("Inbox panel layout", () => {
@@ -195,102 +184,6 @@ describe.runIf("__vitest_browser__" in globalThis)("Inbox panel layout", () => {
     refresh.click();
     expect(params.mentions.refresh).toHaveBeenCalledOnce();
   });
-
-  it.each(["base-first", "base-last"])(
-    "positions collapsed sidebar attention beyond chrome controls (%s)",
-    async (order) => {
-      // Entry CSS and the lazy component may arrive in either order. Use both
-      // complete owners so this also catches resets introduced in the base sheet.
-      const sheets = (
-        order === "base-first" ? [layoutCss, floatingCss] : [floatingCss, layoutCss]
-      ).map((css) => {
-        const sheet = document.createElement("style");
-        sheet.textContent = css;
-        document.head.append(sheet);
-        return sheet;
-      });
-      onTestFinished(() => sheets.forEach((sheet) => sheet.remove()));
-      const shell = document.createElement("div");
-      shell.className = "shell shell--nav-collapsed shell--home-control shell--floating-attention";
-      shell.innerHTML = `
-      <div class="shell-chrome-controls">
-        <button class="shell-chrome-controls__button"></button>
-        <button class="shell-chrome-controls__button"></button>
-        <button class="shell-chrome-controls__button"></button>
-        <button class="shell-chrome-controls__button shell-chrome-controls__home"></button>
-      </div>
-      <nav class="macos-titlebar-controls">
-        ${Array.from(
-          { length: 5 },
-          () => '<button class="topbar-icon-btn macos-titlebar-controls__button"></button>',
-        ).join("")}
-      </nav>
-      <main class="content">
-        <openclaw-sidebar-attention class="sidebar-attention--floating">
-          <button class="sidebar-issues-button"></button>
-        </openclaw-sidebar-attention>
-      </main>
-    `;
-      document.body.append(shell);
-
-      const attention = shell.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
-        "openclaw-sidebar-attention",
-      )!;
-      const chrome = shell.querySelector<HTMLElement>(".shell-chrome-controls")!;
-      const nativeChrome = shell.querySelector<HTMLElement>(".macos-titlebar-controls")!;
-      const inbox = attention.querySelector<HTMLElement>(".sidebar-issues-button")!;
-
-      // The real shell mounts this row only in native web-chrome mode.
-      nativeChrome.remove();
-      await attention.updateComplete;
-      attention.append(inbox);
-
-      expect(getComputedStyle(attention).position).toBe("fixed");
-      expect(getComputedStyle(attention).display).toBe("flex");
-      expect(attention.getBoundingClientRect().left).toBeGreaterThanOrEqual(
-        chrome.getBoundingClientRect().right + 8,
-      );
-      const paint = () => ({
-        border: getComputedStyle(inbox).borderTopWidth,
-        background: getComputedStyle(inbox).backgroundColor,
-      });
-      expect(Number.parseFloat(paint().border)).toBeGreaterThan(0);
-      const resting = paint();
-      expect(resting.background).not.toBe("rgba(0, 0, 0, 0)");
-      expect(getComputedStyle(inbox).boxShadow).not.toBe("none");
-      expect(getComputedStyle(inbox).backdropFilter).toBe("blur(10px)");
-      const { page } = await import("vitest/browser");
-      await page.elementLocator(inbox).hover();
-      const hovered = paint();
-      expect(hovered.border).toBe(resting.border);
-      expect(hovered.background).not.toBe(resting.background);
-      await page.elementLocator(chrome.querySelector("button")!).hover();
-      inbox.setAttribute("aria-expanded", "true");
-      expect(paint()).toEqual(hovered);
-      inbox.setAttribute("aria-expanded", "false");
-      expect(paint()).toEqual(resting);
-
-      document.documentElement.classList.add("openclaw-native-nav");
-      expect(attention.getBoundingClientRect().left).toBeGreaterThanOrEqual(8);
-
-      document.documentElement.classList.add("openclaw-native-macos");
-      expect(getComputedStyle(attention).top).toBe("52px");
-
-      shell.append(nativeChrome);
-      document.documentElement.classList.add("openclaw-native-web-chrome");
-      expect(
-        attention.getBoundingClientRect().left - nativeChrome.getBoundingClientRect().right,
-      ).toBe(4);
-      expect(paint()).toEqual({ border: "0px", background: "rgba(0, 0, 0, 0)" });
-      expect(getComputedStyle(inbox).boxShadow).toBe("none");
-      expect(getComputedStyle(inbox).backdropFilter).toBe("none");
-      attention.classList.remove("sidebar-attention--floating");
-      shell.classList.remove("shell--floating-attention");
-      expect(paint()).toEqual({ border: "0px", background: "rgba(0, 0, 0, 0)" });
-      expect(getComputedStyle(inbox).boxShadow).toBe("none");
-      expect(getComputedStyle(inbox).backdropFilter).toBe("none");
-    },
-  );
 
   it.each([
     { mobile: false, width: 390, textScale: 1 },

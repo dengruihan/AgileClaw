@@ -25,7 +25,7 @@ function overlaps(left: DOMRect, right: DOMRect): boolean {
 }
 
 describe.skipIf(!hasBrowserLayout)("navigation surface browser layout", () => {
-  it("keeps the floating refresh card clear of the collapsed chrome cluster", async () => {
+  it("keeps the floating refresh card clear of the collapsed expand toggle", async () => {
     await useDesktopViewport();
     render(
       html`
@@ -36,21 +36,9 @@ describe.skipIf(!hasBrowserLayout)("navigation surface browser layout", () => {
               type="button"
               aria-label="Expand navigation"
             ></button>
-            <button
-              class="shell-chrome-controls__button shell-chrome-controls__new-thread"
-              type="button"
-              aria-label="New session"
-            ></button>
-            <button
-              class="shell-chrome-controls__button shell-chrome-controls__search"
-              type="button"
-              aria-label="Search"
-            ></button>
           </div>
           <main class="content">
             ${renderFloatingUpdateCard({
-              navigationSurfaceHidden: true,
-              mobileNavLayout: false,
               refreshRequired: true,
               onRefresh: async () => false,
             })}
@@ -69,7 +57,7 @@ describe.skipIf(!hasBrowserLayout)("navigation surface browser layout", () => {
       document.querySelectorAll<HTMLElement>(".shell-chrome-controls__button"),
     );
     expect(refreshCard).not.toBeNull();
-    expect(buttons).toHaveLength(3);
+    expect(buttons).toHaveLength(1);
 
     const cardBounds = refreshCard!.getBoundingClientRect();
     const buttonBounds = buttons.map((button) => button.getBoundingClientRect());

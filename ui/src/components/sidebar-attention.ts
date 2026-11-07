@@ -11,7 +11,6 @@ import { registerSidebarAttentionEnglish } from "../i18n/locales/en-sidebar-atte
 import { createIdleImport } from "../lib/idle-import.ts";
 import { OpenClawLightDomElement } from "../lit/openclaw-element.ts";
 import { SubscriptionsController } from "../lit/subscriptions-controller.ts";
-import "../styles/sidebar-attention-floating.css";
 import { icons } from "./icons.ts";
 import { sidebarInboxTabCounts, type SidebarAttentionItem } from "./sidebar-attention-entries.ts";
 import type { SidebarAttentionPanelPosition } from "./sidebar-attention-panel.runtime.ts";
@@ -24,9 +23,9 @@ registerSidebarAttentionEnglish();
 type SidebarAttentionPanelRenderer =
   typeof import("./sidebar-attention-panel.runtime.ts").renderSidebarAttentionPanel;
 type UpdateProgressWatcher = (listener: (progress: UpdateProgress) => void) => () => void;
-// Display is stylesheet-owned (layout.css `display: contents` in the footer,
-// flex when floating): the LightDomContents base's inline display would defeat
-// the floating override, re-piling the collapsed-nav cluster at the origin.
+// Display is stylesheet-owned (layout.css `display: contents` in the sidebar
+// footer): the LightDomContents base's inline display would defeat that rule
+// and re-pile the footer's flex children at the origin.
 class SidebarAttention extends OpenClawLightDomElement {
   @consume({ context: applicationContext, subscribe: true })
   private context?: ApplicationContext;

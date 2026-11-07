@@ -60,6 +60,65 @@ async function captureUiProof(page: Page, fileName: string) {
 }
 
 suite.define(() => {
+  it("slims collapsed navigation to the expand toggle and restores entries on expand", async () => {
+    await suite.withPage(
+      {
+        locale: "en-US",
+        serviceWorkers: "block",
+        viewport: { height: 900, width: 1440 },
+      },
+      async ({ page }) => {
+        await installMockGateway(page);
+        await page.goto(`${suite.server.baseUrl}new`);
+        await page.locator(".new-session-page__message").waitFor({ state: "visible" });
+
+        // Expanded sidebar owns both entries.
+        const newSessionAction = page.locator(
+          "openclaw-app-sidebar .sidebar-primary-actions .sidebar-new-session-action",
+        );
+        const inboxButton = page.locator("openclaw-app-sidebar .sidebar-issues-button");
+        await newSessionAction.waitFor({ state: "visible" });
+        await inboxButton.waitFor({ state: "visible" });
+
+        // The startup page's fixed privacy rail shares the identity row's
+        // centerline (both clear the plate's top edge by the same inset).
+        const identityCenter = await page
+          .locator(".sidebar-workspace-header")
+          .evaluate(
+            (element) =>
+              element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2,
+          );
+        const incognitoCenter = await page
+          .locator(".new-session-page__incognito-rail")
+          .evaluate(
+            (element) =>
+              element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2,
+          );
+        expect(Math.abs(incognitoCenter - identityCenter)).toBeLessThanOrEqual(2);
+
+        await page.locator(".sidebar-brand__collapse").click();
+        await page.locator(".shell--nav-collapsed").waitFor();
+        const toggle = page.locator(".shell-chrome-controls__nav-toggle");
+        await toggle.waitFor({ state: "visible" });
+        // Collapsed keeps only the expand operation: no new-session shortcut
+        // in the cluster and no floating Inbox over the content column.
+        expect(await page.locator(".shell-chrome-controls button").count()).toBe(1);
+        expect(await page.locator(".shell-chrome-controls__new-thread").count()).toBe(0);
+        expect(await page.locator(".sidebar-attention--floating").count()).toBe(0);
+        await expect.poll(() => newSessionAction.isVisible()).toBe(false);
+        await expect.poll(() => inboxButton.isVisible()).toBe(false);
+        await captureUiProof(page, "collapsed-toggle-only.png");
+
+        // Expanding restores the original entries without a reload.
+        await toggle.click();
+        await newSessionAction.waitFor({ state: "visible" });
+        await inboxButton.waitFor({ state: "visible" });
+        expect(await page.locator(".shell--nav-collapsed").count()).toBe(0);
+        await captureUiProof(page, "expanded-entries-restored.png");
+      },
+    );
+  });
+
   it("keeps canonical scrollbars without horizontal model-picker overflow and preserves selection", async () => {
     await suite.withPage(
       {

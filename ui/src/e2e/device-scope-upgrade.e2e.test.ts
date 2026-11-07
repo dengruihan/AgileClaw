@@ -166,13 +166,11 @@ suite.define(() => {
     await installMockGateway(mobile, { operatorScopes: LIMITED_SCOPES });
     await mobile.goto(`${suite.server.baseUrl}activity`);
 
-    await mobile.locator(".topbar-search").waitFor();
+    // The mobile header dropped its search affordance; the drawer toggle row
+    // is the clean-header anchor.
+    await mobile.locator(".topbar").waitFor();
     expect(await mobile.locator(".scope-upgrade-status-trigger").count()).toBe(0);
-    await captureProof(
-      mobile,
-      "mobile-activity-clean-header.png",
-      mobile.locator(".topbar-search"),
-    );
+    await captureProof(mobile, "mobile-activity-clean-header.png", mobile.locator(".topbar"));
     await mobile.getByRole("button", { name: "Expand sidebar" }).click();
     await waitForAnimations(mobile.locator(".nav-drawer"));
     const mobileInbox = mobile.locator(".sidebar-issues-button");
@@ -284,13 +282,17 @@ suite.define(() => {
 
     await closeInbox(page);
     await page.locator(".sidebar-brand__collapse").click();
+    await page.locator(".shell--nav-collapsed").waitFor();
+    // Collapsed navigation keeps only the expand toggle: no floating Inbox
+    // renders over the content column anymore.
+    expect(await page.locator(".sidebar-attention--floating").count()).toBe(0);
+    await page.getByRole("button", { name: "Expand sidebar" }).click();
     const collapsedItem = await openLimitedAccessItem(await openInbox(page));
     await waitForPendingUpgradeItem(collapsedItem);
     expect(await gateway.getRequests("device.scopes.requestUpgrade")).toHaveLength(1);
     expect(await gateway.getRequests("device.scopes.waitUpgrade")).toHaveLength(1);
 
     await closeInbox(page);
-    await page.getByRole("button", { name: "Expand sidebar" }).click();
     const sidebar = page.locator("openclaw-app-sidebar");
     const identityCard = sidebar.locator(".sidebar-identity-card");
     await identityCard.waitFor();

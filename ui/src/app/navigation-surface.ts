@@ -116,46 +116,23 @@ export function navigationSurfaceIsHidden(params: {
   return params.mobileNavLayout ? !params.navDrawerOpen : params.navCollapsed;
 }
 
-export function floatingSidebarAttentionVisible(params: {
-  navigationSurfaceHidden: boolean;
-  mobileNavLayout: boolean;
-  compact?: boolean;
-}): boolean {
-  const attentionNeedsFloating = params.navigationSurfaceHidden && !params.mobileNavLayout;
-  return attentionNeedsFloating && !params.compact;
-}
-
+/** Stale-client refresh card floats over the content column; the Inbox itself
+   lives in the expanded sidebar footer, and collapsed navigation keeps only
+   the expand toggle. */
 export function renderFloatingUpdateCard(params: {
-  navigationSurfaceHidden: boolean;
-  mobileNavLayout: boolean;
-  compact?: boolean;
   updateRun?: ApplicationContext["overlays"]["snapshot"]["updateRun"];
   statusBanner?: ApplicationContext["overlays"]["snapshot"]["updateStatusBanner"];
   refreshRequired: boolean;
   onRefresh: () => Promise<boolean>;
-  onNavigate?: ApplicationContext["navigate"];
 }) {
-  const showAttention = floatingSidebarAttentionVisible(params);
-  const showUpdateCard = !params.compact && params.refreshRequired;
-  if (!showAttention && !showUpdateCard) {
+  if (!params.refreshRequired) {
     return nothing;
   }
-  return html`${
-    showAttention
-      ? html`<openclaw-sidebar-attention
-          class="sidebar-attention--floating"
-          .onNavigate=${params.onNavigate}
-        ></openclaw-sidebar-attention>`
-      : nothing
-  }${
-    showUpdateCard
-      ? html`<openclaw-sidebar-update-card
-          class="sidebar-update-card--floating"
-          .updateRun=${params.updateRun ?? null}
-          .statusBanner=${params.statusBanner ?? null}
-          .refreshRequired=${params.refreshRequired}
-          .onRefresh=${params.onRefresh}
-        ></openclaw-sidebar-update-card>`
-      : nothing
-  }`;
+  return html`<openclaw-sidebar-update-card
+    class="sidebar-update-card--floating"
+    .updateRun=${params.updateRun ?? null}
+    .statusBanner=${params.statusBanner ?? null}
+    .refreshRequired=${params.refreshRequired}
+    .onRefresh=${params.onRefresh}
+  ></openclaw-sidebar-update-card>`;
 }

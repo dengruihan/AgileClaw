@@ -128,12 +128,8 @@ suite.define(() => {
             section: `catalog:${catalogId}`,
             params: { agent: agentId, catalog: catalogId },
           },
-          { selector: ".shell-chrome-controls__new-thread", params: { agent: agentId } },
         ];
       for (const [index, action] of actions.entries()) {
-        if (index === actions.length - 1) {
-          await page.locator(".sidebar-brand__collapse").click();
-        }
         if (action.section) {
           await page
             .locator(`[data-session-section="${action.section}"] .sidebar-recent-sessions__head`)
@@ -181,7 +177,9 @@ suite.define(() => {
         }
       }
 
-      await page.locator(".shell-chrome-controls__new-thread").click();
+      // Collapsed navigation no longer offers a new-session shortcut; the
+      // expanded primary action owns the same-tab flow.
+      await page.locator(".sidebar-brand__new-thread").click();
       await waitForControlUiRoute(page, {
         routeId: "new-session",
         pathname: `${basePath}/new`,

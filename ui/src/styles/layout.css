@@ -23,9 +23,6 @@
   --shell-sidebar-footer-height: 53px;
   --shell-native-titlebar-controls-inset: var(--openclaw-native-controls-inset, 92px);
   --shell-native-titlebar-controls-width: 156px;
-  /* Collapsed navigation restores toggle, new-thread, and search outside the
-     hidden sidebar. Optional controls contribute only while mounted. */
-  --shell-controls-width: 104px;
   --shell-chrome-safe-area-left: 12px;
   /* Desktop has no topbar row — the sidebar owns navigation. Narrow viewports
      (layout.mobile.css) and the chat split toolbar restore the row height. */
@@ -45,6 +42,9 @@
   --shell-plate-inset: 8px;
   --shell-plate-radius: var(--radius-xl);
   --shell-plate-border: color-mix(in srgb, var(--border) 82%, transparent);
+  /* First-row chrome (sidebar brand, page toolbar, chat header) clears the
+     plate's inner top edge by its own inset instead of touching the frame. */
+  --shell-plate-chrome-top: 8px;
   height: calc(
     var(--shell-content-height) - var(--shell-plate-inset) * 2 - var(--shell-dock-reserve-bottom)
   );
@@ -128,15 +128,25 @@
   overflow: hidden;
 }
 
+/* Web chat headers grew by the plate chrome inset (startup-layout.css), so the
+   shell toast's chat offset clears the taller header row; components.css owns
+   the base and mobile offsets. */
+:where(html:not(.openclaw-native-macos, .openclaw-native-desktop))
+  .shell.shell--chat:not(.shell--mobile-nav) {
+  --app-toast-shell-top: calc(
+    var(--shell-plate-inset) + var(--shell-plate-chrome-top) + var(--rail-header-height) + 12px
+  );
+}
+
 /* Collapsing hides the sidebar entirely; shell chrome and Cmd+B bring it back.
    Keep --shell-nav-width in sync for fixed-position consumers (e.g. the
    docked terminal panel). */
 .shell--nav-collapsed {
   grid-template-columns: 0 minmax(0, 1fr);
   --shell-nav-width: 0px;
-  /* The collapsed strip shows all three base controls, so unlike the expanded
-     safe edge this keeps the complete collapsed width. */
-  --shell-chrome-safe-area-left: calc(var(--shell-controls-width) + 18px);
+  /* The collapsed strip shows the expand toggle, so unlike the expanded safe
+     edge this keeps the complete collapsed width. */
+  --shell-chrome-safe-area-left: calc(var(--shell-chrome-control-size) + 18px);
 }
 
 /* Drawer shells keep the nav mounted offscreen; desktop collapse removes it. */
@@ -144,12 +154,19 @@
   display: none;
 }
 
-/* The collapsed sidebar restores its controls in the content header. On
-   native macOS hosts without the full strip, they sit below the drag region. */
+/* The collapsed sidebar restores its expand toggle over the content header.
+   The cluster rides inside the plate: offsets measure from the plate's inner
+   edge, not the window, so the control and its focus ring never hug the
+   rounded frame. On native macOS hosts it sits below the drag region. */
 .shell-chrome-controls {
   position: fixed;
-  top: calc((var(--rail-header-height) - var(--shell-chrome-control-size)) / 2);
-  left: calc(var(--shell-nav-width) + var(--shell-chrome-controls-inset));
+  top: calc(
+    var(--shell-plate-inset) + var(--shell-plate-chrome-top) +
+      (var(--rail-header-height) - var(--shell-chrome-control-size)) / 2
+  );
+  left: calc(
+    var(--shell-nav-width) + var(--shell-plate-inset) + var(--shell-chrome-controls-inset)
+  );
   z-index: 45;
   display: flex;
   align-items: center;
@@ -385,10 +402,10 @@ html:is(.openclaw-native-macos, .openclaw-native-nav, .openclaw-native-web-chrom
 
 .settings-sidebar__header {
   flex-shrink: 0;
-  /* 8px top pad centers the 32px back button on the shared 24px chrome
-     centerline, mirroring .sidebar-shell; macOS overrides with titlebar
-     clearance. */
-  padding: 8px 12px 6px;
+  /* The plate chrome inset plus 8px centers the 32px back button on the shared
+     chrome centerline, mirroring .sidebar-shell; macOS overrides with titlebar
+     clearance. Drawer and embed shells zero the inset. */
+  padding: calc(8px + var(--shell-plate-chrome-top, 0px)) 12px 6px;
 }
 
 .settings-sidebar__back {
@@ -1158,17 +1175,24 @@ openclaw-settings-save-indicator:empty {
   flex-shrink: 0;
 }
 
-/* Desktop web shares the pane centerline. Drawers and native windows keep
-   the identity row below their own chrome and retain its separate clearance. */
+/* Desktop web shares the pane centerline, one plate-chrome inset below the
+   plate's top edge. The identity row owns the full rail-height band so the
+   wrapped new-session action below it cannot pull the avatar off the shared
+   centerline. Drawers and native windows keep the identity row below their
+   own chrome and retain its separate clearance. */
 :where(html:not(.openclaw-native-macos, .openclaw-native-desktop)) .shell:not(.shell--mobile-nav) {
   .sidebar-shell {
-    padding-top: 0;
+    padding-top: var(--shell-plate-chrome-top);
   }
 
   .sidebar-brand {
     min-height: var(--rail-header-height);
     padding-bottom: 0;
     margin-bottom: 9px;
+  }
+
+  .sidebar-workspace-header {
+    min-height: var(--rail-header-height);
   }
 }
 
@@ -4239,6 +4263,7 @@ wa-dropdown.sidebar-identity-menu::part(menu) {
 .shell--embed {
   --shell-plate-inset: 0px;
   --shell-plate-radius: 0px;
+  --shell-plate-chrome-top: 0px;
   border: none;
 }
 
@@ -4477,6 +4502,15 @@ wa-dropdown.sidebar-identity-menu::part(menu) {
   --page-toolbar-height: var(--rail-header-height);
 }
 
+/* Web toolbar rows start one plate-chrome inset below the plate edge so the
+   centered title shares the sidebar brand's centerline; native hosts keep
+   their titlebar-relative geometry. */
+:where(html:not(.openclaw-native-macos, .openclaw-native-desktop))
+  .shell:not(.shell--mobile-nav):not(.shell--settings)
+  .content:not(.content--chat).content--toolbar-header:not(.content--actions-blocked) {
+  padding-top: var(--shell-plate-chrome-top);
+}
+
 html.openclaw-native-macos
   .shell:not(.shell--mobile-nav):not(.shell--settings)
   .content:not(.content--chat) {
@@ -4509,10 +4543,7 @@ html.openclaw-native-desktop
 /* Collapsed navigation floats chrome over the row's leading edge; reserve it
    (measured from the content column's padding edge). */
 .shell--nav-collapsed:not(.shell--mobile-nav):not(.shell--settings) .content:not(.content--chat) {
-  --page-toolbar-reserve: calc(
-    var(--shell-chrome-safe-area-left) + var(--shell-attention-width, 0px) -
-      var(--content-inline-padding)
-  );
+  --page-toolbar-reserve: calc(var(--shell-chrome-safe-area-left) - var(--content-inline-padding));
 
   > .connection-action-block {
     margin-top: calc(var(--page-toolbar-height) + var(--page-toolbar-clearance));
@@ -4527,9 +4558,7 @@ html.openclaw-native-desktop
 html.openclaw-native-nav
   .shell--nav-collapsed:not(.shell--mobile-nav):not(.shell--settings)
   .content:not(.content--chat) {
-  --page-toolbar-reserve: calc(
-    204px + var(--shell-attention-width, 0px) - var(--content-inline-padding)
-  );
+  --page-toolbar-reserve: calc(204px - var(--content-inline-padding));
 }
 
 html.openclaw-native-web-chrome
@@ -4537,8 +4566,7 @@ html.openclaw-native-web-chrome
   .content:not(.content--chat) {
   --page-toolbar-reserve: calc(
     var(--shell-native-titlebar-controls-inset) + var(--shell-native-titlebar-controls-width) +
-      var(--shell-chrome-controls-gap) + var(--shell-attention-width, 0px) -
-      var(--content-inline-padding)
+      var(--shell-chrome-controls-gap) - var(--content-inline-padding)
   );
 }
 

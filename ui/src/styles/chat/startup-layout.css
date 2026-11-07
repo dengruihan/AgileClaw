@@ -353,6 +353,16 @@
   -webkit-user-select: none;
 }
 
+/* Web chat headers ride the plate: the chrome inset plus the rail height keeps
+   the shared centerline with the sidebar brand and page toolbars. Native hosts
+   keep their titlebar-height header; drawer shells zero the inset. */
+:where(html:not(.openclaw-native-macos, .openclaw-native-desktop))
+  .shell:not(.shell--mobile-nav)
+  .chat-pane__header {
+  min-height: calc(var(--rail-header-height) + var(--shell-plate-chrome-top, 0px));
+  padding-top: var(--shell-plate-chrome-top, 0px);
+}
+
 .chat-pane__header-leading,
 .chat-pane__header-center,
 .chat-pane__header-trailing {
@@ -762,8 +772,7 @@ openclaw-chat-sidebar-region,
 /* Shell layout owns the dynamic physical-left safe edge. Native hosts replace
    the web-control calculation with their actual window chrome. */
 .shell {
-  --shell-attention-width: 0px;
-  --shell-titlebar-inset: calc(var(--shell-chrome-safe-area-left) + var(--shell-attention-width));
+  --shell-titlebar-inset: var(--shell-chrome-safe-area-left);
 }
 
 html:is(.openclaw-native-macos, .openclaw-native-desktop) .shell:not(.shell--mobile-nav) {
@@ -781,7 +790,7 @@ html.openclaw-native-nav .shell--nav-collapsed:not(.shell--mobile-nav) {
 html.openclaw-native-web-chrome .shell--nav-collapsed:not(.shell--mobile-nav) {
   --shell-titlebar-inset: calc(
     var(--shell-native-titlebar-controls-inset) + var(--shell-native-titlebar-controls-width) +
-      var(--shell-chrome-controls-gap) + var(--shell-attention-width)
+      var(--shell-chrome-controls-gap)
   );
 }
 

@@ -136,6 +136,84 @@ suite.define(() => {
     );
   });
 
+  it("keeps shell chrome inside the plate frame on one shared centerline", async () => {
+    await suite.withPage(
+      { locale: "en-US", serviceWorkers: "block", viewport: { width: 1440, height: 900 } },
+      async ({ page }) => {
+        await installMockGateway(page);
+        await page.goto(`${suite.server.baseUrl}dashboards`);
+        await page.locator(".dashboards-gallery, [data-dashboards-empty]").first().waitFor({
+          state: "visible",
+        });
+
+        // Expanded: the identity row (avatar + AgileClaw wordmark) clears the
+        // plate's top edge instead of touching the rounded frame, and the page
+        // toolbar title rides the same centerline.
+        const expanded = await page.evaluate(() => {
+          const shell = document.querySelector<HTMLElement>(".shell")!;
+          const identity = document.querySelector<HTMLElement>(".sidebar-workspace-header")!;
+          const title = document.querySelector<HTMLElement>(".page-title");
+          const shellBox = shell.getBoundingClientRect();
+          const identityBox = identity.getBoundingClientRect();
+          const titleBox = title?.getBoundingClientRect();
+          return {
+            identityTopGap: identityBox.top - shellBox.top,
+            identityCenter: identityBox.top + identityBox.height / 2,
+            titleCenter: titleBox ? titleBox.top + titleBox.height / 2 : null,
+          };
+        });
+        expect(expanded.identityTopGap).toBeGreaterThanOrEqual(8);
+        if (expanded.titleCenter !== null) {
+          expect(Math.abs(expanded.titleCenter - expanded.identityCenter)).toBeLessThanOrEqual(2);
+        }
+
+        // Collapsed: the expand toggle is the only chrome over the content
+        // column, inset from the plate's top and left edges (never flush with
+        // the rounded frame), and no floating Inbox renders.
+        await page.locator(".sidebar-brand__collapse").click();
+        await page.locator(".shell--nav-collapsed").waitFor();
+        await page.locator(".shell-chrome-controls__nav-toggle").waitFor({ state: "visible" });
+        const collapsed = await page.evaluate(() => {
+          const shell = document.querySelector<HTMLElement>(".shell")!;
+          const toggle = document.querySelector<HTMLElement>(".shell-chrome-controls__nav-toggle")!;
+          const shellBox = shell.getBoundingClientRect();
+          const toggleBox = toggle.getBoundingClientRect();
+          return {
+            clusterButtons: document.querySelectorAll(".shell-chrome-controls button").length,
+            floatingAttention: document.querySelectorAll(".sidebar-attention--floating").length,
+            leftGap: toggleBox.left - shellBox.left,
+            topGap: toggleBox.top - shellBox.top,
+          };
+        });
+        expect(collapsed.clusterButtons).toBe(1);
+        expect(collapsed.floatingAttention).toBe(0);
+        expect(collapsed.leftGap).toBeGreaterThanOrEqual(8);
+        expect(collapsed.topGap).toBeGreaterThanOrEqual(14);
+        await writeFile(
+          path.join(suite.artifactDir, "canvas-dashboards-collapsed.png"),
+          await takeControlUiViewportScreenshot(page, page.locator(".shell"), [
+            page.locator(".shell-chrome-controls__nav-toggle"),
+          ]),
+        );
+
+        // Settings takeover: the back row keeps the shared chrome centerline.
+        await page.locator(".shell-chrome-controls__nav-toggle").click();
+        await page.locator("openclaw-app-sidebar").waitFor({ state: "visible" });
+        await page.goto(`${suite.server.baseUrl}settings/appearance`);
+        await page.locator(".settings-sidebar__nav").waitFor({ state: "visible" });
+        const settings = await page.evaluate((identityCenter) => {
+          const back = document.querySelector<HTMLElement>(".settings-sidebar__back")!;
+          const backBox = back.getBoundingClientRect();
+          return {
+            backCenter: backBox.top + backBox.height / 2,
+            identityCenter,
+          };
+        }, expanded.identityCenter);
+        expect(Math.abs(settings.backCenter - settings.identityCenter)).toBeLessThanOrEqual(2);
+      },
+    );
+  });
+
   it("keeps the primary new-session action full width, left aligned, and navigable", async () => {
     await suite.withPage(
       { locale: "en-US", serviceWorkers: "block", viewport: { width: 1440, height: 900 } },
