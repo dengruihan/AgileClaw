@@ -110,10 +110,13 @@ suite.define(() => {
 
     try {
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, cardsKey));
-      const title = page.locator(".chat-pane__session-title-button");
-      await expect.poll(() => title.textContent()).toContain("Alice · cards");
-      await title.click();
-      const field = page.locator(".chat-pane__session-title-input");
+      const header = page.locator(".chat-pane__header");
+      await expect.poll(() => header.getAttribute("aria-label")).toContain("Alice · cards");
+      await page.locator(".chat-header-session-menu__trigger").click();
+      await page
+        .locator('openclaw-chat-header-session-menu wa-dropdown-item[value="rename"]')
+        .click();
+      const field = page.locator('openclaw-modal-dialog[label="Rename session"] input');
       await field.waitFor({ state: "visible" });
       expect(await field.inputValue()).toBe("");
     } finally {
@@ -153,18 +156,17 @@ suite.define(() => {
         await row.waitFor({ state: "visible" });
         const openRename = async () => {
           if (surface === "header") {
-            await page.locator(".chat-pane__session-title-button").click();
+            await page.locator(".chat-header-session-menu__trigger").click();
+            await page
+              .locator('openclaw-chat-header-session-menu wa-dropdown-item[value="rename"]')
+              .click();
           } else {
             await row.hover();
             await row.click({ button: "right" });
             await page.getByRole("menuitem", { name: "Rename…" }).click();
           }
         };
-        const field = page.locator(
-          surface === "header"
-            ? ".chat-pane__session-title-input"
-            : 'openclaw-modal-dialog[label="Rename session"] input',
-        );
+        const field = page.locator('openclaw-modal-dialog[label="Rename session"] input');
         await openRename();
         await field.waitFor({ state: "visible" });
         await captureUiProof(suite, page, `${surface}-generated-title.png`);

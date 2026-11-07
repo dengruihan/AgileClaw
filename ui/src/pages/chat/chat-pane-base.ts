@@ -14,7 +14,6 @@ import type {
   ControlUiSessionPullRequestSnapshot,
 } from "../../../../src/gateway/control-ui-contract.js";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
-import type { GatewaySessionRow } from "../../api/types.ts";
 import { chatInputOwnerForContext, type ChatInputRegion } from "../../app/chat-input-owner.ts";
 import { applicationContext, type ApplicationContext } from "../../app/context.ts";
 import { observeNativeGateway } from "../../app/native-editor-locality.runtime.ts";
@@ -66,7 +65,6 @@ import { requestChatPageUpdate } from "./chat-state-render.ts";
 import { resolveChatAgentId } from "./chat-state-route.ts";
 import type { ChatTypingActorState } from "./chat-typing-presence.ts";
 import { getChatComposerState } from "./components/chat-composer-state.ts";
-import type { ChatPaneHeaderAction } from "./components/chat-pane-header.ts";
 import { installChatComposerPickerDismissal } from "./components/chat-picker-overlay.ts";
 import type { ChatSessionSharingState } from "./components/chat-session-sharing.ts";
 import { getTranscriptState } from "./components/chat-thread-interactions.ts";
@@ -432,10 +430,6 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
   // SessionDataController's own epoch-scoped controller for the sidebar.
   protected headerSessionMutationAbortController = new AbortController();
 
-  @litState() protected headerEditing = false;
-  @litState() protected headerRenameValue = "";
-  @litState() protected headerPlatform: string | null = null;
-  @litState() protected headerCopiedAction: ChatPaneHeaderAction | null = null;
   protected continueInTerminalDialog: {
     qualifiedSessionKey: string;
     selectedGatewayUrl: string;
@@ -499,10 +493,6 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
       config: SessionDiscussionPanelConfig;
     }
   >();
-  protected headerRenameInitialValue = "";
-  protected headerRenameSession: Pick<GatewaySessionRow, "key" | "sessionId" | "label"> | null =
-    null;
-  protected headerCopiedTimer: number | null = null;
   protected composerPrefillAttentionTimer: number | null = null;
   protected composerPrefillAttentionTarget: HTMLElement | null = null;
 
@@ -511,12 +501,6 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
   protected readonly headerWorktreePaths = new Map<
     string,
     { loaded?: boolean; loading?: boolean; path?: string | null }
-  >();
-  /** HEAD keyed by the resolved root directory it was read from — a branch is
-   * a fact about a checkout, so root transitions miss instead of going stale. */
-  protected readonly headerBranches = new Map<
-    string,
-    { loading?: boolean; value?: string | null }
   >();
   protected nativeDraftCleanup: (() => void) | null = null;
   protected readonly unreadPatchGuard = new SessionUnreadPatchGuard();
@@ -629,16 +613,11 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
     | ReturnType<typeof resolveUiConversationIdentity>
     | undefined;
   protected abstract secondarySessionReadsReady(explicit?: boolean): boolean;
-  protected abstract loadHeaderPlatform(
-    client: GatewayBrowserClient,
-    generation: number,
-  ): Promise<void>;
   protected abstract applyGatewaySnapshot(
     snapshot: ApplicationContext["gateway"]["snapshot"],
   ): void;
   protected abstract applyApplicationConfig(config: ApplicationContext["config"]["current"]): void;
   protected abstract applySessionsState(state: ApplicationContext["sessions"]["state"]): void;
-  protected abstract cancelHeaderRename(): void;
   protected abstract handleArchiveSessionShortcut(event: KeyboardEvent): boolean;
   protected abstract resetOlderMessagesViewport(): void;
   protected abstract syncQueuedEditRetention(): void;

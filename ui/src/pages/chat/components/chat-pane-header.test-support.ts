@@ -29,45 +29,14 @@ export function mountChatPaneHeader(
     title: "Session title",
     session: chatPaneHeaderSessionRow(),
     catalog: false,
-    editing: false,
-    renameValue: "Session title",
-    workspaceRoot: "/repo/openclaw",
-    workspaceLabel: "openclaw",
-    workspaceIcon: null,
-    parentSession: null,
-    branch: "feature/header",
     branches: [],
     branchSwitchDisabledReason: null,
-    platform: "darwin",
-    canReveal: true,
-    copiedAction: null,
-    renameDisabledReason: undefined,
     panelActions: nothing,
     panelLayoutActions: nothing,
     sessionMenuAction: nothing,
-    onBeginRename: vi.fn(),
-    onRenameInput: vi.fn(),
-    onCommitRename: vi.fn(),
-    onCancelRename: vi.fn(),
-    onMenuOpenChange: vi.fn(),
-    onMenuAction: vi.fn(),
-    onOpenParentSession: vi.fn(),
     onBranchSelect: vi.fn(),
     ...patch,
   };
   render(html`${renderChatPaneHeader(props)}`, container);
   return { container, props };
-}
-
-export function mockWorkspaceIconFetch() {
-  const workspaceFetch = vi.fn<typeof fetch>();
-  vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-    // Other header elements fetch assets asynchronously. They must not consume
-    // workspace retry responses or count as authenticated icon requests.
-    if (typeof input === "string" && input.startsWith("/__openclaw__/workspace-icon/")) {
-      return workspaceFetch(input, init);
-    }
-    return Promise.resolve(new Response(null, { status: 404 }));
-  });
-  return workspaceFetch;
 }

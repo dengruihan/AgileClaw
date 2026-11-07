@@ -63,7 +63,6 @@ const CURSOR_CASES: readonly CursorCase[] = [
   { expected: "pointer", selector: ".markdown-github-item" },
   // Semantic cursors remain owned by their components.
   { expected: "text", selector: "#plain-text-input" },
-  { expected: "text", selector: ".chat-pane__session-title-button" },
   { expected: "grab", selector: ".sidebar-session-group-drag-handle" },
   { expected: "zoom-in", selector: ".chat-message-image-button" },
   { expected: "not-allowed", selector: ".btn--ghost:disabled" },
@@ -164,7 +163,6 @@ function fixtureDocument(): string {
       <button id="disabled-new-tab-button" class="btn btn--ghost" type="button" data-new-tab-action disabled>Unavailable new tab</button>
       <button class="settings-secret__toggle" type="button">Reveal</button>
       <button class="sidebar-update-card__hold" type="button" disabled>Hold</button>
-      <button class="chat-pane__session-title-button" type="button">Session title</button>
       <button class="chat-message-image-button" type="button">Image</button>
       <div class="chat-assistant-attachment-card" data-openable>Attachment</div>
       <div class="sidebar-session-group-drag-handle"></div>

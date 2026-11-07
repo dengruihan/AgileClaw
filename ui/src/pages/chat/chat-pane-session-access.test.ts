@@ -5,8 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import type { GatewaySessionRow } from "../../api/types.ts";
 import type { ApplicationContext } from "../../app/context.ts";
+import { showInputDialog } from "../../components/input-dialog.ts";
 import type { SessionCapability } from "../../lib/sessions/index.ts";
 import { sessionsResult } from "../../lib/sessions/session-capability.test-support.ts";
+
+vi.mock("../../components/input-dialog.ts", () => ({ showInputDialog: vi.fn() }));
 import {
   createPaneHeaderWorkspaceFixture,
   createSessionCapabilityFixture,
@@ -51,7 +54,7 @@ describe("chat pane session access", () => {
     expect(state.chatError).toBe(state.lastError);
   });
 
-  it("refuses header rename when sessions.patch is unavailable or lacks write scope", () => {
+  it("refuses header rename when sessions.patch is unavailable or lacks write scope", async () => {
     for (const hello of [
       {
         auth: { role: "operator", scopes: ["operator.write"] },
@@ -76,16 +79,16 @@ describe("chat pane session access", () => {
         updatedAt: 0,
       } satisfies GatewaySessionRow;
 
-      pane.beginHeaderRename(session);
+      await pane.handleHeaderSessionAction({ kind: "rename" }, session);
 
-      expect(pane.headerEditing).toBe(false);
+      expect(showInputDialog).not.toHaveBeenCalled();
       expect(state.chatError).toBeTruthy();
       expect(requestUpdate).toHaveBeenCalledOnce();
       expect(patch).not.toHaveBeenCalled();
     }
   });
 
-  it("rechecks header rename access before committing", () => {
+  it("rechecks header rename access after the dialog resolves", async () => {
     const patch = vi.fn(async () => ({}));
     const sessions = { patch } as unknown as SessionCapability;
     const { pane, state } = createTestChatPane({
@@ -98,19 +101,20 @@ describe("chat pane session access", () => {
       updatedAt: 0,
     } satisfies GatewaySessionRow;
 
-    pane.beginHeaderRename(session);
-    pane.headerRenameValue = "Blocked rename";
-    pane.context.gateway.snapshot.hello = {
-      auth: { role: "operator", scopes: ["operator.read"] },
-      features: { methods: ["sessions.patch"] },
-    } as ApplicationContext["gateway"]["snapshot"]["hello"];
-    pane.commitHeaderRename();
+    vi.mocked(showInputDialog).mockImplementation(async () => {
+      pane.context.gateway.snapshot.hello = {
+        auth: { role: "operator", scopes: ["operator.read"] },
+        features: { methods: ["sessions.patch"] },
+      } as ApplicationContext["gateway"]["snapshot"]["hello"];
+      return "Blocked rename";
+    });
+    await pane.handleHeaderSessionAction({ kind: "rename" }, session);
 
     expect(state.chatError).toBeTruthy();
     expect(patch).not.toHaveBeenCalled();
   });
 
-  it("cancels header rename when the Gateway source changes for the same session", () => {
+  it("drops a resolved rename dialog when the Gateway source changes for the same session", async () => {
     const patch = vi.fn(async () => ({}));
     const sessions = createSessionCapabilityFixture({ patch });
     const client = { request: vi.fn(async () => ({})) } as unknown as GatewayBrowserClient;
@@ -127,18 +131,18 @@ describe("chat pane session access", () => {
       updatedAt: 0,
     } satisfies GatewaySessionRow;
 
-    pane.beginHeaderRename(session);
-    pane.headerRenameValue = "Replacement Gateway title";
-    pane.applyGatewaySnapshot({
-      ...pane.context.gateway.snapshot,
-      client: { request: vi.fn(async () => ({})) } as unknown as GatewayBrowserClient,
-      phase: "stopped",
-      hello: null,
-      sessionKey: state.sessionKey,
+    vi.mocked(showInputDialog).mockImplementation(async () => {
+      pane.applyGatewaySnapshot({
+        ...pane.context.gateway.snapshot,
+        client: { request: vi.fn(async () => ({})) } as unknown as GatewayBrowserClient,
+        phase: "stopped",
+        hello: null,
+        sessionKey: state.sessionKey,
+      });
+      return "Replacement Gateway title";
     });
-    pane.commitHeaderRename();
+    await pane.handleHeaderSessionAction({ kind: "rename" }, session);
 
-    expect(pane.headerEditing).toBe(false);
     expect(patch).not.toHaveBeenCalled();
   });
 
@@ -217,7 +221,6 @@ describe("chat pane session access", () => {
         session,
         false,
         undefined,
-        false,
         null,
       ),
       container,
@@ -251,7 +254,6 @@ describe("chat pane session access", () => {
         session,
         false,
         undefined,
-        false,
         null,
       ),
       container,

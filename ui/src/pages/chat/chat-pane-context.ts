@@ -413,7 +413,6 @@ export abstract class ChatPaneContext extends ChatPaneLifecycle {
     }
     if (sourceChanged) {
       this.continueInTerminalDialog = null;
-      this.cancelHeaderRename();
       cancelChatScroll(state);
       releaseChatMediaResourceSubscriber(state.requestUpdate);
       if (wasConnected) {
@@ -618,10 +617,7 @@ export abstract class ChatPaneContext extends ChatPaneLifecycle {
       setQuestionPromptClient(this.questionPromptState, startupClient);
       refreshPendingQuestionsWithRetry(this.questionPromptState, startupClient, clientIsCurrent);
       this.headerWorktreePaths.clear();
-      this.headerBranches.clear();
-      this.headerPlatform = null;
       if (catalogRouteKey) {
-        void this.loadHeaderPlatform(startupClient, startupGeneration);
         void this.loadCatalogSession(catalogRouteKey, false);
         state.requestUpdate?.();
         return;

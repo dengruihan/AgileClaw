@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, it } from "vitest";
 import {
@@ -7,6 +6,7 @@ import {
   controlUiSessionUrl,
   createChatFlowE2eSuite,
   installMockGateway,
+  waitForRequests,
 } from "./chat-flow.test-support.ts";
 
 const suite = createChatFlowE2eSuite();
@@ -17,7 +17,7 @@ suite.define(() => {
       { label: "desktop", width: 800 },
       { label: "mobile", width: 760 },
     ] as const) {
-      it(`lays out and navigates the ${viewport.label} project-parent-child trail in ${colorScheme} mode`, async () => {
+      it(`keeps the ${viewport.label} header chrome aligned without identity crumbs in ${colorScheme} mode`, async () => {
         const context = await suite.newBrowserContext({
           colorScheme,
           locale: "en-US",
@@ -25,11 +25,14 @@ suite.define(() => {
           viewport: { height: 520, width: viewport.width },
         });
         const page = await context.newPage();
-        const favicon = await readFile(path.resolve(process.cwd(), "ui/public/favicon.svg"));
-        await page.route("**/__openclaw__/workspace-icon/**", async (route) => {
-          await route.fulfill({ body: favicon, contentType: "image/svg+xml", status: 200 });
+        const sessionRequests: string[] = [];
+        page.on("request", (request) => {
+          const url = request.url();
+          if (url.includes("/__openclaw__/workspace-icon/")) {
+            sessionRequests.push(`icon:${url}`);
+          }
         });
-        await installMockGateway(page, {
+        const gateway = await installMockGateway(page, {
           methodResponses: {
             "sessions.list": chatSessionListResponse([
               {
@@ -58,7 +61,17 @@ suite.define(() => {
             "openclaw-chat-pane.chat-pane-cache__pane--active .chat-pane__header",
           );
           await header.waitFor();
-          await header.locator(".workspace-icon").waitFor();
+
+          // Identity breadcrumbs are gone entirely: no project chip, session
+          // title, or parent trail may render, let alone fetch a workspace icon.
+          expect(
+            await page
+              .locator(
+                ".chat-pane__crumbs, .chat-pane__workspace-chip, .chat-pane__session-title, .chat-pane__parent-session",
+              )
+              .count(),
+          ).toBe(0);
+          expect(await page.locator("openclaw-workspace-icon").count()).toBe(0);
 
           const geometry = await header.evaluate((root) => {
             const main = root
@@ -75,78 +88,72 @@ suite.define(() => {
               const rect = node.getBoundingClientRect();
               return rect.top + rect.height / 2;
             };
-            const rect = (selector: string) => {
-              const node = root.querySelector(selector);
-              if (!node) {
-                throw new Error(`missing header element: ${selector}`);
-              }
-              return node.getBoundingClientRect().toJSON();
-            };
             return {
               nav: centerY(".chat-pane__nav-toggle svg"),
-              projectIcon: centerY(".workspace-icon"),
-              projectText: centerY(".chat-pane__workspace-chip span"),
               menu: centerY(".chat-header-session-menu__trigger svg"),
-              parentText: centerY(".chat-pane__parent-session-text"),
-              sessionText: centerY(".chat-pane__session-title-text"),
-              projectRow: rect(".chat-pane__project-row"),
-              sessionTrail: rect(".chat-pane__session-trail"),
-              separatorDisplays: [
-                ...root.querySelectorAll<HTMLElement>(".chat-pane__crumb-sep"),
-              ].map((node) => getComputedStyle(node).display),
               headerBottom: root.getBoundingClientRect().bottom,
               contentTop: main.getBoundingClientRect().top,
             };
           });
 
+          // The remaining chrome — drawer nav and the session menu — shares one
+          // horizontal axis, and the transcript starts below the header row.
           expect(
             Math.abs(geometry.menu - geometry.nav),
             JSON.stringify(geometry),
           ).toBeLessThanOrEqual(0.1);
           expect(geometry.contentTop).toBeGreaterThanOrEqual(geometry.headerBottom - 0.1);
-          if (viewport.label === "desktop") {
-            for (const center of [
-              geometry.projectIcon,
-              geometry.projectText,
-              geometry.parentText,
-              geometry.sessionText,
-            ]) {
-              // Text and artwork carry more visible weight below their geometric
-              // boxes than Lucide actions, so the identity trail needs a 1px
-              // optical lift to share the topbar's perceived horizontal axis.
-              expect(geometry.nav - center, JSON.stringify(geometry)).toBeCloseTo(1, 1);
-            }
-            expect(geometry.separatorDisplays).toEqual(["block", "block"]);
-          } else {
-            expect(geometry.projectRow.bottom - geometry.sessionTrail.top).toBeLessThanOrEqual(0.1);
-            expect(geometry.parentText).toBeCloseTo(geometry.sessionText, 1);
-            expect(geometry.separatorDisplays).toEqual(["none", "none"]);
+          if (captureUiProofEnabled) {
+            await page.screenshot({
+              path: path.join(
+                suite.artifactDir,
+                "chat-header-axis",
+                `${viewport.label}-${colorScheme}.png`,
+              ),
+            });
           }
-          expect(await header.locator(".chat-pane__crumb-sep").count()).toBe(2);
-          const parent = header.locator(".chat-pane__parent-session");
-          const nestedTrail = await header.evaluate((root) => {
-            const parentCrumb = root.querySelector<HTMLElement>(".chat-pane__parent-session")!;
-            const child = root.querySelector<HTMLElement>(".chat-pane__session-title")!;
-            const parentText = root.querySelector<HTMLElement>(".chat-pane__parent-session-text")!;
-            const childText = root.querySelector<HTMLElement>(".chat-pane__session-title-text")!;
-            const headerRect = root.getBoundingClientRect();
-            return {
-              childEllipses: childText.scrollWidth > childText.clientWidth,
-              headerWidth: headerRect.width,
-              parentEllipses: parentText.scrollWidth > parentText.clientWidth,
-              width: child.getBoundingClientRect().right - parentCrumb.getBoundingClientRect().left,
-            };
-          });
-          expect(nestedTrail.parentEllipses).toBe(true);
-          expect(nestedTrail.childEllipses).toBe(true);
-          expect(nestedTrail.width).toBeLessThanOrEqual(nestedTrail.headerWidth / 2 + 1);
-          expect((await parent.textContent())?.trim()).toBe(
-            "Release readiness and production rollout coordination",
-          );
-          await parent.click();
+
+          // Main operations stay reachable: the session menu opens, and the
+          // rename entry point now edits through a dialog instead of the
+          // removed inline title editor.
+          await header.locator(".chat-header-session-menu__trigger").click();
+          const menu = page.locator("openclaw-chat-header-session-menu wa-dropdown");
+          await menu.waitFor();
+          const renameItem = menu.locator('wa-dropdown-item[value="rename"]');
+          await renameItem.waitFor();
+          await renameItem.click();
+          const dialogInput = page.locator('openclaw-modal-dialog input[name="value"]');
+          await dialogInput.waitFor();
           await expect
-            .poll(() => header.locator(".chat-pane__session-title-text").textContent())
-            .toBe("Release readiness and production rollout coordination");
+            .poll(() => dialogInput.inputValue())
+            .toBe("Implement parent breadcrumb navigation and polish overflow behavior");
+          await dialogInput.fill("Renamed from the session menu");
+          await dialogInput.press("Enter");
+          const patch = await waitForRequests(gateway, "sessions.patch", 1, {
+            label: "Renamed from the session menu",
+          });
+          expect(patch).toHaveLength(1);
+
+          // The crumb removal also retired its data loading: no workspace-icon
+          // asset, platform probe, or live branch lookup may be requested.
+          expect(sessionRequests).toEqual([]);
+          expect(await gateway.getRequests("system.info")).toEqual([]);
+          expect(await gateway.getRequests("worktrees.branches")).toEqual([]);
+
+          // Split panes inherit the same header: opening one must not bring
+          // identity crumbs back in any pane.
+          const splitButton = header.locator(".chat-open-split-view");
+          if (await splitButton.count()) {
+            await splitButton.click();
+            await page.locator(".chat-split-view__cell").nth(1).waitFor();
+            expect(
+              await page
+                .locator(
+                  ".chat-pane__crumbs, .chat-pane__session-title, .chat-pane__workspace-chip, .chat-pane__parent-session",
+                )
+                .count(),
+            ).toBe(0);
+          }
         } finally {
           await suite.closeBrowserContext(context);
         }
@@ -232,66 +239,4 @@ suite.define(() => {
       }
     });
   }
-
-  it("repaints a mounted project icon after the Gateway advertises a retry", async () => {
-    const context = await suite.newBrowserContext({
-      locale: "en-US",
-      serviceWorkers: "block",
-      viewport: { height: 520, width: 800 },
-    });
-    const page = await context.newPage();
-    const favicon = await readFile(path.resolve(process.cwd(), "ui/public/favicon.svg"));
-    let requests = 0;
-    await page.route("**/__openclaw__/workspace-icon/**", async (route) => {
-      requests += 1;
-      if (requests === 1) {
-        await route.fulfill({
-          body: "workspace icon snapshot is not ready",
-          headers: { "retry-after": "1" },
-          status: 503,
-        });
-        return;
-      }
-      await route.fulfill({ body: favicon, contentType: "image/svg+xml", status: 200 });
-    });
-    await installMockGateway(page, {
-      methodResponses: {
-        "sessions.list": chatSessionListResponse([
-          {
-            key: "agent:main:session-a",
-            kind: "direct",
-            label: "Workspace icon recovery",
-            spawnedCwd: "/repo/openclaw",
-            updatedAt: 1,
-          },
-        ]),
-      },
-      sessionKey: "agent:main:session-a",
-    });
-
-    try {
-      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:session-a"));
-      const icon = page.locator(".chat-pane__header openclaw-workspace-icon").first();
-      await icon.waitFor();
-      await icon.locator("svg").waitFor();
-      await icon.evaluate((element) => element.setAttribute("data-recovery-host", "mounted"));
-      if (captureUiProofEnabled) {
-        await page.screenshot({
-          path: path.join(suite.artifactDir, "workspace-icon-recovery", "fallback.png"),
-        });
-      }
-
-      await icon.locator(".workspace-icon").waitFor({ timeout: 10_000 });
-
-      expect(requests).toBe(2);
-      expect(await icon.getAttribute("data-recovery-host")).toBe("mounted");
-      if (captureUiProofEnabled) {
-        await page.screenshot({
-          path: path.join(suite.artifactDir, "workspace-icon-recovery", "recovered.png"),
-        });
-      }
-    } finally {
-      await suite.closeBrowserContext(context);
-    }
-  });
 });

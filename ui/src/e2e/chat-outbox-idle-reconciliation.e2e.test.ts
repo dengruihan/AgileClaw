@@ -58,10 +58,13 @@ suite.define(() => {
     try {
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, firstKey));
       await page.locator(`.sidebar-recent-session[data-session-key="${secondKey}"]`).waitFor();
-      await page
-        .locator(".chat-pane-cache__pane--visible .chat-pane__session-title")
-        .getByText("Instant A")
-        .waitFor();
+      await expect
+        .poll(() =>
+          page
+            .locator(".chat-pane-cache__pane--visible .chat-pane__header")
+            .getAttribute("aria-label"),
+        )
+        .toContain("Instant A");
       await page.waitForTimeout(500);
       const initialListCount = (await gateway.getRequests("sessions.list", rosterMatch)).length;
       const initialMetadataCount = (await gateway.getRequests("chat.metadata")).length;
@@ -72,10 +75,13 @@ suite.define(() => {
           `.sidebar-recent-session[data-session-key="${secondKey}"] a.sidebar-recent-session__link`,
         )
         .click();
-      await page
-        .locator(".chat-pane-cache__pane--visible .chat-pane__session-title")
-        .getByText("Instant B")
-        .waitFor();
+      await expect
+        .poll(() =>
+          page
+            .locator(".chat-pane-cache__pane--visible .chat-pane__header")
+            .getAttribute("aria-label"),
+        )
+        .toContain("Instant B");
       const emptyOutboxListRequests = (
         await gateway.getRequests("sessions.list", rosterMatch)
       ).slice(initialListCount);
@@ -152,10 +158,13 @@ suite.define(() => {
           `.sidebar-recent-session[data-session-key="${firstKey}"] a.sidebar-recent-session__link`,
         )
         .click();
-      await page
-        .locator(".chat-pane-cache__pane--visible .chat-pane__session-title")
-        .getByText("Instant A")
-        .waitFor();
+      await expect
+        .poll(() =>
+          page
+            .locator(".chat-pane-cache__pane--visible .chat-pane__header")
+            .getAttribute("aria-label"),
+        )
+        .toContain("Instant A");
       await expect
         .poll(async () => (await gateway.getRequests("sessions.list", rosterMatch)).length)
         .toBe(emptyOutboxListCount + 1);

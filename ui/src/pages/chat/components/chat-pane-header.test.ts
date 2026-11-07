@@ -8,6 +8,7 @@ import {
   type ShellNavDrawerToggleDetail,
 } from "../../../app/shell-nav-drawer-event.ts";
 import { resolveSessionWorkspace } from "../../../lib/sessions/workspace.ts";
+import { resolveChatPaneParentSession } from "../chat-pane-session-presentation.ts";
 import {
   activePlacementSession,
   createPaneHeaderWorkspaceFixture,
@@ -20,11 +21,7 @@ import {
   mountChatPaneHeader,
   type ChatPaneHeaderProps,
 } from "./chat-pane-header.test-support.ts";
-import {
-  canRevealSessionWorkspace,
-  renderChatPaneHeader,
-  resolveChatPaneParentSession,
-} from "./chat-pane-header.ts";
+import { renderChatPaneHeader } from "./chat-pane-header.ts";
 import { renderChatPanePlacement } from "./chat-pane-placement.ts";
 
 const containers: HTMLElement[] = [];
@@ -161,16 +158,6 @@ describe("chat pane header", () => {
     expect(container.querySelector('[data-action="terminal"]')).not.toBeNull();
   });
 
-  it("renders an editable title and workspace chip", () => {
-    const { container, props } = mountHeader();
-    const title = container.querySelector<HTMLButtonElement>(".chat-pane__session-title-button");
-    const chip = container.querySelector<HTMLButtonElement>(".chat-pane__workspace-chip");
-    expect(title?.textContent?.trim()).toBe("Session title");
-    expect(chip?.textContent?.trim()).toContain("openclaw");
-    title?.click();
-    expect(props.onBeginRename).toHaveBeenCalledOnce();
-  });
-
   it("renders a quiet cloud placement chip with move and stop actions", () => {
     const onPlacementMove = vi.fn();
     const onPlacementReclaim = vi.fn();
@@ -248,16 +235,20 @@ describe("chat pane header", () => {
     expect(container.querySelector(".chat-pane__placement-chip")).toBeNull();
   });
 
-  it("places placement and presence after the identity trail", () => {
+  it("renders no identity crumbs and keeps placement and presence in the leading row", () => {
     const { container } = mountHeader({
       placementControl: html`<span data-slot="placement"></span>`,
       presence: html`<span data-slot="presence"></span>`,
     });
-    const crumbs = container.querySelector(".chat-pane__crumbs");
+    expect(container.querySelector(".chat-pane__crumbs")).toBeNull();
+    expect(container.querySelector(".chat-pane__session-title")).toBeNull();
+    expect(container.querySelector(".chat-pane__workspace-chip")).toBeNull();
     expect(
       [...container.querySelectorAll("[data-slot]")].map((slot) => slot.getAttribute("data-slot")),
     ).toEqual(["placement", "presence"]);
-    expect(crumbs?.nextElementSibling?.getAttribute("data-slot")).toBe("placement");
+    expect(container.querySelector('[data-slot="placement"]')?.parentElement?.className).toBe(
+      "chat-pane__header-leading",
+    );
   });
 
   it("places the device scope chip beside placement in the header-leading slot", () => {
@@ -313,44 +304,6 @@ describe("chat pane header", () => {
     expect(container.querySelector("openclaw-session-owner-chip")).toBeNull();
     expect(container.querySelector('[data-slot="sharing"]')?.parentElement?.className).toBe(
       "chat-pane__header-leading",
-    );
-  });
-
-  it("places a clickable parent between the project and child session", () => {
-    const parentSession = { key: "agent:main:parent", title: "Release prep" };
-    const { container, props } = mountHeader({ parentSession });
-    const crumbs = container.querySelector(".chat-pane__crumbs");
-
-    expect(
-      [...(crumbs?.querySelector(".chat-pane__session-trail")?.children ?? [])].map(
-        (child) => child.className,
-      ),
-    ).toEqual([
-      "chat-pane__crumb-sep",
-      "chat-pane__parent-session",
-      "chat-pane__crumb-sep",
-      "chat-pane__session-title chat-pane__session-title-button",
-    ]);
-    const parent = crumbs?.querySelector<HTMLButtonElement>(".chat-pane__parent-session");
-    expect(parent?.textContent?.trim()).toBe("Release prep");
-    parent?.click();
-    expect(props.onOpenParentSession).toHaveBeenCalledExactlyOnceWith("agent:main:parent");
-  });
-
-  it("drops the separator when the session has no project segment", () => {
-    const { container } = mountHeader({ workspaceLabel: null, workspaceRoot: null });
-    expect(container.querySelector(".chat-pane__crumb-sep")).toBeNull();
-    const crumbs = container.querySelector(".chat-pane__crumbs");
-    expect(crumbs?.firstElementChild?.className).toBe("chat-pane__session-trail");
-    expect(crumbs?.querySelector(".chat-pane__session-title")).not.toBeNull();
-  });
-
-  it("keeps the rename input inside the trail so the project stays visible", () => {
-    const { container } = mountHeader({ editing: true, renameValue: "Renaming" });
-    const crumbs = container.querySelector(".chat-pane__crumbs");
-    expect(crumbs?.querySelector(".chat-pane__workspace-chip")).not.toBeNull();
-    expect(crumbs?.querySelector<HTMLInputElement>(".chat-pane__session-title-input")?.value).toBe(
-      "Renaming",
     );
   });
 
@@ -584,106 +537,25 @@ describe("chat pane header", () => {
     expect(chip?.getAttribute("title")).toBe("Created by Ada");
   });
 
-  it.each([
-    ["Enter", false, 0, "commit"],
-    ["Escape", false, 0, "cancel"],
-    ["Enter", true, 0, null],
-    ["Escape", true, 0, null],
-    ["Enter", false, 229, null],
-    ["Escape", false, 229, null],
-  ] as const)(
-    "routes rename %s with isComposing=%s and keyCode=%i",
-    (key, isComposing, keyCode, action) => {
-      const { container, props } = mountHeader({ editing: true, renameValue: "研究" });
-      const input = container.querySelector<HTMLInputElement>(".chat-pane__session-title-input");
-      expect(input).toBeInstanceOf(HTMLInputElement);
-      const event = new KeyboardEvent("keydown", {
-        bubbles: true,
-        cancelable: true,
-        key,
-        isComposing,
-        keyCode,
-      });
-      input?.dispatchEvent(event);
-
-      expect(event.defaultPrevented).toBe(action !== null);
-      expect(props.onCommitRename).toHaveBeenCalledTimes(action === "commit" ? 1 : 0);
-      expect(props.onCancelRename).toHaveBeenCalledTimes(action === "cancel" ? 1 : 0);
-    },
-  );
-
-  it.each(["keyup", "timeout"])(
-    "keeps a Safari composition-confirm Enter from committing a session rename until %s",
-    (release) => {
-      const { container, props } = mountHeader({ editing: true, renameValue: "日本語" });
-      const input = container.querySelector<HTMLInputElement>(".chat-pane__session-title-input")!;
-      input.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
-      const end = new CompositionEvent("compositionend", { bubbles: true, data: "日本語" });
-      input.dispatchEvent(end);
-      for (const offset of [1, 100]) {
-        const enter = new KeyboardEvent("keydown", {
-          key: "Enter",
-          keyCode: 13,
-          bubbles: true,
-          cancelable: true,
-        });
-        Object.defineProperty(enter, "timeStamp", {
-          value: end.timeStamp + (release === "timeout" ? offset : 1),
-        });
-        if (offset === 100 && release === "keyup") {
-          input.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter" }));
-        }
-        input.dispatchEvent(enter);
-        expect(enter.defaultPrevented).toBe(offset === 100);
-        expect(props.onCommitRename).toHaveBeenCalledTimes(offset === 100 ? 1 : 0);
-        expect(props.onCancelRename).not.toHaveBeenCalled();
-        expect(input.value).toBe("日本語");
-      }
-    },
-  );
-
-  it("keeps catalog sessions static and without a workspace chip", () => {
+  it("keeps catalog panel shortcuts usable without session chrome", () => {
     const { container } = mountHeader({
       catalog: true,
       session: undefined,
       panelActions: html`<span data-action="terminal"></span>`,
     });
-    expect(container.querySelector(".chat-pane__session-title-button")).toBeNull();
-    expect(container.querySelector(".chat-pane__session-title")?.textContent).toContain(
-      "Session title",
-    );
-    expect(container.querySelector(".chat-pane__workspace-chip")).toBeNull();
+    expect(container.querySelector(".chat-pane__crumbs")).toBeNull();
     expect(container.querySelector('[data-action="terminal"]')).not.toBeNull();
   });
 
-  it("keeps read-only gateway session titles static", () => {
-    const { container } = mountHeader({
-      renameDisabledReason: "Operator write access is required.",
-    });
-    expect(container.querySelector(".chat-pane__session-title-button")).toBeNull();
-    expect(container.querySelector(".chat-pane__session-title")?.textContent).toContain(
-      "Session title",
-    );
-    expect(container.querySelector(".chat-pane__session-title")?.getAttribute("title")).toBe(
-      "Operator write access is required.",
-    );
-  });
-
-  it("shows copied feedback on the workspace chip", () => {
-    const { container } = mountHeader({ copiedAction: "copy-path" });
-    expect(container.querySelector(".chat-pane__workspace-chip")?.textContent).toContain("Copied");
-  });
-
-  it("shows cloud placement and hides reveal when disabled", () => {
+  it("shows cloud placement without workspace reveal actions", () => {
     const session = row({ placement: { state: "active" } as GatewaySessionRow["placement"] });
     const { container } = mountHeader({
       session,
       placementControl: renderChatPanePlacement({ session }),
-      canReveal: false,
     });
     expect(container.querySelector(".chat-pane__placement-chip")).not.toBeNull();
     expect(container.querySelector('wa-dropdown-item[value="reveal"]')).toBeNull();
-    expect(container.querySelector('wa-dropdown-item[value="copy-path"]')).not.toBeNull();
+    expect(container.querySelector('wa-dropdown-item[value="copy-path"]')).toBeNull();
   });
 
   it("shows an incognito indicator for in-memory threads", () => {
@@ -847,40 +719,5 @@ describe("chat pane workspace resolution", () => {
       root: "/src/openclaw",
       label: "openclaw",
     });
-  });
-
-  it("disables reveal for exec nodes, remote placement, and missing advertisement", () => {
-    expect(
-      canRevealSessionWorkspace({
-        session: row({ execNode: "build-mac", execCwd: "/remote/build" }),
-        workspaceRoot: "/remote/build",
-        methodAdvertised: true,
-        hasAdminAccess: true,
-      }),
-    ).toBe(false);
-    expect(
-      canRevealSessionWorkspace({
-        session: row({ placement: { state: "requested" } as GatewaySessionRow["placement"] }),
-        workspaceRoot: "/cloud/work",
-        methodAdvertised: true,
-        hasAdminAccess: true,
-      }),
-    ).toBe(false);
-    expect(
-      canRevealSessionWorkspace({
-        session: row(),
-        workspaceRoot: "/src/openclaw",
-        methodAdvertised: false,
-        hasAdminAccess: true,
-      }),
-    ).toBe(false);
-    expect(
-      canRevealSessionWorkspace({
-        session: row(),
-        workspaceRoot: "/src/openclaw",
-        methodAdvertised: true,
-        hasAdminAccess: false,
-      }),
-    ).toBe(false);
   });
 });

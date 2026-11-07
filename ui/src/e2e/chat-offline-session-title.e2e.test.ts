@@ -56,13 +56,15 @@ suite.define(() => {
           },
         });
         await page.goto(controlUiSessionUrl(suite.server.baseUrl, row.key));
-        const headings = page.locator(
-          ".chat-pane-cache__pane--visible .chat-pane__session-title-text",
-        );
-        const heading = headings.first();
+        const headers = page.locator(".chat-pane-cache__pane--visible .chat-pane__header");
+        const heading = headers.first();
+        const headerLabels = () =>
+          headers.evaluateAll((nodes) =>
+            nodes.map((node) => (node.getAttribute("aria-label") ?? "").trim()),
+          );
         const names = split ? [name, sibling.label] : [name];
-        await expect.poll(() => heading.textContent()).toBe(name);
-        await expect.poll(() => headings.allTextContents()).toEqual(names);
+        await expect.poll(() => heading.getAttribute("aria-label")).toBe(name);
+        await expect.poll(() => headerLabels()).toEqual(names);
         await expect.poll(() => page.title()).toBe(`${name} — AgileClaw`);
         await page.getByText(transcript, { exact: true }).first().waitFor({ state: "visible" });
         const route = new URL(page.url()).pathname;
@@ -74,16 +76,16 @@ suite.define(() => {
         await page.locator(".gateway-status__label", { hasText: "Reconnecting…" }).waitFor();
         await page.screenshot({ path: `${suite.artifactDir}/offline.png` });
         const offlineTitle = await page.title();
-        const offlineHeadings = await headings.allTextContents();
+        const offlineHeadings = await headerLabels();
         expect(new URL(page.url()).pathname).toBe(route);
         expect(await page.getByText(transcript, { exact: true }).first().isVisible()).toBe(true);
 
         await gateway.setOnline(true);
         await expect.poll(() => page.title()).toBe(`${name} — AgileClaw`);
-        await expect.poll(() => heading.textContent()).toBe(name);
+        await expect.poll(() => heading.getAttribute("aria-label")).toBe(name);
         expect(new URL(page.url()).pathname).toBe(route);
         expect(await page.getByText(transcript, { exact: true }).first().isVisible()).toBe(true);
-        await expect.poll(() => headings.allTextContents()).toEqual(names);
+        await expect.poll(() => headerLabels()).toEqual(names);
         await page.screenshot({ path: `${suite.artifactDir}/reconnected.png` });
         expect.soft(offlineTitle).toBe(`(Disconnected) ${name} — AgileClaw`);
         expect.soft(offlineHeadings).toEqual(names);

@@ -301,13 +301,18 @@ suite.define(() => {
     await page.evaluate(() => document.fonts.ready);
     await waitForLayoutSettled(
       page,
-      ".macos-titlebar-controls, .chat-pane-cache__pane--visible .chat-pane__crumbs",
+      ".macos-titlebar-controls, .chat-pane-cache__pane--visible .chat-pane__header",
     );
     const toolbarBox = await toolbar.boundingBox();
-    const titleBox = await page
-      .locator(".chat-pane-cache__pane--visible .chat-pane__crumbs:visible")
+    // The header's content start (past its left padding) is where the removed
+    // identity trail used to begin; the collapsed toolbar must still clear it.
+    const titleX = await page
+      .locator(".chat-pane-cache__pane--visible .chat-pane__header")
       .first()
-      .boundingBox();
+      .evaluate((header) => {
+        const rect = header.getBoundingClientRect();
+        return rect.x + Number.parseFloat(getComputedStyle(header).paddingLeft || "0");
+      });
     const toolbarRight = await toolbar.evaluate((element) =>
       Math.max(
         ...[element, ...element.querySelectorAll("*")].map(
@@ -316,8 +321,7 @@ suite.define(() => {
       ),
     );
     expect(toolbarBox).not.toBeNull();
-    expect(titleBox).not.toBeNull();
-    expect(titleBox!.x - toolbarRight).toBeGreaterThanOrEqual(8);
+    expect(titleX - toolbarRight).toBeGreaterThanOrEqual(8);
     const topLeftControls = page.locator(".macos-titlebar-controls button:visible");
     const centerlines = await topLeftControls.evaluateAll((buttons) =>
       buttons.map((button) => {

@@ -365,54 +365,6 @@ suite.define(() => {
     },
   );
 
-  it.each([
-    { action: "copy-path", label: "Copy path", value: "/workspace" },
-    { action: "copy-branch", label: "Copy branch name", value: "feature/clipboard" },
-  ] as const)(
-    "shows a visible error when the workspace header $action clipboard action fails",
-    async ({ action, label, value }) => {
-      const context = await suite.newBrowserContext(createControlUiE2eContextOptions());
-      const page = await context.newPage();
-      await installDeniedClipboard(page);
-      const gateway = await installMockGateway(page, {
-        workspace: "/workspace",
-        workspaceGit: true,
-        methodResponses: {
-          "worktrees.branches": { headBranch: "feature/clipboard" },
-        },
-      });
-
-      try {
-        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
-        await page.locator(".chat-pane__workspace-chip").click();
-        await gateway.waitForRequest("worktrees.branches");
-        await page.getByText(label, { exact: true }).click();
-
-        const alert = page.getByRole("alert").filter({ hasText: "Copy failed" });
-        await alert.waitFor({ state: "visible", timeout: 10_000 });
-        expect(await readClipboardFailureProof(page)).toEqual({
-          asyncAttempts: 1,
-          legacyAttempts: 1,
-          value,
-        });
-        expect(await gateway.getRequests("chat.send")).toHaveLength(0);
-
-        const artifactDirParent = process.env.OPENCLAW_UI_E2E_ARTIFACT_DIR?.trim();
-        const artifactDir = artifactDirParent
-          ? createControlUiE2eArtifactDir("chat-flow.clipboard", artifactDirParent)
-          : undefined;
-        if (artifactDir) {
-          await page.screenshot({
-            fullPage: true,
-            path: path.join(artifactDir, `clipboard-${action}-failure.png`),
-          });
-        }
-      } finally {
-        await suite.closeBrowserContext(context);
-      }
-    },
-  );
-
   it("shows and resets a visible accessible failure when assistant code cannot be copied", async () => {
     const context = await suite.newBrowserContext(createControlUiE2eContextOptions());
     const page = await context.newPage();

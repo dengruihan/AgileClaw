@@ -705,7 +705,6 @@ export class ChatPane extends ChatPaneLayoutRender {
       observerRunId,
       catalog,
       agentWorkspace: selectedAgent?.workspace,
-      workspaceGit: selectedAgent?.workspaceGit === true,
       openPanelSlot,
       closePanelSlot,
     })}${this.providerReview.dialog()}`;

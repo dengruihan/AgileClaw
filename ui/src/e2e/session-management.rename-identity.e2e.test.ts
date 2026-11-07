@@ -76,7 +76,11 @@ suite.define(() => {
         await row.waitFor({ state: "visible" });
         const openRename = async () => {
           if (surface === "header") {
-            await page.locator(".chat-pane__session-title-button").click();
+            const trigger = page.locator(".chat-header-session-menu__trigger");
+            await trigger.click();
+            await page
+              .locator('openclaw-chat-header-session-menu wa-dropdown-item[value="rename"]')
+              .click();
           } else {
             await row.hover();
             await row.click({ button: "right" });
@@ -84,18 +88,10 @@ suite.define(() => {
           }
         };
         await openRename();
-        const input = page.locator(
-          surface === "header"
-            ? ".chat-pane__session-title-input"
-            : 'openclaw-modal-dialog[label="Rename session"] input',
-        );
+        const input = page.locator('openclaw-modal-dialog[label="Rename session"] input');
         await expect.poll(() => input.inputValue()).toBe(original.label);
         await input.fill("Stale rename");
-        await capture(
-          "editing",
-          surface === "header" ? input : page.locator("openclaw-modal-dialog dialog"),
-          [input],
-        );
+        await capture("editing", page.locator("openclaw-modal-dialog dialog"), [input]);
 
         await gateway.setSessionsListResponse(sessionsListResponse([replacement]));
         await gateway.emitGatewayEvent("sessions.changed", {

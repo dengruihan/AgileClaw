@@ -609,9 +609,9 @@ suite.define(() => {
           reason: "project",
           session: worktreeSession,
         });
-        await pollLocatorText(page.locator(".chat-pane__session-title-text")).toBe(
-          worktreeSession.displayName,
-        );
+        await expect
+          .poll(() => page.locator(".chat-pane__header").first().getAttribute("aria-label"))
+          .toBe(worktreeSession.displayName);
         await captureUiProof(suite, page, "initial-image-worktree-metadata-loading.png");
         expect(await userImage.getAttribute("data-initial-image-node")).toBe("true");
         expect(await userImage.getAttribute("src")).toBe(initialImageSrc);

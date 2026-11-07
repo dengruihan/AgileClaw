@@ -559,9 +559,13 @@ suite.define(() => {
       await page
         .locator(".sidebar-recent-session--active", { hasText: "Pretty Beam route" })
         .waitFor();
-      await page
-        .locator(".chat-pane__session-title-text", { hasText: "Pretty Beam route" })
-        .waitFor();
+      await expect
+        .poll(() =>
+          page
+            .locator(".chat-pane-cache__pane--visible .chat-pane__header")
+            .getAttribute("aria-label"),
+        )
+        .toContain("Pretty Beam route");
       expect(
         await page
           .locator("openclaw-chat-pane.chat-pane-cache__pane--visible textarea")

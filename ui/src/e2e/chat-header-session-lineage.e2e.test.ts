@@ -59,8 +59,9 @@ suite.define(() => {
     try {
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, sessionKey));
       const header = page.locator(".chat-pane-cache__pane--visible .chat-pane__header");
-      await header
-        .locator(".chat-pane__parent-session")
+      await header.waitFor();
+      await page
+        .locator(`.sidebar-recent-session[data-session-key="${homeKey}"]`)
         .getByText("Home parent", { exact: true })
         .waitFor();
       const actions = header.getByRole("button", { name: "Actions for Header lineage" });
@@ -109,8 +110,8 @@ suite.define(() => {
       expect(new URL(page.url()).pathname).toBe(
         new URL(controlUiSessionUrl(suite.server.baseUrl, sessionKey)).pathname,
       );
-      await header
-        .locator(".chat-pane__parent-session")
+      await page
+        .locator(`.sidebar-recent-session[data-session-key="${homeKey}"]`)
         .getByText("Home parent", { exact: true })
         .waitFor();
       await page.getByText("Retained conversation.", { exact: true }).waitFor();
