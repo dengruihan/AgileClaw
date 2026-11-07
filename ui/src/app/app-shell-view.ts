@@ -6,7 +6,6 @@ import { APP_ROUTE_IDS } from "../app-routes.ts";
 import { renderGatewayStatus } from "../components/gateway-status.ts";
 import { icons } from "../components/icons.ts";
 import { renderConnectingSplash } from "../components/loading-skeleton.ts";
-import { renderNewSessionLink } from "../components/new-session-link.ts";
 import { renderLazySettingsSidebar } from "../components/settings-sidebar-lazy.ts";
 import type { ThemeModeChangeDetail } from "../components/theme-mode-toggle.ts";
 import { t } from "../i18n/index.ts";
@@ -39,17 +38,12 @@ import {
   isOptionalElementDefined,
   MACOS_TITLEBAR_ELEMENT,
   type OptionalCustomElement,
-  SIDEBAR_ATTENTION_ELEMENT,
 } from "./lazy-custom-element.ts";
 import { isMobileNavLayout, shouldMergeChatChrome } from "./mobile-nav-layout.ts";
 import type { NativeHistoryState } from "./native-web-chrome.ts";
 import { isNativeEmbedHost, nativeEmbedHost, isNativeWebChromeHost } from "./native-web-chrome.ts";
 import { beginNativeWindowDragFromTopInset } from "./native-window-drag.ts";
-import {
-  floatingSidebarAttentionVisible,
-  navigationSurfaceIsHidden,
-  renderFloatingUpdateCard,
-} from "./navigation-surface.ts";
+import { navigationSurfaceIsHidden, renderFloatingUpdateCard } from "./navigation-surface.ts";
 import { readGatewayOperatorAccess } from "./operator-access.ts";
 import { NAV_WIDTH_MAX, NAV_WIDTH_MIN, normalizeCatalogOpenTarget } from "./settings.ts";
 import type { ShellLayoutController } from "./shell-layout-traits.ts";
@@ -188,16 +182,6 @@ export function renderApplicationShell(host: ShellViewHost) {
     navDrawerOpen,
     mobileNavLayout,
   });
-  const floatingAttentionVisible =
-    !nativeEmbed &&
-    floatingSidebarAttentionVisible({
-      navigationSurfaceHidden,
-      mobileNavLayout,
-      compact: mergedChatChrome,
-    });
-  if (!nativeEmbed && floatingAttentionVisible) {
-    host.lazyCustomElements.preload(SIDEBAR_ATTENTION_ELEMENT, { reportError: true });
-  }
   const shellWidth = Math.max(globalThis.innerWidth || 0, NAV_WIDTH_MAX);
   // A tablet splits its width between the rail and a narrow content column, so
   // the rail gets a floor wide enough for session titles. The resizer reads the
@@ -274,14 +258,10 @@ export function renderApplicationShell(host: ShellViewHost) {
       ? connectionStatus
       : null;
   const floatingUpdateCard = {
-    navigationSurfaceHidden,
-    mobileNavLayout,
-    compact: mergedChatChrome && !controlUiRefreshRequired,
     statusBanner: overlaySnapshot.updateStatusBanner,
     updateRun: overlaySnapshot.updateRun,
     refreshRequired: controlUiRefreshRequired,
     onRefresh: host.refreshControlUi,
-    onNavigate: host.navigate,
   };
   const navigationContent =
     settingsTakeover || embedNavigation
@@ -359,8 +339,8 @@ export function renderApplicationShell(host: ShellViewHost) {
       } ${mobileNavLayout ? "shell--mobile-nav" : ""} ${
         mergedChatChrome ? "shell--merged-chat-chrome" : ""
       } ${navDrawerOpen ? "shell--nav-drawer-open" : ""} ${nativeEmbed ? "shell--embed" : ""} ${embedSettings ? "shell--embed-settings" : ""} ${settingsTakeover ? "shell--settings" : ""} ${shellConnectionStatus ? "shell--connection-status" : ""} ${
-        floatingSidebarAttentionVisible(floatingUpdateCard) ? "shell--floating-attention" : ""
-      } ${host.navResizing ? "shell--nav-resizing" : ""}"
+        host.navResizing ? "shell--nav-resizing" : ""
+      }"
       style=${`--shell-nav-expanded-width: ${navWidth}px`}
       @theme-change=${(event: CustomEvent<ThemeModeChangeDetail>) => host.handleThemeChange(event)}
     >
@@ -416,15 +396,6 @@ export function renderApplicationShell(host: ShellViewHost) {
                     ${icons.panelLeftOpen}
                   </button>
                 </openclaw-tooltip>
-                ${renderNewSessionLink({
-                  basePath: context.basePath,
-                  agentId: selectedAgentId,
-                  className: "shell-chrome-controls__button shell-chrome-controls__new-thread",
-                  label: t("chat.runControls.newSession"),
-                  showShortcut: true,
-                  disabledReason: newSessionAccess.allowed ? undefined : newSessionAccess.reason,
-                  onOpen: openNewSession,
-                })}
               </div>
             `
           : nothing

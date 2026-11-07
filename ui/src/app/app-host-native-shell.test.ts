@@ -636,58 +636,33 @@ describe("AgileClaw native shell", () => {
 });
 
 describe("AgileClaw shell update affordance", () => {
-  it("renders floating attention while keeping update actions in navigation", async () => {
+  it("floats only the stale-client refresh card, never a floating Inbox", async () => {
     const container = document.createElement("div");
     document.body.append(container);
-    const shared = {
-      mobileNavLayout: false,
-      refreshRequired: false,
-      onRefresh: vi.fn(),
-    };
-    const collapsed = navigationSurfaceIsHidden({
-      navCollapsed: true,
-      navDrawerOpen: false,
-      mobileNavLayout: false,
-    });
-    render(renderFloatingUpdateCard({ ...shared, navigationSurfaceHidden: collapsed }), container);
-    expect(
-      container.querySelector("openclaw-sidebar-attention.sidebar-attention--floating"),
-    ).not.toBeNull();
-    expect(container.querySelector("openclaw-sidebar-update-card")).toBeNull();
+    try {
+      const collapsed = navigationSurfaceIsHidden({
+        navCollapsed: true,
+        navDrawerOpen: false,
+        mobileNavLayout: false,
+      });
+      expect(collapsed).toBe(true);
 
-    render(
-      renderFloatingUpdateCard({
-        ...shared,
-        navigationSurfaceHidden: collapsed,
-        refreshRequired: true,
-      }),
-      container,
-    );
-    const refreshCard = container.querySelector<
-      HTMLElement & { onRefresh: () => void; refreshRequired: boolean }
-    >("openclaw-sidebar-update-card");
-    expect(refreshCard?.refreshRequired).toBe(true);
-    refreshCard?.onRefresh();
-    expect(shared.onRefresh).toHaveBeenCalledOnce();
+      render(renderFloatingUpdateCard({ refreshRequired: false, onRefresh: vi.fn() }), container);
+      expect(container.querySelector("openclaw-sidebar-attention")).toBeNull();
+      expect(container.querySelector("openclaw-sidebar-update-card")).toBeNull();
 
-    const visible = navigationSurfaceIsHidden({
-      navCollapsed: false,
-      navDrawerOpen: false,
-      mobileNavLayout: false,
-    });
-    render(
-      renderFloatingUpdateCard({
-        ...shared,
-        navigationSurfaceHidden: visible,
-        refreshRequired: true,
-      }),
-      container,
-    );
-    expect(container.querySelector("openclaw-sidebar-update-card")).not.toBeNull();
-    container.remove();
+      render(renderFloatingUpdateCard({ refreshRequired: true, onRefresh: vi.fn() }), container);
+      const refreshCard = container.querySelector<
+        HTMLElement & { onRefresh: () => void; refreshRequired: boolean }
+      >("openclaw-sidebar-update-card");
+      expect(refreshCard?.refreshRequired).toBe(true);
+      refreshCard?.onRefresh();
+    } finally {
+      container.remove();
+    }
   });
 
-  it("keeps attention in the closed mobile drawer while preserving stale-client refresh", async () => {
+  it("preserves the stale-client refresh card in the closed mobile drawer", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     try {
@@ -697,24 +672,14 @@ describe("AgileClaw shell update affordance", () => {
         mobileNavLayout: true,
       });
       expect(navigationSurfaceHidden).toBe(true);
-      const shared = {
-        navigationSurfaceHidden,
-        mobileNavLayout: true,
-        refreshRequired: false,
-        onRefresh: vi.fn(),
-      };
 
-      render(renderFloatingUpdateCard(shared), container);
-      expect(
-        container.querySelector("openclaw-sidebar-attention.sidebar-attention--floating"),
-      ).toBeNull();
-
-      render(renderFloatingUpdateCard({ ...shared, refreshRequired: true }), container);
+      render(renderFloatingUpdateCard({ refreshRequired: true, onRefresh: vi.fn() }), container);
       const refreshCard = container.querySelector<
         HTMLElement & { updateComplete: Promise<boolean> }
       >("openclaw-sidebar-update-card");
       await refreshCard?.updateComplete;
       expect(refreshCard?.querySelector(".sidebar-update-card")).not.toBeNull();
+      expect(container.querySelector("openclaw-sidebar-attention")).toBeNull();
     } finally {
       container.remove();
     }
