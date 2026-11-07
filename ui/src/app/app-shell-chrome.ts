@@ -1,4 +1,4 @@
-import { gatewayOriginScope } from "@openclaw/gateway-client/browser";
+import { gatewayCredentialScope } from "@openclaw/gateway-client/browser";
 import { asOptionalRecord } from "@openclaw/normalization-core/record-coerce";
 import { isSettingsTakeover } from "../app-navigation.ts";
 import { isSessionRouteId, routeIdFromPath, type RouteId } from "../app-route-paths.ts";
@@ -370,8 +370,9 @@ export class ShellChromeOwner {
 
   /**
    * Notification URLs name their owning Gateway in the fragment when that
-   * Gateway has a public origin. Another Gateway needs its own document
-   * bootstrap and credential scope, so it stays a worker navigation.
+   * Gateway has a public origin. The credential scope distinguishes logical
+   * Gateways (including query-routed tenants); another Gateway needs its own
+   * document bootstrap and credential scope, so it stays a worker navigation.
    */
   private notificationNavigationHash(url: URL, context: ApplicationContext): string | null {
     if (!url.hash) {
@@ -383,8 +384,8 @@ export class ShellChromeOwner {
       return url.hash;
     }
     if (
-      gatewayOriginScope(owningGatewayUrl) !==
-      gatewayOriginScope(context.gateway.connection.gatewayUrl)
+      gatewayCredentialScope(owningGatewayUrl) !==
+      gatewayCredentialScope(context.gateway.connection.gatewayUrl)
     ) {
       return null;
     }

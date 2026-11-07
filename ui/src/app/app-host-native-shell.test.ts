@@ -790,12 +790,36 @@ describe("AgileClaw notification navigation handshake", () => {
     expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({ handled: true });
   });
 
+  it("keeps a matching query-routed Gateway in app", () => {
+    const { controller } = installMessageChannelServiceWorker();
+    const navigate = vi.fn();
+    const owner = notificationShellChrome(navigate, {
+      gatewayUrl: "wss://gateway.example/openclaw?tenant=first",
+    });
+    const pathname = "/chat/main/dashboard/12345678-90ab-cdef-1234-567890abcdef";
+
+    const reply = dispatchServiceWorkerNavigation(
+      owner,
+      `${window.location.origin}${pathname}#gatewayUrl=wss%3A%2F%2Fgateway.example%2Fopenclaw%3Ftenant%3Dfirst`,
+      controller,
+    );
+
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("chat", { pathname });
+    expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({ handled: true });
+  });
+
   it.each([
     {
       name: "a different Gateway",
       url: (origin: string) =>
         `${origin}/chat/main/dashboard/12345678-90ab-cdef-1234-567890abcdef#gatewayUrl=wss%3A%2F%2Fother.example`,
       options: {},
+    },
+    {
+      name: "another query-routed tenant",
+      url: (origin: string) =>
+        `${origin}/chat/main/dashboard/12345678-90ab-cdef-1234-567890abcdef#gatewayUrl=wss%3A%2F%2Fgateway.example%2Fopenclaw%3Ftenant%3Dsecond`,
+      options: { gatewayUrl: "wss://gateway.example/openclaw?tenant=first" },
     },
     {
       name: "an approval document route",

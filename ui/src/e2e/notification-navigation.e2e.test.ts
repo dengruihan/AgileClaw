@@ -1,5 +1,5 @@
 import { GATEWAY_SERVER_CAPS } from "@openclaw/gateway-protocol";
-import type { Page } from "playwright";
+import type { BrowserContext, Page } from "playwright";
 import { expect, it } from "vitest";
 import {
   controlUiSessionPath,
@@ -21,6 +21,7 @@ const suite = createControlUiE2eSuite({
 const currentKey = "agent:main:notification-current";
 const targetKey = "agent:main:notification-target";
 const unreadMarker = 1_800_000_000_001;
+const otherGatewayUrl = "wss://other.example/openclaw?tenant=second";
 
 /**
  * The bundled E2E bundle is built outside production mode, so main.ts never
@@ -38,31 +39,34 @@ async function registerNotificationWorker(page: Page): Promise<void> {
   );
 }
 
-// Mirrors the exact message and port the service worker transfers on a
-// notification click; the real click cannot be synthesized in the browser.
-async function dispatchNotificationNavigation(page: Page, targetUrl: string) {
-  return await page.evaluate(async (url) => {
-    const controller = navigator.serviceWorker.controller;
-    if (!controller) {
-      throw new Error("Control UI is not controlled by its service worker");
+/**
+ * Dispatches the worker's real notificationclick listener. Playwright cannot
+ * click an OS notification, but evaluating in the service-worker scope drives
+ * the shipped handler, its handshake, and its document fallback for real.
+ */
+async function dispatchNotificationClick(
+  context: BrowserContext,
+  data: { url: string; explicitUrl?: boolean },
+): Promise<void> {
+  const worker =
+    context.serviceWorkers().find((candidate) => candidate.url().includes("/sw.js")) ??
+    (await context.waitForEvent("serviceworker"));
+  await worker.evaluate(async (notificationData) => {
+    let completion: Promise<unknown> | undefined;
+    const event = new Event("notificationclick") as Event & {
+      notification: { close(): void; data: unknown };
+      waitUntil(promise: Promise<unknown>): void;
+    };
+    event.notification = { close() {}, data: notificationData };
+    event.waitUntil = (promise) => {
+      completion = promise;
+    };
+    self.dispatchEvent(event);
+    if (!completion) {
+      throw new Error("notificationclick did not register waitUntil work");
     }
-    const channel = new MessageChannel();
-    const acknowledged = new Promise<unknown>((resolve) => {
-      channel.port2.addEventListener("message", (event) => resolve(event.data), { once: true });
-      channel.port2.start();
-    });
-    navigator.serviceWorker.dispatchEvent(
-      new MessageEvent("message", {
-        data: { type: "openclaw-notification-navigate", url },
-        ports: [channel.port1],
-        source: controller,
-      }),
-    );
-    const timeout = new Promise<undefined>((resolve) => {
-      setTimeout(() => resolve(undefined), 5_000);
-    });
-    return (await Promise.race([acknowledged, timeout])) ?? null;
-  }, targetUrl);
+    await completion;
+  }, data);
 }
 
 async function waitForVisibleSessionPane(page: Page, sessionKey: string): Promise<void> {
@@ -85,6 +89,14 @@ async function visibleSessionKeys(page: Page): Promise<string[]> {
   );
 }
 
+async function markDocument(page: Page): Promise<number> {
+  return await page.evaluate(() => {
+    (window as Window & { notificationDocumentMarker?: string }).notificationDocumentMarker =
+      "same-document";
+    return performance.timeOrigin;
+  });
+}
+
 async function installNotificationGateway(page: Page) {
   const unreadTarget = sessionRow(targetKey, "Notification target", 20, {
     icon: "📬",
@@ -105,16 +117,12 @@ async function installNotificationGateway(page: Page) {
 
 suite.define(() => {
   it("routes an unread notification target without rebuilding the document", async () => {
-    await suite.withPage({ viewport: { height: 900, width: 1280 } }, async ({ page }) => {
+    await suite.withPage({ viewport: { height: 900, width: 1280 } }, async ({ context, page }) => {
       const gateway = await installNotificationGateway(page);
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, currentKey));
       await waitForVisibleSessionPane(page, currentKey);
       await registerNotificationWorker(page);
-      await page.evaluate(() => {
-        (window as Window & { notificationDocumentMarker?: string }).notificationDocumentMarker =
-          "same-document";
-      });
-      const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+      const timeOrigin = await markDocument(page);
       const socketCount = await gateway.getSocketCount();
       const connectCount = (await gateway.getRequests("connect")).length;
       // Child-session lists are scoped to the visible pane; only the roster read
@@ -123,12 +131,11 @@ suite.define(() => {
       const rosterListCount = (await gateway.getRequests("sessions.list", rosterReadMatch)).length;
       const rosterSubscribeCount = (await gateway.getRequests("sessions.subscribe")).length;
 
-      const reply = await dispatchNotificationNavigation(
-        page,
-        controlUiSessionUrl(suite.server.baseUrl, targetKey),
-      );
+      await dispatchNotificationClick(context, {
+        explicitUrl: true,
+        url: controlUiSessionUrl(suite.server.baseUrl, targetKey),
+      });
 
-      expect(reply).toEqual({ handled: true });
       await page.waitForURL((url) => url.pathname === controlUiSessionPath(targetKey));
       await waitForVisibleSessionPane(page, targetKey);
 
@@ -161,7 +168,7 @@ suite.define(() => {
   });
 
   it("settles a retained session preview without rebuilding the document", async () => {
-    await suite.withPage({ viewport: { height: 900, width: 1280 } }, async ({ page }) => {
+    await suite.withPage({ viewport: { height: 900, width: 1280 } }, async ({ context, page }) => {
       const gateway = await installNotificationGateway(page);
       // Visit the target first so the chat page retains its pane in this document.
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, targetKey));
@@ -173,7 +180,7 @@ suite.define(() => {
       await navigateToControlUiSession(page, currentKey);
       await waitForVisibleSessionPane(page, currentKey);
       await registerNotificationWorker(page);
-      const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+      const timeOrigin = await markDocument(page);
       const socketCount = await gateway.getSocketCount();
 
       // The sidebar's navigation intent presents the retained target as a
@@ -189,12 +196,11 @@ suite.define(() => {
       await expect.poll(() => visibleSessionKeys(page)).toContain(targetKey);
       expect(new URL(page.url()).pathname).toBe(controlUiSessionPath(currentKey));
 
-      const reply = await dispatchNotificationNavigation(
-        page,
-        controlUiSessionUrl(suite.server.baseUrl, targetKey),
-      );
+      await dispatchNotificationClick(context, {
+        explicitUrl: true,
+        url: controlUiSessionUrl(suite.server.baseUrl, targetKey),
+      });
 
-      expect(reply).toEqual({ handled: true });
       expect(await page.evaluate(() => performance.timeOrigin)).toBe(timeOrigin);
       expect(await gateway.getSocketCount()).toBe(socketCount);
       await page.waitForURL((url) => url.pathname === controlUiSessionPath(targetKey));
@@ -203,33 +209,72 @@ suite.define(() => {
     });
   });
 
-  it.each([
-    {
-      name: "an approval document route",
-      target: (baseUrl: string) => `${baseUrl}approve/exec%3A1`,
-    },
-    {
-      name: "another Gateway's handoff",
-      target: (_baseUrl: string, targetUrl: string) =>
-        `${targetUrl}#gatewayUrl=wss%3A%2F%2Fother.example`,
-    },
-  ])("leaves $name to the service worker's document navigation", async ({ target }) => {
-    await suite.withPage({ viewport: { height: 900, width: 1280 } }, async ({ page }) => {
+  it("loads the approval document for an approval notification", async () => {
+    await suite.withPage({ viewport: { height: 900, width: 1280 } }, async ({ context, page }) => {
       await installNotificationGateway(page);
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, currentKey));
       await waitForVisibleSessionPane(page, currentKey);
       await registerNotificationWorker(page);
-      const documentUrl = page.url();
-      const targetUrl = target(
-        suite.server.baseUrl,
-        controlUiSessionUrl(suite.server.baseUrl, targetKey),
-      );
+      const timeOrigin = await markDocument(page);
+      const approvalPath = "/approve/exec%3A1";
 
-      const reply = await dispatchNotificationNavigation(page, targetUrl);
+      await dispatchNotificationClick(context, {
+        explicitUrl: true,
+        url: `${suite.server.baseUrl.replace(/\/$/u, "")}${approvalPath}`,
+      });
 
-      expect(reply).toEqual({ handled: false });
-      expect(page.url()).toBe(documentUrl);
+      // Shellless approvals need a fresh document; the worker fallback owns it.
+      await expect.poll(() => page.evaluate(() => performance.timeOrigin)).not.toBe(timeOrigin);
+      expect(new URL(page.url()).pathname).toBe(approvalPath);
+      expect(
+        await page.evaluate(
+          () =>
+            (window as Window & { notificationDocumentMarker?: string }).notificationDocumentMarker,
+        ),
+      ).toBeUndefined();
+    });
+  });
+
+  it("loads the owning Gateway document for a same-path cross-Gateway notification", async () => {
+    await suite.withPage({ viewport: { height: 900, width: 1280 } }, async ({ context, page }) => {
+      await installNotificationGateway(page);
+      const currentPath = controlUiSessionUrl(suite.server.baseUrl, currentKey);
+      await page.goto(currentPath);
       await waitForVisibleSessionPane(page, currentKey);
+      await registerNotificationWorker(page);
+      const timeOrigin = await markDocument(page);
+      const handoffUrl = new URL(page.url());
+      handoffUrl.hash = new URLSearchParams({ gatewayUrl: otherGatewayUrl }).toString();
+
+      await dispatchNotificationClick(context, { explicitUrl: true, url: handoffUrl.href });
+
+      // A fragment-only navigation never leaves the document; the fallback must
+      // force the owning-Gateway bootstrap instead of staying on this tenant.
+      await expect.poll(() => page.evaluate(() => performance.timeOrigin)).not.toBe(timeOrigin);
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const url = new URL(window.location.href);
+            return { hash: url.hash, search: url.search };
+          }),
+        )
+        .toEqual({ hash: "", search: "" });
+      const confirmation = page.locator("openclaw-gateway-url-confirmation");
+      await confirmation.waitFor();
+      expect(await confirmation.textContent()).toContain(otherGatewayUrl);
+      await page.locator(".gateway-switch__actions .btn.primary").click();
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const app = document.querySelector("openclaw-app") as HTMLElement & {
+              runtime?: {
+                context: { gateway: { connection: { gatewayUrl: string } } };
+              };
+            };
+            return app.runtime?.context.gateway.connection.gatewayUrl;
+          }),
+        )
+        .toBe(otherGatewayUrl);
     });
   });
 });

@@ -525,6 +525,127 @@ describe("Control UI service worker notification handshake", () => {
     );
     expect(worker.clients.openWindow).not.toHaveBeenCalled();
   });
+
+  it("moves an owning-Gateway handoff to the query so navigation reaches the document", async () => {
+    const worker = createNotificationServiceWorker(nestedScope, [`${nestedScope}chat?session=7`], {
+      appReply: "unhandled",
+    });
+
+    const close = await worker.dispatchNotificationClick({
+      url: "chat?session=42#gatewayUrl=wss%3A%2F%2Fother.example%2Fopenclaw%3Ftenant%3Dsecond",
+    });
+
+    expect(close).toHaveBeenCalledOnce();
+    // A same-path fragment-only navigation never leaves the document, so the
+    // fallback carries the owner in the bootstrap-owned query handoff instead.
+    expect(worker.windowClients[0]?.navigate).toHaveBeenCalledExactlyOnceWith(
+      `${nestedScope}chat?session=42&gatewayUrl=wss%3A%2F%2Fother.example%2Fopenclaw%3Ftenant%3Dsecond`,
+    );
+    expect(worker.clients.openWindow).not.toHaveBeenCalled();
+  });
+
+  it("keeps a handled same-Gateway handoff in app", async () => {
+    const worker = createNotificationServiceWorker(nestedScope, [`${nestedScope}chat?session=7`], {
+      appReply: "handled",
+    });
+
+    const close = await worker.dispatchNotificationClick({
+      url: "chat?session=42#gatewayUrl=wss%3A%2F%2Fgateway.example",
+    });
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(worker.windowClients[0]?.navigate).not.toHaveBeenCalled();
+    expect(worker.clients.openWindow).not.toHaveBeenCalled();
+  });
+
+  it("bounds a handled click when focus never settles and recovers by opening the target", async () => {
+    const worker = createNotificationServiceWorker(nestedScope, [`${nestedScope}chat?session=7`], {
+      appReply: "handled",
+      focus: "pending",
+      manualTimers: true,
+    });
+
+    const click = worker.dispatchNotificationClick({ url: "chat?session=42" });
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+    expect(worker.windowClients[0]?.navigate).not.toHaveBeenCalled();
+
+    worker.runNextTimer();
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+    worker.runNextTimer();
+    const close = await click;
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(worker.windowClients[0]?.focus).toHaveBeenCalledTimes(2);
+    expect(worker.windowClients[0]?.navigate).not.toHaveBeenCalled();
+    expect(worker.clients.openWindow).toHaveBeenCalledExactlyOnceWith(
+      `${nestedScope}chat?session=42`,
+    );
+  });
+
+  it("recovers a handled click whose focus rejects", async () => {
+    const worker = createNotificationServiceWorker(nestedScope, [`${nestedScope}chat?session=7`], {
+      appReply: "handled",
+      focus: "reject",
+    });
+
+    const close = await worker.dispatchNotificationClick({ url: "chat?session=42" });
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(worker.windowClients[0]?.focus).toHaveBeenCalledTimes(2);
+    expect(worker.windowClients[0]?.navigate).not.toHaveBeenCalled();
+    expect(worker.clients.openWindow).toHaveBeenCalledExactlyOnceWith(
+      `${nestedScope}chat?session=42`,
+    );
+  });
+
+  it("still navigates and recovers when focus rejects after a decline", async () => {
+    const worker = createNotificationServiceWorker(nestedScope, [`${nestedScope}chat?session=7`], {
+      appReply: "unhandled",
+      focus: "reject",
+    });
+
+    const close = await worker.dispatchNotificationClick({ url: "chat?session=42" });
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(worker.windowClients[0]?.navigate).toHaveBeenCalledExactlyOnceWith(
+      `${nestedScope}chat?session=42`,
+    );
+    expect(worker.windowClients[0]?.focus).toHaveBeenCalledTimes(2);
+    expect(worker.clients.openWindow).toHaveBeenCalledExactlyOnceWith(
+      `${nestedScope}chat?session=42`,
+    );
+  });
+
+  it("navigates without waiting for a pending focus", async () => {
+    const worker = createNotificationServiceWorker(nestedScope, [`${nestedScope}chat?session=7`], {
+      appReply: "unhandled",
+      focus: "pending",
+      manualTimers: true,
+    });
+
+    const click = worker.dispatchNotificationClick({ url: "chat?session=42" });
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+
+    // The decline is enough to own the document; focus settlement stays separate.
+    expect(worker.windowClients[0]?.navigate).toHaveBeenCalledExactlyOnceWith(
+      `${nestedScope}chat?session=42`,
+    );
+
+    worker.runNextTimer();
+    worker.runNextTimer();
+    const close = await click;
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(worker.clients.openWindow).toHaveBeenCalledExactlyOnceWith(
+      `${nestedScope}chat?session=42`,
+    );
+  });
 });
 
 type ActivateEventStub = {
@@ -572,11 +693,46 @@ type ServiceWorkerNotificationEventStub = {
 
 type NotificationAppReply = "handled" | "unhandled" | "silent" | "throw";
 
+type FakeMessagePort = {
+  addEventListener(type: string, listener: (event: { data: unknown }) => void): void;
+  start(): void;
+  close(): void;
+  postMessage(data: unknown): void;
+  deliver(event: { data: unknown }): void;
+  peer?: FakeMessagePort;
+};
+
+// Mirrors the MessagePort surface sw.js uses; replies are delivered in the
+// same task so the notification-click tests stay deterministic.
+function createFakeMessageChannel(): { port1: FakeMessagePort; port2: FakeMessagePort } {
+  const createPort = (): FakeMessagePort => {
+    const listeners: Array<(event: { data: unknown }) => void> = [];
+    const port: FakeMessagePort = {
+      addEventListener: (_type, listener) => listeners.push(listener),
+      start: () => {},
+      close: () => {},
+      postMessage: (data) => port.peer?.deliver({ data }),
+      deliver: (event) => {
+        for (const listener of listeners) {
+          listener(event);
+        }
+      },
+    };
+    return port;
+  };
+  const port1 = createPort();
+  const port2 = createPort();
+  port1.peer = port2;
+  port2.peer = port1;
+  return { port1, port2 };
+}
+
 function createNotificationServiceWorker(
   scope: string,
   clientUrls: string[],
   options: {
     appReply?: NotificationAppReply;
+    focus?: "resolve" | "pending" | "reject";
     manualTimers?: boolean;
     messageChannel?: boolean;
     rejectNavigation?: boolean;
@@ -586,7 +742,15 @@ function createNotificationServiceWorker(
   const pendingTimers = new Map<number, () => void>();
   let nextTimerId = 1;
   const windowClients = clientUrls.map((url) => {
-    const focus = vi.fn(async () => undefined);
+    const focus = vi.fn(async () => {
+      if (options.focus === "pending") {
+        await new Promise(() => {});
+        return;
+      }
+      if (options.focus === "reject") {
+        throw new Error("Window cannot be focused");
+      }
+    });
     return {
       url,
       focus,
@@ -649,10 +813,11 @@ function createNotificationServiceWorker(
       };
   const context = vm.createContext({
     ...timers,
+    MessageChannel: options.messageChannel === false ? undefined : createFakeMessageChannel,
     URL,
+    URLSearchParams,
     caches: {},
     fetch: vi.fn(),
-    ...(options.messageChannel === false ? {} : { MessageChannel }),
     self: serviceWorkerGlobal,
   });
 
