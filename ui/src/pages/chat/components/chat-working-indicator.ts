@@ -1,6 +1,6 @@
 import { html, nothing } from "lit";
 import type { ModelRetryStatus } from "../../../../../packages/gateway-protocol/src/chat-retry.ts";
-import type { ThemeMascot } from "../../../../../packages/gateway-protocol/src/theme.ts";
+import type { ThemeMascot } from "../../../app/theme-branding.ts";
 import "../../../components/elapsed-time.ts";
 import "../../../components/working-phrase.ts";
 import { icons } from "../../../components/icons.ts";

@@ -38,8 +38,8 @@ workspace and identity checks or the meeting transcript caller checks.
 | `messaging` | `group:messaging`, `sessions`, `sessions_list`, `sessions_history`, `sessions_search`, `conversations_list`, `conversations_send`, `conversations_turn`, `sessions_send`, `sessions_spawn`, `sessions_yield`, `subagents`, `session_status`, `gateway` (update only), `ask_user` |
 | `full`      | No core profile filtering; selects optional plugin tools too                                                                                                                                                                                                                     |
 
-`coding` and `messaging` also include the [theme tool](/tools/theme) and implicitly
-allow `bundle-mcp` (configured MCP servers).
+`coding` and `messaging` also implicitly allow `bundle-mcp` (configured MCP
+servers).
 
 The [`tts` tool](/tools/tts/api#tool-profiles) is not part of any restricted
 profile. To let an agent on `minimal`, `coding`, or `messaging` call it, add
@@ -74,7 +74,7 @@ whether the tool is available. Subagent and non-owner restrictions still apply.
 | `group:sessions`   | `sessions`, `sessions_list`, `sessions_history`, `sessions_search`, `conversations_list`, `conversations_send`, `conversations_turn`, `sessions_send`, `sessions_spawn`, `sessions_yield`, `subagents`, `session_status`, `suggest_task`, `dismiss_task` |
 | `group:memory`     | `memory_search`, `memory_get`                                                                                                                                                                                                                            |
 | `group:web`        | `web_search`, `x_search`, `web_fetch`                                                                                                                                                                                                                    |
-| `group:ui`         | `browser`, `screen`, `theme`, `dashboard`, `terminal`, `portal`, `canvas`, `show_widget`                                                                                                                                                                 |
+| `group:ui`         | `browser`, `screen`, `dashboard`, `terminal`, `portal`, `canvas`, `show_widget`                                                                                                                                                                          |
 | `group:automation` | `heartbeat_respond`, `automations` (`cron` alias), `gateway`, `plugins`, `openclaw`                                                                                                                                                                      |
 | `group:messaging`  | `message`                                                                                                                                                                                                                                                |
 | `group:nodes`      | `nodes`, `computer`                                                                                                                                                                                                                                      |

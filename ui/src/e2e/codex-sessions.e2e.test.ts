@@ -301,7 +301,7 @@ suite.define(() => {
       ({ key, gatewayUrl, groupingKey, sectionsKey }) => {
         localStorage.removeItem(groupingKey);
         localStorage.removeItem(sectionsKey);
-        localStorage.setItem(key, JSON.stringify({ gatewayUrl, theme: "knot", themeMode: "dark" }));
+        localStorage.setItem(key, JSON.stringify({ gatewayUrl, themeMode: "dark" }));
       },
       {
         groupingKey: catalogGroupingStorageKey,
@@ -314,8 +314,8 @@ suite.define(() => {
       featureMethods: ["chat.metadata", "chat.startup", "sessions.catalog.list"],
       methodResponses: {
         "config.get": {
-          config: { ui: { prefs: { theme: "knot", themeMode: "dark" } } },
-          hash: "catalog-knot-dark",
+          config: { ui: { prefs: { themeMode: "dark" } } },
+          hash: "catalog-style-dark",
         },
         "sessions.list": {
           count: 1,
@@ -447,19 +447,16 @@ suite.define(() => {
               runtime?: import("../app/bootstrap.ts").ApplicationRuntime;
             };
             const theme = app.runtime?.context.theme;
-            const palette = document.getElementById("openclaw-theme-palette-knot");
             const root = document.documentElement.dataset;
             return {
               preferences: [theme?.settings.theme, theme?.mode, theme?.resolvedMode],
-              paletteReady: palette instanceof HTMLLinkElement && Boolean(palette.sheet),
               root: [root.theme, root.themeMode],
             };
           }),
         )
         .toEqual({
-          preferences: ["knot", "dark", "dark"],
-          paletteReady: true,
-          root: ["openknot", "dark"],
+          preferences: ["phosphor", "dark", "dark"],
+          root: ["phosphor", "dark"],
         });
       await expect.poll(() => section.locator("[data-session-catalog-host]").count()).toBe(2);
       expect(await section.locator('[data-session-catalog-host="gateway:local"]').count()).toBe(1);

@@ -18,10 +18,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  *
- * Control UI owns theme selection; Carapace owns the semantic component roles.
+ * Control UI owns style selection; Carapace owns the semantic component roles.
  * Keeping this bridge pointed at the resolved Control UI tokens makes every
- * shipped theme family, mode, and imported custom theme work without a
- * Carapace-side copy of the product theme catalog. */
+ * mode of the single Phosphor style work without a Carapace-side copy of the
+ * product palette. */
 :root {
   --oc-bg-page: var(--bg);
   --oc-bg-surface: var(--card);
@@ -244,14 +244,12 @@
   color: var(--oc-text-primary);
 }
 
-html[data-theme="light"] .oc-action-secondary,
 html[data-theme-resolved="light"] .oc-action-secondary {
   border-color: var(--oc-border-strong);
   background: var(--oc-bg-elevated);
   color: var(--oc-text-primary);
 }
 
-html[data-theme="light"] .oc-action-secondary:hover,
 html[data-theme-resolved="light"] .oc-action-secondary:hover {
   border-color: var(--oc-border-strong);
   background: var(--oc-surface-interactive-hover);

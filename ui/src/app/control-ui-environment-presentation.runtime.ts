@@ -4,14 +4,11 @@ import {
 } from "../../../src/gateway/control-ui-bootstrap-contract.js";
 import { getOrCreatePromise } from "../../../src/shared/lazy-promise.js";
 import { currentThemeBranding, neutralMarkSvg } from "../components/neutral-mark.ts";
-import { applyControlUiOperatorSeamColor } from "./control-ui-presentation.ts";
 
 export function applyControlUiPresentation(params: {
   environment: ControlUiEnvironment | null;
-  seamColor?: string;
 }): void {
   invalidateControlUiFaviconPalette();
-  applyControlUiOperatorSeamColor(params.seamColor);
   const root = document.documentElement;
   const environment = params.environment;
   if (!environment) {

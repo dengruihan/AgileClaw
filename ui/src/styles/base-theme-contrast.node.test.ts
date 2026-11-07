@@ -20,12 +20,8 @@ const SURFACE_TOKENS = ["--bg", "--bg-elevated", "--bg-muted", "--card", "--pane
 
 const AA_NORMAL_TEXT_MIN = 4.5;
 
-// Beacon promises AAA; the other themes promise AA.
-const AAA_NORMAL_TEXT_MIN = 7;
-
-// Read overrides from CSS: missing Beacon once left white on pale at 1.80:1.
+// Read overrides from CSS; a missing override once left white on pale at 1.80:1.
 const CONFIRM_BUTTON_RULE = ".chat-confirm-popover__yes";
-const AAA_THEMES = new Set(["beacon", "beacon-light"]);
 
 // --secondary matched --card and hid chips in dark user bubbles. File links
 // are excluded because they use link ink rather than a chip surface.
@@ -59,15 +55,8 @@ type TokenMap = Map<string, string>;
 type RGB = readonly [red: number, green: number, blue: number];
 type Color = { rgb: RGB; alpha: number };
 
-// Include lazy palettes as well as the startup stylesheet.
 function readPaletteSources(stylesRoot: string): string {
-  const themesDir = path.join(stylesRoot, "..", "..", "public", "themes");
-  const palettes = fs
-    .readdirSync(themesDir)
-    .filter((entry) => entry.endsWith(".css"))
-    .toSorted()
-    .map((entry) => fs.readFileSync(path.join(themesDir, entry), "utf8"));
-  return [fs.readFileSync(path.join(stylesRoot, "base.css"), "utf8"), ...palettes].join("\n");
+  return fs.readFileSync(path.join(stylesRoot, "base.css"), "utf8");
 }
 
 function parseThemeBlocks(baseCss: string): Map<string, TokenMap> {
@@ -94,42 +83,18 @@ function parseThemeBlocks(baseCss: string): Map<string, TokenMap> {
   return blocks;
 }
 
-/** Compose each selectable theme the way theme.ts layers blocks over :root. */
+/** Compose the single style the way base.css layers its light block over :root. */
 function resolveThemes(blocks: Map<string, TokenMap>): Map<string, TokenMap> {
   const root = blocks.get(":root") ?? new Map();
   const light = blocks.get(':root:where([data-theme-mode="light"])') ?? new Map();
-  const layer = (...overrides: (TokenMap | undefined)[]): TokenMap => {
-    const merged: TokenMap = new Map(root);
-    for (const override of overrides) {
-      for (const [key, value] of override ?? []) {
-        merged.set(key, value);
-      }
-    }
-    return merged;
-  };
+  const dark: TokenMap = new Map(root);
+  const lightMode: TokenMap = new Map(root);
+  for (const [key, value] of light) {
+    lightMode.set(key, value);
+  }
   return new Map([
-    ["dark", layer(blocks.get(':root[data-theme="dark"]'))],
-    ["light", layer(light, blocks.get(':root[data-theme="light"]'))],
-    ["openknot", layer(blocks.get(':root[data-theme="openknot"]'))],
-    ["openknot-light", layer(light, blocks.get(':root[data-theme="openknot-light"]'))],
-    ["dash", layer(blocks.get(':root[data-theme="dash"]'))],
-    ["dash-light", layer(light, blocks.get(':root[data-theme="dash-light"]'))],
-    ["absolutely", layer(blocks.get(':root[data-theme="absolutely"]'))],
-    ["absolutely-light", layer(light, blocks.get(':root[data-theme="absolutely-light"]'))],
-    ["tide", layer(blocks.get(':root[data-theme="tide"]'))],
-    ["tide-light", layer(light, blocks.get(':root[data-theme="tide-light"]'))],
-    ["beacon", layer(blocks.get(':root[data-theme="beacon"]'))],
-    ["beacon-light", layer(light, blocks.get(':root[data-theme="beacon-light"]'))],
-    ["phosphor", layer(blocks.get(':root[data-theme="phosphor"]'))],
-    ["phosphor-light", layer(light, blocks.get(':root[data-theme="phosphor-light"]'))],
-    ["crt", layer(blocks.get(':root[data-theme="crt"]'))],
-    ["crt-light", layer(light, blocks.get(':root[data-theme="crt-light"]'))],
-    ["manuscript", layer(blocks.get(':root[data-theme="manuscript"]'))],
-    ["manuscript-light", layer(light, blocks.get(':root[data-theme="manuscript-light"]'))],
-    ["rose", layer(blocks.get(':root[data-theme="rose"]'))],
-    ["rose-light", layer(light, blocks.get(':root[data-theme="rose-light"]'))],
-    ["miami", layer(blocks.get(':root[data-theme="miami"]'))],
-    ["miami-light", layer(light, blocks.get(':root[data-theme="miami-light"]'))],
+    ["phosphor", dark],
+    ["phosphor-light", lightMode],
   ]);
 }
 
@@ -385,18 +350,17 @@ describe("Control UI theme contrast", () => {
   const baseCss = readPaletteSources(stylesDir);
   const themes = resolveThemes(parseThemeBlocks(baseCss));
 
-  it("keeps every text token at WCAG AA on every theme surface, AAA on themes that promise it", () => {
+  it("keeps every text token at WCAG AA on every style surface", () => {
     for (const [themeName, tokens] of themes) {
       for (const textToken of TEXT_TOKENS) {
         const foreground = resolveOpaqueColor(`var(${textToken})`, tokens);
         for (const surfaceToken of SURFACE_TOKENS) {
           const background = resolveOpaqueColor(`var(${surfaceToken})`, tokens);
           const ratio = contrastRatio(foreground, background);
-          const floor = AAA_THEMES.has(themeName) ? AAA_NORMAL_TEXT_MIN : AA_NORMAL_TEXT_MIN;
           expect(
             ratio,
             `${themeName}: ${textToken} rgb(${foreground.join(", ")}) on ${surfaceToken} rgb(${background.join(", ")})`,
-          ).toBeGreaterThanOrEqual(floor);
+          ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT_MIN);
         }
       }
     }
@@ -454,33 +418,6 @@ describe("Control UI theme contrast", () => {
     }
   });
 
-  it("preserves imported fill/ink contrast when no hover pair is supplied", () => {
-    const defaults = parseThemeBlocks(baseCss).get(":root") ?? new Map<string, string>();
-    for (const text of ["#fafafa", "#211e1a"]) {
-      for (const [primary, destructive, foreground] of [
-        ["#d92a3f", "#d32f2f", "#fafafa"],
-        ["#ffc233", "#ffabab", "#000000"],
-      ] as const) {
-        const imported = new Map(defaults);
-        imported.set("--text", text);
-        imported.set("--primary", primary);
-        imported.set("--primary-foreground", foreground);
-        imported.set("--destructive", destructive);
-        imported.set("--destructive-foreground", foreground);
-        for (const fill of ["--primary", "--destructive"]) {
-          const ink = resolveOpaqueColor(`var(${fill}-foreground)`, imported);
-          const rest = contrastRatio(ink, resolveOpaqueColor(`var(${fill})`, imported));
-          const hover = contrastRatio(ink, resolveOpaqueColor(`var(${fill}-hover)`, imported));
-          expect(rest).toBeGreaterThanOrEqual(AA_NORMAL_TEXT_MIN);
-          expect(
-            hover,
-            `${fill} hover must not reduce the imported pair contrast`,
-          ).toBeGreaterThanOrEqual(rest);
-        }
-      }
-    }
-  });
-
   it("keeps the markdown code chip separated from every surface it sits on", () => {
     const chatTextCss = fs.readFileSync(path.join(stylesDir, "chat", "text.css"), "utf8");
     const chip = readCodeChipTokens(chatTextCss);
@@ -519,11 +456,10 @@ describe("Control UI theme contrast", () => {
         continue;
       }
       const ratio = contrastRatio(parseHex(color), parseHex(background));
-      const floor = AAA_THEMES.has(themeName) ? AAA_NORMAL_TEXT_MIN : AA_NORMAL_TEXT_MIN;
       expect(
         ratio,
         `${themeName}: ${paint.color} ${color} on ${paint.background} ${background}`,
-      ).toBeGreaterThanOrEqual(floor);
+      ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT_MIN);
     }
   });
 
@@ -546,11 +482,10 @@ describe("Control UI theme contrast", () => {
           const host = resolveOpaqueColor(`var(${surfaceToken})`, tokens);
           const background = composite(resolvedTint, host);
           const ratio = contrastRatio(foreground, background);
-          const floor = AAA_THEMES.has(themeName) ? AAA_NORMAL_TEXT_MIN : AA_NORMAL_TEXT_MIN;
           expect(
             ratio,
             `${themeName}: ${foregroundToken} on ${tint} over ${surfaceToken}`,
-          ).toBeGreaterThanOrEqual(floor);
+          ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT_MIN);
         }
       }
     }
@@ -623,9 +558,10 @@ describe("Control UI theme contrast", () => {
             const background = composite(resolveColor(surface, tokens), host);
             const ink = composite(resolveColor(foreground, tokens), background);
             const ratio = contrastRatio(ink, background);
-            const floor = AAA_THEMES.has(theme) ? AAA_NORMAL_TEXT_MIN : AA_NORMAL_TEXT_MIN;
-            if (ratio < floor) {
-              failures.push(theme + "/" + tone + ": " + ratio.toFixed(2) + " < " + floor);
+            if (ratio < AA_NORMAL_TEXT_MIN) {
+              failures.push(
+                theme + "/" + tone + ": " + ratio.toFixed(2) + " < " + AA_NORMAL_TEXT_MIN,
+              );
             }
             const focusRatio = contrastRatio(composite(resolveColor(focus, tokens), host), host);
             if (focusRatio < 3) {

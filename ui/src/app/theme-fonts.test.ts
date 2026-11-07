@@ -23,39 +23,34 @@ describe("typeface presentation", () => {
     applyChatFontSmoothing("system");
   });
 
-  it.each([
-    ["claw", ["instrument-sans", "instrument-sans"]],
-    ["dash", ["dm-sans", "fraunces"]],
-    ["phosphor", ["jetbrains-mono", "jetbrains-mono"]],
-    ["custom", ["system", "system"]],
-  ] as const)("loads %s's default faces plus the shared mono face", (theme, [ui, chat]) => {
-    const faces = resolveTypefaces(theme);
-    expect(faces).toEqual({ ui, chat });
+  it("loads the style's default faces plus the shared mono face", () => {
+    const faces = resolveTypefaces();
+    expect(faces).toEqual({ ui: "jetbrains-mono", chat: "jetbrains-mono" });
     syncTypefaceStylesheets(faces);
     // The mono face is always declared: base.css --mono promises JetBrains
-    // Mono for code spans on every theme; its woff2 still downloads lazily.
+    // Mono for code spans; its woff2 still downloads lazily.
     expect(hrefs()).toEqual(
-      [...new Set([ui, chat, "jetbrains-mono"])]
+      [...new Set([faces.ui, faces.chat, "jetbrains-mono"])]
         .filter((face) => face !== "system")
         .map((face) => `/fonts/${face}.css`),
     );
   });
 
-  it("loads overrides once, retaining them without fetching for system or custom defaults", () => {
-    syncTypefaceStylesheets(resolveTypefaces("dash", "system", "system"));
+  it("loads overrides once, retaining them without fetching for system defaults", () => {
+    syncTypefaceStylesheets(resolveTypefaces("system", "system"));
     expect(hrefs()).toEqual(["/fonts/jetbrains-mono.css"]);
-    const faces = resolveTypefaces("dash", "geist", "lora");
+    const faces = resolveTypefaces("geist", "lora");
     expect(faces).toEqual({ ui: "geist", chat: "lora" });
     syncTypefaceStylesheets(faces);
     expect(hrefs()).toEqual(["/fonts/jetbrains-mono.css", "/fonts/geist.css", "/fonts/lora.css"]);
-    expect(resolveTypefaces("custom", "lora")).toEqual({ ui: "lora", chat: "system" });
+    expect(resolveTypefaces("lora")).toEqual({ ui: "lora", chat: "jetbrains-mono" });
     const loaded = fontLinks();
     for (const next of [
       faces,
-      resolveTypefaces("dash", "geist", "geist"),
-      resolveTypefaces("dash", "system", "system"),
-      resolveTypefaces("custom", "lora"),
-      resolveTypefaces("custom"),
+      resolveTypefaces("geist", "geist"),
+      resolveTypefaces("system", "system"),
+      resolveTypefaces("lora"),
+      resolveTypefaces(),
     ]) {
       syncTypefaceStylesheets(next);
       expect(fontLinks()).toEqual(loaded);
@@ -63,7 +58,7 @@ describe("typeface presentation", () => {
   });
 
   it("reuses active faces when specimens are requested and never duplicates them on switches", () => {
-    syncTypefaceStylesheets(resolveTypefaces("dash"));
+    syncTypefaceStylesheets(resolveTypefaces());
     const active = fontLinks();
     loadTypefaceSpecimens();
     const specimens = fontLinks();
@@ -71,11 +66,11 @@ describe("typeface presentation", () => {
     expect(specimens).toHaveLength(9);
     expect(new Set(hrefs()).size).toBe(9);
     loadTypefaceSpecimens();
-    syncTypefaceStylesheets(resolveTypefaces("knot", "lora"));
+    syncTypefaceStylesheets(resolveTypefaces("lora"));
     expect(fontLinks()).toEqual(specimens);
   });
 
-  it("removes inline overrides to return ownership to theme CSS without changing code", () => {
+  it("removes inline overrides to return ownership to style CSS without changing code", () => {
     const style = document.documentElement.style;
     const mono = style.getPropertyValue("--mono");
     applyTypefaceOverrides("lora", "system");

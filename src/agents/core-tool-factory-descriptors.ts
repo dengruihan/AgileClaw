@@ -30,7 +30,6 @@ const CORE_TOOL_FACTORY_DESCRIPTORS = [
   { name: "conversations_turn", family: "openclaw" },
   { name: AUTOMATIONS_TOOL_NAME, family: "openclaw" },
   { name: "screen", family: "openclaw" },
-  { name: "theme", family: "openclaw" },
   { name: "secrets", family: "openclaw" },
   { name: "dashboard", family: "openclaw" },
   { name: "decision_evaluate", family: "openclaw" },

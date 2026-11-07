@@ -16,18 +16,14 @@ const suite = createSidebarCustomizationSuite(
 );
 const captureProof = process.env.OPENCLAW_CAPTURE_UI_PROOF === "1";
 
-const themes = [
-  { colorScheme: "light", resolvedTheme: "light", theme: "claw" },
-  { colorScheme: "dark", resolvedTheme: "dark", theme: "claw" },
-  { colorScheme: "light", resolvedTheme: "openknot-light", theme: "knot" },
-  { colorScheme: "dark", resolvedTheme: "openknot", theme: "knot" },
-  { colorScheme: "light", resolvedTheme: "dash-light", theme: "dash" },
-  { colorScheme: "dark", resolvedTheme: "dash", theme: "dash" },
+const styleModes = [
+  { colorScheme: "light", resolvedTheme: "phosphor-light" },
+  { colorScheme: "dark", resolvedTheme: "phosphor" },
 ] as const;
 
-function configResponse(theme: "claw" | "knot" | "dash", colorScheme: "light" | "dark") {
-  const config = { ui: { prefs: { locale: "en", theme, themeMode: colorScheme } } };
-  const hash = `transient-surfaces-${theme}-${colorScheme}`;
+function configResponse(colorScheme: "light" | "dark") {
+  const config = { ui: { prefs: { locale: "en", themeMode: colorScheme } } };
+  const hash = `transient-surfaces-${colorScheme}`;
   return {
     appliedConfigHash: hash,
     config,
@@ -47,9 +43,9 @@ async function surfaceTokens(surface: Locator) {
 }
 
 suite.define(() => {
-  it.each(themes)(
-    "uses one transient surface contract in $theme $colorScheme",
-    async ({ colorScheme, resolvedTheme, theme }) => {
+  it.each(styleModes)(
+    "uses one transient surface contract in $colorScheme",
+    async ({ colorScheme, resolvedTheme }) => {
       const context = await suite.newBrowserContext({
         colorScheme,
         locale: "en-US",
@@ -61,7 +57,7 @@ suite.define(() => {
       await installMockGateway(page, {
         featureMethods: ["sessions.patch"],
         methodResponses: {
-          "config.get": configResponse(theme, colorScheme),
+          "config.get": configResponse(colorScheme),
           "sessions.list": sessionsListResponse([
             sessionRow(sessionKey, "Release notes", Date.parse("2026-08-14T15:59:00.000Z")),
           ]),
@@ -84,7 +80,7 @@ suite.define(() => {
         });
         await menuSurface.waitFor({ state: "visible" });
         const menuTokens = await surfaceTokens(menuSurface);
-        if (captureProof && theme === "claw") {
+        if (captureProof) {
           await mkdir(path.join(suite.artifactDir, "transient-surfaces"), { recursive: true });
           await page.screenshot({
             animations: "disabled",
@@ -102,7 +98,7 @@ suite.define(() => {
         await languageSelect.click();
         const listbox = languageSelect.locator('[part="listbox"]');
         await listbox.waitFor({ state: "visible" });
-        if (captureProof && theme === "claw") {
+        if (captureProof) {
           await page.screenshot({
             animations: "disabled",
             fullPage: true,

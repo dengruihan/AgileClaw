@@ -150,7 +150,6 @@ describe("Gateway upload admission", () => {
       ["send", { mediaUrl: "/existing/output.png" }],
       ["skills.install", { source: "clawhub", slug: "example" }],
       ["skills.library.save", { markdown: "# Edited skill" }],
-      ["themes.import", { id: "custom", definition: { name: "Custom", description: "Palette" } }],
       ["send", { buffer: "aGVsbG8=" }, true],
     ];
     for (const [method, params, synthetic] of cases) {

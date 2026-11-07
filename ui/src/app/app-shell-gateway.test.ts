@@ -35,7 +35,7 @@ describe("ShellGatewayOwner profile appearance integration", () => {
     owner.handleGatewayEvent({
       type: "event",
       event: "users.prefs.changed",
-      payload: { profileId: "someone-else", keys: ["ui.accent"] },
+      payload: { profileId: "someone-else", keys: ["ui.themeMode"] },
     });
 
     expect(request).not.toHaveBeenCalled();
@@ -71,10 +71,10 @@ describe("ShellGatewayOwner profile appearance integration", () => {
 
     owner.reconcileServerUiPrefs(context.runtimeConfig);
     expect(refreshTheme).not.toHaveBeenCalled();
-    expect(loadSettings().accent).toBeUndefined();
+    expect(loadSettings().themeMode).toBe("system");
     await completeProfileAppearance();
     expect(refreshTheme).toHaveBeenCalledOnce();
-    expect(loadSettings().accent).toBe("#336699");
+    expect(loadSettings().themeMode).toBe("dark");
     expect(request).toHaveBeenCalledOnce();
     // Derived from the wire contract so new appearance keys extend the
     // request without silently invalidating this expectation.
@@ -84,7 +84,7 @@ describe("ShellGatewayOwner profile appearance integration", () => {
   });
 
   it("republishes profile provenance even when its appearance matches the browser mirror", async () => {
-    patchSettings({ accent: "#336699" });
+    patchSettings({ themeMode: "dark" });
     const { completeProfileAppearance, owner, refreshTheme, snapshot } =
       createProfileAppearanceGateway("profile-owner");
 
@@ -92,7 +92,7 @@ describe("ShellGatewayOwner profile appearance integration", () => {
 
     await completeProfileAppearance();
     expect(refreshTheme).toHaveBeenCalledOnce();
-    expect(loadSettings().accent).toBe("#336699");
+    expect(loadSettings().themeMode).toBe("dark");
   });
 
   it("reuses cached profile preferences across unrelated gateway config snapshots", async () => {
@@ -100,19 +100,19 @@ describe("ShellGatewayOwner profile appearance integration", () => {
       createProfileAppearanceGateway("profile-owner");
     owner.synchronizeGateway(snapshot);
     await completeProfileAppearance();
-    expect(loadSettings().accent).toBe("#336699");
+    expect(loadSettings().themeMode).toBe("dark");
     request.mockClear();
     const configState = context.runtimeConfig.state as {
       configSnapshot: { config: unknown };
     };
     configState.configSnapshot = {
-      config: { ui: { prefs: { accent: "#884422" } }, agents: { defaults: {} } },
+      config: { ui: { prefs: { themeMode: "dark" } }, agents: { defaults: {} } },
     };
 
     owner.reconcileServerUiPrefs(context.runtimeConfig);
 
     expect(request).not.toHaveBeenCalled();
-    expect(loadSettings().accent).toBe("#336699");
+    expect(loadSettings().themeMode).toBe("dark");
   });
 
   it.each(["profile-owner", "canonical-owner"])(
@@ -122,7 +122,7 @@ describe("ShellGatewayOwner profile appearance integration", () => {
         createProfileAppearanceGateway("profile-owner");
       owner.synchronizeGateway(snapshot);
       await completeProfileAppearance();
-      expect(loadSettings().accent).toBe("#336699");
+      expect(loadSettings().themeMode).toBe("dark");
       request.mockClear();
       refreshTheme.mockClear();
 
@@ -131,14 +131,14 @@ describe("ShellGatewayOwner profile appearance integration", () => {
         event: "users.prefs.changed",
         payload: {
           profileId: eventProfileId,
-          keys: ["ui.accent"],
-          entries: { "ui.accent": "#ffffff" },
+          keys: ["ui.themeMode"],
+          entries: { "ui.themeMode": "light" },
         },
       });
 
-      expect(loadSettings().accent).toBe("#336699");
-      await completeProfileAppearance("#224466");
-      expect(loadSettings().accent).toBe("#224466");
+      expect(loadSettings().themeMode).toBe("dark");
+      await completeProfileAppearance("light");
+      expect(loadSettings().themeMode).toBe("light");
       expect(request).toHaveBeenCalledOnce();
       expect(refreshTheme).toHaveBeenCalledOnce();
     },

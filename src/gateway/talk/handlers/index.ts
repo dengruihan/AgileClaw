@@ -8,10 +8,8 @@ import {
   ErrorCodes,
   errorShape,
   missingScopeErrorShape,
-  normalizeUiAppearancePreference,
   type TalkCatalogParams,
   type TalkSpeakParams,
-  UI_APPEARANCE_PREFERENCE_KEYS,
   validateTalkCatalogParams,
   validateTalkConfigParams,
   validateTalkSpeakParams,
@@ -37,7 +35,6 @@ import {
   assertSecretOwnerAvailable,
   isSecretOwnerAvailable,
 } from "../../../secrets/runtime-degraded-state.js";
-import { getCanonicalUserPreferences } from "../../../state/user-preferences.js";
 import { resolveTalkSessionAgentId } from "../../../talk/agent-target.js";
 import {
   projectInternalRealtimeVoicePublicConfig,
@@ -869,18 +866,10 @@ export const talkHandlers: GatewayRequestHandlers = {
       configPayload.session = { mainKey: sessionMainKey };
     }
 
-    const profileId = client?.authenticatedUserProfile?.profileId;
-    const accentKey = UI_APPEARANCE_PREFERENCE_KEYS.accent;
-    const preferences = profileId
-      ? await getCanonicalUserPreferences(profileId, [accentKey])
-      : undefined;
-    const profileAccent = preferences
-      ? normalizeUiAppearancePreference(accentKey, preferences.entries[accentKey])
-      : undefined;
-    // Profile accent overrides gateway prefs, then the gateway seam color and theme default.
-    const seamColor =
-      profileAccent ?? snapshot.config.ui?.prefs?.accent ?? snapshot.config.ui?.seamColor;
-    if (typeof seamColor === "string" && seamColor !== "theme") {
+    // The operator seam color feeds native app surfaces (voice-wake glow); the
+    // Control UI no longer repaints its accent from it.
+    const seamColor = snapshot.config.ui?.seamColor;
+    if (typeof seamColor === "string") {
       configPayload.ui = { seamColor };
     }
 

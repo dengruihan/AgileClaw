@@ -16,18 +16,9 @@ import {
 } from "../index.js";
 
 describe("user preference protocol schemas", () => {
-  it("normalizes only supported profile appearance values and canonicalizes accent colors", () => {
-    expect(normalizeUiAppearancePreference(UI_APPEARANCE_PREFERENCE_KEYS.theme, "absolutely")).toBe(
-      "absolutely",
-    );
+  it("normalizes only supported profile appearance values", () => {
     expect(normalizeUiAppearancePreference(UI_APPEARANCE_PREFERENCE_KEYS.themeMode, "system")).toBe(
       "system",
-    );
-    expect(normalizeUiAppearancePreference(UI_APPEARANCE_PREFERENCE_KEYS.accent, "#A1b2C3")).toBe(
-      "#a1b2c3",
-    );
-    expect(normalizeUiAppearancePreference(UI_APPEARANCE_PREFERENCE_KEYS.accent, "theme")).toBe(
-      "theme",
     );
     expect(normalizeUiAppearancePreference(UI_APPEARANCE_PREFERENCE_KEYS.fontUi, "geist")).toBe(
       "geist",
@@ -40,12 +31,8 @@ describe("user preference protocol schemas", () => {
     );
 
     for (const [key, value] of [
-      [UI_APPEARANCE_PREFERENCE_KEYS.theme, "unsupported"],
       [UI_APPEARANCE_PREFERENCE_KEYS.themeMode, "automatic"],
-      [UI_APPEARANCE_PREFERENCE_KEYS.accent, "#abc"],
-      [UI_APPEARANCE_PREFERENCE_KEYS.accent, "#12345g"],
-      [UI_APPEARANCE_PREFERENCE_KEYS.accent, { color: "#123456" }],
-      [UI_APPEARANCE_PREFERENCE_KEYS.theme, 42],
+      [UI_APPEARANCE_PREFERENCE_KEYS.themeMode, 42],
       [UI_APPEARANCE_PREFERENCE_KEYS.fontUi, "theme"],
       [UI_APPEARANCE_PREFERENCE_KEYS.fontChat, "unknown-font"],
       [UI_APPEARANCE_PREFERENCE_KEYS.fontUi, "Geist, sans-serif"],
@@ -60,7 +47,7 @@ describe("user preference protocol schemas", () => {
       Value.Check(UsersPrefsChangedEventSchema, {
         profileId: "profile-1",
         keys: [
-          UI_APPEARANCE_PREFERENCE_KEYS.accent,
+          UI_APPEARANCE_PREFERENCE_KEYS.themeMode,
           UI_APPEARANCE_PREFERENCE_KEYS.fontUi,
           UI_APPEARANCE_PREFERENCE_KEYS.fontChat,
         ],
@@ -117,7 +104,7 @@ describe("user preference protocol schemas", () => {
   it("keeps no-identity results distinct from successful values", () => {
     expect(Value.Check(UsersPrefsGetResultSchema, { status: "no_durable_identity" })).toBe(true);
     expect(
-      Value.Check(UsersPrefsGetResultSchema, { status: "ok", entries: { theme: "claw" } }),
+      Value.Check(UsersPrefsGetResultSchema, { status: "ok", entries: { themeMode: "dark" } }),
     ).toBe(true);
     expect(Value.Check(UsersPrefsSetResultSchema, { status: "ok" })).toBe(true);
     expect(Value.Check(UsersPrefsSetResultSchema, { status: "conflict" })).toBe(true);

@@ -29,8 +29,6 @@ describe("session-scoped method admission", () => {
       true,
     ],
     ["session.members.list", { sessionKey: "agent:main:own" }, true],
-    ["themes.get", { id: "default" }, true],
-    ["themes.list", {}, true],
     ["users.prefs.get", {}, true],
     ["users.self", {}, true],
     ["config.get", undefined, false],

@@ -283,39 +283,6 @@ describe("plugin npm runtime build planning", () => {
       }),
   );
 
-  it("packages declared theme definitions and artwork outside conventional asset paths", () => {
-    const packageDir = tempDirs.make("openclaw-plugin-theme-package-");
-    writeFileSync(
-      path.join(packageDir, "package.json"),
-      JSON.stringify({
-        name: "theme-fixture",
-        version: "1.0.0",
-        openclaw: { extensions: ["./index.ts"] },
-      }),
-    );
-    writeFileSync(
-      path.join(packageDir, "openclaw.plugin.json"),
-      JSON.stringify({
-        id: "theme-fixture",
-        themes: [
-          {
-            id: "workshop",
-            name: "Workshop",
-            description: "Workshop colors",
-            source: "palettes/workshop.json",
-            hats: { beret: "art/beret.svg" },
-          },
-        ],
-      }),
-    );
-    const plan = expectPluginNpmRuntimeBuildPlan(
-      resolvePluginNpmRuntimeBuildPlan({ repoRoot, packageDir }),
-    );
-    expect(plan.packageFiles).toEqual(
-      expect.arrayContaining(["openclaw.plugin.json", "palettes/workshop.json", "art/beret.svg"]),
-    );
-  });
-
   it.each([
     "missing-directory",
     "missing-manifest",

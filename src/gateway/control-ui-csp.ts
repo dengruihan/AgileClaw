@@ -57,15 +57,7 @@ export function buildControlUiCspHeader(opts?: {
   }
   // Web Awesome resolves its bundled system icons to data: SVGs, then fetches
   // them before rendering. Attachment previews fetch browser-owned Blob URLs.
-  const connectTokens = [
-    "'self'",
-    "ws:",
-    "wss:",
-    "data:",
-    "blob:",
-    "https://api.openai.com",
-    "https://tweakcn.com",
-  ];
+  const connectTokens = ["'self'", "ws:", "wss:", "data:", "blob:", "https://api.openai.com"];
   if (opts?.portalHost) {
     const parsed = URL.parse(`http://${opts.portalHost}`);
     if (

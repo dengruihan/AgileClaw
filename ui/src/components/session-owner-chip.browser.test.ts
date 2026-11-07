@@ -2,9 +2,8 @@ import { html, render } from "lit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { SessionParticipant } from "../../../packages/gateway-protocol/src/schema/session-participant.js";
-import { BUILTIN_THEME_IDS } from "../../../packages/gateway-protocol/src/theme-ids.ts";
 import "../test-helpers/load-styles.ts";
-import { resolveTheme, syncThemePaletteStylesheet, type ThemeName } from "../app/theme.ts";
+import { resolveTheme } from "../app/theme.ts";
 import { TYPEFACES, resolveTypefaces, syncTypefaceStylesheets } from "../app/typography.ts";
 import {
   readAvatarGatewayContext,
@@ -76,13 +75,10 @@ beforeEach(() => {
   });
 });
 
-async function applyTheme(theme: ThemeName, mode: "light" | "dark") {
-  await new Promise<void>((resolve) => {
-    syncThemePaletteStylesheet(theme, resolve);
-  });
-  document.documentElement.dataset.theme = resolveTheme(theme, mode);
+async function applyTheme(mode: "light" | "dark") {
+  document.documentElement.dataset.theme = resolveTheme("phosphor", mode);
   document.documentElement.dataset.themeMode = mode;
-  const typefaces = resolveTypefaces(theme);
+  const typefaces = resolveTypefaces();
   syncTypefaceStylesheets(typefaces);
   const stylesheet = document.querySelector<HTMLLinkElement>(`#openclaw-typeface-${typefaces.ui}`)!;
   if (!stylesheet.sheet) {
@@ -184,24 +180,22 @@ async function mountOwnerChip(params: {
 
 describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
   it.each(
-    BUILTIN_THEME_IDS.flatMap((theme) =>
-      (["light", "dark"] as const).flatMap((mode) =>
-        (theme === "claw" ? [2, 3, 5, 12, 13] : [12]).flatMap((ownerCount) =>
-          (theme === "claw"
-            ? ["present", "running", "away", "unread"]
-            : ["present", "away"]
-          ).flatMap((presence) =>
-            (presence === "present" && ownerCount === 12 ? [false, true] : [false]).map(
-              (pinned) => ({ theme, mode, ownerCount, presence, pinned }),
-            ),
-          ),
+    (["light", "dark"] as const).flatMap((mode) =>
+      [2, 3, 5, 12, 13].flatMap((ownerCount) =>
+        ["present", "running", "away", "unread"].flatMap((presence) =>
+          (presence === "present" && ownerCount === 12 ? [false, true] : [false]).map((pinned) => ({
+            mode,
+            ownerCount,
+            presence,
+            pinned,
+          })),
         ),
       ),
     ),
   )(
-    "keeps $ownerCount owners in an equal pair in $theme $mode while $presence (pinned=$pinned)",
-    async ({ theme, mode, ownerCount, presence, pinned }) => {
-      await applyTheme(theme, mode);
+    "keeps $ownerCount owners in an equal pair in $mode while $presence (pinned=$pinned)",
+    async ({ mode, ownerCount, presence, pinned }) => {
+      await applyTheme(mode);
       const sidebar = document.createElement("aside");
       sidebar.className = "sidebar";
       const shell = document.createElement("div");
@@ -376,14 +370,14 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
         const textLuminance = renderedLuminance(style.color);
         expect(
           contrastRatio(counterLuminance, rowLuminance),
-          `${theme} ${state} surface`,
+          `${mode} ${state} surface`,
         ).toBeGreaterThanOrEqual(1.3);
         expect(
           contrastRatio(textLuminance, counterLuminance),
-          `${theme} ${state} text`,
+          `${mode} ${state} text`,
         ).toBeGreaterThanOrEqual(4.5);
       }
-      if (theme === "claw" && presence === "away" && ownerCount === 3) {
+      if (presence === "away" && ownerCount === 3) {
         chip.viewingNow = true;
         await chip.updateComplete;
         await expect
@@ -415,7 +409,7 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
   )(
     "centers a single $size initial in $mode with profile=$profile",
     async ({ mode, size, profile }) => {
-      await applyTheme("claw", mode);
+      await applyTheme(mode);
       const chip = await mountOwnerChip({});
       chip.size = size;
       if (profile) {

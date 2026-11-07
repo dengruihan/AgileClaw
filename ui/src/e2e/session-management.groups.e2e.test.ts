@@ -248,7 +248,7 @@ suite.define(() => {
     const page = await context.newPage();
     await page.clock.install();
     const gateway = await installMockGateway(page, {
-      featureMethods: defaultControlUiFeatureMethods,
+      featureMethods: [...defaultControlUiFeatureMethods],
       methodResponses: {
         "sessions.list": {
           cases: [

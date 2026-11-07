@@ -10,13 +10,6 @@ export const CONTROL_UI_IMAGE_HTTP_ROUTES = [
     ),
   ],
   [
-    ["pluginThemeArt"],
-    createLazyRuntimeNamedExport(
-      () => import("./plugin-theme-art-http.js"),
-      "handlePluginThemeArtHttpRequest",
-    ),
-  ],
-  [
     ["channelAvatar"],
     createLazyRuntimeNamedExport(
       () => import("./channel-avatar-http.js"),

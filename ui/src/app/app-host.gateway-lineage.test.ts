@@ -2,17 +2,16 @@ import { parseControlUiFocusLocation } from "@openclaw/session-url-contract";
 import { render } from "lit";
 /* @vitest-environment jsdom */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveThemeBranding } from "../../../packages/gateway-protocol/src/theme.ts";
 import type {
   GatewayBrowserClient,
   GatewayBrowserClientOptions,
   GatewayHelloOk,
 } from "../api/gateway.ts";
 import type { AgentsListResult } from "../api/types.ts";
+import { captureChatOutboxAdmission, storageTargetForComposer } from "../lib/chat/outbox-store.ts";
 // These direct-render fixtures exercise Gateway lineage without the app lifecycle.
 // Browser tests cover deferred login loading and recovery.
 import "../components/login-gate.ts";
-import { captureChatOutboxAdmission, storageTargetForComposer } from "../lib/chat/outbox-store.ts";
 import {
   createTestSessionCapability,
   sessionsResult,
@@ -38,12 +37,13 @@ import {
   type GatewayRequestMock,
 } from "../test-helpers/gateway-client.ts";
 import { createStorageMock } from "../test-helpers/storage.ts";
-import "./app-host.ts";
 import { resolveControlUiDocumentMode } from "./approval-deep-link.ts";
+import "./app-host.ts";
 import type { ApplicationRuntime } from "./bootstrap.ts";
 import type { ApplicationContext, ApplicationGateway } from "./context.ts";
 import { createApplicationGateway } from "./gateway-store.ts";
 import { loadSettings } from "./settings.ts";
+import { currentThemeBranding } from "./theme-branding.ts";
 
 const HELLO: GatewayHelloOk = {
   type: "hello-ok",
@@ -101,7 +101,7 @@ function createGatewayContext(gateway: ApplicationGateway): ApplicationContext {
     basePath: "",
     agentSelection: { state: { selectedId: null } },
     config: { current: { terminalEnabled: false } },
-    theme: { resolvedMode: "dark", branding: resolveThemeBranding(undefined) },
+    theme: { resolvedMode: "dark", branding: currentThemeBranding() },
   } as unknown as ApplicationContext;
 }
 

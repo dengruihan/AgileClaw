@@ -70,7 +70,6 @@ export const TOOL_DISPLAY_CONFIG: ToolDisplayConfig = {
       "nodeId",
     ]),
     screen: displayTool("🖥️", "Screen", ["action", "sessionKey", "dock"]),
-    theme: displayTool("🎨", "Theme", ["action", "id", "mode"]),
     terminal: displayTool("⌨️", "Terminal", ["action", "sessionId", "command", "cwd"]),
     portal: displayTool("🌐", "Portal", ["action", "port", "id", "title", "path"]),
     process: displayTool("🧰", "Process", ["sessionId"]),

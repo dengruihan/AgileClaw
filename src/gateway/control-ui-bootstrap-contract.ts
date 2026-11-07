@@ -60,7 +60,6 @@ export type ControlUiBootstrapConfig = {
   embedSandbox?: ControlUiEmbedSandboxMode;
   allowExternalEmbedUrls?: boolean;
   automaticallyFetchFavicons?: boolean;
-  seamColor?: string;
   environment?: ControlUiEnvironment;
   /** Fresh-draft model, runtime and reasoning preference policy; never a selection restriction. */
   newSessionModelDefaults?: "last-used" | "configured";

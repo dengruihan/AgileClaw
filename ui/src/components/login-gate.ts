@@ -1,12 +1,12 @@
 // Control UI component renders the login gate.
 import { html, nothing, type TemplateResult } from "lit";
 import { property, state } from "lit/decorators.js";
-import type { ThemeMascot } from "../../../packages/gateway-protocol/src/theme.ts";
 import { normalizeBasePath } from "../app-route-paths.ts";
 import { canReloadControlUiDocument } from "../app/document-reload-guard.ts";
 import { beginNativeWindowDrag } from "../app/native-window-drag.ts";
 import { controlUiPublicAssetPath } from "../app/public-assets.ts";
 import { retryStaleChunkReloadWhenReachable } from "../app/stale-chunk-reload.ts";
+import type { ThemeMascot } from "../app/theme-branding.ts";
 import { t } from "../i18n/index.ts";
 import "../lib/toast.ts";
 import { registerLoginEnglish } from "../i18n/locales/en-login.ts";

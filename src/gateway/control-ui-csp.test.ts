@@ -31,9 +31,7 @@ describe("buildControlUiCspHeader", () => {
       "data:",
       "blob:",
       "https://api.openai.com",
-      "https://tweakcn.com",
     ]);
-    expect(connectSrc).not.toContain("https://*.tweakcn.com");
     expect(connectSrc?.split(" ")).not.toContain("https:");
   });
 

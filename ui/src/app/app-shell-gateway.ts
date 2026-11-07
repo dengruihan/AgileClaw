@@ -134,7 +134,6 @@ export class ShellGatewayOwner {
     applyServerUiPrefs(snapshot.config, {
       scope,
       profileId: context.gateway.snapshot?.selfUser?.id,
-      onThemeChanged: (theme) => context.theme.recordServerSelection(theme, scope),
       onApplied: () => context.theme.refresh(),
     });
     void this.refreshProfileAppearancePrefs(context).catch(() => undefined);
@@ -466,11 +465,6 @@ export class ShellGatewayOwner {
       onApplied: () => {
         if (remainsCurrent()) {
           context.theme.refresh();
-        }
-      },
-      onThemeChanged: (theme) => {
-        if (remainsCurrent()) {
-          context.theme.recordServerSelection(theme, scope);
         }
       },
     })

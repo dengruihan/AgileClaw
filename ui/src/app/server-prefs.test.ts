@@ -65,23 +65,12 @@ describe("server preferences", () => {
     ).toBeNull();
   });
 
-  it("rejects malformed accents in a minimal persisted settings record", () => {
-    const { gatewayUrl } = loadSettings();
-    localStorage.setItem(
-      `openclaw.control.settings.v1:${gatewayUrl}`,
-      JSON.stringify({ gatewayUrl, accent: "#abc" }),
-    );
-    expect(loadSettings().accent).toBeUndefined();
-  });
-
   it("applies only valid, known pref values", () => {
     const onApplied = vi.fn();
     expect(
       applyServerUiPrefs(
         configWithPrefs({
-          theme: "knot",
           themeMode: "dark",
-          accent: "#AbC123",
           locale: "de",
           chatShowThinking: false,
           chatShowToolCalls: false,
@@ -97,53 +86,13 @@ describe("server preferences", () => {
       ),
     ).toBe(true);
     expect(onApplied).toHaveBeenCalledWith({
-      theme: "knot",
       themeMode: "dark",
-      accent: "#abc123",
       locale: "de",
       chatShowThinking: false,
       chatShowToolCalls: false,
       chatPersistCommentary: false,
       chatSendShortcut: "modifier-enter",
       sidebarEntries: ["route:usage", "session:agent:main:test"],
-    });
-  });
-
-  it("preserves a server custom-theme override when this device lacks its palette", () => {
-    const config = configWithPrefs({ theme: "custom" });
-    const onApplied = vi.fn();
-    const onThemeChanged = vi.fn();
-    expect(applyServerUiPrefs(config, { onApplied, onThemeChanged })).toBe(false);
-    expect(loadSettings().theme).toBe("claw");
-    expect(onApplied).not.toHaveBeenCalled();
-    expect(onThemeChanged).toHaveBeenCalledWith("custom");
-    const state = resolveServerUiPrefState(config, "theme");
-
-    expect(state).toEqual({
-      overridden: true,
-      provenance: "synced",
-      resetValue: "claw",
-      value: "claw",
-    });
-    patchSettings({ theme: "knot" });
-    expect(
-      resolveServerUiPrefState(config, "theme", "", loadSettings(), {
-        canSync: false,
-      }),
-    ).toEqual({
-      overridden: true,
-      provenance: "device-local",
-      resetValue: "claw",
-      value: "knot",
-    });
-
-    const beforeReset = loadSettings();
-    const afterReset = resetServerUiPref("theme", state);
-    expect(changedServerUiPrefs(beforeReset, afterReset)).toEqual({
-      theme: null,
-      accent: "theme",
-      fontUi: null,
-      fontChat: null,
     });
   });
 
@@ -199,14 +148,18 @@ describe("server preferences", () => {
       }
     });
 
-    const state = resolveServerUiPrefState(configWithPrefs({ theme: "claw" }), "theme", scope);
-    resetServerUiPref("theme", state);
+    const state = resolveServerUiPrefState(
+      configWithPrefs({ themeMode: "system" }),
+      "themeMode",
+      scope,
+    );
+    resetServerUiPref("themeMode", state);
 
     await vi.waitFor(() =>
       expect(request).toHaveBeenCalledWith(
         "config.patch",
         expect.objectContaining({
-          raw: JSON.stringify({ ui: { prefs: { theme: null } } }),
+          raw: JSON.stringify({ ui: { prefs: { themeMode: null } } }),
         }),
       ),
     );
@@ -216,9 +169,7 @@ describe("server preferences", () => {
     const onApplied = vi.fn();
     applyServerUiPrefs(
       configWithPrefs({
-        theme: "knot",
         themeMode: "dark",
-        accent: "#48d6c2",
         chatSendShortcut: "modifier-enter",
         locale: "de",
         chatFollowUpMode: "queue",
@@ -230,63 +181,46 @@ describe("server preferences", () => {
     expect(applyServerUiPrefs(configWithPrefs({}), { onApplied })).toBe(true);
     const reset = loadSettings();
     expect(changedServerUiPrefs(before, reset)).toEqual({
-      theme: "claw",
       themeMode: "system",
-      accent: null,
       locale: null,
       chatSendShortcut: "enter",
       chatFollowUpMode: null,
     });
     expect(reset).toMatchObject({
-      theme: "claw",
+      theme: "phosphor",
       themeMode: "system",
     });
     expect(reset.locale).toBeUndefined();
     expect(reset.chatFollowUpMode).toBeUndefined();
-    expect(reset.accent).toBeUndefined();
     expect(reset.chatSendShortcut).toBe("enter");
     const persisted = JSON.parse(
       localStorage.getItem(`openclaw.control.settings.v1:${reset.gatewayUrl}`) ?? "{}",
     ) as Record<string, unknown>;
-    expect(Object.hasOwn(persisted, "accent")).toBe(false);
     expect(Object.hasOwn(persisted, "chatSendShortcut")).toBe(false);
   });
 
-  it("does not publish a server theme change shadowed by pending local intent", async () => {
+  it("does not publish a server mode change shadowed by pending local intent", async () => {
     const requestGate = createDeferred<unknown>();
     const request = vi.fn<Request>(() => requestGate.promise);
     const client = createClient(request, scope);
     const onApplied = vi.fn();
-    const onThemeChanged = vi.fn();
-    applyServerUiPrefs(configWithPrefs({ theme: "claw" }), {
-      scope,
-      onApplied,
-      onThemeChanged,
-    });
-    onThemeChanged.mockClear();
+    applyServerUiPrefs(configWithPrefs({ themeMode: "system" }), { scope, onApplied });
 
-    pushServerUiPrefs(client, { theme: "knot" });
+    pushServerUiPrefs(client, { themeMode: "dark" });
     await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
-    expect(
-      applyServerUiPrefs(configWithPrefs({ theme: "knot" }), {
-        scope,
-        onApplied,
-        onThemeChanged,
-      }),
-    ).toBe(false);
-    expect(onThemeChanged).not.toHaveBeenCalled();
+    expect(applyServerUiPrefs(configWithPrefs({ themeMode: "dark" }), { scope, onApplied })).toBe(
+      false,
+    );
 
     onApplied.mockClear();
     expect(
-      applyServerUiPrefs(configWithPrefs({ theme: "knot", locale: "de" }), {
+      applyServerUiPrefs(configWithPrefs({ themeMode: "dark", locale: "de" }), {
         scope,
         onApplied,
-        onThemeChanged,
       }),
     ).toBe(true);
     expect(onApplied).toHaveBeenCalledExactlyOnceWith({ locale: "de" });
     expect(loadSettings().locale).toBe("de");
-    expect(onThemeChanged).not.toHaveBeenCalled();
 
     requestGate.resolve({});
     await waitForFast(() => expect(localStorage.getItem(pendingKey(scope))).toBeNull());
@@ -294,27 +228,29 @@ describe("server preferences", () => {
 
   it("keeps a synced default reset as a pending offline null intent", () => {
     const previous = loadSettings();
-    const next = resetServerUiPref("theme");
+    const next = resetServerUiPref("themeMode");
     const prefs = changedServerUiPrefs(previous, next);
-    expect(prefs).toEqual({ theme: null });
+    expect(prefs).toEqual({ themeMode: null });
 
     pushServerUiPrefs(createClient(vi.fn(), scope, false), prefs ?? {});
 
-    expect(readPending(scope)).toEqual({ theme: null });
-    expect(resolveServerUiPrefState(configWithPrefs({ theme: "claw" }), "theme", scope)).toEqual({
+    expect(readPending(scope)).toEqual({ themeMode: null });
+    expect(
+      resolveServerUiPrefState(configWithPrefs({ themeMode: "system" }), "themeMode", scope),
+    ).toEqual({
       overridden: false,
       provenance: "pending",
-      resetValue: "claw",
-      value: "claw",
+      resetValue: "system",
+      value: "system",
     });
   });
 
   it("retains a rejected local edit until that server key actually changes", async () => {
-    const initialConfig = configWithPrefs({ theme: "claw", locale: "de" });
+    const initialConfig = configWithPrefs({ themeMode: "system", locale: "de" });
     const onApplied = vi.fn();
     applyServerUiPrefs(initialConfig, { scope, onApplied });
     const beforeLocalEdit = loadSettings();
-    const retained = patchSettings({ theme: "knot" });
+    const retained = patchSettings({ themeMode: "dark" });
     const prefs = changedServerUiPrefs(beforeLocalEdit, retained);
     const afterCommit = vi.fn();
     const request = vi.fn<Request>().mockRejectedValue(rejection);
@@ -328,25 +264,37 @@ describe("server preferences", () => {
     );
 
     expect(
-      applyServerUiPrefs(configWithPrefs({ theme: "claw", locale: "de" }), { scope, onApplied }),
+      applyServerUiPrefs(configWithPrefs({ themeMode: "system", locale: "de" }), {
+        scope,
+        onApplied,
+      }),
     ).toBe(false);
-    expect(loadSettings().theme).toBe("knot");
+    expect(loadSettings().themeMode).toBe("dark");
 
     resetServerUiPrefsSync();
     expect(
-      applyServerUiPrefs(configWithPrefs({ theme: "claw", locale: "de" }), { scope, onApplied }),
+      applyServerUiPrefs(configWithPrefs({ themeMode: "system", locale: "de" }), {
+        scope,
+        onApplied,
+      }),
     ).toBe(false);
-    expect(loadSettings().theme).toBe("knot");
+    expect(loadSettings().themeMode).toBe("dark");
 
     expect(
-      applyServerUiPrefs(configWithPrefs({ theme: "claw", locale: "fr" }), { scope, onApplied }),
+      applyServerUiPrefs(configWithPrefs({ themeMode: "system", locale: "fr" }), {
+        scope,
+        onApplied,
+      }),
     ).toBe(true);
-    expect(loadSettings()).toMatchObject({ theme: "knot", locale: "fr" });
+    expect(loadSettings()).toMatchObject({ themeMode: "dark", locale: "fr" });
 
     expect(
-      applyServerUiPrefs(configWithPrefs({ theme: "dash", locale: "fr" }), { scope, onApplied }),
+      applyServerUiPrefs(configWithPrefs({ themeMode: "light", locale: "fr" }), {
+        scope,
+        onApplied,
+      }),
     ).toBe(true);
-    expect(loadSettings().theme).toBe("dash");
+    expect(loadSettings().themeMode).toBe("light");
   });
 
   it("settles only this tab's acknowledged keys from sibling persisted pending", async () => {
@@ -355,7 +303,7 @@ describe("server preferences", () => {
     const client = createClient(request, scope);
     flushServerUiPrefs(client);
     localStorage.setItem(pendingKey(scope), JSON.stringify({ locale: "fr" }));
-    pushServerUiPrefs(client, { theme: "knot" });
+    pushServerUiPrefs(client, { themeMode: "dark" });
     await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
 
     flight.resolve({});
@@ -369,7 +317,7 @@ describe("server preferences", () => {
     flushServerUiPrefs(client);
     localStorage.setItem(pendingKey(scope), JSON.stringify({ locale: "fr" }));
 
-    pushServerUiPrefs(client, { theme: "knot" });
+    pushServerUiPrefs(client, { themeMode: "dark" });
 
     await waitForFast(() => expect(readPending(scope)).toEqual({ locale: "fr" }));
   });
@@ -591,41 +539,43 @@ describe("read-only server preference lifecycle", () => {
   const retainedKey = `openclaw.control.serverPrefs.retained-local.v1:${scope}`;
   it("retains a pre-snapshot read-only edit until the first server baseline is recorded", () => {
     const request = vi.fn<Request>();
-    patchSettings({ theme: "knot" });
+    patchSettings({ themeMode: "dark" });
 
     pushServerUiPrefs(
       createClient(request, scope, true, { ok: true }, false),
-      { theme: "knot" },
+      { themeMode: "dark" },
       { afterCommit: vi.fn() },
     );
 
-    const initial = configWithPrefs({ theme: "claw" });
+    const initial = configWithPrefs({ themeMode: "system" });
     expect(applyServerUiPrefs(initial, applied)).toBe(false);
-    expect(loadSettings().theme).toBe("knot");
+    expect(loadSettings().themeMode).toBe("dark");
     expect(localStorage.getItem(retainedKey)).toBeNull();
 
     resetServerUiPrefsSync();
-    expect(applyServerUiPrefs(configWithPrefs({ theme: "claw" }), applied)).toBe(false);
-    expect(loadSettings().theme).toBe("knot");
+    expect(applyServerUiPrefs(configWithPrefs({ themeMode: "system" }), applied)).toBe(false);
+    expect(loadSettings().themeMode).toBe("dark");
     const previous = loadSettings();
-    const state = resolveServerUiPrefState(initial, "theme", scope, previous, { canSync: false });
-    const reset = resetServerUiPref("theme", state, scope);
-    expect(reset.theme).toBe("claw");
+    const state = resolveServerUiPrefState(initial, "themeMode", scope, previous, {
+      canSync: false,
+    });
+    const reset = resetServerUiPref("themeMode", state, scope);
+    expect(reset.themeMode).toBe("system");
     expect(changedServerUiPrefs(previous, reset)).toBeNull();
 
-    expect(applyServerUiPrefs(configWithPrefs({ theme: "dash" }), applied)).toBe(true);
-    expect(loadSettings().theme).toBe("dash");
+    expect(applyServerUiPrefs(configWithPrefs({ themeMode: "light" }), applied)).toBe(true);
+    expect(loadSettings().themeMode).toBe("light");
     expect(request).not.toHaveBeenCalled();
   });
 
   it("applies the first server delta after a post-snapshot read-only edit", () => {
-    const initial = configWithPrefs({ theme: "claw" });
+    const initial = configWithPrefs({ themeMode: "system" });
     applyServerUiPrefs(initial, applied);
-    patchSettings({ theme: "knot" });
+    patchSettings({ themeMode: "dark" });
 
     pushServerUiPrefs(
       createClient(vi.fn(), scope, true, { ok: true }, false),
-      { theme: "knot" },
+      { themeMode: "dark" },
       {
         afterCommit: ({ retainedLocal }) => {
           expect(retainedLocal).toBe(true);
@@ -635,33 +585,39 @@ describe("read-only server preference lifecycle", () => {
     );
 
     expect(localStorage.getItem(retainedKey)).toBeNull();
-    expect(applyServerUiPrefs(configWithPrefs({ theme: "dash" }), applied)).toBe(true);
-    expect(loadSettings().theme).toBe("dash");
+    expect(applyServerUiPrefs(configWithPrefs({ themeMode: "light" }), applied)).toBe(true);
+    expect(loadSettings().themeMode).toBe("light");
   });
 
   it("keeps offline intent through read-only reconnect and replays it after authorization", async () => {
     const request = vi.fn<Request>(async () => ({}));
     const writer = createClient(request, scope, false, { ok: true }, false);
-    patchSettings({ theme: "knot" });
+    patchSettings({ themeMode: "dark" });
 
-    pushServerUiPrefs(writer, { theme: "knot" });
-    expect(readPending(scope)).toEqual({ theme: "knot" });
+    pushServerUiPrefs(writer, { themeMode: "dark" });
+    expect(readPending(scope)).toEqual({ themeMode: "dark" });
     expect(
-      resolveServerUiPrefState(configWithPrefs({ theme: "claw" }), "theme", scope, loadSettings(), {
-        canSync: false,
-      }),
+      resolveServerUiPrefState(
+        configWithPrefs({ themeMode: "system" }),
+        "themeMode",
+        scope,
+        loadSettings(),
+        {
+          canSync: false,
+        },
+      ),
     ).toEqual({
       overridden: true,
       provenance: "device-local",
-      resetValue: "claw",
-      value: "knot",
+      resetValue: "system",
+      value: "dark",
     });
 
     (writer.state as { connected: boolean }).connected = true;
     flushServerUiPrefs(writer);
     await Promise.resolve();
     expect(request).not.toHaveBeenCalled();
-    expect(readPending(scope)).toEqual({ theme: "knot" });
+    expect(readPending(scope)).toEqual({ themeMode: "dark" });
 
     (writer as { canPatch?: boolean }).canPatch = true;
     flushServerUiPrefs(writer);
@@ -691,32 +647,32 @@ describe("read-only server preference lifecycle", () => {
     const request = vi.fn<Request>(async () => ({}));
     const client = createClient(request, scope, false);
 
-    pushServerUiPrefs(client, { locale: "de", theme: "knot" });
-    localStorage.setItem(pendingKey(scope), JSON.stringify({ theme: "knot" }));
+    pushServerUiPrefs(client, { locale: "de", themeMode: "dark" });
+    localStorage.setItem(pendingKey(scope), JSON.stringify({ themeMode: "dark" }));
     (client.state as { connected: boolean }).connected = true;
     (client as { canPatch: boolean }).canPatch = false;
-    pushServerUiPrefs(client, { themeMode: "dark" });
+    pushServerUiPrefs(client, { locale: "fr" });
 
-    expect(readPending(scope)).toEqual({ theme: "knot" });
+    expect(readPending(scope)).toEqual({ themeMode: "dark" });
     expect(request).not.toHaveBeenCalled();
 
     (client as { canPatch: boolean }).canPatch = true;
     flushServerUiPrefs(client);
     await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
-    expectPatch(request, { theme: "knot" });
+    expectPatch(request, { themeMode: "dark" });
   });
 
   it("dispatches a same-key replacement persisted by another tab", async () => {
     const request = vi.fn<Request>(async () => ({}));
     const client = createClient(request, scope, false);
 
-    pushServerUiPrefs(client, { theme: "knot" });
-    localStorage.setItem(pendingKey(scope), JSON.stringify({ theme: "dash" }));
+    pushServerUiPrefs(client, { themeMode: "dark" });
+    localStorage.setItem(pendingKey(scope), JSON.stringify({ themeMode: "light" }));
     (client.state as { connected: boolean }).connected = true;
     flushServerUiPrefs(client);
 
     await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
-    expectPatch(request, { theme: "dash" });
+    expectPatch(request, { themeMode: "light" });
   });
 
   it("does not migrate cancelled pre-connection intent into an adopted gateway scope", async () => {
@@ -724,7 +680,7 @@ describe("read-only server preference lifecycle", () => {
     const writer = createClient(request, "", false);
     Object.assign(writer.state, { client: null });
 
-    pushServerUiPrefs(writer, { theme: "knot" });
+    pushServerUiPrefs(writer, { themeMode: "dark" });
     localStorage.removeItem(pendingKey(""));
 
     Object.assign(writer.state, createClient(request, "ws://first").state);

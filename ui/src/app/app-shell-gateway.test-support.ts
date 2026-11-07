@@ -7,13 +7,13 @@ import { ShellGatewayOwner, type ShellGatewayHost } from "./app-shell-gateway.ts
 import type { ApplicationContext, ApplicationGatewaySnapshot } from "./context.ts";
 
 export function createProfileAppearanceGateway(profileId: string | null) {
-  const pendingResponses: Array<(accent: string) => void> = [];
+  const pendingResponses: Array<(mode: string) => void> = [];
   let requestStarted = createDeferred();
   const request = vi.fn(
     () =>
-      new Promise<{ status: string; entries: { "ui.accent": string } }>((resolve) => {
-        pendingResponses.push((accent) =>
-          resolve({ status: "ok", entries: { "ui.accent": accent } }),
+      new Promise<{ status: string; entries: { "ui.themeMode": string } }>((resolve) => {
+        pendingResponses.push((mode) =>
+          resolve({ status: "ok", entries: { "ui.themeMode": mode } }),
         );
         requestStarted.resolve();
       }),
@@ -50,7 +50,7 @@ export function createProfileAppearanceGateway(profileId: string | null) {
       state: {
         client,
         connected: true,
-        configSnapshot: { config: { ui: { prefs: { accent: "#ff0000" } } } },
+        configSnapshot: { config: { ui: { prefs: { themeMode: "light" } } } },
       },
     },
     theme: { refresh: refreshTheme, recordServerSelection: vi.fn() },
@@ -71,7 +71,7 @@ export function createProfileAppearanceGateway(profileId: string | null) {
     sessionKeyClient: null,
   } as unknown as ShellGatewayHost;
   return {
-    async completeProfileAppearance(this: void, accent = "#336699") {
+    async completeProfileAppearance(this: void, mode = "dark") {
       // The first request follows a lazy import; synchronize on its arrival, not loader speed.
       await requestStarted.promise;
       expect(pendingResponses).toHaveLength(1);
@@ -83,7 +83,7 @@ export function createProfileAppearanceGateway(profileId: string | null) {
       const refreshed = new Promise<void>((resolve) => {
         refreshTheme.mockImplementationOnce(resolve);
       });
-      respond!(accent);
+      respond!(mode);
       return refreshed;
     },
     context,

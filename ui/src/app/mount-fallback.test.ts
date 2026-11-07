@@ -31,7 +31,7 @@ function installStartupPaintShell(window: TestWindow, html: string): void {
 
   const startupScript = Array.from(
     parsed.querySelectorAll<HTMLScriptElement>("script:not([src])"),
-  ).find((script) => script.textContent?.includes("var THEMES = {"));
+  ).find((script) => script.textContent?.includes("var MODES = {"));
   if (!startupScript?.textContent) {
     throw new Error("Expected inline startup theme script in index.html");
   }
@@ -86,9 +86,19 @@ describe("Control UI mount fallback", () => {
   });
 
   it.each([
-    ["claw dark", { theme: "claw", themeMode: "dark" }, "dark", "rgb(14, 16, 21)"],
-    ["OpenKnot dark", { theme: "knot", themeMode: "dark" }, "openknot", "rgb(8, 8, 8)"],
-    ["Dash light", { theme: "dash", themeMode: "light" }, "dash-light", "rgb(247, 242, 236)"],
+    ["phosphor dark", { theme: "phosphor", themeMode: "dark" }, "phosphor", "rgb(10, 15, 10)"],
+    [
+      "phosphor light",
+      { theme: "phosphor", themeMode: "light" },
+      "phosphor-light",
+      "rgb(244, 247, 244)",
+    ],
+    [
+      "a retired theme id normalized to phosphor",
+      { theme: "knot", themeMode: "dark" },
+      "phosphor",
+      "rgb(10, 15, 10)",
+    ],
   ])(
     "paints %s before the app stylesheet loads",
     async (_name, settings, expectedTheme, expectedBackground) => {

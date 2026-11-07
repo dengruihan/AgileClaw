@@ -38,8 +38,6 @@ packages/gateway-protocol/src/schema/worker-session-tools.ts
 packages/gateway-protocol/src/secret-ref-contract.ts
 packages/gateway-protocol/src/session-agent-status.ts
 packages/gateway-protocol/src/svg-image.ts
-packages/gateway-protocol/src/theme-ids.ts
-packages/gateway-protocol/src/theme.ts
 packages/gateway-protocol/src/update-run-vocabulary.ts
 packages/gateway-protocol/src/validation-errors.ts
 packages/gateway-protocol/src/worker-capacity.ts
@@ -1222,8 +1220,6 @@ src/plugins/manifest-registry-build.ts
 src/plugins/manifest-registry-installed.ts
 src/plugins/manifest-registry.ts
 src/plugins/manifest-setup-normalizers.ts
-src/plugins/manifest-theme-definitions.ts
-src/plugins/manifest-themes.ts
 src/plugins/manifest.ts
 src/plugins/min-host-version.ts
 src/plugins/module-export.ts

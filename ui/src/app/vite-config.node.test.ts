@@ -652,7 +652,7 @@ describe("Control UI Vite config", () => {
     expect(flat.get("login.failure.authRequired.title")).toBe("This Gateway expects its token");
     expect(flat.get("sessionsView.runsOnDevice")).toBe("Runs on device");
     expect(flat.get("pluginConsent.widenedTitle")).toBe("What changed");
-    expect(flat.get("configPage.themeImported")).toBe("Imported {name}.");
+    expect(flat.get("configView.textSizes.small")).toBe("Small");
     expect(flat.get("configView.sections.cron")).toBe("Automations");
     expect(flat.get("updates.page.intro")).toBe(
       "Manage the connected Gateway's release channel and update policy.",

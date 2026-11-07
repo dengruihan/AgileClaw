@@ -371,13 +371,13 @@ suite.define(() => {
           ({ gatewayUrl }) => {
             localStorage.setItem(
               `openclaw.control.settings.v1:${gatewayUrl}`,
-              JSON.stringify({ gatewayUrl, theme: "dash", themeMode: "dark" }),
+              JSON.stringify({ gatewayUrl, theme: "phosphor", themeMode: "dark" }),
             );
           },
           { gatewayUrl: controlUiBundledGatewayUrl(suite.server.baseUrl) },
         );
         await page.reload();
-        await expect.poll(() => page.locator("html").getAttribute("data-theme")).toBe("dash");
+        await expect.poll(() => page.locator("html").getAttribute("data-theme")).toBe("phosphor");
 
         await page.evaluate(() => {
           const app = document.querySelector("openclaw-app") as HTMLElement & {

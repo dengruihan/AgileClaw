@@ -427,6 +427,28 @@ function removeUiAssistantIdentity(raw: Record<string, unknown>, changes: string
   changes.push("Removed retired ui.assistant; configure agents.list[].identity instead.");
 }
 
+function removeRetiredUiAppearancePrefs(raw: Record<string, unknown>, changes: string[]): void {
+  const ui = getRecord(raw.ui);
+  const prefs = getRecord(ui?.prefs);
+  if (!prefs) {
+    return;
+  }
+  if (Object.hasOwn(prefs, "theme")) {
+    delete prefs.theme;
+    changes.push("Removed ui.prefs.theme; Phosphor is the single UI style.");
+  }
+  if (Object.hasOwn(prefs, "accent")) {
+    delete prefs.accent;
+    changes.push("Removed ui.prefs.accent; the UI style owns the accent palette.");
+  }
+  if (ui && Object.keys(prefs).length === 0) {
+    delete ui.prefs;
+    if (Object.keys(ui).length === 0) {
+      delete raw.ui;
+    }
+  }
+}
+
 export const LEGACY_CONFIG_MIGRATIONS_RUNTIME_RETIRED: LegacyConfigMigrationSpec[] = [
   LEGACY_CONFIG_MIGRATION_RUNTIME_MEMORY_QMD,
   defineLegacyConfigMigration({
@@ -601,6 +623,23 @@ export const LEGACY_CONFIG_MIGRATIONS_RUNTIME_RETIRED: LegacyConfigMigrationSpec
       rule(["ui", "assistant"], "ui.assistant was retired; use agents.list[].identity instead."),
     ],
     apply: removeUiAssistantIdentity,
+  }),
+  defineLegacyConfigMigration({
+    id: "runtime.ui-appearance-single-style",
+    describe: "Remove retired UI theme and accent preferences",
+    legacyRules: [
+      rule(
+        ["ui", "prefs"],
+        "ui.prefs.theme and ui.prefs.accent were retired; Phosphor is the single style and color mode stays on ui.themeMode.",
+        (value) => {
+          const prefs = getRecord(value);
+          return Boolean(
+            prefs && (Object.hasOwn(prefs, "theme") || Object.hasOwn(prefs, "accent")),
+          );
+        },
+      ),
+    ],
+    apply: removeRetiredUiAppearancePrefs,
   }),
   defineLegacyConfigMigration({
     id: "runtime.retired-config-keys",

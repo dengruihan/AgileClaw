@@ -1,7 +1,5 @@
 import { UI_APPEARANCE_TYPEFACE_VALUES } from "../../../packages/gateway-protocol/src/schema/ui-appearance-typefaces.ts";
-import { isBuiltinThemeId } from "../../../packages/gateway-protocol/src/theme-ids.ts";
 import { inferControlUiPublicAssetPath } from "./public-assets.ts";
-import type { ThemeName } from "./theme.ts";
 
 export type TypefaceId = (typeof UI_APPEARANCE_TYPEFACE_VALUES)[number];
 type TypefacePair = { ui: TypefaceId; chat: TypefaceId };
@@ -43,34 +41,17 @@ export const TYPEFACES = Object.fromEntries(
   { label: string; stack: string; asset: `fonts/${TypefaceId}.css` | undefined }
 >;
 
-const THEME_TYPEFACES = {
-  claw: { ui: "instrument-sans", chat: "instrument-sans" },
-  knot: { ui: "geist", chat: "geist" },
-  dash: { ui: "dm-sans", chat: "fraunces" },
-  absolutely: { ui: "space-grotesk", chat: "lora" },
-  tide: { ui: "ibm-plex-sans", chat: "ibm-plex-sans" },
-  beacon: { ui: "atkinson-hyperlegible", chat: "atkinson-hyperlegible" },
-  phosphor: { ui: "jetbrains-mono", chat: "jetbrains-mono" },
-  crt: { ui: "jetbrains-mono", chat: "jetbrains-mono" },
-  manuscript: { ui: "lora", chat: "lora" },
-  rose: { ui: "dm-sans", chat: "dm-sans" },
-  miami: { ui: "space-grotesk", chat: "space-grotesk" },
-  custom: { ui: "system", chat: "system" },
-} satisfies Record<ThemeName, TypefacePair>;
-
 // The wire contract owns storable overrides; browser and profile inputs must
 // reject the same unknown values rather than turning them into CSS families.
 export function normalizeTypefaceOverride(value: unknown): TypefaceId | undefined {
   return UI_APPEARANCE_TYPEFACE_VALUES.find((face) => face === value);
 }
 
-export function resolveTypefaces(
-  theme: ThemeName,
-  ui?: TypefaceId,
-  chat?: TypefaceId,
-): TypefacePair {
-  const defaults = THEME_TYPEFACES[isBuiltinThemeId(theme) ? theme : "custom"];
-  return { ui: ui ?? defaults.ui, chat: chat ?? defaults.chat };
+/** The single style's own faces; undefined overrides fall back to them. */
+const STYLE_TYPEFACES: TypefacePair = { ui: "jetbrains-mono", chat: "jetbrains-mono" };
+
+export function resolveTypefaces(ui?: TypefaceId, chat?: TypefaceId): TypefacePair {
+  return { ui: ui ?? STYLE_TYPEFACES.ui, chat: chat ?? STYLE_TYPEFACES.chat };
 }
 
 // Load faces only when selected or previewed; retain them so switching slots

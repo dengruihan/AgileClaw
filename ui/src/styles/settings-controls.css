@@ -39,7 +39,8 @@
   height: 16px;
 }
 
-/* The neutral track keeps its 2px inset; many-option enums may wrap. */
+/* The neutral track keeps its 2px inset; many-option enums may wrap.
+   The track is a recessed well; the active segment extrudes from it. */
 .settings-segmented {
   min-height: var(--settings-control-height);
   box-sizing: border-box;
@@ -51,6 +52,7 @@
   background: color-mix(in srgb, var(--bg) 80%, var(--bg-elevated) 20%);
   border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
   border-radius: var(--radius-md);
+  box-shadow: var(--surface-well);
   padding: 2px;
 }
 
@@ -153,7 +155,11 @@ wa-radio-group.settings-segmented::part(form-control-label) {
 .settings-segmented > .settings-segmented__btn--active {
   background: var(--bg-elevated);
   color: var(--text-strong);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--surface-raised);
+}
+
+.settings-segmented > .settings-segmented__btn:active:not(.settings-segmented__btn--active) {
+  box-shadow: var(--surface-pressed);
 }
 
 .settings-segmented--accent > .settings-segmented__btn--active {
@@ -161,7 +167,9 @@ wa-radio-group.settings-segmented::part(form-control-label) {
   background: var(--accent-subtle);
   color: var(--text);
   font-weight: 600;
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--accent) 20%, transparent);
+  box-shadow:
+    var(--surface-pressed),
+    0 0 6px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 :root[data-theme-mode="light"] .settings-segmented--accent > .settings-segmented__btn--active {
@@ -172,7 +180,9 @@ wa-radio-group.settings-segmented::part(form-control-label) {
 .settings-segmented--primary > .settings-segmented__btn--active {
   background: var(--primary);
   color: var(--primary-foreground);
-  box-shadow: 0 1px 3px var(--accent-subtle);
+  box-shadow:
+    var(--surface-raised),
+    0 0 10px var(--accent-glow);
 }
 
 :is(.settings-segmented--accent, .settings-segmented--primary)
@@ -256,7 +266,8 @@ select.settings-select:not([multiple]) {
 }
 
 /* Native controls own their box. Web Awesome selects are styled by their
-   component-owned stylesheet. */
+   component-owned stylesheet. Input fields sit in a recessed well so their
+   face reads as carved out of the surrounding surface. */
 .settings-input,
 select.settings-select {
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
@@ -264,7 +275,10 @@ select.settings-select {
   background-color: color-mix(in srgb, var(--bg) 80%, var(--bg-elevated) 20%);
   color: var(--text);
   padding: 7px 10px;
-  transition: border-color var(--duration-fast) var(--ease-out);
+  box-shadow: var(--surface-well);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
 select.settings-select:not([multiple]) {

@@ -68,20 +68,14 @@ const DEFAULT_APPLICATION_CONFIG: ApplicationConfig = {
 
 function loadControlUiPresentation(
   environment: ControlUiEnvironment | null,
-  seamColor: string | undefined,
   isCurrent: () => boolean,
 ) {
   const root = document.documentElement;
-  if (
-    environment ||
-    seamColor ||
-    root.hasAttribute(CONTROL_UI_ENVIRONMENT_ATTRIBUTE) ||
-    root.style.getPropertyValue("--ring")
-  ) {
+  if (environment || root.hasAttribute(CONTROL_UI_ENVIRONMENT_ATTRIBUTE)) {
     void import("./control-ui-environment-presentation.runtime.ts").then(
       ({ applyControlUiPresentation }) => {
         if (isCurrent()) {
-          applyControlUiPresentation({ environment, seamColor });
+          applyControlUiPresentation({ environment });
         }
       },
     );
@@ -129,7 +123,7 @@ async function loadApplicationConfig(params: {
   url: string;
   authCandidates: readonly string[];
   signal?: AbortSignal;
-}): Promise<{ config: ApplicationConfig; seamColor?: string } | null> {
+}): Promise<{ config: ApplicationConfig } | null> {
   if (typeof window === "undefined" || typeof fetch !== "function") {
     return null;
   }
@@ -158,7 +152,7 @@ async function loadApplicationConfig(params: {
       return null;
     }
     const parsed = (await res.json()) as ControlUiBootstrapConfig;
-    return { config: normalizeApplicationConfig(parsed), seamColor: parsed.seamColor };
+    return { config: normalizeApplicationConfig(parsed) };
   } catch {
     return null;
   }
@@ -180,7 +174,7 @@ export function createApplicationConfigCapability(params: {
       ...current,
       environment: JSON.parse(environmentAttribute),
     };
-    loadControlUiPresentation(current.environment, undefined, () => publishedVersion === 0);
+    loadControlUiPresentation(current.environment, () => publishedVersion === 0);
   }
   const url = `${normalizeRouteBasePath(params.resourceBasePath)}${CONTROL_UI_BOOTSTRAP_CONFIG_PATH}`;
   const sameOrigin = new URL(url, window.location.origin).origin === window.location.origin;
@@ -243,7 +237,6 @@ export function createApplicationConfigCapability(params: {
         publishedVersion = version;
         loadControlUiPresentation(
           next.environment,
-          loaded.seamColor,
           () => isCurrent() && version === publishedVersion,
         );
         const documentTerminalEnabled = readDocumentTerminalEnabled();

@@ -4,7 +4,6 @@ import { normalizeAgentId } from "@openclaw/normalization-core/agent-id";
 import { asOptionalRecord } from "@openclaw/normalization-core/record-coerce";
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import { normalizeUniqueTrimmedStringList } from "@openclaw/normalization-core/string-normalization";
-import { normalizeUiAppearancePreference } from "../../../packages/gateway-protocol/src/schema/ui-appearance-preferences.ts";
 import { DEFAULT_SIDEBAR_ENTRIES, normalizeSidebarEntries } from "../app-navigation.ts";
 import { configuredUiDevGateway } from "../dev-gateway.ts";
 import { isSupportedLocale } from "../i18n/index.ts";
@@ -19,7 +18,6 @@ import {
 import { normalizeChatSplitLayout } from "../pages/chat/split-layout-persistence.ts";
 import type { ChatSplitLayout } from "../pages/chat/split-layout-types.ts";
 import { resolveControlUiPaths } from "./browser.ts";
-import { parseImportedCustomTheme, type ImportedCustomTheme } from "./custom-theme.ts";
 import { parseThemeSelection, type ThemeMode, type ThemeName } from "./theme.ts";
 import { normalizeTypefaceOverride, type TypefaceId } from "./typography.ts";
 import { normalizeLocalUserIdentity, type LocalUserIdentity } from "./user-identity.ts";
@@ -137,10 +135,6 @@ type ChatWorkspaceDock = (typeof CHAT_WORKSPACE_DOCKS)[number];
 
 const normalizeChatWorkspaceDock = normalizeChoice(CHAT_WORKSPACE_DOCKS, "right");
 
-export function normalizeAccentColor(value: unknown): string | undefined {
-  return normalizeUiAppearancePreference("ui.accent", value);
-}
-
 export function normalizeTextScale(value: unknown, fallback: TextScaleStop = 100): TextScaleStop {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return fallback;
@@ -158,7 +152,7 @@ export function normalizeTextScale(value: unknown, fallback: TextScaleStop = 100
 }
 
 export const UI_APPEARANCE_DEFAULTS = {
-  theme: "claw",
+  theme: "phosphor",
   themeMode: "system",
   textScale: 100,
   sidebarLiveActivity: true,
@@ -180,8 +174,7 @@ export type UiSettings = {
   selectedAgentId?: string;
   theme: ThemeName;
   themeMode: ThemeMode;
-  accent?: string;
-  // Browser typeface overrides; undefined = theme default.
+  // Browser typeface overrides; undefined = style default.
   fontUi?: TypefaceId;
   fontChat?: TypefaceId;
   chatShowThinking: boolean;
@@ -215,7 +208,6 @@ export type UiSettings = {
   showAdvancedSettings?: boolean; // Expand advanced schema settings (default false)
   pinnedAgentIds?: string[]; // Agents pinned in the Agents settings page
   textScale?: TextScaleStop; // Browser-local text scale percentage
-  customTheme?: ImportedCustomTheme;
   locale?: string;
   // Confirm before deleting sessions (default true). Device-local on purpose:
   // opting out on one browser must not lower the bar on the operator's others,
@@ -480,7 +472,6 @@ export function loadUiPreferences(
     const gatewayUrl =
       targetGatewayUrl ?? (parsedGatewayUrl === pageDerivedUrl ? defaultUrl : parsedGatewayUrl);
     const scopedSessionSelection = resolveScopedSessionSelection(gatewayUrl, parsed, defaults);
-    const customTheme = parseImportedCustomTheme(parsed.customTheme);
     const { theme, mode } = parseThemeSelection(parsed.theme, parsed.themeMode);
     const parsedRecord = asOptionalRecord(parsed) ?? {};
     const hasSidebarEntries = Object.hasOwn(parsedRecord, "sidebarEntries");
@@ -499,9 +490,8 @@ export function loadUiPreferences(
       sessionKey: scopedSessionSelection.sessionKey,
       lastActiveSessionKey: scopedSessionSelection.lastActiveSessionKey,
       selectedAgentId: scopedSessionSelection.selectedAgentId,
-      theme: theme === "custom" && !customTheme ? "claw" : theme,
+      theme,
       themeMode: mode,
-      accent: normalizeAccentColor(parsed.accent),
       fontUi: normalizeTypefaceOverride(parsed.fontUi),
       fontChat: normalizeTypefaceOverride(parsed.fontChat),
       chatShowThinking: normalizeBooleanSetting(parsed.chatShowThinking, defaults.chatShowThinking),
@@ -568,7 +558,6 @@ export function loadUiPreferences(
         normalizeTextScale(parsed.textScale) !== UI_APPEARANCE_DEFAULTS.textScale
           ? normalizeTextScale(parsed.textScale)
           : undefined,
-      customTheme: customTheme ?? undefined,
       locale: isSupportedLocale(parsed.locale) ? parsed.locale : undefined,
       ...(parsed.sessionDeleteConfirm === false ? { sessionDeleteConfirm: false } : {}),
       ...(parsed.openLinksInControlUiBrowser === true ? { openLinksInControlUiBrowser: true } : {}),
@@ -657,7 +646,6 @@ export function saveSettings(next: UiSettings, options: { selectGateway?: boolea
     gatewayUrl: next.gatewayUrl,
     theme: next.theme,
     themeMode: next.themeMode,
-    accent: normalizeAccentColor(next.accent),
     fontUi: normalizeTypefaceOverride(next.fontUi),
     fontChat: normalizeTypefaceOverride(next.fontChat),
     chatShowThinking: next.chatShowThinking,
@@ -701,7 +689,6 @@ export function saveSettings(next: UiSettings, options: { selectGateway?: boolea
     // Empty pin list is the default; only real pins persist.
     pinnedAgentIds: next.pinnedAgentIds?.length ? next.pinnedAgentIds : undefined,
     textScale: next.textScale !== undefined ? normalizeTextScale(next.textScale) : undefined,
-    customTheme: next.customTheme || undefined,
     sessionsByGateway,
     locale: next.locale || undefined,
     // Only the opted-out value is persisted; absence means the safe default.

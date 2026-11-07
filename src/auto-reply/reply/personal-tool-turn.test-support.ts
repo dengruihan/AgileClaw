@@ -86,31 +86,6 @@ export async function createPersonalToolScreenDispatcher(profileIds: readonly st
     );
 }
 
-export async function createPersonalThemeToolCaller(
-  invoke: (
-    method: string,
-    params: Record<string, unknown>,
-  ) => Promise<{ ok: boolean; payload?: unknown; error?: { message: string } }>,
-) {
-  const [{ vi }, gatewayRequest, { createThemeTool }] = await Promise.all([
-    import("vitest"),
-    import("../../agents/tools/in-process-gateway.js"),
-    import("../../agents/tools/theme-tool.js"),
-  ]);
-  vi.spyOn(gatewayRequest, "callAgentToolGatewayRequest").mockImplementation(
-    async <T>(request: Parameters<typeof gatewayRequest.callAgentToolGatewayRequest>[0]) => {
-      const result = await invoke(request.method, request.params as Record<string, unknown>);
-      if (!result.ok) {
-        throw new Error(result.error?.message);
-      }
-      return result.payload as T;
-    },
-  );
-  const theme = createThemeTool();
-  return async (params: Record<string, unknown>, user?: string) =>
-    (await theme.execute("theme", { ...params, ...(user ? { user } : {}) })).details;
-}
-
 type Person = {
   profileId: string;
   senderId: string;

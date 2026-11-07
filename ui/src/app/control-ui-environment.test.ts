@@ -58,7 +58,6 @@ describe("Control UI environment presentation", () => {
       assistantName: "AgileClaw",
       assistantAvatar: "O",
       environment,
-      seamColor: "#123456",
     };
     vi.stubGlobal(
       "fetch",
@@ -75,7 +74,6 @@ describe("Control UI environment presentation", () => {
     expect(document.documentElement.style.getPropertyValue("--control-ui-environment-color")).toBe(
       "var(--control-ui-environment-amber)",
     );
-    expect(document.documentElement.style.getPropertyValue("--ring")).toBe("#123456");
     expect(sidebar.querySelector(".control-ui-environment-pill")?.textContent).toBe("edge");
     expect(topbar.querySelector(".control-ui-environment-pill")?.textContent).toBe("edge");
     expect(favicon.href).toContain("data:image/svg+xml,");
@@ -140,46 +138,6 @@ describe("Control UI environment presentation", () => {
     );
     expect(document.title).toBe("AgileClaw Control");
     expect(document.documentElement.hasAttribute("data-openclaw-environment")).toBe(false);
-  });
-
-  it("clears seam-color presentation when a seam-only bootstrap refresh becomes unset", async () => {
-    const bootstrap: ControlUiBootstrapConfig = {
-      basePath: "",
-      assistantName: "AgileClaw",
-      assistantAvatar: "O",
-    };
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn<typeof fetch>()
-        .mockResolvedValueOnce(new Response(JSON.stringify({ ...bootstrap, seamColor: "#123456" })))
-        .mockResolvedValueOnce(new Response(JSON.stringify(bootstrap))),
-    );
-    const config = createApplicationConfigCapability({ resourceBasePath: "" });
-
-    await config.refresh();
-    await vi.dynamicImportSettled();
-
-    expect(document.documentElement.style.getPropertyValue("--ring")).toBe("#123456");
-    expect(document.documentElement.style.getPropertyValue("--accent")).toBe("#123456");
-
-    await config.refresh();
-    await vi.dynamicImportSettled();
-
-    for (const property of [
-      "--ring",
-      "--accent",
-      "--accent-hover",
-      "--accent-muted",
-      "--accent-subtle",
-      "--accent-glow",
-      "--primary",
-      "--focus",
-      "--focus-ring",
-      "--focus-glow",
-    ]) {
-      expect(document.documentElement.style.getPropertyValue(property)).toBe("");
-    }
   });
 
   it("applies public document environment metadata before authenticated bootstrap", async () => {

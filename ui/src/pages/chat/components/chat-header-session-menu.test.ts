@@ -50,7 +50,7 @@ function settings(): UiSettings {
     token: "",
     sessionKey: "main",
     lastActiveSessionKey: "main",
-    theme: "claw",
+    theme: "phosphor",
     themeMode: "dark",
     chatShowThinking: true,
     chatShowToolCalls: true,

@@ -2,7 +2,6 @@
 import path from "node:path";
 import type { Locator, Page } from "playwright";
 import { beforeEach, expect, it } from "vitest";
-import { importCustomThemeFromUrl } from "../pages/config/custom-theme-import.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import {
   type MockGatewayRequest,
@@ -13,7 +12,6 @@ import {
   installMockGateway,
   waitForControlUiSettingsTakeover,
 } from "../test-helpers/control-ui-e2e.ts";
-import { createTweakcnThemePayload } from "../test-helpers/custom-theme.ts";
 import {
   configResponse,
   patchPrefs,
@@ -58,56 +56,6 @@ async function readPersistedSettings(page: Page): Promise<Record<string, unknown
     const raw = localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
   }, settingsStorageKey());
-}
-
-async function readAccentPresentation(page: Page) {
-  return page.evaluate(() => {
-    const styles = getComputedStyle(document.documentElement);
-    return {
-      accent: styles.getPropertyValue("--accent").trim(),
-      accentForeground: styles.getPropertyValue("--accent-foreground").trim(),
-      primaryForeground: styles.getPropertyValue("--primary-foreground").trim(),
-    };
-  });
-}
-
-/** Resolves --primary-hover to concrete channels via a painted probe; computed
- * custom-property reads return the raw color-mix() expression, not a color. */
-async function readResolvedPrimaryHover(page: Page): Promise<number[]> {
-  return page.evaluate(() => {
-    const probe = document.createElement("div");
-    probe.style.backgroundColor = "var(--primary-hover)";
-    document.body.append(probe);
-    const value = getComputedStyle(probe).backgroundColor;
-    probe.remove();
-    // Chromium serializes mixed colors as color(srgb r g b) with 0-1 floats.
-    const channels = (value.match(/\d+(?:\.\d+)?/g) ?? []).slice(0, 3).map(Number);
-    return channels.every((channel) => channel <= 1)
-      ? channels.map((channel) => channel * 255)
-      : channels;
-  });
-}
-
-async function readThemeImportRaceState(page: Page) {
-  const importer = page.locator(".settings-theme-import");
-  const message = importer.locator(".settings-theme-import__message");
-  const settings = await readPersistedSettings(page);
-  return {
-    renderedThemeMode: await page.locator("html").getAttribute("data-theme"),
-    titleColor: await page
-      .locator(".page-title")
-      .evaluate((element) => getComputedStyle(element).color),
-    clawSelected:
-      (await page
-        .locator("#settings-appearance-theme .settings-theme-card--claw")
-        .getAttribute("aria-pressed")) === "true",
-    customThemeMetadataCount: await importer.locator(".settings-theme-import__meta").count(),
-    importUrl: await importer.locator("input").inputValue(),
-    message: (await message.count()) > 0 ? ((await message.textContent())?.trim() ?? "") : "",
-    importButtonDisabled: await importer.locator("button.primary").isDisabled(),
-    persistedTheme: settings.theme ?? null,
-    hasPersistedCustomTheme: settings.customTheme !== undefined,
-  };
 }
 
 async function captureViewport(page: Page, filename: string): Promise<void> {
@@ -197,7 +145,6 @@ suite.define(() => {
     const page = await context.newPage();
     const initialPrefs: Record<string, unknown> = {
       locale: "en",
-      theme: "knot",
       themeMode: "dark",
     };
     const gateway = await installMockGateway(page, {
@@ -214,16 +161,12 @@ suite.define(() => {
       await gateway.waitForRequest("config.get");
 
       const languageRow = settingsRow(page, "Language");
-      const themeSection = page.locator("#settings-appearance-theme");
-      const colorModeRow = settingsRow(page, "Color mode");
+      const colorModeRow = page.locator("#settings-appearance-theme .settings-row").first();
       const textSizeSection = page.locator("#settings-appearance-text-size");
       const languageSelect = languageRow.locator("wa-select");
       const colorModeGroup = colorModeRow.locator("wa-radio-group");
 
       await expect.poll(() => selectValue(languageSelect)).toBe("en");
-      await expect
-        .poll(() => themeSection.locator(".settings-theme-card--knot").getAttribute("aria-pressed"))
-        .toBe("true");
       await expect.poll(() => selectValue(colorModeGroup)).toBe("dark");
       await expect
         .poll(() =>
@@ -233,8 +176,14 @@ suite.define(() => {
         )
         .toBe("true");
       await expect.poll(() => languageRow.textContent()).toContain("Default: System");
-      await expect.poll(() => themeSection.textContent()).toContain("Default: Claw");
-      await expect.poll(() => colorModeRow.textContent()).toContain("Default: System");
+      await expect
+        .poll(() =>
+          page
+            .locator("#settings-appearance-theme")
+            .locator(":scope > .settings-section__desc")
+            .textContent(),
+        )
+        .toContain("Default: System");
       await expect.poll(() => textSizeSection.textContent()).toContain("Default: 100%");
       await expect.poll(() => page.locator("html").getAttribute("data-theme-mode")).toBe("dark");
 
@@ -256,22 +205,7 @@ suite.define(() => {
         remainingPrefs: withoutLocale,
       });
 
-      const withoutTheme: Record<string, unknown> = { ...withoutLocale, accent: "theme" };
-      delete withoutTheme.theme;
-      await resetSyncedPreference({
-        click: () =>
-          themeSection
-            .locator(".settings-theme-card--claw")
-            .click()
-            .then(() => undefined),
-        expectedKey: "theme",
-        expectedPrefs: { theme: null, accent: "theme" },
-        gateway,
-        hash: "appearance-defaults-3",
-        remainingPrefs: withoutTheme,
-      });
-
-      const withoutThemeMode = { ...withoutTheme };
+      const withoutThemeMode: Record<string, unknown> = { ...withoutLocale };
       delete withoutThemeMode.themeMode;
       await resetSyncedPreference({
         click: () =>
@@ -289,9 +223,6 @@ suite.define(() => {
       await expect.poll(() => readPersistedSettings(page)).not.toHaveProperty("textScale");
 
       await expect.poll(() => selectValue(languageSelect)).toBe("system");
-      await expect
-        .poll(() => themeSection.locator(".settings-theme-card--claw").getAttribute("aria-pressed"))
-        .toBe("true");
       await expect.poll(() => selectValue(colorModeGroup)).toBe("system");
       await expect
         .poll(() =>
@@ -306,16 +237,10 @@ suite.define(() => {
       await gateway.waitForRequest("config.get");
 
       const reloadedLanguageRow = settingsRow(page, "Language");
-      const reloadedThemeSection = page.locator("#settings-appearance-theme");
       const reloadedColorModeRow = settingsRow(page, "Color mode");
       const reloadedTextSizeSection = page.locator("#settings-appearance-text-size");
 
       await expect.poll(() => selectValue(reloadedLanguageRow.locator("wa-select"))).toBe("system");
-      await expect
-        .poll(() =>
-          reloadedThemeSection.locator(".settings-theme-card--claw").getAttribute("aria-pressed"),
-        )
-        .toBe("true");
       await expect
         .poll(() => selectValue(reloadedColorModeRow.locator("wa-radio-group")))
         .toBe("system");
@@ -327,7 +252,6 @@ suite.define(() => {
         )
         .toBe("true");
       await expect.poll(() => reloadedLanguageRow.textContent()).not.toContain("Using default:");
-      await expect.poll(() => reloadedThemeSection.textContent()).not.toContain("Using default:");
       await expect.poll(() => reloadedColorModeRow.textContent()).not.toContain("Using default:");
       await expect
         .poll(() => reloadedTextSizeSection.textContent())
@@ -337,166 +261,6 @@ suite.define(() => {
 
       await page.evaluate(() => window.scrollTo(0, 0));
       await captureViewport(page, "03-inherited-defaults.png");
-    } finally {
-      await context.close();
-    }
-  });
-
-  it("applies synced accent preferences immediately and restores the operator seam color", async () => {
-    const localAccent = "#f5b942";
-    const serverAccent = "#5b9cf6";
-    const mintAccent = "#52c99a";
-    const customAccent = "#243b6b";
-    const operatorAccent = "#123456";
-    const context = await suite.browser.newContext({
-      colorScheme: "dark",
-      locale: "en-US",
-      serviceWorkers: "block",
-      viewport: { height: 1000, width: 1440 },
-    });
-    await context.addInitScript(
-      ({ accent, gatewayUrl, key }) => {
-        localStorage.setItem(key, JSON.stringify({ accent, gatewayUrl }));
-      },
-      {
-        accent: localAccent,
-        gatewayUrl: controlUiBundledGatewayUrl(suite.server.baseUrl),
-        key: settingsStorageKey(),
-      },
-    );
-    const page = await context.newPage();
-    const initialPrefs = { accent: serverAccent, theme: "knot" };
-    const gateway = await installMockGateway(page, {
-      deferredMethods: ["config.get"],
-      methodResponses: {
-        "config.get": configResponse(initialPrefs, "appearance-accent-1"),
-        "config.patch": { ok: true },
-      },
-    });
-    await page.route("**/control-ui-config.json", (route) =>
-      route.fulfill({
-        json: { ...createControlUiMockBootstrapConfig(), seamColor: operatorAccent },
-      }),
-    );
-
-    try {
-      const response = await page.goto(`${suite.server.baseUrl}settings/appearance`);
-      expect(response?.status()).toBe(200);
-      await gateway.waitForRequest("config.get");
-      await expect
-        .poll(() => readAccentPresentation(page))
-        .toEqual({
-          accent: localAccent,
-          accentForeground: "#000000",
-          primaryForeground: "#000000",
-        });
-
-      await gateway.resolveDeferred(
-        "config.get",
-        configResponse(initialPrefs, "appearance-accent-1"),
-      );
-      await waitForControlUiSettingsTakeover(page);
-      const accentSection = page.locator("#settings-appearance-accent");
-      const mintPreset = accentSection.locator('[data-accent-preset="mint"]');
-      await expect
-        .poll(() =>
-          accentSection.locator('[data-accent-preset="blue"]').getAttribute("aria-pressed"),
-        )
-        .toBe("true");
-      await expect.poll(() => readAccentPresentation(page)).toMatchObject({ accent: serverAccent });
-      await accentSection.scrollIntoViewIfNeeded();
-      await captureViewport(page, "08-accent-server-preference.png");
-
-      await gateway.setMethodResponse(
-        "config.get",
-        configResponse({ accent: mintAccent, theme: "knot" }, "appearance-accent-2"),
-      );
-      await mintPreset.click();
-      await waitForRequestCount(gateway, "config.patch", 1);
-      expect(patchPrefs((await gateway.getRequests("config.patch"))[0]!)).toEqual({
-        accent: mintAccent,
-      });
-      await expect.poll(() => mintPreset.getAttribute("aria-pressed")).toBe("true");
-      await expect
-        .poll(() => readAccentPresentation(page))
-        .toEqual({
-          accent: mintAccent,
-          accentForeground: "#000000",
-          primaryForeground: "#000000",
-        });
-      await expect.poll(() => readPersistedSettings(page)).toMatchObject({ accent: mintAccent });
-      // Dark Knot primary buttons hover on --primary-hover; it must track the
-      // selected accent (mint mixed 18% toward white), not the theme default.
-      const hoverChannels = await readResolvedPrimaryHover(page);
-      const expectedHover = [0x52, 0xc9, 0x9a].map((channel) =>
-        Math.round(channel * 0.82 + 255 * 0.18),
-      );
-      expect(hoverChannels).toHaveLength(3);
-      for (const [index, channel] of hoverChannels.entries()) {
-        expect(Math.abs(channel - expectedHover[index]!)).toBeLessThanOrEqual(2);
-      }
-      await captureViewport(page, "09-accent-mint-selected.png");
-
-      await resetSyncedPreference({
-        click: () =>
-          page
-            .locator("#settings-appearance-theme .settings-theme-card--claw")
-            .click()
-            .then(() => undefined),
-        expectedKey: "theme",
-        expectedPrefs: { theme: null, accent: "theme" },
-        gateway,
-        hash: "appearance-accent-3",
-        remainingPrefs: { accent: "theme" },
-      });
-      await expect.poll(() => page.locator("html").getAttribute("data-theme")).toBe("dark");
-      await expect.poll(() => readAccentPresentation(page)).toMatchObject({ accent: "#ff5c5c" });
-      await expect.poll(() => readPersistedSettings(page)).toMatchObject({ accent: "theme" });
-      await expect.poll(() => mintPreset.getAttribute("aria-pressed")).toBe("false");
-
-      await gateway.setMethodResponse(
-        "config.get",
-        configResponse({ accent: customAccent }, "appearance-accent-4"),
-      );
-      await accentSection.locator('input[type="color"][data-accent-custom]').fill(customAccent);
-      await waitForRequestCount(gateway, "config.patch", 3);
-      expect(patchPrefs((await gateway.getRequests("config.patch"))[2]!)).toEqual({
-        accent: customAccent,
-      });
-      await expect
-        .poll(() => readAccentPresentation(page))
-        .toEqual({
-          accent: customAccent,
-          accentForeground: "#ffffff",
-          primaryForeground: "#ffffff",
-        });
-      await expect.poll(() => readPersistedSettings(page)).toMatchObject({ accent: customAccent });
-
-      await resetSyncedPreference({
-        click: () =>
-          accentSection
-            .locator('[data-accent-preset="default"]')
-            .click()
-            .then(() => undefined),
-        expectedKey: "accent",
-        gateway,
-        hash: "appearance-accent-5",
-        remainingPrefs: {},
-      });
-      await expect
-        .poll(() =>
-          accentSection.locator('[data-accent-preset="default"]').getAttribute("aria-pressed"),
-        )
-        .toBe("true");
-      await expect
-        .poll(() => readAccentPresentation(page))
-        .toEqual({
-          accent: operatorAccent,
-          accentForeground: "#ffffff",
-          primaryForeground: "#ffffff",
-        });
-      await expect.poll(() => readPersistedSettings(page)).not.toHaveProperty("accent");
-      await captureViewport(page, "10-accent-operator-default-restored.png");
     } finally {
       await context.close();
     }
@@ -512,7 +276,7 @@ suite.define(() => {
       async ({ page }) => {
         const initialPrefs = {
           locale: "en",
-          theme: "claw",
+          themeMode: "dark",
           chatFollowUpMode: "queue",
         };
         const gateway = await installMockGateway(page, {
@@ -528,38 +292,32 @@ suite.define(() => {
 
         const languageRow = page.locator("#settings-language .settings-row");
         const languageSelect = languageRow.locator("wa-select");
-        const themeSection = page.locator("#settings-appearance-theme");
-        const themeDescription = themeSection.locator(":scope > .settings-section__desc");
+        const colorModeRow = page.locator("#settings-appearance-theme .settings-row").first();
+        const colorModeDescription = page
+          .locator("#settings-appearance-theme")
+          .locator(":scope > .settings-section__desc");
         const followUpSelect = page.locator("[data-settings-follow-up-mode]");
         const followUpRow = page.locator(".settings-row").filter({ has: followUpSelect });
 
         await expect.poll(() => selectValue(languageSelect)).toBe("en");
-        await expect
-          .poll(() =>
-            themeSection.locator(".settings-theme-card--claw").getAttribute("aria-pressed"),
-          )
-          .toBe("true");
+        await expect.poll(() => selectValue(colorModeRow.locator("wa-radio-group"))).toBe("dark");
         await expect.poll(() => followUpSelect.inputValue()).toBe("queue");
 
         await gateway.deferNext("config.patch");
-        await themeSection.locator(".settings-theme-card--knot").click();
+        await colorModeRow.locator('wa-radio[value="light"]').click();
         await waitForRequestCount(gateway, "config.patch", 1);
         expect(
           patchPrefs((await gateway.getRequests("config.patch"))[0] as MockGatewayRequest),
-        ).toEqual({ theme: "knot", accent: "theme" });
+        ).toEqual({ themeMode: "light" });
         await gateway.rejectDeferred("config.patch", {
           code: "INVALID_REQUEST",
           message: "mock validation failure",
         });
 
+        await expect.poll(() => selectValue(colorModeRow.locator("wa-radio-group"))).toBe("light");
+        await expect.poll(() => colorModeDescription.textContent()).toContain("Default: Dark");
         await expect
-          .poll(() =>
-            themeSection.locator(".settings-theme-card--knot").getAttribute("aria-pressed"),
-          )
-          .toBe("true");
-        await expect.poll(() => themeDescription.textContent()).toContain("Default: Claw");
-        await expect
-          .poll(() => themeDescription.textContent())
+          .poll(() => colorModeDescription.textContent())
           .toContain("Stored in this browser only");
 
         await gateway.deferNext("config.patch");
@@ -599,7 +357,7 @@ suite.define(() => {
           .poll(() => followUpRow.textContent())
           .toContain("Stocké uniquement dans ce navigateur");
 
-        await themeSection.locator(".settings-theme-card--claw").click();
+        await colorModeRow.locator('wa-radio[value="dark"]').click();
         await languageSelect.evaluate((element) => {
           const select = element as HTMLElement & { value: string };
           select.value = "system";
@@ -607,11 +365,7 @@ suite.define(() => {
         });
         await followUpRow.locator("button.btn--sm").click();
 
-        await expect
-          .poll(() =>
-            themeSection.locator(".settings-theme-card--claw").getAttribute("aria-pressed"),
-          )
-          .toBe("true");
+        await expect.poll(() => selectValue(colorModeRow.locator("wa-radio-group"))).toBe("dark");
         await expect.poll(() => selectValue(languageSelect)).toBe("en");
         await expect.poll(() => followUpSelect.inputValue()).toBe("queue");
         await expect.poll(() => page.locator("html").getAttribute("lang")).toBe("en");
@@ -631,7 +385,7 @@ suite.define(() => {
     const gateway = await installMockGateway(page, {
       operatorScopes: ["operator.read"],
       methodResponses: {
-        "config.get": configResponse({ theme: "knot" }, "appearance-read-only-1"),
+        "config.get": configResponse({ themeMode: "dark" }, "appearance-read-only-1"),
       },
     });
 
@@ -641,39 +395,35 @@ suite.define(() => {
       await waitForControlUiSettingsTakeover(page);
       await gateway.waitForRequest("config.get");
 
-      const themeSection = page.locator("#settings-appearance-theme");
-      const themeDescription = themeSection.locator(":scope > .settings-section__desc");
-      await themeSection.locator(".settings-theme-card--claw").click();
+      const colorModeRow = page.locator("#settings-appearance-theme .settings-row").first();
+      const colorModeDescription = page
+        .locator("#settings-appearance-theme")
+        .locator(":scope > .settings-section__desc");
+      await colorModeRow.locator('wa-radio[value="light"]').click();
 
+      await expect.poll(() => selectValue(colorModeRow.locator("wa-radio-group"))).toBe("light");
       await expect
-        .poll(() => themeSection.locator(".settings-theme-card--claw").getAttribute("aria-pressed"))
-        .toBe("true");
-      await expect
-        .poll(() => themeDescription.textContent())
+        .poll(() => colorModeDescription.textContent())
         .toContain("Stored in this browser only");
-      await expect.poll(() => readPersistedSettings(page)).toMatchObject({ theme: "claw" });
+      await expect.poll(() => readPersistedSettings(page)).toMatchObject({ themeMode: "light" });
       await page.waitForTimeout(100);
       expect(await gateway.getRequests("config.patch")).toHaveLength(0);
 
       await page.reload();
       await waitForControlUiSettingsTakeover(page);
+      await expect.poll(() => selectValue(colorModeRow.locator("wa-radio-group"))).toBe("light");
       await expect
-        .poll(() => themeSection.locator(".settings-theme-card--claw").getAttribute("aria-pressed"))
-        .toBe("true");
-      await expect
-        .poll(() => themeDescription.textContent())
+        .poll(() => colorModeDescription.textContent())
         .toContain("Stored in this browser only");
-      await expect.poll(() => readPersistedSettings(page)).toMatchObject({ theme: "claw" });
+      await expect.poll(() => readPersistedSettings(page)).toMatchObject({ themeMode: "light" });
       expect(await gateway.getRequests("config.patch")).toHaveLength(0);
 
-      await themeSection.locator(".settings-theme-card--knot").click();
+      await colorModeRow.locator('wa-radio[value="system"]').click();
+      await expect.poll(() => selectValue(colorModeRow.locator("wa-radio-group"))).toBe("system");
+      await expect.poll(() => colorModeDescription.textContent()).toContain("Default: Dark");
       await expect
-        .poll(() => themeSection.locator(".settings-theme-card--knot").getAttribute("aria-pressed"))
-        .toBe("true");
-      await expect.poll(() => themeDescription.textContent()).toContain("Default: Claw");
-      await expect
-        .poll(() => themeDescription.textContent())
-        .not.toContain("Stored in this browser only");
+        .poll(() => colorModeDescription.textContent())
+        .toContain("Stored in this browser only");
       await page.waitForTimeout(100);
       expect(await gateway.getRequests("config.patch")).toHaveLength(0);
 
@@ -738,289 +488,6 @@ suite.define(() => {
         .toBe("true");
       expect(await gateway.getRequests("config.patch")).toHaveLength(0);
     } finally {
-      await context.close();
-    }
-  });
-
-  it("announces a failed custom-theme import, then persists a successful retry across reload", async () => {
-    await suite.withPage(
-      {
-        colorScheme: "dark",
-        locale: "en-US",
-        serviceWorkers: "block",
-        viewport: { height: 900, width: 1440 },
-      },
-      async ({ page }) => {
-        const gateway = await installMockGateway(page, {
-          methodResponses: {
-            "config.get": configResponse({}, "custom-theme-invalid-1"),
-            "config.patch": { ok: true },
-          },
-        });
-        await page.route("https://tweakcn.com/r/themes/network-failure", async (route) => {
-          await route.fulfill({ status: 503 });
-        });
-        let successfulImports = 0;
-        await page.route("https://tweakcn.com/r/themes/retry-theme", async (route) => {
-          successfulImports += 1;
-          await route.fulfill({ json: createTweakcnThemePayload() });
-        });
-
-        const response = await page.goto(`${suite.server.baseUrl}settings/appearance`);
-        expect(response?.status()).toBe(200);
-        await waitForControlUiSettingsTakeover(page);
-        await gateway.waitForRequest("config.get");
-
-        await page.locator(".settings-theme-card--custom").click();
-        const importer = page.locator(".settings-theme-import");
-        await importer.locator("input").fill("https://tweakcn.com/themes/network-failure");
-        await importer.locator("button.primary").click();
-
-        await expect
-          .poll(async () => (await importer.getByRole("alert").textContent())?.trim())
-          .toBe("tweakcn import failed (503).");
-        expect(await gateway.getRequests("config.patch")).toHaveLength(0);
-        await captureViewport(page, "07-custom-theme-import-error-announced.png");
-
-        await gateway.setMethodResponse(
-          "config.get",
-          configResponse({ theme: "custom", accent: "theme" }, "custom-theme-imported-2"),
-        );
-        await importer.locator("input").fill("https://tweakcn.com/themes/retry-theme");
-        await importer.locator("button.primary").click();
-        await expect.poll(() => importer.getByRole("status").textContent()).toContain("Imported");
-        await expect.poll(() => page.locator("html").getAttribute("data-theme")).toBe("custom");
-        const importedSettings = await readPersistedSettings(page);
-        expect(importedSettings).toMatchObject({
-          customTheme: { themeId: "retry-theme", label: "Light Green" },
-          theme: "custom",
-        });
-        const importedAccent = await readAccentPresentation(page);
-        expect(importedAccent.accent).toBe(createTweakcnThemePayload().cssVars.dark.accent);
-        await waitForRequestCount(gateway, "config.patch", 1);
-        const [themePatch] = await gateway.getRequests("config.patch");
-        expect(patchPrefs(themePatch!)).toEqual({ theme: "custom", accent: "theme" });
-        await captureViewport(page, "08-custom-theme-imported.png");
-
-        await page.reload();
-        await waitForControlUiSettingsTakeover(page);
-        await expect.poll(() => page.locator("html").getAttribute("data-theme")).toBe("custom");
-        await expect
-          .poll(() => importer.locator(".settings-theme-import__meta-value").textContent())
-          .toContain("Light Green");
-        expect((await readPersistedSettings(page)).customTheme).toEqual(
-          importedSettings.customTheme,
-        );
-        expect(await readAccentPresentation(page)).toEqual(importedAccent);
-        expect(successfulImports).toBe(1);
-        expect(await gateway.getRequests("config.patch")).toHaveLength(0);
-        await captureViewport(page, "09-custom-theme-reloaded.png");
-      },
-    );
-  });
-
-  it("keeps Clear authoritative after a delayed custom-theme replacement", async () => {
-    const existingTheme = await importCustomThemeFromUrl(
-      "existing",
-      async () =>
-        new Response(
-          JSON.stringify({ ...createTweakcnThemePayload(), name: "Existing Test Theme" }),
-          { headers: { "content-type": "application/json" }, status: 200 },
-        ),
-    );
-    const replacementPayload = createTweakcnThemePayload();
-    let releaseReplacement!: () => void;
-    const replacementGate = new Promise<void>((resolve) => {
-      releaseReplacement = resolve;
-    });
-    const context = await suite.browser.newContext({
-      colorScheme: "dark",
-      locale: "en-US",
-      serviceWorkers: "block",
-      viewport: { height: 1000, width: 1440 },
-    });
-    await context.addInitScript(
-      ({ gatewayUrl, key, theme }) => {
-        localStorage.setItem(
-          key,
-          JSON.stringify({
-            customTheme: theme,
-            gatewayUrl,
-            theme: "custom",
-          }),
-        );
-      },
-      {
-        gatewayUrl: controlUiBundledGatewayUrl(suite.server.baseUrl),
-        key: settingsStorageKey(),
-        theme: existingTheme,
-      },
-    );
-    const page = await context.newPage();
-    const gateway = await installMockGateway(page, {
-      methodResponses: {
-        "config.get": configResponse({}, "custom-theme-race-1"),
-        "config.patch": { ok: true },
-      },
-    });
-    await page.route("https://tweakcn.com/r/themes/replacement", async (route) => {
-      await replacementGate;
-      await route.fulfill({ json: replacementPayload });
-    });
-
-    try {
-      const response = await page.goto(`${suite.server.baseUrl}settings/appearance`);
-      expect(response?.status()).toBe(200);
-      await waitForControlUiSettingsTakeover(page);
-      await gateway.waitForRequest("config.get");
-
-      const themeSection = page.locator("#settings-appearance-theme");
-      const importer = page.locator(".settings-theme-import");
-      const importField = importer.locator("input");
-      await expect.poll(() => page.locator("html").getAttribute("data-theme")).toBe("custom");
-      await expect
-        .poll(() => importer.locator(".settings-theme-import__meta-value").textContent())
-        .toContain("Existing Test Theme");
-      const beforeReplace = await readThemeImportRaceState(page);
-      await captureViewport(page, "04-custom-theme-before-replace.png");
-
-      await importField.fill("replacement");
-      await importer.locator("button.primary").click();
-      const replacementResponse = page.waitForResponse("https://tweakcn.com/r/themes/replacement");
-      await expect.poll(() => importer.locator("button.primary").isDisabled()).toBe(true);
-      await importer.locator("button.danger").click();
-
-      await expect
-        .poll(() => themeSection.locator(".settings-theme-card--claw").getAttribute("aria-pressed"))
-        .toBe("true");
-      await expect.poll(() => importer.locator(".settings-theme-import__meta").count()).toBe(0);
-      const afterClear = await readThemeImportRaceState(page);
-      await captureViewport(page, "05-custom-theme-cleared-with-replace-pending.png");
-
-      releaseReplacement();
-      await replacementResponse;
-      await expect
-        .poll(async () => {
-          const settings = await readPersistedSettings(page);
-          return {
-            customTheme: settings.customTheme,
-            theme: settings.theme,
-          };
-        })
-        .toEqual({ customTheme: undefined, theme: "claw" });
-      await expect.poll(() => importer.locator(".settings-theme-import__meta").count()).toBe(0);
-      await expect
-        .poll(() => importer.locator(".settings-theme-import__message").textContent())
-        .toContain("removed");
-      await expect.poll(() => importer.getByRole("status").count()).toBe(1);
-      const afterDelayedResponse = await readThemeImportRaceState(page);
-      expect(beforeReplace).toMatchObject({
-        clawSelected: false,
-        customThemeMetadataCount: 1,
-        persistedTheme: "custom",
-        hasPersistedCustomTheme: true,
-      });
-      expect(afterClear).toMatchObject({
-        renderedThemeMode: "dark",
-        clawSelected: true,
-        customThemeMetadataCount: 0,
-        importUrl: "replacement",
-        importButtonDisabled: false,
-        persistedTheme: "claw",
-        hasPersistedCustomTheme: false,
-      });
-      expect(beforeReplace.titleColor).not.toBe(afterClear.titleColor);
-      expect(afterDelayedResponse).toEqual({
-        ...afterClear,
-        message: "Custom theme removed.",
-      });
-      console.info(
-        `[control-ui-e2e] THEME_IMPORT_RACE_VERDICT ${JSON.stringify({
-          scenario: "delayed-replace-then-clear",
-          beforeReplace,
-          afterClear,
-          afterDelayedResponse,
-          pass: true,
-        })}`,
-      );
-      await captureViewport(page, "06-custom-theme-clear-remains-final.png");
-    } finally {
-      releaseReplacement();
-      await context.close();
-    }
-  });
-
-  it("keeps a newer server-applied theme authoritative over a delayed import", async () => {
-    const replacementPayload = createTweakcnThemePayload();
-    let releaseImport!: () => void;
-    const importGate = new Promise<void>((resolve) => {
-      releaseImport = resolve;
-    });
-    const context = await suite.browser.newContext({
-      colorScheme: "dark",
-      locale: "en-US",
-      serviceWorkers: "block",
-      viewport: { height: 1000, width: 1440 },
-    });
-    const page = await context.newPage();
-    const gateway = await installMockGateway(page, {
-      methodResponses: {
-        "config.get": configResponse({ theme: "claw" }, "custom-theme-server-race-1"),
-        "config.patch": { ok: true },
-      },
-    });
-    await page.route("https://tweakcn.com/r/themes/replacement", async (route) => {
-      await importGate;
-      await route.fulfill({ json: replacementPayload });
-    });
-
-    try {
-      const response = await page.goto(`${suite.server.baseUrl}settings/appearance`);
-      expect(response?.status()).toBe(200);
-      await waitForControlUiSettingsTakeover(page);
-      await gateway.waitForRequest("config.get");
-
-      const themeSection = page.locator("#settings-appearance-theme");
-      await themeSection.locator(".settings-theme-card--custom").click();
-      const importer = page.locator(".settings-theme-import");
-      await importer.locator("input").fill("replacement");
-      await importer.locator("button.primary").click();
-      const replacementResponse = page.waitForResponse("https://tweakcn.com/r/themes/replacement");
-      await expect.poll(() => importer.locator("button.primary").isDisabled()).toBe(true);
-
-      const configGetCount = (await gateway.getRequests("config.get")).length;
-      await gateway.setMethodResponse(
-        "config.get",
-        configResponse({ theme: "knot" }, "custom-theme-server-race-2"),
-      );
-      await gateway.emitGatewayEvent("config.changed", {
-        hash: "custom-theme-server-race-2",
-        path: "/tmp/openclaw.json",
-        ts: Date.now(),
-      });
-      await waitForRequestCount(gateway, "config.get", configGetCount + 1);
-      await expect
-        .poll(() => themeSection.locator(".settings-theme-card--knot").getAttribute("aria-pressed"))
-        .toBe("true");
-
-      releaseImport();
-      await replacementResponse;
-      await expect
-        .poll(async () => {
-          const settings = await readPersistedSettings(page);
-          return {
-            hasCustomTheme: typeof settings.customTheme === "object",
-            theme: settings.theme,
-          };
-        })
-        .toEqual({ hasCustomTheme: true, theme: "knot" });
-      await expect
-        .poll(() => importer.locator(".settings-theme-import__message").textContent())
-        .toContain("Imported");
-      await expect.poll(() => importer.getByRole("status").count()).toBe(1);
-      expect(await gateway.getRequests("config.patch")).toHaveLength(0);
-    } finally {
-      releaseImport();
       await context.close();
     }
   });

@@ -65,7 +65,6 @@ function controlsHtml() {
       <label class="field checkbox"><input type="checkbox" /><span>field checkbox</span></label>
       <label class="field checkbox"><input type="radio" /><span>field radio</span></label>
       <input class="settings-sidebar__search-input" value="settings search" />
-      <input class="settings-theme-import__input" value="theme" />
       <label class="config-raw-field"><textarea>raw config</textarea></label>
       <input class="settings-input" value="config input" />
       <div class="settings-row__control"><textarea class="settings-input">config textarea</textarea></div>
@@ -223,13 +222,13 @@ describeBrowserLayout("settings icon buttons", () => {
 });
 
 describeBrowserLayout("shared button states", () => {
-  it("honors distinct primary fill and hover colors in a custom light palette", async () => {
+  it("honors distinct primary fill and hover colors in the light palette", async () => {
     await withBrowserPage(desktopContext.newPage(), async (page) => {
       await page.emulateMedia({ reducedMotion: "reduce" });
       await page.setContent(`<!doctype html>
-        <html data-theme="custom-light" data-theme-mode="light">
+        <html data-theme="phosphor-light" data-theme-mode="light">
           <head><style>
-            :root[data-theme="custom-light"] {
+            :root[data-theme-mode="light"] {
               --primary: #1e40af;
               --primary-hover: #1e3a8a;
               --primary-foreground: #ffffff;
@@ -261,7 +260,7 @@ describeBrowserLayout("shared button states", () => {
       await withBrowserPage(desktopContext.newPage(), async (page) => {
         await page.emulateMedia({ reducedMotion: "reduce" });
         await page.setContent(`<!doctype html>
-          <html data-theme="${theme}" data-theme-mode="${theme}">
+          <html data-theme=${theme === "light" ? "phosphor-light" : "phosphor"} data-theme-mode="${theme}">
             <head><style>${readUiCss()}</style></head>
             <body><main style="padding: 24px"><button class="btn" type="button">Action</button></main></body>
           </html>`);
@@ -320,7 +319,7 @@ describeBrowserLayout("shared button states", () => {
       await withBrowserPage(desktopContext.newPage(), async (page) => {
         await page.emulateMedia({ reducedMotion: "reduce" });
         await page.setContent(`<!doctype html>
-          <html data-theme="${theme}" data-theme-mode="${theme}">
+          <html data-theme=${theme === "light" ? "phosphor-light" : "phosphor"} data-theme-mode="${theme}">
             <head><style>${readUiCss()}</style></head>
             <body><main style="padding: 24px">
               <button class="btn" type="button">Cancel</button>
@@ -449,7 +448,6 @@ describeBrowserLayout("touch-primary form controls", () => {
           ".field textarea",
           ".field select",
           ".settings-sidebar__search-input",
-          ".settings-theme-import__input",
           ".config-raw-field textarea",
           "input.settings-input",
           ".settings-row__control > textarea.settings-input",

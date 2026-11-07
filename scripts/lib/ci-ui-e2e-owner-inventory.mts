@@ -282,13 +282,8 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
     "config",
   ]),
   pageWatch("ui/src/e2e/app-chrome-interaction.e2e.test.ts", ["chat", "config", "usage"]),
-  pageWatch("ui/src/e2e/appearance-accent-selection.e2e.test.ts", ["config"]),
   pageWatch("ui/src/e2e/appearance-control-layout.e2e.test.ts", ["config"]),
-  pageWatch(
-    "ui/src/e2e/appearance-settings-defaults.e2e.test.ts",
-    ["chat", "config"],
-    ["ui/src/pages/config/custom-theme-import.ts"],
-  ),
+  pageWatch("ui/src/e2e/appearance-settings-defaults.e2e.test.ts", ["chat", "config"]),
   {
     testFile: "ui/src/e2e/approval-bootstrap.e2e.test.ts",
     ownerRoots: ["ui/src/components/sidebar-attention.ts", "ui/src/pages/chat/route.ts"],
@@ -2373,11 +2368,6 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
     ["config", "skill-workshop", "skills"],
     ["ui/src/components/select-picker.ts"],
   ),
-  pageWatch(
-    "ui/src/e2e/theme-selection-defaults.e2e.test.ts",
-    ["config"],
-    ["ui/src/components/select-picker.ts"],
-  ),
   pageWatch("ui/src/e2e/tool-titles.e2e.test.ts", ["chat"]),
   {
     testFile: "ui/src/e2e/update-coalesced.e2e.test.ts",
@@ -2555,5 +2545,5 @@ export const UI_E2E_SMOKE_TEST_FILES: readonly string[] = [
   // Always run credential apply/reconnect, stale-target replacement, and persisted session settings.
   "ui/src/e2e/connection-settings.e2e.test.ts",
   // Always run a settings edit through rendered CSS, persistence, and reset.
-  "ui/src/e2e/appearance-accent-selection.e2e.test.ts",
+  "ui/src/e2e/appearance-settings-defaults.e2e.test.ts",
 ];

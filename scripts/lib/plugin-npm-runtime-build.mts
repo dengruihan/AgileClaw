@@ -18,7 +18,6 @@ import {
 import { assertRealOutputRoot } from "./output-root-guard.mjs";
 import { createPluginInventoryModuleRefsPlugin } from "./plugin-inventory-module-refs.mts";
 import { preparePackageRuntimeAssets } from "./plugin-npm-runtime-assets.mts";
-import { collectPluginThemeAssetPaths } from "./plugin-theme-assets.mts";
 import { isRecord } from "./record-shared.mjs";
 
 const env = {
@@ -398,9 +397,6 @@ function resolvePluginNpmRuntimePackageFiles(plan: {
   }
   if (packageRelativePathExists(plan.packageDir, "skills")) {
     merged.add("skills/**");
-  }
-  for (const file of collectPluginThemeAssetPaths(plan.manifest)) {
-    merged.add(file);
   }
   return [...merged];
 }

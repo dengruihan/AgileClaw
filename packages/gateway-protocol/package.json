@@ -77,11 +77,6 @@
       "import": "./dist/system-agent-context.mjs",
       "default": "./dist/system-agent-context.mjs"
     },
-    "./theme": {
-      "types": "./dist/theme.d.mts",
-      "import": "./dist/theme.mjs",
-      "default": "./dist/theme.mjs"
-    },
     "./version": {
       "types": "./dist/version.d.mts",
       "import": "./dist/version.mjs",

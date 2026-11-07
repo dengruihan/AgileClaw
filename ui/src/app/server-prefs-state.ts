@@ -1,17 +1,17 @@
 import { asNullableRecord as asRecord } from "@openclaw/normalization-core/record-coerce";
-import { UI_APPEARANCE_PREFERENCE_KEYS } from "../../../packages/gateway-protocol/src/schema/ui-appearance-preferences.ts";
-import { isThemeId, normalizeThemeMode } from "../../../packages/gateway-protocol/src/theme-ids.ts";
+import {
+  normalizeThemeMode,
+  UI_APPEARANCE_PREFERENCE_KEYS,
+} from "../../../packages/gateway-protocol/src/schema/ui-appearance-preferences.ts";
 import { normalizeSidebarEntries } from "../app-navigation.ts";
 import { isSupportedLocale } from "../i18n/index.ts";
 import {
-  normalizeAccentColor,
   normalizeChatFollowUpModeOverride,
   normalizeChatSendShortcut,
-  UI_APPEARANCE_DEFAULTS,
   type ChatSendShortcut,
   type UiSettings,
 } from "./settings.ts";
-import type { ThemeMode, ThemeName } from "./theme.ts";
+import type { ThemeMode } from "./theme.ts";
 import { normalizeTypefaceOverride } from "./typography.ts";
 
 export function isAppearancePref(key: string): key is keyof typeof UI_APPEARANCE_PREFERENCE_KEYS {
@@ -30,7 +30,7 @@ type SyncedPrefSpec<T> = {
 
 const prefSpec = <T>(specification: SyncedPrefSpec<T>) => specification;
 
-const optionalPrefSpec = <K extends "accent" | "fontUi" | "fontChat" | "chatFollowUpMode">(
+const optionalPrefSpec = <K extends "fontUi" | "fontChat" | "chatFollowUpMode">(
   key: K,
   normalize: (value: unknown) => UiSettings[K],
   configSync = true,
@@ -49,24 +49,13 @@ const optionalPrefSpec = <K extends "accent" | "fontUi" | "fontChat" | "chatFoll
  * Each key owns server validation, local normalization, and applicability.
  */
 export const SYNCED_PREFS = {
-  theme: prefSpec<ThemeName>({
-    extract: (value) => (value === "custom" || isThemeId(value) ? value : undefined),
-    local: (settings) => settings.theme,
-    write: (value) => ({ theme: value ?? UI_APPEARANCE_DEFAULTS.theme }),
-    clearable: true,
-    reset: () => ({ theme: UI_APPEARANCE_DEFAULTS.theme }),
-    // A server "custom" theme is only honorable once this browser imported one;
-    // the imported palette itself is too large to live in config.
-    canApply: (value, settings) => value !== "custom" || Boolean(settings.customTheme),
-  }),
   themeMode: prefSpec<ThemeMode>({
     extract: normalizeThemeMode,
     local: (settings) => settings.themeMode,
-    write: (value) => ({ themeMode: value ?? UI_APPEARANCE_DEFAULTS.themeMode }),
+    write: (value) => ({ themeMode: value ?? "system" }),
     clearable: true,
-    reset: () => ({ themeMode: UI_APPEARANCE_DEFAULTS.themeMode }),
+    reset: () => ({ themeMode: "system" }),
   }),
-  accent: optionalPrefSpec("accent", normalizeAccentColor),
   fontUi: optionalPrefSpec("fontUi", normalizeTypefaceOverride, false),
   fontChat: optionalPrefSpec("fontChat", normalizeTypefaceOverride, false),
   locale: prefSpec<string>({
@@ -105,9 +94,7 @@ export const SYNCED_PREFS = {
 
 export type SyncedPrefKey = keyof typeof SYNCED_PREFS;
 export type ResettableServerUiPrefKey =
-  | "theme"
   | "themeMode"
-  | "accent"
   | "fontUi"
   | "fontChat"
   | "locale"

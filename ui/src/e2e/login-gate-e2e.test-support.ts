@@ -24,7 +24,6 @@ type InstalledArtifactObservation = {
   buildId: string | null;
   font: ObservedAssetLink;
   icon: ObservedAssetLink;
-  theme: ObservedAssetLink;
 };
 
 export type ServiceWorkerObservation = {
@@ -295,7 +294,6 @@ export async function observeInstalledArtifact(page: Page): Promise<InstalledArt
       buildId: document.documentElement.getAttribute("data-openclaw-control-ui-build-id"),
       font: observeLink('link[id^="openclaw-typeface-"]'),
       icon: observeLink('link[rel="icon"][type="image/svg+xml"]'),
-      theme: observeLink("#openclaw-theme-palette-absolutely"),
     };
   });
 }
@@ -342,7 +340,7 @@ export async function installPhoneRecoveryRequestObserver(
       sessionStorage.setItem(key, String(documentOrdinal));
       localStorage.setItem(
         `openclaw.control.settings.v1:${gatewayUrl}`,
-        JSON.stringify({ gatewayUrl, theme: "absolutely", themeMode: "dark" }),
+        JSON.stringify({ gatewayUrl, themeMode: "dark" }),
       );
       const instrumentedPrototypes = new WeakSet<object>();
       const instrument = (constructor: typeof WebSocket) => {

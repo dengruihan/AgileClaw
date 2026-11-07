@@ -19,7 +19,7 @@ beforeEach(async () => {
     "\n",
   );
   document.head.append(stylesheet);
-  const typefaces = resolveTypefaces("claw");
+  const typefaces = resolveTypefaces();
   syncTypefaceStylesheets(typefaces);
   await expect
     .poll(() =>

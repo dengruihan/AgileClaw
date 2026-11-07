@@ -118,12 +118,12 @@ describe("Control UI base theme tokens", () => {
   });
 });
 
-// Absolutely palette edits left both --bg mirrors stale. Pre-paint needs a color
-// before CSS loads; preview chips must remain independent of the active theme.
-describe("Control UI theme --bg mirrors", () => {
+// Palette edits left pre-paint mirrors stale before. Pre-paint needs a color
+// before CSS loads.
+describe("Control UI style --bg mirrors", () => {
   const RESOLVED_THEME_BG_SELECTOR = new Map<string, string>([
-    ["dark", ":root"],
-    ["light", ':root:where([data-theme-mode="light"])'],
+    ["phosphor", ":root"],
+    ["phosphor-light", ':root:where([data-theme-mode="light"])'],
   ]);
 
   function readBlockToken(css: string, selector: string, token: string): string | undefined {
@@ -135,29 +135,12 @@ describe("Control UI theme --bg mirrors", () => {
     return selector.replaceAll(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`);
   }
 
-  /** Every theme's canonical --bg, keyed by the resolved data-theme value. */
+  /** The style's canonical --bg, keyed by the resolved data-theme value. */
   function readCanonicalBackgrounds(): Map<string, string> {
-    // Palettes other than the default now live in public/themes; the mirrors
-    // must track them there too.
-    const themesDir = path.join(stylesDir, "..", "..", "public", "themes");
-    const baseCss = [
-      fs.readFileSync(path.join(stylesDir, "base.css"), "utf8"),
-      ...fs
-        .readdirSync(themesDir)
-        .filter((entry) => entry.endsWith(".css"))
-        .toSorted()
-        .map((entry) => fs.readFileSync(path.join(themesDir, entry), "utf8")),
-    ].join("\n");
+    const baseCss = fs.readFileSync(path.join(stylesDir, "base.css"), "utf8");
     const backgrounds = new Map<string, string>();
     for (const [resolved, selector] of RESOLVED_THEME_BG_SELECTOR) {
       const value = readBlockToken(baseCss, selector, "--bg");
-      if (value) {
-        backgrounds.set(resolved, value);
-      }
-    }
-    for (const match of baseCss.matchAll(/:root\[data-theme="([^"]+)"\]\s*\{/gu)) {
-      const resolved = match[1] ?? "";
-      const value = readBlockToken(baseCss, `:root[data-theme="${resolved}"]`, "--bg");
       if (value) {
         backgrounds.set(resolved, value);
       }
@@ -171,12 +154,12 @@ describe("Control UI theme --bg mirrors", () => {
 
     const prePaint = new Map<string, string>();
     for (const match of indexHtml.matchAll(
-      /html(?:\[data-theme(?:-mode)?="([^"]+)"\])?\s*\{\s*background:\s*([^;]+);/gu,
+      /html(?:\[data-theme-mode="([^"]+)"\])?\s*\{\s*background:\s*([^;]+);/gu,
     )) {
       const attribute = match[1];
       const value = (match[2] ?? "").trim();
       // Bare `html` is the default dark paint; the -mode selector is light.
-      prePaint.set(attribute ?? "dark", value);
+      prePaint.set(attribute === "light" ? "phosphor-light" : "phosphor", value);
     }
 
     for (const [resolved, background] of canonical) {
@@ -185,48 +168,6 @@ describe("Control UI theme --bg mirrors", () => {
       );
     }
 
-    expect(canonical.size).toBeGreaterThanOrEqual(RESOLVED_THEME_BG_SELECTOR.size);
+    expect(canonical.size).toBe(RESOLVED_THEME_BG_SELECTOR.size);
   });
-
-  it("keeps the Appearance preview chips on every theme's --bg", () => {
-    const configCss = fs.readFileSync(path.join(stylesDir, "config.css"), "utf8");
-    const canonical = readCanonicalBackgrounds();
-    let checked = 0;
-
-    for (const match of configCss.matchAll(/\.settings-theme-card--([\w-]+)[^{]*\{([^}]*)\}/gu)) {
-      const family = match[1] ?? "";
-      const body = match[2] ?? "";
-      const chip = body.match(/--theme-chip-bg:\s*([^;]+);/u)?.[1]?.trim();
-      if (!chip || chip.startsWith("var(")) {
-        continue;
-      }
-      // Light chip rules are nested under the light-mode selector, so the
-      // preceding text decides which resolved palette this chip mirrors.
-      const isLight = configCss
-        .slice(0, match.index ?? 0)
-        .split(".settings-theme-card--")
-        .at(-1)
-        ?.includes('data-theme-mode="light"');
-      const resolved = resolveFamily(family, isLight === true);
-      const background = canonical.get(resolved);
-      if (!background) {
-        continue;
-      }
-      checked += 1;
-      expect(chip.toLowerCase(), `${resolved}: chip background`).toBe(background.toLowerCase());
-    }
-
-    expect(checked).toBeGreaterThan(0);
-  });
-
-  /** Appearance uses theme family names; base.css keys off resolved values. */
-  function resolveFamily(family: string, light: boolean): string {
-    if (family === "claw") {
-      return light ? "light" : "dark";
-    }
-    if (family === "knot") {
-      return light ? "openknot-light" : "openknot";
-    }
-    return light ? `${family}-light` : family;
-  }
 });

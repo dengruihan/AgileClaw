@@ -7,19 +7,19 @@ import {
   createControlUiE2eSuite,
   holdModuleResponse,
 } from "./control-ui-e2e-suite.test-support.ts";
-import { captureUiProof, createThemedChatOpener } from "./theme-typography.test-support.ts";
+import { captureUiProof, createStyledChatOpener } from "./theme-typography.test-support.ts";
 
 export function defineTypographyModuleBoundaryTests(
   suite: ReturnType<typeof createControlUiE2eSuite>,
   moduleRequest: (sourcePath: string) => RegExp,
 ) {
   describe("Typography module loading", () => {
-    const openThemedChat = createThemedChatOpener(suite);
+    const openStyledChat = createStyledChatOpener(suite);
 
     it.each(["MacIntel", "Linux x86_64"])(
       "keeps shortcut letters aligned on the system UI stack on %s",
       async (platform) => {
-        const { page } = await openThemedChat("phosphor", "dark");
+        const { page } = await openStyledChat("dark");
         await page.addInitScript((value) => {
           Object.defineProperty(navigator, "platform", { get: () => value });
         }, platform);

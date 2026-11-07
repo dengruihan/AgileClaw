@@ -48,7 +48,7 @@ export function makeUiSettings(
     token: "",
     sessionKey: "main",
     lastActiveSessionKey: "main",
-    theme: "claw",
+    theme: "phosphor",
     themeMode: "system",
     chatShowThinking: true,
     chatShowToolCalls: true,
