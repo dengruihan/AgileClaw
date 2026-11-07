@@ -7,10 +7,11 @@ read_when:
   - You need the sandbox and node targeting rules
 ---
 
-The agent gets two browser tools:
+The agent gets two browser tools, plus the vault save tool:
 
 - `browser` - doctor/status/start/stop/tabs/open/focus/close/snapshot/screenshot/navigate/act/requests/errors/text/emulate
 - `browser_login` - use one saved password-vault login without receiving the password
+- `vault_save_login` - save a website login into the personal password vault (see [Password vault → Agent save](/gateway/passwords-vault#agent-save))
 
 `browser_login` takes only an opaque `itemRef` and an optional reason/profile/target. It reads the origin from the local browser, asks the operator for a one-time approval, and returns a value-free status. It is limited to local managed/shared Chromium and never exposes a vault read verb. See [Password vault → Agent fill](/gateway/passwords-vault#agent-fill).
 

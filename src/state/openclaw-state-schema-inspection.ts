@@ -11,6 +11,11 @@ import {
   needsVaultAuditActionRepair,
 } from "./openclaw-state-db-vault-audit-repair.js";
 import {
+  isVaultEntriesAccountDefinitionIssue,
+  isVaultEntriesAccountIndexIssue,
+  needsVaultEntriesAccountRepair,
+} from "./openclaw-state-db-vault-entries-repair.js";
+import {
   getOpenClawStateRuntimeSchema,
   isOpenClawStateFirstUseSchemaIssue,
   isOpenClawStateStartupRepairableSchemaIssue,
@@ -55,9 +60,12 @@ export function inspectCurrentStateStartupSchema(
     ),
   ]);
   const vaultAuditRepairable = needsVaultAuditActionRepair(database);
+  const vaultEntriesRepairable = needsVaultEntriesAccountRepair(database);
   const isRepairable = (issue: SqliteSchemaIssue) =>
     isOpenClawStateStartupRepairableSchemaIssue(issue) ||
-    (vaultAuditRepairable && isVaultAuditActionDefinitionIssue(issue));
+    (vaultAuditRepairable && isVaultAuditActionDefinitionIssue(issue)) ||
+    (vaultEntriesRepairable &&
+      (isVaultEntriesAccountDefinitionIssue(issue) || isVaultEntriesAccountIndexIssue(issue)));
   return {
     blockingIssues: issues.filter(
       (issue) => !isRepairable(issue) && !isOpenClawStateFirstUseSchemaIssue(issue),

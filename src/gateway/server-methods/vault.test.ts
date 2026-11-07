@@ -702,4 +702,148 @@ describe("vault gateway methods", () => {
     });
     expect(execute.mock.calls[0]?.[1]).toMatchObject({ status: "expired" });
   });
+
+  it("saves an agent login without the reveal scope and returns no secrets", async () => {
+    const service = createServiceStub();
+    service.saveLogin = vi.fn(async () => ({
+      itemRef: "vault_agent_item",
+      originScheme: "https" as const,
+      originHost: "example.com",
+      originPort: 443,
+      siteLabel: "example.com",
+      account: "",
+      hasNotes: false,
+      revision: 1,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    }));
+    const handlers = createVaultHandlers({ service });
+    const respond = await invoke({
+      handlers,
+      method: "vault.saveLogin",
+      requestParams: {
+        originScheme: "https",
+        originHost: "example.com",
+        originPort: 443,
+        password: "synthetic-agent-password",
+      },
+      // operator.vault alone: no operator.vault.reveal anywhere on the connection.
+      scopes: ["operator.vault"],
+      agent: {},
+    });
+    // oxlint-disable-next-line typescript/unbound-method -- vi.fn service stub
+    expect(service.saveLogin).toHaveBeenCalledWith({
+      originScheme: "https",
+      originHost: "example.com",
+      originPort: 443,
+      password: "synthetic-agent-password",
+    });
+    const payload = respond.mock.calls[0]?.[1] as { entry: { itemRef: string } };
+    expect(payload.entry.itemRef).toBe("vault_agent_item");
+    expect(respond.mock.calls[0]?.[0]).toBe(true);
+    expect(JSON.stringify(payload)).not.toContain("synthetic-agent-password");
+    expect(payload).not.toHaveProperty("password");
+  });
+
+  it("requires a live agent runtime identity for agent saves", async () => {
+    const service = createServiceStub();
+    service.saveLogin = vi.fn();
+    const handlers = createVaultHandlers({ service });
+    const respond = await invoke({
+      handlers,
+      method: "vault.saveLogin",
+      requestParams: {
+        originScheme: "https",
+        originHost: "example.com",
+        originPort: 443,
+      },
+      scopes: CONTROL_UI_DEFAULT_OPERATOR_SCOPES,
+    });
+    expect(respond).toHaveBeenCalledTimes(1);
+    const [ok, , error] = respond.mock.calls[0] as unknown as [
+      boolean,
+      unknown,
+      { code: string; details: { code: string } },
+    ];
+    expect(ok).toBe(false);
+    expect(error.code).toBe(ErrorCodes.FORBIDDEN);
+    expect(error.details.code).toBe("VAULT_FILL_AGENT_REQUIRED");
+    // oxlint-disable-next-line typescript/unbound-method -- vi.fn service stub
+    expect(service.saveLogin).not.toHaveBeenCalled();
+  });
+
+  it("maps duplicate and locked-setup failures to actionable request errors", async () => {
+    const service = createServiceStub();
+    service.saveLogin = vi.fn(async () => {
+      throw new VaultError("VAULT_DUPLICATE", "An entry for this site and account already exists.", {
+        existingItemRef: "vault_existing",
+      });
+    });
+    const handlers = createVaultHandlers({ service });
+    const duplicate = await invoke({
+      handlers,
+      method: "vault.saveLogin",
+      requestParams: {
+        originScheme: "https",
+        originHost: "example.com",
+        originPort: 443,
+        account: "person@example.com",
+      },
+      scopes: ["operator.vault"],
+      agent: {},
+    });
+    let call = duplicate.mock.calls[0] as unknown as [
+      boolean,
+      unknown,
+      { code: string; details: Record<string, string> },
+    ];
+    expect(call[0]).toBe(false);
+    expect(call[2].code).toBe(ErrorCodes.INVALID_REQUEST);
+    expect(call[2].details).toMatchObject({
+      code: "VAULT_DUPLICATE",
+      existingItemRef: "vault_existing",
+    });
+
+    service.saveLogin = vi.fn(async () => {
+      throw new VaultError(
+        "VAULT_WRITE_KEY_UNAVAILABLE",
+        "Unlock the password vault once so agent saves also work while it stays locked.",
+      );
+    });
+    const setup = await invoke({
+      handlers,
+      method: "vault.saveLogin",
+      requestParams: {
+        originScheme: "https",
+        originHost: "example.com",
+        originPort: 443,
+      },
+      scopes: ["operator.vault"],
+      agent: {},
+    });
+    call = setup.mock.calls[0] as unknown as [
+      boolean,
+      unknown,
+      { code: string; details: Record<string, string> },
+    ];
+    expect(call[0]).toBe(false);
+    expect(call[2].code).toBe(ErrorCodes.INVALID_REQUEST);
+    expect(call[2].details.code).toBe("VAULT_WRITE_KEY_UNAVAILABLE");
+  });
+
+  it("rejects agent-save params without a complete origin", async () => {
+    const service = createServiceStub();
+    service.saveLogin = vi.fn();
+    const handlers = createVaultHandlers({ service });
+    const respond = await invoke({
+      handlers,
+      method: "vault.saveLogin",
+      requestParams: { originScheme: "https", originHost: "example.com" },
+      scopes: ["operator.vault"],
+      agent: {},
+    });
+    expect(respond.mock.calls[0]?.[0]).toBe(false);
+    // oxlint-disable-next-line typescript/unbound-method -- vi.fn service stub
+    expect(service.saveLogin).not.toHaveBeenCalled();
+  });
 });

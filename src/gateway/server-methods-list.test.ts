@@ -306,6 +306,7 @@ describe("listGatewayMethods", () => {
       "node.device.enable",
       "node.device.disable",
       "node.device.update",
+      "vault.saveLogin",
     ];
     expect(listGatewayMethods().slice(-expectedSuffix.length)).toEqual(expectedSuffix);
     const methods = listGatewayMethods();
@@ -418,6 +419,7 @@ describe("listGatewayMethods", () => {
       "node.device.enable",
       "node.device.disable",
       "node.device.update",
+      "vault.saveLogin",
     ]);
   });
 
@@ -672,6 +674,7 @@ describe("listGatewayMethods", () => {
       "node.device.enable",
       "node.device.disable",
       "node.device.update",
+      "vault.saveLogin",
     ];
     expect(coreMethods.slice(-expectedCoreSuffix.length)).toEqual(expectedCoreSuffix);
     expect(methods.indexOf("approval.get")).toBeGreaterThan(methods.indexOf("tts.speak"));

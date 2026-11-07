@@ -51,7 +51,7 @@ export function createBrowserLoginTool(opts?: BrowserLoginToolOptions): AnyAgent
     name: "browser_login",
     label: "Browser login",
     description:
-      "Use one saved website login in the local managed browser without receiving the password. Each use needs operator approval; the origin is read from the browser.",
+      "Use one saved website login in the local managed browser without receiving the password. Each use needs operator approval; the origin is read from the browser. To store a new login, use vault_save_login instead.",
     parameters: BrowserLoginToolSchema,
     execute: async (_toolCallId, rawParams, signal) => {
       const raw = rawParams as Record<string, unknown>;

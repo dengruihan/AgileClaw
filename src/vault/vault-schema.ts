@@ -7,19 +7,25 @@ export const VAULT_TABLE_NAMES = [
   "vault_entry_secrets",
   "vault_keys",
   "vault_key_wraps",
+  "vault_write_keys",
+  "vault_write_key_wraps",
+  "vault_pending_entry_secrets",
   "vault_meta",
   "vault_audit_events",
 ] as const;
 
 const VAULT_INDEX_SQL = [
   `CREATE UNIQUE INDEX IF NOT EXISTS vault_entries_owner_active_account_idx
-    ON vault_entries (owner_kind, owner_id, origin_host, account) WHERE deleted_at_ms IS NULL`,
+    ON vault_entries (owner_kind, owner_id, origin_host, account)
+    WHERE deleted_at_ms IS NULL AND account <> ''`,
   `CREATE INDEX IF NOT EXISTS vault_entries_owner_live_idx
     ON vault_entries (owner_kind, owner_id, deleted_at_ms, updated_at_ms DESC)`,
   `CREATE INDEX IF NOT EXISTS vault_entries_owner_deleted_idx
     ON vault_entries (owner_kind, owner_id, deleted_at_ms) WHERE deleted_at_ms IS NOT NULL`,
   `CREATE UNIQUE INDEX IF NOT EXISTS vault_keys_owner_live_idx
     ON vault_keys (owner_kind, owner_id) WHERE retired_at_ms IS NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS vault_write_keys_owner_live_idx
+    ON vault_write_keys (owner_kind, owner_id) WHERE retired_at_ms IS NULL`,
   `CREATE INDEX IF NOT EXISTS vault_audit_events_owner_sequence_idx
     ON vault_audit_events (owner_kind, owner_id, sequence DESC)`,
 ] as const;

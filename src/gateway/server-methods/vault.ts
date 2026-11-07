@@ -21,6 +21,7 @@ import {
   validateVaultRestoreParams,
   validateVaultRevealParams,
   validateVaultRevealResult,
+  validateVaultSaveLoginParams,
   validateVaultSetAutoLockParams,
   validateVaultStatusParams,
   validateVaultStatusResult,
@@ -121,6 +122,7 @@ function vaultErrorShape(error: unknown): ErrorShape {
       case "VAULT_DUPLICATE":
       case "VAULT_INVALID_INPUT":
       case "VAULT_ALREADY_INITIALIZED":
+      case "VAULT_WRITE_KEY_UNAVAILABLE":
         return errorShape(ErrorCodes.INVALID_REQUEST, error.message, { details });
       default:
         return errorShape(ErrorCodes.UNAVAILABLE, error.message, { details });
@@ -277,6 +279,51 @@ export function createVaultHandlers(
           );
         } catch (error) {
           logFailure(params.log, "vault.create", error);
+          respond(false, undefined, vaultErrorShape(error));
+        }
+      },
+    ),
+    "vault.saveLogin": defineValidatedGatewayHandler(
+      "vault.saveLogin",
+      validateVaultSaveLoginParams,
+      async (options) => {
+        const { params: requestParams, respond, client } = options;
+        // Agent saves ride the agent runtime identity exactly like fill: an
+        // operator connection without one cannot mint entries through this
+        // path, and no reveal scope is required or honored here.
+        const identity = readFillAgentIdentity(client ?? null);
+        if (!identity) {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.FORBIDDEN, "Agent saves require a live agent runtime identity.", {
+              details: { code: "VAULT_FILL_AGENT_REQUIRED" },
+            }),
+          );
+          return;
+        }
+        const { assertCurrent } = readGatewayRequestMutationAuthority(options);
+        try {
+          assertCurrent();
+          const entry = await service.saveLogin({
+            originScheme: requestParams.originScheme,
+            originHost: requestParams.originHost,
+            originPort: requestParams.originPort,
+            ...(requestParams.siteLabel !== undefined
+              ? { siteLabel: requestParams.siteLabel }
+              : {}),
+            ...(requestParams.account !== undefined ? { account: requestParams.account } : {}),
+            ...(requestParams.label !== undefined ? { label: requestParams.label } : {}),
+            ...(requestParams.password !== undefined ? { password: requestParams.password } : {}),
+            ...(requestParams.notes !== undefined ? { notes: requestParams.notes } : {}),
+          });
+          assertCurrent();
+          respond(
+            true,
+            validateResult({ entry }, validateVaultEntryMutationResult, "vault.saveLogin"),
+          );
+        } catch (error) {
+          logFailure(params.log, "vault.saveLogin", error);
           respond(false, undefined, vaultErrorShape(error));
         }
       },

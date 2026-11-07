@@ -52,6 +52,21 @@ export type VaultEntryCreateInput = {
   notes?: string;
 };
 
+/**
+ * Agent save input. Only the site is required; every other field may be empty
+ * so the operator can complete the entry later in the password manager.
+ */
+export type VaultAgentSaveInput = {
+  originScheme: "https" | "http";
+  originHost: string;
+  originPort: number;
+  siteLabel?: string;
+  account?: string;
+  label?: string;
+  password?: string;
+  notes?: string;
+};
+
 export type VaultEntryUpdateInput = {
   itemRef: string;
   revision: number;
@@ -115,6 +130,7 @@ export type VaultErrorCode =
   | "VAULT_DUPLICATE"
   | "VAULT_INVALID_INPUT"
   | "VAULT_ORIGIN_MISMATCH"
+  | "VAULT_WRITE_KEY_UNAVAILABLE"
   | "VAULT_UNAVAILABLE";
 
 export class VaultError extends Error {

@@ -1,0 +1,17 @@
+{
+  "id": "passwords-vault",
+  "categories": ["productivity"],
+  "activation": {
+    "onStartup": true
+  },
+  "name": "Passwords vault",
+  "description": "Agent save access to the built-in personal password vault through the vault_save_login tool.",
+  "contracts": {
+    "tools": ["vault_save_login"]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

@@ -262,6 +262,7 @@ export const validateVaultLockParams = compile(S.VaultLockParamsSchema);
 export const validateVaultListParams = compile(S.VaultListParamsSchema);
 export const validateVaultListResult = compile(S.VaultListResultSchema);
 export const validateVaultCreateParams = compile(S.VaultCreateParamsSchema);
+export const validateVaultSaveLoginParams = compile(S.VaultSaveLoginParamsSchema);
 export const validateVaultUpdateParams = compile(S.VaultUpdateParamsSchema);
 export const validateVaultDeleteParams = compile(S.VaultDeleteParamsSchema);
 export const validateVaultRestoreParams = compile(S.VaultRestoreParamsSchema);

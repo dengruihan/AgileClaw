@@ -61,9 +61,13 @@ export const FIRST_USE_STATE_TABLES = [
   "vault_entry_secrets",
   "vault_keys",
   "vault_key_wraps",
+  "vault_write_keys",
+  "vault_write_key_wraps",
+  "vault_pending_entry_secrets",
   "vault_meta",
   "vault_audit_events",
 ] as const;
+
 export const FIRST_USE_STATE_INDEXES = [
   "idx_user_profile_identities_profile_id",
   "idx_user_profile_identities_authorization",
@@ -89,6 +93,7 @@ export const FIRST_USE_STATE_INDEXES = [
   "vault_entries_owner_live_idx",
   "vault_entries_owner_deleted_idx",
   "vault_keys_owner_live_idx",
+  "vault_write_keys_owner_live_idx",
   "vault_audit_events_owner_sequence_idx",
 ] as const;
 // These additive tables stay optional until their feature-local lazy ensures

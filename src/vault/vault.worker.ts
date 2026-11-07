@@ -1,16 +1,25 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { parentPort, workerData } from "node:worker_threads";
+import { createSubsystemLogger } from "../logging/subsystem.js";
 import {
   openOpenClawStateDatabase,
   runOpenClawStateWriteTransaction,
   type OpenClawStateDatabase,
 } from "../state/openclaw-state-db.js";
 import {
+  claimAgentWritesAfterUnlock,
+  ensureEntrySecretsMigrated,
+  ensureVaultWriteKey,
+  insertEntryWithDek,
+  migratePendingEntrySecrets,
+  saveLoginEntry,
+  type VaultAgentSaveWorkerDeps,
+} from "./vault-agent-save.worker.js";
+import {
   constantTimeKeyCheckMatches,
   deriveKek,
   entryKey,
   generatePassword,
-  newVaultItemRef,
   newVaultKeyId,
   unwrapDek,
   VAULT_DEK_BYTES,
@@ -39,7 +48,6 @@ import {
 import {
   countVaultEntries,
   insertVaultAudit,
-  insertVaultEntry,
   insertVaultKey,
   listVaultAudit,
   listVaultEntries,
@@ -85,6 +93,7 @@ if (!port) {
 // SAFETY: the sole launcher supplies VaultWorkerData.
 const data = workerData as VaultWorkerData;
 const owner: VaultOwner = { kind: VAULT_OWNER_KIND, id: VAULT_DEFAULT_OWNER_ID };
+const log = createSubsystemLogger("vault/worker");
 const send = (message: VaultWorkerReply) => port.postMessage(message);
 
 let database: OpenClawStateDatabase | undefined;
@@ -193,6 +202,7 @@ function status(): VaultStatus {
 function maintenance(): void {
   const handle = db();
   if (countVaultEntries(handle.db, owner).deletedCount === 0) {
+    migratePendingEntrySecrets(agentSaveDeps());
     return;
   }
   const now = clockNow();
@@ -206,6 +216,7 @@ function maintenance(): void {
   if (purged > 0) {
     touchActivity();
   }
+  migratePendingEntrySecrets(agentSaveDeps());
 }
 
 async function initialize(passphrase: string, autoLockOption?: number): Promise<VaultStatus> {
@@ -253,6 +264,15 @@ async function initialize(passphrase: string, autoLockOption?: number): Promise<
     autoLockSeconds = lockSeconds;
     lastActivityAt = now;
     armAutoLock();
+    // A fresh vault gets its write keypair immediately so agent saves work
+    // before the first lock; existing vaults claim theirs on the next unlock.
+    try {
+      ensureVaultWriteKey(agentSaveDeps());
+    } catch (error) {
+      log.warn("vault write key creation failed", {
+        error: error instanceof Error ? error.message : "unknown",
+      });
+    }
     return status();
   } catch (error) {
     freshDek.fill(0);
@@ -346,6 +366,9 @@ async function unlock(passphrase: string): Promise<VaultStatus> {
       audit(transaction, "unlock", "succeeded");
     });
     armAutoLock();
+    // Sealed agent rows become DEK-encrypted while the key is held, and a
+    // vault that predates agent saves gets its write keypair here.
+    claimAgentWritesAfterUnlock(agentSaveDeps());
     return status();
   } finally {
     kek.fill(0);
@@ -361,59 +384,25 @@ function readVaultKeyId(): string {
 }
 
 function createEntry(input: VaultEntryCreateInput): VaultEntryMetadata {
-  const activeDek = requireDek();
   const normalized = normalizeCreateInput(input);
   maintenance();
-  const now = clockNow();
-  const itemRef = newVaultItemRef();
-  const baseEntry: VaultEntryMetadata = {
-    itemRef,
-    originScheme: normalized.scheme,
-    originHost: normalized.host,
-    originPort: normalized.port,
-    siteLabel: normalized.siteLabel,
-    account: normalized.account,
-    ...(normalized.label ? { label: normalized.label } : {}),
-    hasNotes: normalized.notes.length > 0,
-    revision: 1,
-    passwordUpdatedAtMs: now,
-    createdAtMs: now,
-    updatedAtMs: now,
+  return insertEntryWithDek(agentSaveDeps(), normalized);
+}
+
+function agentSaveDeps(): VaultAgentSaveWorkerDeps {
+  return {
+    owner,
+    db,
+    dek: () => dek,
+    requireDek,
+    readVaultKeyId,
+    write,
+    audit,
+    clockNow,
+    touchActivity,
+    maintenance,
+    warn: (message, details) => log.warn(message, details),
   };
-  const key = entryKey(activeDek, itemRef);
-  try {
-    const keyId = readVaultKeyId();
-    const encrypted = encryptEntry(
-      key,
-      entryAadParams(baseEntry, keyId, owner),
-      normalized.password,
-      normalized.notes,
-    );
-    write("vault.create", (transaction) => {
-      insertVaultEntry(
-        transaction.db,
-        owner,
-        {
-          itemRef,
-          scheme: normalized.scheme,
-          host: normalized.host,
-          port: normalized.port,
-          siteLabel: normalized.siteLabel,
-          account: normalized.account,
-          ...(normalized.label ? { label: normalized.label } : {}),
-          hasNotes: baseEntry.hasNotes,
-          revision: 1,
-        },
-        { ...encrypted, keyId },
-        now,
-      );
-      audit(transaction, "create", "succeeded", { itemRef });
-    });
-    touchActivity();
-    return baseEntry;
-  } finally {
-    key.fill(0);
-  }
 }
 
 function updateEntry(input: VaultEntryUpdateInput): VaultEntryMetadata {
@@ -430,6 +419,8 @@ function updateEntry(input: VaultEntryUpdateInput): VaultEntryMetadata {
       "This entry changed on another screen. Refresh and retry.",
     );
   }
+  // An agent save that landed while locked may still be sealed; claim it first.
+  ensureEntrySecretsMigrated(agentSaveDeps(), normalized.itemRef);
   const secret = readVaultEntrySecret(handle.db, normalized.itemRef);
   if (!secret) {
     throw new VaultError("VAULT_CORRUPTED", "The vault entry secret is missing.");
@@ -544,6 +535,8 @@ function revealEntry(
   if (entry.deletedAtMs !== undefined) {
     throw new VaultError("VAULT_DELETED", "Restore this entry before viewing it.");
   }
+  // An agent save that landed while locked may still be sealed; claim it first.
+  ensureEntrySecretsMigrated(agentSaveDeps(), itemRef);
   const secret = readVaultEntrySecret(handle.db, itemRef);
   if (!secret) {
     throw new VaultError("VAULT_CORRUPTED", "The vault entry secret is missing.");
@@ -559,7 +552,16 @@ function revealEntry(
 }
 
 function fillWorkerDeps(): VaultFillWorkerDeps {
-  return { owner, db, requireDek, write, audit, clockNow, touchActivity };
+  return {
+    owner,
+    db,
+    requireDek,
+    write,
+    audit,
+    clockNow,
+    touchActivity,
+    ensureSecretsMigrated: (itemRef) => ensureEntrySecretsMigrated(agentSaveDeps(), itemRef),
+  };
 }
 
 function setAutoLock(seconds: number): VaultStatus {
@@ -609,6 +611,8 @@ async function execute(operation: VaultWorkerOperation): Promise<VaultWorkerResu
     }
     case "create":
       return { type: "create", entry: createEntry(operation.input) };
+    case "saveLogin":
+      return { type: "saveLogin", entry: saveLoginEntry(agentSaveDeps(), operation.input) };
     case "update":
       return { type: "update", entry: updateEntry(operation.input) };
     case "delete":

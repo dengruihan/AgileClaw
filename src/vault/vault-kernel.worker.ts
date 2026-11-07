@@ -15,6 +15,7 @@ import {
   type VaultOrigin,
   type VaultOwner,
 } from "./vault-types.js";
+import type { SealedVaultEntrySecrets } from "./vault-write-crypto.js";
 
 type VaultDatabase = Pick<
   OpenClawStateKyselyDatabase,
@@ -22,6 +23,9 @@ type VaultDatabase = Pick<
   | "vault_entry_secrets"
   | "vault_keys"
   | "vault_key_wraps"
+  | "vault_write_keys"
+  | "vault_write_key_wraps"
+  | "vault_pending_entry_secrets"
   | "vault_meta"
   | "vault_audit_events"
 >;
@@ -65,6 +69,19 @@ export type VaultEncryptedEntry = {
   notesNonce: Buffer;
   notesCiphertext: Buffer;
 };
+
+export type VaultWriteKeyRow = {
+  writeKeyId: string;
+  publicKey: Buffer;
+  keyId: string;
+  nonce: Buffer;
+  wrappedPrivateKey: Buffer;
+};
+
+export type VaultPendingEntrySecretRow = {
+  itemRef: string;
+  writeKeyId: string;
+} & SealedVaultEntrySecrets;
 
 export type VaultEntryWriteFields = VaultOrigin & {
   itemRef: string;
@@ -243,11 +260,10 @@ export function readVaultEntrySecret(
   };
 }
 
-export function insertVaultEntry(
+export function insertVaultEntryRow(
   db: DatabaseSync,
   owner: VaultOwner,
   fields: VaultEntryWriteFields,
-  encrypted: VaultEncryptedEntry & { keyId: string },
   now: number,
 ): void {
   executeSqliteQuerySync(
@@ -273,10 +289,18 @@ export function insertVaultEntry(
         deleted_at_ms: null,
       }),
   );
+}
+
+export function insertVaultEntrySecretRow(
+  db: DatabaseSync,
+  itemRef: string,
+  encrypted: VaultEncryptedEntry & { keyId: string },
+  now: number,
+): void {
   executeSqliteQuerySync(
     db,
     kysely(db).insertInto("vault_entry_secrets").values({
-      item_ref: fields.itemRef,
+      item_ref: itemRef,
       key_id: encrypted.keyId,
       aad_version: 1,
       secret_nonce: encrypted.secretNonce,
@@ -285,6 +309,176 @@ export function insertVaultEntry(
       notes_ciphertext: encrypted.notesCiphertext,
       updated_at_ms: now,
     }),
+  );
+}
+
+export function insertVaultEntry(
+  db: DatabaseSync,
+  owner: VaultOwner,
+  fields: VaultEntryWriteFields,
+  encrypted: VaultEncryptedEntry & { keyId: string },
+  now: number,
+): void {
+  insertVaultEntryRow(db, owner, fields, now);
+  insertVaultEntrySecretRow(db, fields.itemRef, encrypted, now);
+}
+
+/** Active entry for one site and non-empty account; the unique-index shape. */
+export function findVaultEntryByAccount(
+  db: DatabaseSync,
+  owner: VaultOwner,
+  host: string,
+  account: string,
+): VaultEntryMetadata | undefined {
+  const row = executeSqliteQueryTakeFirstSync(
+    db,
+    kysely(db)
+      .selectFrom("vault_entries")
+      .selectAll()
+      .where("owner_kind", "=", owner.kind)
+      .where("owner_id", "=", owner.id)
+      .where("origin_host", "=", host)
+      .where("account", "=", account)
+      .where("deleted_at_ms", "is", null),
+  );
+  return row ? toMetadata(row) : undefined;
+}
+
+export function readVaultWriteKeyRow(
+  db: DatabaseSync,
+  owner: VaultOwner,
+): VaultWriteKeyRow | undefined {
+  const key = executeSqliteQueryTakeFirstSync(
+    db,
+    kysely(db)
+      .selectFrom("vault_write_keys")
+      .selectAll()
+      .where("owner_kind", "=", owner.kind)
+      .where("owner_id", "=", owner.id)
+      .where("retired_at_ms", "is", null),
+  );
+  if (!key) {
+    return undefined;
+  }
+  const wrap = executeSqliteQueryTakeFirstSync(
+    db,
+    kysely(db)
+      .selectFrom("vault_write_key_wraps")
+      .selectAll()
+      .where("write_key_id", "=", key.write_key_id),
+  );
+  if (!wrap) {
+    return undefined;
+  }
+  return {
+    writeKeyId: key.write_key_id,
+    publicKey: Buffer.from(key.public_key),
+    keyId: wrap.key_id,
+    nonce: Buffer.from(wrap.nonce),
+    wrappedPrivateKey: Buffer.from(wrap.wrapped_private_key),
+  };
+}
+
+export function insertVaultWriteKey(
+  db: DatabaseSync,
+  owner: VaultOwner,
+  key: {
+    writeKeyId: string;
+    publicKey: Buffer;
+    keyId: string;
+    nonce: Buffer;
+    wrappedPrivateKey: Buffer;
+  },
+  now: number,
+): void {
+  executeSqliteQuerySync(
+    db,
+    kysely(db).insertInto("vault_write_keys").values({
+      write_key_id: key.writeKeyId,
+      owner_kind: owner.kind,
+      owner_id: owner.id,
+      public_key: key.publicKey,
+      created_at_ms: now,
+      retired_at_ms: null,
+    }),
+  );
+  executeSqliteQuerySync(
+    db,
+    kysely(db).insertInto("vault_write_key_wraps").values({
+      write_key_id: key.writeKeyId,
+      key_id: key.keyId,
+      nonce: key.nonce,
+      wrapped_private_key: key.wrappedPrivateKey,
+      created_at_ms: now,
+    }),
+  );
+}
+
+function toPendingRow(
+  row: OpenClawStateKyselyDatabase["vault_pending_entry_secrets"],
+): VaultPendingEntrySecretRow {
+  return {
+    itemRef: row.item_ref,
+    writeKeyId: row.write_key_id,
+    ephemeralPublicKey: Buffer.from(row.ephemeral_public_key),
+    secretNonce: Buffer.from(row.secret_nonce),
+    secretCiphertext: Buffer.from(row.secret_ciphertext),
+    notesNonce: Buffer.from(row.notes_nonce),
+    notesCiphertext: Buffer.from(row.notes_ciphertext),
+  };
+}
+
+export function readVaultPendingEntrySecret(
+  db: DatabaseSync,
+  itemRef: string,
+): VaultPendingEntrySecretRow | undefined {
+  const row = executeSqliteQueryTakeFirstSync(
+    db,
+    kysely(db)
+      .selectFrom("vault_pending_entry_secrets")
+      .selectAll()
+      .where("item_ref", "=", itemRef),
+  );
+  return row ? toPendingRow(row) : undefined;
+}
+
+export function listVaultPendingEntrySecrets(db: DatabaseSync): string[] {
+  const rows = executeSqliteQuerySync(
+    db,
+    kysely(db)
+      .selectFrom("vault_pending_entry_secrets")
+      .select(["item_ref"])
+      .orderBy("created_at_ms", "asc"),
+  ).rows;
+  return rows.map((row) => row.item_ref);
+}
+
+export function insertVaultPendingEntrySecret(
+  db: DatabaseSync,
+  itemRef: string,
+  writeKeyId: string,
+  sealed: SealedVaultEntrySecrets,
+  now: number,
+): void {
+  executeSqliteQuerySync(
+    db,
+    kysely(db).insertInto("vault_pending_entry_secrets").values({
+      item_ref: itemRef,
+      write_key_id: writeKeyId,
+      ephemeral_public_key: sealed.ephemeralPublicKey,
+      secret_nonce: sealed.secretNonce,
+      secret_ciphertext: sealed.secretCiphertext,
+      notes_nonce: sealed.notesNonce,
+      notes_ciphertext: sealed.notesCiphertext,
+      created_at_ms: now,
+    }),
+  );
+}
+
+export function deleteVaultPendingEntrySecret(db: DatabaseSync, itemRef: string): void {
+  executeSqliteQuerySync(
+    db,
+    kysely(db).deleteFrom("vault_pending_entry_secrets").where("item_ref", "=", itemRef),
   );
 }
 

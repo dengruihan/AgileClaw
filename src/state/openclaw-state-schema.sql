@@ -2761,6 +2761,8 @@ CREATE INDEX IF NOT EXISTS secret_store_entries_live_idx
 
 -- Personal website-password vault. Secret fields are stored only as AES-256-GCM
 -- ciphertext; metadata remains queryable while locked. No value column exists.
+-- An empty account marks an agent-saved entry the operator has not completed;
+-- those rows are exempt from the one-account-per-site uniqueness rule.
 CREATE TABLE IF NOT EXISTS vault_entries (
   item_ref TEXT NOT NULL PRIMARY KEY CHECK (length(item_ref) BETWEEN 1 AND 128),
   owner_kind TEXT NOT NULL CHECK (owner_kind IN ('profile')),
@@ -2769,7 +2771,7 @@ CREATE TABLE IF NOT EXISTS vault_entries (
   origin_host TEXT NOT NULL CHECK (length(origin_host) BETWEEN 1 AND 253),
   origin_port INTEGER NOT NULL CHECK (origin_port BETWEEN 1 AND 65535),
   site_label TEXT NOT NULL CHECK (length(site_label) BETWEEN 1 AND 256),
-  account TEXT NOT NULL CHECK (length(account) BETWEEN 1 AND 512),
+  account TEXT NOT NULL CHECK (length(account) BETWEEN 0 AND 512),
   label TEXT,
   has_notes INTEGER NOT NULL CHECK (has_notes IN (0, 1)),
   revision INTEGER NOT NULL CHECK (revision >= 1),
@@ -2780,7 +2782,8 @@ CREATE TABLE IF NOT EXISTS vault_entries (
   deleted_at_ms INTEGER
 ) STRICT;
 CREATE UNIQUE INDEX IF NOT EXISTS vault_entries_owner_active_account_idx
-  ON vault_entries (owner_kind, owner_id, origin_host, account) WHERE deleted_at_ms IS NULL;
+  ON vault_entries (owner_kind, owner_id, origin_host, account)
+  WHERE deleted_at_ms IS NULL AND account <> '';
 CREATE INDEX IF NOT EXISTS vault_entries_owner_live_idx
   ON vault_entries (owner_kind, owner_id, deleted_at_ms, updated_at_ms DESC);
 CREATE INDEX IF NOT EXISTS vault_entries_owner_deleted_idx
@@ -2818,6 +2821,41 @@ CREATE TABLE IF NOT EXISTS vault_key_wraps (
   key_check BLOB NOT NULL CHECK (length(key_check) = 32),
   created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
   last_used_at_ms INTEGER
+) STRICT;
+
+-- Agent write-only tier. The X25519 public key seals agent-saved passwords and
+-- notes while the vault is locked; the private key is wrapped under the vault
+-- DEK, so opening sealed values requires an unlocked vault. Sealed rows wait in
+-- vault_pending_entry_secrets until the next unlock migrates them into
+-- vault_entry_secrets under the per-entry DEK keys.
+CREATE TABLE IF NOT EXISTS vault_write_keys (
+  write_key_id TEXT NOT NULL PRIMARY KEY CHECK (length(write_key_id) BETWEEN 1 AND 128),
+  owner_kind TEXT NOT NULL CHECK (owner_kind IN ('profile')),
+  owner_id TEXT NOT NULL CHECK (length(owner_id) BETWEEN 1 AND 256),
+  public_key BLOB NOT NULL CHECK (length(public_key) = 32),
+  created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+  retired_at_ms INTEGER
+) STRICT;
+CREATE UNIQUE INDEX IF NOT EXISTS vault_write_keys_owner_live_idx
+  ON vault_write_keys (owner_kind, owner_id) WHERE retired_at_ms IS NULL;
+
+CREATE TABLE IF NOT EXISTS vault_write_key_wraps (
+  write_key_id TEXT NOT NULL PRIMARY KEY REFERENCES vault_write_keys(write_key_id) ON DELETE CASCADE,
+  key_id TEXT NOT NULL,
+  nonce BLOB NOT NULL CHECK (length(nonce) = 12),
+  wrapped_private_key BLOB NOT NULL,
+  created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS vault_pending_entry_secrets (
+  item_ref TEXT NOT NULL PRIMARY KEY REFERENCES vault_entries(item_ref) ON DELETE CASCADE,
+  write_key_id TEXT NOT NULL,
+  ephemeral_public_key BLOB NOT NULL CHECK (length(ephemeral_public_key) = 32),
+  secret_nonce BLOB NOT NULL CHECK (length(secret_nonce) = 12),
+  secret_ciphertext BLOB NOT NULL,
+  notes_nonce BLOB NOT NULL CHECK (length(notes_nonce) = 12),
+  notes_ciphertext BLOB NOT NULL,
+  created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0)
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS vault_meta (
