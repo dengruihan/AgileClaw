@@ -36,6 +36,16 @@
   );
   --shell-focus-duration: 200ms;
   --shell-focus-ease: var(--ease-out);
+  /* The main column floats as a rounded inset panel over the shared canvas;
+     navigation and the frame keep the canvas layer visible without moving
+     either surface's internal layout. Drawer shells and native embeds drop
+     both to zero below so phone and in-app content stays full-bleed. */
+  --shell-content-inset: 8px;
+  --shell-content-radius: var(--radius-lg);
+  /* Below --card in both modes, so cards, groups, and bubbles inside the panel
+     still read as the top layer while the panel itself lifts off the canvas. */
+  --shell-content-surface: color-mix(in srgb, var(--card) 70%, var(--bg-content, var(--bg)));
+  --shell-content-border: color-mix(in srgb, var(--border) 82%, transparent);
   height: var(--shell-content-height);
   display: grid;
   grid-template-columns: var(--shell-nav-width) minmax(0, 1fr);
@@ -1151,7 +1161,8 @@ openclaw-settings-save-indicator:empty {
 }
 
 /* Primary new-session action: the one full-width control above Pages. It wraps
-   onto its own row inside the brand block. */
+   onto its own row inside the brand block. The surface matches the sidebar
+   rows' quiet left-aligned rhythm rather than a centered accented banner. */
 .sidebar-primary-actions {
   flex: 1 0 100%;
   margin: 8px 0 0 2px;
@@ -1165,29 +1176,31 @@ openclaw-settings-save-indicator:empty {
 .sidebar-new-session-action {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 10px;
   width: 100%;
-  min-height: 40px;
+  min-height: 38px;
   padding: 0 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
-  color: var(--text-strong);
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  color: var(--text);
   font-size: var(--control-ui-text-md);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1;
   text-decoration: none;
   white-space: nowrap;
   transition:
     background var(--duration-fast) ease,
-    border-color var(--duration-fast) ease;
+    border-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
 }
 
 .sidebar-new-session-action:hover:not(:disabled, [aria-disabled="true"]),
 .sidebar-new-session-action:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 44%, var(--border));
-  background: color-mix(in srgb, var(--accent) 18%, var(--bg-elevated));
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+  color: var(--text-strong);
 }
 
 .sidebar-new-session-action:focus-visible {
@@ -1201,14 +1214,20 @@ openclaw-settings-save-indicator:empty {
 }
 
 .sidebar-new-session-action svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   flex: none;
+  color: var(--muted);
   stroke: currentColor;
   fill: none;
-  stroke-width: 1.7px;
+  stroke-width: 1.8px;
   stroke-linecap: round;
   stroke-linejoin: round;
+  transition: color var(--duration-fast) ease;
+}
+
+.sidebar-new-session-action:hover:not(:disabled, [aria-disabled="true"]) svg {
+  color: var(--text-strong);
 }
 
 .sidebar-brand__header-control svg {
@@ -1270,8 +1289,8 @@ openclaw-settings-save-indicator:empty {
 
 .sidebar-brand__new-thread svg {
   /* The plus path occupies less of its viewBox than the panel/search artwork. */
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 .sidebar-shell__content {
@@ -4186,14 +4205,22 @@ wa-dropdown.sidebar-identity-menu::part(menu) {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  /* The rounded reading surface: routes keep their own padding and scrolling;
+     only the panel frame, fill, and corner belong to the shell. */
+  border: 1px solid var(--shell-content-border);
+  border-radius: var(--shell-content-radius);
+  background: var(--shell-content-surface);
   /* Reserve space for the docked operator terminal and browser panels so they
      reshape the content area (shrink it) instead of overlaying the chat. The
-     panels set these vars; they are 0 when closed. */
-  margin-bottom: var(--shell-dock-reserve-bottom);
-  margin-right: calc(
-    var(--oc-terminal-reserve-right, 0px) + var(--oc-browser-reserve-right, 0px) +
-      var(--oc-link-reader-reserve-right, 0px) + var(--oc-assistant-reserve-right, 0px)
-  );
+     panels set these vars; they are 0 when closed. The inset keeps the panel
+     frame clear of the window edge on every side. */
+  margin: var(--shell-content-inset)
+    calc(
+      var(--oc-terminal-reserve-right, 0px) + var(--oc-browser-reserve-right, 0px) +
+        var(--oc-link-reader-reserve-right, 0px) + var(--oc-assistant-reserve-right, 0px) +
+        var(--shell-content-inset)
+    )
+    calc(var(--shell-dock-reserve-bottom) + var(--shell-content-inset)) var(--shell-content-inset);
   transition:
     margin-bottom 0.16s ease,
     margin-right 0.16s ease;
@@ -4201,7 +4228,21 @@ wa-dropdown.sidebar-identity-menu::part(menu) {
 
 /* The separate status row owns bottom-dock clearance while navigation is hidden. */
 .shell:not(.shell--mobile-nav).shell--connection-status > .content {
-  margin-bottom: 0;
+  margin-bottom: var(--shell-content-inset);
+}
+
+/* Drawer shells and native embeds own their window edge; the panel drops to the
+   bare content column instead of squeezing phone or in-app content inward. */
+.shell--mobile-nav,
+.shell--embed {
+  --shell-content-inset: 0px;
+  --shell-content-radius: 0px;
+}
+
+.shell--mobile-nav > .content,
+.shell--embed > .content {
+  border: none;
+  background: none;
 }
 
 /* Programmatic focus anchor (tabindex="-1") used when collapsing the sidebar
