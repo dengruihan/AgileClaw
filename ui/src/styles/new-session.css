@@ -26,9 +26,11 @@ openclaw-new-session-page {
   z-index: 45;
 }
 
+/* Shares the plate chrome centerline with the sidebar identity row and page
+   toolbars (see --shell-plate-chrome-top in layout.css). */
 :where(html:not(.openclaw-native-macos, .openclaw-native-desktop)) .shell:not(.shell--mobile-nav) {
   .new-session-page__incognito-rail {
-    top: calc((var(--rail-header-height) - 40px) / 2);
+    top: calc(var(--shell-plate-chrome-top, 0px) + (var(--rail-header-height) - 40px) / 2);
   }
 }
 

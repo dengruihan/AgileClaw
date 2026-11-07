@@ -160,7 +160,7 @@ async function expectPanelHeaderControlsClearShellChrome(
       .filter((button) => button.bottom > button.top && button.right > button.left);
     const shells = [
       ...document.querySelectorAll(
-        ":is(.shell-chrome-controls, .macos-titlebar-controls, .sidebar-attention--floating) button:not([hidden])",
+        ":is(.shell-chrome-controls, .macos-titlebar-controls) button:not([hidden])",
       ),
     ]
       .map(rect)
@@ -421,21 +421,36 @@ suite.define(() => {
           const box = await tabs.boundingBox();
           return box ? box.y + box.height / 2 : -1;
         };
-        // The toolbar row sits at the top of the content column in both states.
-        await expect.poll(rowCenter).toBe(24);
+        // The toolbar row rides the plate's chrome centerline: it clears the
+        // plate's top edge and matches the sidebar identity row.
+        const shellTop = async () =>
+          shell.evaluate((element) => element.getBoundingClientRect().top);
+        const identityCenter = async () =>
+          page
+            .locator(".sidebar-workspace-header")
+            .evaluate(
+              (element) =>
+                element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2,
+            );
+        await expect
+          .poll(async () => Math.abs((await rowCenter()) - (await identityCenter())))
+          .toBeLessThanOrEqual(2);
+        await expect
+          .poll(async () => (await rowCenter()) - (await shellTop()))
+          .toBeGreaterThanOrEqual(30);
         await capturePanel(page, "page-toolbar-expanded");
 
         await page.locator(".sidebar-brand__collapse").click();
         await expect.poll(() => shell.getAttribute("class")).toContain("shell--nav-collapsed");
-        await expect.poll(rowCenter).toBe(24);
+        const centeredRow = await rowCenter();
         const controls = page.locator(".shell-chrome-controls button:visible");
         const controlBoxes = await controls.evaluateAll((buttons) =>
           buttons.map((button) => button.getBoundingClientRect()),
         );
-        expect(controlBoxes.length).toBeGreaterThan(0);
+        expect(controlBoxes.length).toBe(1);
         const tabsBox = (await tabs.boundingBox())!;
         for (const box of controlBoxes) {
-          expect(box.top + box.height / 2).toBe(24);
+          expect(Math.abs(box.top + box.height / 2 - centeredRow)).toBeLessThanOrEqual(2);
           expect(box.right).toBeLessThan(tabsBox.x);
         }
         await capturePanel(page, "page-toolbar-collapsed");
@@ -461,7 +476,7 @@ suite.define(() => {
       home: false,
       deviceLess: false,
       direction: "ltr",
-      expectedControl: ".shell-chrome-controls__search",
+      expectedControl: ".shell-chrome-controls__nav-toggle",
       name: "collapsed navigation",
       navCollapsed: true,
       operatorScopes: undefined,
@@ -473,11 +488,11 @@ suite.define(() => {
       home: true,
       deviceLess: false,
       direction: "ltr",
-      expectedControl: ".shell-chrome-controls__home",
-      name: "collapsed navigation with Home and attention",
+      expectedControl: ".shell-chrome-controls__nav-toggle",
+      name: "collapsed navigation with a Home-capable session",
       navCollapsed: true,
       operatorScopes: undefined,
-      proof: "collapsed-nav-home-attention",
+      proof: "collapsed-nav-home",
       themeMode: "dark" as const,
     },
     {
@@ -485,11 +500,11 @@ suite.define(() => {
       home: false,
       deviceLess: true,
       direction: "rtl",
-      expectedControl: ".sidebar-attention--floating .sidebar-issues-button",
-      name: "collapsed RTL limited-access status and attention",
+      expectedControl: ".shell-chrome-controls__nav-toggle",
+      name: "collapsed RTL limited-access navigation",
       navCollapsed: true,
       operatorScopes: limitedScopes,
-      proof: "collapsed-rtl-limited-attention",
+      proof: "collapsed-rtl-limited",
       themeMode: "dark" as const,
     },
   ])("keeps focused main controls clear of shell chrome for $name", async (testCase) => {
@@ -521,7 +536,9 @@ suite.define(() => {
           await expect
             .poll(() => page.locator(".shell").getAttribute("class"))
             .toContain("shell--nav-collapsed");
-          await page.locator(".sidebar-attention--floating .sidebar-issues-button").waitFor();
+          // Collapsed navigation keeps only the expand toggle: the Inbox entry
+          // stays parked in the hidden sidebar instead of floating.
+          expect(await page.locator(".sidebar-attention--floating").count()).toBe(0);
         }
         await page.locator(testCase.expectedControl).waitFor();
         await waitForShellLayout(page);

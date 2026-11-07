@@ -323,13 +323,15 @@ suite.define(() => {
       if (testCase.collapseSidebar) {
         await page.locator(".sidebar-brand__collapse").click();
         await page.locator(".shell--nav-collapsed").waitFor();
+        // Collapsed navigation keeps only the expand toggle: no Inbox entry
+        // floats over the content column and the sidebar footer entry hides
+        // with the sidebar itself.
+        expect(await page.locator(".sidebar-attention--floating").count()).toBe(0);
+        expect(await page.locator(".sidebar-issues-button").isVisible()).toBe(false);
+      } else {
+        const chatInbox = page.locator("openclaw-app-sidebar .sidebar-issues-button");
+        await chatInbox.waitFor({ state: "visible" });
       }
-      const chatInbox = page.locator(
-        testCase.collapseSidebar
-          ? ".sidebar-attention--floating .sidebar-issues-button"
-          : "openclaw-app-sidebar .sidebar-issues-button",
-      );
-      await chatInbox.waitFor({ state: "visible" });
 
       await page.keyboard.press("Control+Shift+,");
       await waitForControlUiSettingsTakeover(page);
@@ -362,9 +364,14 @@ suite.define(() => {
       await page.goto(`${suite.server.baseUrl}new`);
       await page.locator(".new-session-page__message").waitFor({ state: "visible" });
       await page.locator(".sidebar-brand__collapse").click();
-      const floatingInbox = page.locator(".sidebar-attention--floating");
+      await page.locator(".shell--nav-collapsed").waitFor();
+      expect(await page.locator(".sidebar-attention--floating").count()).toBe(0);
+      // The badge parks in the hidden sidebar and survives the presenter gap.
+      await page.getByRole("button", { name: "Expand sidebar" }).click();
+      const footerInbox = page.locator("openclaw-app-sidebar .sidebar-issues-button");
+      await footerInbox.waitFor({ state: "visible" });
       await expect
-        .poll(() => floatingInbox.locator(".sidebar-issues-button__count").textContent())
+        .poll(() => footerInbox.locator(".sidebar-issues-button__count").textContent())
         .toBe("2");
 
       await page.keyboard.press("Control+Shift+,");
@@ -373,7 +380,7 @@ suite.define(() => {
 
       await page.keyboard.press("Escape");
       await expect.poll(() => new URL(page.url()).pathname).toBe("/new");
-      const restoredInbox = page.locator(".sidebar-attention--floating");
+      const restoredInbox = page.locator("openclaw-app-sidebar .sidebar-issues-button");
       await restoredInbox.waitFor({ state: "visible" });
       expect(await restoredInbox.locator(".sidebar-issues-button__count").textContent()).toBe("2");
 
@@ -403,16 +410,15 @@ suite.define(() => {
         .toBe("connected");
       await page.keyboard.press("Escape");
       await expect.poll(() => new URL(page.url()).pathname).toBe("/new");
-      await page.locator(".sidebar-attention--floating .sidebar-issues-button").waitFor();
-      expect(
-        await page.locator(".sidebar-attention--floating .sidebar-issues-button__count").count(),
-      ).toBe(0);
+      const reconnectedInbox = page.locator("openclaw-app-sidebar .sidebar-issues-button");
+      await reconnectedInbox.waitFor();
+      expect(await reconnectedInbox.locator(".sidebar-issues-button__count").count()).toBe(0);
     } finally {
       await suite.closeBrowserContext(context);
     }
   });
 
-  it("keeps one attention badge across expanded and collapsed presenters", async () => {
+  it("parks the attention badge in the sidebar while navigation is collapsed", async () => {
     const context = await suite.newBrowserContext({
       locale: "en-US",
       serviceWorkers: "block",
@@ -434,7 +440,10 @@ suite.define(() => {
         .toBe(0);
 
       await page.locator(".sidebar-brand__collapse").click();
-      await page.locator(".sidebar-attention--floating .sidebar-issues-button").waitFor();
+      await page.locator(".shell--nav-collapsed").waitFor();
+      // Collapsed navigation renders no Inbox presenter at all.
+      expect(await page.locator(".sidebar-attention--floating").count()).toBe(0);
+      expect(await page.locator(".sidebar-issues-button").isVisible()).toBe(false);
       await page.locator(".shell-chrome-controls__nav-toggle").click();
       await page.locator("openclaw-app-sidebar .sidebar-issues-button").waitFor();
 
@@ -456,9 +465,13 @@ suite.define(() => {
       await gateway.deferNext("cron.status");
       await gateway.deferNext("models.authStatus");
       await page.locator(".sidebar-brand__collapse").click();
+      await page.locator(".shell--nav-collapsed").waitFor();
+      expect(await page.locator(".sidebar-attention--floating").count()).toBe(0);
+      // Re-expanding without a refetch keeps the badge exactly as it was.
+      await page.locator(".shell-chrome-controls__nav-toggle").click();
       await expect
         .poll(() =>
-          page.locator(".sidebar-attention--floating .sidebar-issues-button__count").textContent(),
+          page.locator("openclaw-app-sidebar .sidebar-issues-button__count").textContent(),
         )
         .toBe("1");
     } finally {

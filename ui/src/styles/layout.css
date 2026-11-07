@@ -128,6 +128,16 @@
   overflow: hidden;
 }
 
+/* Web chat headers grew by the plate chrome inset (startup-layout.css), so the
+   shell toast's chat offset clears the taller header row; components.css owns
+   the base and mobile offsets. */
+:where(html:not(.openclaw-native-macos, .openclaw-native-desktop))
+  .shell.shell--chat:not(.shell--mobile-nav) {
+  --app-toast-shell-top: calc(
+    var(--shell-plate-inset) + var(--shell-plate-chrome-top) + var(--rail-header-height) + 12px
+  );
+}
+
 /* Collapsing hides the sidebar entirely; shell chrome and Cmd+B bring it back.
    Keep --shell-nav-width in sync for fixed-position consumers (e.g. the
    docked terminal panel). */

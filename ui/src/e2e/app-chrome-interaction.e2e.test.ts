@@ -80,6 +80,22 @@ suite.define(() => {
         await newSessionAction.waitFor({ state: "visible" });
         await inboxButton.waitFor({ state: "visible" });
 
+        // The startup page's fixed privacy rail shares the identity row's
+        // centerline (both clear the plate's top edge by the same inset).
+        const identityCenter = await page
+          .locator(".sidebar-workspace-header")
+          .evaluate(
+            (element) =>
+              element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2,
+          );
+        const incognitoCenter = await page
+          .locator(".new-session-page__incognito-rail")
+          .evaluate(
+            (element) =>
+              element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2,
+          );
+        expect(Math.abs(incognitoCenter - identityCenter)).toBeLessThanOrEqual(2);
+
         await page.locator(".sidebar-brand__collapse").click();
         await page.locator(".shell--nav-collapsed").waitFor();
         const toggle = page.locator(".shell-chrome-controls__nav-toggle");
