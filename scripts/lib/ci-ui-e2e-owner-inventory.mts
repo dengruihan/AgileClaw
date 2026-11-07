@@ -609,7 +609,7 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
   pageWatch(
     "ui/src/e2e/chat-header-axis.e2e.test.ts",
     ["chat", "new-session"],
-    ["ui/src/components/workspace-icon.ts", "ui/src/pages/chat/chat-pane.ts"],
+    ["ui/src/pages/chat/chat-pane.ts"],
   ),
   pageWatch("ui/src/e2e/chat-header-owner-presence.capture.e2e.test.ts", ["chat", "profile"]),
   pageWatch(
@@ -1947,16 +1947,6 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
       ...pageStyles["chat"],
     ],
   },
-  pageWatch(
-    "ui/src/e2e/session-management.rename-composition.e2e.test.ts",
-    ["chat"],
-    [
-      "ui/src/components/modal-dialog.ts",
-      "ui/src/components/session-menu.ts",
-      "ui/src/lib/sessions/session-capability.ts",
-      "ui/src/pages/chat/components/chat-header-session-menu.ts",
-    ],
-  ),
   pageWatch(
     "ui/src/e2e/session-management.rename-identity.e2e.test.ts",
     ["chat", "sessions"],

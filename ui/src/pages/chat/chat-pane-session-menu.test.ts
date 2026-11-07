@@ -25,7 +25,10 @@ import {
 } from "./components/chat-transcript.test-support.ts";
 
 vi.mock("../../lib/toast.ts", () => ({ showToast: vi.fn() }));
-vi.mock("../../components/input-dialog.ts", () => ({ showInputDialog: vi.fn() }));
+vi.mock("../../components/input-dialog.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../components/input-dialog.ts")>()),
+  showInputDialog: vi.fn(),
+}));
 
 beforeEach(installTranscriptDomMocks);
 

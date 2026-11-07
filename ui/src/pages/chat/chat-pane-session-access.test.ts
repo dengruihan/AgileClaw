@@ -9,7 +9,10 @@ import { showInputDialog } from "../../components/input-dialog.ts";
 import type { SessionCapability } from "../../lib/sessions/index.ts";
 import { sessionsResult } from "../../lib/sessions/session-capability.test-support.ts";
 
-vi.mock("../../components/input-dialog.ts", () => ({ showInputDialog: vi.fn() }));
+vi.mock("../../components/input-dialog.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../components/input-dialog.ts")>()),
+  showInputDialog: vi.fn(),
+}));
 import {
   createPaneHeaderWorkspaceFixture,
   createSessionCapabilityFixture,
