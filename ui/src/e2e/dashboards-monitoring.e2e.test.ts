@@ -320,6 +320,16 @@ suite.define(() => {
       await library.getByRole("button", { name: "Show all panels" }).click();
       await library.getByRole("button", { name: "Done" }).click();
 
+      // The empty-state action is gone after "Show all panels"; focus must land
+      // on the persistent Panels trigger instead of the document body.
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => document.activeElement?.hasAttribute("data-monitoring-panels") ?? false,
+          ),
+        )
+        .toBe(true);
+
       await expect.poll(() => page.locator("[data-monitoring-machine]").count()).toBe(3);
       expect(
         await page.locator('[data-monitoring-machine="gateway"] openclaw-sparkline').count(),

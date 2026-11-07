@@ -115,6 +115,7 @@ function renderPanelsButton(panels: MonitoringPanelsState) {
   return html`<button
     type="button"
     class="dashboards-monitoring__panels"
+    data-monitoring-panels
     aria-haspopup="dialog"
     aria-expanded=${String(panels.libraryOpen)}
     title=${t("systems.panelLibrary.triggerHint")}

@@ -186,6 +186,32 @@ describe("dashboards machine monitoring", () => {
     expect(container.textContent).toContain("1/3");
   });
 
+  it("keeps the legacy disk reading when the volume list is empty", async () => {
+    // `system.info` can report `disks: []` together with the legacy aggregate
+    // fields; the tile must still plot the reported availability.
+    const gatewaySystemInfo = {
+      ...inventory().gatewaySystemInfo!,
+      disks: [],
+      diskTotalBytes: 16_384,
+      diskAvailableBytes: 8_192,
+    };
+    const value = inventory({ gatewaySystemInfo });
+    const rows: MonitoringRow[] = [
+      { environment: value.environments[0]!, gatewaySystemInfo, sessions: [] },
+    ];
+    const container = document.createElement("div");
+    document.body.append(container);
+    render(renderMonitoring(state({ inventory: value, rows })), container);
+
+    const disks = container.querySelectorAll<
+      HTMLElement & { samples: readonly { value: number }[] }
+    >("openclaw-sparkline.dashboards-monitoring__vital--disk");
+    expect(disks).toHaveLength(1);
+    expect(disks[0]!.samples.map((sample) => sample.value)).toEqual([8_192]);
+    await (disks[0] as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(disks[0]!.textContent).toContain("8.0 KB");
+  });
+
   it("offers every catalog panel in the library and reports the current choice", () => {
     const panels = panelsState({ visible: ["load"], libraryOpen: true });
     const container = document.createElement("div");

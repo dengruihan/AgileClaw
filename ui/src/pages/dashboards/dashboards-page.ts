@@ -7,6 +7,7 @@ import {
   DASHBOARD_DOCUMENT_ELEMENT,
   ensureCustomElementDefined,
 } from "../../app/lazy-custom-element.ts";
+import type { OpenClawModalDialog } from "../../components/modal-dialog.ts";
 import { completePanelRefresh, failPanelRefresh } from "../../components/panel-refresh-status.ts";
 import { formatUiError } from "../../lib/format-error.ts";
 import { fetchPagedSessionRows } from "../../lib/sessions/paged-session-rows.ts";
@@ -153,6 +154,19 @@ class DashboardsPage extends OpenClawLightDomElement {
     saveDashboardPanels(this.panelGatewayUrl, this.panels);
   }
 
+  /**
+   * The drawer's opener can be the empty-state action, which disappears once
+   * panels come back. The shared modal restores focus to this fallback instead
+   * of dropping it on the document body.
+   */
+  private returnPanelLibraryFocus(): void {
+    const dialog = this.querySelector<OpenClawModalDialog>("openclaw-modal-dialog");
+    const trigger = this.querySelector<HTMLElement>("[data-monitoring-panels]");
+    if (dialog && trigger) {
+      dialog.setReturnFocusTarget(trigger);
+    }
+  }
+
   private panelsState(): MonitoringPanelsState {
     return {
       visible: this.panels,
@@ -171,6 +185,7 @@ class DashboardsPage extends OpenClawLightDomElement {
         this.panelLibraryOpen = true;
       },
       closeLibrary: () => {
+        this.returnPanelLibraryFocus();
         this.panelLibraryOpen = false;
       },
     };

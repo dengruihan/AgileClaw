@@ -69,23 +69,25 @@ export function renderMonitoringVitals(
         (gatewayHost ? MONITORING_GATEWAY_STALE_MS : MONITORING_NODE_STALE_MS));
   const retained = source.telemetryHistory(row.environment.id);
   const history = retained.length ? retained : [{ at: observedAt ?? 0, stats }];
-  // An empty volume list cannot render a disk tile, so it keeps the legacy
+  // An empty volume list cannot render per-volume tiles, so it keeps the legacy
   // single-volume reading instead of showing an empty panel.
   const disks = stats.disks?.length ? stats.disks : undefined;
   const showDisk = selected.has("disk");
+  const diskSample = (path: string | undefined) => (sample: HostMeasurements) => {
+    if (path !== undefined) {
+      return sample.disks?.find((disk) => disk.path === path)?.availableBytes;
+    }
+    // The Gateway reports the aggregate reading alongside an absent or empty
+    // volume list (`src/gateway/server-methods/system.ts` keeps both).
+    return sample.disks?.length ? undefined : sample.diskAvailableBytes;
+  };
   const renderDisk = (path: string | undefined, totalBytes: number | undefined) => html`
     <openclaw-sparkline
       class="gateway-vital dashboards-monitoring__vital dashboards-monitoring__vital--disk"
       title=${path ?? nothing}
       .label=${path ? `${t("systems.disk")} ${path}` : t("systems.disk")}
       .sub=${totalBytes === undefined ? "" : `/ ${bytes(totalBytes)}`}
-      .samples=${metricSamples(history, (sample) =>
-        path === undefined
-          ? sample.disks === undefined
-            ? sample.diskAvailableBytes
-            : undefined
-          : sample.disks?.find((disk) => disk.path === path)?.availableBytes,
-      )}
+      .samples=${metricSamples(history, diskSample(path))}
       .format=${bytes}
       .autorange=${true}
     ></openclaw-sparkline>

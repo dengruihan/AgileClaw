@@ -655,6 +655,37 @@ describe("DashboardsPage", () => {
     );
     expect(second.querySelector(".dashboards-monitoring__vital--load")).toBeNull();
     expect(second.querySelectorAll("[data-monitoring] openclaw-sparkline")).toHaveLength(2);
+
+    // Empty selection, then restore from the empty-state action: that opener is
+    // gone once panels return, so closing must return focus to the Panels trigger.
+    second.querySelector<HTMLButtonElement>(".dashboards-monitoring__panels")!.click();
+    await settleLitElement(second);
+    for (const id of ["memory", "disk"]) {
+      second
+        .querySelector<HTMLInputElement>(`[data-panel-option="${id}"] input`)!
+        .dispatchEvent(new Event("change", { bubbles: true }));
+      await settleLitElement(second);
+    }
+    second
+      .querySelector<HTMLButtonElement>(".dashboards-panel-library__footer .btn.primary")!
+      .click();
+    await settleLitElement(second);
+    const empty = second.querySelector("[data-monitoring-no-panels]");
+    expect(empty).not.toBeNull();
+
+    empty!.querySelector<HTMLButtonElement>("button")!.click();
+    await settleLitElement(second);
+    second
+      .querySelector<HTMLButtonElement>(".dashboards-panel-library__footer .btn--ghost")!
+      .click();
+    await settleLitElement(second);
+    second
+      .querySelector<HTMLButtonElement>(".dashboards-panel-library__footer .btn.primary")!
+      .click();
+    await settleLitElement(second);
+    expect(second.querySelector("[data-monitoring-no-panels]")).toBeNull();
+    expect(document.activeElement?.hasAttribute("data-monitoring-panels")).toBe(true);
+
     second.remove();
     localStorage.clear();
   });
