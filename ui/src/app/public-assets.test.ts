@@ -26,7 +26,6 @@ describe("controlUiPublicAssetPath", () => {
         "favicon.svg",
         "apple-touch-icon.png",
         "manifest.webmanifest",
-        "themes/absolutely.css",
         "fonts/lora.css",
         "provider-icons/ProviderIcon-pi.svg",
         "cloud-provider-icons/aws.svg",

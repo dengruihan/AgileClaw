@@ -10,7 +10,6 @@ import { normalizeMessageChannel } from "../../../utils/message-channel.js";
 import {
   resolveReplyOperatorAuthorityKey,
   resolveReplyScreenToolTarget,
-  resolveReplyThemeProfileId,
 } from "../reply-tool-authority.js";
 import type { FollowupRun } from "./types.js";
 
@@ -109,7 +108,6 @@ export function resolveFollowupDeliveryContextKey(run: FollowupRun): string {
     execution.messageProvider ?? "",
     JSON.stringify([...new Set(execution.clientCaps ?? [])].toSorted()),
     stableStringify(resolveReplyScreenToolTarget(run) ?? null),
-    resolveReplyThemeProfileId(run) ?? "",
     stableStringify(execution.toolBindings ?? null),
     execution.chatType ?? "",
     execution.agentAccountId ?? "",
