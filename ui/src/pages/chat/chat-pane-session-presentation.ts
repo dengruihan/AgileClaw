@@ -1,11 +1,32 @@
 import type { GatewaySessionRow } from "../../api/types.ts";
 import type { ApplicationContext } from "../../app/context.ts";
+import { resolveSessionDisplayName } from "../../lib/session-display.ts";
 import { collectKnownSessionGroups } from "../../lib/sessions/grouping.ts";
 import { scopedAgentParamsForSession } from "../../lib/sessions/navigation.ts";
-import { areUiSessionKeysEquivalent } from "../../lib/sessions/session-key.ts";
+import {
+  areUiSessionKeysEquivalent,
+  resolveUiSessionNavigationParentKey,
+} from "../../lib/sessions/session-key.ts";
 import type { ChatPageHost } from "./chat-state-host.ts";
 import { resolveChatAgentId } from "./chat-state-route.ts";
-import { resolveChatPaneParentSession } from "./components/chat-pane-header.ts";
+
+export type ChatPaneParentSession = {
+  key: string;
+  title: string;
+};
+
+/** Navigation parent presentation fact: used by the subagent banner and its render key. */
+export function resolveChatPaneParentSession(
+  session: GatewaySessionRow | undefined,
+  sessions: readonly GatewaySessionRow[],
+): ChatPaneParentSession | null {
+  const parentKey = resolveUiSessionNavigationParentKey(session);
+  if (!parentKey || (session && areUiSessionKeysEquivalent(parentKey, session.key))) {
+    return null;
+  }
+  const parent = sessions.find((row) => areUiSessionKeysEquivalent(row.key, parentKey));
+  return parent ? { key: parent.key, title: resolveSessionDisplayName(parent.key, parent) } : null;
+}
 
 /** Capture rendered roster facts without retaining a mutable row as the previous value. */
 export function chatSessionPresentationKey(

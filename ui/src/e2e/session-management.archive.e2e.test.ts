@@ -533,10 +533,9 @@ suite.define(() => {
             titleHistory.push(title);
           }
           const paneTitle = document
-            .querySelector(
-              "openclaw-chat-pane.chat-pane-cache__pane--active .chat-pane__session-title",
-            )
-            ?.textContent?.replace(/\s+/g, " ")
+            .querySelector("openclaw-chat-pane.chat-pane-cache__pane--active .chat-pane__header")
+            ?.getAttribute("aria-label")
+            ?.replace(/\s+/g, " ")
             .trim();
           if (paneTitle && paneTitleHistory.at(-1) !== paneTitle) {
             paneTitleHistory.push(paneTitle);

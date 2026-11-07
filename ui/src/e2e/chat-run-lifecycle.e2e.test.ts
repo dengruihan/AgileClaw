@@ -861,9 +861,13 @@ suite.define(() => {
         ],
         ts: activeUpdatedAt,
       });
-      await currentPage
-        .locator(".chat-pane__session-title", { hasText: staleActiveLabel })
-        .waitFor();
+      await expect
+        .poll(() =>
+          currentPage
+            .locator(".chat-pane-cache__pane--visible .chat-pane__header")
+            .getAttribute("aria-label"),
+        )
+        .toContain(staleActiveLabel);
       expect(await currentPage.getByRole("button", { name: "Stop generating" }).count()).toBe(0);
       await expect.poll(() => mainSessionRunIndicator.count()).toBe(0);
 

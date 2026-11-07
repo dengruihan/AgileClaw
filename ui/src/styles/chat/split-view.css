@@ -120,99 +120,6 @@
   margin-left: 0;
 }
 
-/* These groups become the two mobile identity rows. They stay transparent to
-   the desktop flex trail so its existing one-line geometry is unchanged. */
-.chat-pane__project-row,
-.chat-pane__session-trail {
-  display: contents;
-}
-
-/* Renaming needs the row's spare width, which the trail must pass through:
-   without this the input is trapped inside a shrink-only container. */
-.chat-pane__crumbs:has(.chat-pane__session-title-input) {
-  flex: 1 1 auto;
-}
-
-.chat-pane__session-title-button,
-.chat-pane__parent-session {
-  /* Hover padding is drawn outside the text box: the plain-span title (catalog
-     and rename-disabled panes) has none, and without the pull-back the same
-     title would start 5px further right the moment renaming is allowed. */
-  padding: 3px 5px;
-  margin-inline: -5px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  text-align: left;
-}
-
-.chat-pane__session-title-button {
-  cursor: text;
-}
-
-.chat-pane__session-title-button:hover,
-.chat-pane__session-title-button:focus-visible,
-.chat-pane__parent-session:hover,
-.chat-pane__parent-session:focus-visible {
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  outline: none;
-}
-
-.chat-pane__parent-session {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  cursor: var(--cursor-action);
-}
-
-.chat-pane__parent-session:hover,
-.chat-pane__parent-session:focus-visible {
-  color: var(--text);
-}
-
-/* Keep nested identity contextual rather than letting it become the header.
-   The two titles share at most half the container after separator spacing. */
-.chat-pane__crumbs:has(.chat-pane__parent-session) .chat-pane__parent-session,
-.chat-pane__crumbs:has(.chat-pane__parent-session) .chat-pane__session-title {
-  max-width: min(18ch, calc((50cqw - 20px) / 2));
-}
-
-.chat-pane__session-title-text,
-.chat-pane__parent-session-text {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.chat-pane__session-title-input {
-  flex: 1 1 auto;
-  min-width: 60px;
-  height: 28px;
-  padding: 0 7px;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  background: var(--panel);
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-  outline: none;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-/* Where supported, the rename input hugs its text too, so the workspace chip
-   tracks the title while typing; elsewhere editing falls back to full width. */
-@supports (field-sizing: content) {
-  .chat-pane__session-title-input {
-    flex: 0 1 auto;
-    field-sizing: content;
-    max-width: min(60ch, 100%);
-  }
-}
-
 .chat-pane__incognito {
   display: inline-flex;
   flex: 0 0 auto;
@@ -220,8 +127,7 @@
   color: var(--muted);
 }
 
-.chat-pane__incognito svg,
-.chat-pane__workspace-chip svg {
+.chat-pane__incognito svg {
   width: 14px;
   height: 14px;
   /* Lucide outline icons: without this the paths render browser-default
@@ -231,22 +137,6 @@
   stroke-width: 1.5px;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-/* Project icons are arbitrary artwork, so they keep their own pixels: matched to
-   the glyph box, contained rather than stretched, and deliberately unstyled —
-   no shadow, plate, or filter. Accepted tradeoff: a favicon that is one flat
-   dark color on transparency loses contrast against a dark chip. Rescuing it
-   unconditionally would cost every normal full-color icon, so if it ever
-   matters in practice the escape hatch is a plate applied conditionally, not a
-   blanket effect here. */
-.chat-pane__workspace-chip .workspace-icon-fallback {
-  display: contents;
-}
-
-.chat-pane__workspace-menu {
-  flex: 0 1 auto;
-  min-width: 0;
 }
 
 .chat-pane__placement-menu,
@@ -360,13 +250,6 @@
   color: var(--accent);
 }
 
-.chat-pane__workspace-chip:hover,
-.chat-pane__workspace-chip:focus-visible {
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  color: var(--text);
-  outline: none;
-}
-
 .chat-pane__presence {
   display: inline-flex;
   flex: 0 0 auto;
@@ -381,9 +264,9 @@
   flex: 0 0 auto;
   min-width: 0;
   padding: 0;
-  /* With the title text-hugging, this claims the leftover width so the
-     action cluster stays pinned to the right edge (and doubles as the
-     native window-drag surface between chip and actions). */
+  /* Claims the leftover width so the action cluster stays pinned to the right
+     edge (and doubles as the native window-drag surface between the leading
+     identity chips and the actions). */
   margin: 0 0 0 auto;
 }
 

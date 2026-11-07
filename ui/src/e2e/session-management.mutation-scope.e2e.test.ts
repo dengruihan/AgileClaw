@@ -130,13 +130,12 @@ suite.define(() => {
             await rowFor(original.key).click({ button: "right" });
             await page.getByRole("menuitem", { name: "Rename…", exact: true }).click();
           } else {
-            await page.locator(".chat-pane__session-title-button").click();
+            await page.locator(".chat-header-session-menu__trigger").click();
+            await page
+              .locator('openclaw-chat-header-session-menu wa-dropdown-item[value="rename"]')
+              .click();
           }
-          const input = page.locator(
-            filter === "All"
-              ? 'openclaw-modal-dialog[label="Rename session"] input'
-              : ".chat-pane__session-title-input",
-          );
+          const input = page.locator('openclaw-modal-dialog[label="Rename session"] input');
           await input.fill("Renamed original");
           await input.press("Enter");
           const request = await waitForPatch(

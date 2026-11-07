@@ -1,9 +1,5 @@
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
-import type {
-  SessionsFilesRevealResult,
-  WorktreesBranchesResult,
-  WorktreesListResult,
-} from "../../../../packages/gateway-protocol/src/index.js";
+import type { WorktreesListResult } from "../../../../packages/gateway-protocol/src/index.js";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import type { GatewaySessionRow } from "../../api/types.ts";
 import { serializeSidebarEntry } from "../../app-navigation.ts";
@@ -12,9 +8,7 @@ import type { SidebarSessionMutationScope } from "../../components/app-sidebar-s
 import { sessionMenuReasons } from "../../components/session-menu-access.ts";
 import type { SessionMenuData } from "../../components/session-menu-actions.ts";
 import type { SessionActionHost } from "../../components/session-organizer-operations.runtime.ts";
-import { isCloudWorkerPlacementState } from "../../components/session-row-badges.ts";
 import { t } from "../../i18n/index.ts";
-import { copyToClipboard } from "../../lib/clipboard.ts";
 import { openEditor } from "../../lib/editor-links.ts";
 import { formatUiError } from "../../lib/format-error.ts";
 import {
@@ -33,14 +27,12 @@ import {
   resolveUiConversationIdentity,
 } from "../../lib/sessions/session-key.ts";
 import { runSessionNavigationAction } from "../../lib/sessions/session-menu-navigation.ts";
-import { readSystemInfo } from "../../lib/system-info.ts";
 import { showToast } from "../../lib/toast.ts";
 import { runControlUiPluginAction } from "../../plugins/control-ui-actions.ts";
 import { ChatPaneContext } from "./chat-pane-context.ts";
 import { ChatPaneHeaderMemo } from "./chat-pane-header-memo.ts";
 import { resolveChatAgentId, selectedChatSessionRow } from "./chat-state-route.ts";
 import type { HeaderMenuAction } from "./components/chat-header-session-menu.ts";
-import type { ChatPaneHeaderAction } from "./components/chat-pane-header.ts";
 import { buildContinueInTerminalCommand } from "./continue-in-terminal-command.ts";
 
 export abstract class ChatPaneSessionMenu extends ChatPaneContext {
@@ -146,22 +138,6 @@ export abstract class ChatPaneSessionMenu extends ChatPaneContext {
   private headerSessionOperationsLoad: Promise<
     typeof import("../../components/session-organizer-operations.runtime.ts")
   > | null = null;
-  protected async loadHeaderPlatform(
-    client: GatewayBrowserClient,
-    generation: number,
-  ): Promise<void> {
-    const gateway = this.context.gateway;
-    const platform = await readSystemInfo(gateway)
-      .then((sample) => sample.value.platform)
-      .catch(() => null);
-    if (
-      this.context.gateway === gateway &&
-      this.connectedClient === client &&
-      this.connectionGeneration === generation
-    ) {
-      this.headerPlatform = platform;
-    }
-  }
 
   protected async handleHeaderSessionAction(action: HeaderMenuAction, row: GatewaySessionRow) {
     if (action.kind === "stop-cloud-worker") {
@@ -175,7 +151,7 @@ export abstract class ChatPaneSessionMenu extends ChatPaneContext {
       return;
     }
     if (action.kind === "rename") {
-      this.beginHeaderRename(row);
+      await this.renameHeaderSession(row);
       return;
     }
     if (
@@ -492,7 +468,16 @@ export abstract class ChatPaneSessionMenu extends ChatPaneContext {
     );
   }
 
-  protected beginHeaderRename(row: GatewaySessionRow): void {
+  /** Shares the sidebar/sessions-page dialog rename: the pane header has no
+   * inline title editor, so the menu action edits through a modal tied to the
+   * connection scope and revalidates access against the current row before
+   * patching. */
+  protected async renameHeaderSession(row: GatewaySessionRow): Promise<void> {
+    const scope = this.captureHeaderSessionActionScope();
+    if (!scope) {
+      this.publishHeaderError(t("sessionsView.actionRequiresConnection"));
+      return;
+    }
     const access = readSessionMethodAccess(this.context.gateway.snapshot, {
       method: "sessions.patch",
       params: { key: row.key, label: null },
@@ -503,72 +488,52 @@ export abstract class ChatPaneSessionMenu extends ChatPaneContext {
       this.publishHeaderError(access.reason);
       return;
     }
-    // The edit belongs to this instance, even if a replacement reuses its key.
-    this.headerRenameSession = { key: row.key, sessionId: row.sessionId, label: row.label };
-    this.headerRenameInitialValue = resolveSessionRenameValue(row);
-    this.headerRenameValue = this.headerRenameInitialValue;
-    this.headerEditing = true;
-    void this.updateComplete.then(() => {
-      const input = this.querySelector<HTMLInputElement>(".chat-pane__session-title-input");
-      input?.focus();
-      input?.select();
+    const initialValue = resolveSessionRenameValue(row);
+    const { showInputDialog } = await import("../../components/input-dialog.ts");
+    const value = await showInputDialog({
+      signal: scope.signal,
+      title: t("sessionsView.renameSessionPrompt"),
+      defaultValue: initialValue,
     });
-  }
-
-  protected cancelHeaderRename(): void {
-    this.headerEditing = false;
-    this.headerRenameSession = null;
-  }
-
-  protected commitHeaderRename(): void {
-    if (!this.headerEditing) {
-      return;
-    }
-    const session = this.headerRenameSession;
-    const patch = resolveSessionRenamePatch(
-      this.headerRenameValue,
-      this.headerRenameInitialValue,
-      session?.label,
-    );
-    this.headerEditing = false;
-    this.headerRenameSession = null;
+    const patch = value === null ? null : resolveSessionRenamePatch(value, initialValue, row.label);
     const state = this.state;
-    if (!session || !state || !patch) {
+    if (value === null || !patch || !state || scope.signal.aborted) {
       return;
     }
-    const access = readSessionMethodAccess(this.context.gateway.snapshot, {
+    // Refresh metadata only on the selected instance; a replacement that kept
+    // the captured ID stays patchable, matching the organizer's rename.
+    const currentRow = state.sessionsResult?.sessions.find(
+      (candidate) =>
+        areUiSessionKeysEquivalent(candidate.key, row.key) &&
+        (!row.sessionId || candidate.sessionId === row.sessionId),
+    );
+    const commitAccess = readSessionMethodAccess(this.context.gateway.snapshot, {
       method: "sessions.patch",
-      params: { key: session.key, ...patch },
+      params: { key: row.key, ...patch },
       sessionScope: true,
-      session: state.sessionsResult?.sessions.find(
-        (row) =>
-          areUiSessionKeysEquivalent(row.key, session.key) && row.sessionId === session.sessionId,
-      ),
+      session: currentRow ?? row,
     });
-    if (!access.allowed) {
-      this.publishHeaderError(access.reason);
+    if (!commitAccess.allowed) {
+      this.publishHeaderError(commitAccess.reason);
       return;
     }
     const owner = this.headerOutcomeOwner;
     void this.context.sessions
-      .patch(session.key, patch, {
+      .patch(row.key, patch, {
         agentId: resolveChatAgentId(state),
-        expectedSessionId: session.sessionId,
+        expectedSessionId: row.sessionId,
       })
       .catch((error: unknown) => this.publishHeaderError(error, owner));
   }
 
-  protected async loadHeaderMenuData(
-    row: GatewaySessionRow,
-    agentWorkspace: string | undefined,
-    workspaceGit: boolean,
-  ): Promise<void> {
+  protected async loadHeaderMenuData(row: GatewaySessionRow): Promise<void> {
     const client = this.connectedClient;
     if (!client) {
       return;
     }
-    const loads = [this.loadHeaderPlatform(client, this.connectionGeneration)];
-    // Same precedence as resolveChatPaneWorkspace/loadSessionFileRoot.
+    const loads: Promise<unknown>[] = [];
+    // Same precedence as resolveChatPaneWorkspace/loadSessionFileRoot: the
+    // worktree checkout path feeds the session menu's open-in actions.
     const immediateRoot =
       (row.execNode ? row.execCwd?.trim() : undefined) ||
       row.spawnedWorkspaceDir?.trim() ||
@@ -600,78 +565,8 @@ export abstract class ChatPaneSessionMenu extends ChatPaneContext {
         );
       }
     }
-    const agentRoot = !row.worktree ? agentWorkspace?.trim() : undefined;
-    const knownRoot =
-      immediateRoot ||
-      (worktreeId ? this.headerWorktreePaths.get(worktreeId)?.path : undefined) ||
-      agentRoot;
-    const remote = Boolean(row.execNode) || isCloudWorkerPlacementState(row.placement?.state);
-    // workspaceGit describes the agent workspace only; a session-specific
-    // root (spawned dir) may be a Git checkout regardless.
-    const rootMayHaveBranch = knownRoot === agentRoot ? workspaceGit : Boolean(knownRoot);
-    // HEAD can move mid-session, so refetch on every open while keeping the
-    // last-known branch visible during the refresh to avoid menu flicker.
-    if (!row.worktree && !remote && knownRoot && rootMayHaveBranch) {
-      const entry = this.headerBranches.get(knownRoot) ?? {};
-      this.headerBranches.set(knownRoot, entry);
-      if (!entry.loading) {
-        entry.loading = true;
-        loads.push(
-          client
-            .request<WorktreesBranchesResult>("worktrees.branches", { repoRoot: knownRoot })
-            .then((result) => {
-              entry.value = result.headBranch ?? null;
-            })
-            .catch(() => {
-              entry.value = null;
-            })
-            .finally(() => {
-              entry.loading = false;
-            }),
-        );
-      }
-    }
     await Promise.all(loads);
     this.requestUpdate();
-  }
-
-  protected showHeaderCopied(action: ChatPaneHeaderAction): void {
-    this.headerCopiedAction = action;
-    if (this.headerCopiedTimer !== null) {
-      window.clearTimeout(this.headerCopiedTimer);
-    }
-    this.headerCopiedTimer = window.setTimeout(() => {
-      this.headerCopiedAction = null;
-      this.headerCopiedTimer = null;
-    }, 1_500);
-  }
-
-  protected handleHeaderMenuAction(
-    action: ChatPaneHeaderAction,
-    row: GatewaySessionRow,
-    workspaceRoot: string | null,
-    branch: string | null,
-    copy: (value: string) => Promise<boolean> = copyToClipboard,
-  ): void {
-    const copiedValue =
-      action === "copy-path" ? workspaceRoot : action === "copy-branch" ? branch : null;
-    if (copiedValue) {
-      const owner = this.headerOutcomeOwner;
-      void copy(copiedValue).then((copied) => {
-        if (!this.ownsHeaderOutcome(owner)) {
-          return;
-        }
-        if (copied) {
-          this.showHeaderCopied(action);
-        } else {
-          this.publishHeaderError(t("common.copyFailed"), owner);
-        }
-      });
-      return;
-    }
-    if (action === "reveal" && workspaceRoot) {
-      void this.revealHeaderWorkspace(row);
-    }
   }
 
   protected publishHeaderError(error: unknown, owner = this.headerOutcomeOwner): void {
@@ -680,26 +575,5 @@ export abstract class ChatPaneSessionMenu extends ChatPaneContext {
     }
     this.state.chatError = this.state.lastError = formatUiError(error);
     this.state.requestUpdate?.();
-  }
-
-  protected async revealHeaderWorkspace(row: GatewaySessionRow): Promise<void> {
-    const client = this.connectedClient;
-    if (!client) {
-      return;
-    }
-    const owner = this.headerOutcomeOwner;
-    const agentId = parseAgentSessionKey(row.key)?.agentId;
-    try {
-      const result = await client.request<SessionsFilesRevealResult>("sessions.files.reveal", {
-        key: row.key,
-        ...(agentId ? { agentId } : {}),
-      });
-      if (!result.ok) {
-        const error = result.error ?? "Failed to reveal session workspace.";
-        this.publishHeaderError(error, owner);
-      }
-    } catch (error) {
-      this.publishHeaderError(error, owner);
-    }
   }
 }

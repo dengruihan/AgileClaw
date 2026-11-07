@@ -198,12 +198,16 @@ suite.define(() => {
           .length;
         await gateway.deferNext("sessions.list", childRosterQuery);
         await childLink.click();
-        const selectedTitle = page.locator(
-          ".chat-pane-cache__pane--active .chat-pane__session-title-text",
-        );
-        await expect.poll(() => selectedTitle.textContent()).toBe("Backend implementation");
+        const selectedTitle = page
+          .locator(".chat-pane-cache__pane--active .chat-pane__header")
+          .first();
+        await expect
+          .poll(() => selectedTitle.getAttribute("aria-label"))
+          .toBe("Backend implementation");
         await page.goBack();
-        await expect.poll(() => selectedTitle.textContent()).toBe("Build the implementation");
+        await expect
+          .poll(() => selectedTitle.getAttribute("aria-label"))
+          .toBe("Build the implementation");
         await activePane.getByText("Handed off and waiting", { exact: true }).waitFor();
         await gateway.waitForRequest("sessions.list", {
           after: childRosterReads,

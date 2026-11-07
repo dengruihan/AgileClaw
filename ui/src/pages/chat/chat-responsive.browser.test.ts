@@ -956,53 +956,6 @@ describeBrowserLayout.concurrent("chat responsive browser layout", () => {
     });
   });
 
-  it("keeps a constrained no-face header to one flex gap", async () => {
-    await withBrowserPage(openBrowserPage(360, 180), async (page) => {
-      const splitViewCss = readStyleSheet("ui/src/styles/chat/split-view.css");
-      await page.setContent(
-        `<!doctype html><html><head><style>${readUiCss()}\n${splitViewCss}</style></head><body>
-          <div class="chat-pane__header" style="width: 320px;">
-            <div class="chat-pane__header-leading">
-              <div class="chat-pane__crumbs">
-                <span class="chat-pane__session-title">
-                  <span class="chat-pane__session-title-text">A deliberately long session title for the no-face header</span>
-                </span>
-              </div>
-            </div>
-            <div class="chat-pane__header-trailing">
-              <div class="chat-pane__actions">
-                <button class="btn btn--ghost btn--icon chat-icon-btn" type="button">A</button>
-                <button class="btn btn--ghost btn--icon chat-icon-btn" type="button">B</button>
-                <button class="btn btn--ghost btn--icon chat-icon-btn" type="button">C</button>
-              </div>
-            </div>
-          </div>
-        </body></html>`,
-      );
-
-      const geometry = await page.locator(".chat-pane__header").evaluate((header) => {
-        const leading = header.querySelector<HTMLElement>(".chat-pane__header-leading")!;
-        const trailing = header.querySelector<HTMLElement>(".chat-pane__header-trailing")!;
-        const title = header.querySelector<HTMLElement>(".chat-pane__session-title-text")!;
-        const leadingRect = leading.getBoundingClientRect();
-        const trailingRect = trailing.getBoundingClientRect();
-        return {
-          gap: trailingRect.left - leadingRect.right,
-          regionClasses: [...header.children].map((child) => child.className),
-          titleClientWidth: title.clientWidth,
-          titleScrollWidth: title.scrollWidth,
-        };
-      });
-
-      expect(geometry.regionClasses).toEqual([
-        "chat-pane__header-leading",
-        "chat-pane__header-trailing",
-      ]);
-      expect(geometry.gap).toBeCloseTo(8, 0);
-      expect(geometry.titleScrollWidth).toBeGreaterThan(geometry.titleClientWidth);
-    });
-  });
-
   it("keeps the split-pane close button reachable as the pane narrows", async () => {
     await withBrowserPage(openBrowserPage(1100, 240), async (page) => {
       const splitViewCss = readStyleSheet("ui/src/styles/chat/split-view.css");
@@ -1010,18 +963,12 @@ describeBrowserLayout.concurrent("chat responsive browser layout", () => {
         `<!doctype html><html><head><style>${readUiCss()}\n${splitViewCss}</style></head><body>
           <div class="chat-split-view__cell" style="width: 320px;">
             <div class="chat-pane__header chat-pane__header--closable">
-              <button class="btn btn--ghost btn--icon chat-icon-btn chat-pane__nav-toggle" type="button">N</button>
-              <span class="chat-pane__session-title"
-                ><span class="chat-pane__session-title-text"
-                  >A deliberately long split-pane session title</span
-                ></span
-              >
-              <openclaw-session-owner-chip>
-                <span class="session-owner-chip session-owner-chip--header">O</span>
-              </openclaw-session-owner-chip>
-              <button class="chat-pane__workspace-chip" type="button">
-                ${iconSvg()}<span>openclaw-workspace</span>
-              </button>
+              <div class="chat-pane__header-leading">
+                <button class="btn btn--ghost btn--icon chat-icon-btn chat-pane__nav-toggle" type="button">N</button>
+                <openclaw-session-owner-chip>
+                  <span class="session-owner-chip session-owner-chip--header">O</span>
+                </openclaw-session-owner-chip>
+              </div>
               <wa-dropdown class="chat-pane__sharing-menu">
                 <button class="btn btn--ghost btn--icon chat-icon-btn chat-pane__sharing-trigger" type="button">S</button>
               </wa-dropdown>
@@ -1119,86 +1066,6 @@ describeBrowserLayout.concurrent("chat responsive browser layout", () => {
         (cell as HTMLElement).style.width = "1000px";
       });
       expect(await displayValues()).not.toContain("none");
-    });
-  });
-
-  it("caps a nested session trail at half the header while ellipsizing both titles", async () => {
-    await withBrowserPage(openBrowserPage(720, 180), async (page) => {
-      const splitViewCss = readStyleSheet("ui/src/styles/chat/split-view.css");
-      await page.setContent(
-        `<!doctype html><html><head><style>${readUiCss()}\n${splitViewCss}</style></head><body>
-          <div class="chat-split-view__cell" style="width: 640px;">
-            <div class="chat-pane__header chat-pane__header--closable">
-              <div class="chat-pane__crumbs">
-                <div class="chat-pane__project-row">
-                  <wa-dropdown class="chat-pane__workspace-menu">
-                    <button class="chat-pane__workspace-chip" type="button">
-                      ${iconSvg()}<span>openclaw</span>
-                    </button>
-                  </wa-dropdown>
-                </div>
-                <div class="chat-pane__session-trail">
-                  <span class="chat-pane__crumb-sep" aria-hidden="true">/</span>
-                  <button class="chat-pane__parent-session" type="button">
-                    <span class="chat-pane__parent-session-text">Release preparation with a long parent name</span>
-                  </button>
-                  <span class="chat-pane__crumb-sep" aria-hidden="true">/</span>
-                  <button class="chat-pane__session-title chat-pane__session-title-button" type="button">
-                    <span class="chat-pane__session-title-text">Implementation details with a long child name</span>
-                  </button>
-                </div>
-              </div>
-              <div class="chat-pane__actions">
-                <button class="btn btn--ghost btn--icon chat-icon-btn chat-pane__close-pane" type="button">X</button>
-              </div>
-            </div>
-          </div>
-        </body></html>`,
-      );
-
-      const readState = () =>
-        page.locator(".chat-pane__header").evaluate((header) => {
-          const separators = [...header.querySelectorAll<HTMLElement>(".chat-pane__crumb-sep")];
-          const parentText = header.querySelector<HTMLElement>(".chat-pane__parent-session-text")!;
-          const childText = header.querySelector<HTMLElement>(".chat-pane__session-title-text")!;
-          const parent = header.querySelector<HTMLElement>(".chat-pane__parent-session")!;
-          const child = header.querySelector<HTMLElement>(".chat-pane__session-title")!;
-          const headerRect = header.getBoundingClientRect();
-          const parentRect = parent.getBoundingClientRect();
-          const childRect = child.getBoundingClientRect();
-          return {
-            firstSeparator: getComputedStyle(separators[0]!).display,
-            secondSeparator: getComputedStyle(separators[1]!).display,
-            parentEllipses: parentText.scrollWidth > parentText.clientWidth,
-            childEllipses: childText.scrollWidth > childText.clientWidth,
-            headerWidth: headerRect.width,
-            nestedTrailWidth: childRect.right - parentRect.left,
-            overflow: (header as HTMLElement).scrollWidth - (header as HTMLElement).clientWidth,
-          };
-        });
-
-      const normal = await readState();
-      expect(normal).toMatchObject({
-        firstSeparator: "block",
-        secondSeparator: "block",
-        parentEllipses: true,
-        childEllipses: true,
-        overflow: 0,
-      });
-      expect(normal.nestedTrailWidth).toBeLessThanOrEqual(normal.headerWidth / 2 + 1);
-
-      await page.locator(".chat-split-view__cell").evaluate((cell) => {
-        (cell as HTMLElement).style.width = "320px";
-      });
-      const narrow = await readState();
-      expect(narrow).toMatchObject({
-        firstSeparator: "none",
-        secondSeparator: "block",
-        parentEllipses: true,
-        childEllipses: true,
-        overflow: 0,
-      });
-      expect(narrow.nestedTrailWidth).toBeLessThanOrEqual(narrow.headerWidth / 2 + 1);
     });
   });
 

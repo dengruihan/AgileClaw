@@ -478,9 +478,13 @@ suite.define(() => {
       await expect.poll(() => panes.count()).toBe(3);
       await expect
         .poll(async () =>
-          (await page.locator(".chat-pane__session-title").allTextContents()).map((title) =>
-            title.trim(),
-          ),
+          (
+            await page
+              .locator(".chat-pane__header")
+              .evaluateAll((headers) =>
+                headers.map((header) => (header.getAttribute("aria-label") ?? "").trim()),
+              )
+          ).filter((title) => title.length > 0),
         )
         .toContain("Session B");
       await expect

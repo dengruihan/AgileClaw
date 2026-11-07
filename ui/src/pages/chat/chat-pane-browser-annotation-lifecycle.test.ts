@@ -378,9 +378,11 @@ describe("staged attachment composer adoption", () => {
     expect(getChatAttachmentDataUrl(current)).not.toBeNull();
 
     const stopAfterAnnotationOwner = new Error("stop after annotation owner");
-    const cancelHeaderRename = vi.spyOn(pane, "cancelHeaderRename").mockImplementation(() => {
-      throw stopAfterAnnotationOwner;
-    });
+    const retireReplyMessages = vi
+      .spyOn(pane as TestChatPane & { retireReplyMessages: () => void }, "retireReplyMessages")
+      .mockImplementation(() => {
+        throw stopAfterAnnotationOwner;
+      });
     expect(() =>
       pane.applyGatewaySnapshot({
         ...pane.context.gateway.snapshot,
@@ -388,7 +390,7 @@ describe("staged attachment composer adoption", () => {
         phase: "connected",
       }),
     ).toThrow(stopAfterAnnotationOwner);
-    cancelHeaderRename.mockRestore();
+    retireReplyMessages.mockRestore();
     expect(state.chatAttachments).toEqual([current, ordinary]);
     expect(getChatAttachmentDataUrl(current)).not.toBeNull();
 

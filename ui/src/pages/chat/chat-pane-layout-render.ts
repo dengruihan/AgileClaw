@@ -57,7 +57,6 @@ type ChatPaneLayoutRenderParams = {
   observerRunId: string | null;
   catalog: boolean;
   agentWorkspace: string | undefined;
-  workspaceGit: boolean;
   openPanelSlot: (slot: SidebarSlotId) => void;
   closePanelSlot: (slot: SidebarSlotId) => void;
 };
@@ -115,7 +114,6 @@ export abstract class ChatPaneLayoutRender extends ChatPaneBrowserAnnotationRend
       observerRunId,
       catalog,
       agentWorkspace,
-      workspaceGit,
       openPanelSlot,
       closePanelSlot,
     } = params;
@@ -354,7 +352,6 @@ export abstract class ChatPaneLayoutRender extends ChatPaneBrowserAnnotationRend
                 selectedSession,
                 catalog,
                 agentWorkspace,
-                workspaceGit,
                 chatProps.placementStartup,
                 sidebarLayout,
                 panelDefinitions,

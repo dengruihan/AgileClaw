@@ -28,7 +28,6 @@ const ROUTES = [
   ["pluginIcon", "@scope/plugin", "/__openclaw__/plugin-icon/%40scope%2Fplugin"],
   ["pluginActivityIcon", "@scope/plugin", "/__openclaw__/plugin-activity-icon/%40scope%2Fplugin"],
   ["userAvatar", "profile/a b", "/api/users/profile%2Fa%20b/avatar"],
-  ["workspaceIcon", "agent:main:one", "/__openclaw__/workspace-icon/agent%3Amain%3Aone"],
 ] as const satisfies readonly (readonly [ControlUiResourceRoute, string, string])[];
 
 describe("Control UI resource route contract", () => {
@@ -64,11 +63,11 @@ describe("Control UI resource route contract", () => {
   });
 
   it.each([
-    ["blank segment", "/__openclaw__/workspace-icon/"],
-    ["raw nested segment", "/__openclaw__/workspace-icon/agent/main"],
-    ["malformed escape", "/__openclaw__/workspace-icon/%zz"],
+    ["blank segment", "/__openclaw__/channel-avatar/"],
+    ["raw nested segment", "/__openclaw__/channel-avatar/agent/main"],
+    ["malformed escape", "/__openclaw__/channel-avatar/%zz"],
   ])("claims a %s without producing a route value", (_label, pathname) => {
-    expect(parseControlUiResourcePath("workspaceIcon", pathname)).toEqual({
+    expect(parseControlUiResourcePath("channelAvatar", pathname)).toEqual({
       matched: true,
       value: null,
     });
@@ -76,7 +75,7 @@ describe("Control UI resource route contract", () => {
 
   it("does not claim another resource route", () => {
     expect(
-      parseControlUiResourcePath("workspaceIcon", "/__openclaw__/plugin-icon/firecrawl"),
+      parseControlUiResourcePath("channelAvatar", "/__openclaw__/plugin-icon/firecrawl"),
     ).toEqual({ matched: false });
   });
 

@@ -226,11 +226,7 @@ suite.define(() => {
       },
       featureMethods: ["chat.metadata", "chat.startup", "sessions.patch", "sessions.catalog.list"],
     });
-    const shot = async (
-      name: string,
-      surface = page.locator(".shell"),
-      content = [page.locator(".chat-pane__session-title")],
-    ) => {
+    const shot = async (name: string, surface = page.locator(".shell"), content = [row]) => {
       if (capture) {
         await writeFile(
           path.join(proofDir, name),
@@ -239,14 +235,13 @@ suite.define(() => {
       }
     };
     const row = page.locator(`.sidebar-recent-session[data-session-key="${key}"]`);
-    const dot = page.locator(".chat-pane__session-title .session-color-dot");
     const stripe = () =>
       row.evaluate((element) => getComputedStyle(element, "::before").backgroundColor);
     try {
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, key));
       await row.waitFor({ state: "visible" });
       expect(await row.getAttribute("class")).not.toContain("sidebar-recent-session--colored");
-      expect(await dot.count()).toBe(0);
+      expect(await row.getAttribute("style")).toBeNull();
       await shot("before-no-color.png");
       const imported = page
         .locator("[data-catalog-session-key]")
@@ -265,8 +260,6 @@ suite.define(() => {
       await expect
         .poll(() => row.getAttribute("class"))
         .toContain("sidebar-recent-session--colored");
-      await dot.waitFor({ state: "visible" });
-      expect(await dot.getAttribute("aria-label")).toBe("Session color: Purple");
       expect(await row.getAttribute("style")).toContain("--session-color-purple");
       expect(await row.evaluate((element) => getComputedStyle(element, "::before").width)).toBe(
         "3px",
@@ -316,7 +309,6 @@ suite.define(() => {
       // transient event-only clear cannot hide a stale color restored by refresh.
       await row.getByText("Design review refreshed", { exact: true }).waitFor();
       expect(await row.getAttribute("style")).toBeNull();
-      await expect.poll(() => dot.count()).toBe(0);
       await expect
         .poll(() => row.getAttribute("class"))
         .not.toContain("sidebar-recent-session--colored");
@@ -326,7 +318,7 @@ suite.define(() => {
       await page.getByRole("menuitem", { name: "Icon & color", exact: true }).click();
       await page.getByRole("button", { name: "Blue", exact: true }).click();
       await waitForPatch(gateway, (params) => params.key === key && params.color === "blue");
-      await expect.poll(() => dot.getAttribute("aria-label")).toBe("Session color: Blue");
+      await expect.poll(() => row.getAttribute("style")).toContain("--session-color-blue");
       await shot(
         "after-compact-menu.png",
         page.locator('openclaw-chat-header-session-menu > wa-dropdown [part="menu"]'),
@@ -337,7 +329,7 @@ suite.define(() => {
         gateway,
         (params) => params.key === key && params.color === null && params.icon === null,
       );
-      await expect.poll(() => dot.count()).toBe(0);
+      await expect.poll(() => row.getAttribute("style")).toBeNull();
     } finally {
       await context.close();
     }

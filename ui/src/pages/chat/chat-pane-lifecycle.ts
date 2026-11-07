@@ -680,14 +680,9 @@ export abstract class ChatPaneLifecycle extends ChatPaneSessionObservation {
     this.resetOlderMessagesViewport();
     this.nativeDraftCleanup?.();
     this.nativeDraftCleanup = null;
-    if (this.headerCopiedTimer !== null) {
-      window.clearTimeout(this.headerCopiedTimer);
-      this.headerCopiedTimer = null;
-    }
     this.swarmHydrator?.dispose();
     this.swarmHydrator = null;
     this.headerWorktreePaths.clear();
-    this.headerBranches.clear();
     this.presencePayload = undefined;
     dismissConfirmedActionPopovers(this);
     resetChatViewState(this.presentationId);

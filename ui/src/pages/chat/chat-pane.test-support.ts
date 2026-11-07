@@ -192,25 +192,9 @@ export interface TestChatPane extends HTMLElement, ReactiveControllerHost {
   loadingOlder: boolean;
   catalogCursor: string | undefined;
   olderCursorsSeen: Set<string>;
-  headerEditing: boolean;
-  headerRenameValue: string;
-  beginHeaderRename: (row: GatewaySessionRow) => void;
   handleHeaderSessionAction: (action: HeaderMenuAction, row: GatewaySessionRow) => Promise<void>;
   onboarding: boolean;
-  cancelHeaderRename: () => void;
-  commitHeaderRename: () => void;
-  handleHeaderMenuAction: (
-    action: "reveal" | "copy-path" | "copy-branch",
-    row: GatewaySessionRow,
-    workspaceRoot: string | null,
-    branch: string | null,
-    copy?: (value: string) => Promise<boolean>,
-  ) => void;
-  loadHeaderMenuData: (
-    row: GatewaySessionRow,
-    agentWorkspace: string | undefined,
-    workspaceGit: boolean,
-  ) => Promise<void>;
+  loadHeaderMenuData: (row: GatewaySessionRow) => Promise<void>;
   headerPlacementMovingKey: string | null;
   headerPlacementReclaimingKey: string | null;
   headerPlacementRestartingKey: string | null;
@@ -223,7 +207,6 @@ export interface TestChatPane extends HTMLElement, ReactiveControllerHost {
     row: GatewaySessionRow | undefined,
     catalog: boolean,
     agentWorkspace: undefined,
-    workspaceGit: boolean,
     placementStartupStatus: ApplicationPlacementStartupStatus | null | undefined,
     sidebarLayout?: SidebarLayout,
     panelDefinitions?: SidebarPanelDefinition[],

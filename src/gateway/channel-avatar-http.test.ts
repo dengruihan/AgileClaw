@@ -327,7 +327,7 @@ describe("handleChannelAvatarHttpRequest", () => {
 
   it("rejects non-read methods and leaves unrelated paths unhandled", async () => {
     const rejected = await fetch(avatarRoute("agent:main:one"), { method: "POST" });
-    const unhandled = await fetch(`http://127.0.0.1:${port}/__openclaw__/workspace-icon/one`);
+    const unhandled = await fetch(`http://127.0.0.1:${port}/__openclaw__/plugin-icon/one`);
 
     expect(rejected.status).toBe(405);
     expect(rejected.headers.get("allow")).toBe("GET, HEAD");

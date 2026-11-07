@@ -5,6 +5,7 @@ import { render } from "lit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GatewaySessionRow } from "../../api/types.ts";
 import { loadSettings } from "../../app/settings.ts";
+import { showInputDialog } from "../../components/input-dialog.ts";
 import { t } from "../../i18n/index.ts";
 import { resolveSessionDisplayName } from "../../lib/session-display.ts";
 import { sessionsResult } from "../../lib/sessions/session-capability.test-support.ts";
@@ -24,6 +25,10 @@ import {
 } from "./components/chat-transcript.test-support.ts";
 
 vi.mock("../../lib/toast.ts", () => ({ showToast: vi.fn() }));
+vi.mock("../../components/input-dialog.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../components/input-dialog.ts")>()),
+  showInputDialog: vi.fn(),
+}));
 
 beforeEach(installTranscriptDomMocks);
 
@@ -150,7 +155,7 @@ describe("chat pane session menu boundary", () => {
     const verifier = mount(retained.key, "research");
     await Promise.all([ledger, verifier].map(refreshPane));
     const container = document.body.appendChild(document.createElement("div"));
-    const title = (pane: TestChatPane) => {
+    const menuLabel = (pane: TestChatPane) => {
       const presentation = sessions.presentation.result?.sessions.find(
         (row) => row.key === pane.sessionKey,
       );
@@ -163,21 +168,20 @@ describe("chat pane session menu boundary", () => {
           selectedChatSessionRow(pane.state),
           false,
           undefined,
-          false,
           null,
         ),
         container,
       );
-      return container.querySelector(".chat-pane__session-title-text")?.textContent?.trim();
+      return container.querySelector(".chat-pane__header")?.getAttribute("aria-label")?.trim();
     };
     expect(sessions.state.result?.sessions.map((row) => row.key)).toEqual([primary.key]);
-    expect.soft(title(verifier)).toBe("Fresh pane isolation check");
+    expect.soft(menuLabel(verifier)).toBe("Fresh pane isolation check");
 
     context.agentSelection.set("research");
     await sessions.refresh({ agentId: "research", force: true });
     expect(sessions.state.result?.sessions.map((row) => row.key)).toEqual([retained.key]);
-    expect.soft(title(ledger)).toBe("Ledger reconciliation");
-    expect.soft(title(verifier)).toBe("Fresh pane isolation check");
+    expect.soft(menuLabel(ledger)).toBe("Ledger reconciliation");
+    expect.soft(menuLabel(verifier)).toBe("Fresh pane isolation check");
 
     context.agentSelection.set("main");
     await sessions.refresh({ agentId: "main", force: true });
@@ -189,20 +193,19 @@ describe("chat pane session menu boundary", () => {
       session: { ...retained, label: "Reviewed conversation", updatedAt: 2 },
     });
     expect(redraw).toHaveBeenCalled();
-    expect.soft(title(verifier)).toBe("Reviewed conversation");
-    container.querySelector<HTMLButtonElement>(".chat-pane__session-title-button")?.click();
-    expect(verifier.headerRenameValue).toBe("Reviewed conversation");
-    verifier.cancelHeaderRename();
-    expect(title(ledger)).toBe("Ledger reconciliation");
+    expect.soft(menuLabel(verifier)).toBe("Reviewed conversation");
+    expect(menuLabel(ledger)).toBe("Ledger reconciliation");
 
     const patch = vi.spyOn(sessions, "patch");
-    container.querySelector<HTMLButtonElement>(".chat-pane__session-title-button")?.click();
-    ledger.headerRenameValue = "Reviewed ledger";
-    ledger.commitHeaderRename();
+    vi.mocked(showInputDialog).mockResolvedValue("Reviewed ledger");
+    await ledger.handleHeaderSessionAction({ kind: "rename" }, primary);
+    expect(showInputDialog).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultValue: "Ledger reconciliation" }),
+    );
     expect(patch).toHaveBeenCalledOnce();
     await patch.mock.results[0]?.value;
     expect(sessions.presentation.result?.sessions[0]?.label).toBe("Reviewed ledger");
-    expect(title(ledger)).toBe("Reviewed ledger");
+    expect(menuLabel(ledger)).toBe("Reviewed ledger");
     const menu = container.querySelector<HTMLElement & { session: { label: string } }>(
       "openclaw-chat-header-session-menu",
     );
@@ -229,12 +232,11 @@ describe("chat pane session menu boundary", () => {
           session,
           catalog,
           undefined,
-          false,
           null,
         ),
         container,
       );
-      return container.querySelector(".chat-pane__session-title-text")?.textContent?.trim();
+      return container.querySelector(".chat-pane__header")?.getAttribute("aria-label")?.trim();
     };
     expect(draw(undefined)).toBe("Retained conversation");
     expect(draw(row)).toBe("Retained conversation");
@@ -277,7 +279,6 @@ describe("chat pane session menu boundary", () => {
           session,
           false,
           undefined,
-          false,
           null,
         ),
         container,
@@ -382,7 +383,6 @@ describe("chat pane session menu boundary", () => {
         session,
         false,
         undefined,
-        false,
         null,
       ),
       container,
@@ -479,7 +479,7 @@ describe("chat pane session menu boundary", () => {
     },
   );
 
-  it("commits a trimmed label and clears with null", async () => {
+  it("commits a trimmed dialog label and clears with null", async () => {
     const patch = vi.fn(async () => ({}));
     const sessions = createSessionCapabilityFixture({ patch });
     const { pane } = createTestChatPane({ client: createGatewayBrowserClientFixture(), sessions });
@@ -489,9 +489,9 @@ describe("chat pane session menu boundary", () => {
       kind: "direct",
       updatedAt: 0,
     } satisfies GatewaySessionRow;
-    pane.beginHeaderRename(session);
-    pane.headerRenameValue = "  Renamed session  ";
-    pane.commitHeaderRename();
+    vi.mocked(showInputDialog).mockResolvedValue("  Renamed session  ");
+    await pane.handleHeaderSessionAction({ kind: "rename" }, session);
+    expect(showInputDialog).toHaveBeenCalledWith(expect.objectContaining({ defaultValue: "" }));
     expect(patch).toHaveBeenCalledWith(
       session.key,
       { label: "Renamed session" },
@@ -499,9 +499,8 @@ describe("chat pane session menu boundary", () => {
     );
 
     const labeled = { ...session, label: "Renamed session" };
-    pane.beginHeaderRename(labeled);
-    pane.headerRenameValue = "   ";
-    pane.commitHeaderRename();
+    vi.mocked(showInputDialog).mockResolvedValue("   ");
+    await pane.handleHeaderSessionAction({ kind: "rename" }, labeled);
     expect(patch).toHaveBeenLastCalledWith(
       session.key,
       { label: null },
@@ -509,7 +508,7 @@ describe("chat pane session menu boundary", () => {
     );
   });
 
-  it("renames the selected agent's canonical global session", () => {
+  it("renames the selected agent's canonical global session", async () => {
     const patch = vi.fn(async () => ({}));
     const sessions = createSessionCapabilityFixture({ patch });
     const { pane, state } = createTestChatPane({
@@ -525,9 +524,8 @@ describe("chat pane session menu boundary", () => {
       updatedAt: 0,
     } satisfies GatewaySessionRow;
 
-    pane.beginHeaderRename(session);
-    pane.headerRenameValue = "Research thread";
-    pane.commitHeaderRename();
+    vi.mocked(showInputDialog).mockResolvedValue("Research thread");
+    await pane.handleHeaderSessionAction({ kind: "rename" }, session);
 
     expect(patch).toHaveBeenCalledWith(
       "global",
@@ -536,7 +534,7 @@ describe("chat pane session menu boundary", () => {
     );
   });
 
-  it("cancels and skips an unchanged generated dashboard title", () => {
+  it("skips a cancelled dialog and an unchanged generated dashboard title", async () => {
     const patch = vi.fn(async () => ({}));
     const sessions = createSessionCapabilityFixture({ patch });
     const { pane } = createTestChatPane({ client: createGatewayBrowserClientFixture(), sessions });
@@ -546,11 +544,13 @@ describe("chat pane session menu boundary", () => {
       displayName: "Generated title",
       updatedAt: 0,
     } satisfies GatewaySessionRow;
-    pane.beginHeaderRename(session);
-    expect(pane.headerRenameValue).toBe("Generated title");
-    pane.commitHeaderRename();
-    pane.beginHeaderRename(session);
-    pane.cancelHeaderRename();
+    vi.mocked(showInputDialog).mockResolvedValue("Generated title");
+    await pane.handleHeaderSessionAction({ kind: "rename" }, session);
+    vi.mocked(showInputDialog).mockResolvedValue(null);
+    await pane.handleHeaderSessionAction({ kind: "rename" }, session);
+    expect(showInputDialog).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultValue: "Generated title" }),
+    );
     expect(patch).not.toHaveBeenCalled();
   });
 });

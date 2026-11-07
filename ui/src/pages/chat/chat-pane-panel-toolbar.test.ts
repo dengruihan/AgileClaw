@@ -43,7 +43,6 @@ it("keeps main content actions and focus in the task toolbar across plugin panel
         { key: state.sessionKey, kind: "direct", updatedAt: 0 },
         false,
         undefined,
-        false,
         null,
         state.sidebarLayout,
         definitions,

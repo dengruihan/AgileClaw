@@ -458,7 +458,7 @@ describe("profile avatar HTTP endpoint", () => {
     },
     {
       method: "GET",
-      pathname: "/__openclaw__/workspace-icon/one",
+      pathname: "/__openclaw__/plugin-icon/one",
       basePath: "/control",
       code: undefined,
     },

@@ -209,9 +209,11 @@ suite.define(() => {
         await page.clock.runFor(1_000);
         counts.selected = (await probe.evaluate((owner) => owner.read())).renders;
         expect(counts.selected).toBeGreaterThan(0);
-        expect(await page.locator(".chat-pane__session-title-text").textContent()).toBe(
-          "Foreground renamed",
-        );
+        expect(
+          await page
+            .locator(".chat-pane-cache__pane--visible .chat-pane__header")
+            .getAttribute("aria-label"),
+        ).toBe("Foreground renamed");
 
         await gateway.emitGatewayEvent("presence", {
           presence: heartbeat.presence.map((entry) =>

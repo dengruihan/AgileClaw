@@ -18,6 +18,7 @@ import { clearChatHistory } from "./chat-history-actions.ts";
 import { isExpiredIncognitoSession, setChatError } from "./chat-history-state.ts";
 import { createChatModelSetupBanner } from "./chat-model-setup.ts";
 import { ChatPaneRetainedPresentation } from "./chat-pane-retained-presentation.ts";
+import { resolveChatPaneParentSession } from "./chat-pane-session-presentation.ts";
 import {
   NEW_SESSION_ACTIVE_RUN_MESSAGE,
   NEW_SESSION_CREATE_FAILED_MESSAGE,
@@ -25,7 +26,6 @@ import {
   preparePaneSessionHandoff,
 } from "./chat-pane-shared.ts";
 import { canCreateChatSession } from "./chat-state-route.ts";
-import { resolveChatPaneParentSession } from "./components/chat-pane-header.ts";
 
 /** Creates or resets a conversation while guarding its asynchronous ownership. */
 export abstract class ChatPaneSessionCreation extends ChatPaneRetainedPresentation {

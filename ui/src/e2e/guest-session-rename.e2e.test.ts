@@ -71,7 +71,6 @@ suite.define(() => {
       inFlightRun: { runId: "guest-report-run", text: "Reviewing the project notes." },
     });
     const pane = page.locator("openclaw-chat-pane.chat-pane-cache__pane--active");
-    const title = pane.locator(".chat-pane__session-title-button");
     const ownRow = page.locator(`.sidebar-recent-session[data-session-key="${own.key}"]`);
     const foreignRow = page.locator(`.sidebar-recent-session[data-session-key="${foreign.key}"]`);
     const history = pane.getByText("The project outline is ready.", { exact: true });
@@ -99,7 +98,6 @@ suite.define(() => {
         };
       });
     const expectName = async (name: string) => {
-      await expect.poll(() => title.textContent()).toContain(name);
       await expect.poll(() => ownRow.textContent()).toContain(name);
       await history.waitFor();
       await stream.waitFor();
@@ -109,7 +107,7 @@ suite.define(() => {
       if (artifactDir) {
         await writeFile(
           path.join(artifactDir, name),
-          await takeControlUiViewportScreenshot(page, pane, [title, ownRow, history, stream]),
+          await takeControlUiViewportScreenshot(page, pane, [ownRow, history, stream]),
         );
       }
     };
@@ -180,11 +178,14 @@ suite.define(() => {
       expect(page.url()).toBe(originalUrl);
       await screenshot("after-reload.png");
 
-      await cue("Header rename: Enter saves the edited title");
-      await title.click();
-      const headerInput = pane.locator(".chat-pane__session-title-input");
-      await headerInput.fill("Header title");
-      await headerInput.press("Enter");
+      await cue("Header rename: the session menu dialog saves the edited title");
+      await pane.locator(".chat-header-session-menu__trigger").click();
+      await pane
+        .locator('openclaw-chat-header-session-menu wa-dropdown-item[value="rename"]')
+        .click();
+      const headerDialog = page.locator('openclaw-modal-dialog[label="Rename session"]');
+      await headerDialog.locator("input").fill("Header title");
+      await headerDialog.getByRole("button", { name: "Save", exact: true }).click();
       await expectName("Header title");
       const headerPatch = await gateway.waitForRequest("sessions.patch");
       expect(headerPatch.params).toEqual({

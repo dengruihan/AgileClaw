@@ -148,7 +148,6 @@ export function createDashboardHarness(
         state.sessionsResult?.sessions[0],
         false,
         undefined,
-        false,
         null,
         state.sidebarLayout,
       ),

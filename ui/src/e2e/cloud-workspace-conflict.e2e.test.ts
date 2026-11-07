@@ -312,8 +312,11 @@ suite.define(() => {
             await gateway.setMethodResponse("sessions.patch", {
               __mockError: { code: "UNAVAILABLE", message: workerFailureDiagnostic },
             });
-            await page.locator(".chat-pane__session-title-button").click();
-            const rename = page.locator(".chat-pane__session-title-input");
+            await page.locator(".chat-header-session-menu__trigger").click();
+            await page
+              .locator('openclaw-chat-header-session-menu wa-dropdown-item[value="rename"]')
+              .click();
+            const rename = page.locator('openclaw-modal-dialog[label="Rename session"] input');
             await rename.fill("Rejected rename");
             await rename.press("Enter");
             await gateway.waitForRequest("sessions.patch");
