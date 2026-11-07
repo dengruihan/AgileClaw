@@ -101,7 +101,7 @@ export async function readArtwork(shell: Locator) {
     }> = [];
     const content = element.querySelector<HTMLElement>(".content");
     if (!content) {
-      throw new Error("Expected the app content to expose the shell canvas");
+      throw new Error("Expected the app content to ride the shell canvas");
     }
     const composer = element.querySelector<HTMLElement>(".agent-chat__input");
     const description = element.querySelector<HTMLElement>(".settings-section__desc");
@@ -112,13 +112,13 @@ export async function readArtwork(shell: Locator) {
     if (!anchor) {
       throw new Error("Expected a real composer or Appearance description on the app canvas");
     }
-    // The shell paints the rounded reading panel on `.content` itself; the walk
-    // stops there so it records only the surfaces nested inside that panel,
-    // which must stay transparent and let the panel fill through.
+    // The shell is the one rounded base plate; the walk records every surface
+    // nested inside it — `.content` included — which must stay transparent and
+    // let the plate fill through.
     for (const start of [anchor, transcript]) {
       for (
         let parent: Element | null | undefined = start;
-        parent && parent !== element && parent !== content;
+        parent && parent !== element;
         parent = parent.parentElement
       ) {
         const parentStyle = getComputedStyle(parent);
@@ -134,19 +134,10 @@ export async function readArtwork(shell: Locator) {
     const contentSurface = {
       alpha: color(contentStyle.backgroundColor)[3]!,
       image: contentStyle.backgroundImage,
-      // Drawer and native-embed shells drop the panel on purpose.
-      fullBleed:
-        element.classList.contains("shell--mobile-nav") ||
-        element.classList.contains("shell--embed"),
     };
-    const readingSurfaces = [
-      // The transparent drawer/embed content is not a painted reading surface;
-      // its sidebar remains the opaque one.
-      ...(contentSurface.fullBleed ? [] : [contentSurface.alpha]),
-      ...[...element.querySelectorAll(".sidebar, .settings-sidebar")].map(
-        (surface) => color(getComputedStyle(surface).backgroundColor)[3],
-      ),
-    ];
+    const readingSurfaces = [...element.querySelectorAll(".sidebar, .settings-sidebar")].map(
+      (surface) => color(getComputedStyle(surface).backgroundColor)[3],
+    );
     const canvasLabel = color(description ? getComputedStyle(description).color : mutedColor);
     const transcriptColor = transcript ? color(getComputedStyle(transcript).color) : null;
     // Ellipsized composers paint a sibling while the native placeholder is
@@ -161,6 +152,7 @@ export async function readArtwork(shell: Locator) {
     const composerLabel = color(placeholderStyle?.color ?? mutedColor);
     composerLabel[3] = composerLabel[3]! * Number(placeholderStyle?.opacity ?? 1);
     const baseColor = color(canvasColor);
+    let visiblePaintedPixels = 0;
     const bounds = element.getBoundingClientRect();
     canvas.width = Math.ceil(bounds.width);
     canvas.height = Math.ceil(bounds.height);
@@ -174,47 +166,6 @@ export async function readArtwork(shell: Locator) {
       image.naturalWidth * scale,
       image.naturalHeight * scale,
     );
-
-    // The shell paints its rounded reading panel over the artwork, so text and
-    // glass composers inside .content composite over that panel. Count the
-    // artwork that stays visible on the surrounding frame, then paint the panel
-    // for the contrast reads below. A transparent content surface (drawer
-    // shells, native embeds) leaves the artwork visible edge to edge.
-    const contentBounds = content.getBoundingClientRect();
-    const panelX = Math.max(0, Math.ceil(contentBounds.x - bounds.x));
-    const panelY = Math.max(0, Math.ceil(contentBounds.y - bounds.y));
-    const panelRight = Math.min(Math.floor(contentBounds.right - bounds.x), canvas.width);
-    const panelBottom = Math.min(Math.floor(contentBounds.bottom - bounds.y), canvas.height);
-    let visiblePaintedPixels = 0;
-    for (const band of contentSurface.alpha
-      ? [
-          { height: panelY, width: canvas.width, x: 0, y: 0 },
-          { height: canvas.height - panelBottom, width: canvas.width, x: 0, y: panelBottom },
-          { height: panelBottom - panelY, width: panelX, x: 0, y: panelY },
-          {
-            height: panelBottom - panelY,
-            width: canvas.width - panelRight,
-            x: panelRight,
-            y: panelY,
-          },
-        ]
-      : [{ height: canvas.height, width: canvas.width, x: 0, y: 0 }]) {
-      if (band.width <= 0 || band.height <= 0) {
-        continue;
-      }
-      const bandData = pixels.getImageData(band.x, band.y, band.width, band.height).data;
-      for (let offset = 0; offset < bandData.length; offset += 4) {
-        if (
-          bandData[offset] !== baseColor[0] ||
-          bandData[offset + 1] !== baseColor[1] ||
-          bandData[offset + 2] !== baseColor[2]
-        ) {
-          visiblePaintedPixels += 1;
-        }
-      }
-    }
-    pixels.fillStyle = contentStyle.backgroundColor;
-    pixels.fillRect(panelX, panelY, panelRight - panelX, panelBottom - panelY);
 
     const luminance = (red: number, green: number, blue: number) => {
       const linear = (channel: number) => {
@@ -242,6 +193,12 @@ export async function readArtwork(shell: Locator) {
         const red = rgba[offset]!;
         const green = rgba[offset + 1]!;
         const blue = rgba[offset + 2]!;
+        if (
+          context === pixels &&
+          (red !== baseColor[0] || green !== baseColor[1] || blue !== baseColor[2])
+        ) {
+          visiblePaintedPixels += 1;
+        }
         const bg = luminance(red, green, blue);
         const fg = luminance(
           foreground[0]! * alpha + red * (1 - alpha),
@@ -252,9 +209,9 @@ export async function readArtwork(shell: Locator) {
       }
       return minimum;
     };
-    const canvasContrast = minContrast(pixels, contentBounds, canvasLabel);
+    const canvasContrast = minContrast(pixels, content.getBoundingClientRect(), canvasLabel);
     const transcriptContrast = transcriptColor
-      ? minContrast(pixels, contentBounds, transcriptColor)
+      ? minContrast(pixels, content.getBoundingClientRect(), transcriptColor)
       : null;
     let composerContrast: number | null = null;
     let opaqueComposerContrast: number | null = null;
@@ -312,18 +269,15 @@ export function expectAppArtwork(artwork: Awaited<ReturnType<typeof readArtwork>
   expect(artwork.visiblePaintedPixels, label).toBeGreaterThan(0);
   expect(artwork.transparentAncestors.length, label).toBeGreaterThan(0);
   for (const ancestor of artwork.transparentAncestors) {
-    expect(ancestor.alpha, `${label}: ${ancestor.className} hides the reading surface`).toBe(0);
+    expect(ancestor.alpha, `${label}: ${ancestor.className} hides the base plate`).toBe(0);
     expect(ancestor.image, label).toBe("none");
     expect(ancestor.opacity, label).toBe(1);
   }
-  // The shell owns one reading panel across routes: opaque on desktop, dropped
-  // for the full-bleed drawer and native embed. A route that paints its own
-  // fill or artwork there splits the shared surface contract.
+  // The shell owns the one rounded base plate across routes, drawer shells, and
+  // native embeds: a route that paints its own fill or artwork on `.content`
+  // splits the shared surface contract.
   expect(artwork.contentSurface.image, label).toBe("none");
-  expect(
-    artwork.contentSurface.alpha,
-    `${label}: ${artwork.contentSurface.fullBleed ? "full-bleed surface" : "reading panel"}`,
-  ).toBe(artwork.contentSurface.fullBleed ? 0 : 255);
+  expect(artwork.contentSurface.alpha, `${label}: content repaints the base plate`).toBe(0);
   expect(artwork.readingSurfaces.length, label).toBeGreaterThan(0);
   expect(
     artwork.readingSurfaces.every((alpha) => alpha === 255),

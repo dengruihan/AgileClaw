@@ -8,62 +8,82 @@ import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts"
 
 const suite = createControlUiE2eSuite({ name: "Control UI shell content panel" });
 
-type Rect = { left: number; top: number; right: number; bottom: number; width: number };
+type Rect = { left: number; top: number; right: number; bottom: number };
 
-type PanelFrame = {
+type CanvasFrame = {
   background: string;
   borderWidth: string;
-  content: Rect;
+  content: Rect & { background: string; borderWidth: string; radius: string };
+  nav: Rect;
   radius: string;
   shell: Rect;
+  viewport: { width: number; height: number };
 };
 
-async function readPanelFrame(page: Page): Promise<PanelFrame> {
+async function readCanvasFrame(page: Page): Promise<CanvasFrame> {
   return page.evaluate(() => {
     const shell = document.querySelector(".shell");
     const content = document.querySelector(".content");
-    if (!shell || !content) {
-      throw new Error("Expected the shell and content surfaces");
+    const nav = document.querySelector(".shell-nav");
+    if (!shell || !content || !nav) {
+      throw new Error("Expected the shell plate, its navigation, and its content");
     }
     const rect = (element: Element): Rect => {
-      const { left, top, right, bottom, width } = element.getBoundingClientRect();
-      return { left, top, right, bottom, width };
+      const { left, top, right, bottom } = element.getBoundingClientRect();
+      return { left, top, right, bottom };
     };
-    const style = getComputedStyle(content);
+    const shellStyle = getComputedStyle(shell);
+    const contentStyle = getComputedStyle(content);
     return {
-      background: style.backgroundColor,
-      borderWidth: style.borderTopWidth,
-      content: rect(content),
-      radius: style.borderTopLeftRadius,
+      background: shellStyle.backgroundColor,
+      borderWidth: shellStyle.borderTopWidth,
+      content: {
+        ...rect(content),
+        background: contentStyle.backgroundColor,
+        borderWidth: contentStyle.borderTopWidth,
+        radius: contentStyle.borderTopLeftRadius,
+      },
+      nav: rect(nav),
+      radius: shellStyle.borderTopLeftRadius,
       shell: rect(shell),
+      viewport: { height: window.innerHeight, width: window.innerWidth },
     };
   });
 }
 
-function expectRoundedPanel(frame: PanelFrame, label: string) {
-  // The panel floats inside the shell grid on all four sides, not just below
-  // the navigation rail: the same frame applies to home, settings, and routes.
-  expect(frame.content.left - frame.shell.left, `${label}: leading inset`).toBeGreaterThanOrEqual(
-    7,
-  );
-  expect(frame.content.top - frame.shell.top, `${label}: top inset`).toBeGreaterThanOrEqual(7);
+function expectRoundedPlate(frame: CanvasFrame, label: string) {
+  // One rounded base plate floats on the window canvas: the external
+  // background stays exposed on every side, and navigation, the settings rail,
+  // and the main content all ride inside the same frame.
+  expect(frame.shell.left, `${label}: leading inset`).toBeGreaterThanOrEqual(7);
+  expect(frame.shell.top, `${label}: top inset`).toBeGreaterThanOrEqual(7);
   expect(
-    frame.shell.right - frame.content.right,
+    frame.viewport.width - frame.shell.right,
     `${label}: trailing inset`,
   ).toBeGreaterThanOrEqual(7);
   expect(
-    frame.shell.bottom - frame.content.bottom,
+    frame.viewport.height - frame.shell.bottom,
     `${label}: bottom inset`,
   ).toBeGreaterThanOrEqual(7);
-  expect(Number.parseFloat(frame.radius), `${label}: corner radius`).toBeGreaterThanOrEqual(12);
-  expect(frame.borderWidth, `${label}: panel edge`).toBe("1px");
-  // A transparent surface cannot read as an inset panel; any paint (including a
-  // translucent fill) proves the shell canvas is covered by the reading surface.
-  expect(frame.background, `${label}: panel fill`).not.toBe("rgba(0, 0, 0, 0)");
+  expect(Number.parseFloat(frame.radius), `${label}: plate radius`).toBeGreaterThanOrEqual(18);
+  expect(frame.borderWidth, `${label}: plate edge`).toBe("1px");
+  expect(frame.background, `${label}: plate fill`).not.toBe("rgba(0, 0, 0, 0)");
+  // The navigation column and the main column sit on the plate itself.
+  expect(frame.nav.left, `${label}: nav on plate`).toBeGreaterThanOrEqual(frame.shell.left);
+  expect(frame.nav.top, `${label}: nav top on plate`).toBeGreaterThanOrEqual(frame.shell.top);
+  expect(frame.nav.bottom, `${label}: nav bottom on plate`).toBeLessThanOrEqual(frame.shell.bottom);
+  expect(frame.content.left, `${label}: content on plate`).toBeGreaterThanOrEqual(frame.nav.right);
+  expect(frame.content.right, `${label}: content edge on plate`).toBeLessThanOrEqual(
+    frame.shell.right,
+  );
+  // No nested second card: the content column keeps no panel frame of its own.
+  expect(frame.content.background, `${label}: content repaints the plate`).toBe("rgba(0, 0, 0, 0)");
+  expect(frame.content.borderWidth, `${label}: content edge`).toBe("0px");
+  expect(frame.content.radius, `${label}: content radius`).toBe("0px");
 }
 
 suite.define(() => {
-  it("draws one rounded content panel across home and settings", async () => {
+  it("floats one rounded base plate across new, dashboards, and settings", async () => {
     await suite.withPage(
       { locale: "en-US", serviceWorkers: "block", viewport: { width: 1440, height: 900 } },
       async ({ page }) => {
@@ -71,31 +91,47 @@ suite.define(() => {
         await page.goto(`${suite.server.baseUrl}new`);
         await gateway.waitForRequest("connect");
         await page.locator(".new-session-page__message").waitFor({ state: "visible" });
-        const home = await readPanelFrame(page);
+        const home = await readCanvasFrame(page);
         await writeFile(
-          path.join(suite.artifactDir, "content-panel-new.png"),
+          path.join(suite.artifactDir, "canvas-new.png"),
           await takeControlUiViewportScreenshot(page, page.locator(".shell"), [
             page.locator(".new-session-page__message"),
           ]),
         );
 
+        await page.goto(`${suite.server.baseUrl}dashboards`);
+        await page.locator(".dashboards-gallery, [data-dashboards-empty]").first().waitFor({
+          state: "visible",
+        });
+        const dashboards = await readCanvasFrame(page);
+        await writeFile(
+          path.join(suite.artifactDir, "canvas-dashboards.png"),
+          await takeControlUiViewportScreenshot(page, page.locator(".shell"), [
+            page
+              .locator(".dashboards-toolbar, .dashboards-gallery, [data-dashboards-empty]")
+              .first(),
+          ]),
+        );
+
         await page.goto(`${suite.server.baseUrl}settings/appearance`);
         await page.locator(".settings-sidebar__nav").waitFor({ state: "visible" });
-        const settings = await readPanelFrame(page);
+        const settings = await readCanvasFrame(page);
         await writeFile(
-          path.join(suite.artifactDir, "content-panel-settings.png"),
+          path.join(suite.artifactDir, "canvas-settings.png"),
           await takeControlUiViewportScreenshot(page, page.locator(".shell"), [
             page.locator(".settings-workspace"),
           ]),
         );
 
-        expectRoundedPanel(home, "new");
-        expectRoundedPanel(settings, "settings");
-        // One shared visual language: the takeover and the app shell must not
-        // each grow their own radius, fill, or edge.
+        expectRoundedPlate(home, "new");
+        expectRoundedPlate(dashboards, "dashboards");
+        expectRoundedPlate(settings, "settings");
+        // One shared visual language: the settings takeover and the app shell
+        // must not each grow their own radius, fill, or edge.
         expect(settings.radius).toBe(home.radius);
         expect(settings.background).toBe(home.background);
         expect(settings.borderWidth).toBe(home.borderWidth);
+        expect(dashboards.radius).toBe(home.radius);
       },
     );
   });
@@ -105,7 +141,7 @@ suite.define(() => {
       { locale: "en-US", serviceWorkers: "block", viewport: { width: 1440, height: 900 } },
       async ({ page }) => {
         await installMockGateway(page);
-        await page.goto(`${suite.server.baseUrl}dashboard`);
+        await page.goto(`${suite.server.baseUrl}dashboards`);
         const action = page.locator(".sidebar-primary-actions .sidebar-new-session-action");
         await action.waitFor({ state: "visible" });
 
@@ -166,14 +202,20 @@ suite.define(() => {
           .poll(() => page.locator(".shell").getAttribute("class"))
           .toContain("shell--mobile-nav");
 
-        const frame = await readPanelFrame(page);
-        // The drawer shell owns the window edge: no panel frame may squeeze
+        const frame = await readCanvasFrame(page);
+        // The drawer shell owns the window edge: no plate frame may squeeze
         // phone content or leave a sliver of canvas beside it.
+        expect(frame.shell.left).toBe(0);
+        expect(frame.shell.top).toBe(0);
+        expect(frame.shell.right).toBe(frame.viewport.width);
+        expect(frame.shell.bottom).toBe(frame.viewport.height);
+        expect(frame.radius).toBe("0px");
+        expect(frame.borderWidth).toBe("0px");
         expect(frame.content.left).toBeCloseTo(frame.shell.left, 0);
         expect(frame.content.right).toBeCloseTo(frame.shell.right, 0);
-        expect(frame.radius).toBe("0px");
-        expect(frame.background).toBe("rgba(0, 0, 0, 0)");
-        expect(frame.borderWidth).toBe("0px");
+        expect(frame.content.radius).toBe("0px");
+        expect(frame.content.background).toBe("rgba(0, 0, 0, 0)");
+        expect(frame.content.borderWidth).toBe("0px");
 
         await page.locator(".topbar-nav-toggle").first().click({ force: true });
         await expect
@@ -188,7 +230,7 @@ suite.define(() => {
         const drawerAction = page.locator(".sidebar-primary-actions .sidebar-new-session-action");
         await drawerAction.waitFor({ state: "visible" });
         await writeFile(
-          path.join(suite.artifactDir, "content-panel-mobile-drawer.png"),
+          path.join(suite.artifactDir, "canvas-mobile-drawer.png"),
           await takeControlUiViewportScreenshot(page, page.locator(".shell"), [drawerAction]),
         );
         const drawer = await drawerAction.evaluate((element) => {
