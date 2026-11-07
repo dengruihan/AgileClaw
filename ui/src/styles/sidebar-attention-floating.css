@@ -1,5 +1,0 @@
-/* The collapsed-navigation floating Inbox presentation was removed with the
-   collapsed strip slimming: the Inbox lives in the expanded sidebar footer and
-   collapsed navigation keeps only the expand toggle, so no floating cluster
-   positioning remains. This file stays as the stylesheet anchor imported by
-   ui/src/components/sidebar-attention.ts. */
