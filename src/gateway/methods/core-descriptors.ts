@@ -658,7 +658,7 @@ export const CORE_GATEWAY_METHOD_SPECS = [
   ["models.authInspectApiKey", "models-auth-status", "operator.admin", "2026.10"],
   ["vault.status", null, "operator.vault", "2026.10"],
   ["vault.initialize", null, "operator.vault", "2026.10", CONTROL_PLANE_WRITE],
-  ["vault.unlock", null, "operator.vault.reveal", "2026.10"],
+  ["vault.unlock", null, "operator.vault", "2026.10"],
   ["vault.lock", null, "operator.vault", "2026.10"],
   ["vault.list", null, "operator.vault", "2026.10"],
   ["vault.create", null, "operator.vault", "2026.10", CONTROL_PLANE_WRITE],

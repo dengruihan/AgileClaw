@@ -46,6 +46,17 @@ describe("password vault error hints", () => {
     expect(chinese).not.toBe(english);
   });
 
+  it("describes the missing reveal scope as blocking only viewing and copying", async () => {
+    const english = hintFor("VAULT_REVEAL_SCOPE_REQUIRED");
+    expect(english).toContain("view or copy");
+    expect(english).not.toMatch(/unlock/iu);
+
+    await i18n.setLocale("zh-CN");
+    const chinese = hintFor("VAULT_REVEAL_SCOPE_REQUIRED");
+    expect(chinese).toContain("查看或复制");
+    expect(chinese).not.toContain("解锁");
+  });
+
   it("includes the retry time when a lockout reports one", async () => {
     await i18n.setLocale("zh-CN");
     const withoutTime = hintFor("VAULT_LOCKED_OUT");

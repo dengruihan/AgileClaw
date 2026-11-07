@@ -196,38 +196,67 @@ function createFillApproval() {
   };
 }
 
+const CONTROL_UI_DEFAULT_OPERATOR_SCOPES = [
+  "operator.admin",
+  "operator.read",
+  "operator.write",
+  "operator.approvals",
+  "operator.questions",
+  "operator.pairing",
+];
+
 describe("vault gateway methods", () => {
-  it("does not let operator.admin imply reveal or unlock", async () => {
+  it("unlocks with the default Control UI operator scopes without the reveal scope", async () => {
     const service = createServiceStub();
     const handlers = createVaultHandlers({ service });
 
-    const reveal = await invoke({
+    const respond = await invoke({
       handlers,
-      method: "vault.reveal",
-      requestParams: { itemRef: "vault_item" },
-      scopes: ["operator.admin", "operator.vault"],
+      method: "vault.unlock",
+      requestParams: { passphrase: "correct horse battery" },
+      scopes: CONTROL_UI_DEFAULT_OPERATOR_SCOPES,
     });
     // oxlint-disable-next-line typescript/unbound-method -- vi.fn service stub
-    expect(service.reveal).not.toHaveBeenCalled();
-    expect(reveal).toHaveBeenCalledWith(
-      false,
-      undefined,
-      expect.objectContaining({ code: ErrorCodes.FORBIDDEN }),
-    );
+    expect(service.unlock).toHaveBeenCalledWith("correct horse battery");
+    expect(respond).toHaveBeenCalledWith(true, expect.objectContaining({ state: "unlocked" }));
+    expect(JSON.stringify(respond.mock.calls[0]?.[1])).not.toContain("correct horse battery");
+  });
+
+  it("unlocks with operator.vault while keeping reveal and copy behind the reveal scope", async () => {
+    const service = createServiceStub();
+    const handlers = createVaultHandlers({ service });
 
     const unlock = await invoke({
       handlers,
       method: "vault.unlock",
       requestParams: { passphrase: "correct horse battery" },
-      scopes: ["operator.admin"],
+      scopes: ["operator.vault"],
     });
     // oxlint-disable-next-line typescript/unbound-method -- vi.fn service stub
-    expect(service.unlock).not.toHaveBeenCalled();
-    expect(unlock).toHaveBeenCalledWith(
-      false,
-      undefined,
-      expect.objectContaining({ code: ErrorCodes.FORBIDDEN }),
-    );
+    expect(service.unlock).toHaveBeenCalledWith("correct horse battery");
+    expect(unlock).toHaveBeenCalledWith(true, expect.objectContaining({ state: "unlocked" }));
+
+    for (const method of ["vault.reveal", "vault.copy"] as const) {
+      const respond = await invoke({
+        handlers,
+        method,
+        requestParams: { itemRef: "vault_item" },
+        scopes: ["operator.admin", "operator.vault"],
+      });
+      expect(respond).toHaveBeenCalledWith(
+        false,
+        undefined,
+        expect.objectContaining({
+          code: ErrorCodes.FORBIDDEN,
+          details: expect.objectContaining({
+            code: "VAULT_REVEAL_SCOPE_REQUIRED",
+            requiredScope: "operator.vault.reveal",
+          }),
+        }),
+      );
+    }
+    // oxlint-disable-next-line typescript/unbound-method -- vi.fn service stub
+    expect(service.reveal).not.toHaveBeenCalled();
   });
 
   it("allows reveal only with the explicit reveal scope and returns validated values", async () => {
@@ -257,7 +286,7 @@ describe("vault gateway methods", () => {
       handlers,
       method: "vault.unlock",
       requestParams: { passphrase: "wrong but long enough" },
-      scopes: ["operator.vault.reveal"],
+      scopes: ["operator.vault"],
     });
     const error = respond.mock.calls[0]?.[2] as {
       code: string;

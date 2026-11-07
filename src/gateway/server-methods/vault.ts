@@ -91,8 +91,8 @@ function hasScope(client: GatewayClient | null, scope: string): boolean {
 
 /**
  * `operator.admin` satisfies ordinary operator scopes, but the vault deliberately
- * does not let it reveal stored passwords. Reveal, copy, and unlock require the
- * explicit reveal scope on this exact connection.
+ * does not let it reveal stored passwords. Reveal and copy require the explicit
+ * reveal scope on this exact connection; unlocking only needs `operator.vault`.
  */
 function requireExplicitRevealScope(client: GatewayClient | null, respond: RespondFn): boolean {
   if (hasScope(client, VAULT_REVEAL_SCOPE)) {
@@ -207,10 +207,7 @@ export function createVaultHandlers(
       "vault.unlock",
       validateVaultUnlockParams,
       async (options) => {
-        const { params: requestParams, respond, client } = options;
-        if (!requireExplicitRevealScope(client ?? null, respond)) {
-          return;
-        }
+        const { params: requestParams, respond } = options;
         const { assertCurrent } = readGatewayRequestMutationAuthority(options);
         try {
           assertCurrent();
