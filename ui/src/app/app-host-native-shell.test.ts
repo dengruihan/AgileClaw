@@ -7,6 +7,7 @@ import "../components/sidebar-update-card.ts";
 import { getRenderedModalDialog, installDialogPolyfill } from "../test-helpers/modal-dialog.ts";
 import "./app-host.ts";
 import { resetAppHostTestGlobals, type ShellKeyboardState } from "./app-host.test-support.ts";
+import { ShellChromeOwner, type ShellChromeHost } from "./app-shell-chrome.ts";
 import type { ShellViewCallbacks } from "./app-shell-view-callbacks.ts";
 import type { ApplicationContext } from "./context.ts";
 import {
@@ -683,5 +684,246 @@ describe("AgileClaw shell update affordance", () => {
     } finally {
       container.remove();
     }
+  });
+});
+
+type NotificationShellOptions = {
+  basePath?: string;
+  gatewayUrl?: string;
+};
+
+function notificationShellChrome(
+  navigate: ReturnType<typeof vi.fn>,
+  options: NotificationShellOptions = {},
+): ShellChromeOwner {
+  const context = {
+    basePath: options.basePath ?? "",
+    navigate,
+    gateway: {
+      connection: { gatewayUrl: options.gatewayUrl ?? "wss://gateway.example" },
+    },
+  } as unknown as ApplicationContext;
+  return new ShellChromeOwner({ context, navigate } as unknown as ShellChromeHost);
+}
+
+function installMessageChannelServiceWorker() {
+  const controller = { state: "activated" };
+  const addEventListener = vi.fn();
+  Object.defineProperty(navigator, "serviceWorker", {
+    configurable: true,
+    value: { addEventListener, controller, removeEventListener: vi.fn() },
+  });
+  return { addEventListener, controller };
+}
+
+function dispatchServiceWorkerNavigation(
+  owner: ShellChromeOwner,
+  url: unknown,
+  source: unknown,
+  type: unknown = "openclaw-notification-navigate",
+) {
+  const replyPort = { postMessage: vi.fn() };
+  owner.handleServiceWorkerMessage({
+    data: { type, url },
+    ports: [replyPort],
+    source,
+  } as unknown as MessageEvent);
+  return replyPort;
+}
+
+describe("AgileClaw notification navigation handshake", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, "serviceWorker");
+  });
+
+  it("routes a notification target through the app router and acknowledges it", () => {
+    const { controller } = installMessageChannelServiceWorker();
+    const navigate = vi.fn();
+    const owner = notificationShellChrome(navigate);
+    const pathname = "/chat/main/dashboard/12345678-90ab-cdef-1234-567890abcdef";
+
+    const reply = dispatchServiceWorkerNavigation(
+      owner,
+      `${window.location.origin}${pathname}?view=chat#latest`,
+      controller,
+    );
+
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("chat", {
+      pathname,
+      search: "?view=chat",
+      hash: "#latest",
+    });
+    expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({ handled: true });
+  });
+
+  it("keeps the mount base path and known SPA routes in app", () => {
+    const { controller } = installMessageChannelServiceWorker();
+    const navigate = vi.fn();
+    const owner = notificationShellChrome(navigate, { basePath: "/openclaw" });
+
+    const reply = dispatchServiceWorkerNavigation(
+      owner,
+      `${window.location.origin}/openclaw/settings/appearance?tab=theme`,
+      controller,
+    );
+
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("appearance", {
+      pathname: "/openclaw/settings/appearance",
+      search: "?tab=theme",
+    });
+    expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({ handled: true });
+  });
+
+  it("drops a matching Gateway handoff fragment before routing in app", () => {
+    const { controller } = installMessageChannelServiceWorker();
+    const navigate = vi.fn();
+    const owner = notificationShellChrome(navigate, { gatewayUrl: "wss://gateway.example" });
+    const pathname = "/chat/main/dashboard/12345678-90ab-cdef-1234-567890abcdef";
+
+    const reply = dispatchServiceWorkerNavigation(
+      owner,
+      `${window.location.origin}${pathname}#gatewayUrl=wss%3A%2F%2Fgateway.example`,
+      controller,
+    );
+
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("chat", { pathname });
+    expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({ handled: true });
+  });
+
+  it("keeps a matching query-routed Gateway in app", () => {
+    const { controller } = installMessageChannelServiceWorker();
+    const navigate = vi.fn();
+    const owner = notificationShellChrome(navigate, {
+      gatewayUrl: "wss://gateway.example/openclaw?tenant=first",
+    });
+    const pathname = "/chat/main/dashboard/12345678-90ab-cdef-1234-567890abcdef";
+
+    const reply = dispatchServiceWorkerNavigation(
+      owner,
+      `${window.location.origin}${pathname}#gatewayUrl=wss%3A%2F%2Fgateway.example%2Fopenclaw%3Ftenant%3Dfirst`,
+      controller,
+    );
+
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("chat", { pathname });
+    expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({ handled: true });
+  });
+
+  it.each([
+    {
+      name: "a different Gateway",
+      url: (origin: string) =>
+        `${origin}/chat/main/dashboard/12345678-90ab-cdef-1234-567890abcdef#gatewayUrl=wss%3A%2F%2Fother.example`,
+      options: {},
+    },
+    {
+      name: "another query-routed tenant",
+      url: (origin: string) =>
+        `${origin}/chat/main/dashboard/12345678-90ab-cdef-1234-567890abcdef#gatewayUrl=wss%3A%2F%2Fgateway.example%2Fopenclaw%3Ftenant%3Dsecond`,
+      options: { gatewayUrl: "wss://gateway.example/openclaw?tenant=first" },
+    },
+    {
+      name: "an approval document route",
+      url: (origin: string) => `${origin}/approve/exec%3A1`,
+      options: {},
+    },
+    {
+      name: "a question document route",
+      url: (origin: string) => `${origin}/ask/question-1`,
+      options: {},
+    },
+    {
+      name: "a nested approval document route",
+      url: (origin: string) =>
+        `${origin}/openclaw/approve/exec%3A1#gatewayUrl=wss%3A%2F%2Fgateway.example`,
+      options: { basePath: "/openclaw" },
+    },
+    {
+      name: "another origin",
+      url: () => "https://other.example/chat/main/dashboard/12345678-90ab-cdef-1234-567890abcdef",
+      options: {},
+    },
+    {
+      name: "a sibling mount",
+      url: (origin: string) => `${origin}/openclaw-other/chat`,
+      options: { basePath: "/openclaw" },
+    },
+    {
+      name: "an unknown app route",
+      url: (origin: string) => `${origin}/not-a-route`,
+      options: {},
+    },
+    {
+      name: "a protocol-relative target",
+      url: () => "//other.example/chat",
+      options: {},
+    },
+    {
+      name: "a malformed target",
+      url: () => "https://[invalid",
+      options: {},
+    },
+  ])("leaves $name to the service worker's document navigation", ({ url, options }) => {
+    const { controller } = installMessageChannelServiceWorker();
+    const navigate = vi.fn();
+    const owner = notificationShellChrome(navigate, options);
+
+    const reply = dispatchServiceWorkerNavigation(owner, url(window.location.origin), controller);
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(reply.postMessage).toHaveBeenCalledExactlyOnceWith({ handled: false });
+  });
+
+  it("leaves invalid handshake payloads unhandled", () => {
+    const { controller } = installMessageChannelServiceWorker();
+    const navigate = vi.fn();
+    const owner = notificationShellChrome(navigate);
+
+    const wrongType = dispatchServiceWorkerNavigation(
+      owner,
+      `${window.location.origin}/chat`,
+      controller,
+      "openclaw-other",
+    );
+    const wrongUrl = dispatchServiceWorkerNavigation(owner, 42, controller);
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(wrongType.postMessage).toHaveBeenCalledExactlyOnceWith({ handled: false });
+    expect(wrongUrl.postMessage).toHaveBeenCalledExactlyOnceWith({ handled: false });
+  });
+
+  it.each([
+    { name: "a window message", source: null },
+    { name: "another service worker", source: { state: "activated" } },
+  ])("ignores $name instead of acknowledging the handshake", ({ source }) => {
+    installMessageChannelServiceWorker();
+    const navigate = vi.fn();
+    const owner = notificationShellChrome(navigate);
+
+    const reply = dispatchServiceWorkerNavigation(owner, `${window.location.origin}/chat`, source);
+
+    expect(navigate).not.toHaveBeenCalled();
+    // No answer keeps the worker on its document-level fallback.
+    expect(reply.postMessage).not.toHaveBeenCalled();
+  });
+
+  it("owns the message listener for exactly one shell connection", () => {
+    const { addEventListener } = installMessageChannelServiceWorker();
+    const host = Object.assign(document.createElement("div"), {
+      context: {} as ApplicationContext,
+      nativeHistoryState: { canGoBack: false, canGoForward: false },
+    }) as unknown as ShellChromeHost;
+    const owner = new ShellChromeOwner(host);
+
+    owner.connect();
+    const registration = addEventListener.mock.calls.find(([type]) => type === "message");
+    if (!registration) {
+      throw new Error("Shell did not register a service-worker message listener");
+    }
+    expect(registration[1]).toBe(owner.handleServiceWorkerMessage);
+    const signal = (registration[2] as { signal: AbortSignal }).signal;
+    expect(signal.aborted).toBe(false);
+
+    owner.disconnect();
+    expect(signal.aborted).toBe(true);
   });
 });

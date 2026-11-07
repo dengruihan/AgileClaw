@@ -366,6 +366,99 @@ self.addEventListener("fetch", (event) => {
 
 // --- Web Push ---
 
+// In-app navigation handshake for notification clicks. A controlled page owns
+// its own routing and answers only after validating the destination itself;
+// any missing, late, or failing answer keeps the document-level fallback.
+const NOTIFICATION_NAVIGATE_MESSAGE = "openclaw-notification-navigate";
+const NOTIFICATION_NAVIGATE_TIMEOUT_MS = 1_000;
+const NOTIFICATION_FOCUS_TIMEOUT_MS = 1_000;
+
+function requestAppNotificationNavigation(client, url) {
+  return new Promise((resolve) => {
+    let channel;
+    let timeout;
+    let settled = false;
+    const settle = (handled) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      try {
+        channel?.port1.close();
+      } catch {
+        // A closed or already collected port must not replace the outcome.
+      }
+      resolve(handled);
+    };
+    try {
+      channel = new MessageChannel();
+      channel.port1.addEventListener("message", (event) => settle(event.data?.handled === true));
+      channel.port1.start();
+      // Older pages have no listener and never answer; do not strand the click
+      // on a tab that cannot route the target itself.
+      timeout = setTimeout(() => settle(false), NOTIFICATION_NAVIGATE_TIMEOUT_MS);
+      // Only a document this worker controls can answer over the port; an
+      // uncontrolled tab, delivery failure, or unsupported channel stays unhandled.
+      client.postMessage({ type: NOTIFICATION_NAVIGATE_MESSAGE, url }, [channel.port2]);
+    } catch {
+      settle(false);
+    }
+  });
+}
+
+// Focus is a click outcome, never a navigation gate: a frozen tab must not
+// hold the bounded handshake or fallback open indefinitely.
+function focusClient(client) {
+  return new Promise((resolve) => {
+    let timeout;
+    let settled = false;
+    const settle = (focused) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      resolve(focused);
+    };
+    try {
+      timeout = setTimeout(() => settle(false), NOTIFICATION_FOCUS_TIMEOUT_MS);
+      Promise.resolve(client.focus()).then(
+        () => settle(true),
+        () => settle(false),
+      );
+    } catch {
+      settle(false);
+    }
+  });
+}
+
+// Last-resort visibility. A browser may refuse the open (for example outside a
+// notification event), and that refusal must not reject the click's work.
+function openNotificationTarget(url) {
+  return Promise.resolve()
+    .then(() => self.clients.openWindow(url))
+    .catch(() => undefined);
+}
+
+// A fragment-only change stays in the current document, so an owning-Gateway
+// handoff must travel through the query form the Control UI bootstrap reads.
+// Startup removes that parameter before routing and connects to the owner.
+function notificationDocumentNavigationUrl(targetUrl) {
+  const hashParams = new URLSearchParams(targetUrl.hash.slice(1));
+  const owningGatewayUrl = hashParams.get("gatewayUrl");
+  if (!owningGatewayUrl) {
+    return targetUrl.href;
+  }
+  const documentUrl = new URL(targetUrl.href);
+  hashParams.delete("gatewayUrl");
+  documentUrl.hash = hashParams.toString() ? `#${hashParams}` : "";
+  if (!documentUrl.searchParams.has("gatewayUrl")) {
+    documentUrl.searchParams.set("gatewayUrl", owningGatewayUrl);
+  }
+  return documentUrl.href;
+}
+
 self.addEventListener("push", (event) => {
   if (!event.data) {
     return;
@@ -457,15 +550,36 @@ self.addEventListener("notificationclick", (event) => {
       }
 
       if (!targetClient) {
-        return self.clients.openWindow(targetUrl.href);
+        return openNotificationTarget(targetUrl.href);
       }
 
-      // Always navigate explicit targets; old or uncontrolled workers can
-      // reject navigation, so preserve the validated open-window fallback.
-      return targetClient
-        .navigate(targetUrl.href)
-        .then((navigatedClient) => (navigatedClient ?? targetClient).focus())
-        .catch(() => self.clients.openWindow(targetUrl.href));
+      // Focus starts alongside the handshake but never gates the decision; a
+      // failed or pending focus keeps its own recovery below.
+      const focusTarget = focusClient(targetClient);
+      const appNavigation = requestAppNotificationNavigation(targetClient, targetUrl.href);
+      return appNavigation.then(async (handled) => {
+        if (handled) {
+          if (await focusTarget) {
+            return undefined;
+          }
+          // The document routed in place, so the only missing outcome is focus:
+          // retry once, then open the exact target as the visible last resort.
+          if (await focusClient(targetClient)) {
+            return undefined;
+          }
+          return openNotificationTarget(targetUrl.href);
+        }
+        // The app declined (document route, other Gateway, unknown path, old or
+        // uncontrolled client): document navigation remains the exact-target
+        // owner and openWindow keeps its last-resort fallback. A Gateway
+        // handoff travels in the query form so it forces a document bootstrap.
+        const navigationUrl = notificationDocumentNavigationUrl(targetUrl);
+        return targetClient
+          .navigate(navigationUrl)
+          .then((navigatedClient) => focusClient(navigatedClient ?? targetClient))
+          .catch(() => false)
+          .then((focused) => (focused ? undefined : openNotificationTarget(navigationUrl)));
+      });
     }),
   );
 });
