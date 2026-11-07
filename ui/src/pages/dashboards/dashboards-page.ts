@@ -16,6 +16,13 @@ import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
 import { PollController } from "../../lit/poll-controller.ts";
 import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
 import { MonitoringController } from "./monitoring-controller.ts";
+import type { MonitoringPanelsState } from "./monitoring-view.ts";
+import {
+  DASHBOARD_PANEL_IDS,
+  orderPanelSelection,
+  type DashboardPanelId,
+} from "./panel-catalog.ts";
+import { loadDashboardPanels, saveDashboardPanels } from "./panel-preferences.ts";
 import { dashboardsRouteData } from "./route.ts";
 import {
   renderDashboards,
@@ -38,9 +45,12 @@ class DashboardsPage extends OpenClawLightDomElement {
     sort: "updated",
   };
   @state() private previewError: string | null = null;
+  @state() private panels: readonly DashboardPanelId[] = DASHBOARD_PANEL_IDS;
+  @state() private panelLibraryOpen = false;
 
   private observedSessions?: ApplicationContext["sessions"];
   private observedScopeId?: string | null;
+  private panelGatewayUrl = "";
   private unsubscribeList?: () => void;
   private data?: DashboardsRouteData;
   private listGeneration = 0;
@@ -98,6 +108,7 @@ class DashboardsPage extends OpenClawLightDomElement {
     if (changed.has("routeData")) {
       this.data = this.routeData;
     }
+    this.syncPanelScope();
     this.bindMonitoring();
     this.bindList();
   }
@@ -124,6 +135,45 @@ class DashboardsPage extends OpenClawLightDomElement {
     // A queued update can still flush after the element leaves the document;
     // presenting there would restart reads nothing can retire.
     this.monitoring.setPresented(this.presented && this.isConnected);
+  }
+
+  /** Panel visibility is device-local presentation state stored per Gateway origin. */
+  private syncPanelScope(): void {
+    const gatewayUrl = this.context?.gateway.connection.gatewayUrl ?? "";
+    if (gatewayUrl === this.panelGatewayUrl) {
+      return;
+    }
+    this.panelGatewayUrl = gatewayUrl;
+    this.panels = loadDashboardPanels(gatewayUrl);
+    this.panelLibraryOpen = false;
+  }
+
+  private commitPanels(next: readonly DashboardPanelId[]): void {
+    this.panels = orderPanelSelection(next);
+    saveDashboardPanels(this.panelGatewayUrl, this.panels);
+  }
+
+  private panelsState(): MonitoringPanelsState {
+    return {
+      visible: this.panels,
+      libraryOpen: this.panelLibraryOpen,
+      toggle: (id) => {
+        this.commitPanels(
+          this.panels.includes(id)
+            ? this.panels.filter((panel) => panel !== id)
+            : [...this.panels, id],
+        );
+      },
+      showAll: () => {
+        this.commitPanels(DASHBOARD_PANEL_IDS);
+      },
+      openLibrary: () => {
+        this.panelLibraryOpen = true;
+      },
+      closeLibrary: () => {
+        this.panelLibraryOpen = false;
+      },
+    };
   }
 
   private bindList(): void {
@@ -233,6 +283,7 @@ class DashboardsPage extends OpenClawLightDomElement {
       this.context?.gateway.snapshot,
       this.previewError,
       this.monitoring,
+      this.panelsState(),
     );
   }
 }

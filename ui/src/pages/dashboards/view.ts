@@ -18,7 +18,11 @@ import {
 } from "../../lib/sessions/route-navigation.ts";
 import "../../styles/dashboards.css";
 import "./dashboard-preview.ts";
-import { renderMonitoring, type MonitoringViewState } from "./monitoring-view.ts";
+import {
+  renderMonitoring,
+  type MonitoringPanelsState,
+  type MonitoringViewState,
+} from "./monitoring-view.ts";
 
 export type DashboardsRouteData = {
   result: SessionsListResult | null;
@@ -301,6 +305,7 @@ export function renderDashboards(
   gatewaySnapshot?: ApplicationGatewaySnapshot,
   previewError: string | null = null,
   monitoring?: MonitoringViewState,
+  panels?: MonitoringPanelsState,
 ) {
   const body =
     data && (data.result || data.error)
@@ -334,6 +339,6 @@ export function renderDashboards(
           : nothing
       }
     </section>
-    ${renderSettingsWorkspace(html`${renderMonitoring(monitoring)} ${body}`)}
+    ${renderSettingsWorkspace(html`${renderMonitoring(monitoring, panels)} ${body}`)}
   `;
 }
