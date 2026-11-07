@@ -137,8 +137,10 @@ export function createVaultSaveLoginTool(): AnyAgentTool {
         });
       }
       const account = readStringParam(params, "account");
-      const password = readStringParam(params, "password");
-      const notes = readStringParam(params, "notes");
+      // Passwords and notes are exact values: surrounding whitespace is part of
+      // the secret, and an explicit empty string is a deliberate blank.
+      const password = readStringParam(params, "password", { trim: false, allowEmpty: true });
+      const notes = readStringParam(params, "notes", { trim: false, allowEmpty: true });
       const label = readStringParam(params, "label");
       const emptyFields = [
         ...(account === undefined || account.trim().length === 0 ? ["account"] : []),

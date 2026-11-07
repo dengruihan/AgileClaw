@@ -13,16 +13,20 @@ vi.mock("openclaw/plugin-sdk/channel-actions", () => ({
   readStringParam: (
     params: Record<string, unknown>,
     key: string,
-    options?: { required?: boolean },
+    options?: { required?: boolean; trim?: boolean; allowEmpty?: boolean },
   ) => {
-    const value = params[key];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
+    // Mirrors readToolStringParam so payload assertions run against the real
+    // trimming and empty-value semantics, not a lossy stand-in.
+    const raw = params[key];
+    const trim = options?.trim !== false;
+    const value = typeof raw === "string" ? (trim ? raw.trim() : raw) : undefined;
+    if (value === undefined || (!value && options?.allowEmpty !== true)) {
+      if (options?.required) {
+        throw new Error(`${key} required`);
+      }
+      return undefined;
     }
-    if (options?.required) {
-      throw new Error(`${key} required`);
-    }
-    return undefined;
+    return value;
   },
 }));
 
@@ -120,6 +124,33 @@ describe("vault_save_login tool", () => {
       { originScheme: "http", originHost: "localhost", originPort: 3000 },
       expect.anything(),
     );
+  });
+
+  it("sends the exact password and notes bytes to the gateway without trimming", async () => {
+    mocks.callGatewayTool.mockResolvedValue({
+      entry: { ...SAVED_ENTRY, account: "user@example.com" },
+    });
+    await runTool({
+      site: "https://example.com",
+      account: "user@example.com",
+      password: "  synthetic password  ",
+      notes: "  first line\nsecond line  ",
+    });
+    const payload = mocks.callGatewayTool.mock.calls[0]?.[2] as Record<string, unknown>;
+    // Whitespace is part of the secret; the vault worker preserves it.
+    expect(payload.password).toBe("  synthetic password  ");
+    expect(payload.notes).toBe("  first line\nsecond line  ");
+  });
+
+  it("passes explicit empty password and notes through and omits absent fields", async () => {
+    mocks.callGatewayTool.mockResolvedValue({ entry: SAVED_ENTRY });
+    const result = await runTool({ site: "example.com", password: "", notes: "" });
+    const payload = mocks.callGatewayTool.mock.calls[0]?.[2] as Record<string, unknown>;
+    expect(payload.password).toBe("");
+    expect(payload.notes).toBe("");
+    expect(payload).not.toHaveProperty("account");
+    expect(payload).not.toHaveProperty("label");
+    expect(result.emptyFields).toEqual(["account", "password", "notes"]);
   });
 
   it("rejects a site that is not an http(s) origin", async () => {

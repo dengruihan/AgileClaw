@@ -38,7 +38,7 @@ The vault never adds a plaintext password or notes column. The `secret_store_ent
 - Authenticated associated data binds the entry reference, owner, exact origin, revision, key identity, and field name. Moving ciphertext to another entry, origin, or revision makes decryption fail.
 - The vault starts locked after a Gateway restart. It auto-locks after the configured idle interval (default five minutes).
 - Five consecutive wrong passphrases trigger a 30-second lockout. Further groups of five back off to five minutes, then one hour. Attempts and the timeout are persisted, so a restart does not clear them.
-- Agents can save logins with the `vault_save_login` tool but cannot list, reveal, read, update, or delete entries. Agent/model context, transcripts, logs, and tool results never include passwords or notes. See [Agent save](#agent-save).
+- Agents can save logins with the `vault_save_login` tool but cannot list, reveal, read, update, or delete entries. The account, password, and notes an agent saves are model-supplied tool arguments, so they appear in that agent's conversation and transcript like any other text it handles; which agents may save credentials is the operator's trust decision. The enforced boundaries are the tool results, Gateway logs, audit records, and the vault tables at rest, which never contain password or notes values. See [Agent save](#agent-save).
 - Agent saves work while the vault is locked through a write-only key: an X25519 public key seals the values, and the matching private key exists only wrapped under the DEK, so nothing sealed while locked can be decrypted until the next unlock. No plaintext or staging table is ever written.
 - Agent fill is a separate, per-request flow that uses an opaque `itemRef`; it never exposes a vault read verb to the model. See [Agent fill](#agent-fill).
 - `operator.admin` does not imply `operator.vault.reveal`. Unlock needs only `operator.vault`, which `operator.admin` satisfies; reveal and copy need the explicit reveal scope on the connection.
@@ -79,7 +79,7 @@ An agent can save a website login directly into the vault with the `vault_save_l
 6. Vaults created by this release get the write key at setup. A vault carried over from an earlier release creates it at the next unlock; until then a locked save fails with a clear `setup_required` result asking for one unlock.
 7. Saves are audited as action `create` with reason code `agent`, without values.
 
-Results are explicit and value-free: `saved` (with `itemRef`, site, origin, account, and the blank field list), `duplicate`, `invalid_input`, `vault_uninitialized`, `setup_required`, or `unavailable`. The tool never returns the saved password or notes, and it offers no list, reveal, update, or delete surface; use [Agent fill](#agent-fill) to apply a saved login later.
+Results are explicit and value-free: `saved` (with `itemRef`, site, origin, account, and the blank field list), `duplicate`, `invalid_input`, `vault_uninitialized`, `setup_required`, or `unavailable`. The tool never returns the saved password or notes, and it offers no list, reveal, update, or delete surface; use [Agent fill](#agent-fill) to apply a saved login later. The values the model passes as arguments travel with its own conversation and transcript like any text it sends — the guarantees above cover the results, logs, audits, and stored ciphertext, not the caller's own tool-call arguments.
 
 ## Agent fill
 
