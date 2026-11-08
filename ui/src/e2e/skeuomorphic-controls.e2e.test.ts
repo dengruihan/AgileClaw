@@ -188,6 +188,24 @@ function fixtureDocument(theme: "dark" | "light"): string {
     <label class="field checkbox"><input type="checkbox" id="latch-set" checked /><span>Telemetry</span></label>
     <label class="field checkbox"><input type="radio" id="dial" name="dial" checked /><span>Dark artwork</span></label>
     <label class="field"><span>Effort</span><input type="range" id="fader" min="0" max="100" value="45" /></label>
+    <nav style="display: flex; flex-direction: column; gap: 2px; width: 220px" aria-label="Console rail keys">
+      <a class="nav-item" href="#" id="rail-nav" onclick="return false"><span class="nav-item__icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /></svg></span><span class="nav-item__text">Sessions</span></a>
+      <a class="nav-item active" href="#" id="rail-nav-selected" onclick="return false"><span class="nav-item__icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1" /></svg></span><span class="nav-item__text">Dashboards</span></a>
+    </nav>
+    <button class="sidebar-brand__icon" type="button" id="rail-collapse" aria-label="Collapse sidebar"><svg viewBox="0 0 24 24" width="16" height="16"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M10 3v18" /></svg></button>
+    <button class="sidebar-issues-button" type="button" id="rail-inbox" aria-expanded="false" aria-label="Inbox"><span class="sidebar-issues-button__icon"><svg viewBox="0 0 24 24" width="18" height="18"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5 4h14l3 8v10H2V12l3-8z" /></svg></span><span class="sidebar-issues-button__count">3</span></button>
+    <button class="sidebar-identity-card" type="button" id="rail-identity" aria-expanded="false"><span class="viewer-avatar viewer-avatar--footer"><span>R</span></span><span class="sidebar-identity-card__text"><span class="sidebar-identity-card__name">Riley</span></span></button>
+    <div class="sidebar-recent-session session-row-host" id="rail-session" style="position: relative; width: 260px">
+      <a href="#" class="sidebar-recent-session__link" id="rail-session-link" onclick="return false"><span class="sidebar-session-indicator"><span class="session-color-dot" style="--session-color: var(--session-color-blue)"></span></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Release prep</span></span></span></a>
+      <span class="sidebar-recent-session__aside session-row-aside"><span class="session-row-actions"><button class="session-action" type="button" id="rail-session-action" aria-label="Archive"><svg viewBox="0 0 24 24" width="14" height="14"><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /></svg></button></span></span>
+    </div>
+    <div class="sidebar-recent-session sidebar-recent-session--selected session-row-host" id="rail-session-selected" style="position: relative; width: 260px">
+      <a href="#" class="sidebar-recent-session__link" onclick="return false"><span class="sidebar-session-indicator"></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Family</span></span></span></a>
+    </div>
+    <div class="sidebar-recent-session session-row-host" id="rail-session-parent" style="position: relative; width: 260px">
+      <a href="#" class="sidebar-recent-session__link" onclick="return false"><span class="sidebar-session-indicator"></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Tax filing research</span></span></span></a>
+      <button class="sidebar-child-session-toggle" id="rail-disclosure-expanded" type="button" aria-expanded="true" aria-label="Hide child sessions"><span class="sidebar-child-session-toggle__icon"><svg viewBox="0 0 24 24" width="11" height="11"><path d="m6 9 6 6 6-6" /></svg></span></button>
+    </div>
     <span id="accent-foreground-probe" aria-hidden="true" style="position: absolute; color: var(--accent-foreground)"></span>
   </main></body></html>`;
 }
@@ -331,6 +349,200 @@ suite.define(() => {
           expect(released.transform).toBe("none");
           expect(released.shadow).toContain("0px 2px 0px 0px");
           expect(released.glossPosition).toBe(resting.glossPosition);
+        },
+      );
+    },
+  );
+
+  it.each(["dark", "light"] as const)(
+    "sidebar console keys seat, travel, latch, and keep selection distinct in %s mode",
+    { timeout: 60_000 },
+    async (theme) => {
+      await suite.withPage(
+        // Tall viewport: the fixture loads the real base.css, whose
+        // html/body clip forbids document scrolling, so every fixture row
+        // must fit the first paint.
+        { colorScheme: theme, locale: "en-US", viewport: { height: 1600, width: 640 } },
+        async ({ page }) => {
+          await page.setContent(fixtureDocument(theme));
+
+          type KeySurface = { border: string; borderAlpha: number; shadow: string; image: string };
+          const readSurface = (selector: string): Promise<KeySurface> =>
+            page.locator(selector).evaluate((element) => {
+              const style = getComputedStyle(element);
+              const rgba = /rgba?\(([^)]+)\)/u.exec(style.borderTopColor);
+              const parts = rgba?.[1].split(/[\s,/]+/u).map(Number) ?? [];
+              return {
+                border: style.borderTopColor,
+                borderAlpha: parts.length === 4 ? (parts[3] ?? 1) : 1,
+                shadow: style.boxShadow,
+                image: style.backgroundImage,
+              };
+            });
+
+          // Every seated rail key wears an opaque machined contour, a graded
+          // face, and a thin rim at rest, so it reads as pressable before any
+          // hover — and none of them wears the new-session key's stronger raise.
+          const seatedKeys = [
+            "#rail-nav",
+            "#rail-collapse",
+            "#rail-inbox",
+            "#rail-identity",
+            "#rail-session",
+            "#rail-session-action",
+          ];
+          const resting = new Map<string, KeySurface>();
+          for (const key of seatedKeys) {
+            const surface = await readSurface(key);
+            resting.set(key, surface);
+            expect(surface.borderAlpha, `${key} contour is opaque`).toBe(1);
+            expect(surface.image, `${key} face is graded`).toContain("linear-gradient");
+            expect(surface.shadow, `${key} wears a 1px rim`).toContain("0px 1px 0px 0px");
+            expect(surface.shadow, `${key} stays quieter than the raise`).not.toContain(
+              "0px 2px 0px 0px",
+            );
+          }
+
+          // Hover deepens the seat without moving the key.
+          const nav = page.locator("#rail-nav");
+          await nav.hover();
+          await expect
+            .poll(() => readSurface("#rail-nav").then((surface) => surface.shadow))
+            .toContain("0px 2px 0px 0px");
+          expect((await readSurface("#rail-nav")).border).not.toBe(
+            resting.get("#rail-nav")!.border,
+          );
+
+          // Press travels the key into the shared pressed well and the release
+          // springs back to the seated rim.
+          await page.mouse.down();
+          await settleFrames(page);
+          const pressed = await readKeyPhysics(nav);
+          expect(transformY(pressed.transform)).toBeGreaterThanOrEqual(0.9);
+          expect(pressed.shadow).toContain("0px 2px 4px");
+          expect(pressed.transformDuration).toBe("0.04s");
+          await page.mouse.up();
+          await page.mouse.move(0, 0);
+          await page.waitForTimeout(320);
+          const released = await readKeyPhysics(nav);
+          expect(released.transform).toBe("none");
+          expect(released.shadow).not.toContain("0px 2px 4px");
+          expect(released.shadow).toContain("0px 1px 0px 0px");
+
+          // The selected route is a different key: an accent contour and the
+          // stronger shared raise — not the hover state, not an error outline.
+          const selected = await readSurface("#rail-nav-selected");
+          expect(selected.border).not.toBe(resting.get("#rail-nav")!.border);
+          expect(selected.border).not.toBe((await readSurface("#rail-nav")).border);
+          expect(selected.shadow).toContain("0px 2px 0px 0px");
+
+          // Pressing the session row's navigation link travels the seated row.
+          const session = page.locator("#rail-session");
+          await session.locator("#rail-session-link").hover();
+          await page.mouse.down();
+          await settleFrames(page);
+          const rowPressed = await readKeyPhysics(session);
+          expect(transformY(rowPressed.transform)).toBeGreaterThanOrEqual(0.9);
+          expect(rowPressed.shadow).toContain("0px 2px 4px");
+          await page.mouse.up();
+          await page.mouse.move(0, 0);
+          await page.waitForTimeout(320);
+
+          // Hovering the row reveals its inline action key; pressing that key
+          // travels the action's own face while the row stays seated.
+          const action = page.locator("#rail-session-action");
+          await session.hover();
+          await expect
+            .poll(() => action.evaluate((element) => getComputedStyle(element).opacity))
+            .toBe("1");
+          await action.hover();
+          await page.mouse.down();
+          await settleFrames(page);
+          expect(transformY((await readKeyPhysics(action)).transform)).toBeGreaterThanOrEqual(0.9);
+          expect((await readKeyPhysics(session)).transform).toBe("none");
+          await page.mouse.up();
+          await page.mouse.move(0, 0);
+          await page.waitForTimeout(320);
+
+          // The expanded parent's disclosure key is revealed by row hover and
+          // must keep the seated-key transition in that state: the
+          // state-specific rule may not shrink the transition list back to
+          // opacity-only, or the press travel and its spring release would
+          // apply instantly. The opacity reveal itself stays in the list.
+          const disclosure = page.locator("#rail-disclosure-expanded");
+          const readDisclosureTransition = () =>
+            disclosure.evaluate((element) => {
+              const style = getComputedStyle(element);
+              const properties = style.transitionProperty.split(",").map((value) => value.trim());
+              const timings =
+                style.transitionTimingFunction.match(/cubic-bezier\([^)]+\)|[a-z-]+/gu) ?? [];
+              const durations = style.transitionDuration.split(",").map((value) => value.trim());
+              const transformIndex = properties.indexOf("transform");
+              return {
+                properties,
+                transformTiming: timings.length === 1 ? timings[0] : timings[transformIndex],
+                transformDuration:
+                  durations.length === 1 ? durations[0] : durations[transformIndex],
+              };
+            });
+          const disclosureRest = await readDisclosureTransition();
+          expect(
+            disclosureRest.properties,
+            "expanded disclosure keeps the seated-key transition list",
+          ).toEqual(
+            expect.arrayContaining([
+              "border-color",
+              "background",
+              "color",
+              "opacity",
+              "box-shadow",
+              "transform",
+            ]),
+          );
+          expect(disclosureRest.transformTiming).toBe(SPRING);
+          expect(disclosureRest.transformDuration).toBe("0.26s");
+
+          // Hovering the parent row reveals the expanded key; pressing it
+          // travels with the shared fast land and restores on the spring.
+          const parentRow = page.locator("#rail-session-parent");
+          await parentRow.hover();
+          await expect
+            .poll(() => disclosure.evaluate((element) => getComputedStyle(element).opacity))
+            .toBe("1");
+          await disclosure.hover();
+          await page.mouse.down();
+          await settleFrames(page);
+          const disclosurePressed = await readKeyPhysics(disclosure);
+          expect(transformY(disclosurePressed.transform)).toBeGreaterThanOrEqual(0.9);
+          expect(disclosurePressed.shadow).toContain("0px 2px 4px");
+          expect(disclosurePressed.transformDuration).toBe("0.04s");
+          await page.mouse.move(4, 860);
+          await page.mouse.up();
+          await page.waitForTimeout(320);
+          const disclosureReleased = await readKeyPhysics(disclosure);
+          expect(disclosureReleased.transform).toBe("none");
+          expect(disclosureReleased.shadow).not.toContain("0px 2px 4px");
+          expect(disclosureReleased.shadow).toContain("0px 1px 0px 0px");
+
+          // An open panel latches its trigger into the pressed seat.
+          await page
+            .locator("#rail-inbox")
+            .evaluate((element) => element.setAttribute("aria-expanded", "true"));
+          await expect
+            .poll(() => readSurface("#rail-inbox").then((surface) => surface.shadow))
+            .toContain("0px 2px 4px");
+          await page
+            .locator("#rail-identity")
+            .evaluate((element) => element.setAttribute("aria-expanded", "true"));
+          await expect
+            .poll(() => readSurface("#rail-identity").then((surface) => surface.shadow))
+            .toContain("0px 2px 4px");
+
+          // The multi-select wash keeps its own seat: distinct contour from the
+          // unselected row's machined neutral.
+          const multi = await readSurface("#rail-session-selected");
+          expect(multi.border).not.toBe(resting.get("#rail-session")!.border);
+          expect(multi.image).toContain("linear-gradient");
         },
       );
     },

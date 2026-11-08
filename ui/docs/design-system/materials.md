@@ -26,22 +26,24 @@ Light arrives from above. Three depths cover every shared control:
 Defined in `:root` (dark) and `:root[data-theme-mode="light"]` in
 `ui/src/styles/base.css`:
 
-| Token                  | Role                                                   |
-| ---------------------- | ------------------------------------------------------ |
-| `--mat-bevel`          | Specular catch on a raised face's top edge             |
-| `--mat-face-hi/lo`     | Face gradient stops (dome light and shade)             |
-| `--mat-rim`            | Solid thickness under a raised face                    |
-| `--mat-rim-hi`         | Light caught inside a pressed seat's lower lip         |
-| `--mat-gloss`          | Specular wash that travels down the face while pressed |
-| `--raise-face`         | Composed raised-face gradient                          |
-| `--raise-shadow`       | Resting key shadow stack (bevel + rim + contact)       |
-| `--raise-shadow-hover` | Slightly taller rim and contact while hovered          |
-| `--press-shadow`       | Pushed-in shadow stack (inset shade + shrunken rim)    |
-| `--well-face`          | Groove floor gradient (darker under the top wall)      |
-| `--well-shadow`        | Groove depth (top inner shade + bottom lip catch)      |
-| `--press-shift`        | Whole-control travel on `:active` (1px)                |
-| `--duration-press`     | Press lands with the finger (40ms)                     |
-| `--duration-release`   | Release settles on `--ease-spring` (260ms)             |
+| Token                  | Role                                                          |
+| ---------------------- | ------------------------------------------------------------- |
+| `--mat-bevel`          | Specular catch on a raised face's top edge                    |
+| `--mat-face-hi/lo`     | Face gradient stops (dome light and shade)                    |
+| `--mat-rim`            | Solid thickness under a raised face                           |
+| `--mat-rim-hi`         | Light caught inside a pressed seat's lower lip                |
+| `--mat-gloss`          | Specular wash that travels down the face while pressed        |
+| `--raise-face`         | Composed raised-face gradient                                 |
+| `--raise-shadow`       | Resting key shadow stack (bevel + rim + contact)              |
+| `--raise-shadow-hover` | Slightly taller rim and contact while hovered                 |
+| `--key-shadow`         | Sidebar rail key stack: same inputs, 1px rim, whisper contact |
+| `--key-shadow-hover`   | Hovered rail key: rim thickens, contact deepens               |
+| `--press-shadow`       | Pushed-in shadow stack (inset shade + shrunken rim)           |
+| `--well-face`          | Groove floor gradient (darker under the top wall)             |
+| `--well-shadow`        | Groove depth (top inner shade + bottom lip catch)             |
+| `--press-shift`        | Whole-control travel on `:active` (1px)                       |
+| `--duration-press`     | Press lands with the finger (40ms)                            |
+| `--duration-release`   | Release settles on `--ease-spring` (260ms)                    |
 
 The older `--surface-*` pairs remain for surfaces that have not migrated;
 new work composes the `--mat-*` vocabulary above.
@@ -107,6 +109,19 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   carapace's own non-`.btn` keys keep theirs (`ui/src/styles/carapace-control-ui.css`).
 - Navigation rows, the settings rail, shell chrome keys, the new-session
   action, and the shell plate's rimmed slab live in `ui/src/styles/layout.css`.
+  The sidebar reads as a console rail: every actionable key — nav rows, session
+  rows and their inline action/expand keys, the collapse and collapsed expand
+  toggles, the footer identity card, and the Inbox button — wears a seated-key
+  construction (`--key-shadow`): an opaque machined contour, a graded face with
+  a top bevel, a thin lower rim, and a contact shadow, separated from the panel
+  by the list gaps. Pressing travels the key (the row travels only when its own
+  navigation link is pressed, never when an inline key is) into the shared
+  `--press-shadow` seat and springs back; hover only thickens the rim. The
+  selected row keeps the same seated construction with an accent face and
+  contour — distinct from hover, quieter than the new-session key, and never an
+  error-like outline. Menu panels, section headings, group headers, toolbar
+  buttons, and other passive or unrelated icon controls stay quiet surfaces; the
+  roster's 20px child chevron stays a bare glyph.
 
 Feature-owned sliders (chat audio seek, reasoning effort) and dashboards keep
 their own chrome by class and never enter this vocabulary.

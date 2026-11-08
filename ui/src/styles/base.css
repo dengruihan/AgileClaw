@@ -319,6 +319,16 @@
   --press-shadow:
     inset 0 2px 4px var(--neu-dark), inset 0 -1px 0 var(--mat-rim-hi),
     0 1px 0 color-mix(in srgb, var(--mat-rim) 62%, transparent);
+  /* Sidebar rail keys: the shared material at seated-row scale. Rail rows wear
+     the same graded face and machined inputs but a 1px rim and a whisper
+     contact instead of the full raise, so a column of quiet keys never
+     outshouts the primary new-session key above them. */
+  --key-shadow:
+    inset 0 1px 0 var(--mat-bevel), 0 1px 0 color-mix(in srgb, var(--mat-rim) 62%, transparent),
+    1px 2px 4px color-mix(in srgb, var(--neu-dark) 64%, transparent);
+  --key-shadow-hover:
+    inset 0 1px 0 var(--mat-bevel), 0 2px 0 color-mix(in srgb, var(--mat-rim) 74%, transparent),
+    1px 3px 6px color-mix(in srgb, var(--neu-dark) 72%, transparent);
   /* Recessed fields: the floor sits darker where the top wall occludes the
      light and catches a faint bevel on the inner bottom lip. */
   --well-face: linear-gradient(
