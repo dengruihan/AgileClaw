@@ -122,6 +122,19 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   error-like outline. Menu panels, section headings, group headers, toolbar
   buttons, and other passive or unrelated icon controls stay quiet surfaces; the
   roster's 20px child chevron stays a bare glyph.
+- Two shared rules own the repeated rail-key chrome in `ui/src/styles/layout.css`
+  so per-control rules carry only geometry and states: a grouped seated-key
+  material rule (`.sidebar-brand__icon`, `.nav-item`, `.sidebar-identity-card`)
+  applies the shared contour, graded face, and rim, and a grouped hover rule
+  (same keys plus the Inbox button) applies the shared hover seat; the build's
+  hover guard media-wraps that rule, and the brand's `:focus-visible` rule
+  restates the hover seat outside it so keyboard focus keeps the seat on
+  non-hover devices. Session rows, their inline action/expand keys, the
+  collapsed-expand toggle, and the personal-theme Inbox hooks
+  (`--sidebar-issues-border`/`--sidebar-issues-background` still gate the
+  Inbox fallbacks) keep their own inline copies for now; a pending Session
+  redesign replaces that block. The roster reset uses `background: none`, which
+  clears both the face retint and the gradient in one declaration.
 
 Feature-owned sliders (chat audio seek, reasoning effort) and dashboards keep
 their own chrome by class and never enter this vocabulary.
