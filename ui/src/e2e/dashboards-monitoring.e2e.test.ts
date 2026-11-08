@@ -90,6 +90,7 @@ suite.define(() => {
     const context = await suite.browser.newContext({
       locale: "en-US",
       serviceWorkers: "block",
+      reducedMotion: "reduce",
       viewport: { width: 1440, height: 900 },
     });
     const page = await context.newPage();
@@ -108,6 +109,8 @@ suite.define(() => {
 
       await page.setViewportSize({ width: 560, height: 900 });
       await expect.poll(() => page.locator("[data-marketplace-trigger]").isVisible()).toBe(true);
+      // Owned geometry wait: the resized layout must settle before capturing.
+      await page.waitForFunction(() => document.documentElement.scrollWidth <= window.innerWidth);
       await page.screenshot({ path: `${artifacts}/02-default-narrow.png` });
     } finally {
       await context.close();
@@ -208,6 +211,7 @@ suite.define(() => {
     const context = await suite.browser.newContext({
       locale: "en-US",
       serviceWorkers: "block",
+      reducedMotion: "reduce",
       viewport: { width: 1440, height: 900 },
     });
     const page = await context.newPage();
@@ -241,8 +245,12 @@ suite.define(() => {
         .locator('[role="alert"]')
         .filter({ hasText: "Dashboard listing unavailable" })
         .waitFor();
-      await openMarket(page);
+      const failedDrawer = await openMarket(page);
       expect(await page.locator("[data-marketplace-preset]").count()).toBe(1);
+      // The settled drawer must sit fully inside the viewport, not mid-entrance.
+      const failedDrawerBox = await failedDrawer.boundingBox();
+      expect(failedDrawerBox!.x).toBeGreaterThan(0);
+      expect(failedDrawerBox!.x + failedDrawerBox!.width).toBeLessThanOrEqual(1440);
       await page.screenshot({ path: `${artifacts}/02-failed-gallery-market.png` });
     } finally {
       await context.close();

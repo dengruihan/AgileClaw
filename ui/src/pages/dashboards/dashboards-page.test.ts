@@ -689,13 +689,20 @@ describe("DashboardsPage", () => {
     await vi.waitFor(() => expect(second.querySelector("[data-monitoring]")).toBeNull());
     second.remove();
 
-    const third = mount();
-    await settleLitElement(third);
-    expect(third.querySelector("[data-monitoring]")).toBeNull();
-    expect(environmentsCalls).toBe(restoredCalls);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(environmentsCalls).toBe(restoredCalls);
-    third.remove();
+    // A bare page owns nothing that could start a read later: advancing the
+    // full poll interval on a fake clock proves no queued work fires.
+    vi.useFakeTimers();
+    try {
+      const third = mount();
+      await settleLitElement(third);
+      expect(third.querySelector("[data-monitoring]")).toBeNull();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(third.querySelector("[data-monitoring]")).toBeNull();
+      expect(environmentsCalls).toBe(restoredCalls);
+      third.remove();
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("re-keys the monitoring owner when the presentation scope changes in place", async () => {
     let environmentsCalls = 0;
