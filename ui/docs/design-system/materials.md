@@ -109,19 +109,10 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   carapace's own non-`.btn` keys keep theirs (`ui/src/styles/carapace-control-ui.css`).
 - Navigation rows, the settings rail, shell chrome keys, the new-session
   action, and the shell plate's rimmed slab live in `ui/src/styles/layout.css`.
-  The sidebar reads as a console rail: every actionable key — nav rows, session
-  rows and their inline action/expand keys, the collapse and collapsed expand
-  toggles, the footer identity card, and the Inbox button — wears a seated-key
-  construction (`--key-shadow`): an opaque machined contour, a graded face with
-  a top bevel, a thin lower rim, and a contact shadow, separated from the panel
-  by the list gaps. Pressing travels the key (the row travels only when its own
-  navigation link is pressed, never when an inline key is) into the shared
-  `--press-shadow` seat and springs back; hover only thickens the rim. The
-  selected row keeps the same seated construction with an accent face and
-  contour — distinct from hover, quieter than the new-session key, and never an
-  error-like outline. Menu panels, section headings, group headers, toolbar
-  buttons, and other passive or unrelated icon controls stay quiet surfaces; the
-  roster's 20px child chevron stays a bare glyph.
+  The session-row pull-out tab system (rows, their inline keys, and their
+  state/touch/draft rules) is owned by the lazy sidebar component's
+  `ui/src/styles/app-sidebar.css`, which loads after the global bundle; the
+  roster sheet keeps its later reset precedence.
 - Two shared rules own the repeated rail-key chrome in `ui/src/styles/layout.css`
   so per-control rules carry only geometry and states: a grouped seated-key
   material rule (`.sidebar-brand__icon`, `.nav-item`, `.sidebar-identity-card`)
@@ -129,12 +120,35 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   (same keys plus the Inbox button) applies the shared hover seat; the build's
   hover guard media-wraps that rule, and the brand's `:focus-visible` rule
   restates the hover seat outside it so keyboard focus keeps the seat on
-  non-hover devices. Session rows, their inline action/expand keys, the
-  collapsed-expand toggle, and the personal-theme Inbox hooks
-  (`--sidebar-issues-border`/`--sidebar-issues-background` still gate the
-  Inbox fallbacks) keep their own inline copies for now; a pending Session
-  redesign replaces that block. The roster reset uses `background: none`, which
-  clears both the face retint and the gradient in one declaration.
+  non-hover devices. The collapsed-expand toggle and the personal-theme Inbox
+  hooks (`--sidebar-issues-border`/`--sidebar-issues-background` still gate
+  the Inbox fallbacks) keep their own inline copies. The roster reset uses
+  `background: none`, which clears both the face retint and the gradient in
+  one declaration.
+- The sidebar reads as a console rail of seated keys with one deliberate
+  exception. Nav rows, the collapse and collapsed expand toggles, the footer
+  identity card, the Inbox button, and the session rows' inline action and
+  expand keys wear the seated-key construction (`--key-shadow`) — an opaque
+  machined contour, a graded face with a top bevel, a thin lower rim, and a
+  contact shadow, separated from the panel by the list gaps; pressing travels
+  the key into the shared `--press-shadow` seat and springs back. Session
+  rows themselves are not keys: each Session is a pull-out index tab seated
+  in a recessed slot (`app-sidebar.css` `.sidebar-recent-session`). The row
+  is the stationary slot — a darker floor with the shared `--well-shadow`
+  groove walls and a quiet hairline mouth — and the row's link is the moving
+  tab: a matte coated-card face (the satin `--raise-face` layer over a
+  retintable color, no dome bevel, no solid rim), a hairline edge, a wider
+  matte grip band painted on the pull side, and a short contact shadow. Tabs
+  rest slightly tucked into their slots; hover, keyboard focus, and the
+  current session pull the tab a few pixels toward the content area on the
+  shared spring, with the current tab staying pulled out and the
+  multi-select wash staying tucked. Pressing the tab seats it back into its
+  slot (`--well-shadow`, fast press, spring release); inline keys never move
+  the tab. The slot's leading stripe carries the session color, or the
+  accent seam on the current session's slot. Menu panels, section headings,
+  group headers, toolbar buttons, and other passive or unrelated icon
+  controls stay quiet surfaces; the roster's 20px child chevron stays a
+  bare glyph.
 
 Feature-owned sliders (chat audio seek, reasoning effort) and dashboards keep
 their own chrome by class and never enter this vocabulary.
