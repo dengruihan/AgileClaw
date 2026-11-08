@@ -22,6 +22,10 @@ function readUiCss(): string {
     "ui/src/styles/layout.css",
     "ui/src/styles/components.css",
     "ui/src/styles/settings-controls.css",
+    // The session-row system is owned by the lazy sidebar component; its sheet
+    // loads after the core bundle, then the roster's own reset sheet.
+    "ui/src/styles/app-sidebar.css",
+    "ui/src/styles/sidebar-agent-roster.css",
   ]
     .map((file) => readStyleSheet(file))
     .join("\n");
@@ -62,6 +66,11 @@ function readKeyPhysics(locator: Locator): Promise<KeyPhysics> {
 function transformY(transform: string): number {
   const match = /matrix\([^,]+, [^,]+, [^,]+, [^,]+, [^,]+, ([^)]+)\)/u.exec(transform);
   return match ? Number.parseFloat(match[1]) : Number.NaN;
+}
+
+function translateX(transform: string): number {
+  const match = /matrix\([^,]+, [^,]+, [^,]+, [^,]+, ([^,]+),/u.exec(transform);
+  return match ? Number.parseFloat(match[1]) : 0;
 }
 
 type GlyphGeometry = {
@@ -198,6 +207,9 @@ function fixtureDocument(theme: "dark" | "light"): string {
     <div class="sidebar-recent-session session-row-host" id="rail-session" style="position: relative; width: 260px">
       <a href="#" class="sidebar-recent-session__link" id="rail-session-link" onclick="return false"><span class="sidebar-session-indicator"><span class="session-color-dot" style="--session-color: var(--session-color-blue)"></span></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Release prep</span></span></span></a>
       <span class="sidebar-recent-session__aside session-row-aside"><span class="session-row-actions"><button class="session-action" type="button" id="rail-session-action" aria-label="Archive"><svg viewBox="0 0 24 24" width="14" height="14"><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /></svg></button></span></span>
+    </div>
+    <div class="sidebar-recent-session sidebar-recent-session--active session-row-host" id="rail-session-current" style="position: relative; width: 260px">
+      <a href="#" class="sidebar-recent-session__link" aria-current="page" onclick="return false"><span class="sidebar-session-indicator"><span class="session-color-dot" style="--session-color: var(--session-color-green)"></span></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Molty</span></span></span></a>
     </div>
     <div class="sidebar-recent-session sidebar-recent-session--selected session-row-host" id="rail-session-selected" style="position: relative; width: 260px">
       <a href="#" class="sidebar-recent-session__link" onclick="return false"><span class="sidebar-session-indicator"></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Family</span></span></span></a>
@@ -382,13 +394,14 @@ suite.define(() => {
 
           // Every seated rail key wears an opaque machined contour, a graded
           // face, and a thin rim at rest, so it reads as pressable before any
-          // hover — and none of them wears the new-session key's stronger raise.
+          // hover — and none of them wears the new-session key's stronger
+          // raise. Session rows are exempt: they are pull-out tabs, proven
+          // separately below.
           const seatedKeys = [
             "#rail-nav",
             "#rail-collapse",
             "#rail-inbox",
             "#rail-identity",
-            "#rail-session",
             "#rail-session-action",
           ];
           const resting = new Map<string, KeySurface>();
@@ -436,20 +449,121 @@ suite.define(() => {
           expect(selected.border).not.toBe((await readSurface("#rail-nav")).border);
           expect(selected.shadow).toContain("0px 2px 0px 0px");
 
-          // Pressing the session row's navigation link travels the seated row.
+          // Session rows are pull-out index tabs now, not seated keys: the
+          // row is the stationary recessed slot, the link is the matte tab
+          // seated in it, and the two constructions must stay distinct.
+          const readBox = (selector: string) =>
+            page.locator(selector).evaluate((element) => {
+              const box = element.getBoundingClientRect();
+              return { left: box.left, right: box.right };
+            });
+          const slot = await readSurface("#rail-session");
+          const tabRest = await readSurface("#rail-session-link");
+          expect(slot.image, "slot floor carries no key face gradient").toBe("none");
+          expect(slot.shadow, "slot is a recessed well").toContain("inset");
+          expect(slot.shadow, "slot wears no lower rim").not.toContain("0px 1px 0px 0px");
+          expect(slot.border, "slot mouth is not the seated key's machined contour").not.toBe(
+            resting.get("#rail-nav")!.border,
+          );
+          expect(tabRest.image, "tab face is satin").toContain("linear-gradient");
+          expect(tabRest.shadow, "tab wears no seated rim").not.toContain("0px 1px 0px 0px");
+          expect(tabRest.border, "tab edge is not the machined contour").not.toBe(
+            resting.get("#rail-nav")!.border,
+          );
+          expect(tabRest.border, "slot and tab keep distinct edges").not.toBe(slot.border);
+
+          // At rest the tab sits tucked inside its slot and the slot itself
+          // never moves.
           const session = page.locator("#rail-session");
+          const rowBoxRest = await readBox("#rail-session");
+          const linkBoxRest = await readBox("#rail-session-link");
+          expect(rowBoxRest.right - linkBoxRest.right).toBeGreaterThanOrEqual(3);
+          expect((await readKeyPhysics(session)).transform).toBe("none");
+
+          // Hover pulls the tab toward the content area without moving the
+          // slot; the pulled tab casts a deeper shadow.
           await session.locator("#rail-session-link").hover();
+          await expect
+            .poll(() =>
+              readKeyPhysics(page.locator("#rail-session-link")).then((physics) =>
+                translateX(physics.transform),
+              ),
+            )
+            .toBeGreaterThanOrEqual(2.5);
+          expect(
+            (await readBox("#rail-session-link")).right - linkBoxRest.right,
+          ).toBeGreaterThanOrEqual(2.5);
+          expect((await readBox("#rail-session")).right).toBe(rowBoxRest.right);
+          expect(
+            (await readKeyPhysics(page.locator("#rail-session-link"))).shadow,
+            "pulled tab casts a deeper shadow",
+          ).not.toBe(tabRest.shadow);
+
+          // Press seats the tab back into its slot with the fast land and the
+          // shared groove shadow; release springs and the row stays put.
           await page.mouse.down();
           await settleFrames(page);
-          const rowPressed = await readKeyPhysics(session);
-          expect(transformY(rowPressed.transform)).toBeGreaterThanOrEqual(0.9);
-          expect(rowPressed.shadow).toContain("0px 2px 4px");
+          const tabPressed = await readKeyPhysics(page.locator("#rail-session-link"));
+          expect(translateX(tabPressed.transform)).toBeLessThanOrEqual(0.5);
+          expect(tabPressed.shadow, "pressed tab takes the slot groove").toContain("inset");
+          expect(tabPressed.transformDuration).toBe("0.04s");
+          expect((await readKeyPhysics(session)).transform).toBe("none");
           await page.mouse.up();
           await page.mouse.move(0, 0);
           await page.waitForTimeout(320);
+          expect((await readKeyPhysics(page.locator("#rail-session-link"))).transformTiming).toBe(
+            SPRING,
+          );
+
+          // The current session's tab rests pulled out with no pointer, while
+          // its slot stays stationary.
+          const currentLink = page.locator("#rail-session-current > .sidebar-recent-session__link");
+          await page.mouse.move(4, 860);
+          await settleFrames(page);
+          expect(translateX((await readKeyPhysics(currentLink)).transform)).toBeGreaterThanOrEqual(
+            2.5,
+          );
+          expect((await readKeyPhysics(page.locator("#rail-session-current"))).transform).toBe(
+            "none",
+          );
+
+          // Keyboard focus pulls the tab too and keeps a visible ring on the
+          // tab face.
+          let tabFocused = false;
+          for (let i = 0; i < 80 && !tabFocused; i += 1) {
+            await page.keyboard.press("Tab");
+            tabFocused = await page.evaluate(() => {
+              const active = document.activeElement;
+              return (
+                active instanceof Element &&
+                active.matches("#rail-session-link") &&
+                active.matches(":focus-visible")
+              );
+            });
+          }
+          expect(tabFocused, "keyboard walk reaches the session tab").toBe(true);
+          await expect
+            .poll(() =>
+              readKeyPhysics(page.locator("#rail-session-link")).then((physics) =>
+                translateX(physics.transform),
+              ),
+            )
+            .toBeGreaterThanOrEqual(2.5);
+          const tabFocusRing = await page.locator("#rail-session-link").evaluate((element) => {
+            const style = getComputedStyle(element);
+            return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
+          });
+          expect(tabFocusRing.outlineStyle).toBe("solid");
+          expect(tabFocusRing.outlineWidth).toBe("2px");
+          await page.evaluate(() => {
+            const active = document.activeElement;
+            if (active instanceof HTMLElement) active.blur();
+          });
+          await page.mouse.move(4, 860);
+          await settleFrames(page);
 
           // Hovering the row reveals its inline action key; pressing that key
-          // travels the action's own face while the row stays seated.
+          // travels the action's own face while the tab and slot stay seated.
           const action = page.locator("#rail-session-action");
           await session.hover();
           await expect
@@ -460,6 +574,9 @@ suite.define(() => {
           await settleFrames(page);
           expect(transformY((await readKeyPhysics(action)).transform)).toBeGreaterThanOrEqual(0.9);
           expect((await readKeyPhysics(session)).transform).toBe("none");
+          expect(
+            translateX((await readKeyPhysics(page.locator("#rail-session-link"))).transform),
+          ).toBeGreaterThanOrEqual(2.5);
           await page.mouse.up();
           await page.mouse.move(0, 0);
           await page.waitForTimeout(320);
@@ -538,11 +655,26 @@ suite.define(() => {
             .poll(() => readSurface("#rail-identity").then((surface) => surface.shadow))
             .toContain("0px 2px 4px");
 
-          // The multi-select wash keeps its own seat: distinct contour from the
-          // unselected row's machined neutral.
-          const multi = await readSurface("#rail-session-selected");
-          expect(multi.border).not.toBe(resting.get("#rail-session")!.border);
-          expect(multi.image).toContain("linear-gradient");
+          // The multi-select wash keeps its own seat: an accent-washed tab
+          // face distinct from the resting tab, and no pull — unlike the
+          // current tab, which stays extended beside it.
+          const readFace = (selector: string) =>
+            page.locator(selector).evaluate((element) => getComputedStyle(element).backgroundColor);
+          expect(await readFace("#rail-session-selected > .sidebar-recent-session__link")).not.toBe(
+            await readFace("#rail-session-link"),
+          );
+          expect(
+            translateX(
+              (
+                await readKeyPhysics(
+                  page.locator("#rail-session-selected > .sidebar-recent-session__link"),
+                )
+              ).transform,
+            ),
+          ).toBeLessThanOrEqual(0.5);
+          expect(translateX((await readKeyPhysics(currentLink)).transform)).toBeGreaterThanOrEqual(
+            2.5,
+          );
         },
       );
     },

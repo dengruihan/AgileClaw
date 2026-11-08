@@ -1,3 +1,972 @@
+/* Session pull-out tab system: owned by the lazy sidebar component (this
+   sheet loads after the global bundle, matching the previous layout.css ->
+   components.css -> app-sidebar.css cascade order). */
+.sidebar-session-tree__children {
+  margin-left: var(--sidebar-lead);
+}
+
+.sidebar-session-tree__loading {
+  min-height: var(--sidebar-session-row-min-height);
+  margin-inline: var(--sidebar-text-offset) 2px;
+  clip-path: inset(calc((100% - 10px) / 2) 0 round var(--radius-sm));
+}
+
+.sidebar-session-tree__show-more {
+  min-height: 28px;
+  padding: 6px var(--sidebar-text-offset);
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--control-ui-text-xs);
+  font-weight: 400;
+  text-align: left;
+}
+
+.sidebar-session-tree__show-more:hover,
+.sidebar-session-tree__show-more:focus-visible {
+  color: var(--text);
+}
+
+.sidebar-recent-session--dragging {
+  opacity: 0.45;
+}
+
+/* Every sidebar session source renders a thread. Keep density and text styling
+   here so gateway threads and native coding catalogs cannot drift apart. */
+.sidebar-recent-session {
+  --sidebar-child-session-toggle-width: max(34px, calc(36px * var(--control-ui-text-scale)));
+  /* Pull-out index tab: the row is the stationary recessed slot and the link
+     is the matte tab seated in it. --session-tab-bg is the tab face retinted
+     per state over the slot floor; the satin layer and grip edge stay
+     constant. --session-tab-pull flips for RTL so travel always aims at the
+     content side. */
+  --session-tab-bg: color-mix(in srgb, var(--bg-elevated) 30%, var(--sidebar-bg, var(--bg)));
+  --session-tab-pull: 3px;
+
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: var(--sidebar-session-row-min-height);
+  padding-right: 2px;
+  border: 1px solid color-mix(in srgb, var(--mat-rim) 30%, transparent);
+  border-radius: var(--radius-md);
+  background-color: color-mix(in srgb, var(--bg) 30%, var(--sidebar-bg, var(--bg)));
+  color: var(--muted);
+  cursor: var(--cursor-action);
+  /* Recessed slot floor: the shared groove vocabulary shades the mouth walls
+     under the seated tab. */
+  box-shadow: var(--well-shadow);
+  transition: color var(--duration-fast) ease;
+}
+
+/* The slot's leading stripe marks the seated tab: the session color when set,
+   else the accent seam on the current session's slot. */
+.sidebar-recent-session--colored::before,
+.sidebar-recent-session--active::before {
+  content: "";
+  position: absolute;
+  inset-block: 5px;
+  inset-inline-start: 1px;
+  width: 2px;
+  border-radius: var(--radius-full);
+  background: var(--session-color, color-mix(in srgb, var(--accent) 78%, transparent));
+  pointer-events: none;
+}
+
+.sidebar-recent-session:hover {
+  --session-tab-bg: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
+
+  color: var(--text);
+}
+
+/* Hover, keyboard focus, and the current session pull the tab a few pixels
+   toward the content area; the current seat stays pulled at rest. Doubled
+   class outranks hover so the current tab's accent face does not degrade
+   while the row is under pointer. */
+.sidebar-recent-session.sidebar-recent-session--active {
+  --session-tab-bg: color-mix(in srgb, var(--accent-subtle) 88%, var(--bg-elevated) 12%);
+
+  color: var(--text-strong);
+}
+
+/* Multi-select is an accent wash that stays tucked: no pull, so it remains
+   distinguishable from the current tab by hue and by seat. */
+.sidebar-recent-session.sidebar-recent-session--selected {
+  --session-tab-bg: color-mix(in srgb, var(--accent) 14%, var(--sidebar-bg, var(--bg)));
+
+  color: var(--text-strong);
+}
+
+/* Pull travel lives on the tab, never on the slot. */
+.sidebar-recent-session:hover > .sidebar-recent-session__link,
+.sidebar-recent-session--active > .sidebar-recent-session__link,
+.sidebar-recent-session > .sidebar-recent-session__link:focus-visible {
+  transform: translateX(var(--session-tab-pull));
+  box-shadow: var(--shadow-md);
+}
+
+/* Pressing the tab seats it back into its slot: the pull collapses and the
+   face takes the shared groove shadow. Inline action keys keep their own
+   travel and never move the tab or the slot. */
+.sidebar-recent-session > .sidebar-recent-session__link:active {
+  transform: translateX(0);
+  box-shadow: var(--well-shadow);
+  transition-duration: var(--duration-press);
+}
+
+/* Matte coated-card tab: one hairline edge and a satin face over the
+   retintable color, with a short contact shadow — no dome bevel and no solid
+   rim, so it never reads as the nav rail's key chrome. The pull grip is a
+   matte band painted on the face's pull side so it costs no reading width. */
+.sidebar-recent-session__link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sidebar-row-gap);
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: calc(var(--sidebar-session-row-min-height) - 2px);
+  margin-block: 1px;
+  margin-inline: 2px 4px;
+  padding: var(--sidebar-session-link-padding-block) 2px var(--sidebar-session-link-padding-block)
+    calc(var(--sidebar-inset) - 2px);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 42%, transparent);
+  border-radius: var(--radius-sm);
+  background-color: var(--session-tab-bg);
+  background-image: var(--raise-face);
+  color: inherit;
+  box-shadow: var(--shadow-sm);
+  transition:
+    background var(--duration-fast) ease,
+    box-shadow var(--duration-release) var(--ease-spring),
+    transform var(--duration-release) var(--ease-spring);
+}
+
+/* Integrated pull grip: a matte band on the tab's pull edge (logical, so it
+   flips with direction). */
+.sidebar-recent-session__link::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 9px;
+  border-start-end-radius: var(--radius-sm);
+  border-end-end-radius: var(--radius-sm);
+  background: var(--mat-face-lo);
+  pointer-events: none;
+}
+
+:root[dir="rtl"] .sidebar-recent-session {
+  --session-tab-pull: -3px;
+}
+
+/* Session rows sit flush with the horizontal clip that protects the sidebar
+   scroller. Keep their focus outline inside the link box so its leading edge
+   remains visible. */
+.sidebar-recent-session__link:focus-visible {
+  outline-offset: -2px;
+}
+
+.sidebar-child-session-toggle {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: var(--sidebar-child-session-toggle-width, 31px);
+  height: var(--sidebar-session-row-min-height);
+  flex: 0 0 var(--sidebar-child-session-toggle-width, 31px);
+  padding: 0 3px;
+  /* Small seated disclosure key, quieter than the row it sits on. */
+  border: 1px solid color-mix(in srgb, var(--border-strong) 34%, var(--sidebar-bg, var(--bg)));
+  border-radius: var(--radius-sm);
+  background-color: color-mix(in srgb, var(--bg-elevated) 24%, var(--sidebar-bg, var(--bg)));
+  background-image: var(--raise-face);
+  color: var(--muted);
+  box-shadow: var(--key-shadow);
+  transition:
+    border-color var(--duration-fast) ease,
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    opacity var(--duration-fast) ease,
+    box-shadow var(--duration-release) var(--ease-spring),
+    transform var(--duration-release) var(--ease-spring);
+}
+
+/* Expanded parents already show their children below, so the collapse control
+   is quiet until row hover; collapsed toggles stay visible because the count
+   and status tint are the only signal that hidden children exist. The state
+   rule restates only the reveal, never the transition: the seated-key
+   transition above must keep animating the key's press in the expanded
+   state too. */
+.sidebar-child-session-toggle[aria-expanded="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.session-row-host:hover .sidebar-child-session-toggle[aria-expanded="true"],
+.session-row-host:focus-within .sidebar-child-session-toggle[aria-expanded="true"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Touch has no hover: keep the collapse control usable, matching the
+   session-action touch override in components.css. */
+@media (hover: none), (pointer: coarse) {
+  .sidebar-child-session-toggle[aria-expanded="true"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.sidebar-child-session-toggle:hover,
+.sidebar-child-session-toggle:focus-visible {
+  border-color: color-mix(in srgb, var(--border-hover) 55%, var(--sidebar-bg, var(--bg)));
+  background-color: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
+  color: var(--text);
+  box-shadow: var(--key-shadow-hover);
+}
+
+.sidebar-child-session-toggle:active:not(:disabled) {
+  box-shadow: var(--press-shadow);
+  transform: translateY(var(--press-shift));
+  transition-duration: var(--duration-press);
+}
+
+.sidebar-child-session-toggle--running {
+  color: var(--accent);
+}
+
+.sidebar-child-session-toggle--failed {
+  color: var(--danger);
+}
+
+.sidebar-child-session-toggle__icon {
+  display: inline-flex;
+}
+
+.sidebar-child-session-toggle__count {
+  min-width: 9px;
+  font-size: calc(9px * var(--control-ui-text-scale));
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.viewer-facepile--session {
+  margin-left: 1px;
+}
+
+.sidebar-recent-session__name {
+  display: block;
+  width: 100%;
+  line-height: var(--sidebar-title-line-height);
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+  font-size: calc(13px * var(--control-ui-text-scale));
+  font-weight: 500;
+  color: var(--text);
+}
+
+.sidebar-recent-sessions
+  .sidebar-recent-session--child
+  .sidebar-recent-session__link
+  > :not(.sidebar-session-indicator):not(.sidebar-recent-session__text) {
+  margin-left: 6px;
+}
+
+.sidebar-recent-session--child .sidebar-recent-session__name {
+  font-size: var(--control-ui-text-sm);
+}
+
+.sidebar-recent-session--child .session-row-trail {
+  font-size: calc(10px * var(--control-ui-text-scale));
+}
+
+.sidebar-child-session__status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.sidebar-child-session__status--done {
+  color: var(--ok);
+}
+
+.sidebar-child-session__status--failed,
+.sidebar-child-session__status--timeout {
+  color: var(--danger);
+}
+
+.sidebar-child-session__status svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8px;
+}
+
+.sidebar-recent-session--active .sidebar-recent-session__name {
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+.sidebar-recent-session__aside {
+  padding-right: 2px;
+}
+
+.sidebar-recent-session:not(.sidebar-recent-session--child) > .sidebar-recent-session__aside {
+  position: absolute;
+  inset: 50% 2px auto auto;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.sidebar-recent-session:not(.sidebar-recent-session--child, .sidebar-recent-session--single-line)
+  > .sidebar-recent-session__link {
+  padding-block: 1px;
+}
+
+.sidebar-recent-session:not(.sidebar-recent-session--child, .sidebar-recent-session--single-line)
+  > .sidebar-recent-session__aside {
+  inset: calc(1px + max(24px, var(--sidebar-title-line-height)) / 2) 2px auto auto;
+}
+
+.sidebar-recent-session--child > .sidebar-recent-session__aside {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex: 0 0 24px;
+  padding-right: 0;
+  pointer-events: none;
+}
+
+/* Rows with a child toggle keep it as the rightmost in-flow control; the
+   overlaid actions land just left of it, at the link's right edge — the
+   same link-relative geometry as toggle-less rows, so one mask fits both. */
+.sidebar-recent-session:not(.sidebar-recent-session--child):has(> .sidebar-child-session-toggle)
+  > .sidebar-recent-session__aside {
+  right: calc(var(--sidebar-child-session-toggle-width) + 4px);
+}
+
+.sidebar-recent-session:not(
+    .sidebar-recent-session--child,
+    .sidebar-recent-session--single-line
+  ):is(:hover, :focus-within)
+  .sidebar-recent-session__title-row {
+  padding-right: var(--session-row-actions-reserve);
+}
+
+.sidebar-recent-session--single-line:not(.sidebar-recent-session--child):is(:hover, :focus-within)
+  .sidebar-recent-session__text {
+  padding-right: var(--session-row-actions-reserve);
+}
+
+/* Hover actions replace trailing PR badges; leading state and second-line metadata stay visible. */
+.sidebar-recent-session--single-line:not(.sidebar-recent-session--child):is(:hover, :focus-within)
+  :is(
+    .session-row-badge--pull-request,
+    .session-row-badges:has(> openclaw-tooltip:only-child > .session-row-badge--pull-request)
+  ) {
+  display: none;
+}
+
+/* Pinned sessions share the page-nav chrome (seated key states, muted glyphs
+   and meta) while retaining session actions. The title deliberately opts out
+   and keeps the list's --text: a session name is content in both zones, and
+   pinning a row must not make it read as dimmer than the same row further
+   down. The pull-out tab construction is inherited from
+   .sidebar-recent-session; the row padding compensates for the tab margins so
+   the zone face stays on the list's text grid. */
+.sidebar-zone-entry .sidebar-recent-session {
+  min-height: max(32px, var(--sidebar-session-row-min-height));
+  padding: 0 6px;
+}
+
+.sidebar-zone-entry .sidebar-recent-session__link {
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.sidebar-zone-entry .sidebar-recent-session__aside {
+  padding-right: 0;
+}
+
+.sidebar-session-indicator {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.sidebar-recent-sessions .sidebar-session-indicator {
+  width: var(--sidebar-lead);
+  flex-basis: var(--sidebar-lead);
+}
+
+.sidebar-session-indicator > .session-row-draft-indicator:not(:only-child) {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  font-size: 6px;
+}
+
+.sidebar-recent-session__text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sidebar-session-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.sidebar-session-tool > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sidebar-recent-session__title-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.sidebar-recent-session:not(.sidebar-recent-session--child, .sidebar-recent-session--single-line)
+  .sidebar-recent-session__title-row {
+  height: max(24px, var(--sidebar-title-line-height));
+}
+
+.sidebar-recent-session--single-line .sidebar-recent-session__title-row {
+  flex: 1 1 0;
+}
+
+.sidebar-recent-session__details {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 18px;
+  min-width: 0;
+}
+
+/* No-preview rows collapse to one line so the endcap rides beside the title. */
+.sidebar-recent-session--single-line .sidebar-recent-session__text {
+  flex-direction: row;
+  align-items: center;
+  gap: calc(var(--sidebar-row-gap) + var(--sidebar-row-gap));
+}
+
+/* Basis 0 mirrors the two-line subtitle contract: the title absorbs all
+   shrink, so the icon endcap keeps its intrinsic width until it alone
+   exceeds the row. Basis auto let long titles crush the endcap to ~0. */
+.sidebar-recent-session--single-line .sidebar-recent-session__name {
+  width: auto;
+  flex: 1 1 0;
+}
+
+.sidebar-recent-session--single-line > .sidebar-recent-session__aside {
+  top: 0;
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-recent-session__subtitle {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--control-ui-text-xs);
+  line-height: 18px;
+  color: var(--muted);
+}
+
+.sidebar-recent-session__channel {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 120px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--control-ui-text-xs);
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-recent-session__details-endcap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  height: 18px;
+  min-width: 0;
+  overflow: hidden;
+  flex: 0 1 auto;
+  margin-left: auto;
+}
+
+.sidebar-recent-session.sidebar-recent-session--attention-amber .sidebar-recent-session__name,
+.sidebar-recent-session.sidebar-recent-session--attention-amber .sidebar-recent-session__subtitle {
+  color: color-mix(in srgb, var(--warn) 82%, var(--text));
+}
+
+.sidebar-recent-session.sidebar-recent-session--attention-danger .sidebar-recent-session__name,
+.sidebar-recent-session.sidebar-recent-session--attention-danger .sidebar-recent-session__subtitle {
+  color: color-mix(in srgb, var(--danger) 86%, var(--text));
+}
+
+.sidebar-recent-session__subtitle--narration {
+  animation: sidebar-narration-arrive var(--duration-fast) ease-out;
+}
+
+@keyframes sidebar-narration-arrive {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sidebar-recent-session .session-owner-chip--row {
+  border: 0;
+  box-shadow: none;
+}
+
+.session-owner-stack {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  width: 28px;
+  height: 20px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.session-owner-stack__back {
+  position: absolute;
+  left: 0;
+  display: inline-flex;
+}
+
+.session-owner-stack__back .viewer-avatar,
+.session-owner-stack__overflow {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--sidebar-bg, var(--bg));
+  border-radius: var(--radius-full);
+  font-size: 9px;
+}
+
+.session-owner-stack__overflow {
+  display: grid;
+  place-items: center;
+  /* Follow the tab fill while keeping the overlapping primary behind an opaque face. */
+  background:
+    linear-gradient(color-mix(in srgb, var(--text-strong) 16%, transparent) 0 0),
+    linear-gradient(var(--session-tab-bg, transparent) 0 0), var(--sidebar-bg, var(--bg));
+  color: var(--text-strong);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.session-owner-stack__front {
+  position: relative;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  font-size: 9px;
+}
+
+.sidebar-recent-session .session-owner-stack__front,
+.sidebar-recent-session .session-owner-stack__back .viewer-avatar,
+.sidebar-recent-session .session-owner-stack__overflow {
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Compose the row's translucent fill over its surface, outside the front face's
+   away filter/opacity. The mask leaves only the 1px cutout. */
+.sidebar-recent-session .session-owner-stack::before,
+.sidebar-recent-session .session-owner-stack::after {
+  content: "";
+  position: absolute;
+  inset-block: 1px;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 18px;
+  border: 1px solid var(--session-tab-bg);
+  border-radius: var(--radius-full);
+  background: var(--sidebar-bg, var(--bg));
+  mask:
+    linear-gradient(white 0 0) padding-box,
+    linear-gradient(white 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  transition: border-color var(--duration-fast) ease;
+}
+
+.sidebar-recent-session .session-owner-stack::before {
+  left: 0;
+}
+
+.sidebar-recent-session .session-owner-stack::after {
+  right: 0;
+}
+
+.session-owner-stack--overflow {
+  justify-content: flex-start;
+}
+
+.session-owner-stack--overflow .session-owner-stack__back {
+  right: 0;
+  left: auto;
+  z-index: 2;
+}
+
+.sidebar-recent-session .session-owner-stack__overflow {
+  border-color: color-mix(in srgb, var(--text-strong) 8%, transparent);
+  background-clip: border-box;
+}
+
+/* Session rows reserve hover-action space while keeping activity in the leading slot. */
+.session-row-host {
+  --session-row-actions-reserve: 52px;
+  position: relative;
+}
+
+.session-row-host[data-session-row-action-count="1"] {
+  --session-row-actions-reserve: 28px;
+}
+
+.session-row-host--draft {
+  --draft-row-opacity: 1;
+  opacity: var(--draft-row-opacity);
+}
+
+.session-row-host--draft-owner .session-row-draft-indicator {
+  opacity: 0.55;
+}
+
+.session-row-host--draft-other {
+  --session-tab-bg: color-mix(in srgb, var(--bg-muted) 44%, var(--sidebar-bg, var(--bg)));
+  --draft-row-opacity: 0.58;
+}
+
+.session-row-host--draft-other:hover,
+.session-row-host--draft-other:focus-within,
+.session-row-host--draft-other.sidebar-recent-session--selected {
+  --draft-row-opacity: 0.88;
+}
+
+.session-row-draft-indicator {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--bg-elevated) 72%, transparent);
+  font-size: 12px;
+}
+
+.session-row-aside {
+  display: grid;
+  align-items: center;
+  justify-items: end;
+  flex: 0 0 auto;
+}
+
+.session-row-aside > * {
+  grid-area: 1 / 1;
+}
+
+.session-row-trail {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--control-ui-text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition: opacity var(--duration-fast) ease;
+  /* Display-only, and its opacity transition forms a stacking context that
+     would otherwise sit above the action buttons and swallow their clicks. */
+  pointer-events: none;
+}
+
+.sidebar-session-fork-indicator {
+  display: inline-flex;
+  margin-right: 4px;
+  color: var(--muted);
+  vertical-align: -2px;
+}
+
+.sidebar-session-fork-indicator svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6px;
+}
+
+/* Attribute badges (approval, cloud placement):
+   muted metadata grouped in the row's second-line endcap. */
+.session-row-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.session-row-badge {
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+}
+
+.session-row-badge--attention,
+.session-row-badge--approval {
+  gap: 2px;
+  color: var(--warn);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-row-badge--pull-request[data-pull-request-state="open"],
+.session-row-badge--cloud[data-placement-state="active"] {
+  color: var(--ok);
+}
+
+.session-row-badge--pull-request[data-pull-request-state="merged"] {
+  color: var(--pr-merged);
+}
+
+.session-row-badge--cloud[data-placement-state="failed"],
+.session-row-badge--cloud[data-disk-space-status="critical"] {
+  color: var(--danger);
+}
+
+.session-row-badge--cloud:is(
+  [data-placement-state="requested"],
+  [data-placement-state="provisioning"],
+  [data-placement-state="syncing"],
+  [data-placement-state="starting"],
+  [data-placement-state="draining"],
+  [data-placement-state="reconciling"]
+) {
+  color: var(--accent);
+}
+
+.session-row-badge--cloud[data-workspace-conflicts],
+.session-row-badge--cloud[data-disk-space-status="warning"] {
+  color: var(--warn);
+}
+
+.session-row-badge svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.session-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.session-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  /* Small seated key riding the row's face; the reveal contract below is
+     unchanged. */
+  border: 1px solid color-mix(in srgb, var(--border-strong) 34%, var(--sidebar-bg, var(--bg)));
+  border-radius: var(--radius-sm);
+  background-color: color-mix(in srgb, var(--bg-elevated) 24%, var(--sidebar-bg, var(--bg)));
+  background-image: var(--raise-face);
+  color: var(--muted);
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: var(--key-shadow);
+  transition:
+    opacity var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    box-shadow var(--duration-release) var(--ease-spring),
+    transform var(--duration-release) var(--ease-spring);
+}
+
+.session-action svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.session-action--touch-menu {
+  display: none;
+}
+
+.session-action:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--border-hover) 55%, var(--sidebar-bg, var(--bg)));
+  background-color: color-mix(in srgb, var(--bg-hover) 88%, var(--sidebar-bg, var(--bg)));
+  color: var(--text);
+  box-shadow: var(--key-shadow-hover);
+}
+
+.session-action:active:not(:disabled) {
+  box-shadow: var(--press-shadow);
+  transform: translateY(var(--press-shift));
+  transition-duration: var(--duration-press);
+}
+
+.session-action:disabled {
+  cursor: not-allowed;
+}
+
+.session-row-host:hover .session-action,
+.session-row-host:focus-within .session-action {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Disabled actions still surface on hover (dimmed) so the tooltip can
+   explain why archiving is unavailable instead of the button vanishing. */
+.session-row-host:hover .session-action:disabled,
+.session-row-host:focus-within .session-action:disabled {
+  opacity: 0.35;
+  pointer-events: auto;
+}
+
+/* Touch devices need tappable actions, including a menu without right-click. */
+@media (hover: none), (pointer: coarse) {
+  .sidebar-recent-session.session-row-host:has(.session-action--touch-menu) {
+    --session-row-actions-reserve: 92px;
+  }
+
+  .sidebar-recent-session.session-row-host[data-session-row-action-count="1"] {
+    --session-row-actions-reserve: 48px;
+  }
+
+  .sidebar-recent-session:has(.session-action--touch-menu):has([data-sidebar-session-pin]) {
+    --session-row-actions-reserve: 136px;
+  }
+
+  .session-action--touch-menu {
+    display: inline-flex;
+  }
+
+  .sidebar-recent-session .session-action {
+    width: 44px;
+    height: 44px;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sidebar-recent-session .session-action:disabled {
+    opacity: 0.35;
+  }
+}
+
+/* A tablet rail sits beside a cramped content column. Hover-only controls keep
+   their documented touch space, so the title wraps to a second line instead of
+   collapsing to a few glyphs; the rail is also floored (shell-nav-width). */
+@media (min-width: 933px) and (max-width: 1320px) and (pointer: coarse) {
+  /* Secondary row buttons stay reachable but give the title their surplus:
+     both actions also live in the row menu, whose 44px target is unchanged. */
+  .sidebar-recent-session.session-row-host:has(.session-action--touch-menu) {
+    --session-row-actions-reserve: 92px;
+  }
+
+  .sidebar-recent-session :is([data-sidebar-session-pin], [data-sidebar-session-archive]) {
+    width: 32px;
+    height: 32px;
+  }
+
+  .sidebar-recent-session:not(.sidebar-recent-session--child) .sidebar-recent-session__title-row {
+    height: auto;
+  }
+
+  .sidebar-recent-session:not(.sidebar-recent-session--child) .sidebar-recent-session__name {
+    display: -webkit-box;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    mask-image: none;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .sidebar-recent-session:not(.sidebar-recent-session--child)
+    .sidebar-recent-session__name
+    > .hover-marquee__text {
+    display: block;
+    width: auto;
+    white-space: normal;
+    transform: none;
+    transition: none;
+  }
+}
+
+.session-row-host--pinned .session-action--pin svg {
+  fill: currentColor;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .sidebar-recent-session {
+    --sidebar-child-session-toggle-width: max(44px, calc(36px * var(--control-ui-text-scale)));
+  }
+
+  /* The tab keeps the full row as its touch target: drop the slot lips. */
+  .sidebar-recent-session > .sidebar-recent-session__link {
+    margin-block: 0;
+    min-height: var(--sidebar-session-row-min-height);
+  }
+
+  .sidebar-recent-session:not(.sidebar-recent-session--child, .sidebar-recent-session--single-line)
+    > .sidebar-recent-session__aside {
+    inset: 50% 2px auto auto;
+  }
+
+  .sidebar-recent-session:not(.sidebar-recent-session--child) .sidebar-recent-session__text {
+    padding-right: var(--session-row-actions-reserve);
+  }
+
+  .sidebar-recent-session:not(.sidebar-recent-session--child) .sidebar-recent-session__title-row {
+    padding-right: 0;
+  }
+}
+
 .shell--mobile-nav .sidebar-shell {
   --sidebar-session-row-floor: 44px;
   --sidebar-inset: 2px;
@@ -20,6 +989,12 @@
 /* The mobile drawer keeps management actions in its always-reachable menu. */
 .shell--mobile-nav .sidebar-recent-session {
   padding-right: 0;
+
+  /* The drawer tab seats flush: no mouth gap, so titles keep their full
+     reading width inside the drawer. */
+  > .sidebar-recent-session__link {
+    margin-inline: 0;
+  }
 
   &.session-row-host {
     --session-row-actions-reserve: 48px;
