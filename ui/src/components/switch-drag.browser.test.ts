@@ -328,3 +328,91 @@ it("cleans up a live gesture when the element disconnects", async () => {
   expect(changes).toEqual([]);
   expect(parts(f.element).thumb.style.translate).toBe("");
 });
+
+it("commits a short flick below the midpoint by its fresh direction", async () => {
+  const changes: boolean[] = [];
+  const f = await fixture({
+    checked: true,
+    onChange: (checked) => {
+      changes.push(checked);
+    },
+  });
+  const start = geometry(f.element);
+  // Fast motion past the tap radius but short of the positional midpoint:
+  // the fresh direction must commit the off pole, while a position-only
+  // release would keep the switch checked.
+  const dx = Math.min(Math.max(start.travelHalf * 0.8, 4.5), start.travelHalf);
+  pointer(f.element, "pointerdown", start.thumbCenterX);
+  pointer(f.element, "pointermove", start.thumbCenterX - dx * 0.5);
+  pointer(f.element, "pointermove", start.thumbCenterX - dx);
+  pointer(f.element, "pointerup", start.thumbCenterX - dx);
+  expect(f.element.checked).toBe(false);
+  expect(changes).toEqual([false]);
+});
+
+it("uses position alone when the pointer rests before releasing", async () => {
+  const changes: boolean[] = [];
+  const f = await fixture({
+    checked: true,
+    onChange: (checked) => {
+      changes.push(checked);
+    },
+  });
+  const start = geometry(f.element);
+  pointer(f.element, "pointerdown", start.thumbCenterX);
+  pointer(f.element, "pointermove", start.thumbCenterX - start.travelHalf);
+  // Hold still past the 90ms flick window (plus margin): velocity measured
+  // against the release time must read zero, leaving position to decide.
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 115);
+  });
+  pointer(f.element, "pointerup", start.thumbCenterX - start.travelHalf);
+  expect(f.element.checked).toBe(true);
+  expect(changes).toEqual([]);
+});
+
+it("calibrates poles when a second drag grabs the thumb mid-snap", async () => {
+  const changes: boolean[] = [];
+  const f = await fixture({
+    checked: true,
+    onChange: (checked) => {
+      changes.push(checked);
+    },
+  });
+  const settled = geometry(f.element);
+  // A short fast flick commits the off pole while the thumb barely moved:
+  // the settle animation then throws it from the checked side to the off
+  // pole, so a follow-up grab really catches it mid-flight.
+  pointer(f.element, "pointerdown", settled.thumbCenterX);
+  pointer(f.element, "pointermove", settled.thumbCenterX - 2);
+  pointer(f.element, "pointerup", settled.thumbCenterX - 3);
+  expect(f.element.checked).toBe(false);
+  expect(changes).toEqual([false]);
+
+  // Freeze the settle animation on its first frame: checked is already false
+  // while the rendered thumb still sits on the checked side.
+  const { thumb } = parts(f.element);
+  let snap: CSSTransition | undefined;
+  await expect
+    .poll(() => {
+      snap = thumb
+        .getAnimations()
+        .find((animation): animation is CSSTransition => animation instanceof CSSTransition);
+      return snap ?? null;
+    })
+    .toBeTruthy();
+  snap!.pause();
+  snap!.currentTime = 0;
+
+  // A flick back toward the checked pole right after the grab must read its
+  // poles from the track, not from the frozen in-flight thumb offset. The
+  // displacement exceeds the tap radius so only calibrated poles can commit.
+  const midSnap = geometry(f.element);
+  pointer(f.element, "pointerdown", midSnap.thumbCenterX);
+  pointer(f.element, "pointermove", midSnap.thumbCenterX + 2);
+  pointer(f.element, "pointermove", midSnap.thumbCenterX + 4.5);
+  pointer(f.element, "pointerup", midSnap.thumbCenterX + 4.5);
+  expect(f.element.checked).toBe(true);
+  expect(changes).toEqual([false, true]);
+  snap!.cancel();
+});

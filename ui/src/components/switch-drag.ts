@@ -100,32 +100,32 @@ class SwitchDragDirective extends AsyncDirective {
 
   private readonly onPointerUp = (event: PointerEvent) => {
     if (this.gesture && event.pointerId === this.gesture.pointerId) {
-      this.settle(event.clientX);
+      this.settle(event.clientX, event.timeStamp);
     }
   };
 
   private readonly onPointerCancel = (event: PointerEvent) => {
     if (this.gesture && event.pointerId === this.gesture.pointerId) {
-      this.settle(null);
+      this.settle(null, event.timeStamp);
     }
   };
 
   private readonly onLostPointerCapture = () => {
     // Capture is lost after pointerup too; only an unreleased capture cancels.
     if (this.gesture !== null) {
-      this.settle(null);
+      this.settle(null, 0);
     }
   };
 
   private readonly onFocusOut = () => {
     if (this.gesture !== null) {
-      this.settle(null);
+      this.settle(null, 0);
     }
   };
 
   private readonly onWindowBlur = () => {
     if (this.gesture !== null) {
-      this.settle(null);
+      this.settle(null, 0);
     }
   };
 
@@ -180,7 +180,7 @@ class SwitchDragDirective extends AsyncDirective {
 
   private detachAll() {
     if (this.gesture && this.element) {
-      this.settle(null);
+      this.settle(null, 0);
     }
     this.disarmClickBlocker();
     if (this.element && this.attached) {
@@ -197,20 +197,26 @@ class SwitchDragDirective extends AsyncDirective {
       return null;
     }
     const thumbBox = thumb.getBoundingClientRect();
-    const controlBox = control.getBoundingClientRect();
-    if (controlBox.width <= 0 || controlBox.height <= 0 || thumbBox.width <= 0) {
+    if (thumbBox.width <= 0) {
       return null;
     }
+    // Poles are fixed by the track's own width/height — the exact values the
+    // shadow CSS feeds into `translate: calc((width - height) / 2)` — and by
+    // direction, never by the thumb's animated position: a grab mid-snap must
+    // not record the in-flight offset as a pole (it used to invert them).
+    const controlStyles = getComputedStyle(control);
+    const width = Number.parseFloat(controlStyles.width);
+    const height = Number.parseFloat(controlStyles.height);
+    const travelHalf = Math.abs(width - height) / 2;
+    if (!(travelHalf > 0)) {
+      return null;
+    }
+    const checkedOffset = controlStyles.direction === "rtl" ? -travelHalf : travelHalf;
+    const controlBox = control.getBoundingClientRect();
     const startOffset =
       thumbBox.left + thumbBox.width / 2 - (controlBox.left + controlBox.width / 2);
-    const travelHalf = Math.abs(startOffset);
-    if (travelHalf <= 0) {
-      return null;
-    }
-    // The switch is symmetric about the track center, so the opposite pole is
-    // exactly mirrored; this self-calibrates through RTL and custom geometry.
     return {
-      checkedOffset: element.checked ? startOffset : -startOffset,
+      checkedOffset,
       startOffset,
       thumb,
       travelHalf,
@@ -224,9 +230,12 @@ class SwitchDragDirective extends AsyncDirective {
     }
   }
 
-  private releaseSpeed(): number {
-    const oldest = this.samples[0];
-    const newest = this.samples[this.samples.length - 1];
+  private releaseSpeed(samples: Array<{ t: number; x: number }>, releaseT: number): number {
+    // The window is measured back from the release: a stationary hold between
+    // the last move and the pointerup must not inherit the earlier velocity.
+    const windowStart = releaseT - FLICK_WINDOW_MS;
+    const oldest = samples.find((sample) => sample.t >= windowStart);
+    const newest = samples[samples.length - 1];
     if (!oldest || !newest || newest === oldest) {
       return 0;
     }
@@ -239,9 +248,14 @@ class SwitchDragDirective extends AsyncDirective {
     return Math.min(gesture.travelHalf, Math.max(-gesture.travelHalf, offset));
   }
 
-  private decidePole(gesture: DragGesture, element: DraggableSwitch, endX: number): boolean {
+  private decidePole(
+    gesture: DragGesture,
+    element: DraggableSwitch,
+    endX: number,
+    releaseT: number,
+  ): boolean {
     const dx = endX - gesture.startPointerX;
-    const speed = this.releaseSpeed();
+    const speed = this.releaseSpeed(this.samples, releaseT);
     if (Math.abs(dx) < TAP_RADIUS_PX && Math.abs(speed) < FLICK_SPEED_PX_PER_MS) {
       // Press without meaningful motion: mirror the native click toggle.
       return !element.checked;
@@ -253,18 +267,18 @@ class SwitchDragDirective extends AsyncDirective {
     const plusDistance = gesture.travelHalf - offset;
     const minusDistance = offset + gesture.travelHalf;
     if (plusDistance === minusDistance) {
-      // Dead center: keep the pole the gesture started on.
-      return gesture.startOffset === gesture.checkedOffset;
+      // Dead center: keep the committed pole.
+      return element.checked;
     }
     return plusDistance < minusDistance === gesture.checkedOffset > 0;
   }
 
-  /** Ends the gesture: endX is the release pointer X, or null to cancel. */
-  private settle(endX: number | null) {
+  /** Ends the gesture: endX/endT are the release pointer position and time, or
+   * null to cancel. The samples survive until the pole verdict is made. */
+  private settle(endX: number | null, releaseT: number) {
     const gesture = this.gesture;
     const element = this.element;
     this.gesture = null;
-    this.samples = [];
     if (this.snapFrame) {
       cancelAnimationFrame(this.snapFrame);
       this.snapFrame = 0;
@@ -286,17 +300,25 @@ class SwitchDragDirective extends AsyncDirective {
     }
     this.armClickBlocker();
     if (!gesture || !element) {
+      this.samples = [];
       return;
     }
     const { thumb } = gesture;
-    if (endX === null || element.disabled) {
+    let target: boolean | null = null;
+    if (endX !== null && !element.disabled) {
+      // The release itself is the freshest velocity sample; decide the pole
+      // while the samples are still alive.
+      this.samples.push({ t: releaseT, x: endX });
+      target = this.decidePole(gesture, element, endX, releaseT);
+    }
+    this.samples = [];
+    if (target === null) {
       // Restore the committed pole; the stylesheet owns the settle animation
       // (and reduced-motion timing) again from here on.
       thumb.style.transition = "";
       thumb.style.translate = "";
       return;
     }
-    const target = this.decidePole(gesture, element, endX);
     const changed = element.checked !== target;
     // Re-enable the stylesheet transition and park the thumb on the target
     // pole in the same recalc, so the snap animates from the released
