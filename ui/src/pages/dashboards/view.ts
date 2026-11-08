@@ -19,10 +19,11 @@ import {
 import "../../styles/dashboards.css";
 import "./dashboard-preview.ts";
 import {
-  renderMonitoring,
-  type MonitoringPanelsState,
-  type MonitoringViewState,
-} from "./monitoring-view.ts";
+  renderMarketplace,
+  renderMarketplaceTrigger,
+  type MarketplaceState,
+} from "./marketplace-view.ts";
+import { renderMonitoring, type MonitoringViewState } from "./monitoring-view.ts";
 
 export type DashboardsRouteData = {
   result: SessionsListResult | null;
@@ -298,6 +299,10 @@ function renderDashboardGallerySkeleton() {
   </section>`;
 }
 
+/**
+ * The monitoring region renders only while its preset is installed: the page
+ * passes the owner it created for the install, and removal withdraws it.
+ */
 export function renderDashboards(
   data: DashboardsRouteData | undefined,
   filters: DashboardGalleryFilters = DEFAULT_FILTERS,
@@ -305,7 +310,7 @@ export function renderDashboards(
   gatewaySnapshot?: ApplicationGatewaySnapshot,
   previewError: string | null = null,
   monitoring?: MonitoringViewState,
-  panels?: MonitoringPanelsState,
+  marketplace?: MarketplaceState,
 ) {
   const body =
     data && (data.result || data.error)
@@ -330,15 +335,19 @@ export function renderDashboards(
         <h1 class="page-title">${titleForRoute("dashboards")}</h1>
         <div class="page-subtitle">${t("subtitles.dashboards")}</div>
       </div>
-      ${
-        data?.result
-          ? html`<div class="dashboards-header__count">
-              <strong>${data.result.sessions.length}</strong>
-              <span>${t("dashboardsPage.totalLabel")}</span>
-            </div>`
-          : nothing
-      }
+      <div class="dashboards-header__actions">
+        ${
+          data?.result
+            ? html`<div class="dashboards-header__count">
+                <strong>${data.result.sessions.length}</strong>
+                <span>${t("dashboardsPage.totalLabel")}</span>
+              </div>`
+            : nothing
+        }
+        ${renderMarketplaceTrigger(marketplace)}
+      </div>
     </section>
-    ${renderSettingsWorkspace(html`${renderMonitoring(monitoring, panels)} ${body}`)}
+    ${renderSettingsWorkspace(html`${renderMonitoring(monitoring)} ${body}`)}
+    ${marketplace?.open ? renderMarketplace(marketplace) : nothing}
   `;
 }
