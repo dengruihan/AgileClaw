@@ -115,6 +115,9 @@ it("tracks the pointer with the thumb and commits the pole under the release", a
   expect(tracking.thumbCenterX).toBeGreaterThan(start.thumbCenterX + 2);
   expect(parts(f.element).thumb.style.transition).toBe("none");
   expect(parts(f.element).thumb.style.translate).not.toBe("");
+  // The material's document ::part(thumb) spring transition must stay
+  // suppressed while held: tracking is instantaneous, with nothing animating.
+  expect(parts(f.element).thumb.getAnimations()).toEqual([]);
 
   pointer(f.element, "pointerup", start.trackCenterX + start.travelHalf + 12);
   expect(f.element.checked).toBe(true);
