@@ -294,22 +294,32 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
         const primaryBounds = primary.getBoundingClientRect();
         const peerBounds = peer.getBoundingClientRect();
         const stackBounds = stack.getBoundingClientRect();
-        expect([stackBounds.width, stackBounds.height]).toEqual([28, 20]);
+        // Hover and the active seat pull the tab (a transform on the link).
+        // While that transform or its spring transition is live, Blink maps
+        // descendant rects through a float32 matrix, so the exactly-laid-out
+        // sizes read with float32 epsilon. The geometry contract stays exact
+        // to five decimals; heights carry no x transform and stay exact.
+        expect(stackBounds.width).toBeCloseTo(28, 5);
+        expect(stackBounds.height).toBe(20);
         for (const bounds of [primaryBounds, peerBounds]) {
-          expect([bounds.width, bounds.height]).toEqual([18, 18]);
+          expect(bounds.width).toBeCloseTo(18, 5);
+          expect(bounds.height).toBe(18);
           expect(bounds.top).toBe(stackBounds.top + 1);
           expect(bounds.left).toBeGreaterThanOrEqual(stackBounds.left);
           expect(bounds.right).toBeLessThanOrEqual(stackBounds.right);
         }
-        expect(Math.abs(primaryBounds.left - peerBounds.left)).toBe(10);
+        // Left-derived differences ride the same float32-mapped rect reads as
+        // the widths above when the pull transform is live.
+        expect(Math.abs(primaryBounds.left - peerBounds.left)).toBeCloseTo(10, 5);
         expect(
           Math.min(primaryBounds.right, peerBounds.right) -
             Math.max(primaryBounds.left, peerBounds.left),
-        ).toBe(8);
+        ).toBeCloseTo(8, 5);
         expect(getComputedStyle(primary).fontSize).toBe(getComputedStyle(peer).fontSize);
         const primaryFace = primary.querySelector<HTMLElement>(".viewer-avatar > span")!;
         const paintedPrimary = primaryFace.getBoundingClientRect();
-        expect([paintedPrimary.width, paintedPrimary.height]).toEqual([16, 16]);
+        expect(paintedPrimary.width).toBeCloseTo(16, 5);
+        expect(paintedPrimary.height).toBe(16);
         expect(getComputedStyle(primary).opacity).toBe(presence === "away" ? "0.45" : "1");
         expect(getComputedStyle(peer).opacity).toBe(
           ownerCount > 2 && presence === "away" ? getComputedStyle(primary).opacity : "1",
@@ -319,8 +329,8 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
         }
         if (presence === "running") {
           const traceBounds = row.querySelector(".session-glyph__trace")!.getBoundingClientRect();
-          expect(traceBounds.left).toBe(stackBounds.left - 2);
-          expect(traceBounds.right).toBe(stackBounds.right + 2);
+          expect(traceBounds.left).toBeCloseTo(stackBounds.left - 2, 5);
+          expect(traceBounds.right).toBeCloseTo(stackBounds.right + 2, 5);
         }
         if (presence === "unread") {
           const badge = row.querySelector(".session-glyph__badge--unread")!;
@@ -335,16 +345,14 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
           }
         }
         if (ownerCount === 2) {
-          expect(peerBounds.left).toBe(stackBounds.left);
+          expect(peerBounds.left).toBeCloseTo(stackBounds.left, 5);
           const paintedPeer = peer.querySelector("span")!.getBoundingClientRect();
-          expect([paintedPeer.width, paintedPeer.height]).toEqual([
-            paintedPrimary.width,
-            paintedPrimary.height,
-          ]);
+          expect(paintedPeer.width).toBeCloseTo(paintedPrimary.width, 5);
+          expect(paintedPeer.height).toBe(paintedPrimary.height);
           continue;
         }
-        expect(primaryBounds.left).toBe(stackBounds.left);
-        expect(peerBounds.right).toBe(stackBounds.right);
+        expect(primaryBounds.left).toBeCloseTo(stackBounds.left, 5);
+        expect(peerBounds.right).toBeCloseTo(stackBounds.right, 5);
         expect(peer.textContent).toBe(`+${ownerCount - 1}`);
         const textRange = document.createRange();
         textRange.selectNodeContents(peer);
@@ -454,7 +462,13 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
       row.className = "sidebar-recent-session";
       row.style.transition = "none";
       sidebar.append(row);
-      row.append(chip);
+      // The chip rides on the moving tab, not on the slot behind it: mirror
+      // the real row/link boundary so the cutout blends with the face the
+      // avatars actually sit on.
+      const link = document.createElement("a");
+      link.className = "sidebar-recent-session__link";
+      row.append(link);
+      link.append(chip);
       const front = chip.querySelector<HTMLElement>(".session-owner-chip")!;
       if (participantCount === 0) {
         expect(getComputedStyle(front).borderTopWidth).toBe("0px");
@@ -469,13 +483,16 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
             [getComputedStyle(stack, "::before"), getComputedStyle(stack, "::after")].map(
               (cutout) => ({
                 width: cutout.borderTopWidth,
-                matchesRow: cutout.borderTopColor === getComputedStyle(row).backgroundColor,
+                // The ring must carry the tab face it rides on — which follows
+                // the --session-tab-bg retint when the row is multi-selected —
+                // not the stationary slot floor behind the tab.
+                matchesTabFace: cutout.borderTopColor === getComputedStyle(link).backgroundColor,
               }),
             ),
           )
           .toEqual([
-            { width: "1px", matchesRow: true },
-            { width: "1px", matchesRow: true },
+            { width: "1px", matchesTabFace: true },
+            { width: "1px", matchesTabFace: true },
           ]);
       }
     },

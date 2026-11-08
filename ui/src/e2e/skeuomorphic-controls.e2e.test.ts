@@ -502,9 +502,16 @@ suite.define(() => {
           // Press seats the tab back into its slot with the fast land and the
           // shared groove shadow; release springs and the row stays put.
           await page.mouse.down();
-          await settleFrames(page);
+          // The press lands in 40ms; poll so a slow frame cannot read the
+          // collapse mid-transition.
+          await expect
+            .poll(() =>
+              readKeyPhysics(page.locator("#rail-session-link")).then((physics) =>
+                translateX(physics.transform),
+              ),
+            )
+            .toBeLessThanOrEqual(0.5);
           const tabPressed = await readKeyPhysics(page.locator("#rail-session-link"));
-          expect(translateX(tabPressed.transform)).toBeLessThanOrEqual(0.5);
           expect(tabPressed.shadow, "pressed tab takes the slot groove").toContain("inset");
           expect(tabPressed.transformDuration).toBe("0.04s");
           expect((await readKeyPhysics(session)).transform).toBe("none");
