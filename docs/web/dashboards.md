@@ -43,7 +43,10 @@ one-to-one), and it snaps open when you release past the latch — a quick
 leftward flick opens it as well. Clicking the tab, or focusing it and pressing
 Enter or Space, opens the drawer without a drag. With the drawer open, push its
 ribbed edge handle right, back toward the edge it came from, to put it away; it
-springs back open if you release before the halfway point. Escape works too,
+springs back open if you release before the halfway point. Grabbing the handle
+again while that close is still sliding and moving mostly vertically is not a
+pull either: the drawer springs back open with the marketplace still open.
+Escape works too,
 focus starts on the edge handle while the drawer is open, and focus returns to
 the tab when it closes. No preset is installed by default — including the
 built-in **System monitoring** preset — so the page starts without one. Add

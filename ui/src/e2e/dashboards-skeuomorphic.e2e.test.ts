@@ -104,6 +104,40 @@ async function expectNoHorizontalOverflow(page: Page) {
 const modalDrawer = (page: Page) => page.locator("openclaw-modal-dialog [data-marketplace]");
 const previewDrawer = (page: Page) => page.locator("[data-marketplace-preview] [data-marketplace]");
 
+/** Ordinary motion animates the modal landing; wait it out before geometry. */
+async function waitForSettledOpen(page: Page) {
+  await expect
+    .poll(async () => (await modalDrawer(page).boundingBox())?.x ?? -1, { timeout: 3_000 })
+    .toBeCloseTo(OPEN_DRAWER_X_PX, 0);
+}
+
+/**
+ * The close verdict animates through the panel's real 240ms transition, and
+ * that curve is too fast to race with CDP round trips. Freeze it at a fixed
+ * mid-flight sample instead: the re-grab then lands on a deterministic
+ * intermediate position with a stationary handle. Cancelling the frozen
+ * animation afterwards hands the transform back to the drag's own paint (or,
+ * after a rejection, to the real settle-back transition).
+ */
+async function freezeMidSettleClose(page: Page, sampleMs: number) {
+  await page.evaluate((sample) => {
+    const panel = document.querySelector("openclaw-modal-dialog [data-marketplace]");
+    for (const animation of panel?.getAnimations() ?? []) {
+      animation.pause();
+      animation.currentTime = sample;
+    }
+  }, sampleMs);
+}
+
+async function unfreezePanelAnimations(page: Page) {
+  await page.evaluate(() => {
+    const panel = document.querySelector("openclaw-modal-dialog [data-marketplace]");
+    for (const animation of panel?.getAnimations() ?? []) {
+      animation.cancel();
+    }
+  });
+}
+
 suite.define(() => {
   it("follows an opening drag with the drawer itself, then drags it shut to the right", async () => {
     const artifacts = createControlUiE2eArtifactDir("dashboards-skeuomorphic-open");
@@ -303,11 +337,12 @@ suite.define(() => {
     }
   });
 
-  it("re-grabs a closing drawer from its live position without a jump", async () => {
+  it("re-grabs a mid-settle close from its live animated position without a jump", async () => {
+    // Ordinary motion: the close settle really animates, so the re-grab has
+    // to measure the panel's intermediate transition frame, not a settled one.
     const context = await suite.browser.newContext({
       locale: "en-US",
       serviceWorkers: "block",
-      reducedMotion: "reduce",
       viewport: { width: VIEWPORT_WIDTH_PX, height: 900 },
     });
     const page = await context.newPage();
@@ -317,34 +352,112 @@ suite.define(() => {
       await page.locator("[data-marketplace-trigger]").click();
       const drawer = modalDrawer(page);
       await drawer.waitFor();
+      await waitForSettledOpen(page);
       const handle = page.locator("[data-marketplace-handle]");
 
-      // Push nearly home and release so the close settle starts with only a
-      // short, slow remainder for the re-grab to track.
+      // Push past half travel and release: with motion enabled the close
+      // verdict animates the remaining distance instead of landing at once.
       const handleBox = (await handle.boundingBox())!;
       const y = handleBox.y + handleBox.height / 2;
       await page.mouse.move(handleBox.x + handleBox.width / 2, y);
       await page.mouse.down();
-      await page.mouse.move(handleBox.x + handleBox.width / 2 + 400, y, { steps: 10 });
+      await page.mouse.move(handleBox.x + handleBox.width / 2 + 300, y, { steps: 10 });
       await page.mouse.up();
 
-      // Re-grab while the settle is still running: the new session must map
-      // its deltas from the panel's measured current shift, not from zero.
+      // Re-grab mid-settle: freeze the real transition at a 30ms sample and
+      // lock onto the stationary handle with a leftward move. Holding sets
+      // data-dragging, whose zero-duration transition then owns the paint.
+      await freezeMidSettleClose(page, 30);
       const liveHandle = (await handle.boundingBox())!;
-      const grabX = (await drawer.boundingBox())!.x;
       await page.mouse.move(liveHandle.x + liveHandle.width / 2, y);
       await page.mouse.down();
       await page.mouse.move(liveHandle.x + liveHandle.width / 2 - 40, y);
-      const resumed = await drawer.boundingBox();
-      expect(resumed!.x).toBeGreaterThan(OPEN_DRAWER_X_PX + 150);
-      expect(resumed!.x).toBeGreaterThanOrEqual(grabX - 60);
-      expect(resumed!.x).toBeLessThanOrEqual(grabX);
+      const heldDuration = await drawer.evaluate(
+        (element) => getComputedStyle(element).transitionDuration,
+      );
+      expect(heldDuration).toBe("0s");
+      await unfreezePanelAnimations(page);
+      const held = (await drawer.boundingBox())!.x;
+      // The lock measured the frozen mid-transition shift and followed it:
+      // the panel sits 40px left of that sampled frame — not restarted from
+      // zero (which paints ~990) and not settled at the closed home.
+      expect(held).toBeGreaterThan(OPEN_DRAWER_X_PX + 200);
+      expect(held).toBeLessThan(VIEWPORT_WIDTH_PX - 40);
+      // With the settle frozen, further deltas track exactly 1:1.
+      await page.mouse.move(liveHandle.x + liveHandle.width / 2 - 70, y);
+      expect((await drawer.boundingBox())!.x).toBeCloseTo(held - 30, 0);
       // The re-grab cancelled the pending close: the modal never unmounted.
       expect(await modalDrawer(page).count()).toBe(1);
 
       // The re-grabbed session still owns its verdict: past half, it closes.
-      await page.mouse.move(liveHandle.x + liveHandle.width / 2 - 40 + 300, y, { steps: 8 });
+      await page.mouse.move(liveHandle.x + liveHandle.width / 2 + 340, y, { steps: 8 });
       await page.mouse.up();
+      await expect.poll(() => modalDrawer(page).count()).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("springs a vertically rejected close re-grab back open instead of stranding the modal", async () => {
+    // Ordinary motion: the rejection lands while the close verdict is still
+    // animating, which is the state whose cancelled settle used to strand the
+    // open marketplace entirely off-screen.
+    const context = await suite.browser.newContext({
+      locale: "en-US",
+      serviceWorkers: "block",
+      viewport: { width: VIEWPORT_WIDTH_PX, height: 900 },
+    });
+    const page = await context.newPage();
+    try {
+      await installDrawerGateway(page);
+      await openDashboards(page);
+      await page.locator("[data-marketplace-trigger]").click();
+      const drawer = modalDrawer(page);
+      await drawer.waitFor();
+      await waitForSettledOpen(page);
+      const handle = page.locator("[data-marketplace-handle]");
+
+      // Start a close and release past half travel.
+      const handleBox = (await handle.boundingBox())!;
+      const y = handleBox.y + handleBox.height / 2;
+      await page.mouse.move(handleBox.x + handleBox.width / 2, y);
+      await page.mouse.down();
+      await page.mouse.move(handleBox.x + handleBox.width / 2 + 350, y, { steps: 10 });
+      await page.mouse.up();
+
+      // Re-grab mid-settle and change direction to a mostly vertical move:
+      // that is not a pull, so the drawer must spring back open with the
+      // marketplace still mounted and expanded — never stranded off-screen
+      // with its panel translated past the viewport edge. The freeze parks
+      // the settle at a 30ms sample so the grab lands on the real handle.
+      await freezeMidSettleClose(page, 30);
+      const liveHandle = (await handle.boundingBox())!;
+      const grabX = (await drawer.boundingBox())!.x;
+      expect(grabX).toBeGreaterThan(OPEN_DRAWER_X_PX + 352);
+      expect(grabX).toBeLessThan(VIEWPORT_WIDTH_PX - 2);
+      await page.mouse.move(liveHandle.x + liveHandle.width / 2, y);
+      await page.mouse.down();
+      await page.mouse.move(liveHandle.x + liveHandle.width / 2, y + 30);
+      // The rejection restored the open settle: let it run for real.
+      await unfreezePanelAnimations(page);
+      await page.mouse.up();
+
+      await expect
+        .poll(async () => (await drawer.boundingBox())!.x, { timeout: 3_000 })
+        .toBeCloseTo(OPEN_DRAWER_X_PX, 0);
+      await expect.poll(() => modalDrawer(page).count()).toBe(1);
+      await expect
+        .poll(() => page.locator("[data-marketplace-trigger]").getAttribute("aria-expanded"))
+        .toBe("true");
+      await expectNoHorizontalOverflow(page);
+
+      // Past the settle window the marketplace is still open and usable:
+      // the drawer sits at its open home and Escape closes it through the
+      // modal owner.
+      await page.waitForTimeout(600);
+      expect(await modalDrawer(page).count()).toBe(1);
+      expect((await drawer.boundingBox())!.x).toBeCloseTo(OPEN_DRAWER_X_PX, 0);
+      await page.keyboard.press("Escape");
       await expect.poll(() => modalDrawer(page).count()).toBe(0);
     } finally {
       await context.close();

@@ -246,8 +246,13 @@ export class MarketplaceDrawerDrag {
       }
       const horizontal = distanceX >= distanceY * DIRECTION_RATIO;
       if ((session.kind === "trigger" && deltaX > 0) || !horizontal) {
-        // Vertical intent or a push against the cabinet is not a pull.
+        // Vertical intent or a push against the cabinet is not a pull. The
+        // grab may have taken over a pending settle (startSession cleared its
+        // timers), so hand the gesture back to that settle: a re-grabbed
+        // drawer springs home instead of stranding its panel or preview
+        // painted at a closed transform the page will never act on.
         this.suppressNextClick = true;
+        this.settleBack(session);
         this.endSession(session, true);
         return;
       }
