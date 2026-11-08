@@ -189,8 +189,14 @@
   text-decoration: none;
   touch-action: manipulation;
   cursor: var(--cursor-action);
+}
+
+/* Carapace's own keys keep the fast carapace ease; shared .btn keys keep the
+   components.css spring contract — scoping this transition out of .btn stops
+   the later-imported carapace list from overriding the shared release spring. */
+.oc-action:not(.btn) {
   transition:
-    background var(--oc-duration-fast) var(--oc-ease-out),
+    background-color var(--oc-duration-fast) var(--oc-ease-out),
     border-color var(--oc-duration-fast) var(--oc-ease-out),
     color var(--oc-duration-fast) var(--oc-ease-out),
     transform var(--oc-duration-fast) var(--oc-ease-out);
@@ -200,7 +206,9 @@
   text-decoration: none;
 }
 
-.oc-action:active:not(:disabled):not([aria-disabled="true"]) {
+/* Same owner split for the press: carapace-generic keys squeeze; shared .btn
+   keys travel the shared --press-shift and keep the shared press duration. */
+.oc-action:not(.btn):active:not(:disabled):not([aria-disabled="true"]) {
   transform: scale(0.98);
 }
 
@@ -215,55 +223,58 @@
   pointer-events: none;
 }
 
+/* Tone only: every variant below uses background-color so the shared key's
+   gloss and face gradients from components.css stay alive under the carapace
+   tint (a background shorthand here would erase them, later import wins). */
 .oc-action-primary {
   border-color: var(--primary);
-  background: var(--primary);
+  background-color: var(--primary);
   color: var(--oc-text-on-accent);
 }
 
 .oc-action-primary:hover {
   border-color: var(--primary-hover);
-  background: var(--primary-hover);
+  background-color: var(--primary-hover);
   color: var(--oc-text-on-accent);
 }
 
 .oc-action-primary:active:not(:disabled):not([aria-disabled="true"]) {
   border-color: var(--oc-accent-primary-deep);
-  background: var(--oc-accent-primary-deep);
+  background-color: var(--oc-accent-primary-deep);
 }
 
 .oc-action-secondary {
   border-color: var(--oc-border-accent);
-  background: var(--oc-surface-accent-soft);
+  background-color: var(--oc-surface-accent-soft);
   color: var(--oc-accent-primary);
 }
 
 .oc-action-secondary:hover {
   border-color: var(--oc-accent-primary);
-  background: color-mix(in srgb, var(--oc-surface-accent-soft) 72%, var(--oc-accent-primary));
+  background-color: color-mix(in srgb, var(--oc-surface-accent-soft) 72%, var(--oc-accent-primary));
   color: var(--oc-text-primary);
 }
 
 html[data-theme-resolved="light"] .oc-action-secondary {
   border-color: var(--oc-border-strong);
-  background: var(--oc-bg-elevated);
+  background-color: var(--oc-bg-elevated);
   color: var(--oc-text-primary);
 }
 
 html[data-theme-resolved="light"] .oc-action-secondary:hover {
   border-color: var(--oc-border-strong);
-  background: var(--oc-surface-interactive-hover);
+  background-color: var(--oc-surface-interactive-hover);
   color: var(--oc-text-primary);
 }
 
 .oc-action-ghost {
   border-color: transparent;
-  background: transparent;
+  background-color: transparent;
   color: var(--oc-text-secondary);
 }
 
 .oc-action-ghost:hover {
-  background: var(--oc-surface-interactive);
+  background-color: var(--oc-surface-interactive);
   color: var(--oc-text-primary);
 }
 

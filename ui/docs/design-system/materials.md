@@ -75,8 +75,13 @@ shadow-DOM switch cap carries its own local guard for the same reason.
 ## Owners
 
 - Buttons (`.btn` family), field inputs (`.field input/textarea/select`),
-  check/radio latches (drawn with per-arm gradient geometry), and the `.field`
-  range fader live in `ui/src/styles/components.css`.
+  check/radio latches, and the `.field`
+  range fader live in `ui/src/styles/components.css`. The checked checkbox's
+  check is real geometry: a short falling 45° arm and a long rising 135° arm,
+  each a px-weighted stroke band clipped to its own tile, meeting at a low
+  left-of-center vertex. The rendered glyph is proven pixel-wise in
+  `ui/src/e2e/skeuomorphic-controls.e2e.test.ts` (single low vertex, single
+  high tip, connected stroke), which rejects both an X and a chevron.
 - Settings vocabulary (`.settings-input`, `.settings-select`,
   `.settings-segmented`) lives in `ui/src/styles/settings-controls.css` and
   composes the same tokens.
@@ -94,7 +99,12 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   (`ui/src/styles/option-card.css`) and the usage preset groove
   (`ui/src/styles/usage.css`) compose the same material; carapace surfaces
   keep their own tone but restyle real `.btn.oc-action` keys with
-  `background-color` so the shared face layers survive underneath.
+  `background-color` so the shared face layers survive underneath. The same
+  owner split covers physics: every carapace variant tone rule (primary,
+  secondary, light, ghost) sets `background-color` only, and the generic
+  carapace press/ease (`scale(0.98)` squeeze, fast ease-out) is scoped to
+  `:not(.btn)` so shared keys keep the shared travel and spring release while
+  carapace's own non-`.btn` keys keep theirs (`ui/src/styles/carapace-control-ui.css`).
 - Navigation rows, the settings rail, shell chrome keys, the new-session
   action, and the shell plate's rimmed slab live in `ui/src/styles/layout.css`.
 

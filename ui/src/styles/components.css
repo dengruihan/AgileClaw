@@ -2192,30 +2192,37 @@ input.input[type="radio"]:active:not(:disabled) {
 input.input[type="checkbox"]:checked {
   border-color: color-mix(in srgb, var(--accent) 60%, black);
   background-color: var(--accent);
-  /* The check is real geometry: a short arm descending to the vertex and a
-     long arm rising past it, each drawn as one diagonal stroke band sized to
-     its own tile so the strokes meet at the bottom-left vertex instead of
-     crossing the box. */
+  /* The check is real geometry: a short arm descends left-to-right to a low
+     vertex, and a longer arm rises from that vertex to the top right. Each
+     arm is one diagonal stroke band clipped to its own tile — 45° bands fall
+     "\", 135° bands rise "/" — with px stops so both strokes keep the same
+     2.5px weight. The tiles share the vertex at (6,12), so the strokes join
+     there instead of crossing (X) or meeting at a top apex (^). */
   background-image:
     linear-gradient(
-      -45deg,
-      transparent 34%,
-      var(--accent-foreground) 34% 66%,
-      transparent 66%
+      45deg,
+      transparent calc(50% - 1.25px),
+      var(--accent-foreground) calc(50% - 1.25px) calc(50% + 1.25px),
+      transparent calc(50% + 1.25px)
     ),
-    linear-gradient(45deg, transparent 40%, var(--accent-foreground) 40% 60%, transparent 60%),
+    linear-gradient(
+      135deg,
+      transparent calc(50% - 1.25px),
+      var(--accent-foreground) calc(50% - 1.25px) calc(50% + 1.25px),
+      transparent calc(50% + 1.25px)
+    ),
     linear-gradient(
       180deg,
       color-mix(in srgb, var(--accent) 82%, white),
       color-mix(in srgb, var(--accent) 76%, black)
     );
   background-size:
-    6px 6px,
-    9px 9px,
+    4px 4px,
+    8px 8px,
     100% 100%;
   background-position:
-    1px 6px,
-    6px 3px,
+    2px 8px,
+    6px 4px,
     0 0;
   background-repeat: no-repeat;
   box-shadow: var(--press-shadow);

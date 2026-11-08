@@ -1,6 +1,7 @@
 // Skeuomorphic shared controls: physical press, spring release, recessed
 // fields, mechanical latches, and the draggable range fader — proven at the
 // stylesheet boundary with the real CSS and on the running Appearance page.
+import { writeFileSync } from "node:fs";
 import type { Locator, Page } from "playwright";
 import { expect, it } from "vitest";
 import { readStyleSheet } from "../../../test/helpers/ui-style-fixtures.js";
@@ -63,6 +64,108 @@ function transformY(transform: string): number {
   return match ? Number.parseFloat(match[1]) : Number.NaN;
 }
 
+type GlyphGeometry = {
+  width: number;
+  height: number;
+  glyphPixels: number;
+  bbox: { minX: number; maxX: number; minY: number; maxY: number };
+  columnsCovered: number;
+  topCluster: { minX: number; maxX: number };
+  bottomCluster: { minX: number; maxX: number };
+};
+
+// Decode an element screenshot inside the page and isolate the glyph strokes:
+// the strokes are solid `--accent-foreground` fills, so the glyph mask is the
+// pixels that match that exact token color (read live from the page), within
+// the rounded plate (page background showing through the 6px-radius corners,
+// the border arc, and the outer shadow stay masked off). The returned
+// geometry is measured on the rendered pixels, not on stylesheet strings, so
+// it rejects any glyph that draws as an X or a chevron.
+async function readGlyphGeometry(
+  page: Page,
+  png: Buffer,
+  cssSize: { width: number; height: number },
+  strokeColor: { r: number; g: number; b: number },
+): Promise<GlyphGeometry> {
+  return page.evaluate(
+    async ({ base64, cssWidth, cssHeight, stroke }) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${base64}`;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("canvas 2d context unavailable");
+      }
+      context.drawImage(image, 0, 0);
+      const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+      const scale = 4;
+      const plateWidth = Math.round(cssWidth * scale);
+      const plateHeight = Math.round(cssHeight * scale);
+      const margin = 8;
+      const radius = 24; // --radius-sm (6px) at device scale 4
+      const insidePlate = (x: number, y: number) => {
+        const dx = Math.max(margin + radius - x, x - (plateWidth - margin - radius - 1), 0);
+        const dy = Math.max(margin + radius - y, y - (plateHeight - margin - radius - 1), 0);
+        return dx * dx + dy * dy <= radius * radius;
+      };
+      const glyph = new Set<number>();
+      const columnTop = new Map<number, number>();
+      const columnBottom = new Map<number, number>();
+      // The nearest seat shade stays >= ~90 away from the stroke color inside
+      // the masked region, and the light theme's brightest gloss stays ~60
+      // away from white, so 45 separates the stroke from every seat pixel
+      // while keeping the >= 35%-coverage antialiased stroke edges.
+      for (let y = margin; y < Math.min(frame.height, plateHeight) - margin; y += 1) {
+        const rowStart = y * frame.width;
+        for (let x = margin; x < Math.min(frame.width, plateWidth) - margin; x += 1) {
+          if (!insidePlate(x, y)) {
+            continue;
+          }
+          const offset = (rowStart + x) * 4;
+          const dr = frame.data[offset] - stroke.r;
+          const dg = frame.data[offset + 1] - stroke.g;
+          const db = frame.data[offset + 2] - stroke.b;
+          if (Math.sqrt(dr * dr + dg * dg + db * db) < 45) {
+            glyph.add(offset);
+            columnTop.set(x, Math.min(columnTop.get(x) ?? y, y));
+            columnBottom.set(x, Math.max(columnBottom.get(x) ?? y, y));
+          }
+        }
+      }
+      const columns = [...columnTop.keys()].toSorted((a, b) => a - b);
+      if (columns.length === 0) {
+        throw new Error("no glyph pixels found in the checked latch capture");
+      }
+      const minY = Math.min(...columnTop.values());
+      const maxY = Math.max(...columnBottom.values());
+      const span = (columnsOf: number[]) => ({
+        minX: columnsOf[0],
+        maxX: columnsOf[columnsOf.length - 1],
+      });
+      const topColumns = columns.filter((x) => (columnTop.get(x) ?? 0) <= minY + 2);
+      const bottomColumns = columns.filter((x) => (columnBottom.get(x) ?? 0) >= maxY - 2);
+      return {
+        width: frame.width,
+        height: frame.height,
+        glyphPixels: glyph.size,
+        bbox: { minX: columns[0], maxX: columns[columns.length - 1], minY, maxY },
+        columnsCovered: columns.length,
+        topCluster: span(topColumns),
+        bottomCluster: span(bottomColumns),
+      } satisfies GlyphGeometry;
+    },
+    {
+      base64: png.toString("base64"),
+      cssWidth: cssSize.width,
+      cssHeight: cssSize.height,
+      stroke: strokeColor,
+    },
+  );
+}
+
 const settleFrames = (page: Page) =>
   page.evaluate(
     () =>
@@ -85,10 +188,108 @@ function fixtureDocument(theme: "dark" | "light"): string {
     <label class="field checkbox"><input type="checkbox" id="latch-set" checked /><span>Telemetry</span></label>
     <label class="field checkbox"><input type="radio" id="dial" name="dial" checked /><span>Dark artwork</span></label>
     <label class="field"><span>Effort</span><input type="range" id="fader" min="0" max="100" value="45" /></label>
+    <span id="accent-foreground-probe" aria-hidden="true" style="position: absolute; color: var(--accent-foreground)"></span>
   </main></body></html>`;
 }
 
+// The real cascade: the core bundle imports base, layout, components, and
+// settings-controls in styles.css order, and carapace-control-ui.css arrives
+// afterwards (plugins.css page import), so it must sit last or the fixture
+// lies about precedence.
+function readCarapaceCascadeCss(): string {
+  return [
+    "ui/src/styles/base.css",
+    "ui/src/styles/layout.css",
+    "ui/src/styles/components.css",
+    "ui/src/styles/settings-controls.css",
+    "ui/src/styles/carapace-control-ui.css",
+  ]
+    .map((file) => readStyleSheet(file))
+    .join("\n");
+}
+
+function carapaceFixtureDocument(theme: "dark" | "light"): string {
+  const htmlAttrs =
+    theme === "light"
+      ? 'data-theme="phosphor-light" data-theme-mode="light" data-theme-resolved="light"'
+      : 'data-theme="phosphor" data-theme-mode="dark" data-theme-resolved="dark"';
+  return `<!doctype html><html ${htmlAttrs}><head><style>${readCarapaceCascadeCss()}</style></head>
+  <body style="margin: 0">
+    <!-- align-items: flex-start keeps the keys at their natural height: the
+       surface's own flex row would otherwise stretch them, and the second
+       surface would land outside the viewport. -->
+    <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 8px">
+      <div class="settings-page oc-app-surface" style="padding: 24px; display: flex; align-items: flex-start; gap: 16px; width: max-content">
+        <button class="btn oc-action oc-action-secondary" type="button" id="surface-secondary">Rescan</button>
+        <button class="btn primary oc-action oc-action-primary" type="button" id="surface-primary">Install</button>
+      </div>
+      <div style="padding: 24px; display: flex; align-items: flex-start; gap: 16px; width: max-content">
+        <button class="btn oc-action oc-action-secondary" type="button" id="plain-secondary">Rescan</button>
+        <button class="btn primary oc-action oc-action-primary" type="button" id="plain-primary">Install</button>
+      </div>
+    </div>
+  </body></html>`;
+}
+
 suite.define(() => {
+  it.each(["dark", "light"] as const)(
+    "carapace surface keys keep the shared gradients and press physics in the real cascade in %s mode",
+    {
+      timeout: 90_000,
+    },
+    async (theme) => {
+      await suite.withPage(
+        { colorScheme: theme, locale: "en-US", viewport: { height: 800, width: 640 } },
+        async ({ page }) => {
+          await page.setContent(carapaceFixtureDocument(theme));
+          // Both carapace surfaces that ship .btn.oc-action keys: the settings
+          // adapter (settings-page oc-app-surface) and the plain generic
+          // surface (plugins pages, dialogs).
+          for (const selector of [
+            "#surface-secondary",
+            "#surface-primary",
+            "#plain-secondary",
+            "#plain-primary",
+          ]) {
+            const key = page.locator(selector);
+            const resting = await readKeyPhysics(key);
+            // The carapace tone rules set background-color only, so the shared
+            // gloss and face gradients survive the later-imported carapace CSS.
+            expect(resting.backgroundImage, selector).toContain("linear-gradient");
+            expect(resting.shadow, selector).toContain("0px 2px 0px 0px");
+            // The release settles on the shared spring, not the generic
+            // carapace ease-out.
+            expect(resting.transformTiming, selector).toBe(SPRING);
+
+            await key.hover();
+            expect((await readKeyPhysics(key)).backgroundImage, selector).toContain(
+              "linear-gradient",
+            );
+
+            await page.mouse.down();
+            await settleFrames(page);
+            const pressed = await readKeyPhysics(key);
+            // The key travels the shared 1-2px press; the generic squeeze can
+            // no longer outrank it.
+            expect(transformY(pressed.transform), selector).toBeGreaterThanOrEqual(0.9);
+            expect(pressed.transform, selector).toContain("matrix(1, 0, 0, 1");
+            expect(pressed.backgroundImage, selector).toContain("linear-gradient");
+            expect(pressed.shadow, selector).toContain("inset");
+            expect(pressed.shadow, selector).not.toContain("0px 2px 0px 0px");
+            expect(pressed.transformDuration, selector).toBe("0.04s");
+
+            await page.mouse.up();
+            await page.mouse.move(0, 0);
+            await page.waitForTimeout(320);
+            const released = await readKeyPhysics(key);
+            expect(released.transform, selector).toBe("none");
+            expect(released.shadow, selector).toContain("0px 2px 0px 0px");
+          }
+        },
+      );
+    },
+  );
+
   it.each(["dark", "light"] as const)(
     "shared keys travel, invert their shadow, and spring back in %s mode",
     { timeout: 60_000 },
@@ -230,20 +431,47 @@ suite.define(() => {
             theme === "dark" ? "rgb(74, 222, 128)" : "rgb(16, 105, 58)",
           );
           expect(latched.shadow).toContain("inset");
-          // The check is geometry, not a crossed X: two stroke tiles sized to
-          // their own arms and meeting at the bottom-left vertex region.
-          const checkGeometry = await set.evaluate((element) => {
-            const style = getComputedStyle(element);
-            return { sizes: style.backgroundSize, positions: style.backgroundPosition };
+          // The check must render as a checkmark, so measure the drawn pixels
+          // of the real capture: one connected stroke, a single low vertex in
+          // the left half, and a single high tip in the right half. That shape
+          // rejects both earlier defects — the crossed X (two top and two
+          // bottom clusters) and the upward chevron (apex centered on top,
+          // two bottom ends) — without asserting stylesheet strings.
+          const capture = await set.screenshot();
+          writeFileSync(`${suite.artifactDir}/latch-checked-enlarged-${theme}.png`, capture);
+          // The painted plate is the layout box; the capture can carry a few
+          // extra rows of the outer rim shadow below it.
+          const latchCss = await set.evaluate((element) => ({
+            width: element.offsetWidth,
+            height: element.offsetHeight,
+          }));
+          // The glyph strokes paint with --accent-foreground; read the token
+          // live so the classifier tracks the theme's actual stroke color.
+          const strokeColor = await page.locator("#accent-foreground-probe").evaluate((element) => {
+            const [r, g, b] = getComputedStyle(element).color.match(/\d+/gu)?.slice(0, 3) ?? [];
+            if (r === undefined || g === undefined || b === undefined) {
+              throw new Error("unreadable accent-foreground probe color");
+            }
+            return { r: Number(r), g: Number(g), b: Number(b) };
           });
-          expect(checkGeometry.sizes).toContain("6px 6px");
-          expect(checkGeometry.sizes).toContain("9px 9px");
-          expect(checkGeometry.positions).toContain("1px 6px");
-          expect(checkGeometry.positions).toContain("6px 3px");
-          // Enlarged inspected render for visual review.
-          await set.screenshot({
-            path: `${suite.artifactDir}/latch-checked-enlarged-${theme}.png`,
-          });
+          const glyph = await readGlyphGeometry(page, capture, latchCss, strokeColor);
+          const bboxWidth = glyph.bbox.maxX - glyph.bbox.minX + 1;
+          const bboxHeight = glyph.bbox.maxY - glyph.bbox.minY + 1;
+          const midX = glyph.bbox.minX + bboxWidth / 2;
+          // One connected stroke: antialiasing may drop a column or two on
+          // the diagonals, but the glyph may not fragment into separate marks.
+          expect(glyph.columnsCovered).toBeGreaterThanOrEqual(bboxWidth - 2);
+          expect(glyph.glyphPixels).toBeLessThan(bboxWidth * bboxHeight * 0.6);
+          const bottomCenter = (glyph.bottomCluster.minX + glyph.bottomCluster.maxX) / 2;
+          expect(glyph.bottomCluster.maxX - glyph.bottomCluster.minX).toBeLessThanOrEqual(
+            bboxWidth * 0.4,
+          );
+          expect(bottomCenter).toBeLessThan(midX);
+          const topCenter = (glyph.topCluster.minX + glyph.topCluster.maxX) / 2;
+          expect(glyph.topCluster.maxX - glyph.topCluster.minX).toBeLessThanOrEqual(
+            bboxWidth * 0.4,
+          );
+          expect(topCenter).toBeGreaterThan(midX);
 
           const dial = page.locator("#dial");
           const dialImage = await dial.evaluate(
