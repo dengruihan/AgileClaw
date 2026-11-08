@@ -218,6 +218,25 @@ function fixtureDocument(theme: "dark" | "light"): string {
       <a href="#" class="sidebar-recent-session__link" onclick="return false"><span class="sidebar-session-indicator"></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Tax filing research</span></span></span></a>
       <button class="sidebar-child-session-toggle" id="rail-disclosure-expanded" type="button" aria-expanded="true" aria-label="Hide child sessions"><span class="sidebar-child-session-toggle__icon"><svg viewBox="0 0 24 24" width="11" height="11"><path d="m6 9 6 6 6-6" /></svg></span></button>
     </div>
+    <div class="sidebar-session-tree" id="rail-session-tree" style="position: relative; width: 260px">
+      <div class="sidebar-recent-session session-row-host" style="position: relative; width: 260px">
+        <a href="#" class="sidebar-recent-session__link" onclick="return false"><span class="sidebar-session-indicator"></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Tax filing research</span></span></span></a>
+      </div>
+      <div class="sidebar-session-tree__children">
+        <div class="sidebar-session-tree__list">
+          <div class="sidebar-session-tree">
+            <div class="sidebar-recent-session sidebar-recent-session--child session-row-host" style="position: relative; width: 260px">
+              <a href="#" class="sidebar-recent-session__link" onclick="return false"><span class="sidebar-session-indicator"></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Reading receipts</span></span></span></a>
+            </div>
+          </div>
+          <div class="sidebar-session-tree">
+            <div class="sidebar-recent-session sidebar-recent-session--child session-row-host" style="position: relative; width: 260px">
+              <a href="#" class="sidebar-recent-session__link" onclick="return false"><span class="sidebar-session-indicator"></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Filing corrections</span></span></span></a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     <span id="accent-foreground-probe" aria-hidden="true" style="position: absolute; color: var(--accent-foreground)"></span>
   </main></body></html>`;
 }
@@ -681,6 +700,55 @@ suite.define(() => {
           ).toBeLessThanOrEqual(0.5);
           expect(translateX((await readKeyPhysics(currentLink)).transform)).toBeGreaterThanOrEqual(
             2.5,
+          );
+
+          // An expanded child tree keeps the shared column-flex frame: the
+          // tree containers are flex columns with the 2px list gap and the
+          // column's min-width protection (flex, not grid — WebKit does not
+          // re-run a grid flex-item's intrinsic sizing when child rows
+          // stream in, so a grid list keeps a stale height and the next
+          // section paints over its rows). Measured spacing proves the
+          // parent-to-child and sibling separations, not just computed
+          // declarations.
+          const treeFrames = await page.evaluate(() => {
+            const tree = document.querySelector("#rail-session-tree")!;
+            const children = tree.querySelector(".sidebar-session-tree__children")!;
+            const list = tree.querySelector(".sidebar-session-tree__list")!;
+            const frame = (element: Element) => {
+              const style = getComputedStyle(element);
+              return {
+                display: style.display,
+                direction: style.flexDirection,
+                gap: style.rowGap,
+                minWidth: style.minWidth,
+              };
+            };
+            const parent = tree.querySelector(":scope > .sidebar-recent-session")!;
+            const [firstChild, secondChild] = [
+              ...list.querySelectorAll(":scope > .sidebar-session-tree > .sidebar-recent-session"),
+            ].map((child) => child.getBoundingClientRect());
+            return {
+              tree: frame(tree),
+              children: frame(children),
+              list: frame(list),
+              parentGap:
+                children.getBoundingClientRect().top - parent.getBoundingClientRect().bottom,
+              siblingGap: secondChild.top - firstChild.bottom,
+            };
+          });
+          for (const frame of [treeFrames.tree, treeFrames.children, treeFrames.list]) {
+            expect(frame.display, "tree container is a flex column").toBe("flex");
+            expect(frame.direction).toBe("column");
+            expect(frame.gap, "tree container keeps the 2px list gap").toBe("2px");
+            expect(frame.minWidth, "tree container keeps the column min-width floor").toBe("0px");
+          }
+          expect(
+            treeFrames.parentGap,
+            "parent row separates from its children by the gap",
+          ).toBeCloseTo(2, 5);
+          expect(treeFrames.siblingGap, "expanded child rows separate by the gap").toBeCloseTo(
+            2,
+            5,
           );
         },
       );

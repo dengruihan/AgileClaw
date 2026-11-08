@@ -1,6 +1,20 @@
 /* Session pull-out tab system: owned by the lazy sidebar component (this
    sheet loads after the global bundle, matching the previous layout.css ->
    components.css -> app-sidebar.css cascade order). */
+/* Expanded child trees share the sidebar lists' column-flex frame. Flex,
+   not grid: WebKit does not re-run a grid flex-item's intrinsic sizing when
+   child rows stream in or grow a second subtitle line after first layout,
+   so a grid list keeps a stale height and the next section paints over its
+   rows. */
+.sidebar-session-tree,
+.sidebar-session-tree__children,
+.sidebar-session-tree__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .sidebar-session-tree__children {
   margin-left: var(--sidebar-lead);
 }
