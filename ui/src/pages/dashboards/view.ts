@@ -20,6 +20,7 @@ import "../../styles/dashboards.css";
 import "./dashboard-preview.ts";
 import {
   renderMarketplace,
+  renderMarketplacePreview,
   renderMarketplaceTrigger,
   type MarketplaceState,
 } from "./marketplace-view.ts";
@@ -344,10 +345,11 @@ export function renderDashboards(
               </div>`
             : nothing
         }
-        ${renderMarketplaceTrigger(marketplace)}
       </div>
     </section>
     ${renderSettingsWorkspace(html`${renderMonitoring(monitoring)} ${body}`)}
+    ${renderMarketplaceTrigger(marketplace)}
+    ${marketplace?.dragActive ? renderMarketplacePreview(marketplace) : nothing}
     ${marketplace?.open ? renderMarketplace(marketplace) : nothing}
   `;
 }

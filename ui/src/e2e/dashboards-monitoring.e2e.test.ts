@@ -168,7 +168,7 @@ suite.define(() => {
       await page.screenshot({ path: `${artifacts}/02-market-installed-desktop.png` });
 
       // The install persists per Gateway origin in this browser, never in the Gateway.
-      await drawer.getByRole("button", { name: "Close marketplace" }).click();
+      await drawer.locator("[data-marketplace-handle]").click();
       await expect.poll(() => page.locator("[data-marketplace]").count()).toBe(0);
 
       // One owner per page: a sidebar re-render never starts another inventory reader.
@@ -308,7 +308,7 @@ suite.define(() => {
         .getByText("Gateway machine", { exact: true })
         .waitFor();
       await page.screenshot({ path: `${artifacts}/02-installed-narrow.png` });
-      await drawer.getByRole("button", { name: "Close marketplace" }).click();
+      await drawer.locator("[data-marketplace-handle]").click();
       await expect.poll(() => page.locator("[data-marketplace]").count()).toBe(0);
       await page.screenshot({ path: `${artifacts}/03-region-narrow.png` });
     } finally {
@@ -330,12 +330,7 @@ suite.define(() => {
       await page.locator(".dashboards-gallery [data-dashboard-session]").first().waitFor();
       await page.locator("[data-marketplace-trigger]").click();
       await page.locator("[data-marketplace] [data-marketplace-add]").click();
-      await page
-        .locator("[data-marketplace]")
-        .getByRole("button", {
-          name: "Close marketplace",
-        })
-        .click();
+      await page.locator("[data-marketplace]").locator("[data-marketplace-handle]").click();
       await expect.poll(() => page.locator("[data-marketplace]").count()).toBe(0);
       const monitoring = page.locator("[data-monitoring]");
       await expect.poll(() => monitoring.getByText("Loading machines").count()).toBe(1);
