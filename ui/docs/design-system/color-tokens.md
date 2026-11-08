@@ -93,13 +93,15 @@ Each `--x` has `-muted` (0.75 alpha) and `-subtle` (0.08 alpha) rgba siblings th
 
 Phosphor's depth comes from one light direction: a light stroke from the top-left and a dark stroke to the bottom-right. `--neu-light` and `--neu-dark` are the only hue inputs; every shadow token composes them.
 
-| Token                     | Use                                                         |
-| ------------------------- | ----------------------------------------------------------- |
-| `--shadow-sm` … `-xl`     | Neutral elevation for cards, popovers, and dialogs          |
-| `--surface-raised`        | Resting extrusion on shell plate, cards, buttons, and chips |
-| `--surface-raised-strong` | Higher-emphasis raised controls (primary buttons)           |
-| `--surface-pressed`       | `:active` and toggled-in controls pushed into the surface   |
-| `--surface-well`          | Recessed field for inputs and segmented-control containers  |
+| Token                     | Use                                                                         |
+| ------------------------- | --------------------------------------------------------------------------- |
+| `--shadow-sm` … `-xl`     | Neutral elevation for cards, popovers, and dialogs                          |
+| `--surface-raised`        | Resting extrusion on legacy surfaces (migrating to `--raise-shadow`)        |
+| `--surface-raised-strong` | Higher-emphasis raised controls (legacy pairing)                            |
+| `--surface-pressed`       | `:active` and toggled-in controls pushed into the surface (legacy pairing)  |
+| `--surface-well`          | Recessed field for inputs and segmented-control containers (legacy pairing) |
+
+Shared controls compose the newer physical-material tokens instead — `--raise-shadow`, `--press-shadow`, `--well-shadow`, and their `--mat-*` inputs (see [materials.md](./materials.md)) — which add a solid rim of thickness, a movable gloss, and press travel on top of the same light direction.
 
 Dark uses `--neu-light: rgba(170,235,185,0.05)` and `--neu-dark: rgba(0,6,2,0.55)`; light uses `rgba(255,255,255,0.9)` and `rgba(29,56,38,0.16)`. Keep the light direction and token composition; do not hand-write per-component shadow pairs.
 
@@ -112,4 +114,4 @@ Dark uses `--neu-light: rgba(170,235,185,0.05)` and `--neu-dark: rgba(0,6,2,0.55
 - ❌ Mixing `--ok` and `--accent-2` for "green success" — use `--ok` only
 - ❌ Using `--danger` for non-error states (e.g. "hot feature") — reserve for errors and destructive actions
 - ❌ `--muted-strong` for normal body text — passes AA on `--bg` but not on every hover/input surface; use `--text` instead
-- ❌ Per-component shadow pairs — compose `--surface-raised`/`--surface-pressed`/`--surface-well` so one light direction holds app-wide
+- ❌ Per-component shadow pairs — compose the `--mat-*`/`--raise-*`/`--press-*`/`--well-*` tokens (or the legacy `--surface-*` pairs) so one light direction holds app-wide

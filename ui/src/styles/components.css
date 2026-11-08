@@ -1030,19 +1030,19 @@ openclaw-session-owner-chip .viewer-avatar__initials {
 
 .card {
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background: var(--card);
+  background-color: var(--card);
+  background-image: var(--raise-face);
   border-radius: var(--radius-lg);
   padding: 18px;
-  box-shadow: var(--surface-raised);
+  box-shadow: var(--raise-shadow);
   animation: rise 0.25s var(--ease-out) backwards;
-  transition:
-    border-color var(--duration-normal) var(--ease-out),
-    box-shadow var(--duration-normal) var(--ease-out);
+  transition: border-color var(--duration-normal) var(--ease-out);
 }
 
+/* A card is a reading surface, not a control: hover may edge-quietly respond,
+   but never lifts like a key. */
 .card:hover {
   border-color: var(--border-strong);
-  box-shadow: var(--surface-raised-strong);
 }
 
 .card-title {
@@ -1180,6 +1180,10 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   }
 }
 
+/* Shared buttons are physical keys: a graded dome face with a specular top
+   edge, a solid rim underneath, and a soft contact shadow. The gloss layer is
+   a 200%-tall gradient whose position animates — light hits the top of the
+   key at rest and the lower lip once it is pushed in. */
 .btn {
   color: inherit;
   display: inline-flex;
@@ -1187,7 +1191,15 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   justify-content: center;
   gap: 6px;
   border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
-  background: var(--bg-elevated);
+  background-color: var(--bg-elevated);
+  background-image: linear-gradient(180deg, var(--mat-gloss), transparent 42%), var(--raise-face);
+  background-size:
+    100% 200%,
+    100% 100%;
+  background-position:
+    0 0,
+    0 0;
+  background-repeat: no-repeat;
   padding: 8px 14px;
   border-radius: var(--radius-md);
   font-size: 13px;
@@ -1196,24 +1208,33 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   /* Labels never break mid-text; tight clusters wrap whole buttons instead
      (see .settings-row--actions). */
   white-space: nowrap;
-  box-shadow: var(--surface-raised);
+  box-shadow: var(--raise-shadow);
+  /* The press lands with the finger; the release springs back. */
   transition:
     border-color var(--duration-fast) var(--ease-out),
-    background var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out);
+    background-color var(--duration-fast) var(--ease-out),
+    background-position var(--duration-release) var(--ease-spring),
+    box-shadow var(--duration-release) var(--ease-spring),
+    transform var(--duration-release) var(--ease-spring);
 }
 
 .btn:hover:where(:not(:disabled, [aria-disabled="true"])) {
-  background: var(--bg-hover);
+  background-color: var(--bg-hover);
   border-color: var(--border-strong);
-  box-shadow: var(--surface-raised-strong);
+  box-shadow: var(--raise-shadow-hover);
 }
 
-/* Pressed controls sink into the plate: the resting extrusion flips into an
-   inset pair while the fill darkens one step. Geometry never moves. */
+/* Pressing pushes the key into the plate: the rim collapses, an inset shadow
+   takes its place, the gloss slides to the lower lip, and the whole key
+   travels --press-shift down. */
 .btn:active:where(:not(:disabled, [aria-disabled="true"])) {
-  background: var(--bg-muted);
-  box-shadow: var(--surface-pressed);
+  background-color: var(--bg-muted);
+  background-position:
+    0 100%,
+    0 0;
+  box-shadow: var(--press-shadow);
+  transform: translateY(var(--press-shift));
+  transition-duration: var(--duration-press);
 }
 
 .btn svg {
@@ -1227,43 +1248,62 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   flex-shrink: 0;
 }
 
+/* Primary keys are the accent material molded into the same dome-and-rim
+   key: every stop derives from --primary so user themes reshape it whole. */
 .btn.primary {
   border-color: transparent;
-  background: var(--primary);
+  background-color: var(--primary);
+  background-image:
+    linear-gradient(180deg, color-mix(in srgb, var(--primary) 26%, transparent), transparent 46%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--primary) 82%, white),
+      color-mix(in srgb, var(--primary) 80%, black)
+    );
   color: var(--primary-foreground);
   box-shadow:
-    var(--surface-raised),
-    0 0 12px var(--accent-glow);
+    inset 0 1px 0 color-mix(in srgb, var(--primary) 42%, white),
+    0 2px 0 color-mix(in srgb, var(--primary) 45%, black),
+    0 3px 10px var(--accent-glow);
 }
 
 .btn.primary:hover:where(:not(:disabled, [aria-disabled="true"])) {
-  background: var(--primary-hover);
+  background-color: var(--primary-hover);
   box-shadow:
-    var(--surface-raised-strong),
-    0 2px 16px var(--accent-glow);
+    inset 0 1px 0 color-mix(in srgb, var(--primary-hover) 42%, white),
+    0 3px 0 color-mix(in srgb, var(--primary-hover) 45%, black),
+    0 5px 14px var(--accent-glow);
 }
 
 .btn.primary:active:where(:not(:disabled, [aria-disabled="true"])) {
+  background-color: var(--primary);
   box-shadow:
-    var(--surface-pressed),
-    0 0 10px var(--accent-glow);
+    inset 0 2px 4px color-mix(in srgb, var(--primary) 55%, black),
+    inset 0 -1px 0 color-mix(in srgb, var(--primary) 35%, white),
+    0 1px 0 color-mix(in srgb, var(--primary) 45%, black),
+    0 0 8px var(--accent-glow);
 }
 
+/* A toggled-in key stays latched in the plate with the gloss resting on its
+   lower lip — pressed, not traveling. */
 .btn.active {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  background: var(--accent-subtle);
+  background-color: var(--accent-subtle);
+  background-position:
+    0 100%,
+    0 0;
   color: var(--text);
-  box-shadow: var(--surface-pressed);
+  box-shadow: var(--press-shadow);
 }
 
 .btn.danger {
   border-color: transparent;
-  background: var(--danger-subtle);
+  background-color: var(--danger-subtle);
   color: var(--danger);
 }
 
 .btn.danger:hover:where(:not(:disabled, [aria-disabled="true"])) {
-  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  background-color: color-mix(in srgb, var(--danger) 15%, transparent);
 }
 
 .btn--sm {
@@ -1482,11 +1522,11 @@ openclaw-toast-host[data-toast-placement="shell"]
   min-width: 36px;
   height: 36px;
   border: 1px solid var(--border);
-  background: var(--bg-elevated);
+  background-color: var(--bg-elevated);
 }
 
 .btn--icon:hover:where(:not(:disabled, [aria-disabled="true"])) {
-  background: var(--bg-hover);
+  background-color: var(--bg-hover);
   border-color: var(--border-strong);
 }
 
@@ -1840,23 +1880,42 @@ openclaw-session-progress-hovercard-provider {
   }
 }
 
+/* Ghost keys are the quietest real material, not a flat exception: a faint
+   translucent face, a hairline edge, and a whisper of the rim. Hover and
+   press strengthen the same vocabulary instead of adding chrome from
+   nothing. */
 .btn--ghost {
-  border-color: transparent;
-  background: transparent;
+  border-color: color-mix(in srgb, var(--border) 42%, transparent);
+  background-color: color-mix(in srgb, var(--bg-elevated) 45%, transparent);
+  background-image:
+    linear-gradient(180deg, color-mix(in srgb, var(--mat-gloss) 45%, transparent), transparent 42%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--mat-face-hi) 45%, transparent),
+      color-mix(in srgb, var(--mat-face-lo) 45%, transparent)
+    );
   color: var(--muted);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--mat-bevel) 45%, transparent),
+    0 1px 0 color-mix(in srgb, var(--mat-rim) 32%, transparent);
 }
 
 .btn--ghost:hover:where(:not(:disabled, [aria-disabled="true"])) {
-  background: var(--bg-hover);
+  background-color: color-mix(in srgb, var(--bg-hover) 80%, transparent);
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
   color: var(--text);
-  border-color: transparent;
+}
+
+.btn--ghost:active:where(:not(:disabled, [aria-disabled="true"])) {
+  background-color: var(--bg-muted);
 }
 
 .btn:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.5;
   cursor: not-allowed;
-  /* An unavailable control settles flush with the plate instead of extruded. */
+  /* An unavailable key settles flush with the plate instead of extruded. */
   box-shadow: none;
+  transform: none;
 }
 
 .field {
@@ -1879,19 +1938,20 @@ openclaw-session-progress-hovercard-provider {
 .field select,
 .input {
   border: 1px solid color-mix(in srgb, var(--input) 75%, transparent);
-  background: var(--card);
+  background-color: var(--bg);
+  background-image: var(--well-face);
   border-radius: var(--radius-md);
   padding: 8px 12px;
   outline: none;
-  box-shadow: var(--surface-well);
+  box-shadow: var(--well-shadow);
   transition:
     border-color var(--duration-fast) ease,
     box-shadow var(--duration-fast) ease;
 }
 
-.field input:not([type="checkbox"]):not([type="radio"]),
+.field input:not([type="checkbox"], [type="radio"], [type="range"]),
 .field select,
-input.input:not([type="checkbox"]):not([type="radio"]),
+input.input:not([type="checkbox"], [type="radio"], [type="range"]),
 select.input {
   height: 38px;
 }
@@ -1910,7 +1970,7 @@ select.input {
 .field select:focus-visible,
 .input:focus-visible {
   border-color: var(--ring);
-  box-shadow: var(--focus-ring);
+  box-shadow: var(--focus-ring), var(--well-shadow);
 }
 
 /* Carapace Sensitive Input adapted to the Control UI token contract. */
@@ -2075,14 +2135,201 @@ select.input {
 }
 
 .config-form .field.checkbox {
-  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-columns: 20px minmax(0, 1fr);
   column-gap: 10px;
 }
 
 .config-form .field.checkbox input[type="checkbox"] {
   margin: 0;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
+}
+
+/* Field check controls are mechanical latches drawn from the shared material:
+   a small raised key at rest, pushed flush while pressed, and latched into an
+   accent-filled seat once checked. Native checkboxes outside this vocabulary
+   (tables, markdown task lists) keep accent-color from base.css. */
+.field input[type="checkbox"],
+.field input[type="radio"],
+input.input[type="checkbox"],
+input.input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-elevated);
+  background-image: linear-gradient(180deg, var(--mat-gloss), transparent 60%), var(--raise-face);
+  box-shadow:
+    inset 0 1px 0 var(--mat-bevel),
+    0 2px 0 var(--mat-rim),
+    0 2px 4px var(--neu-dark);
+  transition:
+    background-color var(--duration-release) var(--ease-spring),
+    box-shadow var(--duration-release) var(--ease-spring),
+    transform var(--duration-release) var(--ease-spring);
+}
+
+.field input[type="radio"],
+input.input[type="radio"] {
+  border-radius: var(--radius-full);
+}
+
+.field input[type="checkbox"]:active:not(:disabled),
+.field input[type="radio"]:active:not(:disabled),
+input.input[type="checkbox"]:active:not(:disabled),
+input.input[type="radio"]:active:not(:disabled) {
+  box-shadow: var(--press-shadow);
+  transform: translateY(var(--press-shift));
+  transition-duration: var(--duration-press);
+}
+
+.field input[type="checkbox"]:checked,
+input.input[type="checkbox"]:checked {
+  border-color: color-mix(in srgb, var(--accent) 60%, black);
+  background-color: var(--accent);
+  background-image:
+    var(--check-glyph),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 82%, white),
+      color-mix(in srgb, var(--accent) 76%, black)
+    );
+  box-shadow: var(--press-shadow);
+}
+
+.field input[type="radio"]:checked,
+input.input[type="radio"]:checked {
+  border-color: color-mix(in srgb, var(--accent) 60%, black);
+  background-color: var(--bg);
+  background-image:
+    var(--well-face), radial-gradient(circle at 50% 50%, var(--accent) 0 3.5px, transparent 4px);
+  box-shadow:
+    var(--well-shadow),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.field input[type="checkbox"]:disabled,
+.field input[type="radio"]:disabled,
+input.input[type="checkbox"]:disabled,
+input.input[type="radio"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  box-shadow: none;
+  transform: none;
+}
+
+@media (forced-colors: active) {
+  .field input[type="checkbox"],
+  .field input[type="radio"],
+  input.input[type="checkbox"],
+  input.input[type="radio"] {
+    appearance: auto;
+    background-image: none;
+    box-shadow: none;
+  }
+}
+
+/* Field range controls are faders: a raised cap with a center grip ridge
+   riding along a recessed groove. Feature sliders (chat seek, reasoning
+   effort) own their own chrome by class and never enter this vocabulary. */
+.field input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.field input[type="range"]::-webkit-slider-runnable-track {
+  height: 10px;
+  border: 1px solid color-mix(in srgb, var(--input) 75%, transparent);
+  border-radius: var(--radius-full);
+  background-color: var(--bg);
+  background-image: var(--well-face);
+  box-shadow: var(--well-shadow);
+}
+
+.field input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background-color: var(--bg-elevated);
+  background-image:
+    linear-gradient(
+      90deg,
+      transparent calc(50% - 1.5px),
+      color-mix(in srgb, var(--mat-rim) 55%, transparent) 0 calc(50% + 1.5px),
+      transparent 0
+    ),
+    radial-gradient(120% 110% at 50% 0%, var(--mat-face-hi), transparent 62%), var(--raise-face);
+  box-shadow:
+    inset 0 1px 0 var(--mat-bevel),
+    0 2px 0 var(--mat-rim),
+    0 3px 6px var(--neu-dark);
+  transition: box-shadow var(--duration-fast) var(--ease-out);
+}
+
+/* Dragging grips the cap: it seats into the groove and lights an accent
+   halo so the live value reads as grabbed, not just hovered. */
+.field input[type="range"]:active::-webkit-slider-thumb {
+  box-shadow:
+    var(--press-shadow),
+    0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.field input[type="range"]:disabled::-webkit-slider-thumb {
+  box-shadow: none;
+}
+
+.field input[type="range"]::-moz-range-track {
+  height: 10px;
+  border: 1px solid color-mix(in srgb, var(--input) 75%, transparent);
+  border-radius: var(--radius-full);
+  background-color: var(--bg);
+  background-image: var(--well-face);
+  box-shadow: var(--well-shadow);
+}
+
+.field input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background-color: var(--bg-elevated);
+  background-image:
+    linear-gradient(
+      90deg,
+      transparent calc(50% - 1.5px),
+      color-mix(in srgb, var(--mat-rim) 55%, transparent) 0 calc(50% + 1.5px),
+      transparent 0
+    ),
+    radial-gradient(120% 110% at 50% 0%, var(--mat-face-hi), transparent 62%), var(--raise-face);
+  box-shadow:
+    inset 0 1px 0 var(--mat-bevel),
+    0 2px 0 var(--mat-rim),
+    0 3px 6px var(--neu-dark);
+  transition: box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.field input[type="range"]:active::-moz-range-thumb {
+  box-shadow:
+    var(--press-shadow),
+    0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.field input[type="range"]:disabled::-moz-range-thumb {
+  box-shadow: none;
 }
 
 .field input[aria-invalid="true"],
@@ -2099,46 +2346,43 @@ select.input {
 }
 
 :root[data-theme-mode="light"] .btn:where(:not(.primary, .danger)) {
-  background: var(--bg);
+  background-color: var(--bg);
   border-color: var(--input);
 }
 
 :root[data-theme-mode="light"]
   .btn:hover:where(:not(.primary, .danger, :disabled, [aria-disabled="true"])) {
-  background: var(--bg-hover);
+  background-color: var(--bg-hover);
 }
 
 :root[data-theme-mode="light"] .btn.active {
   border-color: var(--accent);
-  background: var(--accent-subtle);
+  background-color: var(--accent-subtle);
   color: var(--text);
 }
 
 :root[data-theme-mode="light"] .btn--icon {
-  background: var(--bg-elevated);
+  background-color: var(--bg-elevated);
   border-color: var(--border);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--raise-shadow);
   color: var(--muted);
 }
 
 :root[data-theme-mode="light"] .btn--icon:hover:where(:not(:disabled, [aria-disabled="true"])) {
-  background: var(--bg-hover);
+  background-color: var(--bg-hover);
   border-color: var(--border-strong);
   color: var(--text);
 }
 
-/* Ghost stays chromeless in light mode too: without the border-color reset,
-   the higher-specificity light .btn--icon override above re-adds a 1px border
-   that dark mode never shows. Chrome appears on hover only. */
+/* Ghost keeps its quiet material in light mode; the mode-specific reset only
+   swaps the face tone so the light surface does not read as heavy paint. */
 :root[data-theme-mode="light"] .btn--ghost {
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
+  background-color: color-mix(in srgb, var(--bg) 55%, transparent);
 }
 
 :root[data-theme-mode="light"] .btn--ghost:hover:where(:not(:disabled, [aria-disabled="true"])) {
-  background: var(--bg-hover);
-  border-color: transparent;
+  background-color: color-mix(in srgb, var(--bg-hover) 80%, transparent);
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
 }
 
 .muted {

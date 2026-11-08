@@ -8,11 +8,13 @@ OpenClaw uses a three-step duration scale with purpose-matched easing functions.
 
 Defined in `ui/src/styles/base.css`:
 
-| Token               | Value   | Use                                                       |
-| ------------------- | ------- | --------------------------------------------------------- |
-| `--duration-fast`   | `100ms` | Micro-interactions: hover color, focus ring, icon swap    |
-| `--duration-normal` | `180ms` | Standard transitions: menu open, tab switch, input expand |
-| `--duration-slow`   | `300ms` | Page-level: sheet slide-in, modal fade, skeleton reveal   |
+| Token                | Value   | Use                                                       |
+| -------------------- | ------- | --------------------------------------------------------- |
+| `--duration-fast`    | `100ms` | Micro-interactions: hover color, focus ring, icon swap    |
+| `--duration-normal`  | `180ms` | Standard transitions: menu open, tab switch, input expand |
+| `--duration-slow`    | `300ms` | Page-level: sheet slide-in, modal fade, skeleton reveal   |
+| `--duration-press`   | `40ms`  | Physical press lands with the finger (see materials.md)   |
+| `--duration-release` | `260ms` | Press release settles on `--ease-spring`                  |
 
 Non-token durations in use (document when adding new ones):
 
@@ -31,9 +33,9 @@ Defined in `ui/src/styles/base.css`:
 | --------------- | ----------------------------------- | ------------------------------------------------------- |
 | `--ease-out`    | `cubic-bezier(0.16, 1, 0.3, 1)`     | Most enter/expand transitions — fast start, smooth land |
 | `--ease-in-out` | `cubic-bezier(0.4, 0, 0.2, 1)`      | Elements that travel across screen (slides, drawers)    |
-| `--ease-spring` | `cubic-bezier(0.34, 1.56, 0.64, 1)` | Playful/tactile: button press, badge pop, icon bounce   |
+| `--ease-spring` | `cubic-bezier(0.34, 1.56, 0.64, 1)` | Playful/tactile: key release, switch throw, badge pop   |
 
-**Default rule of thumb:** Use `--ease-out` unless the element explicitly moves from point A to point B (use `--ease-in-out`) or needs a bouncy feel (use `--ease-spring`).
+**Default rule of thumb:** Use `--ease-out` unless the element explicitly moves from point A to point B (use `--ease-in-out`) or needs a bouncy feel (use `--ease-spring`). Shared controls pair a fast press (`--duration-press` — it lands with the finger) with a spring release (`--duration-release` on `--ease-spring`); Web Awesome's switch cap picks the spring up through `--wa-transition-easing`.
 
 ---
 
@@ -55,7 +57,7 @@ Every animation or transition **must** be suppressed when the user has requested
 }
 ```
 
-Light-DOM components get the `.skeleton` primitive and reduced-motion gate from `base.css`. Skeleton sweeps use `animation: none` under reduced motion, with the highlight parked offscreen; even a collapsed animation would briefly run during startup. A component rendered inside shadow roots, such as the panel loading skeleton hosted by the terminal, desktop, and browser panels, carries a declaration-identical copy of the primitive plus its own reduced-motion guard. `ui/src/components/panel-loading-skeleton.test.ts` guards the primitive against drift.
+Light-DOM components get the `.skeleton` primitive and reduced-motion gate from `base.css`. Skeleton sweeps use `animation: none` under reduced motion, with the highlight parked offscreen; even a collapsed animation would briefly run during startup. A component rendered inside shadow roots, such as the panel loading skeleton hosted by the terminal, desktop, and browser panels, carries a declaration-identical copy of the primitive plus its own reduced-motion guard. `ui/src/components/panel-loading-skeleton.test.ts` guards the primitive against drift. Web Awesome's shadow-DOM switch cap carries the same kind of local guard (`wa-switch::part(thumb) { transition: none }`) so its throw settles instantly for reduced-motion users while the pressed/released state changes still apply.
 
 Opt-in decorative motion that should vanish entirely, such as text shimmers, belongs inside `@media (prefers-reduced-motion: no-preference)`. Reduced-motion users keep plain static text.
 

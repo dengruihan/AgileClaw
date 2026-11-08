@@ -40,7 +40,7 @@
 }
 
 /* The neutral track keeps its 2px inset; many-option enums may wrap.
-   The track is a recessed well; the active segment extrudes from it. */
+   The track is a recessed groove; the active segment extrudes from it. */
 .settings-segmented {
   min-height: var(--settings-control-height);
   box-sizing: border-box;
@@ -49,10 +49,11 @@
   flex-wrap: wrap;
   gap: 2px;
   max-width: 100%;
-  background: color-mix(in srgb, var(--bg) 80%, var(--bg-elevated) 20%);
+  background-color: var(--bg);
+  background-image: var(--well-face);
   border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
   border-radius: var(--radius-md);
-  box-shadow: var(--surface-well);
+  box-shadow: var(--well-shadow);
   padding: 2px;
 }
 
@@ -118,7 +119,8 @@ wa-radio-group.settings-segmented::part(form-control-label) {
   transition:
     color var(--duration-normal) var(--ease-out),
     background var(--duration-normal) var(--ease-out),
-    box-shadow var(--duration-normal) var(--ease-out);
+    box-shadow var(--duration-release) var(--ease-spring),
+    transform var(--duration-release) var(--ease-spring);
 }
 
 .settings-segmented--accent > .settings-segmented__btn {
@@ -155,11 +157,13 @@ wa-radio-group.settings-segmented::part(form-control-label) {
 .settings-segmented > .settings-segmented__btn--active {
   background: var(--bg-elevated);
   color: var(--text-strong);
-  box-shadow: var(--surface-raised);
+  box-shadow: var(--raise-shadow);
 }
 
 .settings-segmented > .settings-segmented__btn:active:not(.settings-segmented__btn--active) {
-  box-shadow: var(--surface-pressed);
+  box-shadow: var(--press-shadow);
+  transform: translateY(var(--press-shift));
+  transition-duration: var(--duration-press);
 }
 
 .settings-segmented--accent > .settings-segmented__btn--active {
@@ -168,7 +172,7 @@ wa-radio-group.settings-segmented::part(form-control-label) {
   color: var(--text);
   font-weight: 600;
   box-shadow:
-    var(--surface-pressed),
+    var(--press-shadow),
     0 0 6px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
@@ -181,7 +185,8 @@ wa-radio-group.settings-segmented::part(form-control-label) {
   background: var(--primary);
   color: var(--primary-foreground);
   box-shadow:
-    var(--surface-raised),
+    inset 0 1px 0 color-mix(in srgb, var(--primary) 42%, white),
+    0 2px 0 color-mix(in srgb, var(--primary) 45%, black),
     0 0 10px var(--accent-glow);
 }
 
@@ -266,16 +271,17 @@ select.settings-select:not([multiple]) {
 }
 
 /* Native controls own their box. Web Awesome selects are styled by their
-   component-owned stylesheet. Input fields sit in a recessed well so their
+   component-owned stylesheet. Input fields sit in a recessed groove so their
    face reads as carved out of the surrounding surface. */
 .settings-input,
 select.settings-select {
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: var(--radius-md);
-  background-color: color-mix(in srgb, var(--bg) 80%, var(--bg-elevated) 20%);
+  background-color: var(--bg);
+  background-image: var(--well-face);
   color: var(--text);
   padding: 7px 10px;
-  box-shadow: var(--surface-well);
+  box-shadow: var(--well-shadow);
   transition:
     border-color var(--duration-fast) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out);
@@ -309,7 +315,9 @@ select.settings-select:not([multiple]) {
 select.settings-select:focus-visible {
   outline: none;
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border) 45%);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent),
+    var(--well-shadow);
 }
 
 /* Secret inputs also appear in the startup login gate. Keep these selectors
