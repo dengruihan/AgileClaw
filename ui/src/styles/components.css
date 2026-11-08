@@ -5712,9 +5712,11 @@ td.data-table-key-col {
 }
 
 .session-row-host--draft-other {
-  --session-row-bg: color-mix(in srgb, var(--bg-muted) 44%, transparent);
+  --session-row-bg: color-mix(in srgb, var(--bg-muted) 44%, var(--sidebar-bg, var(--bg)));
   --draft-row-opacity: 0.58;
-  background: var(--session-row-bg);
+  /* background-color, not the shorthand: the row's seated-key face gradient
+     must survive the draft retint. */
+  background-color: var(--session-row-bg);
 }
 
 .session-row-host--draft-other:hover,
@@ -5863,16 +5865,23 @@ td.data-table-key-col {
   width: 24px;
   height: 24px;
   padding: 0;
-  border: none;
+  /* Small seated key riding the row's face; the reveal contract below is
+     unchanged. */
+  border: 1px solid color-mix(in srgb, var(--border-strong) 34%, var(--sidebar-bg, var(--bg)));
   border-radius: var(--radius-sm);
-  background: transparent;
+  background-color: color-mix(in srgb, var(--bg-elevated) 24%, var(--sidebar-bg, var(--bg)));
+  background-image: var(--raise-face);
   color: var(--muted);
   opacity: 0;
   pointer-events: none;
+  box-shadow: var(--key-shadow);
   transition:
     opacity var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
     background var(--duration-fast) ease,
-    color var(--duration-fast) ease;
+    color var(--duration-fast) ease,
+    box-shadow var(--duration-release) var(--ease-spring),
+    transform var(--duration-release) var(--ease-spring);
 }
 
 .session-action svg {
@@ -5890,8 +5899,16 @@ td.data-table-key-col {
 }
 
 .session-action:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bg-hover) 92%, transparent);
+  border-color: color-mix(in srgb, var(--border-hover) 55%, var(--sidebar-bg, var(--bg)));
+  background-color: color-mix(in srgb, var(--bg-hover) 88%, var(--sidebar-bg, var(--bg)));
   color: var(--text);
+  box-shadow: var(--key-shadow-hover);
+}
+
+.session-action:active:not(:disabled) {
+  box-shadow: var(--press-shadow);
+  transform: translateY(var(--press-shift));
+  transition-duration: var(--duration-press);
 }
 
 .session-action:disabled {

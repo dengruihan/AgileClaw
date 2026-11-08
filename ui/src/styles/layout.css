@@ -1352,19 +1352,33 @@ openclaw-settings-save-indicator:empty {
   width: 30px;
   height: 30px;
   padding: 0;
-  border: none;
+  /* Seated key, one step quieter than the new-session action above it. */
+  border: 1px solid color-mix(in srgb, var(--border-strong) 46%, var(--sidebar-bg, var(--bg)));
   border-radius: var(--radius-md);
-  background: transparent;
+  background-color: color-mix(in srgb, var(--bg-elevated) 30%, var(--sidebar-bg, var(--bg)));
+  background-image: var(--raise-face);
   color: var(--muted);
+  box-shadow: var(--key-shadow);
   transition:
+    border-color var(--duration-fast) ease,
     background var(--duration-fast) ease,
-    color var(--duration-fast) ease;
+    color var(--duration-fast) ease,
+    box-shadow var(--duration-release) var(--ease-spring),
+    transform var(--duration-release) var(--ease-spring);
 }
 
 .sidebar-brand__icon:hover:not(:disabled, [aria-disabled="true"]),
 .sidebar-brand__icon:focus-visible {
-  background: color-mix(in srgb, var(--bg-hover) 84%, transparent);
+  border-color: color-mix(in srgb, var(--border-hover) 60%, var(--sidebar-bg, var(--bg)));
+  background-color: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
   color: var(--text);
+  box-shadow: var(--key-shadow-hover);
+}
+
+.sidebar-brand__icon:active:not(:disabled, [aria-disabled="true"]) {
+  box-shadow: var(--press-shadow);
+  transform: translateY(var(--press-shift));
+  transition-duration: var(--duration-press);
 }
 
 .sidebar-brand__icon:focus-visible {
@@ -2282,20 +2296,28 @@ openclaw-settings-save-indicator:empty {
    here so gateway threads and native coding catalogs cannot drift apart. */
 .sidebar-recent-session {
   --sidebar-child-session-toggle-width: max(34px, calc(36px * var(--control-ui-text-scale)));
-  --session-row-bg: transparent;
+  /* Seated navigation key: --session-row-bg is the face retinted per state
+     over the rail floor; the gradient, contour, and rim stay constant. */
+  --session-row-bg: color-mix(in srgb, var(--bg-elevated) 26%, var(--sidebar-bg, var(--bg)));
 
   display: flex;
   align-items: center;
   min-width: 0;
   min-height: var(--sidebar-session-row-min-height);
   padding-right: 2px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 38%, var(--sidebar-bg, var(--bg)));
   border-radius: var(--radius-md);
-  background: var(--session-row-bg);
+  background-color: var(--session-row-bg);
+  background-image: var(--raise-face);
   color: var(--muted);
   cursor: var(--cursor-action);
+  box-shadow: var(--key-shadow);
   transition:
+    border-color var(--duration-fast) ease,
     background var(--duration-fast) ease,
-    color var(--duration-fast) ease;
+    color var(--duration-fast) ease,
+    box-shadow var(--duration-release) var(--ease-spring),
+    transform var(--duration-release) var(--ease-spring);
 }
 
 .sidebar-recent-session--colored::before {
@@ -2310,28 +2332,44 @@ openclaw-settings-save-indicator:empty {
 }
 
 .sidebar-recent-session:hover {
-  --session-row-bg: color-mix(in srgb, var(--bg-hover) 78%, transparent);
+  --session-row-bg: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
 
   color: var(--text);
+  border-color: color-mix(in srgb, var(--border-hover) 60%, var(--sidebar-bg, var(--bg)));
+  box-shadow: var(--key-shadow-hover);
 }
 
-/* Selection is a filled neutral pill (hover fill, one step stronger), not an
-   accent border: 1px accent outlines read as focus/error chrome on the
-   red-leaning themes. Derive from --text so it holds in light + dark.
-   Doubled class outranks .sidebar-recent-session:hover so the selection fill
-   does not degrade to the weaker hover fill while the row is under pointer. */
+/* Selection shares the nav rail's selected vocabulary: the accent face and an
+   accent-tinted opaque contour (nav rows, layout.css `.nav-item.active`). It
+   stays a filled seat, not an outline, so it cannot read as focus or error
+   chrome on the red-leaning themes. Doubled class outranks
+   .sidebar-recent-session:hover so the selection seat does not degrade to the
+   weaker hover fill while the row is under pointer. */
 .sidebar-recent-session.sidebar-recent-session--active {
-  --session-row-bg: color-mix(in srgb, var(--text) 10%, transparent);
+  --session-row-bg: color-mix(in srgb, var(--accent-subtle) 88%, var(--bg-elevated) 12%);
 
   color: var(--text-strong);
+  /* Selected rides as a quiet raised chip: an accent-tinted opaque contour on
+     the seated key, distinct from hover's neutral lift and from focus. */
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--sidebar-bg, var(--bg)));
 }
 
 /* Multi-select is an accent wash so it stays distinguishable by hue from the
    neutral --active fill when a selection includes the active row. */
 .sidebar-recent-session.sidebar-recent-session--selected {
-  --session-row-bg: color-mix(in srgb, var(--accent) 14%, transparent);
+  --session-row-bg: color-mix(in srgb, var(--accent) 14%, var(--sidebar-bg, var(--bg)));
 
   color: var(--text-strong);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--sidebar-bg, var(--bg)));
+}
+
+/* Pressing the row's navigation link travels the seated key. The inline action
+   keys are excluded: their own travel happens on their own face, and :has
+   stays child-bounded (the established pattern for this row's toggle). */
+.sidebar-recent-session:has(> .sidebar-recent-session__link:active) {
+  box-shadow: var(--press-shadow);
+  transform: translateY(var(--press-shift));
+  transition-duration: var(--duration-press);
 }
 
 .sidebar-recent-session__link {
@@ -2362,10 +2400,19 @@ openclaw-settings-save-indicator:empty {
   height: var(--sidebar-session-row-min-height);
   flex: 0 0 var(--sidebar-child-session-toggle-width, 31px);
   padding: 0 3px;
-  border: 0;
+  /* Small seated disclosure key, quieter than the row it sits on. */
+  border: 1px solid color-mix(in srgb, var(--border-strong) 34%, var(--sidebar-bg, var(--bg)));
   border-radius: var(--radius-sm);
-  background: transparent;
+  background-color: color-mix(in srgb, var(--bg-elevated) 24%, var(--sidebar-bg, var(--bg)));
+  background-image: var(--raise-face);
   color: var(--muted);
+  box-shadow: var(--key-shadow);
+  transition:
+    border-color var(--duration-fast) ease,
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    box-shadow var(--duration-release) var(--ease-spring),
+    transform var(--duration-release) var(--ease-spring);
 }
 
 /* Expanded parents already show their children below, so the collapse control
@@ -2394,8 +2441,16 @@ openclaw-settings-save-indicator:empty {
 
 .sidebar-child-session-toggle:hover,
 .sidebar-child-session-toggle:focus-visible {
-  background: color-mix(in srgb, var(--bg-hover) 88%, transparent);
+  border-color: color-mix(in srgb, var(--border-hover) 55%, var(--sidebar-bg, var(--bg)));
+  background-color: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
   color: var(--text);
+  box-shadow: var(--key-shadow-hover);
+}
+
+.sidebar-child-session-toggle:active:not(:disabled) {
+  box-shadow: var(--press-shadow);
+  transform: translateY(var(--press-shift));
+  transition-duration: var(--duration-press);
 }
 
 .sidebar-child-session-toggle--running {
@@ -3427,9 +3482,13 @@ a:is(
   min-height: 32px;
   padding: 0 8px;
   border-radius: var(--radius-md);
-  border: 1px solid transparent;
-  background: transparent;
+  /* Seated rail key: an opaque machined contour and a graded face over the
+     panel floor, so the row reads as pressable before any hover. */
+  border: 1px solid color-mix(in srgb, var(--border-strong) 46%, var(--sidebar-bg, var(--bg)));
+  background-color: color-mix(in srgb, var(--bg-elevated) 30%, var(--sidebar-bg, var(--bg)));
+  background-image: var(--raise-face);
   color: var(--muted);
+  box-shadow: var(--key-shadow);
   transition:
     border-color var(--duration-fast) ease,
     background var(--duration-fast) ease,
@@ -3485,8 +3544,9 @@ a:is(
 
 .nav-item:hover {
   color: var(--text);
-  background: color-mix(in srgb, var(--bg-hover) 84%, transparent);
-  border-color: color-mix(in srgb, var(--border) 72%, transparent);
+  background-color: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
+  border-color: color-mix(in srgb, var(--border-hover) 60%, var(--sidebar-bg, var(--bg)));
+  box-shadow: var(--key-shadow-hover);
 }
 
 .nav-item:active:not(.active):not(.nav-item--active) {
@@ -3499,9 +3559,10 @@ a:is(
 .nav-item--active {
   color: var(--text-strong);
   background: color-mix(in srgb, var(--accent-subtle) 88%, var(--bg-elevated) 12%);
-  border-color: color-mix(in srgb, var(--accent) 16%, transparent);
-  /* The selected row sits as an extruded chip on the rail: one soft pair,
-     slightly stronger than the resting rail so current location is scannable. */
+  /* The selected row sits as an extruded chip on the rail: an accent-tinted
+     opaque contour and the stronger shared raise, distinct from hover's
+     neutral key without reading as focus or error chrome. */
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--sidebar-bg, var(--bg)));
   box-shadow: var(--raise-shadow);
 }
 
@@ -3515,24 +3576,16 @@ a:is(
   color: var(--accent);
 }
 
-/* Pinned sessions share the page-nav chrome (hover/active fill, muted glyphs and
-   meta) while retaining session actions. The title deliberately opts out and
-   keeps the list's --text: a session name is content in both zones, and pinning
-   a row must not make it read as dimmer than the same row further down. */
+/* Pinned sessions share the page-nav chrome (seated key states, muted glyphs
+   and meta) while retaining session actions. The title deliberately opts out
+   and keeps the list's --text: a session name is content in both zones, and
+   pinning a row must not make it read as dimmer than the same row further
+   down. Key material itself is inherited from .sidebar-recent-session. */
 .sidebar-zone-entry .sidebar-recent-session {
-  --session-row-bg: transparent;
-
   position: relative;
   min-height: max(32px, var(--sidebar-session-row-min-height));
   padding: 0 8px;
-  border: 1px solid transparent;
-  background: var(--session-row-bg);
   color: var(--muted);
-  transition:
-    border-color var(--duration-fast) ease,
-    background var(--duration-fast) ease,
-    color var(--duration-fast) ease,
-    transform var(--duration-fast) ease;
 }
 
 .sidebar-zone-entry .sidebar-recent-session__link {
@@ -3564,17 +3617,17 @@ a:is(
 }
 
 .sidebar-zone-entry .sidebar-recent-session:hover {
-  --session-row-bg: color-mix(in srgb, var(--bg-hover) 84%, transparent);
+  --session-row-bg: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
 
   color: var(--text);
-  border-color: color-mix(in srgb, var(--border) 72%, transparent);
+  border-color: color-mix(in srgb, var(--border-hover) 60%, var(--sidebar-bg, var(--bg)));
 }
 
 .sidebar-zone-entry .sidebar-recent-session.sidebar-recent-session--active {
   --session-row-bg: color-mix(in srgb, var(--accent-subtle) 88%, var(--bg-elevated) 12%);
 
   color: var(--text-strong);
-  border-color: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--sidebar-bg, var(--bg)));
 }
 
 .sidebar-zone-entry .sidebar-recent-session__aside {
@@ -3726,17 +3779,44 @@ openclaw-sidebar-attention {
   flex: 0 0 32px;
   place-items: center;
   padding: 0;
-  border: var(--sidebar-issues-border, 0);
+  /* Seated key; personal themes may still retint the face through the hooks. */
+  border: var(
+    --sidebar-issues-border,
+    1px solid color-mix(in srgb, var(--border-strong) 46%, var(--sidebar-bg, var(--bg)))
+  );
   border-radius: var(--radius-md);
-  background: var(--sidebar-issues-background, transparent);
+  background-color: var(
+    --sidebar-issues-background,
+    color-mix(in srgb, var(--bg-elevated) 30%, var(--sidebar-bg, var(--bg)))
+  );
+  background-image: var(--raise-face);
   color: var(--muted);
   cursor: var(--cursor-action);
+  box-shadow: var(--key-shadow);
+  transition:
+    border-color var(--duration-fast) ease,
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    box-shadow var(--duration-release) var(--ease-spring),
+    transform var(--duration-release) var(--ease-spring);
 }
 
-.sidebar-issues-button:hover,
-.sidebar-issues-button[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--bg-hover) 84%, transparent);
+.sidebar-issues-button:is(:hover, [aria-expanded="true"]) {
+  border-color: color-mix(in srgb, var(--border-hover) 60%, var(--sidebar-bg, var(--bg)));
+  background-color: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
   color: var(--text);
+  box-shadow: var(--key-shadow-hover);
+}
+
+/* An open panel latches the key into its pressed seat. */
+.sidebar-issues-button[aria-expanded="true"] {
+  box-shadow: var(--press-shadow);
+}
+
+.sidebar-issues-button:active:not(:disabled, [aria-disabled="true"]) {
+  box-shadow: var(--press-shadow);
+  transform: translateY(var(--press-shift));
+  transition-duration: var(--duration-press);
 }
 
 .sidebar-issues-button:focus-visible {
@@ -3780,20 +3860,40 @@ openclaw-sidebar-attention {
   flex: 1 1 auto;
   min-width: 0;
   padding: 3px 6px;
-  border: none;
+  /* Seated key: the footer's one wide control reads as pressable like the
+     rest of the rail. */
+  border: 1px solid color-mix(in srgb, var(--border-strong) 46%, var(--sidebar-bg, var(--bg)));
   border-radius: var(--radius-md);
-  background: transparent;
+  background-color: color-mix(in srgb, var(--bg-elevated) 30%, var(--sidebar-bg, var(--bg)));
+  background-image: var(--raise-face);
   color: var(--text);
   font: inherit;
   text-align: left;
   cursor: var(--cursor-action);
-  transition: background var(--duration-fast) ease;
+  box-shadow: var(--key-shadow);
+  transition:
+    border-color var(--duration-fast) ease,
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    box-shadow var(--duration-release) var(--ease-spring),
+    transform var(--duration-release) var(--ease-spring);
 }
 
-.sidebar-identity-card:hover,
-.sidebar-identity-card:focus-visible,
+.sidebar-identity-card:is(:hover, :focus-visible, [aria-expanded="true"]) {
+  border-color: color-mix(in srgb, var(--border-hover) 60%, var(--sidebar-bg, var(--bg)));
+  background-color: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
+  box-shadow: var(--key-shadow-hover);
+}
+
+/* The open identity menu latches the key into its pressed seat. */
 .sidebar-identity-card[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--bg-hover) 84%, transparent);
+  box-shadow: var(--press-shadow);
+}
+
+.sidebar-identity-card:active:not(:disabled, [aria-disabled="true"]) {
+  box-shadow: var(--press-shadow);
+  transform: translateY(var(--press-shift));
+  transition-duration: var(--duration-press);
 }
 
 .sidebar-identity-card:focus-visible {
