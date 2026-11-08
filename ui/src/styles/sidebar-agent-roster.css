@@ -271,11 +271,11 @@ openclaw-sidebar-agent-roster {
   opacity: 1;
   pointer-events: auto;
   /* The roster's 20px chevron is a glyph, not a key: a seated key this small
-     would read as noise beside the team row's counts. */
+     would read as noise beside the team row's counts. `background: none`
+     clears the seated face gradient and retint in one declaration. */
   border: 0;
   border-radius: 0;
   background: none;
-  background-image: none;
   box-shadow: none;
 }
 .sidebar-recent-session--team .sidebar-child-session-toggle__icon svg {

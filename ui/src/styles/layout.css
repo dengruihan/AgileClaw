@@ -1345,6 +1345,20 @@ openclaw-settings-save-indicator:empty {
   --sidebar-header-icon-opacity: 1;
 }
 
+/* Shared seated-key material for the standard rail keys: an opaque machined
+   contour, a graded face over the panel floor, and the shared rail rim — one
+   step quieter than the new-session action's full raise. Per-control rules
+   keep only their geometry; state rules keep overriding border-color,
+   background-color, and box-shadow by specificity as before. */
+.sidebar-brand__icon,
+.nav-item,
+.sidebar-identity-card {
+  border: 1px solid color-mix(in srgb, var(--border-strong) 46%, var(--sidebar-bg, var(--bg)));
+  background-color: color-mix(in srgb, var(--bg-elevated) 30%, var(--sidebar-bg, var(--bg)));
+  background-image: var(--raise-face);
+  box-shadow: var(--key-shadow);
+}
+
 .sidebar-brand__icon {
   display: inline-flex;
   align-items: center;
@@ -1352,13 +1366,8 @@ openclaw-settings-save-indicator:empty {
   width: 30px;
   height: 30px;
   padding: 0;
-  /* Seated key, one step quieter than the new-session action above it. */
-  border: 1px solid color-mix(in srgb, var(--border-strong) 46%, var(--sidebar-bg, var(--bg)));
   border-radius: var(--radius-md);
-  background-color: color-mix(in srgb, var(--bg-elevated) 30%, var(--sidebar-bg, var(--bg)));
-  background-image: var(--raise-face);
   color: var(--muted);
-  box-shadow: var(--key-shadow);
   transition:
     border-color var(--duration-fast) ease,
     background var(--duration-fast) ease,
@@ -1367,8 +1376,14 @@ openclaw-settings-save-indicator:empty {
     transform var(--duration-release) var(--ease-spring);
 }
 
-.sidebar-brand__icon:hover:not(:disabled, [aria-disabled="true"]),
-.sidebar-brand__icon:focus-visible {
+/* Shared rail-key hover seat: a thicker rim and deeper contact without moving
+   the key. The build's hover guard media-wraps this rule, so only true hover
+   lands here; expanded triggers latch into the pressed seat through their own
+   later rules. */
+.nav-item:hover,
+.sidebar-issues-button:is(:hover, [aria-expanded="true"]),
+.sidebar-identity-card:is(:hover, :focus-visible, [aria-expanded="true"]),
+.sidebar-brand__icon:hover:not(:disabled, [aria-disabled="true"]) {
   border-color: color-mix(in srgb, var(--border-hover) 60%, var(--sidebar-bg, var(--bg)));
   background-color: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
   color: var(--text);
@@ -1381,7 +1396,13 @@ openclaw-settings-save-indicator:empty {
   transition-duration: var(--duration-press);
 }
 
+/* Keyboard focus keeps the hover seat outside the hover media guard: the
+   hover-material contour and face apply unwrapped, while the focus ring owns
+   box-shadow (this rule runs after the seated-key material group). */
 .sidebar-brand__icon:focus-visible {
+  border-color: color-mix(in srgb, var(--border-hover) 60%, var(--sidebar-bg, var(--bg)));
+  background-color: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
+  color: var(--text);
   outline: none;
   box-shadow: var(--focus-ring);
 }
@@ -3485,13 +3506,10 @@ a:is(
   min-height: 32px;
   padding: 0 8px;
   border-radius: var(--radius-md);
-  /* Seated rail key: an opaque machined contour and a graded face over the
-     panel floor, so the row reads as pressable before any hover. */
-  border: 1px solid color-mix(in srgb, var(--border-strong) 46%, var(--sidebar-bg, var(--bg)));
-  background-color: color-mix(in srgb, var(--bg-elevated) 30%, var(--sidebar-bg, var(--bg)));
-  background-image: var(--raise-face);
+  /* Seated rail key: the shared machined contour and graded face (the grouped
+     seated-key material rule at the top of the sidebar block) so the row reads
+     as pressable before any hover. */
   color: var(--muted);
-  box-shadow: var(--key-shadow);
   transition:
     border-color var(--duration-fast) ease,
     background var(--duration-fast) ease,
@@ -3543,13 +3561,6 @@ a:is(
   font-size: calc(13px * var(--control-ui-text-scale));
   font-weight: 500;
   white-space: nowrap;
-}
-
-.nav-item:hover {
-  color: var(--text);
-  background-color: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
-  border-color: color-mix(in srgb, var(--border-hover) 60%, var(--sidebar-bg, var(--bg)));
-  box-shadow: var(--key-shadow-hover);
 }
 
 .nav-item:active:not(.active):not(.nav-item--active) {
@@ -3804,14 +3815,8 @@ openclaw-sidebar-attention {
     transform var(--duration-release) var(--ease-spring);
 }
 
-.sidebar-issues-button:is(:hover, [aria-expanded="true"]) {
-  border-color: color-mix(in srgb, var(--border-hover) 60%, var(--sidebar-bg, var(--bg)));
-  background-color: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
-  color: var(--text);
-  box-shadow: var(--key-shadow-hover);
-}
-
-/* An open panel latches the key into its pressed seat. */
+/* An open panel latches the key into its pressed seat; hover retints come from
+   the shared rail-key hover rule. */
 .sidebar-issues-button[aria-expanded="true"] {
   box-shadow: var(--press-shadow);
 }
@@ -3864,16 +3869,12 @@ openclaw-sidebar-attention {
   min-width: 0;
   padding: 3px 6px;
   /* Seated key: the footer's one wide control reads as pressable like the
-     rest of the rail. */
-  border: 1px solid color-mix(in srgb, var(--border-strong) 46%, var(--sidebar-bg, var(--bg)));
+     rest of the rail, via the grouped seated-key material rule. */
   border-radius: var(--radius-md);
-  background-color: color-mix(in srgb, var(--bg-elevated) 30%, var(--sidebar-bg, var(--bg)));
-  background-image: var(--raise-face);
   color: var(--text);
   font: inherit;
   text-align: left;
   cursor: var(--cursor-action);
-  box-shadow: var(--key-shadow);
   transition:
     border-color var(--duration-fast) ease,
     background var(--duration-fast) ease,
@@ -3882,13 +3883,8 @@ openclaw-sidebar-attention {
     transform var(--duration-release) var(--ease-spring);
 }
 
-.sidebar-identity-card:is(:hover, :focus-visible, [aria-expanded="true"]) {
-  border-color: color-mix(in srgb, var(--border-hover) 60%, var(--sidebar-bg, var(--bg)));
-  background-color: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
-  box-shadow: var(--key-shadow-hover);
-}
-
-/* The open identity menu latches the key into its pressed seat. */
+/* The open identity menu latches the key into its pressed seat; hover and
+   focus retints come from the shared rail-key hover rule. */
 .sidebar-identity-card[aria-expanded="true"] {
   box-shadow: var(--press-shadow);
 }
