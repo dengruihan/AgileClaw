@@ -202,6 +202,10 @@ function fixtureDocument(theme: "dark" | "light"): string {
     <div class="sidebar-recent-session sidebar-recent-session--selected session-row-host" id="rail-session-selected" style="position: relative; width: 260px">
       <a href="#" class="sidebar-recent-session__link" onclick="return false"><span class="sidebar-session-indicator"></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Family</span></span></span></a>
     </div>
+    <div class="sidebar-recent-session session-row-host" id="rail-session-parent" style="position: relative; width: 260px">
+      <a href="#" class="sidebar-recent-session__link" onclick="return false"><span class="sidebar-session-indicator"></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Tax filing research</span></span></span></a>
+      <button class="sidebar-child-session-toggle" id="rail-disclosure-expanded" type="button" aria-expanded="true" aria-label="Hide child sessions"><span class="sidebar-child-session-toggle__icon"><svg viewBox="0 0 24 24" width="11" height="11"><path d="m6 9 6 6 6-6" /></svg></span></button>
+    </div>
     <span id="accent-foreground-probe" aria-hidden="true" style="position: absolute; color: var(--accent-foreground)"></span>
   </main></body></html>`;
 }
@@ -459,6 +463,66 @@ suite.define(() => {
           await page.mouse.up();
           await page.mouse.move(0, 0);
           await page.waitForTimeout(320);
+
+          // The expanded parent's disclosure key is revealed by row hover and
+          // must keep the seated-key transition in that state: the
+          // state-specific rule may not shrink the transition list back to
+          // opacity-only, or the press travel and its spring release would
+          // apply instantly. The opacity reveal itself stays in the list.
+          const disclosure = page.locator("#rail-disclosure-expanded");
+          const readDisclosureTransition = () =>
+            disclosure.evaluate((element) => {
+              const style = getComputedStyle(element);
+              const properties = style.transitionProperty.split(",").map((value) => value.trim());
+              const timings =
+                style.transitionTimingFunction.match(/cubic-bezier\([^)]+\)|[a-z-]+/gu) ?? [];
+              const durations = style.transitionDuration.split(",").map((value) => value.trim());
+              const transformIndex = properties.indexOf("transform");
+              return {
+                properties,
+                transformTiming: timings.length === 1 ? timings[0] : timings[transformIndex],
+                transformDuration:
+                  durations.length === 1 ? durations[0] : durations[transformIndex],
+              };
+            });
+          const disclosureRest = await readDisclosureTransition();
+          expect(
+            disclosureRest.properties,
+            "expanded disclosure keeps the seated-key transition list",
+          ).toEqual(
+            expect.arrayContaining([
+              "border-color",
+              "background",
+              "color",
+              "opacity",
+              "box-shadow",
+              "transform",
+            ]),
+          );
+          expect(disclosureRest.transformTiming).toBe(SPRING);
+          expect(disclosureRest.transformDuration).toBe("0.26s");
+
+          // Hovering the parent row reveals the expanded key; pressing it
+          // travels with the shared fast land and restores on the spring.
+          const parentRow = page.locator("#rail-session-parent");
+          await parentRow.hover();
+          await expect
+            .poll(() => disclosure.evaluate((element) => getComputedStyle(element).opacity))
+            .toBe("1");
+          await disclosure.hover();
+          await page.mouse.down();
+          await settleFrames(page);
+          const disclosurePressed = await readKeyPhysics(disclosure);
+          expect(transformY(disclosurePressed.transform)).toBeGreaterThanOrEqual(0.9);
+          expect(disclosurePressed.shadow).toContain("0px 2px 4px");
+          expect(disclosurePressed.transformDuration).toBe("0.04s");
+          await page.mouse.move(4, 860);
+          await page.mouse.up();
+          await page.waitForTimeout(320);
+          const disclosureReleased = await readKeyPhysics(disclosure);
+          expect(disclosureReleased.transform).toBe("none");
+          expect(disclosureReleased.shadow).not.toContain("0px 2px 4px");
+          expect(disclosureReleased.shadow).toContain("0px 1px 0px 0px");
 
           // An open panel latches its trigger into the pressed seat.
           await page

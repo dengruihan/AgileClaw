@@ -2411,17 +2411,20 @@ openclaw-settings-save-indicator:empty {
     border-color var(--duration-fast) ease,
     background var(--duration-fast) ease,
     color var(--duration-fast) ease,
+    opacity var(--duration-fast) ease,
     box-shadow var(--duration-release) var(--ease-spring),
     transform var(--duration-release) var(--ease-spring);
 }
 
 /* Expanded parents already show their children below, so the collapse control
    is quiet until row hover; collapsed toggles stay visible because the count
-   and status tint are the only signal that hidden children exist. */
+   and status tint are the only signal that hidden children exist. The state
+   rule restates only the reveal, never the transition: the seated-key
+   transition above must keep animating the key's press in the expanded
+   state too. */
 .sidebar-child-session-toggle[aria-expanded="true"] {
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--duration-fast) ease;
 }
 
 .session-row-host:hover .sidebar-child-session-toggle[aria-expanded="true"],
