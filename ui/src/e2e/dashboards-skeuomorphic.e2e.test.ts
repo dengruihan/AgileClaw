@@ -139,7 +139,35 @@ suite.define(() => {
       await expectNoHorizontalOverflow(page);
       await page.screenshot({ path: `${artifacts}/01-preview-partially-open.png` });
 
-      // Release snaps the drawer into the modal owner's open state.
+      // The transient preview is inert: every control inside it sits in an
+      // inert subtree the keyboard can never reach.
+      expect(
+        await page.evaluate(() => {
+          const preview = document.querySelector("[data-marketplace-preview]");
+          return (
+            preview?.hasAttribute("inert") === true &&
+            Array.from(preview?.querySelectorAll("button") ?? []).every(
+              (button) => button.closest("[inert]") !== null,
+            )
+          );
+        }),
+      ).toBe(true);
+      // Pressing Tab mid-gesture moves focus off the capture target, which
+      // safely resets the gesture; focus never enters the preview copy.
+      await page.keyboard.press("Tab");
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => document.activeElement?.closest("[data-marketplace-preview]") === null,
+          ),
+        )
+        .toBe(true);
+      await expect.poll(() => previewDrawer(page).count()).toBe(0);
+      await expect.poll(() => modalDrawer(page).count()).toBe(0);
+
+      // Pull again to complete the slice: release snaps the drawer into the
+      // modal owner's open state.
+      await beginTriggerDrag(page, 80, 10);
       await page.mouse.up();
       const drawer = modalDrawer(page);
       await drawer.waitFor();
@@ -150,8 +178,11 @@ suite.define(() => {
         .toBeCloseTo(OPEN_DRAWER_X_PX, 1);
       await page.screenshot({ path: `${artifacts}/02-open-desktop.png` });
 
-      // Closing drags the drawer back toward its right-edge home, 1:1.
+      // The primary close control keeps its raised material at rest.
       const handle = page.locator("[data-marketplace-handle]");
+      const restingShadow = await handle.evaluate((el) => getComputedStyle(el).boxShadow);
+      expect(restingShadow).not.toBe("none");
+      expect(restingShadow).not.toContain("inset");
       const handleBox = (await handle.boundingBox())!;
       const y = handleBox.y + handleBox.height / 2;
       await page.mouse.move(handleBox.x + handleBox.width / 2, y);
@@ -159,6 +190,9 @@ suite.define(() => {
       await page.mouse.move(handleBox.x + handleBox.width / 2 + 160, y, { steps: 6 });
       const closing = await drawer.boundingBox();
       expect(closing!.x - OPEN_DRAWER_X_PX).toBeCloseTo(160, 1);
+      // While held, the handle flips into the pressed (inset) surface.
+      const draggingShadow = await handle.evaluate((el) => getComputedStyle(el).boxShadow);
+      expect(draggingShadow).toContain("inset");
       await page.screenshot({ path: `${artifacts}/03-closing-mid-drag.png` });
 
       // Past half travel it snaps shut and unmounts.
@@ -215,6 +249,103 @@ suite.define(() => {
       await page.mouse.up();
       await modalDrawer(page).waitFor();
       await page.screenshot({ path: `${artifacts}/01-flick-opened.png` });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("ignores a flick whose speed has aged out by a deliberate release", async () => {
+    const context = await suite.browser.newContext({
+      locale: "en-US",
+      serviceWorkers: "block",
+      reducedMotion: "reduce",
+      viewport: { width: VIEWPORT_WIDTH_PX, height: 900 },
+    });
+    const page = await context.newPage();
+    try {
+      await installDrawerGateway(page);
+      await openDashboards(page);
+      const trigger = page.locator("[data-marketplace-trigger]");
+
+      // Open direction: one fast frame under the position latch, then a held
+      // pause long enough to age the sample out, then release.
+      const tabBox = await trigger.boundingBox();
+      const x = tabBox!.x + tabBox!.width / 2;
+      const y = tabBox!.y + tabBox!.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x - 30, y);
+      await page.waitForTimeout(320);
+      await page.mouse.up();
+      await expect.poll(() => previewDrawer(page).count()).toBe(0);
+      await expect.poll(() => modalDrawer(page).count()).toBe(0);
+      await expect.poll(() => trigger.getAttribute("aria-expanded")).toBe("false");
+
+      // Close direction: the same aged-out flick on the edge handle must not
+      // close the open drawer.
+      await trigger.click();
+      const drawer = modalDrawer(page);
+      await drawer.waitFor();
+      const handle = page.locator("[data-marketplace-handle]");
+      const handleBox = (await handle.boundingBox())!;
+      const handleY = handleBox.y + handleBox.height / 2;
+      await page.mouse.move(handleBox.x + handleBox.width / 2, handleY);
+      await page.mouse.down();
+      await page.mouse.move(handleBox.x + handleBox.width / 2 + 30, handleY);
+      await page.waitForTimeout(320);
+      await page.mouse.up();
+      await expect
+        .poll(async () => (await drawer.boundingBox())!.x, { timeout: 3_000 })
+        .toBeCloseTo(OPEN_DRAWER_X_PX, 1);
+      expect(await modalDrawer(page).count()).toBe(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("re-grabs a closing drawer from its live position without a jump", async () => {
+    const context = await suite.browser.newContext({
+      locale: "en-US",
+      serviceWorkers: "block",
+      reducedMotion: "reduce",
+      viewport: { width: VIEWPORT_WIDTH_PX, height: 900 },
+    });
+    const page = await context.newPage();
+    try {
+      await installDrawerGateway(page);
+      await openDashboards(page);
+      await page.locator("[data-marketplace-trigger]").click();
+      const drawer = modalDrawer(page);
+      await drawer.waitFor();
+      const handle = page.locator("[data-marketplace-handle]");
+
+      // Push nearly home and release so the close settle starts with only a
+      // short, slow remainder for the re-grab to track.
+      const handleBox = (await handle.boundingBox())!;
+      const y = handleBox.y + handleBox.height / 2;
+      await page.mouse.move(handleBox.x + handleBox.width / 2, y);
+      await page.mouse.down();
+      await page.mouse.move(handleBox.x + handleBox.width / 2 + 400, y, { steps: 10 });
+      await page.mouse.up();
+
+      // Re-grab while the settle is still running: the new session must map
+      // its deltas from the panel's measured current shift, not from zero.
+      const liveHandle = (await handle.boundingBox())!;
+      const grabX = (await drawer.boundingBox())!.x;
+      await page.mouse.move(liveHandle.x + liveHandle.width / 2, y);
+      await page.mouse.down();
+      await page.mouse.move(liveHandle.x + liveHandle.width / 2 - 40, y);
+      const resumed = await drawer.boundingBox();
+      expect(resumed!.x).toBeGreaterThan(OPEN_DRAWER_X_PX + 150);
+      expect(resumed!.x).toBeGreaterThanOrEqual(grabX - 60);
+      expect(resumed!.x).toBeLessThanOrEqual(grabX);
+      // The re-grab cancelled the pending close: the modal never unmounted.
+      expect(await modalDrawer(page).count()).toBe(1);
+
+      // The re-grabbed session still owns its verdict: past half, it closes.
+      await page.mouse.move(liveHandle.x + liveHandle.width / 2 - 40 + 300, y, { steps: 8 });
+      await page.mouse.up();
+      await expect.poll(() => modalDrawer(page).count()).toBe(0);
     } finally {
       await context.close();
     }

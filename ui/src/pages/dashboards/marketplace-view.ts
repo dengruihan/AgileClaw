@@ -165,6 +165,7 @@ export function renderMarketplacePreview(marketplace: MarketplaceState) {
     class="dashboards-marketplace-drawer-preview"
     data-marketplace-preview
     aria-hidden="true"
+    inert
   >
     ${renderMarketplacePanel(marketplace)}
   </div>`;

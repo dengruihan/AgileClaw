@@ -915,7 +915,7 @@
     linear-gradient(90deg, color-mix(in srgb, var(--neu-dark) 35%, transparent), transparent 60%),
     linear-gradient(180deg, color-mix(in srgb, var(--neu-light) 55%, transparent), transparent 45%),
     var(--bg-elevated);
-  box-shadow: var(--dashboards-raise-light), var(--dashboards-raise-dark), var(--shadow-sm);
+  box-shadow: var(--surface-raised);
   cursor: grab;
   touch-action: none;
   transition:
@@ -936,7 +936,7 @@
 
 .dashboards-marketplace__handle:active,
 .dashboards-marketplace__panel[data-dragging] .dashboards-marketplace__handle {
-  box-shadow: var(--dashboards-press);
+  box-shadow: var(--surface-pressed);
 }
 
 .dashboards-marketplace__panel[data-dragging] .dashboards-marketplace__handle {

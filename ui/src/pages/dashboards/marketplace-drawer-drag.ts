@@ -18,6 +18,9 @@ const TAB_TRAVEL_PX = 56;
 const TAB_HARD_TRAVEL_PX = 84;
 const OPEN_PULL_PX = 72;
 const FLICK_PX_PER_MS = 0.45;
+// A flick verdict needs a still-moving gesture: a fast move followed by a
+// deliberate pause must settle on position alone, not on the stale sample.
+const FLICK_SAMPLE_AGE_MS = 100;
 const CLOSE_RATIO = 0.5;
 // Must stay >= the matching settle/landing durations in dashboards.css.
 const SETTLE_WAIT_MS = 300;
@@ -45,6 +48,8 @@ type DrawerDrag = {
   startX: number;
   startY: number;
   locked: boolean;
+  /** Shift the panel already had when grabbed, so re-grabs stay continuous. */
+  baseShift: number;
   velocity: number;
   lastX: number;
   lastT: number;
@@ -79,14 +84,24 @@ function tabTravel(pull: number): number {
   return Math.min(TAB_TRAVEL_PX + (pull - TAB_TRAVEL_PX) * 0.3, TAB_HARD_TRAVEL_PX);
 }
 
-/** Drawer offset while closing: rightward 1:1 with damping past closed, leftward resistance. */
-function drawerShift(deltaX: number, width: number): number {
-  if (deltaX >= 0) {
-    const close = Math.min(deltaX, width);
-    const overrun = deltaX > width ? (deltaX - width) * 0.18 : 0;
+/** Drawer offset for a total displacement: rightward toward closed 1:1 with
+ *  damping past closed, leftward past open resisted. */
+function drawerShift(totalDisplacement: number, width: number): number {
+  if (totalDisplacement >= 0) {
+    const close = Math.min(totalDisplacement, width);
+    const overrun = totalDisplacement > width ? (totalDisplacement - width) * 0.18 : 0;
     return close + overrun;
   }
-  return deltaX * 0.18;
+  return totalDisplacement * 0.18;
+}
+
+/** The panel's live X offset, including mid-settle transition frames. */
+function currentShift(panel: HTMLElement): number {
+  const transform = getComputedStyle(panel).transform;
+  if (!transform || transform === "none") {
+    return 0;
+  }
+  return new DOMMatrixReadOnly(transform).m41;
 }
 
 export class MarketplaceDrawerDrag {
@@ -143,13 +158,14 @@ export class MarketplaceDrawerDrag {
       startX: event.clientX,
       startY: event.clientY,
       locked: false,
+      baseShift: 0,
       velocity: 0,
       lastX: event.clientX,
       lastT: event.timeStamp,
     });
   }
 
-  /** Ends any live gesture, clears timers, and drops window listeners. */
+  /** Ends any live gesture and drops every timer, listener, and capture. */
   cancel(): void {
     if (this.settleTimer) {
       clearTimeout(this.settleTimer);
@@ -160,10 +176,13 @@ export class MarketplaceDrawerDrag {
       this.arriveTimer = null;
     }
     const session = this.session;
-    if (session) {
-      this.settleBack(session);
-      this.endSession(session, true);
+    if (!session) {
+      return;
     }
+    // Cleanup only: a settle would just schedule timers that mutate the
+    // detached nodes a disconnecting page is tearing down.
+    this.releaseSession(session);
+    this.session = null;
   }
 
   private startSession(session: DragSession): void {
@@ -238,6 +257,9 @@ export class MarketplaceDrawerDrag {
         session.tab.setAttribute("data-dragging", "");
         this.host.beginPreview();
       } else {
+        // A re-grab during a settle must continue from where the panel
+        // actually is, not from a zero the settle had already left behind.
+        session.baseShift = currentShift(session.panel);
         session.panel.setAttribute("data-dragging", "");
         session.panel.removeAttribute("data-arrived");
       }
@@ -246,7 +268,7 @@ export class MarketplaceDrawerDrag {
     if (session.kind === "trigger") {
       this.paintTrigger(session, effectivePull(-deltaX));
     } else {
-      this.paintDrawer(session, drawerShift(deltaX, session.width));
+      this.paintDrawer(session, drawerShift(session.baseShift + deltaX, session.width));
     }
     // The release position usually equals the last move, so flick speed has to
     // roll forward from the move samples themselves.
@@ -275,12 +297,17 @@ export class MarketplaceDrawerDrag {
       return;
     }
     const pointer = event as PointerEvent;
-    const velocity = session.velocity;
+    // Position decides on its own unless the gesture was still moving.
+    const velocity =
+      pointer.timeStamp - session.lastT <= FLICK_SAMPLE_AGE_MS ? session.velocity : 0;
     if (session.kind === "trigger") {
       const pull = effectivePull(-(pointer.clientX - session.startX));
       this.settleTrigger(session, pull >= OPEN_PULL_PX || velocity <= -FLICK_PX_PER_MS);
     } else {
-      const shift = drawerShift(pointer.clientX - session.startX, session.width);
+      const shift = drawerShift(
+        session.baseShift + (pointer.clientX - session.startX),
+        session.width,
+      );
       const closeProgress = Math.min(shift / session.width, 1);
       const shouldClose = closeProgress >= CLOSE_RATIO || velocity >= FLICK_PX_PER_MS;
       this.settleDrawer(session, shouldClose);
