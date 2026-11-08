@@ -295,6 +295,45 @@
   --surface-pressed: inset 2px 2px 5px var(--neu-dark), inset -2px -2px 4px var(--neu-light);
   --surface-well: inset 2px 2px 4px var(--neu-dark), inset -1px -1px 2px var(--neu-light);
 
+  /* Physical control material. Light arrives from above: every raised face is
+     a graded dome with a specular top edge and a solid rim (thickness) under
+     it, and pressing swaps that rim for inset shade while the face travels
+     --press-shift down; releasing settles on --ease-spring. These are the only
+     hue inputs for control chrome — controls compose them instead of rolling
+     per-feature bevels, so one light model covers every theme. */
+  --mat-bevel: rgba(198, 246, 209, 0.12);
+  --mat-face-hi: rgba(220, 255, 230, 0.05);
+  --mat-face-lo: rgba(0, 8, 3, 0.18);
+  --mat-rim: rgba(0, 5, 2, 0.92);
+  --mat-rim-hi: rgba(170, 235, 185, 0.08);
+  --mat-gloss: rgba(205, 255, 220, 0.1);
+  --raise-face: linear-gradient(180deg, var(--mat-face-hi), var(--mat-face-lo));
+  --raise-shadow:
+    inset 0 1px 0 var(--mat-bevel),
+    inset 0 -1px 0 color-mix(in srgb, var(--mat-rim) 42%, transparent), 0 2px 0 var(--mat-rim),
+    2px 4px 9px var(--neu-dark);
+  --raise-shadow-hover:
+    inset 0 1px 0 var(--mat-bevel),
+    inset 0 -1px 0 color-mix(in srgb, var(--mat-rim) 42%, transparent), 0 3px 0 var(--mat-rim),
+    3px 6px 12px var(--neu-dark);
+  --press-shadow:
+    inset 0 2px 4px var(--neu-dark), inset 0 -1px 0 var(--mat-rim-hi),
+    0 1px 0 color-mix(in srgb, var(--mat-rim) 62%, transparent);
+  /* Recessed fields: the floor sits darker where the top wall occludes the
+     light and catches a faint bevel on the inner bottom lip. */
+  --well-face: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg) 82%, black 18%),
+    color-mix(in srgb, var(--bg) 90%, var(--bg-elevated) 10%)
+  );
+  --well-shadow:
+    inset 0 2px 3px color-mix(in srgb, var(--neu-dark) 72%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--mat-bevel) 45%, transparent);
+  /* Press physics: the press lands with the finger; the release springs back. */
+  --press-shift: 1px;
+  --duration-press: 40ms;
+  --duration-release: 260ms;
+
   /* Window canvas around the shell plate; one step off the plate fill so the
      rounded base plate reads as raised from it in both modes. */
   --shell-canvas: #070b07;
@@ -704,6 +743,20 @@
   --surface-raised-strong: -3px -4px 8px var(--neu-light), 4px 6px 14px var(--neu-dark);
   --surface-pressed: inset 2px 2px 5px var(--neu-dark), inset -2px -2px 4px var(--neu-light);
   --surface-well: inset 2px 2px 4px var(--neu-dark), inset -1px -1px 2px var(--neu-light);
+  /* Physical control material: the same dome-and-rim model with a bright
+     top bevel, a sage-tinted shade, and a darker solid rim standing in for
+     the key's milled edge. */
+  --mat-bevel: rgba(255, 255, 255, 0.95);
+  --mat-face-hi: rgba(255, 255, 255, 0.72);
+  --mat-face-lo: rgba(35, 66, 44, 0.08);
+  --mat-rim: rgba(74, 98, 82, 0.55);
+  --mat-rim-hi: rgba(255, 255, 255, 0.55);
+  --mat-gloss: rgba(255, 255, 255, 0.6);
+  --well-face: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg) 82%, var(--text) 18%),
+    color-mix(in srgb, var(--bg) 90%, var(--bg-elevated) 10%)
+  );
   --shell-canvas: #e7eee8;
   --overlay-border: color-mix(in srgb, var(--border-strong) 64%, transparent);
   --overlay-shadow: -3px -4px 8px var(--neu-light), 5px 8px 22px var(--neu-dark);
@@ -934,11 +987,42 @@ wa-switch {
   --wa-form-control-background-color: color-mix(in srgb, var(--border-strong) 60%, transparent);
   --wa-form-control-border-color: var(--muted);
   --wa-color-focus: var(--ring);
+  /* The lever snaps between its poles on the shared spring so the cap reads
+     as a physical throw, not a fade. */
+  --wa-transition-easing: var(--ease-spring);
   /* The library sizes the track at 1.75x its height and the thumb at 0.75em,
      leaving fractional insets (3.75px at 14px) that pixel-snap unevenly and
      push the thumb off-center. Whole-pixel insets keep it centered. */
   --width: calc(var(--height) + 2 * round(calc(var(--height) * 0.375), 1px));
   --thumb-size: calc(var(--height) - 2 * round(calc((var(--height) - 0.75em) / 2), 1px));
+}
+
+/* The switch is a lever in a machined channel: the track floor sits recessed
+   (the accent fill keeps the inner lip when checked) and the cap rides proud
+   of it on a solid rim. ::part() is the only document-side reach into Web
+   Awesome's shadow DOM; the library cannot be reached another way. */
+wa-switch::part(control) {
+  background-image: var(--raise-face);
+  box-shadow: var(--well-shadow);
+}
+
+wa-switch::part(thumb) {
+  background-color: var(--bg-elevated);
+  background-image: var(--raise-face);
+  box-shadow:
+    inset 0 1px 0 var(--mat-bevel),
+    0 2px 0 var(--mat-rim),
+    0 2px 5px var(--neu-dark);
+  /* The component styles the cap with `transition: inherit`; this restates
+     the full list so the throw keeps animating while the shading eases. */
+  transition:
+    translate var(--wa-transition-normal) var(--ease-spring),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+/* Grabbing the lever dimples the cap into its channel. */
+wa-switch:active::part(thumb) {
+  box-shadow: var(--press-shadow);
 }
 
 /* Keep neutral menu hover, keyboard focus, and open submenus on the active theme.
@@ -1193,6 +1277,12 @@ wa-popover::part(body)::-webkit-scrollbar-thumb:hover {
   wa-select {
     --show-duration: 0ms;
     --hide-duration: 0ms;
+  }
+
+  /* The switch cap lives in Web Awesome's shadow DOM, which the global
+     reset below cannot reach; its throw settles instantly instead. */
+  wa-switch::part(thumb) {
+    transition: none;
   }
 
   .skeleton::after,

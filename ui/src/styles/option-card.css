@@ -4,8 +4,9 @@
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-sm);
+  background-color: var(--bg-elevated);
+  background-image: var(--raise-face);
+  box-shadow: var(--raise-shadow);
 }
 
 .option-card__chip {
@@ -33,6 +34,8 @@
   gap: 10px;
 }
 
+/* Choice buttons are card-sized keys: the same dome, rim, and press travel
+   as every shared control, sized up to the radio-card footprint. */
 .option-card__choice {
   display: flex;
   min-height: 88px;
@@ -42,18 +45,28 @@
   padding: 13px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: var(--raise-face);
   color: var(--text);
   text-align: left;
+  box-shadow: var(--raise-shadow);
   transition:
     border-color var(--duration-fast) var(--ease-out),
-    background var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out);
+    background-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-release) var(--ease-spring),
+    transform var(--duration-release) var(--ease-spring);
 }
 
 .option-card__choice:hover:not(:disabled) {
   border-color: var(--border-strong);
-  background: var(--bg-hover);
+  background-color: var(--bg-hover);
+  box-shadow: var(--raise-shadow-hover);
+}
+
+.option-card__choice:active:not(:disabled) {
+  box-shadow: var(--press-shadow);
+  transform: translateY(var(--press-shift));
+  transition-duration: var(--duration-press);
 }
 
 .option-card__choice:focus-visible {
@@ -61,10 +74,19 @@
   box-shadow: var(--focus-ring);
 }
 
+.option-card__choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  box-shadow: none;
+  transform: none;
+}
+
 .option-card__choice--recommended,
 .option-card__choice--selected {
   border-color: var(--accent);
-  background: var(--accent-subtle);
+  background-color: var(--accent-subtle);
+  /* Latched into the plate like every toggled-in control. */
+  box-shadow: var(--press-shadow);
 }
 
 /* Hover must not swap the accent tint for the neutral one; the mismatched
@@ -72,7 +94,7 @@
 .option-card__choice--recommended:hover:not(:disabled),
 .option-card__choice--selected:hover:not(:disabled) {
   border-color: var(--accent);
-  background: var(--accent-subtle);
+  background-color: var(--accent-subtle);
 }
 
 .option-card__choice-copy {

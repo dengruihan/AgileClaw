@@ -109,8 +109,10 @@
   gap: var(--space-2);
 }
 
+/* Translucent glass key over the channel banner: background-color keeps the
+   shared face gradients from components.css; only the tone is local. */
 .channels-detail__header-actions .btn {
-  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  background-color: color-mix(in srgb, var(--bg) 55%, transparent);
   backdrop-filter: blur(4px);
 }
 
