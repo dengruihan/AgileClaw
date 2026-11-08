@@ -205,6 +205,19 @@ suite.define(() => {
         ).toBe("page");
         // Re-query every row by key: the sidebar commits again while the activity
         // read is held, so element handles captured in one pass can detach.
+        // Measure the tab's leading gap in the tab's own untransformed layout
+        // coordinates. Screen-rect reads sampled across the sidebar's async
+        // commits can catch transient relayout frames (the R2 round measured
+        // 7.9248 on a gap whose settled screen reads and this offset read are
+        // exactly 8px, and the failure screenshot shows no visible spacing
+        // loss), and a pulled tab makes screen reads animation-frame
+        // sensitive; offsetLeft chains ignore transforms and animation
+        // frames while still measuring the same user-visible flex gap
+        // between the lead slot and the title. The link is the positioned
+        // containing block for the title, and the indicator (position:
+        // relative) is the offsetParent for the lead glyph, so the lead's
+        // offset chains through the indicator rather than sharing the
+        // title's offsetParent.
         const measuredLeads = await (async () => {
           const keys = await sessionRows.evaluateAll((rows) =>
             rows.map((row) => row.dataset.sessionKey ?? ""),
@@ -214,22 +227,32 @@ suite.define(() => {
             const row = sidebar
               .locator(`.sidebar-recent-session[data-session-key="${key}"]`)
               .first();
-            const title = await row.locator(".sidebar-recent-session__name").boundingBox();
-            expect(title, key).not.toBeNull();
+            const frame = await row.evaluate((element) => {
+              const indicator = element.querySelector(".sidebar-session-indicator");
+              const lead = element.querySelector(".session-glyph");
+              const title = element.querySelector(".sidebar-recent-session__name");
+              if (!indicator || !lead || !title) {
+                return null;
+              }
+              return {
+                leadStart: indicator.offsetLeft + lead.offsetLeft,
+                leadWidth: lead.offsetWidth,
+                titleStart: title.offsetLeft,
+              };
+            });
             const leadLocator = row.locator(".sidebar-session-indicator .session-glyph");
-            // Plain member rows render no lead glyph; every row that does keeps the
-            // documented gap before its title.
-            if ((await leadLocator.count()) === 0) {
-              continue;
-            }
-            const lead = await leadLocator.boundingBox();
-            if (!lead) {
+            // Plain member rows render no lead glyph (frame null); every row
+            // that does keeps the documented gap before its title.
+            if (!frame || (await leadLocator.count()) === 0) {
               continue;
             }
             measured += 1;
             // The renderer reports fractional layout values (a pinned row measures
             // 7.98 px for the 8 px gap); allow sub-pixel rounding only.
-            expect(title!.x - (lead.x + lead.width)).toBeGreaterThanOrEqual(8 - 0.05);
+            expect(
+              frame!.titleStart - (frame!.leadStart + frame!.leadWidth),
+              key,
+            ).toBeGreaterThanOrEqual(8 - 0.05);
           }
           return measured;
         })();
