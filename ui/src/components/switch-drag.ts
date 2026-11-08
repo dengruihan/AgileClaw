@@ -78,8 +78,11 @@ class SwitchDragDirective extends AsyncDirective {
     } catch {
       // Synthetic pointers (tests) have no active pointer to capture.
     }
-    // The stylesheet animates `translate`; while tracking, the thumb must be 1:1.
-    geometry.thumb.style.transition = "none";
+    // The stylesheet animates `translate`; while tracking, the thumb must be
+    // 1:1. Document ::part() rules outrank a plain inline declaration (the
+    // material in base.css gives the cap its own spring transition), so the
+    // suppression itself needs the important declaration.
+    geometry.thumb.style.setProperty("transition", "none", "important");
     element.addEventListener("pointermove", this.onPointerMove);
     element.addEventListener("pointerup", this.onPointerUp);
     element.addEventListener("pointercancel", this.onPointerCancel);
