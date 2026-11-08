@@ -35,6 +35,22 @@ after a Gateway reconnect.
 If a refresh fails, the page keeps the last loaded dashboards visible with a
 stale-data warning. Choose **Retry** to load the list again.
 
+The page can also show built-in page presets. Open the **Dashboard
+marketplace**, a page-level drawer, to browse and manage them. No preset is
+installed by default — including the built-in **System monitoring** preset — so
+the page starts without one. Add **System monitoring** from the marketplace to
+show its three measurements: **CPU load**, **Memory used**, and
+**Disk available**. Remove it from the marketplace when you no longer want it.
+
+Presets belong to the page, not to a thread. They stay separate from the
+dashboard cards in the gallery, which are session dashboards owned by their
+threads: adding or removing a preset never creates, edits, or deletes a card's
+dashboard, and the cards keep their existing behavior. A preset choice is
+device-local, stored by your browser per Gateway origin, so it applies on this
+device for that Gateway and does not follow you to another device or Gateway.
+The marketplace is built into the page — no remote plugin upload or download
+service is introduced.
+
 The dashboard and its shared presentation default follow you when you connect
 to the same Gateway from another device. Personal presentation overrides, the
 active dashboard tab, and other task layout choices remain per-device UI state. The browser retains layout and tab preferences
