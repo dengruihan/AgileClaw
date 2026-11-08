@@ -13,7 +13,6 @@ import {
   type HostMeasurements,
   type MonitoringTelemetrySample,
 } from "./monitoring-telemetry.ts";
-import { DASHBOARD_PANEL_IDS, type DashboardPanelId } from "./panel-catalog.ts";
 
 /** The mounted monitoring owner supplies these facts; the renderer owns no reads. */
 export type MonitoringVitalsSource = {
@@ -48,16 +47,11 @@ function metricSamples(
   return samples;
 }
 
-export function renderMonitoringVitals(
-  row: MonitoringRow,
-  source: MonitoringVitalsSource,
-  panels: readonly DashboardPanelId[] = DASHBOARD_PANEL_IDS,
-) {
+export function renderMonitoringVitals(row: MonitoringRow, source: MonitoringVitalsSource) {
   const stats = monitoringMeasurements(row);
   if (!stats) {
     return html`<p class="dashboards-monitoring__no-telemetry">${t("systems.noTelemetry")}</p>`;
   }
-  const selected = new Set(panels);
   const observedAt = row.node?.hostStats?.updatedAtMs ?? source.sampledAtMs;
   const gatewayHost = row.environment.id === "gateway";
   const lastKnown =
@@ -72,7 +66,6 @@ export function renderMonitoringVitals(
   // An empty volume list cannot render per-volume tiles, so it keeps the legacy
   // single-volume reading instead of showing an empty panel.
   const disks = stats.disks?.length ? stats.disks : undefined;
-  const showDisk = selected.has("disk");
   const diskSample = (path: string | undefined) => (sample: HostMeasurements) => {
     if (path !== undefined) {
       return sample.disks?.find((disk) => disk.path === path)?.availableBytes;
@@ -96,45 +89,35 @@ export function renderMonitoringVitals(
     row.environment.id,
     html`<div class="dashboards-monitoring__vitals" data-stale=${lastKnown}>
       <div
-        class="dashboards-monitoring__vital-row ${showDisk && disks && disks.length !== 1 ? "dashboards-monitoring__vital-row--volumes" : ""}"
+        class="dashboards-monitoring__vital-row ${disks && disks.length !== 1 ? "dashboards-monitoring__vital-row--volumes" : ""}"
       >
+        ${html`<openclaw-sparkline
+          class="gateway-vital dashboards-monitoring__vital dashboards-monitoring__vital--load"
+          .label=${t("systems.load")}
+          .sub=${t("systems.cpuCount", { count: String(stats.cpuCount) })}
+          .samples=${metricSamples(history, (sample) => sample.loadAverage?.[0])}
+          .format=${(value: number) => value.toFixed(2)}
+          .floorMax=${stats.cpuCount}
+        ></openclaw-sparkline>`}
+        ${html`<openclaw-sparkline
+          class="gateway-vital dashboards-monitoring__vital dashboards-monitoring__vital--memory"
+          .label=${t("systems.memory")}
+          .sub=${`/ ${bytes(stats.memoryTotalBytes)}`}
+          .samples=${metricSamples(
+            history,
+            (sample) => sample.memoryTotalBytes - sample.memoryFreeBytes,
+          )}
+          .format=${bytes}
+          .floorMax=${stats.memoryTotalBytes}
+        ></openclaw-sparkline>`}
         ${
-          selected.has("load")
-            ? html`<openclaw-sparkline
-                class="gateway-vital dashboards-monitoring__vital dashboards-monitoring__vital--load"
-                .label=${t("systems.load")}
-                .sub=${t("systems.cpuCount", { count: String(stats.cpuCount) })}
-                .samples=${metricSamples(history, (sample) => sample.loadAverage?.[0])}
-                .format=${(value: number) => value.toFixed(2)}
-                .floorMax=${stats.cpuCount}
-              ></openclaw-sparkline>`
-            : nothing
-        }
-        ${
-          selected.has("memory")
-            ? html`<openclaw-sparkline
-                class="gateway-vital dashboards-monitoring__vital dashboards-monitoring__vital--memory"
-                .label=${t("systems.memory")}
-                .sub=${`/ ${bytes(stats.memoryTotalBytes)}`}
-                .samples=${metricSamples(
-                  history,
-                  (sample) => sample.memoryTotalBytes - sample.memoryFreeBytes,
-                )}
-                .format=${bytes}
-                .floorMax=${stats.memoryTotalBytes}
-              ></openclaw-sparkline>`
-            : nothing
-        }
-        ${
-          !showDisk
-            ? nothing
-            : disks === undefined
-              ? renderDisk(undefined, stats.diskTotalBytes)
-              : repeat(
-                  disks,
-                  (disk) => disk.path,
-                  (disk) => renderDisk(disk.path, disk.totalBytes),
-                )
+          disks === undefined
+            ? renderDisk(undefined, stats.diskTotalBytes)
+            : repeat(
+                disks,
+                (disk) => disk.path,
+                (disk) => renderDisk(disk.path, disk.totalBytes),
+              )
         }
       </div>
       <div class="dashboards-monitoring__caption">

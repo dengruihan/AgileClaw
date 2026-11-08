@@ -1,11 +1,11 @@
 import type { TranslationMap } from "../lib/types.ts";
 import { en } from "./en.ts";
 
-// Machine monitoring copy for the dashboards workspace. The standalone Systems
-// page is gone; these strings cover the monitoring region only.
+// Copy for the System monitoring preset the dashboards marketplace installs:
+// its region, its vitals, and the measurements its preset card presents.
 const enSystems = {
   systems: {
-    title: "Systems",
+    title: "System monitoring",
     loading: "Loading machines…",
     empty: "No machines are available to this account.",
     offlineGateway: "Gateway disconnected. Reconnect to refresh machines.",
@@ -25,18 +25,12 @@ const enSystems = {
     noTelemetry: "This machine has not reported resource statistics.",
     statuses: { starting: "Starting", stopping: "Stopping", error: "Error" },
     errors: "Some machine information could not be refreshed.",
-    panelLibrary: {
-      trigger: "Panels",
-      triggerHint: "Choose which machine panels to show",
-      title: "Machine panels",
+    preset: {
+      name: "System monitoring",
       description:
-        "Choose which resource panels appear for every machine. This browser remembers your selection; no Gateway settings change.",
-      close: "Close panel library",
-      done: "Done",
-      showAll: "Show all panels",
-      selected: "{count} of {total} panels shown",
+        "Live resource measurements for every machine this Gateway reports, refreshed while the preset is installed.",
     },
-    panelCatalog: {
+    measurements: {
       load: {
         label: "CPU load",
         description: "1-minute load average compared with the machine's core count.",
@@ -49,11 +43,6 @@ const enSystems = {
         label: "Disk available",
         description: "Free space on each volume the machine reports.",
       },
-    },
-    noPanels: {
-      title: "No machine panels selected",
-      description: "Choose the resource panels you want to see for each machine.",
-      action: "Open panel library",
     },
   },
 } satisfies TranslationMap;

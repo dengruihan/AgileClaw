@@ -7,7 +7,6 @@ import {
   DASHBOARD_DOCUMENT_ELEMENT,
   ensureCustomElementDefined,
 } from "../../app/lazy-custom-element.ts";
-import type { OpenClawModalDialog } from "../../components/modal-dialog.ts";
 import { completePanelRefresh, failPanelRefresh } from "../../components/panel-refresh-status.ts";
 import { formatUiError } from "../../lib/format-error.ts";
 import { fetchPagedSessionRows } from "../../lib/sessions/paged-session-rows.ts";
@@ -16,14 +15,14 @@ import { GatewayPageController } from "../../lit/gateway-page-controller.ts";
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
 import { PollController } from "../../lit/poll-controller.ts";
 import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
-import { MonitoringController } from "./monitoring-controller.ts";
-import type { MonitoringPanelsState } from "./monitoring-view.ts";
 import {
-  DASHBOARD_PANEL_IDS,
-  orderPanelSelection,
-  type DashboardPanelId,
-} from "./panel-catalog.ts";
-import { loadDashboardPanels, saveDashboardPanels } from "./panel-preferences.ts";
+  loadInstalledMarketplacePresets,
+  orderMarketplacePresets,
+  saveInstalledMarketplacePresets,
+  type MarketplacePresetId,
+} from "./marketplace-presets.ts";
+import type { MarketplaceState } from "./marketplace-view.ts";
+import { MonitoringController } from "./monitoring-controller.ts";
 import { dashboardsRouteData } from "./route.ts";
 import {
   renderDashboards,
@@ -46,12 +45,12 @@ class DashboardsPage extends OpenClawLightDomElement {
     sort: "updated",
   };
   @state() private previewError: string | null = null;
-  @state() private panels: readonly DashboardPanelId[] = DASHBOARD_PANEL_IDS;
-  @state() private panelLibraryOpen = false;
+  @state() private installedPresets: readonly MarketplacePresetId[] = [];
+  @state() private marketplaceOpen = false;
 
   private observedSessions?: ApplicationContext["sessions"];
   private observedScopeId?: string | null;
-  private panelGatewayUrl = "";
+  private marketplaceGatewayUrl = "";
   private unsubscribeList?: () => void;
   private data?: DashboardsRouteData;
   private listGeneration = 0;
@@ -73,7 +72,7 @@ class DashboardsPage extends OpenClawLightDomElement {
     this,
     MONITORING_POLL_INTERVAL_MS,
     () => void this.monitoring?.refresh(),
-    true,
+    false,
     "visible",
   );
 
@@ -84,6 +83,7 @@ class DashboardsPage extends OpenClawLightDomElement {
 
   override connectedCallback() {
     super.connectedCallback();
+    this.syncMonitoringLifecycle();
     void ensureCustomElementDefined(
       DASHBOARD_DOCUMENT_ELEMENT.tagName,
       DASHBOARD_DOCUMENT_ELEMENT.loadModule,
@@ -109,8 +109,9 @@ class DashboardsPage extends OpenClawLightDomElement {
     if (changed.has("routeData")) {
       this.data = this.routeData;
     }
-    this.syncPanelScope();
+    this.syncMarketplaceScope();
     this.bindMonitoring();
+    this.syncMonitoringLifecycle();
     this.bindList();
   }
 
@@ -120,17 +121,26 @@ class DashboardsPage extends OpenClawLightDomElement {
     }
   }
 
-  /** One monitoring owner per mounted dashboards page; leaving the route releases its reads. */
+  private get systemMonitoringInstalled(): boolean {
+    return this.installedPresets.includes("system-monitoring");
+  }
+
+  /**
+   * One monitoring owner per mounted dashboards page, and only while its preset
+   * is installed. Removal, disconnect, or a credential/recovery-scope revision
+   * retires the owner that captured the retired presentation.
+   */
   private bindMonitoring(): void {
     const context = this.context;
-    if (!context) {
+    if (!context || !this.systemMonitoringInstalled) {
+      this.retireMonitoring();
       return;
     }
     // The route is not scope-keyed, so an in-place credential/recovery-scope
     // revision must replace the owner that captured the retired scope.
     const scope = gatewayPresentationScope(context.gateway);
     if (this.monitoring?.context !== context || this.monitoring.scope !== scope) {
-      this.monitoring?.setPresented(false);
+      this.retireMonitoring();
       this.monitoring = new MonitoringController(context);
     }
     // A queued update can still flush after the element leaves the document;
@@ -138,55 +148,55 @@ class DashboardsPage extends OpenClawLightDomElement {
     this.monitoring.setPresented(this.presented && this.isConnected);
   }
 
-  /** Panel visibility is device-local presentation state stored per Gateway origin. */
-  private syncPanelScope(): void {
+  private retireMonitoring(): void {
+    this.monitoring?.setPresented(false);
+    this.monitoring = undefined;
+  }
+
+  /** Installation owns the poll loop: no preset installed means no monitoring polling. */
+  private syncMonitoringLifecycle(): void {
+    if (this.systemMonitoringInstalled && this.isConnected) {
+      this.poll.start();
+    } else {
+      this.poll.stop();
+    }
+  }
+
+  /** Installed presets are device-local presentation state stored per Gateway origin. */
+  private syncMarketplaceScope(): void {
     const gatewayUrl = this.context?.gateway.connection.gatewayUrl ?? "";
-    if (gatewayUrl === this.panelGatewayUrl) {
+    if (gatewayUrl === this.marketplaceGatewayUrl) {
       return;
     }
-    this.panelGatewayUrl = gatewayUrl;
-    this.panels = loadDashboardPanels(gatewayUrl);
-    this.panelLibraryOpen = false;
+    this.marketplaceGatewayUrl = gatewayUrl;
+    this.installedPresets = loadInstalledMarketplacePresets(gatewayUrl);
+    this.marketplaceOpen = false;
   }
 
-  private commitPanels(next: readonly DashboardPanelId[]): void {
-    this.panels = orderPanelSelection(next);
-    saveDashboardPanels(this.panelGatewayUrl, this.panels);
+  private commitPresets(next: readonly MarketplacePresetId[]): void {
+    this.installedPresets = orderMarketplacePresets(next);
+    saveInstalledMarketplacePresets(this.marketplaceGatewayUrl, this.installedPresets);
   }
 
-  /**
-   * The drawer's opener can be the empty-state action, which disappears once
-   * panels come back. The shared modal restores focus to this fallback instead
-   * of dropping it on the document body.
-   */
-  private returnPanelLibraryFocus(): void {
-    const dialog = this.querySelector<OpenClawModalDialog>("openclaw-modal-dialog");
-    const trigger = this.querySelector<HTMLElement>("[data-monitoring-panels]");
-    if (dialog && trigger) {
-      dialog.setReturnFocusTarget(trigger);
-    }
-  }
-
-  private panelsState(): MonitoringPanelsState {
+  private marketplaceState(): MarketplaceState {
     return {
-      visible: this.panels,
-      libraryOpen: this.panelLibraryOpen,
-      toggle: (id) => {
-        this.commitPanels(
-          this.panels.includes(id)
-            ? this.panels.filter((panel) => panel !== id)
-            : [...this.panels, id],
-        );
+      open: this.marketplaceOpen,
+      installed: this.installedPresets,
+      openMarketplace: () => {
+        this.marketplaceOpen = true;
       },
-      showAll: () => {
-        this.commitPanels(DASHBOARD_PANEL_IDS);
+      closeMarketplace: () => {
+        this.marketplaceOpen = false;
       },
-      openLibrary: () => {
-        this.panelLibraryOpen = true;
+      install: (id) => {
+        if (!this.installedPresets.includes(id)) {
+          this.commitPresets([...this.installedPresets, id]);
+        }
       },
-      closeLibrary: () => {
-        this.returnPanelLibraryFocus();
-        this.panelLibraryOpen = false;
+      uninstall: (id) => {
+        if (this.installedPresets.includes(id)) {
+          this.commitPresets(this.installedPresets.filter((preset) => preset !== id));
+        }
       },
     };
   }
@@ -297,8 +307,8 @@ class DashboardsPage extends OpenClawLightDomElement {
       },
       this.context?.gateway.snapshot,
       this.previewError,
-      this.monitoring,
-      this.panelsState(),
+      this.systemMonitoringInstalled ? this.monitoring : undefined,
+      this.marketplaceState(),
     );
   }
 }

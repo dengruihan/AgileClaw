@@ -451,7 +451,7 @@ describe("DashboardsPage", () => {
       ),
     ).toEqual(["Alpha signals", "Bravo health", "Zulu monitor"]);
   });
-  it("renders machine monitoring from the dashboards owner with one poll per interval", async () => {
+  it("ships no monitoring by default and binds its lifecycle to the marketplace install", async () => {
     vi.useFakeTimers();
     try {
       const requests = new Map<string, number>();
@@ -531,6 +531,27 @@ describe("DashboardsPage", () => {
 
       await vi.advanceTimersByTimeAsync(1);
       await settleLitElement(element);
+
+      // A fresh page installs no preset: no region, no inventory reads, no polling.
+      expect(element.querySelector("[data-monitoring]")).toBeNull();
+      expect(element.querySelector("[data-marketplace-trigger]")).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(requests.size).toBe(0);
+
+      // The marketplace drawer presents the preset's three measurements.
+      element.querySelector<HTMLButtonElement>("[data-marketplace-trigger]")!.click();
+      await settleLitElement(element);
+      const drawer = element.querySelector("[data-marketplace]");
+      expect(drawer).not.toBeNull();
+      expect(drawer?.textContent).toContain("System monitoring");
+      expect(drawer?.textContent).toContain("CPU load");
+      expect(drawer?.textContent).toContain("Memory used");
+      expect(drawer?.textContent).toContain("Disk available");
+      expect(drawer?.querySelector("[data-marketplace-add]")).not.toBeNull();
+
+      drawer!.querySelector<HTMLButtonElement>("[data-marketplace-add]")!.click();
+      await vi.advanceTimersByTimeAsync(1);
+      await settleLitElement(element);
       await vi.advanceTimersByTimeAsync(1);
       await settleLitElement(element);
 
@@ -553,15 +574,22 @@ describe("DashboardsPage", () => {
       expect(requests.get("environments.list")).toBe(2);
       expect(requests.has("backup.status")).toBe(false);
 
-      element.remove();
+      // Removing the preset deletes the region, retires the owner, and stops polling.
+      element.querySelector<HTMLButtonElement>("[data-marketplace-trigger]")!.click();
+      await settleLitElement(element);
+      const remove = element.querySelector<HTMLButtonElement>("[data-marketplace-remove]");
+      expect(remove).not.toBeNull();
+      remove!.click();
+      await vi.waitFor(() => expect(element.querySelector("[data-monitoring]")).toBeNull());
       await vi.advanceTimersByTimeAsync(60_000);
       expect(requests.get("environments.list")).toBe(2);
+
+      element.remove();
     } finally {
       vi.useRealTimers();
     }
   });
-  it("remembers the machine panels chosen in the panel library", async () => {
-    localStorage.clear();
+  it("keeps the installed preset per Gateway origin across page instances", async () => {
     const systemInfo = {
       machineName: "Gateway machine",
       hostname: "gateway-host",
@@ -579,9 +607,11 @@ describe("DashboardsPage", () => {
       diskTotalBytes: 16_384,
       diskAvailableBytes: 8_192,
     };
+    let environmentsCalls = 0;
     const client = createTestGatewayClient(async (method) => {
       switch (method) {
         case "environments.list":
+          environmentsCalls += 1;
           return {
             environments: [
               { id: "gateway", type: "local", label: "Gateway machine", status: "available" },
@@ -631,63 +661,41 @@ describe("DashboardsPage", () => {
       return page;
     };
 
+    // Install once through the marketplace; a remount is the refresh path.
     const first = mount();
+    await settleLitElement(first);
+    first.querySelector<HTMLButtonElement>("[data-marketplace-trigger]")!.click();
+    await settleLitElement(first);
+    first.querySelector<HTMLButtonElement>("[data-marketplace-add]")!.click();
     await vi.waitFor(() =>
-      expect(first.querySelectorAll("[data-monitoring] openclaw-sparkline")).toHaveLength(3),
+      expect(first.querySelectorAll("[data-monitoring-machine]")).toHaveLength(1),
     );
+    expect(first.querySelectorAll("[data-monitoring] openclaw-sparkline")).toHaveLength(3);
 
-    first.querySelector<HTMLButtonElement>(".dashboards-monitoring__panels")!.click();
-    await settleLitElement(first);
-    expect(first.querySelector("[data-panel-library]")).not.toBeNull();
-
-    first
-      .querySelector<HTMLInputElement>('[data-panel-option="load"] input')!
-      .dispatchEvent(new Event("change", { bubbles: true }));
-    await settleLitElement(first);
-    expect(first.querySelector(".dashboards-monitoring__vital--load")).toBeNull();
-    expect(first.querySelectorAll("[data-monitoring] openclaw-sparkline")).toHaveLength(2);
-
-    // A fresh page instance is the refresh path: only the stored choice survives.
     first.remove();
     const second = mount();
     await vi.waitFor(() =>
       expect(second.querySelectorAll("[data-monitoring-machine]")).toHaveLength(1),
     );
-    expect(second.querySelector(".dashboards-monitoring__vital--load")).toBeNull();
-    expect(second.querySelectorAll("[data-monitoring] openclaw-sparkline")).toHaveLength(2);
+    expect(second.querySelector("[data-marketplace-trigger]")?.getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    const restoredCalls = environmentsCalls;
 
-    // Empty selection, then restore from the empty-state action: that opener is
-    // gone once panels return, so closing must return focus to the Panels trigger.
-    second.querySelector<HTMLButtonElement>(".dashboards-monitoring__panels")!.click();
+    // Removing on the restored page persists: the next instance stays bare.
+    second.querySelector<HTMLButtonElement>("[data-marketplace-trigger]")!.click();
     await settleLitElement(second);
-    for (const id of ["memory", "disk"]) {
-      second
-        .querySelector<HTMLInputElement>(`[data-panel-option="${id}"] input`)!
-        .dispatchEvent(new Event("change", { bubbles: true }));
-      await settleLitElement(second);
-    }
-    second
-      .querySelector<HTMLButtonElement>(".dashboards-panel-library__footer .btn.primary")!
-      .click();
-    await settleLitElement(second);
-    const empty = second.querySelector("[data-monitoring-no-panels]");
-    expect(empty).not.toBeNull();
-
-    empty!.querySelector<HTMLButtonElement>("button")!.click();
-    await settleLitElement(second);
-    second
-      .querySelector<HTMLButtonElement>(".dashboards-panel-library__footer .btn--ghost")!
-      .click();
-    await settleLitElement(second);
-    second
-      .querySelector<HTMLButtonElement>(".dashboards-panel-library__footer .btn.primary")!
-      .click();
-    await settleLitElement(second);
-    expect(second.querySelector("[data-monitoring-no-panels]")).toBeNull();
-    expect(document.activeElement?.hasAttribute("data-monitoring-panels")).toBe(true);
-
+    second.querySelector<HTMLButtonElement>("[data-marketplace-remove]")!.click();
+    await vi.waitFor(() => expect(second.querySelector("[data-monitoring]")).toBeNull());
     second.remove();
-    localStorage.clear();
+
+    const third = mount();
+    await settleLitElement(third);
+    expect(third.querySelector("[data-monitoring]")).toBeNull();
+    expect(environmentsCalls).toBe(restoredCalls);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(environmentsCalls).toBe(restoredCalls);
+    third.remove();
   });
   it("re-keys the monitoring owner when the presentation scope changes in place", async () => {
     let environmentsCalls = 0;
@@ -766,6 +774,11 @@ describe("DashboardsPage", () => {
     const provider = createApplicationContextProvider(context);
     provider.append(element);
     document.body.append(provider);
+    await settleLitElement(element);
+
+    element.querySelector<HTMLButtonElement>("[data-marketplace-trigger]")!.click();
+    await settleLitElement(element);
+    element.querySelector<HTMLButtonElement>("[data-marketplace-add]")!.click();
 
     await vi.waitFor(() =>
       expect(element.querySelectorAll("[data-monitoring-machine]")).toHaveLength(1),

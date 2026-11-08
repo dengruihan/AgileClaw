@@ -757,6 +757,17 @@ export const en: TranslationMap & {
     resultCount: "Dashboards: {count}",
     noResultsTitle: "No matching dashboards",
     noResultsDescription: "Try another search or author.",
+    marketplace: "Marketplace",
+    marketplaceHint: "Browse dashboard presets",
+    marketplaceTitle: "Dashboard marketplace",
+    marketplaceDescription:
+      "Ready-made dashboards you can add to this page. This browser remembers your presets; no Gateway settings change.",
+    marketplaceClose: "Close marketplace",
+    marketplaceAddAction: "Add",
+    marketplaceAdd: "Add {preset}",
+    marketplaceRemoveAction: "Remove",
+    marketplaceRemove: "Remove {preset}",
+    marketplaceInstalled: "Installed",
   },
   dashboardDocument: {
     close: "Close dashboard",
