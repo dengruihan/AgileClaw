@@ -1,7 +1,13 @@
 import { html, render, type LitElement } from "lit";
 import { expect, it, vi } from "vitest";
+import "../test-helpers/load-styles.ts";
+import "@awesome.me/webawesome/dist/styles/themes/default.css";
 import type { SettingsSaveIndicatorProps } from "./settings-save-indicator.ts";
-import { renderSettingsSegmented } from "./settings-ui.ts";
+import {
+  renderSettingsSegmented,
+  renderSettingsToggle,
+  renderSettingsToggleRow,
+} from "./settings-ui.ts";
 import "./settings-save-indicator.ts";
 import startupStyles from "../styles.css?inline";
 
@@ -104,6 +110,183 @@ it("restores segmented controls after fieldset busy state while preserving disab
     expect(onChange).not.toHaveBeenCalled();
     draw(false);
     await expect.poll(disabledStates).toEqual(["false", "false", "true"]);
+  } finally {
+    render(null, container);
+    container.remove();
+  }
+});
+
+type ToggleRowFixture = {
+  container: HTMLDivElement;
+  draw: (options?: { checked?: boolean; disabled?: boolean }) => HTMLElement;
+  switchElement: () => HTMLElement & { checked: boolean };
+};
+
+function toggleRowFixture(options: {
+  onChange: (checked: boolean) => boolean | void;
+  onAct?: (checked: boolean) => void;
+}): ToggleRowFixture {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const state = { checked: false, disabled: false };
+  // The fixture plays the owning page: accepted toggles move the committed
+  // prop and re-render (live() re-asserts it); rejections leave the prop.
+  const handleChange = (checked: boolean) => {
+    const result = options.onChange(checked);
+    if (result !== false) {
+      state.checked = checked;
+      draw();
+    }
+    return result;
+  };
+  const draw = () =>
+    render(
+      html`${renderSettingsToggleRow({
+        title: "Browser enabled",
+        checked: state.checked,
+        disabled: state.disabled,
+        onChange: handleChange,
+        onAct: options.onAct,
+      })}`,
+      container,
+    );
+  const drawOnce = (initial: { checked?: boolean; disabled?: boolean } = {}) => {
+    state.checked = initial.checked ?? false;
+    state.disabled = initial.disabled ?? false;
+    draw();
+    return container;
+  };
+  return {
+    container,
+    draw: drawOnce,
+    switchElement: () => container.querySelector<HTMLElement & { checked: boolean }>("wa-switch")!,
+  };
+}
+
+it("commits one dragged toggle flip with onAct before onChange", async () => {
+  const { userEvent } = await import("vitest/browser");
+  const onAct = vi.fn();
+  const onChange = vi.fn();
+  const changes: boolean[] = [];
+  const f = toggleRowFixture({
+    onAct,
+    onChange: (checked) => {
+      changes.push(checked);
+      onChange(checked);
+    },
+  });
+  f.draw({ checked: false });
+  const switchElement = f.switchElement();
+  try {
+    await userEvent.click(switchElement);
+    expect(switchElement.checked).toBe(true);
+    expect(changes).toEqual([true]);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(true);
+    expect(onAct).toHaveBeenCalledTimes(1);
+    expect(onAct).toHaveBeenCalledWith(true);
+    expect(onAct.mock.invocationCallOrder[0]).toBeLessThan(onChange.mock.invocationCallOrder[0]!);
+    // A second physical click keeps flipping exactly once per gesture.
+    await userEvent.click(switchElement);
+    expect(switchElement.checked).toBe(false);
+    expect(changes).toEqual([true, false]);
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onAct).toHaveBeenCalledTimes(2);
+  } finally {
+    render(null, f.container);
+    f.container.remove();
+  }
+});
+
+it("restores the switch when the dragged change is rejected", async () => {
+  const { userEvent } = await import("vitest/browser");
+  const changes: boolean[] = [];
+  const f = toggleRowFixture({
+    onChange: (checked) => {
+      changes.push(checked);
+      return false;
+    },
+  });
+  f.draw({ checked: false });
+  const switchElement = f.switchElement();
+  try {
+    await userEvent.click(switchElement);
+    expect(changes).toEqual([true]);
+    expect(switchElement.checked).toBe(false);
+    await expect
+      .poll(
+        () =>
+          switchElement.shadowRoot!.querySelector<HTMLElement>('[part~="thumb"]')!.style.translate,
+      )
+      .toBe("");
+  } finally {
+    render(null, f.container);
+    f.container.remove();
+  }
+});
+
+it("keeps the whole-row click path toggling with onAct before onChange", async () => {
+  const { userEvent } = await import("vitest/browser");
+  const onAct = vi.fn();
+  const onChange = vi.fn();
+  const f = toggleRowFixture({ onAct, onChange });
+  f.draw({ checked: false });
+  let changeEvents = 0;
+  f.switchElement().addEventListener("change", () => {
+    changeEvents += 1;
+  });
+  try {
+    await userEvent.click(f.container.querySelector<HTMLElement>(".settings-row__title")!);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(true);
+    expect(onAct).toHaveBeenCalledTimes(1);
+    expect(onAct).toHaveBeenCalledWith(true);
+    expect(onAct.mock.invocationCallOrder[0]).toBeLessThan(onChange.mock.invocationCallOrder[0]!);
+    // The row path moves the committed prop through the owner's re-render
+    // (live() applies it) without producing a switch change event.
+    expect(f.switchElement().checked).toBe(true);
+    expect(changeEvents).toBe(0);
+  } finally {
+    render(null, f.container);
+    f.container.remove();
+  }
+});
+
+it("keeps disabled settings toggles inert", async () => {
+  const { userEvent } = await import("vitest/browser");
+  const onChange = vi.fn();
+  const f = toggleRowFixture({ onChange });
+  f.draw({ checked: false, disabled: true });
+  const switchElement = f.switchElement();
+  try {
+    await userEvent.click(switchElement);
+    expect(switchElement.checked).toBe(false);
+    expect(onChange).not.toHaveBeenCalled();
+  } finally {
+    render(null, f.container);
+    f.container.remove();
+  }
+});
+
+it("keeps bare settings toggles draggable through their change contract", async () => {
+  const { userEvent } = await import("vitest/browser");
+  const container = document.createElement("div");
+  document.body.append(container);
+  const onChange = vi.fn();
+  try {
+    render(
+      html`${renderSettingsToggle({
+        checked: false,
+        ariaLabel: "Watcher",
+        onChange,
+      })}`,
+      container,
+    );
+    const switchElement = container.querySelector<HTMLElement & { checked: boolean }>("wa-switch")!;
+    await userEvent.click(switchElement);
+    expect(switchElement.checked).toBe(true);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(true);
   } finally {
     render(null, container);
     container.remove();
