@@ -333,11 +333,6 @@
   --press-shift: 1px;
   --duration-press: 40ms;
   --duration-release: 260ms;
-  /* Check glyph for custom-drawn checkboxes: two strokes meeting at the bottom
-     center, on --accent-foreground for the audited pair contrast. */
-  --check-glyph:
-    linear-gradient(45deg, transparent 41%, var(--accent-foreground) 41% 57%, transparent 57%),
-    linear-gradient(-45deg, transparent 41%, var(--accent-foreground) 41% 57%, transparent 57%);
 
   /* Window canvas around the shell plate; one step off the plate fill so the
      rounded base plate reads as raised from it in both modes. */

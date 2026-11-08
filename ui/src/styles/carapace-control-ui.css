@@ -613,7 +613,9 @@ html[data-theme-resolved="light"] .oc-action-secondary:hover {
   padding: 8px 14px;
   border-color: var(--oc-border-subtle);
   border-radius: var(--oc-radius-control);
-  background: var(--oc-bg-elevated);
+  /* Tone only: background-color keeps the shared key's gloss and face
+     gradients from components.css alive under the carapace surface tint. */
+  background-color: var(--oc-bg-elevated);
   color: var(--oc-text-primary);
   font-size: var(--oc-font-size-sm);
   font-weight: 500;
@@ -622,13 +624,13 @@ html[data-theme-resolved="light"] .oc-action-secondary:hover {
 
 .settings-page.oc-app-surface .btn.oc-action.oc-action-primary {
   border-color: var(--primary);
-  background: var(--primary);
+  background-color: var(--primary);
   color: var(--primary-foreground);
 }
 
 .settings-page.oc-app-surface .btn.oc-action.oc-action-primary:hover:not(:disabled) {
   border-color: var(--primary-hover);
-  background: var(--primary-hover);
+  background-color: var(--primary-hover);
   color: var(--primary-foreground);
 }
 
@@ -639,7 +641,7 @@ html[data-theme-resolved="light"] .oc-action-secondary:hover {
 
 .settings-page.oc-app-surface .btn.oc-action:hover:not(:disabled) {
   border-color: var(--oc-border-strong);
-  background: var(--oc-surface-interactive-hover);
+  background-color: var(--oc-surface-interactive-hover);
   color: var(--oc-text-primary);
 }
 

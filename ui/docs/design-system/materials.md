@@ -75,8 +75,8 @@ shadow-DOM switch cap carries its own local guard for the same reason.
 ## Owners
 
 - Buttons (`.btn` family), field inputs (`.field input/textarea/select`),
-  check/radio latches, and the `.field` range fader live in
-  `ui/src/styles/components.css`.
+  check/radio latches (drawn with per-arm gradient geometry), and the `.field`
+  range fader live in `ui/src/styles/components.css`.
 - Settings vocabulary (`.settings-input`, `.settings-select`,
   `.settings-segmented`) lives in `ui/src/styles/settings-controls.css` and
   composes the same tokens.
@@ -86,6 +86,15 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   `--wa-transition-easing: var(--ease-spring)`). The library implements click
   and arrow-key throws only; positional thumb dragging is not part of its
   contract.
+- Hub route tabs (`wa-tab.hub-tab` in `ui/src/styles/hub-tabs.css`) share the
+  nav-row contract through `::part(base)`: quiet rest, hover fill, pressed
+  well with travel, and the active route as a raised chip. ARIA tablists are
+  keyboard-entered at the active tab; arrow keys move within.
+- Option-card choice keys and their card container
+  (`ui/src/styles/option-card.css`) and the usage preset groove
+  (`ui/src/styles/usage.css`) compose the same material; carapace surfaces
+  keep their own tone but restyle real `.btn.oc-action` keys with
+  `background-color` so the shared face layers survive underneath.
 - Navigation rows, the settings rail, shell chrome keys, the new-session
   action, and the shell plate's rimmed slab live in `ui/src/styles/layout.css`.
 

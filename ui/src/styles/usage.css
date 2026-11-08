@@ -343,20 +343,24 @@
 .usage-presets {
   flex-wrap: wrap;
   padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
   border-radius: var(--radius-lg);
-  background: var(--bg-muted);
+  background-color: var(--bg);
+  background-image: var(--well-face);
+  box-shadow: var(--well-shadow);
 }
 
 .usage-presets .btn {
   border-color: transparent;
-  background: transparent;
+  background-color: transparent;
 }
 
+/* The active preset extrudes from the groove track like a segmented key. */
 .usage-presets .btn.active {
-  background: var(--card);
+  background-color: var(--card);
   border-color: var(--border);
   color: var(--text-strong);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--raise-shadow);
 }
 
 .usage-date-range {

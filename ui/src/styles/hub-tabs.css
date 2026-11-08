@@ -21,15 +21,45 @@ wa-tab.hub-tab {
   font-size: var(--control-ui-text-sm);
   font-weight: 550;
   color: var(--muted);
-  transition: color var(--duration-normal) var(--ease-out);
 }
 
-/* Neutralize wa-tab's stock 1em padding; keep a slim nav-tab hit area. */
+/* Neutralize wa-tab's stock 1em padding; keep a slim nav-tab hit area. Route
+   tabs share the nav-row interaction contract: quiet text at rest, a fill on
+   hover, the shared pressed well with travel while held, and the current
+   route riding as a raised chip. */
 wa-tab.hub-tab::part(base) {
   padding: var(--space-1) var(--space-2) var(--space-2);
   gap: 6px;
+  border-radius: var(--radius-md);
   font: inherit;
   color: inherit;
+  transition:
+    color var(--duration-normal) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-release) var(--ease-spring),
+    transform var(--duration-release) var(--ease-spring);
+}
+
+wa-tab.hub-tab:hover:not([active], [disabled])::part(base) {
+  color: var(--text);
+  background-color: color-mix(in srgb, var(--bg-hover) 84%, transparent);
+}
+
+wa-tab.hub-tab:active:not([active], [disabled])::part(base) {
+  box-shadow: var(--press-shadow);
+  transform: translateY(var(--press-shift));
+  transition-duration: var(--duration-press);
+}
+
+wa-tab.hub-tab[active]::part(base) {
+  color: var(--text-strong);
+  background-color: color-mix(in srgb, var(--accent-subtle) 88%, var(--bg-elevated) 12%);
+  box-shadow: var(--raise-shadow);
+}
+
+wa-tab.hub-tab[disabled]::part(base) {
+  box-shadow: none;
+  transform: none;
 }
 
 .hub-tabs--sub wa-tab.hub-tab {
