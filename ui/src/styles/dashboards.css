@@ -24,35 +24,125 @@
   gap: var(--space-3);
 }
 
+/* Machined-surface helpers for this page, layered on the shared surface
+   tokens. One light source: thin bevels edge raised faces, wells recess input
+   floors and gauge screens, and presses adopt the shared pressed surface. */
+.dashboards-header__actions,
+.dashboards-gallery,
+.dashboards-monitoring,
+.dashboards-marketplace__panel {
+  --dashboards-bevel-light: inset 0 1px 0 color-mix(in srgb, var(--text) 10%, transparent);
+  --dashboards-bevel-dark: inset 0 -1px 0 color-mix(in srgb, var(--neu-dark) 65%, transparent);
+  --dashboards-well:
+    inset 0 2px 5px var(--neu-dark), inset 0 -1px 0 color-mix(in srgb, var(--text) 8%, transparent);
+  --dashboards-press-motion:
+    box-shadow var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+/* Drawer pull tab anchored to the viewport's right edge - the closed drawer's
+   front face. The drag owner drives --dashboards-marketplace-pull; the cast
+   shadow deepens with the pull so the face visibly separates from the edge. */
 .dashboards-marketplace-trigger {
-  display: inline-flex;
+  --dashboards-marketplace-pull: 0px;
+  position: fixed;
+  top: 50%;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  gap: var(--space-3);
+  padding: var(--space-4) 6px;
+  border: 1px solid var(--border-strong);
+  border-right: 0;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
   color: var(--text);
-  background: transparent;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--neu-light) 60%, transparent), transparent 55%),
+    var(--bg-elevated);
+  box-shadow:
+    var(--dashboards-bevel-light),
+    var(--dashboards-bevel-dark),
+    calc(var(--dashboards-marketplace-pull) * 0.55) 0
+      calc(10px + var(--dashboards-marketplace-pull) * 0.8) var(--neu-dark);
   font: inherit;
   font-size: var(--control-ui-text-xs);
   font-weight: 600;
-  white-space: nowrap;
+  cursor: grab;
+  touch-action: none;
+  transform: translateY(-50%) translateX(calc(var(--dashboards-marketplace-pull) * -1));
+  transition:
+    transform var(--duration-normal) cubic-bezier(0.34, 1.35, 0.64, 1),
+    box-shadow var(--duration-normal) ease,
+    border-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
 }
 
 .dashboards-marketplace-trigger:hover {
   color: var(--text-strong);
-  background: var(--bg-hover);
+  border-color: var(--border-hover);
 }
 
 .dashboards-marketplace-trigger:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: -2px;
+}
+
+.dashboards-marketplace-trigger:active:not([data-dragging]) {
+  box-shadow: var(--surface-pressed);
+}
+
+/* Past the open threshold the latch is armed: the tab lights up as a detent cue. */
+.dashboards-marketplace-trigger[data-armed] {
+  color: var(--text-strong);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-strong));
+}
+
+.dashboards-marketplace-trigger[data-dragging] {
+  color: var(--text-strong);
+  cursor: grabbing;
+  transition: none;
+}
+
+.dashboards-marketplace-trigger[aria-expanded="true"] {
+  color: var(--muted);
+  box-shadow: var(--dashboards-well);
+  background: var(--bg);
 }
 
 .dashboards-marketplace-trigger svg {
   width: 16px;
   height: 16px;
+}
+
+.dashboards-marketplace-trigger__label {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dashboards-marketplace-trigger__grip {
+  width: 10px;
+  height: 26px;
+  border-radius: var(--radius-full);
+  background: repeating-linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--text) 16%, transparent) 0 1.5px,
+    transparent 1.5px 4.5px
+  );
+  box-shadow: inset 0 1px 2px var(--neu-dark);
+  transition: background var(--duration-fast) ease;
+}
+
+.dashboards-marketplace-trigger:hover .dashboards-marketplace-trigger__grip,
+.dashboards-marketplace-trigger[data-armed] .dashboards-marketplace-trigger__grip {
+  background: repeating-linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--text) 26%, transparent) 0 1.5px,
+    transparent 1.5px 4.5px
+  );
 }
 
 .dashboards-gallery {
@@ -120,13 +210,18 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   color: var(--text);
-  background: var(--card);
+  background: var(--bg);
+  box-shadow: var(--dashboards-well);
   font: inherit;
   outline: none;
   transition:
     border-color var(--duration-fast) ease,
-    background var(--duration-fast) ease,
     box-shadow var(--duration-fast) ease;
+}
+
+.dashboards-search input:hover,
+.dashboards-select select:hover {
+  border-color: var(--border-hover);
 }
 
 .dashboards-search input {
@@ -141,8 +236,9 @@
 .dashboards-search input:focus,
 .dashboards-select select:focus {
   border-color: color-mix(in srgb, var(--accent) 66%, var(--border-strong));
-  background: var(--bg-elevated);
-  box-shadow: 0 0 0 3px var(--accent-subtle);
+  box-shadow:
+    var(--dashboards-well),
+    0 0 0 3px var(--accent-subtle);
 }
 
 .dashboards-select {
@@ -180,8 +276,10 @@
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--card);
-  box-shadow: var(--shadow-sm);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--neu-light) 35%, transparent), transparent 28%),
+    var(--card);
+  box-shadow: var(--surface-raised);
   transition:
     border-color var(--duration-fast) ease,
     box-shadow var(--duration-fast) ease,
@@ -190,8 +288,15 @@
 
 .dashboard-card:has(a.dashboard-card__main):hover {
   border-color: var(--border-hover);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--surface-raised-strong);
   transform: translateY(-2px);
+}
+
+/* A pressed card sinks into the surface instead of only changing color. */
+.dashboard-card:has(a.dashboard-card__main:active) {
+  border-color: var(--border);
+  box-shadow: var(--surface-pressed);
+  transform: none;
 }
 
 .dashboard-card__main {
@@ -209,6 +314,8 @@
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border-bottom: 1px solid var(--border);
+  /* The live preview sits behind a recessed screen bezel. */
+  box-shadow: inset 0 2px 6px var(--neu-dark);
   background: var(--bg);
   pointer-events: none;
 }
@@ -341,6 +448,14 @@
   padding: var(--space-8) var(--space-4);
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-lg);
+  background:
+    radial-gradient(
+      90% 70% at 50% 0%,
+      color-mix(in srgb, var(--neu-dark) 30%, transparent),
+      transparent 70%
+    ),
+    var(--bg);
+  box-shadow: var(--dashboards-well);
   color: var(--muted);
   text-align: center;
 }
@@ -390,13 +505,22 @@
   }
 }
 
+/* Instrument console: the monitoring region is a raised console plate; each
+   machine is a module on it and each vital sits behind a recessed gauge screen. */
 .dashboards-monitoring {
   min-width: 0;
   margin-bottom: var(--space-6);
   padding: var(--space-4);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
-  background: var(--card);
+  background:
+    radial-gradient(
+      140% 90% at 12% 0%,
+      color-mix(in srgb, var(--neu-light) 40%, transparent),
+      transparent 55%
+    ),
+    var(--card);
+  box-shadow: var(--surface-raised);
 }
 
 .dashboards-monitoring__header {
@@ -435,15 +559,26 @@
   width: 32px;
   height: 32px;
   padding: 6px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   color: var(--muted);
-  background: transparent;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--neu-light) 55%, transparent), transparent 45%),
+    var(--bg-elevated);
+  box-shadow: var(--surface-raised);
+  cursor: default;
+  transition: var(--dashboards-press-motion);
 }
 
-.dashboards-monitoring__refresh:hover {
+.dashboards-monitoring__refresh:hover:not(:disabled) {
   color: var(--text-strong);
-  background: var(--bg-hover);
+  border-color: var(--border-hover);
+  box-shadow: var(--surface-raised-strong);
+}
+
+.dashboards-monitoring__refresh:active:not(:disabled) {
+  background: var(--bg-muted);
+  box-shadow: var(--surface-pressed);
 }
 
 .dashboards-monitoring__refresh:focus-visible {
@@ -453,6 +588,7 @@
 
 .dashboards-monitoring__refresh:disabled {
   opacity: 0.45;
+  box-shadow: none;
 }
 
 .dashboards-monitoring__refresh svg {
@@ -471,7 +607,10 @@
   padding: var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--bg);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--neu-light) 30%, transparent), transparent 34%),
+    var(--bg);
+  box-shadow: var(--dashboards-bevel-light), var(--dashboards-bevel-dark);
 }
 
 .dashboards-monitoring__machine-head {
@@ -480,28 +619,44 @@
   gap: var(--space-2);
 }
 
+/* Status lamp: a lit LED in a metal collar rather than a flat paint dot. */
 .dashboards-monitoring__dot {
   flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--muted);
-  opacity: 0.45;
+  box-shadow:
+    inset 0 1px 1px var(--neu-dark),
+    0 0 0 2px color-mix(in srgb, var(--text) 9%, transparent);
+  opacity: 0.5;
 }
 
 .dashboards-monitoring__machine[data-status="available"] .dashboards-monitoring__dot {
   background: var(--ok);
+  box-shadow:
+    inset 0 1px 1px var(--neu-dark),
+    0 0 0 2px color-mix(in srgb, var(--text) 9%, transparent),
+    0 0 8px color-mix(in srgb, var(--ok) 55%, transparent);
   opacity: 1;
 }
 
 .dashboards-monitoring__machine[data-status="starting"] .dashboards-monitoring__dot,
 .dashboards-monitoring__machine[data-status="stopping"] .dashboards-monitoring__dot {
   background: var(--warn);
+  box-shadow:
+    inset 0 1px 1px var(--neu-dark),
+    0 0 0 2px color-mix(in srgb, var(--text) 9%, transparent),
+    0 0 8px color-mix(in srgb, var(--warn) 55%, transparent);
   opacity: 1;
 }
 
 .dashboards-monitoring__machine[data-status="error"] .dashboards-monitoring__dot {
   background: var(--danger);
+  box-shadow:
+    inset 0 1px 1px var(--neu-dark),
+    0 0 0 2px color-mix(in srgb, var(--text) 9%, transparent),
+    0 0 8px color-mix(in srgb, var(--danger) 55%, transparent);
   opacity: 1;
 }
 
@@ -556,6 +711,24 @@
   min-height: 96px;
 }
 
+/* Gauge screens: page-scoped depth layered over the shared sparkline tile. */
+.dashboards-monitoring .dashboards-monitoring__vital {
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--neu-light) 25%, transparent), transparent 26%),
+    var(--bg);
+  box-shadow: var(--dashboards-well);
+}
+
+.dashboards-monitoring .dashboards-monitoring__vital .sparkline-tile__chart {
+  box-shadow: inset 0 2px 6px var(--neu-dark);
+  background: color-mix(in srgb, var(--neu-dark) 35%, var(--bg));
+}
+
+.dashboards-monitoring .dashboards-monitoring__vital .sparkline-tile__chart polyline {
+  filter: drop-shadow(0 0 5px color-mix(in srgb, currentColor 55%, transparent));
+}
+
 .dashboards-monitoring__vital--memory {
   color: var(--info);
 }
@@ -607,11 +780,19 @@
 .dashboards-monitoring__callout {
   margin-bottom: var(--space-2);
   padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--muted);
-  background: var(--bg-elevated);
+  background: var(--bg);
+  box-shadow: var(--dashboards-well);
   font-size: var(--control-ui-text-xs);
   overflow-wrap: anywhere;
+}
+
+.dashboards-monitoring__callout summary {
+  color: var(--text);
+  font-weight: 600;
+  cursor: default;
 }
 
 .dashboards-monitoring__callout--error {
@@ -651,12 +832,132 @@
   }
 }
 
+/* Drawer front: ambient light from the top-left plus a lit leading edge. The
+   drag owner paints transform while dragging; settle runs through the
+   transition below, and [data-arrived] plays the latch-back after settling. */
 .dashboards-marketplace__panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--card);
+  background:
+    radial-gradient(
+      130% 60% at 16% 0%,
+      color-mix(in srgb, var(--neu-light) 45%, transparent),
+      transparent 58%
+    ),
+    var(--card);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--text) 10%, transparent);
+  transition: transform 240ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.dashboards-marketplace__panel[data-dragging] {
+  transition: none;
+}
+
+/* Drag-preview: the drawer itself follows the pointer before the modal owns
+   it. Fixed elements do not extend the document's scrollable overflow, so the
+   fully closed translateX(100%) never adds a horizontal scrollbar. */
+.dashboards-marketplace-drawer-preview {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 40;
+  width: min(440px, 100vw);
+  height: 100dvh;
+  pointer-events: none;
+}
+
+.dashboards-marketplace-drawer-preview .dashboards-marketplace__panel {
+  transform: translateX(100%);
+}
+
+/* Landing: after a drag-open verdict the modal drawer mounts while the preview
+   still covers it; the panel is revealed once the entrance has landed. */
+.dashboards-marketplace--landing .dashboards-marketplace__panel {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dashboards-marketplace__panel[data-arrived] {
+  animation: dashboards-marketplace-arrive 320ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+@keyframes dashboards-marketplace-arrive {
+  0% {
+    transform: translateX(0);
+  }
+  45% {
+    transform: translateX(-5px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+/* Edge pull handle: graspable ridges on the drawer's leading edge. */
+.dashboards-marketplace__handle {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  width: 24px;
+  height: 84px;
+  padding: 0;
+  place-items: center;
+  transform: translate(-55%, -50%);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  color: var(--muted);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--neu-dark) 35%, transparent), transparent 60%),
+    linear-gradient(180deg, color-mix(in srgb, var(--neu-light) 55%, transparent), transparent 45%),
+    var(--bg-elevated);
+  box-shadow: var(--surface-raised);
+  cursor: grab;
+  touch-action: none;
+  transition:
+    border-color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+
+.dashboards-marketplace__handle:hover {
+  color: var(--text-strong);
+  border-color: var(--border-hover);
+}
+
+.dashboards-marketplace__handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.dashboards-marketplace__handle:active,
+.dashboards-marketplace__panel[data-dragging] .dashboards-marketplace__handle {
+  box-shadow: var(--surface-pressed);
+}
+
+.dashboards-marketplace__panel[data-dragging] .dashboards-marketplace__handle {
+  cursor: grabbing;
+}
+
+.dashboards-marketplace__handle-ridges {
+  width: 8px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  background: repeating-linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--text) 18%, transparent) 0 1.5px,
+    transparent 1.5px 5px
+  );
+  box-shadow: inset 0 1px 2px var(--neu-dark);
+  transition: transform var(--duration-fast) ease;
+}
+
+.dashboards-marketplace__handle:active .dashboards-marketplace__handle-ridges {
+  transform: scaleY(0.9);
 }
 
 .dashboards-marketplace__header {
@@ -666,6 +967,7 @@
   gap: var(--space-3);
   padding: var(--space-4);
   border-bottom: 1px solid var(--border);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--neu-light) 30%, transparent);
 }
 
 .dashboards-marketplace__header h2 {
@@ -681,34 +983,6 @@
   color: var(--muted);
   font-size: var(--control-ui-text-xs);
   line-height: 1.45;
-}
-
-.dashboards-marketplace__close {
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--muted);
-  background: transparent;
-}
-
-.dashboards-marketplace__close:hover {
-  color: var(--text-strong);
-  background: var(--bg-hover);
-}
-
-.dashboards-marketplace__close:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.dashboards-marketplace__close svg {
-  width: 16px;
-  height: 16px;
 }
 
 .dashboards-marketplace__body {
@@ -732,7 +1006,10 @@
   padding: var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--bg);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--neu-light) 30%, transparent), transparent 30%),
+    var(--bg);
+  box-shadow: var(--dashboards-bevel-light), var(--dashboards-bevel-dark);
 }
 
 .dashboards-marketplace__preset[data-installed="true"] {
@@ -791,6 +1068,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--card);
+  box-shadow: var(--dashboards-well);
 }
 
 .dashboards-marketplace__measurement-label {
@@ -821,5 +1099,32 @@
 
   .dashboards-marketplace__preset {
     padding: var(--space-3);
+  }
+}
+
+/* Full-bleed drawers have no room for a protruding handle: tuck it inside. */
+@media (max-width: 400px) {
+  .dashboards-marketplace__handle {
+    left: var(--space-1);
+    width: 20px;
+    height: 64px;
+    transform: translateY(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboards-marketplace-trigger,
+  .dashboards-marketplace__panel,
+  .dashboards-marketplace__handle,
+  .dashboards-marketplace__handle-ridges,
+  .dashboards-monitoring__refresh,
+  .dashboards-marketplace__close,
+  .dashboard-card {
+    transition-duration: 0ms;
+    animation-duration: 0ms;
+  }
+
+  .dashboards-marketplace__panel[data-arrived] {
+    animation: none;
   }
 }

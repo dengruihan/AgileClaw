@@ -15,6 +15,7 @@ import { GatewayPageController } from "../../lit/gateway-page-controller.ts";
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
 import { PollController } from "../../lit/poll-controller.ts";
 import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
+import { MarketplaceDrawerDrag } from "./marketplace-drawer-drag.ts";
 import {
   loadInstalledMarketplacePresets,
   orderMarketplacePresets,
@@ -31,6 +32,9 @@ import {
 } from "./view.ts";
 
 const MONITORING_POLL_INTERVAL_MS = 15_000;
+// The modal's drawer entrance is 200ms; the preview stays until it lands so
+// the handoff never shows the entrance's closed-side start position.
+const MARKETPLACE_LANDING_MS = 280;
 
 class DashboardsPage extends OpenClawLightDomElement {
   @consume({ context: applicationContext, subscribe: true })
@@ -47,6 +51,8 @@ class DashboardsPage extends OpenClawLightDomElement {
   @state() private previewError: string | null = null;
   @state() private installedPresets: readonly MarketplacePresetId[] = [];
   @state() private marketplaceOpen = false;
+  @state() private marketplaceDrag = false;
+  private marketplaceLandingTimer: ReturnType<typeof setTimeout> | undefined;
 
   private observedSessions?: ApplicationContext["sessions"];
   private observedScopeId?: string | null;
@@ -55,6 +61,33 @@ class DashboardsPage extends OpenClawLightDomElement {
   private data?: DashboardsRouteData;
   private listGeneration = 0;
   private monitoring?: MonitoringController;
+  /** Gesture owner for the marketplace pull tab; the page keeps the open state. */
+  private readonly drawerDrag = new MarketplaceDrawerDrag({
+    beginPreview: () => {
+      this.marketplaceDrag = true;
+    },
+    endPreview: () => {
+      if (!this.marketplaceOpen) {
+        this.clearMarketplaceDrag();
+      }
+    },
+    openFromDrag: () => {
+      this.marketplaceOpen = true;
+      // With reduced motion the modal has no entrance to hide behind the
+      // preview, so the handoff is a same-frame swap.
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        this.clearMarketplaceDrag();
+        return;
+      }
+      this.marketplaceLandingTimer = setTimeout(() => {
+        this.marketplaceLandingTimer = undefined;
+        this.clearMarketplaceDrag();
+      }, MARKETPLACE_LANDING_MS);
+    },
+    closeMarketplace: () => {
+      this.closeMarketplaceDrawer();
+    },
+  });
   private readonly gateway = new GatewayPageController(this, {
     getGateway: () => this.context?.gateway,
   });
@@ -102,6 +135,12 @@ class DashboardsPage extends OpenClawLightDomElement {
     this.observedScopeId = undefined;
     this.monitoring?.setPresented(false);
     this.subscriptions.clear();
+    if (this.marketplaceLandingTimer) {
+      clearTimeout(this.marketplaceLandingTimer);
+      this.marketplaceLandingTimer = undefined;
+    }
+    this.marketplaceDrag = false;
+    this.drawerDrag.cancel();
     super.disconnectedCallback();
   }
 
@@ -171,6 +210,20 @@ class DashboardsPage extends OpenClawLightDomElement {
     this.marketplaceGatewayUrl = gatewayUrl;
     this.installedPresets = loadInstalledMarketplacePresets(gatewayUrl);
     this.marketplaceOpen = false;
+    this.clearMarketplaceDrag();
+  }
+
+  private clearMarketplaceDrag(): void {
+    if (this.marketplaceLandingTimer) {
+      clearTimeout(this.marketplaceLandingTimer);
+      this.marketplaceLandingTimer = undefined;
+    }
+    this.marketplaceDrag = false;
+  }
+
+  private closeMarketplaceDrawer(): void {
+    this.marketplaceOpen = false;
+    this.clearMarketplaceDrag();
   }
 
   private commitPresets(next: readonly MarketplacePresetId[]): void {
@@ -182,11 +235,14 @@ class DashboardsPage extends OpenClawLightDomElement {
     return {
       open: this.marketplaceOpen,
       installed: this.installedPresets,
+      dragActive: this.marketplaceDrag,
+      drawerDrag: this.drawerDrag,
       openMarketplace: () => {
         this.marketplaceOpen = true;
+        this.clearMarketplaceDrag();
       },
       closeMarketplace: () => {
-        this.marketplaceOpen = false;
+        this.closeMarketplaceDrawer();
       },
       install: (id) => {
         if (!this.installedPresets.includes(id)) {

@@ -3,6 +3,7 @@ import { icons } from "../../components/icons.ts";
 import "../../components/modal-dialog.ts";
 import { t } from "../../i18n/index.ts";
 import { registerSystemsEnglish } from "../../i18n/locales/en-systems.ts";
+import type { MarketplaceDrawerDrag } from "./marketplace-drawer-drag.ts";
 import {
   MARKETPLACE_MEASUREMENTS,
   MARKETPLACE_PRESETS,
@@ -16,14 +17,23 @@ registerSystemsEnglish();
 export type MarketplaceState = {
   open: boolean;
   installed: readonly MarketplacePresetId[];
+  /** True while the page is in a drag-preview gesture mounting the preview drawer. */
+  dragActive: boolean;
+  /** Page-owned drag owner for the pull tab; static renders stay click-only without it. */
+  drawerDrag?: MarketplaceDrawerDrag;
   openMarketplace: () => void;
   closeMarketplace: () => void;
   install: (id: MarketplacePresetId) => void;
   uninstall: (id: MarketplacePresetId) => void;
 };
 
-/** Page-level action: always rendered, so it stays reachable with data, an empty gallery, or a failed load. */
+/**
+ * Page-level pull tab anchored to the viewport's right edge — the closed
+ * drawer's front face. Click and keyboard activate it; a leftward pointer
+ * drag pulls the drawer out through the page's drag-preview.
+ */
 export function renderMarketplaceTrigger(marketplace?: MarketplaceState) {
+  const drag = marketplace?.drawerDrag;
   return html`<button
     type="button"
     class="dashboards-marketplace-trigger"
@@ -31,10 +41,17 @@ export function renderMarketplaceTrigger(marketplace?: MarketplaceState) {
     aria-haspopup="dialog"
     aria-expanded=${String(marketplace?.open ?? false)}
     title=${t("dashboardsPage.marketplaceHint")}
-    @click=${() => marketplace?.openMarketplace()}
+    @pointerdown=${(event: PointerEvent) => drag?.triggerPointerDown(event)}
+    @click=${() => {
+      if (drag?.consumeDragActivation()) {
+        return;
+      }
+      marketplace?.openMarketplace();
+    }}
   >
     ${icons.layoutGrid}
-    <span>${t("dashboardsPage.marketplace")}</span>
+    <span class="dashboards-marketplace-trigger__label">${t("dashboardsPage.marketplace")}</span>
+    <span class="dashboards-marketplace-trigger__grip" aria-hidden="true"></span>
   </button>`;
 }
 
@@ -100,36 +117,71 @@ function renderPresetCard(preset: MarketplacePreset, marketplace: MarketplaceSta
   </li>`;
 }
 
+/**
+ * The drawer front itself, shared by the modal drawer and the drag-preview.
+ * The ribbed edge handle is the close affordance: pull it right, click it, or
+ * activate it with the keyboard.
+ */
+function renderMarketplacePanel(
+  marketplace: MarketplaceState,
+  options: { autofocusHandle?: boolean } = {},
+) {
+  const drag = marketplace.drawerDrag;
+  const title = t("dashboardsPage.marketplaceTitle");
+  return html`<section class="dashboards-marketplace__panel" data-marketplace>
+    <button
+      type="button"
+      class="dashboards-marketplace__handle"
+      data-marketplace-handle
+      aria-label=${t("dashboardsPage.marketplacePullClose")}
+      ?autofocus=${options.autofocusHandle === true}
+      @pointerdown=${(event: PointerEvent) => drag?.drawerHandlePointerDown(event)}
+      @click=${() => {
+        if (drag?.consumeDragActivation()) {
+          return;
+        }
+        marketplace.closeMarketplace();
+      }}
+    >
+      <span class="dashboards-marketplace__handle-ridges" aria-hidden="true"></span>
+    </button>
+    <header class="dashboards-marketplace__header">
+      <div>
+        <h2>${title}</h2>
+        <p>${t("dashboardsPage.marketplaceDescription")}</p>
+      </div>
+    </header>
+    <div class="dashboards-marketplace__body">
+      <ul class="dashboards-marketplace__list">
+        ${MARKETPLACE_PRESETS.map((preset) => renderPresetCard(preset, marketplace))}
+      </ul>
+    </div>
+  </section>`;
+}
+
+/** Drag-preview: the drawer following the pointer before the modal owns it. */
+export function renderMarketplacePreview(marketplace: MarketplaceState) {
+  return html`<div
+    class="dashboards-marketplace-drawer-preview"
+    data-marketplace-preview
+    aria-hidden="true"
+    inert
+  >
+    ${renderMarketplacePanel(marketplace)}
+  </div>`;
+}
+
 export function renderMarketplace(marketplace: MarketplaceState) {
   const title = t("dashboardsPage.marketplaceTitle");
   return html`<openclaw-modal-dialog
-    class="drawer dashboards-marketplace"
+    class="drawer dashboards-marketplace ${
+      marketplace.dragActive ? "dashboards-marketplace--landing" : ""
+    }"
     style="--openclaw-modal-width: min(440px, 100vw);"
     label=${title}
     description=${t("dashboardsPage.marketplaceDescription")}
     @modal-cancel=${() => marketplace.closeMarketplace()}
   >
-    <section class="dashboards-marketplace__panel" data-marketplace>
-      <header class="dashboards-marketplace__header">
-        <div>
-          <h2>${title}</h2>
-          <p>${t("dashboardsPage.marketplaceDescription")}</p>
-        </div>
-        <button
-          type="button"
-          class="dashboards-marketplace__close"
-          aria-label=${t("dashboardsPage.marketplaceClose")}
-          title=${t("dashboardsPage.marketplaceClose")}
-          @click=${() => marketplace.closeMarketplace()}
-        >
-          ${icons.x}
-        </button>
-      </header>
-      <div class="dashboards-marketplace__body">
-        <ul class="dashboards-marketplace__list">
-          ${MARKETPLACE_PRESETS.map((preset) => renderPresetCard(preset, marketplace))}
-        </ul>
-      </div>
-    </section>
+    ${renderMarketplacePanel(marketplace, { autofocusHandle: true })}
   </openclaw-modal-dialog>`;
 }

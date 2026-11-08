@@ -36,9 +36,21 @@ If a refresh fails, the page keeps the last loaded dashboards visible with a
 stale-data warning. Choose **Retry** to load the list again.
 
 The page can also show built-in page presets. Open the **Dashboard
-marketplace**, a page-level drawer, to browse and manage them. No preset is
-installed by default — including the built-in **System monitoring** preset — so
-the page starts without one. Add **System monitoring** from the marketplace to
+marketplace**, a page-level drawer anchored to the right edge of the window.
+Its pull tab rides that edge — grab the ribbed **Marketplace** tab and drag it
+left: the drawer itself slides out with your pull (a short catch, then
+one-to-one), and it snaps open when you release past the latch — a quick
+leftward flick opens it as well. Clicking the tab, or focusing it and pressing
+Enter or Space, opens the drawer without a drag. With the drawer open, push its
+ribbed edge handle right, back toward the edge it came from, to put it away; it
+springs back open if you release before the halfway point. Grabbing the handle
+again while that close is still sliding and moving mostly vertically is not a
+pull either: the drawer springs back open with the marketplace still open.
+Escape works too,
+focus starts on the edge handle while the drawer is open, and focus returns to
+the tab when it closes. No preset is installed by default — including the
+built-in **System monitoring** preset — so the page starts without one. Add
+**System monitoring** from the marketplace to
 show its three measurements: **CPU load**, **Memory used**, and
 **Disk available**. Remove it from the marketplace when you no longer want it.
 
