@@ -347,7 +347,12 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
         if (ownerCount === 2) {
           expect(peerBounds.left).toBeCloseTo(stackBounds.left, 5);
           const paintedPeer = peer.querySelector("span")!.getBoundingClientRect();
-          expect(paintedPeer.width).toBeCloseTo(paintedPrimary.width, 5);
+          // Both faces ride the same live tab transform, but each rect width is
+          // mapped and rounded on its own, so float32 drift can round the reads
+          // in opposite directions: 2 ULP above and 1 ULP below 16px
+          // (ULP = 2^-19), a 3 ULP gap that exceeds the five-decimal tolerance
+          // only when the two widths are compared. Keep it; check each against 16.
+          expect(paintedPeer.width).toBeCloseTo(16, 5);
           expect(paintedPeer.height).toBe(paintedPrimary.height);
           continue;
         }
