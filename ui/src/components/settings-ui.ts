@@ -11,6 +11,7 @@ import { shellLayoutTraits } from "../app/shell-layout-traits.ts";
 import { t } from "../i18n/index.ts";
 import { buildExternalLinkRel, EXTERNAL_LINK_TARGET } from "../lib/external-link.ts";
 import { icons } from "./icons.ts";
+import { switchDrag } from "./switch-drag.ts";
 import "./tooltip.ts";
 
 type SettingsStatusKind = "ok" | "warn" | "danger" | "accent" | "muted";
@@ -290,6 +291,7 @@ export function renderSettingsToggle(props: {
       .checked=${live(props.checked)}
       ?disabled=${props.disabled ?? false}
       aria-disabled="false"
+      ${switchDrag({ checked: () => props.checked })}
       @change=${(event: Event) => {
         const target = event.currentTarget as HTMLElement & { checked: boolean };
         if (props.onChange(target.checked) === false) {
@@ -347,6 +349,7 @@ export function renderSettingsToggleRow(props: {
           size="s"
           .checked=${live(props.checked)}
           ?disabled=${props.disabled ?? false}
+          ${switchDrag({ checked: () => props.checked, onAct: props.onAct })}
           @click=${notifySwitchActivation}
           @keydown=${notifySwitchActivation}
           @change=${(event: Event) => {
