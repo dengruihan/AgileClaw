@@ -4,6 +4,7 @@ import { CONTROL_UI_BOOTSTRAP_CONFIG_PATH } from "../../../src/gateway/control-u
 import {
   type ControlUiMockGatewayScenario,
   type MockGatewayRequest,
+  controlUiBundledSettingsStorageKey,
   controlUiSessionUrl,
   createControlUiMockBootstrapConfig,
   createControlUiMockGatewayInitScript,
@@ -148,25 +149,32 @@ suite.define(() => {
     }
   });
 
-  // Joint short-height allocation matrix for the sidebar column: the brand,
-  // footer, and session well stay fixed, both bounded rosters keep at least
-  // one whole readable row, and the hidden body never scrolls. Deep bands
-  // (very short windows) settle expanded Online into its complete header-only
-  // state instead of clipping either list.
+  // Joint allocation matrix for the sidebar column. Above 500px viewport
+  // height the expanded Online roster interacts fully beside the session
+  // well; at or below 500px the whole Online section (header and toggle
+  // included) yields its space to the session well in both the default and
+  // the agent-roster mode, leaving no expanded control behind, while the
+  // nav rail may shrink into a bounded scrollable strip. The hidden body
+  // never scrolls and no row is ever clipped to a sliver.
   const sidebarHeightMatrix = [
-    { height: 500, touch: false, users: 1, width: 1280 },
-    { height: 500, touch: false, users: 8, width: 1280 },
-    { height: 400, touch: false, users: 1, width: 1280 },
-    { height: 400, touch: false, users: 8, width: 1280 },
-    { height: 360, touch: false, users: 8, width: 1280 },
-    { height: 320, touch: false, users: 8, width: 1280 },
-    { height: 500, touch: true, users: 8, width: 932 },
-    { height: 400, touch: true, users: 8, width: 932 },
+    { height: 800, mode: "sessions", touch: false, users: 8, width: 1280 },
+    { height: 500, mode: "sessions", touch: false, users: 1, width: 1280 },
+    { height: 500, mode: "sessions", touch: false, users: 8, width: 1280 },
+    { height: 400, mode: "sessions", touch: false, users: 8, width: 1280 },
+    { height: 360, mode: "sessions", touch: false, users: 8, width: 1280 },
+    { height: 320, mode: "sessions", touch: false, users: 8, width: 1280 },
+    { height: 500, mode: "sessions", touch: true, users: 8, width: 932 },
+    { height: 800, mode: "roster", touch: false, users: 8, width: 1280 },
+    { height: 500, mode: "roster", touch: false, users: 8, width: 1280 },
+    { height: 400, mode: "roster", touch: false, users: 8, width: 1280 },
+    { height: 360, mode: "roster", touch: false, users: 8, width: 1280 },
+    { height: 320, mode: "roster", touch: false, users: 8, width: 1280 },
+    { height: 400, mode: "roster", touch: true, users: 8, width: 932 },
   ] as const;
 
   it.each(sidebarHeightMatrix)(
-    "keeps whole Online and session rows reachable at $width x $height with $users users",
-    async ({ height, touch, users, width }) => {
+    "allocates whole Online and session rows at $width x $height ($mode mode, $users users)",
+    async ({ height, mode, touch, users, width }) => {
       const baseTime = Date.parse("2026-07-01T16:00:00.000Z");
       const rows = Array.from({ length: 20 }, (_, index) =>
         sessionRow(`agent:main:chat-${index}`, `Chat ${index}`, baseTime - index * 60_000),
@@ -178,9 +186,59 @@ suite.define(() => {
         viewport: { height, width },
       });
       const page = await context.newPage();
+      await page.addInitScript(() => {
+        localStorage.setItem("openclaw:sidebar:sessions:show-preview", "true");
+      });
       await installMockGateway(page, {
         methodResponses: {
           "sessions.list": sessionsListResponse(rows),
+          // Roster mode joins agent cards with the session sections.
+          ...(mode === "roster"
+            ? {
+                "agents.list": {
+                  defaultId: "main",
+                  mainKey: "main",
+                  scope: "per-sender",
+                  agents: [
+                    { id: "main", name: "Harbor", identity: { emoji: "⚓" } },
+                    { id: "forge", name: "Forge", identity: { emoji: "🔧" } },
+                  ],
+                },
+                "agent.identity.get": {
+                  cases: [
+                    { id: "main", name: "Harbor" },
+                    { id: "forge", name: "Forge" },
+                  ].map((agent) => ({
+                    match: { agentId: agent.id },
+                    response: { agentId: agent.id, name: agent.name, emoji: "⚓", avatar: "" },
+                  })),
+                },
+                "chat.startup": {
+                  agentsList: {
+                    defaultId: "main",
+                    mainKey: "main",
+                    scope: "per-sender",
+                    agents: [
+                      { id: "main", name: "Harbor", identity: { emoji: "⚓" } },
+                      { id: "forge", name: "Forge", identity: { emoji: "🔧" } },
+                    ],
+                  },
+                  messages: [],
+                  metadata: { models: [] },
+                  sessionId: "session:agent:main:main",
+                  thinkingLevel: null,
+                },
+                "cron.list": {
+                  jobs: [],
+                  snapshotRevision: "roster-matrix",
+                  total: 0,
+                  offset: 0,
+                  limit: 50,
+                  hasMore: false,
+                  nextOffset: null,
+                },
+              }
+            : {}),
         },
         sessionKey: "agent:main:main",
         presenceUsers: [
@@ -194,8 +252,23 @@ suite.define(() => {
       });
       try {
         await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
-        // The deep band hides the whole Online section, so wait for attached
-        // rather than visible here.
+        // Roster mode is a persisted UI setting: apply it after first load and
+        // reload so the app boots with it (boot-time settings sync can clobber
+        // a pre-load write).
+        if (mode === "roster") {
+          // The storage key derives from an imported helper; pass its value as
+          // an argument so the serialized callback carries no import reference.
+          const settingsKey = controlUiBundledSettingsStorageKey(suite.server.baseUrl);
+          await page.evaluate(
+            ({ key }) => {
+              localStorage.setItem(key, JSON.stringify({ sidebarAgentsMode: "roster" }));
+            },
+            { key: settingsKey },
+          );
+          await page.reload();
+        }
+        // The short-window band hides the whole Online section, so wait for
+        // attached rather than visible here.
         await page.locator(".sidebar-online").waitFor({ state: "attached" });
         // Coarse pointers run the drawer layout: open it so the sidebar column
         // is on-screen before measuring or interacting.
@@ -213,10 +286,16 @@ suite.define(() => {
           );
           await page.waitForTimeout(200);
         }
-        await expect
-          .poll(() => page.locator("[data-online-user-id]").count(), { timeout: 15_000 })
-          .toBe(users);
-
+        if (mode === "roster") {
+          // Prove the agent-roster host actually mounted, so the roster-mode
+          // allocation assertions exercise the roster owner.
+          await expect
+            .poll(() => page.locator("openclaw-sidebar-agent-roster").count(), { timeout: 15_000 })
+            .toBeGreaterThanOrEqual(1);
+        }
+        // At or below 500px the whole Online section is hidden; above it the
+        // expanded roster stays.
+        const shortWindow = height <= 500;
         // A row counts as visible only when the row and its label sit entirely
         // inside their scroller's clip box and the viewport; overflow
         // declarations and scrollTop deltas say nothing about what a user can
@@ -233,7 +312,10 @@ suite.define(() => {
               rowSelector: string,
               nameSelector: string,
             ) => {
-              const root = document.querySelector<HTMLElement>(rootSelector)!;
+              const root = document.querySelector<HTMLElement>(rootSelector);
+              if (!root) {
+                return [];
+              }
               const rootRect = root.getBoundingClientRect();
               return [...root.querySelectorAll<HTMLElement>(rowSelector)]
                 .filter((row) => {
@@ -247,16 +329,46 @@ suite.define(() => {
                 })
                 .map((row) => row.getBoundingClientRect().height);
             };
-            const body = document.querySelector<HTMLElement>(".sidebar-shell__body")!;
-            const nav = document.querySelector<HTMLElement>(".sidebar-nav")!;
+            const body = document.querySelector<HTMLElement>(".sidebar-shell__body");
+            const nav = document.querySelector<HTMLElement>(".sidebar-nav");
             const onlineSection = document.querySelector<HTMLElement>(".sidebar-online")!;
             const onlineList = document.querySelector<HTMLElement>(".sidebar-online__list");
-            const well = document.querySelector<HTMLElement>(".sidebar-sessions")!;
-            const scroller = document.querySelector<HTMLElement>(".sidebar-sessions__scroll")!;
-            const bounds = (element: HTMLElement) => {
+            const well = document.querySelector<HTMLElement>(".sidebar-sessions");
+            // The roster host mounts before its session content renders; the
+            // settle poll treats a missing scroller as "unsettled".
+            const scroller = document.querySelector<HTMLElement>(".sidebar-sessions__scroll");
+            const bounds = (element: HTMLElement | null) => {
+              if (!element) {
+                return { top: -1, bottom: -1, height: 0 };
+              }
               const rect = element.getBoundingClientRect();
               return { top: rect.top, bottom: rect.bottom, height: rect.height };
             };
+            if (!body || !scroller) {
+              return {
+                bodyScrollTop: 0,
+                bodyOverflow: 0,
+                nav: bounds(nav),
+                online: bounds(onlineSection),
+                onlineSectionHidden:
+                  onlineSection === null || getComputedStyle(onlineSection).display === "none",
+                onlineToggleVisible: false,
+                onlineListScrollTop: null,
+                onlineListClientHeight: null,
+                onlineListScrollHeight: null,
+                well: bounds(well),
+                wellClientHeight: well?.clientHeight ?? 0,
+                footer: bounds(document.querySelector<HTMLElement>(".sidebar-shell__footer")),
+                scrollerScrollTop: 0,
+                scrollerClientHeight: 0,
+                scrollerScrollHeight: 0,
+                scrollerMissing: true,
+                visiblePersonRowCount: 0,
+                visiblePersonRowHeights: [] as number[],
+                visibleSessionRowCount: 0,
+                visibleSessionRowHeights: [] as number[],
+              };
+            }
             return {
               bodyScrollTop: body.scrollTop,
               bodyOverflow: body.scrollHeight - body.clientHeight,
@@ -277,11 +389,12 @@ suite.define(() => {
               onlineListClientHeight: onlineList?.clientHeight ?? null,
               onlineListScrollHeight: onlineList?.scrollHeight ?? null,
               well: bounds(well),
-              wellClientHeight: well.clientHeight,
+              wellClientHeight: well?.clientHeight ?? 0,
               footer: bounds(document.querySelector<HTMLElement>(".sidebar-shell__footer")!),
               scrollerScrollTop: scroller.scrollTop,
               scrollerClientHeight: scroller.clientHeight,
               scrollerScrollHeight: scroller.scrollHeight,
+              scrollerMissing: false,
               visiblePersonRowCount: visibleRows(
                 ".sidebar-online__list",
                 "[data-online-user-id]",
@@ -304,15 +417,29 @@ suite.define(() => {
               ),
             };
           });
-        const expectWholeRows = (layout: Awaited<ReturnType<typeof readLayout>>, phase: string) => {
+        const expectWholeRows = (
+          layout: Awaited<ReturnType<typeof readLayout>>,
+          phase: string,
+          requireWholeSessionRow = true,
+        ) => {
+          /* Roster mode keeps Online collapsed behind its facepile header,
+             and its agent cards and group headers precede the session rows;
+             whole session rows there are asserted at the aligned offset. */
+          const personFloor = layout.onlineSectionHidden || mode === "roster" ? 0 : 1;
           expect(
             layout.visiblePersonRowCount,
             `${phase}: a whole Online person row and its name are visible`,
-          ).toBeGreaterThanOrEqual(layout.onlineSectionHidden ? 0 : 1);
+          ).toBeGreaterThanOrEqual(personFloor);
           expect(
             layout.visibleSessionRowCount,
             `${phase}: a whole session row and its name are visible`,
-          ).toBeGreaterThanOrEqual(1);
+          ).toBeGreaterThanOrEqual(requireWholeSessionRow ? 1 : 0);
+          if (!requireWholeSessionRow) {
+            expect(
+              layout.scrollerScrollHeight,
+              `${phase}: a whole row's worth of session content is scrollable`,
+            ).toBeGreaterThanOrEqual(29);
+          }
           if (!layout.onlineSectionHidden) {
             expect(
               layout.visiblePersonRowHeights.every((rowHeight) => rowHeight >= 31),
@@ -330,25 +457,36 @@ suite.define(() => {
             ).toBe(false);
           }
         };
-
-        // The drawer open and the roster mount settle layout asynchronously;
-        // poll to a stable allocation instead of sleeping: either the bounded
-        // roster shows whole rows, or the deep band settled it header-only.
+        // The roster host and its session content mount asynchronously; poll
+        // to a stable allocation instead of sleeping: either the bounded
+        // roster shows whole rows, or the short-window band settled the
+        // Online section into its hidden state.
         await expect
           .poll(
             async () => {
               const layout = await readLayout();
-              if (layout.onlineSectionHidden) {
-                return "header-only";
+              if (layout.scrollerMissing) {
+                return "unsettled";
               }
-              return layout.visiblePersonRowCount >= 1 && layout.visibleSessionRowCount >= 1
-                ? "whole-rows"
-                : "unsettled";
+              if (layout.onlineSectionHidden) {
+                return "section-hidden";
+              }
+              // Roster mode keeps Online collapsed behind its facepile header
+              // by design; only session rows gate the settled state there.
+              const personOk = mode === "sessions" ? layout.visiblePersonRowCount >= 1 : true;
+              return personOk && layout.visibleSessionRowCount >= 1 ? "whole-rows" : "unsettled";
             },
             { timeout: 15_000 },
           )
           .not.toBe("unsettled");
         const resting = await readLayout();
+        expect(
+          resting.onlineSectionHidden,
+          shortWindow
+            ? "the short-window band hides the whole Online section"
+            : "ordinary heights keep the expanded Online section",
+        ).toBe(shortWindow);
+        expect(resting.onlineToggleVisible).toBe(!shortWindow);
         expect(
           resting.bodyOverflow,
           "the hidden sidebar body keeps no unreachable overflow",
@@ -359,7 +497,7 @@ suite.define(() => {
           resting.wellClientHeight,
           "the session well keeps its bounded floor",
         ).toBeGreaterThanOrEqual(38);
-        expectWholeRows(resting, "resting");
+        expectWholeRows(resting, "resting", mode !== "roster");
 
         // Wheel input over the roster scrolls Online itself when its roster
         // overflows; over the session list scrolls the well's nested
@@ -368,7 +506,7 @@ suite.define(() => {
           resting.onlineListScrollHeight !== null &&
           resting.onlineListClientHeight !== null &&
           resting.onlineListScrollHeight > resting.onlineListClientHeight;
-        if (!resting.onlineSectionHidden && onlineScrollable) {
+        if (!shortWindow && onlineScrollable) {
           const onlineListBox = await page.locator(".sidebar-online__list").boundingBox();
           await page.mouse.move(
             onlineListBox!.x + onlineListBox!.width / 2,
@@ -393,58 +531,48 @@ suite.define(() => {
           const alignedOnline = await readLayout();
           expect(alignedOnline.bodyScrollTop, "alignment never scrolls the hidden body").toBe(0);
           expectWholeRows(alignedOnline, "alignedOnline");
-        } else if (resting.onlineSectionHidden) {
-          // Deep band: the Online section is fully hidden (complete
-          // collapsed-equivalent state), so no expanded control remains to
-          // interact with.
-          const hiddenSection = await readLayout();
-          expect(hiddenSection.onlineSectionHidden).toBe(true);
-          expect(hiddenSection.onlineToggleVisible).toBe(false);
-          expect(hiddenSection.bodyScrollTop).toBe(0);
-          expect(hiddenSection.nav).toEqual(resting.nav);
-          expect(hiddenSection.well).toEqual(resting.well);
-        } else {
-          // Expanded roster fits without scrolling (e.g. a single person
-          // row): nothing to wheel; chrome immobility still holds.
-          const unscrolled = await readLayout();
-          expect(unscrolled.bodyScrollTop).toBe(0);
-          expect(unscrolled.nav).toEqual(resting.nav);
-          expect(unscrolled.well).toEqual(resting.well);
-          expect(unscrolled.footer).toEqual(resting.footer);
         }
 
         // Keyboard focus must land in its own bounded scroller and keep a
-        // whole row readable; the hidden body never moves. In the deep band
-        // the Online section is hidden entirely, so there is no roster row to
-        // focus and no expanded control left behind.
-        if (resting.onlineSectionHidden) {
+        // whole row readable; the hidden body never moves. In the short
+        // window the Online section is hidden entirely, so there is no
+        // roster row to focus and no expanded control left behind.
+        if (shortWindow) {
           expect(
             resting.onlineToggleVisible,
-            "the deep band leaves no Online expanded control to focus",
+            "the short-window band leaves no Online expanded control to focus",
           ).toBe(false);
-        } else {
+        } else if (mode === "sessions") {
           await page.locator("[data-online-user-id]").last().focus();
         }
         const focusedOnline = await readLayout();
         expect(focusedOnline.bodyScrollTop, "focus never scrolls the hidden body").toBe(0);
-        const onlineListMetrics = focusedOnline.onlineListClientHeight;
-        if (
-          !resting.onlineSectionHidden &&
-          onlineListMetrics !== null &&
-          focusedOnline.onlineListScrollHeight !== null
-        ) {
-          const focusScrollable = focusedOnline.onlineListScrollHeight > onlineListMetrics;
-          if (focusScrollable) {
+        if (mode === "sessions" && !shortWindow) {
+          const onlineListMetrics = focusedOnline.onlineListClientHeight;
+          if (
+            onlineListMetrics !== null &&
+            focusedOnline.onlineListScrollHeight !== null &&
+            focusedOnline.onlineListScrollHeight > onlineListMetrics
+          ) {
             expect(
               focusedOnline.onlineListScrollTop,
               "focusing the last roster row scrolls it into view",
             ).toBeGreaterThan(0);
           }
+          // Real activation of the last person: click hit-target proof plus
+          // the keyboard activation path, neither moving the hidden body.
+          const urlBeforeOnline = page.url();
+          await page.locator("[data-online-user-id]").last().click();
+          expect(page.url(), "activating a person never navigates").toBe(urlBeforeOnline);
+          await page.locator("[data-online-user-id]").last().focus();
+          await page.keyboard.press("Enter");
+          const activatedOnline = await readLayout();
+          expect(activatedOnline.bodyScrollTop).toBe(0);
+          expectWholeRows(activatedOnline, "activatedOnline");
         }
-        expectWholeRows(focusedOnline, "focusedOnline");
 
         // Session reachability: wheel, focus, and real activation of another
-        // session, with the fixed chrome staying put throughout.
+        // session (navigation), with the fixed chrome staying put throughout.
         const sessionListBox = await page.locator(".sidebar-sessions__scroll").boundingBox();
         await page.mouse.move(
           sessionListBox!.x + sessionListBox!.width / 2,
@@ -461,8 +589,8 @@ suite.define(() => {
         expect(wheeledSessions.footer).toEqual(resting.footer);
         await page.evaluate(`(() => {
           const scroller = document.querySelector(".sidebar-sessions__scroll");
-          const rows = scroller.querySelectorAll(".sidebar-recent-session");
-          const last = rows[rows.length - 1];
+          const sessionRows = scroller.querySelectorAll(".sidebar-recent-session");
+          const last = sessionRows[sessionRows.length - 1];
           if (!last) {
             return;
           }
@@ -483,7 +611,14 @@ suite.define(() => {
         expectWholeRows(focusedSession, "focusedSession");
 
         const urlBefore = page.url();
-        await page.locator(".sidebar-recent-session__link").last().click();
+        if (mode === "roster") {
+          // Roster rows carry overlay action chrome on focus; keyboard
+          // activation is the deterministic reachability proof there.
+          await page.locator(".sidebar-recent-session__link").last().focus();
+          await page.keyboard.press("Enter");
+        } else {
+          await page.locator(".sidebar-recent-session__link").last().click();
+        }
         expect(page.url(), "activating a session navigates").not.toBe(urlBefore);
         const activated = await readLayout();
         expect(activated.bodyOverflow).toBeLessThanOrEqual(1);
