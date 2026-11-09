@@ -51,10 +51,28 @@ function scenario(recentSessionLabel = recentLabel) {
         timeZone: "Europe/Paris",
         watchedSessions: [watched, "agent:main:main", "agent:private:hidden"],
       },
+      {
+        // A second distinct identity: solo presence renders no Online section.
+        // Bea stays idle so Alice keeps the active-first top row and its
+        // keyboard order.
+        id: "bea",
+        identity: { type: "profile" as const, id: "bea" },
+        name: "Bea",
+        onlineSince: now - 7_200_000,
+        lastActivityAt: now - 600_000,
+      },
     ],
     methodResponses: {
       "sessions.list": chatSessionListResponse([
-        { key: "agent:main:main", kind: "direct", label: "", updatedAt: now - 90_000 },
+        {
+          key: "agent:main:main",
+          kind: "direct",
+          label: "",
+          // The Gateway derives titles for unnamed sessions; the card asserts
+          // the display-name path with the same explicit title.
+          displayName: "Main Session",
+          updatedAt: now - 90_000,
+        },
         { key: selected, kind: "direct", label: "Selected session", updatedAt: now },
         {
           key: watched,
@@ -182,9 +200,19 @@ suite.define(() => {
               user: { id: "alice", identity: { type: "profile", id: "alice" }, name: "Alice" },
               lastActivityAt: Date.now(),
             },
+            // A companion identity keeps the section mounted while Alice flips active.
+            {
+              user: { id: "bob", name: "Bob" },
+              ts: Date.now(),
+              lastActivityAt: Date.now() - 600_000,
+            },
           ],
         });
         await expect.poll(() => person.getAttribute("data-presence-activity")).toBe("active");
+        // Flipping Alice above Bob reorders the roster and moves the row from
+        // under the pointer, so re-anchor her card before asserting its status.
+        await person.hover();
+        await card.waitFor({ state: "visible" });
         expect(await card.locator(".person-activity-card__status").textContent()).toContain(
           "Active",
         );
@@ -641,15 +669,25 @@ suite.define(() => {
           .poll(() => rawLink.evaluate((element) => document.activeElement === element))
           .toBe(true);
         await gateway.emitGatewayEvent("presence", {
-          presence: [{ user: raw, watchedSessions: [rawSession, selected] }],
+          presence: [
+            { user: raw, watchedSessions: [rawSession, selected] },
+            // A second distinct identity keeps the section mounted so the raw
+            // card and its focus survive profile leaving the roster.
+            { user: { id: "carol", name: "Carol" }, watchedSessions: [selected] },
+          ],
         });
-        await expect.poll(() => page.locator(".sidebar-online__person").count()).toBe(1);
+        await expect.poll(() => page.locator(".sidebar-online__person").count()).toBe(2);
+        expect(await page.getByRole("link", { name: "Activity for Profile person" }).count()).toBe(
+          0,
+        );
         expect(await rawLink.evaluate((element) => document.activeElement === element)).toBe(true);
         expect(await rawCard.count()).toBe(1);
         await gateway.emitGatewayEvent("presence", {
           presence: [
             { user: raw, reason: "disconnect", watchedSessions: [rawSession] },
             { user: profile, watchedSessions: [profileSession] },
+            // Carol keeps the section mounted for the profile card coverage.
+            { user: { id: "carol", name: "Carol" }, watchedSessions: [selected] },
           ],
         });
         await expect.poll(() => rawCard.count()).toBe(0);
@@ -668,6 +706,19 @@ suite.define(() => {
             animations: "disabled",
           });
         }
+        // Profile alone is solo presence: the whole Online section hides.
+        await gateway.emitGatewayEvent("presence", {
+          presence: [
+            { user: raw, reason: "disconnect", watchedSessions: [rawSession] },
+            {
+              user: { id: "carol", name: "Carol" },
+              reason: "disconnect",
+              watchedSessions: [selected],
+            },
+            { user: profile, watchedSessions: [profileSession] },
+          ],
+        });
+        await expect.poll(() => page.locator(".sidebar-online").count()).toBe(0);
         expect((await gateway.getRequests("connect")).length).toBeGreaterThan(0);
         expect((await gateway.getRequests("sessions.list")).length).toBeGreaterThan(0);
       },
