@@ -459,6 +459,9 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
       const sidebar = document.createElement("aside");
       sidebar.className = "sidebar";
       document.body.append(sidebar);
+      const feed = document.createElement("section");
+      feed.className = "sidebar-sessions";
+      sidebar.append(feed);
       const chip = await mountOwnerChip({
         participantCount,
         participants: [{ identity: { type: "profile", id: "profile-bob" }, label: "Bob" }],
@@ -466,10 +469,10 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
       const row = document.createElement("div");
       row.className = "sidebar-recent-session";
       row.style.transition = "none";
-      sidebar.append(row);
-      // The chip rides on the moving tab, not on the slot behind it: mirror
-      // the real row/link boundary so the cutout blends with the face the
-      // avatars actually sit on.
+      feed.append(row);
+      // The chip rides on the record face, not on the panel behind the strip:
+      // mirror the real row/link boundary so the cutout blends with the face
+      // the avatars actually sit on.
       const link = document.createElement("a");
       link.className = "sidebar-recent-session__link";
       row.append(link);
@@ -488,16 +491,16 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
             [getComputedStyle(stack, "::before"), getComputedStyle(stack, "::after")].map(
               (cutout) => ({
                 width: cutout.borderTopWidth,
-                // The ring must carry the tab face it rides on — which follows
-                // the --session-tab-bg retint when the row is multi-selected —
-                // not the stationary slot floor behind the tab.
-                matchesTabFace: cutout.borderTopColor === getComputedStyle(link).backgroundColor,
+                // The ring must carry the record face it rides on — which
+                // follows the --session-row-face retint when the row is
+                // multi-selected — not the strip floor behind the record.
+                matchesRowFace: cutout.borderTopColor === getComputedStyle(link).backgroundColor,
               }),
             ),
           )
           .toEqual([
-            { width: "1px", matchesTabFace: true },
-            { width: "1px", matchesTabFace: true },
+            { width: "1px", matchesRowFace: true },
+            { width: "1px", matchesRowFace: true },
           ]);
       }
     },

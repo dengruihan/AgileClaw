@@ -232,6 +232,9 @@ export class SessionOrganizerController {
     }
     event.preventDefault();
     event.stopPropagation();
+    // A pinned record is inside the session frame; entering the pinned zone
+    // means the pointer left the unpin target, so clear its stale highlight.
+    this.sessionListRemovalDrop = false;
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = "move";
     }

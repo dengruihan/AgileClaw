@@ -476,7 +476,9 @@ describe("AppSidebar agent roster", () => {
     sidebar.querySelector<HTMLButtonElement>('[data-agent-collapse="working"]')?.click();
     await vi.waitFor(() => expect(sessionKeys(sidebar)).not.toContain("agent:working:recent"));
     expect(
-      sidebar.querySelector('.sidebar-nav [data-session-key="agent:working:pinned"]'),
+      sidebar.querySelector(
+        '.sidebar-recent-sessions__list--pinned [data-session-key="agent:working:pinned"]',
+      ),
     ).not.toBeNull();
     expect(loadSettings().sidebarCollapsedAgentIds).toEqual(["working"]);
     provider.remove();
@@ -490,7 +492,9 @@ describe("AppSidebar agent roster", () => {
     ).toBe("false");
     expect(sessionKeys(remounted.sidebar)).not.toContain("agent:working:recent");
     expect(
-      remounted.sidebar.querySelector('.sidebar-nav [data-session-key="agent:working:pinned"]'),
+      remounted.sidebar.querySelector(
+        '.sidebar-recent-sessions__list--pinned [data-session-key="agent:working:pinned"]',
+      ),
     ).not.toBeNull();
     expect(sessionKeys(remounted.sidebar)).toContain("agent:recent:recent");
     await toggleRoster(remounted.sidebar);

@@ -179,9 +179,8 @@ suite.define(() => {
       }
       await captureUiProof(suite, page, "child-sessions-expanded.png");
       await captureUiProof(suite, page, "child-sessions-run-state-precedence.png");
-
       const tree = page.locator(`[data-session-tree="${parentKey}"]`);
-      expect(await tree.locator("xpath=ancestor::nav").count()).toBe(pinned ? 1 : 0);
+      expect(await tree.evaluate((el) => Boolean(el.closest(".sidebar-sessions")))).toBe(true);
       const nesting = await tree.evaluate((element) => {
         const parentElement = element.querySelector(".sidebar-recent-session")!;
         const childContainer = element.querySelector(".sidebar-session-tree__children")!;
@@ -195,7 +194,6 @@ suite.define(() => {
       });
       expect(nesting.childLeft - nesting.parentLeft).toBeGreaterThan(8);
       expect(nesting.guide).toBe("none");
-
       const completedChild = childRows.nth(1);
       const childArchiveButton = completedChild.getByRole("button", {
         name: "Archive session: Verify tests",

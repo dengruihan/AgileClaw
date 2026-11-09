@@ -35,6 +35,7 @@ import {
   renderAppSidebarFooterBar,
   renderAppSidebarPagesHead,
   renderAppSidebarZoneEntry,
+  renderPinnedSessionZone,
 } from "./app-sidebar-render.ts";
 import type { SessionCatalogGroupsRenderer } from "./app-sidebar-session-catalog-render.ts";
 import type { CatalogSessionMenuRequest } from "./app-sidebar-session-catalogs.ts";
@@ -380,13 +381,13 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
   }
 
   renderPinnedSidebarSession(session: SidebarRecentSession): TemplateResult {
-    // Pinned sessions live in the navigation zone, not a session list.
+    // Pinned sessions are feed records now; the pinned list owns their list role.
     return this.sidebarAgentsMode === "roster" && this.rosterRenderer
       ? this.rosterRenderer.renderSidebarPinnedSession(this, session)
-      : renderSessionTree({ host: this, session, listItem: false });
+      : renderSessionTree({ host: this, session, listItem: true });
   }
 
-  private renderSessions() {
+  private renderSessions(pinned: unknown) {
     return renderPluginSurface(
       "session-list",
       {
@@ -394,11 +395,11 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
         agentId: this.getSessionNavigationState().selectedAgentId,
         sessions: this.context?.sessions.state.result?.sessions ?? [],
       },
-      this.renderSessionsBody(),
+      this.renderSessionsBody(pinned),
     );
   }
 
-  private renderSessionsBody() {
+  private renderSessionsBody(pinned: unknown) {
     if (this.sidebarAgentsMode === "roster") {
       if (!this.rosterRenderer) {
         void this.rosterRendererImport.load().catch(() => undefined);
@@ -440,6 +441,7 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
       nativeSessionsHaveMore: this.sessionData.sessionsResult?.hasMore === true,
       nativeSessionsLoading: this.sessionData.sessionsLoading,
       catalogRenderer: this.catalogRenderer,
+      pinned,
       catalogs: {
         catalogs,
         basePath: this.basePath,
@@ -458,6 +460,11 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
 
   override render() {
     const sidebarZone = this.reconciledSidebarZone();
+    const navigationEntries = sidebarZone.entries.filter((entry) => entry.type !== "session");
+    const pinnedSessions =
+      this.sidebarAgentsMode === "roster"
+        ? nothing
+        : renderPinnedSessionZone(this, sidebarZone.entries, sidebarZone.sessionRows);
     return html`
       <aside
         class="sidebar"
@@ -497,7 +504,7 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
                   @drop=${(event: DragEvent) => this.sessionOrganizer.handleSidebarZoneDrop(event)}
                 >
                   <openclaw-mcp-app-catalog surface="sidebar"></openclaw-mcp-app-catalog>
-                  ${repeat(sidebarZone.entries, serializeSidebarEntry, (entry) =>
+                  ${repeat(navigationEntries, serializeSidebarEntry, (entry) =>
                     renderAppSidebarZoneEntry(
                       this,
                       entry,
@@ -508,7 +515,7 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
                 </div>
               </nav>
               <div class="sidebar-session-content">
-                ${renderAppSidebarOnline(this)} ${this.renderSessions()}
+                ${renderAppSidebarOnline(this)} ${this.renderSessions(pinnedSessions)}
               </div>
             </div>
             ${

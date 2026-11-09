@@ -169,12 +169,12 @@ suite.define(() => {
         for (const agent of agentsList.agents) {
           const group = sidebar.locator(`[data-agent-group="${agent.id}"]`);
           const pin = sidebar.locator(
-            `.sidebar-nav [data-session-key="agent:${agent.id}:project"]`,
+            `.sidebar-recent-sessions__list--pinned [data-session-key="agent:${agent.id}:project"]`,
           );
           expect(await pin.count()).toBe(1);
           expect(await pin.textContent()).toContain(`${agent.name} project`);
           expect(await pin.locator(".identity-avatar--agent").count()).toBe(1);
-          // Anchor and member rows share one list; the pinned project row lives in Pages.
+          // Anchor and member rows share one list; the pinned project row lives in the paper strip.
           expect(
             await group
               .locator(".sidebar-recent-session")
@@ -249,8 +249,8 @@ suite.define(() => {
               throw new Error(`${key}: session row is missing its title element`);
             }
             measured += 1;
-            // The renderer reports fractional layout values (a pinned row measures
-            // 7.98 px for the 8 px gap); allow sub-pixel rounding only.
+            // The renderer reports fractional layout values; allow sub-pixel
+            // rounding only.
             expect(gap.gap, key).toBeGreaterThanOrEqual(8 - 0.05);
           }
           return measured;

@@ -1,10 +1,8 @@
 /* Session surfaces owned by the lazy sidebar component (this sheet loads after
    the global bundle, matching the previous layout.css -> components.css ->
-   app-sidebar.css cascade order). The session list itself is one continuous
-   paper feed (see the tail of this file). The earlier pull-out tab rules stay
-   for the pinned nav-zone entries, which are console keys beside the pages
-   rail rather than list records, and for row fixtures that mount without the
-   feed container. */
+   app-sidebar.css cascade order). Every Session record, pinned or unpinned, is
+   one continuous paper feed (see the tail of this file). Non-Session Pages
+   entries remain the console keys beside the rail. */
 /* Expanded child trees share the sidebar lists' column-flex frame. Flex,
    not grid: WebKit does not re-run a grid flex-item's intrinsic sizing when
    child rows stream in or grow a second subtitle line after first layout,
@@ -50,92 +48,35 @@
 }
 
 /* Every sidebar session source renders a thread. Keep density and text styling
-   here so gateway threads and native coding catalogs cannot drift apart. */
+   here so gateway threads and native coding catalogs cannot drift apart. The
+   row is a flat record on the continuous paper feed (see the tail of this
+   sheet); the face, edges, and travel of the retired pull-out tabs do not
+   exist here. --session-row-face is the face the record sits on, consumed by
+   the owner-chip cutout and retinted per state by the feed. */
 .sidebar-recent-session {
   --sidebar-child-session-toggle-width: max(34px, calc(36px * var(--control-ui-text-scale)));
-  /* Pull-out index tab: the row is the stationary recessed slot and the link
-     is the matte tab seated in it. --session-tab-bg is the tab face retinted
-     per state over the slot floor; the satin layer and grip edge stay
-     constant. --session-tab-pull flips for RTL so travel always aims at the
-     content side. */
-  --session-tab-bg: color-mix(in srgb, var(--bg-elevated) 30%, var(--sidebar-bg, var(--bg)));
-  --session-tab-pull: 3px;
+  --session-row-face: var(--sidebar-bg, var(--bg));
 
+  position: relative;
   display: flex;
   align-items: center;
   min-width: 0;
   min-height: var(--sidebar-session-row-min-height);
-  padding-right: 2px;
-  border: 1px solid color-mix(in srgb, var(--mat-rim) 30%, transparent);
-  border-radius: var(--radius-md);
-  background-color: color-mix(in srgb, var(--bg) 30%, var(--sidebar-bg, var(--bg)));
+  padding-right: 0;
   color: var(--muted);
   cursor: var(--cursor-action);
-  /* Recessed slot floor: the shared groove vocabulary shades the mouth walls
-     under the seated tab. */
-  box-shadow: var(--well-shadow);
   transition: color var(--duration-fast) ease;
 }
 
-/* The slot's leading stripe marks the seated tab: the session color when set,
-   else the accent seam on the current session's slot. */
-.sidebar-recent-session--colored::before,
-.sidebar-recent-session--active::before {
-  content: "";
-  position: absolute;
-  inset-block: 5px;
-  inset-inline-start: 1px;
-  width: 2px;
-  border-radius: var(--radius-full);
-  background: var(--session-color, color-mix(in srgb, var(--accent) 78%, transparent));
-  pointer-events: none;
-}
-
 .sidebar-recent-session:hover {
-  --session-tab-bg: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
-
   color: var(--text);
 }
 
-/* Hover, keyboard focus, and the current session pull the tab a few pixels
-   toward the content area; the current seat stays pulled at rest. Doubled
-   class outranks hover so the current tab's accent face does not degrade
-   while the row is under pointer. */
-.sidebar-recent-session.sidebar-recent-session--active {
-  --session-tab-bg: color-mix(in srgb, var(--accent-subtle) 88%, var(--bg-elevated) 12%);
-
-  color: var(--text-strong);
-}
-
-/* Multi-select is an accent wash that stays tucked: no pull, so it remains
-   distinguishable from the current tab by hue and by seat. */
+.sidebar-recent-session.sidebar-recent-session--active,
 .sidebar-recent-session.sidebar-recent-session--selected {
-  --session-tab-bg: color-mix(in srgb, var(--accent) 14%, var(--sidebar-bg, var(--bg)));
-
   color: var(--text-strong);
 }
 
-/* Pull travel lives on the tab, never on the slot. */
-.sidebar-recent-session:hover > .sidebar-recent-session__link,
-.sidebar-recent-session--active > .sidebar-recent-session__link,
-.sidebar-recent-session > .sidebar-recent-session__link:focus-visible {
-  transform: translateX(var(--session-tab-pull));
-  box-shadow: var(--shadow-md);
-}
-
-/* Pressing the tab seats it back into its slot: the pull collapses and the
-   face takes the shared groove shadow. Inline action keys keep their own
-   travel and never move the tab or the slot. */
-.sidebar-recent-session > .sidebar-recent-session__link:active {
-  transform: translateX(0);
-  box-shadow: var(--well-shadow);
-  transition-duration: var(--duration-press);
-}
-
-/* Matte coated-card tab: one hairline edge and a satin face over the
-   retintable color, with a short contact shadow — no dome bevel and no solid
-   rim, so it never reads as the nav rail's key chrome. The pull grip is a
-   matte band painted on the face's pull side so it costs no reading width. */
 .sidebar-recent-session__link {
   position: relative;
   display: flex;
@@ -143,39 +84,16 @@
   gap: var(--sidebar-row-gap);
   flex: 1 1 auto;
   min-width: 0;
-  min-height: calc(var(--sidebar-session-row-min-height) - 2px);
-  margin-block: 1px;
-  margin-inline: 2px 4px;
+  min-height: var(--sidebar-session-row-min-height);
+  margin: 0;
   padding: var(--sidebar-session-link-padding-block) 2px var(--sidebar-session-link-padding-block)
     calc(var(--sidebar-inset) - 2px);
-  border: 1px solid color-mix(in srgb, var(--border-strong) 42%, transparent);
-  border-radius: var(--radius-sm);
-  background-color: var(--session-tab-bg);
-  background-image: var(--raise-face);
+  border: 0;
+  border-radius: 0;
+  background: none;
   color: inherit;
-  box-shadow: var(--shadow-sm);
-  transition:
-    background var(--duration-fast) ease,
-    box-shadow var(--duration-release) var(--ease-spring),
-    transform var(--duration-release) var(--ease-spring);
-}
-
-/* Integrated pull grip: a matte band on the tab's pull edge (logical, so it
-   flips with direction). */
-.sidebar-recent-session__link::before {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  inset-inline-end: 0;
-  width: 9px;
-  border-start-end-radius: var(--radius-sm);
-  border-end-end-radius: var(--radius-sm);
-  background: var(--mat-face-lo);
-  pointer-events: none;
-}
-
-:root[dir="rtl"] .sidebar-recent-session {
-  --session-tab-pull: -3px;
+  box-shadow: none;
+  transition: background-color var(--duration-fast) ease;
 }
 
 /* Session rows sit flush with the horizontal clip that protects the sidebar
@@ -394,27 +312,6 @@
   display: none;
 }
 
-/* Pinned sessions share the page-nav chrome (seated key states, muted glyphs
-   and meta) while retaining session actions. The title deliberately opts out
-   and keeps the list's --text: a session name is content in both zones, and
-   pinning a row must not make it read as dimmer than the same row further
-   down. The pull-out tab construction is inherited from
-   .sidebar-recent-session; the row padding compensates for the tab margins so
-   the zone face stays on the list's text grid. */
-.sidebar-zone-entry .sidebar-recent-session {
-  min-height: max(32px, var(--sidebar-session-row-min-height));
-  padding: 0 6px;
-}
-
-.sidebar-zone-entry .sidebar-recent-session__link {
-  gap: 8px;
-  padding: 3px 0;
-}
-
-.sidebar-zone-entry .sidebar-recent-session__aside {
-  padding-right: 0;
-}
-
 .sidebar-session-indicator {
   position: relative;
   display: inline-flex;
@@ -596,10 +493,10 @@
 .session-owner-stack__overflow {
   display: grid;
   place-items: center;
-  /* Follow the tab fill while keeping the overlapping primary behind an opaque face. */
+  /* Follow the record face while keeping the overlapping primary behind an opaque face. */
   background:
     linear-gradient(color-mix(in srgb, var(--text-strong) 16%, transparent) 0 0),
-    linear-gradient(var(--session-tab-bg, transparent) 0 0), var(--sidebar-bg, var(--bg));
+    linear-gradient(var(--session-row-face, transparent) 0 0), var(--sidebar-bg, var(--bg));
   color: var(--text-strong);
   font-weight: 700;
   line-height: 1;
@@ -630,9 +527,9 @@
   z-index: 1;
   box-sizing: border-box;
   width: 18px;
-  border: 1px solid var(--session-tab-bg);
+  border: 1px solid var(--session-row-face);
   border-radius: var(--radius-full);
-  background: var(--sidebar-bg, var(--bg));
+  background: var(--session-row-face);
   mask:
     linear-gradient(white 0 0) padding-box,
     linear-gradient(white 0 0);
@@ -684,7 +581,7 @@
 }
 
 .session-row-host--draft-other {
-  --session-tab-bg: color-mix(in srgb, var(--bg-muted) 44%, var(--sidebar-bg, var(--bg)));
+  --session-row-face: color-mix(in srgb, var(--bg-muted) 44%, var(--sidebar-bg, var(--bg)));
   --draft-row-opacity: 0.58;
 }
 
@@ -1031,14 +928,6 @@
   }
 }
 
-.shell--mobile-nav .sidebar-zone-entry .sidebar-recent-session {
-  padding-inline: 4px;
-
-  > .sidebar-recent-session__link {
-    gap: var(--sidebar-row-gap);
-  }
-}
-
 .shell--mobile-nav .sidebar-recent-session:not(.sidebar-recent-session--child) {
   .sidebar-recent-session__text {
     padding-right: var(--session-row-actions-reserve);
@@ -1063,8 +952,8 @@
    child tree. Rows are records on that strip: a left-aligned title over a
    fine incised rule, with no per-row card, tab, or seat. Session state still
    reads through a low-accent wash, and the inline management keys stay
-   reachable on hover/focus. Pinned nav-zone entries are console keys and
-   deliberately keep the pull-out tab rules above.
+   reachable on hover/focus. Pinned Session records join the same strip in
+   canonical zone order; non-Session Pages entries remain console keys.
 
    Material lives here, in the lazy sidebar sheet, so the boot bundle gains
    nothing. The structural `.sidebar-sessions` rule in layout.css remains the
@@ -1193,13 +1082,19 @@
    layout-owned bleed margin moved here with the session material. */
 .sidebar-sessions > .sidebar-recent-sessions {
   margin-inline: 0;
-  padding-inline: 6px;
+  padding-inline: 4px;
 }
 
-.sidebar-sessions .sidebar-recent-sessions__list,
-.sidebar-sessions .sidebar-session-tree,
-.sidebar-sessions .sidebar-session-tree__list {
+.sidebar-sessions .sidebar-recent-sessions__list {
   gap: 0;
+}
+
+.sidebar-recent-sessions__list--pinned {
+  min-height: 0;
+}
+
+.sidebar-agent-roster > .sidebar-recent-sessions__list--pinned {
+  margin-bottom: 4px;
 }
 
 /* The toolbar is the strip's first line: label at the title grid, keys on the
@@ -1209,16 +1104,16 @@
   padding-inline: calc(var(--sidebar-text-offset) + 4px) 10px;
 }
 
-/* A record, not a slot or a tab. */
+/* A record, not a slot or a tab. The record face is a solid paper tone so
+   the owner-chip cutout can match it exactly as state washes retint it. */
 .sidebar-sessions .sidebar-recent-session {
-  position: relative;
+  --session-row-face: var(--session-feed-paper);
+
   min-height: calc(var(--sidebar-session-row-min-height) + 4px);
-  padding-right: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  color: var(--muted);
+}
+
+.sidebar-sessions .sidebar-recent-session > .sidebar-recent-session__link {
+  background-color: var(--session-row-face);
 }
 
 /* Fine incised rule under each title: a shallow dark line with a light catch
@@ -1251,50 +1146,19 @@
   line-height: 14px;
 }
 
-/* The old tab face, grip band, slot mouth, and leading seam do not exist on a
-   printed record. */
-.sidebar-sessions .sidebar-recent-session__link,
-.sidebar-sessions .sidebar-recent-session > .sidebar-recent-session__link {
-  margin: 0;
-  min-height: var(--sidebar-session-row-min-height);
-  padding-right: 6px;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  transform: none;
-}
-
-.sidebar-sessions .sidebar-recent-session__link::before,
-.sidebar-sessions .sidebar-recent-session--colored::before,
-.sidebar-sessions .sidebar-recent-session--active::before {
-  content: none;
-}
-
-.sidebar-sessions .sidebar-recent-session:hover > .sidebar-recent-session__link,
-.sidebar-sessions .sidebar-recent-session--active > .sidebar-recent-session__link,
-.sidebar-sessions .sidebar-recent-session > .sidebar-recent-session__link:focus-visible,
-.sidebar-sessions .sidebar-recent-session > .sidebar-recent-session__link:active {
-  transform: none;
-  box-shadow: none;
-}
-
 /* State stays a quiet wash on the same strip: hover and focus lighten the
    record, the current session carries the accent, multi-select is a slightly
-   deeper accent wash. No travel, no rim. */
-.sidebar-sessions .sidebar-recent-session:hover {
+   deeper accent wash. No travel, no rim. The face stays a solid retinted
+   value so the owner-chip cutout follows it exactly. */
+.sidebar-sessions .sidebar-recent-session:is(:hover, :focus-within) {
+  --session-row-face: color-mix(in srgb, var(--bg-hover) 52%, var(--session-feed-paper));
+
   color: var(--text);
 }
 
-.sidebar-sessions .sidebar-recent-session:hover > .sidebar-recent-session__link,
-.sidebar-sessions .sidebar-recent-session > .sidebar-recent-session__link:focus-visible {
-  background-color: color-mix(in srgb, var(--bg-hover) 52%, transparent);
-}
+.sidebar-sessions .sidebar-recent-session.sidebar-recent-session--active {
+  --session-row-face: color-mix(in srgb, var(--accent) 9%, var(--session-feed-paper));
 
-.sidebar-sessions
-  .sidebar-recent-session.sidebar-recent-session--active
-  > .sidebar-recent-session__link {
-  background-color: color-mix(in srgb, var(--accent) 9%, transparent);
   color: var(--text-strong);
 }
 
@@ -1302,37 +1166,39 @@
   font-weight: 600;
 }
 
-.sidebar-sessions
-  .sidebar-recent-session.sidebar-recent-session--selected
-  > .sidebar-recent-session__link {
-  background-color: color-mix(in srgb, var(--accent) 11%, transparent);
+.sidebar-sessions .sidebar-recent-session.sidebar-recent-session--selected {
+  --session-row-face: color-mix(in srgb, var(--accent) 11%, var(--session-feed-paper));
+
   color: var(--text-strong);
 }
 
-/* Inline management and disclosure keys become bare glyphs on the strip;
-   they stay seated inside their own boxes, so no layout or touch target
-   changes here. */
-.sidebar-sessions .session-action,
-.sidebar-sessions .sidebar-child-session-toggle {
-  border: 0;
-  background: none;
-  box-shadow: none;
-  color: var(--muted);
+/* Removal target: the existing pinned/unpinned removal drop needs its own
+   material after the feed base replaces the old transparent section. */
+.sidebar-sessions.sidebar-sessions--removal-drop {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--muted) 10%, transparent) 0, transparent 18px),
+    color-mix(in srgb, var(--muted) 12%, var(--session-feed-well));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--muted) 55%, transparent),
+    inset 0 2px 4px color-mix(in srgb, var(--neu-dark) 100%, transparent);
 }
 
-.sidebar-sessions .session-action:hover:not(:disabled),
-.sidebar-sessions .session-action:focus-visible,
-.sidebar-sessions .sidebar-child-session-toggle:hover,
-.sidebar-sessions .sidebar-child-session-toggle:focus-visible {
-  background-color: color-mix(in srgb, var(--bg-hover) 58%, transparent);
-  color: var(--text);
-  box-shadow: none;
+.sidebar-sessions.sidebar-sessions--removal-drop .sidebar-recent-session {
+  --session-row-face: color-mix(in srgb, var(--muted) 12%, var(--session-feed-paper));
 }
 
-.sidebar-sessions .session-action:active:not(:disabled),
-.sidebar-sessions .sidebar-child-session-toggle:active:not(:disabled) {
-  transform: none;
-  box-shadow: none;
+.sidebar-sessions.sidebar-sessions--removal-drop::after {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--mat-bevel) 26%, transparent) 0,
+      transparent 3px
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--muted) 14%, var(--session-feed-paper)) 0,
+      color-mix(in srgb, var(--muted) 9%, var(--session-feed-paper)) 18px
+    );
 }
 
 /* Errors and pagination sit inside the strip's margins instead of crossing

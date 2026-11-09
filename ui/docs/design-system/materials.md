@@ -113,8 +113,8 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   continuous strip, records, state/wash rules, and the list's inline inset) is
   owned by the lazy sidebar component's `ui/src/styles/app-sidebar.css`, which
   loads after the global bundle; the roster sheet keeps its later reset
-  precedence. The pinned nav-zone session entries keep the pull-out tab
-  construction there as console keys.
+  precedence. Pinned Session records join the same feed in canonical zone
+  order; non-Session Pages entries stay console keys.
 - Two shared rules own the repeated rail-key chrome in `ui/src/styles/layout.css`
   so per-control rules carry only geometry and states: a grouped seated-key
   material rule (`.sidebar-brand__icon`, `.nav-item`, `.sidebar-identity-card`)
@@ -130,10 +130,9 @@ shadow-DOM switch cap carries its own local guard for the same reason.
 - The sidebar reads as a console rail of seated keys with one deliberate
   exception. Nav rows, the collapse and collapsed expand toggles, the footer
   identity card, the Inbox button, and the session list's inline action and
-  expand glyphs seat their interaction in their own boxes. Pinned nav-zone
-  session entries keep the earlier pull-out tab construction: the row is the
-  stationary slot and the link is the matte tab (`app-sidebar.css`), so the
-  console keys above the session list still read as part of the rail.
+  disclosure keys seat their interaction in their own boxes. Pinned Session
+  records are list records on the paper feed, not console keys; the Pages
+  entries above the feed keep the rail's key construction.
 - The session list itself is one continuous paper feed, not a column of
   cards. `ui/src/styles/app-sidebar.css` shapes `.sidebar-sessions` as a
   shallow cool-gray well pressed into the sidebar, with the same-material
@@ -147,11 +146,12 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   band, slot mouth, and travel are removed in this scope. Hover and focus
   lighten the record, the current session carries a restrained accent wash and
   stronger title, multi-select deepens the wash, and pin/archive/disclosure
-  controls surface as bare glyphs on interaction. The strip is painted behind
+  controls surface as their existing seated keys on interaction. The strip is painted behind
   the content (pseudo-elements on the well), so headings and gaps cannot
   detach it; empty, loading, error, catalog, and roster states share the same
-  material. Pinned nav-zone rows above the list stay console keys, and pinned
-  rows are not part of the feed.
+  material. Pinned Session records stay in canonical pinned order at the top
+  of the same strip and keep their pin/order/menu behavior; only non-Session
+  Pages entries remain in the console rail.
 
 Feature-owned sliders (chat audio seek, reasoning effort) and dashboards keep
 their own chrome by class and never enter this vocabulary.
