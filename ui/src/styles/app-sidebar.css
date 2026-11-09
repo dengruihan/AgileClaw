@@ -1037,13 +1037,31 @@
   padding-inline: var(--sidebar-text-offset) 4px;
 }
 
-/* Short-height band: the toolbar lives inside the scroller and yields its
-   height before the session rows, so one whole row stays readable when the
-   (max-height: 500px) sidebar band compresses the well (layout.css). */
+/* Short-height band: the session toolbar is removed as a whole — a
+   zero-height clipped control with an orphaned flex gap is not an acceptable
+   compact state — and the edge fade compresses to 12px stops so it cannot
+   cover a whole row inside the small well window (floors in layout.css). */
 @media (max-height: 500px) {
   .sidebar-sessions .sidebar-session-toolbar {
-    flex-shrink: 1;
-    min-height: 0;
+    display: none;
+  }
+
+  .sidebar-sessions--scroll-top {
+    --sidebar-body-mask: linear-gradient(to bottom, black calc(100% - 12px), transparent);
+  }
+
+  .sidebar-sessions--scroll-middle {
+    --sidebar-body-mask: linear-gradient(
+      to bottom,
+      transparent,
+      black 12px,
+      black calc(100% - 12px),
+      transparent
+    );
+  }
+
+  .sidebar-sessions--scroll-bottom {
+    --sidebar-body-mask: linear-gradient(to bottom, transparent, black 12px);
   }
 }
 

@@ -392,6 +392,13 @@ suite.define(() => {
               onlineListScrollTop: onlineList?.scrollTop ?? null,
               onlineListClientHeight: onlineList?.clientHeight ?? null,
               onlineListScrollHeight: onlineList?.scrollHeight ?? null,
+              toolbarDisplay: (() => {
+                const toolbar = document.querySelector(
+                  ".sidebar-sessions .sidebar-session-toolbar",
+                );
+                return toolbar ? getComputedStyle(toolbar).display : "absent";
+              })(),
+              scrollerMaskImage: getComputedStyle(scroller).maskImage,
               well: bounds(well),
               wellClientHeight: well?.clientHeight ?? 0,
               footer: bounds(document.querySelector<HTMLElement>(".sidebar-shell__footer")!),
@@ -436,7 +443,7 @@ suite.define(() => {
           ).toBeGreaterThanOrEqual(personFloor);
           expect(
             layout.visibleSessionRowCount,
-            `${phase}: whole session row visible [s=${layout.visibleSessionRowCount} sc=${layout.scrollerClientHeight} sh=${layout.scrollerScrollHeight} st=${layout.scrollerScrollTop}]`,
+            `${phase}: a whole session row and its name are visible`,
           ).toBeGreaterThanOrEqual(requireWholeSessionRow ? 1 : 0);
           if (!requireWholeSessionRow) {
             expect(
@@ -501,10 +508,32 @@ suite.define(() => {
           resting.wellClientHeight,
           "the session well keeps its bounded floor",
         ).toBeGreaterThanOrEqual(38);
-        // At rest below 300px the compressed toolbar and section header
-        // residue can precede the first row; whole-row readability is
-        // asserted at the focused/aligned offsets in those cases.
-        expectWholeRows(resting, "resting", mode !== "roster" && height > 300);
+        // One whole readable session row is required at rest at every
+        // supported height, in both modes.
+        expectWholeRows(resting, "resting", mode !== "roster");
+        // In the short-window band the session toolbar is deliberately
+        // removed as a whole (no zero-height clipped controls) and the edge
+        // fade is the compact 12px variant, so it cannot cover a whole row.
+        if (shortWindow) {
+          // Sessions mode removes the toolbar element; roster mode never
+          // renders one — neither state leaves a clipped control behind.
+          expect(
+            resting.toolbarDisplay,
+            "the short-window band leaves no rendered session toolbar",
+          ).not.toBe("flex");
+          expect(
+            resting.scrollerMaskImage,
+            "the short-window band uses the compact 12px edge fade",
+          ).toContain("12px");
+          expect(
+            resting.scrollerMaskImage,
+            "the short-window fade does not use the 32px stops",
+          ).not.toContain("32px");
+        } else {
+          expect(resting.toolbarDisplay, "ordinary heights keep the session toolbar").not.toBe(
+            "none",
+          );
+        }
 
         // Wheel input over the roster scrolls Online itself when its roster
         // overflows; over the session list scrolls the well's nested
