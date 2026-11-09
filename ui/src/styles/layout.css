@@ -2638,6 +2638,7 @@ openclaw-settings-save-indicator:empty {
     display: none;
   }
 
+
   /* The floors compress to one whole session row plus its padding and
      margins: the nav rail keeps its 2rem scrollable floor, the well drops
      its toolbar-inclusive floor, and the toolbar itself yields first, so

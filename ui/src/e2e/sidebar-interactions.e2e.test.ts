@@ -284,10 +284,16 @@ suite.define(() => {
           await drawerToggle.click();
           const drawer = page.locator(".shell--mobile-nav.shell--nav-drawer-open > .shell-nav");
           await drawer.waitFor({ state: "visible", timeout: 30_000 });
-          // The slide transform shifts measured bounds; wait for it to settle.
+          // The slide transition shifts measured bounds; synchronize on the
+          // final drawer position from the owning CSS
+          // (.shell--mobile-nav.shell--nav-drawer-open .shell-nav settles at
+          // translateX(0)) before any input is dispatched.
           await drawer.evaluate(
             "(element) => Promise.all(element.getAnimations().map((a) => a.finished))",
           );
+          await expect
+            .poll(() => drawer.evaluate((el) => getComputedStyle(el).transform))
+            .toBe("matrix(1, 0, 0, 1, 0, 0)");
           // Explicit settled-state assertion: the drawer's session content is
           // measurable (test/AGENTS.md: synchronize on the produced state).
           await expect
@@ -409,6 +415,10 @@ suite.define(() => {
                 );
                 return toolbar ? getComputedStyle(toolbar).display : "absent";
               })(),
+              rosterHeaderDisplay: (() => {
+                const header = document.querySelector(".sidebar-agent-roster__header");
+                return header ? getComputedStyle(header).display : "absent";
+              })(),
               scrollerMaskImage: getComputedStyle(scroller).maskImage,
               well: bounds(well),
               wellClientHeight: well?.clientHeight ?? 0,
@@ -499,6 +509,20 @@ suite.define(() => {
             : "ordinary heights keep the expanded Online section",
         ).toBe(shortWindow);
         expect(resting.onlineToggleVisible).toBe(!shortWindow);
+        // The compact roster group header is deliberately removed with the
+        // band so agent session rows start at the top of the well; agent
+        // association stays on the grouped rows (data-agent-group) and
+        // new-session stays in the brand.
+        if (shortWindow && mode === "roster") {
+          // The compact roster group header is removed with the band so the
+          // agent session rows start at the top of the well; association
+          // stays on the grouped rows (data-agent-group) and new-session
+          // stays in the brand.
+          expect(
+            resting.rosterHeaderDisplay,
+            "the short-window band removes the compact roster group header",
+          ).toBe("none");
+        }
         expect(
           resting.bodyOverflow,
           "the hidden sidebar body keeps no unreachable overflow",
@@ -549,11 +573,9 @@ suite.define(() => {
             onlineListBox!.x + onlineListBox!.width / 2,
             onlineListBox!.y + onlineListBox!.height / 2,
           );
+          await page.mouse.wheel(0, 240);
           await expect
-            .poll(async () => {
-              await page.mouse.wheel(0, 240);
-              return readLayout().then((layout) => layout.onlineListScrollTop);
-            })
+            .poll(() => readLayout().then((layout) => layout.onlineListScrollTop))
             .toBeGreaterThan(0);
           const wheeledOnline = await readLayout();
           expect(wheeledOnline.bodyScrollTop, "wheel input never scrolls the hidden body").toBe(0);
@@ -617,14 +639,11 @@ suite.define(() => {
           sessionListBox!.x + sessionListBox!.width / 2,
           sessionListBox!.y + sessionListBox!.height / 2,
         );
-        // Coarse/parallel timing can swallow the first wheel dispatch; retry
-        // the input inside the poll until the produced state appears
-        // (test/AGENTS.md: synchronize on the produced state).
+        // The drawer position is settled above; a single wheel dispatch now
+        // reaches the session scroller.
+        await page.mouse.wheel(0, 240);
         await expect
-          .poll(async () => {
-            await page.mouse.wheel(0, 240);
-            return readLayout().then((layout) => layout.scrollerScrollTop);
-          })
+          .poll(() => readLayout().then((layout) => layout.scrollerScrollTop))
           .toBeGreaterThan(0);
         const wheeledSessions = await readLayout();
         expect(wheeledSessions.bodyScrollTop, "session wheel never scrolls the body").toBe(0);

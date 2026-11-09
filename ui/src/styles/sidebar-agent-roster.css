@@ -14,6 +14,15 @@ openclaw-sidebar-agent-roster {
   font-weight: 600;
 }
 
+/* Short-height band (owned with layout.css): the compact roster group header
+   is removed as a whole so agent session rows start at the top of the well;
+   the group and its sessions stay, and new-session stays in the brand. */
+@media (max-height: 500px) {
+  .sidebar-agent-roster__header {
+    display: none;
+  }
+}
+
 .sidebar-agent-roster__row,
 .sidebar-agent-roster__link {
   display: flex;
