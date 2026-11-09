@@ -143,9 +143,11 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   footer stay fixed. Expanded Online scrolls inside its own bounded section
   (header pinned, roster scrolling under it) instead of displacing the well;
   at very short window heights the whole Online section yields its space to
-  the well and is hidden outright, and the in-well session toolbar is removed
+  the well and is hidden outright, the in-well session toolbar is removed
   with it (new-session stays in the brand; filter/sort return above the
-  band), leaving the session rows as the only controls in the well.
+  band), and in agent-roster mode the compact roster group header is removed
+  with the band as well, leaving the session rows as the only controls in
+  the well.
   No outlet, continuous paper strip,
   per-row rule, or separate backing panel is drawn. Pinned and unpinned
   records share the same scroller and keep their selection, ordering,
