@@ -185,19 +185,35 @@ describe("sidebar people workload", () => {
     },
   );
 
-  it("keeps a single deduplicated self visible in the roster and collapsed facepile", async () => {
+  it("hides a solo deduplicated identity and reopens the roster for a second person", async () => {
     const { sidebar, gateway } = await mountWorkload();
     const self = presence()[0]!;
+    const bea = presence()[1]!;
     gateway.publishEvent("presence", {
-      presence: [self, { ...self, instanceId: "second-self-tab" }],
+      presence: [
+        self,
+        { ...self, instanceId: "second-self-tab" },
+        { ...self, instanceId: "third-self-device" },
+      ],
     });
     await settle(sidebar);
-    expect(names(sidebar)).toEqual(["ada"]);
+    expect(sidebar.querySelector(".sidebar-online")).toBeNull();
+    gateway.publishEvent("presence", {
+      presence: [self, { ...self, instanceId: "second-self-tab" }, bea],
+    });
+    await settle(sidebar);
+    expect(names(sidebar)).toEqual(["ada", "bea"]);
     expect(counts(sidebar, "ada")).toEqual(["1", "7"]);
     await click(sidebar, ".sidebar-online .sidebar-session-group-toggle");
     const facepile = sidebar.querySelector("openclaw-viewer-facepile");
-    expect(facepile?.staticUsers?.map((user) => user.id)).toEqual(["ada"]);
-    gateway.publishEvent("presence", { presence: [{ ...self, reason: "disconnect" }] });
+    expect(facepile?.staticUsers?.map((user) => user.id)).toEqual(["ada", "bea"]);
+    gateway.publishEvent("presence", {
+      presence: [
+        self,
+        { ...self, instanceId: "second-self-tab" },
+        { ...bea, reason: "disconnect" },
+      ],
+    });
     await settle(sidebar);
     expect(sidebar.querySelector(".sidebar-online")).toBeNull();
   });
