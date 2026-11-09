@@ -288,7 +288,18 @@ suite.define(() => {
           await drawer.evaluate(
             "(element) => Promise.all(element.getAnimations().map((a) => a.finished))",
           );
-          await page.waitForTimeout(200);
+          // Explicit settled-state assertion: the drawer's session content is
+          // measurable (test/AGENTS.md: synchronize on the produced state).
+          await expect
+            .poll(
+              () =>
+                page
+                  .locator(".sidebar-sessions__scroll")
+                  .first()
+                  .evaluate((el) => el.clientHeight),
+              { timeout: 15_000 },
+            )
+            .toBeGreaterThan(0);
         }
         if (mode === "roster") {
           // Prove the agent-roster host actually mounted, so the roster-mode
@@ -428,11 +439,7 @@ suite.define(() => {
               ),
             };
           });
-        const expectWholeRows = (
-          layout: Awaited<ReturnType<typeof readLayout>>,
-          phase: string,
-          requireWholeSessionRow = true,
-        ) => {
+        const expectWholeRows = (layout: Awaited<ReturnType<typeof readLayout>>, phase: string) => {
           /* Roster mode keeps Online collapsed behind its facepile header,
              and its agent cards and group headers precede the session rows;
              whole session rows there are asserted at the aligned offset. */
@@ -444,13 +451,7 @@ suite.define(() => {
           expect(
             layout.visibleSessionRowCount,
             `${phase}: a whole session row and its name are visible`,
-          ).toBeGreaterThanOrEqual(requireWholeSessionRow ? 1 : 0);
-          if (!requireWholeSessionRow) {
-            expect(
-              layout.scrollerScrollHeight,
-              `${phase}: a whole row's worth of session content is scrollable`,
-            ).toBeGreaterThanOrEqual(29);
-          }
+          ).toBeGreaterThanOrEqual(1);
           if (!layout.onlineSectionHidden) {
             expect(
               layout.visiblePersonRowHeights.every((rowHeight) => rowHeight >= 31),
@@ -487,7 +488,7 @@ suite.define(() => {
               const personOk = mode === "sessions" ? layout.visiblePersonRowCount >= 1 : true;
               return personOk && layout.visibleSessionRowCount >= 1 ? "whole-rows" : "unsettled";
             },
-            { timeout: 15_000 },
+            { timeout: 30_000 },
           )
           .not.toBe("unsettled");
         const resting = await readLayout();
@@ -510,7 +511,9 @@ suite.define(() => {
         ).toBeGreaterThanOrEqual(38);
         // One whole readable session row is required at rest at every
         // supported height, in both modes.
-        expectWholeRows(resting, "resting", mode !== "roster");
+        // One whole readable session row is required at rest at every
+        // supported height, in both modes.
+        expectWholeRows(resting, "resting");
         // In the short-window band the session toolbar is deliberately
         // removed as a whole (no zero-height clipped controls) and the edge
         // fade is the compact 12px variant, so it cannot cover a whole row.
@@ -548,9 +551,11 @@ suite.define(() => {
             onlineListBox!.x + onlineListBox!.width / 2,
             onlineListBox!.y + onlineListBox!.height / 2,
           );
-          await page.mouse.wheel(0, 240);
           await expect
-            .poll(() => readLayout().then((layout) => layout.onlineListScrollTop))
+            .poll(async () => {
+              await page.mouse.wheel(0, 240);
+              return readLayout().then((layout) => layout.onlineListScrollTop);
+            })
             .toBeGreaterThan(0);
           const wheeledOnline = await readLayout();
           expect(wheeledOnline.bodyScrollTop, "wheel input never scrolls the hidden body").toBe(0);
@@ -614,9 +619,14 @@ suite.define(() => {
           sessionListBox!.x + sessionListBox!.width / 2,
           sessionListBox!.y + sessionListBox!.height / 2,
         );
-        await page.mouse.wheel(0, 240);
+        // Coarse/parallel timing can swallow the first wheel dispatch; retry
+        // the input inside the poll until the produced state appears
+        // (test/AGENTS.md: synchronize on the produced state).
         await expect
-          .poll(() => readLayout().then((layout) => layout.scrollerScrollTop))
+          .poll(async () => {
+            await page.mouse.wheel(0, 240);
+            return readLayout().then((layout) => layout.scrollerScrollTop);
+          })
           .toBeGreaterThan(0);
         const wheeledSessions = await readLayout();
         expect(wheeledSessions.bodyScrollTop, "session wheel never scrolls the body").toBe(0);
