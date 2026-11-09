@@ -1501,6 +1501,8 @@ openclaw-settings-save-indicator:empty {
   flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
+  /* Match the top group gap so the well frame sits off the footer divider. */
+  margin-bottom: var(--sidebar-group-gap);
 }
 
 .sidebar-sessions__scroll {
