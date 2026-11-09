@@ -1,7 +1,6 @@
 import type { LitElement } from "lit";
 import { describe, expect, it, vi } from "vitest";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
-import * as presenceUsers from "../../lib/presence-users.ts";
 import { selectSessionMenuValue } from "../app-sidebar-menu.ts";
 import { focusSidebarPersonWithKeyboard } from "../app-sidebar-setup.ts";
 import {
@@ -357,15 +356,11 @@ describe("AppSidebar viewer presence", () => {
     sidebar.connected = true;
     vi.useFakeTimers();
     const now = Date.now();
-    const project = presenceUsers.presenceViewerActivity;
-    vi.spyOn(presenceUsers, "presenceViewerActivity").mockImplementationOnce((user) => {
-      const state = project(user);
-      vi.setSystemTime(now + 2);
-      return state;
-    });
     gateway.publishEvent("presence", {
       presence: [
         { user: { id: "alice", name: "Alice" }, ts: now, lastActivityAt: now - 119_999 },
+        // A companion identity keeps the section mounted while Alice's
+        // deadline expires.
         { user: { id: "bob", name: "Bob" }, ts: now },
       ],
     });
@@ -373,6 +368,9 @@ describe("AppSidebar viewer presence", () => {
     const row = sidebar.querySelector<HTMLElement>('[data-online-user-id="alice"]')!;
     expect(row.dataset.presenceActivity).toBe("active");
     await vi.advanceTimersByTimeAsync(2);
+    // The deadline passed without another presence event; a fresh render
+    // evaluates the row's activity against the advanced clock.
+    sidebar.requestUpdate();
     await sidebar.updateComplete;
     expect(row.dataset.presenceActivity).toBe("idle");
   });

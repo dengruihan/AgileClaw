@@ -146,9 +146,14 @@ suite.define(() => {
           timeZone: "Europe/London",
           watchedSessions: [watched, "agent:private:hidden"],
         };
+        // A distinct second identity keeps the sidebar Online section — and
+        // Ada's row card trigger — mounted; solo presence renders no section.
+        // It rides along in every nonempty snapshot below, never in the
+        // intentional empty offline snapshot.
+        const teammate = { id: "grace", name: "Grace" };
         const gateway = await installMockGateway(page, {
           historyMessages,
-          presenceUsers: [person],
+          presenceUsers: [person, teammate],
           methodResponses: {
             "users.list": directory,
             "sessions.list": chatSessionListResponse([
@@ -211,6 +216,7 @@ suite.define(() => {
               lastActivityAt: now,
               watchedSessions: [watched],
             },
+            { user: { id: teammate.id, name: teammate.name }, ts: now },
           ],
         });
         await expect.poll(() => card.textContent()).toContain("Europe/Paris");
@@ -227,6 +233,7 @@ suite.define(() => {
               user: { id: person.id, identity: person.identity, name: person.name },
               watchedSessions: [watched],
             },
+            { user: { id: teammate.id, name: teammate.name }, ts: now },
           ],
         });
         await card.getByRole("link", { name: /Release checklist/ }).click();

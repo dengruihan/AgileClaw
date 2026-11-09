@@ -39,35 +39,41 @@ describe("AppSidebar person activity card", () => {
     sidebar.connected = true;
     gateway.publishEvent("presence", {
       presence: [
-        // Family, platform, mode, client ID, misleading host. Duplicate tabs collapse.
-        ["Mac", "MacIntel", "webchat"],
-        ["Mac", "MacIntel", "webchat"],
-        ["iPad", "MacIntel", "webchat"],
-        ["Mac", "MacARM64", "webchat"],
-        ["Windows", "win32", "webchat"],
-        ["Mac", "macos", "ui", "openclaw-tui", "openclaw-macos"],
-        ["Mac", "macos", "ui", "openclaw-macos", "openclaw-tui"],
-        [undefined, "linux", "ui", undefined, "openclaw-tui"],
-        [undefined, "freebsd", "cli"],
-      ].map(([deviceFamily, platform, mode, clientId, host], tab) => ({
-        ts: Date.now() - 500_000,
-        lastInputSeconds: 3,
-        instanceId: `private-tab-${tab}`,
-        ip: "192.0.2.12",
-        host: host ?? "internal-host",
-        deviceFamily,
-        platform,
-        mode,
-        clientId,
-        timeZone: "Europe/Paris",
-        user: { id: "alice", identity: { type: "profile" as const, id: "alice" }, name: "Alice" },
-        watchedSessions: [
-          "AGENT:research:watched",
-          "agent:research:watched",
-          "agent:private:secret-title",
-          "global",
-        ],
-      })),
+        ...[
+          // Family, platform, mode, client ID, misleading host. Duplicate tabs collapse.
+          ["Mac", "MacIntel", "webchat"],
+          ["Mac", "MacIntel", "webchat"],
+          ["iPad", "MacIntel", "webchat"],
+          ["Mac", "MacARM64", "webchat"],
+          ["Windows", "win32", "webchat"],
+          ["Mac", "macos", "ui", "openclaw-tui", "openclaw-macos"],
+          ["Mac", "macos", "ui", "openclaw-macos", "openclaw-tui"],
+          [undefined, "linux", "ui", undefined, "openclaw-tui"],
+          [undefined, "freebsd", "cli"],
+        ].map(([deviceFamily, platform, mode, clientId, host], tab) => ({
+          ts: Date.now() - 500_000,
+          lastInputSeconds: 3,
+          instanceId: `private-tab-${tab}`,
+          ip: "192.0.2.12",
+          host: host ?? "internal-host",
+          deviceFamily,
+          platform,
+          mode,
+          clientId,
+          timeZone: "Europe/Paris",
+          user: { id: "alice", identity: { type: "profile" as const, id: "alice" }, name: "Alice" },
+          watchedSessions: [
+            "AGENT:research:watched",
+            "agent:research:watched",
+            "agent:private:secret-title",
+            "global",
+          ],
+        })),
+        // One distinct second identity keeps the Online section mounted: solo
+        // presence renders no section at all. Alice keeps her nine-connection
+        // tab dedup, privacy exclusions, and the focused-card assertions below.
+        { ts: Date.now(), user: { id: "bob", name: "Bob" } },
+      ],
     });
     await sidebar.updateComplete;
     const trigger = sidebar.querySelector<HTMLElement>(".sidebar-online__person")!;
