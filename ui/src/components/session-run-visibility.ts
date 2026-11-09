@@ -58,7 +58,7 @@ class SessionRunVisibility extends AsyncDirective {
         return;
       }
       const row = element.closest(".session-row-host");
-      const root = element.closest(".sidebar-shell__body");
+      const root = element.closest(".sidebar-sessions__scroll");
       if (!row || !root) {
         return;
       }

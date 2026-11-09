@@ -8,8 +8,11 @@ import {
   createControlUiMockBootstrapConfig,
   createControlUiMockGatewayInitScript,
   defaultControlUiFeatureMethods,
+  installMockGateway,
   waitForControlUiRoute,
 } from "../test-helpers/control-ui-e2e.ts";
+import { createControlUiSessionRow as sessionRow } from "../test-helpers/control-ui-session-fixtures.ts";
+import { sessionsListResponse } from "./session-management.test-support.ts";
 import {
   captureSidebarUiProof,
   createSidebarCustomizationSuite,
@@ -20,6 +23,131 @@ import {
 const suite = createSidebarCustomizationSuite("Control UI sidebar interactions mocked Gateway E2E");
 
 suite.define(() => {
+  it("scrolls long session lists inside a fixed well without moving sidebar chrome", async () => {
+    const baseTime = Date.parse("2026-07-01T16:00:00.000Z");
+    const rows = [
+      ...Array.from({ length: 8 }, (_, index) =>
+        sessionRow(`agent:main:work-${index}`, `Work session ${index}`, baseTime - index * 60_000, {
+          worktree: { branch: `openclaw/wt-${index}`, repoRoot: "/Users/dev/Projects/clawdbot" },
+        }),
+      ),
+      ...Array.from({ length: 30 }, (_, index) =>
+        sessionRow(`agent:main:chat-${index}`, `Chat ${index}`, baseTime - (index + 10) * 60_000),
+      ),
+    ];
+    const context = await suite.newBrowserContext({
+      locale: "en-US",
+      serviceWorkers: "block",
+      viewport: { height: 620, width: 1280 },
+    });
+    const page = await context.newPage();
+    await installMockGateway(page, {
+      methodResponses: {
+        "sessions.list": sessionsListResponse(rows),
+      },
+      sessionKey: "agent:main:main",
+      presenceUsers: [{ self: true, id: "fixed-sidebar-user", name: "Riley" }],
+    });
+    try {
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
+      await page.locator(".sidebar-online").waitFor({ state: "visible" });
+      await page.locator('[data-session-section="work"] .sidebar-session-group-toggle').click();
+      const loadMore = page
+        .locator('[data-session-section="ungrouped"]')
+        .getByRole("button", { name: "Show more" });
+      for (let pageIndex = 0; pageIndex < 3 && (await loadMore.isVisible()); pageIndex += 1) {
+        await loadMore.click();
+      }
+      await page.locator(".sidebar-sessions__scroll").evaluate((element) => {
+        element.scrollTop = 0;
+      });
+      await expect
+        .poll(
+          () =>
+            page
+              .locator('.sidebar-recent-session:not([data-session-key="agent:main:main"])')
+              .count(),
+          { timeout: 15_000 },
+        )
+        // The agent anchor is an ordinary row and renders on top of the fixture rows.
+        .toBe(rows.length);
+      await captureSidebarUiProof(suite, page, "short-window-session-sections.png");
+
+      // Sections must stack below each other, not paint over the rows above.
+      const overlaps = await page.evaluate(() => {
+        const rects = [
+          ...document.querySelectorAll(".sidebar-recent-session, .sidebar-recent-sessions__head"),
+        ]
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            return { top: rect.top, bottom: rect.bottom };
+          })
+          .filter((rect) => rect.bottom > rect.top)
+          .toSorted((a, b) => a.top - b.top);
+        let bad = 0;
+        let previousBottom: number | undefined;
+        for (const rect of rects) {
+          if (previousBottom !== undefined && rect.top < previousBottom - 2) {
+            bad += 1;
+          }
+          previousBottom = rect.bottom;
+        }
+        return bad;
+      });
+      expect(overlaps).toBe(0);
+
+      const readLayout = () =>
+        page.evaluate(() => {
+          const bounds = (selector: string) => {
+            const rect = document.querySelector(selector)!.getBoundingClientRect();
+            return { top: rect.top, bottom: rect.bottom, height: rect.height };
+          };
+          const body = document.querySelector<HTMLElement>(".sidebar-shell__body")!;
+          const well = document.querySelector<HTMLElement>(".sidebar-sessions")!;
+          const scroller = document.querySelector<HTMLElement>(".sidebar-sessions__scroll")!;
+          return {
+            bodyTop: body.scrollTop,
+            bodyOverflow: body.scrollHeight - body.clientHeight,
+            online: bounds(".sidebar-online"),
+            well: bounds(".sidebar-sessions"),
+            footer: bounds(".sidebar-shell__footer"),
+            listClientHeight: scroller.clientHeight,
+            listScrollHeight: scroller.scrollHeight,
+            listTop: scroller.scrollTop,
+            wellOverflow: well.scrollHeight - well.clientHeight,
+            wellOverflowY: getComputedStyle(well).overflowY,
+            outlet: getComputedStyle(well, "::before").content,
+            strip: getComputedStyle(well, "::after").content,
+          };
+        });
+      const resting = await readLayout();
+      expect(resting.online.bottom).toBeLessThanOrEqual(resting.well.top);
+      expect(resting.well.bottom).toBeLessThanOrEqual(resting.footer.top);
+      expect(resting.bodyOverflow).toBeLessThanOrEqual(1);
+      expect(resting.listScrollHeight).toBeGreaterThan(resting.listClientHeight);
+      expect(resting.outlet).toBe("none");
+      expect(resting.strip).toBe("none");
+
+      await page.locator(".sidebar-sessions__scroll").evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      await expect.poll(() => readLayout().then((layout) => layout.listTop)).toBeGreaterThan(0);
+      const scrolled = await readLayout();
+      expect(scrolled.bodyTop).toBe(0);
+      expect(scrolled.bodyOverflow).toBeLessThanOrEqual(1);
+      expect(scrolled.online).toEqual(resting.online);
+      expect(scrolled.footer).toEqual(resting.footer);
+      expect(scrolled.well).toEqual(resting.well);
+      expect(scrolled.wellOverflow, "the decorative well does not scroll").toBeLessThanOrEqual(1);
+      expect(scrolled.wellOverflowY, "the decorative well clips its nested scroller").toBe(
+        "hidden",
+      );
+      await captureSidebarUiProof(suite, page, "short-window-session-well-scrolled.png");
+    } finally {
+      await suite.closeBrowserContext(context);
+    }
+  });
+
   it("opens every new-session plus as a native link without creating sessions", async () => {
     const context = await suite.newBrowserContext({
       locale: "en-US",

@@ -21,7 +21,7 @@ suite.define(() => {
     { overflow: true, width: 1280 },
     { overflow: true, width: 390 },
   ])(
-    "keeps sidebar insets symmetric with overflow=$overflow at $width px",
+    "keeps session-well insets symmetric with overflow=$overflow at $width px",
     async ({ overflow, width }) => {
       const captureProof = process.env.OPENCLAW_CAPTURE_UI_PROOF === "1";
       const context = await suite.newBrowserContext({
@@ -56,7 +56,7 @@ suite.define(() => {
         // Exercise the authored classic scrollbar regardless of macOS overlay preferences.
         // Either non-auto standard property would override the existing WebKit styles.
         await page.addStyleTag({
-          content: ".sidebar-shell__body { scrollbar-width: auto; scrollbar-color: auto; }",
+          content: ".sidebar-sessions__scroll { scrollbar-width: auto; scrollbar-color: auto; }",
         });
         if (width === 390) {
           await page
@@ -71,29 +71,27 @@ suite.define(() => {
         );
         await active.waitFor();
         const geometry = await active.evaluate((row) => {
-          const sidebar = row.closest<HTMLElement>(".sidebar");
-          const scroller = row.closest<HTMLElement>(".sidebar-shell__body");
-          if (!sidebar || !scroller) {
+          const well = row.closest<HTMLElement>(".sidebar-sessions");
+          const scroller = row.closest<HTMLElement>(".sidebar-sessions__scroll");
+          if (!well || !scroller) {
             throw new Error("sidebar session geometry owner not found");
           }
           const rowRect = row.getBoundingClientRect();
-          const sidebarRect = sidebar.getBoundingClientRect();
+          const wellRect = well.getBoundingClientRect();
           const scrollbarWidth = scroller.offsetWidth - scroller.clientWidth;
-          const navRect = sidebar.querySelector(".sidebar-nav")!.getBoundingClientRect();
+          const nativeScrollbarWidth = getComputedStyle(scroller, "::-webkit-scrollbar").width;
           const scrollerStyle = getComputedStyle(scroller);
           return {
-            leftInset: rowRect.left - sidebarRect.left,
-            rightInset: sidebarRect.right - rowRect.right - scrollbarWidth,
-            navLeft: navRect.left,
-            navRight: navRect.right,
-            rowLeft: rowRect.left,
-            rowRight: rowRect.right,
+            leftInset: rowRect.left - wellRect.left,
+            rightInset: wellRect.right - rowRect.right - scrollbarWidth,
             scrollbarWidth,
+            nativeScrollbarWidth,
             maskImage: scrollerStyle.maskImage,
             maskPosition: scrollerStyle.maskPosition,
             maskSize: scrollerStyle.maskSize,
             overflows: scroller.scrollHeight > scroller.clientHeight,
-            clearance: scroller.getBoundingClientRect().right - scrollbarWidth - rowRect.right,
+            horizontalOverflow: scroller.scrollWidth - scroller.clientWidth,
+            clearance: wellRect.right - scrollbarWidth - rowRect.right,
           };
         });
 
@@ -105,23 +103,16 @@ suite.define(() => {
           console.log("Sidebar geometry", geometry);
         }
         expect(geometry.overflows).toBe(overflow);
-        expect(geometry.scrollbarWidth > 0).toBe(overflow);
+        expect(geometry.nativeScrollbarWidth, "the platform scrollbar is hidden").toBe("0px");
+        // A hidden scrollbar owns no layout width; wheel, touch, and keyboard
+        // scrolling still work on the nested session list.
+        expect(geometry.scrollbarWidth).toBe(0);
         expect(geometry.rightInset, JSON.stringify(geometry)).toBeCloseTo(geometry.leftInset, 1);
-        expect(geometry.rowLeft).toBeCloseTo(geometry.navLeft, 1);
-        expect(geometry.rowRight).toBeCloseTo(geometry.navRight, 1);
-        expect(geometry.clearance).toBeGreaterThanOrEqual(8);
-        if (overflow) {
-          expect(geometry.maskImage.match(/linear-gradient/g)).toHaveLength(2);
-          expect(geometry.maskPosition.split(", ").at(-1)?.split(" ")[0]).toBe("100%");
-          expect(geometry.maskSize.split(", ")).toContain("12px 100%");
-        }
+        expect(geometry.horizontalOverflow).toBeLessThanOrEqual(1);
+        expect(geometry.clearance).toBeGreaterThan(0);
 
-        const rtlMaskPosition = await active.evaluate((row) => {
-          document.documentElement.dir = "rtl";
-          return getComputedStyle(row.closest<HTMLElement>(".sidebar-shell__body")!).maskPosition;
-        });
         if (overflow) {
-          expect(rtlMaskPosition.split(", ").at(-1)?.split(" ")[0]).toBe("0%");
+          expect(geometry.maskImage.match(/linear-gradient/g)).toHaveLength(1);
         }
       } finally {
         await suite.closeBrowserContext(context);

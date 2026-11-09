@@ -30,14 +30,17 @@ function visibilityProbe() {
       constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
         super((entries, observer) => {
           callback(entries, observer);
-          if (options?.root instanceof Element && options.root.matches(".sidebar-shell__body")) {
+          if (
+            options?.root instanceof Element &&
+            options.root.matches(".sidebar-sessions__scroll")
+          ) {
             for (const entry of entries) {
               intersections.set(entry.target, entry);
             }
             delivery.resolve();
           }
         }, options);
-        if (options?.root instanceof Element && options.root.matches(".sidebar-shell__body")) {
+        if (options?.root instanceof Element && options.root.matches(".sidebar-sessions__scroll")) {
           observers.push(this);
           activeObservers.add(this);
         }
@@ -47,7 +50,7 @@ function visibilityProbe() {
         super.disconnect();
       }
       override observe(target: Element) {
-        if (this.root instanceof Element && this.root.matches(".sidebar-shell__body")) {
+        if (this.root instanceof Element && this.root.matches(".sidebar-sessions__scroll")) {
           observed.add(target);
         }
         super.observe(target);
@@ -98,9 +101,8 @@ it("pauses offscreen session indicators and resumes them when their rows scroll 
     harness.sessions,
   );
   sidebar.style.cssText =
-    "display:block;position:fixed;inset:0 auto auto 0;width:280px;height:240px";
-  const scroller = sidebar.querySelector<HTMLElement>(".sidebar-shell__body")!;
-  scroller.style.cssText = "height:600px;flex:none;overflow:auto";
+    "display:flex;position:fixed;inset:0 auto auto 0;width:280px;height:800px";
+  const scroller = sidebar.querySelector<HTMLElement>(".sidebar-sessions__scroll")!;
   expect(observers).toHaveLength(0);
   harness.publishList(roster);
   await sidebar.updateComplete;
@@ -243,11 +245,10 @@ it("registers running rows rendered by the real roster child after its parent up
     rows,
   );
   sidebar.style.cssText =
-    "display:block;position:fixed;inset:0 auto auto 0;width:280px;height:800px";
-  const scroller = sidebar.querySelector<HTMLElement>(".sidebar-shell__body")!;
-  scroller.style.cssText = "height:600px;flex:none;overflow:auto";
+    "display:flex;position:fixed;inset:0 auto auto 0;width:280px;height:800px";
   sidebar.sidebarAgentsMode = "roster";
   await settleRoster(sidebar);
+  const scroller = sidebar.querySelector<HTMLElement>(".sidebar-sessions__scroll")!;
   for (let page = 0; page < 2; page++) {
     probe.reset();
     sidebar.querySelector<HTMLButtonElement>(".sidebar-session-pagination__button")!.click();

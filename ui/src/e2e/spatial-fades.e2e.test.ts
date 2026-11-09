@@ -87,7 +87,7 @@ suite.define(() => {
           // The list intentionally shows only ten rows until expanded; use the
           // same short viewport as the existing sidebar containment regression.
           await page.setViewportSize({ width, height: 500 });
-          const sidebar = page.locator(".sidebar-shell__body");
+          const sidebar = page.locator(".sidebar-sessions__scroll");
           await expect.poll(() => sidebar.getAttribute("class")).toContain("scroll-top");
           await sidebar.evaluate((el) => {
             el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;

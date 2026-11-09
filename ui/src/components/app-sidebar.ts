@@ -142,13 +142,6 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
   private readonly hiddenSessionCatalogsChanged = () => {
     this.hiddenSessionCatalogIds = loadStoredHiddenSessionCatalogIds();
   };
-  // The shared scroller drives the fade classes; nested lists keep their own scroll.
-  private readonly handleShellScroll = (event: Event): void => {
-    if (event.currentTarget instanceof HTMLElement) {
-      this.sessionData.updateSessionsScrollState(event.currentTarget);
-    }
-  };
-
   // Catalog rows are non-startup content. Load their renderer through the same
   // idle boundary as other sidebar chrome, then repaint when the chunk arrives.
   private catalogRenderer: SessionCatalogGroupsRenderer | null = null;
@@ -381,7 +374,7 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
   }
 
   renderPinnedSidebarSession(session: SidebarRecentSession): TemplateResult {
-    // Pinned sessions are feed records now; the pinned list owns their list role.
+    // The pinned list owns the list role for these ordinary session records.
     return this.sidebarAgentsMode === "roster" && this.rosterRenderer
       ? this.rosterRenderer.renderSidebarPinnedSession(this, session)
       : renderSessionTree({ host: this, session, listItem: true });
@@ -486,10 +479,7 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
               : nothing,
           )}
           <div class="sidebar-shell__content">
-            <div
-              class="sidebar-shell__body sidebar-shell__body--scroll-${this.sessionData.sessionsScrollState}"
-              @scroll=${this.handleShellScroll}
-            >
+            <div class="sidebar-shell__body">
               <nav
                 class="sidebar-nav"
                 @contextmenu=${this.sidebarMenus.openCustomizeMenuFromContext}

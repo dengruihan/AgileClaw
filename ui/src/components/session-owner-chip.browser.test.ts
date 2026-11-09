@@ -202,6 +202,8 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
       shell.className = "sidebar-shell";
       const sessions = document.createElement("section");
       sessions.className = "sidebar-sessions sidebar-recent-sessions";
+      // Isolate owner geometry from the shell's remaining-height allocation.
+      sessions.style.flex = "none";
       sessions.classList.toggle("sidebar-zone-entry", pinned);
       shell.append(sessions);
       sidebar.append(shell);
@@ -456,9 +458,9 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
       const sidebar = document.createElement("aside");
       sidebar.className = "sidebar";
       document.body.append(sidebar);
-      const feed = document.createElement("section");
-      feed.className = "sidebar-sessions";
-      sidebar.append(feed);
+      const well = document.createElement("section");
+      well.className = "sidebar-sessions";
+      sidebar.append(well);
       const chip = await mountOwnerChip({
         participantCount,
         participants: [{ identity: { type: "profile", id: "profile-bob" }, label: "Bob" }],
@@ -466,9 +468,8 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
       const row = document.createElement("div");
       row.className = "sidebar-recent-session";
       row.style.transition = "none";
-      feed.append(row);
-      // The chip rides on the record face, not on the panel behind the strip:
-      // mirror the real row/link boundary so the cutout blends with the face
+      well.append(row);
+      // Mirror the real row/link boundary so the cutout blends with the face
       // the avatars actually sit on.
       const link = document.createElement("a");
       link.className = "sidebar-recent-session__link";
@@ -488,9 +489,7 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
             [getComputedStyle(stack, "::before"), getComputedStyle(stack, "::after")].map(
               (cutout) => ({
                 width: cutout.borderTopWidth,
-                // The ring must carry the record face it rides on — which
-                // follows the --session-row-face retint when the row is
-                // multi-selected — not the strip floor behind the record.
+                // The cutout follows --session-row-face when the row is selected.
                 matchesRowFace: cutout.borderTopColor === getComputedStyle(link).backgroundColor,
               }),
             ),

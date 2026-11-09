@@ -174,7 +174,7 @@ suite.define(() => {
           expect(await pin.count()).toBe(1);
           expect(await pin.textContent()).toContain(`${agent.name} project`);
           expect(await pin.locator(".identity-avatar--agent").count()).toBe(1);
-          // Anchor and member rows share one list; the pinned project row lives in the paper strip.
+          // Anchor and member rows share one list; the pinned project row lives in the session well.
           expect(
             await group
               .locator(".sidebar-recent-session")

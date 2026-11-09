@@ -165,7 +165,7 @@ suite.define(() => {
         await expect.poll(() => modelOptions.isVisible()).toBe(true);
         const chatStyles = await page.evaluate(() => {
           const sidebar = document.querySelector<HTMLElement>(".sidebar");
-          const sessions = document.querySelector<HTMLElement>(".sidebar-shell__body");
+          const sessions = document.querySelector<HTMLElement>(".sidebar-sessions__scroll");
           const thread = document.querySelector<HTMLElement>(".chat-thread");
           const modelPicker = document.querySelector<HTMLElement>(".chat-controls__model-options");
           if (!sidebar || !sessions || !thread || !modelPicker) {
@@ -175,21 +175,19 @@ suite.define(() => {
             chatSelection: getComputedStyle(thread).userSelect,
             chatScrollbar: getComputedStyle(thread, "::-webkit-scrollbar").width,
             sidebarSelection: getComputedStyle(sidebar).userSelect,
-            sidebarScrollbar: getComputedStyle(sessions, "::-webkit-scrollbar").width,
+            hiddenSidebarScrollbar: getComputedStyle(sessions, "::-webkit-scrollbar").width,
             modelPickerScrollbar: getComputedStyle(modelPicker, "::-webkit-scrollbar").width,
             modelPickerOverflowX: getComputedStyle(modelPicker).overflowX,
             modelPickerHorizontalOverflow: modelPicker.scrollWidth - modelPicker.clientWidth,
           };
         });
-        // One canonical width everywhere: the sidebar no longer overrides
-        // --scrollbar-size down to 6px, and the model picker (which used to
-        // inherit the raw document default with no width of its own) now
-        // reports the same value as every other sampled surface.
+        // Canonical scrollbars stay visible elsewhere; the session well hides
+        // its platform scrollbar and uses its own draggable rail instead.
         expect(chatStyles).toEqual({
           chatSelection: "text",
           chatScrollbar: "12px",
           sidebarSelection: "none",
-          sidebarScrollbar: "12px",
+          hiddenSidebarScrollbar: "0px",
           modelPickerScrollbar: "12px",
           modelPickerOverflowX: "hidden",
           modelPickerHorizontalOverflow: 0,

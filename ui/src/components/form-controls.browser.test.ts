@@ -27,6 +27,7 @@ function readUiCss(): string {
     "ui/src/styles/layout.css",
     "ui/src/styles/layout.mobile.css",
     "ui/src/styles/components.css",
+    "ui/src/styles/app-sidebar.css",
     "ui/src/styles/settings-controls.css",
     "ui/src/styles/settings.css",
     "ui/src/styles/config.css",
@@ -821,7 +822,9 @@ describeBrowserLayout("app chrome interaction styles", () => {
               <input class="settings-sidebar__search-input" value="editable settings search" />
             </aside>
             <aside class="sidebar">
-              <div class="sidebar-shell__body">Recent session</div>
+              <div class="sidebar-sessions">
+                <div class="sidebar-sessions__scroll">Recent session</div>
+              </div>
             </aside>
             <main class="content" style="height: 100px">
               <div class="settings-card">App chrome tile</div>
@@ -853,8 +856,8 @@ describeBrowserLayout("app chrome interaction styles", () => {
           chromeSelection: style(".settings-card").userSelect,
           contentScrollbar: scrollbarWidth(".content"),
           inputSelection: style(".settings-sidebar__search-input").userSelect,
-          regularSidebarScrollbar: scrollbarWidth(".sidebar-shell__body"),
-          regularSidebarSelection: style(".sidebar-shell__body").userSelect,
+          hiddenSidebarScrollbar: scrollbarWidth(".sidebar-sessions__scroll"),
+          regularSidebarSelection: style(".sidebar-sessions").userSelect,
           settingsSidebarScrollbar: scrollbarWidth(".settings-sidebar__nav"),
           settingsSidebarSelection: style(".settings-sidebar__nav").userSelect,
           // The board tab rail intentionally hides its scrollbar (a drag/wheel
@@ -870,8 +873,8 @@ describeBrowserLayout("app chrome interaction styles", () => {
         chromeSelection: "auto",
         contentScrollbar: "12px",
         hiddenRailScrollbarWidth: "none",
+        hiddenSidebarScrollbar: "0px",
         inputSelection: "text",
-        regularSidebarScrollbar: "12px",
         regularSidebarSelection: "none",
         settingsSidebarScrollbar: "12px",
         settingsSidebarSelection: "none",
