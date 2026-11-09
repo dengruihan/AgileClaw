@@ -647,13 +647,14 @@ export function renderSessionList(params: {
   nativeSessionsLoading: boolean;
   catalogs: SessionCatalogRenderSnapshot;
   catalogRenderer: SessionCatalogGroupsRenderer | null;
+  pinned?: unknown;
 }) {
   const { host } = params;
   return renderSessionListFrame(
     host,
     html`
       <div class="sidebar-recent-sessions">
-        ${renderSessionListBody(params)}
+        ${params.pinned ?? nothing} ${renderSessionListBody(params)}
         ${renderRosterLoadMore(host, params.sections, params.nativeSessionsHaveMore, params.nativeSessionsLoading)}
         ${renderPersonalSessionEmpty(
           host,

@@ -169,12 +169,12 @@ suite.define(() => {
         for (const agent of agentsList.agents) {
           const group = sidebar.locator(`[data-agent-group="${agent.id}"]`);
           const pin = sidebar.locator(
-            `.sidebar-nav [data-session-key="agent:${agent.id}:project"]`,
+            `.sidebar-recent-sessions__list--pinned [data-session-key="agent:${agent.id}:project"]`,
           );
           expect(await pin.count()).toBe(1);
           expect(await pin.textContent()).toContain(`${agent.name} project`);
           expect(await pin.locator(".identity-avatar--agent").count()).toBe(1);
-          // Anchor and member rows share one list; the pinned project row lives in Pages.
+          // Anchor and member rows share one list; the pinned project row lives in the paper strip.
           expect(
             await group
               .locator(".sidebar-recent-session")
@@ -205,19 +205,16 @@ suite.define(() => {
         ).toBe("page");
         // Re-query every row by key: the sidebar commits again while the activity
         // read is held, so element handles captured in one pass can detach.
-        // Measure the tab's leading gap as one atomic fractional read: the
+        // Measure the record's leading gap as one atomic fractional read: the
         // lead glyph and title both getBoundingClientRect inside a single
-        // evaluation, so the two rects share one layout pass and the same
-        // link translation — the current tab rests pulled, and pull
-        // translations move both descendants together, keeping the gap exact
-        // (probe: 8px at pull offsets 0/0.125/1.5/2.125/3px). Separate
-        // screen-rect reads sampled by separate calls can land on different
-        // frames of the sidebar's async commits, and integer offset* reads
-        // round a fractional shrink (7.92 or even 7.5px) back up to a
-        // passing 8, hiding an R2-scale defect. The lead is selected under
-        // the positioned indicator, so plain member rows without a glyph
-        // return null and are skipped; a missing title is a real defect and
-        // fails explicitly instead of being skipped.
+        // evaluation, so the two rects share one layout pass and a stable
+        // reading. Separate screen-rect reads sampled by separate calls can
+        // land on different frames of the sidebar's async commits, and
+        // integer offset* reads round a fractional shrink (7.92 or even
+        // 7.5px) back up to a passing 8, hiding an R2-scale defect. The lead
+        // is selected under the positioned indicator, so plain member rows
+        // without a glyph return null and are skipped; a missing title is a
+        // real defect and fails explicitly instead of being skipped.
         const measuredLeads = await (async () => {
           const keys = await sessionRows.evaluateAll((rows) =>
             rows.map((row) => row.dataset.sessionKey ?? ""),
@@ -249,8 +246,8 @@ suite.define(() => {
               throw new Error(`${key}: session row is missing its title element`);
             }
             measured += 1;
-            // The renderer reports fractional layout values (a pinned row measures
-            // 7.98 px for the 8 px gap); allow sub-pixel rounding only.
+            // The renderer reports fractional layout values; allow sub-pixel
+            // rounding only.
             expect(gap.gap, key).toBeGreaterThanOrEqual(8 - 0.05);
           }
           return measured;

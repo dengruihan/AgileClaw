@@ -52,15 +52,21 @@ describe("AppSidebar agent roster pins", () => {
       [...sidebar.querySelectorAll<HTMLElement>(".sidebar-nav [data-sidebar-entry]")].map(
         (entry) => entry.dataset.sidebarEntry,
       ),
-    ).toEqual(entries);
+    ).toEqual(entries.filter((entry) => entry.startsWith("route:")));
+    const pinnedList = sidebar.querySelector(
+      ".sidebar-sessions .sidebar-recent-sessions__list--pinned",
+    );
+    expect(pinnedList).not.toBeNull();
     for (const id of ["working", "main", "recent"]) {
       const rows = sidebar.querySelectorAll(`[data-session-key="agent:${id}:pinned"]`);
       expect(rows).toHaveLength(1);
       const row = rows[0];
-      expect(row?.closest(".sidebar-nav")).not.toBeNull();
+      expect(row?.closest(".sidebar-nav")).toBeNull();
+      expect(row?.closest(".sidebar-recent-sessions__list--pinned")).not.toBeNull();
+      expect(row?.closest(".sidebar-sessions")).not.toBeNull();
       expect(row?.closest("[data-agent-group]")).toBeNull();
       expect(row?.hasAttribute("role")).toBe(false);
-      expect(row?.closest(".sidebar-session-tree")?.hasAttribute("role")).toBe(false);
+      expect(row?.closest(".sidebar-session-tree")?.getAttribute("role")).toBe("listitem");
       const avatar = row?.querySelector(".sidebar-session-indicator .identity-avatar--agent");
       expect(avatar).not.toBeNull();
       expect(row?.querySelector(".sidebar-session-indicator .session-glyph__emoji")).toBeNull();
@@ -103,7 +109,7 @@ describe("AppSidebar agent roster pins", () => {
     expect(context.agentSelection.state.selectedId).toBe("main");
     sidebar
       .querySelector<HTMLAnchorElement>(
-        '.sidebar-nav [data-session-key="agent:working:pinned"] .sidebar-recent-session__link',
+        '.sidebar-recent-sessions__list--pinned [data-session-key="agent:working:pinned"] .sidebar-recent-session__link',
       )
       ?.click();
     await settleRoster(sidebar);
@@ -129,7 +135,9 @@ describe("AppSidebar agent roster pins", () => {
     sidebar.sidebarAgentsMode = "roster";
     await settleRoster(sidebar);
     for (const pinned of [true, false]) {
-      const source = pinned ? '[data-agent-group="working"]' : ".sidebar-nav";
+      const source = pinned
+        ? '[data-agent-group="working"]'
+        : ".sidebar-recent-sessions__list--pinned";
       const pin = sidebar.querySelector<HTMLButtonElement>(
         `${source} [data-session-key="${key}"] .session-action--pin`,
       );
@@ -148,7 +156,8 @@ describe("AppSidebar agent roster pins", () => {
       await settleRoster(sidebar);
       const rows = sidebar.querySelectorAll(`[data-session-key="${key}"]`);
       expect(rows).toHaveLength(1);
-      expect(rows[0]?.closest(".sidebar-nav") !== null).toBe(pinned);
+      expect(rows[0]?.closest(".sidebar-recent-sessions__list--pinned") !== null).toBe(pinned);
+      expect(rows[0]?.closest(".sidebar-nav")).toBeNull();
       expect(rows[0]?.closest('[data-agent-group="working"]') !== null).toBe(!pinned);
       expect(context.agentSelection.state.selectedId).toBe("main");
     }
@@ -172,7 +181,7 @@ describe("AppSidebar agent roster pins", () => {
     sidebar.sidebarAgentsMode = "roster";
     await settleRoster(sidebar);
     const toggle = sidebar.querySelector<HTMLButtonElement>(
-      `.sidebar-nav [data-child-session-toggle="${parentKey}"]`,
+      `.sidebar-recent-sessions__list--pinned [data-child-session-toggle="${parentKey}"]`,
     );
     expect(toggle).not.toBeNull();
     toggle?.click();
@@ -184,7 +193,8 @@ describe("AppSidebar agent roster pins", () => {
     expect(sessionKeys(sidebar)).toEqual([parentKey, childKey]);
     expect(sidebar.querySelectorAll(`[data-session-key="${childKey}"]`)).toHaveLength(1);
     const child = sidebar.querySelector(`[data-session-key="${childKey}"]`);
-    expect(child?.closest(".sidebar-nav")).not.toBeNull();
+    expect(child?.closest(".sidebar-recent-sessions__list--pinned")).not.toBeNull();
+    expect(child?.closest(".sidebar-nav")).toBeNull();
     expect(child?.closest("[data-agent-group]")).toBeNull();
     expect(child?.classList.contains("sidebar-recent-session--child")).toBe(true);
     expect(child?.querySelector(".sidebar-session-indicator .identity-avatar--agent")).toBeNull();

@@ -10,6 +10,7 @@ import { AgentRosterElement } from "../lib/agents/roster-element.ts";
 import { shouldHandleNavigationClick } from "../lib/navigation-click.ts";
 import { newSessionSearch } from "../pages/new-session/location.ts";
 import type { AppSidebarRenderHost } from "./app-sidebar-render.ts";
+import { renderPinnedSessionZone } from "./app-sidebar-render.ts";
 import { renderPersonalSessionEmpty } from "./app-sidebar-session-filter-summary.ts";
 import { renderSessionListFrame, renderSessionSection } from "./app-sidebar-session-list-render.ts";
 import type { SidebarVisibleSections } from "./app-sidebar-session-projection.ts";
@@ -87,9 +88,16 @@ class SidebarAgentRoster extends AgentRosterElement {
       const cards = this.cards();
       const error = this.roster.error ?? this.roster.subscriptionError;
       const newSessionAccess = this.host.readNewSessionAccess();
+      const sidebarZone = this.host.reconciledSidebarZone();
+      const pinned = renderPinnedSessionZone(
+        this.host,
+        sidebarZone.entries,
+        sidebarZone.sessionRows,
+      );
       return renderSessionListFrame(
         this.host,
         html`<div class="sidebar-agent-roster">
+          ${pinned}
           ${error ? html`<button class="sidebar-agent-roster__link" @click=${() => void this.refresh()}>${t("agentsHome.loadFailed")}</button>` : nothing}
           ${this.roster.loading && cards.length === 0 ? html`<span role="status" aria-label=${t("common.loading")} class="skeleton skeleton-line"></span>` : nothing}
           ${repeat(
@@ -321,7 +329,7 @@ export function renderSidebarPinnedSession(host: RosterHost, session: SidebarRec
   return renderSessionTree({
     host,
     session,
-    listItem: false,
+    listItem: true,
     icon: renderAgentIdentityAvatar(card ?? { id: agentId }),
   });
 }

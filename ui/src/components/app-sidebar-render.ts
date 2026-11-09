@@ -1,4 +1,5 @@
 import { html, nothing } from "lit";
+import { repeat } from "lit/directives/repeat.js";
 import type { GatewayControlUiPluginTab } from "../api/gateway.ts";
 import { serializeSidebarEntry, titleForRoute, type SidebarZoneEntry } from "../app-navigation.ts";
 import { isRouteId } from "../app-route-paths.ts";
@@ -289,6 +290,39 @@ export function renderAppSidebarZoneEntry(
           await host.updateComplete;
         },
       })}
+    </div>
+  `;
+}
+
+/**
+ * Pinned Session records join the session paper feed: they are real list
+ * records, not navigation keys. The zone wrapper still owns each record's
+ * drop target and reorder menu so the persisted pinned order stays canonical.
+ * Non-Session navigation entries stay in the pages rail.
+ */
+export function renderPinnedSessionZone(
+  host: AppSidebarRenderHost,
+  entries: readonly SidebarZoneEntry[],
+  sessionRows: ReadonlyMap<string, SidebarRecentSession>,
+) {
+  const pinnedEntries = entries.filter(
+    (entry) => entry.type === "session" && sessionRows.has(entry.key),
+  );
+  if (pinnedEntries.length === 0) {
+    return nothing;
+  }
+  return html`
+    <div
+      class="sidebar-recent-sessions__list sidebar-recent-sessions__list--pinned"
+      role="list"
+      aria-label=${t("sessionsView.pinned")}
+      @dragover=${(event: DragEvent) => host.sessionOrganizer.handleSidebarZoneDragOver(event)}
+      @dragleave=${(event: DragEvent) => host.sessionOrganizer.handleSidebarZoneDragLeave(event)}
+      @drop=${(event: DragEvent) => host.sessionOrganizer.handleSidebarZoneDrop(event)}
+    >
+      ${repeat(pinnedEntries, serializeSidebarEntry, (entry) =>
+        renderAppSidebarZoneEntry(host, entry, sessionRows, new Map()),
+      )}
     </div>
   `;
 }

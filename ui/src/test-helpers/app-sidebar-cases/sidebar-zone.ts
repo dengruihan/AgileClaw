@@ -190,7 +190,7 @@ describe("AppSidebar interleaved zone", () => {
     }
   });
 
-  it("renders routes and pinned sessions in the canonical entry order", async () => {
+  it("keeps non-Session navigation entries in Pages and pinned sessions in the feed order", async () => {
     const { sidebar, sessions } = await mountZone();
     const result = sessions.sessions.state.result;
     if (!result) {
@@ -209,20 +209,109 @@ describe("AppSidebar interleaved zone", () => {
     sidebar.sidebarEntries = ["route:usage", "session:agent:main:alpha", "route:portals"];
     await sidebar.updateComplete;
 
-    const labels = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-zone-entry")].map((entry) =>
-      entry.querySelector(".nav-item__text, .sidebar-recent-session__name")?.textContent?.trim(),
-    );
-    expect(labels).toEqual(["Usage", "Alpha", "Portals"]);
+    const navLabels = [
+      ...sidebar.querySelectorAll<HTMLElement>(".sidebar-nav .sidebar-zone-entry"),
+    ].map((entry) => entry.querySelector(".nav-item__text")?.textContent?.trim());
+    expect(navLabels).toEqual(["Usage", "Portals"]);
     expect(sidebar.querySelector('[data-session-section="pinned"]')).toBeNull();
+
+    const pinnedList = sidebar.querySelector<HTMLElement>(
+      ".sidebar-sessions .sidebar-recent-sessions__list--pinned",
+    );
+    expect(pinnedList).not.toBeNull();
+    expect(pinnedList?.closest(".sidebar-nav")).toBeNull();
+    expect(
+      [...(pinnedList?.querySelectorAll<HTMLElement>("[data-sidebar-entry]") ?? [])].map(
+        (entry) => entry.dataset.sidebarEntry,
+      ),
+    ).toEqual(["session:agent:main:alpha"]);
     const pinnedRow = sidebar.querySelector('[data-session-key="agent:main:alpha"]');
     const pinnedTree = pinnedRow?.closest(".sidebar-session-tree");
     expect(pinnedRow?.hasAttribute("role")).toBe(false);
-    expect(pinnedTree?.hasAttribute("role")).toBe(false);
-    expect(pinnedRow?.closest('[role="list"]')).toBeNull();
-    // Every session row, including the agent anchor, uses the same row contract.
-    expect(
-      sidebar.querySelector('[data-session-key="agent:main:main"]')?.hasAttribute("role"),
-    ).toBe(false);
+    expect(pinnedTree?.getAttribute("role")).toBe("listitem");
+    expect(pinnedTree?.closest('[role="list"]')).toBe(pinnedList);
+  });
+
+  it("reorders pinned records inside the feed without triggering the unpin target", async () => {
+    const { sidebar, sessions } = await mountZone();
+    const result = sessions.sessions.state.result!;
+    sessions.publish({
+      result: {
+        ...result,
+        sessions: result.sessions.map((row) =>
+          row.key === "agent:main:alpha" || row.key === "agent:main:beta"
+            ? Object.assign({}, row, { pinned: true })
+            : row,
+        ),
+      },
+    });
+    sidebar.sidebarEntries = ["session:agent:main:alpha", "session:agent:main:beta", "route:usage"];
+    const onUpdate = vi.fn((entries: string[]) => {
+      sidebar.sidebarEntries = entries;
+    });
+    sidebar.onUpdateSidebarEntries = onUpdate;
+    await sidebar.updateComplete;
+
+    const alphaRow = sidebar.querySelector<HTMLElement>('[data-session-key="agent:main:alpha"]')!;
+    const betaEntry = zoneEntry(sidebar, "session:agent:main:beta");
+    vi.spyOn(betaEntry, "getBoundingClientRect").mockReturnValue({
+      top: 100,
+      height: 34,
+    } as DOMRect);
+    const dataTransfer = createDataTransferStub();
+
+    dispatchDragEvent(alphaRow, "dragstart", dataTransfer);
+    dispatchDragEvent(betaEntry, "dragover", dataTransfer, 120);
+    expect(sidebar.sessionOrganizer.sessionListRemovalDrop).toBe(false);
+    dispatchDragEvent(betaEntry, "drop", dataTransfer, 120);
+    await sidebar.updateComplete;
+
+    expect(onUpdate).toHaveBeenLastCalledWith([
+      "session:agent:main:beta",
+      "session:agent:main:alpha",
+      "route:usage",
+    ]);
+    expect(sessions.patch).not.toHaveBeenCalled();
+  });
+
+  it("clears the stale removal target on reentering the pinned strip and unpins on the list", async () => {
+    const { sidebar, sessions } = await mountZone();
+    const result = sessions.sessions.state.result!;
+    sessions.publish({
+      result: {
+        ...result,
+        sessions: result.sessions.map((row) =>
+          row.key === "agent:main:alpha" ? Object.assign({}, row, { pinned: true }) : row,
+        ),
+      },
+    });
+    sidebar.sidebarEntries = ["session:agent:main:alpha", "route:usage"];
+    await sidebar.updateComplete;
+
+    const alphaRow = sidebar.querySelector<HTMLElement>('[data-session-key="agent:main:alpha"]')!;
+    const alphaEntry = zoneEntry(sidebar, "session:agent:main:alpha");
+    const feed = sidebar.querySelector<HTMLElement>(".sidebar-sessions")!;
+    const dataTransfer = createDataTransferStub();
+    dispatchDragEvent(alphaRow, "dragstart", dataTransfer);
+    dispatchDragEvent(feed, "dragover", dataTransfer);
+    expect(sidebar.sessionOrganizer.sessionListRemovalDrop).toBe(true);
+    await sidebar.updateComplete;
+    expect(feed.classList.contains("sidebar-sessions--removal-drop")).toBe(true);
+
+    dispatchDragEvent(alphaEntry, "dragover", dataTransfer);
+    expect(sidebar.sessionOrganizer.sessionListRemovalDrop).toBe(false);
+    await sidebar.updateComplete;
+    expect(feed.classList.contains("sidebar-sessions--removal-drop")).toBe(false);
+
+    dispatchDragEvent(feed, "dragover", dataTransfer);
+    dispatchDragEvent(feed, "drop", dataTransfer);
+    await waitForFast(() =>
+      expect(sessions.patch).toHaveBeenCalledWith(
+        "agent:main:alpha",
+        { pinned: false },
+        { agentId: "main", expectedSessionId: "session:agent:main:alpha" },
+      ),
+    );
   });
 
   it.each([
@@ -595,10 +684,7 @@ describe("AppSidebar interleaved zone", () => {
 
   it("prunes only the unpinned session's entry and preserves unknown-agent slots", async () => {
     const { sidebar, sessions } = await mountZone();
-    const result = sessions.sessions.state.result;
-    if (!result) {
-      throw new Error("expected session list");
-    }
+    const result = sessions.sessions.state.result!;
     sessions.publish({
       result: {
         ...result,
@@ -627,10 +713,7 @@ describe("AppSidebar interleaved zone", () => {
 
   it("keeps pinned rows first in shift-range selection order", async () => {
     const { sidebar, sessions } = await mountZone();
-    const result = sessions.sessions.state.result;
-    if (!result) {
-      throw new Error("expected session list");
-    }
+    const result = sessions.sessions.state.result!;
     sessions.publish({
       result: {
         ...result,

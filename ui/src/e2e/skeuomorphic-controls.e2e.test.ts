@@ -65,12 +65,7 @@ function readKeyPhysics(locator: Locator): Promise<KeyPhysics> {
 
 function transformY(transform: string): number {
   const match = /matrix\([^,]+, [^,]+, [^,]+, [^,]+, [^,]+, ([^)]+)\)/u.exec(transform);
-  return match ? Number.parseFloat(match[1]) : Number.NaN;
-}
-
-function translateX(transform: string): number {
-  const match = /matrix\([^,]+, [^,]+, [^,]+, [^,]+, ([^,]+),/u.exec(transform);
-  return match ? Number.parseFloat(match[1]) : 0;
+  return match?.[1] ? Number.parseFloat(match[1]) : Number.NaN;
 }
 
 type GlyphGeometry = {
@@ -134,9 +129,9 @@ async function readGlyphGeometry(
             continue;
           }
           const offset = (rowStart + x) * 4;
-          const dr = frame.data[offset] - stroke.r;
-          const dg = frame.data[offset + 1] - stroke.g;
-          const db = frame.data[offset + 2] - stroke.b;
+          const dr = (frame.data[offset] ?? 0) - stroke.r;
+          const dg = (frame.data[offset + 1] ?? 0) - stroke.g;
+          const db = (frame.data[offset + 2] ?? 0) - stroke.b;
           if (Math.sqrt(dr * dr + dg * dg + db * db) < 45) {
             glyph.add(offset);
             columnTop.set(x, Math.min(columnTop.get(x) ?? y, y));
@@ -150,20 +145,16 @@ async function readGlyphGeometry(
       }
       const minY = Math.min(...columnTop.values());
       const maxY = Math.max(...columnBottom.values());
-      const span = (columnsOf: number[]) => ({
-        minX: columnsOf[0],
-        maxX: columnsOf[columnsOf.length - 1],
-      });
       const topColumns = columns.filter((x) => (columnTop.get(x) ?? 0) <= minY + 2);
       const bottomColumns = columns.filter((x) => (columnBottom.get(x) ?? 0) >= maxY - 2);
       return {
         width: frame.width,
         height: frame.height,
         glyphPixels: glyph.size,
-        bbox: { minX: columns[0], maxX: columns[columns.length - 1], minY, maxY },
+        bbox: { minX: columns[0] ?? 0, maxX: columns.at(-1) ?? 0, minY, maxY },
         columnsCovered: columns.length,
-        topCluster: span(topColumns),
-        bottomCluster: span(bottomColumns),
+        topCluster: { minX: topColumns[0] ?? 0, maxX: topColumns.at(-1) ?? 0 },
+        bottomCluster: { minX: bottomColumns[0] ?? 0, maxX: bottomColumns.at(-1) ?? 0 },
       } satisfies GlyphGeometry;
     },
     {
@@ -179,7 +170,7 @@ const settleFrames = (page: Page) =>
   page.evaluate(
     () =>
       new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(resolve));
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
       }),
   );
 
@@ -204,39 +195,45 @@ function fixtureDocument(theme: "dark" | "light"): string {
     <button class="sidebar-brand__icon" type="button" id="rail-collapse" aria-label="Collapse sidebar"><svg viewBox="0 0 24 24" width="16" height="16"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M10 3v18" /></svg></button>
     <button class="sidebar-issues-button" type="button" id="rail-inbox" aria-expanded="false" aria-label="Inbox"><span class="sidebar-issues-button__icon"><svg viewBox="0 0 24 24" width="18" height="18"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5 4h14l3 8v10H2V12l3-8z" /></svg></span><span class="sidebar-issues-button__count">3</span></button>
     <button class="sidebar-identity-card" type="button" id="rail-identity" aria-expanded="false"><span class="viewer-avatar viewer-avatar--footer"><span>R</span></span><span class="sidebar-identity-card__text"><span class="sidebar-identity-card__name">Riley</span></span></button>
-    <div class="sidebar-recent-session session-row-host" id="rail-session" style="position: relative; width: 260px">
+    <section class="sidebar-sessions" id="rail-sessions" style="width: 260px">
+      <div class="sidebar-recent-sessions">
+        <div class="sidebar-recent-sessions__list">
+    <div class="sidebar-recent-session session-row-host" id="rail-session" style="position: relative">
       <a href="#" class="sidebar-recent-session__link" id="rail-session-link" onclick="return false"><span class="sidebar-session-indicator"><span class="session-color-dot" style="--session-color: var(--session-color-blue)"></span></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Release prep</span></span></span></a>
       <span class="sidebar-recent-session__aside session-row-aside"><span class="session-row-actions"><button class="session-action" type="button" id="rail-session-action" aria-label="Archive"><svg viewBox="0 0 24 24" width="14" height="14"><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /></svg></button></span></span>
     </div>
-    <div class="sidebar-recent-session sidebar-recent-session--active session-row-host" id="rail-session-current" style="position: relative; width: 260px">
+    <div class="sidebar-recent-session sidebar-recent-session--active session-row-host" id="rail-session-current" style="position: relative">
       <a href="#" class="sidebar-recent-session__link" aria-current="page" onclick="return false"><span class="sidebar-session-indicator"><span class="session-color-dot" style="--session-color: var(--session-color-green)"></span></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Molty</span></span></span></a>
     </div>
-    <div class="sidebar-recent-session sidebar-recent-session--selected session-row-host" id="rail-session-selected" style="position: relative; width: 260px">
+    <div class="sidebar-recent-session sidebar-recent-session--selected session-row-host" id="rail-session-selected" style="position: relative">
       <a href="#" class="sidebar-recent-session__link" onclick="return false"><span class="sidebar-session-indicator"></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Family</span></span></span></a>
     </div>
-    <div class="sidebar-recent-session session-row-host" id="rail-session-parent" style="position: relative; width: 260px">
+    <div class="sidebar-recent-session session-row-host" id="rail-session-parent" style="position: relative">
       <a href="#" class="sidebar-recent-session__link" onclick="return false"><span class="sidebar-session-indicator"></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Tax filing research</span></span></span></a>
       <button class="sidebar-child-session-toggle" id="rail-disclosure-expanded" type="button" aria-expanded="true" aria-label="Hide child sessions"><span class="sidebar-child-session-toggle__icon"><svg viewBox="0 0 24 24" width="11" height="11"><path d="m6 9 6 6 6-6" /></svg></span></button>
     </div>
-    <div class="sidebar-session-tree" id="rail-session-tree" style="position: relative; width: 260px">
-      <div class="sidebar-recent-session session-row-host" style="position: relative; width: 260px">
+    <div class="sidebar-session-tree" id="rail-session-tree" style="position: relative">
+      <div class="sidebar-recent-session session-row-host" style="position: relative">
         <a href="#" class="sidebar-recent-session__link" onclick="return false"><span class="sidebar-session-indicator"></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Tax filing research</span></span></span></a>
       </div>
       <div class="sidebar-session-tree__children">
         <div class="sidebar-session-tree__list">
           <div class="sidebar-session-tree">
-            <div class="sidebar-recent-session sidebar-recent-session--child session-row-host" style="position: relative; width: 260px">
+            <div class="sidebar-recent-session sidebar-recent-session--child session-row-host" style="position: relative">
               <a href="#" class="sidebar-recent-session__link" onclick="return false"><span class="sidebar-session-indicator"></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Reading receipts</span></span></span></a>
             </div>
           </div>
           <div class="sidebar-session-tree">
-            <div class="sidebar-recent-session sidebar-recent-session--child session-row-host" style="position: relative; width: 260px">
+            <div class="sidebar-recent-session sidebar-recent-session--child session-row-host" style="position: relative">
               <a href="#" class="sidebar-recent-session__link" onclick="return false"><span class="sidebar-session-indicator"></span><span class="sidebar-recent-session__text"><span class="sidebar-recent-session__title-row"><span class="sidebar-recent-session__name">Filing corrections</span></span></span></a>
             </div>
           </div>
         </div>
       </div>
     </div>
+        </div>
+      </div>
+    </section>
     <span id="accent-foreground-probe" aria-hidden="true" style="position: absolute; color: var(--accent-foreground)"></span>
   </main></body></html>`;
 }
@@ -402,7 +399,7 @@ suite.define(() => {
             page.locator(selector).evaluate((element) => {
               const style = getComputedStyle(element);
               const rgba = /rgba?\(([^)]+)\)/u.exec(style.borderTopColor);
-              const parts = rgba?.[1].split(/[\s,/]+/u).map(Number) ?? [];
+              const parts = rgba?.[1]?.split(/[\s,/]+/u).map(Number) ?? [];
               return {
                 border: style.borderTopColor,
                 borderAlpha: parts.length === 4 ? (parts[3] ?? 1) : 1,
@@ -414,8 +411,8 @@ suite.define(() => {
           // Every seated rail key wears an opaque machined contour, a graded
           // face, and a thin rim at rest, so it reads as pressable before any
           // hover — and none of them wears the new-session key's stronger
-          // raise. Session rows are exempt: they are pull-out tabs, proven
-          // separately below.
+          // raise. Session records are exempt: they are flat paper-feed
+          // records, proven separately below.
           const seatedKeys = [
             "#rail-nav",
             "#rail-collapse",
@@ -468,93 +465,119 @@ suite.define(() => {
           expect(selected.border).not.toBe((await readSurface("#rail-nav")).border);
           expect(selected.shadow).toContain("0px 2px 0px 0px");
 
-          // Session rows are pull-out index tabs now, not seated keys: the
-          // row is the stationary recessed slot, the link is the matte tab
-          // seated in it, and the two constructions must stay distinct.
-          const readBox = (selector: string) =>
-            page.locator(selector).evaluate((element) => {
-              const box = element.getBoundingClientRect();
-              return { left: box.left, right: box.right };
-            });
-          const slot = await readSurface("#rail-session");
-          const tabRest = await readSurface("#rail-session-link");
-          expect(slot.image, "slot floor carries no key face gradient").toBe("none");
-          expect(slot.shadow, "slot is a recessed well").toContain("inset");
-          expect(slot.shadow, "slot wears no lower rim").not.toContain("0px 1px 0px 0px");
-          expect(slot.border, "slot mouth is not the seated key's machined contour").not.toBe(
-            resting.get("#rail-nav")!.border,
+          // Every Session record is one continuous paper feed: a recessed
+          // well, a compact passive outlet, and one strip painted behind
+          // flat records. No per-row slot, tab face, rim, or travel exists.
+          const feedSurface = await page.locator("#rail-sessions").evaluate((element) => {
+            const well = getComputedStyle(element);
+            const strip = getComputedStyle(element, "::after");
+            const outlet = getComputedStyle(element, "::before");
+            const wellBox = element.getBoundingClientRect();
+            const row = element.querySelector("#rail-session")!;
+            const rowBox = row.getBoundingClientRect();
+            const link = row.querySelector(".sidebar-recent-session__link")!;
+            const linkStyle = getComputedStyle(link);
+            const rowStyle = getComputedStyle(row);
+            const rule = getComputedStyle(row, "::after");
+            const title = row.querySelector(".sidebar-recent-session__name")!;
+            return {
+              well: {
+                left: wellBox.left,
+                right: wellBox.right,
+                image: well.backgroundImage,
+                shadow: well.boxShadow,
+              },
+              strip: {
+                zIndex: strip.zIndex,
+                left: Number.parseFloat(strip.left),
+                right: Number.parseFloat(strip.right),
+                top: Number.parseFloat(strip.top),
+                image: strip.backgroundImage,
+                shadow: strip.boxShadow,
+              },
+              outlet: { height: outlet.height, top: outlet.top, content: outlet.content },
+              row: {
+                left: rowBox.left,
+                right: rowBox.right,
+                border: rowStyle.borderTopWidth,
+                image: rowStyle.backgroundImage,
+                shadow: rowStyle.boxShadow,
+              },
+              link: {
+                border: linkStyle.borderTopWidth,
+                image: linkStyle.backgroundImage,
+                shadow: linkStyle.boxShadow,
+                transform: linkStyle.transform,
+                background: linkStyle.backgroundColor,
+              },
+              rule: { height: rule.height, bottom: rule.bottom },
+              titleLeft: title.getBoundingClientRect().left,
+            };
+          });
+          expect(feedSurface.well.shadow, "well is recessed").toContain("inset");
+          expect(feedSurface.strip.zIndex, "strip paints behind content").toBe("-1");
+          expect(feedSurface.strip.left, "strip keeps its left clearance").toBe(4);
+          expect(feedSurface.strip.right, "strip keeps its right clearance").toBe(4);
+          expect(feedSurface.strip.top).toBeGreaterThan(0);
+          expect(feedSurface.strip.image, "strip carries the continuous paper").toContain(
+            "linear-gradient",
           );
-          expect(tabRest.image, "tab face is satin").toContain("linear-gradient");
-          expect(tabRest.shadow, "tab wears no seated rim").not.toContain("0px 1px 0px 0px");
-          expect(tabRest.border, "tab edge is not the machined contour").not.toBe(
-            resting.get("#rail-nav")!.border,
+          expect(feedSurface.outlet.height, "outlet stays compact").toBe("9px");
+          expect(feedSurface.outlet.content).toBe('""');
+          expect(feedSurface.row.border, "row has no card border").toBe("0px");
+          expect(feedSurface.row.image, "row has no card face").toBe("none");
+          expect(feedSurface.row.shadow, "row has no card shadow").toBe("none");
+          expect(feedSurface.link.border, "link has no tab border").toBe("0px");
+          expect(feedSurface.link.image, "link has no satin tab face").toBe("none");
+          expect(feedSurface.link.shadow, "link has no tab shadow").toBe("none");
+          expect(feedSurface.link.transform, "record rests untranslated").toBe("none");
+          expect(feedSurface.rule.height, "incised rule is two pixels").toBe("2px");
+          expect(feedSurface.titleLeft, "title stays left-aligned on the paper").toBeGreaterThan(
+            feedSurface.row.left,
           );
-          expect(tabRest.border, "slot and tab keep distinct edges").not.toBe(slot.border);
+          expect(feedSurface.row.left).toBeGreaterThanOrEqual(feedSurface.well.left + 4);
+          expect(feedSurface.row.right).toBeLessThanOrEqual(feedSurface.well.right - 4);
 
-          // At rest the tab sits tucked inside its slot and the slot itself
-          // never moves.
+          // Hover and press retint the record; neither travels or re-cards it.
           const session = page.locator("#rail-session");
-          const rowBoxRest = await readBox("#rail-session");
-          const linkBoxRest = await readBox("#rail-session-link");
-          expect(rowBoxRest.right - linkBoxRest.right).toBeGreaterThanOrEqual(3);
-          expect((await readKeyPhysics(session)).transform).toBe("none");
-
-          // Hover pulls the tab toward the content area without moving the
-          // slot; the pulled tab casts a deeper shadow.
-          await session.locator("#rail-session-link").hover();
-          await expect
-            .poll(() =>
-              readKeyPhysics(page.locator("#rail-session-link")).then((physics) =>
-                translateX(physics.transform),
-              ),
-            )
-            .toBeGreaterThanOrEqual(2.5);
-          expect(
-            (await readBox("#rail-session-link")).right - linkBoxRest.right,
-          ).toBeGreaterThanOrEqual(2.5);
-          expect((await readBox("#rail-session")).right).toBe(rowBoxRest.right);
-          expect(
-            (await readKeyPhysics(page.locator("#rail-session-link"))).shadow,
-            "pulled tab casts a deeper shadow",
-          ).not.toBe(tabRest.shadow);
-
-          // Press seats the tab back into its slot with the fast land and the
-          // shared groove shadow; release springs and the row stays put.
+          const sessionLink = page.locator("#rail-session-link");
+          await sessionLink.hover();
+          await settleFrames(page);
+          const hoveredFace = await sessionLink.evaluate(
+            (element) => getComputedStyle(element).backgroundColor,
+          );
+          expect(hoveredFace, "hover retints the record face").not.toBe(
+            feedSurface.link.background,
+          );
+          expect((await readKeyPhysics(sessionLink)).transform).toBe("none");
+          expect((await readKeyPhysics(sessionLink)).shadow).toBe("none");
           await page.mouse.down();
-          // The press lands in 40ms; poll so a slow frame cannot read the
-          // collapse mid-transition.
-          await expect
-            .poll(() =>
-              readKeyPhysics(page.locator("#rail-session-link")).then((physics) =>
-                translateX(physics.transform),
-              ),
-            )
-            .toBeLessThanOrEqual(0.5);
-          const tabPressed = await readKeyPhysics(page.locator("#rail-session-link"));
-          expect(tabPressed.shadow, "pressed tab takes the slot groove").toContain("inset");
-          expect(tabPressed.transformDuration).toBe("0.04s");
-          expect((await readKeyPhysics(session)).transform).toBe("none");
+          await settleFrames(page);
+          expect((await readKeyPhysics(sessionLink)).transform).toBe("none");
+          expect((await readKeyPhysics(sessionLink)).shadow).toBe("none");
           await page.mouse.up();
           await page.mouse.move(0, 0);
           await page.waitForTimeout(320);
-          expect((await readKeyPhysics(page.locator("#rail-session-link"))).transformTiming).toBe(
-            SPRING,
-          );
 
-          // The current session's tab rests pulled out with no pointer, while
-          // its slot stays stationary.
+          // Current and multi-select are quiet record washes, not tabs.
+          const readFace = (selector: string) =>
+            page.locator(selector).evaluate((element) => getComputedStyle(element).backgroundColor);
           const currentLink = page.locator("#rail-session-current > .sidebar-recent-session__link");
-          await page.mouse.move(4, 860);
-          await settleFrames(page);
-          expect(translateX((await readKeyPhysics(currentLink)).transform)).toBeGreaterThanOrEqual(
-            2.5,
+          expect(await readFace("#rail-session-current > .sidebar-recent-session__link")).not.toBe(
+            feedSurface.link.background,
           );
-          expect((await readKeyPhysics(page.locator("#rail-session-current"))).transform).toBe(
-            "none",
+          expect(await readFace("#rail-session-selected > .sidebar-recent-session__link")).not.toBe(
+            feedSurface.link.background,
           );
+          expect(
+            await page
+              .locator("#rail-session-current .sidebar-recent-session__name")
+              .evaluate((element) => getComputedStyle(element).fontWeight),
+            "current title stays prominent",
+          ).toBe("600");
+          expect((await readKeyPhysics(currentLink)).transform).toBe("none");
 
-          // Keyboard focus pulls the tab too and keeps a visible ring on the
-          // tab face.
+          // Keyboard focus keeps its visible ring and does not move the record.
           let tabFocused = false;
           for (let i = 0; i < 80 && !tabFocused; i += 1) {
             await page.keyboard.press("Tab");
@@ -567,29 +590,25 @@ suite.define(() => {
               );
             });
           }
-          expect(tabFocused, "keyboard walk reaches the session tab").toBe(true);
-          await expect
-            .poll(() =>
-              readKeyPhysics(page.locator("#rail-session-link")).then((physics) =>
-                translateX(physics.transform),
-              ),
-            )
-            .toBeGreaterThanOrEqual(2.5);
+          expect(tabFocused, "keyboard walk reaches the session record").toBe(true);
           const tabFocusRing = await page.locator("#rail-session-link").evaluate((element) => {
             const style = getComputedStyle(element);
             return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
           });
           expect(tabFocusRing.outlineStyle).toBe("solid");
           expect(tabFocusRing.outlineWidth).toBe("2px");
+          expect((await readKeyPhysics(sessionLink)).transform).toBe("none");
           await page.evaluate(() => {
             const active = document.activeElement;
-            if (active instanceof HTMLElement) active.blur();
+            if (active instanceof HTMLElement) {
+              active.blur();
+            }
           });
           await page.mouse.move(4, 860);
           await settleFrames(page);
 
-          // Hovering the row reveals its inline action key; pressing that key
-          // travels the action's own face while the tab and slot stay seated.
+          // Hovering the record reveals its inline seated action key; pressing
+          // that key travels the key itself while the record stays flat.
           const action = page.locator("#rail-session-action");
           await session.hover();
           await expect
@@ -600,52 +619,30 @@ suite.define(() => {
           await settleFrames(page);
           expect(transformY((await readKeyPhysics(action)).transform)).toBeGreaterThanOrEqual(0.9);
           expect((await readKeyPhysics(session)).transform).toBe("none");
-          expect(
-            translateX((await readKeyPhysics(page.locator("#rail-session-link"))).transform),
-          ).toBeGreaterThanOrEqual(2.5);
+          expect((await readKeyPhysics(sessionLink)).transform).toBe("none");
           await page.mouse.up();
           await page.mouse.move(0, 0);
           await page.waitForTimeout(320);
 
-          // The expanded parent's disclosure key is revealed by row hover and
-          // must keep the seated-key transition in that state: the
+          // The expanded parent's disclosure key is revealed by record hover
+          // and must keep the seated-key transition in that state: the
           // state-specific rule may not shrink the transition list back to
           // opacity-only, or the press travel and its spring release would
           // apply instantly. The opacity reveal itself stays in the list.
           const disclosure = page.locator("#rail-disclosure-expanded");
-          const readDisclosureTransition = () =>
-            disclosure.evaluate((element) => {
-              const style = getComputedStyle(element);
-              const properties = style.transitionProperty.split(",").map((value) => value.trim());
-              const timings =
-                style.transitionTimingFunction.match(/cubic-bezier\([^)]+\)|[a-z-]+/gu) ?? [];
-              const durations = style.transitionDuration.split(",").map((value) => value.trim());
-              const transformIndex = properties.indexOf("transform");
-              return {
-                properties,
-                transformTiming: timings.length === 1 ? timings[0] : timings[transformIndex],
-                transformDuration:
-                  durations.length === 1 ? durations[0] : durations[transformIndex],
-              };
-            });
-          const disclosureRest = await readDisclosureTransition();
-          expect(
-            disclosureRest.properties,
-            "expanded disclosure keeps the seated-key transition list",
-          ).toEqual(
-            expect.arrayContaining([
-              "border-color",
-              "background",
-              "color",
-              "opacity",
-              "box-shadow",
-              "transform",
-            ]),
+          const disclosureProperties = await disclosure.evaluate(
+            (element) => getComputedStyle(element).transitionProperty,
           );
-          expect(disclosureRest.transformTiming).toBe(SPRING);
-          expect(disclosureRest.transformDuration).toBe("0.26s");
+          for (const property of "border-color background color opacity box-shadow transform".split(
+            " ",
+          )) {
+            expect(disclosureProperties, property).toContain(property);
+          }
+          const disclosurePhysics = await readKeyPhysics(disclosure);
+          expect(disclosurePhysics.transformTiming).toBe(SPRING);
+          expect(disclosurePhysics.transformDuration).toBe("0.26s");
 
-          // Hovering the parent row reveals the expanded key; pressing it
+          // Hovering the parent record reveals the expanded key; pressing it
           // travels with the shared fast land and restores on the spring.
           const parentRow = page.locator("#rail-session-parent");
           await parentRow.hover();
@@ -668,39 +665,12 @@ suite.define(() => {
           expect(disclosureReleased.shadow).toContain("0px 1px 0px 0px");
 
           // An open panel latches its trigger into the pressed seat.
-          await page
-            .locator("#rail-inbox")
-            .evaluate((element) => element.setAttribute("aria-expanded", "true"));
-          await expect
-            .poll(() => readSurface("#rail-inbox").then((surface) => surface.shadow))
-            .toContain("0px 2px 4px");
-          await page
-            .locator("#rail-identity")
-            .evaluate((element) => element.setAttribute("aria-expanded", "true"));
-          await expect
-            .poll(() => readSurface("#rail-identity").then((surface) => surface.shadow))
-            .toContain("0px 2px 4px");
-
-          // The multi-select wash keeps its own seat: an accent-washed tab
-          // face distinct from the resting tab, and no pull — unlike the
-          // current tab, which stays extended beside it.
-          const readFace = (selector: string) =>
-            page.locator(selector).evaluate((element) => getComputedStyle(element).backgroundColor);
-          expect(await readFace("#rail-session-selected > .sidebar-recent-session__link")).not.toBe(
-            await readFace("#rail-session-link"),
-          );
-          expect(
-            translateX(
-              (
-                await readKeyPhysics(
-                  page.locator("#rail-session-selected > .sidebar-recent-session__link"),
-                )
-              ).transform,
-            ),
-          ).toBeLessThanOrEqual(0.5);
-          expect(translateX((await readKeyPhysics(currentLink)).transform)).toBeGreaterThanOrEqual(
-            2.5,
-          );
+          for (const selector of ["#rail-inbox", "#rail-identity"]) {
+            await page.locator(selector).evaluate((el) => el.setAttribute("aria-expanded", "true"));
+            await expect
+              .poll(() => readSurface(selector).then((surface) => surface.shadow))
+              .toContain("0px 2px 4px");
+          }
 
           // An expanded child tree keeps the shared column-flex frame: the
           // tree containers are flex columns with the 2px list gap and the
@@ -726,7 +696,7 @@ suite.define(() => {
             const parent = tree.querySelector(":scope > .sidebar-recent-session")!;
             const [firstChild, secondChild] = [
               ...list.querySelectorAll(":scope > .sidebar-session-tree > .sidebar-recent-session"),
-            ].map((child) => child.getBoundingClientRect());
+            ].map((child) => child.getBoundingClientRect()) as [DOMRect, DOMRect];
             return {
               tree: frame(tree),
               children: frame(children),
@@ -861,8 +831,8 @@ suite.define(() => {
           // The painted plate is the layout box; the capture can carry a few
           // extra rows of the outer rim shadow below it.
           const latchCss = await set.evaluate((element) => ({
-            width: element.offsetWidth,
-            height: element.offsetHeight,
+            width: "offsetWidth" in element ? element.offsetWidth : 0,
+            height: "offsetHeight" in element ? element.offsetHeight : 0,
           }));
           // The glyph strokes paint with --accent-foreground; read the token
           // live so the classifier tracks the theme's actual stroke color.

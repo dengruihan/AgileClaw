@@ -109,10 +109,12 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   carapace's own non-`.btn` keys keep theirs (`ui/src/styles/carapace-control-ui.css`).
 - Navigation rows, the settings rail, shell chrome keys, the new-session
   action, and the shell plate's rimmed slab live in `ui/src/styles/layout.css`.
-  The session-row pull-out tab system (rows, their inline keys, and their
-  state/touch/draft rules) is owned by the lazy sidebar component's
-  `ui/src/styles/app-sidebar.css`, which loads after the global bundle; the
-  roster sheet keeps its later reset precedence.
+  The session-list paper feed (the recessed well, its passive outlet, the
+  continuous strip, records, state/wash rules, and the list's inline inset) is
+  owned by the lazy sidebar component's `ui/src/styles/app-sidebar.css`, which
+  loads after the global bundle; the roster sheet keeps its later reset
+  precedence. Pinned Session records join the same feed in canonical zone
+  order; non-Session Pages entries stay console keys.
 - Two shared rules own the repeated rail-key chrome in `ui/src/styles/layout.css`
   so per-control rules carry only geometry and states: a grouped seated-key
   material rule (`.sidebar-brand__icon`, `.nav-item`, `.sidebar-identity-card`)
@@ -127,28 +129,29 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   one declaration.
 - The sidebar reads as a console rail of seated keys with one deliberate
   exception. Nav rows, the collapse and collapsed expand toggles, the footer
-  identity card, the Inbox button, and the session rows' inline action and
-  expand keys wear the seated-key construction (`--key-shadow`) — an opaque
-  machined contour, a graded face with a top bevel, a thin lower rim, and a
-  contact shadow, separated from the panel by the list gaps; pressing travels
-  the key into the shared `--press-shadow` seat and springs back. Session
-  rows themselves are not keys: each Session is a pull-out index tab seated
-  in a recessed slot (`app-sidebar.css` `.sidebar-recent-session`). The row
-  is the stationary slot — a darker floor with the shared `--well-shadow`
-  groove walls and a quiet hairline mouth — and the row's link is the moving
-  tab: a matte coated-card face (the satin `--raise-face` layer over a
-  retintable color, no dome bevel, no solid rim), a hairline edge, a wider
-  matte grip band painted on the pull side, and a short contact shadow. Tabs
-  rest slightly tucked into their slots; hover, keyboard focus, and the
-  current session pull the tab a few pixels toward the content area on the
-  shared spring, with the current tab staying pulled out and the
-  multi-select wash staying tucked. Pressing the tab seats it back into its
-  slot (`--well-shadow`, fast press, spring release); inline keys never move
-  the tab. The slot's leading stripe carries the session color, or the
-  accent seam on the current session's slot. Menu panels, section headings,
-  group headers, toolbar buttons, and other passive or unrelated icon
-  controls stay quiet surfaces; the roster's 20px child chevron stays a
-  bare glyph.
+  identity card, the Inbox button, and the session list's inline action and
+  disclosure keys seat their interaction in their own boxes. Pinned Session
+  records are list records on the paper feed, not console keys; the Pages
+  entries above the feed keep the rail's key construction.
+- The session list itself is one continuous paper feed, not a column of
+  cards. `ui/src/styles/app-sidebar.css` shapes `.sidebar-sessions` as a
+  shallow cool-gray well pressed into the sidebar, with the same-material
+  convex lip and narrow recessed slit of a paper outlet at its upper end; the
+  slit carries only a faint roller hint, never a printer body, control, or
+  label. One matte strip in the panel's own color family — a step brighter
+  than the well, never beige paper — runs unbroken from that slit behind every
+  group heading, catalog, and expanded child tree, inset by a narrow side
+  clearance with a soft contact shadow. Records on the strip are a
+  left-aligned title over a fine incised rule; the old per-row tab face, grip
+  band, slot mouth, and travel are removed in this scope. Hover and focus
+  lighten the record, the current session carries a restrained accent wash and
+  stronger title, multi-select deepens the wash, and pin/archive/disclosure
+  controls surface as their existing seated keys on interaction. The strip is painted behind
+  the content (pseudo-elements on the well), so headings and gaps cannot
+  detach it; empty, loading, error, catalog, and roster states share the same
+  material. Pinned Session records stay in canonical pinned order at the top
+  of the same strip and keep their pin/order/menu behavior; only non-Session
+  Pages entries remain in the console rail.
 
 Feature-owned sliders (chat audio seek, reasoning effort) and dashboards keep
 their own chrome by class and never enter this vocabulary.
