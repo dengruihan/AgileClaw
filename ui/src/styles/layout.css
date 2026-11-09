@@ -1502,10 +1502,12 @@ openclaw-settings-save-indicator:empty {
   /* Expanded Online keeps its intrinsic height while it fits, then becomes
      the bounded non-session scroll owner instead of displacing the fixed
      session well or overflowing the hidden sidebar body. The cap leaves the
-     well at least ~10rem of usable height beside a fully expanded roster. */
+     well at least ~10rem of usable height, and its 4.5rem floor keeps the
+     section header plus one full 32px person row readable even in very
+     short windows instead of clipping the roster to a sliver. */
   flex: 0 1 auto;
   min-height: 0;
-  max-height: calc(100% - 12rem);
+  max-height: max(calc(100% - 10rem), 4.5rem);
 }
 
 .sidebar-sessions {
@@ -2425,8 +2427,10 @@ openclaw-settings-save-indicator:empty {
   flex-direction: column;
   gap: 2px;
   /* The member roster is the bounded scroll owner for expanded Online; the
-     section header stays in place while long rosters scroll under it. */
-  min-height: 0;
+     section header stays in place while long rosters scroll under it. The
+     floor is one full 32px person row, so the roster is never clipped to an
+     unreadable sliver no matter how the section is bounded. */
+  min-height: 2rem;
   overflow-y: auto;
 }
 
