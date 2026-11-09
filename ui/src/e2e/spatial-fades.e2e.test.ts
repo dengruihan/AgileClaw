@@ -8,7 +8,16 @@ const suite = createControlUiE2eSuite({ name: "Spatial overflow fades" });
 // Calibrate the real scroller with a solid paint layer, without replacing its
 // mask, geometry or overflow state. Sampling the rendered pixels catches a hard
 // clip even when the observer attributes and computed gradient both look valid.
-async function expectClearEdge(scroller: Locator) {
+// fadeBoundaryPx is the intended fully-opaque boundary from each edge: sample
+// brightness must reach full legibility by that boundary (detecting a longer
+// fade — e.g. the legacy 32px mask at a 14px compact boundary — as a failure).
+// edgeMax caps the brightness at the very edge: a soft fade starts dimmer than
+// the interior, while a hard clip line would be fully bright there.
+async function expectClearEdge(
+  scroller: Locator,
+  expectations?: { fadeBoundaryPx?: number; edgeMax?: number },
+) {
+  const { fadeBoundaryPx = 34, edgeMax = 3 } = expectations ?? {};
   const page = scroller.page();
   await scroller.evaluate((element) => {
     element.setAttribute("data-fade-probe", "");
@@ -32,8 +41,22 @@ async function expectClearEdge(scroller: Locator) {
         const ramp = Array.from({ length: 36 }, (_, y) =>
           sample(edge === "top" ? y + 1 : image.get_height() - 2 - y),
         );
-        expect(ramp[0], `${edge}: content clears the clipping boundary`).toBeLessThanOrEqual(3);
-        expect(ramp[4], `${edge}: no bright strip at the edge`).toBeLessThan(30);
+        // A soft fade may start semi-transparent at the very edge; the contract
+        // is a smooth monotonic ramp, not a hard clip line.
+        expect(ramp[0], `${edge}: no bright strip at the very edge`).toBeLessThanOrEqual(edgeMax);
+        // The default 32px fades are near-black this early; a compressed fade
+        // (the 12px compact band) legitimately sits mid-ramp at 4px, so the
+        // early-row check only applies to the default calibration.
+        if (!expectations) {
+          expect(ramp[4], `${edge}: no bright strip at the edge`).toBeLessThan(30);
+        }
+        // Fully legible at the intended fade boundary — this detects a longer
+        // fade (e.g. the legacy 32px mask at the 14px compact boundary), where
+        // the sample still sits mid-ramp.
+        expect(
+          sample(fadeBoundaryPx + 2),
+          `${edge}: interior stays fully legible at the ${fadeBoundaryPx}px boundary`,
+        ).toBeGreaterThanOrEqual(250);
         expect(ramp[35], `${edge}: interior stays fully legible`).toBeGreaterThanOrEqual(250);
         for (let y = 1; y < ramp.length; y++) {
           const step = ramp[y]! - ramp[y - 1]!;
@@ -93,7 +116,9 @@ suite.define(() => {
             el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
           });
           await expect.poll(() => sidebar.getAttribute("class")).toContain("scroll-middle");
-          await expectClearEdge(sidebar);
+          // The ≤500px sidebar band intentionally uses the compact 12px
+          // edge fade; calibrate against that boundary, not the 32px one.
+          await expectClearEdge(sidebar, { fadeBoundaryPx: 14, edgeMax: 40 });
           await sidebar.evaluate((el) => {
             el.scrollTop = el.scrollHeight;
           });

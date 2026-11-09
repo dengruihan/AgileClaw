@@ -2631,18 +2631,21 @@ openclaw-settings-save-indicator:empty {
    included) yields its space to the session well in both the default and the
    agent-roster mode — both content owners drop to a well-only floor, the
    nav rail may shrink into a bounded scrollable strip, and the session well
-   keeps its toolbar plus one full session row. No region is ever clipped to
-   a partial row and the hidden body never scrolls. */
+   keeps one full session row. No region is ever clipped to a partial row and
+   the hidden body never scrolls. */
 @media (max-height: 500px) {
+  /* The whole Online section is hidden, and the in-section session toolbar
+     is removed with it (new-session stays in the brand; filter/sort return
+     above the band), so agent session rows start at the top of the well.
+     The compact roster group header is likewise removed with the band
+     (sidebar-agent-roster.css). */
   .sidebar-session-content > .sidebar-online {
     display: none;
   }
 
-
   /* The floors compress to one whole session row plus its padding and
-     margins: the nav rail keeps its 2rem scrollable floor, the well drops
-     its toolbar-inclusive floor, and the toolbar itself yields first, so
-     one whole session row stays readable at every height in this band. */
+     margins: the nav rail keeps its 2rem scrollable floor, so one whole
+     session row stays readable at every height in this band. */
   .sidebar-session-content,
   .sidebar-session-content > openclaw-sidebar-agent-roster {
     min-height: calc(var(--sidebar-session-row-min-height) + 12px + 1rem);
