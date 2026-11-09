@@ -2633,10 +2633,10 @@ openclaw-settings-save-indicator:empty {
 /* Joint short-height allocation for the sidebar column. The brand, footer,
    and session well stay fixed; bounded regions give up height in a fixed
    order — navigation shrinks into a scrollable rail first, and at very short
-   heights expanded Online settles into its complete header-only state with
-   the roster hidden. No region is ever clipped to a partial row and the
-   hidden body never scrolls. */
-@media (max-height: 449px) {
+   heights the Online section is hidden entirely, so no stale expanded
+   toggle remains where its roster cannot be shown. No region is ever
+   clipped to a partial row and the hidden body never scrolls. */
+@media (height < 450px) {
   .sidebar-session-content > .sidebar-online {
     margin-top: 6px;
     margin-bottom: 6px;
@@ -2648,23 +2648,16 @@ openclaw-settings-save-indicator:empty {
   }
 }
 
-@media (max-height: 449px) and (hover: none),
-  (max-height: 449px) and (pointer: coarse) {
+@media (height < 450px) and (hover: none),
+  (height < 450px) and (pointer: coarse) {
   /* Coarse row floors (44px) exceed the compact budget below 450px, so
      coarse pointers take the header-only state from 449px up. */
   .sidebar-session-content > .sidebar-online {
-    margin-top: 4px;
-    margin-bottom: 4px;
-    min-height: 2rem;
-    max-height: none;
+    display: none;
   }
 
   .sidebar-session-content {
-    min-height: calc(2rem + var(--sidebar-session-row-min-height) + 2rem);
-  }
-
-  .sidebar-online__list {
-    display: none;
+    min-height: calc(var(--sidebar-session-row-min-height) + 12px + 1rem);
   }
 
   .sidebar-session-toolbar {
@@ -2678,20 +2671,13 @@ openclaw-settings-save-indicator:empty {
   }
 }
 
-@media (max-height: 385px) {
+@media (height < 386px) {
   .sidebar-session-content > .sidebar-online {
-    margin-top: 4px;
-    margin-bottom: 4px;
-    min-height: 2rem;
-    max-height: none;
+    display: none;
   }
 
   .sidebar-session-content {
-    min-height: calc(2rem + var(--sidebar-session-row-min-height) + 2rem);
-  }
-
-  .sidebar-online__list {
-    display: none;
+    min-height: calc(var(--sidebar-session-row-min-height) + 12px + 1rem);
   }
 
   .sidebar-session-toolbar {

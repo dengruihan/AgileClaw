@@ -141,7 +141,9 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   sessions: the decorative frame never scrolls, and only its nested list
   scrolls and carries the content-edge fades. Navigation and the user
   footer stay fixed. Expanded Online scrolls inside its own bounded section
-  (header pinned, roster scrolling under it) instead of displacing the well.
+  (header pinned, roster scrolling under it) instead of displacing the well;
+  at very short window heights the whole Online section yields its space to
+  the well and is hidden outright, leaving no expanded control behind.
   No outlet, continuous paper strip,
   per-row rule, or separate backing panel is drawn. Pinned and unpinned
   records share the same scroller and keep their selection, ordering,

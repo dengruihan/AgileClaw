@@ -194,7 +194,9 @@ suite.define(() => {
       });
       try {
         await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
-        await page.locator(".sidebar-online").waitFor({ state: "visible" });
+        // The deep band hides the whole Online section, so wait for attached
+        // rather than visible here.
+        await page.locator(".sidebar-online").waitFor({ state: "attached" });
         // Coarse pointers run the drawer layout: open it so the sidebar column
         // is on-screen before measuring or interacting.
         if (touch) {
@@ -260,8 +262,17 @@ suite.define(() => {
               bodyOverflow: body.scrollHeight - body.clientHeight,
               nav: bounds(nav),
               online: bounds(onlineSection),
-              onlineListHidden:
-                onlineList === null || getComputedStyle(onlineList).display === "none",
+              onlineSectionHidden: getComputedStyle(onlineSection).display === "none",
+              onlineToggleVisible: (() => {
+                const toggle = document.querySelector(
+                  ".sidebar-online .sidebar-session-group-toggle",
+                );
+                if (!toggle) {
+                  return false;
+                }
+                const rect = toggle.getBoundingClientRect();
+                return rect.height > 0 && rect.width > 0;
+              })(),
               onlineListScrollTop: onlineList?.scrollTop ?? null,
               onlineListClientHeight: onlineList?.clientHeight ?? null,
               onlineListScrollHeight: onlineList?.scrollHeight ?? null,
@@ -297,12 +308,12 @@ suite.define(() => {
           expect(
             layout.visiblePersonRowCount,
             `${phase}: a whole Online person row and its name are visible`,
-          ).toBeGreaterThanOrEqual(layout.onlineListHidden ? 0 : 1);
+          ).toBeGreaterThanOrEqual(layout.onlineSectionHidden ? 0 : 1);
           expect(
             layout.visibleSessionRowCount,
             `${phase}: a whole session row and its name are visible`,
           ).toBeGreaterThanOrEqual(1);
-          if (!layout.onlineListHidden) {
+          if (!layout.onlineSectionHidden) {
             expect(
               layout.visiblePersonRowHeights.every((rowHeight) => rowHeight >= 31),
               "visible Online rows are whole rows, not clipped slivers",
@@ -312,6 +323,12 @@ suite.define(() => {
             layout.visibleSessionRowHeights.every((rowHeight) => rowHeight >= 29),
             "visible session rows are whole rows, not clipped slivers",
           ).toBe(true);
+          if (layout.onlineSectionHidden) {
+            expect(
+              layout.onlineToggleVisible,
+              "no misleading Online expanded control remains when the roster is hidden",
+            ).toBe(false);
+          }
         };
 
         // The drawer open and the roster mount settle layout asynchronously;
@@ -321,7 +338,7 @@ suite.define(() => {
           .poll(
             async () => {
               const layout = await readLayout();
-              if (layout.onlineListHidden) {
+              if (layout.onlineSectionHidden) {
                 return "header-only";
               }
               return layout.visiblePersonRowCount >= 1 && layout.visibleSessionRowCount >= 1
@@ -351,7 +368,7 @@ suite.define(() => {
           resting.onlineListScrollHeight !== null &&
           resting.onlineListClientHeight !== null &&
           resting.onlineListScrollHeight > resting.onlineListClientHeight;
-        if (!resting.onlineListHidden && onlineScrollable) {
+        if (!resting.onlineSectionHidden && onlineScrollable) {
           const onlineListBox = await page.locator(".sidebar-online__list").boundingBox();
           await page.mouse.move(
             onlineListBox!.x + onlineListBox!.width / 2,
@@ -376,29 +393,43 @@ suite.define(() => {
           const alignedOnline = await readLayout();
           expect(alignedOnline.bodyScrollTop, "alignment never scrolls the hidden body").toBe(0);
           expectWholeRows(alignedOnline, "alignedOnline");
+        } else if (resting.onlineSectionHidden) {
+          // Deep band: the Online section is fully hidden (complete
+          // collapsed-equivalent state), so no expanded control remains to
+          // interact with.
+          const hiddenSection = await readLayout();
+          expect(hiddenSection.onlineSectionHidden).toBe(true);
+          expect(hiddenSection.onlineToggleVisible).toBe(false);
+          expect(hiddenSection.bodyScrollTop).toBe(0);
+          expect(hiddenSection.nav).toEqual(resting.nav);
+          expect(hiddenSection.well).toEqual(resting.well);
         } else {
-          // Deep band: the roster is settled into its complete header-only
-          // state; wheel input over it must not scroll anything.
-          const onlineBox = await page.locator(".sidebar-online").boundingBox();
-          await page.mouse.move(
-            onlineBox!.x + onlineBox!.width / 2,
-            onlineBox!.y + onlineBox!.height / 2,
-          );
-          await page.mouse.wheel(0, 240);
-          const wheeledHeader = await readLayout();
-          expect(wheeledHeader.bodyScrollTop).toBe(0);
-          expect(wheeledHeader.nav).toEqual(resting.nav);
-          expect(wheeledHeader.well).toEqual(resting.well);
+          // Expanded roster fits without scrolling (e.g. a single person
+          // row): nothing to wheel; chrome immobility still holds.
+          const unscrolled = await readLayout();
+          expect(unscrolled.bodyScrollTop).toBe(0);
+          expect(unscrolled.nav).toEqual(resting.nav);
+          expect(unscrolled.well).toEqual(resting.well);
+          expect(unscrolled.footer).toEqual(resting.footer);
         }
 
         // Keyboard focus must land in its own bounded scroller and keep a
-        // whole row readable; the hidden body never moves.
-        await page.locator("[data-online-user-id]").last().focus();
+        // whole row readable; the hidden body never moves. In the deep band
+        // the Online section is hidden entirely, so there is no roster row to
+        // focus and no expanded control left behind.
+        if (resting.onlineSectionHidden) {
+          expect(
+            resting.onlineToggleVisible,
+            "the deep band leaves no Online expanded control to focus",
+          ).toBe(false);
+        } else {
+          await page.locator("[data-online-user-id]").last().focus();
+        }
         const focusedOnline = await readLayout();
         expect(focusedOnline.bodyScrollTop, "focus never scrolls the hidden body").toBe(0);
         const onlineListMetrics = focusedOnline.onlineListClientHeight;
         if (
-          !resting.onlineListHidden &&
+          !resting.onlineSectionHidden &&
           onlineListMetrics !== null &&
           focusedOnline.onlineListScrollHeight !== null
         ) {
