@@ -1037,6 +1037,16 @@
   padding-inline: var(--sidebar-text-offset) 4px;
 }
 
+/* Short-height band: the toolbar lives inside the scroller and yields its
+   height before the session rows, so one whole row stays readable when the
+   (max-height: 500px) sidebar band compresses the well (layout.css). */
+@media (max-height: 500px) {
+  .sidebar-sessions .sidebar-session-toolbar {
+    flex-shrink: 1;
+    min-height: 0;
+  }
+}
+
 /* Flat records sit directly in the well. The shared row-face value keeps the
    stacked-owner cutout aligned with hover, current, and selected state washes. */
 .sidebar-sessions .sidebar-recent-session {

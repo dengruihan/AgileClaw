@@ -1486,9 +1486,7 @@ openclaw-settings-save-indicator:empty {
      to the outer flex makes the nav rail yield height before either list is
      clipped; the well's scroller keeps an explicit zero minimum, so this no
      longer drags in the whole session list. */
-  min-height: calc(
-    var(--sidebar-online-floor) + var(--sidebar-session-well-floor) + 1.75rem
-  );
+  min-height: calc(var(--sidebar-online-floor) + var(--sidebar-session-well-floor) + 1.75rem);
 }
 
 .sidebar-session-content > openclaw-sidebar-agent-roster {
@@ -1497,9 +1495,7 @@ openclaw-settings-save-indicator:empty {
   flex-direction: column;
   /* Roster mode shares the session content allocation floor, so the bounded
      well inside it propagates the same way. */
-  min-height: calc(
-    var(--sidebar-online-floor) + var(--sidebar-session-well-floor) + 1.75rem
-  );
+  min-height: calc(var(--sidebar-online-floor) + var(--sidebar-session-well-floor) + 1.75rem);
 }
 
 .sidebar-sessions,
@@ -2642,17 +2638,21 @@ openclaw-settings-save-indicator:empty {
     display: none;
   }
 
+  /* The floors compress to one whole session row plus its padding and
+     margins: the nav rail keeps its 2rem scrollable floor, the well drops
+     its toolbar-inclusive floor, and the toolbar itself yields first, so
+     one whole session row stays readable at every height in this band. */
   .sidebar-session-content,
   .sidebar-session-content > openclaw-sidebar-agent-roster {
-    min-height: calc(var(--sidebar-session-well-floor) + 1rem);
+    min-height: calc(var(--sidebar-session-row-min-height) + 12px + 1rem);
   }
 
   .sidebar-sessions {
     margin-top: 8px;
     margin-bottom: 8px;
+    min-height: calc(var(--sidebar-session-row-min-height) + 12px);
   }
 }
-
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar-recent-sessions__head,
