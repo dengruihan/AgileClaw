@@ -705,6 +705,69 @@ suite.define(() => {
     },
   );
 
+  it("dismisses the Online filter popover when the second identity leaves", async () => {
+    await suite.withPage(
+      { viewport: { width: 1280, height: 800 }, locale: "en-US", serviceWorkers: "block" },
+      async ({ page }) => {
+        const owner = {
+          self: true,
+          id: "gateway-owner",
+          identity: { type: "profile" as const, id: "gateway-owner" },
+          name: "Shared owner",
+        };
+        const ada = {
+          id: "ada",
+          identity: { type: "profile" as const, id: "ada" },
+          name: "Ada",
+        };
+        const gateway = await installMockGateway(page, {
+          sessionKey: "agent:main:main",
+          presenceUsers: [owner, ada],
+        });
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
+        const section = page.locator(".sidebar-online");
+        const filterToggle = page.locator(".sidebar-online__filter-toggle");
+        const popover = page.locator(".sidebar-people-filter-menu");
+        await section.waitFor();
+        await filterToggle.focus();
+        await filterToggle.press("Enter");
+        await popover.waitFor();
+        // Removing Ada removes the whole section; the popover anchored to its
+        // toggle must be dismissed by the owning lifecycle instead of
+        // rendering orphaned, and keyboard focus stranded by the removal
+        // re-anchors on the brand's persistent new-session control.
+        await gateway.emitGatewayEvent("presence", {
+          presence: [{ user: { id: owner.id, identity: owner.identity, name: owner.name } }],
+        });
+        await expect.poll(() => section.count()).toBe(0);
+        await expect.poll(() => popover.count()).toBe(0);
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () =>
+                (document.activeElement as HTMLElement | null)?.classList.contains(
+                  "sidebar-brand__new-thread",
+                ) ?? false,
+            ),
+          )
+          .toBe(true);
+        // A returning second identity restores the ordinary filter flow.
+        await gateway.emitGatewayEvent("presence", {
+          presence: [
+            { user: { id: owner.id, identity: owner.identity, name: owner.name } },
+            { user: { id: ada.id, identity: ada.identity, name: ada.name } },
+          ],
+        });
+        await section.waitFor();
+        await filterToggle.focus();
+        await filterToggle.press("Enter");
+        await popover.waitFor();
+        await page.keyboard.press("Escape");
+        await expect.poll(() => popover.count()).toBe(0);
+      },
+    );
+  });
+
   it("opens every new-session plus as a native link without creating sessions", async () => {
     const context = await suite.newBrowserContext({
       locale: "en-US",

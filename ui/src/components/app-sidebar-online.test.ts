@@ -218,6 +218,39 @@ describe("sidebar people workload", () => {
     expect(sidebar.querySelector(".sidebar-online")).toBeNull();
   });
 
+  it("dismisses the keyboard-owned people-filter popover when presence turns solo", async () => {
+    const { sidebar, gateway } = await mountWorkload();
+    const self = presence()[0]!;
+    const bea = presence()[1]!;
+    await click(sidebar, ".sidebar-online__filter-toggle");
+    await vi.dynamicImportSettled();
+    await settle(sidebar);
+    const toggle = sidebar.querySelector<HTMLElement>(".sidebar-online__filter-toggle")!;
+    toggle.focus();
+    expect(document.activeElement).toBe(toggle);
+    expect(sidebar.querySelector(".sidebar-people-filter-menu")).not.toBeNull();
+    // Removing the second identity unmounts the section; the anchored popover
+    // must be dismissed by the owning lifecycle instead of rendering orphaned,
+    // and keyboard focus stranded by the removal re-anchors on a surviving
+    // control.
+    gateway.publishEvent("presence", {
+      presence: [self, { ...self, instanceId: "second-self-tab" }],
+    });
+    await settle(sidebar);
+    expect(sidebar.querySelector(".sidebar-online")).toBeNull();
+    expect(sidebar.querySelector(".sidebar-people-filter-menu")).toBeNull();
+    expect(sidebar.sidebarMenus.peopleFilterMenuPosition).toBeNull();
+    expect(document.activeElement).toBe(sidebar.querySelector(".sidebar-brand__new-thread"));
+    // A returning second identity restores the ordinary filter flow.
+    gateway.publishEvent("presence", { presence: [self, bea] });
+    await settle(sidebar);
+    await click(sidebar, ".sidebar-online__filter-toggle");
+    await vi.dynamicImportSettled();
+    await settle(sidebar);
+    expect(sidebar.querySelector(".sidebar-online")).not.toBeNull();
+    expect(sidebar.querySelector(".sidebar-people-filter-menu")).not.toBeNull();
+  });
+
   it("uses one complete cross-agent summary, including self, not the paginated or owner-filtered sidebar", async () => {
     const pending = createDeferred<SessionsListResult>();
     const { sidebar, sessions, context, request, summaryRequest } = await mountWorkload(
