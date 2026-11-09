@@ -81,3 +81,13 @@ The full suite is large; prefer focused tests while iterating. See `CONTRIBUTING
 ## License
 
 Apache-2.0. See [`LICENSE`](LICENSE). Third-party components retain their original notices; see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=dengruihan%2FAgileClaw&type=date&legend=top-left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=dengruihan/AgileClaw&type=date&legend=top-left&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=dengruihan/AgileClaw&type=date&legend=top-left" />
+    <img alt="Star History Chart for dengruihan/AgileClaw" src="https://api.star-history.com/svg?repos=dengruihan/AgileClaw&type=date&legend=top-left" />
+  </picture>
+</a>
