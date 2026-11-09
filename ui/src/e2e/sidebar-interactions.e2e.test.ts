@@ -440,9 +440,9 @@ suite.define(() => {
             };
           });
         const expectWholeRows = (layout: Awaited<ReturnType<typeof readLayout>>, phase: string) => {
-          /* Roster mode keeps Online collapsed behind its facepile header,
-             and its agent cards and group headers precede the session rows;
-             whole session rows there are asserted at the aligned offset. */
+          /* Roster mode keeps Online collapsed behind its facepile header
+             by design; its session rows are asserted whole-and-readable at
+             rest exactly like every other mode. */
           const personFloor = layout.onlineSectionHidden || mode === "roster" ? 0 : 1;
           expect(
             layout.visiblePersonRowCount,
@@ -509,8 +509,6 @@ suite.define(() => {
           resting.wellClientHeight,
           "the session well keeps its bounded floor",
         ).toBeGreaterThanOrEqual(38);
-        // One whole readable session row is required at rest at every
-        // supported height, in both modes.
         // One whole readable session row is required at rest at every
         // supported height, in both modes.
         expectWholeRows(resting, "resting");
