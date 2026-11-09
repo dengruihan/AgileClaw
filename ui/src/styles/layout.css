@@ -1184,6 +1184,11 @@ openclaw-settings-save-indicator:empty {
   --sidebar-pad-x: 10px;
   --sidebar-session-link-padding-block: 4px;
   --sidebar-session-row-floor: 30px;
+  /* Bounded-region floors for the joint short-height allocation: expanded
+     Online keeps its header plus one full person row, and the session well
+     keeps its toolbar plus one full session row. */
+  --sidebar-online-floor: 4.5rem;
+  --sidebar-session-well-floor: calc(var(--sidebar-session-row-min-height) + 2.5rem);
   --sidebar-title-line-height: calc(18px * var(--control-ui-text-scale));
   --sidebar-session-row-min-height: max(
     var(--sidebar-session-row-floor),
@@ -1457,13 +1462,14 @@ openclaw-settings-save-indicator:empty {
 
 .sidebar-nav {
   position: relative;
-  flex-shrink: 0;
-  padding: 0;
-  /* Long Pages lists scroll within the rail instead of overflowing the hidden
-     sidebar body; short navigation keeps its intrinsic height and never
-     scrolls. */
+  /* Bounded rail: at short window heights the rail shrinks into a scrollable
+     strip so the session well and expanded Online keep their row floors;
+     ordinary heights keep its intrinsic size without scrolling. */
+  flex: 0 1 auto;
+  min-height: 2rem;
   max-height: 60%;
   overflow-y: auto;
+  padding: 0;
 }
 
 /* Inset highlight surfaces without narrowing the header or agent roster. */
@@ -1475,14 +1481,25 @@ openclaw-settings-save-indicator:empty {
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
-  min-height: 0;
+  /* Joint allocation floor: bounded Online plus the bounded session well
+     (toolbar + one session row) plus their margins. Communicating this floor
+     to the outer flex makes the nav rail yield height before either list is
+     clipped; the well's scroller keeps an explicit zero minimum, so this no
+     longer drags in the whole session list. */
+  min-height: calc(
+    var(--sidebar-online-floor) + var(--sidebar-session-well-floor) + 1.75rem
+  );
 }
 
 .sidebar-session-content > openclaw-sidebar-agent-roster {
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
-  min-height: 0;
+  /* Roster mode shares the session content allocation floor, so the bounded
+     well inside it propagates the same way. */
+  min-height: calc(
+    var(--sidebar-online-floor) + var(--sidebar-session-well-floor) + 1.75rem
+  );
 }
 
 .sidebar-sessions,
@@ -1499,20 +1516,19 @@ openclaw-settings-save-indicator:empty {
 }
 
 .sidebar-session-content > .sidebar-online {
-  /* Expanded Online keeps its intrinsic height while it fits, then becomes
-     the bounded non-session scroll owner instead of displacing the fixed
-     session well or overflowing the hidden sidebar body. The cap leaves the
-     well at least ~10rem of usable height, and its 4.5rem floor keeps the
-     section header plus one full 32px person row readable even in very
-     short windows instead of clipping the roster to a sliver. */
+  /* min-height keeps the expanded roster's floor at header + gap + one full
+     person row (32px fine pointer, 44px coarse); the cap bounds its share so
+     the fixed session well keeps at least ~10rem beside it. */
   flex: 0 1 auto;
-  min-height: 0;
+  min-height: var(--sidebar-online-floor);
   max-height: max(calc(100% - 10rem), 4.5rem);
 }
 
 .sidebar-sessions {
   flex: 1 1 0;
-  min-height: 0;
+  /* Toolbar + one full session row + the well padding, so the session list is
+     never squeezed below a whole readable row. */
+  min-height: calc(var(--sidebar-session-row-min-height) + 2.5rem);
   overflow: hidden;
   /* Match the top group gap so the well frame sits off the footer divider. */
   margin-bottom: var(--sidebar-group-gap);
@@ -2608,6 +2624,85 @@ openclaw-settings-save-indicator:empty {
   .sidebar-online__person {
     min-height: 44px;
   }
+
+  .sidebar-online__list {
+    min-height: 2.75rem;
+  }
+}
+
+/* Joint short-height allocation for the sidebar column. The brand, footer,
+   and session well stay fixed; bounded regions give up height in a fixed
+   order — navigation shrinks into a scrollable rail first, and at very short
+   heights expanded Online settles into its complete header-only state with
+   the roster hidden. No region is ever clipped to a partial row and the
+   hidden body never scrolls. */
+@media (max-height: 449px) {
+  .sidebar-session-content > .sidebar-online {
+    margin-top: 6px;
+    margin-bottom: 6px;
+  }
+
+  .sidebar-sessions {
+    margin-top: 8px;
+    margin-bottom: 8px;
+  }
+}
+
+@media (max-height: 449px) and (hover: none),
+  (max-height: 449px) and (pointer: coarse) {
+  /* Coarse row floors (44px) exceed the compact budget below 450px, so
+     coarse pointers take the header-only state from 449px up. */
+  .sidebar-session-content > .sidebar-online {
+    margin-top: 4px;
+    margin-bottom: 4px;
+    min-height: 2rem;
+    max-height: none;
+  }
+
+  .sidebar-session-content {
+    min-height: calc(2rem + var(--sidebar-session-row-min-height) + 2rem);
+  }
+
+  .sidebar-online__list {
+    display: none;
+  }
+
+  .sidebar-session-toolbar {
+    display: none;
+  }
+
+  .sidebar-sessions {
+    margin-top: 8px;
+    margin-bottom: 8px;
+    min-height: calc(var(--sidebar-session-row-min-height) + 12px);
+  }
+}
+
+@media (max-height: 385px) {
+  .sidebar-session-content > .sidebar-online {
+    margin-top: 4px;
+    margin-bottom: 4px;
+    min-height: 2rem;
+    max-height: none;
+  }
+
+  .sidebar-session-content {
+    min-height: calc(2rem + var(--sidebar-session-row-min-height) + 2rem);
+  }
+
+  .sidebar-online__list {
+    display: none;
+  }
+
+  .sidebar-session-toolbar {
+    display: none;
+  }
+
+  .sidebar-sessions {
+    margin-top: 8px;
+    margin-bottom: 8px;
+    min-height: calc(var(--sidebar-session-row-min-height) + 12px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3263,6 +3358,7 @@ a:is(
 @media (hover: none), (pointer: coarse) {
   .sidebar-shell {
     --sidebar-session-row-floor: 44px;
+    --sidebar-online-floor: 5.25rem;
   }
 }
 
