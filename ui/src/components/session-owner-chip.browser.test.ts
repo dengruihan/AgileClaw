@@ -294,11 +294,10 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
         const primaryBounds = primary.getBoundingClientRect();
         const peerBounds = peer.getBoundingClientRect();
         const stackBounds = stack.getBoundingClientRect();
-        // Hover and the active seat pull the tab (a transform on the link).
-        // While that transform or its spring transition is live, Blink maps
-        // descendant rects through a float32 matrix, so the exactly-laid-out
-        // sizes read with float32 epsilon. The geometry contract stays exact
-        // to five decimals; heights carry no x transform and stay exact.
+        // Hover and the active seat retint the record face; the record itself
+        // does not transform. Rect reads can still carry sub-pixel layout
+        // fractions, so the geometry contract stays exact to five decimals;
+        // heights stay exact.
         expect(stackBounds.width).toBeCloseTo(28, 5);
         expect(stackBounds.height).toBe(20);
         for (const bounds of [primaryBounds, peerBounds]) {
@@ -308,8 +307,8 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
           expect(bounds.left).toBeGreaterThanOrEqual(stackBounds.left);
           expect(bounds.right).toBeLessThanOrEqual(stackBounds.right);
         }
-        // Left-derived differences ride the same float32-mapped rect reads as
-        // the widths above when the pull transform is live.
+        // Left-derived differences use the same fractional rect reads as the
+        // widths above.
         expect(Math.abs(primaryBounds.left - peerBounds.left)).toBeCloseTo(10, 5);
         expect(
           Math.min(primaryBounds.right, peerBounds.right) -
@@ -347,11 +346,9 @@ describe.skipIf(!hasBrowserLayout)("session owner stack layout", () => {
         if (ownerCount === 2) {
           expect(peerBounds.left).toBeCloseTo(stackBounds.left, 5);
           const paintedPeer = peer.querySelector("span")!.getBoundingClientRect();
-          // Both faces ride the same live tab transform, but each rect width is
-          // mapped and rounded on its own, so float32 drift can round the reads
-          // in opposite directions: 2 ULP above and 1 ULP below 16px
-          // (ULP = 2^-19), a 3 ULP gap that exceeds the five-decimal tolerance
-          // only when the two widths are compared. Keep it; check each against 16.
+          // Each painted face is measured independently; keep each rect's own
+          // sub-pixel rounding from being compared against the other, and check
+          // each against 16px.
           expect(paintedPeer.width).toBeCloseTo(16, 5);
           expect(paintedPeer.height).toBe(paintedPrimary.height);
           continue;

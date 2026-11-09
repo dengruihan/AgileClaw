@@ -205,19 +205,16 @@ suite.define(() => {
         ).toBe("page");
         // Re-query every row by key: the sidebar commits again while the activity
         // read is held, so element handles captured in one pass can detach.
-        // Measure the tab's leading gap as one atomic fractional read: the
+        // Measure the record's leading gap as one atomic fractional read: the
         // lead glyph and title both getBoundingClientRect inside a single
-        // evaluation, so the two rects share one layout pass and the same
-        // link translation — the current tab rests pulled, and pull
-        // translations move both descendants together, keeping the gap exact
-        // (probe: 8px at pull offsets 0/0.125/1.5/2.125/3px). Separate
-        // screen-rect reads sampled by separate calls can land on different
-        // frames of the sidebar's async commits, and integer offset* reads
-        // round a fractional shrink (7.92 or even 7.5px) back up to a
-        // passing 8, hiding an R2-scale defect. The lead is selected under
-        // the positioned indicator, so plain member rows without a glyph
-        // return null and are skipped; a missing title is a real defect and
-        // fails explicitly instead of being skipped.
+        // evaluation, so the two rects share one layout pass and a stable
+        // reading. Separate screen-rect reads sampled by separate calls can
+        // land on different frames of the sidebar's async commits, and
+        // integer offset* reads round a fractional shrink (7.92 or even
+        // 7.5px) back up to a passing 8, hiding an R2-scale defect. The lead
+        // is selected under the positioned indicator, so plain member rows
+        // without a glyph return null and are skipped; a missing title is a
+        // real defect and fails explicitly instead of being skipped.
         const measuredLeads = await (async () => {
           const keys = await sessionRows.evaluateAll((rows) =>
             rows.map((row) => row.dataset.sessionKey ?? ""),

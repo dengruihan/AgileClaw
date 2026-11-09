@@ -145,25 +145,16 @@ async function readGlyphGeometry(
       }
       const minY = Math.min(...columnTop.values());
       const maxY = Math.max(...columnBottom.values());
-      const span = (columnsOf: number[]) => ({
-        minX: columnsOf[0] ?? 0,
-        maxX: columnsOf[columnsOf.length - 1] ?? 0,
-      });
       const topColumns = columns.filter((x) => (columnTop.get(x) ?? 0) <= minY + 2);
       const bottomColumns = columns.filter((x) => (columnBottom.get(x) ?? 0) >= maxY - 2);
       return {
         width: frame.width,
         height: frame.height,
         glyphPixels: glyph.size,
-        bbox: {
-          minX: columns[0] ?? 0,
-          maxX: columns[columns.length - 1] ?? 0,
-          minY,
-          maxY,
-        },
+        bbox: { minX: columns[0] ?? 0, maxX: columns.at(-1) ?? 0, minY, maxY },
         columnsCovered: columns.length,
-        topCluster: span(topColumns),
-        bottomCluster: span(bottomColumns),
+        topCluster: { minX: topColumns[0] ?? 0, maxX: topColumns.at(-1) ?? 0 },
+        bottomCluster: { minX: bottomColumns[0] ?? 0, maxX: bottomColumns.at(-1) ?? 0 },
       } satisfies GlyphGeometry;
     },
     {
@@ -420,8 +411,8 @@ suite.define(() => {
           // Every seated rail key wears an opaque machined contour, a graded
           // face, and a thin rim at rest, so it reads as pressable before any
           // hover — and none of them wears the new-session key's stronger
-          // raise. Session rows are exempt: they are pull-out tabs, proven
-          // separately below.
+          // raise. Session records are exempt: they are flat paper-feed
+          // records, proven separately below.
           const seatedKeys = [
             "#rail-nav",
             "#rail-collapse",
@@ -632,6 +623,54 @@ suite.define(() => {
           await page.mouse.up();
           await page.mouse.move(0, 0);
           await page.waitForTimeout(320);
+
+          // The expanded parent's disclosure key is revealed by record hover
+          // and must keep the seated-key transition in that state: the
+          // state-specific rule may not shrink the transition list back to
+          // opacity-only, or the press travel and its spring release would
+          // apply instantly. The opacity reveal itself stays in the list.
+          const disclosure = page.locator("#rail-disclosure-expanded");
+          const disclosureProperties = await disclosure.evaluate(
+            (element) => getComputedStyle(element).transitionProperty,
+          );
+          for (const property of "border-color background color opacity box-shadow transform".split(
+            " ",
+          )) {
+            expect(disclosureProperties, property).toContain(property);
+          }
+          const disclosurePhysics = await readKeyPhysics(disclosure);
+          expect(disclosurePhysics.transformTiming).toBe(SPRING);
+          expect(disclosurePhysics.transformDuration).toBe("0.26s");
+
+          // Hovering the parent record reveals the expanded key; pressing it
+          // travels with the shared fast land and restores on the spring.
+          const parentRow = page.locator("#rail-session-parent");
+          await parentRow.hover();
+          await expect
+            .poll(() => disclosure.evaluate((element) => getComputedStyle(element).opacity))
+            .toBe("1");
+          await disclosure.hover();
+          await page.mouse.down();
+          await settleFrames(page);
+          const disclosurePressed = await readKeyPhysics(disclosure);
+          expect(transformY(disclosurePressed.transform)).toBeGreaterThanOrEqual(0.9);
+          expect(disclosurePressed.shadow).toContain("0px 2px 4px");
+          expect(disclosurePressed.transformDuration).toBe("0.04s");
+          await page.mouse.move(4, 860);
+          await page.mouse.up();
+          await page.waitForTimeout(320);
+          const disclosureReleased = await readKeyPhysics(disclosure);
+          expect(disclosureReleased.transform).toBe("none");
+          expect(disclosureReleased.shadow).not.toContain("0px 2px 4px");
+          expect(disclosureReleased.shadow).toContain("0px 1px 0px 0px");
+
+          // An open panel latches its trigger into the pressed seat.
+          for (const selector of ["#rail-inbox", "#rail-identity"]) {
+            await page.locator(selector).evaluate((el) => el.setAttribute("aria-expanded", "true"));
+            await expect
+              .poll(() => readSurface(selector).then((surface) => surface.shadow))
+              .toContain("0px 2px 4px");
+          }
 
           // An expanded child tree keeps the shared column-flex frame: the
           // tree containers are flex columns with the 2px list gap and the
