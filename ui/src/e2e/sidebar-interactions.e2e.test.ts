@@ -148,6 +148,113 @@ suite.define(() => {
     }
   });
 
+  it("bounds an expanded Online roster in short windows without collapsing the session well", async () => {
+    const baseTime = Date.parse("2026-07-01T16:00:00.000Z");
+    const rows = Array.from({ length: 20 }, (_, index) =>
+      sessionRow(`agent:main:chat-${index}`, `Chat ${index}`, baseTime - index * 60_000),
+    );
+    const context = await suite.newBrowserContext({
+      locale: "en-US",
+      serviceWorkers: "block",
+      viewport: { height: 500, width: 1280 },
+    });
+    const page = await context.newPage();
+    await installMockGateway(page, {
+      methodResponses: {
+        "sessions.list": sessionsListResponse(rows),
+      },
+      sessionKey: "agent:main:main",
+      presenceUsers: [
+        { self: true, id: "online-self", name: "Riley" },
+        ...Array.from({ length: 7 }, (_, index) => ({
+          self: false,
+          id: `online-user-${index}`,
+          name: `Teammate ${index}`,
+        })),
+      ],
+    });
+    try {
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
+      await page.locator(".sidebar-online").waitFor({ state: "visible" });
+      await expect
+        .poll(() => page.locator("[data-online-user-id]").count(), { timeout: 15_000 })
+        .toBe(8);
+
+      const readLayout = () =>
+        page.evaluate(() => {
+          const bounds = (selector: string) => {
+            const rect = document.querySelector(selector)!.getBoundingClientRect();
+            return { top: rect.top, bottom: rect.bottom, height: rect.height };
+          };
+          const body = document.querySelector<HTMLElement>(".sidebar-shell__body")!;
+          const onlineList = document.querySelector<HTMLElement>(".sidebar-online__list")!;
+          const well = document.querySelector<HTMLElement>(".sidebar-sessions")!;
+          const scroller = document.querySelector<HTMLElement>(".sidebar-sessions__scroll")!;
+          return {
+            bodyScrollTop: body.scrollTop,
+            bodyOverflow: body.scrollHeight - body.clientHeight,
+            nav: bounds(".sidebar-nav"),
+            online: bounds(".sidebar-online"),
+            onlineListScrollTop: onlineList.scrollTop,
+            onlineListClientHeight: onlineList.clientHeight,
+            onlineListScrollHeight: onlineList.scrollHeight,
+            onlineListOverflowY: getComputedStyle(onlineList).overflowY,
+            well: bounds(".sidebar-sessions"),
+            wellClientHeight: well.clientHeight,
+            wellOverflow: well.scrollHeight - well.clientHeight,
+            footer: bounds(".sidebar-shell__footer"),
+            scrollerClientHeight: scroller.clientHeight,
+            scrollerScrollHeight: scroller.scrollHeight,
+          };
+        });
+      const resting = await readLayout();
+      expect(
+        resting.bodyOverflow,
+        "the hidden sidebar body keeps no unreachable overflow",
+      ).toBeLessThanOrEqual(1);
+      expect(resting.onlineListScrollHeight).toBeGreaterThan(resting.onlineListClientHeight);
+      expect(resting.onlineListOverflowY, "expanded Online rows scroll inside the section").toBe(
+        "auto",
+      );
+      expect(resting.online.bottom).toBeLessThanOrEqual(resting.well.top);
+      expect(resting.well.bottom).toBeLessThanOrEqual(resting.footer.top);
+      expect(
+        resting.wellClientHeight,
+        "the session well keeps usable height beside expanded Online",
+      ).toBeGreaterThan(100);
+      expect(resting.scrollerClientHeight).toBeGreaterThan(0);
+
+      // Wheel input over the roster scrolls Online itself; fixed chrome stays put.
+      const onlineListBox = await page.locator(".sidebar-online__list").boundingBox();
+      await page.mouse.move(
+        onlineListBox!.x + onlineListBox!.width / 2,
+        onlineListBox!.y + onlineListBox!.height / 2,
+      );
+      await page.mouse.wheel(0, 240);
+      await expect
+        .poll(() => readLayout().then((layout) => layout.onlineListScrollTop))
+        .toBeGreaterThan(0);
+      const wheeled = await readLayout();
+      expect(wheeled.bodyScrollTop, "wheel input never scrolls the hidden body").toBe(0);
+      expect(wheeled.nav).toEqual(resting.nav);
+      expect(wheeled.well).toEqual(resting.well);
+      expect(wheeled.footer).toEqual(resting.footer);
+
+      // Keyboard focus lands on the roster's own scroller instead of the body.
+      await page.locator("[data-online-user-id]").last().focus();
+      await expect
+        .poll(() => readLayout().then((layout) => layout.onlineListScrollTop))
+        .toBeGreaterThan(0);
+      const focused = await readLayout();
+      expect(focused.bodyScrollTop, "focus never scrolls the hidden body").toBe(0);
+      expect(focused.nav).toEqual(resting.nav);
+      expect(focused.well).toEqual(resting.well);
+      expect(focused.footer).toEqual(resting.footer);
+    } finally {
+      await suite.closeBrowserContext(context);
+    }
+  });
+
   it("opens every new-session plus as a native link without creating sessions", async () => {
     const context = await suite.newBrowserContext({
       locale: "en-US",

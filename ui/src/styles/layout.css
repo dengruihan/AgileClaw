@@ -1459,6 +1459,11 @@ openclaw-settings-save-indicator:empty {
   position: relative;
   flex-shrink: 0;
   padding: 0;
+  /* Long Pages lists scroll within the rail instead of overflowing the hidden
+     sidebar body; short navigation keeps its intrinsic height and never
+     scrolls. */
+  max-height: 60%;
+  overflow-y: auto;
 }
 
 /* Inset highlight surfaces without narrowing the header or agent roster. */
@@ -1494,7 +1499,13 @@ openclaw-settings-save-indicator:empty {
 }
 
 .sidebar-session-content > .sidebar-online {
-  flex-shrink: 0;
+  /* Expanded Online keeps its intrinsic height while it fits, then becomes
+     the bounded non-session scroll owner instead of displacing the fixed
+     session well or overflowing the hidden sidebar body. The cap leaves the
+     well at least ~10rem of usable height beside a fully expanded roster. */
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: calc(100% - 12rem);
 }
 
 .sidebar-sessions {
@@ -2413,6 +2424,10 @@ openclaw-settings-save-indicator:empty {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* The member roster is the bounded scroll owner for expanded Online; the
+     section header stays in place while long rosters scroll under it. */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .sidebar-online__facepile {

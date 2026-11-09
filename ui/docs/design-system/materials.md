@@ -139,8 +139,10 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   and left and a soft highlight on the bottom and right describe the recess
   without a heavy face gradient. Its size does not depend on the number of
   sessions: the decorative frame never scrolls, and only its nested list
-  scrolls and carries the content-edge fades. Online, navigation, and the user
-  footer stay fixed. No outlet, continuous paper strip,
+  scrolls and carries the content-edge fades. Navigation and the user
+  footer stay fixed. Expanded Online scrolls inside its own bounded section
+  (header pinned, roster scrolling under it) instead of displacing the well.
+  No outlet, continuous paper strip,
   per-row rule, or separate backing panel is drawn. Pinned and unpinned
   records share the same scroller and keep their selection, ordering,
   pin/archive, child-tree, and menu behavior. Hover and focus lighten the
