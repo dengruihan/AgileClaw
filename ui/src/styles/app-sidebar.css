@@ -1,6 +1,10 @@
-/* Session pull-out tab system: owned by the lazy sidebar component (this
-   sheet loads after the global bundle, matching the previous layout.css ->
-   components.css -> app-sidebar.css cascade order). */
+/* Session surfaces owned by the lazy sidebar component (this sheet loads after
+   the global bundle, matching the previous layout.css -> components.css ->
+   app-sidebar.css cascade order). The session list itself is one continuous
+   paper feed (see the tail of this file). The earlier pull-out tab rules stay
+   for the pinned nav-zone entries, which are console keys beside the pages
+   rail rather than list records, and for row fixtures that mount without the
+   feed container. */
 /* Expanded child trees share the sidebar lists' column-flex frame. Flex,
    not grid: WebKit does not re-run a grid flex-item's intrinsic sizing when
    child rows stream in or grow a second subtitle line after first layout,
@@ -1048,4 +1052,291 @@
   .sidebar-recent-session__title-row {
     padding-right: 0;
   }
+}
+
+/* -------------------------------------------------------------------------
+   Continuous session paper feed
+
+   The whole session list is one recessed well molded into the sidebar panel.
+   A passive outlet sits at the well's upper end, and one matte paper strip
+   runs unbroken from that slit behind every group, catalog, and expanded
+   child tree. Rows are records on that strip: a left-aligned title over a
+   fine incised rule, with no per-row card, tab, or seat. Session state still
+   reads through a low-accent wash, and the inline management keys stay
+   reachable on hover/focus. Pinned nav-zone entries are console keys and
+   deliberately keep the pull-out tab rules above.
+
+   Material lives here, in the lazy sidebar sheet, so the boot bundle gains
+   nothing. The structural `.sidebar-sessions` rule in layout.css remains the
+   layout owner; this section owns only the material and row presentation.
+   ------------------------------------------------------------------------- */
+
+.sidebar-sessions {
+  --session-feed-edge-gap: 4px;
+  --session-feed-strip-top: 17px;
+  --session-feed-strip-bottom: 8px;
+  /* Same cool neutral family as the panel, a step darker: the pressed floor
+     of the channel. Light mode re-tints it below. */
+  --session-feed-well: color-mix(in srgb, var(--bg) 80%, black 20%);
+  /* The strip is the same material a step brighter than the well, never a
+     beige paper stock. */
+  --session-feed-paper: color-mix(in srgb, var(--bg-elevated) 64%, var(--bg) 36%);
+  --session-feed-rule: color-mix(in srgb, var(--neu-dark) 92%, transparent);
+  --session-feed-rule-hi: color-mix(in srgb, var(--mat-bevel) 46%, transparent);
+
+  position: relative;
+  isolation: isolate;
+  padding: 17px 0 10px;
+  border-radius: 10px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--neu-dark) 34%, transparent) 0,
+      transparent 18px
+    ),
+    var(--session-feed-well);
+  /* Shallow channel: the top wall shades the floor, the lower lip catches a
+     thin light line, and the outer edge separates it from the panel. */
+  box-shadow:
+    inset 0 2px 4px color-mix(in srgb, var(--neu-dark) 100%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--mat-bevel) 48%, transparent),
+    0 1px 0 color-mix(in srgb, var(--mat-bevel) 32%, transparent);
+  transition:
+    background var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
+}
+
+:root[data-theme-mode="light"] .sidebar-sessions {
+  --session-feed-well: color-mix(in srgb, var(--bg) 85%, black 15%);
+}
+
+:root[data-theme-mode="dark"] .sidebar-sessions {
+  --session-feed-paper: color-mix(in srgb, var(--bg-elevated) 74%, var(--bg) 26%);
+}
+
+/* Passive paper outlet: one short convex lip in the panel's own material over
+   a narrow horizontal slit. A barely-there repeating sheen inside the slit
+   hints at rollers; there is no printer body, control, light, or label. */
+.sidebar-sessions::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 5px;
+  inset-inline: 2px;
+  height: 9px;
+  border-radius: 3px 3px 2px 2px;
+  background:
+    repeating-linear-gradient(
+        90deg,
+        transparent 0 18px,
+        color-mix(in srgb, var(--mat-bevel) 9%, transparent) 18px 19px,
+        transparent 19px 37px
+      )
+      center calc(100% - 5px) / calc(100% - 8px) 3px no-repeat,
+    linear-gradient(
+        180deg,
+        transparent 0 3px,
+        color-mix(in srgb, var(--neu-dark) 100%, transparent) 3px 4px,
+        color-mix(in srgb, var(--neu-dark) 62%, transparent) 4px 6px,
+        color-mix(in srgb, var(--mat-bevel) 38%, transparent) 6px 7px,
+        transparent 7px
+      )
+      center / calc(100% - 6px) 9px no-repeat,
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--session-feed-paper) 40%, var(--session-feed-well) 60%),
+      var(--session-feed-well)
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--mat-bevel) 58%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--neu-dark) 46%, transparent),
+    0 1px 1px color-mix(in srgb, var(--neu-dark) 52%, transparent);
+  pointer-events: none;
+}
+
+/* One strip for every Session source. It is painted behind the content, so
+   section gaps, group headings, and expanded child trees cannot break it. */
+.sidebar-sessions::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: var(--session-feed-strip-top);
+  inset-inline: var(--session-feed-edge-gap);
+  bottom: var(--session-feed-strip-bottom);
+  border-radius: 9px 9px 4px 4px / 3px 3px 4px 4px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--mat-bevel) 26%, transparent) 0,
+      transparent 3px
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--neu-dark) 36%, transparent) 0,
+      transparent 7px
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-elevated) 20%, var(--session-feed-paper) 80%) 0,
+      var(--session-feed-paper) 18px
+    );
+  /* Soft contact shadow: the strip rests inside the channel instead of
+     floating above the panel. */
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--neu-dark) 88%, transparent),
+    1px 0 2px color-mix(in srgb, var(--neu-dark) 48%, transparent),
+    -1px 0 2px color-mix(in srgb, var(--neu-dark) 36%, transparent);
+  pointer-events: none;
+}
+
+/* The list keeps the tool column's text grid inside the strip. The old
+   layout-owned bleed margin moved here with the session material. */
+.sidebar-sessions > .sidebar-recent-sessions {
+  margin-inline: 0;
+  padding-inline: 6px;
+}
+
+.sidebar-sessions .sidebar-recent-sessions__list,
+.sidebar-sessions .sidebar-session-tree,
+.sidebar-sessions .sidebar-session-tree__list {
+  gap: 0;
+}
+
+/* The toolbar is the strip's first line: label at the title grid, keys on the
+   trailing paper margin. */
+.sidebar-sessions .sidebar-session-toolbar {
+  margin-inline: 0;
+  padding-inline: calc(var(--sidebar-text-offset) + 4px) 10px;
+}
+
+/* A record, not a slot or a tab. */
+.sidebar-sessions .sidebar-recent-session {
+  position: relative;
+  min-height: calc(var(--sidebar-session-row-min-height) + 4px);
+  padding-right: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+}
+
+/* Fine incised rule under each title: a shallow dark line with a light catch
+   on its lower edge, low contrast on the matte strip. */
+.sidebar-sessions .sidebar-recent-session::after {
+  content: "";
+  position: absolute;
+  inset-inline: 6px;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(
+    180deg,
+    var(--session-feed-rule) 0 1px,
+    var(--session-feed-rule-hi) 1px 2px
+  );
+  pointer-events: none;
+}
+
+/* A record's optional second line (preview/narration/trail) stays quieter than
+   the title so the printed title-and-rule rhythm still leads. */
+.sidebar-sessions .sidebar-recent-session__details {
+  height: 14px;
+  gap: 5px;
+}
+
+.sidebar-sessions .sidebar-recent-session__subtitle,
+.sidebar-sessions .sidebar-recent-session .session-row-trail,
+.sidebar-sessions .sidebar-recent-session__channel {
+  font-size: calc(10px * var(--control-ui-text-scale));
+  line-height: 14px;
+}
+
+/* The old tab face, grip band, slot mouth, and leading seam do not exist on a
+   printed record. */
+.sidebar-sessions .sidebar-recent-session__link,
+.sidebar-sessions .sidebar-recent-session > .sidebar-recent-session__link {
+  margin: 0;
+  min-height: var(--sidebar-session-row-min-height);
+  padding-right: 6px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  transform: none;
+}
+
+.sidebar-sessions .sidebar-recent-session__link::before,
+.sidebar-sessions .sidebar-recent-session--colored::before,
+.sidebar-sessions .sidebar-recent-session--active::before {
+  content: none;
+}
+
+.sidebar-sessions .sidebar-recent-session:hover > .sidebar-recent-session__link,
+.sidebar-sessions .sidebar-recent-session--active > .sidebar-recent-session__link,
+.sidebar-sessions .sidebar-recent-session > .sidebar-recent-session__link:focus-visible,
+.sidebar-sessions .sidebar-recent-session > .sidebar-recent-session__link:active {
+  transform: none;
+  box-shadow: none;
+}
+
+/* State stays a quiet wash on the same strip: hover and focus lighten the
+   record, the current session carries the accent, multi-select is a slightly
+   deeper accent wash. No travel, no rim. */
+.sidebar-sessions .sidebar-recent-session:hover {
+  color: var(--text);
+}
+
+.sidebar-sessions .sidebar-recent-session:hover > .sidebar-recent-session__link,
+.sidebar-sessions .sidebar-recent-session > .sidebar-recent-session__link:focus-visible {
+  background-color: color-mix(in srgb, var(--bg-hover) 52%, transparent);
+}
+
+.sidebar-sessions
+  .sidebar-recent-session.sidebar-recent-session--active
+  > .sidebar-recent-session__link {
+  background-color: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--text-strong);
+}
+
+.sidebar-sessions .sidebar-recent-session--active .sidebar-recent-session__name {
+  font-weight: 600;
+}
+
+.sidebar-sessions
+  .sidebar-recent-session.sidebar-recent-session--selected
+  > .sidebar-recent-session__link {
+  background-color: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: var(--text-strong);
+}
+
+/* Inline management and disclosure keys become bare glyphs on the strip;
+   they stay seated inside their own boxes, so no layout or touch target
+   changes here. */
+.sidebar-sessions .session-action,
+.sidebar-sessions .sidebar-child-session-toggle {
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+}
+
+.sidebar-sessions .session-action:hover:not(:disabled),
+.sidebar-sessions .session-action:focus-visible,
+.sidebar-sessions .sidebar-child-session-toggle:hover,
+.sidebar-sessions .sidebar-child-session-toggle:focus-visible {
+  background-color: color-mix(in srgb, var(--bg-hover) 58%, transparent);
+  color: var(--text);
+  box-shadow: none;
+}
+
+.sidebar-sessions .session-action:active:not(:disabled),
+.sidebar-sessions .sidebar-child-session-toggle:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Errors and pagination sit inside the strip's margins instead of crossing
+   its stamped edges. */
+.sidebar-sessions > .sidebar-session-error {
+  margin-inline: calc(var(--session-feed-edge-gap) + 4px);
 }

@@ -1683,15 +1683,9 @@ openclaw-settings-save-indicator:empty {
   display: flex;
   flex-direction: column;
   gap: var(--sidebar-group-gap);
-  /* The scroll body already keeps rows clear of a classic scrollbar. Reclaim
-     both section insets so overlay scrollbars do not leave a trailing gap. */
-  margin-inline: -8px;
-  /* Sessions are stateful app chrome, not navigation links. */
+  /* Sessions are stateful app chrome, not navigation links. The session-list
+     material and its strip insets live in the lazy app-sidebar sheet. */
   cursor: var(--cursor-action);
-}
-
-.shell:not(.shell--mobile-nav) .sidebar-recent-sessions {
-  margin-inline: -6px;
 }
 
 .sidebar-shell__body--scroll-top {
