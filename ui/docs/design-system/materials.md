@@ -109,11 +109,12 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   carapace's own non-`.btn` keys keep theirs (`ui/src/styles/carapace-control-ui.css`).
 - Navigation rows, the settings rail, shell chrome keys, the new-session
   action, and the shell plate's rimmed slab live in `ui/src/styles/layout.css`.
-  The session-list paper feed (the recessed well, its passive outlet, the
-  continuous strip, records, state/wash rules, and the list's inline inset) is
-  owned by the lazy sidebar component's `ui/src/styles/app-sidebar.css`, which
-  loads after the global bundle; the roster sheet keeps its later reset
-  precedence. Pinned Session records join the same feed in canonical zone
+  That sheet also fixes the session scroller's geometry: Online and the user
+  footer keep their intrinsic height, while the session well takes the space
+  between them. The outer sidebar never scrolls. The well's material, record
+  states, and scroll-edge fades live in the lazy sidebar component's
+  `ui/src/styles/app-sidebar.css`; the roster sheet keeps its later reset
+  precedence. Pinned Session records join the same well in canonical zone
   order; non-Session Pages entries stay console keys.
 - Two shared rules own the repeated rail-key chrome in `ui/src/styles/layout.css`
   so per-control rules carry only geometry and states: a grouped seated-key
@@ -130,28 +131,30 @@ shadow-DOM switch cap carries its own local guard for the same reason.
 - The sidebar reads as a console rail of seated keys with one deliberate
   exception. Nav rows, the collapse and collapsed expand toggles, the footer
   identity card, the Inbox button, and the session list's inline action and
-  disclosure keys seat their interaction in their own boxes. Pinned Session
-  records are list records on the paper feed, not console keys; the Pages
-  entries above the feed keep the rail's key construction.
-- The session list itself is one continuous paper feed, not a column of
-  cards. `ui/src/styles/app-sidebar.css` shapes `.sidebar-sessions` as a
-  shallow cool-gray well pressed into the sidebar, with the same-material
-  convex lip and narrow recessed slit of a paper outlet at its upper end; the
-  slit carries only a faint roller hint, never a printer body, control, or
-  label. One matte strip in the panel's own color family — a step brighter
-  than the well, never beige paper — runs unbroken from that slit behind every
-  group heading, catalog, and expanded child tree, inset by a narrow side
-  clearance with a soft contact shadow. Records on the strip are a
-  left-aligned title over a fine incised rule; the old per-row tab face, grip
-  band, slot mouth, and travel are removed in this scope. Hover and focus
-  lighten the record, the current session carries a restrained accent wash and
-  stronger title, multi-select deepens the wash, and pin/archive/disclosure
-  controls surface as their existing seated keys on interaction. The strip is painted behind
-  the content (pseudo-elements on the well), so headings and gaps cannot
-  detach it; empty, loading, error, catalog, and roster states share the same
-  material. Pinned Session records stay in canonical pinned order at the top
-  of the same strip and keep their pin/order/menu behavior; only non-Session
-  Pages entries remain in the console rail.
+  disclosure keys seat their interaction in their own boxes. Session records
+  stay flat within their shared well; only their inline action and disclosure
+  keys rise on interaction.
+- `.sidebar-sessions` is a shallow cool-gray well pressed into the sidebar.
+  Its floor stays close to the sidebar tone; a faint inner shade on the top
+  and left and a soft highlight on the bottom and right describe the recess
+  without a heavy face gradient. Its size does not depend on the number of
+  sessions: the decorative frame never scrolls, and only its nested list
+  scrolls and carries the content-edge fades. Navigation and the user
+  footer stay fixed. Expanded Online scrolls inside its own bounded section
+  (header pinned, roster scrolling under it) instead of displacing the well;
+  at very short window heights the whole Online section yields its space to
+  the well and is hidden outright, the in-well session toolbar is removed
+  with it (new-session stays in the brand; filter/sort return above the
+  band), and in agent-roster mode the compact roster group header is removed
+  with the band as well, leaving the session rows as the only controls in
+  the well.
+  No outlet, continuous paper strip,
+  per-row rule, or separate backing panel is drawn. Pinned and unpinned
+  records share the same scroller and keep their selection, ordering,
+  pin/archive, child-tree, and menu behavior. Hover and focus lighten the
+  record, the current session carries a restrained accent wash and stronger
+  title, and multi-select deepens the wash. Empty, loading, error, catalog,
+  and roster states use the same fixed well.
 
 Feature-owned sliders (chat audio seek, reasoning effort) and dashboards keep
 their own chrome by class and never enter this vocabulary.

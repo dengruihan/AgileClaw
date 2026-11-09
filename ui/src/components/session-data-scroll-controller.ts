@@ -12,7 +12,7 @@ export class SessionDataScrollController {
   constructor(private readonly notify: () => void) {}
 
   synchronize(host: Pick<HTMLElement, "querySelector">): void {
-    const element = host.querySelector<HTMLElement>(".sidebar-shell__body");
+    const element = host.querySelector<HTMLElement>(".sidebar-sessions__scroll");
     if (element !== this.element) {
       this.resizeObserver?.disconnect();
       this.element = element;

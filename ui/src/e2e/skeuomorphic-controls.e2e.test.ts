@@ -411,8 +411,8 @@ suite.define(() => {
           // Every seated rail key wears an opaque machined contour, a graded
           // face, and a thin rim at rest, so it reads as pressable before any
           // hover — and none of them wears the new-session key's stronger
-          // raise. Session records are exempt: they are flat paper-feed
-          // records, proven separately below.
+          // raise. Session records stay flat in their shared recessed well,
+          // proven separately below.
           const seatedKeys = [
             "#rail-nav",
             "#rail-collapse",
@@ -465,20 +465,16 @@ suite.define(() => {
           expect(selected.border).not.toBe((await readSurface("#rail-nav")).border);
           expect(selected.shadow).toContain("0px 2px 0px 0px");
 
-          // Every Session record is one continuous paper feed: a recessed
-          // well, a compact passive outlet, and one strip painted behind
-          // flat records. No per-row slot, tab face, rim, or travel exists.
-          const feedSurface = await page.locator("#rail-sessions").evaluate((element) => {
+          // One recessed well holds every record. No outlet, paper strip,
+          // per-row card, incised rule, rim, or record travel is drawn.
+          const wellSurface = await page.locator("#rail-sessions").evaluate((element) => {
             const well = getComputedStyle(element);
-            const strip = getComputedStyle(element, "::after");
-            const outlet = getComputedStyle(element, "::before");
             const wellBox = element.getBoundingClientRect();
             const row = element.querySelector("#rail-session")!;
             const rowBox = row.getBoundingClientRect();
             const link = row.querySelector(".sidebar-recent-session__link")!;
             const linkStyle = getComputedStyle(link);
             const rowStyle = getComputedStyle(row);
-            const rule = getComputedStyle(row, "::after");
             const title = row.querySelector(".sidebar-recent-session__name")!;
             return {
               well: {
@@ -486,22 +482,16 @@ suite.define(() => {
                 right: wellBox.right,
                 image: well.backgroundImage,
                 shadow: well.boxShadow,
+                outlet: getComputedStyle(element, "::before").content,
+                strip: getComputedStyle(element, "::after").content,
               },
-              strip: {
-                zIndex: strip.zIndex,
-                left: Number.parseFloat(strip.left),
-                right: Number.parseFloat(strip.right),
-                top: Number.parseFloat(strip.top),
-                image: strip.backgroundImage,
-                shadow: strip.boxShadow,
-              },
-              outlet: { height: outlet.height, top: outlet.top, content: outlet.content },
               row: {
                 left: rowBox.left,
                 right: rowBox.right,
                 border: rowStyle.borderTopWidth,
                 image: rowStyle.backgroundImage,
                 shadow: rowStyle.boxShadow,
+                rule: getComputedStyle(row, "::after").content,
               },
               link: {
                 border: linkStyle.borderTopWidth,
@@ -510,33 +500,25 @@ suite.define(() => {
                 transform: linkStyle.transform,
                 background: linkStyle.backgroundColor,
               },
-              rule: { height: rule.height, bottom: rule.bottom },
               titleLeft: title.getBoundingClientRect().left,
             };
           });
-          expect(feedSurface.well.shadow, "well is recessed").toContain("inset");
-          expect(feedSurface.strip.zIndex, "strip paints behind content").toBe("-1");
-          expect(feedSurface.strip.left, "strip keeps its left clearance").toBe(4);
-          expect(feedSurface.strip.right, "strip keeps its right clearance").toBe(4);
-          expect(feedSurface.strip.top).toBeGreaterThan(0);
-          expect(feedSurface.strip.image, "strip carries the continuous paper").toContain(
-            "linear-gradient",
+          expect(wellSurface.well.shadow, "well is recessed").toContain("inset");
+          expect(wellSurface.well.outlet).toBe("none");
+          expect(wellSurface.well.strip).toBe("none");
+          expect(wellSurface.row.rule).toBe("none");
+          expect(wellSurface.row.border, "row has no card border").toBe("0px");
+          expect(wellSurface.row.image, "row has no card face").toBe("none");
+          expect(wellSurface.row.shadow, "row has no card shadow").toBe("none");
+          expect(wellSurface.link.border, "link has no card border").toBe("0px");
+          expect(wellSurface.link.image, "link has no raised face").toBe("none");
+          expect(wellSurface.link.shadow, "link has no card shadow").toBe("none");
+          expect(wellSurface.link.transform, "record rests untranslated").toBe("none");
+          expect(wellSurface.titleLeft, "title stays left-aligned").toBeGreaterThan(
+            wellSurface.row.left,
           );
-          expect(feedSurface.outlet.height, "outlet stays compact").toBe("9px");
-          expect(feedSurface.outlet.content).toBe('""');
-          expect(feedSurface.row.border, "row has no card border").toBe("0px");
-          expect(feedSurface.row.image, "row has no card face").toBe("none");
-          expect(feedSurface.row.shadow, "row has no card shadow").toBe("none");
-          expect(feedSurface.link.border, "link has no tab border").toBe("0px");
-          expect(feedSurface.link.image, "link has no satin tab face").toBe("none");
-          expect(feedSurface.link.shadow, "link has no tab shadow").toBe("none");
-          expect(feedSurface.link.transform, "record rests untranslated").toBe("none");
-          expect(feedSurface.rule.height, "incised rule is two pixels").toBe("2px");
-          expect(feedSurface.titleLeft, "title stays left-aligned on the paper").toBeGreaterThan(
-            feedSurface.row.left,
-          );
-          expect(feedSurface.row.left).toBeGreaterThanOrEqual(feedSurface.well.left + 4);
-          expect(feedSurface.row.right).toBeLessThanOrEqual(feedSurface.well.right - 4);
+          expect(wellSurface.row.left).toBeGreaterThanOrEqual(wellSurface.well.left + 4);
+          expect(wellSurface.row.right).toBeLessThanOrEqual(wellSurface.well.right - 4);
 
           // Hover and press retint the record; neither travels or re-cards it.
           const session = page.locator("#rail-session");
@@ -547,7 +529,7 @@ suite.define(() => {
             (element) => getComputedStyle(element).backgroundColor,
           );
           expect(hoveredFace, "hover retints the record face").not.toBe(
-            feedSurface.link.background,
+            wellSurface.link.background,
           );
           expect((await readKeyPhysics(sessionLink)).transform).toBe("none");
           expect((await readKeyPhysics(sessionLink)).shadow).toBe("none");
@@ -564,10 +546,10 @@ suite.define(() => {
             page.locator(selector).evaluate((element) => getComputedStyle(element).backgroundColor);
           const currentLink = page.locator("#rail-session-current > .sidebar-recent-session__link");
           expect(await readFace("#rail-session-current > .sidebar-recent-session__link")).not.toBe(
-            feedSurface.link.background,
+            wellSurface.link.background,
           );
           expect(await readFace("#rail-session-selected > .sidebar-recent-session__link")).not.toBe(
-            feedSurface.link.background,
+            wellSurface.link.background,
           );
           expect(
             await page

@@ -493,7 +493,7 @@ describe("AppSidebar session mutation feedback", () => {
       );
     });
     const error = sidebar.querySelector("[data-sidebar-session-error]");
-    expect(error?.parentElement?.classList.contains("sidebar-sessions")).toBe(true);
+    expect(error?.parentElement?.classList.contains("sidebar-sessions__scroll")).toBe(true);
     expect(error?.closest(".sidebar-recent-sessions")).toBeNull();
 
     error?.querySelector<HTMLButtonElement>('[aria-label="Dismiss error"]')?.click();

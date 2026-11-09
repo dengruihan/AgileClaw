@@ -56,6 +56,8 @@ type SidebarSessionListHost = SessionListHost & {
       | "sessionCatalogs"
       | "sessionCatalogLive"
       | "loadingMoreSessionCatalogIds"
+      | "sessionsScrollState"
+      | "updateSessionsScrollState"
     >;
 };
 
@@ -689,19 +691,28 @@ export function renderSessionListFrame(host: SidebarSessionListHost, body: unkno
       @dragleave=${(event: DragEvent) => host.sessionOrganizer.handleSessionListDragLeave(event)}
       @drop=${(event: DragEvent) => host.sessionOrganizer.handleSessionListDrop(event)}
     >
-      ${host.sidebarAgentsMode === "roster" ? nothing : renderSessionListToolbar(host)}
-      ${
-        host.sessionData.sessionsStartingUp
-          ? html`<div
-              class="sidebar-session-empty-hint sidebar-session-empty-hint--startup"
-              role="status"
-              aria-live="polite"
-            >
-              <span class="btn__spinner" aria-hidden="true"></span> ${t("agentStartup.short")}
-            </div>`
-          : nothing
-      }
-      ${renderSessionMutationError(host)} ${body}
+      <div
+        class="sidebar-sessions__scroll sidebar-sessions--scroll-${host.sessionData.sessionsScrollState}"
+        @scroll=${(event: Event) => {
+          if (event.currentTarget instanceof HTMLElement) {
+            host.sessionData.updateSessionsScrollState(event.currentTarget);
+          }
+        }}
+      >
+        ${host.sidebarAgentsMode === "roster" ? nothing : renderSessionListToolbar(host)}
+        ${
+          host.sessionData.sessionsStartingUp
+            ? html`<div
+                class="sidebar-session-empty-hint sidebar-session-empty-hint--startup"
+                role="status"
+                aria-live="polite"
+              >
+                <span class="btn__spinner" aria-hidden="true"></span> ${t("agentStartup.short")}
+              </div>`
+            : nothing
+        }
+        ${renderSessionMutationError(host)} ${body}
+      </div>
     </section>
   `;
 }

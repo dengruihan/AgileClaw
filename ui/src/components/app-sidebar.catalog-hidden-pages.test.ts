@@ -147,25 +147,25 @@ describe("AppSidebar expanded catalog refresh visibility", () => {
       });
       mounted = await mountExpanded(request);
       const { sidebar, provider } = mounted;
-      const scrollBody = sidebar.querySelector(".sidebar-shell__body");
-      expect(scrollBody).not.toBeNull();
-      expect(observed.has(scrollBody!)).toBe(true);
+      const scroller = sidebar.querySelector(".sidebar-sessions__scroll");
+      expect(scroller).not.toBeNull();
+      expect(observed.has(scroller!)).toBe(true);
 
       sidebar.requestUpdate();
       provider.remove();
-      expect(observed.has(scrollBody!)).toBe(false);
+      expect(observed.has(scroller!)).toBe(false);
       const timersAfterDetach = vi.getTimerCount();
       const observationsAfterDetach = observe.mock.calls.length;
       await sidebar.updateComplete;
       expect.soft(vi.getTimerCount()).toBe(timersAfterDetach);
       expect.soft(observe).toHaveBeenCalledTimes(observationsAfterDetach);
-      expect.soft(observed.has(scrollBody!)).toBe(false);
+      expect.soft(observed.has(scroller!)).toBe(false);
 
       document.body.append(provider);
       await sidebar.updateComplete;
       await vi.advanceTimersByTimeAsync(200);
       await settle(sidebar);
-      expect(observed.has(sidebar.querySelector(".sidebar-shell__body")!)).toBe(true);
+      expect(observed.has(sidebar.querySelector(".sidebar-sessions__scroll")!)).toBe(true);
       expect(request).toHaveBeenCalledTimes(4);
       expect(sidebar.textContent).toContain("Original 1");
     } finally {

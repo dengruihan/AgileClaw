@@ -295,10 +295,9 @@ export function renderAppSidebarZoneEntry(
 }
 
 /**
- * Pinned Session records join the session paper feed: they are real list
- * records, not navigation keys. The zone wrapper still owns each record's
- * drop target and reorder menu so the persisted pinned order stays canonical.
- * Non-Session navigation entries stay in the pages rail.
+ * Pinned Session records join the same scrolling well as other sessions.
+ * The zone wrapper still owns each record's drop target and reorder menu so
+ * the persisted pinned order stays canonical. Non-Session entries stay in Pages.
  */
 export function renderPinnedSessionZone(
   host: AppSidebarRenderHost,

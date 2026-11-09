@@ -190,7 +190,7 @@ describe("AppSidebar interleaved zone", () => {
     }
   });
 
-  it("keeps non-Session navigation entries in Pages and pinned sessions in the feed order", async () => {
+  it("keeps non-Session navigation entries in Pages and pinned sessions in the well order", async () => {
     const { sidebar, sessions } = await mountZone();
     const result = sessions.sessions.state.result;
     if (!result) {
@@ -232,7 +232,7 @@ describe("AppSidebar interleaved zone", () => {
     expect(pinnedTree?.closest('[role="list"]')).toBe(pinnedList);
   });
 
-  it("reorders pinned records inside the feed without triggering the unpin target", async () => {
+  it("reorders pinned records inside the well without triggering the unpin target", async () => {
     const { sidebar, sessions } = await mountZone();
     const result = sessions.sessions.state.result!;
     sessions.publish({
@@ -274,7 +274,7 @@ describe("AppSidebar interleaved zone", () => {
     expect(sessions.patch).not.toHaveBeenCalled();
   });
 
-  it("clears the stale removal target on reentering the pinned strip and unpins on the list", async () => {
+  it("clears the stale removal target on reentering the pinned list and unpins on the well", async () => {
     const { sidebar, sessions } = await mountZone();
     const result = sessions.sessions.state.result!;
     sessions.publish({
@@ -290,21 +290,21 @@ describe("AppSidebar interleaved zone", () => {
 
     const alphaRow = sidebar.querySelector<HTMLElement>('[data-session-key="agent:main:alpha"]')!;
     const alphaEntry = zoneEntry(sidebar, "session:agent:main:alpha");
-    const feed = sidebar.querySelector<HTMLElement>(".sidebar-sessions")!;
+    const well = sidebar.querySelector<HTMLElement>(".sidebar-sessions")!;
     const dataTransfer = createDataTransferStub();
     dispatchDragEvent(alphaRow, "dragstart", dataTransfer);
-    dispatchDragEvent(feed, "dragover", dataTransfer);
+    dispatchDragEvent(well, "dragover", dataTransfer);
     expect(sidebar.sessionOrganizer.sessionListRemovalDrop).toBe(true);
     await sidebar.updateComplete;
-    expect(feed.classList.contains("sidebar-sessions--removal-drop")).toBe(true);
+    expect(well.classList.contains("sidebar-sessions--removal-drop")).toBe(true);
 
     dispatchDragEvent(alphaEntry, "dragover", dataTransfer);
     expect(sidebar.sessionOrganizer.sessionListRemovalDrop).toBe(false);
     await sidebar.updateComplete;
-    expect(feed.classList.contains("sidebar-sessions--removal-drop")).toBe(false);
+    expect(well.classList.contains("sidebar-sessions--removal-drop")).toBe(false);
 
-    dispatchDragEvent(feed, "dragover", dataTransfer);
-    dispatchDragEvent(feed, "drop", dataTransfer);
+    dispatchDragEvent(well, "dragover", dataTransfer);
+    dispatchDragEvent(well, "drop", dataTransfer);
     await waitForFast(() =>
       expect(sessions.patch).toHaveBeenCalledWith(
         "agent:main:alpha",

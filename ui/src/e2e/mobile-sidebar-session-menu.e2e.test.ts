@@ -72,9 +72,7 @@ suite.define(() => {
         const drawerBox = await page.locator(".shell-nav").boundingBox();
         expect(drawerBox?.width).toBeGreaterThanOrEqual(330);
         expect(drawerBox?.width).toBeLessThanOrEqual(336);
-        // The continuous paper reserves its 4px side clearances from the row
-        // width, so the title keeps the previous 240px reading width minus
-        // those two narrow gutters (8px).
+        // The well's narrow insets must not crowd titles out of the drawer.
         expect(restingWidth).toBeGreaterThanOrEqual(232);
         const plainRow = page.locator(`[data-session-key="${plainKey}"]`);
         const plainTitle = plainRow.locator(".sidebar-recent-session__name");

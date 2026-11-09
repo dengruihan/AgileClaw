@@ -3,15 +3,15 @@ import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import { createGateway, createSessions, mountSidebar } from "../app-sidebar.ts";
 import "../../components/app-sidebar.ts";
 
-describe("AppSidebar shared scroller", () => {
-  it("drives the fade state from the shared scroller's own scroll events", async () => {
+describe("AppSidebar session scroller", () => {
+  it("drives the fade state from the session well's own scroll events", async () => {
     const { sidebar } = await mountSidebar(
       createGateway({} as GatewayBrowserClient),
       createSessions("main", ["agent:main:main"]),
     );
-    const scroller = sidebar.querySelector<HTMLElement>(".sidebar-shell__body");
+    const scroller = sidebar.querySelector<HTMLElement>(".sidebar-sessions__scroll");
     if (!scroller) {
-      throw new Error("expected the shared sidebar scroller");
+      throw new Error("expected the session well scroller");
     }
     Object.defineProperties(scroller, {
       scrollHeight: { configurable: true, value: 900 },
@@ -21,13 +21,13 @@ describe("AppSidebar shared scroller", () => {
     scroller.scrollTop = 0;
     scroller.dispatchEvent(new Event("scroll"));
     await sidebar.updateComplete;
-    expect(scroller.classList.contains("sidebar-shell__body--scroll-top")).toBe(true);
+    expect(scroller.classList.contains("sidebar-sessions--scroll-top")).toBe(true);
 
     scroller.scrollTop = 600;
     scroller.dispatchEvent(new Event("scroll"));
     await sidebar.updateComplete;
-    expect(scroller.classList.contains("sidebar-shell__body--scroll-middle")).toBe(false);
-    expect(scroller.classList.contains("sidebar-shell__body--scroll-bottom")).toBe(true);
+    expect(scroller.classList.contains("sidebar-sessions--scroll-middle")).toBe(false);
+    expect(scroller.classList.contains("sidebar-sessions--scroll-bottom")).toBe(true);
   });
 
   it("keeps the session list mounted as the only lower-sidebar content", async () => {
