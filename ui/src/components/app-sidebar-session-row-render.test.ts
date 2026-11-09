@@ -68,7 +68,7 @@ it("keeps Online facepiles idle until presence or time-sensitive ordering change
   const now = 1_800_000_000_000;
   vi.setSystemTime(now);
   const { host, container } = createHost();
-  const presence = ["ada", "zoe"].map((id) => ({
+  const presence = ["ada", "zoe", "mia"].map((id) => ({
     ts: now,
     user: { id, identity: { type: "profile" as const, id }, name: id },
     lastActivityAt: id === "ada" ? now - 119_999 : now,
@@ -88,11 +88,19 @@ it("keeps Online facepiles idle until presence or time-sensitive ordering change
   update();
   await facepile.updateComplete;
   expect(updates).toHaveBeenCalledOnce();
+  expect(facepile.querySelector(".viewer-facepile")?.getAttribute("aria-label")).toBe(
+    "mia, zoe, ada",
+  );
+
+  host.sessionData.presencePayload = { presence: presence.slice(0, 2) };
+  update();
+  await facepile.updateComplete;
+  expect(updates).toHaveBeenCalledTimes(2);
   expect(facepile.querySelector(".viewer-facepile")?.getAttribute("aria-label")).toBe("zoe, ada");
 
   host.sessionData.presencePayload = { presence: presence.slice(0, 1) };
   update();
   await facepile.updateComplete;
   expect(updates).toHaveBeenCalledTimes(2);
-  expect(facepile.querySelector(".viewer-facepile")?.getAttribute("aria-label")).toBe("ada");
+  expect(container.querySelector(".sidebar-online")).toBeNull();
 });

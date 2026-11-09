@@ -194,7 +194,12 @@ ID matching a profile ID never combines their watched sessions, connection facts
 or viewer counts. The Gateway uses the same namespace boundary for online/activity
 timing and collaborative typing counts. Overlapping tabs share timing facts only
 within their namespace. Later activity stays separate if a raw tab gains profile
-qualification. The Online roster includes your own connected identity. Session
+qualification. The Online roster includes your own connected identity. The sidebar's Online
+section renders only while at least two distinct identities are online: a
+personal Gateway where only the Shared owner is connected — across any number
+of tabs or devices — shows no Online section, which appears when a second
+distinct identity connects and hides again when they leave. Connection count
+never substitutes for identity count. Session
 viewer indicators exclude you according to the authenticated user's recorded
 qualification, using the current connection only when that user is unavailable.
 Only a displayed owner with the exact qualified profile identity is deduplicated

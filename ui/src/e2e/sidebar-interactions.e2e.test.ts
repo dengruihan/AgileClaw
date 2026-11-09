@@ -47,7 +47,13 @@ suite.define(() => {
         "sessions.list": sessionsListResponse(rows),
       },
       sessionKey: "agent:main:main",
-      presenceUsers: [{ self: true, id: "fixed-sidebar-user", name: "Riley" }],
+      presenceUsers: [
+        { self: true, id: "fixed-sidebar-user", name: "Riley" },
+        // A second identity keeps the Online section mounted: solo presence
+        // intentionally renders no section, and this test owns the well
+        // geometry around a live roster.
+        { self: false, id: "fixed-sidebar-teammate", name: "Sage" },
+      ],
     });
     try {
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
@@ -271,9 +277,12 @@ suite.define(() => {
           );
           await page.reload();
         }
-        // The short-window band hides the whole Online section, so wait for
-        // attached rather than visible here.
-        await page.locator(".sidebar-online").waitFor({ state: "attached" });
+        // The short-window band hides the whole Online section (attached, not
+        // visible), and solo presence — the users: 1 case — renders no section
+        // at any height, so only wait for the roster when one can exist.
+        if (users > 1) {
+          await page.locator(".sidebar-online").waitFor({ state: "attached" });
+        }
         // Coarse pointers run the drawer layout: open it so the sidebar column
         // is on-screen before measuring or interacting.
         if (touch) {
@@ -352,7 +361,7 @@ suite.define(() => {
             };
             const body = document.querySelector<HTMLElement>(".sidebar-shell__body");
             const nav = document.querySelector<HTMLElement>(".sidebar-nav");
-            const onlineSection = document.querySelector<HTMLElement>(".sidebar-online")!;
+            const onlineSection = document.querySelector<HTMLElement>(".sidebar-online");
             const onlineList = document.querySelector<HTMLElement>(".sidebar-online__list");
             const well = document.querySelector<HTMLElement>(".sidebar-sessions");
             // The roster host mounts before its session content renders; the
@@ -395,7 +404,8 @@ suite.define(() => {
               bodyOverflow: body.scrollHeight - body.clientHeight,
               nav: bounds(nav),
               online: bounds(onlineSection),
-              onlineSectionHidden: getComputedStyle(onlineSection).display === "none",
+              onlineSectionHidden:
+                onlineSection === null || getComputedStyle(onlineSection).display === "none",
               onlineToggleVisible: (() => {
                 const toggle = document.querySelector(
                   ".sidebar-online .sidebar-session-group-toggle",
@@ -504,11 +514,13 @@ suite.define(() => {
         const resting = await readLayout();
         expect(
           resting.onlineSectionHidden,
-          shortWindow
-            ? "the short-window band hides the whole Online section"
-            : "ordinary heights keep the expanded Online section",
-        ).toBe(shortWindow);
-        expect(resting.onlineToggleVisible).toBe(!shortWindow);
+          users === 1
+            ? "solo presence renders no Online section at any height"
+            : shortWindow
+              ? "the short-window band hides the whole Online section"
+              : "ordinary heights keep the expanded Online section",
+        ).toBe(shortWindow || users === 1);
+        expect(resting.onlineToggleVisible).toBe(!shortWindow && users > 1);
         // The compact roster group header is deliberately removed with the
         // band so agent session rows start at the top of the well; agent
         // association stays on the grouped rows (data-agent-group) and
@@ -692,6 +704,69 @@ suite.define(() => {
       }
     },
   );
+
+  it("dismisses the Online filter popover when the second identity leaves", async () => {
+    await suite.withPage(
+      { viewport: { width: 1280, height: 800 }, locale: "en-US", serviceWorkers: "block" },
+      async ({ page }) => {
+        const owner = {
+          self: true,
+          id: "gateway-owner",
+          identity: { type: "profile" as const, id: "gateway-owner" },
+          name: "Shared owner",
+        };
+        const ada = {
+          id: "ada",
+          identity: { type: "profile" as const, id: "ada" },
+          name: "Ada",
+        };
+        const gateway = await installMockGateway(page, {
+          sessionKey: "agent:main:main",
+          presenceUsers: [owner, ada],
+        });
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
+        const section = page.locator(".sidebar-online");
+        const filterToggle = page.locator(".sidebar-online__filter-toggle");
+        const popover = page.locator(".sidebar-people-filter-menu");
+        await section.waitFor();
+        await filterToggle.focus();
+        await filterToggle.press("Enter");
+        await popover.waitFor();
+        // Removing Ada removes the whole section; the popover anchored to its
+        // toggle must be dismissed by the owning lifecycle instead of
+        // rendering orphaned, and keyboard focus stranded by the removal
+        // re-anchors on the brand's persistent new-session control.
+        await gateway.emitGatewayEvent("presence", {
+          presence: [{ user: { id: owner.id, identity: owner.identity, name: owner.name } }],
+        });
+        await expect.poll(() => section.count()).toBe(0);
+        await expect.poll(() => popover.count()).toBe(0);
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () =>
+                (document.activeElement as HTMLElement | null)?.classList.contains(
+                  "sidebar-brand__new-thread",
+                ) ?? false,
+            ),
+          )
+          .toBe(true);
+        // A returning second identity restores the ordinary filter flow.
+        await gateway.emitGatewayEvent("presence", {
+          presence: [
+            { user: { id: owner.id, identity: owner.identity, name: owner.name } },
+            { user: { id: ada.id, identity: ada.identity, name: ada.name } },
+          ],
+        });
+        await section.waitFor();
+        await filterToggle.focus();
+        await filterToggle.press("Enter");
+        await popover.waitFor();
+        await page.keyboard.press("Escape");
+        await expect.poll(() => popover.count()).toBe(0);
+      },
+    );
+  });
 
   it("opens every new-session plus as a native link without creating sessions", async () => {
     const context = await suite.newBrowserContext({

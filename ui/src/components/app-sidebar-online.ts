@@ -5,6 +5,7 @@ import { presenceUserKey } from "../../../src/shared/presence-user.ts";
 import { t } from "../i18n/index.ts";
 import { renderHoverMarquee } from "../lib/hover-marquee.ts";
 import {
+  hasMultiplePresenceIdentities,
   presenceViewerActivity,
   presenceActivityLabel,
   presenceViewerLabel,
@@ -19,6 +20,12 @@ import { personActivityLink, personActivityRouting } from "./person-activity-lin
 const onlineFaces = new WeakMap<AppSidebarRenderHost, readonly PresenceViewer[]>();
 
 export function renderAppSidebarOnline(host: AppSidebarRenderHost) {
+  // Solo presence renders no section: one identity — the Shared owner included,
+  // across any number of tabs or devices — is not a roster. A second distinct
+  // identity reveals the section until that person disconnects again.
+  if (!hasMultiplePresenceIdentities(host.sessionData.presencePayload)) {
+    return nothing;
+  }
   const sectionId = "online";
   const team = host.sidebarAgentsMode === "roster";
   const collapsed = team ? !host.teamOnlineExpanded : host.collapsedSessionSections.has(sectionId);
@@ -33,9 +40,6 @@ export function renderAppSidebarOnline(host: AppSidebarRenderHost) {
     onlineUsers = previousFaces;
   } else {
     onlineFaces.set(host, onlineUsers);
-  }
-  if (onlineUsers.length === 0) {
-    return nothing;
   }
   const counts = host.sessionData.ownerCounts.counts;
   const countsFor = (user: PresenceViewer) =>

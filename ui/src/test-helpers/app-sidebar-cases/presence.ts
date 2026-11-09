@@ -1,7 +1,6 @@
 import type { LitElement } from "lit";
 import { describe, expect, it, vi } from "vitest";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
-import * as presenceUsers from "../../lib/presence-users.ts";
 import { selectSessionMenuValue } from "../app-sidebar-menu.ts";
 import { focusSidebarPersonWithKeyboard } from "../app-sidebar-setup.ts";
 import {
@@ -179,11 +178,16 @@ describe("AppSidebar viewer presence", () => {
           lastActivityAt: Date.now(),
           ts: 1,
         },
+        {
+          instanceId: "self-second-tab",
+          user: { id: "self", name: "Self" },
+          lastActivityAt: Date.now(),
+          ts: 1,
+        },
       ],
     });
     await sidebar.updateComplete;
-    expect(sidebar.querySelectorAll(".sidebar-online__person")).toHaveLength(1);
-    expect(sidebar.querySelector('[data-online-user-id="self"]')).not.toBeNull();
+    expect(sidebar.querySelector(".sidebar-online")).toBeNull();
 
     gatewayHarness.publishEvent("presence", {
       presence: [
@@ -352,19 +356,21 @@ describe("AppSidebar viewer presence", () => {
     sidebar.connected = true;
     vi.useFakeTimers();
     const now = Date.now();
-    const project = presenceUsers.presenceViewerActivity;
-    vi.spyOn(presenceUsers, "presenceViewerActivity").mockImplementationOnce((user) => {
-      const state = project(user);
-      vi.setSystemTime(now + 2);
-      return state;
-    });
     gateway.publishEvent("presence", {
-      presence: [{ user: { id: "alice", name: "Alice" }, ts: now, lastActivityAt: now - 119_999 }],
+      presence: [
+        { user: { id: "alice", name: "Alice" }, ts: now, lastActivityAt: now - 119_999 },
+        // A companion identity keeps the section mounted while Alice's
+        // deadline expires.
+        { user: { id: "bob", name: "Bob" }, ts: now },
+      ],
     });
     await sidebar.updateComplete;
     const row = sidebar.querySelector<HTMLElement>('[data-online-user-id="alice"]')!;
     expect(row.dataset.presenceActivity).toBe("active");
     await vi.advanceTimersByTimeAsync(2);
+    // The deadline passed without another presence event; a fresh render
+    // evaluates the row's activity against the advanced clock.
+    sidebar.requestUpdate();
     await sidebar.updateComplete;
     expect(row.dataset.presenceActivity).toBe("idle");
   });
@@ -382,7 +388,8 @@ describe("AppSidebar viewer presence", () => {
       onlineSince: Date.now() - 300_000,
       lastActivityAt: Date.now() - 119_000,
     };
-    gateway.publishEvent("presence", { presence: [person] });
+    const teammate = { ts: Date.now(), user: { id: "bob", name: "Bob" } };
+    gateway.publishEvent("presence", { presence: [person, teammate] });
     await sidebar.updateComplete;
     const row = sidebar.querySelector<HTMLElement>('[data-online-user-id="alice"]')!;
     row.click();
@@ -394,7 +401,9 @@ describe("AppSidebar viewer presence", () => {
     expect(row.dataset.presenceActivity).toBe("idle");
     expect(card.querySelector(".person-activity-card__status")?.textContent).toContain("Idle");
     expect(card.textContent).toContain("Online for");
-    gateway.publishEvent("presence", { presence: [{ ...person, lastActivityAt: Date.now() }] });
+    gateway.publishEvent("presence", {
+      presence: [{ ...person, lastActivityAt: Date.now() }, teammate],
+    });
     await sidebar.updateComplete;
     expect(row.dataset.presenceActivity).toBe("active");
     provider.remove();
@@ -415,8 +424,9 @@ describe("AppSidebar viewer presence", () => {
         user: { id: "alice", identity: { type: "profile" as const, id: "alice" }, name: "Alice" },
         onlineSince: Date.now() - 90_000,
       };
+      const teammate = { ts: Date.now(), user: { id: "bob", name: "Bob" } };
       gateway.publishEvent("presence", {
-        presence: [person],
+        presence: [person, teammate],
       });
       await sidebar.updateComplete;
       vi.useFakeTimers();
@@ -461,14 +471,14 @@ describe("AppSidebar viewer presence", () => {
       await elapsed.updateComplete;
       expect(elapsed.textContent).toBe(elapsedBeforeDismissal);
       if (reason === "remove") {
-        expect(sidebar.querySelector(".sidebar-online")).toBeNull();
+        expect(sidebar.querySelector('[data-online-user-id="alice"]')).toBeNull();
         const returned = { ...person, ts: Date.now(), onlineSince: Date.now() };
         gateway.publishEvent("presence", {
-          presence: [{ ...person, reason: "disconnect" }, returned],
+          presence: [{ ...person, reason: "disconnect" }, returned, teammate],
         });
         await sidebar.updateComplete;
         focusSidebarPersonWithKeyboard(
-          sidebar.querySelector<HTMLElement>(".sidebar-online__person")!,
+          sidebar.querySelector<HTMLElement>('[data-online-user-id="alice"]')!,
         );
         await vi.waitFor(() =>
           expect(

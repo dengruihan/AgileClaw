@@ -16,6 +16,7 @@ import "./session-menu.ts";
 import "./mcp-app-catalog.ts";
 import "./sidebar-attention.ts";
 import { shouldHandleNavigationClick } from "../lib/navigation-click.ts";
+import { hasMultiplePresenceIdentities } from "../lib/presence-users.ts";
 import {
   buildCatalogSessionKey,
   catalogSessionKeyFromSearch,
@@ -200,6 +201,28 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
       }
     } else {
       this.narration.sync(this.narrationSyncInput());
+    }
+    // Solo presence removes the Online section, but the people-filter popover
+    // renders separately from that section and only closes on outside input,
+    // so its owning lifecycle dismisses it here with the same identity rule
+    // the section renderer applies. Only the peopleFilter menu is affected;
+    // focus that the removed section anchored moves to the brand's persistent
+    // new-session control instead of staying with a detached anchor.
+    if (
+      this.sidebarMenus.peopleFilterMenuPosition &&
+      !hasMultiplePresenceIdentities(this.sessionData.presencePayload)
+    ) {
+      const active = document.activeElement;
+      const anchorLostFocus =
+        !(active instanceof HTMLElement) ||
+        !active.isConnected ||
+        active === document.body ||
+        active === this.sidebarMenus.peopleFilterMenuTrigger ||
+        Boolean(active.closest(".sidebar-people-filter-menu"));
+      this.sidebarMenus.closePositionedMenu("peopleFilter");
+      if (anchorLostFocus) {
+        this.querySelector<HTMLElement>(".sidebar-brand__new-thread")?.focus();
+      }
     }
   }
 

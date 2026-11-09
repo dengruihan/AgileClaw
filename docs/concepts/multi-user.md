@@ -147,7 +147,7 @@ The Control UI keeps ownership and presence visually distinct:
 
 When several people watch the same session, the transcript also shows a live typing indicator above the composer. Someone typing in the Control UI streams their draft text into a softer version of their sent-message bubble, with the same sender identity, a caret, and a **Typing · not sent** label. Other typists show a three-dot bubble with the same unsent label. Drafts are ephemeral presence. They are never persisted. They never enter the session transcript or the model's context. They fade a moment after the typist pauses or sends.
 
-When the loaded session list contains fewer than two distinct owner identities and no session has recorded outside participants, OpenClaw hides all ownership and owner-filter chrome. A single-user gateway therefore looks unchanged.
+When the loaded session list contains fewer than two distinct owner identities and no session has recorded outside participants, OpenClaw hides all ownership and owner-filter chrome. The sidebar's **Online** section follows the same rule from the presence side: it renders only while at least two distinct identities are online, so a lone Shared owner on any number of tabs or devices sees no section until another person connects. A single-user gateway therefore looks unchanged.
 
 ## People cards
 

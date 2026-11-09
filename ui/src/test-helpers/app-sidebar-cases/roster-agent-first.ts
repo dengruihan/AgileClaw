@@ -392,11 +392,26 @@ describe("AppSidebar agent roster", () => {
   it("starts Online collapsed in team mode and keeps it expandable", async () => {
     const { sidebar, gatewayHarness } = await mountRoster();
     sidebar.sidebarAgentsMode = "roster";
+    const viewer = {
+      instanceId: "viewer-tab",
+      user: { id: "viewer", identity: { type: "profile" as const, id: "viewer" }, name: "Viewer" },
+    };
+    gatewayHarness.publishEvent("presence", {
+      presence: [viewer, { ...viewer, instanceId: "viewer-phone" }],
+    });
+    await sidebar.updateComplete;
+    expect(sidebar.querySelector(".sidebar-online")).toBeNull();
     gatewayHarness.publishEvent("presence", {
       presence: [
+        viewer,
+        { ...viewer, instanceId: "viewer-phone" },
         {
-          instanceId: "viewer-tab",
-          user: { id: "viewer", identity: { type: "profile", id: "viewer" }, name: "Viewer" },
+          instanceId: "teammate-tab",
+          user: {
+            id: "teammate",
+            identity: { type: "profile" as const, id: "teammate" },
+            name: "Teammate",
+          },
         },
       ],
     });
