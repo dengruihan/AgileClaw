@@ -283,6 +283,54 @@ const frozenWorkbookPayload = {
   ],
 };
 
+const hiddenRows = Array.from({ length: 60 }, (_, index) => [
+  `A ${index + 1}`,
+  `B ${index + 1}`,
+  `C ${index + 1}`,
+  `D ${index + 1}`,
+  `E ${index + 1}`,
+]);
+
+const hiddenWorkbookPayload = {
+  format: "xlsx",
+  sheets: [
+    {
+      name: "Hidden inside frozen",
+      rowCount: hiddenRows.length,
+      columnCount: 5,
+      rowNumbers: hiddenRows.map((_, index) => index + 1),
+      rows: hiddenRows,
+      columns: [
+        { width: 10 },
+        { width: 10, hidden: true },
+        { width: 10 },
+        { width: 10 },
+        { width: 10 },
+      ],
+      frozenRows: 3,
+      frozenColumns: 3,
+      mergedCells: [{ row: 0, column: 2, rowSpan: 1, columnSpan: 2 }],
+    },
+    {
+      name: "Hidden outside frozen",
+      rowCount: hiddenRows.length,
+      columnCount: 5,
+      rowNumbers: hiddenRows.map((_, index) => index + 1),
+      rows: hiddenRows,
+      columns: [
+        { width: 10 },
+        { width: 10 },
+        { width: 10, hidden: true },
+        { width: 10 },
+        { width: 10 },
+      ],
+      frozenRows: 3,
+      frozenColumns: 2,
+      mergedCells: [{ row: 1, column: 3, rowSpan: 2, columnSpan: 2 }],
+    },
+  ],
+};
+
 const officeFixtures = [
   {
     name: "layout-report.docx",
@@ -298,6 +346,11 @@ const officeFixtures = [
     name: "frozen.xlsx",
     mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     file: { officePreview: frozenWorkbookPayload, previewKind: "office" },
+  },
+  {
+    name: "hidden.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    file: { officePreview: hiddenWorkbookPayload, previewKind: "office" },
   },
 ] as const;
 
@@ -677,6 +730,122 @@ describeControlUiE2e("Control UI layout Office side-panel preview", () => {
         .poll(() => workbook.locator(".sidebar-office-sheet__column-header").first().textContent())
         .toContain("A");
       await verifyFrozenGeometry("declared", false);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("collapses hidden columns and keeps frozen offsets aligned", async () => {
+    const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
+      await installOfficeGateway(page);
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
+      await openRailFile(page, "hidden.xlsx");
+
+      const workbook = page.locator('.sidebar-office-preview[data-office-format="xlsx"]');
+      await workbook.waitFor({ state: "visible" });
+
+      const verifyHiddenSheet = async (
+        sheetName: string,
+        hiddenColumn: number,
+        expectedLetters: string[],
+      ) => {
+        await workbook.getByRole("tab", { name: sheetName }).click();
+        await expect
+          .poll(() =>
+            workbook
+              .locator(".sidebar-office-sheet__column-header")
+              .nth(hiddenColumn)
+              .getAttribute("data-column"),
+          )
+          .toBe(String(hiddenColumn));
+
+        const scroll = workbook.locator(".sidebar-office-sheet__scroll");
+        await scroll.evaluate((element) => {
+          element.scrollTop = 400;
+          element.scrollLeft = 150;
+        });
+        await expect
+          .poll(() => scroll.evaluate((element) => element.scrollTop))
+          .toBeGreaterThan(100);
+        await page.screenshot({
+          path: path.join(artifactDir, `hidden-${hiddenColumn}-scroll.png`),
+        });
+
+        const headers = await workbook
+          .locator(".sidebar-office-sheet__column-header")
+          .evaluateAll((nodes) =>
+            nodes.map((node) => {
+              const rect = node.getBoundingClientRect();
+              return {
+                column: Number(node.getAttribute("data-column")),
+                left: rect.left,
+                right: rect.right,
+                text: node.textContent?.trim() ?? "",
+                width: rect.width,
+              };
+            }),
+          );
+        expect(headers.map((header) => header.text)).toEqual(expectedLetters);
+        expect(headers[hiddenColumn]?.width ?? 1).toBeLessThanOrEqual(0.5);
+        const hiddenDataWidth = await workbook
+          .locator(`.sidebar-office-sheet__cell[data-column="${hiddenColumn}"]`)
+          .first()
+          .evaluate((element) => element.getBoundingClientRect().width);
+        expect(hiddenDataWidth).toBeLessThanOrEqual(0.5);
+
+        const afterScroll = await workbook
+          .locator(".sidebar-office-sheet__column-header")
+          .evaluateAll((nodes) =>
+            nodes.slice(0, 5).map((node) => {
+              const rect = node.getBoundingClientRect();
+              return {
+                column: Number(node.getAttribute("data-column")),
+                left: rect.left,
+                right: rect.right,
+                width: rect.width,
+              };
+            }),
+          );
+        expect(afterScroll[hiddenColumn]?.width ?? 1).toBeLessThanOrEqual(0.5);
+        if (hiddenColumn === 1) {
+          // B is inside the frozen pane; collapsing it makes frozen C start at B's boundary.
+          expect(
+            Math.abs((afterScroll[2]?.left ?? 0) - (afterScroll[1]?.left ?? 0)),
+          ).toBeLessThanOrEqual(1);
+          expect(
+            Math.abs((afterScroll[0]?.right ?? 0) - (afterScroll[1]?.left ?? 0)),
+          ).toBeLessThanOrEqual(1);
+        } else if (hiddenColumn === 2) {
+          // C is outside the frozen pane; the visible D column follows the collapsed C column.
+          expect(
+            Math.abs((afterScroll[3]?.left ?? 0) - (afterScroll[2]?.right ?? 0)),
+          ).toBeLessThanOrEqual(1);
+        }
+
+        const hit = await page.evaluate(() => {
+          const cell = document.querySelector(
+            '.sidebar-office-sheet__cell[data-row="0"][data-column="0"]',
+          );
+          if (!cell) {
+            return null;
+          }
+          const rect = cell.getBoundingClientRect();
+          const element = document.elementFromPoint(rect.left + rect.width / 2, rect.bottom - 1);
+          return element
+            ? {
+                column: element.getAttribute("data-column"),
+                row: element.getAttribute("data-row"),
+              }
+            : null;
+        });
+        expect(hit).toMatchObject({ row: "0", column: "0" });
+      };
+
+      await verifyHiddenSheet("Hidden inside frozen", 1, ["A", "", "C", "D", "E"]);
+      await verifyHiddenSheet("Hidden outside frozen", 2, ["A", "B", "", "D", "E"]);
     } finally {
       await context.close();
     }

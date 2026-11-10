@@ -1246,10 +1246,15 @@ openclaw-session-discussion {
   z-index: 3;
 }
 
-.sidebar-office-sheet__cell--hidden {
+.sidebar-office-sheet__cell--hidden,
+.sidebar-office-sheet__column-header--hidden {
   width: 0;
+  max-width: 0;
   padding: 0;
   border: 0;
+  overflow: hidden;
+  font-size: 0;
+  line-height: 0;
   visibility: hidden;
 }
 

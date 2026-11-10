@@ -244,18 +244,21 @@ function renderSheet(sheet: Sheet): TemplateResult {
       <thead>
         <tr>
           <th class="sidebar-office-sheet__corner" scope="col" aria-hidden="true"></th>
-          ${widths.map(
-            (_, column) => html`<th
+          ${widths.map((_, column) => {
+            const hidden = sheet.columns?.[column]?.hidden === true;
+            return html`<th
               class="sidebar-office-sheet__column-header ${
                 column < frozenColumns ? "sidebar-office-sheet__column-header--frozen" : ""
-              }"
+              } ${hidden ? "sidebar-office-sheet__column-header--hidden" : ""}"
               scope="col"
               data-column=${column}
+              data-hidden=${hidden ? "true" : nothing}
+              aria-hidden=${hidden ? "true" : nothing}
               style=${styleMap(column < frozenColumns ? { left: `${columnLeft(column)}px` } : {})}
             >
-              ${officeColumnLetter(column)}
-            </th>`,
-          )}
+              ${hidden ? nothing : officeColumnLetter(column)}
+            </th>`;
+          })}
         </tr>
       </thead>
       <tbody>
