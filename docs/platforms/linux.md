@@ -225,9 +225,11 @@ app quits; foreground runs stop with the app and never update themselves.
 Pairing waits for approval on the controlling Gateway, and the status row
 reports waiting, running, installed, and error states. Start, stop, and
 restart stay available in the window and the tray. Stop always revokes remote
-execution: it works without consent, and a stop during an applying start or
-restart joins that action and then stops the service for real. After the app
-restarts, a saved pairing reconnects without a new join URL or setup code.
+execution: it works without consent, and a stop during an applying start,
+restart, or re-pair preparation joins that action and then stops the service
+for real; a stopped re-pair never starts its replacement. After the app
+restarts, a saved pairing reconnects without a new join URL or setup code, and
+the tray can start that reconnect without opening the window first.
 
 Pairing declares a minimal remote-execution surface: command execution with
 its approval policy plus the occupancy lease lifecycle. File, browser, and

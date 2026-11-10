@@ -116,6 +116,12 @@ function render() {
 }
 
 function applyPayload(payload) {
+  // A command's returned snapshot can be read before the supervisor publishes
+  // the request's preparing state. Never let that older read replace a newer
+  // status event (for example, back to Running during re-pair preparation).
+  if (status && payload.revision < status.revision) {
+    return;
+  }
   status = {
     ...payload,
     consent: preferences.consent,

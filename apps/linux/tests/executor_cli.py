@@ -285,6 +285,7 @@ def main():
                 sys.exit(1)
             state = fixture_state()
             if verb == "stop" and state.get("stopDelayMs"):
+                record("service-stop-started")
                 time.sleep(state["stopDelayMs"] / 1000)
             if verb == "stop" and state.get("stopShouldFail"):
                 record("service-stop-failed")

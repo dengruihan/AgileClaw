@@ -449,10 +449,11 @@ The first-run driver pairs through the real window against a synthetic
 executor CLI: consent refusal, invalid and expired input, the 0600 handoff,
 approval waiting, stop/restart, a failing CLI installer that must never show
 command-shaped output, tray Stop in service error states, a real service stop
-while a Start or Restart is still applying, service install arguments, app
-restarts that resume a foreground pairing and restore running, stopped, and
-unknown service probes, and joined teardown. Install the native title bar test
-dependencies, then run:
+while a Start or Restart is still applying and during either re-pair
+preparation, service install arguments, app restarts that resume a foreground
+pairing and restore running, stopped, and unknown service probes, a
+window-free tray reconnect after relaunch, and joined teardown. Install the
+native title bar test dependencies, then run:
 
 ```bash
 xvfb-run -a -s '-screen 0 1440x1080x24' dbus-run-session -- \

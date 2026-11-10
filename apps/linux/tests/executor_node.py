@@ -6,10 +6,11 @@ the window, consent refusal, invalid/expired input, the 0600 handoff, approval
 waiting in both run modes, serialized delayed service stop before re-pair,
 failed service stop retaining service authority, consent-free window and tray
 stops in service error states, a real stop during an applying service
-Start/Restart, reconnect/restart with the fixed command surface, app restarts
-that restore foreground pairing and running/stopped/unknown service probes, and
-a self-exiting foreground leader whose TERM-ignoring descendant forces the real
-final-exit join window. The join URL and setup code are bearer secrets: they
+Start/Restart and during either re-pair preparation, reconnect/restart with the
+fixed command surface, app restarts that restore foreground pairing and
+running/stopped/unknown service probes, a relaunch that reconnects directly
+from the tray without opening the window, and a self-exiting foreground leader
+whose TERM-ignoring descendant forces the real final-exit join window. The join URL and setup code are bearer secrets: they
 exist only in the driver's private HOME, and every proof surface is scanned for
 them.
 """
@@ -235,6 +236,16 @@ class ExecutorNodeFixture:
                               "the restarted app's canonical service probe")
             return restarted
 
+        def tray_click(label):
+            def attempt():
+                try:
+                    self.fixture.open_native_menu(current_app(), label)
+                    return True
+                except RuntimeError:
+                    return False
+
+            self.chrome.until(attempt, f"the enabled {label} tray item")
+
         def no_handoff_files():
             handoff_dir = Path.home() / ".config/ai.openclaw.linux/executor-node"
             if not handoff_dir.exists():
@@ -285,7 +296,7 @@ class ExecutorNodeFixture:
                 raise RuntimeError("The controlled window exposed no readable text")
             return seen
 
-        def pair(target, mode=None, name="Desk", approval_wait=True, install_assert=False):
+        def pair_start(target, mode=None, name="Desk"):
             self.stage_secret(target)
             if name is not None:
                 fill("Device name (optional)", name)
@@ -294,6 +305,9 @@ class ExecutorNodeFixture:
             # intended run mode explicitly.
             click("While this app is open" if mode != "service" else "As a background service")
             click("Pair this computer")
+
+        def pair(target, mode=None, name="Desk", approval_wait=True, install_assert=False):
+            pair_start(target, mode, name)
             if approval_wait and not self.approve_file.exists():
                 wait("Status: Waiting for approval on the controlling Gateway")
                 self.approve_file.touch()
@@ -478,6 +492,39 @@ class ExecutorNodeFixture:
         self.capture("after-restart-foreground")
         self.chrome.record("app restart resumes a foreground pairing", True)
 
+        # A relaunch without opening the window must reconcile canonical
+        # pairing during startup so the tray Start control reconnects directly.
+        self.fixture.open_native_menu(current_app(), "Quit OpenClaw")
+        code = current_app().wait(timeout=15)
+        if code != 0:
+            raise RuntimeError(f"The native Quit action exited with {code}")
+        pairing_probes = self.count_events("pairing-probe")
+        restart()
+        wait("Welcome to OpenClaw", "heading")
+        self.chrome.until(lambda: self.count_events("pairing-probe") > pairing_probes,
+                          "the relaunched app's canonical pairing probe")
+        if any(title.startswith("Controlled Device")
+               for title in self.fixture.windows(current_app()).values()):
+            raise RuntimeError("The controlled-device window opened during the tray-only reconnect")
+        runs_before = self.count_events("foreground-run")
+        tray_click("Start Controlled Device")
+        self.chrome.until(lambda: self.count_events("foreground-run") >= runs_before + 1,
+                          "the tray-only foreground reconnect after relaunch")
+        self.capture("tray-reconnect-running")
+        self.chrome.record("relaunch enables a direct tray foreground reconnect", True)
+        stops_before = self.count_events("foreground-stop")
+        tray_click("Stop Controlled Device")
+
+        def tray_stop_joined():
+            stops = [item for item in self.events() if item["event"] == "foreground-stop"]
+            return len(stops) > stops_before and stops[-1].get("descendantGone") is True
+
+        self.chrome.until(tray_stop_joined, "the tray-stopped foreground tree to join")
+        self.chrome.record("tray reconnect teardown joins its process tree", True)
+        self.fixture.open_native_menu(current_app(), "Controlled Device…")
+        focus_executor()
+        wait("Status: Off")
+
         # Service pairing waits for approval in the supervised install path.
         self.approve_file.unlink(missing_ok=True)
         pair(VALID_CODE, mode="service", install_assert=True)
@@ -561,16 +608,6 @@ class ExecutorNodeFixture:
         # Tray parity for service errors: a failed stop and an unknown probe
         # both leave the service possibly running, so the tray must keep Stop
         # even after consent is withdrawn (service Stop never needs consent).
-        def tray_click(label):
-            def attempt():
-                try:
-                    self.fixture.open_native_menu(current_app(), label)
-                    return True
-                except RuntimeError:
-                    return False
-
-            self.chrome.until(attempt, f"the enabled {label} tray item")
-
         click("Start")
         wait("Status: Running (background service)")
         click("Allow remote control of this computer", prefix=True)
@@ -662,6 +699,73 @@ class ExecutorNodeFixture:
         self.chrome.record("tray stop during an applying restart runs the real service stop", True)
         click("Allow remote control of this computer", prefix=True)
         self.set_state(startDelayMs=0, restartDelayMs=0)
+
+        # Stop during re-pair preparation: the old-service stop is already in
+        # flight but the replacement child does not exist yet. Stop must cancel
+        # the preparation, run a real service stop, and never start the
+        # superseded replacement connect.
+        click("Start")
+        wait("Status: Running (background service)")
+        stop_starts_before = self.count_events("service-stop-started")
+        connect_before = self.count_events("connect-start")
+        self.set_state(requirePaired=True, stopDelayMs=8000)
+        pair_start(VALID_CODE, mode="service")
+        self.chrome.until(
+            lambda: self.count_events("service-stop-started") > stop_starts_before,
+            "the service re-pair's old-service stop",
+        )
+        self.capture("repair-preparation-service")
+        self.set_state(requirePaired=True, stopDelayMs=0)
+        click("Allow remote control of this computer", prefix=True)
+        wait("Start", "push button", predicate=lambda node:
+             in_active_window(node)
+             and not node.get_state_set().contains(Atspi.StateType.SENSITIVE))
+        stops_before = self.count_events("service-stop")
+        tray_click("Stop Controlled Device")
+        self.chrome.until(lambda: self.count_events("service-stop") > stops_before,
+                          "the real service stop after cancelling service re-pair preparation")
+        self.chrome.until(lambda: last_probe_active() is False,
+                          "the stopped probe after service re-pair preparation")
+        if self.count_events("connect-start") != connect_before:
+            raise RuntimeError("The superseded service re-pair connected")
+        if not no_handoff_files():
+            raise RuntimeError("The cancelled service re-pair left its staged secret")
+        wait("Status: Stopped (background service)")
+        self.capture("stop-repair-preparation-service")
+        self.chrome.record("tray stop during service re-pair preparation stops the old service", True)
+
+        click("Allow remote control of this computer", prefix=True)
+        click("Start")
+        wait("Status: Running (background service)")
+        stop_starts_before = self.count_events("service-stop-started")
+        connect_before = self.count_events("connect-start")
+        self.set_state(requirePaired=True, stopDelayMs=8000)
+        pair_start(JOIN_URL, mode=None)
+        self.chrome.until(
+            lambda: self.count_events("service-stop-started") > stop_starts_before,
+            "the foreground re-pair's old-service stop",
+        )
+        self.capture("repair-preparation-foreground")
+        self.set_state(requirePaired=True, stopDelayMs=0)
+        click("Allow remote control of this computer", prefix=True)
+        wait("Start", "push button", predicate=lambda node:
+             in_active_window(node)
+             and not node.get_state_set().contains(Atspi.StateType.SENSITIVE))
+        stops_before = self.count_events("service-stop")
+        click("Stop")
+        self.chrome.until(lambda: self.count_events("service-stop") > stops_before,
+                          "the real service stop after cancelling foreground re-pair preparation")
+        self.chrome.until(lambda: last_probe_active() is False,
+                          "the stopped probe after foreground re-pair preparation")
+        if self.count_events("connect-start") != connect_before:
+            raise RuntimeError("The superseded foreground re-pair connected")
+        if not no_handoff_files():
+            raise RuntimeError("The cancelled foreground re-pair left its staged secret")
+        wait("Status: Stopped (background service)")
+        self.capture("stop-repair-preparation-foreground")
+        self.chrome.record("window stop during foreground re-pair preparation stops the old service", True)
+        click("Allow remote control of this computer", prefix=True)
+        self.set_state(requirePaired=True, stopDelayMs=0)
 
         # A real app restart must restore durable canonical service status
         # instead of the new process's initial observation. Cover each probe

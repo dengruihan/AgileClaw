@@ -193,6 +193,15 @@ impl Request {
     }
 }
 
+/// Pairing request progress. `Preparing` covers the serialized old-service
+/// stop and command build, before any replacement child exists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PairingStage {
+    None,
+    Preparing,
+    Child,
+}
+
 /// What Stop means for the current run and in-flight request.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum StopTarget {
@@ -223,6 +232,7 @@ struct Pairing {
 struct Shared {
     revision: u64,
     request: Request,
+    pairing_stage: PairingStage,
     stopping: bool,
     status_revision: u64,
     status: Run,
@@ -514,9 +524,22 @@ fn pairing_missing_error() -> String {
 /// Decide what Stop means for the current run and the supervisor's active
 /// request. An app-owned pairing/install child is cancellable; a service
 /// action in flight must be joined and then stopped through the service.
-fn stop_target(run: &Run, request: ActiveRequest) -> StopTarget {
+fn stop_target(run: &Run, request: ActiveRequest, pairing_stage: PairingStage) -> StopTarget {
     if request == ActiveRequest::Service {
         return StopTarget::ServiceStop;
+    }
+    if request == ActiveRequest::PairingChild {
+        // A replacement pairing first stops any old service; no child exists
+        // yet. Stop must join that preparation and stop the service for real,
+        // not just cancel it. Once the pairing child is owned, cancelling and
+        // joining that child is the revocation.
+        if pairing_stage == PairingStage::Preparing {
+            return StopTarget::ServiceStop;
+        }
+        if pairing_stage == PairingStage::Child {
+            return StopTarget::CancelOwnedChild;
+        }
+        // No pairing work started yet; fall through to the current run state.
     }
     let cancels_owned_child = matches!(run.phase, Phase::Preparing | Phase::WaitingApproval)
         && (run.mode == Some("foreground")
@@ -548,6 +571,7 @@ impl ExecutorNode {
         let shared = Arc::new(Mutex::new(Shared {
             revision: 0,
             request: Request::Idle,
+            pairing_stage: PairingStage::None,
             stopping: false,
             status_revision: 0,
             status: Run {
@@ -668,7 +692,7 @@ impl ExecutorNode {
     /// start; canonical pairing evidence gates reconnects; service authority
     /// is retained until reconciled away.
     pub fn action(&self, action: ToolAction) -> Result<(), String> {
-        let request = {
+        let (request, needs_pairing_probe) = {
             let shared = self
                 .shared
                 .lock()
@@ -681,12 +705,15 @@ impl ExecutorNode {
                 // Start/Restart still owns the CLI action until the next request
                 // is applied, so Stop must join it and then run the real service
                 // stop instead of cancelling to an observation-only Idle pass.
-                ToolAction::Stop => match stop_target(run, shared.request.active_kind()) {
-                    StopTarget::ServiceStop => Request::Service(ToolAction::Stop),
-                    StopTarget::CancelOwnedChild
-                    | StopTarget::ForegroundChild
-                    | StopTarget::Idle => Request::Idle,
-                },
+                ToolAction::Stop => (
+                    match stop_target(run, shared.request.active_kind(), shared.pairing_stage) {
+                        StopTarget::ServiceStop => Request::Service(ToolAction::Stop),
+                        StopTarget::CancelOwnedChild
+                        | StopTarget::ForegroundChild
+                        | StopTarget::Idle => Request::Idle,
+                    },
+                    false,
+                ),
                 // Only Start/Restart are consent-gated; the service's own
                 // context is the authority for service actions (pairing
                 // evidence gates only the foreground reconnect below).
@@ -695,20 +722,81 @@ impl ExecutorNode {
                         return Err(consent_missing_error());
                     }
                     if run.service.may_exist() && run.mode == Some("service") {
-                        Request::Service(action)
+                        (Request::Service(action), false)
                     } else {
-                        if run.paired != Some(true) {
-                            return Err(pairing_missing_error());
+                        match run.paired {
+                            Some(true) => (Request::Foreground { pairing: None }, false),
+                            Some(false) => return Err(pairing_missing_error()),
+                            // A fresh process may not have reconciled canonical
+                            // pairing yet. Revalidate through the CLI owner
+                            // immediately before the side effect.
+                            None => (Request::Foreground { pairing: None }, true),
                         }
-                        Request::Foreground { pairing: None }
                     }
                 }
             }
         };
+        if needs_pairing_probe {
+            let (paired, generation) = self.revalidate_pairing()?;
+            if !paired {
+                return Err(pairing_missing_error());
+            }
+            return self.submit_at_generation(request, generation);
+        }
         self.submit(request)
     }
 
+    /// Read the CLI-owned canonical pairing fact on the caller's thread. The
+    /// result is fenced by the request generation: a supervisor transition
+    /// during the probe refuses the stale answer instead of starting on it.
+    fn revalidate_pairing(&self) -> Result<(bool, u64), String> {
+        let (revision, cli) = {
+            let shared = self
+                .shared
+                .lock()
+                .map_err(|_| "Controlled device unavailable.")?;
+            if shared.stopping {
+                return Err("OpenClaw is quitting.".into());
+            }
+            (shared.revision, OpenClawCli::locate().ok())
+        };
+        let cli = cli.ok_or_else(cli_missing_error)?;
+        let cancelled = || {
+            let shared = self.shared.lock().expect("executor state");
+            shared.stopping || shared.revision != revision
+        };
+        let mut probe_owner = None;
+        let paired = probe_paired(&cli, cancelled, &mut probe_owner)?;
+        if let Some(mut process) = probe_owner {
+            let _ = process.stop();
+        }
+        let mut current = self
+            .shared
+            .lock()
+            .map_err(|_| "Controlled device unavailable.")?;
+        if current.stopping || current.revision != revision {
+            return Err("The controlled-device state changed. Try again.".into());
+        }
+        current.status.paired = paired;
+        current.status_revision += 1;
+        Ok((paired == Some(true), revision))
+    }
+
     fn submit(&self, request: Request) -> Result<(), String> {
+        self.submit_with_generation(request, None)
+    }
+
+    /// Submit only if the supervisor generation is still the one the caller
+    /// revalidated against, so a stale pairing answer cannot start a request.
+    fn submit_at_generation(&self, request: Request, generation: u64) -> Result<(), String> {
+        self.submit_with_generation(request, Some(generation))
+    }
+
+    fn submit_with_generation(
+        &self,
+        request: Request,
+        expected_generation: Option<u64>,
+    ) -> Result<(), String> {
         {
             let mut shared = self
                 .shared
@@ -716,6 +804,9 @@ impl ExecutorNode {
                 .map_err(|_| "Controlled device unavailable.")?;
             if shared.stopping {
                 return Err("OpenClaw is quitting.".into());
+            }
+            if expected_generation.is_some_and(|expected| shared.revision != expected) {
+                return Err("The controlled-device state changed. Try again.".into());
             }
             shared.revision += 1;
             shared.request = request;
@@ -967,19 +1058,21 @@ fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>)
             }
             applied = Some(revision);
             tail.clear();
+            {
+                let mut current = shared.lock().expect("executor state");
+                current.pairing_stage = PairingStage::None;
+            }
             let cancelled = || {
                 let shared = shared.lock().expect("executor state");
                 shared.stopping || shared.revision != revision
             };
             match request {
                 Request::Idle => {
-                    // Reconcile the CLI-owned service before publishing Off so
-                    // the next Start dispatches against facts, not a retained
-                    // unknown that can race the user's next action.
-                    let paired = {
-                        let current = shared.lock().expect("executor state");
-                        (current.status.paired, current.status.detail.clone())
-                    };
+                    // Reconcile the CLI-owned service and canonical pairing
+                    // before publishing idle state so a fresh process (for
+                    // example after relaunch) can start from the tray without
+                    // opening the window, and the next Start dispatches against
+                    // facts rather than a retained unknown.
                     let cli = OpenClawCli::locate().ok();
                     let cancelled = || {
                         let shared = shared.lock().expect("executor state");
@@ -989,6 +1082,10 @@ fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>)
                         None => ServiceState::Unverified,
                         Some(cli) => probe_service_state(cli, cancelled, &mut probe_owner)
                             .unwrap_or(ServiceState::Unverified),
+                    };
+                    let paired = match &cli {
+                        None => None,
+                        Some(cli) => probe_paired(cli, cancelled, &mut probe_owner).unwrap_or(None),
                     };
                     {
                         let mut current = shared.lock().expect("executor state");
@@ -1003,7 +1100,7 @@ fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>)
                         // missing; only a reconciled service enables it.
                         mode: (cli.is_some() && service.may_exist()).then_some("service"),
                         service,
-                        paired: paired.0,
+                        paired,
                         detail: service_detail(cli.is_some(), &service),
                     };
                     publish(&app, &shared, revision, run);
@@ -1186,6 +1283,10 @@ fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>)
                     }
                     child = None;
                     child_role = None;
+                    {
+                        let mut current = shared.lock().expect("executor state");
+                        current.pairing_stage = PairingStage::None;
+                    }
                 }
             }
         }
@@ -1211,6 +1312,12 @@ fn start_pairing_request(
     } else {
         "foreground"
     };
+    {
+        let mut current = shared.lock().expect("executor state");
+        if current.revision == revision && !current.stopping {
+            current.pairing_stage = PairingStage::Preparing;
+        }
+    }
     publish(
         app,
         shared,
@@ -1243,24 +1350,49 @@ fn start_pairing_request(
             publish(app, shared, revision, run);
             None
         }
-        Ok(command) => match DesktopNodeProcess::spawn(command) {
-            Ok(process) => Some((
-                process,
-                if service_install {
-                    ChildRole::ServiceInstall
-                } else {
-                    ChildRole::ForegroundRun
-                },
-            )),
-            Err(error) => {
-                let run = {
-                    let current = shared.lock().expect("executor state");
-                    current.status.clone().error(error)
-                };
-                publish(app, shared, revision, run);
-                None
+        Ok(command) => {
+            // A superseding Stop cancels the preparation before any
+            // replacement (and its staged secret) can start.
+            if cancelled() {
+                return None;
             }
-        },
+            match DesktopNodeProcess::spawn(command) {
+                Ok(mut process) => {
+                    let current_generation = {
+                        let mut current = shared.lock().expect("executor state");
+                        if current.stopping || current.revision != revision {
+                            false
+                        } else {
+                            current.pairing_stage = PairingStage::Child;
+                            true
+                        }
+                    };
+                    if !current_generation {
+                        // The replacement was superseded between the pre-spawn
+                        // check and spawn: join it immediately so no connect
+                        // proceeds past the user's Stop.
+                        let _ = process.stop();
+                        return None;
+                    }
+                    Some((
+                        process,
+                        if service_install {
+                            ChildRole::ServiceInstall
+                        } else {
+                            ChildRole::ForegroundRun
+                        },
+                    ))
+                }
+                Err(error) => {
+                    let run = {
+                        let current = shared.lock().expect("executor state");
+                        current.status.clone().error(error)
+                    };
+                    publish(app, shared, revision, run);
+                    None
+                }
+            }
+        }
     }
 }
 
@@ -1920,14 +2052,40 @@ mod tests {
             None,
         );
         assert_eq!(
-            stop_target(&applying, ActiveRequest::Service),
+            stop_target(&applying, ActiveRequest::Service, PairingStage::None),
             StopTarget::ServiceStop
         );
-        // A supervised service install remains a cancellable app-owned child.
+        // Once the supervised pairing child exists, cancelling and joining it
+        // is the revocation.
         assert_eq!(
-            stop_target(&applying, ActiveRequest::PairingChild),
+            stop_target(&applying, ActiveRequest::PairingChild, PairingStage::Child),
             StopTarget::CancelOwnedChild
         );
+
+        // Before the replacement child exists, a pairing request is stopping
+        // the old service; Stop must run that stop for real in both modes.
+        for mode in ["foreground", "service"] {
+            let re_pair_prep =
+                test_run(Phase::Preparing, Some(mode), ServiceState::Unverified, None);
+            assert_eq!(
+                stop_target(
+                    &re_pair_prep,
+                    ActiveRequest::PairingChild,
+                    PairingStage::Preparing
+                ),
+                StopTarget::ServiceStop,
+                "{mode} re-pair preparation must stop the old service"
+            );
+            assert_eq!(
+                stop_target(
+                    &re_pair_prep,
+                    ActiveRequest::PairingChild,
+                    PairingStage::Child
+                ),
+                StopTarget::CancelOwnedChild,
+                "{mode} replacement child must be cancelled"
+            );
+        }
 
         let running = test_run(
             Phase::Running,
@@ -1938,11 +2096,11 @@ mod tests {
             Some(true),
         );
         assert_eq!(
-            stop_target(&running, ActiveRequest::Idle),
+            stop_target(&running, ActiveRequest::Idle, PairingStage::None),
             StopTarget::ServiceStop
         );
         assert_eq!(
-            stop_target(&running, ActiveRequest::Service),
+            stop_target(&running, ActiveRequest::Service, PairingStage::None),
             StopTarget::ServiceStop
         );
 
@@ -1953,7 +2111,11 @@ mod tests {
             Some(true),
         );
         assert_eq!(
-            stop_target(&foreground_preparing, ActiveRequest::PairingChild),
+            stop_target(
+                &foreground_preparing,
+                ActiveRequest::PairingChild,
+                PairingStage::Child
+            ),
             StopTarget::CancelOwnedChild
         );
         let foreground_running = test_run(
@@ -1963,12 +2125,19 @@ mod tests {
             Some(true),
         );
         assert_eq!(
-            stop_target(&foreground_running, ActiveRequest::PairingChild),
-            StopTarget::ForegroundChild
+            stop_target(
+                &foreground_running,
+                ActiveRequest::PairingChild,
+                PairingStage::Child
+            ),
+            StopTarget::CancelOwnedChild
         );
 
         let off = test_run(Phase::Off, None, ServiceState::Absent, Some(false));
-        assert_eq!(stop_target(&off, ActiveRequest::Idle), StopTarget::Idle);
+        assert_eq!(
+            stop_target(&off, ActiveRequest::Idle, PairingStage::None),
+            StopTarget::Idle
+        );
         let service_error = test_run(
             Phase::Error,
             Some("service"),
@@ -1976,7 +2145,7 @@ mod tests {
             None,
         );
         assert_eq!(
-            stop_target(&service_error, ActiveRequest::Service),
+            stop_target(&service_error, ActiveRequest::Service, PairingStage::None),
             StopTarget::ServiceStop
         );
     }
