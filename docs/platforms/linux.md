@@ -208,6 +208,30 @@ the desktop can open. Missing CLI or invalid configuration errors appear here.
 Turning sharing off, changing Primary Gateway, or quitting the app stops the old
 desktop connection. Closing the window to the tray keeps sharing active.
 
+### Controlled device
+
+**Controlled Device…** in the tray menu, or **Be controlled from another
+computer** during first-run, opens the controlled-device window. Pairing turns
+this computer into a restricted executor node for one Gateway: an approved
+operator can run commands here under the Gateway's approval policy and hold
+this device's busy-lease while connected.
+
+Paste either the Gateway's join URL or its `oc-pair://` setup code. Both are
+one-time bearer secrets until redeemed: the window stages the pasted value in a
+private owner-only file that the local CLI consumes and deletes, and never
+stores, logs, or displays it. Choose to run while the app is open or install
+the background service. The service keeps this computer available after the
+app quits; foreground runs stop with the app and never update themselves.
+Pairing waits for approval on the controlling Gateway, and the status row
+reports waiting, running, installed, and error states. Start, stop, and
+restart stay available in the window and the tray.
+
+Pairing declares a minimal remote-execution surface: command execution with
+its approval policy plus the occupancy lease lifecycle. File, browser, and
+screen capabilities are not part of pairing and need their own Gateway
+approvals. The local CLI owns pairing state, device identity, and the service
+definition; the app only remembers its consent and device-name preferences.
+
 ### First-run setup
 
 Choose **Get started** on the welcome screen, then choose where your assistant
@@ -219,6 +243,9 @@ should live:
   Gateway, enter its address under **Gateway URL**, or choose **SSH tunnel**
   and enter an SSH target such as `user@gateway-host`. The Gateway port defaults
   to `18789`.
+- **Be controlled from another computer** pairs this computer as a restricted
+  executor node through the controlled-device window; see
+  [Controlled device](#controlled-device).
 
 If the remote Gateway requires authentication, expand **Gateway authentication**
 and enter its token or password. Use one credential type, matching the remote

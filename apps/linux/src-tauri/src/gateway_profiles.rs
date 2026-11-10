@@ -58,6 +58,10 @@ struct Registry {
     keep_computer_awake: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     desktop_sharing_enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    executor_consent: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    executor_display_name: Option<String>,
 }
 
 impl Default for Registry {
@@ -68,6 +72,8 @@ impl Default for Registry {
             selected: None,
             keep_computer_awake: false,
             desktop_sharing_enabled: None,
+            executor_consent: None,
+            executor_display_name: None,
         }
     }
 }
@@ -262,6 +268,40 @@ impl GatewayProfiles {
             return Ok(());
         }
         next.desktop_sharing_enabled = Some(enabled);
+        self.commit(&mut cache, next)
+    }
+
+    pub fn executor_consent(&self) -> Result<Option<bool>, String> {
+        let mut cache = self.registry.lock().map_err(|_| CORRUPT)?;
+        Ok(self.load(&mut cache)?.executor_consent)
+    }
+
+    pub fn set_executor_consent(&self, consent: bool) -> Result<(), String> {
+        let mut cache = self.registry.lock().map_err(|_| CORRUPT)?;
+        let mut next = self.load(&mut cache)?.clone();
+        if next.executor_consent == Some(consent) {
+            return Ok(());
+        }
+        next.executor_consent = Some(consent);
+        self.commit(&mut cache, next)
+    }
+
+    pub fn executor_display_name(&self) -> Result<Option<String>, String> {
+        let mut cache = self.registry.lock().map_err(|_| CORRUPT)?;
+        Ok(self.load(&mut cache)?.executor_display_name.clone())
+    }
+
+    pub fn set_executor_display_name(&self, name: Option<&str>) -> Result<(), String> {
+        let mut cache = self.registry.lock().map_err(|_| CORRUPT)?;
+        let mut next = self.load(&mut cache)?.clone();
+        let name = name
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string);
+        if next.executor_display_name == name {
+            return Ok(());
+        }
+        next.executor_display_name = name;
         self.commit(&mut cache, next)
     }
 
@@ -506,6 +546,38 @@ mod tests {
             store(&vault).desktop_sharing_enabled().unwrap(),
             Some(false)
         );
+    }
+
+    #[test]
+    fn executor_preferences_persist_independently_and_preserve_absence() {
+        let vault = MemoryCredential::default();
+        vault.0.lock().unwrap().value =
+            Some(br#"{"version":1,"profiles":[],"selected":null}"#.to_vec());
+        let before = vault.0.lock().unwrap().value.clone();
+        let profiles = store(&vault);
+        assert_eq!(profiles.executor_consent().unwrap(), None);
+        assert_eq!(profiles.executor_display_name().unwrap(), None);
+        assert_eq!(vault.0.lock().unwrap().value, before);
+        profiles.set_executor_consent(true).unwrap();
+        profiles
+            .set_executor_display_name(Some("  Desk  "))
+            .unwrap();
+        let restarted = store(&vault);
+        assert_eq!(restarted.executor_consent().unwrap(), Some(true));
+        assert_eq!(
+            restarted.executor_display_name().unwrap().as_deref(),
+            Some("Desk")
+        );
+        restarted.set_executor_consent(false).unwrap();
+        restarted.set_executor_display_name(Some("   ")).unwrap();
+        let restarted = store(&vault);
+        assert_eq!(restarted.executor_consent().unwrap(), Some(false));
+        assert_eq!(restarted.executor_display_name().unwrap(), None);
+        assert_eq!(store(&vault).list().unwrap().len(), 0);
+        vault.0.lock().unwrap().fail_write = true;
+        assert!(restarted.set_executor_consent(true).is_err());
+        assert_eq!(restarted.executor_consent().unwrap(), Some(false));
+        assert_eq!(store(&vault).executor_consent().unwrap(), Some(false));
     }
 
     #[cfg(target_os = "macos")]

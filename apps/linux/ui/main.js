@@ -10,6 +10,7 @@ const elements = {
   connectionChoices: document.querySelector("#connection-choices"),
   connectionLocal: document.querySelector("#connection-local"),
   connectionRemote: document.querySelector("#connection-remote"),
+  connectionExecutor: document.querySelector("#connection-executor"),
   description: document.querySelector("#description"),
   discovery: document.querySelector("#discovery"),
   eyebrow: document.querySelector("#eyebrow"),
@@ -648,6 +649,11 @@ elements.installButton.addEventListener("click", () => {
 elements.welcomeContinue.addEventListener("click", renderConnectionChoices);
 elements.connectionLocal.addEventListener("click", () => selectConnection("local"));
 elements.connectionRemote.addEventListener("click", () => selectConnection("remote"));
+elements.connectionExecutor.addEventListener("click", () => {
+  void invoke("executor_node_request", { message: { type: "open" } }).catch((error) => {
+    showRemoteFeedback(friendlyError(error), true);
+  });
+});
 elements.setupBack.addEventListener("click", () =>
   editingConnection ? closeConnectionSettings() : renderWelcome(),
 );

@@ -17,6 +17,7 @@ fn main() {
         "connect_discovered_gateway",
         "connect_remote_gateway",
         "discover_gateways",
+        "executor_node_request",
         "gateway_request",
         "gateway_profile_request",
         "gateway_action",

@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-executor-node-request"
+description = "Enables controlled-device pairing, status, consent, and start/stop/restart actions."
+commands.allow = ["executor_node_request"]

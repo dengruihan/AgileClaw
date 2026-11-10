@@ -7,6 +7,7 @@ mod desktop_bridge;
 mod desktop_node;
 mod desktop_node_process;
 mod discovery;
+mod executor_node;
 mod gateway;
 mod gateway_control_auth;
 mod gateway_device_identity;
@@ -1712,6 +1713,9 @@ impl DesktopState {
         if let Some(node) = app.try_state::<desktop_node::DesktopNode>() {
             node.stop();
         }
+        if let Some(node) = app.try_state::<executor_node::ExecutorNode>() {
+            node.stop();
+        }
         if let Some(power) = app.try_state::<keep_awake::KeepAwake>() {
             power.stop();
         }
@@ -1723,6 +1727,9 @@ impl DesktopState {
         let app = app.clone();
         thread::spawn(move || {
             if let Some(node) = app.try_state::<desktop_node::DesktopNode>() {
+                node.wait_stopped();
+            }
+            if let Some(node) = app.try_state::<executor_node::ExecutorNode>() {
                 node.wait_stopped();
             }
             if let Some(power) = app.try_state::<keep_awake::KeepAwake>() {
@@ -3433,6 +3440,10 @@ fn main() {
             app.handle().clone(),
             Arc::clone(&profiles),
         )?);
+        app.manage(executor_node::ExecutorNode::start(
+            app.handle().clone(),
+            Arc::clone(&profiles),
+        )?);
         #[cfg(target_os = "linux")]
         app.manage(gateway_sleep_logind::SleepBridge::start(
             app.handle().clone(),
@@ -3527,6 +3538,7 @@ fn main() {
         discovery::connect_discovered_gateway,
         connect_remote_gateway,
         discovery::discover_gateways,
+        executor_node::executor_node_request,
         install_cli,
         gateway_action,
         native_browser_bridge::native_browser_request,

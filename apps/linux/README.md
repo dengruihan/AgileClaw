@@ -1,6 +1,6 @@
 # OpenClaw for Linux
 
-The Linux companion is a Tauri v2 desktop shell for local and remote OpenClaw Gateways. It discovers nearby Gateways over Bonjour, installs the CLI when local setup needs it, delegates local Gateway service management to `openclaw gateway`, opens the selected Gateway's Control UI, and stays available in the system tray.
+The Linux companion is a Tauri v2 desktop shell for local and remote OpenClaw Gateways. It discovers nearby Gateways over Bonjour, installs the CLI when local setup needs it, delegates local Gateway service management to `openclaw gateway`, opens the selected Gateway's Control UI, and stays available in the system tray. **Controlled Device…** pairs the same computer as a restricted executor node through a GUI-only flow.
 
 On macOS, the Tauri build is named **OpenClaw-Tauri** so it can be installed alongside the native **OpenClaw** app. It retains its separate bundle identity when updated.
 
@@ -417,6 +417,50 @@ package-managed installs still link to the existing release page. The
 `linux-stable` publication channel does not change those client defaults.
 Changing them requires separate release-owner approval and signed
 installed-client migration proof.
+
+## Controlled device
+
+**Controlled Device…** in the tray menu, or **Be controlled from another
+computer** on the first-run screen, opens the controlled-device window. It
+pairs this computer to one Gateway as a restricted executor node: an approved
+operator can run commands here under the Gateway's approval policy and hold
+this device's busy-lease while connected. Pairing accepts either the Gateway
+join URL or its `oc-pair://` setup code, requires an explicit remote-control
+consent, and offers **While this app is open** or **As a background service**.
+
+Both pairing forms are one-time bearer secrets until redeemed. The window
+stages the pasted value in a 0600 handoff file under the app's config
+directory, the CLI consumes and deletes it during pairing, and the app never
+places it in arguments, environment, logs, status text, or service
+definitions. Pairing declares only command execution with its approval policy
+plus the occupancy lease lifecycle; file, browser, and screen capabilities
+need their own Gateway approvals. Foreground runs opt out of node
+self-auto-update because the app updater owns runtime changes, and a stopped
+foreground run always rejoins its whole process tree.
+
+The CLI keeps canonical pairing state, device identity, and the service
+definition. The app remembers only its consent and device-name preferences in
+its credential store, and the tray mirrors the same status and
+start/stop/restart controls as the window.
+
+### Native controlled-device regression on Linux
+
+The first-run driver pairs through the real window against a synthetic
+executor CLI: consent refusal, invalid and expired input, the 0600 handoff,
+approval waiting, stop/restart, service install arguments, an app restart with
+durable service status, and joined teardown. Install the native title bar test
+dependencies, then run:
+
+```bash
+xvfb-run -a -s '-screen 0 1440x1080x24' dbus-run-session -- \
+  /usr/bin/python3 apps/linux/tests/first_run.py \
+  apps/linux/src-tauri/target/debug/openclaw-desktop --executor \
+  --artifacts-dir /tmp/openclaw-executor-proof
+```
+
+The driver owns an isolated HOME, loopback session, and read-only fixture CLI;
+no real Gateway or account is used. Screenshots and JSON results remain in the
+artifact directory.
 
 ## Desktop sharing
 
