@@ -216,6 +216,7 @@ export async function resolveNodeProgramArguments(params: {
   installedAppsSharing?: boolean;
   commands?: string[];
   allCommands?: boolean;
+  executor?: boolean;
   dev?: boolean;
   runtime: GatewayDaemonRuntime;
   runtimePath?: string;
@@ -248,6 +249,9 @@ export async function resolveNodeProgramArguments(params: {
     args.push("--all-commands");
   } else if (params.commands !== undefined) {
     args.push("--commands", params.commands.join(","));
+  }
+  if (params.executor) {
+    args.push("--executor");
   }
   return resolveCliProgramArguments({
     args,

@@ -1,6 +1,7 @@
 import { Option, type Command } from "commander";
 import { formatDocsLink } from "../../../packages/terminal-core/src/links.js";
 import { theme } from "../../../packages/terminal-core/src/theme.js";
+import { NODE_EXECUTOR_PROFILE } from "../../infra/node-commands.js";
 import { loadNodeHostConfig } from "../../node-host/config.js";
 import { defaultRuntime } from "../../runtime.js";
 import { inheritOptionFromParent } from "../command-options.js";
@@ -30,6 +31,10 @@ export function registerNodeCli(program: Command) {
     () =>
       `\n${theme.heading("Examples:")}\n${formatHelpExamples([
         ["openclaw node run --host 127.0.0.1 --port 18789", "Run the node host in the foreground."],
+        [
+          "openclaw node run --executor",
+          "Run restricted to the executor profile (tool execution only).",
+        ],
         ["openclaw node status", "Check node host service status."],
         ["openclaw node install", "Install the node host service."],
         ["openclaw node start", "Start the installed node host service."],
@@ -119,6 +124,10 @@ export function registerNodeCli(program: Command) {
         parentStdin: opts.parentStdin,
         commands: opts.commands ?? inheritOptionFromParent<string[]>(command, "commands"),
         allCommands: opts.allCommands ?? inheritOptionFromParent<boolean>(command, "allCommands"),
+        profile:
+          (opts.executor ?? inheritOptionFromParent<boolean>(command, "executor")) === true
+            ? NODE_EXECUTOR_PROFILE
+            : undefined,
       });
     });
 
@@ -156,6 +165,7 @@ export function registerNodeCli(program: Command) {
         ...opts,
         commands: opts.commands ?? inheritOptionFromParent<string[]>(command, "commands"),
         allCommands: opts.allCommands ?? inheritOptionFromParent<boolean>(command, "allCommands"),
+        executor: opts.executor ?? inheritOptionFromParent<boolean>(command, "executor"),
       });
     });
 

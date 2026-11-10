@@ -14,6 +14,7 @@ import { isLoopbackHost } from "../gateway/net.js";
 import { cancelUnreadResponseBody, readResponseWithLimit } from "../infra/http-body.js";
 import { fetchWithSsrFGuard } from "../infra/net/fetch-guard.js";
 import { normalizeHostname } from "../infra/net/hostname.js";
+import { NODE_EXECUTOR_PROFILE } from "../infra/node-commands.js";
 import { loadNodeHostConfig, type NodeHostGatewayConfig } from "../node-host/config.js";
 import { formatGatewayCandidateUrl } from "../node-host/gateway-candidate-connection.js";
 import {
@@ -42,6 +43,7 @@ type ConnectCommandOptions = {
   displayName?: string;
   commands?: string[];
   allCommands?: boolean;
+  executor?: boolean;
 };
 
 type PairingSetupPayload = ReturnType<typeof decodePairingSetupCode>;
@@ -158,6 +160,7 @@ function formatMissingTargetError(
     ...(opts.displayName !== undefined ? ["--display-name", quote(opts.displayName)] : []),
     ...(opts.commands ? ["--commands", quote(opts.commands.join(","))] : []),
     ...(opts.allCommands ? ["--all-commands"] : []),
+    ...(opts.executor ? ["--executor"] : []),
   ];
   const pair = `mint a join URL on the Gateway host with ${command("openclaw devices join-code")}, then run: ${command("openclaw connect <join-url>", ...(opts.service ? ["--service"] : []), ...sessionHostFlags, ...hostFlags)}`;
   if (!savedGateway) {
@@ -287,6 +290,7 @@ async function runConnectCommand(
     displayName: opts.displayName,
     commands: opts.commands,
     allCommands: opts.allCommands,
+    profile: opts.executor ? NODE_EXECUTOR_PROFILE : undefined,
   };
 
   if (!opts.service) {
@@ -315,6 +319,7 @@ async function runConnectCommand(
     displayName: opts.displayName,
     commands: opts.commands,
     allCommands: opts.allCommands,
+    executor: opts.executor,
     force: true,
   });
 }

@@ -249,12 +249,24 @@ describe("node-host SQLite config", () => {
     const params = { fallbackDisplayName: "node", gateway: {}, env };
     const profiled = await configureNodeHost({ ...params, profile: "executor" });
     expect(profiled.profile).toBe("executor");
+    closeOpenClawStateDatabaseForTest();
+    await expect(loadNodeHostConfig(env)).resolves.toMatchObject({ profile: "executor" });
     await expect(configureNodeHost(params)).resolves.toMatchObject({ profile: "executor" });
 
     const cleared = await configureNodeHost({ ...params, allCommands: true });
     expect(cleared).not.toHaveProperty("profile");
     closeOpenClawStateDatabaseForTest();
     await expect(loadNodeHostConfig(env)).resolves.not.toHaveProperty("profile");
+  });
+
+  it("rejects an unsupported persisted executor profile instead of widening the surface", async () => {
+    const { env } = makeTestEnv();
+    writeConfigMachineState(
+      NODE_HOST_CONFIG_KEY,
+      { version: 1, nodeId: "node", profile: "operator" },
+      { env },
+    );
+    await expect(loadNodeHostConfig(env)).rejects.toThrow("unsupported profile");
   });
 
   it("keeps the first committed implicit node id across processes", async ({ signal }) => {

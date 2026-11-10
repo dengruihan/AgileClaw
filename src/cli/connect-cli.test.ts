@@ -196,6 +196,14 @@ describe("connect cli", () => {
       reconnect: "openclaw node run --session-host --display-name 'O''Brien'",
       pair: "openclaw connect <join-url> --session-host --display-name 'O''Brien'",
     },
+    {
+      name: "executor-profile foreground node",
+      platform: "linux",
+      args: ["--executor"],
+      profile: undefined,
+      reconnect: "openclaw node run --executor",
+      pair: "openclaw connect <join-url> --executor",
+    },
   ] as const)(
     "points a paired $name without a target at its saved pairing",
     async ({ platform, args, profile, reconnect, pair }) => {
@@ -401,10 +409,44 @@ describe("connect cli", () => {
     },
   );
 
+  it.each([false, true])(
+    "forwards the executor profile through connect (service=%s)",
+    async (service) => {
+      await runConnect([setupCode(), "--executor", ...(service ? ["--service"] : [])]);
+      expect(mocks.runNodeHost).toHaveBeenCalledWith(
+        expect.objectContaining({ profile: "executor" }),
+      );
+      if (service) {
+        expect(mocks.runNodeDaemonInstall).toHaveBeenCalledWith(
+          expect.objectContaining({ executor: true, force: true }),
+        );
+      } else {
+        expect(mocks.runNodeDaemonInstall).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("keeps the executor profile compatible with an explicit connect --commands allowlist", async () => {
+    await runConnect([setupCode(), "--executor", "--commands", "fixture.read"]);
+    expect(mocks.runNodeHost).toHaveBeenCalledWith(
+      expect.objectContaining({ profile: "executor", commands: ["fixture.read"] }),
+    );
+    expect(mocks.runNodeDaemonInstall).not.toHaveBeenCalled();
+  });
+
   it("rejects --all-commands with --commands before consuming the join target", async () => {
     await expect(
       runConnect([setupCode(), "--all-commands", "--commands", "fixture.read"]),
     ).rejects.toThrow(/--all-commands.*--commands/);
+    expect(mocks.loadNodeHostConfig).not.toHaveBeenCalled();
+    expect(mocks.runNodeHost).not.toHaveBeenCalled();
+    expect(mocks.runNodeDaemonInstall).not.toHaveBeenCalled();
+  });
+
+  it("rejects --all-commands with --executor before consuming the join target", async () => {
+    await expect(runConnect([setupCode(), "--all-commands", "--executor"])).rejects.toThrow(
+      /--all-commands.*--executor/,
+    );
     expect(mocks.loadNodeHostConfig).not.toHaveBeenCalled();
     expect(mocks.runNodeHost).not.toHaveBeenCalled();
     expect(mocks.runNodeDaemonInstall).not.toHaveBeenCalled();

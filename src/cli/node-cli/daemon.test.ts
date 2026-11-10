@@ -337,6 +337,12 @@ describe("runNodeDaemonInstall", () => {
     });
   });
 
+  it("forwards the executor profile to the install plan", async () => {
+    await runNodeDaemonInstall({ force: true, executor: true });
+    expectPlan({ executor: true });
+    expect(mocks.service.install).toHaveBeenCalledOnce();
+  });
+
   it("forwards a full-surface reset when replacing a restricted service", async () => {
     mocks.loadNodeHostConfig.mockResolvedValue({
       gateway: { host: "saved-gateway.local", port: 18789 },

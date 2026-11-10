@@ -188,6 +188,54 @@ describe("registerNodeCli", () => {
     },
   );
 
+  it.each(["run", "install"] as const)(
+    "selects the executor profile before or after node %s",
+    async (leaf) => {
+      for (const args of [
+        ["--executor", leaf],
+        [leaf, "--executor"],
+      ]) {
+        await run(args);
+        if (leaf === "run") {
+          expect(daemonMocks.runNodeHost).toHaveBeenLastCalledWith(
+            expect.objectContaining({ profile: "executor" }),
+          );
+        } else {
+          expect(daemonMocks.runNodeDaemonInstall).toHaveBeenLastCalledWith(
+            expect.objectContaining({ executor: true }),
+          );
+        }
+      }
+    },
+  );
+
+  it("keeps the executor profile compatible with an explicit command allowlist", async () => {
+    await run(["run", "--executor", "--commands", "fixture.read"]);
+    expectHost({ profile: "executor", commands: ["fixture.read"] });
+  });
+
+  it("leaves the executor profile unset without --executor", async () => {
+    await run(["run"]);
+    expect(daemonMocks.runNodeHost.mock.calls[0]?.[0].profile).toBeUndefined();
+  });
+
+  it.each(["run", "install"] as const)(
+    "rejects --all-commands with --executor for node %s",
+    async (leaf) => {
+      for (const args of [
+        [leaf, "--all-commands", "--executor"],
+        ["--all-commands", leaf, "--executor"],
+        ["--executor", leaf, "--all-commands"],
+        ["--executor", "--all-commands", leaf],
+      ]) {
+        await expect(run(args)).rejects.toThrow(/--all-commands.*--executor/);
+      }
+      expect(daemonMocks.runNodeHost).not.toHaveBeenCalled();
+      expect(daemonMocks.runNodeDaemonInstall).not.toHaveBeenCalled();
+      expect(daemonMocks.loadNodeHostConfig).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([undefined, "--ephemeral", "--session-host"])(
     "hosts worker turns only on request: %s",
     async (flag) => {
