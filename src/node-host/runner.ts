@@ -2,7 +2,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import type { CloudflareAccessCredentials } from "../../packages/gateway-client/src/cloudflare-access.js";
-import { gatewayOriginScope } from "../../packages/gateway-client/src/gateway-origin-scope.js";
 import { startGatewayClientWhenEventLoopReady } from "../../packages/gateway-client/src/readiness.js";
 import {
   GATEWAY_CLIENT_MODES,
@@ -15,7 +14,6 @@ import { copyConfigResolutionFactsExcept } from "../config/resolution-facts.js";
 import { GatewayClientRequestError } from "../gateway/client.js";
 import { resolveGatewayCredentialsWithSecretInputs } from "../gateway/credentials-secret-inputs.js";
 import { resolveExplicitGatewayAuth } from "../gateway/credentials.js";
-import { loadDeviceAuthTokenReadOnly } from "../infra/device-auth-store.js";
 import {
   loadDeviceIdentityIfPresent,
   loadOrCreateDeviceIdentity,
@@ -28,10 +26,7 @@ import { createDeferredCore } from "../shared/deferred.js";
 import { VERSION } from "../version.js";
 import { configureNodeHost, loadNodeHostConfig, type NodeHostGatewayConfig } from "./config.js";
 import { startNodeHostConnection } from "./connection.js";
-import {
-  createNodeHostGatewayCandidateConnection,
-  formatGatewayCandidateUrl,
-} from "./gateway-candidate-connection.js";
+import { createNodeHostGatewayCandidateConnection } from "./gateway-candidate-connection.js";
 import {
   resolveNodeHostCloudflareAccess,
   type NodeHostCloudflareAccessConfig,
@@ -48,6 +43,7 @@ import {
   setNodeHostLauncherRestartArguments,
   watchNodeHostParentStdin,
 } from "./launcher-client.js";
+import { canReuseNodeHostDeviceToken } from "./resumable-gateway.js";
 import { prepareNodeHostRuntime } from "./runtime.js";
 import { ensureNodeHostStateReady } from "./startup-state-readiness.js";
 
@@ -94,30 +90,6 @@ const NODE_HOST_EXIT_ON_RECONNECT_PAUSE_CODES: ReadonlySet<string> = new Set([
   ConnectErrorDetailCodes.CLIENT_VERSION_MISMATCH,
 ]);
 
-async function canReuseNodeHostDeviceToken(params: {
-  savedGateway?: NodeHostGatewayConfig;
-  gatewayCandidates: readonly NodeHostGatewayConfig[];
-  deviceId: string;
-  env?: NodeJS.ProcessEnv;
-}): Promise<boolean> {
-  const savedGatewayScope = params.savedGateway
-    ? gatewayOriginScope(formatGatewayCandidateUrl(params.savedGateway))
-    : undefined;
-  return Boolean(
-    savedGatewayScope &&
-    params.gatewayCandidates.every(
-      (candidate) => gatewayOriginScope(formatGatewayCandidateUrl(candidate)) === savedGatewayScope,
-    ) &&
-    (
-      await loadDeviceAuthTokenReadOnly({
-        deviceId: params.deviceId,
-        role: "node",
-        env: params.env ?? process.env,
-      })
-    )?.token,
-  );
-}
-
 async function resolveNodeHostGatewayCredentials(params: {
   config: OpenClawConfig;
   savedGateway?: NodeHostGatewayConfig;
@@ -163,25 +135,6 @@ function buildNodeHostLocalAuthConfig(config: OpenClawConfig): OpenClawConfig {
     nextConfig.gateway.remote.password = undefined;
   }
   return nextConfig;
-}
-
-/**
- * The saved Gateway endpoint when a node credential exists to reconnect without a setup code.
- * Node tokens are not bound to an endpoint, so callers must present the reconnect as conditional.
- */
-export async function loadResumableNodeHostGateway(): Promise<NodeHostGatewayConfig | undefined> {
-  // A failed first enrollment saves the endpoint before any device token exists.
-  const gateway = (await loadNodeHostConfig())?.gateway;
-  const identity = gateway ? loadDeviceIdentityIfPresent() : null;
-  return gateway &&
-    identity &&
-    (await canReuseNodeHostDeviceToken({
-      savedGateway: gateway,
-      gatewayCandidates: [gateway],
-      deviceId: identity.deviceId,
-    }))
-    ? gateway
-    : undefined;
 }
 
 export async function runNodeHost(opts: NodeHostRunOptions): Promise<void> {

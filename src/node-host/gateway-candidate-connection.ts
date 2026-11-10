@@ -11,6 +11,7 @@ import {
 } from "../gateway/client.js";
 import type { ComputerUseCapabilityDescriptor } from "../plugins/computer-use-contract.js";
 import type { NodeHostGatewayConfig } from "./config.js";
+import { formatGatewayCandidateUrl } from "./gateway-candidate-url.js";
 
 type GatewayCandidateEvent = Parameters<NonNullable<GatewayClientOptions["onEvent"]>>[0];
 type GatewayCandidateHello = Parameters<NonNullable<GatewayClientOptions["onHelloOk"]>>[0];
@@ -43,20 +44,6 @@ type GatewayCandidateConnectionParams = {
   onClose: (code: number, reason: string, info?: GatewayClientCloseInfo) => void;
   onWinningCandidate: (candidate: NodeHostGatewayConfig) => void;
 };
-
-export function formatGatewayCandidateUrl(gateway: NodeHostGatewayConfig): string {
-  const host = gateway.host ?? "127.0.0.1";
-  const urlHost =
-    host.includes(":") && !(host.startsWith("[") && host.endsWith("]")) ? `[${host}]` : host;
-  const port = gateway.port ?? 18789;
-  const scheme = gateway.tls ? "wss" : "ws";
-  const contextPath = gateway.contextPath
-    ? gateway.contextPath.startsWith("/")
-      ? gateway.contextPath
-      : `/${gateway.contextPath}`
-    : "";
-  return `${scheme}://${urlHost}:${port}${contextPath}`;
-}
 
 function canTryNextGatewayCandidate(info: GatewayClientCloseInfo | undefined): boolean {
   return info?.phase === "pre-hello" && info.connectRequestSent === false;

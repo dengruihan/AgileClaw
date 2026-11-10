@@ -5,8 +5,9 @@ progress and a failing installer whose command-shaped raw output must not reach
 the window, consent refusal, invalid/expired input, the 0600 handoff, approval
 waiting in both run modes, serialized delayed service stop before re-pair,
 failed service stop retaining service authority, consent-free window and tray
-stops in service error states, reconnect/restart with the fixed command
-surface, app restarts that restore running/stopped/unknown service probes, and
+stops in service error states, a real stop during an applying service
+Start/Restart, reconnect/restart with the fixed command surface, app restarts
+that restore foreground pairing and running/stopped/unknown service probes, and
 a self-exiting foreground leader whose TERM-ignoring descendant forces the real
 final-exit join window. The join URL and setup code are bearer secrets: they
 exist only in the driver's private HOME, and every proof surface is scanned for
@@ -209,6 +210,30 @@ class ExecutorNodeFixture:
 
         def focus_executor():
             self.chrome.command("wmctrl", "-ia", executor_window())
+
+        def restart_app():
+            # Quit through the real tray action, relaunch, and reopen the
+            # window so the new process must reconcile canonical CLI state.
+            self.fixture.open_native_menu(current_app(), "Quit OpenClaw")
+            code = current_app().wait(timeout=15)
+            if code != 0:
+                raise RuntimeError(f"The native Quit action exited with {code}")
+            probes = self.count_events("status-probe")
+            restarted = restart()
+            wait("Welcome to OpenClaw", "heading")
+
+            def open_controlled_device():
+                try:
+                    self.fixture.open_native_menu(restarted, "Controlled Device…")
+                    return True
+                except RuntimeError:
+                    return False
+
+            self.chrome.until(open_controlled_device, "the Controlled Device tray item")
+            focus_executor()
+            self.chrome.until(lambda: self.count_events("status-probe") > probes,
+                              "the restarted app's canonical service probe")
+            return restarted
 
         def no_handoff_files():
             handoff_dir = Path.home() / ".config/ai.openclaw.linux/executor-node"
@@ -439,6 +464,20 @@ class ExecutorNodeFixture:
                           "the restarted foreground tree to join")
         self.chrome.record("reconnect and restart never resend a pairing secret", True)
 
+        # A foreground pairing must resume after a real app restart from the
+        # CLI-owned canonical record: no new secret and no service involved.
+        restart_app()
+        wait("Status: Off")
+        wait("Start", "push button", predicate=lambda node:
+             in_active_window(node) and node.get_state_set().contains(Atspi.StateType.SENSITIVE))
+        runs_before = self.count_events("foreground-run")
+        click("Start")
+        self.chrome.until(lambda: self.count_events("foreground-run") >= runs_before + 1,
+                          "the foreground reconnect after an app restart")
+        wait("Status: Running")
+        self.capture("after-restart-foreground")
+        self.chrome.record("app restart resumes a foreground pairing", True)
+
         # Service pairing waits for approval in the supervised install path.
         self.approve_file.unlink(missing_ok=True)
         pair(VALID_CODE, mode="service", install_assert=True)
@@ -572,31 +611,61 @@ class ExecutorNodeFixture:
         self.chrome.record("tray keeps stop after an unknown service probe without consent", True)
         click("Allow remote control of this computer", prefix=True)
 
+        # Stop while a service Start/Restart is still applying: the in-flight
+        # CLI action must be joined and then stopped for real, including after
+        # consent withdrawal and from the tray.
+        def last_probe_active():
+            probes = [item for item in self.events() if item["event"] == "status-probe"]
+            return probes[-1].get("active") if probes else None
+
+        self.set_state(startDelayMs=8000)
+        starts_before = self.count_events("service-start")
+        click("Start")
+        self.chrome.until(lambda: self.count_events("service-start") >= starts_before + 1,
+                          "the applying service start")
+        click("Allow remote control of this computer", prefix=True)
+        wait("Start", "push button", predicate=lambda node:
+             in_active_window(node)
+             and not node.get_state_set().contains(Atspi.StateType.SENSITIVE))
+        stops_before = self.count_events("service-stop")
+        click("Stop")
+        self.chrome.until(lambda: self.count_events("service-stop") >= stops_before + 1,
+                          "the real service stop after an applying start")
+        self.chrome.until(lambda: last_probe_active() is False,
+                          "the stopped service probe after an applying start")
+        wait("Status: Stopped (background service)")
+        self.capture("stop-applying-start")
+        self.chrome.record("stop during an applying start runs the real service stop", True)
+
+        self.set_state(startDelayMs=0, restartDelayMs=8000)
+        click("Allow remote control of this computer", prefix=True)
+        wait("Start", "push button", predicate=lambda node:
+             in_active_window(node) and node.get_state_set().contains(Atspi.StateType.SENSITIVE))
+        click("Start")
+        wait("Status: Running (background service)")
+        restarts_before = self.count_events("service-restart")
+        click("Restart")
+        self.chrome.until(lambda: self.count_events("service-restart") >= restarts_before + 1,
+                          "the applying service restart")
+        click("Allow remote control of this computer", prefix=True)
+        wait("Start", "push button", predicate=lambda node:
+             in_active_window(node)
+             and not node.get_state_set().contains(Atspi.StateType.SENSITIVE))
+        stops_before = self.count_events("service-stop")
+        tray_click("Stop Controlled Device")
+        self.chrome.until(lambda: self.count_events("service-stop") >= stops_before + 1,
+                          "the consent-free tray stop during an applying restart")
+        self.chrome.until(lambda: last_probe_active() is False,
+                          "the stopped service probe after an applying restart")
+        wait("Status: Stopped (background service)")
+        self.capture("stop-applying-restart")
+        self.chrome.record("tray stop during an applying restart runs the real service stop", True)
+        click("Allow remote control of this computer", prefix=True)
+        self.set_state(startDelayMs=0, restartDelayMs=0)
+
         # A real app restart must restore durable canonical service status
         # instead of the new process's initial observation. Cover each probe
         # result separately: stopped, running, and unknown.
-        def restart_app():
-            self.fixture.open_native_menu(current_app(), "Quit OpenClaw")
-            code = current_app().wait(timeout=15)
-            if code != 0:
-                raise RuntimeError(f"The native Quit action exited with {code}")
-            probes = self.count_events("status-probe")
-            restarted = restart()
-            wait("Welcome to OpenClaw", "heading")
-
-            def open_controlled_device():
-                try:
-                    self.fixture.open_native_menu(restarted, "Controlled Device…")
-                    return True
-                except RuntimeError:
-                    return False
-
-            self.chrome.until(open_controlled_device, "the Controlled Device tray item")
-            focus_executor()
-            self.chrome.until(lambda: self.count_events("status-probe") > probes,
-                              "the restarted app's canonical service probe")
-            return restarted
-
         restart_app()
         wait("Status: Stopped (background service)")
         self.capture("after-restart-stopped")

@@ -175,6 +175,36 @@ enum Request {
     Service(ToolAction),
 }
 
+/// The supervisor's active owner, used to decide what Stop must join first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ActiveRequest {
+    Idle,
+    Service,
+    PairingChild,
+}
+
+impl Request {
+    fn active_kind(&self) -> ActiveRequest {
+        match self {
+            Self::Service(_) => ActiveRequest::Service,
+            Self::Foreground { .. } | Self::ServiceInstall(_) => ActiveRequest::PairingChild,
+            Self::Idle => ActiveRequest::Idle,
+        }
+    }
+}
+
+/// What Stop means for the current run and in-flight request.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StopTarget {
+    /// Drop to Idle: join/cancel an app-owned pairing or install child.
+    CancelOwnedChild,
+    /// Join/cancel the in-flight action, then run the real service stop.
+    ServiceStop,
+    /// Stop the app-owned foreground node.
+    ForegroundChild,
+    Idle,
+}
+
 /// Which supervised child occupies the single child slot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ChildRole {
@@ -389,12 +419,7 @@ fn status_arguments() -> Vec<String> {
 }
 
 fn pairing_probe_arguments() -> Vec<String> {
-    vec![
-        "config".into(),
-        "get".into(),
-        "nodeHost.gateway.host".into(),
-        "--json".into(),
-    ]
+    vec!["node".into(), "pairing".into(), "--json".into()]
 }
 
 /// Map a node-host diagnostic to an app phase. Lines stay app-authored; raw
@@ -484,6 +509,28 @@ fn consent_missing_error() -> String {
 
 fn pairing_missing_error() -> String {
     "This computer is not paired yet. Pair with a join URL or setup code first.".to_string()
+}
+
+/// Decide what Stop means for the current run and the supervisor's active
+/// request. An app-owned pairing/install child is cancellable; a service
+/// action in flight must be joined and then stopped through the service.
+fn stop_target(run: &Run, request: ActiveRequest) -> StopTarget {
+    if request == ActiveRequest::Service {
+        return StopTarget::ServiceStop;
+    }
+    let cancels_owned_child = matches!(run.phase, Phase::Preparing | Phase::WaitingApproval)
+        && (run.mode == Some("foreground")
+            || (run.mode == Some("service") && run.service == ServiceState::Unverified));
+    if cancels_owned_child {
+        return StopTarget::CancelOwnedChild;
+    }
+    if run.mode == Some("foreground") {
+        return StopTarget::ForegroundChild;
+    }
+    if run.service.may_exist() && run.mode == Some("service") {
+        return StopTarget::ServiceStop;
+    }
+    StopTarget::Idle
 }
 
 pub(crate) struct ExecutorNode {
@@ -628,37 +675,34 @@ impl ExecutorNode {
                 .map_err(|_| "Controlled device unavailable.")?;
             let run = &shared.status;
             let consented = self.profiles.executor_consent().ok().flatten() == Some(true);
-            let cancels_owned_child =
-                matches!(run.phase, Phase::Preparing | Phase::WaitingApproval)
-                    && (run.mode == Some("foreground")
-                        || (run.mode == Some("service")
-                            && run.service == ServiceState::Unverified));
             match action {
-                // An app-owned child (foreground run or service install) is
-                // always cancellable; consent is irrelevant to cancellation.
-                ToolAction::Stop if cancels_owned_child => Request::Idle,
-                ToolAction::Stop if run.mode == Some("foreground") => Request::Idle,
-                // Stopping a running device must work without consent — that
-                // is how consent withdrawal takes effect. Only Start/Restart
-                // are consent-gated here; the service's own context is the
-                // authority for service actions (pairing evidence gates only
-                // the foreground reconnect below).
-                _ if run.service.may_exist() && run.mode == Some("service") => match action {
-                    ToolAction::Start | ToolAction::Restart if !consented => {
-                        return Err(consent_missing_error());
-                    }
-                    _ => Request::Service(action),
+                // Stopping a running device must work without consent — that is
+                // how consent withdrawal takes effect. A submitted service
+                // Start/Restart still owns the CLI action until the next request
+                // is applied, so Stop must join it and then run the real service
+                // stop instead of cancelling to an observation-only Idle pass.
+                ToolAction::Stop => match stop_target(run, shared.request.active_kind()) {
+                    StopTarget::ServiceStop => Request::Service(ToolAction::Stop),
+                    StopTarget::CancelOwnedChild
+                    | StopTarget::ForegroundChild
+                    | StopTarget::Idle => Request::Idle,
                 },
+                // Only Start/Restart are consent-gated; the service's own
+                // context is the authority for service actions (pairing
+                // evidence gates only the foreground reconnect below).
                 ToolAction::Start | ToolAction::Restart => {
                     if !consented {
                         return Err(consent_missing_error());
                     }
-                    if run.paired != Some(true) {
-                        return Err(pairing_missing_error());
+                    if run.service.may_exist() && run.mode == Some("service") {
+                        Request::Service(action)
+                    } else {
+                        if run.paired != Some(true) {
+                            return Err(pairing_missing_error());
+                        }
+                        Request::Foreground { pairing: None }
                     }
-                    Request::Foreground { pairing: None }
                 }
-                ToolAction::Stop => Request::Idle,
             }
         };
         self.submit(request)
@@ -797,8 +841,18 @@ fn probe_service_state(
     }
 }
 
-/// Detect canonical pairing without touching credentials: a saved Gateway
-/// endpoint host in the CLI's nodeHost configuration.
+/// The CLI owns the canonical pairing decision (saved nodeHost.config row plus
+/// device identity and a reusable node token). The app only reads its boolean.
+fn parse_pairing_probe(stdout: &[u8]) -> Result<bool, String> {
+    let value: Value = serde_json::from_slice(stdout)
+        .map_err(|_| "The CLI returned an invalid controlled-device pairing status.".to_string())?;
+    value
+        .get("resumable")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| "The CLI returned an invalid controlled-device pairing status.".to_string())
+}
+
+/// Detect canonical pairing without touching credentials or SQLite directly.
 fn probe_paired(
     cli: &OpenClawCli,
     cancelled: impl Fn() -> bool,
@@ -806,16 +860,9 @@ fn probe_paired(
 ) -> Result<Option<bool>, String> {
     let output = run_to_completion(cli, &pairing_probe_arguments(), cancelled, probe_owner)?;
     if output.status.success() {
-        let value: Value = serde_json::from_slice(&output.stdout).map_err(|_| {
-            "The CLI returned an invalid controlled-device pairing status.".to_string()
-        })?;
-        let paired = value.as_str().is_some_and(|host| !host.trim().is_empty());
-        return Ok(Some(paired));
+        return parse_pairing_probe(&output.stdout).map(Some);
     }
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if stderr.contains("valid but unset") || stderr.contains("Config path is valid but unset") {
-        return Ok(Some(false));
-    }
+    // A failed read is an explicit unknown, never a silent "not paired".
     Ok(None)
 }
 
@@ -1824,6 +1871,113 @@ mod tests {
         assert_eq!(
             service_detail(true, &ServiceState::Unverified).as_deref(),
             Some("Service status is unknown.")
+        );
+    }
+
+    fn test_run(
+        phase: Phase,
+        mode: Option<&'static str>,
+        service: ServiceState,
+        paired: Option<bool>,
+    ) -> Run {
+        Run {
+            phase,
+            mode,
+            service,
+            paired,
+            detail: None,
+        }
+    }
+
+    #[test]
+    fn pairing_probe_uses_the_cli_owned_resumable_fact() {
+        assert_eq!(pairing_probe_arguments(), vec!["node", "pairing", "--json"]);
+        assert_eq!(parse_pairing_probe(br#"{"resumable":true}"#).unwrap(), true);
+        assert_eq!(
+            parse_pairing_probe(br#"{"resumable":false}"#).unwrap(),
+            false
+        );
+        assert!(parse_pairing_probe(br#"{"resumable":"yes"}"#).is_err());
+        assert!(parse_pairing_probe(b"127.0.0.1").is_err());
+    }
+
+    #[test]
+    fn stop_during_an_applying_service_action_targets_a_real_service_stop() {
+        assert_eq!(
+            Request::Service(ToolAction::Restart).active_kind(),
+            ActiveRequest::Service
+        );
+        assert_eq!(
+            Request::Foreground { pairing: None }.active_kind(),
+            ActiveRequest::PairingChild
+        );
+        assert_eq!(Request::Idle.active_kind(), ActiveRequest::Idle);
+
+        let applying = test_run(
+            Phase::Preparing,
+            Some("service"),
+            ServiceState::Unverified,
+            None,
+        );
+        assert_eq!(
+            stop_target(&applying, ActiveRequest::Service),
+            StopTarget::ServiceStop
+        );
+        // A supervised service install remains a cancellable app-owned child.
+        assert_eq!(
+            stop_target(&applying, ActiveRequest::PairingChild),
+            StopTarget::CancelOwnedChild
+        );
+
+        let running = test_run(
+            Phase::Running,
+            Some("service"),
+            ServiceState::Installed {
+                running: Some(true),
+            },
+            Some(true),
+        );
+        assert_eq!(
+            stop_target(&running, ActiveRequest::Idle),
+            StopTarget::ServiceStop
+        );
+        assert_eq!(
+            stop_target(&running, ActiveRequest::Service),
+            StopTarget::ServiceStop
+        );
+
+        let foreground_preparing = test_run(
+            Phase::Preparing,
+            Some("foreground"),
+            ServiceState::Unverified,
+            Some(true),
+        );
+        assert_eq!(
+            stop_target(&foreground_preparing, ActiveRequest::PairingChild),
+            StopTarget::CancelOwnedChild
+        );
+        let foreground_running = test_run(
+            Phase::Running,
+            Some("foreground"),
+            ServiceState::Unverified,
+            Some(true),
+        );
+        assert_eq!(
+            stop_target(&foreground_running, ActiveRequest::PairingChild),
+            StopTarget::ForegroundChild
+        );
+
+        let off = test_run(Phase::Off, None, ServiceState::Absent, Some(false));
+        assert_eq!(stop_target(&off, ActiveRequest::Idle), StopTarget::Idle);
+        let service_error = test_run(
+            Phase::Error,
+            Some("service"),
+            ServiceState::Unverified,
+            None,
+        );
+        assert_eq!(
+            stop_target(&service_error, ActiveRequest::Service),
+            StopTarget::ServiceStop
         );
     }
 

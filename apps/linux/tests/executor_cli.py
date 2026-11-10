@@ -202,18 +202,6 @@ def main():
     if command == "config" and sys.argv[2:] == ["file", "--json"]:
         print(json.dumps({"path": str(Path.home() / ".openclaw/openclaw.json")}))
         return
-    if command == "config" and sys.argv[2:] == ["get", "nodeHost.gateway.host", "--json"]:
-        record("config-probe", paired=service_state() or (Path.home() / "fixture-paired").exists())
-        if service_state() or (Path.home() / "fixture-paired").exists():
-            print("127.0.0.1")
-        else:
-            print(
-                json.dumps({"ok": False, "error": {"type": "cli_error",
-                            "message": "Config path is valid but unset: nodeHost.gateway.host."}}),
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        return
     if command == "config" and sys.argv[2:] == ["get", "desktop.host.enabled", "--json"]:
         # Seeded canonical config keeps the desktop node off during this proof.
         print("false")
@@ -278,6 +266,17 @@ def main():
                 "runtime": {"status": runtime_status},
             }}))
             return
+        if verb == "pairing":
+            parser = Arguments(add_help=False)
+            parser.add_argument("--json", action="store_true")
+            parser.parse_args(tail[1:])
+            # The real CLI decides this from canonical nodeHost.config, device
+            # identity, and a reusable node token; the fixture tracks the same
+            # first-authenticated-hello marker and never reads the secret.
+            resumable = (Path.home() / "fixture-paired").exists()
+            record("pairing-probe", resumable=resumable)
+            print(json.dumps({"resumable": resumable}))
+            return
         if verb in ("start", "stop", "restart"):
             Arguments(add_help=False).parse_args([])
             if not STATE.exists():
@@ -294,6 +293,12 @@ def main():
             record("service-" + verb)
             state = {"serviceLoaded": True, "serviceActive": verb != "stop"}
             STATE.write_text(json.dumps(state))
+            if verb in ("start", "restart"):
+                delay = fixture_state().get(verb + "DelayMs")
+                if delay:
+                    # The service transition may already be live while the CLI
+                    # action is still applying; Stop must still issue a stop.
+                    time.sleep(delay / 1000)
             return
         if verb == "install":
             raise RuntimeError("Direct node install is not the GUI pairing path")

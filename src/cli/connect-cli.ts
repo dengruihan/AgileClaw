@@ -16,7 +16,7 @@ import { fetchWithSsrFGuard } from "../infra/net/fetch-guard.js";
 import { normalizeHostname } from "../infra/net/hostname.js";
 import { NODE_EXECUTOR_PROFILE } from "../infra/node-commands.js";
 import { loadNodeHostConfig, type NodeHostGatewayConfig } from "../node-host/config.js";
-import { formatGatewayCandidateUrl } from "../node-host/gateway-candidate-connection.js";
+import { formatGatewayCandidateUrl } from "../node-host/gateway-candidate-url.js";
 import {
   nodeHostCloudflareAccessConfigFromEnv,
   nodeHostGatewayMatchesUrl,
@@ -24,7 +24,8 @@ import {
   resolveNodeHostCloudflareAccess,
   type NodeHostCloudflareAccessConfig,
 } from "../node-host/gateway-cloudflare-access.js";
-import { loadResumableNodeHostGateway, runNodeHost } from "../node-host/runner.js";
+import { loadResumableNodeHostGateway } from "../node-host/resumable-gateway.js";
+import { runNodeHost } from "../node-host/runner.js";
 import { isDevicePairingJoinCode } from "../pairing/join-code.js";
 import { decodePairingSetupCode, encodePairingSetupCode } from "../pairing/setup-code.js";
 import { defaultRuntime } from "../runtime.js";
