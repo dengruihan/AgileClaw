@@ -3,7 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ArtifactOfficePreviewSchema } from "../../../packages/gateway-protocol/src/schema/artifacts.js";
 import { OFFICE_PREVIEW_MAX_BYTES } from "./office-preview-limits.js";
 import { buildOfficePreviewPayload } from "./office-preview-payload.js";
-import { buildDocxFixture, buildXlsxFixture } from "./office-preview.test-support.js";
+import {
+  buildDocxFixture,
+  buildEncryptedOoxmlContainer,
+  buildEncryptedZipFixture,
+  buildStyledXlsxFixture,
+  buildXlsxFixture,
+  OLE_COMPOUND_FILE_HEADER,
+} from "./office-preview.test-support.js";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -80,6 +87,49 @@ describe("shared Office preview payload", () => {
 
     expect(renamed).toEqual({ kind: "office", format: "docx", state: "invalid" });
     expect(corrupt).toEqual({ kind: "office", format: "docx", state: "invalid" });
+  });
+
+  it("returns the richer layout payload for a styled workbook", async () => {
+    const buffer = await buildStyledXlsxFixture();
+    const preview = await buildOfficePreviewPayload({
+      filename: "budget.xlsx",
+      mimeType: XLSX_MIME,
+      sizeBytes: buffer.length,
+      read: async () => buffer,
+    });
+
+    expect(preview).toMatchObject({ kind: "office", format: "xlsx", state: "ready" });
+    const sheet = preview?.preview?.sheets?.[0];
+    expect(sheet?.columns).toEqual([{ width: 30 }, { width: 16 }, { width: 16 }]);
+    expect(sheet?.rows?.[1]?.[1]).toBe("$1,200.50");
+    expect(sheet?.mergedCells).toHaveLength(1);
+    expect(sheet?.styles?.length).toBeGreaterThan(1);
+    expect(preview?.preview?.omitted?.map((entry) => entry.feature)).toContain("charts");
+    expect(Value.Check(ArtifactOfficePreviewSchema, preview)).toBe(true);
+  });
+
+  it("distinguishes an ECMA-376 encrypted package from a legacy container", async () => {
+    const encrypted = await buildOfficePreviewPayload({
+      filename: "secret.docx",
+      mimeType: DOCX_MIME,
+      read: async () => buildEncryptedOoxmlContainer(),
+    });
+    const encryptedZip = await buildOfficePreviewPayload({
+      filename: "secret.docx",
+      mimeType: DOCX_MIME,
+      read: async () => buildEncryptedZipFixture(),
+    });
+    const legacy = await buildOfficePreviewPayload({
+      filename: "secret.doc",
+      mimeType: "application/msword",
+      read: async () => Buffer.concat([OLE_COMPOUND_FILE_HEADER, Buffer.alloc(64)]),
+    });
+
+    expect(encrypted).toEqual({ kind: "office", format: "docx", state: "password-protected" });
+    expect(encryptedZip).toEqual({ kind: "office", format: "docx", state: "password-protected" });
+    // Legacy CFB files are a different family, never password-protected.
+    expect(legacy).toEqual({ kind: "office", state: "unsupported" });
+    expect(Value.Check(ArtifactOfficePreviewSchema, encrypted)).toBe(true);
   });
 
   it("leaves non-Office files on their existing preview path", async () => {

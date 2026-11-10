@@ -1,7 +1,11 @@
 import { Value } from "typebox/value";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ArtifactsDownloadResultSchema } from "../../../packages/gateway-protocol/src/schema/artifacts.js";
-import { buildXlsxFixture } from "../office-preview/office-preview.test-support.js";
+import {
+  buildEncryptedOoxmlContainer,
+  buildStyledXlsxFixture,
+  buildXlsxFixture,
+} from "../office-preview/office-preview.test-support.js";
 import {
   expectErrorDetails,
   expectFirstArtifact,
@@ -158,6 +162,82 @@ describe("artifacts.download opt-in Office preview", () => {
     expect(download.encoding).toBe("base64");
     expect(download.data).toBe(buffer.toString("base64"));
     expect(download.preview).toBeUndefined();
+  });
+
+  it("returns the richer workbook layout through an inline artifact", async () => {
+    const buffer = await buildStyledXlsxFixture();
+    const artifactId = await openInlineArtifact({
+      type: "file",
+      title: "styled.xlsx",
+      mimeType: XLSX_MIME,
+      data: buffer.toString("base64"),
+      sizeBytes: buffer.length,
+    });
+
+    const payload = expectOkPayload(
+      await invoke("artifacts.download", {
+        sessionKey: "agent:main:main",
+        artifactId,
+        preview: "office",
+      }),
+    ) as { preview: { state: string; preview: { sheets: Record<string, unknown>[] } } };
+    expect(payload.preview).toMatchObject({ kind: "office", format: "xlsx", state: "ready" });
+    const sheet = payload.preview.preview.sheets[0];
+    expect(sheet?.columns).toEqual([{ width: 30 }, { width: 16 }, { width: 16 }]);
+    expect(sheet?.mergedCells).toHaveLength(1);
+    const rows = sheet?.rows as string[][] | undefined;
+    expect(rows?.[1]?.[1]).toBe("$1,200.50");
+    expect(Value.Check(ArtifactsDownloadResultSchema, payload)).toBe(true);
+  });
+
+  it("returns the richer workbook layout through a managed artifact", async () => {
+    const buffer = await buildStyledXlsxFixture();
+    const artifactId = "artifact_managed_media_33333333-3333-4333-8333-333333333333";
+    hoisted.readManagedArtifactContent.mockResolvedValue({
+      artifactId,
+      sessionKey: "agent:main:main",
+      type: "file",
+      title: "styled.xlsx",
+      filename: "styled.xlsx",
+      mimeType: XLSX_MIME,
+      sizeBytes: buffer.length,
+      buffer,
+      tooLarge: false,
+    });
+
+    const payload = expectOkPayload(
+      await invoke("artifacts.download", {
+        sessionKey: "agent:main:main",
+        agentId: "main",
+        artifactId,
+        preview: "office",
+      }),
+    ) as { preview: { preview: { sheets: Record<string, unknown>[] } } };
+    expect(payload.preview.preview.sheets[0]?.frozenColumns).toBe(1);
+    expect(payload.preview.preview.sheets[0]?.styles).toBeTruthy();
+  });
+
+  it("reports an encrypted package as password-protected", async () => {
+    const artifactId = await openInlineArtifact({
+      type: "file",
+      title: "secret.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      data: buildEncryptedOoxmlContainer().toString("base64"),
+      sizeBytes: buildEncryptedOoxmlContainer().length,
+    });
+    const payload = expectOkPayload(
+      await invoke("artifacts.download", {
+        sessionKey: "agent:main:main",
+        artifactId,
+        preview: "office",
+      }),
+    ) as { preview: Record<string, unknown> };
+    expect(payload.preview).toEqual({
+      kind: "office",
+      format: "docx",
+      state: "password-protected",
+    });
+    expect(Value.Check(ArtifactsDownloadResultSchema, payload)).toBe(true);
   });
 
   it("reports corrupt and renamed packages as invalid", async () => {

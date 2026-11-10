@@ -10,7 +10,7 @@ import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
 import * as playback from "../media/playback-transcode.js";
 import { handleControlUiAssistantMediaRequest } from "./control-ui.js";
 import * as httpAuth from "./http-auth-utils.js";
-import { buildXlsxFixture } from "./office-preview/office-preview.test-support.js";
+import { buildStyledXlsxFixture } from "./office-preview/office-preview.test-support.js";
 import { makeMockHttpResponse } from "./test-http-response.js";
 
 const runFfprobe = vi.hoisted(() => vi.fn<() => Promise<string>>());
@@ -28,6 +28,24 @@ function startMediaRequest(filePath: string, mode: "meta" | "playback" = "meta")
   const response = makeMockHttpResponse();
   const { res } = response;
   res.req.url = `/__openclaw__/assistant-media?${mode}=1&source=${encodeURIComponent(filePath)}&token=test-token`;
+  res.req.method = "GET";
+  Object.defineProperty(res.req.socket, "remoteAddress", { value: "127.0.0.1" });
+  const handled = handleControlUiAssistantMediaRequest(res.req, res, {
+    auth: { mode: "token", token: "test-token", allowTailscale: false },
+  });
+  return { ...response, handled };
+}
+
+function startMediaPreviewRequest(filePath: string) {
+  const response = makeMockHttpResponse();
+  const { res } = response;
+  const search = new URLSearchParams({
+    meta: "1",
+    preview: "office",
+    source: filePath,
+    token: "test-token",
+  });
+  res.req.url = `/__openclaw__/assistant-media?${search.toString()}`;
   res.req.method = "GET";
   Object.defineProperty(res.req.socket, "remoteAddress", { value: "127.0.0.1" });
   const handled = handleControlUiAssistantMediaRequest(res.req, res, {
@@ -409,8 +427,30 @@ async function readUploadParseResponse(request: ReturnType<typeof startUploadPar
   return JSON.parse(String(request.end.mock.calls[0]?.[0] ?? "")) as Record<string, unknown>;
 }
 
+it("returns a structured layout preview for a local Office attachment", async () => {
+  const root = tempDirs.make("ui-media-office-", resolvePreferredOpenClawTmpDir());
+  const filePath = path.join(root, "styled.xlsx");
+  await fs.writeFile(filePath, await buildStyledXlsxFixture());
+
+  const payload = (await readMetadataResponse(startMediaPreviewRequest(filePath))) as {
+    officePreview: { state: string; preview: { sheets: Record<string, unknown>[] } };
+  };
+
+  expect(payload).toMatchObject({
+    available: true,
+    officePreview: { kind: "office", format: "xlsx", state: "ready" },
+  });
+  expect(payload.officePreview.preview.sheets[0]?.columns).toEqual([
+    { width: 30 },
+    { width: 16 },
+    { width: 16 },
+  ]);
+  // The preview is parsed locally; audio probing never runs for a workbook.
+  expect(runFfprobe).not.toHaveBeenCalled();
+});
+
 it("parses an uploaded Office document for a preview without persisting it", async () => {
-  const workbook = await buildXlsxFixture();
+  const workbook = await buildStyledXlsxFixture();
   const root = tempDirs.make("ui-media-upload-", resolvePreferredOpenClawTmpDir());
   const before = await fs.readdir(root);
   const payload = await readUploadParseResponse(
@@ -420,6 +460,15 @@ it("parses an uploaded Office document for a preview without persisting it", asy
     available: true,
     officePreview: { kind: "office", format: "xlsx", state: "ready" },
   });
+  const officePreview = payload.officePreview as {
+    preview: { sheets: Record<string, unknown>[] };
+  };
+  expect(officePreview.preview.sheets[0]?.mergedCells).toHaveLength(1);
+  expect(officePreview.preview.sheets[0]?.rows).toEqual([
+    ["Item", "Cost", "Date"],
+    ["Rent", "$1,200.50", "15/01/2024"],
+    ["Share", "0.125"],
+  ]);
   // The upload never writes anything: nothing new exists under the temp root.
   expect(await fs.readdir(root)).toEqual(before);
 });

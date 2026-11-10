@@ -1,12 +1,19 @@
 import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
 import { SessionFileOfficePreviewSchema } from "../../../packages/gateway-protocol/src/schema/sessions.js";
-import { parseOfficePreviewBuffer } from "./office-preview-parse.js";
+import { looksLikeEncryptedOfficePackage } from "./office-preview-container.js";
+import {
+  parseOfficePreviewBuffer,
+  parseOfficePreviewBufferResult,
+} from "./office-preview-parse.js";
 import {
   buildDocxFixture,
+  buildEncryptedOoxmlContainer,
+  buildEncryptedZipFixture,
   buildPptxFixture,
   buildSlideXml,
   buildXlsxFixture,
+  OLE_COMPOUND_FILE_HEADER,
 } from "./office-preview.test-support.js";
 
 function expectValidPreview(preview: unknown) {
@@ -138,7 +145,9 @@ describe("parseOfficePreviewBuffer", () => {
     expect(workbook).toEqual({ format: "xlsx", sheets: [] });
     const document = parseOfficePreviewBuffer(await buildDocxFixture(""), "docx");
     expectValidPreview(document);
-    expect(document).toEqual({ format: "docx", blocks: [] });
+    // An empty document keeps its explicit page list and approximation notice.
+    expect(document).toMatchObject({ format: "docx", blocks: [], pages: [] });
+    expect(document?.omitted).toEqual([{ feature: "exactPagination", count: 0 }]);
   });
 
   it("truncates a sheet once the row limit is exceeded", async () => {
@@ -243,5 +252,30 @@ describe("parseOfficePreviewBuffer", () => {
     expectValidPreview(preview);
     expect(preview?.slides).toHaveLength(1);
     expect(JSON.stringify(preview)).not.toContain("EXTERNAL_SLIDE_SECRET");
+  });
+});
+
+describe("parse result states", () => {
+  it("keeps encrypted, mislabelled, and corrupt packages distinct", async () => {
+    expect(parseOfficePreviewBufferResult(buildEncryptedZipFixture(), "docx")).toEqual({
+      failure: "password-protected",
+    });
+    // A readable ZIP of another family is a mislabelled file, not encrypted.
+    expect(parseOfficePreviewBufferResult(await buildXlsxFixture(), "docx")).toEqual({
+      failure: "invalid",
+    });
+    expect(parseOfficePreviewBufferResult(Buffer.from("not a zip"), "xlsx")).toEqual({
+      failure: "invalid",
+    });
+  });
+
+  it("detects the ECMA-376 encrypted container without mislabelling legacy CFB", () => {
+    expect(looksLikeEncryptedOfficePackage(buildEncryptedOoxmlContainer())).toBe(true);
+    expect(
+      looksLikeEncryptedOfficePackage(
+        Buffer.concat([OLE_COMPOUND_FILE_HEADER, Buffer.from("Workbook", "utf16le")]),
+      ),
+    ).toBe(false);
+    expect(looksLikeEncryptedOfficePackage(Buffer.from("PK\u0003\u0004"))).toBe(false);
   });
 });

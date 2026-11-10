@@ -2,6 +2,10 @@
 import type { Static } from "typebox";
 import { Type } from "typebox";
 import { closedObject } from "./closed-object.js";
+import {
+  SessionFileOfficePreviewStateSchema,
+  type SessionFileOfficePreviewState,
+} from "./office-preview.js";
 import { NonEmptyString } from "./primitives.js";
 import { SessionFileOfficeFormatSchema, SessionFileOfficePreviewSchema } from "./sessions.js";
 
@@ -75,14 +79,6 @@ export const ArtifactsDownloadParamsSchema = closedObject({
   preview: Type.Optional(Type.Literal("office")),
 });
 
-/** Whether the Gateway could build the requested structured preview. */
-export const ArtifactOfficePreviewStateSchema = Type.Union([
-  Type.Literal("ready"),
-  Type.Literal("unsupported"),
-  Type.Literal("too-large"),
-  Type.Literal("invalid"),
-]);
-
 /**
  * Structured read-only Office preview returned only when the caller opts in.
  * Legacy containers and non-Office files report `unsupported` without a format.
@@ -91,7 +87,7 @@ export const ArtifactOfficePreviewSchema = closedObject({
   kind: Type.Literal("office"),
   /** Modern OOXML format the reader selected; absent when no modern format applies. */
   format: Type.Optional(SessionFileOfficeFormatSchema),
-  state: ArtifactOfficePreviewStateSchema,
+  state: SessionFileOfficePreviewStateSchema,
   preview: Type.Optional(SessionFileOfficePreviewSchema),
 });
 
@@ -115,5 +111,5 @@ export type ArtifactsGetParams = Static<typeof ArtifactsGetParamsSchema>;
 export type ArtifactsGetResult = Static<typeof ArtifactsGetResultSchema>;
 export type ArtifactsDownloadParams = Static<typeof ArtifactsDownloadParamsSchema>;
 export type ArtifactsDownloadResult = Static<typeof ArtifactsDownloadResultSchema>;
-export type ArtifactOfficePreviewState = Static<typeof ArtifactOfficePreviewStateSchema>;
+export type ArtifactOfficePreviewState = SessionFileOfficePreviewState;
 export type ArtifactOfficePreview = Static<typeof ArtifactOfficePreviewSchema>;

@@ -2,10 +2,11 @@ import type {
   ArtifactOfficePreview,
   SessionFileOfficeFormat,
 } from "../../../packages/gateway-protocol/src/index.js";
+import { looksLikeEncryptedOfficePackage } from "./office-preview-container.js";
 import { OFFICE_PREVIEW_MAX_BYTES } from "./office-preview-limits.js";
 import {
   isLegacyOfficeMimeType,
-  readOfficePreview,
+  readOfficePreviewResult,
   resolveOfficePreviewFormatForMime,
   resolveOfficePreviewTarget,
 } from "./office-preview.js";
@@ -75,11 +76,16 @@ export async function buildOfficePreviewPayload(
     return { kind: "office", format, state: "too-large" };
   }
   if (!hasZipSignature(buffer)) {
-    // A renamed text or legacy file keeps the declared type but no fake preview.
-    return { kind: "office", format, state: "invalid" };
+    // A modern extension over an OLE container is the ECMA-376 encrypted
+    // package; other non-ZIP bytes are a renamed or corrupt file.
+    return {
+      kind: "office",
+      format,
+      state: looksLikeEncryptedOfficePackage(buffer) ? "password-protected" : "invalid",
+    };
   }
-  const preview = await readOfficePreview(buffer, format);
-  return preview
-    ? { kind: "office", format, state: "ready", preview }
-    : { kind: "office", format, state: "invalid" };
+  const result = await readOfficePreviewResult(buffer, format);
+  return "preview" in result
+    ? { kind: "office", format, state: "ready", preview: result.preview }
+    : { kind: "office", format, state: result.failure };
 }

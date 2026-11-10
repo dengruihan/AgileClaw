@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionFileOfficePreviewSchema } from "../../../packages/gateway-protocol/src/schema/sessions.js";
 import {
   buildDocxFixture,
+  buildEncryptedOoxmlContainer,
+  buildEncryptedZipFixture,
   buildPptxFixture,
+  buildStyledDocxFixture,
+  buildStyledXlsxFixture,
   buildXlsxFixture,
   OLE_COMPOUND_FILE_HEADER,
 } from "../office-preview/office-preview.test-support.js";
@@ -152,6 +156,7 @@ describe("sessions.files office previews", () => {
       mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       path: "broken.xlsx",
       previewKind: "unsupported",
+      previewState: "invalid",
     });
     expect(file.officePreview).toBeUndefined();
     expect(file.content).toBeUndefined();
@@ -169,6 +174,7 @@ describe("sessions.files office previews", () => {
       mimeType: "application/vnd.ms-excel",
       path: "legacy.xls",
       previewKind: "unsupported",
+      previewState: "unsupported",
     });
   });
 
@@ -184,8 +190,58 @@ describe("sessions.files office previews", () => {
     expect(file).toMatchObject({
       mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       previewKind: "unsupported",
+      previewState: "too-large",
     });
     expect(file.content).toBeUndefined();
+  });
+
+  it("returns richer layout payloads for styled workbooks and documents", async () => {
+    fs.writeFileSync(path.join(workspaceRoot, "styled.xlsx"), await buildStyledXlsxFixture());
+    fs.writeFileSync(path.join(workspaceRoot, "styled.docx"), await buildStyledDocxFixture());
+
+    const workbook = expectOkPayload(await getFile("styled.xlsx")).file;
+    expect(workbook).toMatchObject({ previewKind: "office", previewState: "ready" });
+    expect(workbook.officePreview.sheets[0].columns).toEqual([
+      { width: 30 },
+      { width: 16 },
+      { width: 16 },
+    ]);
+    expect(workbook.officePreview.sheets[0].rows[1][1]).toBe("$1,200.50");
+    expect(workbook.officePreview.sheets[0].mergedCells).toHaveLength(1);
+    expect(workbook.officePreview.sheets[0].frozenRows).toBe(1);
+    expect(Value.Check(SessionFileOfficePreviewSchema, workbook.officePreview)).toBe(true);
+
+    const document = expectOkPayload(await getFile("styled.docx")).file;
+    expect(document).toMatchObject({ previewKind: "office", previewState: "ready" });
+    expect(document.officePreview.pages).toHaveLength(3);
+    expect(document.officePreview.pages[0].blocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "paragraph", role: "title" }),
+        expect.objectContaining({ kind: "table" }),
+        expect.objectContaining({ kind: "image" }),
+      ]),
+    );
+    expect(Value.Check(SessionFileOfficePreviewSchema, document.officePreview)).toBe(true);
+  });
+
+  it("keeps password-protected and encrypted packages metadata-only", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "encrypted-container.docx"),
+      buildEncryptedOoxmlContainer(),
+    );
+    fs.writeFileSync(path.join(workspaceRoot, "encrypted-zip.docx"), buildEncryptedZipFixture());
+
+    const container = expectOkPayload(await getFile("encrypted-container.docx")).file;
+    expect(container).toMatchObject({
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      previewKind: "unsupported",
+      previewState: "password-protected",
+    });
+    expect(container.officePreview).toBeUndefined();
+
+    const zip = expectOkPayload(await getFile("encrypted-zip.docx")).file;
+    expect(zip).toMatchObject({ previewKind: "unsupported", previewState: "password-protected" });
+    expect(zip.officePreview).toBeUndefined();
   });
 
   it("keeps a text file renamed to .xlsx on the text preview", async () => {
