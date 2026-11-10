@@ -57,7 +57,7 @@ def role_matches(actual_role, expected_role, attributes=None):
     )
 
 
-def exercise(app, Atspi, GLib, *, remote_only, local_start_failure, inline_fixture, binary, gateway_switch):
+def exercise(app, Atspi, GLib, *, remote_only, local_start_failure, inline_fixture, binary, gateway_switch, executor_first_run=False):
     last_headings = set()
     last_controls = set()
 
@@ -93,8 +93,8 @@ def exercise(app, Atspi, GLib, *, remote_only, local_start_failure, inline_fixtu
                     for child in range(node.get_child_count())
                 )
 
-    def wait(label, role=None, *, prefix=False, predicate=None):
-        deadline = time.monotonic() + 30
+    def wait(label, role=None, *, prefix=False, contains=False, predicate=None, timeout=30):
+        deadline = time.monotonic() + timeout
         last_error = None
         while time.monotonic() < deadline:
             if app.poll() is not None:
@@ -119,9 +119,12 @@ def exercise(app, Atspi, GLib, *, remote_only, local_start_failure, inline_fixtu
                         last_headings.add(name)
                     if role is None:
                         content = text_content(node)
-                        matches = content is not None and (
-                            content.startswith(label) if prefix else content == label
-                        )
+                        if contains:
+                            matches = content is not None and label in content
+                        else:
+                            matches = content is not None and (
+                                content.startswith(label) if prefix else content == label
+                            )
                     else:
                         named = name.startswith(label) if prefix else name == label
                         matches = named and role_matches(actual_role, role)
@@ -165,7 +168,9 @@ def exercise(app, Atspi, GLib, *, remote_only, local_start_failure, inline_fixtu
             raise RuntimeError(f"Expected an empty {label!r}; refusing a remote connection")
 
     if inline_fixture is not None:
-        if gateway_switch:
+        if executor_first_run:
+            inline_fixture.exercise_first_run(app, binary, wait, Atspi)
+        elif gateway_switch:
             def restart(*arguments):
                 nonlocal app
                 app.terminate()
@@ -191,13 +196,14 @@ def exercise(app, Atspi, GLib, *, remote_only, local_start_failure, inline_fixtu
             click("On this computer", "toggle button", prefix=True)
             click("Continue")
             wait("OpenClaw needs attention", "heading")
-            wait(START_FAILURE)
+            wait(START_FAILURE, contains=True)
             wait("Try again", "push button")
             if attempt == 0:
                 click("Try again")
                 wait("Welcome to OpenClaw", "heading")
         calls = Path("cli-calls.log").read_text().splitlines()
-        if calls.count("gateway install --json") != 2:
+        installs = [call for call in calls if call.startswith("gateway install ")]
+        if len(installs) != 2:
             raise RuntimeError(f"Expected two failed Gateway installs, observed {calls!r}")
         setup = "browser extension setup --action install --json --wait-ms 1000"
         if calls.count(setup) != 1:
@@ -242,7 +248,7 @@ def interrupted(signum, _frame):
     raise RuntimeError(f"Native first-run smoke interrupted by signal {signum}")
 
 
-def drive(binary, *, remote_only, local_start_failure, inline_browser, window_chrome, gateway_switch, gateway_onboarding, quick_chat, desktop_sharing, executor, artifacts_dir):
+def drive(binary, *, remote_only, local_start_failure, inline_browser, window_chrome, gateway_switch, gateway_onboarding, quick_chat, desktop_sharing, executor, executor_first_run, artifacts_dir):
     try:
         import gi
 
@@ -259,7 +265,7 @@ def drive(binary, *, remote_only, local_start_failure, inline_browser, window_ch
     def capture(outcome):
         if artifacts_dir is None:
             return
-        if window_chrome or gateway_switch or gateway_onboarding or quick_chat or desktop_sharing or executor:
+        if window_chrome or gateway_switch or gateway_onboarding or quick_chat or desktop_sharing or executor or executor_first_run:
             if outcome == "failed" and inline_fixture is not None:
                 inline_fixture.capture("failed")
             return
@@ -328,6 +334,12 @@ def drive(binary, *, remote_only, local_start_failure, inline_browser, window_ch
         inline_fixture = ExecutorNodeFixture(artifacts_dir)
         inline_fixture.start()
         binary = inline_fixture.stage_binary(binary)
+    elif executor_first_run:
+        from executor_first_run import ExecutorFirstRunFixture
+
+        inline_fixture = ExecutorFirstRunFixture(artifacts_dir)
+        inline_fixture.start()
+        binary = inline_fixture.stage_binary(binary)
 
     with Path("app.log").open("wb") as log:
         app = subprocess.Popen(
@@ -343,7 +355,12 @@ def drive(binary, *, remote_only, local_start_failure, inline_browser, window_ch
                 local_start_failure=local_start_failure,
                 inline_fixture=inline_fixture,
                 binary=binary,
-                gateway_switch=gateway_switch or gateway_onboarding or desktop_sharing or executor,
+                gateway_switch=gateway_switch
+                or gateway_onboarding
+                or desktop_sharing
+                or executor
+                or executor_first_run,
+                executor_first_run=executor_first_run,
             )
         except BaseException:
             try:
@@ -415,6 +432,10 @@ def main():
         "--executor", action="store_true",
         help="Verify the controlled-device GUI: consent, pairing secrets, service mode, and teardown",
     )
+    scenarios.add_argument(
+        "--executor-first-run", action="store_true",
+        help="Verify the no-CLI first-run GUI install returns to Welcome and opens the controlled-device pane",
+    )
     args = parser.parse_args()
     if sys.platform != "linux" or os.geteuid() == 0:
         parser.error("Run on Linux as a non-root user; do not disable the WebKit sandbox")
@@ -428,11 +449,11 @@ def main():
         parser.error("The minimal system PATH must not contain an OpenClaw CLI")
     if args.inline_browser and not os.access("/usr/bin/xdotool", os.X_OK):
         parser.error("Inline browser pointer proof requires xdotool")
-    if args.window_chrome or args.gateway_switch or args.gateway_onboarding or args.quick_chat or args.desktop_sharing or args.executor:
+    if args.window_chrome or args.gateway_switch or args.gateway_onboarding or args.quick_chat or args.desktop_sharing or args.executor or args.executor_first_run:
         for tool in ("xdotool", "wmctrl", "xprop", "xwininfo", "openbox"):
             if shutil.which(tool) is None:
                 parser.error(f"Window chrome proof requires {tool}")
-    if (args.gateway_switch or args.gateway_onboarding or args.quick_chat or args.desktop_sharing or args.executor) and shutil.which("gnome-keyring-daemon") is None:
+    if (args.gateway_switch or args.gateway_onboarding or args.quick_chat or args.desktop_sharing or args.executor or args.executor_first_run) and shutil.which("gnome-keyring-daemon") is None:
         parser.error("Native Gateway proof requires a private gnome-keyring-daemon")
     if args.artifacts_dir:
         args.artifacts_dir = args.artifacts_dir.resolve()
@@ -452,6 +473,7 @@ def main():
             quick_chat=args.quick_chat,
             desktop_sharing=args.desktop_sharing,
             executor=args.executor,
+            executor_first_run=args.executor_first_run,
             artifacts_dir=args.artifacts_dir,
         )
         return
@@ -501,9 +523,22 @@ def main():
                 "    print('OpenClaw fixture')\n"
                 "elif command == 'browser extension setup --action install --json --wait-ms 1000':\n"
                 "    print(json.dumps({'action': 'install', 'target': {'kind': 'local-host', 'platform': 'linux', 'hostname': 'fixture', 'profile': 'chrome', 'relayPort': 18799}, 'phase': 'needs_browser_action', 'reason': 'extension_missing', 'installation': {'nativeHostRegistered': True, 'installRequested': False, 'installedProfiles': 0, 'discoveredProfiles': 0, 'awaitingApproval': False, 'automaticBootstrapSupported': True}, 'connection': {'state': 'not_checked'}, 'nextAction': 'install_from_store'}))\n"
-                "elif command == 'gateway status --json':\n"
-                "    print(json.dumps({'service': {'loaded': False}, 'rpc': {'ok': False}}))\n"
-                "elif command == 'gateway install --json':\n"
+                "elif command.startswith('gateway status '):\n"
+                "    print(json.dumps({\n"
+                "        'service': {\n"
+                "            'loaded': False,\n"
+                "            'revision': 'fixture-revision',\n"
+                "            'definitionMutation': 'writable',\n"
+                "            'runtimeIntent': {\n"
+                "                'status': 'known',\n"
+                "                'revision': 'fixture-revision',\n"
+                "                'definition': None,\n"
+                "            },\n"
+                "        },\n"
+                "        'config': {'daemon': {'path': '/fixture/openclaw'}},\n"
+                "        'rpc': {'ok': False},\n"
+                "    }))\n"
+                "elif command.startswith('gateway install '):\n"
                 f"    print({START_FAILURE!r}, file=sys.stderr)\n"
                 "    sys.exit(1)\n"
                 "else:\n"
@@ -531,6 +566,8 @@ def main():
             command.append("--desktop-sharing")
         if args.executor:
             command.append("--executor")
+        if args.executor_first_run:
+            command.append("--executor-first-run")
         if args.artifacts_dir:
             command.extend(["--artifacts-dir", str(args.artifacts_dir)])
         command.append(str(binary))
@@ -545,7 +582,7 @@ def main():
         try:
             try:
                 # Desktop sharing observes five complete app lifecycles, including native Quit.
-                timeout = 360 if args.desktop_sharing or args.executor else 120
+                timeout = 360 if args.desktop_sharing or args.executor or args.executor_first_run else 120
                 code = worker.wait(timeout=timeout)
             except subprocess.TimeoutExpired as error:
                 raise RuntimeError(f"Native first-run driver exceeded {timeout} seconds") from error

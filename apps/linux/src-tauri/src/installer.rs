@@ -180,6 +180,36 @@ pub(crate) fn browser_runtime(
 }
 
 #[cfg(not(target_os = "windows"))]
+fn resolve_installer_script(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    if let Ok(resource) = app
+        .path()
+        .resolve("install-cli.sh", BaseDirectory::Resource)
+    {
+        if resource.is_file() {
+            return Ok(resource);
+        }
+    }
+    // Development and staged test layouts keep the reviewed installer next to
+    // the executable (or in its resources directory) instead of /usr/lib.
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("Bundled installer is unavailable: {error}"))?;
+    let directory = executable
+        .parent()
+        .ok_or_else(|| "Bundled installer is unavailable: executable has no parent".to_string())?;
+    for candidate in [
+        directory.join("install-cli.sh"),
+        directory.join("resources/install-cli.sh"),
+    ] {
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+    app.path()
+        .resolve("install-cli.sh", BaseDirectory::Resource)
+        .map_err(|error| format!("Bundled installer is unavailable: {error}"))
+}
+
+#[cfg(not(target_os = "windows"))]
 fn install_at(
     app: &AppHandle,
     channel: InstallChannel,
@@ -188,10 +218,7 @@ fn install_at(
     runtime_only: bool,
     spawn: Option<&SpawnCommand<'_>>,
 ) -> Result<(), String> {
-    let script = app
-        .path()
-        .resolve("install-cli.sh", BaseDirectory::Resource)
-        .map_err(|error| format!("Bundled installer is unavailable: {error}"))?;
+    let script = resolve_installer_script(app)?;
     let mut command = Command::new("bash");
     configure_installer_environment(&mut command);
     command

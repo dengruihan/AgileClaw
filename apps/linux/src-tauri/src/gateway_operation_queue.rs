@@ -15,7 +15,10 @@ pub(crate) enum GatewayOperation {
         guard: PromotionGuard,
     },
     RetryRemote,
-    Install(InstallChannel),
+    Install {
+        channel: InstallChannel,
+        start_local: bool,
+    },
     #[cfg(target_os = "linux")]
     Runtime(crate::RuntimeAction),
     Action(GatewayAction),

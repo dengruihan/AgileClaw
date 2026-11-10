@@ -59,6 +59,26 @@ export type NodeInvokeResultParams = NodeInvokeResult & {
 const MAX_PENDING_PROGRESS_CHUNKS = 128;
 const MAX_INVOKE_INPUT_BYTES = 16 * 1024;
 
+/** Parse success is independent of the parsed value's shape. */
+type NodeInvokePayloadParse = { parsed: true; value: unknown } | { parsed: false };
+
+function parseNodeInvokePayload(
+  payload: unknown,
+  payloadJSON: string | null | undefined,
+): NodeInvokePayloadParse {
+  if (payload !== undefined) {
+    return { parsed: true, value: payload };
+  }
+  if (typeof payloadJSON !== "string" || payloadJSON.trim() === "") {
+    return { parsed: false };
+  }
+  try {
+    return { parsed: true, value: JSON.parse(payloadJSON) as unknown };
+  } catch {
+    return { parsed: false };
+  }
+}
+
 export class NodeInvokeStreamController {
   constructor(
     private readonly options: {
@@ -138,9 +158,14 @@ export class NodeInvokeStreamController {
       params.error?.code === NODE_INVOKE_NOT_READY && pending.receivedProgress
         ? { code: "UNAVAILABLE", message: "node reported not-ready after invocation progress" }
         : (params.error ?? null);
+    // Node hosts serialize their reply as payloadJSON. Normalize it once here so
+    // every registry consumer (occupancy leases, worker transports, plugins)
+    // sees the same structured payload; raw payloadJSON remains for callers
+    // that need the original text.
+    const parsedPayload = parseNodeInvokePayload(params.payload, params.payloadJSON);
     pending.resolve({
       ok: params.ok,
-      payload: params.payload,
+      payload: parsedPayload.parsed ? parsedPayload.value : undefined,
       payloadJSON: params.payloadJSON ?? null,
       error,
     });

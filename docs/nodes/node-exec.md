@@ -1,12 +1,49 @@
 ---
 summary: "Allowlist node commands, point exec at a node, and invoke commands directly"
 read_when:
+  - Pairing a node from the companion app without a terminal
   - Routing exec tool calls to a paired node
   - Allowlisting node commands or binding exec to one node
   - Invoking a node command over raw RPC
 title: "Run commands on a node"
 sidebarTitle: "Node exec"
 ---
+
+## Pair from the companion app
+
+The Control UI and the native companion app cover node onboarding without a
+terminal. The Gateway-side approval policy and the controlled-side consent are
+separate decisions.
+
+1. In the Control UI, open **New session → Connect a device** (or **Devices →
+   Pair a device**). The Gateway offers the download links for macOS, Windows,
+   and Linux, then a single-use join link for the controlled computer. The
+   join link is the primary handoff; **Show setup code** exposes the same
+   credential as a bare `oc-pair://` code for machines that cannot open links
+   or for a plaintext LAN Gateway, which refuses join URLs.
+2. Install and open the companion on the controlled computer, choose
+   **Be controlled from another computer**, install the CLI from the window,
+   and read the remote-control consent. The install step is the only download
+   step; the app never asks for a terminal command.
+3. Paste the join link or setup code, choose **While this app is open**
+   (foreground) or **As a background service**, and select **Pair this
+   computer**. The companion reports **Preparing** (or **Waiting for
+   approval** when a manual approval is required) while the Gateway reconciles
+   the device. Administrator-minted node bootstrap enrollment auto-approves
+   the node's initial command surface, including `system.run` and the
+   occupancy commands; later command, capability, or permission expansion still
+   requires approval in **Devices**.
+4. The companion reports **Running** once the node connects. The node appears
+   in the Gateway inventory with the executor surface (`system.run`,
+   `system.run.prepare`, and `occupancy.*`), ready for `use_device` and
+   device-scoped `exec`.
+
+The GUI and the CLI share the same canonical state, so the flow is
+interchangeable. The equivalent CLI handoff is `openclaw connect <join-url>
+--executor`; a background service installed from the companion runs the same
+executor profile and reconnects from the saved device token. Setup codes expire
+and are single-use; a paired node restarts with its saved identity, as described
+below. Never commit a join URL or setup code to a script, unit file, or log.
 
 ## Reconnect a paired node
 
