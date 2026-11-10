@@ -342,6 +342,43 @@ describe("chat-model-select-state", () => {
     ]);
   });
 
+  it("keeps the configured model order instead of ranking available entries first", () => {
+    const state = createChatModelState({
+      chatModelCatalog: createModelCatalog(
+        {
+          id: "zeta",
+          name: "Zeta",
+          provider: "fixture",
+          available: false,
+          unavailableReason: "missing-auth",
+        },
+        {
+          id: "alpha",
+          name: "Alpha",
+          provider: "fixture",
+          available: true,
+        },
+      ),
+      sessionsResult: createSessionsListResult({
+        model: "alpha",
+        modelProvider: "fixture",
+        defaultsModel: "alpha",
+        defaultsProvider: "fixture",
+      }),
+    });
+
+    const resolved = resolveChatModelSelectState(state);
+    expect(resolved.options).toEqual([
+      {
+        value: "fixture/zeta",
+        label: "Zeta",
+        disabled: true,
+        unavailableReason: "missing-auth",
+      },
+      { value: "fixture/alpha", label: "Alpha" },
+    ]);
+  });
+
   it.each([
     {
       name: "available",

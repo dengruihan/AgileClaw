@@ -17,7 +17,7 @@ import { openAIModelCatalogRoutePolicy } from "./openai-model-routes.js";
 import { makeProviderModelFixture } from "./test-helpers/provider-model-fixture.js";
 
 describe("resolveLogicalVisibleModelCatalog", () => {
-  it("keeps the selected model ahead of curated and live rows in a large catalog", async () => {
+  it("leads an explicit listing selection without reordering the remaining rows", async () => {
     const catalog: ModelCatalogEntry[] = Array.from({ length: 300 }, (_, index) => ({
       provider: "fixture",
       id: `model-${String(index).padStart(3, "0")}`,
@@ -43,6 +43,40 @@ describe("resolveLogicalVisibleModelCatalog", () => {
       "model-299",
       "model-000",
       "model-001",
+    ]);
+    expect(result).toHaveLength(300);
+    expect(new Set(result.map((entry) => entry.id))).toEqual(
+      new Set(catalog.map((entry) => entry.id)),
+    );
+  });
+
+  it("keeps provider-owned order without a listing selection hint", async () => {
+    const catalog: ModelCatalogEntry[] = Array.from({ length: 300 }, (_, index) => ({
+      provider: "fixture",
+      id: `model-${String(index).padStart(3, "0")}`,
+      name: `Model ${index}`,
+      providerOrder: index,
+    }));
+    const result = await resolveLogicalVisibleModelCatalog({
+      cfg: {},
+      catalog,
+      defaultProvider: "fixture",
+      defaultModel: { provider: "fixture", model: "model-298" },
+      retainedModel: { provider: "fixture", model: "model-299" },
+      view: "all",
+      metadataSnapshot: createPluginMetadataSnapshotFixture({ plugins: [] }),
+      routePolicy: openAIModelCatalogRoutePolicy,
+      evaluateEntry: async () =>
+        resolveLogicalModelCatalogEntryState({
+          evaluation: { availability: true, routeResolution: null },
+          routePolicy: openAIModelCatalogRoutePolicy,
+        }),
+    });
+    // Retention changes membership, never row order.
+    expect(result.slice(0, 3).map((entry) => entry.id)).toEqual([
+      "model-000",
+      "model-001",
+      "model-002",
     ]);
     expect(result).toHaveLength(300);
     expect(new Set(result.map((entry) => entry.id))).toEqual(

@@ -69,6 +69,141 @@ suite.define(() => {
     }
   });
 
+  it("keeps the configured model order and catalog across selections", async () => {
+    const context = await suite.newBrowserContext({
+      locale: "en-US",
+      serviceWorkers: "block",
+      viewport: { height: 900, width: 1280 },
+      ...(captureUiProof
+        ? {
+            recordVideo: {
+              dir: path.join(suite.artifactDir, "model-picker-refresh"),
+              size: { height: 900, width: 1280 },
+            },
+          }
+        : {}),
+    });
+    const page = await context.newPage();
+    const modelIds = ["alpha", "bravo", "charlie", "delta", "echo"];
+    // The mocked Gateway hands the renderer this array directly; the real
+    // configured projection's authored order is covered by
+    // src/gateway/server-methods/models-list-result.picker-order.test.ts.
+    const models = modelIds.map((id) => ({
+      id,
+      name: `Model ${id[0]!.toUpperCase()}${id.slice(1)}`,
+      provider: "fixture",
+      available: true,
+    }));
+    const session = {
+      key: "agent:main:main",
+      kind: "direct",
+      updatedAt: 1,
+      sessionId: "model-order-proof",
+      model: "echo",
+      modelProvider: "fixture",
+      modelOverrideSource: "user",
+    };
+    const gateway = await installMockGateway(page, {
+      sessionKey: session.key,
+      agentModel: "fixture/charlie",
+      models,
+      methodResponses: {
+        "sessions.list": {
+          ts: 1,
+          path: "",
+          count: 1,
+          sessions: [session],
+          defaults: {
+            contextTokens: null,
+            model: "charlie",
+            modelProvider: "fixture",
+            modelSelectionTarget: "session",
+          },
+        },
+      },
+    });
+    try {
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, session.key));
+      await gateway.waitForRequest("models.list");
+      const picker = page.locator(
+        'openclaw-chat-pane[aria-hidden="false"] .chat-controls__model-picker',
+      );
+      const trigger = picker.locator('[data-chat-model-select="true"]');
+      await trigger.click();
+      const options = picker.locator("button[data-chat-model-option]");
+      await expect.poll(() => options.count()).toBe(modelIds.length);
+      await expect.poll(() => picker.getAttribute("open")).not.toBeNull();
+      await expect
+        .poll(() => picker.locator('[data-chat-model-option="fixture/echo"]').isVisible())
+        .toBe(true);
+      const configuredOrder = modelIds.map((id) => `fixture/${id}`);
+      const renderedOrder = () =>
+        options.evaluateAll((rows) =>
+          rows.map((row) => row.getAttribute("data-chat-model-option")),
+        );
+      // The catalog owner (model settings) authored this order; the selected
+      // last row and the mid-list default row must not be promoted.
+      await screenshot(page, "11-configured-order-before-selection.png");
+      expect(await renderedOrder()).toEqual(configuredOrder);
+      expect(
+        await picker
+          .locator('[data-chat-model-default="true"]')
+          .getAttribute("data-chat-model-option"),
+      ).toBe("fixture/charlie");
+      expect(
+        await picker
+          .locator('[data-chat-model-option="fixture/echo"]')
+          .getAttribute("aria-selected"),
+      ).toBe("true");
+      const modelsListReads = (await gateway.getRequests("models.list")).length;
+
+      const selectConfiguredModel = async (id: string) => {
+        const patches = (await gateway.getRequests("sessions.patch")).length;
+        await picker.locator(`[data-chat-model-option="fixture/${id}"]`).click();
+        const request = await gateway.waitForRequest("sessions.patch", { after: patches });
+        expect(request.params).toMatchObject({ key: session.key, model: `fixture/${id}` });
+        await expect
+          .poll(() => trigger.getAttribute("data-chat-select-value"))
+          .toBe(`fixture/${id}`);
+        await expect
+          .poll(() =>
+            picker
+              .locator(`[data-chat-model-option="fixture/${id}"]`)
+              .getAttribute("aria-selected"),
+          )
+          .toBe("true");
+        // Selection updates state only: no catalog refetch, loading flash, row
+        // movement, or dropdown close.
+        expect(await renderedOrder()).toEqual(configuredOrder);
+        expect(await gateway.getRequests("models.list")).toHaveLength(modelsListReads);
+        expect(await picker.locator("[data-chat-model-catalog-state]").count()).toBe(0);
+        expect(await picker.locator(".chat-controls__model-trigger-skeleton").count()).toBe(0);
+        expect(await options.count()).toBe(modelIds.length);
+        expect(await picker.getAttribute("open")).not.toBeNull();
+        expect(
+          await page.evaluate(
+            () =>
+              (document.activeElement as HTMLElement | null)?.getAttribute(
+                "data-chat-model-option",
+              ) ?? null,
+          ),
+        ).toBe(`fixture/${id}`);
+      };
+
+      await selectConfiguredModel("delta");
+      await screenshot(page, "12-configured-order-after-delta.png");
+      await selectConfiguredModel("bravo");
+      await screenshot(page, "13-configured-order-after-bravo.png");
+
+      await page.setViewportSize({ height: 844, width: 390 });
+      await expect.poll(() => options.count()).toBe(modelIds.length);
+      expect(await renderedOrder()).toEqual(configuredOrder);
+      await screenshot(page, "14-configured-order-narrow.png");
+    } finally {
+      await suite.closeBrowserContext(context);
+    }
+  });
+
   it("preserves the Gateway-resolved target without exposing it in the picker", async () => {
     const context = await suite.newBrowserContext({
       hasTouch: true,

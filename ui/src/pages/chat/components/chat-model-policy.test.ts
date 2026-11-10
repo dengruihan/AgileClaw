@@ -104,6 +104,18 @@ describe("server-owned model selection policy", () => {
     }
   });
 
+  it("appends a synthesized default row instead of ranking it first", () => {
+    const { container } = mountControls({
+      models,
+      modelSelectionPolicy: { restricted: true, defaultModel: "fixture/automatic" },
+    });
+    expect(
+      Array.from(container.querySelectorAll("[data-chat-model-option]"), (row) =>
+        row.getAttribute("data-chat-model-option"),
+      ),
+    ).toEqual(["fixture/primary", "fixture/fallback", "fixture/custom", "fixture/automatic"]);
+  });
+
   it("explains an empty restricted catalog without offering model setup", () => {
     const { container } = mountControls({
       models: [],

@@ -391,6 +391,8 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
   // That pin must stay clearable even when the configured default is absent from
   // this catalog. Without it the row has no job (an agent-scoped catalog may
   // legitimately omit the Gateway default), so nothing is synthesized.
+  // The fallback appends: a row the catalog does not configure must not rank
+  // itself ahead of the authored model order.
   if (
     defaultModel &&
     (sessionModelPinned || policy?.restricted) &&
@@ -398,7 +400,7 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
     !uninitialized &&
     !modelOptions.some((option) => option.isDefault)
   ) {
-    modelOptions.unshift({
+    modelOptions.push({
       commitValue: "",
       isDefault: true,
       value: defaultModel,

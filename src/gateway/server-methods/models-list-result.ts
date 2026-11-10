@@ -369,6 +369,9 @@ export async function prepareModelsListResult(
   const selectedModel = resolveSessionModelRef(cfg, scope?.sessionEntry, agentId, {
     allowPluginNormalization: false,
   });
+  // Configured picker reads intentionally omit the visibility layer's listing
+  // hint: selection is presentation state and must not rank rows. Retention
+  // below keeps a pinned selection visible in place.
   // Visibility-layer retention keeps a session's selected model selectable; the
   // catalog view itself no longer admits static rows for it.
   const retainedModel =
@@ -632,7 +635,6 @@ export async function prepareModelsListResult(
     view,
     policy: visibilityPolicy,
     retainedModel,
-    selectedModel,
     routePolicy: openAIModelCatalogRoutePolicy,
     routeVariants,
     prepareEntry: async (entry, variants) => {
