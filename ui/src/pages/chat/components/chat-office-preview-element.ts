@@ -10,6 +10,7 @@ import { t } from "../../../i18n/index.ts";
 import { registerFilePreviewEnglish } from "../../../i18n/locales/en-file-preview.ts";
 import { OpenClawLightDomContentsElement } from "../../../lit/openclaw-element.ts";
 import { renderDocumentPages } from "./chat-office-docx-view.ts";
+import { OfficeSheetGeometryController } from "./chat-office-sheet-geometry.ts";
 import { renderWorkbook } from "./chat-office-sheet-view.ts";
 
 registerFilePreviewEnglish();
@@ -106,6 +107,21 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
   @property() label = "";
 
   @state() private selectedSheet = 0;
+  private readonly sheetGeometry = new OfficeSheetGeometryController(this);
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.sheetGeometry.sync();
+  }
+
+  override disconnectedCallback(): void {
+    this.sheetGeometry.disconnect();
+    super.disconnectedCallback();
+  }
+
+  override updated(): void {
+    this.sheetGeometry.sync();
+  }
 
   override willUpdate(changed: PropertyValues<this>): void {
     const sheetCount = (this.preview?.sheets ?? []).filter((entry) => entry.hidden !== true).length;

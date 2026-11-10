@@ -199,7 +199,10 @@ function renderRow(params: {
       }),
     );
   }
-  return html`<tr style=${styleMap({ height: `${params.heights[params.index]}px` })}>
+  return html`<tr
+    data-row-index=${params.index}
+    style=${styleMap({ height: `${params.heights[params.index]}px` })}
+  >
     <th
       class="sidebar-office-sheet__row-header ${
         frozenRow ? "sidebar-office-sheet__row-header--frozen" : ""
@@ -230,6 +233,8 @@ function renderSheet(sheet: Sheet): TemplateResult {
       class="sidebar-office-sheet__table ${
         sheet.showGridLines === false ? "" : "sidebar-office-sheet__table--gridlines"
       }"
+      data-frozen-rows=${frozenRows}
+      data-frozen-columns=${frozenColumns}
       aria-label=${sheet.name || t("chat.officePreview.untitledSheet")}
     >
       <colgroup>
@@ -245,6 +250,7 @@ function renderSheet(sheet: Sheet): TemplateResult {
                 column < frozenColumns ? "sidebar-office-sheet__column-header--frozen" : ""
               }"
               scope="col"
+              data-column=${column}
               style=${styleMap(column < frozenColumns ? { left: `${columnLeft(column)}px` } : {})}
             >
               ${officeColumnLetter(column)}

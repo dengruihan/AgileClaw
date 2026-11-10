@@ -231,6 +231,58 @@ const workbookPayload = {
   ],
 };
 
+const frozenRows = Array.from({ length: 60 }, (_, index) => [
+  `Row ${index + 1}`,
+  `Value ${index + 1}`,
+  `C ${index + 1}`,
+  `D ${index + 1}`,
+]);
+
+const wrappedFrozenRows = frozenRows.map((row, index) =>
+  index === 1
+    ? ["A long value that wraps across several lines in a narrow frozen cell", ...row.slice(1)]
+    : row,
+);
+
+const frozenWorkbookPayload = {
+  format: "xlsx",
+  sheets: [
+    {
+      name: "Default frozen",
+      rowCount: frozenRows.length,
+      columnCount: 4,
+      rowNumbers: frozenRows.map((_, index) => index + 1),
+      rows: frozenRows,
+      columns: [{ width: 20 }, { width: 20 }, { width: 20 }, { width: 20 }],
+      frozenRows: 3,
+      frozenColumns: 2,
+    },
+    {
+      name: "Wrapped frozen",
+      rowCount: wrappedFrozenRows.length,
+      columnCount: 4,
+      rowNumbers: wrappedFrozenRows.map((_, index) => index + 1),
+      rows: wrappedFrozenRows,
+      columns: [{ width: 10 }, { width: 10 }, { width: 10 }, { width: 10 }],
+      frozenRows: 3,
+      frozenColumns: 2,
+      cells: [{ row: 1, column: 0, style: 0 }],
+      styles: [{ wrapText: true }],
+    },
+    {
+      name: "Declared frozen",
+      rowCount: frozenRows.length,
+      columnCount: 4,
+      rowNumbers: frozenRows.map((_, index) => index + 1),
+      rows: frozenRows,
+      rowHeights: [10, 10, 10],
+      columns: [{ width: 20 }, { width: 20 }, { width: 20 }, { width: 20 }],
+      frozenRows: 3,
+      frozenColumns: 2,
+    },
+  ],
+};
+
 const officeFixtures = [
   {
     name: "layout-report.docx",
@@ -241,6 +293,11 @@ const officeFixtures = [
     name: "layout-budget.xlsx",
     mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     file: { officePreview: workbookPayload, previewKind: "office" },
+  },
+  {
+    name: "frozen.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    file: { officePreview: frozenWorkbookPayload, previewKind: "office" },
   },
 ] as const;
 
@@ -542,6 +599,84 @@ describeControlUiE2e("Control UI layout Office side-panel preview", () => {
       expect(request.params).toMatchObject({ artifactId: artifact.id, preview: "office" });
       expect(await page.locator(".sidebar-office-preview__download").count()).toBe(1);
       await page.screenshot({ path: path.join(artifactDir, "after-artifact-rail-grid.png") });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("keeps multiple frozen rows and their intersections aligned after scrolling", async () => {
+    const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
+      await installOfficeGateway(page);
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
+      await openRailFile(page, "frozen.xlsx");
+
+      const workbook = page.locator('.sidebar-office-preview[data-office-format="xlsx"]');
+      await workbook.waitFor({ state: "visible" });
+
+      const verifyFrozenGeometry = async (label: string, expectTallRow: boolean) => {
+        const scroll = workbook.locator(".sidebar-office-sheet__scroll");
+        await scroll.evaluate((element) => {
+          element.scrollTop = 400;
+          element.scrollLeft = 150;
+        });
+        await expect
+          .poll(() => scroll.evaluate((element) => element.scrollTop))
+          .toBeGreaterThan(100);
+
+        await page.screenshot({
+          path: path.join(artifactDir, `before-assert-frozen-${label}-scroll.png`),
+        });
+        const boxes = await workbook.locator("tbody tr").evaluateAll((rows) =>
+          rows.slice(0, 3).map((row) => {
+            const cell = row.querySelector('td[data-column="0"]');
+            const rect = (cell ?? row).getBoundingClientRect();
+            return { height: rect.height, top: rect.top, bottom: rect.bottom };
+          }),
+        );
+        expect(boxes).toHaveLength(3);
+        if (expectTallRow) {
+          expect(boxes[1]?.height ?? 0).toBeGreaterThan((boxes[0]?.height ?? 0) + 1);
+        }
+        // Adjacent frozen rows must tile, not overlap, after the scroll.
+        expect(Math.abs((boxes[1]?.top ?? 0) - (boxes[0]?.bottom ?? 0))).toBeLessThanOrEqual(1);
+        expect(Math.abs((boxes[2]?.top ?? 0) - (boxes[1]?.bottom ?? 0))).toBeLessThanOrEqual(1);
+
+        const hit = await page.evaluate(() => {
+          const cell = document.querySelector(
+            '.sidebar-office-sheet__cell[data-row="0"][data-column="0"]',
+          );
+          if (!cell) {
+            return null;
+          }
+          const rect = cell.getBoundingClientRect();
+          const element = document.elementFromPoint(rect.left + rect.width / 2, rect.bottom - 1);
+          return element
+            ? {
+                column: element.getAttribute("data-column"),
+                row: element.getAttribute("data-row"),
+              }
+            : null;
+        });
+        expect(hit).toMatchObject({ row: "0", column: "0" });
+        await page.screenshot({
+          path: path.join(artifactDir, `after-frozen-${label}-scroll.png`),
+        });
+      };
+
+      await verifyFrozenGeometry("default", false);
+      await workbook.getByRole("tab", { name: "Wrapped frozen" }).click();
+      await expect
+        .poll(() => workbook.locator(".sidebar-office-sheet__column-header").first().textContent())
+        .toContain("A");
+      await verifyFrozenGeometry("wrapped", true);
+      await workbook.getByRole("tab", { name: "Declared frozen" }).click();
+      await expect
+        .poll(() => workbook.locator(".sidebar-office-sheet__column-header").first().textContent())
+        .toContain("A");
+      await verifyFrozenGeometry("declared", false);
     } finally {
       await context.close();
     }
