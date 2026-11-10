@@ -57,12 +57,35 @@ const catalog = {
       sheetPicker: "Worksheets",
       untitledSheet: "Untitled sheet",
       slideLabel: "Slide {index}",
+      approximatePages:
+        "Pages approximate the document layout. Line breaks and pagination can differ from Word.",
+      pageOf: "Page {index} of {count}",
+      header: "Document header",
+      footer: "Document footer",
+      imageUnavailable: "This image could not be shown safely.",
+      omittedFeatures: "Not shown in this preview: {features}.",
+      omittedFeature: {
+        charts: "Charts",
+        comments: "Comments",
+        conditionalFormatting: "Conditional formatting",
+        dataValidation: "Data validation",
+        drawings: "Drawings",
+        embeddedObjects: "Embedded objects",
+        equations: "Equations",
+        exactPagination: "Exact pagination",
+        floatingObjects: "Floating objects",
+        images: "Unsupported images",
+        multipleSections: "Other sections",
+        pivotTables: "Pivot tables",
+      },
       unsupported:
         "This Office file can't be previewed here. Download it to open it in an Office app.",
       tooLarge:
         "This Office file is larger than the 8 MiB preview limit. Download it to open it in an Office app.",
       invalid:
         "This Office file couldn't be read for preview. Download it to open it in an Office app.",
+      passwordProtected:
+        "This Office file is password-protected. Download it and open it in an Office app.",
       download: "Download",
     },
   },

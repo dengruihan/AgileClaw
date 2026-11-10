@@ -33,6 +33,8 @@ function unavailableReason(state: string | undefined): string {
       return t("chat.officePreview.tooLarge");
     case "invalid":
       return t("chat.officePreview.invalid");
+    case "password-protected":
+      return t("chat.officePreview.passwordProtected");
     default:
       return t("chat.officePreview.unsupported");
   }
