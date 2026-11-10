@@ -32,29 +32,33 @@ function armPending(
   });
 }
 
+function deliver(payload: string) {
+  const { pendingInvokes, controller } = createController();
+  let result: Parameters<PendingInvoke["resolve"]>[0] | undefined;
+  armPending(pendingInvokes, (value) => {
+    result = value;
+  });
+  expect(
+    controller.handleResult({
+      id: "invoke-1",
+      nodeId: "node-a",
+      connId: "conn-1",
+      ok: true,
+      payloadJSON: payload,
+    }),
+  ).toBe(true);
+  return result;
+}
+
 describe("NodeInvokeStreamController.handleResult", () => {
   it("normalizes a real node host's payloadJSON into the structured payload", () => {
-    const { pendingInvokes, controller } = createController();
     const grant = {
       ok: true,
       holder: { sessionKey: "agent:main:root", sessionId: "sess-1", runId: "run-1" },
       leaseToken: "lease-1",
       acquiredAtMs: 1,
     };
-    let result: unknown;
-    armPending(pendingInvokes, (value) => {
-      result = value;
-    });
-
-    expect(
-      controller.handleResult({
-        id: "invoke-1",
-        nodeId: "node-a",
-        connId: "conn-1",
-        ok: true,
-        payloadJSON: JSON.stringify(grant),
-      }),
-    ).toBe(true);
+    const result = deliver(JSON.stringify(grant));
 
     // The occupancy lease owner reads result.payload; a payloadJSON-only node
     // reply must not look like a malformed grant.
@@ -66,10 +70,25 @@ describe("NodeInvokeStreamController.handleResult", () => {
     });
   });
 
-  it("keeps an explicit payload and treats unparseable payloadJSON as no payload", () => {
+  it("preserves valid payloads whose shape is an object with only a payloadJSON string", () => {
+    const nested = { payloadJSON: "legitimate-inner-text" };
+    const result = deliver(JSON.stringify(nested));
+
+    expect(result?.payload).toEqual(nested);
+    expect(result?.payloadJSON).toBe(JSON.stringify(nested));
+  });
+
+  it("treats unparseable payloadJSON as no payload while retaining the raw text", () => {
+    const result = deliver("{not-json");
+
+    expect(result?.payload).toBeUndefined();
+    expect(result?.payloadJSON).toBe("{not-json");
+  });
+
+  it("keeps an explicit payload", () => {
     const { pendingInvokes, controller } = createController();
     const explicit = { holder: { sessionKey: "agent:main:root" } };
-    let result: { payload?: unknown } | undefined;
+    let result: Parameters<PendingInvoke["resolve"]>[0] | undefined;
     armPending(pendingInvokes, (value) => {
       result = value;
     });
@@ -82,19 +101,7 @@ describe("NodeInvokeStreamController.handleResult", () => {
       payload: explicit,
       payloadJSON: JSON.stringify({ ignored: true }),
     });
-    expect(result?.payload).toEqual(explicit);
 
-    const second = createController();
-    armPending(second.pendingInvokes, (value) => {
-      result = value;
-    });
-    second.controller.handleResult({
-      id: "invoke-1",
-      nodeId: "node-a",
-      connId: "conn-1",
-      ok: true,
-      payloadJSON: "{not-json",
-    });
-    expect(result?.payload).toBeUndefined();
+    expect(result?.payload).toEqual(explicit);
   });
 });

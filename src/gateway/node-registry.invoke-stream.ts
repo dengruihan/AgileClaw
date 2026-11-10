@@ -10,7 +10,6 @@ import {
 import { scheduleAbsoluteDeadline } from "../utils/absolute-deadline.js";
 import type { NodeInvokeResult } from "./node-invoke.types.js";
 import { NODE_INVOKE_PAIRING_CHANGED_ABORT } from "./node-registry-private-token.js";
-import { parseGatewayPayload } from "./server-json.js";
 
 /** A node may emit this only before invoking a handler or sending any progress. */
 export const NODE_INVOKE_NOT_READY = "NODE_NOT_READY";
@@ -60,25 +59,24 @@ export type NodeInvokeResultParams = NodeInvokeResult & {
 const MAX_PENDING_PROGRESS_CHUNKS = 128;
 const MAX_INVOKE_INPUT_BYTES = 16 * 1024;
 
-/** True when parseGatewayPayload preserved unparseable text in its raw wrapper. */
-function isGatewayPayloadParseFailure(value: unknown): value is { payloadJSON: string } {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const keys = Object.keys(value);
-  return (
-    keys.length === 1 &&
-    keys[0] === "payloadJSON" &&
-    typeof (value as { payloadJSON?: unknown }).payloadJSON === "string"
-  );
-}
+/** Parse success is independent of the parsed value's shape. */
+type NodeInvokePayloadParse = { parsed: true; value: unknown } | { parsed: false };
 
-function parseNodeInvokePayload(payload: unknown, payloadJSON: string | null | undefined): unknown {
+function parseNodeInvokePayload(
+  payload: unknown,
+  payloadJSON: string | null | undefined,
+): NodeInvokePayloadParse {
   if (payload !== undefined) {
-    return payload;
+    return { parsed: true, value: payload };
   }
-  const parsed = parseGatewayPayload(payloadJSON);
-  return isGatewayPayloadParseFailure(parsed) ? undefined : parsed;
+  if (typeof payloadJSON !== "string" || payloadJSON.trim() === "") {
+    return { parsed: false };
+  }
+  try {
+    return { parsed: true, value: JSON.parse(payloadJSON) as unknown };
+  } catch {
+    return { parsed: false };
+  }
 }
 
 export class NodeInvokeStreamController {
@@ -164,10 +162,10 @@ export class NodeInvokeStreamController {
     // every registry consumer (occupancy leases, worker transports, plugins)
     // sees the same structured payload; raw payloadJSON remains for callers
     // that need the original text.
-    const payload = parseNodeInvokePayload(params.payload, params.payloadJSON);
+    const parsedPayload = parseNodeInvokePayload(params.payload, params.payloadJSON);
     pending.resolve({
       ok: params.ok,
-      payload,
+      payload: parsedPayload.parsed ? parsedPayload.value : undefined,
       payloadJSON: params.payloadJSON ?? null,
       error,
     });
