@@ -7,6 +7,20 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+/// Test-only stop failure injection for the supervisor's retained-owner path.
+/// Target one exact child so parallel tests cannot consume the failure.
+#[cfg(test)]
+static TEST_STOP_FAILURE_PID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+#[cfg(test)]
+static TEST_STOP_FAILURES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Arm the next `count` teardowns of `pid` to fail before touching its tree.
+#[cfg(test)]
+pub(crate) fn fail_next_stop_for_test(pid: u32, count: usize) {
+    TEST_STOP_FAILURE_PID.store(pid, Ordering::SeqCst);
+    TEST_STOP_FAILURES.store(count, Ordering::SeqCst);
+}
+
 pub(crate) struct DesktopNodeProcess {
     child: Child,
     output: Receiver<(bool, String)>,
@@ -113,6 +127,11 @@ impl DesktopNodeProcess {
         self.output.try_iter().take(64)
     }
 
+    #[cfg(test)]
+    pub(crate) fn id_for_test(&self) -> u32 {
+        self.child.id()
+    }
+
     /// `Some(status)` once the leader exited; `None` while it is alive.
     pub fn exited(&mut self) -> Result<Option<std::process::ExitStatus>, String> {
         self.child
@@ -121,6 +140,16 @@ impl DesktopNodeProcess {
     }
 
     pub fn stop(&mut self) -> Result<(), String> {
+        #[cfg(test)]
+        if TEST_STOP_FAILURE_PID.load(Ordering::SeqCst) == self.child.id()
+            && TEST_STOP_FAILURES
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |remaining| {
+                    remaining.checked_sub(1)
+                })
+                .is_ok()
+        {
+            return Err("Injected desktop-sharing teardown failure for tests.".into());
+        }
         self.child.stdin.take();
         #[cfg(unix)]
         signal_group(self.child.id(), "TERM")?;
@@ -220,6 +249,11 @@ impl DesktopNodeProcess {
             thread::sleep(Duration::from_millis(25));
         }
     }
+}
+
+#[cfg(all(test, unix))]
+pub(crate) fn process_group_exists_for_test(pid: u32) -> bool {
+    signal_group(pid, "0").unwrap_or(true)
 }
 
 #[cfg(unix)]
