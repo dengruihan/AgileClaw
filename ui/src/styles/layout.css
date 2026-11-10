@@ -1562,6 +1562,13 @@ openclaw-settings-save-indicator:empty {
   overscroll-behavior: contain;
   scrollbar-gutter: auto;
   scrollbar-width: none;
+  /* Height-query container for allocation concessions inside the well (the
+     compact roster group header yields when this scroller cannot afford the
+     header plus one whole session row). Its height is owned by the flex
+     chain above, never by content, so size containment changes no sizing;
+     positioned row chrome anchors within its own row, not above the scroller. */
+  container-name: sidebar-session-scroller;
+  container-type: size;
 }
 
 .sidebar-sessions__scroll::-webkit-scrollbar {
@@ -2689,6 +2696,25 @@ openclaw-settings-save-indicator:empty {
     margin-top: 8px;
     margin-bottom: 8px;
     min-height: calc(var(--sidebar-session-row-min-height) + 12px);
+  }
+}
+
+/* The compact roster group header opens each agent's section inside the well
+   scroller's flow, so a column whose scroller cannot afford the header plus
+   one whole session row clips that first row mid-label at rest. The
+   compact-height band above removes the header for everyone; this extends
+   the same concession to taller columns that reach the same squeeze — the
+   solo floor release plus a fuller rail of 6px-separated seated keys leaves
+   less than header + row above 500px. The scroller container keeps it exact
+   per column: roomy columns keep the header, tight ones lose it, and no
+   viewport rung is added. 80px is the 48px header plus one rendered session
+   row at the default text scale. */
+@container sidebar-session-scroller (max-height: 80px) {
+  /* Seated inside the allocation owner's well scope so the concession keeps
+     winning the cascade over the roster chunk's base display rule, which
+     loads after this sheet. */
+  .sidebar-sessions .sidebar-agent-roster__header {
+    display: none;
   }
 }
 
