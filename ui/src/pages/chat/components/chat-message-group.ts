@@ -129,7 +129,7 @@ function renderPreparedGroupMessage(
     searchResult: opts.searchResult,
     text: source.displayMarkdown,
     streaming: group.isStreaming && index === group.messages.length - 1,
-    liveTail: opts.reveal?.isTail(item.key) === true,
+    liveTail: opts.reveal?.isTail(group.key) === true,
     instant:
       assistantMessageDisclosure?.expanded === true ||
       !source.normalizedMessage.content.every((contentItem) => contentItem.type === "text"),

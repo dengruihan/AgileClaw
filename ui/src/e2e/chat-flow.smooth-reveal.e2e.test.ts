@@ -271,6 +271,49 @@ suite.define(() => {
     });
   });
 
+  it("reveals whole grapheme clusters (flags, ZWJ families, keycaps)", async () => {
+    const artifactDir = artifactDirFor("chat-flow.smooth-reveal");
+    await suite.withPage(createControlUiE2eContextOptions(), async ({ page }) => {
+      const { gateway, runId } = await openStreamingTurn(page, "grapheme reveal probe");
+      const finalText = "Flags 🇨🇳🇯🇵 and a family 👨‍👩‍👧‍👦 plus keycap 1️⃣ and modifier 👍🏽 stay whole.";
+      await gateway.emitChatFinal({ runId, text: finalText });
+      const boundaries = await page.evaluate(
+        (text) =>
+          new Promise<{ samples: number[]; boundaries: number[]; text: string }>((resolve) => {
+            const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+            const boundarySet = new Set<number>();
+            for (const segment of segmenter.segment(text)) {
+              boundarySet.add(segment.index);
+              boundarySet.add(segment.index + segment.segment.length);
+            }
+            const samples: number[] = [];
+            const startedAt = performance.now();
+            const readText = () => {
+              const nodes = [...document.querySelectorAll<HTMLElement>(".chat-text")];
+              return (nodes.at(-1)?.textContent ?? "").trim();
+            };
+            const tick = () => {
+              samples.push(readText().length);
+              if (performance.now() - startedAt < 1200) {
+                requestAnimationFrame(tick);
+                return;
+              }
+              resolve({ samples, boundaries: [...boundarySet], text: readText() });
+            };
+            requestAnimationFrame(tick);
+          }),
+        finalText,
+      );
+      const painted = boundaries.samples.filter((length) => length > 0);
+      expect(painted.length).toBeGreaterThan(1);
+      expect(painted.every((length) => boundaries.boundaries.includes(length))).toBe(true);
+      expect(boundaries.text).toBe(finalText);
+      if (artifactDir) {
+        await page.screenshot({ path: path.join(artifactDir, "state-graphemes.png") });
+      }
+    });
+  });
+
   it("paints settled text immediately under reduced motion", async () => {
     const artifactDir = artifactDirFor("chat-flow.smooth-reveal");
     await suite.withPage(

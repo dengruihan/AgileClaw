@@ -13,6 +13,7 @@ import {
 } from "../../../components/markdown-tables.ts";
 import { toSanitizedMarkdownHtml } from "../../../components/markdown.ts";
 import type { MessageGroup } from "../../../lib/chat/chat-types.ts";
+import { groupMessages } from "../chat-thread-grouping.ts";
 import { renderMessageGroup } from "./chat-message-group.ts";
 import {
   prepareMarkdownMedia,
@@ -645,26 +646,26 @@ describe("smooth assistant reveal", () => {
     expect(paintedBeforeHandoff.length).toBeLessThan(streamed.length);
 
     const finalText = `${streamed} It settles with **strong** emphasis.`;
-    const group: MessageGroup = {
-      kind: "group",
-      key: "assistant:2000",
-      role: "assistant",
-      messages: [
-        {
-          message: {
-            role: "assistant",
-            content: [{ type: "text", text: finalText }],
-            timestamp: 2_000,
-          },
-          key: "assistant:2000:message",
-          hasVisibleContent: true,
+    // Build the settled row through the real grouper so the renderer's group
+    // key (`group:assistant:<itemKey>`) is the tail key it actually asks about.
+    const [group] = groupMessages([
+      {
+        kind: "message",
+        key: "assistant:1",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: finalText }],
+          timestamp: 2_000,
         },
-      ],
-      visibleContent: "text",
-      timestamp: 2_000,
-      isStreaming: false,
-      runId: "reveal-run",
-    };
+      },
+    ]) as MessageGroup[];
+    expect(group?.key).toBe("group:assistant:assistant:1");
+    harness.buffer.focusTail({
+      kind: "agent-run-frame",
+      key: "reveal-frame",
+      parts: [group],
+      outcome: { kind: "completed", actionOwner: group.messages[0] },
+    });
     harness.adopt(() =>
       render(
         html`<section ${markdownBlocks()}>
@@ -707,6 +708,139 @@ describe("smooth assistant reveal", () => {
     );
     expect(harness.pendingFrames).toBe(0);
     expect(container.querySelectorAll(".chat-bubble")).toHaveLength(1);
+  });
+
+  it("reveals an identity-less one-shot final through the real grouped renderer", async () => {
+    const harness = createRevealHarness();
+    const finalText = "A one-shot grouped answer painted by the real message group renderer.";
+    const [group] = groupMessages([
+      {
+        kind: "message",
+        key: "assistant:1",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: finalText }],
+          timestamp: 2_000,
+        },
+      },
+    ]) as MessageGroup[];
+    expect(group?.key).toBe("group:assistant:assistant:1");
+    expect(group?.runId).toBeUndefined();
+    harness.buffer.focusTail(group);
+    expect(harness.buffer.isTail(group!.key)).toBe(true);
+    const draw = () =>
+      render(
+        html`<section ${markdownBlocks()}>
+          ${renderMessageGroup(group!, {
+            showReasoning: false,
+            showToolCalls: false,
+            reveal: harness.buffer,
+          })}
+        </section>`,
+        container,
+      );
+    harness.adopt(draw);
+    draw();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const painted = () => (container.querySelector(".chat-text")?.textContent ?? "").trim();
+    expect(painted().length).toBeGreaterThan(0);
+    expect(painted().length).toBeLessThan(finalText.length);
+    expect(container.querySelector(".chat-bubble")?.classList.contains("streaming")).toBe(true);
+    await harness.drain();
+    expect(painted()).toBe(finalText);
+    expect(container.querySelector(".chat-bubble")?.classList.contains("streaming")).toBe(false);
+  });
+
+  it("keeps same-run rows with a shared opening independent at the stream/group boundary", async () => {
+    const harness = createRevealHarness();
+    const rowA = `Shared prefix: alpha ${"keeps growing with readable pacing. ".repeat(3)}`;
+    const rowB = `Shared prefix: beta ${"is a separate same-run row. ".repeat(3)}`;
+    const containerA = document.body.appendChild(document.createElement("div"));
+    const containerB = document.body.appendChild(document.createElement("div"));
+    const drawStream = (target: HTMLElement, key: string, text: string) => () =>
+      render(
+        html`<section ${markdownBlocks()}>
+          ${renderStreamGroup(
+            [
+              {
+                kind: "stream",
+                key,
+                text,
+                startedAt: 1_000,
+                isStreaming: true,
+                runId: "reveal-run",
+              },
+            ],
+            { sessionKey: "agent:main:main", reveal: harness.buffer },
+          )}
+        </section>`,
+        target,
+      );
+    try {
+      drawStream(containerA, "stream-a", rowA)();
+      await Promise.resolve();
+      for (let frame = 0; frame < 2; frame += 1) {
+        await harness.frame();
+        drawStream(containerA, "stream-a", rowA)();
+      }
+      drawStream(containerB, "stream-b", rowB)();
+      await Promise.resolve();
+      for (let frame = 0; frame < 2; frame += 1) {
+        await harness.frame();
+        drawStream(containerB, "stream-b", rowB)();
+      }
+      const paintedB = (containerB.querySelector(".chat-text")?.textContent ?? "").trim();
+      expect(paintedB.length).toBeGreaterThan(0);
+      expect(paintedB.length).toBeLessThan(rowB.length);
+
+      const finalText = `${rowA} and finishes.`;
+      const [finalGroup] = groupMessages([
+        {
+          kind: "message",
+          key: "assistant:final",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: finalText }],
+            timestamp: 3_000,
+          },
+        },
+      ]) as MessageGroup[];
+      harness.buffer.focusTail(finalGroup!);
+      const drawFinal = () =>
+        render(
+          html`<section ${markdownBlocks()}>
+            ${renderMessageGroup(finalGroup!, {
+              showReasoning: false,
+              showToolCalls: false,
+              reveal: harness.buffer,
+            })}
+          </section>`,
+          containerA,
+        );
+      harness.adopt(drawFinal);
+      drawFinal();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // B keeps its own reveal: not retracted and not completed by A's final.
+      drawStream(containerB, "stream-b", rowB)();
+      await Promise.resolve();
+      expect((containerB.querySelector(".chat-text")?.textContent ?? "").trim()).toBe(paintedB);
+      await harness.frame();
+      await harness.frame();
+      drawStream(containerB, "stream-b", rowB)();
+      await Promise.resolve();
+      expect(
+        (containerB.querySelector(".chat-text")?.textContent ?? "").trim().length,
+      ).toBeGreaterThan(paintedB.length);
+    } finally {
+      render(nothing, containerA);
+      render(nothing, containerB);
+      containerA.remove();
+      containerB.remove();
+    }
   });
 
   it("paints reduced motion and history rows instantly", async () => {

@@ -9,6 +9,11 @@
  * the complete final text before the row settles into document mode.
  */
 
+import {
+  containingSegment,
+  firstGraphemeClusterLength,
+  skipWhitespaceGraphemes,
+} from "@openclaw/normalization-core/grapheme";
 import { normalizeRoleForGrouping } from "../../../lib/chat/message-normalizer.ts";
 
 export type ChatRevealFrameClock = {
@@ -66,25 +71,69 @@ export type ChatRevealRow = {
 export type ChatRevealTailOwner = {
   readonly kind?: string;
   readonly key?: string;
+  readonly role?: string;
+  readonly messages?: readonly unknown[];
   readonly parts?: readonly ChatRevealTailOwner[];
-  readonly groups?: readonly { readonly key: string }[];
+  readonly groups?: readonly ChatRevealTailOwner[];
+  readonly outcome?: unknown;
 };
 
-function revealOwnerGroupKeys(owner: ChatRevealTailOwner | null): string[] {
-  if (!owner?.key) {
+type TailGroup = {
+  key?: string;
+  role?: string;
+  messages?: readonly unknown[];
+};
+
+function readTailActionOwner(owner: ChatRevealTailOwner): unknown {
+  const outcome = owner.outcome;
+  return typeof outcome === "object" && outcome !== null && "actionOwner" in outcome
+    ? (outcome as { actionOwner?: unknown }).actionOwner
+    : undefined;
+}
+
+function collectTailGroups(owner: ChatRevealTailOwner, groups: TailGroup[]): TailGroup[] {
+  if (owner.kind === "group") {
+    groups.push(owner);
+    return groups;
+  }
+  for (const group of owner.groups ?? []) {
+    collectTailGroups(group, groups);
+  }
+  for (const part of owner.parts ?? []) {
+    collectTailGroups(part, groups);
+  }
+  return groups;
+}
+
+/**
+ * The rendered group that owns the settled final answer, plus its message item
+ * keys: the renderer asks about the group key while the reveal entry is keyed
+ * by the item key (`group:<role>:<itemKey>` vs `<itemKey>`).
+ */
+function revealOwnerTailKeys(owner: ChatRevealTailOwner | null): string[] {
+  if (!owner) {
     return [];
   }
-  if (owner.kind === "group") {
-    return [owner.key];
+  const groups = collectTailGroups(owner, []).filter(
+    (group): group is TailGroup & { key: string } => Boolean(group.key),
+  );
+  const actionOwner = readTailActionOwner(owner);
+  const actionGroup = actionOwner
+    ? groups.find((group) => group.messages?.includes(actionOwner))
+    : undefined;
+  const selected =
+    actionGroup ??
+    groups.findLast((group) => group.role === "assistant") ??
+    groups.at(-1) ??
+    (owner.key ? { key: owner.key, messages: [] } : undefined);
+  if (!selected) {
+    return [];
   }
-  const keys: string[] = [];
-  for (const part of owner.parts ?? []) {
-    keys.push(...revealOwnerGroupKeys(part));
-    for (const group of part.groups ?? []) {
-      keys.push(group.key);
-    }
-  }
-  return keys;
+  const itemKeys = (selected.messages ?? []).flatMap((message) => {
+    const key = (message as { key?: unknown })?.key;
+    return typeof key === "string" && key ? [key] : [];
+  });
+  return [selected.key, ...itemKeys];
 }
 
 type RevealEntry = {
@@ -95,6 +144,8 @@ type RevealEntry = {
   text: string;
   revealed: number;
   streaming: boolean;
+  /** A settled successor already continued this row; never hand off twice. */
+  handedOff: boolean;
   version: number;
 };
 
@@ -115,41 +166,15 @@ const MAX_FRAME_MS = 48;
 const MAX_ENTRIES = 8;
 const MAX_COMPLETED_KEYS = 128;
 const MAX_RUN_OBSERVATIONS = 24;
-const MIN_HANDOFF_PREFIX_CHARS = 4;
 const MAX_PANE_BUFFERS = 8;
-
-const ZERO_WIDTH_JOINER = 0x200d;
-const COMBINING_MARK_RANGES: ReadonlyArray<readonly [number, number]> = [
-  [0x0300, 0x036f],
-  [0x0483, 0x0489],
-  [0x0591, 0x05bd],
-  [0x0610, 0x061a],
-  [0x064b, 0x065f],
-  [0x0670, 0x0670],
-  [0x06d6, 0x06dc],
-  [0x0900, 0x0902],
-  [0x093a, 0x093a],
-  [0x093c, 0x093c],
-  [0x0941, 0x0948],
-  [0x094d, 0x094d],
-  [0x0e31, 0x0e31],
-  [0x0e34, 0x0e3a],
-  [0x0e47, 0x0e4e],
-  [0x1ab0, 0x1aff],
-  [0x1dc0, 0x1dff],
-  [0x20d0, 0x20ff],
-  [0xfe00, 0xfe0f],
-  [0xfe20, 0xfe2f],
-  [0x1f3fb, 0x1f3ff],
-  [0xe0100, 0xe01ef],
-];
 // Runs of Markdown emphasis/code/escape markers stay whole so a reveal step
 // never paints a lone `*` or backslash before its partner arrives.
 const MARKDOWN_MARKER_CODEPOINTS = new Set([0x60, 0x2a, 0x5f, 0x7e, 0x5c]);
 
-function isCombiningMark(codePoint: number): boolean {
-  return COMBINING_MARK_RANGES.some(([from, to]) => codePoint >= from && codePoint <= to);
-}
+const graphemeSegmenter =
+  typeof Intl.Segmenter === "function"
+    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+    : null;
 
 function codePointBefore(text: string, index: number): number | null {
   if (index <= 0) {
@@ -165,18 +190,37 @@ function codePointBefore(text: string, index: number): number | null {
   return trailing;
 }
 
+/** Largest whole-grapheme cut at or below the index, for retraction clamps. */
+function graphemeFloor(text: string, index: number): number {
+  if (!graphemeSegmenter || index <= 0 || index >= text.length) {
+    return index;
+  }
+  const cluster = containingSegment(graphemeSegmenter.segment(text), text, index);
+  return cluster && cluster.index < index ? cluster.index : index;
+}
+
 /**
- * Move a candidate cut forward until it cannot split a surrogate pair, a
- * grapheme cluster, a ZWJ emoji sequence, a CRLF pair, or a Markdown marker run.
+ * Extend a candidate cut to the end of the grapheme cluster it lands in, then
+ * keep a Markdown marker run whole. Grapheme boundaries come from the shared
+ * normalization owner, so flags, ZWJ sequences, keycaps, and modifiers are
+ * never split.
  */
 export function snapRevealIndex(text: string, index: number): number {
   if (index <= 0) {
     return 0;
   }
   let cut = Math.min(index, text.length);
-  const trailing = cut < text.length ? text.charCodeAt(cut) : -1;
-  if (trailing >= 0xdc00 && trailing <= 0xdfff) {
-    cut += 1;
+  if (graphemeSegmenter && cut < text.length) {
+    const cluster = containingSegment(graphemeSegmenter.segment(text), text, cut);
+    if (cluster && cluster.index < cut) {
+      cut = cluster.index + cluster.segment.length;
+    }
+  } else if (!graphemeSegmenter && cut < text.length) {
+    // Without a segmenter only surrogate safety is available.
+    const trailing = text.charCodeAt(cut);
+    if (trailing >= 0xdc00 && trailing <= 0xdfff) {
+      cut += 1;
+    }
   }
   // An escape marker owns the character it escapes.
   const marker = codePointBefore(text, cut);
@@ -187,21 +231,6 @@ export function snapRevealIndex(text: string, index: number): number {
     if (marker === 0x5c && cut < text.length && text.charCodeAt(cut) !== 0x0a) {
       cut += text.codePointAt(cut)! > 0xffff ? 2 : 1;
     }
-  }
-  for (;;) {
-    if (cut >= text.length) {
-      return text.length;
-    }
-    const next = text.codePointAt(cut)!;
-    const previous = codePointBefore(text, cut);
-    if (previous === ZERO_WIDTH_JOINER || isCombiningMark(next)) {
-      cut += next > 0xffff ? 2 : 1;
-      continue;
-    }
-    break;
-  }
-  if (text.charCodeAt(cut - 1) === 0x0d && text.charCodeAt(cut) === 0x0a) {
-    cut += 1;
   }
   return cut;
 }
@@ -217,11 +246,11 @@ function commonPrefixLength(a: string, b: string): number {
 
 /** First visible glyph offset, so a reveal start never paints a blank row. */
 function revealStartIndex(text: string): number {
-  let start = 0;
-  while (start < text.length && /\s/u.test(text.charAt(start))) {
-    start += 1;
+  const start = skipWhitespaceGraphemes(text);
+  if (start >= text.length) {
+    return text.length;
   }
-  return start >= text.length ? text.length : snapRevealIndex(text, start + 1);
+  return start + firstGraphemeClusterLength(text.slice(start));
 }
 
 function revealStep(remaining: number, deltaMs: number): number {
@@ -247,8 +276,14 @@ export class ChatRevealBuffer {
   private readonly entries = new Map<string, RevealEntry>();
   private readonly completed = new Set<string>();
   private readonly runs = new Map<string, RunObservation>();
-  private readonly tailKeys = new Set<string>();
+  /** Focused tail row keys and the run each was focused under. */
+  private readonly tailRunIds = new Map<string, string | null>();
   private sessionKey: string | null = null;
+  private connectionEpoch: number | undefined;
+  /** Run that owns reveal state; superseded runs are retired on identity change. */
+  private activeRunId: string | null = null;
+  /** Newest streaming entry; the only row a settled final may continue from. */
+  private activeStreamEntryKey: string | null = null;
   private liveRunId: string | null = null;
   private scheduleUpdate: () => void = () => {};
   private frame: number | null = null;
@@ -263,28 +298,48 @@ export class ChatRevealBuffer {
   }
 
   /**
-   * One call per transcript projection. Session switches drop buffered runs,
-   * and a settled history load arms the live run so only text that arrives
-   * after the pane attached animates; a replay during initial load paints.
+   * One call per transcript projection. The buffer owns three lifecycle facts:
+   * a session switch or connection transition retires everything (a disconnect
+   * must not keep repainting), a different run supersedes the previous run's
+   * work, and a settled run keeps its intentional final drain. A settled
+   * history load arms the live run so only text that arrives after the pane
+   * attached animates; a replay during initial load paints.
    */
   beginPass(pass: {
     sessionKey: string;
+    connectionEpoch?: number;
     runId?: string | null;
     live: boolean;
     historySettled: boolean;
     scheduleUpdate: () => void;
   }): void {
-    if (this.sessionKey !== pass.sessionKey) {
+    const epochChanged =
+      pass.connectionEpoch !== undefined &&
+      this.connectionEpoch !== undefined &&
+      pass.connectionEpoch !== this.connectionEpoch;
+    if (this.sessionKey !== pass.sessionKey || epochChanged) {
       this.reset();
       this.sessionKey = pass.sessionKey;
     }
+    this.connectionEpoch = pass.connectionEpoch ?? this.connectionEpoch;
     this.pass += 1;
     this.scheduleUpdate = pass.scheduleUpdate;
-    this.liveRunId = pass.runId ?? this.liveRunId;
-    if (!pass.live || !pass.runId) {
+    const incomingRun = pass.runId ?? null;
+    if (incomingRun !== null && incomingRun !== this.activeRunId) {
+      if (this.activeRunId !== null) {
+        // A different run owns the pane now; the previous run's reveal is
+        // retired rather than left repainting offscreen.
+        this.retireRun(this.activeRunId);
+      }
+      this.activeRunId = incomingRun;
+    }
+    if (incomingRun !== null) {
+      this.liveRunId = incomingRun;
+    }
+    if (!pass.live || !incomingRun) {
       return;
     }
-    const observation = this.runs.get(pass.runId) ?? {
+    const observation = this.runs.get(incomingRun) ?? {
       firstPass: this.pass,
       armed: false,
       entries: 0,
@@ -294,13 +349,13 @@ export class ChatRevealBuffer {
     if (pass.historySettled && observation.firstPass < this.pass) {
       observation.armed = true;
     }
-    this.runs.delete(pass.runId);
-    this.runs.set(pass.runId, observation);
+    this.runs.delete(incomingRun);
+    this.runs.set(incomingRun, observation);
     this.pruneRuns();
   }
 
   versionForRun(runId?: string | null): number {
-    const runKey = this.resolveRunKey(runId, true);
+    const runKey = this.resolveRunKey(runId);
     let version = 0;
     for (const entry of this.entries.values()) {
       if (entry.runKey === runKey) {
@@ -325,16 +380,18 @@ export class ChatRevealBuffer {
     // A null owner keeps the previous tail: an answer that is still revealing
     // must not jump while the next run is starting. New tails replace the set.
     if (owner) {
-      this.tailKeys.clear();
-      for (const key of revealOwnerGroupKeys(owner)) {
-        this.tailKeys.add(key);
+      this.tailRunIds.clear();
+      for (const key of revealOwnerTailKeys(owner)) {
+        // The tail belongs to the run that owned the pane when it settled; a
+        // later run must not animate a stale identity-less row.
+        this.tailRunIds.set(key, this.activeRunId);
       }
     }
     return owner?.key ?? null;
   }
 
   isTail(rowKey: string): boolean {
-    return this.tailKeys.has(rowKey);
+    return this.tailRunIds.has(rowKey);
   }
 
   /** Visible prefix for one row; the canonical text itself is never rewritten. */
@@ -343,7 +400,7 @@ export class ChatRevealBuffer {
     if (!text) {
       return { text, revealing: false };
     }
-    const runKey = this.resolveRunKey(request.runId, request.liveTail === true);
+    const runKey = this.resolveRequestRunKey(request);
     const observation = this.runs.get(runKey);
     // History rows and other runs never animate, so their renders stay free of
     // buffer bookkeeping even with hundreds of visible messages.
@@ -362,9 +419,16 @@ export class ChatRevealBuffer {
     if (this.completed.has(entryKey)) {
       return { text, revealing: false };
     }
-    const inherited = this.inheritReveal(runKey, text);
+    const inherited = request.liveTail === true ? this.handoff(runKey, text) : null;
     if (inherited !== null) {
       return this.startEntry(runKey, entryKey, request, inherited);
+    }
+    if (request.liveTail === true && this.runHasEntries(runKey)) {
+      // The run already painted output this settled row cannot continue from.
+      // Painting it settled avoids retracting or restarting text the reader
+      // already saw, and keeps sibling rows independent.
+      this.complete(entryKey);
+      return { text, revealing: false };
     }
     if (!observation.armed) {
       // Attached to a run that was already producing text: paint its backlog
@@ -391,10 +455,23 @@ export class ChatRevealBuffer {
     return this.motionQuery === null || this.motionQuery.matches;
   }
 
-  private resolveRunKey(runId: string | null | undefined, liveTail: boolean): string {
-    // A row without its own run id animates only when the projection marks it
-    // as the pane's live tail; a missing identity is otherwise history.
-    return runId ?? (liveTail ? this.liveRunId : null) ?? "";
+  private resolveRunKey(runId: string | null | undefined): string {
+    return runId ?? this.liveRunId ?? "";
+  }
+
+  private resolveRequestRunKey(request: ChatRevealRequest): string {
+    if (request.runId) {
+      return request.runId;
+    }
+    // An unowned stream part belongs to the live run; an identity-less settled
+    // row belongs to the run it was focused under, never a later run.
+    if (request.streaming === true) {
+      return this.liveRunId ?? "";
+    }
+    if (request.liveTail === true) {
+      return this.tailRunIds.get(request.key) ?? "";
+    }
+    return "";
   }
 
   private startEntry(
@@ -411,9 +488,13 @@ export class ChatRevealBuffer {
       text,
       revealed: revealed > 0 ? Math.min(revealed, text.length) : revealStartIndex(text),
       streaming: request.streaming === true,
+      handedOff: false,
       version: ++this.version,
     };
     this.entries.set(entryKey, entry);
+    if (entry.streaming) {
+      this.activeStreamEntryKey = entryKey;
+    }
     const observation = this.runs.get(runKey);
     if (observation) {
       observation.entries += 1;
@@ -428,12 +509,19 @@ export class ChatRevealBuffer {
 
   private advanceTarget(entry: RevealEntry, request: ChatRevealRequest): ChatRevealText {
     entry.streaming = request.streaming === true;
+    if (entry.streaming && !entry.handedOff) {
+      this.activeStreamEntryKey = entry.entryKey;
+    }
     if (entry.text !== request.text) {
       const painted = entry.text.slice(0, entry.revealed);
       entry.text = request.text;
       // Keep every already painted character that the new canonical text still
-      // contains; the row may swap identity (stream segment -> final message).
-      entry.revealed = Math.min(entry.revealed, commonPrefixLength(painted, request.text));
+      // contains, snapped down to a whole grapheme; the row may swap identity
+      // (stream segment -> final message).
+      entry.revealed = Math.min(
+        entry.revealed,
+        graphemeFloor(request.text, commonPrefixLength(painted, request.text)),
+      );
     }
     if (entry.revealed === 0) {
       // A divergent replacement must still paint one visible glyph, never an
@@ -453,29 +541,39 @@ export class ChatRevealBuffer {
   }
 
   /**
-   * Adopt the reveal position of an already painted row of the same run. The
-   * live stream part and the settled final message use different row keys, so
-   * without this handoff the final answer would restart or jump.
+   * Continue a settled final from the one active stream successor. Ownership is
+   * explicit: the newest streaming entry claims the handoff once, its painted
+   * text must still be a prefix of the final text, and the source entry keeps
+   * its own reveal (never completed or retracted by another row).
    */
-  private inheritReveal(runKey: string, text: string): number | null {
-    const candidates = [...this.entries.values()].filter((entry) => entry.runKey === runKey);
-    for (let index = candidates.length - 1; index >= 0; index -= 1) {
-      const candidate = candidates[index]!;
-      const painted = candidate.text.slice(0, candidate.revealed);
-      if (!painted) {
-        continue;
-      }
-      if (text.startsWith(painted)) {
-        this.complete(candidate.entryKey);
-        return candidate.revealed;
-      }
-      const prefix = commonPrefixLength(painted, text);
-      if (prefix >= Math.min(MIN_HANDOFF_PREFIX_CHARS, painted.length)) {
-        this.complete(candidate.entryKey);
-        return prefix;
+  private handoff(runKey: string, text: string): number | null {
+    const sourceKey = this.activeStreamEntryKey;
+    if (!sourceKey) {
+      return null;
+    }
+    const source = this.entries.get(sourceKey);
+    if (!source || source.runKey !== runKey || !source.streaming) {
+      return null;
+    }
+    const painted = source.text.slice(0, source.revealed);
+    if (!painted || !text.startsWith(painted)) {
+      return null;
+    }
+    // One-to-one: only the first settled successor may continue this stream.
+    source.handedOff = true;
+    if (this.activeStreamEntryKey === source.entryKey) {
+      this.activeStreamEntryKey = null;
+    }
+    return source.revealed;
+  }
+
+  private runHasEntries(runKey: string): boolean {
+    for (const entry of this.entries.values()) {
+      if (entry.runKey === runKey) {
+        return true;
       }
     }
-    return null;
+    return false;
   }
 
   private complete(entryKey: string): void {
@@ -484,6 +582,9 @@ export class ChatRevealBuffer {
       return;
     }
     this.entries.delete(entryKey);
+    if (this.activeStreamEntryKey === entryKey) {
+      this.activeStreamEntryKey = null;
+    }
     const observation = this.runs.get(entry.runKey);
     if (observation) {
       observation.entries = Math.max(0, observation.entries - 1);
@@ -571,15 +672,35 @@ export class ChatRevealBuffer {
     }
   }
 
-  private reset(): void {
+  /** Drops every reveal entry the superseded run still owned. */
+  private retireRun(runKey: string): void {
+    for (const [entryKey, entry] of this.entries) {
+      if (entry.runKey === runKey) {
+        this.entries.delete(entryKey);
+      }
+    }
+    this.runs.delete(runKey);
+    this.activeStreamEntryKey = null;
+    if (!this.hasRemaining()) {
+      this.stopFrames();
+    }
+  }
+
+  private stopFrames(): void {
     if (this.frame !== null) {
       this.clock.cancelFrame(this.frame);
       this.frame = null;
     }
+  }
+
+  private reset(): void {
+    this.stopFrames();
     this.entries.clear();
     this.completed.clear();
     this.runs.clear();
-    this.tailKeys.clear();
+    this.tailRunIds.clear();
+    this.activeStreamEntryKey = null;
+    this.activeRunId = null;
     this.liveRunId = null;
     this.scheduleUpdate = () => {};
   }
@@ -609,6 +730,7 @@ export function chatRevealBufferForPane(paneId: string): ChatRevealBuffer {
 export function beginChatReveal(
   props: {
     paneId: string;
+    connectionEpoch?: number;
     sessionKey: string;
     runId?: string | null;
     runActive?: boolean;
@@ -621,6 +743,7 @@ export function beginChatReveal(
   const buffer = chatRevealBufferForPane(props.paneId);
   buffer.beginPass({
     sessionKey: props.sessionKey,
+    connectionEpoch: props.connectionEpoch,
     runId: props.runId ?? null,
     live:
       Boolean(props.runId || props.runActive || props.runWorking) ||

@@ -1,6 +1,8 @@
 /* @vitest-environment jsdom */
 
 import { describe, expect, it, vi } from "vitest";
+import type { MessageGroup } from "../../../lib/chat/chat-types.ts";
+import { groupMessages } from "../chat-thread-grouping.ts";
 import {
   ChatRevealBuffer,
   snapRevealIndex,
@@ -138,12 +140,15 @@ describe("chat reveal buffer", () => {
       runId: "run-1",
       text: finalText,
       streaming: false,
+      liveTail: true,
     });
     expect(handedOff.revealing).toBe(true);
     expect(handedOff.text).toBe(painted.text);
+    // The source row keeps its own reveal; the handoff never completes or
+    // retracts the row it continued from.
     expect(buffer.visibleText({ key: "stream-row", runId: "run-1", text: streamText })).toEqual({
-      text: streamText,
-      revealing: false,
+      text: painted.text,
+      revealing: true,
     });
 
     frames.advance(400);
@@ -384,5 +389,318 @@ describe("chat reveal buffer", () => {
     expect(snapRevealIndex("line\r\nnext", 5)).toBe(6);
     expect(snapRevealIndex("short", 99)).toBe(5);
     expect(snapRevealIndex("short", -3)).toBe(0);
+  });
+});
+
+function createFrameClockWithEpoch() {
+  let now = 1_000;
+  let nextHandle = 1;
+  const pending = new Map<number, () => void>();
+  const clock: ChatRevealFrameClock = {
+    now: () => now,
+    requestFrame: (callback) => {
+      const handle = nextHandle++;
+      pending.set(handle, callback);
+      return handle;
+    },
+    cancelFrame: (handle) => {
+      pending.delete(handle);
+    },
+  };
+  return {
+    clock,
+    advance(frames = 1, deltaMs = 16) {
+      for (let frame = 0; frame < frames; frame += 1) {
+        now += deltaMs;
+        const callbacks = [...pending.values()];
+        pending.clear();
+        for (const callback of callbacks) {
+          callback();
+        }
+      }
+    },
+    get pendingFrames() {
+      return pending.size;
+    },
+  };
+}
+
+function createLifecycleBuffer() {
+  const frames = createFrameClockWithEpoch();
+  const scheduleUpdate = vi.fn();
+  const buffer = new ChatRevealBuffer({
+    clock: frames.clock,
+    reducedMotion: () => false,
+  });
+  buffer.beginPass({
+    sessionKey: "agent:main:main",
+    connectionEpoch: 1,
+    runId: "run-1",
+    live: true,
+    historySettled: true,
+    scheduleUpdate: () => {},
+  });
+  buffer.beginPass({
+    sessionKey: "agent:main:main",
+    connectionEpoch: 1,
+    runId: "run-1",
+    live: true,
+    historySettled: true,
+    scheduleUpdate,
+  });
+  return { buffer, frames, scheduleUpdate };
+}
+
+const LONG_REPLY = `Shared prefix: alpha ${"keeps growing with readable pacing. ".repeat(4)}`;
+const OTHER_REPLY = `Shared prefix: beta ${"is a separate same-run row. ".repeat(4)}`;
+
+describe("chat reveal ownership regressions", () => {
+  it("hands off only to the focused successor and never retracts or completes another same-run row", () => {
+    const { buffer, frames } = createLifecycleBuffer();
+    buffer.visibleText({ key: "stream-a", runId: "run-1", text: LONG_REPLY, streaming: true });
+    frames.advance(2);
+    const paintedA = buffer.visibleText({
+      key: "stream-a",
+      runId: "run-1",
+      text: LONG_REPLY,
+      streaming: true,
+    });
+    expect(paintedA.revealing).toBe(true);
+    // A second same-run streaming row shares the opening and becomes the newest entry.
+    const paintedB = buffer.visibleText({
+      key: "stream-b",
+      runId: "run-1",
+      text: OTHER_REPLY,
+      streaming: true,
+    });
+    expect(paintedB.revealing).toBe(true);
+    const finalText = `${LONG_REPLY} and finishes.`;
+    const finalA = buffer.visibleText({
+      key: "final-a",
+      runId: "run-1",
+      text: finalText,
+      streaming: false,
+      liveTail: true,
+    });
+    // The final cannot continue A's painted text (the active successor is B and
+    // its opening diverges), so it must not adopt B's position.
+    expect(finalA.text.length).toBeLessThan(paintedA.text.length + 1);
+    // B keeps its own reveal: not retracted, not completed by A's final.
+    expect(
+      buffer.visibleText({
+        key: "stream-b",
+        runId: "run-1",
+        text: OTHER_REPLY,
+        streaming: true,
+      }),
+    ).toEqual({ text: paintedB.text, revealing: true });
+    expect(buffer.versionForRun("run-1")).toBeGreaterThan(0);
+  });
+
+  it("focuses only the action owner's rendered group, not every group in the tail frame", () => {
+    const commentary = groupMessages([
+      { kind: "message", key: "assistant:0", message: { role: "assistant", content: "Checking." } },
+    ])[0] as MessageGroup;
+    const answer = groupMessages([
+      {
+        kind: "message",
+        key: "assistant:1",
+        message: { role: "assistant", content: LONG_REPLY },
+      },
+    ])[0] as MessageGroup;
+    expect(answer.key).toBe("group:assistant:assistant:1");
+    const { buffer } = createLifecycleBuffer();
+    buffer.focusTail({
+      kind: "agent-run-frame",
+      key: "answer-frame",
+      parts: [commentary, answer],
+      outcome: { kind: "completed", actionOwner: answer.messages[0] },
+    });
+    expect(buffer.isTail(answer.key)).toBe(true);
+    expect(buffer.isTail(commentary.key)).toBe(false);
+
+    const revealed = buffer.visibleText({
+      key: answer.key,
+      text: LONG_REPLY,
+      streaming: false,
+      liveTail: buffer.isTail(answer.key),
+    });
+    expect(revealed.revealing).toBe(true);
+    expect(revealed.text.length).toBeGreaterThan(0);
+    expect(revealed.text.length).toBeLessThan(LONG_REPLY.length);
+  });
+
+  it("cancels same-session work on a connection transition and supersedes an explicit new run", () => {
+    const { buffer, frames, scheduleUpdate } = createLifecycleBuffer();
+    buffer.visibleText({ key: "stream-a", runId: "run-1", text: LONG_REPLY, streaming: true });
+    expect(frames.pendingFrames).toBe(1);
+    const run1Version = buffer.versionForRun("run-1");
+    expect(run1Version).toBeGreaterThan(0);
+
+    // Same session, new connection epoch: the previous frame and versions retire.
+    buffer.beginPass({
+      sessionKey: "agent:main:main",
+      connectionEpoch: 2,
+      runId: null,
+      live: false,
+      historySettled: true,
+      scheduleUpdate,
+    });
+    expect(frames.pendingFrames).toBe(0);
+    expect(buffer.versionForRun("run-1")).toBe(0);
+    scheduleUpdate.mockClear();
+    frames.advance(5);
+    expect(scheduleUpdate).not.toHaveBeenCalled();
+
+    // A new run in the same epoch also retires the previous run's work.
+    for (const pass of [0, 1]) {
+      buffer.beginPass({
+        sessionKey: "agent:main:main",
+        connectionEpoch: 2,
+        runId: "run-2",
+        live: true,
+        historySettled: true,
+        scheduleUpdate: pass === 0 ? () => {} : scheduleUpdate,
+      });
+    }
+    buffer.visibleText({ key: "stream-b", runId: "run-2", text: OTHER_REPLY, streaming: true });
+    expect(frames.pendingFrames).toBe(1);
+    buffer.beginPass({
+      sessionKey: "agent:main:main",
+      connectionEpoch: 2,
+      runId: "run-3",
+      live: true,
+      historySettled: true,
+      scheduleUpdate,
+    });
+    expect(frames.pendingFrames).toBe(0);
+    expect(buffer.versionForRun("run-2")).toBe(0);
+  });
+
+  it("does not animate a stale identity-less tail under a later run", () => {
+    const { buffer } = createLifecycleBuffer();
+    const staleTail = "Earlier completed answer that must paint settled.";
+    buffer.focusTail({
+      kind: "group",
+      key: "group:assistant:old",
+      role: "assistant",
+      messages: [],
+    });
+    for (const pass of [0, 1]) {
+      buffer.beginPass({
+        sessionKey: "agent:main:main",
+        connectionEpoch: 1,
+        runId: "run-2",
+        live: true,
+        historySettled: true,
+        scheduleUpdate: pass === 0 ? () => {} : () => {},
+      });
+    }
+    expect(
+      buffer.visibleText({
+        key: "group:assistant:old",
+        text: staleTail,
+        streaming: false,
+        liveTail: buffer.isTail("group:assistant:old"),
+      }),
+    ).toEqual({ text: staleTail, revealing: false });
+  });
+
+  it("keeps an intentional settled-final drain alive across idle passes", () => {
+    const { buffer, frames, scheduleUpdate } = createLifecycleBuffer();
+    buffer.visibleText({ key: "stream-a", runId: "run-1", text: LONG_REPLY, streaming: true });
+    const painted = buffer.visibleText({
+      key: "stream-a",
+      runId: "run-1",
+      text: LONG_REPLY,
+      streaming: true,
+    });
+    // The run settles; the final action owner continues from the painted text.
+    const finalText = `${LONG_REPLY} and finishes.`;
+    buffer.beginPass({
+      sessionKey: "agent:main:main",
+      connectionEpoch: 1,
+      runId: "run-1",
+      live: false,
+      historySettled: true,
+      scheduleUpdate,
+    });
+    const final = buffer.visibleText({
+      key: "final-a",
+      runId: "run-1",
+      text: finalText,
+      streaming: false,
+      liveTail: true,
+    });
+    expect(final.text).toBe(painted.text);
+
+    // The pane's run id can clear while the final still drains; that is not a
+    // disconnect and must not cancel the drain.
+    buffer.beginPass({
+      sessionKey: "agent:main:main",
+      connectionEpoch: 1,
+      runId: null,
+      live: false,
+      historySettled: true,
+      scheduleUpdate,
+    });
+    expect(frames.pendingFrames).toBe(1);
+    const before = buffer.visibleText({
+      key: "final-a",
+      runId: "run-1",
+      text: finalText,
+      streaming: false,
+      liveTail: true,
+    });
+    frames.advance(2);
+    const after = buffer.visibleText({
+      key: "final-a",
+      runId: "run-1",
+      text: finalText,
+      streaming: false,
+      liveTail: true,
+    });
+    expect(after.text.length).toBeGreaterThan(before.text.length);
+  });
+
+  it.each([
+    { label: "flag regional indicators", text: "🇨🇳🇯🇵 flags stay whole in the reveal" },
+    { label: "ZWJ family", text: "👨‍👩‍👧‍👦 families stay whole in the reveal" },
+    { label: "keycap", text: "1️⃣ keycaps stay whole in the reveal" },
+    { label: "combining marks", text: "e\u0301clair combining marks stay whole" },
+    { label: "emoji modifier", text: "👍🏽 thumbs stay whole in the reveal" },
+  ])("cuts only at independent grapheme boundaries: $label", ({ text }) => {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    const boundaries = new Set<number>();
+    for (const { index, segment } of segmenter.segment(text)) {
+      boundaries.add(index);
+      boundaries.add(index + segment.length);
+    }
+    const { buffer, frames } = createLifecycleBuffer();
+    let painted = buffer.visibleText({ key: "grapheme", runId: "run-1", text, streaming: true });
+    for (let frame = 0; frame < 400 && painted.revealing; frame += 1) {
+      expect(boundaries.has(painted.text.length)).toBe(true);
+      expect(text.startsWith(painted.text)).toBe(true);
+      frames.advance();
+      painted = buffer.visibleText({
+        key: "grapheme",
+        runId: "run-1",
+        text,
+        streaming: true,
+      });
+    }
+    expect(painted.text).toBe(text);
+  });
+
+  it("includes the whole first grapheme cluster on the first frame", () => {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    for (const text of ["🇨🇳 flag", "👨‍👩‍👧‍👦 family", "e\u0301clair", "1️⃣ keycap"]) {
+      const first = segmenter.segment(text)[Symbol.iterator]().next().value as
+        | Intl.SegmentData
+        | undefined;
+      const { buffer } = createLifecycleBuffer();
+      const painted = buffer.visibleText({ key: "first", runId: "run-1", text, streaming: true });
+      expect(painted.text).toBe(first?.segment ?? "");
+    }
   });
 });
