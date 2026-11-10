@@ -937,6 +937,9 @@ openclaw-session-discussion {
   color: var(--text);
   font-size: 13px;
   line-height: 1.5;
+  --office-paper: rgb(255 255 255);
+  --office-paper-text: rgb(31 35 40);
+  --office-paper-muted: rgb(95 99 104);
 }
 
 .sidebar-office-preview__notice {
@@ -976,45 +979,278 @@ openclaw-session-discussion {
   }
 }
 
-.sidebar-office-preview__grid-scroll {
+.sidebar-office-preview__omitted,
+.sidebar-office-preview__approximation {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sidebar-office-preview__approximation {
+  border-left: 3px solid var(--accent);
+}
+
+/* Word pages stay paper-white in every theme; only the surrounding reader
+   follows the app chrome. */
+.sidebar-office-docx {
+  container-type: inline-size;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px 2px 8px;
+}
+
+.sidebar-office-docx__page-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sidebar-office-docx__page-label {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.sidebar-office-docx__page {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  width: min(100%, var(--office-doc-page-width, 794px));
+  min-height: min(
+    calc(100cqw * var(--office-doc-page-ratio, 1.414)),
+    calc(var(--office-doc-page-width, 794px) * var(--office-doc-page-ratio, 1.414))
+  );
+  border-radius: 2px;
+  background: var(--office-paper);
+  color: var(--office-paper-text);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 18%),
+    0 8px 24px rgb(0 0 0 / 10%);
+  font-family: "Segoe UI", Calibri, Carlito, "Noto Sans", sans-serif;
+  font-size: 11pt;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.sidebar-office-docx__page-header,
+.sidebar-office-docx__page-footer {
+  flex: 0 0 auto;
+  color: var(--office-paper-muted);
+  font-size: 9pt;
+}
+
+.sidebar-office-docx__page-footer {
+  margin-top: auto;
+}
+
+.sidebar-office-docx__page-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: 2px;
+}
+
+.sidebar-office-docx__paragraph {
+  min-width: 0;
+  margin: 0;
+  white-space: pre-wrap;
+
+  &[data-role="title"] {
+    font-size: 24pt;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  &[data-role="heading"] {
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  &[data-role="heading"][data-level="1"] {
+    font-size: 18pt;
+  }
+
+  &[data-role="heading"][data-level="2"] {
+    font-size: 16pt;
+  }
+
+  &[data-role="heading"][data-level="3"] {
+    font-size: 14pt;
+  }
+
+  &[data-role="heading"][data-level="4"],
+  &[data-role="heading"][data-level="5"],
+  &[data-role="heading"][data-level="6"] {
+    font-size: 12pt;
+  }
+}
+
+.sidebar-office-docx__paragraph--list {
+  display: flex;
+  gap: 6px;
+}
+
+.sidebar-office-docx__list-marker {
+  flex: 0 0 auto;
+  min-width: 1.4em;
+  color: inherit;
+}
+
+.sidebar-office-docx__text {
+  min-width: 0;
+  white-space: pre-wrap;
+}
+
+.sidebar-office-docx__table {
+  width: 100%;
+  margin: 4px 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.sidebar-office-docx__table-cell {
+  padding: 2px 4px 4px;
+  border: 1px solid rgb(0 0 0 / 20%);
+  vertical-align: top;
+}
+
+.sidebar-office-docx__figure {
+  margin: 4px 0;
+  text-align: center;
+}
+
+.sidebar-office-docx__image {
+  display: block;
+  margin: 0 auto;
+}
+
+.sidebar-office-docx__image-unavailable {
+  padding: 8px;
+  border: 1px dashed var(--border);
+  color: var(--office-paper-muted);
+  font-size: 10pt;
+  text-align: center;
+}
+
+/* Spreadsheet grids own their scrolling and pin the row/column headers plus
+   the sheet's frozen pane. Column widths and row heights come from the payload. */
+.sidebar-office-sheet__scroll {
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  background: var(--bg);
 }
 
-.sidebar-office-preview__grid {
-  border-collapse: collapse;
+.sidebar-office-sheet__table {
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  width: max-content;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
-
-  td,
-  th {
-    max-width: 320px;
-    padding: 4px 8px;
-    border-bottom: 1px solid var(--border);
-    border-right: 1px solid var(--border);
-    overflow: hidden;
-    text-align: left;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    vertical-align: top;
-  }
-
-  tr:last-child td,
-  tr:last-child th {
-    border-bottom: 0;
-  }
 }
 
-.sidebar-office-preview__row-number {
+.sidebar-office-sheet__column-header,
+.sidebar-office-sheet__corner {
   position: sticky;
-  left: 0;
-  z-index: 1;
+  top: 0;
+  z-index: 3;
+  box-sizing: border-box;
+  height: 20px;
+  padding: 0 4px;
+  border-right: 1px solid transparent;
+  border-bottom: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--muted);
+  font-size: 11px;
   font-weight: 400;
+  text-align: center;
+  user-select: none;
+}
+
+.sidebar-office-sheet__corner {
+  left: 0;
+  z-index: 5;
+}
+
+.sidebar-office-sheet__column-header--frozen {
+  z-index: 4;
+}
+
+.sidebar-office-sheet__row-header {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  box-sizing: border-box;
+  width: 46px;
+  padding: 0 6px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid transparent;
+  background: var(--bg-elevated);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  text-align: right;
+  user-select: none;
+}
+
+.sidebar-office-sheet__row-header--frozen {
+  z-index: 4;
+}
+
+.sidebar-office-sheet__cell {
+  box-sizing: border-box;
+  padding: 2px 4px;
+  border-right: 1px solid transparent;
+  border-bottom: 1px solid transparent;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  text-align: left;
+  text-overflow: clip;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.sidebar-office-sheet__table--gridlines .sidebar-office-sheet__cell,
+.sidebar-office-sheet__table--gridlines .sidebar-office-sheet__column-header,
+.sidebar-office-sheet__table--gridlines .sidebar-office-sheet__row-header {
+  border-right-color: var(--border);
+  border-bottom-color: var(--border);
+}
+
+.sidebar-office-sheet__cell--frozen-row,
+.sidebar-office-sheet__cell--frozen-column,
+.sidebar-office-sheet__cell--frozen-corner {
+  position: sticky;
+  z-index: 2;
+}
+
+.sidebar-office-sheet__cell--frozen-corner {
+  z-index: 3;
+}
+
+.sidebar-office-sheet__cell--hidden {
+  width: 0;
+  padding: 0;
+  border: 0;
+  visibility: hidden;
 }
 
 .sidebar-office-preview__document {
@@ -1030,8 +1266,8 @@ openclaw-session-discussion {
 
 .sidebar-office-preview__heading {
   margin-top: 16px;
-  font-weight: 600;
   font-size: 15px;
+  font-weight: 600;
   line-height: 1.35;
 
   &[data-level="1"] {

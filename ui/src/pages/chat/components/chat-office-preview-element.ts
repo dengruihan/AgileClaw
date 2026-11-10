@@ -2,12 +2,15 @@ import { html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { property, state } from "lit/decorators.js";
 import type {
   SessionFileOfficeBlock,
+  SessionFileOfficeOmitted,
   SessionFileOfficePreview,
   SessionFileOfficeSlide,
 } from "../../../../../packages/gateway-protocol/src/schema/sessions.js";
 import { t } from "../../../i18n/index.ts";
 import { registerFilePreviewEnglish } from "../../../i18n/locales/en-file-preview.ts";
 import { OpenClawLightDomContentsElement } from "../../../lit/openclaw-element.ts";
+import { renderDocumentPages } from "./chat-office-docx-view.ts";
+import { renderWorkbook } from "./chat-office-sheet-view.ts";
 
 registerFilePreviewEnglish();
 
@@ -17,6 +20,25 @@ function renderNotice(preview: SessionFileOfficePreview): TemplateResult | typeo
         ${t("chat.officePreview.truncated")}
       </div>`
     : nothing;
+}
+
+function omittedLabel(entry: SessionFileOfficeOmitted): string {
+  return t(`chat.officePreview.omittedFeature.${entry.feature}`);
+}
+
+function renderOmitted(preview: SessionFileOfficePreview): TemplateResult | typeof nothing {
+  const counted = (preview.omitted ?? []).filter(
+    (entry) => entry.count > 0 && entry.feature !== "exactPagination",
+  );
+  if (counted.length === 0) {
+    return nothing;
+  }
+  const features = counted
+    .map((entry) => `${omittedLabel(entry)} (${entry.count.toLocaleString()})`)
+    .join(", ");
+  return html`<div class="sidebar-office-preview__omitted" role="status">
+    ${t("chat.officePreview.omittedFeatures", { features })}
+  </div>`;
 }
 
 function renderEmpty(): TemplateResult {
@@ -86,75 +108,41 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
   @state() private selectedSheet = 0;
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("preview") && this.selectedSheet >= (this.preview?.sheets?.length ?? 0)) {
+    const sheetCount = (this.preview?.sheets ?? []).filter((entry) => entry.hidden !== true).length;
+    if (changed.has("preview") && this.selectedSheet >= sheetCount) {
       this.selectedSheet = 0;
     }
   }
 
-  private renderWorkbook(preview: SessionFileOfficePreview): TemplateResult {
-    const sheets = preview.sheets ?? [];
-    const activeIndex = Math.min(this.selectedSheet, Math.max(0, sheets.length - 1));
-    const sheet = sheets[activeIndex];
+  private renderWorkbookView(preview: SessionFileOfficePreview): TemplateResult {
     const selectSheet = (index: number) => {
       this.selectedSheet = index;
     };
     return html`
       <div class="sidebar-office-preview" data-office-format="xlsx" aria-label=${this.label}>
-        ${renderNotice(preview)}
-        ${
-          sheets.length > 1
-            ? html`<div
-                class="sidebar-office-preview__tabs"
-                role="tablist"
-                aria-label=${t("chat.officePreview.sheetPicker")}
-              >
-                ${sheets.map(
-                  (entry, index) => html`<button
-                    class="sidebar-office-preview__tab"
-                    type="button"
-                    role="tab"
-                    aria-selected=${index === activeIndex ? "true" : "false"}
-                    @click=${() => selectSheet(index)}
-                  >
-                    ${entry.name || t("chat.officePreview.untitledSheet")}
-                  </button>`,
-                )}
-              </div>`
-            : nothing
-        }
-        ${
-          !sheet || sheet.rows.length === 0
-            ? renderEmpty()
-            : html`<div class="sidebar-office-preview__grid-scroll">
-                <table class="sidebar-office-preview__grid" data-sheet-index=${activeIndex}>
-                  <tbody>
-                    ${sheet.rows.map(
-                      (row, rowIndex) => html`<tr>
-                        <th class="sidebar-office-preview__row-number" scope="row">
-                          ${sheet.rowNumbers?.[rowIndex] ?? rowIndex + 1}
-                        </th>
-                        ${row.map((cell) => html`<td>${cell}</td>`)}
-                      </tr>`,
-                    )}
-                  </tbody>
-                </table>
-              </div>`
-        }
+        ${renderNotice(preview)} ${renderOmitted(preview)}
+        ${renderWorkbook(preview, this.selectedSheet, selectSheet)}
       </div>
     `;
   }
 
   private renderDocument(preview: SessionFileOfficePreview): TemplateResult {
+    const pages = preview.pages ?? [];
     const blocks = preview.blocks ?? [];
     return html`
       <div class="sidebar-office-preview" data-office-format="docx" aria-label=${this.label}>
-        ${renderNotice(preview)}
+        ${renderNotice(preview)} ${renderOmitted(preview)}
         ${
-          blocks.length === 0
-            ? renderEmpty()
-            : html`<article class="sidebar-office-preview__document">
-                ${renderDocumentBlocks(blocks)}
-              </article>`
+          pages.length > 0
+            ? html`<div class="sidebar-office-preview__approximation" role="note">
+                  ${t("chat.officePreview.approximatePages")}
+                </div>
+                ${renderDocumentPages(preview)}`
+            : blocks.length === 0
+              ? renderEmpty()
+              : html`<article class="sidebar-office-preview__document">
+                  ${renderDocumentBlocks(blocks)}
+                </article>`
         }
       </div>
     `;
@@ -164,7 +152,7 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
     const slides = preview.slides ?? [];
     return html`
       <div class="sidebar-office-preview" data-office-format="pptx" aria-label=${this.label}>
-        ${renderNotice(preview)}
+        ${renderNotice(preview)} ${renderOmitted(preview)}
         ${
           slides.length === 0
             ? renderEmpty()
@@ -182,7 +170,7 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
       return nothing;
     }
     if (preview.format === "xlsx") {
-      return this.renderWorkbook(preview);
+      return this.renderWorkbookView(preview);
     }
     if (preview.format === "docx") {
       return this.renderDocument(preview);

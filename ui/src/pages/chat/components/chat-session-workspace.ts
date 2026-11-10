@@ -88,7 +88,7 @@ function unsupportedFileSidebarContent(
   const filePath = file.workspacePath || file.path || fallbackPath;
   const updatedAt = formatFileUpdatedAt(file.updatedAtMs);
   const lines = [
-    "This file is not previewable inline.",
+    officePreviewStateNotice(file.previewState) ?? "This file is not previewable inline.",
     "",
     `- Path: ${formatMarkdownCodeSpan(filePath)}`,
     file.mimeType ? `- Type: ${formatMarkdownCodeSpan(file.mimeType)}` : null,
@@ -115,15 +115,23 @@ function workspaceBrowserFilePath(root: string | undefined, filePath: string): s
 
 type ArtifactOfficePreview = NonNullable<ArtifactDownloadResult["preview"]>;
 
-function officePreviewNotice(preview: ArtifactOfficePreview): string {
-  switch (preview.state) {
+function officePreviewStateNotice(state: string | undefined): string | undefined {
+  switch (state) {
     case "too-large":
       return t("chat.officePreview.tooLarge");
     case "invalid":
       return t("chat.officePreview.invalid");
-    default:
+    case "password-protected":
+      return t("chat.officePreview.passwordProtected");
+    case "unsupported":
       return t("chat.officePreview.unsupported");
+    default:
+      return undefined;
   }
+}
+
+function officePreviewNotice(preview: ArtifactOfficePreview): string {
+  return officePreviewStateNotice(preview.state) ?? t("chat.officePreview.unsupported");
 }
 
 function artifactPreviewKind(mimeType: string): "audio" | "video" | "document" {

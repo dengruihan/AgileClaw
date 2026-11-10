@@ -210,7 +210,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
       await expect.poll(() => workbook.locator("table").textContent()).toContain("Rent");
       expect(
         await workbook
-          .locator(".sidebar-office-preview__row-number")
+          .locator(".sidebar-office-sheet__row-header")
           .allTextContents()
           .then((labels) => labels.map((label) => label.trim())),
       ).toEqual(["1", "3"]);
@@ -356,7 +356,7 @@ describeControlUiE2e("Control UI Office side-panel preview", () => {
         return element.scrollWidth - element.clientWidth;
       });
       expect(overflow).toBeLessThanOrEqual(1);
-      expect(await workbook.locator(".sidebar-office-preview__grid-scroll").count()).toBe(1);
+      expect(await workbook.locator(".sidebar-office-sheet__scroll").count()).toBe(1);
       await page.screenshot({ path: path.join(artifactDir, "after-xlsx-preview-narrow-dark.png") });
     } finally {
       await context.close();
@@ -951,6 +951,12 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
       preview: { kind: "office", format: "xlsx", state: "too-large" },
       screenshot: "office-too-large-state.png",
     },
+    {
+      id: "artifact_secret_xlsx",
+      title: "secret.xlsx",
+      preview: { kind: "office", format: "xlsx", state: "password-protected" },
+      screenshot: "office-password-protected-state.png",
+    },
   ])("keeps a $title rail artifact explicit about its preview state", async (state) => {
     const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
     try {
@@ -988,9 +994,11 @@ describeControlUiE2e("Control UI file preview entrypoint regressions", () => {
       const row = page.locator(".chat-workspace-rail__file-name", { hasText: state.title }).first();
       await row.waitFor({ state: "visible" });
       await row.click();
-      await expect
-        .poll(() => page.locator(".sidebar-attachment-preview__notice").first().textContent())
-        .toBeTruthy();
+      const stateNotice = page.locator(".sidebar-attachment-preview__notice").first();
+      await expect.poll(() => stateNotice.textContent()).toBeTruthy();
+      if (state.preview.state === "password-protected") {
+        expect(await stateNotice.textContent()).toContain("password-protected");
+      }
       expect(await page.locator(".sidebar-office-preview[data-office-format]").count()).toBe(0);
       expect(
         await page
