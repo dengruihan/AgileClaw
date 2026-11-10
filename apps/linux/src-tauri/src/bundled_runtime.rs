@@ -41,12 +41,38 @@ fn runtime_directory(prefix: &Path, bytes: &str, manifest: &Manifest) -> PathBuf
 }
 
 pub(crate) fn seed(app: &AppHandle) -> Result<BundledRuntime, String> {
-    let source = app
+    let prefix = crate::cli::openclaw_home().map_err(|error| error.to_string())?;
+    let source = resolve_runtime_source(app)?;
+    seed_at(&source, &prefix, MANIFEST, &verify_revision)
+}
+
+fn resolve_runtime_source(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Ok(resource) = app
         .path()
         .resolve("desktop-runtime", BaseDirectory::Resource)
+    {
+        if resource.is_dir() {
+            return Ok(resource);
+        }
+    }
+    // Development and staged test layouts keep the runtime next to the
+    // executable (or in its resources directory) instead of /usr/lib.
+    let executable = std::env::current_exe()
         .map_err(|error| format!("Embedded runtime resources are unavailable: {error}"))?;
-    let prefix = crate::cli::openclaw_home().map_err(|error| error.to_string())?;
-    seed_at(&source, &prefix, MANIFEST, &verify_revision)
+    let directory = executable.parent().ok_or_else(|| {
+        "Embedded runtime resources are unavailable: executable has no parent".to_string()
+    })?;
+    for candidate in [
+        directory.join("desktop-runtime"),
+        directory.join("resources/desktop-runtime"),
+    ] {
+        if candidate.is_dir() {
+            return Ok(candidate);
+        }
+    }
+    app.path()
+        .resolve("desktop-runtime", BaseDirectory::Resource)
+        .map_err(|error| format!("Embedded runtime resources are unavailable: {error}"))
 }
 
 fn seed_at(

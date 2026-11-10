@@ -3332,8 +3332,14 @@ async fn connect_remote_gateway(
 async fn install_cli(
     operations: State<'_, GatewayOperationQueue>,
     channel: InstallChannel,
+    start_local: bool,
 ) -> Result<GatewaySnapshot, String> {
-    operations.execute(GatewayOperation::Install(channel)).await
+    operations
+        .execute(GatewayOperation::Install {
+            channel,
+            start_local,
+        })
+        .await
 }
 
 #[tauri::command]
@@ -3494,9 +3500,10 @@ fn main() {
                 GatewayOperation::RetryRemote => {
                     operation_state.retry_remote(&operation_app, selection)
                 }
-                GatewayOperation::Install(channel) => {
-                    operation_state.install_cli(&operation_app, channel, selection, false)
-                }
+                GatewayOperation::Install {
+                    channel,
+                    start_local,
+                } => operation_state.install_cli(&operation_app, channel, selection, start_local),
                 #[cfg(target_os = "linux")]
                 GatewayOperation::Runtime(action) => {
                     operation_state.runtime_action(&operation_app, action, selection)

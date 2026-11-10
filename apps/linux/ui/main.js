@@ -67,6 +67,7 @@ let discoverySignature = null;
 let firstRunBuild = null;
 let firstRunPhase = null;
 let selectedConnection = "local";
+let installStartLocal = false;
 let remoteTransport = "direct";
 let remoteConnectionPending = false;
 let editingConnection = false;
@@ -309,6 +310,7 @@ async function connect() {
 }
 
 function renderWelcome() {
+  installStartLocal = false;
   render({
     description:
       "Your personal AI assistant, living wherever you choose. It answers questions, works with your files and apps, and can chat with you wherever you are.",
@@ -389,6 +391,7 @@ function syncRemoteAuthentication() {
 }
 
 async function continueLocalSetup() {
+  installStartLocal = true;
   if (firstRunPhase === "unconfigured") {
     render({
       activity:
@@ -418,7 +421,7 @@ async function continueLocalSetup() {
     });
     return;
   }
-  await install();
+  await install(true);
 }
 
 async function connectRemoteGateway() {
@@ -577,7 +580,7 @@ async function closeConnectionSettings() {
   }
 }
 
-async function install() {
+async function install(startLocal = installStartLocal) {
   elements.installButton.disabled = true;
   elements.channel.disabled = true;
   elements.installLog.textContent = "";
@@ -593,11 +596,16 @@ async function install() {
     title: "Preparing your companion",
   });
   try {
-    await invoke("install_cli", { channel: elements.channel.value });
+    await invoke("install_cli", {
+      channel: elements.channel.value,
+      startLocal,
+    });
     elements.logStatus.textContent = "COMPLETE";
-    // A controlled device must not need a local Gateway or a terminal after the
-    // GUI CLI install: return to the Welcome/connection choices immediately.
-    renderWelcome();
+    // Explicit local setup keeps the Gateway/model-setup admission started by
+    // the native owner; a pre-choice/controlled CLI install returns to Welcome.
+    if (!startLocal) {
+      renderWelcome();
+    }
   } catch (error) {
     const message = friendlyError(error);
     elements.logStatus.textContent = "FAILED";
@@ -647,11 +655,17 @@ function renderRetry(message) {
 }
 
 elements.installButton.addEventListener("click", () => {
-  void install();
+  void install(installStartLocal);
 });
 elements.welcomeContinue.addEventListener("click", renderConnectionChoices);
-elements.connectionLocal.addEventListener("click", () => selectConnection("local"));
-elements.connectionRemote.addEventListener("click", () => selectConnection("remote"));
+elements.connectionLocal.addEventListener("click", () => {
+  installStartLocal = true;
+  selectConnection("local");
+});
+elements.connectionRemote.addEventListener("click", () => {
+  installStartLocal = false;
+  selectConnection("remote");
+});
 elements.connectionExecutor.addEventListener("click", () => {
   void invoke("executor_node_request", { message: { type: "open" } }).catch((error) => {
     showRemoteFeedback(friendlyError(error), true);
