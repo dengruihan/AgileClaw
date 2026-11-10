@@ -481,9 +481,14 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
       this.sidebarAgentsMode === "roster"
         ? nothing
         : renderPinnedSessionZone(this, sidebarZone.entries, sidebarZone.sessionRows);
+    // renderAppSidebarOnline owns the solo-presence decision; the layout
+    // owner (layout.css) consumes the same fact through this class to release
+    // the Online floor share and the bounded-rail cap when no roster renders.
+    const onlineSection = renderAppSidebarOnline(this);
+    const soloPresence = onlineSection === nothing;
     return html`
       <aside
-        class="sidebar"
+        class=${soloPresence ? "sidebar sidebar--solo-presence" : "sidebar"}
         @contextmenu=${(event: MouseEvent) => {
           // Editable controls keep the platform editing menu; all other sidebar chrome is owned here.
           if (!(event.target as Element).closest("input, textarea, [contenteditable]")) {
@@ -528,7 +533,7 @@ class AppSidebar extends AppSidebarSessionNavigationElement implements SessionLi
                 </div>
               </nav>
               <div class="sidebar-session-content">
-                ${renderAppSidebarOnline(this)} ${this.renderSessions(pinnedSessions)}
+                ${onlineSection} ${this.renderSessions(pinnedSessions)}
               </div>
             </div>
             ${
