@@ -650,7 +650,10 @@ fn executor_menu_state(
         _ if snapshot.mode == Some("service") && snapshot.service_running == Some(true) => {
             ("Running (service)", false, true, true)
         }
-        _ if snapshot.mode == Some("service") => ("Service stopped", true, true, true),
+        _ if snapshot.mode == Some("service") && snapshot.service_running == Some(false) => {
+            ("Service stopped", true, true, true)
+        }
+        _ if snapshot.mode == Some("service") => ("Service status unknown", true, true, true),
         _ => ("Off", true, false, false),
     };
     (label, start, stop, restart)

@@ -1,7 +1,7 @@
 //! The companion supervises one controlled executor node; the CLI owns pairing
 //! state, occupancy leases, and services. Pairing secrets live only in a
 //! 0600 handoff file that the CLI consumes and deletes.
-use crate::cli::{CliError, OpenClawCli};
+use crate::cli::OpenClawCli;
 use crate::desktop_node_process::DesktopNodeProcess;
 use crate::gateway_profiles::GatewayProfiles;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -14,6 +14,7 @@ use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Output;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -467,6 +468,9 @@ pub(crate) struct ExecutorNode {
     profiles: Arc<GatewayProfiles>,
     sender: mpsc::SyncSender<()>,
     worker: Mutex<Option<JoinHandle<()>>>,
+    /// Serializes CLI installs at the owner: a second concurrent request is
+    /// rejected instead of racing two installers over one prefix.
+    installing: AtomicBool,
 }
 
 impl ExecutorNode {
@@ -500,7 +504,21 @@ impl ExecutorNode {
             profiles,
             sender,
             worker: Mutex::new(Some(worker)),
+            installing: AtomicBool::new(false),
         })
+    }
+
+    /// Serialize CLI installs at the owner: exactly one installer may run
+    /// against the prefix, and a racing request is rejected, not queued.
+    fn begin_install(&self) -> Result<(), String> {
+        self.installing
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .map(|_| ())
+            .map_err(|_| "A CLI install is already running. Wait for it to finish.".to_string())
+    }
+
+    fn end_install(&self) {
+        self.installing.store(false, Ordering::SeqCst);
     }
 
     pub fn snapshot(&self) -> Snapshot {
@@ -597,12 +615,17 @@ impl ExecutorNode {
                 // always cancellable; consent is irrelevant to cancellation.
                 ToolAction::Stop if cancels_owned_child => Request::Idle,
                 ToolAction::Stop if run.mode == Some("foreground") => Request::Idle,
-                _ if run.service.may_exist() && run.mode == Some("service") => {
-                    if !consented {
+                // Stopping a running device must work without consent — that
+                // is how consent withdrawal takes effect. Only Start/Restart
+                // are consent-gated here; the service's own context is the
+                // authority for service actions (pairing evidence gates only
+                // the foreground reconnect below).
+                _ if run.service.may_exist() && run.mode == Some("service") => match action {
+                    ToolAction::Start | ToolAction::Restart if !consented => {
                         return Err(consent_missing_error());
                     }
-                    Request::Service(action)
-                }
+                    _ => Request::Service(action),
+                },
                 ToolAction::Start | ToolAction::Restart => {
                     if !consented {
                         return Err(consent_missing_error());
@@ -1001,18 +1024,26 @@ fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>)
         }
         if let (Some(process), Some(role)) = (child.as_mut(), child_role) {
             if let Some(phase) = drain_output(process, &redactions, &mut tail) {
+                // The install child's authenticated hello precedes the actual
+                // installation; it stays Preparing until the install exit and
+                // running probe prove the service.
+                let phase = match (role, phase) {
+                    (ChildRole::ServiceInstall, Phase::Running) => Phase::Preparing,
+                    (_, phase) => phase,
+                };
                 let changed = {
                     let mut current = shared.lock().expect("executor state");
                     if current.revision == revision && current.status.phase != phase {
                         current.status.phase = phase;
-                        current.status.detail = Some(match phase {
-                            Phase::Running => String::from(if role == ChildRole::ForegroundRun {
-                                "Connected. This computer is under remote control."
-                            } else {
-                                "The background service is installed and running."
-                            }),
-                            Phase::WaitingApproval => {
+                        current.status.detail = Some(match (role, phase) {
+                            (_, Phase::Running) => {
+                                String::from("Connected. This computer is under remote control.")
+                            }
+                            (_, Phase::WaitingApproval) => {
                                 String::from("Waiting for approval on the controlling Gateway.")
+                            }
+                            (ChildRole::ServiceInstall, _) => {
+                                String::from("Pairing and installing the service.")
                             }
                             _ => String::from("Connecting this computer."),
                         });
@@ -1301,12 +1332,26 @@ fn apply_tool_action(
             .map(String::from)
             .unwrap_or_else(|| "The service change did not finish. Try again.".into()));
     }
+    // The phase comes from the probed runtime facts, never from the verb: a
+    // start whose probe says stopped/unknown must not claim Running.
     let service = probe_service_state(cli, cancelled, probe_owner)?;
+    let phase = match service.running() {
+        Some(true) => Phase::Running,
+        Some(false) => Phase::Off,
+        None => {
+            return Ok(Run {
+                phase: Phase::Error,
+                mode: Some("service"),
+                service,
+                paired: None,
+                detail: Some(String::from(
+                    "The service state could not be confirmed. Start or stop it again from here.",
+                )),
+            });
+        }
+    };
     Ok(Run {
-        phase: match action {
-            ToolAction::Stop => Phase::Off,
-            _ => Phase::Running,
-        },
+        phase,
         mode: Some("service"),
         service,
         paired: None,
@@ -1400,11 +1445,26 @@ fn executor_node_message(app: &AppHandle, message: Value) -> Result<Snapshot, St
             let channel: crate::installer::InstallChannel =
                 serde_json::from_value(message.get("channel").cloned().unwrap_or(Value::Null))
                     .map_err(|_| "Choose a release channel for the CLI.".to_string())?;
-            // CLI-only install: no Gateway service, runtime binding, or
-            // dashboard admission belongs to the controlled-device flow.
-            crate::installer::install(app, channel, true)?;
-            OpenClawCli::discover().map_err(|error: CliError| error.to_string())?;
-            node.refresh(app)?;
+            node.begin_install()?;
+            let result = (|| {
+                // CLI-only install: no Gateway service, runtime binding, or
+                // dashboard admission belongs to the controlled-device flow.
+                // Installer errors carry raw tool output (including command-
+                // shaped remediation), so the window only ever receives
+                // app-authored guidance; structured steps stream separately.
+                crate::installer::install(app, channel, true)
+                    .map_err(|_| {
+                        "The CLI install did not finish. Try again, or check the install log in the OpenClaw window.".to_string()
+                    })
+                    .and_then(|()| {
+                        OpenClawCli::discover()
+                            .map(|_| ())
+                            .map_err(|_| "The CLI was installed but could not be started. Try again.".to_string())
+                    })?;
+                node.refresh(app)
+            })();
+            node.end_install();
+            result?;
         }
         Some("pair") => {
             let consent = message

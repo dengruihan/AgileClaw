@@ -98,6 +98,11 @@ class ExecutorNodeFixture:
             "expected = ['--json', '--no-onboard', '--prefix', str(prefix), '--version', 'main', "
             "'--runtime-only', '--install-method', 'git', '--git-dir', str(prefix / 'dev/openclaw')]\n"
             "assert sys.argv[1:] == expected, 'Unexpected controlled installer arguments'\n"
+            "with Path('fixture-installer-calls').open('a') as log: log.write('install\\n')\n"
+            "if Path('installer-fail').exists():\n"
+            "    print(json.dumps({'event': 'step', 'name': 'openclaw', 'status': 'start'}))\n"
+            "    print('Run git -C ' + str(prefix / 'dev/openclaw') + ' rebase --abort', file=sys.stderr)\n"
+            "    sys.exit(1)\n"
             "cli = prefix / 'bin/openclaw'\n"
             "cli.parent.mkdir(parents=True, exist_ok=True)\n"
             f"shutil.copy2({str(Path.home() / 'fixture-cli.py')!r}, cli)\n"
@@ -159,7 +164,7 @@ class ExecutorNodeFixture:
                 node = node.get_parent()
             return False
 
-        def click(label, role=("button", "push button", "toggle button", "check box", "radio button", "combo box"), *, prefix=False, insensitive=False):
+        def click(label, role=("button", "push button", "toggle button", "check box", "radio button", "combo box"), *, prefix=False, insensitive=False, double=False):
             def usable(node):
                 sensitive = node.get_state_set().contains(Atspi.StateType.SENSITIVE)
                 return in_active_window(node) and sensitive is not insensitive
@@ -169,6 +174,9 @@ class ExecutorNodeFixture:
             bounds = component.get_extents(Atspi.CoordType.SCREEN)
             self.chrome.command("xdotool", "mousemove", str(bounds.x + bounds.width // 2),
                                 str(bounds.y + bounds.height // 2), "click", "1")
+            if double:
+                # A second click races the first before any UI refresh.
+                self.chrome.command("xdotool", "click", "1")
 
         def fill(label, value):
             node = wait(label, ("entry", "text", "password text"), predicate=lambda node:
@@ -210,7 +218,7 @@ class ExecutorNodeFixture:
             except RuntimeError:
                 return "<absent>"
 
-        def pair(target, mode=None, name="Desk", approval_wait=True):
+        def pair(target, mode=None, name="Desk", approval_wait=True, install_assert=False):
             self.stage_secret(target)
             if name is not None:
                 fill("Device name (optional)", name)
@@ -222,7 +230,20 @@ class ExecutorNodeFixture:
             if approval_wait and not self.approve_file.exists():
                 wait("Status: Waiting for approval on the controlling Gateway")
                 self.approve_file.touch()
+            if install_assert:
+                # The authenticated hello precedes installation: the window
+                # must hold the preparing state, not claim a running service.
+                wait("Status: Installing service…")
+                restart_button = wait("Restart", "push button", predicate=in_active_window)
+                if restart_button.get_state_set().contains(Atspi.StateType.SENSITIVE):
+                    raise RuntimeError("Restart was offered before the service installed")
+                self.chrome.record("service hello stays preparing until installed", True)
             wait("Status: Running" if mode != "service" else "Status: Running (background service)")
+            if install_assert:
+                restart_button = wait("Restart", "push button", predicate=lambda node:
+                                      in_active_window(node)
+                                      and node.get_state_set().contains(Atspi.StateType.SENSITIVE))
+                self.chrome.record("installed service enables restart only after the probe", True)
 
         wait("Welcome to OpenClaw", "heading")
         click("Get started")
@@ -233,11 +254,22 @@ class ExecutorNodeFixture:
         self.capture("fresh-install")
 
         # Fresh all-GUI installation: a fresh download pairs nothing until the
-        # CLI exists, and progress streams into this window. The development
-        # channel matches this build, like the local-Gateway flow.
+        # CLI exists. A failing installer's command-shaped output never reaches
+        # this window, a double-click installs exactly once, and progress
+        # streams into it. The development channel matches this build.
         click("Release channel", "combo box")
         self.chrome.command("xdotool", "key", "End", "Return")
+        Path("installer-fail").write_text("")
         click("Install OpenClaw CLI")
+        wait("The CLI install did not finish. Try again", None, prefix=True)
+        pane_text = window_text("Install progress")
+        if "git -C" in pane_text or "rebase" in pane_text:
+            raise RuntimeError(f"Installer raw output reached the window: {pane_text!r}")
+        self.chrome.record("failing installer shows only command-free guidance", True)
+        Path("installer-fail").unlink()
+        calls_file = Path.cwd() / "fixture-installer-calls"
+        calls_file.unlink(missing_ok=True)
+        click("Install OpenClaw CLI", double=True)
         # The install pane hides on success; the enabled secret field is the
         # observable completion signal.
         self.chrome.until(
@@ -252,7 +284,10 @@ class ExecutorNodeFixture:
         wait("Pair this computer", "heading")
         self.chrome.until(lambda: (Path.home() / "fixture-installer-called").is_file(),
                           "the reviewed installer to run")
-        self.chrome.record("fresh controlled-device setup installs the CLI through the GUI", True)
+        calls = calls_file.read_text().count("install") if calls_file.exists() else 0
+        if calls != 1:
+            raise RuntimeError(f"A double-click ran {calls} installer invocations")
+        self.chrome.record("fresh controlled-device setup installs the CLI once through the GUI", True)
         self.capture("after-install")
 
         # Consent refusal: pairing and Start stay blocked until the explicit
@@ -332,7 +367,7 @@ class ExecutorNodeFixture:
 
         # Service pairing waits for approval in the supervised install path.
         self.approve_file.unlink(missing_ok=True)
-        pair(VALID_CODE, mode="service")
+        pair(VALID_CODE, mode="service", install_assert=True)
         self.expect_connect(2, hashlib.sha256(VALID_CODE.encode()).hexdigest(), service=True)
         self.capture("running-service")
         events = self.events()
@@ -362,12 +397,17 @@ class ExecutorNodeFixture:
 
         # Failed service stop retains service authority: Start must not fall
         # back to a foreground node while the old service may still own the
-        # canonical identity.
+        # canonical identity, and the failed action is shown as Needs
+        # attention — never as a service state.
         self.approve_file.unlink(missing_ok=True)
         pair(VALID_CODE, mode="service")
         self.set_state(stopShouldFail=True)
         click("Stop")
         wait("The service change did not finish. Try again.", None, prefix=True)
+        if "Needs attention" not in window_text("Status:"):
+            raise RuntimeError(
+                f"A failed stop was not Needs attention: {window_text('Status:')!r}"
+            )
         self.chrome.until(lambda: self.count_events("service-stop-failed") >= 1,
                           "the failing service stop")
         starts = self.count_events("foreground-run")
@@ -378,6 +418,32 @@ class ExecutorNodeFixture:
         self.chrome.until(lambda: self.count_events("service-start") >= 1,
                           "the service start request")
         self.chrome.record("failed service stop retains service authority", True)
+
+        # An unknown runtime probe after a restart is explicit Needs attention
+        # with unknown detail — never collapsed into Stopped.
+        self.set_state(statusUnknown=True)
+        click("Restart")
+        wait("Status: Needs attention")
+        self.chrome.record("unknown service probe stays distinct from stopped", True)
+        self.set_state(statusUnknown=False)
+        click("Start")
+        wait("Status: Running (background service)")
+
+        # Consent withdrawal must never block stopping a running service.
+        click("Allow remote control of this computer", prefix=True)
+        start_button = wait("Start", "push button", predicate=lambda node:
+                            in_active_window(node)
+                            and not node.get_state_set().contains(Atspi.StateType.SENSITIVE))
+        self.chrome.record("withdrawn consent disables start", True)
+        stops_before = self.count_events("service-stop")
+        click("Stop")
+        self.chrome.until(lambda: self.count_events("service-stop") >= stops_before + 1,
+                          "the consent-free service stop")
+        wait("Status: Stopped (background service)")
+        self.chrome.record("clearing consent still stops a running service", True)
+        click("Allow remote control of this computer", prefix=True)
+        wait("Pair this computer", "push button", predicate=lambda node:
+             in_active_window(node) and node.get_state_set().contains(Atspi.StateType.SENSITIVE))
 
         # Final exit teardown: a self-exiting restart leader leaves a
         # TERM-ignoring descendant, so the real force-kill window is exercised

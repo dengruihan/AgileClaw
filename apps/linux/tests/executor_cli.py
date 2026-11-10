@@ -229,9 +229,12 @@ def main():
     if command == "connect":
         selected = read_handoff(sys.argv[2:])
         if selected.service:
-            # Installation waits for the authenticated hello, so approval
-            # waiting is observable before any service change.
+            # The real CLI emits the connected hello marker before installing;
+            # the delay keeps that intermediate UI state observable.
             wait_for_approval()
+            print_connected()
+            delay = fixture_state().get("installDelayMs", 1500)
+            time.sleep(delay / 1000)
             first_connect_then_install(selected.display_name)
             return
         spawn_descendant()
@@ -266,10 +269,13 @@ def main():
             return
         if verb == "status":
             record("status-probe", loaded=service_state(), active=service_active())
+            runtime_status = "stopped"
+            if service_active():
+                runtime_status = "unknown" if fixture_state().get("statusUnknown") else "running"
             print(json.dumps({"service": {
                 "label": "openclaw-node", "loaded": service_state(),
                 "loadedText": "loaded", "notLoadedText": "not installed",
-                "runtime": {"status": "running" if service_active() else "stopped"},
+                "runtime": {"status": runtime_status},
             }}))
             return
         if verb in ("start", "stop", "restart"):

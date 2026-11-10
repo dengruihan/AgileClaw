@@ -234,10 +234,19 @@ fn install_at(
     let stderr_thread = stream_lines("stderr", stderr, sender);
     let mut tail = VecDeque::with_capacity(ERROR_TAIL_LINES);
     for (stream, line) in receiver {
+        // The controlled-device window renders only structured step events;
+        // raw tool output (which can contain command-shaped remediation) is
+        // never presented there. The main window's log pane keeps everything.
+        let structured = serde_json::from_str::<serde_json::Value>(&line)
+            .ok()
+            .is_some_and(|value| value.get("event").is_some());
+        let windows: &[&str] = if structured {
+            &["main", crate::executor_node::EXECUTOR_LABEL]
+        } else {
+            &["main"]
+        };
         if spawn.is_none() {
-            // The controlled-device window runs the same CLI installer with
-            // its own progress pane; emissions to absent windows are no-ops.
-            for window in ["main", crate::executor_node::EXECUTOR_LABEL] {
+            for window in windows {
                 let _ = app.emit_to(
                     window,
                     INSTALL_EVENT,

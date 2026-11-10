@@ -9,7 +9,7 @@ const elements = {
   dot: document.querySelector("#executor-dot"),
   feedback: document.querySelector("#executor-feedback"),
   form: document.querySelector("#executor-form"),
-  install: document.querySelector("#executor-install"),
+  install: document.querySelector("#executor-install-button"),
   installProgress: document.querySelector("#executor-install-progress"),
   installSection: document.querySelector("#executor-install"),
   name: document.querySelector("#executor-name"),
@@ -50,7 +50,11 @@ const PHASES = {
 
 function statusLabel() {
   const phase = PHASES[status.phase] ?? PHASES.off;
-  // Progress phases describe the action, not the service state.
+  // Errors and progress phases describe the action; they are never collapsed
+  // into a service state.
+  if (status.phase === "error") {
+    return phase.label;
+  }
   if (status.phase === "waiting-for-approval") {
     return phase.label;
   }
@@ -58,9 +62,13 @@ function statusLabel() {
     return status.mode === "service" ? "Installing service…" : phase.label;
   }
   if (status.mode === "service") {
-    return status.phase === "running"
-      ? "Running (background service)"
-      : "Stopped (background service)";
+    if (status.phase === "running" || status.serviceRunning === true) {
+      return "Running (background service)";
+    }
+    if (status.serviceRunning === false) {
+      return "Stopped (background service)";
+    }
+    return "Service status unknown";
   }
   if (status.phase === "off" && status.serviceInstalled === null && status.paired !== true) {
     return "Service status unknown";
@@ -187,10 +195,13 @@ for (const [id, type] of [
   });
 }
 
+let installPending = false;
+
 elements.install.addEventListener("click", () => {
-  if (pending) {
+  if (installPending) {
     return;
   }
+  installPending = true;
   elements.install.disabled = true;
   elements.channel.disabled = true;
   elements.installProgress.textContent = "Installing…";
@@ -203,11 +214,14 @@ elements.install.addEventListener("click", () => {
       applyPayload(snapshot);
       elements.installProgress.textContent = "Install complete.";
     })
-    .catch((error) => {
+    .catch(() => {
+      // Installer failures carry raw tool output (including command-shaped
+      // remediation); the window only ever shows app-authored guidance.
       elements.installProgress.textContent =
-        typeof error === "string" ? error : error?.message || "The install did not finish.";
+        "The CLI install did not finish. Try again, or check the install log in the OpenClaw window.";
     })
     .finally(() => {
+      installPending = false;
       elements.install.disabled = false;
       elements.channel.disabled = false;
       render();
@@ -215,17 +229,17 @@ elements.install.addEventListener("click", () => {
 });
 
 await listen("install-progress", ({ payload }) => {
-  let line = payload.line ?? "";
+  // Structured step events only; raw installer output is never rendered here.
+  let line;
   try {
-    const event = JSON.parse(line);
-    if (event?.event === "done" && event.ok === true) {
-      line = `✓ Installed${event.version ? ` ${event.version}` : ""}`;
-    } else if (event?.event === "step" && event.name) {
-      const mark = { start: "→", ok: "✓", skip: "–", warn: "!" }[event.status] ?? "";
-      line = `${mark} ${event.name}`;
+    const event = JSON.parse(payload.line ?? "");
+    if (!event || event.event !== "step" || !event.name) {
+      return;
     }
+    const mark = { start: "→", ok: "✓", skip: "–", warn: "!" }[event.status] ?? "";
+    line = `${mark} ${event.name}`;
   } catch {
-    // Plain installer output renders as-is.
+    return;
   }
   elements.installProgress.textContent = line;
 });
