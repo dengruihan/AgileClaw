@@ -192,17 +192,7 @@ const enNewSessionSetup = {
       "Worker capacity is unavailable. Restart the device session host and try again.",
     deviceNoSlots: "No worker slots are available. Wait for a slot or pick another device.",
     connectMachineTitle: "Connect a machine",
-    connectMachineDescription: "Run this command on the machine you want to connect.",
-    connectMachineGenerating: "Creating a secure connection link…",
-    connectMachineFailed: "Couldn't create a connection link.",
-    connectMachineMissingUrl: "The Gateway did not return a join URL. Update it and try again.",
-    connectMachineUnavailable: "Reconnect to the Gateway and try again.",
-    connectMachineTeamHint: "Running it pairs that machine as a device for your team.",
-    connectMachineSingleUse: "This link is single-use and expires soon.",
-    connectMachineSingleUseExpires: "This link is single-use and expires at {time}.",
-    connectMachineFreshCode: "Mint fresh code",
-    connectMachineRefreshing: "Minting…",
-    connectMachineManageDevices: "Manage devices",
+    connectMachineDescription: "Send a one-time pairing link to the machine you want to connect.",
   },
 } satisfies TranslationMap;
 

@@ -8,8 +8,12 @@ import { buildExternalLinkRel, EXTERNAL_LINK_TARGET } from "../../lib/external-l
 import "../../styles/apps.css";
 import "../../components/native-chrome-setup.ts";
 import { appsBrandIcons } from "./brand-icons.ts";
+import { APP_DOWNLOAD_LINKS, type AppDownloadLink } from "./download-links.ts";
 
 registerAppsEnglish();
+
+const downloadHref = (id: AppDownloadLink["id"]) =>
+  APP_DOWNLOAD_LINKS.find((link) => link.id === id)?.href ?? "";
 
 type AppsProps = {
   onNavigate: (routeId: RouteId) => void;
@@ -111,7 +115,7 @@ const APP_SECTIONS: readonly AppSection[] = [
         icon: appsBrandIcons.apple,
         copyKey: "appsPage.cards.macos",
         ctas: [
-          externalCta("https://github.com/openclaw/openclaw/releases", "appsPage.ctaDownload"),
+          externalCta(downloadHref("macos"), "appsPage.ctaDownload"),
           docsCta("/platforms/macos"),
         ],
       },
@@ -121,10 +125,7 @@ const APP_SECTIONS: readonly AppSection[] = [
         icon: appsBrandIcons.windows,
         copyKey: "appsPage.cards.windows",
         ctas: [
-          externalCta(
-            "https://github.com/openclaw/openclaw-windows-node/releases/latest",
-            "appsPage.ctaDownload",
-          ),
+          externalCta(downloadHref("windows"), "appsPage.ctaDownload"),
           docsCta("/platforms/windows"),
         ],
       },
@@ -134,7 +135,7 @@ const APP_SECTIONS: readonly AppSection[] = [
         icon: appsBrandIcons.linux,
         copyKey: "appsPage.cards.linux",
         ctas: [
-          externalCta("https://github.com/openclaw/openclaw/releases", "appsPage.ctaDownload"),
+          externalCta(downloadHref("linux"), "appsPage.ctaDownload"),
           docsCta("/platforms/linux"),
         ],
       },

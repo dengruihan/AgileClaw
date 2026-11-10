@@ -41,14 +41,14 @@ async function expectPairingLayout(page: Page, mode: "node" | "qr") {
     const setup = document.querySelector<HTMLElement>(".device-pair-setup")!;
     const setupBounds = setup.getBoundingClientRect();
     const elements = document.querySelectorAll<HTMLElement>(
-      `.device-pair-setup, .device-pair-setup__body, .device-pair-setup__access label, .device-pair-setup__meta, .device-pair-setup__fallback, .device-pair-setup__footer, ${
+      `.device-pair-setup, .device-pair-setup__body, .device-pair-setup__access label, .device-pair-setup__steps, .device-pair-setup__step, .device-pair-setup__secret, .device-pair-setup__secret .login-gate__command, .device-pair-setup__downloads a, .device-pair-setup__meta, .device-pair-setup__fallback, .device-pair-setup__footer, ${
         currentMode === "node"
-          ? ".device-pair-setup__command, .login-gate__command, .login-gate__command code, .device-pair-setup .chat-copy-btn"
+          ? ".device-pair-setup__secret code, .device-pair-setup__secret .chat-copy-btn"
           : ".device-pair-setup__qr-frame, .device-pair-setup__qr"
       }`,
     );
-    const copy = setup.querySelector<HTMLElement>(".chat-copy-btn");
-    const code = setup.querySelector<HTMLElement>(".login-gate__command code");
+    const copy = setup.querySelector<HTMLElement>(".device-pair-setup__secret .chat-copy-btn");
+    const code = setup.querySelector<HTMLElement>(".device-pair-setup__secret code");
     const qr = setup.querySelector<HTMLElement>(".device-pair-setup__qr");
     const outside = [...elements]
       .filter((element) => {
@@ -200,6 +200,7 @@ suite.define(() => {
       access: "full" | "limited" | "node",
       expiresAtMs = Date.now() + 120_000,
       resolvedSetupCode = setupCode,
+      joinUrl?: string,
     ) => ({
       setupId,
       expiresAtMs,
@@ -207,6 +208,7 @@ suite.define(() => {
       gatewayUrl: "wss://gateway.example.test",
       ...(access === "node" ? {} : { qrDataUrl }),
       setupCode: resolvedSetupCode,
+      ...(joinUrl ? { joinUrl } : {}),
       urlSource: "test",
       access,
     });
@@ -465,7 +467,7 @@ suite.define(() => {
         await qr.waitFor();
         await page.locator(".device-pair-setup__close").click();
         await dialog.waitFor({ state: "hidden" });
-        const nodeCommand = `openclaw node run --pair "oc-pair://${setupCode}"`;
+        const nodeJoinUrl = `https://gateway.example.test/j/${"n".repeat(12)}`;
         const setup = page.locator(".device-pair-setup");
         for (const viewport of [
           { height: 900, width: 1280 },
@@ -474,34 +476,51 @@ suite.define(() => {
           await page.setViewportSize(viewport);
           await gateway.setMethodResponse(
             "device.pair.setupCode",
-            setupResult(`setup-node-${viewport.width}`, "node", Date.now() + 60_000),
+            setupResult(
+              `setup-node-${viewport.width}`,
+              "node",
+              Date.now() + 60_000,
+              setupCode,
+              nodeJoinUrl,
+            ),
           );
           await pairFromSettings.click();
           await dialog.waitFor();
           await page.locator('input[name="device-pair-access"]').nth(2).check();
           await page.getByRole("button", { name: "Create setup code" }).click();
-          await page.getByText(nodeCommand, { exact: true }).waitFor();
+          await page.getByText("Install the app on that machine", { exact: true }).waitFor();
           await captureUiProof(page, `11-node-${viewport.width}.png`);
+          const guidedText = (await setup.textContent()) ?? "";
+          expect(guidedText).not.toContain("openclaw node run");
+          expect(guidedText).not.toContain("npx openclaw");
+          expect(guidedText).not.toContain(nodeJoinUrl);
           await expectPairingLayout(page, "node");
-          const copy = setup.locator(".chat-copy-btn");
+          const reveal = setup.locator('.device-pair-setup__secret button[aria-pressed="false"]');
+          await reveal.click();
+          await expect
+            .poll(() => setup.locator(".device-pair-setup__secret code").textContent())
+            .toContain(nodeJoinUrl);
+          const copy = setup.locator(".device-pair-setup__secret .chat-copy-btn");
           await copy.focus();
           expect(await copy.evaluate((element) => element === document.activeElement)).toBe(true);
           await page.evaluate(() => navigator.clipboard.writeText("before-copy"));
           await copy.click();
           await expect
             .poll(() => page.evaluate(() => navigator.clipboard.readText()))
-            .toBe(nodeCommand);
+            .toBe(nodeJoinUrl);
           const manageDevices = page.getByRole("button", { name: "Manage devices" });
           await manageDevices.scrollIntoViewIfNeeded();
           await manageDevices.click({ trial: true });
           if (viewport.width === 1280) {
-            await page.locator(".device-pair-setup__close").click();
+            await setup.locator(".device-pair-setup__close").click();
+            await dialog.waitFor({ state: "hidden" });
           }
         }
         expect(await setup.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
         expect((await gateway.getRequests("device.pair.setupCode")).at(-1)?.params).toEqual({
           bootstrapProfile: "node",
           includeQr: false,
+          joinUrl: true,
         });
         await page.getByRole("button", { name: "Manage devices" }).click();
         await expect.poll(() => new URL(page.url()).pathname).toBe("/settings/devices");

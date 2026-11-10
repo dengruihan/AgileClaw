@@ -176,6 +176,7 @@ export class NewSessionPage extends OpenClawLightDomElement {
     this.connectMachine = new ConnectMachineSetupState(
       () => ({ client: this.gateway.client, connected: this.gateway.connected }),
       () => this.requestUpdate(),
+      () => this.context?.gateway ?? null,
     );
     this.dictation = new NewSessionDictationControl({
       textarea: this.submission.composerTextarea,
@@ -587,10 +588,16 @@ export class NewSessionPage extends OpenClawLightDomElement {
           renderDraft: () => (completed ? this.renderDraftBlock() : this.renderWelcome()),
           onOpenImage: this.setImageLightbox,
         })}
-        ${this.connectMachine.render(this.place.isAdmin(), () => {
-          this.connectMachine.close();
-          this.context?.navigate("devices");
-        })}
+        ${this.connectMachine.render(
+          this.place.isAdmin(),
+          () => {
+            this.connectMachine.close();
+            this.context?.navigate("devices");
+          },
+          {
+            onOpenConnectionSettings: () => this.context?.navigate("connection"),
+          },
+        )}
         ${renderChatImageLightbox(this.imageLightbox, () => this.setImageLightbox(null))}
       </div>
       ${

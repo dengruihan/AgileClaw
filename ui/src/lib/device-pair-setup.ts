@@ -62,11 +62,12 @@ function requestDevicePairSetup(client: GatewayRequestClient, params: DevicePair
   });
 }
 
-export function requestDevicePairJoinSetup(client: GatewayRequestClient) {
-  return requestDevicePairSetup(client, { includeQr: false, joinUrl: true });
-}
+// The Gateway refuses to mint join URLs over plaintext transports and tells the
+// client to fall back to the bare setup code. Matching that contract (instead of
+// retrying every failure) keeps genuine errors visible as errors.
+const PLAINTEXT_JOIN_REFUSAL = "Join URLs require a TLS gateway endpoint";
 
-type DevicePairSetupState = {
+export type DevicePairSetupState = {
   client: GatewayRequestClient | null;
   connected: boolean;
   devicePairSetupOpen: boolean;
@@ -320,12 +321,16 @@ export async function refreshDevicePairSetup(state: DevicePairSetupState) {
   const client = state.client;
   const lifecycle = state.devicePairSetupLifecycle;
   const access = lifecycle.access;
-  if (
-    !client ||
-    !state.connected ||
-    state.devicePairSetupLifecycle.phase === "loading" ||
-    devicePairSetupRequests.has(state)
-  ) {
+  if (lifecycle.phase === "loading" || devicePairSetupRequests.has(state)) {
+    return;
+  }
+  const failCreate = (message: string) => {
+    state.devicePairSetupLifecycle = { phase: "error", source: "create", access, message };
+    state.onDevicePairSetupChange();
+  };
+  if (!client || !state.connected) {
+    // A visible dead end beats a dialog that silently ignores its only action.
+    failCreate("Gateway unavailable");
     return;
   }
   const requestToken = {};
@@ -341,14 +346,24 @@ export async function refreshDevicePairSetup(state: DevicePairSetupState) {
   clearDevicePairSetupExpiry(state);
   state.devicePairSetupLifecycle = { phase: "loading", access };
   try {
-    const result = await requestDevicePairSetup(
-      client,
-      access === "full"
-        ? {}
-        : access === "node"
-          ? { bootstrapProfile: "node", includeQr: false }
-          : { bootstrapProfile: "limited" },
-    );
+    let result: DevicePairSetup;
+    try {
+      result = await requestDevicePairSetup(
+        client,
+        access === "full"
+          ? {}
+          : access === "node"
+            ? { bootstrapProfile: "node", includeQr: false, joinUrl: true }
+            : { bootstrapProfile: "limited" },
+      );
+    } catch (err) {
+      const message = formatUiError(err);
+      if (access !== "node" || !message.includes(PLAINTEXT_JOIN_REFUSAL)) {
+        throw err;
+      }
+      // Plaintext LAN cannot mint join URLs; the bare setup code stays available.
+      result = await requestDevicePairSetup(client, { bootstrapProfile: "node", includeQr: false });
+    }
     if (
       devicePairSetupRequests.get(state) !== requestToken ||
       state.client !== client ||

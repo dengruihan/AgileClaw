@@ -73,7 +73,9 @@ openclaw devices reject <requestId>
 Mint a single-use node onboarding URL with administrator access to the
 Gateway. Paste the printed `npx openclaw connect <url>` command on the machine
 to enroll. This join URL is not a mobile app setup code; for Android/iOS use
-[`openclaw qr`](/cli/qr) instead.
+[`openclaw qr`](/cli/qr) instead. The Control UI's pairing dialog mints the
+same join URL through its guided node handoff without showing a terminal
+command; plaintext private networks there fall back to a bare setup code.
 
 ```bash
 openclaw devices join-code

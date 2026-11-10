@@ -916,7 +916,7 @@ wa-popover.new-session-page__where-popover::part(body) {
 }
 
 .connect-machine-dialog {
-  --openclaw-modal-width: 480px;
+  --openclaw-modal-width: 560px;
 }
 
 .connect-machine-dialog__card {
@@ -930,17 +930,6 @@ wa-popover.new-session-page__where-popover::part(body) {
 
 .connect-machine-dialog__body {
   margin-top: 16px;
-}
-
-.connect-machine-dialog__status,
-.connect-machine-dialog__hint {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.connect-machine-dialog__hint {
-  margin-top: 8px;
 }
 
 .connect-machine-dialog .login-gate__command {

@@ -45,6 +45,7 @@ import { isNativeEmbedHost, nativeEmbedHost, isNativeWebChromeHost } from "./nat
 import { beginNativeWindowDragFromTopInset } from "./native-window-drag.ts";
 import { navigationSurfaceIsHidden, renderFloatingUpdateCard } from "./navigation-surface.ts";
 import { readGatewayOperatorAccess } from "./operator-access.ts";
+import type { ApplicationOverlaySnapshot } from "./overlays-types.ts";
 import { NAV_WIDTH_MAX, NAV_WIDTH_MIN, normalizeCatalogOpenTarget } from "./settings.ts";
 import type { ShellLayoutController } from "./shell-layout-traits.ts";
 import { resolveShellNavWidth } from "./shell-nav-width.ts";
@@ -81,6 +82,21 @@ export interface ShellViewHost
   querySelectorAll: ParentNode["querySelectorAll"];
   resizeNavigation(splitRatio: number): void;
   readonly toggleNavigationSurface: (trigger?: HTMLElement) => void;
+}
+
+// The pairing dialog's reveal-once secret starts masked for every freshly
+// minted setup; this is view-level state, retired when that setup changes.
+let devicePairSecretReveal: { setupId: string; revealed: boolean } | null = null;
+
+function resolveDevicePairSecretReveal(
+  lifecycle: ApplicationOverlaySnapshot["devicePairSetupLifecycle"],
+): boolean {
+  const setupId = lifecycle.phase === "waiting" ? lifecycle.setup.setupId : null;
+  if (setupId === null || devicePairSecretReveal?.setupId !== setupId) {
+    devicePairSecretReveal = setupId === null ? null : { setupId, revealed: false };
+    return false;
+  }
+  return devicePairSecretReveal.revealed;
 }
 
 export function renderApplicationShell(host: ShellViewHost) {
@@ -534,12 +550,30 @@ export function renderApplicationShell(host: ShellViewHost) {
         lifecycle: overlaySnapshot.devicePairSetupLifecycle,
         nowMs: Date.now(),
         pendingCount: overlaySnapshot.devicePairPendingCount,
+        nodeOnly: false,
+        secretRevealed: resolveDevicePairSecretReveal(overlaySnapshot.devicePairSetupLifecycle),
+        onToggleSecret: () => {
+          const lifecycle = overlaySnapshot.devicePairSetupLifecycle;
+          const setupId = lifecycle.phase === "waiting" ? lifecycle.setup.setupId : null;
+          if (
+            devicePairSecretReveal !== null &&
+            setupId !== null &&
+            devicePairSecretReveal.setupId === setupId
+          ) {
+            devicePairSecretReveal.revealed = !devicePairSecretReveal.revealed;
+            host.requestUpdate();
+          }
+        },
         onRefresh: () => void context.overlays.refreshDevicePairSetup(),
         onAccessChange: (access) => void context.overlays.setDevicePairSetupAccess(access),
         onClose: () => context.overlays.closeDevicePairSetup(),
         onManageDevices: () => {
           context.overlays.closeDevicePairSetup();
           host.navigate("devices");
+        },
+        onOpenConnectionSettings: () => {
+          context.overlays.closeDevicePairSetup();
+          host.navigate("connection");
         },
         onGetApps: () => {
           context.overlays.closeDevicePairSetup();

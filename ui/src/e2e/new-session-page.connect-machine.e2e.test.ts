@@ -12,6 +12,17 @@ import {
 
 const suite = createNewSessionPageE2eSuite();
 
+const joinSetup = (setupCode: string, joinUrl: string, expiresAtMs = Date.now() + 10 * 60_000) => ({
+  setupId: `setup-${setupCode}`,
+  setupCode,
+  joinUrl,
+  gatewayUrl: "wss://gateway.example.com",
+  auth: "token",
+  urlSource: "test",
+  access: "node",
+  expiresAtMs,
+});
+
 async function captureProof(
   page: Page,
   fileName: string,
@@ -39,10 +50,19 @@ async function captureProof(
   });
 }
 
+async function openConnectMachine(page: Page) {
+  await page.locator("#new-session-where-trigger").click();
+  const connect = page.getByRole("button", { name: "Connect a device" });
+  await connect.waitFor();
+  await connect.click();
+  return page.locator('openclaw-modal-dialog[label="Connect a machine"]');
+}
+
 suite.define(() => {
-  it("lets admins mint and refresh a one-paste machine connection", async () => {
+  it("lets admins transfer a guided one-paste machine pairing without a terminal command", async () => {
     const context = await suite.browser.newContext({
       locale: "en-US",
+      permissions: ["clipboard-read", "clipboard-write"],
       serviceWorkers: "block",
       viewport: { height: 900, width: 1280 },
       ...(captureUiProofEnabled
@@ -60,26 +80,7 @@ suite.define(() => {
     const gateway = await installMockGateway(page, {
       methodResponses: {
         "device.pair.setupCode": {
-          sequence: [
-            {
-              setupCode: "FIRST",
-              joinUrl: firstJoinUrl,
-              gatewayUrl: "wss://gateway.example.com",
-              auth: "token",
-              urlSource: "test",
-              access: "node",
-              expiresAtMs: Date.now() + 10 * 60_000,
-            },
-            {
-              setupCode: "SECOND",
-              joinUrl: secondJoinUrl,
-              gatewayUrl: "wss://gateway.example.com",
-              auth: "token",
-              urlSource: "test",
-              access: "node",
-              expiresAtMs: Date.now() + 10 * 60_000,
-            },
-          ],
+          sequence: [joinSetup("FIRST", firstJoinUrl), joinSetup("SECOND", secondJoinUrl)],
         },
       },
     });
@@ -98,31 +99,64 @@ suite.define(() => {
       await connect.click();
 
       const firstRequest = await gateway.waitForRequest("device.pair.setupCode");
-      expect(firstRequest.params).toEqual({ includeQr: false, joinUrl: true });
-      const dialog = page.locator('openclaw-modal-dialog[label="Connect a machine"]');
-      await dialog.getByText(`npx openclaw connect '${firstJoinUrl}'`, { exact: true }).waitFor();
-      const copy = dialog.locator("button.chat-copy-btn");
-      expect(await copy.count()).toBe(1);
-      expect(await copy.getAttribute("aria-label")).toBe("Copy command");
-      await dialog
-        .getByText("Running it pairs that machine as a device for your team.", { exact: true })
-        .waitFor();
-      await dialog.getByText(/This link is single-use and expires at/u).waitFor();
-      expect(await dialog.getByRole("button", { name: "Manage devices" }).count()).toBe(1);
-
-      await dialog.getByRole("button", { name: "Mint fresh code" }).click();
-      await expect
-        .poll(async () => (await gateway.getRequests("device.pair.setupCode")).length)
-        .toBe(2);
-      expect((await gateway.getRequests("device.pair.setupCode"))[1]?.params).toEqual({
+      expect(firstRequest.params).toEqual({
+        bootstrapProfile: "node",
         includeQr: false,
         joinUrl: true,
       });
-      await dialog.getByText(`npx openclaw connect ${secondJoinUrl}`, { exact: true }).waitFor();
+      const dialog = openConnectMachineDialog(page);
+      const steps = dialog.locator(".device-pair-setup__steps");
+      await steps.waitFor();
+      const guidedText = (await dialog.textContent()) ?? "";
+      expect(guidedText).not.toContain("npx openclaw");
+      expect(guidedText).not.toContain("openclaw node run");
+      expect(guidedText).not.toContain(firstJoinUrl);
+      expect(guidedText).toContain("Install the app on that machine");
+      expect(guidedText).toContain("Send the one-time pairing link");
+      await dialog.getByText(/This link is single-use and expires in/u).waitFor();
+      const downloadLinks = dialog.locator(".device-pair-setup__downloads a");
+      expect(await downloadLinks.count()).toBe(3);
+      expect(await downloadLinks.first().getAttribute("target")).toBe("_blank");
+
+      const copy = dialog.locator(".device-pair-setup__secret .chat-copy-btn");
+      await copy.click();
+      await expect
+        .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+        .toBe(firstJoinUrl);
+      // Copying never unmasks; only the reveal toggle shows the secret.
+      expect(
+        (await dialog.locator(".device-pair-setup__secret code").textContent()) ?? "",
+      ).not.toContain(firstJoinUrl);
       await captureProof(page, "02-connect-dialog.png", {
         surface: dialog.locator("dialog"),
         content: [copy],
       });
+
+      await dialog.locator('.device-pair-setup__secret button[aria-pressed="false"]').click();
+      await expect
+        .poll(() => dialog.locator(".device-pair-setup__secret code").textContent())
+        .toContain(firstJoinUrl);
+      const fallback = dialog.locator(".device-pair-setup__fallback");
+      expect((await fallback.locator("code").textContent()) ?? "").toContain("FIRST");
+      await fallback.locator("summary").click();
+      await fallback.locator(".chat-copy-btn").waitFor();
+
+      await dialog.getByRole("button", { name: "New code" }).click();
+      await expect
+        .poll(async () => (await gateway.getRequests("device.pair.setupCode")).length)
+        .toBe(2);
+      expect((await gateway.getRequests("device.pair.setupCode"))[1]?.params).toEqual({
+        bootstrapProfile: "node",
+        includeQr: false,
+        joinUrl: true,
+      });
+      // A regenerated setup starts masked again; the retired URL is gone from the DOM.
+      await steps.getByText(/This link is single-use and expires in/u).waitFor();
+      const secret = dialog.locator(".device-pair-setup__secret code");
+      await expect.poll(() => secret.textContent()).toContain(SECRET_MASK_PLACEHOLDER_CHECK);
+      expect((await secret.textContent()) ?? "").not.toContain(firstJoinUrl);
+      await dialog.locator('.device-pair-setup__secret button[aria-pressed="false"]').click();
+      await expect.poll(() => secret.textContent()).toContain(secondJoinUrl);
     } finally {
       await context.close();
     }
@@ -147,21 +181,13 @@ suite.define(() => {
     }
   });
 
-  it("shows a retryable error when connection-link creation never responds", async () => {
+  it("shows a retryable error with a connection-settings deep link when minting fails", async () => {
     const context = await suite.browser.newContext({ locale: "en-US", serviceWorkers: "block" });
     const page = await context.newPage();
     const joinUrl = "https://gateway.example.com/j/retried-code";
     const gateway = await installMockGateway(page, {
       methodResponses: {
-        "device.pair.setupCode": {
-          setupCode: "RETRIED",
-          joinUrl,
-          gatewayUrl: "wss://gateway.example.com",
-          auth: "token",
-          urlSource: "test",
-          access: "node",
-          expiresAtMs: Date.now() + 10 * 60_000,
-        },
+        "device.pair.setupCode": joinSetup("RETRIED", joinUrl),
       },
     });
 
@@ -169,11 +195,9 @@ suite.define(() => {
       await page.goto(`${suite.server.baseUrl}new`);
       await page.clock.install();
       await gateway.deferNext("device.pair.setupCode");
-      await page.locator("#new-session-where-trigger").click();
-      await page.getByRole("button", { name: "Connect a device" }).click();
+      const dialog = await openConnectMachine(page);
       await gateway.waitForRequest("device.pair.setupCode");
-      const dialog = page.locator('openclaw-modal-dialog[label="Connect a machine"]');
-      await dialog.getByText("Creating a secure connection link…", { exact: true }).waitFor();
+      await dialog.getByText("Creating a secure setup code…", { exact: true }).waitFor();
       await captureProof(page, "03-connect-loading.png");
 
       await page.clock.fastForward(DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS + 1);
@@ -183,13 +207,20 @@ suite.define(() => {
         .getByRole("alert")
         .filter({ hasText: "gateway request timed out after 30000ms: device.pair.setupCode" })
         .waitFor();
-      expect(
-        await dialog.getByText("Creating a secure connection link…", { exact: true }).count(),
-      ).toBe(0);
+      expect(await dialog.getByText("Creating a secure setup code…", { exact: true }).count()).toBe(
+        0,
+      );
       await captureProof(page, "04-connect-timeout.png");
-      const retry = dialog.getByRole("button", { name: "Mint fresh code" });
-      await retry.click();
-      await dialog.getByText(`npx openclaw connect ${joinUrl}`, { exact: true }).waitFor();
+
+      const deepLink = dialog.getByRole("button", { name: "Connection settings" });
+      await deepLink.click();
+      await expect.poll(() => new URL(page.url()).pathname).toBe("/settings/connection");
+      await page.goBack();
+      await expect.poll(() => new URL(page.url()).pathname).toBe("/new");
+
+      const reopened = await openConnectMachine(page);
+      await gateway.waitForRequest("device.pair.setupCode");
+      await reopened.getByText(/This link is single-use and expires in/u).waitFor();
       expect(await gateway.getRequests("device.pair.setupCode")).toHaveLength(2);
     } finally {
       await context.close();
@@ -206,8 +237,7 @@ suite.define(() => {
 
     try {
       await page.goto(`${suite.server.baseUrl}new`);
-      await page.locator("#new-session-where-trigger").click();
-      await page.getByRole("button", { name: "Connect a device" }).click();
+      await openConnectMachine(page);
       await gateway.waitForRequest("device.pair.setupCode");
       await gateway.rejectDeferred("device.pair.setupCode", {
         message: `pairing failed: Authorization: Bearer ${secret}`,
@@ -233,11 +263,10 @@ suite.define(() => {
 
     try {
       await page.goto(`${suite.server.baseUrl}new`);
-      await page.locator("#new-session-where-trigger").click();
-      await page.getByRole("button", { name: "Connect a device" }).click();
+      await openConnectMachine(page);
       await gateway.waitForRequest("device.pair.setupCode");
       const dialog = page.locator('openclaw-modal-dialog[label="Connect a machine"]');
-      await dialog.getByText("Creating a secure connection link…", { exact: true }).waitFor();
+      await dialog.getByText("Creating a secure setup code…", { exact: true }).waitFor();
 
       await gateway.closeLatest(1012, "test reconnect");
 
@@ -247,3 +276,9 @@ suite.define(() => {
     }
   });
 });
+
+function openConnectMachineDialog(page: Page) {
+  return page.locator('openclaw-modal-dialog[label="Connect a machine"]');
+}
+
+const SECRET_MASK_PLACEHOLDER_CHECK = "••••••";

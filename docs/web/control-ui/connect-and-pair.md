@@ -77,6 +77,18 @@ An already paired administrator can create the iOS/Android connection QR without
 
 Creating a setup code requires `operator.admin`; the button is disabled for sessions without it. A setup code contains a short-lived bootstrap credential, so treat the QR and copied code like a password while they are valid. For remote pairing, the Gateway must resolve to `wss://` (for example, through Tailscale Serve/Funnel); plain `ws://` is limited to loopback and private LAN addresses. See [Pairing](/channels/pairing#pair-from-the-control-ui-recommended) for the full security and fallback details.
 
+## Pair a machine (node host)
+
+An administrator can connect a computer as a command and capability host without opening a terminal. The same **Pair device** dialog offers **Node host** setup type and walks through three steps:
+
+1. **Download** — pick the machine's system to open the matching OpenClaw desktop download (macOS, Windows, or Linux).
+2. **Transfer** — copy the single-use pairing link and paste it into the OpenClaw app on that machine. The link is shown masked until you reveal it, and it retires when it expires or is redeemed; the countdown warns you before that. On a plaintext `ws://` Gateway address the dialog shares the bare setup code instead, with a warning to keep it on the private network.
+3. **Observe** — wait for the machine to connect, then review and approve it from the pending requests in **Devices**.
+
+When the machine redeems its link or code, the dialog settles into **Device paired** and links to the device inventory. If the machine never connects before expiry, the dialog reconciles the Gateway's recorded outcome: a redeemed setup still lands on the paired state, and a link that was minted but never received by the client surfaces a recoverable **Pairing delivery could not be confirmed** state instead of a silent dead end.
+
+Node pairing requires a TLS Gateway endpoint for join URLs (loopback `ws://` excepted); plaintext private networks use the setup-code fallback. The same guided flow is available from **New session → Where → Connect a device**. See [Pairing](/gateway/pairing#one-paste-node-pairing) for the trust model and the headless CLI equivalents.
+
 ## Runtime config endpoint
 
 The Control UI fetches its runtime settings from `/control-ui-config.json`, resolved relative to the gateway's Control UI base path (for example `/__openclaw__/control-ui-config.json` under base path `/__openclaw__/`). That endpoint is gated by gateway HTTP auth: unauthenticated browsers cannot fetch it, and a successful fetch requires a valid gateway token/password or trusted-proxy identity. Tailscale header auth applies to the Control UI WebSocket, not this HTTP endpoint.
