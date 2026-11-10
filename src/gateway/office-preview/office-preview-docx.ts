@@ -115,12 +115,21 @@ function createRunAccumulator(state: DocxState) {
       state.truncated = true;
       const last = runs.at(-1);
       if (last) {
-        last.text = truncate(`${last.text}${buffer}`, OFFICE_PREVIEW_MAX_BLOCK_CHARS);
+        const merged = `${last.text}${buffer}`;
+        const bounded = truncate(merged, OFFICE_PREVIEW_MAX_BLOCK_CHARS);
+        if (bounded.length < merged.length) {
+          state.truncated = true;
+        }
+        last.text = bounded;
       }
       buffer = "";
       return;
     }
-    runs.push({ text: truncate(buffer, OFFICE_PREVIEW_MAX_BLOCK_CHARS), ...style });
+    const bounded = truncate(buffer, OFFICE_PREVIEW_MAX_BLOCK_CHARS);
+    if (bounded.length < buffer.length) {
+      state.truncated = true;
+    }
+    runs.push({ text: bounded, ...style });
     buffer = "";
   };
   return {
@@ -296,10 +305,11 @@ function buildParagraphEvents(paragraph: XmlElement, state: DocxState): Paragrap
     }
     // Accessibility text is the concatenation of the budgeted runs, never the
     // unbudgeted raw accumulator, so it cannot outgrow the rich-text budget.
-    const accessibleText = truncate(
-      cleanText(runs.map((run) => run.text).join("")),
-      OFFICE_PREVIEW_MAX_BLOCK_CHARS,
-    );
+    const joinedText = cleanText(runs.map((run) => run.text).join(""));
+    const accessibleText = truncate(joinedText, OFFICE_PREVIEW_MAX_BLOCK_CHARS);
+    if (accessibleText.length < joinedText.length) {
+      state.truncated = true;
+    }
     events.push({
       kind: "content",
       content: {
@@ -497,6 +507,7 @@ function buildHeaderFooter(
   tag: "headerReference" | "footerReference",
   counter: OmittedFeatureCounter,
   budget: CharacterBudget,
+  state: DocxState,
 ): SessionFileOfficeParagraph[] | undefined {
   const relationshipId = headerFooterPartId(sectPr, tag);
   const partPath = relationshipId ? relationships.get(relationshipId) : undefined;
@@ -510,12 +521,17 @@ function buildHeaderFooter(
   }
   const paragraphs: SessionFileOfficeParagraph[] = [];
   for (const paragraph of elements(doc, "w:p")) {
-    if (paragraphs.length >= 20) {
-      break;
-    }
     const drawings = elements(paragraph, "w:drawing").length + elements(paragraph, "w:pict").length;
+    if (paragraphs.length >= 20) {
+      // Any visible content beyond the paragraph cap is an honest cut.
+      if (paragraphText(paragraph).trim() || drawings > 0) {
+        state.truncated = true;
+        break;
+      }
+      continue;
+    }
     if (drawings > 0) {
-      // Header/footer images are not represented in the page payload.
+      // Header/footer images are not represented in the document payload.
       counter.add("images", drawings);
     }
     const text = budget.take(cleanText(paragraphText(paragraph)).trim(), 2_000);
@@ -708,6 +724,7 @@ export function parseDocument(archive: OfficeZipArchive): SessionFileOfficePrevi
     "headerReference",
     counter,
     state.runBudget,
+    state,
   );
   const footer = buildHeaderFooter(
     archive,
@@ -716,6 +733,7 @@ export function parseDocument(archive: OfficeZipArchive): SessionFileOfficePrevi
     "footerReference",
     counter,
     state.runBudget,
+    state,
   );
   if (state.runBudget.exhausted || state.legacyBudget.exhausted) {
     state.truncated = true;

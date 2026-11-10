@@ -26,6 +26,13 @@ describe("spreadsheet value formatting", () => {
     expect(value("1", "0.0#")).toBe("1.0");
     expect(value("1.25", "0.0#")).toBe("1.25");
     expect(value("1200.5", "#,##0.##")).toBe("1,200.5");
+    // Scientific formats use the same optional placeholders and section sign.
+    expect(value("12000", "0.##E+00")).toBe("1.2E+04");
+    expect(value("12000", "0.00E+00")).toBe("1.20E+04");
+    expect(value("0.00012", "0.##E+00")).toBe("1.2E-04");
+    expect(value("-12000", "0.##E+00;(0.##E+00)")).toBe("(1.2E+04)");
+    expect(value("-12000", "0.##E+00")).toBe("-1.2E+04");
+    expect(value("12000", '0.##E+00" J"')).toBe("1.2E+04 J");
     expect(value("12345", "0.00E+00")).toBe("1.23E+04");
     expect(value("1200.5", "General")).toBe("1200.5");
     // Binary floating-point noise is hidden the way Excel's General format does.

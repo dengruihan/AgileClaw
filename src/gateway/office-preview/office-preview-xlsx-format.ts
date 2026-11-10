@@ -318,6 +318,9 @@ type NumericLayout = {
   grouping: boolean;
   percentScale: number;
   hasPlaceholder: boolean;
+  /** Scientific exponent digit count and explicit sign marker, when present. */
+  exponentDigits: number;
+  exponentSign: "+" | "-" | undefined;
 };
 
 /** Extracts prefix/suffix literals and placeholder shape from a numeric code. */
@@ -327,6 +330,8 @@ function numericLayout(code: string): NumericLayout {
   let pattern = "";
   let seenPlaceholder = false;
   let percentScale = 1;
+  let exponentDigits = 0;
+  let exponentSign: "+" | "-" | undefined;
   let index = 0;
   while (index < code.length) {
     const char = code[index] ?? "";
@@ -366,8 +371,21 @@ function numericLayout(code: string): NumericLayout {
       continue;
     }
     if (seenPlaceholder && (char === "E" || char === "e")) {
-      // The exponent marker and its digits are rendered by the scientific path.
-      break;
+      // Parse the exponent marker and its placeholders, then keep scanning so
+      // literals after the exponent (e.g. a negative section's closing paren)
+      // stay in the suffix.
+      let cursor = index + 1;
+      const signChar = code[cursor];
+      if (signChar === "+" || signChar === "-") {
+        exponentSign = signChar;
+        cursor += 1;
+      }
+      while (/[0#?]/u.test(code[cursor] ?? "")) {
+        exponentDigits += 1;
+        cursor += 1;
+      }
+      index = cursor;
+      continue;
     }
     if (/[0#?]/u.test(char)) {
       seenPlaceholder = true;
@@ -404,7 +422,35 @@ function numericLayout(code: string): NumericLayout {
     grouping: integerPattern.includes(","),
     percentScale,
     hasPlaceholder: pattern.length > 0,
+    exponentDigits: Math.max(1, exponentDigits),
+    exponentSign,
   };
+}
+
+/**
+ * Renders fractional digits through Excel's optional placeholders: a `#`/`?`
+ * digit shows when it is non-zero or a later shown digit is non-zero; `0`
+ * always shows. The caller supplies digits already padded to the placeholder
+ * count.
+ */
+function renderOptionalFraction(rawFraction: string, placeholders: string): string {
+  const digits = rawFraction.padEnd(placeholders.length, "0");
+  const shown = Array.from({ length: placeholders.length }, () => false);
+  let laterNonZero = false;
+  for (let index = placeholders.length - 1; index >= 0; index -= 1) {
+    const digit = digits[index] ?? "0";
+    if (placeholders[index] === "0") {
+      shown[index] = true;
+      laterNonZero ||= digit !== "0";
+    } else {
+      shown[index] = digit !== "0" || laterNonZero;
+      laterNonZero ||= digit !== "0";
+    }
+  }
+  return digits
+    .split("")
+    .filter((_digit, index) => shown[index])
+    .join("");
 }
 
 function groupInteger(value: string): string {
@@ -434,26 +480,7 @@ function formatNumeric(value: number, section: FormatSection): string {
   }
   const fixed = scaled.toFixed(Math.min(10, layout.decimals));
   const [integerPart = "0", rawFraction = ""] = fixed.split(".");
-  // Excel shows an optional `#`/`?` digit when it is non-zero or a later
-  // placeholder shows a non-zero digit; mandatory `0` placeholders always show.
-  const placeholders = layout.fractionPlaceholders;
-  const digits = rawFraction.padEnd(placeholders.length, "0");
-  const shown = Array.from({ length: placeholders.length }, () => false);
-  let laterNonZero = false;
-  for (let index = placeholders.length - 1; index >= 0; index -= 1) {
-    const digit = digits[index] ?? "0";
-    if (placeholders[index] === "0") {
-      shown[index] = true;
-      laterNonZero ||= digit !== "0";
-    } else {
-      shown[index] = digit !== "0" || laterNonZero;
-      laterNonZero ||= digit !== "0";
-    }
-  }
-  const fractionPart = digits
-    .split("")
-    .filter((_digit, index) => shown[index])
-    .join("");
+  const fractionPart = renderOptionalFraction(rawFraction, layout.fractionPlaceholders);
   const paddedInteger = integerPart.padStart(layout.minIntegerDigits, "0");
   const grouped = layout.grouping ? groupInteger(paddedInteger) : paddedInteger;
   const number = fractionPart ? `${grouped}.${fractionPart}` : grouped;
@@ -479,12 +506,16 @@ function formatGeneral(value: number): string {
 function formatScientific(value: number, section: FormatSection): string {
   const layout = numericLayout(section.code);
   const exponential = Math.abs(value).toExponential(Math.min(10, layout.decimals));
-  const [mantissa = "0", exponent = "0"] = exponential.split("e");
-  const sign = value < 0 ? "-" : "";
-  const exponentValue = Number.parseInt(exponent, 10);
+  const [rawMantissa = "0", rawExponent = "0"] = exponential.split("e");
+  const [mantissaInteger = "0", rawFraction = ""] = rawMantissa.split(".");
+  const fraction = renderOptionalFraction(rawFraction, layout.fractionPlaceholders);
+  const mantissa = fraction ? `${mantissaInteger}.${fraction}` : mantissaInteger;
+  const exponentValue = Number.parseInt(rawExponent, 10);
   const exponentText = Number.isFinite(exponentValue)
-    ? `${exponentValue < 0 ? "-" : "+"}${pad(Math.abs(exponentValue), 2)}`
-    : exponent;
+    ? `${exponentValue < 0 ? "-" : layout.exponentSign === "+" ? "+" : layout.exponentSign === "-" ? "" : "+"}${pad(Math.abs(exponentValue), layout.exponentDigits)}`
+    : rawExponent;
+  // The selected section owns the sign: a negative section may use parentheses.
+  const sign = section.negative && !section.explicitNegative ? "-" : "";
   return truncate(
     cleanText(`${sign}${layout.prefix}${mantissa}E${exponentText}${layout.suffix}`),
     4_096,
@@ -526,7 +557,7 @@ export function formatSpreadsheetCellValue(params: {
   if (isDateTimeCode(section.code)) {
     return truncate(cleanText(formatDateTime(value, section.code, params.date1904)), 4_096);
   }
-  if (/[eE][+-]/u.test(barePattern(section.code))) {
+  if (/[eE][+-]?[0#?]/u.test(barePattern(section.code))) {
     return formatScientific(value, section);
   }
   if (section.code.trim() === "General" || section.code.trim() === "") {

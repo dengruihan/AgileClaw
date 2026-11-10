@@ -417,6 +417,66 @@ describe("styled document layout", () => {
     expect(runByText(preview as Preview, "BasedOn cleared")?.underline).toBeUndefined();
   });
 
+  it("marks the header/footer paragraph cap as truncation only beyond 20", async () => {
+    const headerRelationships = [
+      {
+        id: "rIdHeader",
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
+        target: "header1.xml",
+      },
+    ];
+    const parseHeader = async (count: number) => {
+      const paragraphsXml = Array.from(
+        { length: count },
+        (_, index) => `<w:p><w:r><w:t>Header ${index + 1}</w:t></w:r></w:p>`,
+      ).join("");
+      return parseOfficePreviewBuffer(
+        await buildDocxFixture(
+          `<w:p><w:r><w:t>Body</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/></w:sectPr>`,
+          {
+            documentRelationships: headerRelationships,
+            extraParts: [
+              {
+                path: "word/header1.xml",
+                content: `<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${paragraphsXml}</w:hdr>`,
+              },
+            ],
+          },
+        ),
+        "docx",
+      );
+    };
+
+    const exact = await parseHeader(20);
+    expect(exact?.header).toHaveLength(20);
+    expect(exact?.truncated).toBeUndefined();
+
+    const beyond = await parseHeader(21);
+    expect(beyond?.header).toHaveLength(20);
+    expect(beyond?.header?.at(-1)?.text).toBe("Header 20");
+    expect(beyond?.truncated).toBe(true);
+  });
+
+  it("marks per-run and accessibility-text cuts inside table cells", async () => {
+    const oneRun = `<w:tbl><w:tblGrid><w:gridCol w:w="1000"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>${"a".repeat(5_000)}</w:t><w:t>${"b".repeat(5_000)}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`;
+    const twoRuns = `<w:tbl><w:tblGrid><w:gridCol w:w="1000"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${"c".repeat(5_000)}</w:t></w:r><w:r><w:rPr><w:i/></w:rPr><w:t>${"d".repeat(5_000)}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`;
+
+    const single = parseOfficePreviewBuffer(await buildDocxFixture(oneRun), "docx");
+    const singleCell = tableOn(single as Preview, 0)?.rows[0]?.cells[0]?.paragraphs[0];
+    expect(singleCell?.runs.reduce((total, run) => total + run.text.length, 0)).toBe(8_000);
+    expect(singleCell?.text.length).toBe(8_000);
+    expect(single?.blocks?.[0]?.text.length).toBe(8_000);
+    expect(single?.truncated).toBe(true);
+
+    const styled = parseOfficePreviewBuffer(await buildDocxFixture(twoRuns), "docx");
+    const styledCell = tableOn(styled as Preview, 0)?.rows[0]?.cells[0]?.paragraphs[0];
+    // Both runs survive individually, but accessibility and legacy text are cut.
+    expect(styledCell?.runs.reduce((total, run) => total + run.text.length, 0)).toBe(10_000);
+    expect(styledCell?.text.length).toBe(8_000);
+    expect(styled?.blocks?.[0]?.text.length).toBe(8_000);
+    expect(styled?.truncated).toBe(true);
+  });
+
   it("bounds approximate pages and reports the cut", async () => {
     const body = Array.from(
       { length: 60 },
