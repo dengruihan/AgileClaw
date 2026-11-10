@@ -45,7 +45,12 @@ export function renderModelProviders(props: ModelProvidersViewProps) {
                 type="button"
                 class="btn primary"
                 data-custom-provider
-                ?disabled=${props.configBusy || !props.canMutate}
+                title=${props.providerCreationBlockedReason ?? nothing}
+                ?disabled=${
+                  props.configBusy ||
+                  !props.canMutate ||
+                  Boolean(props.providerCreationBlockedReason)
+                }
                 @click=${props.onCustomProvider}
               >
                 ${icons.plus}${t("modelProviders.manager.addProvider")}

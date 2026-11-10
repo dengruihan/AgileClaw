@@ -8,13 +8,16 @@ import { stringInputValue } from "./provider-manager-model-form.ts";
 /** Interactive members the provider-manager connection form reads and calls. */
 export type ProviderConnectionActions = {
   onConnect: () => void;
-  onProviderIdInput: (value: string) => void;
+  onNameInput: (value: string) => void;
+  onNameCommit: () => void;
   onKeyInput: (value: string) => void;
   onToggleRevealKey: () => void;
   onFieldInput: (key: "baseUrl" | "api", value: string) => void;
 };
 
 export type ProviderConnectionState = {
+  /** True for creation and for authored custom entries: the only surfaces with an editable name. */
+  canRename: boolean;
   busy: boolean;
   card: ModelProviderCard | null;
   creating: boolean;
@@ -25,8 +28,8 @@ export type ProviderConnectionState = {
   keyLoading: boolean;
   keyError: string | null;
   keySource: ModelsAuthInspectApiKeyResult["source"];
+  nameDraft: string;
   providerCreated: boolean;
-  providerId: string;
   revealKey: boolean;
 };
 
@@ -66,19 +69,19 @@ export function providerConnectionFields(params: {
   const authMode = !creating ? state.card?.configAuthMode : undefined;
   const authModeBlocked = Boolean(authMode && authMode !== "api-key");
   return html` ${
-      creating
+      state.canRename
         ? html`<label class="field"
-            ><span>${t("modelProviders.manager.providerId")}</span
+            ><span>${t("modelProviders.manager.providerName")}</span
             ><input
-              name="providerId"
-              required
-              pattern="[a-z0-9][a-z0-9._-]*"
-              .value=${state.providerId}
-              ?disabled=${state.disabled || state.providerCreated}
+              name="displayName"
+              placeholder=${t("modelProviders.manager.providerNamePlaceholder")}
+              .value=${state.nameDraft}
+              ?disabled=${state.disabled}
               @input=${(event: Event) => {
-                // SAFETY: the handler only fires on this provider-id text input.
-                actions.onProviderIdInput((event.target as HTMLInputElement).value);
+                // SAFETY: the handler only fires on this provider-name text input.
+                actions.onNameInput((event.target as HTMLInputElement).value);
               }}
+              @change=${actions.onNameCommit}
           /></label>`
         : nothing
     }

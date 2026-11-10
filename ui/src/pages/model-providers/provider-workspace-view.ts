@@ -23,6 +23,13 @@ export function renderProviderWorkspace(props: ModelProvidersViewProps) {
     (card) => (card.configKey ?? card.id) === props.selectedProvider,
   );
   return html` ${props.error ? html`<p class="callout danger" role="alert">${props.error}</p>` : nothing}
+    ${
+      props.providerCreationBlockedReason
+        ? html`<p class="muted" data-provider-creation-blocked role="status">
+            ${props.providerCreationBlockedReason}
+          </p>`
+        : nothing
+    }
     <div class="model-providers__workspace">
       <nav class="model-providers__navigation" aria-label=${t("modelProviders.manager.configured")}>
         <label class="field model-providers__search">
@@ -82,7 +89,10 @@ export function renderProviderWorkspace(props: ModelProvidersViewProps) {
                 type="button"
                 class="btn primary model-providers__add-empty"
                 data-custom-provider
-                ?disabled=${configMutationDisabled(props)}
+                title=${props.providerCreationBlockedReason ?? nothing}
+                ?disabled=${
+                  configMutationDisabled(props) || Boolean(props.providerCreationBlockedReason)
+                }
                 @click=${props.onCustomProvider}
               >
                 ${icons.plus}${t("modelProviders.manager.addProvider")}

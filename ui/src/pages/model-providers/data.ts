@@ -56,6 +56,8 @@ type ModelProviderCardsInput = {
   providerOutcomes?: ModelCatalogProviderOutcome[];
   pendingProviders?: readonly string[];
   configProviderIds?: string[] | null;
+  /** Authored names keyed by the exact config key; absent keeps the derived label. */
+  configProviderDisplayNames?: Record<string, string> | null;
   configProviderModelIds?: Record<string, readonly string[]> | null;
   configApiKeyProviderIds?: string[] | null;
   configProviderAuthModes?: Record<string, string> | null;
@@ -118,6 +120,10 @@ function addProviderId(ids: string[], provider: string): void {
  */
 export function buildModelProviderCards(input: ModelProviderCardsInput): ModelProviderCard[] {
   const drafts: CardDraft[] = [];
+  // An authored name is presentation only: it never replaces the config key that
+  // model, credential, and secret references use.
+  const configuredLabel = (exactKey: string, id: string) =>
+    input.configProviderDisplayNames?.[exactKey] || providerDisplayLabel(id);
   const apiKeyCapabilities = new Map<string, boolean>();
   for (const capability of input.authStatus?.providerCapabilities ?? []) {
     const id = canonicalModelAuthProviderId(capability.provider);
@@ -130,7 +136,7 @@ export function buildModelProviderCards(input: ModelProviderCardsInput): ModelPr
   for (const provider of input.configProviderIds ?? []) {
     const id = canonicalModelAuthProviderId(provider);
     if (id) {
-      const card = ensureDraft(drafts, id, providerDisplayLabel(id)).card;
+      const card = ensureDraft(drafts, id, configuredLabel(provider, id)).card;
       card.configKey ??= provider;
       card.modelIds.push(...(input.configProviderModelIds?.[provider] ?? []));
     }
@@ -350,6 +356,7 @@ function buildSelectableDefaultModels(
 export function readModelProviderConfig(config: Record<string, unknown> | null): {
   providerIds: string[];
   providerModelIds: Record<string, string[]>;
+  providerDisplayNames: Record<string, string>;
   apiKeyProviderIds: string[];
   providerAuthModes: Record<string, string>;
   defaults: DefaultModelSelection;
@@ -364,6 +371,12 @@ export function readModelProviderConfig(config: Record<string, unknown> | null):
         typeof model.id === "string" ? [model.id] : [],
       ),
     ]),
+  );
+  const providerDisplayNames = Object.fromEntries(
+    Object.entries(providers ?? {}).flatMap(([provider, value]) => {
+      const name = asRecord(value)?.displayName;
+      return typeof name === "string" && name.trim() ? [[provider, name.trim()]] : [];
+    }),
   );
   const agents = asRecord(config?.agents);
   const defaults = asRecord(agents?.defaults);
@@ -381,6 +394,7 @@ export function readModelProviderConfig(config: Record<string, unknown> | null):
   return {
     providerIds,
     providerModelIds,
+    providerDisplayNames,
     apiKeyProviderIds: Object.entries(providers ?? {})
       .filter(([, value]) => {
         const provider = asRecord(value);

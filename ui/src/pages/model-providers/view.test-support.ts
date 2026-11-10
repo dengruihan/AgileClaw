@@ -41,6 +41,7 @@ export function props(overrides: Partial<ModelProvidersViewProps> = {}): ModelPr
     catalogDiscovering: false,
     catalogDiscoveryError: null,
     configBusy: false,
+    providerCreationBlockedReason: null,
     unconfiguredProviders: [{ id: "anthropic", displayName: "Anthropic" }],
     canMutate: true,
     mutationBlockedReason: null,

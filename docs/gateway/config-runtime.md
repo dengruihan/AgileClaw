@@ -60,6 +60,7 @@ The `models` root also owns global model-catalog behavior.
   `models.providers.*.models` rows only; `replace` additionally excludes
   discovery results, leaving authored rows alone.
 - `models.providers`: custom provider map keyed by provider id.
+- `models.providers.*.displayName`: optional readable name shown for the provider in place of the label derived from its key. Presentation only: the `models.providers` key stays the identity that `provider/model` references, credentials, and secret targets use, so renaming never rewrites them. Settings → Models writes this leaf when you edit a provider name; omitting it keeps the derived label.
 - `models.providers.*.models[].hidden`: hide this model from pickers and default views. The row stays selectable by exact `provider/model` ref, remains visible in browse views (`view: "all"`, `openclaw models list --all`), and stays visible while a default, fallback, utility, tool, alias, or policy entry references it.
 - `models.providers.*.localService`: optional on-demand process manager for
   local model servers. OpenClaw probes the configured health endpoint, starts

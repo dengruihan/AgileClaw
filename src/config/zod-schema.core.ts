@@ -327,6 +327,12 @@ const ModelProviderSchema = z.strictObject({
   // Bundled provider overlays are materialized with an empty-string sentinel.
   // ModelProvidersSchema below still rejects empty baseUrl values for custom providers.
   baseUrl: z.string().optional(),
+  /**
+   * Readable name shown for this provider instead of the label derived from its id.
+   * Presentation only: the `models.providers` key stays the identity that model,
+   * credential, and secret references use, and renaming never changes it.
+   */
+  displayName: z.string().min(1).optional(),
   /** API key or secret reference for this provider. */
   apiKey: SecretInputSchema.optional().register(sensitive),
   /** Authentication mode used when resolving credentials for this provider. */

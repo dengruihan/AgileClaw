@@ -317,6 +317,7 @@ suite.define(() => {
           methodResponses: {
             "config.get": snapshot(initial, "model-row-e2e"),
             "config.schema": buildConfigSchemaCore(),
+            "models.authStatus": { ts: 1, providers: [], providerCapabilities: [] },
           },
         });
         await page.goto(`${suite.server.baseUrl}settings/advanced?section=models`);
@@ -402,7 +403,7 @@ suite.define(() => {
         await gateway.resolveDeferred("config.patch", { config: saved, hash: "model-row-saved" });
         await fourth.getByText("Fourth updated", { exact: true }).waitFor();
         await page.locator(".settings-section__actions [data-custom-provider]").click();
-        await manager.locator('[name="providerId"]').waitFor();
+        await manager.locator('[name="displayName"]').waitFor();
         await page.locator(`[data-provider-select="${providerId}"]`).click();
         await fourth.getByRole("button", { name: "Edit model", exact: true }).click();
         await expect.poll(() => name.inputValue()).toBe("Fourth updated");
@@ -567,7 +568,8 @@ suite.define(() => {
 
   it("retries failed custom provider credentials without recreating its saved connection", async () => {
     const { buildConfigSchemaCore } = await import("../../../src/config/schema.ts");
-    const providerId = "custom-lab";
+    // The key is generated from the endpoint the test fills below, not typed by the operator.
+    const providerId = "custom-models-example-test";
     const credentialKey = "synthetic-provider-key";
     const initial = { models: { providers: {} } };
     const snapshot = (config: Record<string, unknown>, hash: string) => ({
@@ -592,6 +594,7 @@ suite.define(() => {
           methodResponses: {
             "config.get": snapshot(initial, "custom-provider-initial"),
             "config.schema": buildConfigSchemaCore(),
+            "models.authStatus": { ts: 1, providers: [], providerCapabilities: [] },
             "models.authInspectApiKey": {
               provider: providerId,
               agentId: "main",
@@ -606,10 +609,9 @@ suite.define(() => {
         await page.goto(`${suite.server.baseUrl}settings/model-providers`);
         await page.locator(".settings-section__actions [data-custom-provider]").click();
         const manager = page.locator(".provider-manager--inline");
-        const providerIdInput = manager.locator('input[name="providerId"]');
         const url = manager.getByRole("textbox", { name: "Base URL", exact: true });
         const apiKey = manager.locator('input[name="apiKey"]');
-        await providerIdInput.waitFor();
+        await manager.locator('[name="displayName"]').waitFor();
         expect(await gateway.getRequests("config.patch")).toHaveLength(0);
         expect(await gateway.getRequests("models.authSetApiKey")).toHaveLength(0);
         // The connection form auto-saves; defer both writes before typing so the
@@ -617,7 +619,6 @@ suite.define(() => {
         await gateway.deferNext("config.patch");
         await gateway.deferNext("models.authSetApiKey");
 
-        await providerIdInput.fill(providerId);
         await url.fill("https://models.example.test/v1");
         await apiKey.fill(credentialKey);
         expect(await apiKey.getAttribute("type")).toBe("password");
@@ -669,7 +670,7 @@ suite.define(() => {
           .poll(() => manager.getByRole("alert").textContent())
           .toContain("Connection settings were saved, but the API key was not saved");
         expect(await apiKey.inputValue()).toBe(credentialKey);
-        await expect.poll(() => providerIdInput.count()).toBe(0);
+        await expect.poll(() => manager.locator('[name="providerId"]').count()).toBe(0);
         expect(await gateway.getRequests("config.patch")).toHaveLength(1);
         await gateway.deferNext("models.authSetApiKey");
         // Retrying the failed credential save means editing the key again; the

@@ -105,6 +105,7 @@ suite.define(() => {
             "models.authStatus": {
               ts: 1,
               providers: [{ provider: "studio", status: "static", profiles: [] }],
+              providerCapabilities: [],
             },
             "models.list": { models },
             "models.probe": { provider: "studio", status: "ok", latencyMs: 12, results: [] },
@@ -219,6 +220,7 @@ suite.define(() => {
       const authStatus = (ts: number) => ({
         ts,
         providers: [{ provider: "studio", status: "static", profiles: [] }],
+        providerCapabilities: [],
       });
       const gateway = await installMockGateway(page, {
         methodResponses: {
@@ -294,6 +296,7 @@ suite.define(() => {
           "models.authStatus": {
             ts: 1,
             providers: [{ provider: "studio", status: "ok", profiles: [] }],
+            providerCapabilities: [],
           },
           "models.list": { models: [] },
         },
@@ -333,7 +336,7 @@ suite.define(() => {
               issues: [],
             },
             "models.list": { models: [] },
-            "models.authStatus": { ts: 1, providers: [] },
+            "models.authStatus": { ts: 1, providers: [], providerCapabilities: [] },
             "usage.status": { updatedAt: 1, providers: [] },
             "sessions.usage": { aggregates: { byProvider: [] } },
           },
@@ -397,7 +400,7 @@ suite.define(() => {
               issues: [],
             },
             "models.list": { models: [] },
-            "models.authStatus": { ts: 1, providers: [] },
+            "models.authStatus": { ts: 1, providers: [], providerCapabilities: [] },
             "usage.status": { updatedAt: 1, providers: [] },
             "sessions.usage": { aggregates: { byProvider: [] } },
           },
@@ -405,25 +408,28 @@ suite.define(() => {
         await page.goto(`${suite.server.baseUrl}settings/model-providers`);
         await page.locator(".model-providers__navigation [data-custom-provider]").click();
         const editor = page.locator(".provider-manager--inline");
+        // The create form asks for a readable name only; the config key is generated.
+        await expect.poll(() => editor.locator('[name="providerId"]').count()).toBe(0);
         // The create form auto-saves once its required fields are filled.
         await gateway.deferNext("config.patch");
-        await editor.locator('[name="providerId"]').fill("workspace-custom");
+        await editor.locator('[name="displayName"]').fill("Workspace Custom");
         await editor.locator('[name="baseUrl"]').fill("https://custom.example/v1");
         await editor.locator('[name="api"]').selectOption("anthropic-messages");
         const connection = {
           baseUrl: "https://custom.example/v1",
           api: "anthropic-messages",
+          displayName: "Workspace Custom",
           models: [],
         };
         expect(requestRaw(await gateway.waitForRequest("config.patch"))).toEqual({
-          models: { providers: { "workspace-custom": connection } },
+          models: { providers: { "custom-custom-example": connection } },
         });
         await resolveConfigMutation(
           gateway,
-          { models: { providers: { "workspace-custom": connection } } },
+          { models: { providers: { "custom-custom-example": connection } } },
           "workspace-created",
         );
-        const selected = page.locator('[data-provider-select="workspace-custom"]');
+        const selected = page.locator('[data-provider-select="custom-custom-example"]');
         await selected.waitFor();
         expect(
           await page.locator(".model-providers__navigation [data-custom-provider]").count(),
@@ -447,10 +453,10 @@ suite.define(() => {
         };
         const patch = await gateway.waitForRequest("config.patch", { after: 1 });
         expect(requestRaw(patch)).toEqual({
-          models: { providers: { "workspace-custom": { models: [model] } } },
+          models: { providers: { "custom-custom-example": { models: [model] } } },
         });
         const saved = {
-          models: { providers: { "workspace-custom": { ...connection, models: [model] } } },
+          models: { providers: { "custom-custom-example": { ...connection, models: [model] } } },
         };
         await resolveConfigMutation(gateway, saved, "workspace-model-created");
         await dialog.locator("form").waitFor({ state: "hidden" });
@@ -463,11 +469,15 @@ suite.define(() => {
         await dialog.getByRole("button", { name: "Save", exact: true }).click();
         const edited = { ...model, name: "Renamed model", maxTokens: 16384 };
         expect(requestRaw(await gateway.waitForRequest("config.patch", { after: 2 }))).toEqual({
-          models: { providers: { "workspace-custom": { models: [edited] } } },
+          models: { providers: { "custom-custom-example": { models: [edited] } } },
         });
         await resolveConfigMutation(
           gateway,
-          { models: { providers: { "workspace-custom": { ...connection, models: [edited] } } } },
+          {
+            models: {
+              providers: { "custom-custom-example": { ...connection, models: [edited] } },
+            },
+          },
           "workspace-model-edited",
         );
         await dialog.locator("form").waitFor({ state: "hidden" });
@@ -485,6 +495,291 @@ suite.define(() => {
       },
     );
   });
+  it("holds provider creation until the plugin reservation list loads", async () => {
+    const relayUrl = "https://relay.example.test/v1";
+    await suite.withPage(
+      { locale: "en-US", serviceWorkers: "block", viewport: { width: 1440, height: 1000 } },
+      async ({ page }) => {
+        const gateway = await installMockGateway(page, {
+          methodResponses: {
+            "config.get": {
+              config: { models: { providers: {} } },
+              sourceConfig: { models: { providers: {} } },
+              hash: "reservations-initial",
+              raw: '{"models":{"providers":{}}}',
+              valid: true,
+              issues: [],
+            },
+            "models.list": { models: [] },
+            "models.authStatus": {
+              __mockError: { code: "UNAVAILABLE", message: "Provider list unavailable." },
+            },
+            "usage.status": { updatedAt: 1, providers: [] },
+            "sessions.usage": { aggregates: { byProvider: [] } },
+          },
+        });
+        await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+        const headerAdd = page.locator(".settings-section__actions [data-custom-provider]");
+        const emptyAdd = page.locator(".model-providers__navigation [data-custom-provider]");
+        await expect.poll(() => headerAdd.isDisabled()).toBe(true);
+        await expect.poll(() => emptyAdd.isDisabled()).toBe(true);
+        await expect
+          .poll(() => page.locator("[data-provider-creation-blocked]").textContent())
+          .toContain("Refresh and try again");
+        // The guarded intent cannot open the create editor from either entry point.
+        await headerAdd.dispatchEvent("click");
+        await emptyAdd.dispatchEvent("click");
+        expect(await page.locator(".provider-manager--inline").count()).toBe(0);
+        expect(await gateway.getRequests("config.patch")).toHaveLength(0);
+        if (recordVisuals) {
+          await page.screenshot({
+            path: path.join(suite.artifactDir, "provider-creation-waiting-for-list.png"),
+          });
+        }
+
+        // With the reservation list restored, creation reserves the plugin id.
+        await gateway.setMethodResponse("models.authStatus", {
+          ts: 1,
+          providers: [],
+          providerCapabilities: [
+            {
+              provider: "custom-relay-example-test",
+              apiKeySupported: true,
+              quickApiKeySetup: true,
+            },
+          ],
+        });
+        await page.locator(".model-providers__refresh-button").click();
+        await expect.poll(() => headerAdd.isEnabled()).toBe(true);
+        await expect.poll(() => page.locator("[data-provider-creation-blocked]").count()).toBe(0);
+        // A fresh load of the restored list also starts clean (no stale refusal copy).
+        await page.reload();
+        await expect.poll(() => headerAdd.isEnabled()).toBe(true);
+        if (recordVisuals) {
+          await page.screenshot({
+            path: path.join(suite.artifactDir, "provider-creation-restored.png"),
+          });
+        }
+        await headerAdd.click();
+        const editor = page.locator(".provider-manager--inline");
+        await editor.locator('[name="displayName"]').waitFor();
+        await gateway.deferNext("config.patch");
+        await editor.locator('[name="displayName"]').fill("Relay Example");
+        await editor.locator('[name="baseUrl"]').fill(relayUrl);
+        // The plugin-declared id stays reserved; the new provider claims the next key.
+        const connection = {
+          baseUrl: relayUrl,
+          api: "openai-completions",
+          displayName: "Relay Example",
+          models: [],
+        };
+        expect(requestRaw(await gateway.waitForRequest("config.patch"))).toEqual({
+          models: { providers: { "custom-relay-example-test-2": connection } },
+        });
+        await resolveConfigMutation(
+          gateway,
+          { models: { providers: { "custom-relay-example-test-2": connection } } },
+          "reservations-created",
+        );
+        await expect
+          .poll(() => page.locator('[data-provider-select="custom-relay-example-test-2"]').count())
+          .toBe(1);
+        expect(
+          await page.locator('[data-provider-select="custom-relay-example-test"]').count(),
+        ).toBe(0);
+      },
+    );
+  });
+
+  it("generates keys for name-only creation and renames without moving the key", async () => {
+    const relayUrl = "https://relay.example.test/v1";
+    const firstKey = "custom-relay-example-test";
+    const chineseName = "我的中转站";
+    const renamed = "公司内部模型";
+    const named = (displayName: string) => ({
+      baseUrl: relayUrl,
+      api: "openai-completions",
+      displayName,
+      models: [],
+    });
+    await suite.withPage(
+      { locale: "en-US", serviceWorkers: "block", viewport: { width: 1440, height: 1000 } },
+      async ({ page }) => {
+        const gateway = await installMockGateway(page, {
+          methodResponses: {
+            "config.get": {
+              config: {},
+              sourceConfig: {},
+              hash: "names-initial",
+              raw: "{}",
+              valid: true,
+              issues: [],
+            },
+            "models.list": { models: [] },
+            "models.authStatus": { ts: 1, providers: [], providerCapabilities: [] },
+            "usage.status": { updatedAt: 1, providers: [] },
+            "sessions.usage": { aggregates: { byProvider: [] } },
+          },
+        });
+        await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+        const editor = page.locator(".provider-manager--inline");
+        await page.locator(".model-providers__navigation [data-custom-provider]").click();
+        await gateway.deferNext("config.patch");
+        await editor.locator('[name="displayName"]').fill(chineseName);
+        await editor.locator('[name="baseUrl"]').fill(relayUrl);
+        // The persisted snapshot carries the exact CJK name under an endpoint-derived key.
+        expect(requestRaw(await gateway.waitForRequest("config.patch"))).toEqual({
+          models: { providers: { [firstKey]: named(chineseName) } },
+        });
+        await resolveConfigMutation(
+          gateway,
+          { models: { providers: { [firstKey]: named(chineseName) } } },
+          "names-first-created",
+        );
+        await expect
+          .poll(() => page.locator(`[data-provider-select="${firstKey}"]`).textContent())
+          .toContain(chineseName);
+        if (recordVisuals) {
+          await page.screenshot({
+            path: path.join(suite.artifactDir, "provider-created-with-chinese-name.png"),
+          });
+        }
+
+        // A second provider with the same readable name and endpoint claims its own key.
+        await page.locator(".settings-section__actions [data-custom-provider]").click();
+        await gateway.deferNext("config.patch");
+        await editor.locator('[name="displayName"]').fill(chineseName);
+        await editor.locator('[name="baseUrl"]').fill(relayUrl);
+        expect(requestRaw(await gateway.waitForRequest("config.patch", { after: 1 }))).toEqual({
+          models: { providers: { [`${firstKey}-2`]: named(chineseName) } },
+        });
+        await resolveConfigMutation(
+          gateway,
+          {
+            models: {
+              providers: {
+                [firstKey]: named(chineseName),
+                [`${firstKey}-2`]: named(chineseName),
+              },
+            },
+          },
+          "names-duplicate-created",
+        );
+        await expect.poll(() => page.locator("[data-provider-select]").count()).toBe(2);
+        if (recordVisuals) {
+          await page.screenshot({
+            path: path.join(suite.artifactDir, "provider-duplicate-names.png"),
+          });
+        }
+
+        // Renaming writes only the display leaf: the config key, its nav identity,
+        // and its models stay put.
+        await page.locator(`[data-provider-select="${firstKey}"]`).click();
+        await gateway.deferNext("config.patch");
+        // A real browser confirms the field on blur; the name commits there, not per keystroke.
+        await editor.locator('[name="displayName"]').fill(renamed);
+        await editor.locator('[name="displayName"]').blur();
+        expect(requestRaw(await gateway.waitForRequest("config.patch", { after: 2 }))).toEqual({
+          models: { providers: { [firstKey]: { displayName: renamed } } },
+        });
+        await resolveConfigMutation(
+          gateway,
+          {
+            models: {
+              providers: {
+                [firstKey]: named(renamed),
+                [`${firstKey}-2`]: named(chineseName),
+              },
+            },
+          },
+          "names-renamed",
+        );
+        await expect
+          .poll(() => page.locator(`[data-provider-select="${firstKey}"]`).textContent())
+          .toContain(renamed);
+        // The visible label changed; the navigation identity did not.
+        await expect
+          .poll(() => page.locator(`[data-provider-select="${renamed}"]`).count())
+          .toBe(0);
+        await expect
+          .poll(() => page.locator(`[data-provider-select="${firstKey}"]`).count())
+          .toBe(1);
+        if (recordVisuals) {
+          await page.screenshot({
+            path: path.join(suite.artifactDir, "provider-renamed-keeps-key.png"),
+          });
+        }
+      },
+    );
+  });
+
+  it.each([1440, 390])(
+    "captures the name-only create form and renamed card label at %ipx",
+    async (width) => {
+      const relayUrl = "https://relay.example.test/v1";
+      const firstKey = "custom-relay-example-test";
+      const chineseName = "我的中转站";
+      await suite.withPage(
+        { locale: "en-US", serviceWorkers: "block", viewport: { width, height: 1000 } },
+        async ({ page }) => {
+          const gateway = await installMockGateway(page, {
+            methodResponses: {
+              "config.get": {
+                config: {},
+                sourceConfig: {},
+                hash: `viewport-${width}-initial`,
+                raw: "{}",
+                valid: true,
+                issues: [],
+              },
+              "models.list": { models: [] },
+              "models.authStatus": { ts: 1, providers: [], providerCapabilities: [] },
+              "usage.status": { updatedAt: 1, providers: [] },
+              "sessions.usage": { aggregates: { byProvider: [] } },
+            },
+          });
+          await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+          const editor = page.locator(".provider-manager--inline");
+          await page.locator(".model-providers__navigation [data-custom-provider]").click();
+          await editor.locator('[name="displayName"]').waitFor();
+          if (recordVisuals) {
+            await page.screenshot({
+              path: path.join(suite.artifactDir, `create-form-name-only-${width}.png`),
+            });
+          }
+          await gateway.deferNext("config.patch");
+          await editor.locator('[name="displayName"]').fill(chineseName);
+          await editor.locator('[name="baseUrl"]').fill(relayUrl);
+          await gateway.waitForRequest("config.patch");
+          await resolveConfigMutation(
+            gateway,
+            {
+              models: {
+                providers: {
+                  [firstKey]: {
+                    baseUrl: relayUrl,
+                    api: "openai-completions",
+                    displayName: chineseName,
+                    models: [],
+                  },
+                },
+              },
+            },
+            `viewport-${width}-created`,
+          );
+          await expect
+            .poll(() => page.locator(`[data-provider-select="${firstKey}"]`).textContent())
+            .toContain(chineseName);
+          if (recordVisuals) {
+            await page.screenshot({
+              path: path.join(suite.artifactDir, `created-chinese-name-${width}.png`),
+            });
+          }
+        },
+      );
+    },
+  );
+
   it.each([1440, 1100, 768, 640, 390])(
     "Models page keeps controls separate and publishes discovery into a passive picker at %ipx",
     async (width) => {
@@ -546,6 +841,9 @@ suite.define(() => {
                       },
                     ],
                   },
+                ],
+                providerCapabilities: [
+                  { provider: "openai", apiKeySupported: true, quickApiKeySetup: true },
                 ],
               },
               "usage.status": { updatedAt: Date.now(), providers: [] },

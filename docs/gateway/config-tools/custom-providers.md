@@ -79,6 +79,7 @@ Configuring a custom/local provider `baseUrl` is also the narrow network trust d
     - `models.providers.*.injectNumCtxForOpenAICompat`: for Ollama + `openai-completions`, inject `options.num_ctx` into requests (default: `true`).
     - `models.providers.*.authHeader`: force credential transport in the `Authorization` header when required.
     - `models.providers.*.baseUrl`: upstream API base URL.
+    - `models.providers.*.displayName`: optional readable name shown instead of the label derived from the `models.providers` key. The key remains the identity used by `provider/model` references, auth profiles, and secret targets, so renaming changes only this leaf; blank or absent keeps the derived label. Settings → Models generates the key from the endpoint host and port (`custom-<host>[-<port>]`, suffixed `-2`, `-3` when taken) and never asks for it, while `openclaw onboard --custom-provider-id` and hand-authored config still set an explicit id that stays authoritative.
     - `models.providers.*.headers`: extra static headers for proxy/tenant routing.
 
   </Accordion>

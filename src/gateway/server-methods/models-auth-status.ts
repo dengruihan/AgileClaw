@@ -1,5 +1,6 @@
 import {
   findNormalizedProviderKey,
+  findNormalizedProviderValue,
   normalizeProviderId,
 } from "@openclaw/model-catalog-core/provider-id";
 import { asDateTimestampMs } from "@openclaw/normalization-core/number-coercion";
@@ -123,7 +124,18 @@ function buildExpiry(
   return { at: normalizedExpiresAt, remainingMs, label: formatRemainingShort(remainingMs) };
 }
 
-function providerDisplayName(provider: string): string {
+/**
+ * Provider label for auth-status rows: the persisted display name when authored,
+ * then the usage-provider label, then the raw id.
+ */
+function providerDisplayName(cfg: OpenClawConfig, provider: string): string {
+  const configured = findNormalizedProviderValue(
+    cfg.models?.providers,
+    provider,
+  )?.displayName?.trim();
+  if (configured) {
+    return configured;
+  }
   const usageId = resolveUsageProviderId(provider);
   return (usageId && providerUsageLabel(usageId)) || provider;
 }
@@ -244,7 +256,7 @@ function mapProvider(
   return {
     provider: prov.provider,
     authProvider: authProviderKey,
-    displayName: providerDisplayName(prov.provider),
+    displayName: providerDisplayName(cfg, prov.provider),
     status:
       apiKey && !hasRefreshableProfile && rollup.status === "missing" ? "static" : rollup.status,
     expiry: buildExpiry(rollup.remainingMs, rollup.expiresAt),

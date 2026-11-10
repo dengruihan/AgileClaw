@@ -51,6 +51,32 @@ describe("ModelsConfigSchema", () => {
     ).toBe(false);
   });
 
+  it("persists an authored provider display name without touching its key", () => {
+    const parsed = ModelsConfigSchema.parse({
+      providers: {
+        "custom-relay": {
+          baseUrl: "https://relay.example.test/v1",
+          displayName: "我的中转站",
+          models: [{ id: "model-a", name: "Model A" }],
+        },
+      },
+    });
+    expect(parsed?.providers?.["custom-relay"]?.displayName).toBe("我的中转站");
+    // A blank name is not a value: the field clears the leaf instead, so the
+    // derived label returns.
+    expect(
+      ModelsConfigSchema.safeParse({
+        providers: {
+          "custom-relay": {
+            baseUrl: "https://relay.example.test/v1",
+            displayName: "",
+            models: [],
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts and preserves declared model compatibility settings", () => {
     const compat = {
       thinkingFormat: "deepseek",
