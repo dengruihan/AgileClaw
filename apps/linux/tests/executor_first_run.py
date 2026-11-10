@@ -8,6 +8,7 @@ a real Gateway is proven separately.
 """
 
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -104,15 +105,17 @@ class ExecutorFirstRunFixture(ExecutorNodeFixture):
         self.passed = True
 
     def close(self):
-        failure = __import__("sys").exc_info()[1]
+        failure = sys.exc_info()[1]
         try:
             self.fixture.close()
         finally:
             if self.artifacts_dir:
+                (self.artifacts_dir / "gateway-switch-results.json").unlink(missing_ok=True)
                 (self.artifacts_dir / "executor-first-run-results.json").write_text(
-                    __import__("json").dumps(
+                    json.dumps(
                         {
-                            "passed": failure is None,
+                            "passed": failure is None and self.passed,
+                            "binarySha256": self.binary_sha256,
                             "checks": self.fixture.chrome.checks,
                             "boundary": "Real Tauri first-run GUI admission with a "
                             "synthetic CLI installer; not real Gateway pairing",
