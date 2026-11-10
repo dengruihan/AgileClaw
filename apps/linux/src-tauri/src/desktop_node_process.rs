@@ -7,6 +7,40 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+/// Test-only stop failure injection for the supervisor's retained-owner path.
+/// Target one exact child so parallel tests cannot consume the failure.
+#[cfg(test)]
+static TEST_STOP_FAILURE_PID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+#[cfg(test)]
+static TEST_STOP_FAILURES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Arm the next `count` teardowns of `pid` to fail before touching its tree.
+#[cfg(test)]
+pub(crate) fn fail_next_stop_for_test(pid: u32, count: usize) {
+    TEST_STOP_FAILURE_PID.store(pid, Ordering::SeqCst);
+    TEST_STOP_FAILURES.store(count, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+fn consume_injected_stop_failure(pid: u32) -> bool {
+    if TEST_STOP_FAILURE_PID.load(Ordering::SeqCst) != pid {
+        return false;
+    }
+    let mut remaining = TEST_STOP_FAILURES.load(Ordering::SeqCst);
+    while remaining > 0 {
+        match TEST_STOP_FAILURES.compare_exchange(
+            remaining,
+            remaining - 1,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) {
+            Ok(_) => return true,
+            Err(current) => remaining = current,
+        }
+    }
+    false
+}
+
 pub(crate) struct DesktopNodeProcess {
     child: Child,
     output: Receiver<(bool, String)>,
@@ -113,14 +147,23 @@ impl DesktopNodeProcess {
         self.output.try_iter().take(64)
     }
 
-    pub fn exited(&mut self) -> Result<bool, String> {
+    #[cfg(test)]
+    pub(crate) fn id_for_test(&self) -> u32 {
+        self.child.id()
+    }
+
+    /// `Some(status)` once the leader exited; `None` while it is alive.
+    pub fn exited(&mut self) -> Result<Option<std::process::ExitStatus>, String> {
         self.child
             .try_wait()
-            .map(|exit| exit.is_some())
             .map_err(|error| format!("Could not inspect desktop sharing: {error}"))
     }
 
     pub fn stop(&mut self) -> Result<(), String> {
+        #[cfg(test)]
+        if consume_injected_stop_failure(self.child.id()) {
+            return Err("Injected desktop-sharing teardown failure for tests.".into());
+        }
         self.child.stdin.take();
         #[cfg(unix)]
         signal_group(self.child.id(), "TERM")?;
@@ -130,7 +173,7 @@ impl DesktopNodeProcess {
         let deadline = force_at + Duration::from_secs(10);
         let mut forced = false;
         loop {
-            let leader_done = self.exited()?;
+            let leader_done = self.exited()?.is_some();
             #[cfg(unix)]
             let tree_done = !signal_group(self.child.id(), "0")?;
             #[cfg(windows)]
@@ -220,6 +263,11 @@ impl DesktopNodeProcess {
             thread::sleep(Duration::from_millis(25));
         }
     }
+}
+
+#[cfg(all(test, unix))]
+pub(crate) fn process_group_exists_for_test(pid: u32) -> bool {
+    signal_group(pid, "0").unwrap_or(true)
 }
 
 #[cfg(unix)]
@@ -378,7 +426,7 @@ mod tests {
             !probe.status.success(),
             "wrapper descendant survived shutdown"
         );
-        assert!(process.exited().unwrap());
+        assert!(process.exited().unwrap().is_some());
     }
     #[cfg(unix)]
     #[test]
@@ -456,7 +504,7 @@ mod tests {
                 break descendant;
             }
             assert!(
-                !process.exited().unwrap(),
+                !process.exited().unwrap().is_some(),
                 "cmd exited before its child was observed"
             );
             assert!(
@@ -476,7 +524,7 @@ mod tests {
         assert!(!process.job.is_empty().unwrap());
         process.stop().unwrap();
         assert!(process.job.is_empty().unwrap());
-        assert!(process.exited().unwrap());
+        assert!(process.exited().unwrap().is_some());
         unsafe { GetExitCodeProcess(handle, &mut code) }.unwrap();
         let _ = unsafe { CloseHandle(handle) };
         assert_ne!(

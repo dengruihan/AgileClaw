@@ -8,6 +8,14 @@ title: "Run commands on a node"
 sidebarTitle: "Node exec"
 ---
 
+## Reconnect a paired node
+
+A node that paired earlier keeps its canonical Gateway endpoint, device
+identity, and device token in `state/openclaw.sqlite`. It reconnects with those
+credentials and does not need a new setup code. `openclaw node pairing --json`
+reports `{"resumable": true}` when that saved pairing can reconnect; companion
+apps use that read-only fact instead of reading node state directly.
+
 ## Allowlist the commands
 
 Exec approvals are **per node host**. Add allowlist entries from the gateway:

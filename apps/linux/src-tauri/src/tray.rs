@@ -27,6 +27,11 @@ const QUICKCHAT_SHORTCUT_ID: &str = "quickchat-shortcut";
 const START_ID: &str = "start-gateway";
 const STOP_ID: &str = "stop-gateway";
 const RESTART_ID: &str = "restart-gateway";
+const EXECUTOR_STATUS_ID: &str = "executor-status";
+const EXECUTOR_OPEN_ID: &str = "executor-open";
+const EXECUTOR_START_ID: &str = "executor-start";
+const EXECUTOR_STOP_ID: &str = "executor-stop";
+const EXECUTOR_RESTART_ID: &str = "executor-restart";
 #[cfg(target_os = "linux")]
 const ADOPT_RUNTIME_ID: &str = "adopt-bundled-runtime";
 const QUIT_ID: &str = "quit";
@@ -44,6 +49,10 @@ pub struct TrayHandles {
     start: MenuItem<tauri::Wry>,
     stop: MenuItem<tauri::Wry>,
     restart: MenuItem<tauri::Wry>,
+    executor_status: MenuItem<tauri::Wry>,
+    executor_start: MenuItem<tauri::Wry>,
+    executor_stop: MenuItem<tauri::Wry>,
+    executor_restart: MenuItem<tauri::Wry>,
     #[cfg(target_os = "linux")]
     runtime_action: MenuItem<tauri::Wry>,
 }
@@ -243,6 +252,34 @@ pub fn build(
     let start = MenuItem::with_id(app, START_ID, "Start Gateway", false, None::<&str>)?;
     let stop = MenuItem::with_id(app, STOP_ID, "Stop Gateway", false, None::<&str>)?;
     let restart = MenuItem::with_id(app, RESTART_ID, "Restart Gateway", false, None::<&str>)?;
+    let executor_status = MenuItem::with_id(
+        app,
+        EXECUTOR_STATUS_ID,
+        "Controlled device: Off",
+        false,
+        None::<&str>,
+    )?;
+    let executor_start = MenuItem::with_id(
+        app,
+        EXECUTOR_START_ID,
+        "Start Controlled Device",
+        false,
+        None::<&str>,
+    )?;
+    let executor_stop = MenuItem::with_id(
+        app,
+        EXECUTOR_STOP_ID,
+        "Stop Controlled Device",
+        false,
+        None::<&str>,
+    )?;
+    let executor_restart = MenuItem::with_id(
+        app,
+        EXECUTOR_RESTART_ID,
+        "Restart Controlled Device",
+        false,
+        None::<&str>,
+    )?;
     let menu_builder = MenuBuilder::new(app)
         .item(&status)
         .item(&crate::gateway_windows::menu(app.handle())?)
@@ -261,6 +298,11 @@ pub fn build(
         menu_builder
     };
     let menu_builder = menu_builder.separator().items(&[&start, &stop, &restart]);
+    let menu_builder = menu_builder
+        .separator()
+        .item(&executor_status)
+        .text(EXECUTOR_OPEN_ID, "Controlled Device…")
+        .items(&[&executor_start, &executor_stop, &executor_restart]);
     #[cfg(target_os = "linux")]
     let runtime_action = MenuItem::with_id(
         app,
@@ -357,6 +399,10 @@ pub fn build(
         start,
         stop,
         restart,
+        executor_status,
+        executor_start,
+        executor_stop,
+        executor_restart,
         #[cfg(target_os = "linux")]
         runtime_action,
     })
@@ -473,6 +519,23 @@ fn handle_menu(
             app.state::<GatewayOperationQueue>()
                 .submit_action(GatewayAction::Restart);
         }
+        EXECUTOR_OPEN_ID => {
+            if let Err(error) = crate::executor_node::open_window(app) {
+                eprintln!("Could not open the controlled-device window: {error}");
+            }
+        }
+        EXECUTOR_START_ID => {
+            crate::executor_node::submit_tray_action(app, crate::executor_node::ToolAction::Start);
+        }
+        EXECUTOR_STOP_ID => {
+            crate::executor_node::submit_tray_action(app, crate::executor_node::ToolAction::Stop);
+        }
+        EXECUTOR_RESTART_ID => {
+            crate::executor_node::submit_tray_action(
+                app,
+                crate::executor_node::ToolAction::Restart,
+            );
+        }
         #[cfg(target_os = "linux")]
         ADOPT_RUNTIME_ID => confirm_runtime_action(app),
         _ => {}
@@ -545,6 +608,64 @@ fn confirm_runtime_action(app: &AppHandle) {
                 });
         });
     });
+}
+
+/// The controlled device publishes from its supervisor thread; the tray must
+/// reflect phase changes even while its window is closed.
+pub(crate) fn publish_executor(app: &AppHandle, snapshot: &crate::executor_node::Snapshot) {
+    let current_app = app.clone();
+    let snapshot = snapshot.clone();
+    if let Err(error) = app.run_on_main_thread(move || {
+        let state = current_app.state::<DesktopState>();
+        if state.is_quitting() {
+            return;
+        }
+        state.with_tray(|tray| {
+            let (label, start, stop, restart) = executor_menu_state(&snapshot);
+            let _ = tray
+                .executor_status
+                .set_text(&format!("Controlled device: {label}"));
+            let _ = tray.executor_start.set_enabled(start);
+            let _ = tray.executor_stop.set_enabled(stop);
+            let _ = tray.executor_restart.set_enabled(restart);
+        });
+    }) {
+        eprintln!("Could not update the controlled-device tray state: {error}");
+    }
+}
+
+fn executor_menu_state(
+    snapshot: &crate::executor_node::Snapshot,
+) -> (&'static str, bool, bool, bool) {
+    let (label, start, stop, restart) = match snapshot.phase {
+        "running" if snapshot.mode == Some("service") => ("Running (service)", false, true, true),
+        "running" => ("Running", false, true, true),
+        "waiting-for-approval" => ("Waiting for approval", false, true, false),
+        // A supervised service install stays cancellable from the tray.
+        "preparing" if snapshot.mode == Some("service") => {
+            ("Installing service", false, true, false)
+        }
+        "preparing" => ("Connecting", false, true, false),
+        // A service-owned error can still have remote execution running: keep
+        // Stop beside Start exactly like the window so the user can revoke it
+        // without re-granting consent. A confirmed-absent service has nothing
+        // left to stop.
+        "error"
+            if snapshot.mode == Some("service") && snapshot.service_installed != Some(false) =>
+        {
+            ("Needs attention", true, true, false)
+        }
+        "error" => ("Needs attention", true, false, false),
+        _ if snapshot.mode == Some("service") && snapshot.service_running == Some(true) => {
+            ("Running (service)", false, true, true)
+        }
+        _ if snapshot.mode == Some("service") && snapshot.service_running == Some(false) => {
+            ("Service stopped", true, true, true)
+        }
+        _ if snapshot.mode == Some("service") => ("Service status unknown", true, true, true),
+        _ => ("Off", true, false, false),
+    };
+    (label, start, stop, restart)
 }
 
 pub fn publish_keep_awake(app: &AppHandle, status: KeepAwakeStatus) {
@@ -669,5 +790,53 @@ mod tests {
             Some(":0"),
         ));
         assert!(!linux_global_shortcuts_supported(None, None, None));
+    }
+
+    fn executor_snapshot(
+        phase: &'static str,
+        mode: Option<&'static str>,
+        service_installed: Option<bool>,
+        service_running: Option<bool>,
+    ) -> crate::executor_node::Snapshot {
+        crate::executor_node::Snapshot {
+            revision: 1,
+            phase,
+            mode,
+            service_installed,
+            service_running,
+            paired: Some(true),
+            detail: None,
+            cli_available: true,
+            consent: None,
+            display_name: None,
+        }
+    }
+
+    #[test]
+    fn service_errors_keep_stop_available_in_the_tray() {
+        // A failed service stop and an unknown post-action probe both publish
+        // Needs attention while the old service may still be running.
+        let failed_stop = executor_snapshot("error", Some("service"), None, Some(true));
+        assert_eq!(
+            executor_menu_state(&failed_stop),
+            ("Needs attention", true, true, false)
+        );
+        let unknown_probe = executor_snapshot("error", Some("service"), None, None);
+        assert_eq!(
+            executor_menu_state(&unknown_probe),
+            ("Needs attention", true, true, false)
+        );
+        // A confirmed-absent service and a foreground error have nothing to
+        // stop, so Stop stays disabled.
+        let absent = executor_snapshot("error", Some("service"), Some(false), None);
+        assert_eq!(
+            executor_menu_state(&absent),
+            ("Needs attention", true, false, false)
+        );
+        let foreground = executor_snapshot("error", Some("foreground"), None, None);
+        assert_eq!(
+            executor_menu_state(&foreground),
+            ("Needs attention", true, false, false)
+        );
     }
 }

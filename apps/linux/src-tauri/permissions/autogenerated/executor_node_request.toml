@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-executor-node-request"
+description = "Enables the executor_node_request command without any pre-configured scope."
+commands.allow = ["executor_node_request"]
+
+[[permission]]
+identifier = "deny-executor-node-request"
+description = "Denies the executor_node_request command without any pre-configured scope."
+commands.deny = ["executor_node_request"]

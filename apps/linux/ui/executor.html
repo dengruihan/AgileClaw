@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Controlled Device</title>
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="executor.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <header class="brand" aria-label="OpenClaw">
+          <img class="brand-mark" src="mascot.svg" alt="" aria-hidden="true" />
+          <span>OpenClaw</span>
+        </header>
+        <div class="status-row">
+          <span id="executor-dot" class="status-dot idle"></span>
+          <span class="eyebrow">CONTROLLED DEVICE</span>
+        </div>
+        <h1 id="executor-title">Controlled device</h1>
+        <p id="executor-description">
+          Let an approved operator on your Gateway use this computer remotely.
+        </p>
+
+        <section id="executor-status" class="executor-status" aria-live="polite">
+          <p id="executor-state">Status: checking…</p>
+          <p id="executor-detail" class="hint"></p>
+          <div class="control-row executor-actions">
+            <button id="executor-start" class="primary" type="button" disabled>Start</button>
+            <button id="executor-stop" class="primary" type="button" disabled>Stop</button>
+            <button id="executor-restart" class="button-subtle" type="button" disabled>
+              Restart
+            </button>
+          </div>
+        </section>
+
+        <section id="executor-install" class="executor-install hidden" aria-labelledby="install-title">
+          <div class="remote-heading">
+            <h2 id="install-title">Install the CLI</h2>
+            <span>
+              Pairing uses this computer's OpenClaw CLI. Install it here — no
+              Gateway service is added and no terminal is needed.
+            </span>
+          </div>
+          <div class="control-row">
+            <div class="select-field channel-field">
+              <label for="executor-channel">Release channel</label>
+              <select id="executor-channel">
+                <option value="stable">Stable</option>
+                <option value="beta">Beta</option>
+                <option value="dev">Development</option>
+              </select>
+            </div>
+            <button id="executor-install-button" class="primary" type="button">
+              Install OpenClaw CLI
+            </button>
+          </div>
+          <p id="executor-install-progress" class="hint"></p>
+        </section>
+
+        <form id="executor-form" aria-labelledby="pairing-title" novalidate>
+          <div class="remote-heading">
+            <h2 id="pairing-title">Pair this computer</h2>
+            <span>Paste what the controlling Gateway gave you.</span>
+          </div>
+          <div class="remote-field">
+            <label for="executor-name">Device name (optional)</label>
+            <input id="executor-name" type="text" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="remote-field">
+            <label for="executor-target">Join URL or setup code</label>
+            <input
+              id="executor-target"
+              type="password"
+              placeholder="https://gateway.example.com/j/…  or  oc-pair://…"
+              autocomplete="off"
+              spellcheck="false"
+              aria-describedby="executor-secret-hint"
+            />
+            <p id="executor-secret-hint" class="hint">
+              Treated as a one-time secret. It is used once to pair this computer and never
+              stored by this app.
+            </p>
+          </div>
+          <fieldset class="executor-mode">
+            <legend>Run mode</legend>
+            <label class="executor-choice">
+              <input type="radio" name="executor-mode" value="foreground" checked />
+              <span>While this app is open</span>
+            </label>
+            <label class="executor-choice">
+              <input type="radio" name="executor-mode" value="service" />
+              <span>As a background service</span>
+            </label>
+          </fieldset>
+          <label class="executor-consent">
+            <input type="checkbox" id="executor-consent" />
+            <span>
+              Allow remote control of this computer: an approved operator can run commands
+              here (gated by the Gateway's approval policy) and hold this device's
+              busy-lease while connected. You can stop it here at any time.
+            </span>
+          </label>
+          <p id="executor-feedback" class="remote-feedback hidden" role="status"></p>
+          <button id="executor-pair" class="primary executor-pair" type="submit" disabled>
+            Pair this computer
+          </button>
+        </form>
+      </section>
+    </main>
+    <script type="module" src="executor.js"></script>
+  </body>
+</html>

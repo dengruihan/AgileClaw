@@ -25,9 +25,13 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
+// mock-isolation: connect-target tests stop at the runner handoff; the runner's real behavior has its own suite.
 vi.mock("../node-host/runner.js", () => ({
-  loadResumableNodeHostGateway: mocks.loadResumableNodeHostGateway,
   runNodeHost: mocks.runNodeHost,
+}));
+vi.mock("../node-host/resumable-gateway.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../node-host/resumable-gateway.js")>()),
+  loadResumableNodeHostGateway: mocks.loadResumableNodeHostGateway,
 }));
 vi.mock("../node-host/config.js", () => ({ loadNodeHostConfig: mocks.loadNodeHostConfig }));
 vi.mock("../config/config.js", () => ({

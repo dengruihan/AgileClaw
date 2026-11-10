@@ -146,6 +146,15 @@ export function registerNodeCli(program: Command) {
     .option("--json", "Output JSON", false)
     .action(runNodeIdentityShow);
 
+  node
+    .command("pairing")
+    .description("Show whether the saved pairing can reconnect without a setup code (read-only)")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      const { runNodePairingStatus } = await import("./pairing.js");
+      await runNodePairingStatus(opts);
+    });
+
   addNodeGatewayOptions(
     addNodeCommandOptions(
       node

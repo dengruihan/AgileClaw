@@ -1,0 +1,64 @@
+.remote-heading h2 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.executor-install {
+  margin-bottom: 18px;
+}
+
+.executor-install .control-row {
+  align-items: flex-end;
+  margin: 10px 0 6px;
+}
+
+.executor-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.executor-status p {
+  margin: 0;
+}
+
+.executor-actions {
+  margin-top: 6px;
+}
+
+.executor-mode {
+  border: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+.executor-mode legend {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+.executor-choice {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.executor-consent {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.executor-consent span {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.executor-pair {
+  width: 100%;
+}

@@ -66,6 +66,7 @@
             "allow-connect-discovered-gateway",
             "allow-connect-remote-gateway",
             "allow-discover-gateways",
+            "allow-executor-node-request",
             "allow-gateway-action",
             "allow-install-cli",
             "allow-open-release-page",
@@ -111,6 +112,17 @@
           "webviews": ["quickchat"],
           "permissions": [
             "allow-quickchat",
+            "core:event:allow-listen",
+            "core:event:allow-unlisten"
+          ]
+        },
+        {
+          "identifier": "executor",
+          "description": "The controlled-device window pairs this computer and controls its executor node.",
+          "local": true,
+          "webviews": ["executor"],
+          "permissions": [
+            "allow-executor-node-request",
             "core:event:allow-listen",
             "core:event:allow-unlisten"
           ]

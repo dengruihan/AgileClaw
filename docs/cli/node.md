@@ -313,6 +313,18 @@ openclaw node identity --json
 It prints the device ID and public key from the `primary` row in
 `state/openclaw.sqlite` and never creates the database or a new identity.
 
+Check whether a saved pairing can reconnect without a new setup code:
+
+```bash
+openclaw node pairing --json
+```
+
+The command is read-only. It reports `{"resumable": true}` only when the
+canonical `nodeHost.config` SQLite row, this machine's device identity, and a
+reusable `node` device token all exist. It never prints the token or creates
+state; `resumable: false` means pair again with a join URL or `oc-pair://` setup
+code.
+
 On tightly controlled node networks, the Gateway operator can explicitly opt in
 to auto-approving first-time node pairing from trusted CIDRs:
 

@@ -9,6 +9,10 @@ const SAVED_TLS_FINGERPRINT = "ef".repeat(32);
 
 type LoadNodeHostConfig = typeof import("../../node-host/config.js").loadNodeHostConfig;
 
+const pairingMocks = vi.hoisted(() => ({
+  runNodePairingStatus: vi.fn(),
+}));
+
 const daemonMocks = vi.hoisted(() => ({
   defaultRuntime: {
     log: vi.fn(),
@@ -27,6 +31,8 @@ const daemonMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("./daemon.js", () => daemonMocks);
+
+vi.mock("./pairing.js", () => pairingMocks);
 
 vi.mock("../../node-host/config.js", () => ({
   loadNodeHostConfig: daemonMocks.loadNodeHostConfig,
@@ -94,6 +100,11 @@ describe("registerNodeCli", () => {
     for (const flag of ["--desktop-sharing", "--auth-from-env", "--parent-stdin"]) {
       expect(help).not.toContain(flag);
     }
+  });
+
+  it("registers the read-only saved-pairing report and forwards --json", async () => {
+    await run(["pairing", "--json"]);
+    expect(pairingMocks.runNodePairingStatus).toHaveBeenCalledWith({ json: true });
   });
 
   it.each([

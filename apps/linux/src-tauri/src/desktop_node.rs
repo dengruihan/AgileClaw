@@ -314,7 +314,7 @@ fn run(
         if let Some(process) = child.as_mut() {
             retain_diagnostics(process, &redactions, &mut diagnostic_tail);
             match process.exited() {
-                Ok(false) => {}
+                Ok(None) => {}
                 outcome => {
                     let stopped = process.stop();
                     retain_diagnostics(process, &redactions, &mut diagnostic_tail);
