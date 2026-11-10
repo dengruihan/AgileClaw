@@ -14,8 +14,12 @@ import { FsSafeError } from "../../infra/fs-safe.js";
 import { isPathInside } from "../../infra/path-guards.js";
 import { BROWSER_IMAGE_MIME_TYPES } from "../../shared/browser-image-mime-types.js";
 import {
+  looksLikeEncryptedOfficePackage,
+  OLE_COMPOUND_FILE_SIGNATURE,
+} from "../office-preview/office-preview-container.js";
+import {
   OFFICE_PREVIEW_MAX_BYTES,
-  readOfficePreview,
+  readOfficePreviewResult,
   resolveOfficePreviewTarget,
   type OfficePreviewTarget,
 } from "../office-preview/office-preview.js";
@@ -168,7 +172,7 @@ function isDetectedTextMime(mimeType: string): boolean {
 }
 
 const ZIP_LOCAL_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
-const OLE_COMPOUND_FILE_HEADER = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+const OLE_COMPOUND_FILE_HEADER = OLE_COMPOUND_FILE_SIGNATURE;
 
 function hasSignature(buffer: Buffer, signature: Buffer): boolean {
   return (
@@ -183,17 +187,25 @@ export async function populateSessionFilePreview(
   // OOXML packages are zipped parts, so the file type alone cannot select the
   // preview: a renamed text file still gets its text preview below.
   const officeTarget = resolveOfficePreviewTarget(entry.path);
-  if (officeTarget?.kind === "modern" && hasSignature(buffer, ZIP_LOCAL_HEADER)) {
-    const preview = await readOfficePreview(buffer, officeTarget.format);
-    if (preview) {
-      entry.mimeType = officeTarget.mimeType;
+  const modernOffice = officeTarget?.kind === "modern" ? officeTarget : undefined;
+  if (modernOffice && hasSignature(buffer, ZIP_LOCAL_HEADER)) {
+    const result = await readOfficePreviewResult(buffer, modernOffice.format);
+    entry.mimeType = modernOffice.mimeType;
+    if ("preview" in result) {
       entry.previewKind = "office";
-      entry.officePreview = preview;
+      entry.officePreview = result.preview;
+      entry.previewState = "ready";
     } else {
-      // Corrupt, encrypted, or over-limit packages keep the declared type.
-      entry.mimeType = officeTarget.mimeType;
+      // Corrupt and encrypted packages keep their distinct reasons.
       entry.previewKind = "unsupported";
+      entry.previewState = result.failure;
     }
+    return;
+  }
+  if (modernOffice && looksLikeEncryptedOfficePackage(buffer)) {
+    entry.mimeType = modernOffice.mimeType;
+    entry.previewKind = "unsupported";
+    entry.previewState = "password-protected";
     return;
   }
   if (officeTarget?.kind === "legacy" && hasSignature(buffer, OLE_COMPOUND_FILE_HEADER)) {
@@ -201,6 +213,7 @@ export async function populateSessionFilePreview(
     // instead of the sniffed container type.
     entry.mimeType = officeTarget.mimeType;
     entry.previewKind = "unsupported";
+    entry.previewState = "unsupported";
     return;
   }
   const mimeType = await detectMime({ buffer });
@@ -226,6 +239,10 @@ export async function populateSessionFilePreview(
   if (mimeType) {
     entry.mimeType = mimeType;
   }
+  if (modernOffice) {
+    // Declared OOXML type without a ZIP signature: renamed or corrupt bytes.
+    entry.previewState = "invalid";
+  }
 }
 
 function applyOversizedFileMetadata(
@@ -238,6 +255,13 @@ function applyOversizedFileMetadata(
   if (officeTarget?.kind === "legacy" && hasSignature(buffer, OLE_COMPOUND_FILE_HEADER)) {
     entry.mimeType = officeTarget.mimeType;
     entry.previewKind = "unsupported";
+    entry.previewState = "unsupported";
+    return;
+  }
+  if (officeTarget?.kind === "modern") {
+    entry.mimeType = officeTarget.mimeType;
+    entry.previewKind = "unsupported";
+    entry.previewState = "too-large";
     return;
   }
   const prefixIsText = decodeUtf8Strict(buffer) !== undefined;
@@ -300,6 +324,7 @@ async function toSessionFileEntry(
     if (stat.size > OFFICE_PREVIEW_MAX_BYTES) {
       entry.mimeType = officeTarget.mimeType;
       entry.previewKind = "unsupported";
+      entry.previewState = "too-large";
       return entry;
     }
     const officeRead = await readWorkspaceFile(readRoot, browserPath, {
@@ -314,6 +339,7 @@ async function toSessionFileEntry(
       // instead of failing the whole read as an unpresentable text file.
       entry.mimeType = officeTarget.mimeType;
       entry.previewKind = "unsupported";
+      entry.previewState = "too-large";
       return entry;
     }
     entry.workspacePath = target.outside ? target.absolutePath : officeRead.canonicalPath;

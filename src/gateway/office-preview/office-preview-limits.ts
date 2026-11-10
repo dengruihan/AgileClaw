@@ -26,10 +26,23 @@ export const OFFICE_PREVIEW_MAX_SHEET_COLUMNS = 40;
 export const OFFICE_PREVIEW_MAX_SHEET_CELLS = 20_000;
 export const OFFICE_PREVIEW_MAX_CELL_CHARS = 4_096;
 export const OFFICE_PREVIEW_MAX_SPREADSHEET_CHARS = 400_000;
+export const OFFICE_PREVIEW_MAX_MERGES = 500;
 
 export const OFFICE_PREVIEW_MAX_BLOCKS = 2_000;
 export const OFFICE_PREVIEW_MAX_BLOCK_CHARS = 8_000;
 export const OFFICE_PREVIEW_MAX_DOCUMENT_CHARS = 400_000;
+
+/** Approximate DOCX page cards; Word can paginate larger documents beyond this. */
+export const OFFICE_PREVIEW_MAX_DOCX_PAGES = 50;
+export const OFFICE_PREVIEW_MAX_PAGE_BLOCKS = 500;
+export const OFFICE_PREVIEW_MAX_DOCX_RUNS = 8_000;
+export const OFFICE_PREVIEW_MAX_DOCX_TABLE_CELLS = 4_000;
+export const OFFICE_PREVIEW_MAX_DOCX_IMAGES = 24;
+/** Per-image decoded bytes; a single embedded photo stays comfortably inline. */
+export const OFFICE_PREVIEW_MAX_DOCX_IMAGE_BYTES = 384 * 1024;
+/** Total decoded bytes across every inlined document image. */
+export const OFFICE_PREVIEW_MAX_DOCX_IMAGE_TOTAL_BYTES = 1024 * 1024;
+export const OFFICE_PREVIEW_MAX_DOCX_LIST_LEVELS = 9;
 
 export const OFFICE_PREVIEW_MAX_SLIDES = 100;
 export const OFFICE_PREVIEW_MAX_SLIDE_LINES = 80;

@@ -2,6 +2,10 @@
 import type { Static } from "typebox";
 import { Type } from "typebox";
 import { closedObject } from "./closed-object.js";
+import {
+  SessionFileOfficePreviewStateSchema,
+  type SessionFileOfficePreviewState,
+} from "./office-preview.js";
 import { NonEmptyString } from "./primitives.js";
 import { SessionFileOfficeFormatSchema, SessionFileOfficePreviewSchema } from "./sessions.js";
 
@@ -75,13 +79,12 @@ export const ArtifactsDownloadParamsSchema = closedObject({
   preview: Type.Optional(Type.Literal("office")),
 });
 
-/** Whether the Gateway could build the requested structured preview. */
-export const ArtifactOfficePreviewStateSchema = Type.Union([
-  Type.Literal("ready"),
-  Type.Literal("unsupported"),
-  Type.Literal("too-large"),
-  Type.Literal("invalid"),
-]);
+/**
+ * Public runtime constant kept under its historical name. The state vocabulary
+ * is owned by `office-preview.ts`; this alias is the single registry entry so
+ * native protocol generation emits one enum.
+ */
+export const ArtifactOfficePreviewStateSchema = SessionFileOfficePreviewStateSchema;
 
 /**
  * Structured read-only Office preview returned only when the caller opts in.
@@ -115,5 +118,5 @@ export type ArtifactsGetParams = Static<typeof ArtifactsGetParamsSchema>;
 export type ArtifactsGetResult = Static<typeof ArtifactsGetResultSchema>;
 export type ArtifactsDownloadParams = Static<typeof ArtifactsDownloadParamsSchema>;
 export type ArtifactsDownloadResult = Static<typeof ArtifactsDownloadResultSchema>;
-export type ArtifactOfficePreviewState = Static<typeof ArtifactOfficePreviewStateSchema>;
+export type ArtifactOfficePreviewState = SessionFileOfficePreviewState;
 export type ArtifactOfficePreview = Static<typeof ArtifactOfficePreviewSchema>;
