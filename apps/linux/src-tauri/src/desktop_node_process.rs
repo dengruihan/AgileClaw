@@ -21,6 +21,26 @@ pub(crate) fn fail_next_stop_for_test(pid: u32, count: usize) {
     TEST_STOP_FAILURES.store(count, Ordering::SeqCst);
 }
 
+#[cfg(test)]
+fn consume_injected_stop_failure(pid: u32) -> bool {
+    if TEST_STOP_FAILURE_PID.load(Ordering::SeqCst) != pid {
+        return false;
+    }
+    let mut remaining = TEST_STOP_FAILURES.load(Ordering::SeqCst);
+    while remaining > 0 {
+        match TEST_STOP_FAILURES.compare_exchange(
+            remaining,
+            remaining - 1,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) {
+            Ok(_) => return true,
+            Err(current) => remaining = current,
+        }
+    }
+    false
+}
+
 pub(crate) struct DesktopNodeProcess {
     child: Child,
     output: Receiver<(bool, String)>,
@@ -141,13 +161,7 @@ impl DesktopNodeProcess {
 
     pub fn stop(&mut self) -> Result<(), String> {
         #[cfg(test)]
-        if TEST_STOP_FAILURE_PID.load(Ordering::SeqCst) == self.child.id()
-            && TEST_STOP_FAILURES
-                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |remaining| {
-                    remaining.checked_sub(1)
-                })
-                .is_ok()
-        {
+        if consume_injected_stop_failure(self.child.id()) {
             return Err("Injected desktop-sharing teardown failure for tests.".into());
         }
         self.child.stdin.take();

@@ -541,6 +541,78 @@ fn note_spawned_pairing_child(shared: &Mutex<Shared>, revision: u64) -> SpawnedC
     }
 }
 
+/// Test-only hook that moves the request generation immediately after spawn,
+/// exercising the exact handoff boundary without a production fault switch.
+#[cfg(test)]
+static TEST_STALE_PAIRING_SPAWN: AtomicBool = AtomicBool::new(false);
+
+#[cfg(test)]
+fn stale_next_pairing_spawn_for_test() {
+    TEST_STALE_PAIRING_SPAWN.store(true, Ordering::SeqCst);
+}
+
+/// Hand a freshly spawned pairing child to the supervisor. The child is never
+/// stopped or dropped here: a superseding request still receives this exact
+/// owner and must join it before applying replacement work.
+fn handoff_spawned_pairing_child(
+    shared: &Mutex<Shared>,
+    revision: u64,
+    process: DesktopNodeProcess,
+    service_install: bool,
+) -> Option<(DesktopNodeProcess, ChildRole, SpawnedChildGeneration)> {
+    #[cfg(test)]
+    if TEST_STALE_PAIRING_SPAWN.swap(false, Ordering::SeqCst) {
+        let mut current = shared.lock().expect("executor state");
+        current.revision += 1;
+    }
+    let generation = note_spawned_pairing_child(shared, revision);
+    Some((
+        process,
+        if service_install {
+            ChildRole::ServiceInstall
+        } else {
+            ChildRole::ForegroundRun
+        },
+        generation,
+    ))
+}
+
+/// Install a spawned pairing child in the supervisor's owned slot. Returns
+/// true when the request was superseded and the loop must join it first.
+fn install_pairing_child(
+    child: &mut Option<DesktopNodeProcess>,
+    child_role: &mut Option<ChildRole>,
+    started: Option<(DesktopNodeProcess, ChildRole, SpawnedChildGeneration)>,
+    cancelled: bool,
+) -> bool {
+    if let Some((process, role, generation)) = started {
+        *child = Some(process);
+        *child_role = Some(role);
+        return generation == SpawnedChildGeneration::Stale || cancelled;
+    }
+    false
+}
+
+/// Result of the supervisor's pre-request teardown gate.
+enum OwnedTeardown {
+    Ready,
+    Retained(Run),
+}
+
+/// Join every owned process before the supervisor applies another request.
+/// A failed teardown retains the exact owner and returns the Needs-attention
+/// run to publish; callers must not proceed until a later retry succeeds.
+fn teardown_owned_processes(
+    child: &mut Option<DesktopNodeProcess>,
+    probe: &mut Option<DesktopNodeProcess>,
+    status: &Run,
+) -> OwnedTeardown {
+    match join_owned_processes(child, probe) {
+        None => OwnedTeardown::Ready,
+        Some(error) => OwnedTeardown::Retained(status.clone().error(error)),
+    }
+}
+
 /// Join every owned process before the supervisor applies another request.
 /// A failed teardown retains that exact owner and reports the error; callers
 /// must not start a replacement until a later retry joins it.
@@ -1072,16 +1144,19 @@ fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>)
         };
         if applied != Some(revision) {
             // Join every owned process before any replacement or shutdown. A
-            // failed teardown retains that exact owner and the supervisor
-            // retries it before applying the next request.
-            if let Some(error) = join_owned_processes(&mut child, &mut probe_owner) {
-                let run = {
-                    let current = shared.lock().expect("executor state");
-                    current.status.clone().error(error)
-                };
-                publish(&app, &shared, revision, run);
-                let _ = receiver.recv_timeout(Duration::from_secs(1));
-                continue;
+            // failed teardown retains that exact owner, publishes Needs
+            // attention, and is retried before the next request is applied.
+            let status = {
+                let current = shared.lock().expect("executor state");
+                current.status.clone()
+            };
+            match teardown_owned_processes(&mut child, &mut probe_owner, &status) {
+                OwnedTeardown::Ready => {}
+                OwnedTeardown::Retained(run) => {
+                    publish(&app, &shared, revision, run);
+                    let _ = receiver.recv_timeout(Duration::from_secs(1));
+                    continue;
+                }
             }
             child_role = None;
             if stopping {
@@ -1137,7 +1212,7 @@ fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>)
                     publish(&app, &shared, revision, run);
                 }
                 Request::Foreground { pairing } => {
-                    if let Some((process, role, generation)) = start_pairing_request(
+                    let started = start_pairing_request(
                         &app,
                         &shared,
                         revision,
@@ -1146,20 +1221,16 @@ fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>)
                         false,
                         &mut redactions,
                         &mut probe_owner,
-                    ) {
-                        child = Some(process);
-                        child_role = Some(role);
-                        if generation == SpawnedChildGeneration::Stale || cancelled() {
-                            // Ownership transferred: go straight to the loop
-                            // head, which joins this exact child (retaining it
-                            // on failure) before applying the superseding
-                            // request.
-                            continue;
-                        }
+                    );
+                    if install_pairing_child(&mut child, &mut child_role, started, cancelled()) {
+                        // Ownership transferred: go straight to the loop head,
+                        // which joins this exact child (retaining it on
+                        // failure) before applying the superseding request.
+                        continue;
                     }
                 }
                 Request::ServiceInstall(pairing) => {
-                    if let Some((process, role, generation)) = start_pairing_request(
+                    let started = start_pairing_request(
                         &app,
                         &shared,
                         revision,
@@ -1168,12 +1239,9 @@ fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>)
                         true,
                         &mut redactions,
                         &mut probe_owner,
-                    ) {
-                        child = Some(process);
-                        child_role = Some(role);
-                        if generation == SpawnedChildGeneration::Stale || cancelled() {
-                            continue;
-                        }
+                    );
+                    if install_pairing_child(&mut child, &mut child_role, started, cancelled()) {
+                        continue;
                     }
                 }
                 Request::Service(action) => {
@@ -1404,16 +1472,7 @@ fn start_pairing_request(
                     // is installed in the supervised slot so the loop head
                     // joins it (retaining it on failure) before any
                     // replacement is applied.
-                    let generation = note_spawned_pairing_child(shared, revision);
-                    Some((
-                        process,
-                        if service_install {
-                            ChildRole::ServiceInstall
-                        } else {
-                            ChildRole::ForegroundRun
-                        },
-                        generation,
-                    ))
+                    handoff_spawned_pairing_child(shared, revision, process, service_install)
                 }
                 Err(error) => {
                     let run = {
@@ -2180,6 +2239,106 @@ mod tests {
             stop_target(&service_error, ActiveRequest::Service, PairingStage::None),
             StopTarget::ServiceStop
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stale_spawn_handoff_blocks_replacement_and_quit_until_joined() {
+        use crate::desktop_node_process::{fail_next_stop_for_test, process_group_exists_for_test};
+        use std::process::Command;
+
+        let shared = Mutex::new(Shared {
+            revision: 1,
+            request: Request::Foreground { pairing: None },
+            pairing_stage: PairingStage::Preparing,
+            stopping: false,
+            status_revision: 0,
+            status: test_run(
+                Phase::Preparing,
+                Some("foreground"),
+                ServiceState::Unverified,
+                None,
+            ),
+            cli_available: true,
+        });
+
+        // Force a real generation change immediately after spawn, then drive
+        // the production handoff and caller install used by the supervisor.
+        stale_next_pairing_spawn_for_test();
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", "sleep 120 & echo $!; wait"]);
+        let started = handoff_spawned_pairing_child(
+            &shared,
+            1,
+            DesktopNodeProcess::spawn(command).expect("fixture child"),
+            false,
+        )
+        .expect("a spawned pairing child must be handed to the supervisor");
+        assert_eq!(started.2, SpawnedChildGeneration::Stale);
+        let pid = started.0.id_for_test();
+
+        let mut child = None;
+        let mut child_role = None;
+        assert!(install_pairing_child(
+            &mut child,
+            &mut child_role,
+            Some(started),
+            false
+        ));
+        assert_eq!(
+            child.as_ref().map(DesktopNodeProcess::id_for_test),
+            Some(pid)
+        );
+
+        // A failed teardown on the exact spawned PID retains the owner,
+        // publishes Needs attention, and blocks replacement and Quit.
+        fail_next_stop_for_test(pid, 1);
+        let mut probe_owner = None;
+        let status = test_run(
+            Phase::Preparing,
+            Some("foreground"),
+            ServiceState::Unverified,
+            None,
+        );
+        let mut replacement_started = false;
+        let mut quit_finished = false;
+        match teardown_owned_processes(&mut child, &mut probe_owner, &status) {
+            OwnedTeardown::Ready => {
+                replacement_started = true;
+                quit_finished = true;
+            }
+            OwnedTeardown::Retained(run) => {
+                assert_eq!(run.phase, Phase::Error);
+                assert!(run
+                    .detail
+                    .as_deref()
+                    .unwrap_or_default()
+                    .contains("Injected"));
+            }
+        }
+        assert!(!replacement_started);
+        assert!(!quit_finished);
+        assert_eq!(
+            child.as_ref().map(DesktopNodeProcess::id_for_test),
+            Some(pid)
+        );
+        assert!(process_group_exists_for_test(pid));
+
+        // A later successful join clears the owner and unblocks both paths.
+        match teardown_owned_processes(&mut child, &mut probe_owner, &status) {
+            OwnedTeardown::Ready => {
+                replacement_started = true;
+                quit_finished = true;
+            }
+            OwnedTeardown::Retained(run) => {
+                panic!("retained child did not join on retry: {run:?}")
+            }
+        }
+        assert!(replacement_started);
+        assert!(quit_finished);
+        assert!(child.is_none());
+        assert!(probe_owner.is_none());
+        assert!(!process_group_exists_for_test(pid));
     }
 
     #[cfg(unix)]
