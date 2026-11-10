@@ -65,8 +65,23 @@ Gateway pairing approval shows the resulting declared commands.
 To restore the full default surface, use `openclaw node run --all-commands`
 for a foreground node or `openclaw node install --force --all-commands` for
 an installed service. When enrolling again, use `openclaw connect <join-url>
---all-commands` (add `--service` for a service). This forgets the saved allowlist;
-`--all-commands` cannot be combined with `--commands`.
+--all-commands` (add `--service` for a service). This forgets the saved allowlist
+and executor profile; `--all-commands` cannot be combined with `--commands` or
+`--executor`.
+
+To enroll the machine as a restricted tool executor instead, pass `--executor`.
+The node advertises the [executor profile](/nodes/node-host#executor-profile)
+(tool execution with the occupancy lease, no worker hosting or skill/plugin
+publication), and the choice persists in node-host state and in the installed
+service's arguments. An explicit `--commands` list replaces the profile's
+default command set instead of intersecting it: narrow by choosing a subset,
+and retain the commands the [executor profile](/nodes/node-host#executor-profile)
+marks as required for a working minimal executor. It is
+rejected together with `--all-commands`:
+
+```bash
+openclaw connect <join-url> --executor
+```
 
 To let that foreground process host full worker sessions, give explicit local
 consent with `--session-host`:
@@ -149,15 +164,16 @@ hosting and exact capacity from this durable consent when it starts.
 
 ## Accepted targets
 
-| Option                  | Purpose                                                                                                               |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `--commands <ids>`      | Save an exact comma-separated node command allowlist (repeatable). Applies to foreground runs and installed services. |
-| `--all-commands`        | Advertise the full default command surface and forget any saved `--commands` allowlist. Conflicts with `--commands`.  |
-| `--display-name <name>` | Set the node display name.                                                                                            |
-| `--service`             | Pair first, then install the node as a user service.                                                                  |
-| `--session-host`        | Consent to worker hosting. An explicit command allowlist disables hosting.                                            |
-| `--ephemeral`           | Run a provider-managed disposable worker node.                                                                        |
-| `--target-file <path>`  | Read a join target from a file and consume the handoff after a successful read.                                       |
+| Option                  | Purpose                                                                                                                                                    |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--commands <ids>`      | Save an exact comma-separated node command allowlist (repeatable). Applies to foreground runs and installed services.                                      |
+| `--all-commands`        | Advertise the full default command surface and forget any saved `--commands` allowlist and executor profile. Conflicts with `--commands` and `--executor`. |
+| `--executor`            | Enroll with the restricted [executor profile](/nodes/node-host#executor-profile). Compatible with `--commands`.                                            |
+| `--display-name <name>` | Set the node display name.                                                                                                                                 |
+| `--service`             | Pair first, then install the node as a user service.                                                                                                       |
+| `--session-host`        | Consent to worker hosting. An explicit command allowlist disables hosting.                                                                                 |
+| `--ephemeral`           | Run a provider-managed disposable worker node.                                                                                                             |
+| `--target-file <path>`  | Read a join target from a file and consume the handoff after a successful read.                                                                            |
 
 `openclaw connect <target>` accepts:
 

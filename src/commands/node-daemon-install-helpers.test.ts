@@ -152,6 +152,24 @@ describe("buildNodeInstallPlan", () => {
     );
   });
 
+  it("carries the executor profile into the managed node command", async () => {
+    mocks.resolveNodeProgramArguments.mockResolvedValue({
+      programArguments: ["node", "node-host"],
+    });
+    mocks.buildNodeServiceEnvironment.mockReturnValue({});
+    await buildNodeInstallPlan({
+      env: {},
+      host: "127.0.0.1",
+      port: 18789,
+      runtime: "node",
+      runtimePath: "/custom/node/bin/node",
+      executor: true,
+    });
+    expect(mocks.resolveNodeProgramArguments).toHaveBeenCalledWith(
+      expect.objectContaining({ executor: true }),
+    );
+  });
+
   it("marks node gateway credentials as file-backed service env", async () => {
     mocks.resolvePreferredNodePath.mockResolvedValue("/usr/bin/node");
     mocks.resolveNodeProgramArguments.mockResolvedValue({

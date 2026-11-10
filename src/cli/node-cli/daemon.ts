@@ -55,6 +55,7 @@ type NodeDaemonInstallOptions = Parameters<typeof resolveNodeGatewayOptions>[0] 
   shareInstalledApps?: boolean;
   commands?: string[];
   allCommands?: boolean;
+  executor?: boolean;
   runtime?: string;
   runtimePath?: string;
   force?: boolean;
@@ -219,6 +220,7 @@ export async function runNodeDaemonInstall(opts: NodeDaemonInstallOptions) {
       installedAppsSharing: opts.shareInstalledApps,
       commands: opts.commands,
       allCommands: opts.allCommands,
+      executor: opts.executor,
       runtime: retainedRuntime?.runtime ?? runtimeRaw,
       runtimeExplicit: opts.runtime !== undefined || opts.runtimePath !== undefined,
       runtimePath: retainedRuntime?.path,

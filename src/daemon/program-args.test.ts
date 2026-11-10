@@ -489,6 +489,35 @@ describe("resolveNodeProgramArguments", () => {
     ]);
   });
 
+  it("carries the executor profile into the managed node command", async () => {
+    const entryPath = path.resolve("/opt/openclaw/dist/entry.js");
+    const indexPath = path.resolve("/opt/openclaw/dist/index.js");
+    mockEntrypoint(entryPath);
+
+    const result = await resolveNodeProgramArguments({
+      host: "gateway.example",
+      port: 18789,
+      commands: ["fixture.read"],
+      executor: true,
+      runtime: "node",
+      runtimePath: validatedNodePath,
+    });
+
+    expect(result.programArguments).toEqual([
+      validatedNodePath,
+      indexPath,
+      "node",
+      "run",
+      "--host",
+      "gateway.example",
+      "--port",
+      "18789",
+      "--commands",
+      "fixture.read",
+      "--executor",
+    ]);
+  });
+
   it("replaces persisted command restrictions with all commands while retaining node options", async () => {
     const actualFs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
     fsMocks.stat.mockImplementation(actualFs.stat);

@@ -103,7 +103,8 @@ Options:
 - `--display-name <name>`: Override the node display name
 - `--session-host`: Host worker sessions for this foreground process without changing the saved worker-hosting preference
 - `--commands <ids>`: Persist an exact comma-separated command allowlist (repeatable); advertise only available matches and their required capabilities. Disables computer use, skills, plugin tools, MCP servers, and worker hosting. Omitting the flag preserves the saved list.
-- `--all-commands`: Advertise the full default command surface and forget any saved `--commands` allowlist. Cannot be combined with `--commands`.
+- `--all-commands`: Advertise the full default command surface and forget any saved `--commands` allowlist and executor profile. Cannot be combined with `--commands` or `--executor`.
+- `--executor`: Advertise the restricted [executor profile](/nodes/node-host#executor-profile): tool execution only, with the occupancy lease for exclusive device use, and no worker hosting. The choice persists in node-host state, so later starts keep it. An explicit `--commands` list replaces the profile's default command set rather than intersecting it, so narrow the surface by choosing a subset of the profile commands and retain the commands that section marks as required for a working minimal executor. Compatible with `--commands`; cannot be combined with `--all-commands`.
 - `--share-installed-apps`: On macOS, advertise installed applications through `device.apps`
 - `--no-share-installed-apps`: Disable installed application sharing
 
@@ -183,7 +184,8 @@ Options:
 - `--node-id <id>`: Override the client instance ID stored in shared SQLite state (does not reset pairing)
 - `--display-name <name>`: Override the node display name
 - `--commands <ids>`: Persist the command allowlist for the installed service (repeatable), with the same restrictions as `node run`.
-- `--all-commands`: Advertise the full default command surface and forget any saved `--commands` allowlist. Cannot be combined with `--commands`.
+- `--all-commands`: Advertise the full default command surface and forget any saved `--commands` allowlist and executor profile. Cannot be combined with `--commands` or `--executor`.
+- `--executor`: Run the installed service with the restricted [executor profile](/nodes/node-host#executor-profile); the service carries `--executor` in its arguments and persists the choice in node-host state. Compatible with `--commands`; cannot be combined with `--all-commands`.
 - `--share-installed-apps`: On macOS, advertise installed applications through `device.apps`
 - `--no-share-installed-apps`: Disable installed application sharing
 - `--runtime <node|bun>`: Service runtime (default: `node`). Bun 1.4+ with WAL-reset-safe `node:sqlite` is an explicit opt-in; Node remains recommended.
@@ -223,10 +225,10 @@ openclaw node uninstall
 ```
 
 Use `openclaw node run` for a foreground node host (no service).
-To remove a saved command allowlist, run `openclaw node run --all-commands`
-in the foreground, or reinstall the service with
-`openclaw node install --force --all-commands`. The reset is durable; the
-replacement service arguments no longer carry `--commands`.
+To remove a saved command allowlist and executor profile, run
+`openclaw node run --all-commands` in the foreground, or reinstall the service
+with `openclaw node install --force --all-commands`. The reset is durable; the
+replacement service arguments no longer carry `--commands` or `--executor`.
 
 Service commands accept `--json` for machine-readable output.
 `node start` and `node restart` print install hints and exit nonzero when no

@@ -25,6 +25,7 @@ export async function buildNodeInstallPlan(params: {
   installedAppsSharing?: boolean;
   commands?: string[];
   allCommands?: boolean;
+  executor?: boolean;
   runtime: GatewayDaemonRuntime;
   runtimeExplicit?: boolean;
   devMode?: boolean;
@@ -55,6 +56,7 @@ export async function buildNodeInstallPlan(params: {
     installedAppsSharing: params.installedAppsSharing,
     commands: params.commands,
     allCommands: params.allCommands,
+    executor: params.executor,
     dev: devMode,
     runtime,
     runtimePath,

@@ -27,11 +27,21 @@ export function addNodeCommandOptions(command: Command): Command {
       "--all-commands",
       "Advertise the full default command surface and forget any saved --commands allowlist",
     )
+    .option(
+      "--executor",
+      "Advertise the restricted executor profile (tool execution only, occupancy lease required); persists in node-host state",
+    )
     .hook("preAction", (_command, actionCommand) => {
       // Commander conflicts are local-only; include flags split across node and its leaf.
       const opts = actionCommand.optsWithGlobals();
       if (opts.allCommands && opts.commands !== undefined) {
         actionCommand.error("--all-commands cannot be combined with --commands", {
+          code: "commander.conflictingOption",
+        });
+      }
+      // --all-commands restores the full surface, so it also clears the saved profile.
+      if (opts.allCommands && opts.executor) {
+        actionCommand.error("--all-commands cannot be combined with --executor", {
           code: "commander.conflictingOption",
         });
       }

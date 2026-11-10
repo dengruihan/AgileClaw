@@ -154,9 +154,20 @@ allowlist. Exec runs foreground on the node: an exec invoke holds the lease unti
 its process tree is extinct, including any descendants it tried to background,
 and `process` follow-ups remain a Gateway-side surface.
 
-Select the profile with `profile: "executor"` in the node-host runtime options
-(the value persists in node-host state, so later starts keep it), or run the same
-surface manually by listing the commands above with `--commands`. The Gateway
+Select the profile with `--executor` on `openclaw node run`, `openclaw node
+install`, or `openclaw connect` (`--executor` also reaches the installed
+service's arguments), or with `profile: "executor"` in the node-host runtime
+options. The value persists in node-host state, so later starts keep it. An
+explicit `--commands` list **replaces** the profile's default command set
+instead of intersecting it: choosing a subset of the profile commands narrows
+the surface, while ids outside the profile widen it. A minimal
+remote-execution executor must retain `system.run`,
+`occupancy.acquire.v1`, and `occupancy.release.v1` — invocation rejects
+commands missing from the manifest before lease dispatch, and the Gateway
+requires acquire and release alongside `system.run` for session device
+execution. Retain `occupancy.renew.v1`, `occupancy.status.v1`, and
+`occupancy.revoke.v1` too when renewal, status, and revoke behavior is
+desired. The Gateway
 pairing approval shows the declared commands, and
 [Gateway command policy](/nodes/command-policy) still applies to every
 invocation. See [Session device occupancy](/nodes/node-exec#session-device-occupancy)
@@ -165,7 +176,8 @@ for the lease rules that make the executor exclusive.
 The persisted profile is one-way until it is cleared: `openclaw node run
 --all-commands` (or `openclaw node install --force --all-commands`) clears both
 the saved allowlist and the saved executor profile and advertises the full
-default surface again. Without a profile, `--commands` remains the operator-facing
+default surface again; `--all-commands` cannot be combined with `--executor`.
+Without a profile, `--commands` remains the operator-facing
 way to publish the executor surface, and a node whose allowlist advertises the
 `occupancy.*` commands enforces the lease the same way.
 
