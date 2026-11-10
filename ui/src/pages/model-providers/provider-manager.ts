@@ -245,38 +245,45 @@ export class ProviderManager extends OpenClawLightDomElement {
     this.seededName = this.committedName;
   }
 
-  /**
-   * Commits the Name field on its own, on blur or Enter. Connection autosaves never
-   * carry an unconfirmed name, and clearing the field removes the leaf so the label
-   * derived from the config key shows again.
-   */
-  private commitName() {
+  /** Applies the Name field to the draft; returns true when the leaf changed. */
+  private applyNameDraft(): boolean {
     const next = this.nameDraft.trim();
     if (next === this.committedName) {
+      // The committed value replaces what was typed, so the field is clean again and
+      // a later authoritative refresh may move it underneath the operator.
       this.nameDraft = next;
       this.seededName = next;
-      return;
+      return false;
     }
     const draft = { ...this.draft };
     if (next) {
       draft.displayName = next;
     } else {
+      // A cleared name is not a value: dropping the leaf restores the derived label.
       delete draft.displayName;
     }
     this.draft = draft;
-    // The committed value replaces what was typed, so re-seed both marks: the field
-    // is clean again and a later config refresh may move it underneath the operator.
+    // The touched leaf keeps the committed name alive across the re-render that an
+    // unrelated config refresh triggers before the write settles.
+    this.touched.add("displayName");
     this.nameDraft = next;
     this.seededName = next;
-    // Marking the leaf touched keeps the committed name alive across the re-render
-    // that an unrelated config refresh triggers before the write settles.
-    this.touched.add("displayName");
+    return true;
+  }
+
+  private commitName() {
+    if (!this.applyNameDraft()) {
+      return;
+    }
     if (this.intent?.view === "create" && !this.providerCreated) {
       // Nothing is persisted yet; the create write takes the whole draft once the
       // endpoint is complete.
       return;
     }
-    void this.saveConnection(true);
+    // Same owner as the connection fields, armed immediately because a confirmed
+    // commit is an explicit action: a loading or busy editor retries through it
+    // instead of dropping the name.
+    this.armConnectionAutoSave(0);
   }
 
   /** Connection edits save themselves; the submit path only flushes them early. */
@@ -697,6 +704,11 @@ export class ProviderManager extends OpenClawLightDomElement {
     // A retry after a failed credential save must start clean: the stale error
     // would otherwise keep the dialog open and visible after a successful retry.
     this.error = this.notice = null;
+    // An explicit submit commits a typed name even when the browser never fired the
+    // field's change event (Enter without blur). Autosaves keep that boundary.
+    if (!auto) {
+      this.applyNameDraft();
+    }
     const creating = this.intent?.view === "create";
     // A new provider's key is claimed inside the write transaction; an existing
     // entry keeps the exact key it was created with, so an edit never moves identity.

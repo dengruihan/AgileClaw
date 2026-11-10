@@ -577,7 +577,9 @@ suite.define(() => {
         // and its models stay put.
         await page.locator(`[data-provider-select="${firstKey}"]`).click();
         await gateway.deferNext("config.patch");
+        // A real browser confirms the field on blur; the name commits there, not per keystroke.
         await editor.locator('[name="displayName"]').fill(renamed);
+        await editor.locator('[name="displayName"]').blur();
         expect(requestRaw(await gateway.waitForRequest("config.patch", { after: 2 }))).toEqual({
           models: { providers: { [firstKey]: { displayName: renamed } } },
         });
@@ -596,7 +598,13 @@ suite.define(() => {
         await expect
           .poll(() => page.locator(`[data-provider-select="${firstKey}"]`).textContent())
           .toContain(renamed);
-        expect(page.locator(`[data-provider-select="${renamed}"]`)).toHaveCount(0);
+        // The visible label changed; the navigation identity did not.
+        await expect
+          .poll(() => page.locator(`[data-provider-select="${renamed}"]`).count())
+          .toBe(0);
+        await expect
+          .poll(() => page.locator(`[data-provider-select="${firstKey}"]`).count())
+          .toBe(1);
         if (recordVisuals) {
           await page.screenshot({
             path: path.join(suite.artifactDir, "provider-renamed-keeps-key.png"),
@@ -605,6 +613,73 @@ suite.define(() => {
       },
     );
   });
+
+  it.each([1440, 390])(
+    "captures the name-only create form and renamed card label at %ipx",
+    async (width) => {
+      const relayUrl = "https://relay.example.test/v1";
+      const firstKey = "custom-relay-example-test";
+      const chineseName = "我的中转站";
+      await suite.withPage(
+        { locale: "en-US", serviceWorkers: "block", viewport: { width, height: 1000 } },
+        async ({ page }) => {
+          const gateway = await installMockGateway(page, {
+            methodResponses: {
+              "config.get": {
+                config: {},
+                sourceConfig: {},
+                hash: `viewport-${width}-initial`,
+                raw: "{}",
+                valid: true,
+                issues: [],
+              },
+              "models.list": { models: [] },
+              "models.authStatus": { ts: 1, providers: [] },
+              "usage.status": { updatedAt: 1, providers: [] },
+              "sessions.usage": { aggregates: { byProvider: [] } },
+            },
+          });
+          await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+          const editor = page.locator(".provider-manager--inline");
+          await page.locator(".model-providers__navigation [data-custom-provider]").click();
+          await editor.locator('[name="displayName"]').waitFor();
+          if (recordVisuals) {
+            await page.screenshot({
+              path: path.join(suite.artifactDir, `create-form-name-only-${width}.png`),
+            });
+          }
+          await gateway.deferNext("config.patch");
+          await editor.locator('[name="displayName"]').fill(chineseName);
+          await editor.locator('[name="baseUrl"]').fill(relayUrl);
+          await gateway.waitForRequest("config.patch");
+          await resolveConfigMutation(
+            gateway,
+            {
+              models: {
+                providers: {
+                  [firstKey]: {
+                    baseUrl: relayUrl,
+                    api: "openai-completions",
+                    displayName: chineseName,
+                    models: [],
+                  },
+                },
+              },
+            },
+            `viewport-${width}-created`,
+          );
+          await expect
+            .poll(() => page.locator(`[data-provider-select="${firstKey}"]`).textContent())
+            .toContain(chineseName);
+          if (recordVisuals) {
+            await page.screenshot({
+              path: path.join(suite.artifactDir, `created-chinese-name-${width}.png`),
+            });
+          }
+        },
+      );
+    },
+  );
 
   it.each([1440, 1100, 768, 640, 390])(
     "Models page keeps controls separate and publishes discovery into a passive picker at %ipx",

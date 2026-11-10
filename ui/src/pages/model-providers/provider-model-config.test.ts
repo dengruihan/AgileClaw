@@ -256,6 +256,48 @@ describe("custom provider creation", () => {
     expect(patch.providerId).toBe("custom-ollama-2");
   });
 
+  it("leaves an authored id and its references byte-identical while creating and renaming", () => {
+    const authored = {
+      models: {
+        providers: {
+          moonshot: {
+            baseUrl: "https://api.moonshot.cn/v1",
+            models: [{ id: "kimi-k2", name: "Kimi K2" }],
+          },
+        },
+      },
+      agents: {
+        defaults: {
+          model: { primary: "moonshot/kimi-k2" },
+          models: { "moonshot/kimi-k2": { alias: "Work" } },
+        },
+      },
+    };
+    const before = structuredClone(authored);
+    const created = applyMergePatch(
+      authored,
+      providerCreatePatch({ config: authored, entry }).raw,
+      { mergeObjectArraysById: true, replaceArrayPaths: [] },
+    );
+    const renamed = applyMergePatch(
+      created,
+      providerConnectionPatch(
+        { displayName: "我的中转站" },
+        { displayName: "公司内部模型" },
+        new Set(["displayName"]),
+        "custom-models-example-test",
+      ).raw,
+      { mergeObjectArraysById: true, replaceArrayPaths: [] },
+    );
+
+    // Creation only adds its own key; the rename only touches that leaf.
+    const providers = (renamed as typeof authored).models.providers;
+    expect(Object.keys(providers)).toEqual(["moonshot", "custom-models-example-test"]);
+    expect(providers.moonshot).toEqual(before.models.providers.moonshot);
+    expect((renamed as typeof authored).agents).toEqual(before.agents);
+    expect(providers["custom-models-example-test"].displayName).toBe("公司内部模型");
+  });
+
   it("claims against the freshest snapshot, not the one the form opened with", () => {
     const openedWith = { models: { providers: {} } };
     const latest = {

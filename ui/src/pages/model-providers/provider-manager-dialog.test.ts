@@ -579,4 +579,28 @@ describe("provider manager dialog forms", () => {
       models: { providers: { "custom-relay": { displayName: null } } },
     });
   });
+
+  it("submits a typed name the browser never confirmed with a change event", async () => {
+    const { patches, save, setInput } = await openDialog(
+      {
+        providers: {
+          "custom-relay": {
+            baseUrl: "https://relay.example.test/v1",
+            displayName: "Relay",
+            models: [],
+          },
+        },
+        catalog: [],
+      },
+      "custom-relay",
+    );
+
+    // Enter submits without blurring, so no change event reaches the field.
+    setInput("displayName", "公司内部模型");
+    await save();
+
+    expect(JSON.parse(String(patches[0]?.raw))).toEqual({
+      models: { providers: { "custom-relay": { displayName: "公司内部模型" } } },
+    });
+  });
 });
