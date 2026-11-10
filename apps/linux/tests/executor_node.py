@@ -1,13 +1,16 @@
 """Real Tauri controlled-device GUI proof against a synthetic executor CLI.
 
 Covers the fresh all-GUI flow and the review regressions: GUI CLI install with
-progress, consent refusal, invalid/expired input, the 0600 handoff, approval
+progress and a failing installer whose command-shaped raw output must not reach
+the window, consent refusal, invalid/expired input, the 0600 handoff, approval
 waiting in both run modes, serialized delayed service stop before re-pair,
-failed service stop retaining service authority, reconnect/restart with the
-fixed command surface, and a self-exiting foreground leader whose TERM-ignoring
-descendant forces the real final-exit join window. The join URL and setup code
-are bearer secrets: they exist only in the driver's private HOME, and every
-proof surface is scanned for them.
+failed service stop retaining service authority, consent-free window and tray
+stops in service error states, reconnect/restart with the fixed command
+surface, app restarts that restore running/stopped/unknown service probes, and
+a self-exiting foreground leader whose TERM-ignoring descendant forces the real
+final-exit join window. The join URL and setup code are bearer secrets: they
+exist only in the driver's private HOME, and every proof surface is scanned for
+them.
 """
 
 import base64
@@ -93,7 +96,7 @@ class ExecutorNodeFixture:
         installer = directory / "install-cli.sh"
         installer.write_text(
             "#!/bin/bash\nset -euo pipefail\n/usr/bin/python3 - \"$@\" <<'PY'\n"
-            "import json, shutil, sys\nfrom pathlib import Path\n"
+            "import json, shutil, sys, time\nfrom pathlib import Path\n"
             "prefix = Path.home() / '.openclaw'\n"
             "expected = ['--json', '--no-onboard', '--prefix', str(prefix), '--version', 'main', "
             "'--runtime-only', '--install-method', 'git', '--git-dir', str(prefix / 'dev/openclaw')]\n"
@@ -102,6 +105,7 @@ class ExecutorNodeFixture:
             "if Path('installer-fail').exists():\n"
             "    print(json.dumps({'event': 'step', 'name': 'openclaw', 'status': 'start'}))\n"
             "    print('Run git -C ' + str(prefix / 'dev/openclaw') + ' rebase --abort', file=sys.stderr)\n"
+            "    time.sleep(4)\n"
             "    sys.exit(1)\n"
             "cli = prefix / 'bin/openclaw'\n"
             "cli.parent.mkdir(parents=True, exist_ok=True)\n"
@@ -192,9 +196,13 @@ class ExecutorNodeFixture:
             except subprocess.SubprocessError:
                 raise RuntimeError("Could not enter the controlled-device form") from None
 
+        def current_app():
+            # first_run.restart() replaces the process and records it here.
+            return getattr(self, "restarted_app", None) or app
+
         def executor_window():
             return self.chrome.until(
-                lambda: next((window for window, title in self.fixture.windows(app).items()
+                lambda: next((window for window, title in self.fixture.windows(current_app()).items()
                               if title.startswith("Controlled Device")), None),
                 "the controlled-device window",
             )
@@ -209,14 +217,48 @@ class ExecutorNodeFixture:
             return not any(path.name.startswith("handoff-") for path in handoff_dir.iterdir())
 
         def window_text(label):
-            try:
-                node = wait(label, None, prefix=True)
-                from gi.repository import Atspi as _Atspi
+            # A missing node is a failure, never an accepted sentinel: callers
+            # assert the rendered content they expect.
+            node = wait(label, None, prefix=True)
+            text = node.get_text_iface()
+            if text is None:
+                raise RuntimeError(f"{label!r} does not expose readable text")
+            return Atspi.Text.get_text(text, 0, -1)
 
-                text = node.get_text_iface()
-                return "" if text is None else _Atspi.Text.get_text(text, 0, -1)
-            except RuntimeError:
-                return "<absent>"
+        def controlled_texts():
+            # Every accessible string in the active controlled window, so raw
+            # installer output cannot hide outside the pane under assertion.
+            desktop = Atspi.get_desktop(0)
+            seen = []
+            for index in range(desktop.get_child_count()):
+                owner = desktop.get_child_at_index(index)
+                if owner is None or owner.get_process_id() != current_app().pid:
+                    continue
+                pending = [owner]
+                visited = 0
+                while pending:
+                    node = pending.pop()
+                    if node is None:
+                        continue
+                    visited += 1
+                    if visited > 1000:
+                        raise RuntimeError(
+                            "Controlled-device accessibility tree exceeded 1000 nodes"
+                        )
+                    if in_active_window(node):
+                        name = node.get_name()
+                        if name:
+                            seen.append(name)
+                        text = node.get_text_iface()
+                        if text is not None:
+                            content = Atspi.Text.get_text(text, 0, -1)
+                            if content:
+                                seen.append(content)
+                    pending.extend(node.get_child_at_index(child)
+                                   for child in range(node.get_child_count()))
+            if not seen:
+                raise RuntimeError("The controlled window exposed no readable text")
+            return seen
 
         def pair(target, mode=None, name="Desk", approval_wait=True, install_assert=False):
             self.stage_secret(target)
@@ -261,10 +303,29 @@ class ExecutorNodeFixture:
         self.chrome.command("xdotool", "key", "End", "Return")
         Path("installer-fail").write_text("")
         click("Install OpenClaw CLI")
-        wait("The CLI install did not finish. Try again", None, prefix=True)
-        pane_text = window_text("Install progress")
-        if "git -C" in pane_text or "rebase" in pane_text:
-            raise RuntimeError(f"Installer raw output reached the window: {pane_text!r}")
+        focus_executor()
+
+        def leaked_texts():
+            return [text for text in controlled_texts()
+                    if "git -C" in text or "rebase" in text]
+
+        # The fixture keeps emitting command-shaped remediation for a few
+        # seconds before it fails. Sample the controlled window while that
+        # output would be visible, then require the authored guidance that
+        # replaces it; a missing node is an error, never an absent sentinel.
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            leaked = leaked_texts()
+            if leaked:
+                raise RuntimeError(f"Installer raw output reached the window: {leaked!r}")
+            time.sleep(0.2)
+        guidance = window_text("The CLI install did not finish. Try again")
+        if "git" in guidance or "rebase" in guidance:
+            raise RuntimeError(f"Installer raw output reached the pane: {guidance!r}")
+        leaked = leaked_texts()
+        if leaked:
+            raise RuntimeError(f"Installer raw output reached the window: {leaked!r}")
+        self.capture("failing-installer")
         self.chrome.record("failing installer shows only command-free guidance", True)
         Path("installer-fail").unlink()
         calls_file = Path.cwd() / "fixture-installer-calls"
@@ -288,6 +349,14 @@ class ExecutorNodeFixture:
         if calls != 1:
             raise RuntimeError(f"A double-click ran {calls} installer invocations")
         self.chrome.record("fresh controlled-device setup installs the CLI once through the GUI", True)
+        # No service exists yet: the refresh clears the detail instead of
+        # describing a confirmed absence as an unknown service.
+        wait("Status: Off")
+        focus_executor()
+        absent_texts = controlled_texts()
+        if any("Service status is unknown" in text for text in absent_texts):
+            raise RuntimeError("A confirmed absent service was reported as unknown")
+        self.chrome.record("fresh install reports no service instead of unknown", True)
         self.capture("after-install")
 
         # Consent refusal: pairing and Start stay blocked until the explicit
@@ -351,10 +420,15 @@ class ExecutorNodeFixture:
             self.chrome.until(lambda: self.count_events("foreground-run") >= 1,
                               "the saved-pairing reconnect")
         except RuntimeError as error:
-            status_line = window_text("Status:")
-            feedback_line = window_text("Action feedback")
+            def diagnostic(label):
+                try:
+                    return window_text(label)
+                except RuntimeError:
+                    return "<unreadable>"
+
             raise RuntimeError(
-                f"{error}; window reports status={status_line!r} feedback={feedback_line!r}"
+                f"{error}; window reports status={diagnostic('Status:')!r} "
+                f"feedback={diagnostic('Action feedback')!r}"
             ) from None
         wait("Status: Running")
         click("Restart")
@@ -444,6 +518,106 @@ class ExecutorNodeFixture:
         click("Allow remote control of this computer", prefix=True)
         wait("Pair this computer", "push button", predicate=lambda node:
              in_active_window(node) and node.get_state_set().contains(Atspi.StateType.SENSITIVE))
+
+        # Tray parity for service errors: a failed stop and an unknown probe
+        # both leave the service possibly running, so the tray must keep Stop
+        # even after consent is withdrawn (service Stop never needs consent).
+        def tray_click(label):
+            def attempt():
+                try:
+                    self.fixture.open_native_menu(current_app(), label)
+                    return True
+                except RuntimeError:
+                    return False
+
+            self.chrome.until(attempt, f"the enabled {label} tray item")
+
+        click("Start")
+        wait("Status: Running (background service)")
+        click("Allow remote control of this computer", prefix=True)
+        wait("Start", "push button", predicate=lambda node:
+             in_active_window(node)
+             and not node.get_state_set().contains(Atspi.StateType.SENSITIVE))
+        self.set_state(stopShouldFail=True)
+        click("Stop")
+        wait("Status: Needs attention")
+        self.set_state(stopShouldFail=False)
+        stops_before = self.count_events("service-stop")
+        tray_click("Stop Controlled Device")
+        self.chrome.until(lambda: self.count_events("service-stop") >= stops_before + 1,
+                          "the consent-free tray service stop")
+        wait("Status: Stopped (background service)")
+        self.chrome.record("tray keeps stop for a failed service stop without consent", True)
+
+        # The unknown post-action probe publishes the same Needs attention
+        # shape while the service may still be running.
+        click("Allow remote control of this computer", prefix=True)
+        wait("Start", "push button", predicate=lambda node:
+             in_active_window(node) and node.get_state_set().contains(Atspi.StateType.SENSITIVE))
+        click("Start")
+        wait("Status: Running (background service)")
+        self.set_state(statusUnknown=True)
+        click("Restart")
+        wait("Status: Needs attention")
+        click("Allow remote control of this computer", prefix=True)
+        wait("Start", "push button", predicate=lambda node:
+             in_active_window(node)
+             and not node.get_state_set().contains(Atspi.StateType.SENSITIVE))
+        self.set_state(statusUnknown=False)
+        stops_before = self.count_events("service-stop")
+        tray_click("Stop Controlled Device")
+        self.chrome.until(lambda: self.count_events("service-stop") >= stops_before + 1,
+                          "the consent-free tray stop after an unknown probe")
+        wait("Status: Stopped (background service)")
+        self.chrome.record("tray keeps stop after an unknown service probe without consent", True)
+        click("Allow remote control of this computer", prefix=True)
+
+        # A real app restart must restore durable canonical service status
+        # instead of the new process's initial observation. Cover each probe
+        # result separately: stopped, running, and unknown.
+        def restart_app():
+            self.fixture.open_native_menu(current_app(), "Quit OpenClaw")
+            code = current_app().wait(timeout=15)
+            if code != 0:
+                raise RuntimeError(f"The native Quit action exited with {code}")
+            probes = self.count_events("status-probe")
+            restarted = restart()
+            wait("Welcome to OpenClaw", "heading")
+
+            def open_controlled_device():
+                try:
+                    self.fixture.open_native_menu(restarted, "Controlled Device…")
+                    return True
+                except RuntimeError:
+                    return False
+
+            self.chrome.until(open_controlled_device, "the Controlled Device tray item")
+            focus_executor()
+            self.chrome.until(lambda: self.count_events("status-probe") > probes,
+                              "the restarted app's canonical service probe")
+            return restarted
+
+        restart_app()
+        wait("Status: Stopped (background service)")
+        self.capture("after-restart-stopped")
+        self.chrome.record("app restart restores a stopped service", True)
+
+        click("Start")
+        wait("Status: Running (background service)")
+        restart_app()
+        wait("Status: Running (background service)")
+        self.capture("after-restart-running")
+        self.chrome.record("app restart restores a running service", True)
+
+        self.set_state(statusUnknown=True)
+        restart_app()
+        wait("Status: Service status unknown")
+        window_text("Service status is unknown.")
+        self.capture("after-restart-unknown")
+        self.chrome.record("app restart keeps an unknown service probe explicit", True)
+        self.set_state(statusUnknown=False)
+        click("Stop")
+        wait("Status: Stopped (background service)")
 
         # Final exit teardown: a self-exiting restart leader leaves a
         # TERM-ignoring descendant, so the real force-kill window is exercised

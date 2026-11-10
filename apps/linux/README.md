@@ -447,9 +447,11 @@ start/stop/restart controls as the window.
 
 The first-run driver pairs through the real window against a synthetic
 executor CLI: consent refusal, invalid and expired input, the 0600 handoff,
-approval waiting, stop/restart, service install arguments, an app restart with
-durable service status, and joined teardown. Install the native title bar test
-dependencies, then run:
+approval waiting, stop/restart, a failing CLI installer that must never show
+command-shaped output, tray Stop in service error states, service install
+arguments, app restarts that restore running, stopped, and unknown service
+probes, and joined teardown. Install the native title bar test dependencies,
+then run:
 
 ```bash
 xvfb-run -a -s '-screen 0 1440x1080x24' dbus-run-session -- \

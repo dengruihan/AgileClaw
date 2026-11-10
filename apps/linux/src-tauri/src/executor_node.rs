@@ -455,6 +455,29 @@ fn cli_missing_error() -> String {
     "Install the OpenClaw CLI first, then try again.".to_string()
 }
 
+/// The user-facing meaning of one CLI service observation. A confirmed absent
+/// service clears the detail; only an unverified or unrecognized observation
+/// is described as unknown.
+fn service_detail(cli_available: bool, service: &ServiceState) -> Option<String> {
+    if !cli_available {
+        return Some(cli_missing_error());
+    }
+    match service {
+        ServiceState::Absent => None,
+        ServiceState::Installed {
+            running: Some(true),
+        } => Some(String::from(
+            "The background service is installed and running.",
+        )),
+        ServiceState::Installed {
+            running: Some(false),
+        } => Some(String::from("The service is stopped.")),
+        ServiceState::Installed { running: None } | ServiceState::Unverified => {
+            Some(String::from("Service status is unknown."))
+        }
+    }
+}
+
 fn consent_missing_error() -> String {
     "Approve remote control before starting the controlled device.".to_string()
 }
@@ -836,16 +859,7 @@ fn probe_now(app: &AppHandle, shared: &Arc<Mutex<Shared>>) -> Result<(), String>
         mode: (cli.is_some() && service.may_exist()).then_some("service"),
         service,
         paired,
-        detail: match (&cli, service.running()) {
-            (None, _) => Some(cli_missing_error()),
-            (_, Some(true)) => Some(String::from(
-                "The background service is installed and running.",
-            )),
-            (_, Some(false)) => Some(String::from("The service is stopped.")),
-            (_, None) => cli
-                .is_some()
-                .then(|| String::from("Service status is unknown.")),
-        },
+        detail: service_detail(cli.is_some(), &service),
     };
     publish(app, shared, revision, run);
     Ok(())
@@ -943,28 +957,7 @@ fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>)
                         mode: (cli.is_some() && service.may_exist()).then_some("service"),
                         service,
                         paired: paired.0,
-                        detail: match (&cli, &service) {
-                            (None, _) => Some(cli_missing_error()),
-                            (_, ServiceState::Absent) => None,
-                            (
-                                _,
-                                ServiceState::Installed {
-                                    running: Some(true),
-                                },
-                            ) => Some(String::from(
-                                "The background service is installed and running.",
-                            )),
-                            (
-                                _,
-                                ServiceState::Installed {
-                                    running: Some(false),
-                                },
-                            ) => Some(String::from("The service is stopped.")),
-                            (_, ServiceState::Unverified) if cli.is_some() => {
-                                Some(String::from("Service status is unknown."))
-                            }
-                            (_, _) => None,
-                        },
+                        detail: service_detail(cli.is_some(), &service),
                     };
                     publish(&app, &shared, revision, run);
                 }
@@ -1795,6 +1788,43 @@ mod tests {
         assert_eq!(wire["serviceRunning"], serde_json::Value::Null);
         assert_eq!(wire["paired"], false);
         assert_eq!(wire["cliAvailable"], false);
+    }
+
+    #[test]
+    fn confirmed_absent_service_clears_the_unknown_detail() {
+        assert_eq!(service_detail(true, &ServiceState::Absent), None);
+        assert_eq!(
+            service_detail(false, &ServiceState::Absent),
+            Some(cli_missing_error())
+        );
+        assert_eq!(
+            service_detail(
+                true,
+                &ServiceState::Installed {
+                    running: Some(true)
+                }
+            )
+            .as_deref(),
+            Some("The background service is installed and running.")
+        );
+        assert_eq!(
+            service_detail(
+                true,
+                &ServiceState::Installed {
+                    running: Some(false)
+                }
+            )
+            .as_deref(),
+            Some("The service is stopped.")
+        );
+        assert_eq!(
+            service_detail(true, &ServiceState::Installed { running: None }).as_deref(),
+            Some("Service status is unknown.")
+        );
+        assert_eq!(
+            service_detail(true, &ServiceState::Unverified).as_deref(),
+            Some("Service status is unknown.")
+        );
     }
 
     #[test]

@@ -646,6 +646,15 @@ fn executor_menu_state(
             ("Installing service", false, true, false)
         }
         "preparing" => ("Connecting", false, true, false),
+        // A service-owned error can still have remote execution running: keep
+        // Stop beside Start exactly like the window so the user can revoke it
+        // without re-granting consent. A confirmed-absent service has nothing
+        // left to stop.
+        "error"
+            if snapshot.mode == Some("service") && snapshot.service_installed != Some(false) =>
+        {
+            ("Needs attention", true, true, false)
+        }
         "error" => ("Needs attention", true, false, false),
         _ if snapshot.mode == Some("service") && snapshot.service_running == Some(true) => {
             ("Running (service)", false, true, true)
@@ -781,5 +790,53 @@ mod tests {
             Some(":0"),
         ));
         assert!(!linux_global_shortcuts_supported(None, None, None));
+    }
+
+    fn executor_snapshot(
+        phase: &'static str,
+        mode: Option<&'static str>,
+        service_installed: Option<bool>,
+        service_running: Option<bool>,
+    ) -> crate::executor_node::Snapshot {
+        crate::executor_node::Snapshot {
+            revision: 1,
+            phase,
+            mode,
+            service_installed,
+            service_running,
+            paired: Some(true),
+            detail: None,
+            cli_available: true,
+            consent: None,
+            display_name: None,
+        }
+    }
+
+    #[test]
+    fn service_errors_keep_stop_available_in_the_tray() {
+        // A failed service stop and an unknown post-action probe both publish
+        // Needs attention while the old service may still be running.
+        let failed_stop = executor_snapshot("error", Some("service"), None, Some(true));
+        assert_eq!(
+            executor_menu_state(&failed_stop),
+            ("Needs attention", true, true, false)
+        );
+        let unknown_probe = executor_snapshot("error", Some("service"), None, None);
+        assert_eq!(
+            executor_menu_state(&unknown_probe),
+            ("Needs attention", true, true, false)
+        );
+        // A confirmed-absent service and a foreground error have nothing to
+        // stop, so Stop stays disabled.
+        let absent = executor_snapshot("error", Some("service"), Some(false), None);
+        assert_eq!(
+            executor_menu_state(&absent),
+            ("Needs attention", true, false, false)
+        );
+        let foreground = executor_snapshot("error", Some("foreground"), None, None);
+        assert_eq!(
+            executor_menu_state(&foreground),
+            ("Needs attention", true, false, false)
+        );
     }
 }
