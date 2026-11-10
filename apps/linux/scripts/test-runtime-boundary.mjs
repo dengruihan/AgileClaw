@@ -53,7 +53,10 @@ test("explicit Linux first-run setup installs only when no service is installed 
     /if !snapshot\.installed && !snapshot\.reachable \{[^]*?^ {12}\}/m,
   );
   assert.ok(absent, "explicit setup must establish service absence before installing");
-  assert.match(absent[0], /return self\.install_cli\(app, InstallChannel::Stable, selection\)/);
+  assert.match(
+    absent[0],
+    /return self\.install_cli\(app, InstallChannel::Stable, selection, true\)/,
+  );
   assert.doesNotMatch(explicit.replace(absent[0], ""), /\.install_cli\(/);
 });
 
