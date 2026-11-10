@@ -2424,7 +2424,10 @@ openclaw-settings-save-indicator:empty {
 
 .nav-section__items {
   display: grid;
-  gap: 2px;
+  /* Seated route keys carry opaque machined faces; the inherited 2px row
+     rhythm predates that material and left adjacent controls — Dashboard
+     beside Automations — reading as one merged block. */
+  gap: 6px;
 }
 
 .sidebar-online {
