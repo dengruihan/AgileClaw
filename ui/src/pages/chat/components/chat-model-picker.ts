@@ -134,18 +134,13 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
           className: "chat-controls__trigger-provider-icon",
         })
       : nothing;
+  // Rows keep the authored order the catalog owner supplied (model settings /
+  // published configuration). Selection only moves the check mark.
   const providerGroups = new Map<string, ChatModelPickerOption[]>();
   for (const option of params.modelOptions) {
     const existing = providerGroups.get(option.provider);
     if (existing) {
-      // Default restores inheritance; it stays ahead of ranked model choices.
-      if (option.isDefault) {
-        existing.unshift(option);
-      } else if (option === leadingModelOption) {
-        existing.splice(existing[0]?.isDefault ? 1 : 0, 0, option);
-      } else {
-        existing.push(option);
-      }
+      existing.push(option);
     } else {
       providerGroups.set(option.provider, [option]);
     }
@@ -156,9 +151,8 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
   const leadingProvider = leadingModelOption?.provider ?? providerGroupEntries[0]?.[0];
   const leadingGroupOptions =
     leadingProvider === undefined ? undefined : providerGroups.get(leadingProvider);
-  const orderedOptions = providerGroupEntries.flatMap(([, options]) => options);
   const optionIndex = new Map(
-    orderedOptions.map((option, index) => [modelPickerOptionKey(option), index]),
+    params.modelOptions.map((option, index) => [modelPickerOptionKey(option), index]),
   );
   const targetGroups = params.targetGroups ?? [];
   const hasSelectableModelOptions = params.modelOptions.some((option) => !option.disabled);
@@ -438,7 +432,7 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
                     entry,
                     groupId: group.id,
                     groupLabel: group.label,
-                    index: orderedOptions.length + targetIndex,
+                    index: params.modelOptions.length + targetIndex,
                     onSelect: selectTarget,
                   }),
               )}

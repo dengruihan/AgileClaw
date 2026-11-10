@@ -152,19 +152,39 @@ function catalogModelAvailabilityKey(entry: ModelCatalogEntry): string {
   return normalizeChatModelAvailabilityKey(buildQualifiedChatModelValue(entry.id, entry.provider));
 }
 
+function isCanonicalChatModelRouteValue(value: string): boolean {
+  const separator = value.indexOf("/");
+  if (separator <= 0) {
+    return true;
+  }
+  const provider = value.slice(0, separator).trim().toLowerCase();
+  return provider === normalizeChatModelProviderId(provider);
+}
+
 function resolveCatalogChatModelValue(value: string, options: ChatModelSelectOption[]): string {
   const exactValue = value.trim().toLowerCase();
   if (!exactValue) {
     return value;
   }
   const normalizedValue = normalizeChatModelAvailabilityKey(value);
+  // Equivalent routes (for example a legacy `codex/` alias beside `openai/`)
+  // keep their authored row positions; only the resolved value prefers the
+  // canonical provider spelling so a committed patch uses the server's route.
   for (const disabled of [false, true]) {
-    const match = options.find(
-      (option) =>
-        Boolean(option.disabled) === disabled &&
-        (option.value.trim().toLowerCase() === exactValue ||
-          normalizeChatModelAvailabilityKey(option.value) === normalizedValue),
+    const scoped = options.filter((option) => Boolean(option.disabled) === disabled);
+    const exactMatches = scoped.filter(
+      (option) => option.value.trim().toLowerCase() === exactValue,
     );
+    const normalizedMatches = scoped.filter(
+      (option) => normalizeChatModelAvailabilityKey(option.value) === normalizedValue,
+    );
+    const canonical =
+      exactMatches.find((option) => isCanonicalChatModelRouteValue(option.value)) ??
+      normalizedMatches.find((option) => isCanonicalChatModelRouteValue(option.value));
+    if (canonical) {
+      return canonical.value;
+    }
+    const match = exactMatches[0] ?? normalizedMatches[0];
     if (match) {
       return match.value;
     }
@@ -179,14 +199,9 @@ function buildChatModelOptions(
   const seen = new Set<string>();
   const options: ChatModelSelectOption[] = [];
 
-  for (const entry of catalog.toSorted(
-    (left, right) =>
-      Number(left.available === false) - Number(right.available === false) ||
-      Number(left.provider.trim().toLowerCase() !== normalizeChatModelProviderId(left.provider)) -
-        Number(
-          right.provider.trim().toLowerCase() !== normalizeChatModelProviderId(right.provider),
-        ),
-  )) {
+  // Preserve the catalog's authored order: model settings and the published
+  // configuration own row order, and availability must not re-rank it.
+  for (const entry of catalog) {
     if (entry.manualSelectionAllowed === false) {
       continue;
     }

@@ -431,4 +431,107 @@ suite.define(() => {
       await context.close();
     }
   });
+
+  it("keeps the configured model order when the new-session picker changes selection", async () => {
+    const context = await suite.browser.newContext({
+      locale: "en-US",
+      serviceWorkers: "block",
+      viewport: { height: 900, width: 1280 },
+    });
+    const page = await context.newPage();
+    const modelIds = ["alpha", "bravo", "charlie", "delta", "echo"];
+    const models = modelIds.map((id) => ({
+      available: true,
+      id,
+      name: `Model ${id[0]!.toUpperCase()}${id.slice(1)}`,
+      provider: "fixture",
+    }));
+    const gateway = await installMockGateway(page, {
+      agentModel: "fixture/charlie",
+      models,
+    });
+
+    try {
+      await page.goto(`${suite.server.baseUrl}new?agent=main`);
+      const root = page.locator("openclaw-new-session-page");
+      const trigger = root.locator('.new-session-page__composer [data-chat-model-select="true"]');
+      await trigger.click();
+      const options = root.locator("button[data-chat-model-option]");
+      await expect.poll(() => options.count()).toBe(modelIds.length);
+      await expect
+        .poll(() => root.locator('[data-chat-model-option="fixture/echo"]').isVisible())
+        .toBe(true);
+      const configuredOrder = modelIds.map((id) => `fixture/${id}`);
+      const renderedOrder = () =>
+        options.evaluateAll((rows) =>
+          rows.map((row) => row.getAttribute("data-chat-model-option")),
+        );
+      if (captureUiProof) {
+        await mkdir(path.join(suite.artifactDir, "new-session-model-order"), { recursive: true });
+        await page.screenshot({
+          animations: "disabled",
+          path: path.join(
+            suite.artifactDir,
+            "new-session-model-order",
+            "01-configured-order-before-selection.png",
+          ),
+        });
+      }
+      expect(await renderedOrder()).toEqual(configuredOrder);
+      expect(
+        await root
+          .locator('[data-chat-model-default="true"]')
+          .getAttribute("data-chat-model-option"),
+      ).toBe("fixture/charlie");
+      expect(
+        await root
+          .locator('[data-chat-model-option="fixture/charlie"]')
+          .getAttribute("aria-selected"),
+      ).toBe("true");
+      const modelsListReads = (await gateway.getRequests("models.list")).length;
+
+      const selectConfiguredModel = async (id: string) => {
+        await selectChatModelOption(root.locator(`[data-chat-model-option="fixture/${id}"]`));
+        await expect
+          .poll(() =>
+            root.locator(`[data-chat-model-option="fixture/${id}"]`).getAttribute("aria-selected"),
+          )
+          .toBe("true");
+        expect(await renderedOrder()).toEqual(configuredOrder);
+        expect(await gateway.getRequests("models.list")).toHaveLength(modelsListReads);
+        expect(await root.locator("[data-chat-model-catalog-state]").count()).toBe(0);
+        expect(await root.locator(".chat-controls__model-trigger-skeleton").count()).toBe(0);
+        expect(await options.count()).toBe(modelIds.length);
+        expect(await trigger.getAttribute("data-chat-select-value")).toBe(`fixture/${id}`);
+      };
+
+      await selectConfiguredModel("delta");
+      if (captureUiProof) {
+        await page.screenshot({
+          animations: "disabled",
+          path: path.join(
+            suite.artifactDir,
+            "new-session-model-order",
+            "02-configured-order-after-delta.png",
+          ),
+        });
+      }
+      await selectConfiguredModel("bravo");
+      await page.setViewportSize({ height: 844, width: 390 });
+      await expect.poll(() => options.count()).toBe(modelIds.length);
+      expect(await renderedOrder()).toEqual(configuredOrder);
+      if (captureUiProof) {
+        await page.screenshot({
+          animations: "disabled",
+          path: path.join(
+            suite.artifactDir,
+            "new-session-model-order",
+            "03-configured-order-narrow.png",
+          ),
+        });
+      }
+    } finally {
+      await context.close();
+    }
+  });
 });
