@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
+import { expectComposerSurface } from "./theme-background.test-support.ts";
 
 const suite = createControlUiE2eSuite({
   name: "Control UI chat composer focus",
@@ -208,7 +209,7 @@ suite.define(() => {
     });
   });
 
-  it("changes neutral focus styling in dark and light themes", async () => {
+  it("deepens the recessed well on neutral focus in dark and light themes", async () => {
     await suite.withPage({ viewport: { width: 1440, height: 900 } }, async ({ page }) => {
       const gateway = await installMockGateway(page);
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
@@ -218,53 +219,78 @@ suite.define(() => {
       const textarea = composer.locator("textarea");
       await composer.waitFor({ state: "visible" });
 
+      const parseShadowLayers = (value: string) =>
+        value.split(/, (?=color\(|rgba?\()/).map((segment) => {
+          const match = segment.match(
+            /^(rgba?\([^)]*\)|color\(srgb[^)]*\)) (-?[\d.]+)px (-?[\d.]+)px (-?[\d.]+)px (-?[\d.]+)px(?: )?(inset)?$/,
+          );
+          if (!match) {
+            throw new Error(`unparsed shadow layer: ${segment}`);
+          }
+          const numbers = match[1]!.match(/[\d.]+/g)!.map(Number);
+          const scale = match[1]!.startsWith("color(srgb") ? 255 : 1;
+          return {
+            alpha: numbers[3] ?? 1,
+            inset: match[6] === "inset",
+            rgb: numbers.slice(0, 3).map((channel) => channel * scale),
+            spread: Number(match[5]),
+            x: Number(match[2]),
+            y: Number(match[3]),
+          };
+        });
+      const readMaterial = () =>
+        composer.evaluate(async (element) => {
+          await Promise.all(element.getAnimations().map((animation) => animation.finished));
+          const style = getComputedStyle(element);
+          const { width, height } = element.getBoundingClientRect();
+          return {
+            borderColor: style.borderColor,
+            boxShadow: style.boxShadow,
+            height,
+            width,
+          };
+        });
+
       for (const theme of ["dark", "light"] as const) {
         await page.emulateMedia({ colorScheme: theme });
         await expect
           .poll(() => page.evaluate(() => document.documentElement.dataset.themeMode))
           .toBe(theme);
         await textarea.evaluate((element) => element.blur());
-        const unfocused = await composer.evaluate(async (element) => {
-          await Promise.all(element.getAnimations().map((animation) => animation.finished));
-          const style = getComputedStyle(element);
-          const { width, height } = element.getBoundingClientRect();
-          return { borderColor: style.borderColor, boxShadow: style.boxShadow, width, height };
-        });
+        const resting = await readMaterial();
+        await expectComposerSurface(composer);
 
         await textarea.focus();
-        const focused = await composer.evaluate(async (element) => {
-          await Promise.all(element.getAnimations().map((animation) => animation.finished));
-          const style = getComputedStyle(element);
-          const { width, height } = element.getBoundingClientRect();
-          const parseRgb = (color: string): [number, number, number] => {
-            const values = color
-              .match(/[\d.]+/g)
-              ?.slice(0, 3)
-              .map(Number);
-            if (!values || values.length !== 3) {
-              throw new Error(`expected an RGB color, received ${color}`);
-            }
-            return (
-              color.startsWith("color(srgb") ? values.map((value) => value * 255) : values
-            ) as [number, number, number];
-          };
-          const borderChannels = parseRgb(style.borderColor);
+        const focused = await readMaterial();
+        await expectComposerSurface(composer);
 
-          return {
-            borderColor: style.borderColor,
-            boxShadow: style.boxShadow,
-            width,
-            height,
-            neutralChannelSpread: Math.max(...borderChannels) - Math.min(...borderChannels),
-          };
-        });
-
-        expect([focused.borderColor, focused.boxShadow]).not.toEqual([
-          unfocused.borderColor,
-          unfocused.boxShadow,
-        ]);
-        expect(focused.neutralChannelSpread).toBeLessThanOrEqual(24);
-        expect([focused.width, focused.height]).toEqual([unfocused.width, unfocused.height]);
+        const focusedLayers = parseShadowLayers(focused.boxShadow);
+        // The well sinks with the caret — it changes, but never rises out of
+        // the recess, and focus never paints an accent frame.
+        expect(focused.boxShadow, `focus changes the material (${theme})`).not.toBe(
+          resting.boxShadow,
+        );
+        expect(
+          focusedLayers.every((layer) => layer.inset),
+          `focused shadows stay inset (${theme})`,
+        ).toBe(true);
+        expect(
+          focusedLayers.some(
+            (layer) => layer.inset && layer.x === 0 && layer.y === 0 && layer.spread === 1,
+          ),
+          `focus turns up a visible inner rim (${theme})`,
+        ).toBe(true);
+        for (const layer of focusedLayers) {
+          const channelSpread = Math.max(...layer.rgb) - Math.min(...layer.rgb);
+          expect(
+            channelSpread,
+            `focused shadow stays in the neutral ramp (${theme})`,
+          ).toBeLessThanOrEqual(66);
+        }
+        expect(focused.borderColor.replace(/\s/g, ""), `focus keeps no frame (${theme})`).toBe(
+          resting.borderColor.replace(/\s/g, ""),
+        );
+        expect([focused.width, focused.height]).toEqual([resting.width, resting.height]);
       }
     });
   });
