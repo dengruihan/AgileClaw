@@ -1,7 +1,7 @@
 //! The companion supervises one controlled executor node; the CLI owns pairing
 //! state, occupancy leases, and services. Pairing secrets live only in a
 //! 0600 handoff file that the CLI consumes and deletes.
-use crate::cli::OpenClawCli;
+use crate::cli::{CliError, OpenClawCli};
 use crate::desktop_node_process::DesktopNodeProcess;
 use crate::gateway_profiles::GatewayProfiles;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -64,12 +64,63 @@ impl Phase {
     }
 }
 
+/// The controller's own observation of the CLI-owned node service. `Unverified`
+/// retains service authority after a failed action: Start/Restart keep routing
+/// to the service until a probe reconciles the real state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ServiceState {
+    Absent,
+    Installed { running: Option<bool> },
+    Unverified,
+}
+
+impl ServiceState {
+    fn installed(&self) -> Option<bool> {
+        match self {
+            Self::Absent => Some(false),
+            Self::Installed { .. } | Self::Unverified => None,
+        }
+    }
+
+    fn running(&self) -> Option<bool> {
+        match self {
+            Self::Installed { running } => *running,
+            _ => None,
+        }
+    }
+
+    fn may_exist(&self) -> bool {
+        !matches!(self, Self::Absent)
+    }
+}
+
 #[derive(Clone, Debug)]
 struct Run {
     phase: Phase,
     mode: Option<&'static str>,
-    service_installed: Option<bool>,
+    service: ServiceState,
+    paired: Option<bool>,
     detail: Option<String>,
+}
+
+impl Run {
+    fn idle(service: ServiceState, paired: Option<bool>) -> Self {
+        Self {
+            phase: Phase::Off,
+            mode: None,
+            service,
+            paired,
+            detail: None,
+        }
+    }
+
+    fn error(self, detail: String) -> Self {
+        Self {
+            phase: Phase::Error,
+            detail: Some(detail),
+            ..self
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Debug)]
@@ -77,12 +128,12 @@ struct Run {
 pub(crate) struct Snapshot {
     pub revision: u64,
     pub phase: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub mode: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub service_installed: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_running: Option<bool>,
+    pub paired: Option<bool>,
     pub detail: Option<String>,
+    pub cli_available: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub consent: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -90,17 +141,29 @@ pub(crate) struct Snapshot {
 }
 
 impl Snapshot {
-    fn from_run(revision: u64, run: &Run) -> Self {
+    /// Run-state fields always serialize (as null when cleared) so the window
+    /// can replace them wholesale; only the app preferences are omitted.
+    fn from_run(revision: u64, run: &Run, cli_available: bool) -> Self {
         Self {
             revision,
             phase: run.phase.as_str(),
             mode: run.mode,
-            service_installed: run.service_installed,
+            service_installed: run.service.installed(),
+            service_running: run.service.running(),
+            paired: run.paired,
             detail: run.detail.clone(),
+            cli_available,
             consent: None,
             display_name: None,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ToolAction {
+    Start,
+    Stop,
+    Restart,
 }
 
 #[derive(Clone, Debug)]
@@ -109,14 +172,13 @@ enum Request {
     Foreground { pairing: Option<Pairing> },
     ServiceInstall(Pairing),
     Service(ToolAction),
-    Probe,
 }
 
+/// Which supervised child occupies the single child slot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ToolAction {
-    Start,
-    Stop,
-    Restart,
+enum ChildRole {
+    ForegroundRun,
+    ServiceInstall,
 }
 
 #[derive(Clone, Debug)]
@@ -133,6 +195,7 @@ struct Shared {
     stopping: bool,
     status_revision: u64,
     status: Run,
+    cli_available: bool,
 }
 
 /// One unredeemed join URL or setup code, held at 0600 until the CLI consumes it.
@@ -241,7 +304,7 @@ fn validate_setup_code(code: &str) -> Result<String, String> {
 fn validate_join_url(raw: &str) -> Result<(), String> {
     let url = tauri::Url::parse(raw)
         .map_err(|_| "Paste the whole join URL, ending in /j/<code>.".to_string())?;
-    let loopback = matches!(url.host_str(), Some("localhost") | Some("[::1]"))
+    let loopback = matches!(url.host_str(), Some("localhost"))
         || url
             .host_str()
             .and_then(|host| {
@@ -264,10 +327,9 @@ fn validate_join_url(raw: &str) -> Result<(), String> {
     {
         return Err("That join URL carries extra parts. Copy the URL exactly as shown.".into());
     }
-    let Some(path) = url.path().rsplit_once("/j/") else {
+    let Some((_, code)) = url.path().rsplit_once("/j/") else {
         return Err("Paste the whole join URL, ending in /j/<code>.".into());
     };
-    let code = path.1;
     let valid = code.len() == JOIN_CODE_LENGTH
         && !code
             .chars()
@@ -300,8 +362,16 @@ fn pairing_arguments(
     args
 }
 
+/// Reconnect always restates the fixed minimal surface; without an explicit
+/// list `node run --executor` would advertise the full executor profile.
 fn reconnect_arguments() -> Vec<String> {
-    vec!["node".into(), "run".into(), "--executor".into()]
+    vec![
+        "node".into(),
+        "run".into(),
+        "--executor".into(),
+        "--commands".into(),
+        EXECUTOR_COMMANDS.join(","),
+    ]
 }
 
 fn service_arguments(action: ToolAction) -> Vec<String> {
@@ -315,6 +385,15 @@ fn service_arguments(action: ToolAction) -> Vec<String> {
 
 fn status_arguments() -> Vec<String> {
     vec!["node".into(), "status".into(), "--json".into()]
+}
+
+fn pairing_probe_arguments() -> Vec<String> {
+    vec![
+        "config".into(),
+        "get".into(),
+        "nodeHost.gateway.host".into(),
+        "--json".into(),
+    ]
 }
 
 /// Map a node-host diagnostic to an app phase. Lines stay app-authored; raw
@@ -371,6 +450,18 @@ fn remediation(stdout: &str, stderr: &str) -> Option<&'static str> {
     None
 }
 
+fn cli_missing_error() -> String {
+    "Install the OpenClaw CLI first, then try again.".to_string()
+}
+
+fn consent_missing_error() -> String {
+    "Approve remote control before starting the controlled device.".to_string()
+}
+
+fn pairing_missing_error() -> String {
+    "This computer is not paired yet. Pair with a join URL or setup code first.".to_string()
+}
+
 pub(crate) struct ExecutorNode {
     shared: Arc<Mutex<Shared>>,
     profiles: Arc<GatewayProfiles>,
@@ -388,9 +479,11 @@ impl ExecutorNode {
             status: Run {
                 phase: Phase::Off,
                 mode: None,
-                service_installed: None,
+                service: ServiceState::Unverified,
+                paired: None,
                 detail: None,
             },
+            cli_available: OpenClawCli::discover().is_ok(),
         }));
         let (sender, receiver) = mpsc::sync_channel(1);
         let state = Arc::clone(&shared);
@@ -411,19 +504,25 @@ impl ExecutorNode {
     }
 
     pub fn snapshot(&self) -> Snapshot {
-        let (revision, run) = {
+        let (revision, run, cli_available) = {
             let shared = self.shared.lock().expect("executor state");
-            (shared.status_revision, shared.status.clone())
+            (
+                shared.status_revision,
+                shared.status.clone(),
+                shared.cli_available,
+            )
         };
-        let mut snapshot = Snapshot::from_run(revision, &run);
+        let mut snapshot = Snapshot::from_run(revision, &run, cli_available);
         snapshot.consent = self.profiles.executor_consent().ok().flatten();
         snapshot.display_name = self.profiles.executor_display_name().ok().flatten();
         snapshot
     }
 
-    /// Probe the installed service so a fresh window or tray reflects durable
-    /// state; never submitted while another request owns the supervisor.
-    pub fn refresh(&self) -> Result<(), String> {
+    /// Probe the service and canonical pairing so a fresh window or tray
+    /// reflects durable state. The caller's thread probes inline (it already
+    /// left the async runtime), and the observation is refused while another
+    /// request owns the supervisor so it cannot stomp a live run.
+    pub fn refresh(&self, app: &AppHandle) -> Result<(), String> {
         {
             let shared = self
                 .shared
@@ -436,40 +535,13 @@ impl ExecutorNode {
                 return Ok(());
             }
         }
-        self.submit(Request::Probe)
-    }
-
-    /// Tray and window controls share this dispatch: an app-owned foreground
-    /// child stops first, then an installed service absorbs the action.
-    pub fn action(&self, action: ToolAction) -> Result<(), String> {
-        let request = {
-            let shared = self
-                .shared
-                .lock()
-                .map_err(|_| "Controlled device unavailable.")?;
-            let run = &shared.status;
-            if action == ToolAction::Stop && run.mode == Some("foreground") {
-                Request::Idle
-            } else if run.service_installed == Some(true) {
-                Request::Service(action)
-            } else {
-                match action {
-                    ToolAction::Start | ToolAction::Restart => {
-                        Request::Foreground { pairing: None }
-                    }
-                    ToolAction::Stop => Request::Idle,
-                }
-            }
-        };
-        self.submit(request)
-    }
-
-    pub fn set_consent(&self, consent: bool) -> Result<(), String> {
-        self.profiles.set_executor_consent(consent)
+        probe_now(app, &self.shared)
     }
 
     /// Stage the pairing secret at 0600 and hand the path to the CLI. The
     /// secret itself never reaches argv, env, logs, or service definitions.
+    /// Replacing a live service is serialized here: the supervisor stops and
+    /// reconciles the old service before any replacement runs.
     pub fn pair(
         &self,
         target: &str,
@@ -495,6 +567,52 @@ impl ExecutorNode {
         } else {
             Request::Foreground {
                 pairing: Some(pairing),
+            }
+        };
+        self.submit(request)
+    }
+
+    pub fn set_consent(&self, consent: bool) -> Result<(), String> {
+        self.profiles.set_executor_consent(consent)
+    }
+
+    /// Tray and window controls share this dispatch. Consent gates every
+    /// start; canonical pairing evidence gates reconnects; service authority
+    /// is retained until reconciled away.
+    pub fn action(&self, action: ToolAction) -> Result<(), String> {
+        let request = {
+            let shared = self
+                .shared
+                .lock()
+                .map_err(|_| "Controlled device unavailable.")?;
+            let run = &shared.status;
+            let consented = self.profiles.executor_consent().ok().flatten() == Some(true);
+            let cancels_owned_child =
+                matches!(run.phase, Phase::Preparing | Phase::WaitingApproval)
+                    && (run.mode == Some("foreground")
+                        || (run.mode == Some("service")
+                            && run.service == ServiceState::Unverified));
+            match action {
+                // An app-owned child (foreground run or service install) is
+                // always cancellable; consent is irrelevant to cancellation.
+                ToolAction::Stop if cancels_owned_child => Request::Idle,
+                ToolAction::Stop if run.mode == Some("foreground") => Request::Idle,
+                _ if run.service.may_exist() && run.mode == Some("service") => {
+                    if !consented {
+                        return Err(consent_missing_error());
+                    }
+                    Request::Service(action)
+                }
+                ToolAction::Start | ToolAction::Restart => {
+                    if !consented {
+                        return Err(consent_missing_error());
+                    }
+                    if run.paired != Some(true) {
+                        return Err(pairing_missing_error());
+                    }
+                    Request::Foreground { pairing: None }
+                }
+                ToolAction::Stop => Request::Idle,
             }
         };
         self.submit(request)
@@ -555,20 +673,14 @@ fn publish(app: &AppHandle, shared: &Mutex<Shared>, revision: u64, run: Run) {
 fn notify(app: &AppHandle, shared: &Mutex<Shared>) {
     let snapshot = {
         let current = shared.lock().expect("executor state");
-        Snapshot::from_run(current.status_revision, &current.status)
+        Snapshot::from_run(
+            current.status_revision,
+            &current.status,
+            current.cli_available,
+        )
     };
     crate::tray::publish_executor(app, &snapshot);
     let _ = app.emit_to(EXECUTOR_LABEL, STATUS_EVENT, snapshot);
-}
-
-/// Tray actions mirror the window's controls; a missing CLI becomes a visible
-/// notification instead of a silent no-op.
-pub(crate) fn submit_tray_action(app: &AppHandle, action: ToolAction) {
-    let node = app.state::<ExecutorNode>();
-    if let Err(error) = node.action(action) {
-        eprintln!("Controlled device action failed: {error}");
-        crate::notify::notify(app, "Controlled device", &error);
-    }
 }
 
 fn drain_output(
@@ -604,29 +716,136 @@ fn run_to_completion(
         .ok_or_else(|| "The controlled-device setup was superseded.".to_string())
 }
 
-fn probe_service_status(
+/// Read the CLI-owned service state. Nonzero or unreadable status is an
+/// explicit unknown, never a silent "absent".
+fn probe_service_state(
+    cli: &OpenClawCli,
+    cancelled: impl Fn() -> bool,
+    probe_owner: &mut Option<DesktopNodeProcess>,
+) -> Result<ServiceState, String> {
+    let output = run_to_completion(cli, &status_arguments(), cancelled, probe_owner)?;
+    if !output.status.success() {
+        return Ok(ServiceState::Unverified);
+    }
+    let value: Value = serde_json::from_slice(&output.stdout)
+        .map_err(|_| "The CLI returned an invalid controlled-device service status.".to_string())?;
+    let service = value.get("service");
+    let installed = service
+        .and_then(|service| service.get("loaded"))
+        .and_then(Value::as_bool);
+    match installed {
+        Some(false) => Ok(ServiceState::Absent),
+        Some(true) => {
+            let running = service
+                .and_then(|service| service.get("runtime"))
+                .and_then(|runtime| runtime.get("status"))
+                .and_then(Value::as_str)
+                .and_then(|status| match status {
+                    "running" => Some(true),
+                    "stopped" => Some(false),
+                    _ => None,
+                });
+            Ok(ServiceState::Installed { running })
+        }
+        None => Ok(ServiceState::Unverified),
+    }
+}
+
+/// Detect canonical pairing without touching credentials: a saved Gateway
+/// endpoint host in the CLI's nodeHost configuration.
+fn probe_paired(
     cli: &OpenClawCli,
     cancelled: impl Fn() -> bool,
     probe_owner: &mut Option<DesktopNodeProcess>,
 ) -> Result<Option<bool>, String> {
-    let output = run_to_completion(cli, &status_arguments(), cancelled, probe_owner)?;
-    if !output.status.success() {
-        return Ok(None);
+    let output = run_to_completion(cli, &pairing_probe_arguments(), cancelled, probe_owner)?;
+    if output.status.success() {
+        let value: Value = serde_json::from_slice(&output.stdout).map_err(|_| {
+            "The CLI returned an invalid controlled-device pairing status.".to_string()
+        })?;
+        let paired = value.as_str().is_some_and(|host| !host.trim().is_empty());
+        return Ok(Some(paired));
     }
-    let value: Value = serde_json::from_slice(&output.stdout)
-        .map_err(|_| "The CLI returned an invalid controlled-device service status.".to_string())?;
-    Ok(value
-        .get("service")
-        .and_then(|service| service.get("loaded"))
-        .and_then(Value::as_bool))
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("valid but unset") || stderr.contains("Config path is valid but unset") {
+        return Ok(Some(false));
+    }
+    Ok(None)
 }
 
 fn tail_text(tail: &VecDeque<String>) -> String {
     tail.iter().cloned().collect::<Vec<_>>().join("\n")
 }
 
+/// Reconcile the CLI-owned service state and canonical pairing evidence into
+/// the shared run state. Callers already run off the async runtime; the write
+/// is revision-guarded so a superseded probe never overwrites newer state.
+fn probe_now(app: &AppHandle, shared: &Arc<Mutex<Shared>>) -> Result<(), String> {
+    {
+        let current = shared.lock().expect("executor state");
+        if current.stopping || !matches!(current.request, Request::Idle) {
+            return Ok(());
+        }
+    }
+    let revision = shared.lock().expect("executor state").revision;
+    let cancelled = || {
+        let current = shared.lock().expect("executor state");
+        current.stopping || current.revision != revision
+    };
+    let mut probe_owner = None;
+    let (cli, paired) = probe_knowledge(cancelled, &mut probe_owner);
+    let service = match &cli {
+        None => ServiceState::Unverified,
+        Some(cli) => probe_service_state(cli, cancelled, &mut probe_owner)
+            .unwrap_or(ServiceState::Unverified),
+    };
+    {
+        let mut current = shared.lock().expect("executor state");
+        current.cli_available = cli.is_some();
+    }
+    let run = Run {
+        phase: match service.running() {
+            Some(true) => Phase::Running,
+            _ => Phase::Off,
+        },
+        // No service authority is claimed while the CLI is missing; only a
+        // reconciled service enables it.
+        mode: (cli.is_some() && service.may_exist()).then_some("service"),
+        service,
+        paired,
+        detail: match (&cli, service.running()) {
+            (None, _) => Some(cli_missing_error()),
+            (_, Some(true)) => Some(String::from(
+                "The background service is installed and running.",
+            )),
+            (_, Some(false)) => Some(String::from("The service is stopped.")),
+            (_, None) => cli
+                .is_some()
+                .then(|| String::from("Service status is unknown.")),
+        },
+    };
+    publish(app, shared, revision, run);
+    Ok(())
+}
+
+/// What the supervisor knows about the CLI up front: a verified CLI plus the
+/// canonical pairing evidence probe.
+fn probe_knowledge(
+    cancelled: impl Fn() -> bool,
+    probe_owner: &mut Option<DesktopNodeProcess>,
+) -> (Option<OpenClawCli>, Option<bool>) {
+    match OpenClawCli::discover() {
+        Err(_) => (None, None),
+        Ok(cli) => {
+            let paired = probe_paired(&cli, cancelled, probe_owner).unwrap_or(None);
+            (Some(cli), paired)
+        }
+    }
+}
+
 fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>) {
     let mut child: Option<DesktopNodeProcess> = None;
+    let mut child_role: Option<ChildRole> = None;
     let mut probe_owner: Option<DesktopNodeProcess> = None;
     let mut applied: Option<u64> = None;
     let mut redactions: Vec<String> = Vec::new();
@@ -642,141 +861,119 @@ fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>)
             for owner in [&mut child, &mut probe_owner] {
                 if let Some(process) = owner.as_mut() {
                     if let Err(error) = process.stop() {
-                        publish(
-                            &app,
-                            &shared,
-                            revision,
-                            Run {
-                                phase: Phase::Error,
-                                mode: None,
-                                service_installed: None,
-                                detail: Some(error),
-                            },
-                        );
+                        let run = {
+                            let current = shared.lock().expect("executor state");
+                            current.status.clone().error(error)
+                        };
+                        publish(&app, &shared, revision, run);
                         cleanup_failed = true;
                         continue;
                     }
                 }
-                owner.take();
+                *owner = None;
             }
             if cleanup_failed {
                 // Keep every unresolved owner; a replacement never outruns teardown.
                 let _ = receiver.recv_timeout(Duration::from_secs(1));
                 continue;
             }
+            child_role = None;
             if stopping {
                 break;
             }
             applied = Some(revision);
             tail.clear();
+            let cancelled = || {
+                let shared = shared.lock().expect("executor state");
+                shared.stopping || shared.revision != revision
+            };
             match request {
-                Request::Idle => publish(
-                    &app,
-                    &shared,
-                    revision,
-                    Run {
-                        phase: Phase::Off,
-                        mode: None,
-                        service_installed: None,
-                        detail: None,
-                    },
-                ),
-                Request::Probe => {
-                    redactions.clear();
-                    let cli = OpenClawCli::locate();
-                    let outcome = cli
-                        .map_err(|_| {
-                            "Install or update the local OpenClaw CLI to see the controlled device."
-                                .to_string()
-                        })
-                        .and_then(|cli| {
-                            let cancelled = || {
-                                let shared = shared.lock().expect("executor state");
-                                shared.stopping || shared.revision != revision
-                            };
-                            let mut probe_owner = None;
-                            probe_service_status(&cli, cancelled, &mut probe_owner).map(|loaded| {
-                                Run {
-                                    phase: Phase::Off,
-                                    mode: None,
-                                    service_installed: loaded,
-                                    detail: loaded
-                                        .map(|installed| {
-                                            if installed {
-                                                String::from("The background service is installed.")
-                                            } else {
-                                                String::new()
-                                            }
-                                        })
-                                        .filter(|detail| !detail.is_empty()),
-                                }
-                            })
-                        });
-                    finish_tool_run(&app, &shared, revision, outcome, &mut tail, None);
+                Request::Idle => {
+                    // Reconcile the CLI-owned service before publishing Off so
+                    // the next Start dispatches against facts, not a retained
+                    // unknown that can race the user's next action.
+                    let paired = {
+                        let current = shared.lock().expect("executor state");
+                        (current.status.paired, current.status.detail.clone())
+                    };
+                    let cli = OpenClawCli::locate().ok();
+                    let cancelled = || {
+                        let shared = shared.lock().expect("executor state");
+                        shared.stopping || shared.revision != revision
+                    };
+                    let service = match &cli {
+                        None => ServiceState::Unverified,
+                        Some(cli) => probe_service_state(cli, cancelled, &mut probe_owner)
+                            .unwrap_or(ServiceState::Unverified),
+                    };
+                    {
+                        let mut current = shared.lock().expect("executor state");
+                        current.cli_available = cli.is_some();
+                    }
+                    let run = Run {
+                        phase: match service.running() {
+                            Some(true) => Phase::Running,
+                            _ => Phase::Off,
+                        },
+                        // No service authority is claimed while the CLI is
+                        // missing; only a reconciled service enables it.
+                        mode: (cli.is_some() && service.may_exist()).then_some("service"),
+                        service,
+                        paired: paired.0,
+                        detail: match (&cli, &service) {
+                            (None, _) => Some(cli_missing_error()),
+                            (_, ServiceState::Absent) => None,
+                            (
+                                _,
+                                ServiceState::Installed {
+                                    running: Some(true),
+                                },
+                            ) => Some(String::from(
+                                "The background service is installed and running.",
+                            )),
+                            (
+                                _,
+                                ServiceState::Installed {
+                                    running: Some(false),
+                                },
+                            ) => Some(String::from("The service is stopped.")),
+                            (_, ServiceState::Unverified) if cli.is_some() => {
+                                Some(String::from("Service status is unknown."))
+                            }
+                            (_, _) => None,
+                        },
+                    };
+                    publish(&app, &shared, revision, run);
                 }
                 Request::Foreground { pairing } => {
-                    publish(
+                    if let Some((process, role)) = start_pairing_request(
                         &app,
                         &shared,
                         revision,
-                        Run {
-                            phase: Phase::Preparing,
-                            mode: Some("foreground"),
-                            service_installed: None,
-                            detail: Some(String::from("Connecting this computer.")),
-                        },
-                    );
-                    match prepare_foreground(&pairing, &mut redactions) {
-                        Err(error) => publish(
-                            &app,
-                            &shared,
-                            revision,
-                            Run {
-                                phase: Phase::Error,
-                                mode: Some("foreground"),
-                                service_installed: None,
-                                detail: Some(error),
-                            },
-                        ),
-                        Ok(command) => match DesktopNodeProcess::spawn(command) {
-                            Ok(process) => {
-                                child = Some(process);
-                            }
-                            Err(error) => publish(
-                                &app,
-                                &shared,
-                                revision,
-                                Run {
-                                    phase: Phase::Error,
-                                    mode: Some("foreground"),
-                                    service_installed: None,
-                                    detail: Some(error),
-                                },
-                            ),
-                        },
+                        cancelled,
+                        pairing,
+                        false,
+                        &mut redactions,
+                        &mut probe_owner,
+                    ) {
+                        child = Some(process);
+                        child_role = Some(role);
                     }
                 }
                 Request::ServiceInstall(pairing) => {
-                    publish(
+                    if let Some((process, role)) = start_pairing_request(
                         &app,
                         &shared,
                         revision,
-                        Run {
-                            phase: Phase::Preparing,
-                            mode: Some("service"),
-                            service_installed: None,
-                            detail: Some(String::from("Pairing and installing the service.")),
-                        },
-                    );
-                    let outcome = apply_service_request(
-                        &pairing,
+                        cancelled,
+                        Some(pairing),
                         true,
                         &mut redactions,
                         &mut probe_owner,
-                        &shared,
-                        revision,
-                    );
-                    finish_tool_run(&app, &shared, revision, outcome, &mut tail, Some("service"));
+                    ) {
+                        child = Some(process);
+                        child_role = Some(role);
+                    }
                 }
                 Request::Service(action) => {
                     publish(
@@ -786,31 +983,44 @@ fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>)
                         Run {
                             phase: Phase::Preparing,
                             mode: Some("service"),
-                            service_installed: None,
+                            service: ServiceState::Unverified,
+                            paired: None,
                             detail: Some(String::from("Applying the service change.")),
                         },
                     );
                     redactions.clear();
-                    let outcome = apply_tool_action(&shared, revision, action, &mut probe_owner);
-                    finish_tool_run(&app, &shared, revision, outcome, &mut tail, Some("service"));
+                    let outcome = match OpenClawCli::locate() {
+                        Err(_) => Err(cli_missing_error()),
+                        Ok(cli) => {
+                            apply_tool_action(&cli, &shared, revision, action, &mut probe_owner)
+                        }
+                    };
+                    finish_tool_run(&app, &shared, revision, outcome, &mut tail);
                 }
             }
         }
-        if let Some(process) = child.as_mut() {
+        if let (Some(process), Some(role)) = (child.as_mut(), child_role) {
             if let Some(phase) = drain_output(process, &redactions, &mut tail) {
                 let changed = {
                     let mut current = shared.lock().expect("executor state");
                     if current.revision == revision && current.status.phase != phase {
                         current.status.phase = phase;
                         current.status.detail = Some(match phase {
-                            Phase::Running => {
-                                String::from("Connected. This computer is under remote control.")
-                            }
+                            Phase::Running => String::from(if role == ChildRole::ForegroundRun {
+                                "Connected. This computer is under remote control."
+                            } else {
+                                "The background service is installed and running."
+                            }),
                             Phase::WaitingApproval => {
                                 String::from("Waiting for approval on the controlling Gateway.")
                             }
                             _ => String::from("Connecting this computer."),
                         });
+                        if phase == Phase::Running && role == ChildRole::ForegroundRun {
+                            // The first authenticated hello saved the canonical
+                            // pairing; a connected run is itself the evidence.
+                            current.status.paired = Some(true);
+                        }
                         current.status_revision += 1;
                         true
                     } else {
@@ -822,37 +1032,89 @@ fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>)
                 }
             }
             match process.exited() {
-                Ok(false) => {}
+                Ok(None) => {}
                 outcome => {
-                    let _ = process.stop();
-                    let error = match outcome {
-                        Err(error) => Some(error),
-                        Ok(true) => {
+                    // Join the whole tree before the slot is reusable; a
+                    // failed join retains the owner for the next tick.
+                    let joined = process.stop();
+                    if let Err(join_error) = joined {
+                        let run = {
+                            let current = shared.lock().expect("executor state");
+                            current.status.clone().error(format!(
+                                "The controlled device could not finish stopping its process tree: {join_error}"
+                            ))
+                        };
+                        publish(&app, &shared, revision, run);
+                        let _ = receiver.recv_timeout(Duration::from_millis(250));
+                        continue;
+                    }
+                    let exit_ok = matches!(&outcome, Ok(Some(status)) if status.success());
+                    match role {
+                        ChildRole::ForegroundRun => {
                             let text = tail_text(&tail);
-                            remediation("", &text).map(String::from).or_else(|| {
-                                Some(String::from(
-                                    "The controlled device stopped unexpectedly. Start it again or pair below.",
-                                ))
-                            })
+                            let run = match &outcome {
+                                Err(error) => {
+                                    let current = shared.lock().expect("executor state");
+                                    Run::idle(current.status.service, current.status.paired)
+                                        .error(error.clone())
+                                }
+                                Ok(Some(_)) => {
+                                    let current = shared.lock().expect("executor state");
+                                    Run::idle(current.status.service, current.status.paired)
+                                        .error(
+                                            remediation("", &text).map(String::from).unwrap_or_else(|| {
+                                                String::from(
+                                                    "The controlled device stopped unexpectedly. Start it again or pair below.",
+                                                )
+                                            }),
+                                        )
+                                }
+                                Ok(None) => unreachable!("exited() reported an exit"),
+                            };
+                            publish(&app, &shared, revision, run);
                         }
-                        Ok(false) => None,
-                    };
-                    publish(
-                        &app,
-                        &shared,
-                        revision,
-                        Run {
-                            phase: if error.is_some() {
-                                Phase::Error
+                        ChildRole::ServiceInstall => {
+                            redactions.clear();
+                            let outcome = if exit_ok {
+                                match OpenClawCli::locate() {
+                                    Err(_) => Err(cli_missing_error()),
+                                    Ok(cli) => probe_service_state(
+                                        &cli,
+                                        || {
+                                            let shared = shared.lock().expect("executor state");
+                                            shared.stopping || shared.revision != revision
+                                        },
+                                        &mut probe_owner,
+                                    )
+                                    .and_then(|service| {
+                                        if service.running() != Some(true) {
+                                            return Err(String::from(
+                                                "The service finished installing but is not running. Start it from here.",
+                                            ));
+                                        }
+                                        Ok(Run {
+                                            phase: Phase::Running,
+                                            mode: Some("service"),
+                                            service,
+                                            paired: Some(true),
+                                            detail: Some(String::from(
+                                                "The background service is installed and running.",
+                                            )),
+                                        })
+                                    })
+                                }
                             } else {
-                                Phase::Off
-                            },
-                            mode: Some("foreground"),
-                            service_installed: None,
-                            detail: error,
-                        },
-                    );
+                                let text = tail_text(&tail);
+                                Err(remediation("", &text).map(String::from).unwrap_or_else(|| {
+                                    "Pairing did not finish. Check the join link and try again."
+                                        .into()
+                                }))
+                            };
+                            finish_tool_run(&app, &shared, revision, outcome, &mut tail);
+                        }
+                    }
                     child = None;
+                    child_role = None;
                 }
             }
         }
@@ -860,24 +1122,157 @@ fn run(app: AppHandle, shared: Arc<Mutex<Shared>>, receiver: mpsc::Receiver<()>)
     }
 }
 
-fn prepare_foreground(
+/// Publish the preparing state, stop and reconcile any possibly-installed
+/// service, and spawn the supervised pairing child. Errors publish retained
+/// authority and return None; a spawn returns the owned child and its role.
+fn start_pairing_request(
+    app: &AppHandle,
+    shared: &Arc<Mutex<Shared>>,
+    revision: u64,
+    cancelled: impl Fn() -> bool + Copy,
+    pairing: Option<Pairing>,
+    service_install: bool,
+    redactions: &mut Vec<String>,
+    probe_owner: &mut Option<DesktopNodeProcess>,
+) -> Option<(DesktopNodeProcess, ChildRole)> {
+    let mode = if service_install {
+        "service"
+    } else {
+        "foreground"
+    };
+    publish(
+        app,
+        shared,
+        revision,
+        Run {
+            phase: Phase::Preparing,
+            mode: Some(mode),
+            service: ServiceState::Unverified,
+            paired: None,
+            detail: Some(String::from(if service_install {
+                "Pairing and installing the service."
+            } else {
+                "Connecting this computer."
+            })),
+        },
+    );
+    // Serialized replacement: a possibly-installed service is stopped and
+    // reconciled before any replacement runs, and a failed stop retains
+    // service authority over the request.
+    match prepare_pairing_request(
+        shared,
+        revision,
+        cancelled,
+        probe_owner,
+        service_install,
+        &pairing,
+        redactions,
+    ) {
+        Err(run) => {
+            publish(app, shared, revision, run);
+            None
+        }
+        Ok(command) => match DesktopNodeProcess::spawn(command) {
+            Ok(process) => Some((
+                process,
+                if service_install {
+                    ChildRole::ServiceInstall
+                } else {
+                    ChildRole::ForegroundRun
+                },
+            )),
+            Err(error) => {
+                let run = {
+                    let current = shared.lock().expect("executor state");
+                    current.status.clone().error(error)
+                };
+                publish(app, shared, revision, run);
+                None
+            }
+        },
+    }
+}
+
+/// Stop and reconcile any possibly-installed service before a replacement
+/// pairing. A failed stop returns the retained-authority run to publish and
+/// aborts the replacement.
+fn prepare_pairing_request(
+    shared: &Arc<Mutex<Shared>>,
+    revision: u64,
+    cancelled: impl Fn() -> bool + Copy,
+    probe_owner: &mut Option<DesktopNodeProcess>,
+    service_install: bool,
     pairing: &Option<Pairing>,
     redactions: &mut Vec<String>,
-) -> Result<std::process::Command, String> {
-    let cli = OpenClawCli::locate().map_err(|_| {
-        "Install or update the local OpenClaw CLI first, then try again.".to_string()
+) -> Result<std::process::Command, Run> {
+    let mut service = shared.lock().expect("executor state").status.service;
+    if service.may_exist() {
+        let cli = OpenClawCli::locate().map_err(|_| Run {
+            phase: Phase::Error,
+            mode: Some("service"),
+            service,
+            paired: None,
+            detail: Some(cli_missing_error()),
+        })?;
+        let stopped = apply_tool_action(&cli, shared, revision, ToolAction::Stop, probe_owner);
+        service = match stopped {
+            Ok(run) => run.service,
+            Err(_) => {
+                // The stop itself can fail because no service exists (for
+                // example after a canceled install); reconcile the real state
+                // before deciding whether authority is retained.
+                probe_service_state(&cli, cancelled, probe_owner)
+                    .unwrap_or(ServiceState::Unverified)
+            }
+        };
+        if service.may_exist() && service.running() != Some(false) {
+            return Err(Run {
+                phase: Phase::Error,
+                mode: Some("service"),
+                service,
+                paired: None,
+                detail: Some(String::from(
+                    "The previous service did not stop, so no replacement was started.",
+                )),
+            });
+        }
+    }
+    let cli = OpenClawCli::locate().map_err(|_| Run {
+        phase: Phase::Error,
+        mode: Some(if service_install {
+            "service"
+        } else {
+            "foreground"
+        }),
+        service,
+        paired: None,
+        detail: Some(cli_missing_error()),
     })?;
     let args = match pairing {
         Some(pairing) => {
             *redactions = pairing.redactions.clone();
-            pairing_arguments(&pairing.handoff, pairing.display_name.as_deref(), false)
+            pairing_arguments(
+                &pairing.handoff,
+                pairing.display_name.as_deref(),
+                service_install,
+            )
         }
         None => {
             redactions.clear();
             reconnect_arguments()
         }
     };
-    let mut command = cli.command(args).map_err(|error| error.to_string())?;
+    let mut command = cli.command(args).map_err(|error| Run {
+        phase: Phase::Error,
+        mode: Some(if service_install {
+            "service"
+        } else {
+            "foreground"
+        }),
+        service,
+        paired: None,
+        detail: Some(error.to_string()),
+    })?;
     command
         .env_remove("CF_ACCESS_CLIENT_ID")
         .env_remove("CF_ACCESS_CLIENT_SECRET")
@@ -887,75 +1282,34 @@ fn prepare_foreground(
     Ok(command)
 }
 
-fn apply_service_request(
-    pairing: &Pairing,
-    service: bool,
-    redactions: &mut Vec<String>,
-    probe_owner: &mut Option<DesktopNodeProcess>,
-    shared: &Mutex<Shared>,
-    revision: u64,
-) -> Result<Run, String> {
-    *redactions = pairing.redactions.clone();
-    let cli = OpenClawCli::locate().map_err(|_| {
-        "Install or update the local OpenClaw CLI first, then try again.".to_string()
-    })?;
-    let args = pairing_arguments(&pairing.handoff, pairing.display_name.as_deref(), service);
-    let cancelled = || {
-        let shared = shared.lock().expect("executor state");
-        shared.stopping || shared.revision != revision
-    };
-    let output = run_to_completion(&cli, &args, cancelled, probe_owner)?;
-    if !output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-        return Err(remediation(&stdout, &stderr)
-            .map(String::from)
-            .unwrap_or_else(|| {
-                "Pairing did not finish. Check the join link and try again.".into()
-            }));
-    }
-    probe_service_status(&cli, cancelled, probe_owner)?;
-    Ok(Run {
-        phase: Phase::Running,
-        mode: Some("service"),
-        service_installed: Some(true),
-        detail: Some(String::from(
-            "The background service is installed and running.",
-        )),
-    })
-}
-
 fn apply_tool_action(
+    cli: &OpenClawCli,
     shared: &Mutex<Shared>,
     revision: u64,
     action: ToolAction,
     probe_owner: &mut Option<DesktopNodeProcess>,
 ) -> Result<Run, String> {
-    let cli = OpenClawCli::locate().map_err(|_| {
-        "Install or update the local OpenClaw CLI first, then try again.".to_string()
-    })?;
     let args = service_arguments(action);
     let cancelled = || {
         let shared = shared.lock().expect("executor state");
         shared.stopping || shared.revision != revision
     };
-    let output = run_to_completion(&cli, &args, cancelled, probe_owner)?;
+    let output = run_to_completion(cli, &args, cancelled, probe_owner)?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
         return Err(remediation("", &stderr)
             .map(String::from)
             .unwrap_or_else(|| "The service change did not finish. Try again.".into()));
     }
-    // `node status` reports systemd enabled state, which stays true across
-    // stop; the controller owns the running/stopped observation instead.
+    let service = probe_service_state(cli, cancelled, probe_owner)?;
     Ok(Run {
-        phase: if action == ToolAction::Stop {
-            Phase::Off
-        } else {
-            Phase::Running
+        phase: match action {
+            ToolAction::Stop => Phase::Off,
+            _ => Phase::Running,
         },
         mode: Some("service"),
-        service_installed: Some(true),
+        service,
+        paired: None,
         detail: None,
     })
 }
@@ -966,28 +1320,23 @@ fn finish_tool_run(
     revision: u64,
     outcome: Result<Run, String>,
     tail: &mut VecDeque<String>,
-    mode: Option<&'static str>,
 ) {
     tail.clear();
     match outcome {
         Ok(run) => publish(app, shared, revision, run),
-        Err(error) => publish(
-            app,
-            shared,
-            revision,
-            Run {
-                phase: Phase::Error,
-                mode,
-                service_installed: None,
-                detail: Some(error),
-            },
-        ),
+        Err(error) => {
+            let run = {
+                let current = shared.lock().expect("executor state");
+                current.status.clone().error(error)
+            };
+            publish(app, shared, revision, run);
+        }
     }
 }
 
 pub(crate) fn open_window(app: &AppHandle) -> Result<(), String> {
     // GTK window operations belong to the main thread even when IPC arrives
-    // on an async worker.
+    // on a blocking worker.
     let (sender, receiver) = std::sync::mpsc::channel();
     let current = app.clone();
     app.run_on_main_thread(move || {
@@ -997,6 +1346,16 @@ pub(crate) fn open_window(app: &AppHandle) -> Result<(), String> {
     receiver
         .recv()
         .map_err(|_| "The controlled-device window did not open.".to_string())?
+}
+
+/// Tray actions mirror the window's controls; a missing CLI becomes a visible
+/// notification instead of a silent no-op.
+pub(crate) fn submit_tray_action(app: &AppHandle, action: ToolAction) {
+    let node = app.state::<ExecutorNode>();
+    if let Err(error) = node.action(action) {
+        eprintln!("Controlled device action failed: {error}");
+        crate::notify::notify(app, "Controlled device", &error);
+    }
 }
 
 fn ensure_window(app: &AppHandle) -> Result<(), String> {
@@ -1017,7 +1376,8 @@ fn ensure_window(app: &AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn executor_node_request(app: AppHandle, message: Value) -> Result<Snapshot, String> {
-    // Vault access (Secret Service) and window work must leave the async runtime.
+    // Vault access (Secret Service), GTK windows, and CLI installs must leave
+    // the async runtime.
     let current = app.clone();
     tauri::async_runtime::spawn_blocking(move || executor_node_message(&current, message))
         .await
@@ -1028,7 +1388,7 @@ fn executor_node_message(app: &AppHandle, message: Value) -> Result<Snapshot, St
     let node = app.state::<ExecutorNode>();
     match message.get("type").and_then(Value::as_str) {
         Some("open") => open_window(app)?,
-        Some("status") | Some("refresh") => node.refresh()?,
+        Some("status") | Some("refresh") => node.refresh(app)?,
         Some("set-consent") => {
             let consent = message
                 .get("value")
@@ -1036,12 +1396,22 @@ fn executor_node_message(app: &AppHandle, message: Value) -> Result<Snapshot, St
                 .ok_or("Consent must be true or false.")?;
             node.set_consent(consent)?;
         }
+        Some("install-cli") => {
+            let channel: crate::installer::InstallChannel =
+                serde_json::from_value(message.get("channel").cloned().unwrap_or(Value::Null))
+                    .map_err(|_| "Choose a release channel for the CLI.".to_string())?;
+            // CLI-only install: no Gateway service, runtime binding, or
+            // dashboard admission belongs to the controlled-device flow.
+            crate::installer::install(app, channel, true)?;
+            OpenClawCli::discover().map_err(|error: CliError| error.to_string())?;
+            node.refresh(app)?;
+        }
         Some("pair") => {
             let consent = message
                 .get("consent")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            if !consent {
+            if !consent || node.snapshot().consent != Some(true) {
                 return Err("Remote-control consent is required before pairing.".into());
             }
             node.set_consent(true)?;
@@ -1159,7 +1529,6 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
-    #[cfg(unix)]
     #[test]
     fn explicit_commands_keep_the_executor_profile_a_working_executor() {
         // An explicit --commands list REPLACES the executor profile defaults, so
@@ -1206,15 +1575,15 @@ mod tests {
         );
         assert!(!joined.contains(secret));
         assert!(!joined.contains("c2VjcmV0"));
+        // Reconnect restates the same fixed surface; without it `node run
+        // --executor` would advertise the full executor profile.
         let reconnect = reconnect_arguments();
-        assert_eq!(
-            reconnect,
-            vec![
-                "node".to_string(),
-                "run".to_string(),
-                "--executor".to_string()
-            ]
-        );
+        let commands_index = reconnect
+            .iter()
+            .position(|arg| arg == "--commands")
+            .unwrap();
+        assert_eq!(reconnect[commands_index + 1], EXECUTOR_COMMANDS.join(","));
+        assert!(!reconnect.iter().any(|arg| arg.contains(secret)));
         assert_eq!(
             service_arguments(ToolAction::Restart),
             vec!["node".to_string(), "restart".to_string()]
@@ -1282,26 +1651,99 @@ mod tests {
     }
 
     #[test]
-    fn service_status_json_reports_only_loaded_state() {
-        let read = |stdout: &[u8]| -> Option<bool> {
+    fn service_status_maps_running_stopped_and_unknown_explicitly() {
+        let read = |stdout: &[u8]| -> ServiceState {
             let output = Output {
                 status: std::process::ExitStatus::default(),
                 stdout: stdout.to_vec(),
                 stderr: Vec::new(),
             };
             let value: Value = serde_json::from_slice(&output.stdout).unwrap();
-            value
-                .get("service")
+            let service = value.get("service");
+            match service
                 .and_then(|service| service.get("loaded"))
                 .and_then(Value::as_bool)
+            {
+                Some(false) => ServiceState::Absent,
+                Some(true) => ServiceState::Installed {
+                    running: service
+                        .and_then(|service| service.get("runtime"))
+                        .and_then(|runtime| runtime.get("status"))
+                        .and_then(Value::as_str)
+                        .and_then(|status| match status {
+                            "running" => Some(true),
+                            "stopped" => Some(false),
+                            _ => None,
+                        }),
+                },
+                None => ServiceState::Unverified,
+            }
         };
         assert_eq!(
-            read(br#"{"service":{"label":"openclaw-node","loaded":true,"loadedText":"loaded"}}"#),
-            Some(true)
+            read(br#"{"service":{"label":"openclaw-node","loaded":true,"runtime":{"status":"running"}}}"#),
+            ServiceState::Installed { running: Some(true) }
+        );
+        assert_eq!(
+            read(br#"{"service":{"label":"openclaw-node","loaded":true,"runtime":{"status":"stopped"}}}"#),
+            ServiceState::Installed { running: Some(false) }
+        );
+        assert_eq!(
+            read(br#"{"service":{"label":"openclaw-node","loaded":true,"runtime":{"status":"unknown","detail":"no manager"}}}"#),
+            ServiceState::Installed { running: None }
         );
         assert_eq!(
             read(br#"{"service":{"label":"openclaw-node","loaded":false,"notLoadedText":"not installed"}}"#),
-            Some(false)
+            ServiceState::Absent
         );
+        assert_eq!(
+            ServiceState::Installed { running: None }.installed(),
+            None,
+            "an unknown runtime state must not claim the service is absent"
+        );
+    }
+
+    #[test]
+    fn snapshots_serialize_run_clears_but_omit_preferences() {
+        let running = Snapshot::from_run(
+            1,
+            &Run {
+                phase: Phase::Running,
+                mode: Some("service"),
+                service: ServiceState::Installed {
+                    running: Some(true),
+                },
+                paired: Some(true),
+                detail: Some(String::from("installed")),
+            },
+            true,
+        );
+        let wire: Value = serde_json::from_str(&serde_json::to_string(&running).unwrap()).unwrap();
+        assert_eq!(wire["mode"], "service");
+        assert_eq!(wire["serviceInstalled"], serde_json::Value::Null);
+        assert_eq!(wire["serviceRunning"], true);
+        assert_eq!(wire["paired"], true);
+        assert_eq!(wire["detail"], "installed");
+        assert_eq!(wire["cliAvailable"], true);
+        assert!(wire.get("consent").is_none());
+        assert!(wire.get("displayName").is_none());
+
+        let cleared = Snapshot::from_run(2, &Run::idle(ServiceState::Absent, Some(false)), false);
+        let wire: Value = serde_json::from_str(&serde_json::to_string(&cleared).unwrap()).unwrap();
+        assert_eq!(wire["mode"], serde_json::Value::Null);
+        assert_eq!(wire["detail"], serde_json::Value::Null);
+        assert_eq!(wire["serviceInstalled"], false);
+        assert_eq!(wire["serviceRunning"], serde_json::Value::Null);
+        assert_eq!(wire["paired"], false);
+        assert_eq!(wire["cliAvailable"], false);
+    }
+
+    #[test]
+    fn service_authority_rules_route_without_falling_back_to_foreground() {
+        let may_exist = |state: ServiceState| state.may_exist();
+        assert!(may_exist(ServiceState::Unverified));
+        assert!(may_exist(ServiceState::Installed {
+            running: Some(false)
+        }));
+        assert!(!may_exist(ServiceState::Absent));
     }
 }

@@ -113,10 +113,10 @@ impl DesktopNodeProcess {
         self.output.try_iter().take(64)
     }
 
-    pub fn exited(&mut self) -> Result<bool, String> {
+    /// `Some(status)` once the leader exited; `None` while it is alive.
+    pub fn exited(&mut self) -> Result<Option<std::process::ExitStatus>, String> {
         self.child
             .try_wait()
-            .map(|exit| exit.is_some())
             .map_err(|error| format!("Could not inspect desktop sharing: {error}"))
     }
 
@@ -130,7 +130,7 @@ impl DesktopNodeProcess {
         let deadline = force_at + Duration::from_secs(10);
         let mut forced = false;
         loop {
-            let leader_done = self.exited()?;
+            let leader_done = self.exited()?.is_some();
             #[cfg(unix)]
             let tree_done = !signal_group(self.child.id(), "0")?;
             #[cfg(windows)]
@@ -378,7 +378,7 @@ mod tests {
             !probe.status.success(),
             "wrapper descendant survived shutdown"
         );
-        assert!(process.exited().unwrap());
+        assert!(process.exited().unwrap().is_some());
     }
     #[cfg(unix)]
     #[test]
@@ -456,7 +456,7 @@ mod tests {
                 break descendant;
             }
             assert!(
-                !process.exited().unwrap(),
+                !process.exited().unwrap().is_some(),
                 "cmd exited before its child was observed"
             );
             assert!(
@@ -476,7 +476,7 @@ mod tests {
         assert!(!process.job.is_empty().unwrap());
         process.stop().unwrap();
         assert!(process.job.is_empty().unwrap());
-        assert!(process.exited().unwrap());
+        assert!(process.exited().unwrap().is_some());
         unsafe { GetExitCodeProcess(handle, &mut code) }.unwrap();
         let _ = unsafe { CloseHandle(handle) };
         assert_ne!(

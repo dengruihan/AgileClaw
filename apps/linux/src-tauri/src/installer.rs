@@ -235,14 +235,18 @@ fn install_at(
     let mut tail = VecDeque::with_capacity(ERROR_TAIL_LINES);
     for (stream, line) in receiver {
         if spawn.is_none() {
-            let _ = app.emit_to(
-                "main",
-                INSTALL_EVENT,
-                InstallProgress {
-                    stream,
-                    line: &line,
-                },
-            );
+            // The controlled-device window runs the same CLI installer with
+            // its own progress pane; emissions to absent windows are no-ops.
+            for window in ["main", crate::executor_node::EXECUTOR_LABEL] {
+                let _ = app.emit_to(
+                    window,
+                    INSTALL_EVENT,
+                    InstallProgress {
+                        stream,
+                        line: &line,
+                    },
+                );
+            }
         }
         // Structured step events belong to the log pane; the failure tail is
         // shown as prose and must keep only human-readable diagnostics.

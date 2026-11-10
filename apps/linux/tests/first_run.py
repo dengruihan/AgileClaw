@@ -327,6 +327,7 @@ def drive(binary, *, remote_only, local_start_failure, inline_browser, window_ch
 
         inline_fixture = ExecutorNodeFixture(artifacts_dir)
         inline_fixture.start()
+        binary = inline_fixture.stage_binary(binary)
 
     with Path("app.log").open("wb") as log:
         app = subprocess.Popen(
@@ -544,7 +545,7 @@ def main():
         try:
             try:
                 # Desktop sharing observes five complete app lifecycles, including native Quit.
-                timeout = 300 if args.desktop_sharing or args.executor else 120
+                timeout = 360 if args.desktop_sharing or args.executor else 120
                 code = worker.wait(timeout=timeout)
             except subprocess.TimeoutExpired as error:
                 raise RuntimeError(f"Native first-run driver exceeded {timeout} seconds") from error
@@ -577,5 +578,8 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as error:
+        import traceback
+
+        traceback.print_exc()
         print(f"FAIL: {error}", file=sys.stderr)
         sys.exit(1)

@@ -3,6 +3,15 @@
   margin: 0;
 }
 
+.executor-install {
+  margin-bottom: 18px;
+}
+
+.executor-install .control-row {
+  align-items: flex-end;
+  margin: 10px 0 6px;
+}
+
 .executor-status {
   display: flex;
   flex-direction: column;

@@ -1,10 +1,13 @@
 """Real Tauri controlled-device GUI proof against a synthetic executor CLI.
 
-The driver pairs through the actual window: consent refusal, invalid and
-expired input, the 0600 handoff, approval waiting, stop/restart, service
-install arguments, an app restart with durable service status, and joined
-teardown. The join URL and setup code are bearer secrets: they exist only in
-the driver's private HOME, and every proof surface is scanned for them.
+Covers the fresh all-GUI flow and the review regressions: GUI CLI install with
+progress, consent refusal, invalid/expired input, the 0600 handoff, approval
+waiting in both run modes, serialized delayed service stop before re-pair,
+failed service stop retaining service authority, reconnect/restart with the
+fixed command surface, and a self-exiting foreground leader whose TERM-ignoring
+descendant forces the real final-exit join window. The join URL and setup code
+are bearer secrets: they exist only in the driver's private HOME, and every
+proof surface is scanned for them.
 """
 
 import base64
@@ -25,6 +28,7 @@ JOIN_CODE_DIGEST = hashlib.sha256(JOIN_URL.encode()).hexdigest()
 VALID_CODE = None
 EXPIRED_CODE = None
 SECRETS = ()
+JOIN_WINDOW_SECONDS = 60
 
 
 def setup_code(expires_in_ms):
@@ -46,6 +50,7 @@ class ExecutorNodeFixture:
         self.events_file = Path.home() / "executor-cli-events.jsonl"
         self.secret_file = Path.home() / "executor-secret.txt"
         self.approve_file = Path.home() / "executor-approve"
+        self.state_file = Path.home() / "executor-fixture-state.json"
         self.binary_sha256 = None
         self.passed = False
 
@@ -55,23 +60,69 @@ class ExecutorNodeFixture:
         EXPIRED_CODE = setup_code(-1_000)
         SECRETS = (JOIN_URL, VALID_CODE[len("oc-pair://"):], SETUP_TOKEN)
         self.fixture.start()
-        # The flow boots into first-run choices: no configured Gateway, and the
-        # seeded canonical desktop opt-out keeps the desktop node silent while
-        # the synthetic executor CLI replaces the gateway one.
+        # Fresh-download state: no CLI (the base gateway fixture installs one;
+        # the controlled-device GUI must install its own through the staged
+        # installer), and the seeded canonical desktop opt-out keeps desktop
+        # sharing silent once the CLI exists.
+        (Path.home() / ".openclaw/bin/openclaw").unlink(missing_ok=True)
         config = Path.home() / ".openclaw/openclaw.json"
-        config.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         config.write_text(json.dumps({"desktop": {"host": {"enabled": False}}}))
         config.chmod(0o600)
-        cli = Path.home() / ".openclaw/bin/openclaw"
-        shutil.copyfile(Path(__file__).with_name("executor_cli.py"), cli)
-        cli.chmod(0o700)
         # The driver's private copy of the secret; the fixture CLI compares hashes.
         self.secret_file.write_text(JOIN_URL)
         self.secret_file.chmod(0o600)
 
+    def stage_binary(self, binary):
+        # Tauri's documented Cargo resource layout is target/<profile> with
+        # .cargo-lock; the executor GUI installer resolves its bundled script
+        # there, so the fixture installs a reviewed synthetic installer.
+        directory = Path.home() / "target/debug"
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / ".cargo-lock").touch()
+        staged = directory / binary.name
+        shutil.copy2(binary, staged)
+        self.binary_sha256 = hashlib.sha256(binary.read_bytes()).hexdigest()
+        if hashlib.sha256(staged.read_bytes()).hexdigest() != self.binary_sha256:
+            raise RuntimeError("Staging changed the native application binary")
+        if (binary.parent / "desktop-runtime").exists():
+            shutil.copytree(
+                binary.parent / "desktop-runtime", directory / "desktop-runtime",
+                dirs_exist_ok=True,
+            )
+        prefix = Path.home() / ".openclaw"
+        installer = directory / "install-cli.sh"
+        installer.write_text(
+            "#!/bin/bash\nset -euo pipefail\n/usr/bin/python3 - \"$@\" <<'PY'\n"
+            "import json, shutil, sys\nfrom pathlib import Path\n"
+            "prefix = Path.home() / '.openclaw'\n"
+            "expected = ['--json', '--no-onboard', '--prefix', str(prefix), '--version', 'main', "
+            "'--runtime-only', '--install-method', 'git', '--git-dir', str(prefix / 'dev/openclaw')]\n"
+            "assert sys.argv[1:] == expected, 'Unexpected controlled installer arguments'\n"
+            "cli = prefix / 'bin/openclaw'\n"
+            "cli.parent.mkdir(parents=True, exist_ok=True)\n"
+            f"shutil.copy2({str(Path.home() / 'fixture-cli.py')!r}, cli)\n"
+            "cli.chmod(0o700)\n"
+            "(prefix / 'openclaw.json').write_text(json.dumps({'desktop': {'host': {'enabled': False}}}))\n"
+            "Path('fixture-installer-called').touch()\n"
+            "print(json.dumps({'event': 'done', 'ok': True, 'version': 'fixture'}))\n"
+            "print(json.dumps({'event': 'step', 'name': 'openclaw', 'status': 'ok'}))\n"
+            "PY\n"
+        )
+        installer.chmod(0o700)
+        # The reviewed installer copies this private fixture CLI into place.
+        shutil.copyfile(Path(__file__).with_name("executor_cli.py"), Path.home() / "fixture-cli.py")
+        return staged
+
     @property
     def chrome(self):
         return self.fixture.chrome
+
+    def set_state(self, **state):
+        self.state_file.write_text(json.dumps(state))
+
+    def stage_secret(self, value):
+        self.secret_file.write_text(value)
+        self.secret_file.chmod(0o600)
 
     @property
     def config(self):
@@ -89,11 +140,8 @@ class ExecutorNodeFixture:
             raise RuntimeError(f"Synthetic executor CLI rejected its contract: {detail!r}")
         return result
 
-    def expect_events(self, count, label):
-        self.chrome.until(
-            lambda: self.events()[count - 1] if len(self.events()) >= count else None,
-            label,
-        )
+    def count_events(self, name):
+        return sum(1 for item in self.events() if item["event"] == name)
 
     def capture(self, name):
         if self.artifacts_dir:
@@ -104,8 +152,6 @@ class ExecutorNodeFixture:
             )
 
     def exercise(self, app, binary, wait, Atspi, restart):
-        self.binary_sha256 = hashlib.sha256(binary.read_bytes()).hexdigest()
-
         def in_active_window(node):
             while node is not None and node.get_localized_role_name() != "application":
                 if node.get_state_set().contains(Atspi.StateType.ACTIVE):
@@ -113,8 +159,11 @@ class ExecutorNodeFixture:
                 node = node.get_parent()
             return False
 
-        def click(label, role=("button", "push button", "toggle button", "check box", "radio button"), *, prefix=False):
-            node = wait(label, role, prefix=prefix, predicate=in_active_window)
+        def click(label, role=("button", "push button", "toggle button", "check box", "radio button", "combo box"), *, prefix=False, insensitive=False):
+            def usable(node):
+                sensitive = node.get_state_set().contains(Atspi.StateType.SENSITIVE)
+                return in_active_window(node) and sensitive is not insensitive
+            node = wait(label, role, prefix=prefix, predicate=usable)
             component = node.get_component_iface()
             component.scroll_to(Atspi.ScrollType.ANYWHERE)
             bounds = component.get_extents(Atspi.CoordType.SCREEN)
@@ -138,7 +187,7 @@ class ExecutorNodeFixture:
         def executor_window():
             return self.chrome.until(
                 lambda: next((window for window, title in self.fixture.windows(app).items()
-                              if title == "Controlled Device"), None),
+                              if title.startswith("Controlled Device")), None),
                 "the controlled-device window",
             )
 
@@ -151,24 +200,79 @@ class ExecutorNodeFixture:
                 return True
             return not any(path.name.startswith("handoff-") for path in handoff_dir.iterdir())
 
+        def window_text(label):
+            try:
+                node = wait(label, None, prefix=True)
+                from gi.repository import Atspi as _Atspi
+
+                text = node.get_text_iface()
+                return "" if text is None else _Atspi.Text.get_text(text, 0, -1)
+            except RuntimeError:
+                return "<absent>"
+
+        def pair(target, mode=None, name="Desk", approval_wait=True):
+            self.stage_secret(target)
+            if name is not None:
+                fill("Device name (optional)", name)
+            fill("Join URL or setup code", target)
+            # The radio keeps its previous choice; every pairing selects its
+            # intended run mode explicitly.
+            click("While this app is open" if mode != "service" else "As a background service")
+            click("Pair this computer")
+            if approval_wait and not self.approve_file.exists():
+                wait("Status: Waiting for approval on the controlling Gateway")
+                self.approve_file.touch()
+            wait("Status: Running" if mode != "service" else "Status: Running (background service)")
+
         wait("Welcome to OpenClaw", "heading")
         click("Get started")
         wait("Where should your assistant live?", "heading")
         click("Be controlled from another computer", prefix=True)
         focus_executor()
-        wait("Pair this computer", "heading")
-        self.capture("form")
+        wait("Install the CLI", "heading")
+        self.capture("fresh-install")
 
-        # Consent refusal: pairing stays blocked until the explicit approval.
-        pair = wait("Pair this computer", "push button", predicate=in_active_window)
-        if pair.get_state_set().contains(Atspi.StateType.SENSITIVE):
+        # Fresh all-GUI installation: a fresh download pairs nothing until the
+        # CLI exists, and progress streams into this window. The development
+        # channel matches this build, like the local-Gateway flow.
+        click("Release channel", "combo box")
+        self.chrome.command("xdotool", "key", "End", "Return")
+        click("Install OpenClaw CLI")
+        # The install pane hides on success; the enabled secret field is the
+        # observable completion signal.
+        self.chrome.until(
+            lambda: wait(
+                "Join URL or setup code", ("password text", "entry", "text"),
+                predicate=lambda node: node.get_state_set().contains(Atspi.StateType.SENSITIVE)
+                and in_active_window(node),
+            )
+            is not None,
+            "the GUI CLI install to finish",
+        )
+        wait("Pair this computer", "heading")
+        self.chrome.until(lambda: (Path.home() / "fixture-installer-called").is_file(),
+                          "the reviewed installer to run")
+        self.chrome.record("fresh controlled-device setup installs the CLI through the GUI", True)
+        self.capture("after-install")
+
+        # Consent refusal: pairing and Start stay blocked until the explicit
+        # approval, and Start additionally stays blocked without pairing.
+        pair_button = wait("Pair this computer", "push button", predicate=in_active_window)
+        if pair_button.get_state_set().contains(Atspi.StateType.SENSITIVE):
             raise RuntimeError("Pairing was offered before explicit remote-execution consent")
-        self.chrome.record("consent refusal keeps pairing blocked", True)
+        start_button = wait("Start", "push button", predicate=in_active_window)
+        if start_button.get_state_set().contains(Atspi.StateType.SENSITIVE):
+            raise RuntimeError("Start was offered before consent and pairing")
+        self.chrome.record("consent refusal keeps pairing and start blocked", True)
 
         click("Allow remote control of this computer", prefix=True)
         wait("Pair this computer", "push button", predicate=lambda node:
              in_active_window(node) and node.get_state_set().contains(Atspi.StateType.SENSITIVE))
-        self.chrome.record("explicit consent enables pairing only in the GUI", True)
+        start_button = wait("Start", "push button", predicate=in_active_window)
+        if start_button.get_state_set().contains(Atspi.StateType.SENSITIVE):
+            raise RuntimeError("Start ignored the missing canonical pairing")
+        self.chrome.record("start requires canonical pairing, not just consent", True)
+        self.capture("consent-gates")
 
         # Invalid join URL and invalid/expired setup codes never reach the CLI.
         for index, (wrong, message) in enumerate((
@@ -180,103 +284,148 @@ class ExecutorNodeFixture:
             click("Pair this computer")
             self.capture(f"invalid-{index}")
             wait(message, None, prefix=True)
-            if self.events():
-                raise RuntimeError(f"Invalid input reached the CLI: {self.events()!r}")
+            lifecycle = [item for item in self.events() if item["event"] in (
+                "connect-start", "foreground-run", "service-first-connect",
+                "service-install", "service-start", "service-stop", "service-restart",
+            )]
+            if lifecycle:
+                raise RuntimeError(f"Invalid input reached the CLI lifecycle: {lifecycle!r}")
         if not no_handoff_files():
             raise RuntimeError("Invalid input staged a pairing secret")
         self.chrome.record("invalid and expired input never stage secrets or spawn the CLI", True)
-        self.capture("invalid-input")
 
-        # Real pairing: 0600 handoff, approval wait, then connected.
-        fill("Device name (optional)", "Desk")
-        fill("Join URL or setup code", JOIN_URL)
-        click("Pair this computer")
-        self.expect_events(1, "the synthetic connect with the staged secret")
-        first = self.events()[0]
-        if first["event"] != "connect-start" or first["handoffMode"] != "600" \
-                or first["secretSha256"] != JOIN_CODE_DIGEST or first["service"] \
-                or first["displayName"] != "Desk" or first["commands"] != COMMANDS_CSV:
-            raise RuntimeError("Foreground pairing lost the 0600 handoff contract")
-        wait("Status: Waiting for approval on the controlling Gateway")
-        self.capture("waiting-approval")
-        self.chrome.record("pairing waits for Gateway approval through the GUI", True)
-        self.approve_file.touch()
-        wait("Status: Running")
+        # Real foreground pairing: 0600 handoff, approval wait, then connected.
+        pair(JOIN_URL, name="Desk")
+        self.expect_connect(1, JOIN_CODE_DIGEST, service=False)
         self.capture("running-foreground")
         self.chrome.record("approval completes the join-URL pairing", True)
+        self.set_state(requirePaired=True)
+        if not no_handoff_files():
+            raise RuntimeError("A redeemed pairing secret remained on disk")
 
-        # Stop joins the observed process tree.
+        # Stop joins the observed process tree; reconnect and restart restate
+        # the fixed minimal surface without any secret.
         click("Stop")
         wait("Status: Off")
         self.chrome.until(lambda: any(
             item["event"] == "foreground-stop" and item.get("descendantGone")
             for item in self.events()), "the first foreground tree to join")
-        if not no_handoff_files():
-            raise RuntimeError("A redeemed pairing secret remained on disk")
         self.chrome.record("stop joins the CLI and its descendant", True)
-
-        # Reconnect and restart use the saved pairing without any secret.
         click("Start")
-        self.chrome.until(
-            lambda: any(item["event"] == "foreground-run" for item in self.events()),
-            "the saved-pairing reconnect",
-        )
+        try:
+            self.chrome.until(lambda: self.count_events("foreground-run") >= 1,
+                              "the saved-pairing reconnect")
+        except RuntimeError as error:
+            status_line = window_text("Status:")
+            feedback_line = window_text("Action feedback")
+            raise RuntimeError(
+                f"{error}; window reports status={status_line!r} feedback={feedback_line!r}"
+            ) from None
         wait("Status: Running")
         click("Restart")
-        self.chrome.until(
-            lambda: sum(1 for item in self.events() if item["event"] == "foreground-run") >= 2,
-            "the GUI restart",
-        )
+        self.chrome.until(lambda: self.count_events("foreground-run") >= 2,
+                          "the GUI restart")
         wait("Status: Running")
-        self.chrome.until(lambda: any(
-            item["event"] == "foreground-stop" for item in self.events()),
-            "the restarted foreground tree to join")
+        self.chrome.until(lambda: self.count_events("foreground-stop") >= 2,
+                          "the restarted foreground tree to join")
         self.chrome.record("reconnect and restart never resend a pairing secret", True)
 
-        # Service mode: first connect stores durable auth, install carries the
-        # executor selection without any secret material.
-        self.secret_file.write_text(VALID_CODE)
-        fill("Join URL or setup code", VALID_CODE)
-        click("As a background service")
-        click("Pair this computer")
-        wait("Status: Running (background service)")
+        # Service pairing waits for approval in the supervised install path.
+        self.approve_file.unlink(missing_ok=True)
+        pair(VALID_CODE, mode="service")
+        self.expect_connect(2, hashlib.sha256(VALID_CODE.encode()).hexdigest(), service=True)
         self.capture("running-service")
         events = self.events()
-        service_connect = next(item for item in events if item["event"] == "connect-start"
-                               and item.get("service"))
         install = next(item for item in events if item["event"] == "service-install")
-        if service_connect["secretSha256"] != hashlib.sha256(VALID_CODE.encode()).hexdigest():
-            raise RuntimeError("Service pairing staged the wrong secret")
         program = install["programArguments"]
         if "--executor" not in program or "--commands" not in program \
                 or "--target-file" in program:
             raise RuntimeError(f"Service install arguments broke the contract: {program!r}")
-        self.chrome.record("service pairing installs with executor args and durable credentials", True)
+        self.chrome.record("service approval waiting installs with executor args", True)
 
+        # Delayed service stop: re-pairing to foreground is serialized by the
+        # controller — the old service stops and reconciles first, and no
+        # foreground node starts beside it.
+        self.set_state(stopDelayMs=1500, requirePaired=True)
+        foreground_runs = self.count_events("foreground-run")
+        pair(JOIN_URL, mode=None)
+        events = self.events()
+        stops = [index for index, item in enumerate(events) if item["event"] == "service-stop"]
+        connects = [index for index, item in enumerate(events) if item["event"] == "connect-start"]
+        if not stops or not connects or stops[-1] > connects[-1]:
+            raise RuntimeError(f"Service replacement was not serialized: {events!r}")
+        if self.count_events("foreground-run") != foreground_runs:
+            raise RuntimeError("A foreground node started beside the stopping service")
+        wait("Status: Running")
+        self.chrome.record("delayed service stop serializes the re-pair", True)
+        self.capture("repaired-foreground")
+
+        # Failed service stop retains service authority: Start must not fall
+        # back to a foreground node while the old service may still own the
+        # canonical identity.
+        self.approve_file.unlink(missing_ok=True)
+        pair(VALID_CODE, mode="service")
+        self.set_state(stopShouldFail=True)
         click("Stop")
-        wait("Status: Stopped (background service)")
-        self.chrome.until(lambda: any(item["event"] == "service-stop" for item in self.events()),
-                          "the service stop request")
+        wait("The service change did not finish. Try again.", None, prefix=True)
+        self.chrome.until(lambda: self.count_events("service-stop-failed") >= 1,
+                          "the failing service stop")
+        starts = self.count_events("foreground-run")
         click("Start")
         wait("Status: Running (background service)")
-        self.chrome.until(lambda: any(item["event"] == "service-start" for item in self.events()),
+        if self.count_events("foreground-run") != starts:
+            raise RuntimeError("Start fell back to a foreground node after a failed stop")
+        self.chrome.until(lambda: self.count_events("service-start") >= 1,
                           "the service start request")
-        self.chrome.record("service start/stop stay GUI-only", True)
+        self.chrome.record("failed service stop retains service authority", True)
 
-        # Durable service status survives an app restart; the tray opens the window.
-        self.fixture.open_native_menu(app, "Quit OpenClaw")
-        app.wait(timeout=10)
-        if app.returncode != 0:
-            raise RuntimeError("The native Quit action did not finish cleanly")
-        app = restart()
-        wait("Welcome to OpenClaw", "heading")
-        self.fixture.open_native_menu(app, "Controlled Device…")
-        focus_executor()
-        wait("Status: Service installed")
-        click("Start")
-        wait("Status: Running (background service)")
-        self.capture("after-restart-service")
-        self.chrome.record("durable service status survives an app restart", True)
+        # Final exit teardown: a self-exiting restart leader leaves a
+        # TERM-ignoring descendant, so the real force-kill window is exercised
+        # before the controller gives up or replaces it.
+        self.set_state(ignoreTermDescendant=True, selfExitAfterMs=1500, stopShouldFail=False)
+        self.approve_file.unlink(missing_ok=True)
+        pair(JOIN_URL, name="Desk")
+        runs_before = self.count_events("foreground-run")
+        click("Restart")
+        self.chrome.until(
+            lambda: self.count_events("foreground-run") >= runs_before + 1,
+            "the self-exiting restarted run",
+        )
+        stable_runs = runs_before + 1
+        deadline = time.monotonic() + JOIN_WINDOW_SECONDS
+
+        def status_text():
+            node = wait("Status:", None, prefix=True)
+            from gi.repository import Atspi as _Atspi
+
+            text = node.get_text_iface()
+            return "" if text is None else _Atspi.Text.get_text(text, 0, -1)
+
+        def orphan_identity():
+            exits = [item for item in self.events() if item["event"] == "leader-exit"]
+            return exits[-1]["descendant"] if exits else None
+
+        def descendant_gone():
+            orphan = orphan_identity()
+            if orphan is None:
+                return False
+            current = Path(f"/proc/{orphan['pid']}/stat")
+            if not current.exists():
+                return True
+            fields = current.read_text().rsplit(") ", 1)[1].split()
+            return fields[19] != orphan["start"]
+
+        while time.monotonic() < deadline:
+            if self.count_events("foreground-run") != stable_runs:
+                raise RuntimeError("A replacement started beside an unjoined tree")
+            if "Running" not in status_text() and descendant_gone():
+                break
+            time.sleep(0.5)
+        else:
+            raise RuntimeError("The unjoined process tree was never joined")
+        wait("The controlled device stopped unexpectedly.", None, prefix=True)
+        self.chrome.record("final exit retains and joins the unjoined tree", True)
+        self.capture("final-exit-teardown")
 
         if not no_handoff_files():
             raise RuntimeError("A pairing secret outlived its redemption")
@@ -287,7 +436,19 @@ class ExecutorNodeFixture:
                 if secret and secret in contents:
                     raise RuntimeError("The app log disclosed a pairing secret")
         self.passed = True
-        print("PASS: real controlled-device GUI pairing, consent, secrets, service mode and teardown", flush=True)
+        print("PASS: controlled-device GUI install, consent, secrets, serialized service and teardown", flush=True)
+
+    def expect_connect(self, count, digest, service):
+        self.chrome.until(
+            lambda: len([item for item in self.events() if item["event"] == "connect-start"]) >= count,
+            "the synthetic connect with the staged secret",
+        )
+        connects = [item for item in self.events() if item["event"] == "connect-start"]
+        first = connects[count - 1]
+        if first["handoffMode"] != "600" or first["secretSha256"] != digest \
+                or first["service"] is not service or first["displayName"] != "Desk" \
+                or first["commands"] != COMMANDS_CSV:
+            raise RuntimeError("Pairing lost the 0600 handoff contract")
 
     def close(self):
         failure = sys.exc_info()[1]
@@ -312,8 +473,9 @@ class ExecutorNodeFixture:
                     "checks": self.fixture.chrome.checks,
                     "cliEvents": self.events(),
                     "syntheticCli": True, "syntheticGateway": False,
-                    "boundary": "Real Tauri WebKit GUI, OS vault, 0600 handoff, and joined "
-                                "process tree; not real Gateway pairing or systemd",
+                    "boundary": "Real Tauri WebKit GUI, OS vault, 0600 handoff, serialized "
+                                "service lifecycle, and joined process tree; not real Gateway "
+                                "pairing or systemd",
                 }, indent=2) + "\n")
             if leaked:
                 message = f"Controlled-device proof leaked process or secret state: {leaked!r}"

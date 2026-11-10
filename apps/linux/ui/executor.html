@@ -37,6 +37,30 @@
           </div>
         </section>
 
+        <section id="executor-install" class="executor-install hidden" aria-labelledby="install-title">
+          <div class="remote-heading">
+            <h2 id="install-title">Install the CLI</h2>
+            <span>
+              Pairing uses this computer's OpenClaw CLI. Install it here — no
+              Gateway service is added and no terminal is needed.
+            </span>
+          </div>
+          <div class="control-row">
+            <div class="select-field channel-field">
+              <label for="executor-channel">Release channel</label>
+              <select id="executor-channel">
+                <option value="stable">Stable</option>
+                <option value="beta">Beta</option>
+                <option value="dev">Development</option>
+              </select>
+            </div>
+            <button id="executor-install" class="primary" type="button">
+              Install OpenClaw CLI
+            </button>
+          </div>
+          <p id="executor-install-progress" class="hint"></p>
+        </section>
+
         <form id="executor-form" aria-labelledby="pairing-title" novalidate>
           <div class="remote-heading">
             <h2 id="pairing-title">Pair this computer</h2>
@@ -80,7 +104,12 @@
               busy-lease while connected. You can stop it here at any time.
             </span>
           </label>
-          <p id="executor-feedback" class="remote-feedback hidden" role="status"></p>
+          <p
+            id="executor-feedback"
+            class="remote-feedback hidden"
+            role="status"
+            aria-label="Action feedback"
+          ></p>
           <button id="executor-pair" class="primary executor-pair" type="submit" disabled>
             Pair this computer
           </button>

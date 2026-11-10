@@ -3,11 +3,15 @@ const { invoke } = tauri.core;
 const { listen } = tauri.event;
 
 const elements = {
+  channel: document.querySelector("#executor-channel"),
   consent: document.querySelector("#executor-consent"),
   detail: document.querySelector("#executor-detail"),
   dot: document.querySelector("#executor-dot"),
   feedback: document.querySelector("#executor-feedback"),
   form: document.querySelector("#executor-form"),
+  install: document.querySelector("#executor-install"),
+  installProgress: document.querySelector("#executor-install-progress"),
+  installSection: document.querySelector("#executor-install"),
   name: document.querySelector("#executor-name"),
   pair: document.querySelector("#executor-pair"),
   restart: document.querySelector("#executor-restart"),
@@ -15,9 +19,11 @@ const elements = {
   state: document.querySelector("#executor-state"),
   stop: document.querySelector("#executor-stop"),
   target: document.querySelector("#executor-target"),
-  title: document.querySelector("#executor-title"),
 };
 
+// App preferences persist across run-state changes; every other field is
+// replaced wholesale by each status payload so clears are never retained.
+const preferences = { consent: undefined, displayName: undefined };
 let status = null;
 let pending = false;
 
@@ -44,13 +50,20 @@ const PHASES = {
 
 function statusLabel() {
   const phase = PHASES[status.phase] ?? PHASES.off;
+  // Progress phases describe the action, not the service state.
+  if (status.phase === "waiting-for-approval") {
+    return phase.label;
+  }
+  if (status.phase === "preparing") {
+    return status.mode === "service" ? "Installing service…" : phase.label;
+  }
   if (status.mode === "service") {
     return status.phase === "running"
       ? "Running (background service)"
       : "Stopped (background service)";
   }
-  if (status.phase === "off" && status.serviceInstalled) {
-    return "Service installed";
+  if (status.phase === "off" && status.serviceInstalled === null && status.paired !== true) {
+    return "Service status unknown";
   }
   return phase.label;
 }
@@ -63,19 +76,43 @@ function render() {
   elements.state.textContent = `Status: ${statusLabel()}`;
   elements.detail.textContent = status.detail ?? "";
   elements.dot.className = `status-dot ${phase.dot}`;
-  elements.consent.checked = status.consent === true;
-  if (status.displayName && !elements.name.value) {
-    elements.name.value = status.displayName;
+  elements.consent.checked = preferences.consent === true;
+  if (preferences.displayName && !elements.name.value) {
+    elements.name.value = preferences.displayName;
   }
-  const installed = status.serviceInstalled === true;
+  show(elements.installSection, status.cliAvailable === false);
+  elements.target.disabled = status.cliAvailable === false;
+  elements.name.disabled = status.cliAvailable === false;
+
   const busy = status.phase === "preparing";
   const controlled = status.phase === "running" || status.phase === "waiting-for-approval";
-  elements.start.disabled = pending || busy || !(status.phase === "off" || status.phase === "error");
-  elements.stop.disabled =
-    pending || busy || !(controlled || installed);
+  const installed = status.serviceInstalled === true || status.mode === "service";
+  // Start requires consent plus either confirmed canonical pairing (a
+  // reconnect) or an owned service (service start); a fresh Start without
+  // either must never create pairing state on its own.
+  const serviceOwned = status.mode === "service" || status.serviceInstalled === true;
+  elements.start.disabled =
+    pending ||
+    busy ||
+    status.consent !== true ||
+    (!serviceOwned && status.paired !== true) ||
+    !(status.phase === "off" || status.phase === "error");
+  // Stop can always cancel an app-owned child or stop a controlled device.
+  elements.stop.disabled = pending || !(controlled || installed || busy);
   elements.restart.disabled =
-    pending || busy || !(controlled || installed);
-  elements.pair.disabled = pending || status.consent !== true;
+    pending ||
+    busy ||
+    status.consent !== true ||
+    !(controlled || installed || serviceOwned);
+  elements.pair.disabled = pending || preferences.consent !== true;
+}
+
+function applyPayload(payload) {
+  status = {
+    ...payload,
+    consent: preferences.consent,
+    displayName: preferences.displayName,
+  };
 }
 
 async function send(message) {
@@ -85,7 +122,14 @@ async function send(message) {
   pending = true;
   render();
   try {
-    status = await invoke("executor_node_request", { message });
+    const snapshot = await invoke("executor_node_request", { message });
+    if (snapshot.consent !== undefined) {
+      preferences.consent = snapshot.consent;
+    }
+    if (snapshot.displayName !== undefined) {
+      preferences.displayName = snapshot.displayName;
+    }
+    applyPayload(snapshot);
     feedback("", false);
   } catch (error) {
     feedback(
@@ -99,12 +143,13 @@ async function send(message) {
 }
 
 elements.consent.addEventListener("change", () => {
+  preferences.consent = elements.consent.checked;
   void send({ type: "set-consent", value: elements.consent.checked });
 });
 
 elements.form.addEventListener("submit", (event) => {
   event.preventDefault();
-  if (!elements.consent.checked) {
+  if (preferences.consent !== true) {
     feedback("Approve remote control first.", true);
     return;
   }
@@ -117,22 +162,19 @@ elements.form.addEventListener("submit", (event) => {
   }
   elements.target.removeAttribute("aria-invalid");
   const mode = document.querySelector('input[name="executor-mode"]:checked')?.value;
-  const running = status && ["running", "waiting-for-approval", "preparing"].includes(status.phase);
-  void (async () => {
-    if (running) {
-      await send({ type: "stop" });
-    }
-    await send({
-      type: "pair",
-      target,
-      displayName: elements.name.value.trim() || null,
-      mode,
-      consent: elements.consent.checked,
-    });
+  // Replacing a running service is serialized by the controller: it stops and
+  // reconciles the old service before any replacement runs.
+  void send({
+    type: "pair",
+    target,
+    displayName: elements.name.value.trim() || null,
+    mode,
+    consent: true,
+  }).then(() => {
     if (!elements.feedback.classList.contains("error")) {
       elements.target.value = "";
     }
-  })();
+  });
 });
 
 for (const [id, type] of [
@@ -145,11 +187,56 @@ for (const [id, type] of [
   });
 }
 
+elements.install.addEventListener("click", () => {
+  if (pending) {
+    return;
+  }
+  elements.install.disabled = true;
+  elements.channel.disabled = true;
+  elements.installProgress.textContent = "Installing…";
+  invoke("executor_node_request", {
+    message: { type: "install-cli", channel: elements.channel.value },
+  })
+    .then((snapshot) => {
+      preferences.consent = snapshot.consent;
+      preferences.displayName = snapshot.displayName;
+      applyPayload(snapshot);
+      elements.installProgress.textContent = "Install complete.";
+    })
+    .catch((error) => {
+      elements.installProgress.textContent =
+        typeof error === "string" ? error : error?.message || "The install did not finish.";
+    })
+    .finally(() => {
+      elements.install.disabled = false;
+      elements.channel.disabled = false;
+      render();
+    });
+});
+
+await listen("install-progress", ({ payload }) => {
+  let line = payload.line ?? "";
+  try {
+    const event = JSON.parse(line);
+    if (event?.event === "done" && event.ok === true) {
+      line = `✓ Installed${event.version ? ` ${event.version}` : ""}`;
+    } else if (event?.event === "step" && event.name) {
+      const mark = { start: "→", ok: "✓", skip: "–", warn: "!" }[event.status] ?? "";
+      line = `${mark} ${event.name}`;
+    }
+  } catch {
+    // Plain installer output renders as-is.
+  }
+  elements.installProgress.textContent = line;
+});
+
 await listen("executor://status-changed", ({ payload }) => {
-  // Event payloads omit app preferences; keep the values this window loaded.
-  status = { ...(status ?? {}), ...payload };
+  applyPayload(payload);
   render();
 });
 
-status = await invoke("executor_node_request", { message: { type: "status" } });
+const snapshot = await invoke("executor_node_request", { message: { type: "status" } });
+preferences.consent = snapshot.consent;
+preferences.displayName = snapshot.displayName;
+applyPayload(snapshot);
 render();

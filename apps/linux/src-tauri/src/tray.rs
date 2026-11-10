@@ -641,13 +641,16 @@ fn executor_menu_state(
         "running" if snapshot.mode == Some("service") => ("Running (service)", false, true, true),
         "running" => ("Running", false, true, true),
         "waiting-for-approval" => ("Waiting for approval", false, true, false),
+        // A supervised service install stays cancellable from the tray.
         "preparing" if snapshot.mode == Some("service") => {
-            ("Installing service", false, false, false)
+            ("Installing service", false, true, false)
         }
         "preparing" => ("Connecting", false, true, false),
         "error" => ("Needs attention", true, false, false),
+        _ if snapshot.mode == Some("service") && snapshot.service_running == Some(true) => {
+            ("Running (service)", false, true, true)
+        }
         _ if snapshot.mode == Some("service") => ("Service stopped", true, true, true),
-        _ if snapshot.service_installed == Some(true) => ("Service installed", true, true, true),
         _ => ("Off", true, false, false),
     };
     (label, start, stop, restart)

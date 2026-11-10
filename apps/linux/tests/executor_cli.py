@@ -3,7 +3,8 @@
 
 This proves the Tauri pairing/teardown boundary, not real Gateway pairing or
 systemd. The foreground descendant shares the native-owned process group and
-must be joined before the CLI can finish. The one-time pairing secret is read
+must be joined before the CLI can finish; the final-exit fixture ignores TERM
+so the native force window is exercised. The one-time pairing secret is read
 from a private file, compared by hash against the driver's copy, and never
 recorded in events or echoed anywhere.
 """
@@ -25,6 +26,7 @@ EVENTS = Path.home() / "executor-cli-events.jsonl"
 SECRET = Path.home() / "executor-secret.txt"
 APPROVE = Path.home() / "executor-approve"
 STATE = Path.home() / "executor-service-state.json"
+FIXTURE_STATE = Path.home() / "executor-fixture-state.json"
 JOIN_PORT = 18790
 
 # Must match the Rust controller's explicit minimal executor surface: an
@@ -48,6 +50,12 @@ def record(event, **details):
         os.close(descriptor)
 
 
+def fixture_state():
+    if FIXTURE_STATE.exists():
+        return json.loads(FIXTURE_STATE.read_text())
+    return {}
+
+
 def identity(pid):
     try:
         values = (Path("/proc") / str(pid) / "stat").read_text().rsplit(") ", 1)[1].split()
@@ -61,12 +69,21 @@ def still_exists(node):
     return current is not None and current["start"] == node["start"]
 
 
-def spawn_descendant():
+def spawn_descendant(ignore_term=False):
     global DESCENDANT
-    DESCENDANT = subprocess.Popen(
-        ["sleep", "300"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    if ignore_term:
+        DESCENDANT = subprocess.Popen(
+            [sys.executable, "-c",
+             "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN);"
+             "time.sleep(600)"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        DESCENDANT = subprocess.Popen(
+            ["sleep", "300"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
 
 def join_descendant():
@@ -77,7 +94,7 @@ def join_descendant():
     if node is not None:
         DESCENDANT.terminate()
         try:
-            DESCENDANT.wait(timeout=10)
+            DESCENDANT.wait(timeout=45)
         except subprocess.TimeoutExpired:
             DESCENDANT.kill()
             DESCENDANT.wait(timeout=5)
@@ -116,10 +133,12 @@ def read_handoff(arguments):
         commands=selected.commands, service=bool(selected.service),
         displayName=selected.display_name,
     )
+    # The first authenticated hello saved canonical pairing state in the CLI.
+    (Path.home() / "fixture-paired").touch()
     return selected
 
 
-def run_connected_foreground():
+def wait_for_approval():
     print(
         "node host gateway reconnect paused after close (4000): device pairing required"
         " detail=PAIRING_REQUIRED; waiting for operator action",
@@ -130,8 +149,10 @@ def run_connected_foreground():
         if time.monotonic() >= deadline:
             raise RuntimeError("Fixture approval never arrived")
         time.sleep(0.1)
+
+
+def print_connected():
     print(f"node host gateway connected: wss://127.0.0.1:{JOIN_PORT}/fixture/", flush=True)
-    signal.pause()
 
 
 def first_connect_then_install(display_name):
@@ -142,12 +163,20 @@ def first_connect_then_install(display_name):
     if "--target-file" in program or any(SECRET.stem in part for part in program):
         raise RuntimeError("Service program arguments leaked the pairing handoff")
     record("service-install", programArguments=program)
-    STATE.write_text(json.dumps({"serviceLoaded": True}))
+    STATE.write_text(json.dumps({"serviceLoaded": True, "serviceActive": True}))
 
 
 def service_state():
+    # systemd enabled state: installed units stay enabled across stop.
     if STATE.exists():
         return json.loads(STATE.read_text()).get("serviceLoaded", False)
+    return False
+
+
+def service_active():
+    # The controller's own running observation, separate from enabled.
+    if STATE.exists():
+        return json.loads(STATE.read_text()).get("serviceActive", False)
     return False
 
 
@@ -155,27 +184,13 @@ def wait_forever():
     signal.pause()
 
 
-CANONICAL_CONFIG = Path.home() / ".openclaw/openclaw.json"
-CHROME_SETUP = "browser extension setup --action install --json --wait-ms 1000"
-
-
-def handle_startup(command, arguments):
-    if command == "config" and arguments == ["file", "--json"]:
-        print(json.dumps({"path": str(CANONICAL_CONFIG)}))
-        return True
-    if command == "config" and arguments == ["get", "desktop.host.enabled", "--json"]:
-        # Seeded canonical config keeps the desktop node off during this proof.
-        print("false")
-        return True
-    if command == "gateway" and arguments == ["status", "--json"]:
-        print(json.dumps({"service": {"loaded": False}, "rpc": {"ok": False}}))
-        return True
-    if command == "browser" and arguments == [
-        "extension", "setup", "--action", "install", "--json", "--wait-ms", "1000",
-    ]:
-        print(json.dumps({"action": "install", "target": {"kind": "local-host", "platform": "linux", "hostname": "fixture", "profile": "chrome", "relayPort": 18799}, "phase": "needs_browser_action", "reason": "extension_missing", "installation": {"nativeHostRegistered": True, "installRequested": False, "installedProfiles": 0, "discoveredProfiles": 0, "awaitingApproval": False, "automaticBootstrapSupported": True}, "connection": {"state": "not_checked"}, "nextAction": "install_from_store"}))
-        return True
-    return False
+def detach_descendant():
+    """Hand the descendant to the native teardown and exit without joining."""
+    global DESCENDANT
+    node = identity(DESCENDANT.pid)
+    record("leader-exit", descendant=node)
+    atexit.unregister(join_descendant)
+    DESCENDANT = None
 
 
 def main():
@@ -184,15 +199,45 @@ def main():
     if command == "--version":
         print("OpenClaw fixture")
         return
-    if handle_startup(command, sys.argv[2:]):
+    if command == "config" and sys.argv[2:] == ["file", "--json"]:
+        print(json.dumps({"path": str(Path.home() / ".openclaw/openclaw.json")}))
+        return
+    if command == "config" and sys.argv[2:] == ["get", "nodeHost.gateway.host", "--json"]:
+        record("config-probe", paired=service_state() or (Path.home() / "fixture-paired").exists())
+        if service_state() or (Path.home() / "fixture-paired").exists():
+            print("127.0.0.1")
+        else:
+            print(
+                json.dumps({"ok": False, "error": {"type": "cli_error",
+                            "message": "Config path is valid but unset: nodeHost.gateway.host."}}),
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        return
+    if command == "config" and sys.argv[2:] == ["get", "desktop.host.enabled", "--json"]:
+        # Seeded canonical config keeps the desktop node off during this proof.
+        print("false")
+        return
+    if command == "gateway" and sys.argv[2:] == ["status", "--json"]:
+        print(json.dumps({"service": {"loaded": False}, "rpc": {"ok": False}}))
+        return
+    if command == "browser" and sys.argv[2:] == [
+        "extension", "setup", "--action", "install", "--json", "--wait-ms", "1000",
+    ]:
+        print(json.dumps({"action": "install", "target": {"kind": "local-host", "platform": "linux", "hostname": "fixture", "profile": "chrome", "relayPort": 18799}, "phase": "needs_browser_action", "reason": "extension_missing", "installation": {"nativeHostRegistered": True, "installRequested": False, "installedProfiles": 0, "discoveredProfiles": 0, "awaitingApproval": False, "automaticBootstrapSupported": True}, "connection": {"state": "not_checked"}, "nextAction": "install_from_store"}))
         return
     if command == "connect":
         selected = read_handoff(sys.argv[2:])
         if selected.service:
+            # Installation waits for the authenticated hello, so approval
+            # waiting is observable before any service change.
+            wait_for_approval()
             first_connect_then_install(selected.display_name)
             return
         spawn_descendant()
-        run_connected_foreground()
+        wait_for_approval()
+        print_connected()
+        wait_forever()
         return
     if command == "node":
         tail = sys.argv[2:]
@@ -200,25 +245,49 @@ def main():
         if verb == "run":
             parser = Arguments(add_help=False)
             parser.add_argument("--executor", action="store_true", required=True)
-            parser.parse_args(tail[1:])
+            parser.add_argument("--commands", required=True)
+            selected = parser.parse_args(tail[1:])
+            if selected.commands != COMMANDS_CSV:
+                raise RuntimeError("Reconnect lost the explicit minimal command surface")
             record("foreground-run")
-            spawn_descendant()
-            print(f"node host gateway connected: wss://127.0.0.1:{JOIN_PORT}/fixture/", flush=True)
+            state = fixture_state()
+            if state.get("requirePaired") and not service_state() \
+                    and not (Path.home() / "fixture-paired").exists():
+                raise RuntimeError("Reconnect ran without canonical pairing")
+            spawn_descendant(ignore_term=bool(state.get("ignoreTermDescendant")))
+            print_connected()
+            if state.get("selfExitAfterMs") is not None:
+                # Simulated crash: the leader exits cleanly and hands the
+                # descendant to the native teardown instead of joining it.
+                time.sleep(state["selfExitAfterMs"] / 1000)
+                detach_descendant()
+                return
             wait_forever()
             return
         if verb == "status":
+            record("status-probe", loaded=service_state(), active=service_active())
             print(json.dumps({"service": {
                 "label": "openclaw-node", "loaded": service_state(),
                 "loadedText": "loaded", "notLoadedText": "not installed",
+                "runtime": {"status": "running" if service_active() else "stopped"},
             }}))
             return
         if verb in ("start", "stop", "restart"):
             Arguments(add_help=False).parse_args([])
+            if not STATE.exists():
+                # systemd rejects service changes with no installed unit.
+                print("fixture: service not installed", file=sys.stderr)
+                sys.exit(1)
+            state = fixture_state()
+            if verb == "stop" and state.get("stopDelayMs"):
+                time.sleep(state["stopDelayMs"] / 1000)
+            if verb == "stop" and state.get("stopShouldFail"):
+                record("service-stop-failed")
+                print("fixture: stop failed", file=sys.stderr)
+                sys.exit(1)
             record("service-" + verb)
-            # systemd enabled state survives stop; only the controller's own
-            # observation distinguishes running from stopped.
-            if verb != "stop" and not service_state():
-                STATE.write_text(json.dumps({"serviceLoaded": True}))
+            state = {"serviceLoaded": True, "serviceActive": verb != "stop"}
+            STATE.write_text(json.dumps(state))
             return
         if verb == "install":
             raise RuntimeError("Direct node install is not the GUI pairing path")
