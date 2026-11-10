@@ -105,6 +105,7 @@ suite.define(() => {
             "models.authStatus": {
               ts: 1,
               providers: [{ provider: "studio", status: "static", profiles: [] }],
+              providerCapabilities: [],
             },
             "models.list": { models },
             "models.probe": { provider: "studio", status: "ok", latencyMs: 12, results: [] },
@@ -219,6 +220,7 @@ suite.define(() => {
       const authStatus = (ts: number) => ({
         ts,
         providers: [{ provider: "studio", status: "static", profiles: [] }],
+        providerCapabilities: [],
       });
       const gateway = await installMockGateway(page, {
         methodResponses: {
@@ -294,6 +296,7 @@ suite.define(() => {
           "models.authStatus": {
             ts: 1,
             providers: [{ provider: "studio", status: "ok", profiles: [] }],
+            providerCapabilities: [],
           },
           "models.list": { models: [] },
         },
@@ -333,7 +336,7 @@ suite.define(() => {
               issues: [],
             },
             "models.list": { models: [] },
-            "models.authStatus": { ts: 1, providers: [] },
+            "models.authStatus": { ts: 1, providers: [], providerCapabilities: [] },
             "usage.status": { updatedAt: 1, providers: [] },
             "sessions.usage": { aggregates: { byProvider: [] } },
           },
@@ -397,7 +400,7 @@ suite.define(() => {
               issues: [],
             },
             "models.list": { models: [] },
-            "models.authStatus": { ts: 1, providers: [] },
+            "models.authStatus": { ts: 1, providers: [], providerCapabilities: [] },
             "usage.status": { updatedAt: 1, providers: [] },
             "sessions.usage": { aggregates: { byProvider: [] } },
           },
@@ -492,6 +495,102 @@ suite.define(() => {
       },
     );
   });
+  it("holds provider creation until the plugin reservation list loads", async () => {
+    const relayUrl = "https://relay.example.test/v1";
+    await suite.withPage(
+      { locale: "en-US", serviceWorkers: "block", viewport: { width: 1440, height: 1000 } },
+      async ({ page }) => {
+        const gateway = await installMockGateway(page, {
+          methodResponses: {
+            "config.get": {
+              config: { models: { providers: {} } },
+              sourceConfig: { models: { providers: {} } },
+              hash: "reservations-initial",
+              raw: '{"models":{"providers":{}}}',
+              valid: true,
+              issues: [],
+            },
+            "models.list": { models: [] },
+            "models.authStatus": {
+              __mockError: { code: "UNAVAILABLE", message: "Provider list unavailable." },
+            },
+            "usage.status": { updatedAt: 1, providers: [] },
+            "sessions.usage": { aggregates: { byProvider: [] } },
+          },
+        });
+        await page.goto(`${suite.server.baseUrl}settings/model-providers`);
+        const headerAdd = page.locator(".settings-section__actions [data-custom-provider]");
+        const emptyAdd = page.locator(".model-providers__navigation [data-custom-provider]");
+        await expect.poll(() => headerAdd.isDisabled()).toBe(true);
+        await expect.poll(() => emptyAdd.isDisabled()).toBe(true);
+        await expect
+          .poll(() => page.locator("[data-provider-creation-blocked]").textContent())
+          .toContain("Refresh and try again");
+        // The guarded intent cannot open the create editor from either entry point.
+        await headerAdd.dispatchEvent("click");
+        await emptyAdd.dispatchEvent("click");
+        expect(await page.locator(".provider-manager--inline").count()).toBe(0);
+        expect(await gateway.getRequests("config.patch")).toHaveLength(0);
+        if (recordVisuals) {
+          await page.screenshot({
+            path: path.join(suite.artifactDir, "provider-creation-waiting-for-list.png"),
+          });
+        }
+
+        // With the reservation list restored, creation reserves the plugin id.
+        await gateway.setMethodResponse("models.authStatus", {
+          ts: 1,
+          providers: [],
+          providerCapabilities: [
+            {
+              provider: "custom-relay-example-test",
+              apiKeySupported: true,
+              quickApiKeySetup: true,
+            },
+          ],
+        });
+        await page.locator(".model-providers__refresh-button").click();
+        await expect.poll(() => headerAdd.isEnabled()).toBe(true);
+        await expect.poll(() => page.locator("[data-provider-creation-blocked]").count()).toBe(0);
+        // A fresh load of the restored list also starts clean (no stale refusal copy).
+        await page.reload();
+        await expect.poll(() => headerAdd.isEnabled()).toBe(true);
+        if (recordVisuals) {
+          await page.screenshot({
+            path: path.join(suite.artifactDir, "provider-creation-restored.png"),
+          });
+        }
+        await headerAdd.click();
+        const editor = page.locator(".provider-manager--inline");
+        await editor.locator('[name="displayName"]').waitFor();
+        await gateway.deferNext("config.patch");
+        await editor.locator('[name="displayName"]').fill("Relay Example");
+        await editor.locator('[name="baseUrl"]').fill(relayUrl);
+        // The plugin-declared id stays reserved; the new provider claims the next key.
+        const connection = {
+          baseUrl: relayUrl,
+          api: "openai-completions",
+          displayName: "Relay Example",
+          models: [],
+        };
+        expect(requestRaw(await gateway.waitForRequest("config.patch"))).toEqual({
+          models: { providers: { "custom-relay-example-test-2": connection } },
+        });
+        await resolveConfigMutation(
+          gateway,
+          { models: { providers: { "custom-relay-example-test-2": connection } } },
+          "reservations-created",
+        );
+        await expect
+          .poll(() => page.locator('[data-provider-select="custom-relay-example-test-2"]').count())
+          .toBe(1);
+        expect(
+          await page.locator('[data-provider-select="custom-relay-example-test"]').count(),
+        ).toBe(0);
+      },
+    );
+  });
+
   it("generates keys for name-only creation and renames without moving the key", async () => {
     const relayUrl = "https://relay.example.test/v1";
     const firstKey = "custom-relay-example-test";
@@ -517,7 +616,7 @@ suite.define(() => {
               issues: [],
             },
             "models.list": { models: [] },
-            "models.authStatus": { ts: 1, providers: [] },
+            "models.authStatus": { ts: 1, providers: [], providerCapabilities: [] },
             "usage.status": { updatedAt: 1, providers: [] },
             "sessions.usage": { aggregates: { byProvider: [] } },
           },
@@ -634,7 +733,7 @@ suite.define(() => {
                 issues: [],
               },
               "models.list": { models: [] },
-              "models.authStatus": { ts: 1, providers: [] },
+              "models.authStatus": { ts: 1, providers: [], providerCapabilities: [] },
               "usage.status": { updatedAt: 1, providers: [] },
               "sessions.usage": { aggregates: { byProvider: [] } },
             },
@@ -742,6 +841,9 @@ suite.define(() => {
                       },
                     ],
                   },
+                ],
+                providerCapabilities: [
+                  { provider: "openai", apiKeySupported: true, quickApiKeySetup: true },
                 ],
               },
               "usage.status": { updatedAt: Date.now(), providers: [] },

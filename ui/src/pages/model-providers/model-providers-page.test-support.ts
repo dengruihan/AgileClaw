@@ -65,6 +65,10 @@ export type ModelProvidersPageTestElement = HTMLElement & {
   routeData: ModelProvidersRouteData | undefined;
   requestUpdate: () => void;
   saveDefaults: () => Promise<void>;
+  selectProvider: (intent: {
+    provider: string;
+    view: "settings" | "models" | "create";
+  }) => Promise<void>;
   selectedAgentId: string;
 };
 

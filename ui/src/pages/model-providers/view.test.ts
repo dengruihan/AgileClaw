@@ -158,6 +158,30 @@ describe("renderModelProviders", () => {
     },
   );
 
+  it("blocks provider creation and explains the retry while the provider list is unknown", () => {
+    const onCustomProvider = vi.fn();
+    const container = mount(
+      props({
+        cards: [],
+        configuredModels: [],
+        unconfiguredProviders: [],
+        providerCreationBlockedReason:
+          "The provider list has not loaded, so a new provider cannot be added yet. Refresh and try again.",
+        onCustomProvider,
+      }),
+    );
+    const buttons = [...container.querySelectorAll<HTMLButtonElement>("[data-custom-provider]")];
+    expect(buttons).toHaveLength(2);
+    expect(buttons.every((button) => button.disabled)).toBe(true);
+    expect(text(container.querySelector("[data-provider-creation-blocked]"))).toContain(
+      "Refresh and try again",
+    );
+    for (const button of buttons) {
+      button.click();
+    }
+    expect(onCustomProvider).not.toHaveBeenCalled();
+  });
+
   it("shows inherited model policy, restores overrides, and preserves advanced thinking", () => {
     const onThinkingReset = vi.fn();
     const onFastModeReset = vi.fn();

@@ -317,6 +317,7 @@ suite.define(() => {
           methodResponses: {
             "config.get": snapshot(initial, "model-row-e2e"),
             "config.schema": buildConfigSchemaCore(),
+            "models.authStatus": { ts: 1, providers: [], providerCapabilities: [] },
           },
         });
         await page.goto(`${suite.server.baseUrl}settings/advanced?section=models`);
@@ -593,6 +594,7 @@ suite.define(() => {
           methodResponses: {
             "config.get": snapshot(initial, "custom-provider-initial"),
             "config.schema": buildConfigSchemaCore(),
+            "models.authStatus": { ts: 1, providers: [], providerCapabilities: [] },
             "models.authInspectApiKey": {
               provider: providerId,
               agentId: "main",

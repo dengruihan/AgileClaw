@@ -50,6 +50,15 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
     (this.selectedAgentId ? null : t("agents.noAgents"));
   private readonly canMutate = (): boolean =>
     this.mutationBlockedReason() === null && !modelProviderConfigBusy(this.context);
+  /**
+   * Creation claims a generated `models.providers` key, which must not take a
+   * plugin-declared provider id. The capability list is that complete reservation
+   * source; while it is unavailable creation waits instead of guessing.
+   */
+  readonly providerReservationsKnown = (): boolean =>
+    Array.isArray(this.data?.authStatus?.providerCapabilities);
+  readonly providerCreationBlockedReason = (): string =>
+    t("modelProviders.manager.providerCreationUnavailable");
 
   @consume({ context: applicationContext, subscribe: true })
   context!: ApplicationContext;
@@ -91,6 +100,13 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
   }
 
   async selectProvider(intent: ProviderManagerIntent) {
+    if (intent.view === "create" && !this.providerReservationsKnown()) {
+      this.setMessage("connection", {
+        kind: "error",
+        text: this.providerCreationBlockedReason(),
+      });
+      return;
+    }
     const manager = this.querySelector<ProviderManager>("openclaw-provider-manager");
     if (manager?.intent?.provider === intent.provider && manager.intent.view === intent.view) {
       return;
@@ -231,6 +247,13 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
       this.setMessage("add", null);
     },
     onCustom: () => {
+      if (!this.providerReservationsKnown()) {
+        this.setMessage("connection", {
+          kind: "error",
+          text: this.providerCreationBlockedReason(),
+        });
+        return;
+      }
       this.managerIntent = { provider: "", view: "create" };
     },
     canContinue: () => this.mutationBlockedReason() === null,

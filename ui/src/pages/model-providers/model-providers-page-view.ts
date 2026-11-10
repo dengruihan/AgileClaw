@@ -83,6 +83,11 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
   const knownProviderIds = new Set(
     data.authStatus?.providerCapabilities?.map((entry) => entry.provider) ?? [],
   );
+  // Plugin capabilities are the complete reservation source for generated keys;
+  // without them, creation waits rather than risk shadowing a plugin provider.
+  const providerReservations = Array.isArray(data.authStatus?.providerCapabilities)
+    ? knownProviderIds
+    : null;
   const isLocalOrCustom = (id: string) =>
     localOrCustomProvider(configObject, id, knownProviderIds, catalog?.models ?? []);
   const login = page.login.pageActions;
@@ -93,7 +98,7 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
     .agentId=${page.selectedAgentId}
     .intent=${managerIntent}
     .customProvider=${isLocalOrCustom(managerIntent?.provider ?? "")}
-    .reservedProviderIds=${knownProviderIds}
+    .reservedProviderIds=${providerReservations}
     .card=${cards.find((card) => (card.configKey ?? card.id) === managerIntent?.provider) ?? null}
     .probeResults=${page.probeResults}
     .probeBusy=${page.busy}
@@ -184,6 +189,10 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
       configuredProviderIds,
     ),
     mutationBlockedReason: page.mutationBlockedReason(),
+    providerCreationBlockedReason:
+      page.data !== null && !page.providerReservationsKnown()
+        ? page.providerCreationBlockedReason()
+        : null,
     defaultsMutationBlockedReason: modelProviderConfigMutationBlockedReason(page.context),
     busy: page.busy,
     messages: page.messages,

@@ -56,8 +56,12 @@ export class ProviderManager extends OpenClawLightDomElement {
   @property({ attribute: false }) probeResults: Record<string, ModelsProbeResult> = {};
   @property({ attribute: false }) probeBusy: Record<string, boolean> = {};
   @property({ attribute: false }) probeErrors: Record<string, { text: string }> = {};
-  /** Plugin-declared provider ids that a generated config key must not take. */
-  @property({ attribute: false }) reservedProviderIds: ReadonlySet<string> = new Set();
+  /**
+   * Plugin-declared provider ids that a generated config key must not take.
+   * Null means the reservation set is unknown, so creation is refused instead
+   * of risking a key that shadows a plugin-declared provider.
+   */
+  @property({ attribute: false }) reservedProviderIds: ReadonlySet<string> | null = null;
   @property({ attribute: false }) onCreated: (provider: string) => void = () => {};
   @property({ attribute: false }) onRefresh: () => void = () => {};
   @property({ attribute: false }) onProbe: (modelId: string) => void = () => {};
@@ -713,6 +717,15 @@ export class ProviderManager extends OpenClawLightDomElement {
     // A new provider's key is claimed inside the write transaction; an existing
     // entry keeps the exact key it was created with, so an edit never moves identity.
     const firstCreate = creating && !this.providerCreated;
+    // Hold one reservation snapshot for this write: a property refresh mid-write
+    // must not turn a checked creation into an unchecked claim.
+    const reservedProviderIds = this.reservedProviderIds;
+    if (firstCreate && !reservedProviderIds) {
+      // A generated key must never take a plugin-declared provider id; without
+      // that complete reservation set this write stays refused rather than risk it.
+      this.error = t("modelProviders.manager.providerCreationUnavailable");
+      return;
+    }
     const id = firstCreate ? "" : this.providerId.trim();
     if (!firstCreate && (!id || ["__proto__", "constructor", "prototype"].includes(id))) {
       // Auto-saves stay silent on incomplete input; an explicit submit reports it.
@@ -736,7 +749,9 @@ export class ProviderManager extends OpenClawLightDomElement {
             const patch = providerCreatePatch({
               config,
               entry: { ...this.draft, api: this.draft.api ?? "openai-completions", models: [] },
-              reservedProviderIds: this.reservedProviderIds,
+              // Non-null whenever this branch runs: the guard above refuses an
+              // unchecked creation before any config write.
+              reservedProviderIds: reservedProviderIds ?? [],
             });
             createdId = patch.providerId;
             return patch;

@@ -695,6 +695,8 @@ const enSettings = {
         "This provider configuration changed while you were editing. Close and reopen the editor to review the current settings, then retry.",
       unusableProviderKey:
         "This provider entry has an unusable configuration key. Correct the key in the configuration editor before editing it here.",
+      providerCreationUnavailable:
+        "The provider list has not loaded, so a new provider cannot be added yet. Refresh and try again.",
       urlRequired: "Enter a base URL for the custom provider.",
       duplicateModel:
         "Enter a model ID and name. New model IDs must be unique within this provider.",

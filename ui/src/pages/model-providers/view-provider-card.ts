@@ -30,6 +30,8 @@ export type ModelProvidersViewProps = Omit<
   /** Retryable error from picker-triggered catalog discovery. */
   catalogDiscoveryError: string | null;
   configBusy: boolean;
+  /** Why provider creation waits, e.g. plugin reservations are unavailable; null when creatable. */
+  providerCreationBlockedReason: string | null;
   unconfiguredProviders: ProviderOption[];
   defaultsMutationBlockedReason: string | null;
   messages: Record<string, ModelProviderRowMessage>;
