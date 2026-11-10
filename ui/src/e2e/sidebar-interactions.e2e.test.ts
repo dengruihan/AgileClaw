@@ -795,10 +795,14 @@ suite.define(() => {
         navScrollable: nav ? nav.scrollHeight - nav.clientHeight > 1 : null,
         automations: box('.sidebar-nav [data-sidebar-entry="route:cron"]'),
         automationsLabel: box('.sidebar-nav [data-sidebar-entry="route:cron"] .nav-item__text'),
+        rosterHeaderDisplay: (() => {
+          const header = document.querySelector(".sidebar-agent-roster__header");
+          return header ? getComputedStyle(header).display : "absent";
+        })(),
         well: box(".sidebar-sessions"),
         online: box(".sidebar-online"),
         footer: box(".sidebar-shell__footer"),
-        onlineMounted: !!document.querySelector(".sidebar-online"),
+        onlineMounted: Boolean(document.querySelector(".sidebar-online")),
         bodyOverflow: (() => {
           const body = document.querySelector<HTMLElement>(".sidebar-shell__body");
           return body ? body.scrollHeight - body.clientHeight : null;
@@ -841,6 +845,21 @@ suite.define(() => {
       )
       .toBe(true);
     return readSidebarClearance(page);
+  };
+  // Roster mode is a persisted UI setting: merge it into the bundled settings
+  // after first load and reload so the app boots with it — a whole-blob write
+  // would drop the synced sidebarEntries pins, and boot-time settings sync can
+  // clobber a pre-load write entirely.
+  const bootRosterMode = async (page: Page, baseUrl: string) => {
+    const settingsKey = controlUiBundledSettingsStorageKey(baseUrl);
+    await page.evaluate((key) => {
+      const previous = JSON.parse(localStorage.getItem(key) ?? "{}") as Record<string, unknown>;
+      localStorage.setItem(key, JSON.stringify({ ...previous, sidebarAgentsMode: "roster" }));
+    }, settingsKey);
+    await page.reload();
+    await expect
+      .poll(() => page.locator("openclaw-sidebar-agent-roster").count(), { timeout: 15_000 })
+      .toBeGreaterThanOrEqual(1);
   };
 
   it("keeps the whole Automations entry clear of the well when solo presence hides Online", async () => {
@@ -971,19 +990,7 @@ suite.define(() => {
     });
     try {
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
-      // Roster mode is a persisted UI setting: merge it into the bundled
-      // settings after first load and reload so the app boots with it — a
-      // whole-blob write would drop the synced sidebarEntries pins, and
-      // boot-time settings sync can clobber a pre-load write entirely.
-      const settingsKey = controlUiBundledSettingsStorageKey(suite.server.baseUrl);
-      await page.evaluate((key) => {
-        const previous = JSON.parse(localStorage.getItem(key) ?? "{}") as Record<string, unknown>;
-        localStorage.setItem(key, JSON.stringify({ ...previous, sidebarAgentsMode: "roster" }));
-      }, settingsKey);
-      await page.reload();
-      await expect
-        .poll(() => page.locator("openclaw-sidebar-agent-roster").count(), { timeout: 15_000 })
-        .toBeGreaterThanOrEqual(1);
+      await bootRosterMode(page, suite.server.baseUrl);
       const layout = await settleSidebarClearance(page, false);
       expect(layout.onlineMounted, "solo presence renders no Online section in roster mode").toBe(
         false,
@@ -1006,7 +1013,56 @@ suite.define(() => {
         layout.wholeSessionRowCount,
         "a whole session row and its name stay visible in the roster well",
       ).toBeGreaterThanOrEqual(1);
+      expect(
+        layout.rosterHeaderDisplay,
+        "the tight solo column yields the compact roster group header — the scroller cannot afford the header plus one whole row — so the row stays readable without scrolling the nav rail",
+      ).toBe("none");
       await captureSidebarUiProof(suite, page, "solo-clearance-roster-mode.png");
+    } finally {
+      await suite.closeBrowserContext(context);
+    }
+  });
+
+  // The header-yield concession is exact per column, not a height band: just
+  // above the tight solo slice the well scroller affords the compact group
+  // header plus one whole session row, so the header must stay mounted beside
+  // the readable row. The 520 case above pins the yielding side; this pins
+  // the roomy side of the 80px scroller threshold.
+  it("keeps the roster group header mounted beside a whole row above the tight solo slice", async () => {
+    const height = 560;
+    const baseTime = Date.parse("2026-07-01T16:00:00.000Z");
+    const rows = Array.from({ length: 6 }, (_, index) =>
+      sessionRow(`agent:main:chat-${index}`, `Chat ${index}`, baseTime - index * 60_000),
+    );
+    const context = await suite.newBrowserContext({
+      locale: "en-US",
+      serviceWorkers: "block",
+      viewport: { height, width: 1280 },
+    });
+    const page = await context.newPage();
+    await installMockGateway(page, {
+      methodResponses: {
+        "sessions.list": sessionsListResponse(rows),
+        "config.get": clearanceServerConfig(),
+        ...clearanceRosterResponses(),
+      },
+      sessionKey: "agent:main:main",
+      // Solo presence: the roster renders no Online section at any height.
+      presenceUsers: [{ self: true, id: "clearance-roster-roomy-self", name: "Riley" }],
+    });
+    try {
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
+      await bootRosterMode(page, suite.server.baseUrl);
+      const layout = await settleSidebarClearance(page, false);
+      await captureSidebarUiProof(suite, page, "solo-clearance-roster-roomy-header.png");
+      expect(
+        layout.rosterHeaderDisplay,
+        "the scroller affords the header plus one whole row, so the compact group header stays mounted",
+      ).not.toBe("none");
+      expect(
+        layout.wholeSessionRowCount,
+        "a whole session row and its name stay visible in the roster well",
+      ).toBeGreaterThanOrEqual(1);
     } finally {
       await suite.closeBrowserContext(context);
     }
@@ -1050,21 +1106,7 @@ suite.define(() => {
       try {
         await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
         if (mode === "roster") {
-          // Roster mode is a persisted UI setting: merge it into the bundled
-          // settings after first load and reload so the app boots with it (a
-          // whole-blob write would drop the synced sidebarEntries pins).
-          const settingsKey = controlUiBundledSettingsStorageKey(suite.server.baseUrl);
-          await page.evaluate((key) => {
-            const previous = JSON.parse(localStorage.getItem(key) ?? "{}") as Record<
-              string,
-              unknown
-            >;
-            localStorage.setItem(key, JSON.stringify({ ...previous, sidebarAgentsMode: "roster" }));
-          }, settingsKey);
-          await page.reload();
-          await expect
-            .poll(() => page.locator("openclaw-sidebar-agent-roster").count(), { timeout: 15_000 })
-            .toBeGreaterThanOrEqual(1);
+          await bootRosterMode(page, suite.server.baseUrl);
         }
         const layout = await settleSidebarClearance(page, false);
         // Captured before the assertions so a regressed run retains the exact
