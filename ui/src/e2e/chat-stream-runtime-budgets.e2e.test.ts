@@ -593,7 +593,13 @@ function buildLongTranscriptFixture(messageCount: number): Array<Record<string, 
 
 suite.define(() => {
   it("commits a streamed delta burst in frame-bound transcript batches", async () => {
-    await suite.withPage(createControlUiE2eContextOptions(), async ({ page }) => {
+    // This probe measures delta-to-frame coalescing. Smooth reveal owns its own
+    // cadence lane, so paint settled text here instead of counting reveal frames.
+    const contextOptions = {
+      ...createControlUiE2eContextOptions(),
+      reducedMotion: "reduce" as const,
+    };
+    await suite.withPage(contextOptions, async ({ page }) => {
       const gateway = await installMockGateway(page, { deferredMethods: ["sessions.describe"] });
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
       await gateway.waitForRequest("chat.startup");
@@ -732,7 +738,13 @@ suite.define(() => {
   });
 
   it("loads a long transcript and streams a rich turn inside budget ceilings", async () => {
-    await suite.withPage(createControlUiE2eContextOptions(), async ({ page, context }) => {
+    // Heap and wall budgets are presentation-agnostic; reveal frames would only
+    // add unrelated paint work, so this probe paints settled text.
+    const contextOptions = {
+      ...createControlUiE2eContextOptions(),
+      reducedMotion: "reduce" as const,
+    };
+    await suite.withPage(contextOptions, async ({ page, context }) => {
       const gateway = await installMockGateway(page, {
         historyMessages: buildLongTranscriptFixture(LONG_TRANSCRIPT_MESSAGE_COUNT),
       });

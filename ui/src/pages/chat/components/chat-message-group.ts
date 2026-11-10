@@ -43,6 +43,7 @@ import {
   resolveMessageActionDetails,
 } from "./chat-message-markdown.ts";
 import { messageReactionOptions, renderGroupMessageReactions } from "./chat-message-reactions.ts";
+import { revealAssistantText } from "./chat-message-reveal-buffer.ts";
 import { renderChatSendStatus } from "./chat-message-send-status.ts";
 import {
   isOwnSenderGroup,
@@ -121,9 +122,25 @@ function renderPreparedGroupMessage(
         : {}),
     };
   }
-  const isStreaming = group.isStreaming && index === group.messages.length - 1;
+  const revealed = revealAssistantText(opts.reveal, {
+    key: item.key,
+    runId: group.runId,
+    role: group.role,
+    searchResult: opts.searchResult,
+    text: source.displayMarkdown,
+    streaming: group.isStreaming && index === group.messages.length - 1,
+    liveTail: opts.reveal?.isTail(item.key) === true,
+    instant:
+      assistantMessageDisclosure?.expanded === true ||
+      !source.normalizedMessage.content.every((contentItem) => contentItem.type === "text"),
+  });
+  // Copy, reply targets, and message actions still derive from the canonical
+  // preparation; only the painted Markdown follows the reveal prefix.
+  const presented = revealed ? { ...source, displayMarkdown: revealed.text } : source;
+  const isStreaming =
+    (group.isStreaming && index === group.messages.length - 1) || revealed?.revealing === true;
   return html`${renderGroupedMessage(
-    source,
+    presented,
     item.key,
     {
       ...opts,

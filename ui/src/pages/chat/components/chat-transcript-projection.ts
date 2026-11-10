@@ -26,6 +26,7 @@ import { renderAgentRunFrame } from "./chat-agent-run-frame.ts";
 import { buildChatArchiveNotice, renderChatDivider, renderChatNotice } from "./chat-divider.ts";
 import { renderActivityGroup, renderMessageGroup } from "./chat-message-group.ts";
 import { assistantMediaPolicyKey, getChatMediaRenderVersion } from "./chat-message-media.ts";
+import { beginChatReveal } from "./chat-message-reveal-buffer.ts";
 import {
   renderStreamGroup,
   renderWorkGroupSummary,
@@ -80,6 +81,9 @@ export function projectChatTranscript(
   const state = getTranscriptState(props.paneId);
   const asyncQuestions = props.asyncQuestions;
   const requestUpdate = props.onRequestUpdate ?? (() => {});
+  // Presentation-only reveal: one buffer per pane, armed per live run. It owns
+  // the painted prefix only; canonical content and transcript bytes stay put.
+  const reveal = beginChatReveal(props, requestUpdate);
   const activeSession = props.selectedSession;
   const { showOwnSenderName, sessionPeople } = resolveTranscriptParticipants(props);
   const mediaPolicyKey = assistantMediaPolicyKey(activeSession, props.mediaPolicyEpoch);
@@ -289,6 +293,7 @@ export function projectChatTranscript(
     showAssistantAvatar: avatarPlacement === "gutter",
     // Tool results stamp only the device id; the selected row carries its name.
     resolveDeviceLabel: sessionScopeDeviceLabelResolver(activeSession),
+    reveal,
   } satisfies StreamGroupOptions;
   const streamGroupOptions = {
     ...sharedMessageRenderOptions,
@@ -404,8 +409,10 @@ export function projectChatTranscript(
       item.key === latestAssistantItemKey ? "latest-assistant" : ""
     }|${searchFiltering ? "search-result" : ""}`;
   };
+  // Row guard keys stay stable between reveal ticks; only the row whose run
+  // advanced repaints, so a long transcript never re-renders per frame.
   const rowPresentationDependencies = (item: ChatRenderItem): readonly unknown[] => {
-    const dependencies: unknown[] = [liveStatusSignature(item)];
+    const dependencies: unknown[] = [liveStatusSignature(item), reveal.versionForRow(item)];
     for (const group of chatItemGroups(item)) {
       for (const source of group.messages) {
         if (source.replyTarget?.kind === "id") {
@@ -489,14 +496,14 @@ export function projectChatTranscript(
     resolvedRecap && (!tailStatusOwner?.runId || tailStatusOwner.runId === resolvedRecap.runId)
       ? resolvedRecap
       : null;
-  latestAssistantItemKey =
-    !props.runActive &&
-    !props.runWorking &&
-    !searchFiltering &&
-    tailStatusOwner &&
-    (tailStatusOwner.kind !== "group" || !tailStatusOwner.isStreaming)
-      ? tailStatusOwner.key
-      : null;
+  const settledView = !props.runActive && !props.runWorking && !searchFiltering;
+  latestAssistantItemKey = reveal.focusTail(
+    settledView &&
+      tailStatusOwner &&
+      !(tailStatusOwner.kind === "group" && tailStatusOwner.isStreaming)
+      ? tailStatusOwner
+      : null,
+  );
   transcript.entryAnimations.project(chatItems);
   transcript.syncMessageRows(messageRowKeysById, transcriptMessageKeys);
   if (turnRecap !== null && tailStatusOwner?.runId === turnRecap.runId) {

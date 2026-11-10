@@ -12,11 +12,15 @@ import {
   releaseMarkdownTables,
 } from "../../../components/markdown-tables.ts";
 import { toSanitizedMarkdownHtml } from "../../../components/markdown.ts";
+import type { MessageGroup } from "../../../lib/chat/chat-types.ts";
+import { renderMessageGroup } from "./chat-message-group.ts";
 import {
   prepareMarkdownMedia,
   renderMarkdownMedia,
   type MarkdownMedia,
 } from "./chat-message-media-markdown.ts";
+import { ChatRevealBuffer, type ChatRevealFrameClock } from "./chat-message-reveal-buffer.ts";
+import { renderStreamGroup } from "./chat-message-stream.ts";
 import { renderMessageMarkdown } from "./chat-message-text.ts";
 
 let container: HTMLDivElement;
@@ -508,5 +512,211 @@ describe("streaming Markdown DOM", () => {
     renderReply("A **corrected** reply", false);
     expect(container.querySelector("input,img,hr")).toBeNull();
     expect(container.querySelector("strong")?.textContent).toBe("corrected");
+  });
+});
+
+function createRevealHarness(options: { reducedMotion?: () => boolean } = {}) {
+  let now = 1_000;
+  let nextHandle = 1;
+  let redraw = () => {};
+  const pending = new Map<number, () => void>();
+  const clock: ChatRevealFrameClock = {
+    now: () => now,
+    requestFrame: (callback) => {
+      const handle = nextHandle++;
+      pending.set(handle, callback);
+      return handle;
+    },
+    cancelFrame: (handle) => {
+      pending.delete(handle);
+    },
+  };
+  const buffer = new ChatRevealBuffer({ clock, reducedMotion: options.reducedMotion });
+  // The run is observed one projection before the text it produces arrives.
+  for (const initial of [true, false]) {
+    buffer.beginPass({
+      sessionKey: "agent:main:main",
+      runId: "reveal-run",
+      live: true,
+      historySettled: true,
+      scheduleUpdate: initial ? () => {} : () => redraw(),
+    });
+  }
+  return {
+    buffer,
+    adopt(draw: () => void) {
+      redraw = draw;
+    },
+    get pendingFrames() {
+      return pending.size;
+    },
+    async frame() {
+      now += 16;
+      const callbacks = [...pending.values()];
+      pending.clear();
+      for (const callback of callbacks) {
+        callback();
+      }
+      redraw();
+      await Promise.resolve();
+      await Promise.resolve();
+    },
+    async frames(count: number) {
+      for (let frame = 0; frame < count; frame += 1) {
+        await this.frame();
+      }
+    },
+    async drain(limit = 400) {
+      for (let frame = 0; frame < limit && pending.size > 0; frame += 1) {
+        await this.frame();
+      }
+    },
+  };
+}
+
+function drawStreamPart(
+  reveal: ChatRevealBuffer,
+  text: string,
+  onDraw: (draw: () => void) => void,
+) {
+  const draw = () =>
+    render(
+      html`<section ${markdownBlocks()}>
+        ${renderStreamGroup(
+          [
+            {
+              kind: "stream",
+              key: "reveal-stream",
+              text,
+              startedAt: 1_000,
+              isStreaming: true,
+              runId: "reveal-run",
+            },
+          ],
+          { sessionKey: "agent:main:main", reveal },
+        )}
+      </section>`,
+      container,
+    );
+  onDraw(draw);
+  draw();
+}
+
+describe("smooth assistant reveal", () => {
+  it("reveals a streaming Markdown body frame by frame without replacing retained controls", async () => {
+    const harness = createRevealHarness();
+    const source =
+      "Intro paragraph that keeps arriving with **emphasis**.\n\n```ts\nconst value = 1;\nconst next = value + 1;\n```";
+    drawStreamPart(harness.buffer, source, (draw) => harness.adopt(draw));
+    await Promise.resolve();
+
+    const painted = () => (container.querySelector(".chat-text")?.textContent ?? "").trim();
+    const initial = painted().length;
+    expect(initial).toBeGreaterThan(0);
+    expect(initial).toBeLessThan(source.length);
+
+    const bubble = container.querySelector(".chat-bubble")!;
+    expect(bubble.getAttribute("data-message-text")).toBe(source);
+
+    await harness.frame();
+    const textElement = container.querySelector(".chat-text");
+    await harness.frames(3);
+    expect(painted().length).toBeGreaterThan(initial);
+    expect(container.querySelector(".chat-text")).toBe(textElement);
+    expect(container.querySelector(".chat-bubble")).toBe(bubble);
+
+    await harness.drain();
+    expect(painted()).toContain("Intro paragraph that keeps arriving with emphasis.");
+    expect(painted()).toContain("const next = value + 1;");
+    expect(bubble.getAttribute("data-message-text")).toBe(source);
+    expect(container.querySelector(".code-block-wrapper")).not.toBeNull();
+    expect(harness.pendingFrames).toBe(0);
+  });
+
+  it("keeps the stream's reveal position when the settled final message replaces the row", async () => {
+    const harness = createRevealHarness();
+    const streamed = "A considered answer that keeps arriving across several frames.";
+    drawStreamPart(harness.buffer, streamed, (draw) => harness.adopt(draw));
+    await Promise.resolve();
+    await harness.frame();
+    await harness.frame();
+    const paintedBeforeHandoff = (container.querySelector(".chat-text")?.textContent ?? "").trim();
+    expect(paintedBeforeHandoff.length).toBeGreaterThan(0);
+    expect(paintedBeforeHandoff.length).toBeLessThan(streamed.length);
+
+    const finalText = `${streamed} It settles with **strong** emphasis.`;
+    const group: MessageGroup = {
+      kind: "group",
+      key: "assistant:2000",
+      role: "assistant",
+      messages: [
+        {
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: finalText }],
+            timestamp: 2_000,
+          },
+          key: "assistant:2000:message",
+          hasVisibleContent: true,
+        },
+      ],
+      visibleContent: "text",
+      timestamp: 2_000,
+      isStreaming: false,
+      runId: "reveal-run",
+    };
+    harness.adopt(() =>
+      render(
+        html`<section ${markdownBlocks()}>
+          ${renderMessageGroup(group, {
+            showReasoning: false,
+            showToolCalls: false,
+            reveal: harness.buffer,
+          })}
+        </section>`,
+        container,
+      ),
+    );
+    render(
+      html`<section ${markdownBlocks()}>
+        ${renderMessageGroup(group, {
+          showReasoning: false,
+          showToolCalls: false,
+          reveal: harness.buffer,
+        })}
+      </section>`,
+      container,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const handedOff = (container.querySelector(".chat-text")?.textContent ?? "").trim();
+    // The settled row continues from the exact text the stream row painted.
+    expect(handedOff).toBe(paintedBeforeHandoff);
+    expect(container.querySelector(".chat-bubble")?.classList.contains("streaming")).toBe(true);
+
+    await harness.drain();
+    const settled = (container.querySelector(".chat-text")?.textContent ?? "").trim();
+    expect(settled).toBe(
+      "A considered answer that keeps arriving across several frames. It settles with strong emphasis.",
+    );
+    expect(container.querySelector(".chat-bubble")?.classList.contains("streaming")).toBe(false);
+    expect(container.querySelector("strong")?.textContent).toBe("strong");
+    expect(container.querySelector(".chat-bubble")?.getAttribute("data-message-text")).toBe(
+      finalText,
+    );
+    expect(harness.pendingFrames).toBe(0);
+    expect(container.querySelectorAll(".chat-bubble")).toHaveLength(1);
+  });
+
+  it("paints reduced motion and history rows instantly", async () => {
+    const harness = createRevealHarness({ reducedMotion: () => true });
+    const source = "Instant reply with **emphasis**.";
+    drawStreamPart(harness.buffer, source, (draw) => harness.adopt(draw));
+    await Promise.resolve();
+    expect((container.querySelector(".chat-text")?.textContent ?? "").trim()).toBe(
+      "Instant reply with emphasis.",
+    );
+    expect(harness.pendingFrames).toBe(0);
   });
 });
