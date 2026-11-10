@@ -4,7 +4,9 @@ import { capturePluginLifecycleAuthority } from "../plugins/registry-lifecycle.j
 import { withPluginRuntimeGenerationScope } from "../plugins/runtime/generation-scope.js";
 import { augmentPreparedModelCatalogWithAgentHarness } from "./harness/model-catalog.js";
 import { resolveAgentRuntimePluginSelectionOwners } from "./harness/runtime-plugin-load-plan.js";
+import { orderModelCatalogForPicker } from "./model-catalog-order.js";
 import { buildPreparedModelCatalogSnapshot } from "./model-catalog.js";
+import { resolveAuthoredModelCatalogOrder } from "./model-selection-shared.js";
 import { ownPreparedPluginGeneration } from "./prepared-model-runtime.plugin-lifetime.js";
 import type {
   PreparedModelRuntimeCatalogMode,
@@ -201,12 +203,24 @@ export async function buildPreparedPluginModelCatalog(params: {
       ...(input.readOnly ? { readOnly: true } : {}),
       ...(input.workspaceDir ? { workspaceDir: input.workspaceDir } : {}),
     });
+    // The raw builder merges configured overlays onto registry positions. The
+    // prepared projection owns Model Settings order, so authored rows lead in
+    // their configured provider/model array order; discovered-only rows keep
+    // their provider-owned ranking.
+    const authoredOrder = resolveAuthoredModelCatalogOrder({
+      cfg: input.config,
+      manifestPlugins: metadataSnapshot,
+    });
+    const orderedSnapshot =
+      authoredOrder.modelRank.size > 0
+        ? { ...snapshot, entries: orderModelCatalogForPicker(snapshot.entries, authoredOrder) }
+        : snapshot;
     return params.catalogMode === "live" && params.includeNative !== false
       ? await augmentPreparedModelCatalogWithAgentHarness({
           input,
-          snapshot,
+          snapshot: orderedSnapshot,
           pluginRegistry,
         })
-      : snapshot;
+      : orderedSnapshot;
   });
 }

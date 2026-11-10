@@ -5,6 +5,7 @@ import * as providerPolicy from "../plugins/provider-policy-surface.js";
 import { orderModelCatalogForPicker } from "./model-catalog-order.js";
 import { buildPreparedModelCatalogSnapshot } from "./model-catalog.js";
 import type { ModelCatalogEntry } from "./model-catalog.types.js";
+import { resolveAuthoredModelCatalogOrder } from "./model-selection-shared.js";
 import { createModelVisibilityPolicy } from "./model-visibility-policy.js";
 import { prepareCapturedRuntimeFacts } from "./prepared-model-runtime.configured-catalog.js";
 import type { PreparedConfiguredRuntimeModel } from "./prepared-model-runtime.types.js";
@@ -67,15 +68,71 @@ describe("configured catalog registry composition", () => {
         metadataSnapshot,
         includeProviderPluginAugmentation: false,
       });
-      const expected = manifest
-        ? ["z-strong", "m-current", "a-small"]
-        : ["a-small", "m-current", "z-strong"];
-      expect(orderModelCatalogForPicker(modelCatalog.entries).map(({ id }) => id)).toEqual(
-        expected,
-      );
-      expect(orderModelCatalogForPicker(refreshed.entries).map(({ id }) => id)).toEqual(expected);
+      // Authored Model Settings order wins over registry/manifest ranking even
+      // when the manifest declares a different strongest-first order.
+      const authoredOrder = resolveAuthoredModelCatalogOrder({
+        cfg: config,
+        manifestPlugins: metadataSnapshot,
+      });
+      const expected = ["a-small", "m-current", "z-strong"];
+      expect(
+        orderModelCatalogForPicker(modelCatalog.entries, authoredOrder).map(({ id }) => id),
+      ).toEqual(expected);
+      expect(
+        orderModelCatalogForPicker(refreshed.entries, authoredOrder).map(({ id }) => id),
+      ).toEqual(expected);
     },
   );
+
+  it("keeps provider-owned ranking for a catalog with no authored configuration order", async () => {
+    const manifestModels = ["z-strong", "m-current", "a-small"].map((id) => ({
+      id,
+      name: id,
+      contextWindow: 32_000,
+      maxTokens: 4096,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      reasoning: false,
+      input: ["text" as const],
+    }));
+    const provider = {
+      api: "openai-responses" as const,
+      baseUrl: "https://fixture.invalid/v1",
+      models: manifestModels,
+    };
+    const config: OpenClawConfig = {};
+    const metadataSnapshot = createPluginMetadataSnapshotFixture({
+      plugins: [
+        {
+          id: "fixture",
+          providers: ["fixture"],
+          modelCatalog: {
+            providers: { fixture: provider },
+            discovery: { fixture: "runtime" },
+          },
+        },
+      ],
+    });
+    const registry = ModelRegistry.create(AuthStorage.inMemory({}), "captured:models.json", {
+      config,
+      includePluginCatalogs: false,
+      pluginMetadataSnapshot: metadataSnapshot,
+      modelsJsonContents: JSON.stringify({ providers: { fixture: provider } }),
+    });
+    const { modelCatalog } = prepareCapturedRuntimeFacts({
+      agentFacts: { input: { config }, configuredModelRefs: [] },
+      workspaceFacts: { pluginMetadataSnapshot: metadataSnapshot, inlineProviderModels: [] },
+      templateModelRegistry: registry,
+      configuredRuntimeModels: [],
+    });
+    const authoredOrder = resolveAuthoredModelCatalogOrder({
+      cfg: config,
+      manifestPlugins: metadataSnapshot,
+    });
+    expect(authoredOrder.modelRank.size).toBe(0);
+    expect(
+      orderModelCatalogForPicker(modelCatalog.entries, authoredOrder).map(({ id }) => id),
+    ).toEqual(["z-strong", "m-current", "a-small"]);
+  });
 
   it("bounds captured catalog policy loading by provider and refreshes it per invocation", () => {
     const loadPolicy = vi.spyOn(providerPolicy, "resolveDirectBundledProviderPolicySurface");

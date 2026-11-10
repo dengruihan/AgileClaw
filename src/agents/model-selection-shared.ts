@@ -25,6 +25,7 @@ import { hasExactConfiguredProviderModel } from "./configured-provider-model.js"
 import { DEFAULT_PROVIDER } from "./defaults.js";
 import { findModelCatalogEntry } from "./model-catalog-lookup.js";
 import { overlayCatalogMetadata } from "./model-catalog-metadata.js";
+import type { AuthoredModelCatalogOrder } from "./model-catalog-order.js";
 import type { ModelCatalogEntry } from "./model-catalog.types.js";
 import { isVllmQwenThinkingCompat } from "./model-compat-catalog.js";
 import type { ModelFallbackRouteResolution } from "./model-fallback.types.js";
@@ -1158,6 +1159,46 @@ function resolveConfiguredModelManifestPlugins(params: {
     env: process.env,
     ...(workspaceDir ? { workspaceDir } : {}),
   });
+}
+
+/**
+ * Authored catalog order from Model Settings: provider declaration order in
+ * `models.providers` plus each provider's `models[]` array order. Returns empty
+ * ranks when the configuration authors no models, so discovered/provider-owned
+ * catalogs keep their manifest/providerOrder ranking.
+ */
+export function resolveAuthoredModelCatalogOrder(params: {
+  cfg: OpenClawConfig;
+  manifestPlugins?: ModelManifestPlugins;
+}): AuthoredModelCatalogOrder {
+  const keyOf = createModelCatalogIdentityKeyResolver();
+  const providerRank = new Map<string, number>();
+  const modelRank = new Map<string, number>();
+  const providers = params.cfg.models?.providers;
+  if (!providers || typeof providers !== "object") {
+    return { keyOf, providerRank, modelRank };
+  }
+  const normalizeModelId = createConfiguredProviderCatalogModelIdNormalizer({
+    manifestPlugins: params.manifestPlugins,
+  });
+  let providerIndex = 0;
+  for (const [providerRaw, provider] of Object.entries(providers)) {
+    const providerId = normalizeProviderId(providerRaw);
+    if (!providerId || !Array.isArray(provider?.models)) {
+      continue;
+    }
+    providerRank.set(providerId, providerIndex++);
+    let modelIndex = 0;
+    for (const model of provider.models) {
+      const rawId = normalizeOptionalString(model?.id) ?? "";
+      const id = rawId ? normalizeModelId(providerId, rawId) : "";
+      if (!id) {
+        continue;
+      }
+      modelRank.set(keyOf({ provider: providerId, id }), modelIndex++);
+    }
+  }
+  return { keyOf, providerRank, modelRank };
 }
 
 /** Build catalog entries from configured provider model rows. */

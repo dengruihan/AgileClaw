@@ -56,13 +56,57 @@ export function compareModelCatalogEntries(a: ModelCatalogEntry, b: ModelCatalog
 }
 
 /**
- * Normalize the picker projection to the catalog owner's order: providers sort
- * by identity and each provider keeps its declared strongest-first order.
- * Selection is presentation state (the check mark); it never moves rows, and
- * the visibility layer retains a pinned or unavailable selection in place.
+ * Authoritative authored order from `models.providers.*`: provider declaration
+ * order plus each provider's `models[]` array order (the Model Settings order).
+ * Keys use the catalog identity resolver so aliases and manifest-normalized ids
+ * match the prepared rows.
+ */
+export type AuthoredModelCatalogOrder = {
+  keyOf: (entry: Pick<ModelCatalogEntry, "provider" | "id">) => string;
+  providerRank: ReadonlyMap<string, number>;
+  modelRank: ReadonlyMap<string, number>;
+};
+
+export function compareModelCatalogEntriesWithAuthoredOrder(
+  a: ModelCatalogEntry,
+  b: ModelCatalogEntry,
+  authoredOrder: AuthoredModelCatalogOrder,
+): number {
+  const aModelRank = authoredOrder.modelRank.get(authoredOrder.keyOf(a));
+  const bModelRank = authoredOrder.modelRank.get(authoredOrder.keyOf(b));
+  if (aModelRank !== undefined && bModelRank !== undefined) {
+    const aProviderRank = authoredOrder.providerRank.get(normalizeProviderId(a.provider));
+    const bProviderRank = authoredOrder.providerRank.get(normalizeProviderId(b.provider));
+    return (
+      (aProviderRank ?? Number.MAX_SAFE_INTEGER) - (bProviderRank ?? Number.MAX_SAFE_INTEGER) ||
+      aModelRank - bModelRank ||
+      compareModelCatalogEntries(a, b)
+    );
+  }
+  // Authored rows lead discovered-only rows; the catalog owner never had an
+  // authored position to preserve for the latter.
+  if (aModelRank !== undefined) {
+    return -1;
+  }
+  if (bModelRank !== undefined) {
+    return 1;
+  }
+  return compareModelCatalogEntries(a, b);
+}
+
+/**
+ * Normalize a display projection to the catalog owner's order. Authored model
+ * settings order wins whenever a row was declared in `models.providers.*`;
+ * rows with no authored position keep the provider-owned (manifest/providerOrder)
+ * ranking. Selection is presentation state and never moves rows.
  */
 export function orderModelCatalogForPicker(
   entries: readonly ModelCatalogEntry[],
+  authoredOrder?: AuthoredModelCatalogOrder,
 ): ModelCatalogEntry[] {
-  return entries.toSorted(compareModelCatalogEntries);
+  return entries.toSorted((a, b) =>
+    authoredOrder
+      ? compareModelCatalogEntriesWithAuthoredOrder(a, b, authoredOrder)
+      : compareModelCatalogEntries(a, b),
+  );
 }

@@ -18,7 +18,10 @@ import type {
 import { createModelCatalogView } from "./model-catalog-view.js";
 import type { ModelCatalogEntry } from "./model-catalog.js";
 import type { ModelRef } from "./model-ref-shared.js";
-import { dedupeModelCatalogEntries } from "./model-selection-shared.js";
+import {
+  dedupeModelCatalogEntries,
+  resolveAuthoredModelCatalogOrder,
+} from "./model-selection-shared.js";
 import {
   RUNTIME_MODEL_VISIBILITY_NORMALIZATION,
   createModelVisibilityPolicy,
@@ -153,6 +156,12 @@ export async function prepareLogicalVisibleModelCatalog(
       ...RUNTIME_MODEL_VISIBILITY_NORMALIZATION,
     });
   const keyOf = createModelCatalogIdentityKeyResolver();
+  // Authored Model Settings order owns configured rows; discovered-only rows
+  // keep their provider-owned (manifest/providerOrder) ranking.
+  const authoredOrder = resolveAuthoredModelCatalogOrder({
+    cfg: params.cfg,
+    manifestPlugins: params.metadataSnapshot,
+  });
   const catalogView = createModelCatalogView({
     cfg: params.cfg,
     catalog: params.catalog,
@@ -267,7 +276,7 @@ export async function prepareLogicalVisibleModelCatalog(
         return [row];
       });
       return leadSelectedListingRow(
-        orderModelCatalogForPicker(dedupeByKey(projected, publicationKeyOf)),
+        orderModelCatalogForPicker(dedupeByKey(projected, publicationKeyOf), authoredOrder),
         params.selectedModel,
         publicationKeyOf,
       );
