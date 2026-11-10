@@ -1467,7 +1467,8 @@ openclaw-settings-save-indicator:empty {
      reserves generous room beside the rail; solo presence allocates for the
      session well's floor only, so the rail may use everything above that
      floor instead of being fractionally clipped when its intrinsic size
-     crosses 60% (the joint floors live on .sidebar-session-content). */
+     crosses 60% (the joint floors live on .sidebar-session-content). Inside
+     the compact-height band the solo cap compresses to the band floor. */
   flex: 0 1 auto;
   min-height: 2rem;
   max-height: calc(100% - var(--sidebar-session-well-floor) - 1.75rem);
@@ -1511,8 +1512,8 @@ openclaw-settings-save-indicator:empty {
 
 /* Solo presence releases the Online share of the joint floor (renderAppSidebarOnline
    renders no section until a second identity is online). Class-scoped by the
-   sidebar render owner; it stays ahead of the compact-height band below, whose
-   narrower floors still win for both presence states. */
+   sidebar render owner. The compact-height band below restates these same
+   solo selectors so its narrower floors stay authoritative there. */
 .sidebar--solo-presence .sidebar-session-content,
 .sidebar--solo-presence .sidebar-session-content > openclaw-sidebar-agent-roster {
   min-height: calc(var(--sidebar-session-well-floor) + 1.75rem);
@@ -2665,10 +2666,20 @@ openclaw-settings-save-indicator:empty {
 
   /* The floors compress to one whole session row plus its padding and
      margins: the nav rail keeps its 2rem scrollable floor, so one whole
-     session row stays readable at every height in this band. */
+     session row stays readable at every height in this band. The solo
+     selectors restate the class-scoped release above, which otherwise
+     out-specificities this band and would keep the ordinary allocation. */
   .sidebar-session-content,
-  .sidebar-session-content > openclaw-sidebar-agent-roster {
+  .sidebar-session-content > openclaw-sidebar-agent-roster,
+  .sidebar--solo-presence .sidebar-session-content,
+  .sidebar--solo-presence .sidebar-session-content > openclaw-sidebar-agent-roster {
     min-height: calc(var(--sidebar-session-row-min-height) + 12px + 1rem);
+  }
+
+  /* Solo releases the rail's 60% cap for the ordinary allocation; inside the
+     band the rail must instead yield everything above the compressed floor. */
+  .sidebar--solo-presence .sidebar-nav {
+    max-height: calc(100% - var(--sidebar-session-row-min-height) - 12px - 1rem);
   }
 
   .sidebar-sessions {

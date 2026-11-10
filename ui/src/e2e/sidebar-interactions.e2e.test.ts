@@ -734,6 +734,51 @@ suite.define(() => {
       valid: true,
     };
   };
+  const clearanceRosterResponses = () => ({
+    // Roster mode joins agent cards with the session sections.
+    "agents.list": {
+      defaultId: "main",
+      mainKey: "main",
+      scope: "per-sender",
+      agents: [
+        { id: "main", name: "Harbor", identity: { emoji: "⚓" } },
+        { id: "forge", name: "Forge", identity: { emoji: "🔧" } },
+      ],
+    },
+    "agent.identity.get": {
+      cases: [
+        { id: "main", name: "Harbor" },
+        { id: "forge", name: "Forge" },
+      ].map((agent) => ({
+        match: { agentId: agent.id },
+        response: { agentId: agent.id, name: agent.name, emoji: "⚓", avatar: "" },
+      })),
+    },
+    "chat.startup": {
+      agentsList: {
+        defaultId: "main",
+        mainKey: "main",
+        scope: "per-sender",
+        agents: [
+          { id: "main", name: "Harbor", identity: { emoji: "⚓" } },
+          { id: "forge", name: "Forge", identity: { emoji: "🔧" } },
+        ],
+      },
+      messages: [],
+      metadata: { models: [] },
+      sessionId: "session:agent:main:main",
+      thinkingLevel: null,
+    },
+    "cron.list": {
+      jobs: [],
+      snapshotRevision: "sidebar-clearance-roster",
+      total: 0,
+      offset: 0,
+      limit: 50,
+      hasMore: false,
+      nextOffset: null,
+    },
+  });
   const readSidebarClearance = (page: Page) =>
     page.evaluate(() => {
       const box = (selector: string) => {
@@ -918,49 +963,7 @@ suite.define(() => {
       methodResponses: {
         "sessions.list": sessionsListResponse(rows),
         "config.get": clearanceServerConfig(),
-        // Roster mode joins agent cards with the session sections.
-        "agents.list": {
-          defaultId: "main",
-          mainKey: "main",
-          scope: "per-sender",
-          agents: [
-            { id: "main", name: "Harbor", identity: { emoji: "⚓" } },
-            { id: "forge", name: "Forge", identity: { emoji: "🔧" } },
-          ],
-        },
-        "agent.identity.get": {
-          cases: [
-            { id: "main", name: "Harbor" },
-            { id: "forge", name: "Forge" },
-          ].map((agent) => ({
-            match: { agentId: agent.id },
-            response: { agentId: agent.id, name: agent.name, emoji: "⚓", avatar: "" },
-          })),
-        },
-        "chat.startup": {
-          agentsList: {
-            defaultId: "main",
-            mainKey: "main",
-            scope: "per-sender",
-            agents: [
-              { id: "main", name: "Harbor", identity: { emoji: "⚓" } },
-              { id: "forge", name: "Forge", identity: { emoji: "🔧" } },
-            ],
-          },
-          messages: [],
-          metadata: { models: [] },
-          sessionId: "session:agent:main:main",
-          thinkingLevel: null,
-        },
-        "cron.list": {
-          jobs: [],
-          snapshotRevision: "sidebar-clearance-roster",
-          total: 0,
-          offset: 0,
-          limit: 50,
-          hasMore: false,
-          nextOffset: null,
-        },
+        ...clearanceRosterResponses(),
       },
       sessionKey: "agent:main:main",
       // Solo presence: the roster renders no Online section at any height.
@@ -1008,6 +1011,83 @@ suite.define(() => {
       await suite.closeBrowserContext(context);
     }
   });
+
+  // Solo presence must keep the compact-height band's narrower floors: the
+  // class-scoped release out-specificities the band's plain selectors below
+  // 500px, so the band restates the solo selectors — and without that, the
+  // ordinary 98px allocation over-reserved compact solo columns until the
+  // well overlapped the footer while duo kept the compressed 58px floor.
+  const soloCompactHeights = [500, 400, 300, 280] as const;
+
+  it.each(
+    soloCompactHeights.flatMap((height) => [
+      { height, mode: "sessions" as const },
+      { height, mode: "roster" as const },
+    ]),
+  )(
+    "keeps compact solo columns free of overflow at $height ($mode mode)",
+    async ({ height, mode }) => {
+      const baseTime = Date.parse("2026-07-01T16:00:00.000Z");
+      const rows = Array.from({ length: 6 }, (_, index) =>
+        sessionRow(`agent:main:chat-${index}`, `Chat ${index}`, baseTime - index * 60_000),
+      );
+      const context = await suite.newBrowserContext({
+        locale: "en-US",
+        serviceWorkers: "block",
+        viewport: { height, width: 1280 },
+      });
+      const page = await context.newPage();
+      await installMockGateway(page, {
+        methodResponses: {
+          "sessions.list": sessionsListResponse(rows),
+          "config.get": clearanceServerConfig(),
+          ...(mode === "roster" ? clearanceRosterResponses() : {}),
+        },
+        sessionKey: "agent:main:main",
+        // Solo presence: no Online section at any height.
+        presenceUsers: [{ self: true, id: `clearance-compact-self-${mode}`, name: "Riley" }],
+      });
+      try {
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
+        if (mode === "roster") {
+          // Roster mode is a persisted UI setting: merge it into the bundled
+          // settings after first load and reload so the app boots with it (a
+          // whole-blob write would drop the synced sidebarEntries pins).
+          const settingsKey = controlUiBundledSettingsStorageKey(suite.server.baseUrl);
+          await page.evaluate((key) => {
+            const previous = JSON.parse(localStorage.getItem(key) ?? "{}") as Record<
+              string,
+              unknown
+            >;
+            localStorage.setItem(key, JSON.stringify({ ...previous, sidebarAgentsMode: "roster" }));
+          }, settingsKey);
+          await page.reload();
+          await expect
+            .poll(() => page.locator("openclaw-sidebar-agent-roster").count(), { timeout: 15_000 })
+            .toBeGreaterThanOrEqual(1);
+        }
+        const layout = await settleSidebarClearance(page, false);
+        // Captured before the assertions so a regressed run retains the exact
+        // compact state it failed on.
+        await captureSidebarUiProof(suite, page, `solo-compact-${mode}-${height}.png`);
+        expect(layout.onlineMounted, "solo presence renders no Online section").toBe(false);
+        expect(
+          layout.bodyOverflow,
+          "the compact solo column keeps zero body overflow",
+        ).toBeLessThanOrEqual(1);
+        expect(
+          layout.well!.bottom,
+          "the compact solo well stays above the footer divider",
+        ).toBeLessThanOrEqual(layout.footer!.top + 0.5);
+        expect(
+          layout.wholeSessionRowCount,
+          "a whole session row and its name stay visible",
+        ).toBeGreaterThanOrEqual(1);
+      } finally {
+        await suite.closeBrowserContext(context);
+      }
+    },
+  );
 
   it("dismisses the Online filter popover when the second identity leaves", async () => {
     await suite.withPage(
