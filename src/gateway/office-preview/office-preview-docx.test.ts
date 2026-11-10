@@ -6,6 +6,7 @@ import {
   buildDocxFixture,
   buildRepeatedImageDocxFixture,
   buildStyledDocxFixture,
+  incompressibleText,
   textBoxDocxBody,
 } from "./office-preview.test-support.js";
 
@@ -32,6 +33,27 @@ function paragraphByText(preview: Preview, text: string): Paragraph | undefined 
     .find((block): block is Paragraph => block.kind === "paragraph" && block.text === text);
 }
 
+function allParagraphs(preview: Preview): Paragraph[] {
+  const blocks = preview.pages?.flatMap((page) => page.blocks) ?? [];
+  return [
+    ...blocks.flatMap((block) =>
+      block.kind === "paragraph"
+        ? [block]
+        : block.kind === "table"
+          ? block.rows.flatMap((row) => row.cells.flatMap((cell) => cell.paragraphs))
+          : [],
+    ),
+    ...(preview.header ?? []),
+    ...(preview.footer ?? []),
+  ];
+}
+
+function runByText(preview: Preview, text: string) {
+  return allParagraphs(preview)
+    .flatMap((paragraph) => paragraph.runs)
+    .find((run) => run.text === text);
+}
+
 function tableOn(preview: Preview, pageIndex: number): Table | undefined {
   return preview.pages?.[pageIndex]?.blocks.find((block): block is Table => block.kind === "table");
 }
@@ -54,8 +76,11 @@ describe("styled document layout", () => {
       marginBottomPt: 72,
       marginLeftPt: 72,
     });
-    expect(firstPage?.header?.[0]?.text).toBe("Confidential");
-    expect(firstPage?.footer?.[0]?.text).toBe("Page footer");
+    // Headers/footers are document-level and serialized once, not per page.
+    expect(preview?.header?.[0]?.text).toBe("Confidential");
+    expect(preview?.footer?.[0]?.text).toBe("Page footer");
+    expect(firstPage).not.toHaveProperty("header");
+    expect(firstPage).not.toHaveProperty("footer");
 
     const title = paragraphByText(preview as Preview, "Quarterly Layout");
     expect(title).toMatchObject({
@@ -255,8 +280,142 @@ describe("styled document layout", () => {
       // Content is not silently invented into the body; the approximation is counted.
       expect(JSON.stringify(preview?.pages)).not.toContain("TEXT_BOX_NOTE");
       expect(preview?.omitted).toContainEqual({ feature: "floatingObjects", count: 1 });
+      expect(preview?.omitted?.some((entry) => entry.feature === "drawings")).toBe(false);
     },
   );
+
+  it("bounds table accessibility text with the rich-text budget", async () => {
+    const rows = Array.from({ length: 14 }, (_, rowIndex) => {
+      const cells = Array.from({ length: 10 }, (_unused, columnIndex) => {
+        const chunk = incompressibleText(8_000, rowIndex * 10 + columnIndex + 1);
+        return `<w:tc><w:p><w:r><w:t>${chunk}</w:t></w:r></w:p></w:tc>`;
+      }).join("");
+      return `<w:tr>${cells}</w:tr>`;
+    }).join("");
+    const preview = parseOfficePreviewBuffer(
+      await buildDocxFixture(
+        `<w:tbl><w:tblGrid><w:gridCol w:w="1000"/></w:tblGrid>${rows}</w:tbl>`,
+      ),
+      "docx",
+    );
+
+    expect(Value.Check(SessionFileOfficePreviewSchema, preview)).toBe(true);
+    const probeParagraphs = allParagraphs(preview as Preview);
+    const paragraphChars = probeParagraphs.reduce(
+      (total, paragraph) => total + paragraph.text.length,
+      0,
+    );
+    const runChars = probeParagraphs
+      .flatMap((paragraph) => paragraph.runs)
+      .reduce((total, run) => total + run.text.length, 0);
+    const legacyChars = (preview?.blocks ?? []).reduce(
+      (total, block) => total + block.text.length,
+      0,
+    );
+    // Every serialized text representation is bounded by the document budget.
+    expect(runChars).toBe(400_000);
+    expect(paragraphChars).toBe(400_000);
+    expect(legacyChars).toBe(400_000);
+    expect(Buffer.byteLength(JSON.stringify(preview))).toBeLessThan(1_600_000);
+    expect(preview?.truncated).toBe(true);
+  });
+
+  it("serializes headers and footers once for all page cards", async () => {
+    const headerTexts = Array.from({ length: 20 }, (_, index) =>
+      incompressibleText(2_000, 10_000 + index),
+    );
+    const footerTexts = Array.from({ length: 20 }, (_, index) =>
+      incompressibleText(2_000, 20_000 + index),
+    );
+    const headerParagraphs = headerTexts
+      .map((text) => `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`)
+      .join("");
+    const footerParagraphs = footerTexts
+      .map((text) => `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`)
+      .join("");
+    const pages = Array.from(
+      { length: 50 },
+      (_, index) =>
+        `<w:p><w:r><w:t>Page ${index + 1}</w:t></w:r></w:p>${
+          index < 49 ? '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' : ""
+        }`,
+    ).join("");
+    const preview = parseOfficePreviewBuffer(
+      await buildDocxFixture(
+        `${pages}<w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/><w:footerReference w:type="default" r:id="rIdFooter"/><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>`,
+        {
+          documentRelationships: [
+            {
+              id: "rIdHeader",
+              type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
+              target: "header1.xml",
+            },
+            {
+              id: "rIdFooter",
+              type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer",
+              target: "footer1.xml",
+            },
+          ],
+          extraParts: [
+            {
+              path: "word/header1.xml",
+              content: `<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${headerParagraphs}</w:hdr>`,
+            },
+            {
+              path: "word/footer1.xml",
+              content: `<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${footerParagraphs}</w:ftr>`,
+            },
+          ],
+        },
+      ),
+      "docx",
+    );
+
+    expect(Value.Check(SessionFileOfficePreviewSchema, preview)).toBe(true);
+    expect(preview?.pages).toHaveLength(50);
+    expect(preview?.header).toHaveLength(20);
+    expect(preview?.footer).toHaveLength(20);
+    expect(preview?.header?.every((paragraph) => paragraph.text.length === 2_000)).toBe(true);
+    expect(preview?.pages?.[0]).not.toHaveProperty("header");
+    const json = JSON.stringify(preview);
+    // Each header/footer paragraph serializes once as text plus one run, without
+    // being copied onto the 50 page cards.
+    expect(json.split(headerTexts[0]!).length - 1).toBe(2);
+    expect(json.split(footerTexts[0]!).length - 1).toBe(2);
+    expect(Buffer.byteLength(json)).toBeLessThan(400_000);
+    expect(preview?.truncated).toBeUndefined();
+  });
+
+  it("counts an unsupported inline DrawingML shape exactly once", async () => {
+    const inlineShape = `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="952500" cy="952500"/><wp:docPr id="7" name="AutoShape"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wps:wsp><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
+    const anchoredShape = inlineShape
+      .replace("wp:inline", "wp:anchor")
+      .replace("</wp:inline>", "</wp:anchor>");
+    const inline = parseOfficePreviewBuffer(await buildDocxFixture(inlineShape), "docx");
+    const anchored = parseOfficePreviewBuffer(await buildDocxFixture(anchoredShape), "docx");
+
+    expect(inline?.omitted).toContainEqual({ feature: "drawings", count: 1 });
+    expect(inline?.omitted?.some((entry) => entry.feature === "floatingObjects")).toBe(false);
+    expect(inline?.pages).toEqual([]);
+    expect(anchored?.omitted).toContainEqual({ feature: "floatingObjects", count: 1 });
+    expect(anchored?.omitted?.some((entry) => entry.feature === "drawings")).toBe(false);
+  });
+
+  it("treats w:u none as no underline and lets a direct run clear inherited underline", async () => {
+    const stylesXml = `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:style w:type="character" w:styleId="Underlined"><w:name w:val="Underlined"/><w:rPr><w:u w:val="single"/></w:rPr></w:style>
+<w:style w:type="character" w:styleId="NoUnderline"><w:name w:val="No Underline"/><w:basedOn w:val="Underlined"/><w:rPr><w:u w:val="none"/></w:rPr></w:style>
+</w:styles>`;
+    const body = `<w:p><w:r><w:rPr><w:u w:val="none"/></w:rPr><w:t>Direct none</w:t></w:r></w:p>
+<w:p><w:r><w:rPr><w:rStyle w:val="Underlined"/></w:rPr><w:t>Inherited underline</w:t></w:r><w:r><w:rPr><w:rStyle w:val="Underlined"/><w:u w:val="none"/></w:rPr><w:t>Cleared underline</w:t></w:r></w:p>
+<w:p><w:r><w:rPr><w:rStyle w:val="NoUnderline"/></w:rPr><w:t>BasedOn cleared</w:t></w:r></w:p>`;
+    const preview = parseOfficePreviewBuffer(await buildDocxFixture(body, { stylesXml }), "docx");
+
+    expect(runByText(preview as Preview, "Direct none")?.underline).toBeUndefined();
+    expect(runByText(preview as Preview, "Inherited underline")?.underline).toBe(true);
+    expect(runByText(preview as Preview, "Cleared underline")?.underline).toBeUndefined();
+    expect(runByText(preview as Preview, "BasedOn cleared")?.underline).toBeUndefined();
+  });
 
   it("bounds approximate pages and reports the cut", async () => {
     const body = Array.from(

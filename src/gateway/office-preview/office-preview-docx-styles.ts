@@ -212,8 +212,12 @@ export function resolveRunStyle(
   if (italic && onOff(italic)) {
     style.italic = true;
   }
-  if (underline && onOff(underline)) {
-    style.underline = true;
+  if (underline) {
+    const underlineValue = valAttribute(underline)?.toLowerCase();
+    // `none` is the explicit off value; it must clear an inherited underline.
+    if (underlineValue !== "none" && onOff(underline)) {
+      style.underline = true;
+    }
   }
   if (strike && onOff(strike)) {
     style.strike = true;

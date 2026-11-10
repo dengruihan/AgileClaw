@@ -259,9 +259,6 @@ const SessionFileOfficePageSchema = closedObject({
   marginRightPt: Type.Number({ minimum: 0, maximum: 1_000 }),
   marginBottomPt: Type.Number({ minimum: 0, maximum: 1_000 }),
   marginLeftPt: Type.Number({ minimum: 0, maximum: 1_000 }),
-  /** Header/footer paragraphs for the document's final section. */
-  header: Type.Optional(Type.Array(SessionFileOfficeParagraphSchema, { maxItems: 20 })),
-  footer: Type.Optional(Type.Array(SessionFileOfficeParagraphSchema, { maxItems: 20 })),
   blocks: Type.Array(SessionFileOfficeDocBlockSchema, { maxItems: 500 }),
 });
 
@@ -300,6 +297,12 @@ export const SessionFileOfficePreviewSchema = closedObject({
   pages: Type.Optional(Type.Array(SessionFileOfficePageSchema, { maxItems: 50 })),
   /** Unique inline images referenced by page image blocks. */
   media: Type.Optional(Type.Array(SessionFileOfficeMediaSchema, { maxItems: 24 })),
+  /**
+   * Header/footer paragraphs for the document's supported (final) section.
+   * They are serialized once and apply to every page card.
+   */
+  header: Type.Optional(Type.Array(SessionFileOfficeParagraphSchema, { maxItems: 20 })),
+  footer: Type.Optional(Type.Array(SessionFileOfficeParagraphSchema, { maxItems: 20 })),
   /** Features this preview intentionally dropped or approximated. */
   omitted: Type.Optional(Type.Array(SessionFileOfficeOmittedSchema, { maxItems: 20 })),
 });

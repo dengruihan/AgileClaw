@@ -199,6 +199,8 @@ export async function buildDocxFixture(
   options?: {
     /** Relationships appended to the document part, including external targets. */
     documentRelationships?: readonly OfficeFixtureRelationship[];
+    /** Word styles part used to prove default/basedOn chain resolution. */
+    stylesXml?: string;
     extraParts?: readonly OfficeFixtureFile[];
   },
 ): Promise<Buffer> {
@@ -225,6 +227,7 @@ export async function buildDocxFixture(
       path: "word/document.xml",
       content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="${OFFICE_REL_NS}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><w:body>${body}</w:body></w:document>`,
     },
+    ...(options?.stylesXml ? [{ path: "word/styles.xml", content: options.stylesXml }] : []),
     ...(options?.documentRelationships
       ? [
           {
@@ -597,4 +600,15 @@ export function textBoxDocxBody(params: {
   }
   const container = params.form === "anchor" ? "wp:anchor" : "wp:inline";
   return `<w:p><w:r><w:drawing><${container}><wp:extent cx="952500" cy="952500"/><wp:docPr id="3" name="Text Box"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wps:wsp><wps:txbx>${content}</wps:txbx></wps:wsp></a:graphicData></a:graphic></${container}></w:drawing></w:r></w:p>`;
+}
+
+/** Deterministic low-compressibility text for budget probes. */
+export function incompressibleText(length: number, seed: number): string {
+  let state = seed >>> 0;
+  let text = "";
+  for (let index = 0; index < length; index += 1) {
+    state = (state * 1_664_525 + 1_013_904_223) >>> 0;
+    text += String.fromCharCode(97 + (state % 26));
+  }
+  return text;
 }

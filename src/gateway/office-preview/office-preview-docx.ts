@@ -210,8 +210,17 @@ function readDrawingImages(drawing: XmlElement, state: DocxState): SessionFileOf
   }
   const extent = elements(drawing, "wp:extent")[0] ?? elements(drawing, "a:ext")[0];
   const blip = elements(drawing, "a:blip")[0];
+  const relationshipId = attribute(blip, "r:embed") ?? attribute(blip, "r:link");
+  if (!relationshipId) {
+    // Auto-shapes, ink, and other DrawingML the page payload cannot place are
+    // counted once; text boxes/anchors above already own their classification.
+    if (textBoxes === 0 && elements(drawing, "wp:anchor").length === 0) {
+      state.counter.add("drawings");
+    }
+    return [];
+  }
   const image = state.media.read({
-    relationshipId: attribute(blip, "r:embed") ?? attribute(blip, "r:link"),
+    relationshipId,
     alt: attribute(elements(drawing, "wp:docPr")[0], "descr"),
     widthPt: emuToPoints(attribute(extent, "cx")) ?? 0,
     heightPt: emuToPoints(attribute(extent, "cy")) ?? 0,
@@ -285,15 +294,22 @@ function buildParagraphEvents(paragraph: XmlElement, state: DocxState): Paragrap
     if (runs.length === 0 && !text && images.length === 0) {
       return;
     }
+    // Accessibility text is the concatenation of the budgeted runs, never the
+    // unbudgeted raw accumulator, so it cannot outgrow the rich-text budget.
+    const accessibleText = truncate(
+      cleanText(runs.map((run) => run.text).join("")),
+      OFFICE_PREVIEW_MAX_BLOCK_CHARS,
+    );
     events.push({
       kind: "content",
       content: {
         paragraph: {
           ...baseParagraph,
           ...(markerPending ? { listMarker: markerPending } : {}),
-          text: truncate(cleanText(text), OFFICE_PREVIEW_MAX_BLOCK_CHARS),
+          text: accessibleText,
           runs,
         },
+        // The legacy stream keeps its own independently budgeted raw text.
         text,
         images: images.splice(0),
       },
@@ -480,6 +496,7 @@ function buildHeaderFooter(
   sectPr: XmlElement | undefined,
   tag: "headerReference" | "footerReference",
   counter: OmittedFeatureCounter,
+  budget: CharacterBudget,
 ): SessionFileOfficeParagraph[] | undefined {
   const relationshipId = headerFooterPartId(sectPr, tag);
   const partPath = relationshipId ? relationships.get(relationshipId) : undefined;
@@ -501,7 +518,7 @@ function buildHeaderFooter(
       // Header/footer images are not represented in the page payload.
       counter.add("images", drawings);
     }
-    const text = truncate(paragraphText(paragraph).trim(), 2_000);
+    const text = budget.take(cleanText(paragraphText(paragraph)).trim(), 2_000);
     if (!text) {
       continue;
     }
@@ -572,20 +589,6 @@ export function parseDocument(archive: OfficeZipArchive): SessionFileOfficePrevi
     counter.add("multipleSections", sectionProperties.length - 1);
   }
   counter.add("exactPagination", 0);
-  const header = buildHeaderFooter(
-    archive,
-    relationships,
-    sectionProperties.at(-1),
-    "headerReference",
-    counter,
-  );
-  const footer = buildHeaderFooter(
-    archive,
-    relationships,
-    sectionProperties.at(-1),
-    "footerReference",
-    counter,
-  );
 
   const events: ParagraphEvent[] = [];
   const collect = (container: XmlElement): void => {
@@ -626,8 +629,6 @@ export function parseDocument(archive: OfficeZipArchive): SessionFileOfficePrevi
     }
     pages.push({
       ...geometry,
-      ...(header ? { header } : {}),
-      ...(footer ? { footer } : {}),
       blocks,
     });
     blocks = [];
@@ -698,6 +699,24 @@ export function parseDocument(archive: OfficeZipArchive): SessionFileOfficePrevi
   if (pageStarted) {
     pushPage();
   }
+  // Header/footer paragraphs apply to every page card, so they are serialized
+  // once at document level and charged to the same rich-text budget.
+  const header = buildHeaderFooter(
+    archive,
+    relationships,
+    sectionProperties.at(-1),
+    "headerReference",
+    counter,
+    state.runBudget,
+  );
+  const footer = buildHeaderFooter(
+    archive,
+    relationships,
+    sectionProperties.at(-1),
+    "footerReference",
+    counter,
+    state.runBudget,
+  );
   if (state.runBudget.exhausted || state.legacyBudget.exhausted) {
     state.truncated = true;
   }
@@ -706,6 +725,8 @@ export function parseDocument(archive: OfficeZipArchive): SessionFileOfficePrevi
     blocks: legacyBlocks,
     pages,
     ...(state.media.media.length > 0 ? { media: state.media.media } : {}),
+    ...(header ? { header } : {}),
+    ...(footer ? { footer } : {}),
     ...(state.truncated ? { truncated: true } : {}),
     omitted: counter.list(),
   };
