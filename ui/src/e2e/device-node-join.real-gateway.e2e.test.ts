@@ -466,6 +466,7 @@ suite.define(() => {
           (await dialog.locator(".device-pair-setup__fallback code").textContent()) ?? ""
         ).trim();
         expect(displayed.length).toBeGreaterThan(0);
+        await capture(page, "08-setup-code-displayed.png");
         const setupCode = displayed.startsWith("oc-pair://") ? displayed : `oc-pair://${displayed}`;
         const payload = decodePairingSetupCode(setupCode) as PairingPayload;
         expect(payload.url).toBe(`ws://127.0.0.1:${port}`);
@@ -493,6 +494,7 @@ suite.define(() => {
         expect(inventory?.commands).toEqual(
           expect.arrayContaining(["system.run", "occupancy.acquire.v1"]),
         );
+        await capture(page, "09-setup-code-paired.png");
       });
     } finally {
       await nodeClient?.stopAndWait().catch(() => undefined);
