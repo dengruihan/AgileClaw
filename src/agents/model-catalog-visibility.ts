@@ -69,6 +69,28 @@ function sortModelCatalogEntries(entries: ModelCatalogEntry[]): ModelCatalogEntr
   return entries.toSorted(compareModelCatalogEntries);
 }
 
+/**
+ * Listing-only hint for callers that explicitly ask the selected row to lead
+ * (CLI `/models` browsing). Picker projections leave `selected` unset, so
+ * their order stays provider-owned and selection never moves rows.
+ */
+function leadSelectedListingRow(
+  entries: readonly ModelCatalogEntry[],
+  selected: ModelRef | undefined,
+  keyOf: (entry: Pick<ModelCatalogEntry, "provider" | "id">) => string,
+): ModelCatalogEntry[] {
+  const ordered = [...entries];
+  if (!selected) {
+    return ordered;
+  }
+  const selectedKey = keyOf({ provider: selected.provider, id: selected.model });
+  const index = ordered.findIndex((entry) => keyOf(entry) === selectedKey);
+  if (index > 0) {
+    ordered.unshift(...ordered.splice(index, 1));
+  }
+  return ordered;
+}
+
 type LogicalModelCatalogParams = {
   cfg: OpenClawConfig;
   catalog: ModelCatalogEntry[];
@@ -81,6 +103,11 @@ type LogicalModelCatalogParams = {
   routePolicy: ModelCatalogRoutePolicy;
   routeVariants?: readonly ModelCatalogEntry[];
   retainedModel?: ModelRef;
+  /**
+   * Explicit non-picker listing hint (CLI `/models`): lead this row without
+   * changing the remaining provider order. Picker projections leave it unset,
+   * so selection only moves a check mark there.
+   */
   selectedModel?: ModelRef;
   metadataSnapshot?: PluginMetadataSnapshot;
   /** Only a lifecycle owner can certify that captured catalog policy remains current. */
@@ -239,9 +266,10 @@ export async function prepareLogicalVisibleModelCatalog(
         }
         return [row];
       });
-      return orderModelCatalogForPicker(
-        dedupeByKey(projected, publicationKeyOf),
-        params.selectedModel ?? params.retainedModel,
+      return leadSelectedListingRow(
+        orderModelCatalogForPicker(dedupeByKey(projected, publicationKeyOf)),
+        params.selectedModel,
+        publicationKeyOf,
       );
     };
     if (params.view === "all") {

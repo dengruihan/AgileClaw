@@ -440,6 +440,9 @@ suite.define(() => {
     });
     const page = await context.newPage();
     const modelIds = ["alpha", "bravo", "charlie", "delta", "echo"];
+    // The mocked Gateway hands the renderer this array directly; the real
+    // configured projection's authored order is covered by
+    // src/gateway/server-methods/models-list-result.picker-order.test.ts.
     const models = modelIds.map((id) => ({
       available: true,
       id,

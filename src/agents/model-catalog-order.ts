@@ -55,19 +55,14 @@ export function compareModelCatalogEntries(a: ModelCatalogEntry, b: ModelCatalog
   return orderComparison || a.id.localeCompare(b.id) || a.name.localeCompare(b.name);
 }
 
-/** Keep a session's selected row reachable without changing the provider-owned remainder. */
+/**
+ * Normalize the picker projection to the catalog owner's order: providers sort
+ * by identity and each provider keeps its declared strongest-first order.
+ * Selection is presentation state (the check mark); it never moves rows, and
+ * the visibility layer retains a pinned or unavailable selection in place.
+ */
 export function orderModelCatalogForPicker(
   entries: readonly ModelCatalogEntry[],
-  selected?: { provider: string; model: string },
 ): ModelCatalogEntry[] {
-  const ordered = entries.toSorted(compareModelCatalogEntries);
-  if (selected) {
-    const keyOf = createModelCatalogIdentityKeyResolver();
-    const selectedKey = keyOf({ provider: selected.provider, id: selected.model });
-    const index = ordered.findIndex((entry) => keyOf(entry) === selectedKey);
-    if (index > 0) {
-      ordered.unshift(...ordered.splice(index, 1));
-    }
-  }
-  return ordered;
+  return entries.toSorted(compareModelCatalogEntries);
 }
