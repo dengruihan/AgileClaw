@@ -25,6 +25,7 @@ import {
   type PairedDevice,
 } from "../../../src/infra/device-pairing.js";
 import { NODE_EXECUTOR_PROFILE_COMMANDS } from "../../../src/infra/node-commands.js";
+import { decodePairingSetupCode } from "../../../src/pairing/setup-code.js";
 import { createOpenClawTestState } from "../../../src/test-utils/openclaw-test-state.ts";
 import { getFreePort } from "../../../src/test-utils/ports.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
@@ -398,6 +399,105 @@ suite.define(() => {
       await nodeClient?.stopAndWait().catch(() => undefined);
       await operator?.stopAndWait().catch(() => undefined);
       await gateway?.close({ reason: "node join e2e cleanup" }).catch(() => undefined);
+      await state.cleanup();
+    }
+  });
+
+  it("redeems the displayed setup code with a real node client", async () => {
+    const port = await getFreePort();
+    const token = "node-join-real-gateway-setup-code-token";
+    const state = await createOpenClawTestState({
+      label: "control-ui-device-node-join-setup-code",
+      layout: "home",
+      env: {
+        OPENCLAW_SKIP_BROWSER_CONTROL_SERVER: "1",
+        OPENCLAW_SKIP_CANVAS_HOST: "1",
+        OPENCLAW_SKIP_CHANNELS: "1",
+        OPENCLAW_SKIP_CRON: "1",
+        OPENCLAW_SKIP_GMAIL_WATCHER: "1",
+        OPENCLAW_SKIP_PROVIDERS: "1",
+        OPENCLAW_TEST_MINIMAL_GATEWAY: "1",
+        VITEST: "1",
+      },
+    });
+    let gateway: GatewayServer | undefined;
+    let operator: GatewayClient | undefined;
+    let nodeClient: GatewayClient | undefined;
+    try {
+      await state.writeConfig({
+        gateway: {
+          auth: { mode: "token", token },
+          controlUi: { allowedOrigins: [new URL(suite.server.baseUrl).origin], enabled: false },
+          port,
+          nodes: {
+            commands: { allow: [...NODE_EXECUTOR_PROFILE_COMMANDS] },
+            pairing: { autoApproveLocal: false, sshVerify: false },
+          },
+        },
+        plugins: {
+          entries: {
+            "device-pair": { config: { publicUrl: `ws://127.0.0.1:${port}` } },
+          },
+        },
+      });
+      state.applyEnv();
+      const { startGatewayServer } = await import("../../../src/gateway/server.js");
+      gateway = await startGatewayServer(port, {
+        auth: { mode: "token", token },
+        bind: "loopback",
+        controlUiEnabled: false,
+        sidecarStartup: "defer",
+      });
+      operator = await connectOperator({ port, token, stateDir: state.stateDir });
+
+      await suite.withPage(newPageOptions(), async ({ page }) => {
+        await installBrowserPairing(page, port);
+        const url = new URL("new", suite.server.baseUrl);
+        url.searchParams.set("gatewayUrl", `ws://127.0.0.1:${port}`);
+        url.hash = `token=${encodeURIComponent(token)}`;
+        await page.goto(url.toString());
+        await confirmGatewayUrl(page, { required: true });
+        const dialog = await openConnectMachine(page);
+        await dialog
+          .getByText(/This link is single-use and expires in/u)
+          .waitFor({ timeout: 45_000 });
+
+        const displayed = (
+          (await dialog.locator(".device-pair-setup__fallback code").textContent()) ?? ""
+        ).trim();
+        expect(displayed.length).toBeGreaterThan(0);
+        const setupCode = displayed.startsWith("oc-pair://") ? displayed : `oc-pair://${displayed}`;
+        const payload = decodePairingSetupCode(setupCode) as PairingPayload;
+        expect(payload.url).toBe(`ws://127.0.0.1:${port}`);
+        expect(payload.bootstrapToken.length).toBeGreaterThan(0);
+
+        const node = startNodeClient({ port, payload, stateDir: state.stateDir });
+        nodeClient = node.client;
+        const hello = await Promise.race([
+          node.hello,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("setup-code bootstrap did not connect")), 25_000),
+          ),
+        ]);
+        expect(hello.features.methods).toContain("node.invoke");
+        await dialog.getByText(NODE_DISPLAY_NAME, { exact: true }).waitFor({ timeout: 20_000 });
+        await expect
+          .poll(async () => readNode(operator!, node.identity.deviceId), { timeout: 20_000 })
+          .toMatchObject({
+            connected: true,
+            paired: true,
+            approvalState: "approved",
+            displayName: NODE_DISPLAY_NAME,
+          });
+        const inventory = await readNode(operator, node.identity.deviceId);
+        expect(inventory?.commands).toEqual(
+          expect.arrayContaining(["system.run", "occupancy.acquire.v1"]),
+        );
+      });
+    } finally {
+      await nodeClient?.stopAndWait().catch(() => undefined);
+      await operator?.stopAndWait().catch(() => undefined);
+      await gateway?.close({ reason: "node join setup-code e2e cleanup" }).catch(() => undefined);
       await state.cleanup();
     }
   });
