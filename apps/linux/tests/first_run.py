@@ -93,7 +93,7 @@ def exercise(app, Atspi, GLib, *, remote_only, local_start_failure, inline_fixtu
                     for child in range(node.get_child_count())
                 )
 
-    def wait(label, role=None, *, prefix=False, predicate=None, timeout=30):
+    def wait(label, role=None, *, prefix=False, contains=False, predicate=None, timeout=30):
         deadline = time.monotonic() + timeout
         last_error = None
         while time.monotonic() < deadline:
@@ -119,9 +119,12 @@ def exercise(app, Atspi, GLib, *, remote_only, local_start_failure, inline_fixtu
                         last_headings.add(name)
                     if role is None:
                         content = text_content(node)
-                        matches = content is not None and (
-                            content.startswith(label) if prefix else content == label
-                        )
+                        if contains:
+                            matches = content is not None and label in content
+                        else:
+                            matches = content is not None and (
+                                content.startswith(label) if prefix else content == label
+                            )
                     else:
                         named = name.startswith(label) if prefix else name == label
                         matches = named and role_matches(actual_role, role)
@@ -193,13 +196,14 @@ def exercise(app, Atspi, GLib, *, remote_only, local_start_failure, inline_fixtu
             click("On this computer", "toggle button", prefix=True)
             click("Continue")
             wait("OpenClaw needs attention", "heading")
-            wait(START_FAILURE)
+            wait(START_FAILURE, contains=True)
             wait("Try again", "push button")
             if attempt == 0:
                 click("Try again")
                 wait("Welcome to OpenClaw", "heading")
         calls = Path("cli-calls.log").read_text().splitlines()
-        if calls.count("gateway install --json") != 2:
+        installs = [call for call in calls if call.startswith("gateway install ")]
+        if len(installs) != 2:
             raise RuntimeError(f"Expected two failed Gateway installs, observed {calls!r}")
         setup = "browser extension setup --action install --json --wait-ms 1000"
         if calls.count(setup) != 1:
@@ -519,9 +523,22 @@ def main():
                 "    print('OpenClaw fixture')\n"
                 "elif command == 'browser extension setup --action install --json --wait-ms 1000':\n"
                 "    print(json.dumps({'action': 'install', 'target': {'kind': 'local-host', 'platform': 'linux', 'hostname': 'fixture', 'profile': 'chrome', 'relayPort': 18799}, 'phase': 'needs_browser_action', 'reason': 'extension_missing', 'installation': {'nativeHostRegistered': True, 'installRequested': False, 'installedProfiles': 0, 'discoveredProfiles': 0, 'awaitingApproval': False, 'automaticBootstrapSupported': True}, 'connection': {'state': 'not_checked'}, 'nextAction': 'install_from_store'}))\n"
-                "elif command == 'gateway status --json':\n"
-                "    print(json.dumps({'service': {'loaded': False}, 'rpc': {'ok': False}}))\n"
-                "elif command == 'gateway install --json':\n"
+                "elif command.startswith('gateway status '):\n"
+                "    print(json.dumps({\n"
+                "        'service': {\n"
+                "            'loaded': False,\n"
+                "            'revision': 'fixture-revision',\n"
+                "            'definitionMutation': 'writable',\n"
+                "            'runtimeIntent': {\n"
+                "                'status': 'known',\n"
+                "                'revision': 'fixture-revision',\n"
+                "                'definition': None,\n"
+                "            },\n"
+                "        },\n"
+                "        'config': {'daemon': {'path': '/fixture/openclaw'}},\n"
+                "        'rpc': {'ok': False},\n"
+                "    }))\n"
+                "elif command.startswith('gateway install '):\n"
                 f"    print({START_FAILURE!r}, file=sys.stderr)\n"
                 "    sys.exit(1)\n"
                 "else:\n"
