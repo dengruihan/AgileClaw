@@ -1,5 +1,4 @@
 // @vitest-environment node
-import { DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS } from "@openclaw/gateway-client/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDeferred as deferred } from "../../../test/helpers/promise.js";
 import {
@@ -11,7 +10,6 @@ import {
   parseDevicePairSetupCompletion,
   parseDevicePairSetupDeliveryUncertain,
   refreshDevicePairSetup,
-  requestDevicePairJoinSetup,
   setDevicePairSetupAccess,
   syncDevicePairSetupCountdown,
   type DevicePairSetupLifecycle,
@@ -20,6 +18,10 @@ import {
 type DevicePairSetupState = ReturnType<typeof createDevicePairSetupState>;
 type DevicePairSetup = Extract<DevicePairSetupLifecycle, { phase: "waiting" }>["setup"];
 type DevicePairSetupCompletion = NonNullable<ReturnType<typeof parseDevicePairSetupCompletion>>;
+
+// The Gateway's stable plaintext-LAN refusal; the lifecycle keys its fallback on it.
+const PLAINTEXT_JOIN_REFUSAL_MESSAGE =
+  "Join URLs require a TLS gateway endpoint, except for loopback. Use the setup code directly for plaintext LAN pairing.";
 
 function setupResult(
   setupId: string,
@@ -64,23 +66,6 @@ afterEach(() => {
 });
 
 describe("device pairing setup state", () => {
-  it("requests a one-paste join URL without rendering a QR", async () => {
-    const result = setupResult("NODE", "node");
-    const request = vi.fn().mockResolvedValue({
-      ...result,
-      joinUrl: "https://gateway.example.com/j/fresh-code",
-    });
-
-    await expect(requestDevicePairJoinSetup({ request })).resolves.toMatchObject({
-      joinUrl: "https://gateway.example.com/j/fresh-code",
-    });
-    expect(request).toHaveBeenCalledWith(
-      "device.pair.setupCode",
-      { includeQr: false, joinUrl: true },
-      { timeoutMs: DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS },
-    );
-  });
-
   it("opens in access selection without minting a setup credential", async () => {
     const request = vi.fn();
     const state = createDevicePairSetupState({
@@ -198,8 +183,11 @@ describe("device pairing setup state", () => {
     closeDevicePairSetup(state);
   });
 
-  it("requests the node bootstrap profile when selected", async () => {
-    const request = vi.fn().mockResolvedValue(setupResult("NODE", "node"));
+  it("requests the node bootstrap profile with a join URL when selected", async () => {
+    const request = vi.fn().mockResolvedValue({
+      ...setupResult("NODE", "node", { access: "node" }),
+      joinUrl: "https://gateway.example.com/j/fresh-code",
+    });
     const state = stateWithClient({
       request,
     } as unknown as DevicePairSetupState["client"]);
@@ -209,9 +197,135 @@ describe("device pairing setup state", () => {
 
     expect(request.mock.calls.at(-1)?.slice(0, 2)).toEqual([
       "device.pair.setupCode",
-      { bootstrapProfile: "node", includeQr: false },
+      { bootstrapProfile: "node", includeQr: false, joinUrl: true },
     ]);
-    expect(state.devicePairSetupLifecycle).toMatchObject({ phase: "waiting", access: "node" });
+    expect(state.devicePairSetupLifecycle).toMatchObject({
+      phase: "waiting",
+      access: "node",
+      setup: {
+        joinUrl: "https://gateway.example.com/j/fresh-code",
+        setupCode: "node",
+      },
+    });
+    closeDevicePairSetup(state);
+  });
+
+  it("falls back to the bare setup code when the gateway refuses a plaintext join URL", async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error(
+          "Join URLs require a TLS gateway endpoint, except for loopback. Use the setup code directly for plaintext LAN pairing.",
+        ),
+      )
+      .mockResolvedValueOnce(setupResult("PLAIN", "plain-code", { access: "node" }));
+    const state = stateWithClient({ request } as unknown as DevicePairSetupState["client"]);
+
+    await setDevicePairSetupAccess(state, "node");
+    await refreshDevicePairSetup(state);
+
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[0]?.[1]).toEqual({
+      bootstrapProfile: "node",
+      includeQr: false,
+      joinUrl: true,
+    });
+    expect(request.mock.calls[1]?.[1]).toEqual({ bootstrapProfile: "node", includeQr: false });
+    expect(state.devicePairSetupLifecycle).toMatchObject({
+      phase: "waiting",
+      access: "node",
+      setup: { setupCode: "plain-code" },
+    });
+    closeDevicePairSetup(state);
+  });
+
+  // The plaintext refusal arrives one await after the join-URL request started.
+  // Close/reopen or a client replacement in that window retires the operation;
+  // the fallback bearer must never be minted for it.
+  it.each([
+    {
+      label: "the dialog closed",
+      act: (state: DevicePairSetupState) => {
+        closeDevicePairSetup(state);
+      },
+      expectLifecycle: { phase: "selection", access: "full" },
+    },
+    {
+      label: "the Gateway client was replaced",
+      act: (state: DevicePairSetupState) => {
+        state.client = { request: vi.fn() } as unknown as DevicePairSetupState["client"];
+      },
+      expectLifecycle: { phase: "loading", access: "node" },
+    },
+    {
+      label: "the dialog closed and reopened",
+      act: (state: DevicePairSetupState) => {
+        closeDevicePairSetup(state);
+        state.devicePairSetupOpen = true;
+      },
+      expectLifecycle: { phase: "selection", access: "full" },
+    },
+  ] as const)(
+    "mints no fallback bearer when the plaintext refusal lands after $label",
+    async ({ act, expectLifecycle }) => {
+      const refusal = deferred<DevicePairSetup>();
+      const fallback = deferred<DevicePairSetup>();
+      const request = vi
+        .fn()
+        .mockReturnValueOnce(refusal.promise)
+        .mockReturnValueOnce(fallback.promise);
+      const state = stateWithClient({ request } as unknown as DevicePairSetupState["client"]);
+      await setDevicePairSetupAccess(state, "node");
+
+      const pending = refreshDevicePairSetup(state);
+      refusal.reject(new Error(PLAINTEXT_JOIN_REFUSAL_MESSAGE));
+      act(state);
+      await pending;
+
+      // Exactly one RPC: the retired operation never mints the fallback bearer.
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(state.devicePairSetupLifecycle).toEqual(expectLifecycle);
+      expect(state.devicePairSetupExpiryTimer).toBeNull();
+    },
+  );
+
+  it("keeps non-node failures as errors without a bare-code fallback retry", async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error("Join URLs require a TLS gateway endpoint, except for loopback."),
+      );
+    const state = stateWithClient({ request } as unknown as DevicePairSetupState["client"]);
+
+    await refreshDevicePairSetup(state);
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(state.devicePairSetupLifecycle).toMatchObject({
+      phase: "error",
+      source: "create",
+      access: "full",
+      message: "Join URLs require a TLS gateway endpoint, except for loopback.",
+    });
+    closeDevicePairSetup(state);
+  });
+
+  it("reports a visible error when the gateway is unavailable", async () => {
+    const request = vi.fn();
+    const state = createDevicePairSetupState({
+      client: { request } as unknown as DevicePairSetupState["client"],
+      connected: false,
+    });
+    state.devicePairSetupOpen = true;
+
+    await refreshDevicePairSetup(state);
+
+    expect(request).not.toHaveBeenCalled();
+    expect(state.devicePairSetupLifecycle).toEqual({
+      phase: "error",
+      source: "create",
+      access: "full",
+      message: "Gateway unavailable",
+    });
     closeDevicePairSetup(state);
   });
 

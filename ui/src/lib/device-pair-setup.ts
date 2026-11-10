@@ -62,11 +62,12 @@ function requestDevicePairSetup(client: GatewayRequestClient, params: DevicePair
   });
 }
 
-export function requestDevicePairJoinSetup(client: GatewayRequestClient) {
-  return requestDevicePairSetup(client, { includeQr: false, joinUrl: true });
-}
+// The Gateway refuses to mint join URLs over plaintext transports and tells the
+// client to fall back to the bare setup code. Matching that contract (instead of
+// retrying every failure) keeps genuine errors visible as errors.
+const PLAINTEXT_JOIN_REFUSAL = "Join URLs require a TLS gateway endpoint";
 
-type DevicePairSetupState = {
+export type DevicePairSetupState = {
   client: GatewayRequestClient | null;
   connected: boolean;
   devicePairSetupOpen: boolean;
@@ -320,12 +321,16 @@ export async function refreshDevicePairSetup(state: DevicePairSetupState) {
   const client = state.client;
   const lifecycle = state.devicePairSetupLifecycle;
   const access = lifecycle.access;
-  if (
-    !client ||
-    !state.connected ||
-    state.devicePairSetupLifecycle.phase === "loading" ||
-    devicePairSetupRequests.has(state)
-  ) {
+  if (lifecycle.phase === "loading" || devicePairSetupRequests.has(state)) {
+    return;
+  }
+  const failCreate = (message: string) => {
+    state.devicePairSetupLifecycle = { phase: "error", source: "create", access, message };
+    state.onDevicePairSetupChange();
+  };
+  if (!client || !state.connected) {
+    // A visible dead end beats a dialog that silently ignores its only action.
+    failCreate("Gateway unavailable");
     return;
   }
   const requestToken = {};
@@ -340,21 +345,40 @@ export async function refreshDevicePairSetup(state: DevicePairSetupState) {
   }
   clearDevicePairSetupExpiry(state);
   state.devicePairSetupLifecycle = { phase: "loading", access };
+  // One fence owns "this refresh operation is still the live one": its request
+  // token is current, the Gateway client and connection are unchanged, and the
+  // dialog is still open. Retired operations mint nothing and write nothing.
+  const operationRetired = () =>
+    devicePairSetupRequests.get(state) !== requestToken ||
+    state.client !== client ||
+    !state.connected ||
+    !state.devicePairSetupOpen;
   try {
-    const result = await requestDevicePairSetup(
-      client,
-      access === "full"
-        ? {}
-        : access === "node"
-          ? { bootstrapProfile: "node", includeQr: false }
-          : { bootstrapProfile: "limited" },
-    );
-    if (
-      devicePairSetupRequests.get(state) !== requestToken ||
-      state.client !== client ||
-      !state.connected ||
-      !state.devicePairSetupOpen
-    ) {
+    let result: DevicePairSetup;
+    try {
+      result = await requestDevicePairSetup(
+        client,
+        access === "full"
+          ? {}
+          : access === "node"
+            ? { bootstrapProfile: "node", includeQr: false, joinUrl: true }
+            : { bootstrapProfile: "limited" },
+      );
+    } catch (err) {
+      const message = formatUiError(err);
+      if (access !== "node" || !message.includes(PLAINTEXT_JOIN_REFUSAL)) {
+        throw err;
+      }
+      // The refusal can land after close/reopen or a client replacement. The
+      // fallback would mint a fresh bearer for a retired operation, so
+      // revalidate the fence before this second side effect.
+      if (operationRetired()) {
+        return;
+      }
+      // Plaintext LAN cannot mint join URLs; the bare setup code stays available.
+      result = await requestDevicePairSetup(client, { bootstrapProfile: "node", includeQr: false });
+    }
+    if (operationRetired()) {
       return;
     }
     if (!hasDevicePairSetupLifecycle(result)) {

@@ -5377,12 +5377,113 @@ td.data-table-key-col {
   text-align: center;
 }
 
-.device-pair-setup__command {
+.device-pair-setup__steps {
   display: grid;
   width: min(540px, 100%);
+  margin: 0;
+  padding: 0;
+  gap: 12px;
+  list-style: none;
+  counter-reset: device-pair-step;
+}
+
+.device-pair-setup__step {
+  position: relative;
+  display: grid;
   min-width: 0;
-  max-width: 100%;
-  gap: 10px;
+  padding: 13px 16px 13px 46px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  gap: 6px;
+  justify-items: start;
+  counter-increment: device-pair-step;
+  text-align: left;
+}
+
+.device-pair-setup__step::before {
+  content: counter(device-pair-step);
+  position: absolute;
+  top: 13px;
+  left: 12px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: var(--radius-full);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.device-pair-setup__step h3 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.device-pair-setup__step > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.device-pair-setup__downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.device-pair-setup__downloads a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 13px;
+  cursor: var(--cursor-action);
+  text-decoration: none;
+}
+
+.device-pair-setup__downloads a:hover {
+  border-color: var(--accent);
+  color: var(--text-strong);
+}
+
+.device-pair-setup__downloads a:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.device-pair-setup__secret {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.device-pair-setup__secret .login-gate__command {
+  flex: 1;
+  margin: 0;
+}
+
+.device-pair-setup__secret code[data-secret-state="masked"] {
+  color: var(--muted);
+  letter-spacing: 0.08em;
+}
+
+.device-pair-setup__step .device-pair-setup__fallback summary {
+  margin: 0;
 }
 
 .device-pair-setup .login-gate__command {
@@ -5572,6 +5673,10 @@ td.data-table-key-col {
 
   .device-pair-setup__access {
     grid-template-columns: 1fr;
+  }
+
+  .device-pair-setup__step {
+    padding: 12px 12px 12px 40px;
   }
 
   .device-pair-setup__footer a {

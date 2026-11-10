@@ -73,12 +73,29 @@ previously approved capabilities are separate from that pending request.
 
 ## One-paste node pairing
 
-In the Control UI Devices page, open the pairing dialog, choose **Node host**,
-and copy the generated command to the device:
+In the Control UI, the pairing dialog's **Node host** setup presents a guided
+handoff with no terminal command:
 
-```bash
-openclaw node run --pair "oc-pair://<setup-code>"
-```
+1. **Download** links the OpenClaw desktop app for the machine's system, using
+   the same download URLs as the Control UI's Apps page.
+2. **Transfer** shows a single-use join URL as a masked, reveal-once secret to
+   paste into the OpenClaw app on that machine. The join URL requires a TLS
+   Gateway endpoint (loopback `ws://` excepted); on plaintext private networks
+   the dialog falls back to the bare setup code, which carries the same
+   short-lived credential.
+3. **Observe** waits for the machine to connect and links to the device
+   inventory and pending approvals.
+
+Both the join URL and the setup code are bearer-equivalent secrets: reveal-once
+copy, single-use, and they retire at expiry or redemption. When the machine
+redeems its link, the dialog settles into the paired state and links to
+**Devices** for review.
+
+The equivalent headless flow remains CLI-based: `openclaw devices join-code`
+prints the join URL with its `npx openclaw connect <url>` command, and the
+bare setup code works the same way through `openclaw connect` (it accepts an
+`oc-pair://<setup-code>` URL or the bare code; see
+[Connect a machine](/cli/connect)).
 
 The setup link carries the Gateway endpoint, a short-lived single-use bootstrap
 token, and a TLS certificate pin when the Gateway directly serves a pinnable
