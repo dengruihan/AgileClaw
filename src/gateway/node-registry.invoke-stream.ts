@@ -10,6 +10,7 @@ import {
 import { scheduleAbsoluteDeadline } from "../utils/absolute-deadline.js";
 import type { NodeInvokeResult } from "./node-invoke.types.js";
 import { NODE_INVOKE_PAIRING_CHANGED_ABORT } from "./node-registry-private-token.js";
+import { parseGatewayPayload } from "./server-json.js";
 
 /** A node may emit this only before invoking a handler or sending any progress. */
 export const NODE_INVOKE_NOT_READY = "NODE_NOT_READY";
@@ -58,6 +59,27 @@ export type NodeInvokeResultParams = NodeInvokeResult & {
 
 const MAX_PENDING_PROGRESS_CHUNKS = 128;
 const MAX_INVOKE_INPUT_BYTES = 16 * 1024;
+
+/** True when parseGatewayPayload preserved unparseable text in its raw wrapper. */
+function isGatewayPayloadParseFailure(value: unknown): value is { payloadJSON: string } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const keys = Object.keys(value);
+  return (
+    keys.length === 1 &&
+    keys[0] === "payloadJSON" &&
+    typeof (value as { payloadJSON?: unknown }).payloadJSON === "string"
+  );
+}
+
+function parseNodeInvokePayload(payload: unknown, payloadJSON: string | null | undefined): unknown {
+  if (payload !== undefined) {
+    return payload;
+  }
+  const parsed = parseGatewayPayload(payloadJSON);
+  return isGatewayPayloadParseFailure(parsed) ? undefined : parsed;
+}
 
 export class NodeInvokeStreamController {
   constructor(
@@ -138,9 +160,14 @@ export class NodeInvokeStreamController {
       params.error?.code === NODE_INVOKE_NOT_READY && pending.receivedProgress
         ? { code: "UNAVAILABLE", message: "node reported not-ready after invocation progress" }
         : (params.error ?? null);
+    // Node hosts serialize their reply as payloadJSON. Normalize it once here so
+    // every registry consumer (occupancy leases, worker transports, plugins)
+    // sees the same structured payload; raw payloadJSON remains for callers
+    // that need the original text.
+    const payload = parseNodeInvokePayload(params.payload, params.payloadJSON);
     pending.resolve({
       ok: params.ok,
-      payload: params.payload,
+      payload,
       payloadJSON: params.payloadJSON ?? null,
       error,
     });
