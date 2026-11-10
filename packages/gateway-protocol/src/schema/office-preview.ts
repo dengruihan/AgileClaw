@@ -110,7 +110,9 @@ const SessionFileOfficeCellSchema = closedObject({
   /** 0-based column index. */
   column: Type.Integer({ minimum: 0, maximum: 39 }),
   /** Index into `SessionFileOfficeSheet.styles`. */
-  style: Type.Integer({ minimum: 0, maximum: 255 }),
+  style: Type.Optional(Type.Integer({ minimum: 0, maximum: 255 })),
+  /** Explicitly plain cell: overrides a styled sheet `defaultStyle`. */
+  plain: Type.Optional(Type.Boolean()),
 });
 
 /** One merged range resolved to rendered row/column indices. */
@@ -224,10 +226,19 @@ const SessionFileOfficeTableSchema = closedObject({
   rows: Type.Array(SessionFileOfficeTableRowSchema, { maxItems: 200 }),
 });
 
+/**
+ * One unique inlined image. Document pages reference media by index so a file
+ * that repeats the same image never repeats its bytes on the wire.
+ */
+const SessionFileOfficeMediaSchema = closedObject({
+  dataUrl: OfficeInlineImageDataUrlSchema,
+});
+
 /** One bounded safe inline image anchored in a document page. */
 const SessionFileOfficeImageSchema = closedObject({
   kind: Type.Literal("image"),
-  dataUrl: OfficeInlineImageDataUrlSchema,
+  /** Index into `SessionFileOfficePreview.media`. */
+  media: Type.Integer({ minimum: 0, maximum: 23 }),
   widthPt: Type.Number({ minimum: 0, maximum: 2_000 }),
   heightPt: Type.Number({ minimum: 0, maximum: 2_000 }),
   alt: Type.Optional(Type.String({ maxLength: 512 })),
@@ -287,6 +298,8 @@ export const SessionFileOfficePreviewSchema = closedObject({
   slides: Type.Optional(Type.Array(SessionFileOfficeSlideSchema, { maxItems: 100 })),
   /** Approximate page cards for word-processing documents. */
   pages: Type.Optional(Type.Array(SessionFileOfficePageSchema, { maxItems: 50 })),
+  /** Unique inline images referenced by page image blocks. */
+  media: Type.Optional(Type.Array(SessionFileOfficeMediaSchema, { maxItems: 24 })),
   /** Features this preview intentionally dropped or approximated. */
   omitted: Type.Optional(Type.Array(SessionFileOfficeOmittedSchema, { maxItems: 20 })),
 });
@@ -305,6 +318,7 @@ export type SessionFileOfficeParagraph = Static<typeof SessionFileOfficeParagrap
 export type SessionFileOfficeTableCell = Static<typeof SessionFileOfficeTableCellSchema>;
 export type SessionFileOfficeTableRow = Static<typeof SessionFileOfficeTableRowSchema>;
 export type SessionFileOfficeTable = Static<typeof SessionFileOfficeTableSchema>;
+export type SessionFileOfficeMedia = Static<typeof SessionFileOfficeMediaSchema>;
 export type SessionFileOfficeImage = Static<typeof SessionFileOfficeImageSchema>;
 export type SessionFileOfficeDocBlock = Static<typeof SessionFileOfficeDocBlockSchema>;
 export type SessionFileOfficePage = Static<typeof SessionFileOfficePageSchema>;

@@ -7,6 +7,7 @@ import {
   buildDocxFixture,
   buildEncryptedOoxmlContainer,
   buildEncryptedZipFixture,
+  buildEntryOverflowZipFixture,
   buildPptxFixture,
   buildStyledDocxFixture,
   buildStyledXlsxFixture,
@@ -242,6 +243,22 @@ describe("sessions.files office previews", () => {
     const zip = expectOkPayload(await getFile("encrypted-zip.docx")).file;
     expect(zip).toMatchObject({ previewKind: "unsupported", previewState: "password-protected" });
     expect(zip.officePreview).toBeUndefined();
+  });
+
+  it("reports an archive resource-limit budget as too-large", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "overflow.xlsx"),
+      await buildEntryOverflowZipFixture(),
+    );
+
+    const file = expectOkPayload(await getFile("overflow.xlsx")).file;
+
+    expect(file).toMatchObject({
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      previewKind: "unsupported",
+      previewState: "too-large",
+    });
+    expect(file.officePreview).toBeUndefined();
   });
 
   it("keeps a text file renamed to .xlsx on the text preview", async () => {

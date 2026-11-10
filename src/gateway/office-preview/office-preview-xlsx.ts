@@ -179,8 +179,11 @@ function readFrozenPane(doc: ReturnType<typeof tryParseXml>): {
   }
   const view = elements(doc, "sheetView")[0];
   const pane = childNamed(view, "pane");
-  const frozenColumns = numericAttribute(pane, "xSplit", { min: 0, max: 40 });
-  const frozenRows = numericAttribute(pane, "ySplit", { min: 0, max: 200 });
+  // `split` is an ordinary movable split view; only frozen panes are layout.
+  const paneState = attribute(pane, "state");
+  const frozen = paneState === "frozen" || paneState === "frozenSplit";
+  const frozenColumns = frozen ? numericAttribute(pane, "xSplit", { min: 0, max: 40 }) : undefined;
+  const frozenRows = frozen ? numericAttribute(pane, "ySplit", { min: 0, max: 200 }) : undefined;
   return {
     ...(frozenRows ? { frozenRows: Math.floor(frozenRows) } : {}),
     ...(frozenColumns ? { frozenColumns: Math.floor(frozenColumns) } : {}),
@@ -307,9 +310,14 @@ function parseWorksheetXml(params: {
       }
       values[column] = value;
       displayedCells += 1;
-      const style = xfIndex === 0 ? undefined : params.styles.styleIndexOf(xfIndex);
-      if (style !== undefined) {
-        cells.push({ row: renderedIndex, column, style });
+      if (xfIndex !== 0) {
+        const resolution = params.styles.resolveStyle(xfIndex);
+        if (resolution && "style" in resolution) {
+          cells.push({ row: renderedIndex, column, style: resolution.style });
+        } else if (resolution && params.styles.defaultStyle !== undefined) {
+          // An explicit empty `cellXfs` entry clears the styled sheet default.
+          cells.push({ row: renderedIndex, column, plain: true });
+        }
       }
     }
     rows.push(trimTrailingEmpty(values));

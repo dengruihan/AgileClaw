@@ -61,12 +61,14 @@ export type XlsxFixtureSheet = {
   }[])[];
   /** Raw `<sheetData>` body, for malformed or sparse row-number regressions. */
   sheetDataXml?: string;
+  /** XML inserted before `<sheetData>` (sheetViews, cols, merges, ...). */
+  worksheetPrefixXml?: string;
   /** Worksheet tab visibility declared by the workbook part. */
   state?: "hidden" | "veryHidden";
 };
 
-function worksheetContent(sheetDataXml: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetDataXml}</sheetData></worksheet>`;
+function worksheetContent(prefixXml: string, sheetDataXml: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${prefixXml}<sheetData>${sheetDataXml}</sheetData></worksheet>`;
 }
 
 function generatedSheetData(sheet: XlsxFixtureSheet): string {
@@ -126,7 +128,10 @@ export async function buildXlsxFixture(options?: {
 
   const sheetXml = sheets.map((sheet, sheetIndex) => ({
     path: `xl/worksheets/sheet${sheetIndex + 1}.xml`,
-    content: worksheetContent(sheet.sheetDataXml ?? generatedSheetData(sheet)),
+    content: worksheetContent(
+      sheet.worksheetPrefixXml ?? "",
+      sheet.sheetDataXml ?? generatedSheetData(sheet),
+    ),
   }));
 
   return await buildZip([
@@ -218,7 +223,7 @@ export async function buildDocxFixture(
     },
     {
       path: "word/document.xml",
-      content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="${OFFICE_REL_NS}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>${body}</w:body></w:document>`,
+      content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="${OFFICE_REL_NS}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><w:body>${body}</w:body></w:document>`,
     },
     ...(options?.documentRelationships
       ? [
@@ -542,4 +547,54 @@ export function buildEncryptedOoxmlContainer(): Buffer {
     Buffer.from("EncryptedPackage", "utf16le"),
     Buffer.alloc(64),
   ]);
+}
+
+/** A signature-valid PNG padded to a requested byte size. */
+export function paddedPng(bytes: number): Buffer {
+  const base = Buffer.from(PNG_1X1_BASE64, "base64");
+  return bytes <= base.length
+    ? base
+    : Buffer.concat([base, Buffer.alloc(bytes - base.length, 0x41)]);
+}
+
+/** Document repeating one image part so payload growth per occurrence is measurable. */
+export async function buildRepeatedImageDocxFixture(params: {
+  imageBytes: number;
+  occurrences: number;
+}): Promise<Buffer> {
+  const image = paddedPng(params.imageBytes);
+  const drawing = `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="952500" cy="952500"/><wp:docPr id="1" name="Repeated" descr="Repeated image"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:blipFill><a:blip r:embed="rIdImage"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
+  return await buildDocxFixture(drawing.repeat(params.occurrences), {
+    documentRelationships: [
+      {
+        id: "rIdImage",
+        type: `${OFFICE_REL_NS}/image`,
+        target: "media/repeated.png",
+      },
+    ],
+    extraParts: [{ path: "word/media/repeated.png", content: image }],
+  });
+}
+
+/** ZIP with more entries than the preview archive budget allows. */
+export async function buildEntryOverflowZipFixture(entries = 2_001): Promise<Buffer> {
+  return await buildZip(
+    Array.from({ length: entries }, (_, index) => ({
+      path: `part-${index}.xml`,
+      content: "<x/>",
+    })),
+  );
+}
+
+/** Text-box shapes in the three forms Word writes. */
+export function textBoxDocxBody(params: {
+  text: string;
+  form: "inline" | "anchor" | "vml";
+}): string {
+  const content = `<w:txbxContent><w:p><w:r><w:t>${params.text}</w:t></w:r></w:p></w:txbxContent>`;
+  if (params.form === "vml") {
+    return `<w:p><w:r><w:pict><v:shape><v:textbox>${content}</v:textbox></v:shape></w:pict></w:r></w:p>`;
+  }
+  const container = params.form === "anchor" ? "wp:anchor" : "wp:inline";
+  return `<w:p><w:r><w:drawing><${container}><wp:extent cx="952500" cy="952500"/><wp:docPr id="3" name="Text Box"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wps:wsp><wps:txbx>${content}</wps:txbx></wps:wsp></a:graphicData></a:graphic></${container}></w:drawing></w:r></w:p>`;
 }

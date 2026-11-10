@@ -226,8 +226,38 @@ export const SessionFilePreviewKindSchema = Type.Union([
   Type.Literal("unsupported"),
 ]);
 
-/** Office preview schemas are owned by `office-preview.ts` and re-exported here. */
-export * from "./office-preview.js";
+/**
+ * Office preview schemas are owned by `office-preview.ts`; the previously
+ * public schema set is re-exported here. The preview-state schema is registered
+ * once, under its legacy `ArtifactOfficePreviewStateSchema` name.
+ */
+export {
+  SessionFileOfficeBlockSchema,
+  SessionFileOfficeFormatSchema,
+  SessionFileOfficePreviewSchema,
+  SessionFileOfficeSheetSchema,
+  SessionFileOfficeSlideSchema,
+  type SessionFileOfficeBlock,
+  type SessionFileOfficeCell,
+  type SessionFileOfficeCellStyle,
+  type SessionFileOfficeDocBlock,
+  type SessionFileOfficeFormat,
+  type SessionFileOfficeImage,
+  type SessionFileOfficeMedia,
+  type SessionFileOfficeMerge,
+  type SessionFileOfficeOmitted,
+  type SessionFileOfficeOmittedFeature,
+  type SessionFileOfficePage,
+  type SessionFileOfficeParagraph,
+  type SessionFileOfficePreview,
+  type SessionFileOfficeRun,
+  type SessionFileOfficeSheet,
+  type SessionFileOfficeSheetColumn,
+  type SessionFileOfficeSlide,
+  type SessionFileOfficeTable,
+  type SessionFileOfficeTableCell,
+  type SessionFileOfficeTableRow,
+} from "./office-preview.js";
 
 const SessionFileHashSchema = Type.String({
   minLength: 64,

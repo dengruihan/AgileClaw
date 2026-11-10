@@ -19,6 +19,7 @@ import type {
   SessionFileOfficeParagraph,
   SessionFileOfficePreview,
   SessionFileOfficeRun,
+  SessionFileOfficeTable,
 } from "../../../packages/gateway-protocol/src/index.js";
 import type { DocxStyleResolver } from "./office-preview-docx-styles.js";
 import {
@@ -70,7 +71,10 @@ type DocxState = {
   styles: DocxStyleResolver;
   numbering: DocxNumbering;
   media: DocxImageReader;
-  budget: CharacterBudget;
+  /** Character budget for the typed page runs. */
+  runBudget: CharacterBudget;
+  /** Separate equivalent budget for the legacy text blocks. */
+  legacyBudget: CharacterBudget;
   counter: OmittedFeatureCounter;
   runsUsed: number;
   tableCellsUsed: number;
@@ -88,7 +92,7 @@ type ParagraphContent = {
 type ParagraphEvent =
   | { kind: "content"; content: ParagraphContent }
   | { kind: "pageBreak" }
-  | { kind: "table"; table: SessionFileOfficeDocBlock };
+  | { kind: "table"; table: SessionFileOfficeTable };
 
 function createRunAccumulator(state: DocxState) {
   const runs: SessionFileOfficeRun[] = [];
@@ -127,7 +131,7 @@ function createRunAccumulator(state: DocxState) {
         style = nextStyle;
         styleKey = key;
       }
-      buffer += state.budget.take(text, OFFICE_PREVIEW_MAX_BLOCK_CHARS);
+      buffer += state.runBudget.take(text, OFFICE_PREVIEW_MAX_BLOCK_CHARS);
     },
     take: () => {
       flush();
@@ -182,7 +186,17 @@ function paragraphText(paragraph: XmlElement): string {
 }
 
 function readDrawingImages(drawing: XmlElement, state: DocxState): SessionFileOfficeImage[] {
-  if (elements(drawing, "wp:anchor").length > 0) {
+  // Text boxes are reported even when they are inline (no `wp:anchor`), so
+  // their content can never disappear without a notice.
+  // A DrawingML text box carries both `wps:txbx` and `w:txbxContent`; count
+  // the richer element once per drawing, never twice.
+  const textBoxes = Math.max(
+    elements(drawing, "w:txbxContent").length,
+    elements(drawing, "wps:txbx").length,
+  );
+  if (textBoxes > 0) {
+    state.counter.add("floatingObjects", textBoxes);
+  } else if (elements(drawing, "wp:anchor").length > 0) {
     // Floating/anchored placement is rendered inline; the approximation is explicit.
     state.counter.add("floatingObjects");
   }
@@ -203,6 +217,25 @@ function readDrawingImages(drawing: XmlElement, state: DocxState): SessionFileOf
     heightPt: emuToPoints(attribute(extent, "cy")) ?? 0,
   });
   return image ? [image] : [];
+}
+
+/** Counts a VML picture/text box without reading any of its relationships. */
+function countVmlPict(pict: XmlElement, state: DocxState): void {
+  const textBoxes = Math.max(
+    elements(pict, "v:textbox").length,
+    elements(pict, "w:txbxContent").length,
+  );
+  if (textBoxes > 0) {
+    state.counter.add("floatingObjects", textBoxes);
+  }
+  const images = elements(pict, "v:imagedata").length;
+  if (images > 0) {
+    state.counter.add("images", images);
+  }
+  if (textBoxes === 0 && images === 0) {
+    // Any other VML shape is a floating object the page payload cannot place.
+    state.counter.add("floatingObjects");
+  }
 }
 
 function buildParagraphEvents(paragraph: XmlElement, state: DocxState): ParagraphEvent[] {
@@ -319,7 +352,7 @@ function buildParagraphEvents(paragraph: XmlElement, state: DocxState): Paragrap
           images.push(...readDrawingImages(child, state));
           break;
         case "pict":
-          state.counter.add("images");
+          countVmlPict(child, state);
           break;
         case "object":
           state.counter.add("embeddedObjects");
@@ -354,6 +387,8 @@ function buildParagraphEvents(paragraph: XmlElement, state: DocxState): Paragrap
         state.counter.add("equations");
       } else if (name === "drawing") {
         images.push(...readDrawingImages(child, state));
+      } else if (name === "pict") {
+        countVmlPict(child, state);
       } else if (name === "AlternateContent") {
         const branch = childNamed(child, "Choice") ?? childNamed(child, "Fallback");
         if (branch) {
@@ -475,20 +510,27 @@ function buildHeaderFooter(
   return paragraphs.length > 0 ? paragraphs : undefined;
 }
 
-function legacyBlockFor(content: ParagraphContent): SessionFileOfficeBlock | undefined {
-  const text = content.text.trim();
-  if (!text) {
+function legacyBlockFor(
+  paragraph: SessionFileOfficeParagraph,
+  text: string,
+  budget: CharacterBudget,
+): SessionFileOfficeBlock | undefined {
+  const raw = text.trim();
+  if (!raw) {
     return undefined;
   }
-  const bounded = truncate(text, OFFICE_PREVIEW_MAX_BLOCK_CHARS);
-  if (content.paragraph.role === "heading" || content.paragraph.role === "title") {
+  const bounded = budget.take(raw, OFFICE_PREVIEW_MAX_BLOCK_CHARS).trim();
+  if (!bounded) {
+    return undefined;
+  }
+  if (paragraph.role === "heading" || paragraph.role === "title") {
     return {
       kind: "heading",
-      level: Math.max(1, Math.min(6, content.paragraph.level ?? 1)),
+      level: Math.max(1, Math.min(6, paragraph.level ?? 1)),
       text: bounded,
     };
   }
-  if (content.paragraph.role === "listItem") {
+  if (paragraph.role === "listItem") {
     return { kind: "listItem", text: bounded };
   }
   return { kind: "paragraph", text: bounded };
@@ -515,7 +557,8 @@ export function parseDocument(archive: OfficeZipArchive): SessionFileOfficePrevi
     styles: readDocxStyles(archive, theme),
     numbering: readDocxNumbering(archive),
     media: createDocxImageReader(archive, relationships, counter),
-    budget: new CharacterBudget(OFFICE_PREVIEW_MAX_DOCUMENT_CHARS),
+    runBudget: new CharacterBudget(OFFICE_PREVIEW_MAX_DOCUMENT_CHARS),
+    legacyBudget: new CharacterBudget(OFFICE_PREVIEW_MAX_DOCUMENT_CHARS),
     counter,
     runsUsed: 0,
     tableCellsUsed: 0,
@@ -591,6 +634,19 @@ export function parseDocument(archive: OfficeZipArchive): SessionFileOfficePrevi
     pageStarted = false;
   };
 
+  const pushLegacy = (paragraph: SessionFileOfficeParagraph, text: string): void => {
+    if (state.legacyBlocksUsed >= OFFICE_PREVIEW_MAX_BLOCKS) {
+      state.truncated = true;
+      return;
+    }
+    const block = legacyBlockFor(paragraph, text, state.legacyBudget);
+    if (!block) {
+      return;
+    }
+    legacyBlocks.push(block);
+    state.legacyBlocksUsed += 1;
+  };
+
   const addBlock = (block: SessionFileOfficeDocBlock): void => {
     if (pages.length >= OFFICE_PREVIEW_MAX_DOCX_PAGES) {
       state.truncated = true;
@@ -619,18 +675,19 @@ export function parseDocument(archive: OfficeZipArchive): SessionFileOfficePrevi
     }
     if (event.kind === "table") {
       addBlock(event.table);
+      // The legacy text stream keeps table-cell text in document order for
+      // callers that predate the typed table payload.
+      for (const row of event.table.rows) {
+        for (const cell of row.cells) {
+          for (const paragraph of cell.paragraphs) {
+            pushLegacy(paragraph, paragraph.text);
+          }
+        }
+      }
       continue;
     }
     const { content } = event;
-    const legacy = legacyBlockFor(content);
-    if (legacy) {
-      if (state.legacyBlocksUsed < OFFICE_PREVIEW_MAX_BLOCKS) {
-        legacyBlocks.push(legacy);
-        state.legacyBlocksUsed += 1;
-      } else {
-        state.truncated = true;
-      }
-    }
+    pushLegacy(content.paragraph, content.text);
     if (content.paragraph.runs.length > 0 || content.paragraph.listMarker) {
       addBlock(content.paragraph);
     }
@@ -641,13 +698,14 @@ export function parseDocument(archive: OfficeZipArchive): SessionFileOfficePrevi
   if (pageStarted) {
     pushPage();
   }
-  if (state.budget.exhausted) {
+  if (state.runBudget.exhausted || state.legacyBudget.exhausted) {
     state.truncated = true;
   }
   return {
     format: "docx",
     blocks: legacyBlocks,
     pages,
+    ...(state.media.media.length > 0 ? { media: state.media.media } : {}),
     ...(state.truncated ? { truncated: true } : {}),
     omitted: counter.list(),
   };

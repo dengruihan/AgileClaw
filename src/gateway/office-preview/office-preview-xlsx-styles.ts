@@ -21,11 +21,18 @@ import {
 } from "./office-preview-xml.js";
 import type { OfficeZipArchive } from "./office-preview-zip.js";
 
+/** How one `cellXfs` entry formats its cell. */
+export type SpreadsheetCellStyleResolution = { style: number } | { plain: true };
+
 export type SpreadsheetStyleTable = {
   /** Deduplicated style table for the sheet payload. */
   styles: SessionFileOfficeCellStyle[];
-  /** Style index for a `cellXfs` entry; undefined for the empty/default style. */
-  styleIndexOf(xfIndex: number): number | undefined;
+  /**
+   * Resolves one `cellXfs` entry. `plain` means the entry is explicit but
+   * empty, so it must clear a styled sheet default; undefined means the entry
+   * is unknown or was cut by the style-table cap.
+   */
+  resolveStyle(xfIndex: number): SpreadsheetCellStyleResolution | undefined;
   /** Number-format code for a `cellXfs` entry. */
   formatCodeOf(xfIndex: number): string | undefined;
   /** Style index of `cellXfs[0]`, applied to cells without an explicit entry. */
@@ -36,7 +43,7 @@ export type SpreadsheetStyleTable = {
 
 const EMPTY_STYLE_TABLE: SpreadsheetStyleTable = {
   styles: [],
-  styleIndexOf: () => undefined,
+  resolveStyle: () => undefined,
   formatCodeOf: () => undefined,
   defaultStyle: undefined,
   truncated: false,
@@ -273,7 +280,7 @@ export function readSpreadsheetStyles(
   const parts = { fonts, fills, borders, formats, theme };
   const table: SessionFileOfficeCellStyle[] = [];
   const dedupe = new Map<string, number>();
-  const styleIndexes = new Map<number, number>();
+  const resolutions = new Map<number, SpreadsheetCellStyleResolution>();
   const formatCodes = new Map<number, string>();
   let truncated = false;
   for (let xfIndex = 0; xfIndex < xfs.length; xfIndex += 1) {
@@ -286,12 +293,14 @@ export function readSpreadsheetStyles(
       formatCodes.set(xfIndex, formatCode);
     }
     if (Object.keys(style).length === 0) {
+      // An explicit empty entry overrides the sheet default.
+      resolutions.set(xfIndex, { plain: true });
       continue;
     }
     const key = JSON.stringify(style);
     const existing = dedupe.get(key);
     if (existing !== undefined) {
-      styleIndexes.set(xfIndex, existing);
+      resolutions.set(xfIndex, { style: existing });
       continue;
     }
     if (table.length >= 256) {
@@ -299,14 +308,16 @@ export function readSpreadsheetStyles(
       continue;
     }
     dedupe.set(key, table.length);
-    styleIndexes.set(xfIndex, table.length);
+    resolutions.set(xfIndex, { style: table.length });
     table.push(style);
   }
+  const defaultResolution = resolutions.get(0);
   return {
     styles: table,
-    styleIndexOf: (xfIndex) => styleIndexes.get(xfIndex),
+    resolveStyle: (xfIndex) => resolutions.get(xfIndex),
     formatCodeOf: (xfIndex) => formatCodes.get(xfIndex),
-    defaultStyle: styleIndexes.get(0),
+    defaultStyle:
+      defaultResolution && "style" in defaultResolution ? defaultResolution.style : undefined,
     truncated,
   };
 }

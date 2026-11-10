@@ -311,6 +311,8 @@ function formatDateTime(value: number, code: string, date1904: boolean): string 
 type NumericLayout = {
   prefix: string;
   suffix: string;
+  /** Mandatory (`0`) and optional (`#`/`?`) fraction placeholders, left to right. */
+  fractionPlaceholders: string;
   decimals: number;
   minIntegerDigits: number;
   grouping: boolean;
@@ -396,6 +398,7 @@ function numericLayout(code: string): NumericLayout {
   return {
     prefix,
     suffix,
+    fractionPlaceholders: [...fractionPattern].filter((char) => /[0#?]/u.test(char)).join(""),
     decimals: [...fractionPattern].filter((char) => /[0#?]/u.test(char)).length,
     minIntegerDigits: [...integerPattern].filter((char) => char === "0").length,
     grouping: integerPattern.includes(","),
@@ -430,10 +433,30 @@ function formatNumeric(value: number, section: FormatSection): string {
     return "";
   }
   const fixed = scaled.toFixed(Math.min(10, layout.decimals));
-  const [integerPart = "0", fractionPart = ""] = fixed.split(".");
+  const [integerPart = "0", rawFraction = ""] = fixed.split(".");
+  // Excel shows an optional `#`/`?` digit when it is non-zero or a later
+  // placeholder shows a non-zero digit; mandatory `0` placeholders always show.
+  const placeholders = layout.fractionPlaceholders;
+  const digits = rawFraction.padEnd(placeholders.length, "0");
+  const shown = Array.from({ length: placeholders.length }, () => false);
+  let laterNonZero = false;
+  for (let index = placeholders.length - 1; index >= 0; index -= 1) {
+    const digit = digits[index] ?? "0";
+    if (placeholders[index] === "0") {
+      shown[index] = true;
+      laterNonZero ||= digit !== "0";
+    } else {
+      shown[index] = digit !== "0" || laterNonZero;
+      laterNonZero ||= digit !== "0";
+    }
+  }
+  const fractionPart = digits
+    .split("")
+    .filter((_digit, index) => shown[index])
+    .join("");
   const paddedInteger = integerPart.padStart(layout.minIntegerDigits, "0");
   const grouped = layout.grouping ? groupInteger(paddedInteger) : paddedInteger;
-  const number = layout.decimals > 0 ? `${grouped}.${fractionPart}` : grouped;
+  const number = fractionPart ? `${grouped}.${fractionPart}` : grouped;
   // A negative section defines its own sign/parentheses; the fallback section
   // needs the minus sign Excel would otherwise add.
   const sign = section.negative && !section.explicitNegative ? "-" : "";

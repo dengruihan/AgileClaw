@@ -114,7 +114,11 @@ function isParseResult(
     return false;
   }
   if ("failure" in value) {
-    return value.failure === "invalid" || value.failure === "password-protected";
+    return (
+      value.failure === "invalid" ||
+      value.failure === "password-protected" ||
+      value.failure === "too-large"
+    );
   }
   if (!("preview" in value)) {
     return false;

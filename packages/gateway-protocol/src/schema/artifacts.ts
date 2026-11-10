@@ -80,6 +80,13 @@ export const ArtifactsDownloadParamsSchema = closedObject({
 });
 
 /**
+ * Public runtime constant kept under its historical name. The state vocabulary
+ * is owned by `office-preview.ts`; this alias is the single registry entry so
+ * native protocol generation emits one enum.
+ */
+export const ArtifactOfficePreviewStateSchema = SessionFileOfficePreviewStateSchema;
+
+/**
  * Structured read-only Office preview returned only when the caller opts in.
  * Legacy containers and non-Office files report `unsupported` without a format.
  */
@@ -87,7 +94,7 @@ export const ArtifactOfficePreviewSchema = closedObject({
   kind: Type.Literal("office"),
   /** Modern OOXML format the reader selected; absent when no modern format applies. */
   format: Type.Optional(SessionFileOfficeFormatSchema),
-  state: SessionFileOfficePreviewStateSchema,
+  state: ArtifactOfficePreviewStateSchema,
   preview: Type.Optional(SessionFileOfficePreviewSchema),
 });
 

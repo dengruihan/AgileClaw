@@ -18,6 +18,14 @@ describe("spreadsheet value formatting", () => {
     expect(value("0.5", "0%")).toBe("50%");
     expect(value("0.125", "0.00%")).toBe("12.50%");
     expect(value("3.14159", "0.0")).toBe("3.1");
+    // Optional fraction placeholders drop trailing zeros and orphan points.
+    expect(value("1.2", "0.##")).toBe("1.2");
+    expect(value("1", "0.##")).toBe("1");
+    expect(value("1.234", "0.##")).toBe("1.23");
+    expect(value("0.05", "0.##")).toBe("0.05");
+    expect(value("1", "0.0#")).toBe("1.0");
+    expect(value("1.25", "0.0#")).toBe("1.25");
+    expect(value("1200.5", "#,##0.##")).toBe("1,200.5");
     expect(value("12345", "0.00E+00")).toBe("1.23E+04");
     expect(value("1200.5", "General")).toBe("1200.5");
     // Binary floating-point noise is hidden the way Excel's General format does.
@@ -148,6 +156,63 @@ describe("styled workbook layout", () => {
     expect(sheet?.rows?.[0]).toEqual(["Total", "$999.00"]);
     // A formula without a cached value renders an empty cell, not a guess.
     expect(sheet?.rows?.[1]).toEqual(["Pending"]);
+  });
+
+  it("keeps an explicit plain cellXfs entry as an override of a styled default", async () => {
+    const sheetDataXml =
+      '<row r="1"><c r="A1" s="0" t="inlineStr"><is><t>Bold</t></is></c><c r="B1" s="1" t="inlineStr"><is><t>Plain</t></is></c></row>';
+    const preview = parseOfficePreviewBuffer(
+      await buildXlsxFixture({
+        sheets: [{ name: "Override", sheetDataXml }],
+        sharedStrings: [],
+        extraParts: [
+          {
+            path: "xl/styles.xml",
+            content:
+              '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><b/><sz val="11"/><name val="Calibri"/></font><font/></fonts><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0"/></cellXfs></styleSheet>',
+          },
+        ],
+      }),
+      "xlsx",
+    );
+
+    const sheet = preview?.sheets?.[0];
+    expect(sheet?.defaultStyle).toBe(0);
+    expect(sheet?.styles?.[0]?.bold).toBe(true);
+    // A1 uses the styled default; B1 explicitly clears it.
+    expect(sheet?.cells).toEqual([{ row: 0, column: 1, plain: true }]);
+  });
+
+  it("reports frozen panes only for frozen pane states", async () => {
+    const splitView =
+      '<sheetViews><sheetView><pane xSplit="1" ySplit="1" topLeftCell="B2" state="split"/></sheetView></sheetViews>';
+    const frozenView =
+      '<sheetViews><sheetView><pane xSplit="1" ySplit="1" topLeftCell="B2" state="frozen"/></sheetView></sheetViews>';
+    const preview = parseOfficePreviewBuffer(
+      await buildXlsxFixture({
+        sheets: [
+          {
+            name: "Split",
+            worksheetPrefixXml: splitView,
+            sheetDataXml: '<row r="1"><c r="A1"><v>1</v></c></row>',
+          },
+          {
+            name: "Frozen",
+            worksheetPrefixXml: frozenView,
+            sheetDataXml: '<row r="1"><c r="A1"><v>1</v></c></row>',
+          },
+        ],
+        sharedStrings: [],
+      }),
+      "xlsx",
+    );
+
+    const split = preview?.sheets?.[0];
+    expect(split?.frozenRows).toBeUndefined();
+    expect(split?.frozenColumns).toBeUndefined();
+    const frozen = preview?.sheets?.[1];
+    expect(frozen?.frozenRows).toBe(1);
+    expect(frozen?.frozenColumns).toBe(1);
   });
 
   it("keeps hidden worksheet tabs with their declaration", async () => {

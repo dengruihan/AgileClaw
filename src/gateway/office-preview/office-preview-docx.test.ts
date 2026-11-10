@@ -2,7 +2,12 @@ import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
 import { SessionFileOfficePreviewSchema } from "../../../packages/gateway-protocol/src/schema/office-preview.js";
 import { parseOfficePreviewBuffer } from "./office-preview-parse.js";
-import { buildDocxFixture, buildStyledDocxFixture } from "./office-preview.test-support.js";
+import {
+  buildDocxFixture,
+  buildRepeatedImageDocxFixture,
+  buildStyledDocxFixture,
+  textBoxDocxBody,
+} from "./office-preview.test-support.js";
 
 type Preview = NonNullable<ReturnType<typeof parseOfficePreviewBuffer>>;
 type Paragraph = Extract<
@@ -111,8 +116,11 @@ describe("styled document layout", () => {
       (block): block is DocxImage => block.kind === "image",
     );
     expect(images).toHaveLength(1);
-    expect(images[0]?.dataUrl.startsWith("data:image/png;base64,")).toBe(true);
+    // Images are referenced through the deduplicated media table.
     expect(images[0]).toMatchObject({ widthPt: 75, heightPt: 75, alt: "Synthetic logo" });
+    expect(images[0]?.media).toBe(0);
+    expect(preview?.media).toHaveLength(1);
+    expect(preview?.media?.[0]?.dataUrl.startsWith("data:image/png;base64,")).toBe(true);
   });
 
   it("splits approximate pages at manual and last-rendered breaks", async () => {
@@ -151,6 +159,104 @@ describe("styled document layout", () => {
       { kind: "listItem", text: "Second numbered" },
     ]);
   });
+
+  it("keeps table-cell text in the legacy stream in document order", async () => {
+    const preview = parseOfficePreviewBuffer(await buildStyledDocxFixture(), "docx");
+    const texts = (preview?.blocks ?? []).map((block) => block.text);
+    const expectedOrder = [
+      "Section Two",
+      "Header A",
+      "Header B",
+      "Merged",
+      "B2",
+      "B3",
+      "Page two text",
+    ];
+    const positions = expectedOrder.map((text) => texts.indexOf(text));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(positions.toSorted((left, right) => left - right)).toEqual(positions);
+  });
+
+  it("bounds legacy block text and page runs with the document character budget", async () => {
+    const chunk = "x".repeat(8_000);
+    const body = Array.from({ length: 60 }, () => `<w:p><w:r><w:t>${chunk}</w:t></w:r></w:p>`).join(
+      "",
+    );
+    const preview = parseOfficePreviewBuffer(await buildDocxFixture(body), "docx");
+
+    const legacyChars = (preview?.blocks ?? []).reduce(
+      (total, block) => total + block.text.length,
+      0,
+    );
+    expect(preview?.blocks).toHaveLength(50);
+    expect(legacyChars).toBe(400_000);
+    const runChars =
+      preview?.pages?.flatMap((page) =>
+        page.blocks.flatMap((block) =>
+          block.kind === "paragraph"
+            ? block.runs.map((run) => run.text.length)
+            : block.kind === "table"
+              ? block.rows.flatMap((row) =>
+                  row.cells.flatMap((cell) =>
+                    cell.paragraphs.flatMap((paragraph) =>
+                      paragraph.runs.map((run) => run.text.length),
+                    ),
+                  ),
+                )
+              : [],
+        ),
+      ) ?? [];
+    expect(runChars.reduce((total, length) => total + length, 0)).toBeLessThanOrEqual(400_000);
+    expect(preview?.truncated).toBe(true);
+  });
+
+  it("deduplicates repeated images instead of repeating their bytes", async () => {
+    const preview = parseOfficePreviewBuffer(
+      await buildRepeatedImageDocxFixture({ imageBytes: 204_870, occurrences: 10 }),
+      "docx",
+    );
+
+    expect(Value.Check(SessionFileOfficePreviewSchema, preview)).toBe(true);
+    const imageBlocks =
+      preview?.pages?.flatMap((page) =>
+        page.blocks.filter((block): block is DocxImage => block.kind === "image"),
+      ) ?? [];
+    expect(imageBlocks).toHaveLength(10);
+    expect(preview?.media).toHaveLength(1);
+    expect(new Set(imageBlocks.map((block) => block.media)).size).toBe(1);
+    // One ~273 k-character data URL plus ten tiny references, not ten copies.
+    expect(Buffer.byteLength(JSON.stringify(preview))).toBeLessThan(320_000);
+  });
+
+  it("keeps serialized size flat as repeated image occurrences grow", async () => {
+    const many = parseOfficePreviewBuffer(
+      await buildRepeatedImageDocxFixture({ imageBytes: 204_870, occurrences: 200 }),
+      "docx",
+    );
+    const imageBlocks =
+      many?.pages?.flatMap((page) =>
+        page.blocks.filter((block): block is DocxImage => block.kind === "image"),
+      ) ?? [];
+    expect(imageBlocks).toHaveLength(200);
+    expect(many?.media).toHaveLength(1);
+    // 200 references add only block overhead, not 200 data URLs.
+    expect(Buffer.byteLength(JSON.stringify(many))).toBeLessThan(350_000);
+  });
+
+  it.each(["inline", "anchor", "vml"] as const)(
+    "reports a %s text box instead of dropping its content silently",
+    async (form) => {
+      const preview = parseOfficePreviewBuffer(
+        await buildDocxFixture(textBoxDocxBody({ text: "TEXT_BOX_NOTE", form })),
+        "docx",
+      );
+
+      expect(Value.Check(SessionFileOfficePreviewSchema, preview)).toBe(true);
+      // Content is not silently invented into the body; the approximation is counted.
+      expect(JSON.stringify(preview?.pages)).not.toContain("TEXT_BOX_NOTE");
+      expect(preview?.omitted).toContainEqual({ feature: "floatingObjects", count: 1 });
+    },
+  );
 
   it("bounds approximate pages and reports the cut", async () => {
     const body = Array.from(

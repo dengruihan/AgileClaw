@@ -16,7 +16,19 @@ import { parseSpreadsheet } from "./office-preview-xlsx.js";
 import { OfficeArchiveError, OfficeZipArchive } from "./office-preview-zip.js";
 
 /** Why a package could not produce a structured preview. */
-export type OfficePreviewParseFailure = "invalid" | "password-protected";
+export type OfficePreviewParseFailure = "invalid" | "password-protected" | "too-large";
+
+/**
+ * Archive limits are a complexity budget, not corruption: a legitimately framed
+ * package that exceeds entry/inflation/ratio limits reports `too-large`.
+ */
+const ARCHIVE_LIMIT_REASONS: ReadonlySet<OfficeArchiveError["reason"]> = new Set([
+  "zip64",
+  "entry_limit",
+  "entry_too_large",
+  "archive_too_large",
+  "compression_ratio",
+]);
 
 export type OfficePreviewParseResult =
   | { preview: SessionFileOfficePreview }
@@ -44,12 +56,13 @@ export function parseOfficePreviewBufferResult(
   try {
     archive = new OfficeZipArchive(buffer);
   } catch (error) {
-    return {
-      failure:
-        error instanceof OfficeArchiveError && error.reason === "encrypted"
-          ? "password-protected"
-          : "invalid",
-    };
+    if (!(error instanceof OfficeArchiveError)) {
+      return { failure: "invalid" };
+    }
+    if (error.reason === "encrypted") {
+      return { failure: "password-protected" };
+    }
+    return { failure: ARCHIVE_LIMIT_REASONS.has(error.reason) ? "too-large" : "invalid" };
   }
   try {
     const preview = selectPreview(archive, format);

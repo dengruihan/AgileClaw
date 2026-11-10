@@ -7,6 +7,7 @@ import {
   buildDocxFixture,
   buildEncryptedOoxmlContainer,
   buildEncryptedZipFixture,
+  buildEntryOverflowZipFixture,
   buildStyledXlsxFixture,
   buildXlsxFixture,
   OLE_COMPOUND_FILE_HEADER,
@@ -130,6 +131,19 @@ describe("shared Office preview payload", () => {
     // Legacy CFB files are a different family, never password-protected.
     expect(legacy).toEqual({ kind: "office", state: "unsupported" });
     expect(Value.Check(ArtifactOfficePreviewSchema, encrypted)).toBe(true);
+  });
+
+  it("reports an archive that exceeds its resource budget as too-large", async () => {
+    const buffer = await buildEntryOverflowZipFixture();
+    const preview = await buildOfficePreviewPayload({
+      filename: "overflow.xlsx",
+      mimeType: XLSX_MIME,
+      sizeBytes: buffer.length,
+      read: async () => buffer,
+    });
+
+    expect(preview).toEqual({ kind: "office", format: "xlsx", state: "too-large" });
+    expect(Value.Check(ArtifactOfficePreviewSchema, preview)).toBe(true);
   });
 
   it("leaves non-Office files on their existing preview path", async () => {

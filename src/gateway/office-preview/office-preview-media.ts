@@ -5,9 +5,17 @@
  * media-core data-URL sanitizer that re-sniffs the bytes. WMF, EMF, SVG, BMP,
  * TIFF, and oversized images are never rendered; they are counted as an explicit
  * omission instead of being silently dropped.
+ *
+ * Media is deduplicated by package part: one decoded image is inlined once in
+ * the preview's `media` table, and every occurrence is a small block that
+ * references it. Repeating an image therefore cannot multiply the serialized
+ * payload, and the byte budget applies to actual wire bytes.
  */
 import { sanitizeInlineImageDataUrl } from "@openclaw/media-core/inline-image-data-url";
-import type { SessionFileOfficeImage } from "../../../packages/gateway-protocol/src/index.js";
+import type {
+  SessionFileOfficeImage,
+  SessionFileOfficeMedia,
+} from "../../../packages/gateway-protocol/src/index.js";
 import {
   OFFICE_PREVIEW_MAX_DOCX_IMAGE_BYTES,
   OFFICE_PREVIEW_MAX_DOCX_IMAGE_TOTAL_BYTES,
@@ -25,15 +33,15 @@ const INLINE_IMAGE_MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
 };
 
 export type DocxImageReader = {
-  /** Resolves one image relationship into a bounded typed image, or undefined. */
+  /** Unique images inlined by this document, indexed by `SessionFileOfficeImage.media`. */
+  readonly media: SessionFileOfficeMedia[];
+  /** Resolves one image occurrence into a media reference, or undefined. */
   read: (params: {
     relationshipId: string | undefined;
     alt: string | undefined;
     widthPt: number;
     heightPt: number;
   }) => SessionFileOfficeImage | undefined;
-  /** True when at least one image was inlined. */
-  readonly used: boolean;
 };
 
 export function createDocxImageReader(
@@ -41,8 +49,8 @@ export function createDocxImageReader(
   relationships: ReadonlyMap<string, string>,
   counter: OmittedFeatureCounter,
 ): DocxImageReader {
-  const cache = new Map<string, string | undefined>();
-  let inlineCount = 0;
+  const indexes = new Map<string, number>();
+  const media: SessionFileOfficeMedia[] = [];
   let totalBytes = 0;
 
   const read = (params: {
@@ -65,9 +73,9 @@ export function createDocxImageReader(
       counter.add("images");
       return undefined;
     }
-    let dataUrl = cache.get(target);
-    if (dataUrl === undefined) {
-      if (inlineCount >= OFFICE_PREVIEW_MAX_DOCX_IMAGES) {
+    let mediaIndex = indexes.get(target);
+    if (mediaIndex === undefined) {
+      if (media.length >= OFFICE_PREVIEW_MAX_DOCX_IMAGES) {
         counter.add("images");
         return undefined;
       }
@@ -85,28 +93,26 @@ export function createDocxImageReader(
         counter.add("images");
         return undefined;
       }
-      dataUrl = sanitizeInlineImageDataUrl(`data:${mimeType};base64,${bytes.toString("base64")}`);
+      const dataUrl = sanitizeInlineImageDataUrl(
+        `data:${mimeType};base64,${bytes.toString("base64")}`,
+      );
       if (!dataUrl) {
         counter.add("images");
         return undefined;
       }
       totalBytes += bytes.length;
-      inlineCount += 1;
-      cache.set(target, dataUrl);
+      mediaIndex = media.length;
+      media.push({ dataUrl });
+      indexes.set(target, mediaIndex);
     }
     return {
       kind: "image",
-      dataUrl,
+      media: mediaIndex,
       widthPt: Math.max(0, Math.min(2_000, params.widthPt)),
       heightPt: Math.max(0, Math.min(2_000, params.heightPt)),
       ...(params.alt ? { alt: params.alt.slice(0, 512) } : {}),
     };
   };
 
-  return {
-    read,
-    get used() {
-      return inlineCount > 0;
-    },
-  };
+  return { media, read };
 }

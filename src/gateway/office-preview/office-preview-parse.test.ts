@@ -10,6 +10,7 @@ import {
   buildDocxFixture,
   buildEncryptedOoxmlContainer,
   buildEncryptedZipFixture,
+  buildEntryOverflowZipFixture,
   buildPptxFixture,
   buildSlideXml,
   buildXlsxFixture,
@@ -266,6 +267,19 @@ describe("parse result states", () => {
     });
     expect(parseOfficePreviewBufferResult(Buffer.from("not a zip"), "xlsx")).toEqual({
       failure: "invalid",
+    });
+  });
+
+  it("reports archive resource limits as too-large, not corruption", async () => {
+    expect(parseOfficePreviewBufferResult(await buildEntryOverflowZipFixture(), "docx")).toEqual({
+      failure: "too-large",
+    });
+    // Malformed archives remain invalid; encrypted ones keep their own state.
+    expect(parseOfficePreviewBufferResult(Buffer.from("not a zip"), "docx")).toEqual({
+      failure: "invalid",
+    });
+    expect(parseOfficePreviewBufferResult(buildEncryptedZipFixture(), "docx")).toEqual({
+      failure: "password-protected",
     });
   });
 
