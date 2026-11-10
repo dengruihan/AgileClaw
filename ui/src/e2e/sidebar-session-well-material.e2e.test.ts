@@ -21,11 +21,46 @@ suite.define(() => {
   // it is supposed to line, and reads as a washed edge (the canonical
   // --well-shadow groove model keeps the lip at 0 blur for the same reason).
   const materialCases = [
-    { label: "ordinary dark", colorScheme: "dark", drawer: false, roster: false, users: 8 },
-    { label: "ordinary light", colorScheme: "light", drawer: false, roster: false, users: 8 },
-    { label: "solo short dark", colorScheme: "dark", drawer: false, roster: false, users: 1 },
-    { label: "compact drawer dark", colorScheme: "dark", drawer: true, roster: false, users: 8 },
-    { label: "roster dark", colorScheme: "dark", drawer: false, roster: true, users: 8 },
+    {
+      label: "ordinary dark",
+      colorScheme: "dark",
+      drawer: false,
+      roster: false,
+      short: false,
+      users: 8,
+    },
+    {
+      label: "ordinary light",
+      colorScheme: "light",
+      drawer: false,
+      roster: false,
+      short: false,
+      users: 8,
+    },
+    {
+      label: "solo short dark",
+      colorScheme: "dark",
+      drawer: false,
+      roster: false,
+      short: true,
+      users: 1,
+    },
+    {
+      label: "compact drawer dark",
+      colorScheme: "dark",
+      drawer: true,
+      roster: false,
+      short: false,
+      users: 8,
+    },
+    {
+      label: "roster dark",
+      colorScheme: "dark",
+      drawer: false,
+      roster: false,
+      short: false,
+      users: 8,
+    },
   ] as const;
 
   /** Per-channel luminance of one device pixel in a decoded RGBA screenshot. */
@@ -82,7 +117,7 @@ suite.define(() => {
 
   it.each(materialCases)(
     "keeps the session-well recess lip seated on the right and bottom edges ($label)",
-    async ({ label, colorScheme, drawer, roster, users }) => {
+    async ({ label, colorScheme, drawer, roster, short, users }) => {
       const captureProof = process.env.OPENCLAW_CAPTURE_UI_PROOF === "1";
       const sessionKey = "agent:main:dashboard:active-session";
       const baseTime = Date.parse("2026-07-01T16:00:00.000Z");
@@ -98,11 +133,19 @@ suite.define(() => {
             ),
       );
       const compact = drawer;
+      // The short case exercises the ≤500px band where the Online section
+      // yields its space to the well; its in-well session toolbar is removed
+      // at that height, keeping the floor below the two rows empty for the
+      // bottom-edge sample line.
       const context = await suite.newBrowserContext({
         colorScheme,
         deviceScaleFactor: 3,
         locale: "en-US",
-        viewport: compact ? { height: 844, width: 390 } : { height: 800, width: 1280 },
+        viewport: compact
+          ? { height: 844, width: 390 }
+          : short
+            ? { height: 500, width: 1280 }
+            : { height: 800, width: 1280 },
       });
       const page = await context.newPage();
       await installMockGateway(page, {
@@ -200,6 +243,20 @@ suite.define(() => {
         const well = page.locator(".sidebar-sessions").first();
         await well.waitFor({ state: "visible" });
         await page.evaluate(() => document.fonts.ready);
+        // The bottom-edge sample line crosses the floor below the last row,
+        // so that zone must stay content-free: the two-row roster (plus the
+        // ≤500px band removing the in-well toolbar in the short case) keeps
+        // it face-only at every case height.
+        const floorGap = await well.evaluate((element) => {
+          const wellRect = element.getBoundingClientRect();
+          const wellRows = element.querySelectorAll(".sidebar-recent-session");
+          const lastRow = wellRows[wellRows.length - 1]?.getBoundingClientRect();
+          return wellRect.bottom - (lastRow?.bottom ?? wellRect.top);
+        });
+        expect(
+          floorGap,
+          "empty floor below the last row keeps the bottom sample line content-free",
+        ).toBeGreaterThanOrEqual(24);
 
         // Geometry: exactly the shade layer plus the zero-blur lip layer.
         const { shadows, padding } = await well.evaluate((element) => {
