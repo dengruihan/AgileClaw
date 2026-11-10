@@ -299,7 +299,11 @@ suite.define(() => {
         await page.goto(url.toString());
         await confirmGatewayUrl(page, { required: true });
         const dialog = await openConnectMachine(page);
-        await dialog.getByText(/This link is single-use and expires in/u).waitFor();
+        // The first setup request can pay the Gateway's cold bootstrap-token
+        // writer startup; the dialog stays in its creating state until it resolves.
+        await dialog
+          .getByText(/This link is single-use and expires in/u)
+          .waitFor({ timeout: 45_000 });
 
         // Download-to-pair guidance: both transfer steps render real app links.
         for (const platform of ["macOS", "Windows", "Linux"]) {
@@ -449,7 +453,9 @@ suite.define(() => {
 
         // The Gateway refuses the plaintext non-loopback join URL; the dialog
         // shows the fallback guidance instead of a dead end.
-        await dialog.getByText("Share the setup code instead", { exact: true }).waitFor();
+        await dialog
+          .getByText("Share the setup code instead", { exact: true })
+          .waitFor({ timeout: 45_000 });
         await dialog
           .getByText(/This Gateway address is not encrypted, so one-time links are unavailable\./u)
           .waitFor();
