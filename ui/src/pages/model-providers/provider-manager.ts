@@ -29,6 +29,7 @@ import { providerModelsList } from "./provider-manager-models.ts";
 import {
   configuredProvider,
   providerConnectionPatch,
+  providerCreatePatch,
   modelReferences,
   modelRemovePatch,
   modelWritePatch,
@@ -55,6 +56,8 @@ export class ProviderManager extends OpenClawLightDomElement {
   @property({ attribute: false }) probeResults: Record<string, ModelsProbeResult> = {};
   @property({ attribute: false }) probeBusy: Record<string, boolean> = {};
   @property({ attribute: false }) probeErrors: Record<string, { text: string }> = {};
+  /** Plugin-declared provider ids that a generated config key must not take. */
+  @property({ attribute: false }) reservedProviderIds: ReadonlySet<string> = new Set();
   @property({ attribute: false }) onCreated: (provider: string) => void = () => {};
   @property({ attribute: false }) onRefresh: () => void = () => {};
   @property({ attribute: false }) onProbe: (modelId: string) => void = () => {};
@@ -70,6 +73,8 @@ export class ProviderManager extends OpenClawLightDomElement {
   ) => Promise<CredentialResult | undefined> = async () => undefined;
   @state() private draft: Record<string, unknown> = {};
   @state() private providerId = "";
+  /** Live Name field text; it reaches the draft only when the operator confirms it. */
+  @state() private nameDraft = "";
   private readonly credential = new ProviderCredentialController(() => this.requestUpdate());
   @state() private error: string | null = null;
   @state() private notice: string | null = null;
@@ -88,6 +93,8 @@ export class ProviderManager extends OpenClawLightDomElement {
   private touched = new Set<string>();
   private listScrollTop = 0;
   private providerCreated = false;
+  /** The name the field was last seeded from, so pending typing survives a re-render. */
+  private seededName = "";
   private focusModelsSection = false;
   private autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -106,6 +113,8 @@ export class ProviderManager extends OpenClawLightDomElement {
       this.providerId = this.intent?.provider ?? "";
       this.original = structuredClone(configuredProvider(this.config, this.providerId) ?? {});
       this.draft = structuredClone(this.original);
+      this.nameDraft = "";
+      this.seededName = "";
       this.catalog = [];
       this.focusModelsSection = this.intent?.view === "models";
       if (this.intent) {
@@ -115,6 +124,7 @@ export class ProviderManager extends OpenClawLightDomElement {
       this.original = structuredClone(configuredProvider(this.config, this.providerId) ?? {});
       this.draft = structuredClone(this.original);
     }
+    this.syncName();
     this.credential.sync({
       client: this.context.gateway.snapshot.client,
       agentId: this.agentId,
@@ -220,6 +230,53 @@ export class ProviderManager extends OpenClawLightDomElement {
     this.draft = { ...this.draft, [key]: value };
     this.touched.add(key);
     this.scheduleConnectionAutoSave();
+  }
+
+  /** The name the draft persists, i.e. what the Name field should show next. */
+  private get committedName(): string {
+    return typeof this.draft.displayName === "string" ? this.draft.displayName : "";
+  }
+
+  private syncName() {
+    if (this.nameDraft !== this.seededName) {
+      return;
+    }
+    this.nameDraft = this.committedName;
+    this.seededName = this.committedName;
+  }
+
+  /**
+   * Commits the Name field on its own, on blur or Enter. Connection autosaves never
+   * carry an unconfirmed name, and clearing the field removes the leaf so the label
+   * derived from the config key shows again.
+   */
+  private commitName() {
+    const next = this.nameDraft.trim();
+    if (next === this.committedName) {
+      this.nameDraft = next;
+      this.seededName = next;
+      return;
+    }
+    const draft = { ...this.draft };
+    if (next) {
+      draft.displayName = next;
+    } else {
+      delete draft.displayName;
+    }
+    this.draft = draft;
+    // The committed value replaces what was typed, so re-seed both marks: the field
+    // is clean again and a later config refresh may move it underneath the operator.
+    this.nameDraft = next;
+    this.seededName = next;
+    // Marking the leaf touched keeps the committed name alive across the re-render
+    // that an unrelated config refresh triggers before the write settles.
+    this.touched.add("displayName");
+    if (this.intent?.view === "create" && !this.providerCreated) {
+      // Nothing is persisted yet; the create write takes the whole draft once the
+      // endpoint is complete.
+      return;
+    }
+    void this.saveConnection(true);
   }
 
   /** Connection edits save themselves; the submit path only flushes them early. */
@@ -396,7 +453,7 @@ export class ProviderManager extends OpenClawLightDomElement {
     const modelDirty =
       this.modelDraft !== null &&
       JSON.stringify(this.modelDraft) !== JSON.stringify(this.initialModelDraft);
-    if (!this.dirty && !modelDirty && !(this.intent?.view === "create" && this.providerId)) {
+    if (!this.dirty && !modelDirty && this.nameDraft.trim() === this.committedName) {
       return true;
     }
     const controller = new AbortController();
@@ -522,10 +579,10 @@ export class ProviderManager extends OpenClawLightDomElement {
             ${providerConnectionFields({
               actions: {
                 onConnect: this.onConnect,
-                onProviderIdInput: (value) => {
-                  this.providerId = value;
-                  this.scheduleConnectionAutoSave();
+                onNameInput: (value) => {
+                  this.nameDraft = value;
                 },
+                onNameCommit: () => this.commitName(),
                 onKeyInput: (value) => {
                   this.credential.value = value;
                   this.requestUpdate();
@@ -539,6 +596,7 @@ export class ProviderManager extends OpenClawLightDomElement {
               },
               state: {
                 busy: this.busy,
+                canRename: creating || this.customProvider,
                 card: this.card,
                 creating,
                 dirty: this.dirty,
@@ -548,8 +606,8 @@ export class ProviderManager extends OpenClawLightDomElement {
                 keyLoading: this.credential.loading,
                 keyError: this.credential.error,
                 keySource: this.credential.source,
+                nameDraft: this.nameDraft,
                 providerCreated: this.providerCreated,
-                providerId: this.providerId,
                 revealKey: this.credential.revealed,
               },
             })}
@@ -640,51 +698,46 @@ export class ProviderManager extends OpenClawLightDomElement {
     // would otherwise keep the dialog open and visible after a successful retry.
     this.error = this.notice = null;
     const creating = this.intent?.view === "create";
-    const id = this.providerId.trim();
-    if (
-      !id ||
-      ["__proto__", "constructor", "prototype"].includes(id) ||
-      (creating && !this.providerCreated && configuredProvider(this.config, id))
-    ) {
+    // A new provider's key is claimed inside the write transaction; an existing
+    // entry keeps the exact key it was created with, so an edit never moves identity.
+    const firstCreate = creating && !this.providerCreated;
+    const id = firstCreate ? "" : this.providerId.trim();
+    if (!firstCreate && (!id || ["__proto__", "constructor", "prototype"].includes(id))) {
       // Auto-saves stay silent on incomplete input; an explicit submit reports it.
       if (!auto) {
-        this.error = t("modelProviders.manager.duplicateProvider");
+        this.error = t("modelProviders.manager.unusableProviderKey");
       }
       return;
     }
-    if (creating && !this.draft.baseUrl) {
+    if (firstCreate && !this.draft.baseUrl) {
       if (!auto) {
         this.error = t("modelProviders.manager.urlRequired");
       }
       return;
     }
-    const { raw, replacePaths } = providerConnectionPatch(
-      this.original,
-      this.draft,
-      this.touched,
-      id,
-    );
-    if (creating && !this.providerCreated) {
-      raw.models = {
-        providers: {
-          [id]: { ...this.draft, api: this.draft.api ?? "openai-completions", models: [] },
-        },
-      };
-    }
     const generation = this.generation;
-    if ((creating && !this.providerCreated) || this.touched.size) {
+    let createdId = "";
+    if (firstCreate || this.touched.size) {
       if (
         !(await this.write((config) => {
+          if (firstCreate) {
+            const patch = providerCreatePatch({
+              config,
+              entry: { ...this.draft, api: this.draft.api ?? "openai-completions", models: [] },
+              reservedProviderIds: this.reservedProviderIds,
+            });
+            createdId = patch.providerId;
+            return patch;
+          }
           const latest = configuredProvider(config, id);
           if (
-            (creating && !this.providerCreated && latest) ||
             [...this.touched].some(
               (key) => JSON.stringify(latest?.[key]) !== JSON.stringify(this.original[key]),
             )
           ) {
             return { error: t("modelProviders.manager.conflict") };
           }
-          return { raw, replacePaths };
+          return providerConnectionPatch(this.original, this.draft, this.touched, id);
         }))
       ) {
         return;
@@ -693,19 +746,22 @@ export class ProviderManager extends OpenClawLightDomElement {
         return;
       }
       this.providerCreated ||= creating;
-      // The merged view continues in place; adopt the trimmed key the save used
+      // The merged view continues in place; adopt the claimed key the save used
       // so the in-dialog model list targets the created provider.
-      this.providerId = id;
+      this.providerId = firstCreate ? createdId : id;
+      this.credential.rekey(this.providerId);
       this.original = structuredClone(
         configuredProvider(this.config, this.providerId) ?? this.draft,
       );
       this.draft = structuredClone(this.original);
       this.touched.clear();
+      this.syncName();
     }
+    const savedId = firstCreate ? this.providerId : id;
     if (this.credential.dirty) {
       this.busy = true;
       try {
-        const result = await this.onCredential(id, this.credential.value.trim() || null);
+        const result = await this.onCredential(savedId, this.credential.value.trim() || null);
         if (generation !== this.generation) {
           return;
         }
@@ -728,7 +784,7 @@ export class ProviderManager extends OpenClawLightDomElement {
       }
     }
     if (creating && generation === this.generation && !this.error) {
-      this.onCreated(this.providerId);
+      this.onCreated(savedId);
       // Creation continues in place: the merged view lists models to add next.
       if (!this.loading) {
         void this.load();

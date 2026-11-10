@@ -680,7 +680,8 @@ const enSettings = {
       customProvider: "Custom provider",
       providerActions: "Actions for {name}",
       advanced: "Advanced configuration",
-      providerId: "Provider ID",
+      providerName: "Name",
+      providerNamePlaceholder: "Optional; blank shows a label generated from the endpoint",
       keepKey: "Enter an API key",
       externalKey:
         "Environment and secret-reference keys are managed at their source and cannot be shown here.",
@@ -692,7 +693,8 @@ const enSettings = {
       saved: "Configuration saved",
       conflict:
         "This provider configuration changed while you were editing. Close and reopen the editor to review the current settings, then retry.",
-      duplicateProvider: "Choose a unique provider ID.",
+      unusableProviderKey:
+        "This provider entry has an unusable configuration key. Correct the key in the configuration editor before editing it here.",
       urlRequired: "Enter a base URL for the custom provider.",
       duplicateModel:
         "Enter a model ID and name. New model IDs must be unique within this provider.",

@@ -6,6 +6,7 @@ import {
   modelRemovePatch,
   modelWritePatch,
   providerConnectionPatch,
+  providerCreatePatch,
   providerDeletePatch,
   providerReferenceSites,
 } from "./provider-model-config.ts";
@@ -189,6 +190,87 @@ describe("provider connection edits", () => {
         },
       },
     });
+  });
+});
+
+describe("custom provider creation", () => {
+  const entry = {
+    baseUrl: "https://models.example.test/v1",
+    displayName: "我的中转站",
+    api: "openai-completions",
+    models: [],
+  };
+
+  it("claims an endpoint-derived key so creation never asks for an id", () => {
+    const patch = providerCreatePatch({ config: { models: { providers: {} } }, entry });
+    expect(patch.providerId).toBe("custom-models-example-test");
+    expect(patch.raw).toEqual({
+      models: { providers: { "custom-models-example-test": entry } },
+    });
+    expect(patch.replacePaths).toEqual([]);
+  });
+
+  it("keeps the host and port apart for two local endpoints", () => {
+    const first = providerCreatePatch({
+      config: null,
+      entry: { ...entry, baseUrl: "http://127.0.0.1:11434/v1" },
+    });
+    const second = providerCreatePatch({
+      config: null,
+      entry: { ...entry, baseUrl: "http://127.0.0.1:8080/v1" },
+    });
+    expect([first.providerId, second.providerId]).toEqual([
+      "custom-127-0-0-1-11434",
+      "custom-127-0-0-1-8080",
+    ]);
+  });
+
+  it("claims the next key instead of overwriting a same-endpoint provider", () => {
+    const existing = {
+      models: {
+        providers: {
+          "custom-models-example-test": { baseUrl: "https://models.example.test/v1", models: [] },
+        },
+      },
+    };
+    const patch = providerCreatePatch({ config: existing, entry });
+    expect(patch.providerId).toBe("custom-models-example-test-2");
+    expect(
+      applyMergePatch(existing, patch.raw, { mergeObjectArraysById: true, replaceArrayPaths: [] }),
+    ).toEqual({
+      models: {
+        providers: {
+          "custom-models-example-test": { baseUrl: "https://models.example.test/v1", models: [] },
+          "custom-models-example-test-2": entry,
+        },
+      },
+    });
+  });
+
+  it("skips a plugin-declared provider id when claiming", () => {
+    const patch = providerCreatePatch({
+      config: null,
+      entry: { ...entry, baseUrl: "http://ollama" },
+      reservedProviderIds: ["custom-ollama"],
+    });
+    expect(patch.providerId).toBe("custom-ollama-2");
+  });
+
+  it("claims against the freshest snapshot, not the one the form opened with", () => {
+    const openedWith = { models: { providers: {} } };
+    const latest = {
+      models: {
+        providers: {
+          "custom-models-example-test": { baseUrl: "https://other.example.test/v1", models: [] },
+        },
+      },
+    };
+    expect(providerCreatePatch({ config: openedWith, entry }).providerId).toBe(
+      "custom-models-example-test",
+    );
+    expect(providerCreatePatch({ config: latest, entry }).providerId).toBe(
+      "custom-models-example-test-2",
+    );
   });
 });
 

@@ -1,3 +1,4 @@
+import { buildEndpointIdFromUrl } from "@openclaw/model-catalog-core/provider-id";
 // Onboard custom config tests cover provider-specific config merging and context-window bounds.
 import { setCurrentManifestModelIdNormalizationPolicies } from "@openclaw/model-catalog-core/provider-model-id-normalization";
 import { describe, expect, it, vi } from "vitest";
@@ -554,6 +555,20 @@ describe("applyCustomApiConfig", () => {
     expect(provider?.api).toBe("azure-openai-responses");
     expect(provider?.authHeader).toBe(false);
     expect(provider?.headers).toEqual({ "api-key": "key789" });
+  });
+
+  it("derives the same key as the shared generator the Control UI claims from", () => {
+    const baseUrl = "https://models.example.test:8443/v1";
+    const result = applyCustomApiConfig({
+      config: {},
+      baseUrl,
+      modelId: "model-a",
+      compatibility: "openai",
+    });
+
+    expect(result.providerId).toBe("custom-models-example-test-8443");
+    expect(result.providerId).toBe(buildEndpointIdFromUrl(baseUrl));
+    expect(result.providerIdRenamedFrom).toBeUndefined();
   });
 
   it("renames provider id when a non-azure baseUrl differs", () => {

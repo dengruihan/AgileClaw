@@ -425,6 +425,29 @@ describe("buildModelProviderCards", () => {
       profiles: [],
     });
   });
+
+  it("labels cards with authored names while the config key stays the identity", () => {
+    const cards = buildModelProviderCards({
+      ...EMPTY_INPUT,
+      configProviderIds: ["custom-relay", "custom-relay-2", "custom-other"],
+      configProviderDisplayNames: {
+        "custom-relay": "我的中转站",
+        "custom-relay-2": "我的中转站",
+      },
+    });
+    expect(cards.map((card) => card.configKey).toSorted()).toEqual([
+      "custom-other",
+      "custom-relay",
+      "custom-relay-2",
+    ]);
+    expect(
+      Object.fromEntries(cards.map((card) => [card.configKey ?? card.id, card.displayName])),
+    ).toEqual({
+      "custom-other": "Custom Other",
+      "custom-relay": "我的中转站",
+      "custom-relay-2": "我的中转站",
+    });
+  });
 });
 
 describe("model provider configuration data", () => {
@@ -486,6 +509,7 @@ describe("model provider configuration data", () => {
     ).toEqual({
       providerIds: ["openai", "anthropic"],
       providerModelIds: { openai: [], anthropic: [] },
+      providerDisplayNames: {},
       apiKeyProviderIds: ["openai"],
       providerAuthModes: {},
       defaults: {
@@ -508,6 +532,20 @@ describe("model provider configuration data", () => {
         models: { providers: { OpenAI: { auth: "oauth" } } },
       }).providerAuthModes,
     ).toEqual({ OpenAI: "oauth" });
+  });
+
+  it("reads authored display names by their exact config key", () => {
+    expect(
+      readModelProviderConfig({
+        models: {
+          providers: {
+            "custom-relay": { baseUrl: "https://relay.example.test/v1", displayName: "我的中转站" },
+            unnamed: { baseUrl: "https://other.example.test/v1" },
+            blank: { baseUrl: "https://blank.example.test/v1", displayName: "   " },
+          },
+        },
+      }).providerDisplayNames,
+    ).toEqual({ "custom-relay": "我的中转站" });
   });
 
   it("lists known providers that are not configured", () => {

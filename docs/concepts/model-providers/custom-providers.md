@@ -11,6 +11,8 @@ title: "Custom providers and local runtimes"
 
 Use `models.providers` (or `models.json`) to add **custom** providers or OpenAI/Anthropic-compatible proxies.
 
+In Settings → Models, **Add provider** asks for a readable name, the base URL, and the API format only. OpenClaw generates the `models.providers` key from the endpoint host and port (`https://relay.example.test/v1` → `custom-relay-example-test`), claims an unused key when several providers share an endpoint, and stores the name as `models.providers.<id>.displayName`. That key is the identity its model, credential, and secret references use: renaming a provider never changes it, and clearing the name restores the label derived from the key. CLI onboarding and hand-authored config keep taking an explicit provider id, which stays authoritative.
+
 Many of the bundled provider plugins below already publish a default catalog. Use explicit `models.providers.<id>` entries only when you want to override the default base URL, headers, or model list.
 
 Bundled and catalog-known routes take their `compat` capabilities from the owning provider plugin. A config `compat` block is for a custom provider/model or a different `api`/`baseUrl` route whose endpoint contract you have verified; see the [custom-provider capability guide](/gateway/config-tools#custom-provider-capability-declarations). Doctor removes legacy values that merely repeat the catalog and leaves divergent values visible for operator review.

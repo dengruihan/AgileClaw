@@ -899,6 +899,37 @@ describe("models.authStatus", () => {
     expect(readOnlyResult.providers[0]?.usage).not.toHaveProperty("accountEmail");
   });
 
+  it("labels auth-status providers with their authored display name", async () => {
+    mocks.getRuntimeConfig.mockReturnValue({
+      models: {
+        providers: {
+          "custom-relay": {
+            baseUrl: "https://relay.example.test/v1",
+            displayName: "我的中转站",
+            models: [],
+          },
+          "custom-unnamed": { baseUrl: "https://other.example.test/v1", models: [] },
+        },
+      },
+    } satisfies OpenClawConfig);
+    const named = createStaticApiKeyProvider("custom-relay");
+    const unnamed = createStaticApiKeyProvider("custom-unnamed");
+    mocks.buildAuthHealthSummary.mockReturnValue({
+      now: 0,
+      warnAfterMs: 0,
+      profiles: [...named.profiles, ...unnamed.profiles],
+      providers: [named, unnamed],
+    });
+
+    const result = await readAuthStatus();
+
+    // The authored name is presentation only; an unnamed provider keeps today's label.
+    expect(result.providers.map((provider) => provider.displayName)).toEqual([
+      "我的中转站",
+      "custom-unnamed",
+    ]);
+  });
+
   it("adds DeepSeek API-key balance summaries to auth status usage", async () => {
     mockHealthProvider(createStaticApiKeyProvider("deepseek"));
     mocks.loadProviderUsageSummary.mockResolvedValue({

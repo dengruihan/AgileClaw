@@ -93,6 +93,13 @@ async function openDialog(config: DialogTestConfig, provider: string) {
     input(name).value = value;
     input(name).dispatchEvent(new Event("input", { bubbles: true }));
   };
+  /** Confirms a field the way the browser does on blur or Enter, which is when the Name leaf commits. */
+  const commitInput = async (name: string, value: string) => {
+    const previous = patches.length;
+    setInput(name, value);
+    input(name).dispatchEvent(new Event("change", { bubbles: true }));
+    await waitForFast(() => expect(patches.length).toBeGreaterThan(previous));
+  };
   const save = async () => {
     const previous = patches.length;
     manager
@@ -104,7 +111,7 @@ async function openDialog(config: DialogTestConfig, provider: string) {
     await waitForFast(() => expect(manager.querySelector(".provider-manager--model")).toBeNull());
     await page.updateComplete;
   };
-  return { harness, manager, input, setInput, save, patches, page };
+  return { harness, manager, input, setInput, commitInput, save, patches, page };
 }
 
 function editButton(manager: Element, modelId: string): HTMLButtonElement {
@@ -526,4 +533,50 @@ describe("provider manager dialog forms", () => {
       );
     },
   );
+
+  it("renames a custom provider through its display name without moving the config key", async () => {
+    const { patches, commitInput, input } = await openDialog(
+      {
+        providers: {
+          "custom-relay": {
+            baseUrl: "https://relay.example.test/v1",
+            displayName: "Relay",
+            models: [{ id: "m1", name: "M1", input: ["text"], contextWindow: 1, maxTokens: 1 }],
+          },
+        },
+        catalog: [],
+      },
+      "custom-relay",
+    );
+    expect(input("displayName").value).toBe("Relay");
+
+    await commitInput("displayName", "我的中转站");
+
+    expect(JSON.parse(String(patches[0]?.raw))).toEqual({
+      models: { providers: { "custom-relay": { displayName: "我的中转站" } } },
+    });
+    expect(patches[0]?.replacePaths ?? []).toEqual([]);
+  });
+
+  it("clears the display name on an empty commit so the derived label returns", async () => {
+    const { patches, commitInput } = await openDialog(
+      {
+        providers: {
+          "custom-relay": {
+            baseUrl: "https://relay.example.test/v1",
+            displayName: "Relay",
+            models: [],
+          },
+        },
+        catalog: [],
+      },
+      "custom-relay",
+    );
+
+    await commitInput("displayName", "");
+
+    expect(JSON.parse(String(patches[0]?.raw))).toEqual({
+      models: { providers: { "custom-relay": { displayName: null } } },
+    });
+  });
 });

@@ -1,5 +1,11 @@
+import {
+  buildEndpointIdFromUrl,
+  claimEndpointId,
+  endpointIdOccupancy,
+} from "@openclaw/model-catalog-core/provider-id";
 import { asNullableRecord, isRecord } from "@openclaw/normalization-core/record-coerce";
 import { splitTrailingAuthProfile } from "../../../../src/agents/model-ref-profile.js";
+import { isBuiltInModelProviderOverlayId } from "../../../../src/config/model-provider-overlay-ids.js";
 import {
   collectBaseArrayPaths,
   formatConfigPatchPath,
@@ -12,6 +18,35 @@ export function configuredProvider(
 ): Record<string, unknown> | null {
   const providers = asNullableRecord(asNullableRecord(config?.models)?.providers);
   return asNullableRecord(providers?.[key]);
+}
+
+/**
+ * Claims a fresh `models.providers` key for a new custom provider and returns its
+ * create patch. The claim runs against the latest snapshot inside the write
+ * transaction, so a concurrent save cannot make two providers share a key, and an
+ * existing same-endpoint provider is never overwritten: creation always takes an
+ * unused key. The seed is endpoint-derived, so a display name never moves identity.
+ */
+export function providerCreatePatch(params: {
+  config: Record<string, unknown> | null;
+  entry: Record<string, unknown>;
+  /** Plugin-declared provider ids that a generated key must not take. */
+  reservedProviderIds?: Iterable<string>;
+}): ProviderModelsPatch & { providerId: string } {
+  const baseUrl = typeof params.entry.baseUrl === "string" ? params.entry.baseUrl.trim() : "";
+  const reserved = new Set(params.reservedProviderIds ?? []);
+  const providers = asNullableRecord(asNullableRecord(params.config?.models)?.providers);
+  const claim = claimEndpointId({
+    seed: buildEndpointIdFromUrl(baseUrl),
+    occupied: endpointIdOccupancy(providers ?? undefined),
+    isReserved: (candidate) =>
+      reserved.has(candidate) || isBuiltInModelProviderOverlayId(candidate),
+  });
+  return {
+    providerId: claim.providerId,
+    raw: { models: { providers: { [claim.providerId]: params.entry } } },
+    replacePaths: [],
+  };
 }
 
 export function providerModels(

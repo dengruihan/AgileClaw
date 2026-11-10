@@ -1,3 +1,7 @@
+import {
+  buildEndpointIdFromUrl,
+  normalizeEndpointId,
+} from "@openclaw/model-catalog-core/provider-id";
 import { isHttpUrl } from "@openclaw/net-policy/url-protocol";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { SecretInput } from "../config/types.secrets.js";
@@ -12,9 +16,7 @@ import type { OnboardingAgentTarget } from "./onboard-agent-target.js";
 import {
   applyCustomApiConfig,
   buildAnthropicVerificationProbeRequest,
-  buildEndpointIdFromUrl,
   buildOpenAiVerificationProbeRequest,
-  normalizeEndpointId,
   normalizeOptionalProviderApiKey,
   resolveCustomModelAliasError,
   resolveCustomModelImageInputInference,

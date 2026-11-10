@@ -63,6 +63,17 @@ export class ProviderCredentialController {
     this.scope = null;
   }
 
+  /**
+   * Adopts the config key a create claimed for the provider already being edited.
+   * The operator's pending credential belongs to that provider, so this is a
+   * rename of the same scope rather than a switch to another one.
+   */
+  rekey(provider: string) {
+    if (this.scope && this.scope.provider !== provider) {
+      this.scope = { ...this.scope, provider };
+    }
+  }
+
   saved(value: string) {
     this.value = this.original = value.trim();
     this.revealed = false;

@@ -69,6 +69,7 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
       : data.providerOutcomes,
     pendingProviders: catalog?.pendingProviders,
     configProviderIds: config.providerIds,
+    configProviderDisplayNames: config.providerDisplayNames,
     configProviderModelIds: config.providerModelIds,
     configApiKeyProviderIds: config.apiKeyProviderIds,
     configProviderAuthModes: config.providerAuthModes,
@@ -92,6 +93,7 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
     .agentId=${page.selectedAgentId}
     .intent=${managerIntent}
     .customProvider=${isLocalOrCustom(managerIntent?.provider ?? "")}
+    .reservedProviderIds=${knownProviderIds}
     .card=${cards.find((card) => (card.configKey ?? card.id) === managerIntent?.provider) ?? null}
     .probeResults=${page.probeResults}
     .probeBusy=${page.busy}
