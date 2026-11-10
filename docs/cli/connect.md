@@ -73,7 +73,10 @@ To enroll the machine as a restricted tool executor instead, pass `--executor`.
 The node advertises the [executor profile](/nodes/node-host#executor-profile)
 (tool execution with the occupancy lease, no worker hosting or skill/plugin
 publication), and the choice persists in node-host state and in the installed
-service's arguments. It combines with an explicit `--commands` narrowing and is
+service's arguments. An explicit `--commands` list replaces the profile's
+default command set instead of intersecting it: narrow by choosing a subset,
+and retain the commands the [executor profile](/nodes/node-host#executor-profile)
+marks as required for a working minimal executor. It is
 rejected together with `--all-commands`:
 
 ```bash

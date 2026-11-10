@@ -104,7 +104,7 @@ Options:
 - `--session-host`: Host worker sessions for this foreground process without changing the saved worker-hosting preference
 - `--commands <ids>`: Persist an exact comma-separated command allowlist (repeatable); advertise only available matches and their required capabilities. Disables computer use, skills, plugin tools, MCP servers, and worker hosting. Omitting the flag preserves the saved list.
 - `--all-commands`: Advertise the full default command surface and forget any saved `--commands` allowlist and executor profile. Cannot be combined with `--commands` or `--executor`.
-- `--executor`: Advertise the restricted [executor profile](/nodes/node-host#executor-profile): tool execution only, with the occupancy lease for exclusive device use, and no worker hosting. The choice persists in node-host state, so later starts keep it; an explicit `--commands` list narrows the profile surface further. Compatible with `--commands`; cannot be combined with `--all-commands`.
+- `--executor`: Advertise the restricted [executor profile](/nodes/node-host#executor-profile): tool execution only, with the occupancy lease for exclusive device use, and no worker hosting. The choice persists in node-host state, so later starts keep it. An explicit `--commands` list replaces the profile's default command set rather than intersecting it, so narrow the surface by choosing a subset of the profile commands and retain the commands that section marks as required for a working minimal executor. Compatible with `--commands`; cannot be combined with `--all-commands`.
 - `--share-installed-apps`: On macOS, advertise installed applications through `device.apps`
 - `--no-share-installed-apps`: Disable installed application sharing
 
