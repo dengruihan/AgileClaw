@@ -239,6 +239,10 @@ definition; the app only remembers its consent and device-name preferences.
 
 ### First-run setup
 
+When the companion opens without an installed CLI, it offers a graphical
+**Install OpenClaw** step. A successful install re-runs admission and returns to
+the welcome screen, so no restart or terminal action is required.
+
 Choose **Get started** on the welcome screen, then choose where your assistant
 should live:
 
