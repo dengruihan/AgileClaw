@@ -102,11 +102,14 @@
   flex-shrink: 0;
 }
 
-/* One surface, no internal rules. Separation inside the composer is carried by
-   luminance alone — a slightly lifted control/dropdown ground against the page
-   canvas — so the frame never stacks a strong border, an inner divider and a
-   heavy shadow on top of each other. Every foreground step below is a mix
-   toward that same surface, which keeps the ramp correct in light themes too,
+/* One surface, no internal rules. The composer is a neumorphic well: the same
+   recessed material the design system's fields and segmented tracks sit in,
+   carved into the page canvas by light alone — shade cast inward by the top
+   and left walls, a highlight caught along the bottom and right lips — so the
+   frame never stacks a strong border, an inner divider and a heavy shadow on
+   top of each other. Shadow tokens come from base.css's one-light-direction
+   model, so one formula reads in both themes; every foreground step below is a
+   mix toward the well floor, which keeps the ramp correct in light themes too,
    where --text-strong is dark rather than near-white. */
 .chat-footer,
 .agent-chat__composer-shell,
@@ -200,6 +203,21 @@
      and the multiline editor never gets shorter than one of them. Derived, so a
      scaled-up editor keeps its leading instead of crowding its own descenders. */
   --chat-composer-editor-line: calc(var(--chat-composer-editor-size) * 1.5);
+  /* The well material. Resting is a seated recess: the sharp close wall shade
+     plus a wide ambient pool falling away from the light, over a caught lip.
+     Focus only deepens the carve and turns up a neutral inner rim — never an
+     outer ring, which would re-raise the surface the recess just carved. */
+  --chat-composer-well:
+    inset 2px 3px 6px color-mix(in srgb, var(--neu-dark) 78%, transparent),
+    inset 9px 13px 24px color-mix(in srgb, var(--neu-dark) 36%, transparent),
+    inset -1px -1px 1px color-mix(in srgb, var(--mat-bevel) 45%, transparent),
+    inset -5px -7px 16px color-mix(in srgb, var(--neu-light) 46%, transparent);
+  --chat-composer-well-focus:
+    inset 0 0 0 1px color-mix(in srgb, var(--text-strong) 14%, transparent),
+    inset 2px 4px 8px color-mix(in srgb, var(--neu-dark) 92%, transparent),
+    inset 10px 16px 28px color-mix(in srgb, var(--neu-dark) 52%, transparent),
+    inset -1px -1px 1px color-mix(in srgb, var(--mat-bevel) 30%, transparent),
+    inset -6px -9px 18px color-mix(in srgb, var(--neu-light) 34%, transparent);
 
   position: relative;
   z-index: 1;
@@ -220,10 +238,11 @@
   /* The app owns the artwork; keep one translucent writing surface, not a
      second texture. Foreground/menu tokens retain their opaque surface color. */
   background: color-mix(in srgb, var(--chat-composer-surface) 78%, transparent);
-  border: 1px solid var(--chat-composer-hairline);
-  /* Deliberately lighter than --shadow-sm: with the border and the luminance
-     step already doing the separating, a heavier drop reads as a second frame. */
-  box-shadow: 0 4px 16px rgb(0 0 0 / 5%);
+  /* A well has no outer frame: the opening's edge is the shade inside it.
+     Forced-colors modes replace this border themselves, and the incognito
+     dashed border in new-session.css overrides it while keeping the well. */
+  border: 1px solid transparent;
+  box-shadow: var(--chat-composer-well);
   flex-shrink: 0;
   transition:
     border-color var(--duration-fast) ease,
@@ -234,38 +253,11 @@
   --chat-composer-hairline: color-mix(in srgb, var(--text-strong) 9%, transparent);
 }
 
-/* Light surfaces get depth from translucent layers instead of a painted edge. */
-:root[data-theme-mode="light"] .agent-chat__input {
-  border-color: transparent;
-  box-shadow:
-    0 0 0 1px var(--chat-composer-light-outline),
-    0 1px 2px -1px var(--chat-composer-light-outline),
-    0 2px 4px rgb(0 0 0 / 4%);
-}
-
-/* Focus is a neutral state, not an accent/status signal. Keep it within one
-   subtle luminance step of the resting hairline; a second ring or outer spread
-   would make the composer look thicker as soon as the operator starts typing. */
+/* Focus is a neutral state, not an accent/status signal: the well sinks one
+   step with the caret and the rim stays within the surface's own neutral ramp,
+   so the composer never looks thicker or raised once typing starts. */
 .agent-chat__input:has(.agent-chat__composer-combobox > :is(textarea, input):focus) {
-  border-color: color-mix(in srgb, var(--chat-composer-hairline) 94%, var(--text-strong));
-  box-shadow: 0 4px 16px rgb(0 0 0 / 5%);
-}
-
-:root[data-theme-mode="light"]
-  .agent-chat__input:has(.agent-chat__composer-combobox > :is(textarea, input):focus) {
-  border-color: transparent;
-  box-shadow:
-    0 0 0 1px rgb(0 0 0 / 8%),
-    0 1px 2px -1px rgb(0 0 0 / 8%),
-    0 2px 4px rgb(0 0 0 / 6%);
-}
-
-:root[data-theme-mode="light"] .agent-chat__input--dictating,
-:root[data-theme-mode="light"] .agent-chat__input--dictating:focus-within {
-  border-color: transparent;
-  box-shadow:
-    0 0 0 1px rgb(0 0 0 / 6%),
-    0 4px 18px rgb(0 0 0 / 6%);
+  box-shadow: var(--chat-composer-well-focus);
 }
 
 .agent-chat__input--prefill-attention {
