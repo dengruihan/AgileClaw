@@ -951,9 +951,12 @@
 
 .sidebar-sessions {
   --session-well-face: color-mix(in srgb, var(--sidebar-bg, var(--bg)) 97%, black 3%);
+  /* The right/bottom catch-light is a crisp zero-blur lip seated on the inner
+     edge; a blurred band would float the light inside the floor and wash the
+     recess border it is supposed to line (canonical --well-shadow lip model). */
   --session-well-shadow:
     inset 1px 1px 2px color-mix(in srgb, var(--neu-dark) 85%, transparent),
-    inset -1px -1px 2px color-mix(in srgb, var(--mat-bevel) 58%, transparent);
+    inset -1px -1px 0 color-mix(in srgb, var(--mat-bevel) 58%, transparent);
 
   margin-inline: 0;
   padding: 4px 8px;
