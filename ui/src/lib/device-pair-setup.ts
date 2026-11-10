@@ -345,6 +345,14 @@ export async function refreshDevicePairSetup(state: DevicePairSetupState) {
   }
   clearDevicePairSetupExpiry(state);
   state.devicePairSetupLifecycle = { phase: "loading", access };
+  // One fence owns "this refresh operation is still the live one": its request
+  // token is current, the Gateway client and connection are unchanged, and the
+  // dialog is still open. Retired operations mint nothing and write nothing.
+  const operationRetired = () =>
+    devicePairSetupRequests.get(state) !== requestToken ||
+    state.client !== client ||
+    !state.connected ||
+    !state.devicePairSetupOpen;
   try {
     let result: DevicePairSetup;
     try {
@@ -361,15 +369,16 @@ export async function refreshDevicePairSetup(state: DevicePairSetupState) {
       if (access !== "node" || !message.includes(PLAINTEXT_JOIN_REFUSAL)) {
         throw err;
       }
+      // The refusal can land after close/reopen or a client replacement. The
+      // fallback would mint a fresh bearer for a retired operation, so
+      // revalidate the fence before this second side effect.
+      if (operationRetired()) {
+        return;
+      }
       // Plaintext LAN cannot mint join URLs; the bare setup code stays available.
       result = await requestDevicePairSetup(client, { bootstrapProfile: "node", includeQr: false });
     }
-    if (
-      devicePairSetupRequests.get(state) !== requestToken ||
-      state.client !== client ||
-      !state.connected ||
-      !state.devicePairSetupOpen
-    ) {
+    if (operationRetired()) {
       return;
     }
     if (!hasDevicePairSetupLifecycle(result)) {

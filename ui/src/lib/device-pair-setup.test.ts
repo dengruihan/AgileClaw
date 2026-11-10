@@ -19,6 +19,10 @@ type DevicePairSetupState = ReturnType<typeof createDevicePairSetupState>;
 type DevicePairSetup = Extract<DevicePairSetupLifecycle, { phase: "waiting" }>["setup"];
 type DevicePairSetupCompletion = NonNullable<ReturnType<typeof parseDevicePairSetupCompletion>>;
 
+// The Gateway's stable plaintext-LAN refusal; the lifecycle keys its fallback on it.
+const PLAINTEXT_JOIN_REFUSAL_MESSAGE =
+  "Join URLs require a TLS gateway endpoint, except for loopback. Use the setup code directly for plaintext LAN pairing.";
+
 function setupResult(
   setupId: string,
   setupCode: string,
@@ -234,6 +238,56 @@ describe("device pairing setup state", () => {
     });
     closeDevicePairSetup(state);
   });
+
+  // The plaintext refusal arrives one await after the join-URL request started.
+  // Close/reopen or a client replacement in that window retires the operation;
+  // the fallback bearer must never be minted for it.
+  it.each([
+    {
+      label: "the dialog closed",
+      act: (state: DevicePairSetupState) => {
+        closeDevicePairSetup(state);
+      },
+      expectLifecycle: { phase: "selection", access: "full" },
+    },
+    {
+      label: "the Gateway client was replaced",
+      act: (state: DevicePairSetupState) => {
+        state.client = { request: vi.fn() } as unknown as DevicePairSetupState["client"];
+      },
+      expectLifecycle: { phase: "loading", access: "node" },
+    },
+    {
+      label: "the dialog closed and reopened",
+      act: (state: DevicePairSetupState) => {
+        closeDevicePairSetup(state);
+        state.devicePairSetupOpen = true;
+      },
+      expectLifecycle: { phase: "selection", access: "full" },
+    },
+  ] as const)(
+    "mints no fallback bearer when the plaintext refusal lands after $label",
+    async ({ act, expectLifecycle }) => {
+      const refusal = deferred<DevicePairSetup>();
+      const fallback = deferred<DevicePairSetup>();
+      const request = vi
+        .fn()
+        .mockReturnValueOnce(refusal.promise)
+        .mockReturnValueOnce(fallback.promise);
+      const state = stateWithClient({ request } as unknown as DevicePairSetupState["client"]);
+      await setDevicePairSetupAccess(state, "node");
+
+      const pending = refreshDevicePairSetup(state);
+      refusal.reject(new Error(PLAINTEXT_JOIN_REFUSAL_MESSAGE));
+      act(state);
+      await pending;
+
+      // Exactly one RPC: the retired operation never mints the fallback bearer.
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(state.devicePairSetupLifecycle).toEqual(expectLifecycle);
+      expect(state.devicePairSetupExpiryTimer).toBeNull();
+    },
+  );
 
   it("keeps non-node failures as errors without a bare-code fallback retry", async () => {
     const request = vi
