@@ -57,7 +57,7 @@ suite.define(() => {
       label: "roster dark",
       colorScheme: "dark",
       drawer: false,
-      roster: false,
+      roster: true,
       short: false,
       users: 8,
     },
@@ -231,6 +231,15 @@ suite.define(() => {
             .click();
         }
         await waitForSessionRosterHydration(page);
+        if (roster) {
+          // The persisted roster mode must actually mount the grouped roster
+          // presentation (agent groups beside the shared well) — a green case
+          // name alone does not prove the roster setup was exercised.
+          await page
+            .locator(".sidebar-agent-roster [data-agent-group]")
+            .first()
+            .waitFor({ state: "visible", timeout: 20_000 });
+        }
         if (users === 1) {
           // Solo presence renders no Online section at any height; the well is
           // the only well-sized surface left between the nav and the footer.
