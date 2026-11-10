@@ -862,6 +862,7 @@ impl DesktopState {
         app: &AppHandle,
         channel: InstallChannel,
         selection: u64,
+        start_local: bool,
     ) -> Result<GatewaySnapshot, String> {
         let _operation = self
             .inner
@@ -870,7 +871,11 @@ impl DesktopState {
             .map_err(|_| "Installer lock is unavailable.".to_string())?;
         #[cfg(target_os = "linux")]
         let cli = {
-            let runtime = bundled_runtime::seed(app)?;
+            // A controlled device only needs the CLI. Starting a local Gateway
+            // (and its bundled runtime) is deferred until the user actually
+            // configures this machine as a Gateway, so first-run admission can
+            // continue to Welcome and "Be controlled from another computer".
+            let mut installed = false;
             let cli = match OpenClawCli::discover() {
                 Ok(cli) => cli,
                 Err(CliError::Missing) => {
@@ -882,15 +887,20 @@ impl DesktopState {
                         return Err("The existing CLI launcher is unavailable. Repair it before installing a Gateway.".into());
                     }
                     installer::install(app, channel, true)?;
-                    let cli = OpenClawCli::discover().map_err(|error| error.to_string())?;
-                    runtime_action::bind_runtime(&cli, &runtime, runtime_action::Purpose::Gateway)?;
-                    cli
+                    installed = true;
+                    OpenClawCli::discover().map_err(|error| error.to_string())?
                 }
                 Err(error) => return Err(error.to_string()),
             };
-            runtime_action::fresh(&cli, &runtime, &|| {
-                self.runtime_operation_is_current(app, selection)
-            })?;
+            if start_local {
+                let runtime = bundled_runtime::seed(app)?;
+                if installed {
+                    runtime_action::bind_runtime(&cli, &runtime, runtime_action::Purpose::Gateway)?;
+                }
+                runtime_action::fresh(&cli, &runtime, &|| {
+                    self.runtime_operation_is_current(app, selection)
+                })?;
+            }
             cli
         };
         #[cfg(not(target_os = "linux"))]
@@ -934,17 +944,30 @@ impl DesktopState {
             })?
             .mark_onboarding_pending();
         #[cfg(target_os = "linux")]
-        let readiness =
-            gateway::status(&cli).and_then(|snapshot| gateway::dashboard(&cli, snapshot));
+        let readiness = if start_local {
+            Some(gateway::status(&cli).and_then(|snapshot| gateway::dashboard(&cli, snapshot)))
+        } else {
+            None
+        };
         #[cfg(not(target_os = "linux"))]
-        let readiness = gateway::ensure_ready(&cli);
-        let ready = readiness.map_err(|error| {
-            format!("OpenClaw is installed, but connecting to the Gateway failed: {error}")
-        })?;
-        self.finish_local_connection(app, cli, ready)
-            .map_err(|error| {
-                format!("OpenClaw is installed, but opening the Gateway dashboard failed: {error}")
-            })
+        let readiness = Some(gateway::ensure_ready(&cli));
+        if let Some(readiness) = readiness {
+            let ready = readiness.map_err(|error| {
+                format!("OpenClaw is installed, but connecting to the Gateway failed: {error}")
+            })?;
+            return self
+                .finish_local_connection(app, cli, ready)
+                .map_err(|error| {
+                    format!(
+                        "OpenClaw is installed, but opening the Gateway dashboard failed: {error}"
+                    )
+                });
+        }
+        // No Gateway is configured yet: return the unconfigured snapshot so the
+        // webview re-runs admission and offers the Welcome/connection choices.
+        let snapshot = GatewaySnapshot::unconfigured();
+        self.update_tray(&snapshot);
+        Ok(snapshot)
     }
 
     pub fn gateway_action(
@@ -1069,7 +1092,7 @@ impl DesktopState {
             if !snapshot.installed && !snapshot.reachable {
                 // Choosing local first-run setup is explicit installation consent.
                 // The fresh-install guard rechecks absence before any service write.
-                return self.install_cli(app, InstallChannel::Stable, selection);
+                return self.install_cli(app, InstallChannel::Stable, selection, true);
             }
         }
         self.connect_selected(app, true, selection)
@@ -3472,7 +3495,7 @@ fn main() {
                     operation_state.retry_remote(&operation_app, selection)
                 }
                 GatewayOperation::Install(channel) => {
-                    operation_state.install_cli(&operation_app, channel, selection)
+                    operation_state.install_cli(&operation_app, channel, selection, false)
                 }
                 #[cfg(target_os = "linux")]
                 GatewayOperation::Runtime(action) => {

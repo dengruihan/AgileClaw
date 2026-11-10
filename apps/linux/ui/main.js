@@ -596,9 +596,8 @@ async function install() {
     await invoke("install_cli", { channel: elements.channel.value });
     elements.logStatus.textContent = "COMPLETE";
     // A controlled device must not need a local Gateway or a terminal after the
-    // GUI CLI install: re-run admission so the Welcome/connection choices are
-    // available immediately.
-    await connect();
+    // GUI CLI install: return to the Welcome/connection choices immediately.
+    renderWelcome();
   } catch (error) {
     const message = friendlyError(error);
     elements.logStatus.textContent = "FAILED";
