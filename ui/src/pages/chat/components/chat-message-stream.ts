@@ -15,6 +15,7 @@ import { formatDurationLong } from "../../../lib/format-duration.ts";
 import { renderChatAvatar } from "../chat-avatar.ts";
 import { renderGroupedMessage } from "./chat-message-bubble.ts";
 import { prepareChatMessageRender, resolveMessageActionDetails } from "./chat-message-markdown.ts";
+import type { ChatRevealBuffer } from "./chat-message-reveal-buffer.ts";
 import { renderChatTimestamp } from "./chat-message-timestamp.ts";
 import { renderChatQuestionSummary } from "./chat-question-card.ts";
 import {
@@ -78,6 +79,8 @@ export type StreamGroupOptions = StreamMessageOptions & {
   waitingApproval?: boolean;
   runOutputTokens?: number | null;
   questionPrompts?: ReadonlyMap<string, QuestionPrompt>;
+  /** Presentation-only smooth reveal owned by the transcript projection. */
+  reveal?: ChatRevealBuffer;
 };
 
 export function renderStreamGroupParts(
@@ -117,12 +120,35 @@ export function renderStreamGroupPart(
     content: [{ type: "text", text: part.text }],
     timestamp: part.startedAt,
   });
+  const reveal = opts.reveal;
+  const revealed = reveal?.visibleText({
+    key: part.key,
+    runId: part.runId,
+    text: part.text,
+    streaming: part.isStreaming,
+    // A live stream part may not stamp a run id; it still belongs to this run.
+    liveTail: part.isStreaming,
+    // Media directives resolve to attachments (and fetches). A character-level
+    // prefix would expose a half-written URL, so directive bodies paint whole.
+    instant: !source.normalizedMessage.content.every((contentItem) => contentItem.type === "text"),
+  });
+  const visibleText = revealed?.text ?? part.text;
+  // Copy and reply targets keep the canonical arrived text; only the painted
+  // body follows the reveal prefix.
+  const presented =
+    visibleText === part.text
+      ? source
+      : prepareChatMessageRender({
+          role: "assistant",
+          content: [{ type: "text", text: visibleText }],
+          timestamp: part.startedAt,
+        });
   return renderGroupedMessage(
-    source,
+    presented,
     part.key,
     {
       ...opts,
-      isStreaming: part.isStreaming,
+      isStreaming: part.isStreaming || revealed?.revealing === true,
       entryRef: opts.entryRefFor?.(part.key),
       showReasoning: false,
       // Settled segments can be replied to without transcript IDs or footer actions.

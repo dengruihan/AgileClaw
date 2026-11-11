@@ -6,6 +6,7 @@ import {
   type TaskSuggestionEvent,
 } from "../../../../packages/gateway-protocol/src/index.js";
 import { chatInputOwnerForContext } from "../../app/chat-input-owner.ts";
+import type { ApplicationGatewaySnapshot } from "../../app/gateway.ts";
 import { availableLinkReaders } from "../../app/link-reader-routing.ts";
 import { isDesktopPanelAvailable } from "../../app/panel-availability.ts";
 import {
@@ -64,6 +65,7 @@ import { resetChatViewState } from "./chat-view-state.ts";
 import { publishChatWorkContext } from "./chat-work-context.ts";
 import { resolveChatAttachmentLimits } from "./components/chat-attachment-admission.ts";
 import { dismissConfirmedActionPopovers } from "./components/chat-message-confirmation.ts";
+import { cancelChatReveal, disposeChatReveal } from "./components/chat-message-reveal-buffer.ts";
 import { openSessionWorkspaceFile } from "./components/chat-session-workspace.ts";
 import { CHAT_COMPOSER_DRAFT_STORAGE_ERROR } from "./composer-persistence.ts";
 import { exportChatMarkdown } from "./export.ts";
@@ -393,7 +395,7 @@ export abstract class ChatPaneLifecycle extends ChatPaneSessionObservation {
     chatState.addCleanup(this.mcpApps.subscribe());
     chatState.addCleanup(
       this.context.gateway.subscribe((next) => {
-        this.applyGatewaySnapshot(next);
+        this.handleGatewaySnapshot(next);
         this.activateComposerPresentation();
         this.synchronizeForegroundTranscript();
       }),
@@ -632,7 +634,19 @@ export abstract class ChatPaneLifecycle extends ChatPaneSessionObservation {
     );
   }
 
+  /**
+   * Gateway connection transitions own reveal lifecycle: a disconnect cancels
+   * pending reveal frames at once, without waiting for another projection.
+   */
+  handleGatewaySnapshot(next: ApplicationGatewaySnapshot) {
+    if (next.phase !== "connected") {
+      cancelChatReveal(this.paneId);
+    }
+    this.applyGatewaySnapshot(next);
+  }
+
   override disconnectedCallback() {
+    disposeChatReveal(this.paneId);
     this.activeSessionResources.sync(null);
     this.syncSessionCompanionPresentation(false);
     this.composerPresentation?.dispose();
