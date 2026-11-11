@@ -248,11 +248,22 @@ suite.define(() => {
       await section.waitFor();
       const duo = await settleSidebarClearance(page, true);
       // Multi-user baseline: the mounted Online roster shares the session
-      // region with the well and never overlaps it. (The duo body keeps a
-      // pre-existing overflow at this height with a six-row nav — a duo-mode
-      // condition outside this fix.)
+      // region with the well and never overlaps it. The region's floor covers
+      // Online's own vertical margins as well as its box, so the well keeps a
+      // whole row above the footer divider and the Body does not overflow.
       expect(duo.onlineMounted).toBe(true);
       expect(duo.online!.bottom).toBeLessThanOrEqual(duo.well!.top);
+      expect(
+        duo.bodyOverflow,
+        "the duo region floor covers Online's share without body overflow",
+      ).toBeLessThanOrEqual(0);
+      expect(duo.well!.bottom, "the duo well stays above the footer divider").toBeLessThanOrEqual(
+        duo.footer!.top,
+      );
+      expect(
+        duo.wholeSessionRowCount,
+        "one whole session row stays readable beside Online",
+      ).toBeGreaterThanOrEqual(1);
 
       // The second identity leaves: the section unmounts and the session
       // region's floor drops to the well, so the rail keeps every key it
@@ -309,6 +320,11 @@ suite.define(() => {
       const duoAgain = await settleSidebarClearance(page, true);
       expect(duoAgain.onlineMounted).toBe(true);
       expect(duoAgain.online!.bottom).toBeLessThanOrEqual(duoAgain.well!.top);
+      expect(
+        duoAgain.bodyOverflow,
+        "the returning duo column keeps no body overflow",
+      ).toBeLessThanOrEqual(0);
+      expect(duoAgain.well!.bottom).toBeLessThanOrEqual(duoAgain.footer!.top);
       await captureSidebarUiProof(suite, page, "solo-clearance-second-identity-returned.png");
     } finally {
       await suite.closeBrowserContext(context);
@@ -337,19 +353,33 @@ suite.define(() => {
     "route:cron",
   ];
   const ordinaryClearanceCases = [
-    { height: 540, order: "reordered" as const, toolbar: "none" },
-    { height: 560, order: "reordered" as const, toolbar: "none" },
-    { height: 580, order: "reordered" as const, toolbar: "flex" },
-    { height: 720, order: "default" as const, toolbar: "flex" },
-    { height: 720, order: "reordered" as const, toolbar: "flex" },
-    { height: 800, order: "default" as const, toolbar: "flex" },
-    { height: 800, order: "reordered" as const, toolbar: "flex" },
-    { height: 900, order: "default" as const, toolbar: "flex" },
+    // Tight columns: the session region keeps one whole row and the toolbar
+    // yields. 564/568/571 straddle the toolbar crossover — the well content
+    // there is 54/58/61px, just under the 62px the toolbar, its flex gap and a
+    // row need — so they are the exact band where the old 53.5px threshold
+    // restored a toolbar that clipped the row by 8/4/1px.
+    { height: 540, order: "reordered", pointer: "mouse", toolbar: "none" },
+    { height: 560, order: "reordered", pointer: "mouse", toolbar: "none" },
+    { height: 564, order: "reordered", pointer: "mouse", toolbar: "none" },
+    { height: 568, order: "reordered", pointer: "mouse", toolbar: "none" },
+    { height: 571, order: "reordered", pointer: "mouse", toolbar: "none" },
+    // 572 is the first column whose well content reaches 62px: the toolbar
+    // returns with the row still whole.
+    { height: 572, order: "reordered", pointer: "mouse", toolbar: "flex" },
+    { height: 580, order: "reordered", pointer: "mouse", toolbar: "flex" },
+    // A coarse pointer raises the row floor to 44px, so the same 580px column
+    // no longer affords toolbar + gap + row and must keep the row instead.
+    { height: 580, order: "reordered", pointer: "touch", toolbar: "none" },
+    { height: 720, order: "default", pointer: "mouse", toolbar: "flex" },
+    { height: 720, order: "reordered", pointer: "mouse", toolbar: "flex" },
+    { height: 800, order: "default", pointer: "mouse", toolbar: "flex" },
+    { height: 800, order: "reordered", pointer: "mouse", toolbar: "flex" },
+    { height: 900, order: "default", pointer: "mouse", toolbar: "flex" },
   ];
 
   it.each(ordinaryClearanceCases)(
-    "keeps the last nav key whole and clickable above the well at $height ($order order)",
-    async ({ height, order, toolbar }) => {
+    "keeps the last nav key whole and clickable above the well at $height ($order order, $pointer)",
+    async ({ height, order, pointer, toolbar }) => {
       const baseTime = Date.parse("2026-07-01T16:00:00.000Z");
       const rows = Array.from({ length: 6 }, (_, index) =>
         sessionRow(`agent:main:chat-${index}`, `Chat ${index}`, baseTime - index * 60_000),
@@ -357,6 +387,7 @@ suite.define(() => {
       const config =
         order === "reordered" ? { ui: { prefs: { sidebarEntries: allSidebarRoutes } } } : {};
       const context = await suite.newBrowserContext({
+        hasTouch: pointer === "touch",
         locale: "en-US",
         serviceWorkers: "block",
         viewport: { height, width: 1280 },

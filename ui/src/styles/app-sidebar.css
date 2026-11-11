@@ -1042,13 +1042,23 @@
 
 /* Short-height band: the session toolbar is removed as a whole — a
    zero-height clipped control with an orphaned flex gap is not an acceptable
-   compact state — and the edge fade compresses to 12px stops so it cannot
-   cover a whole row inside the small well window (floors in layout.css). */
+   compact state (floors in layout.css). The edge fade's short-well stops are
+   owned by the well's height query below, not by this viewport band, so the
+   same compact mask also applies to a short well above 500px. */
 @media (max-height: 500px) {
   .sidebar-sessions .sidebar-session-toolbar {
     display: none;
   }
+}
 
+/* Short wells fade in 12px stops instead of the ordinary 32px: a 30-60px
+   scroller cannot seat a whole row above a 32px edge fade, so the row would
+   read washed out (the 540px single-row column this layout can produce). The
+   well's own height drives it, including the toolbar and flex gap, so the
+   compact stops follow the measured slot rather than another viewport rung.
+   93.5px is the well content box below which a whole row (row floor) plus the
+   32px fade cannot both fit: toolbar 24 + gap 8 + row 30 + fade 32 = 94. */
+@container sidebar-session-well (max-height: 93.5px) {
   .sidebar-sessions--scroll-top {
     --sidebar-body-mask: linear-gradient(to bottom, black calc(100% - 12px), transparent);
   }
