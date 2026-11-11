@@ -504,4 +504,42 @@ describe("toSanitizedMarkdownHtml", () => {
       expect(html.length).toBeGreaterThan(0);
     });
   });
+
+  describe("math", () => {
+    it("keeps inline and display TeX as bounded placeholders", () => {
+      const html = toSanitizedMarkdownHtml(
+        ["The radius is $r = \\frac{d}{2}$.", "", "$$", "A = \\pi r^2", "$$"].join("\n"),
+      );
+      expect(html).toBe(
+        '<p>The radius is <span class="markdown-math">$r = \\frac{d}{2}$</span>.</p>\n' +
+          '<div class="markdown-math markdown-math--display">$$\nA = \\pi r^2\n$$</div>\n',
+      );
+    });
+
+    it("escapes authored markup inside math instead of rendering it", () => {
+      const html = toSanitizedMarkdownHtml(
+        "$<img src=x onerror=alert(1)>$ and $$<script>alert(2)</script>$$",
+      );
+      const fragment = htmlFragment(html);
+      expect(fragment.querySelector("img")).toBeNull();
+      expect(fragment.querySelector("script")).toBeNull();
+      expect(fragment.querySelector(".markdown-math")?.textContent).toBe(
+        "$<img src=x onerror=alert(1)>$",
+      );
+      expect(html).not.toContain("style=");
+    });
+
+    it("leaves currency, code, and fences untouched", () => {
+      const html = toSanitizedMarkdownHtml(
+        ["Fees are $5 and $10 for `$40` entries.", "", "```bash", 'echo "$HOME $PATH"', "```"].join(
+          "\n",
+        ),
+      );
+      expect(htmlFragment(html).querySelector(".markdown-math")).toBeNull();
+      expect(html).toContain("Fees are $5 and $10 for <code>$40</code> entries.");
+      expect(htmlFragment(html).querySelector("pre code")?.textContent?.trim()).toBe(
+        'echo "$HOME $PATH"',
+      );
+    });
+  });
 });

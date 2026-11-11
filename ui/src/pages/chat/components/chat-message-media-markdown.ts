@@ -4,6 +4,11 @@ import { Directive, directive } from "lit/directive.js";
 import { repeat } from "lit/directives/repeat.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { html, unsafeStatic } from "lit/static-html.js";
+import {
+  MARKDOWN_MATH_CLASS,
+  readMarkdownMathPlaceholder,
+} from "../../../components/markdown-math.ts";
+import "./chat-message-math.ts";
 import type { ProjectedMessageContent } from "./chat-message-media.ts";
 
 type PositionedMedia = Exclude<ProjectedMessageContent, { type: "text" }>;
@@ -88,6 +93,7 @@ type MarkdownBindings = {
   media?: MarkdownMedia;
   slots: Map<Node, number>;
   mediaAncestors: Set<Node>;
+  mathAncestors: Set<Node>;
   incremental: boolean;
 };
 
@@ -130,10 +136,23 @@ class MarkdownNodeDirective extends Directive {
     if (!(node instanceof Element)) {
       return nothing;
     }
+    const math = readMarkdownMathPlaceholder(node);
+    if (math) {
+      // Transcripts own the lazy renderer; other Markdown surfaces keep the
+      // readable TeX source and never fetch KaTeX. The delimited source rides on
+      // an attribute so table clones and copy readers keep the model's text.
+      return html`<openclaw-chat-math
+        .source=${math.source}
+        .display=${math.display}
+        data-math-source=${math.delimitedSource}
+      ></openclaw-chat-math>`;
+    }
     // Completed subtrees need no per-node bindings. Mermaid and custom elements
     // own their children: their enhancements can remove Lit's child markers.
     if (
-      (!bindings.incremental && !bindings.mediaAncestors.has(node)) ||
+      (!bindings.incremental &&
+        !bindings.mediaAncestors.has(node) &&
+        !bindings.mathAncestors.has(node)) ||
       node.classList.contains("markdown-mermaid") ||
       node.localName.includes("-")
     ) {
@@ -177,9 +196,10 @@ class MarkdownMediaDirective extends Directive {
   private template?: HTMLTemplateElement;
   private slots = new Map<Node, number>();
   private mediaAncestors = new Set<Node>();
+  private mathAncestors = new Set<Node>();
 
   render(sanitizedHtml: string, media?: MarkdownMedia, incremental = false) {
-    if (!incremental && !media) {
+    if (!incremental && !media && !sanitizedHtml.includes(MARKDOWN_MATH_CLASS)) {
       return unsafeHTML(sanitizedHtml);
     }
     const prefix = media?.prefix ?? "";
@@ -191,6 +211,7 @@ class MarkdownMediaDirective extends Directive {
       this.template = template;
       this.slots.clear();
       this.mediaAncestors.clear();
+      this.mathAncestors.clear();
       const marker = new RegExp(`${prefix}(\\d+)END`, "g");
       const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT);
       const nodes: Text[] = [];
@@ -241,8 +262,20 @@ class MarkdownMediaDirective extends Directive {
           this.mediaAncestors.add(parent);
         }
       }
+      // Math placeholders need Lit bindings, so their containers stay walked.
+      for (const placeholder of template.content.querySelectorAll(`.${MARKDOWN_MATH_CLASS}`)) {
+        for (let parent = placeholder.parentNode; parent; parent = parent.parentNode) {
+          this.mathAncestors.add(parent);
+        }
+      }
     }
-    const bindings = { media, slots: this.slots, mediaAncestors: this.mediaAncestors, incremental };
+    const bindings = {
+      media,
+      slots: this.slots,
+      mediaAncestors: this.mediaAncestors,
+      mathAncestors: this.mathAncestors,
+      incremental,
+    };
     return renderMarkdownChildren(this.template.content, bindings);
   }
 }
