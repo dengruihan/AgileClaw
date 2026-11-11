@@ -112,22 +112,26 @@ between two amounts is never absorbed into one. Code spans and code fences keep
 their dollars, so `$HOME` in a shell example stays literal, and `\$` writes a
 literal dollar sign.
 
-Unmatched or oversized delimiters stay readable as source instead of producing
-half an equation. An unfinished `$$` block, inline content beyond 1,000
-characters, and display content beyond 4,000 characters keep the text the model
-wrote. Invalid TeX shows an error marker beside its source rather than failing
-the message.
+Unmatched or oversized delimiters remain readable text instead of producing
+half an equation. Dollar-delimited source, including an unfinished `$$` block
+and dollar content beyond the 1,000-character inline or 4,000-character display
+limits, is preserved verbatim. Rejected `\(...\)` and `\[...\]` forms follow
+ordinary Markdown backslash escaping, so their delimiter backslashes can
+disappear. Invalid TeX remains visible as error-colored source, with the parse
+error available on hover, rather than failing the message.
 
 Formulas are presentation only. While a reply streams, an incomplete delimiter
-stays as its literal source; once the closer arrives, the same phrase becomes
-one typeset equation without duplicating text. The saved transcript and the
-assistant reply reveal keep their existing behavior. **Copy as markdown**
+remains readable text: dollar delimiters stay verbatim, while `\(`/`\[` follow
+normal Markdown backslash escaping. Once the closer arrives, the same phrase
+becomes one typeset equation without duplicating text. The saved transcript and
+the assistant reply reveal keep their existing behavior. **Copy as markdown**
 returns the original delimited TeX, and **Copy table** returns each cell's
 delimited source once instead of the rendered MathML and visual markup.
 
 Formula source is escaped, and KaTeX runs without trust, so model-authored TeX
-cannot add links, images, iframes, styles, or remote requests. Macro expansion
-and rendered size are bounded.
+cannot add links, images, iframes, author-chosen HTML attributes or CSS, or
+remote requests. Ordinary TeX color and sizing commands remain available; macro
+expansion and rendered size are bounded.
 
 ## Model request errors and retries
 
