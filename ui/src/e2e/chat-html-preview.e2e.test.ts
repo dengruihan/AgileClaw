@@ -369,7 +369,20 @@ suite.define(() => {
                 path: path.join(suite.artifactDir, `attachment-${mode}.png`),
               });
               for (const height of [1000, 480]) {
+                // A resize propagates asynchronously through the outer sandbox iframe
+                // and then the content iframe while the panel eases to its new size, so
+                // the outer frame and inner window.innerHeight pass through stale and
+                // intermediate values. Sameness over time alone can match two pre-resize
+                // samples; instead anchor the wait to the requested resize and prove the
+                // settled contract: the outer frame stops changing, the inner viewport
+                // matches that frame within the browser's integer rounding, the frame
+                // fills the panel, and a real resize leaves the recorded pre-resize height.
+                const resized = page.viewportSize()?.height !== height;
+                const preResizeHeight = await attachmentDocument
+                  .locator("body")
+                  .evaluate(() => window.innerHeight);
                 await page.setViewportSize({ width: 1440, height });
+                let previousFrameHeight: number | undefined;
                 await expect
                   .poll(async () => {
                     const frame = await outer.boundingBox();
@@ -381,9 +394,21 @@ suite.define(() => {
                           bounds.bottom - Number.parseFloat(getComputedStyle(element).paddingBottom)
                         );
                       });
-                    return Math.abs(frame!.y + frame!.height - available);
+                    const viewport = await attachmentDocument.locator("body").evaluate(() => ({
+                      width: window.innerWidth,
+                      height: window.innerHeight,
+                    }));
+                    const frameStable = previousFrameHeight === frame!.height;
+                    previousFrameHeight = frame!.height;
+                    return (
+                      frameStable &&
+                      Math.abs(viewport.width - frame!.width) < 0.5 &&
+                      Math.abs(viewport.height - frame!.height) < 0.5 &&
+                      Math.abs(frame!.y + frame!.height - available) <= 1 &&
+                      (!resized || viewport.height !== preResizeHeight)
+                    );
                   })
-                  .toBeLessThanOrEqual(1);
+                  .toBe(true);
                 const frame = await outer.boundingBox();
                 const viewport = await attachmentDocument.locator("body").evaluate(() => ({
                   width: window.innerWidth,
