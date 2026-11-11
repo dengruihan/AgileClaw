@@ -238,6 +238,9 @@
   border: 1px solid transparent;
   box-shadow: var(--chat-composer-well);
   flex-shrink: 0;
+  transition:
+    border-color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
 }
 
 :root[data-theme-mode="dark"] :is(.chat-footer, .agent-chat__composer-shell, .agent-chat__input) {
