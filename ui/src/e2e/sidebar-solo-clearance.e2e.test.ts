@@ -149,6 +149,8 @@ suite.define(() => {
           return header ? getComputedStyle(header).display : "absent";
         })(),
         well: box(".sidebar-sessions"),
+        sessionScroller: box(".sidebar-sessions__scroll"),
+        firstSessionRow: box(".sidebar-sessions__scroll .sidebar-recent-session"),
         online: box(".sidebar-online"),
         footer: box(".sidebar-shell__footer"),
         onlineMounted: Boolean(document.querySelector(".sidebar-online")),
@@ -209,6 +211,28 @@ suite.define(() => {
     await expect
       .poll(() => page.locator("openclaw-sidebar-agent-roster").count(), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(1);
+  };
+  // Text scale is a persisted browser preference (TEXT_SCALE_STOPS); boot it the
+  // same way so the app's own theme owner writes --control-ui-text-scale.
+  const bootTextScale = async (page: Page, baseUrl: string, textScale: number) => {
+    const settingsKey = controlUiBundledSettingsStorageKey(baseUrl);
+    await page.evaluate(
+      ({ key, value }) => {
+        const previous = JSON.parse(localStorage.getItem(key) ?? "{}") as Record<string, unknown>;
+        localStorage.setItem(key, JSON.stringify({ ...previous, textScale: value }));
+      },
+      { key: settingsKey, value: textScale },
+    );
+    await page.reload();
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() =>
+            getComputedStyle(document.documentElement).getPropertyValue("--control-ui-text-scale"),
+          ),
+        { timeout: 15_000 },
+      )
+      .toBe(String(textScale / 100));
   };
 
   it("keeps the whole Automations entry clear of the well when solo presence hides Online", async () => {
@@ -358,28 +382,44 @@ suite.define(() => {
     // there is 54/58/61px, just under the 62px the toolbar, its flex gap and a
     // row need — so they are the exact band where the old 53.5px threshold
     // restored a toolbar that clipped the row by 8/4/1px.
-    { height: 540, order: "reordered", pointer: "mouse", toolbar: "none" },
-    { height: 560, order: "reordered", pointer: "mouse", toolbar: "none" },
-    { height: 564, order: "reordered", pointer: "mouse", toolbar: "none" },
-    { height: 568, order: "reordered", pointer: "mouse", toolbar: "none" },
-    { height: 571, order: "reordered", pointer: "mouse", toolbar: "none" },
+    { height: 540, order: "reordered", pointer: "mouse", textScale: 100, toolbar: "none" },
+    { height: 560, order: "reordered", pointer: "mouse", textScale: 100, toolbar: "none" },
+    { height: 564, order: "reordered", pointer: "mouse", textScale: 100, toolbar: "none" },
+    { height: 568, order: "reordered", pointer: "mouse", textScale: 100, toolbar: "none" },
+    { height: 571, order: "reordered", pointer: "mouse", textScale: 100, toolbar: "none" },
     // 572 is the first column whose well content reaches 62px: the toolbar
     // returns with the row still whole.
-    { height: 572, order: "reordered", pointer: "mouse", toolbar: "flex" },
-    { height: 580, order: "reordered", pointer: "mouse", toolbar: "flex" },
+    { height: 572, order: "reordered", pointer: "mouse", textScale: 100, toolbar: "flex" },
+    { height: 580, order: "reordered", pointer: "mouse", textScale: 100, toolbar: "flex" },
     // A coarse pointer raises the row floor to 44px, so the same 580px column
-    // no longer affords toolbar + gap + row and must keep the row instead.
-    { height: 580, order: "reordered", pointer: "touch", toolbar: "none" },
-    { height: 720, order: "default", pointer: "mouse", toolbar: "flex" },
-    { height: 720, order: "reordered", pointer: "mouse", toolbar: "flex" },
-    { height: 800, order: "default", pointer: "mouse", toolbar: "flex" },
-    { height: 800, order: "reordered", pointer: "mouse", toolbar: "flex" },
-    { height: 900, order: "default", pointer: "mouse", toolbar: "flex" },
+    // no longer affords toolbar + gap + row and must keep the row instead; 610
+    // affords it again and stays on the ordinary fade.
+    { height: 580, order: "reordered", pointer: "touch", textScale: 100, toolbar: "none" },
+    { height: 610, order: "reordered", pointer: "touch", textScale: 100, toolbar: "flex" },
+    // The row token is max(30px, 18px * text scale + 8px) at the supported
+    // 90/100/110/125/140% stops, so the crossover moves with the stop: 90 and
+    // 110% keep the 30px row and the 62px need, 125% needs 62.5px (hidden at the
+    // 62px 572px column), 140% needs 65.2px (hidden through the 65px column at
+    // 575px and back at 66px/576px).
+    { height: 572, order: "reordered", pointer: "mouse", textScale: 90, toolbar: "flex" },
+    { height: 572, order: "reordered", pointer: "mouse", textScale: 110, toolbar: "flex" },
+    { height: 572, order: "reordered", pointer: "mouse", textScale: 125, toolbar: "none" },
+    { height: 573, order: "reordered", pointer: "mouse", textScale: 125, toolbar: "flex" },
+    { height: 572, order: "reordered", pointer: "mouse", textScale: 140, toolbar: "none" },
+    { height: 574, order: "reordered", pointer: "mouse", textScale: 140, toolbar: "none" },
+    { height: 575, order: "reordered", pointer: "mouse", textScale: 140, toolbar: "none" },
+    { height: 576, order: "reordered", pointer: "mouse", textScale: 140, toolbar: "flex" },
+    // Ordinary desktop columns pin the static clearance of the 6px rail gap.
+    { height: 720, order: "default", pointer: "mouse", textScale: 100, toolbar: "flex" },
+    { height: 720, order: "reordered", pointer: "mouse", textScale: 100, toolbar: "flex" },
+    { height: 800, order: "default", pointer: "mouse", textScale: 100, toolbar: "flex" },
+    { height: 800, order: "reordered", pointer: "mouse", textScale: 100, toolbar: "flex" },
+    { height: 900, order: "default", pointer: "mouse", textScale: 100, toolbar: "flex" },
   ];
 
   it.each(ordinaryClearanceCases)(
-    "keeps the last nav key whole and clickable above the well at $height ($order order, $pointer)",
-    async ({ height, order, pointer, toolbar }) => {
+    "keeps the last nav key whole and clickable above the well at $height ($order order, $pointer, $textScale%)",
+    async ({ height, order, pointer, textScale, toolbar }) => {
       const baseTime = Date.parse("2026-07-01T16:00:00.000Z");
       const rows = Array.from({ length: 6 }, (_, index) =>
         sessionRow(`agent:main:chat-${index}`, `Chat ${index}`, baseTime - index * 60_000),
@@ -410,6 +450,9 @@ suite.define(() => {
       });
       try {
         await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
+        if (textScale !== 100) {
+          await bootTextScale(page, suite.server.baseUrl, textScale);
+        }
         const layout = await settleSidebarClearance(page, false);
         // Captured before the assertions so a regressed run retains the exact
         // column it failed on.
@@ -423,6 +466,10 @@ suite.define(() => {
           layout.wholeSessionRowCount,
           "one whole session row stays readable",
         ).toBeGreaterThanOrEqual(1);
+        expect(
+          layout.firstSessionRow!.bottom,
+          "the first session row is not clipped by its scroller",
+        ).toBeLessThanOrEqual(layout.sessionScroller!.bottom);
         // No tolerance: the rail viewport ends at the key's own lower edge, and
         // the Session frame starts below it, so nothing paints over the key.
         expect(
