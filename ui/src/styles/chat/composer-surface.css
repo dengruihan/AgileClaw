@@ -205,19 +205,13 @@
   --chat-composer-editor-line: calc(var(--chat-composer-editor-size) * 1.5);
   /* The well material. Resting is a seated recess: the sharp close wall shade
      plus a wide ambient pool falling away from the light, over a caught lip.
-     Focus only deepens the carve and turns up a neutral inner rim — never an
-     outer ring, which would re-raise the surface the recess just carved. */
+     It stays put through focus and typing — a deeper carve, inner rim, or outer
+     ring would re-raise the surface the recess just carved. */
   --chat-composer-well:
     inset 2px 3px 6px color-mix(in srgb, var(--neu-dark) 78%, transparent),
     inset 9px 13px 24px color-mix(in srgb, var(--neu-dark) 36%, transparent),
     inset -1px -1px 1px color-mix(in srgb, var(--mat-bevel) 45%, transparent),
     inset -5px -7px 16px color-mix(in srgb, var(--neu-light) 46%, transparent);
-  --chat-composer-well-focus:
-    inset 0 0 0 1px color-mix(in srgb, var(--text-strong) 14%, transparent),
-    inset 2px 4px 8px color-mix(in srgb, var(--neu-dark) 92%, transparent),
-    inset 10px 16px 28px color-mix(in srgb, var(--neu-dark) 52%, transparent),
-    inset -1px -1px 1px color-mix(in srgb, var(--mat-bevel) 30%, transparent),
-    inset -6px -9px 18px color-mix(in srgb, var(--neu-light) 34%, transparent);
 
   position: relative;
   z-index: 1;
@@ -244,20 +238,10 @@
   border: 1px solid transparent;
   box-shadow: var(--chat-composer-well);
   flex-shrink: 0;
-  transition:
-    border-color var(--duration-fast) ease,
-    box-shadow var(--duration-fast) ease;
 }
 
 :root[data-theme-mode="dark"] :is(.chat-footer, .agent-chat__composer-shell, .agent-chat__input) {
   --chat-composer-hairline: color-mix(in srgb, var(--text-strong) 9%, transparent);
-}
-
-/* Focus is a neutral state, not an accent/status signal: the well sinks one
-   step with the caret and the rim stays within the surface's own neutral ramp,
-   so the composer never looks thicker or raised once typing starts. */
-.agent-chat__input:has(.agent-chat__composer-combobox > :is(textarea, input):focus) {
-  box-shadow: var(--chat-composer-well-focus);
 }
 
 .agent-chat__input--prefill-attention {

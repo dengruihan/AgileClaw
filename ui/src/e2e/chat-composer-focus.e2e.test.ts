@@ -1,4 +1,6 @@
+import type { Locator } from "playwright";
 import { expect, it } from "vitest";
+import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
@@ -209,15 +211,13 @@ suite.define(() => {
     });
   });
 
-  it("deepens the recessed well on neutral focus in dark and light themes", async () => {
+  it("keeps the recessed well material stable on neutral focus in dark and light themes", async () => {
+    const artifactDir =
+      process.env.OPENCLAW_CAPTURE_UI_PROOF === "1"
+        ? createControlUiE2eArtifactDir("chat-composer-focus")
+        : undefined;
     await suite.withPage({ viewport: { width: 1440, height: 900 } }, async ({ page }) => {
       const gateway = await installMockGateway(page);
-      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
-      await gateway.waitForRequest("chat.startup");
-
-      const composer = page.locator(".agent-chat__input");
-      const textarea = composer.locator("textarea");
-      await composer.waitFor({ state: "visible" });
 
       const parseShadowLayers = (value: string) =>
         value.split(/, (?=color\(|rgba?\()/).map((segment) => {
@@ -230,16 +230,17 @@ suite.define(() => {
           const numbers = match[1]!.match(/[\d.]+/g)!.map(Number);
           const scale = match[1]!.startsWith("color(srgb") ? 255 : 1;
           return {
-            alpha: numbers[3] ?? 1,
             inset: match[6] === "inset",
             rgb: numbers.slice(0, 3).map((channel) => channel * scale),
-            spread: Number(match[5]),
-            x: Number(match[2]),
-            y: Number(match[3]),
           };
         });
-      const readMaterial = () =>
+      const readMaterial = (composer: Locator) =>
         composer.evaluate(async (element) => {
+          // Let a focus transition start before awaiting it, so a fade cannot
+          // mask a lasting material change.
+          await new Promise<void>((resolve) => {
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          });
           await Promise.all(element.getAnimations().map((animation) => animation.finished));
           const style = getComputedStyle(element);
           const { width, height } = element.getBoundingClientRect();
@@ -251,46 +252,91 @@ suite.define(() => {
           };
         });
 
-      for (const theme of ["dark", "light"] as const) {
-        await page.emulateMedia({ colorScheme: theme });
-        await expect
-          .poll(() => page.evaluate(() => document.documentElement.dataset.themeMode))
-          .toBe(theme);
-        await textarea.evaluate((element) => element.blur());
-        const resting = await readMaterial();
-        await expectComposerSurface(composer);
-
-        await textarea.focus();
-        const focused = await readMaterial();
-        await expectComposerSurface(composer);
-
-        const focusedLayers = parseShadowLayers(focused.boxShadow);
-        // The well sinks with the caret — it changes, but never rises out of
-        // the recess, and focus never paints an accent frame.
-        expect(focused.boxShadow, `focus changes the material (${theme})`).not.toBe(
-          resting.boxShadow,
-        );
-        expect(
-          focusedLayers.every((layer) => layer.inset),
-          `focused shadows stay inset (${theme})`,
-        ).toBe(true);
-        expect(
-          focusedLayers.some(
-            (layer) => layer.inset && layer.x === 0 && layer.y === 0 && layer.spread === 1,
-          ),
-          `focus turns up a visible inner rim (${theme})`,
-        ).toBe(true);
-        for (const layer of focusedLayers) {
-          const channelSpread = Math.max(...layer.rgb) - Math.min(...layer.rgb);
-          expect(
-            channelSpread,
-            `focused shadow stays in the neutral ramp (${theme})`,
-          ).toBeLessThanOrEqual(66);
+      for (const [route, url, composerSelector] of [
+        [
+          "chat",
+          controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"),
+          ".chat-footer .agent-chat__input",
+        ],
+        ["new", `${suite.server.baseUrl}new`, ".new-session-page__composer .agent-chat__input"],
+      ] as const) {
+        await page.goto(url);
+        if (route === "chat") {
+          await gateway.waitForRequest("chat.startup");
         }
-        expect(focused.borderColor.replace(/\s/g, ""), `focus keeps no frame (${theme})`).toBe(
-          resting.borderColor.replace(/\s/g, ""),
-        );
-        expect([focused.width, focused.height]).toEqual([resting.width, resting.height]);
+        const composer = page.locator(composerSelector);
+        const textarea = composer.locator("textarea");
+        await composer.waitFor({ state: "visible" });
+
+        for (const theme of ["dark", "light"] as const) {
+          await page.emulateMedia({ colorScheme: theme });
+          await expect
+            .poll(() => page.evaluate(() => document.documentElement.dataset.themeMode))
+            .toBe(theme);
+          const capture = async (state: string) => {
+            if (!artifactDir) {
+              return;
+            }
+            await composer.screenshot({
+              animations: "disabled",
+              path: `${artifactDir}/${route}-${theme}-${state}.png`,
+            });
+          };
+
+          await textarea.evaluate((element) => element.blur());
+          const resting = await readMaterial(composer);
+          await expectComposerSurface(composer);
+          await capture("resting");
+
+          await textarea.click();
+          await expect
+            .poll(() => textarea.evaluate((element) => document.activeElement === element))
+            .toBe(true);
+          const focused = await readMaterial(composer);
+          await expectComposerSurface(composer);
+          await capture("focused");
+
+          const draft = `focus proof ${route} ${theme}`;
+          await page.keyboard.type(draft);
+          await expect.poll(() => textarea.inputValue()).toBe(draft);
+          await expect
+            .poll(() => textarea.evaluate((element) => document.activeElement === element))
+            .toBe(true);
+          await capture("typed");
+          await textarea.fill("");
+
+          const restingLayers = parseShadowLayers(resting.boxShadow);
+          const focusedLayers = parseShadowLayers(focused.boxShadow);
+          // Focus keeps the seated recess: no deeper carve, no inner rim, no
+          // outer ring, and no resize that would move the surface under the
+          // caret.
+          expect(
+            restingLayers.every((layer) => layer.inset),
+            `resting shadows stay inset (${route}, ${theme})`,
+          ).toBe(true);
+          expect(
+            focusedLayers.every((layer) => layer.inset),
+            `focused shadows stay inset (${route}, ${theme})`,
+          ).toBe(true);
+          for (const layer of [...restingLayers, ...focusedLayers]) {
+            const channelSpread = Math.max(...layer.rgb) - Math.min(...layer.rgb);
+            expect(
+              channelSpread,
+              `the well stays in the neutral ramp (${route}, ${theme})`,
+            ).toBeLessThanOrEqual(66);
+          }
+          expect(focused.boxShadow, `focus keeps the resting well (${route}, ${theme})`).toBe(
+            resting.boxShadow,
+          );
+          expect(
+            focused.borderColor.replace(/\s/g, ""),
+            `focus keeps no frame (${route}, ${theme})`,
+          ).toBe(resting.borderColor.replace(/\s/g, ""));
+          expect(
+            [focused.width, focused.height],
+            `focus keeps the surface size (${route}, ${theme})`,
+          ).toEqual([resting.width, resting.height]);
+        }
       }
     });
   });
