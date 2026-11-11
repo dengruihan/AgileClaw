@@ -293,6 +293,12 @@ export class ChatRevealBuffer {
   private activeRunId: string | null = null;
   /** Live stream row per run, noted by the projection while it streams. */
   private readonly liveStreamKeys = new Map<string, string>();
+  /**
+   * Whether this run was ever observed streaming, and whether its live row was
+   * unambiguous. Only runs with streaming origin state may settle a final that
+   * cannot continue one; commentary alone must not suppress a one-shot reveal.
+   */
+  private readonly streamOrigins = new Map<string, "unique" | "unresolved">();
   /** The one stream entry a settled final may continue from (identity, not recency). */
   private successor: { runKey: string; entryKey: string } | null = null;
   private liveRunId: string | null = null;
@@ -395,8 +401,11 @@ export class ChatRevealBuffer {
     }
     if (key) {
       this.liveStreamKeys.set(runKey, key);
+      this.streamOrigins.set(runKey, "unique");
     } else {
       this.liveStreamKeys.delete(runKey);
+      this.streamOrigins.delete(runKey);
+      this.streamOrigins.set(runKey, "unresolved");
     }
   }
 
@@ -462,10 +471,11 @@ export class ChatRevealBuffer {
     if (typeof inherited === "number") {
       return this.startEntry(runKey, entryKey, request, inherited);
     }
-    if (settledTail && this.runHasEntries(runKey)) {
-      // The run already painted output this settled row cannot continue from.
-      // Painting it settled avoids retracting or restarting text the reader
-      // already saw, and keeps sibling rows independent.
+    if (settledTail && this.streamOrigins.has(runKey)) {
+      // This run was observed streaming but no exact live-row origin is
+      // available (ambiguous or not identified). Paint settled instead of
+      // adopting or restarting text; a run that never streamed (one-shot
+      // provider) still reveals from the start, even beside commentary.
       this.complete(entryKey);
       return { text, revealing: false };
     }
@@ -602,15 +612,6 @@ export class ChatRevealBuffer {
     return source.revealed;
   }
 
-  private runHasEntries(runKey: string): boolean {
-    for (const entry of this.entries.values()) {
-      if (entry.runKey === runKey) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   private complete(entryKey: string): void {
     const entry = this.entries.get(entryKey);
     if (!entry) {
@@ -713,6 +714,7 @@ export class ChatRevealBuffer {
     }
     this.runs.delete(runKey);
     this.liveStreamKeys.delete(runKey);
+    this.streamOrigins.delete(runKey);
     if (this.successor?.runKey === runKey) {
       this.successor = null;
     }
@@ -735,6 +737,7 @@ export class ChatRevealBuffer {
     this.runs.clear();
     this.tailRunIds.clear();
     this.liveStreamKeys.clear();
+    this.streamOrigins.clear();
     this.successor = null;
     this.activeRunId = null;
     this.liveRunId = null;
@@ -787,7 +790,9 @@ export function trackRevealLiveStream(
   stream: string | null | undefined,
   items: readonly ChatRevealLiveRow[],
 ): void {
-  if ((stream ?? null) === null) {
+  // An empty stream is the acknowledgement bridge, not streamed output: it has
+  // no live row and must not suppress a one-shot final reveal.
+  if (!stream?.trim()) {
     return;
   }
   const live = items.filter(

@@ -546,11 +546,12 @@ describe("chat reveal ownership regressions", () => {
     ).toEqual({ text: paintedB.text, revealing: true });
   });
 
-  it("paints settled instead of adopting or restarting when no bound predecessor exists", () => {
+  it("paints settled when a streaming run exposes no identifiable live row", () => {
     const { buffer, frames } = createLifecycleBuffer();
     buffer.visibleText({ key: "stream-a", runId: "run-1", text: LONG_REPLY, streaming: true });
     frames.advance(2);
-    // The tail is focused without a live-stream binding (e.g. restored state).
+    // The run streamed, but the selector found no live row to bind.
+    trackRevealLiveStream(buffer, "run-1", LONG_REPLY, []);
     buffer.focusTail(
       { kind: "group", key: "group:assistant:final-a", role: "assistant", messages: [] },
       "run-1",
@@ -564,6 +565,45 @@ describe("chat reveal ownership regressions", () => {
         liveTail: true,
       }),
     ).toEqual({ text: `${LONG_REPLY} and finishes.`, revealing: false });
+  });
+
+  it("reveals a one-shot final beside same-run commentary when no stream ever existed", () => {
+    const { buffer, frames } = createLifecycleBuffer();
+    const commentary = "Checking the request first.";
+    const finalText = `${LONG_REPLY} and finishes without any live stream.`;
+    // Settled commentary of the same run animates on its own.
+    const firstCommentary = buffer.visibleText({
+      key: "commentary",
+      runId: "run-1",
+      text: commentary,
+      streaming: false,
+    });
+    expect(firstCommentary.revealing).toBe(true);
+    expect(firstCommentary.text.length).toBeLessThan(commentary.length);
+    // stream === null for this run: the production selector records no origin.
+    trackRevealLiveStream(buffer, "run-1", null, []);
+    buffer.focusTail(
+      { kind: "group", key: "group:assistant:final", role: "assistant", messages: [] },
+      "run-1",
+    );
+    const final = buffer.visibleText({
+      key: "final",
+      runId: "run-1",
+      text: finalText,
+      streaming: false,
+      liveTail: true,
+    });
+    // Commentary entries do not suppress the one-shot reveal.
+    expect(final.revealing).toBe(true);
+    expect(final.text.length).toBeGreaterThan(0);
+    expect(final.text.length).toBeLessThan(finalText.length);
+    frames.advance(400);
+    expect(
+      buffer.visibleText({ key: "final", runId: "run-1", text: finalText, streaming: false }),
+    ).toEqual({ text: finalText, revealing: false });
+    expect(
+      buffer.visibleText({ key: "commentary", runId: "run-1", text: commentary, streaming: false }),
+    ).toEqual({ text: commentary, revealing: false });
   });
 
   it("focuses only the action owner's rendered group, not every group in the tail frame", () => {
