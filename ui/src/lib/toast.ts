@@ -4,6 +4,7 @@ import { styleMap } from "lit/directives/style-map.js";
 import { icons } from "../components/icons.ts";
 import { t } from "../i18n/index.ts";
 import { OpenClawLightDomContentsElement } from "../lit/openclaw-element.ts";
+import "../styles/toast.css";
 import { formatUiExternalText } from "./format-error.ts";
 
 type ToastDismissReason = "action" | "dismiss" | "disconnected" | "replaced" | "timeout";

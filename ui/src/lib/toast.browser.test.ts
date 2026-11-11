@@ -185,4 +185,57 @@ describe.skipIf(!hasBrowserLayout)("toast browser layout", () => {
       }
     }
   });
+
+  it("lets clicks reach controls beneath the passive toast surface while keeping its action interactive", async () => {
+    await useViewport(1280, 800);
+    const { page } = await import("vitest/browser");
+    let actionClicks = 0;
+    const host = await showArchiveToast({
+      durationMs: 60_000,
+      onAction: () => {
+        actionClicks += 1;
+      },
+    });
+    const toast = host.querySelector<HTMLElement>(".app-toast")!;
+    const bounds = toast.getBoundingClientRect();
+
+    // A control under the toast's own padding, where the reload-blocked toast
+    // overlaps the file panel's Save/Discard buttons.
+    const point = { x: bounds.left + 5, y: bounds.top + 5 };
+    const underlying = document.createElement("button");
+    underlying.type = "button";
+    underlying.textContent = "Underlying control";
+    underlying.style.cssText = `position: fixed; z-index: 1; left: ${point.x - 40}px; top: ${
+      point.y - 15
+    }px; width: 80px; height: 30px`;
+    let underlyingClicks = 0;
+    underlying.addEventListener("click", () => {
+      underlyingClicks += 1;
+    });
+    document.body.append(underlying);
+
+    // The passive surface no longer intercepts the click (fails fast pre-fix).
+    expect(document.elementFromPoint(point.x, point.y)).toBe(underlying);
+    await page.getByRole("button", { name: "Underlying control", exact: true }).click();
+    expect(underlyingClicks).toBe(1);
+
+    // The toast's own controls stay hit-testable and clickable. The dismiss
+    // icon's SVG path is the deepest hit, so assert membership, not identity.
+    const dismiss = host.querySelector<HTMLElement>(".app-toast__dismiss")!;
+    const dismissBounds = dismiss.getBoundingClientRect();
+    const dismissHit = document.elementFromPoint(
+      dismissBounds.left + dismissBounds.width / 2,
+      dismissBounds.top + dismissBounds.height / 2,
+    );
+    expect(dismiss.contains(dismissHit)).toBe(true);
+    const action = host.querySelector<HTMLElement>(".app-toast__action")!;
+    const actionBounds = action.getBoundingClientRect();
+    const actionHit = document.elementFromPoint(
+      actionBounds.left + actionBounds.width / 2,
+      actionBounds.top + actionBounds.height / 2,
+    );
+    expect(action.contains(actionHit)).toBe(true);
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    expect(actionClicks).toBe(1);
+  });
 });
