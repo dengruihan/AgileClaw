@@ -1,4 +1,4 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import { property } from "lit/decorators.js";
 import type { ControlUiEnvironment } from "../../../src/gateway/control-ui-bootstrap-contract.js";
 import { beginNativeWindowDrag } from "../app/native-window-drag.ts";
@@ -6,15 +6,19 @@ import { controlUiPublicAssetPath } from "../app/public-assets.ts";
 import { t } from "../i18n/index.ts";
 import { OpenClawLightDomContentsElement } from "../lit/openclaw-element.ts";
 import { icons } from "./icons.ts";
+import { renderShellFullscreenButton } from "./shell-fullscreen.ts";
 import "./tooltip.ts";
 
-/** Narrow-viewport header: drawer toggle and brand.
+/** Narrow-viewport header: drawer toggle, brand, and the document fullscreen control.
  * Desktop hides it entirely (layout.css) — the sidebar owns navigation there. */
 class AppTopbar extends OpenClawLightDomContentsElement {
   @property({ attribute: false }) navDrawerOpen = false;
   @property({ attribute: false }) resourceBasePath = "";
   @property({ attribute: false }) environment: ControlUiEnvironment | null = null;
+  @property({ attribute: false }) fullscreenActive = false;
+  @property({ attribute: false }) fullscreenSupported = false;
   @property({ attribute: false }) onToggleDrawer!: (trigger: HTMLElement) => void;
+  @property({ attribute: false }) onToggleFullscreen?: (trigger: HTMLElement) => void;
 
   override render() {
     const drawerLabel = this.navDrawerOpen ? t("nav.collapse") : t("nav.expand");
@@ -49,6 +53,18 @@ class AppTopbar extends OpenClawLightDomContentsElement {
                 html`<span class="control-ui-environment-pill">${this.environment.label}</span>`
               }
             </div>
+          </div>
+          <div class="topnav-shell__actions">
+            ${
+              this.onToggleFullscreen
+                ? renderShellFullscreenButton({
+                    active: this.fullscreenActive,
+                    supported: this.fullscreenSupported,
+                    className: "topbar-icon-btn topbar-fullscreen",
+                    onToggle: (trigger) => this.onToggleFullscreen?.(trigger),
+                  })
+                : nothing
+            }
           </div>
         </div>
       </header>

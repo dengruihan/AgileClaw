@@ -11,6 +11,11 @@ import {
   KEYBOARD_SHORTCUTS_REQUEST_EVENT,
   TERMINAL_PANEL_TOGGLE_EVENT,
 } from "../components/panel-toggle-contract.ts";
+import {
+  SHELL_FULLSCREEN_TOGGLE_EVENT,
+  type ShellFullscreen,
+  type ShellFullscreenToggleDetail,
+} from "../components/shell-fullscreen.ts";
 import { focusWithoutTooltip } from "../components/tooltip.ts";
 import type { BoardFace } from "../lib/board/settings.ts";
 import {
@@ -82,6 +87,7 @@ function activeServiceWorkerContainer(): ServiceWorkerContainer | undefined {
 export interface ShellChromeHost extends ShellNewSessionHost, ShellPanelHost {
   readonly activeSessionKey: string;
   readonly updateComplete: Promise<boolean>;
+  readonly shellFullscreen: ShellFullscreen;
   readonly execApprovalElement: OptionalCustomElement;
   readonly approvalOverlay: (HTMLElement & { show(): void; dialogOpen?: boolean }) | undefined;
   navDrawerOpen: boolean;
@@ -141,6 +147,7 @@ export class ShellChromeOwner {
       [BROWSER_PANEL_TOGGLE_EVENT, this.panels.handleDeferredBrowserToggle],
       [LINK_READER_PANEL_TOGGLE_EVENT, this.panels.handleDeferredLinkReaderToggle],
       [DESKTOP_PANEL_TOGGLE_EVENT, this.panels.handleDeferredDesktopToggle],
+      [SHELL_FULLSCREEN_TOGGLE_EVENT, this.handleShellFullscreenToggle],
       [SHELL_APPROVALS_OPEN_EVENT, this.handleApprovalsOpen],
     ] as const) {
       window.addEventListener(type, listener, options);
@@ -469,6 +476,11 @@ export class ShellChromeOwner {
 
   readonly handleDocumentKeydown = (event: KeyboardEvent): void => {
     const host = this.host;
+    // F11 toggles the whole document through the Fullscreen API while it can,
+    // so the browser's native window fullscreen never runs a second state.
+    if (host.shellFullscreen.handleShortcut(event)) {
+      return;
+    }
     if (
       host.lazyCustomElements.visibleState?.element === DEBUG_OVERLAY_ELEMENT &&
       shouldCloseDebugOverlay(
@@ -654,6 +666,14 @@ export class ShellChromeOwner {
 
   readonly handleShellNavDrawerToggle = (event: Event): void => {
     this.toggleNavigationSurface(shellNavDrawerTriggerFromEvent(event));
+  };
+
+  readonly handleShellFullscreenToggle = (event: Event): void => {
+    // SAFETY: registered only for the shell's own toggle event; detail is its trigger.
+    const detail = (event as CustomEvent<ShellFullscreenToggleDetail>).detail;
+    this.host.shellFullscreen.toggle(
+      detail?.trigger instanceof HTMLElement ? detail.trigger : null,
+    );
   };
 
   private readonly handleApprovalsOpen = (event: Event): void => {

@@ -13,6 +13,7 @@ import {
   type PersonActivityRouting,
 } from "../../../components/person-activity-link.ts";
 import { renderSessionOwnerChip } from "../../../components/session-owner-chip.ts";
+import { renderShellFullscreenButton } from "../../../components/shell-fullscreen.ts";
 import "../../../components/tooltip.ts";
 import { t } from "../../../i18n/index.ts";
 import { formatRelativeTimestamp } from "../../../lib/format.ts";
@@ -53,6 +54,12 @@ type ChatPaneHeaderProps = {
   placementControl?: TemplateResult | typeof nothing;
   deviceScopeControl?: TemplateResult | typeof nothing;
   sessionMenuAction: TemplateResult | typeof nothing;
+  /** Whole-page fullscreen control; the shell owns its state and the toggle. */
+  fullscreen?: {
+    active: boolean;
+    supported: boolean;
+    onToggle: (trigger: HTMLElement) => void;
+  } | null;
   onBranchSelect: (leafEntryId: string) => void;
   onOpenSplitView?: () => void;
   onSplitDown?: (paneId: string) => void;
@@ -265,6 +272,16 @@ export function renderChatPaneHeader(props: ChatPaneHeaderProps) {
             )}
             ${props.sessionMenuAction}
           </fieldset>
+          ${
+            props.fullscreen
+              ? renderShellFullscreenButton({
+                  active: props.fullscreen.active,
+                  supported: props.fullscreen.supported,
+                  className: "btn btn--ghost btn--icon chat-icon-btn chat-pane__fullscreen",
+                  onToggle: props.fullscreen.onToggle,
+                })
+              : nothing
+          }
         </div>
       </div>
     </div>

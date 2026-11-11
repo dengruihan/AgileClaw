@@ -20,6 +20,7 @@ export class FullscreenController implements ReactiveController {
   errorText: string | null = null;
 
   private restoreFocus = false;
+  private restoreTarget: HTMLElement | null = null;
 
   constructor(
     private readonly host: OpenClawLitElement,
@@ -35,6 +36,7 @@ export class FullscreenController implements ReactiveController {
   hostDisconnected(): void {
     document.removeEventListener("fullscreenchange", this.onFullscreenChange);
     this.restoreFocus = false;
+    this.restoreTarget = null;
     if (this.ownsFullscreen()) {
       void document.exitFullscreen().catch(() => {});
     }
@@ -96,14 +98,27 @@ export class FullscreenController implements ReactiveController {
     if (wasActive && !this.active && this.restoreFocus) {
       // Escape and browser controls exit outside the component. Restore focus so
       // keyboard operators return to the control that changed the viewport.
+      const restoreTarget = this.restoreTarget;
+      this.restoreFocus = false;
+      this.restoreTarget = null;
       void this.host.updateComplete.then(() => {
-        this.host.renderRoot.querySelector<HTMLButtonElement>(this.options.buttonSelector)?.focus();
-        this.restoreFocus = false;
+        this.focusRestoreTarget(restoreTarget)?.focus();
       });
     }
   };
 
-  private async toggle(): Promise<void> {
+  private focusRestoreTarget(restoreTarget: HTMLElement | null): HTMLElement | null {
+    if (restoreTarget?.isConnected) {
+      return restoreTarget;
+    }
+    return this.host.renderRoot.querySelector<HTMLElement>(this.options.buttonSelector);
+  }
+
+  /**
+   * Toggle the owned surface. `restoreTarget` is the control, or the pre-viewport
+   * focus for a keyboard entry, that focus returns to when fullscreen ends.
+   */
+  async toggle(restoreTarget: HTMLElement | null = null): Promise<void> {
     this.setError(null);
     if (this.active) {
       await this.exit();
@@ -115,10 +130,12 @@ export class FullscreenController implements ReactiveController {
       return;
     }
     this.restoreFocus = true;
+    this.restoreTarget = restoreTarget;
     try {
       await section.requestFullscreen();
     } catch (error) {
       this.restoreFocus = false;
+      this.restoreTarget = null;
       this.setError(this.options.errorMessage(error));
     }
   }

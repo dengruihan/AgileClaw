@@ -7,6 +7,7 @@ import { renderGatewayStatus } from "../components/gateway-status.ts";
 import { icons } from "../components/icons.ts";
 import { renderConnectingSplash } from "../components/loading-skeleton.ts";
 import { renderLazySettingsSidebar } from "../components/settings-sidebar-lazy.ts";
+import { shellFullscreenSupported, type ShellFullscreen } from "../components/shell-fullscreen.ts";
 import type { ThemeModeChangeDetail } from "../components/theme-mode-toggle.ts";
 import { t } from "../i18n/index.ts";
 import { resolveGatewayStatus } from "../lib/gateway-status.ts";
@@ -60,6 +61,7 @@ export interface ShellViewHost
   readonly execApprovalElement: OptionalCustomElement;
   readonly nativeHistoryState: NativeHistoryState;
   readonly navDrawerOpen: boolean;
+  readonly shellFullscreen: ShellFullscreen;
   navResizing: boolean;
   readonly shellLayout: ShellLayoutController;
   readonly navigationSidebar: HTMLElement;
@@ -390,6 +392,9 @@ export function renderApplicationShell(host: ShellViewHost) {
               .environment=${config.environment}
               .navDrawerOpen=${navDrawerOpen}
               .onToggleDrawer=${host.toggleNavigationSurface}
+              .fullscreenActive=${host.shellFullscreen.active}
+              .fullscreenSupported=${shellFullscreenSupported()}
+              .onToggleFullscreen=${host.shellFullscreen.toggle}
             ></openclaw-app-topbar>`
       }
       ${
