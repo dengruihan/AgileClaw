@@ -489,6 +489,48 @@ export function sample${index}(value: number): number {
     }
   });
 
+  it("promotes a streamed display block without duplicating or leaking delimiters", () => {
+    const key = "math-display-promotion";
+    const unclosed = ["Before", "", "$$", String.raw`\int_0^1 x\,dx`, ""].join("\n");
+    const [openStable, openTail] = toStreamingMarkdownParts(unclosed, {}, key);
+    expect(htmlFragment(openStable + openTail).querySelector(".markdown-math")).toBeNull();
+
+    const complete = `${unclosed}$$\n\n`;
+    const [stable, tail] = toStreamingMarkdownParts(complete, {}, key);
+    const fragment = htmlFragment(stable + tail);
+    const blocks = fragment.querySelectorAll(".markdown-math--display");
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.textContent).toBe(`$$\n${String.raw`\int_0^1 x\,dx`}\n$$`);
+    expect(fragment.textContent).not.toContain("$$\n$$");
+    expect(stable + tail).toBe(toSanitizedMarkdownHtml(complete));
+  });
+
+  it("typesets inline math whose closer arrives after the streamed prefix", () => {
+    const key = "math-inline-promotion";
+    const opening = "Energy is $E = mc";
+    const [, openingTail] = toStreamingMarkdownParts(opening, {}, key);
+    expect(openingTail).toContain("$E = mc");
+
+    const complete = `${opening}^2$ exactly.\n\n`;
+    const [stable, tail] = toStreamingMarkdownParts(complete, {}, key);
+    const fragment = htmlFragment(stable + tail);
+    const spans = fragment.querySelectorAll(".markdown-math");
+    expect(spans).toHaveLength(1);
+    expect(spans[0]?.textContent).toBe("$E = mc^2$");
+    expect(fragment.textContent).toBe("Energy is $E = mc^2$ exactly.\n");
+    expect(stable + tail).toBe(toSanitizedMarkdownHtml(complete));
+  });
+
+  it("keeps currency plain while a streamed reply grows", () => {
+    const key = "math-currency-stream";
+    toStreamingMarkdownParts("The fee is $5\n\n", {}, key);
+    const complete = "The fee is $5\n\nand $9 per seat.\n\n";
+    const [stable, tail] = toStreamingMarkdownParts(complete, {}, key);
+    const fragment = htmlFragment(stable + tail);
+    expect(fragment.querySelectorAll(".markdown-math")).toHaveLength(0);
+    expect(stable + tail).toBe(toSanitizedMarkdownHtml(complete));
+  });
+
   it("resets an incremental cursor when a completed citation marker rewrites its prefix", () => {
     const partial = "Intro\n\ncitevery-long-partial-citation-marker";
     const completed = `${partial}\n\n\`\`\`ts\nconst answer = 42;`;

@@ -1,0 +1,48 @@
+/* Lazy math presentation, fetched with KaTeX only when a transcript has TeX. */
+
+.openclaw-chat-math__source {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+}
+
+.openclaw-chat-math__body {
+  display: contents;
+}
+
+/* Inline equations keep the paragraph baseline but never widen the column. */
+.openclaw-chat-math:not(.openclaw-chat-math--display) {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  vertical-align: baseline;
+}
+
+/* Display equations center like prose blocks and scroll instead of clipping. */
+.openclaw-chat-math--display {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 2px;
+}
+
+.openclaw-chat-math--display > .openclaw-chat-math__body > .katex-display {
+  margin-block: 0.5em;
+}
+
+.openclaw-chat-math .katex-error {
+  color: var(--danger, currentColor);
+}
+
+.openclaw-chat-math .katex {
+  color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .openclaw-chat-math,
+  .openclaw-chat-math__body {
+    transition: none;
+  }
+}

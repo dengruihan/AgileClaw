@@ -15,6 +15,7 @@ import {
   restoreMarkdownHumanMentions,
 } from "./markdown-human-mentions.ts";
 import type { MarkdownJson } from "./markdown-json.ts";
+import { hasUnpairedMarkdownMath } from "./markdown-math.ts";
 import { createMarkdownParser } from "./markdown-parser.ts";
 import { stripProgressCardRawContentBlocks } from "./markdown-raw-content.ts";
 import {
@@ -682,6 +683,9 @@ export function toStreamingMarkdownParts(
   const state = streamingMarkdownState(streamKey);
   const previous = state?.rendered;
   const renderKey = markdownRenderKey(renderOptions);
+  // A math delimiter that owns no closer in either half only becomes an
+  // equation once the other half arrives, so appended HTML must not split it.
+  const stableAppendSource = previous ? stableMarkdown.slice(previous.markdown.length) : "";
   // Containers and block-art classification can outlive a completed boundary.
   // The message parse guard also keeps applying to the complete prefix.
   const incremental =
@@ -694,6 +698,8 @@ export function toStreamingMarkdownParts(
         !stableMarkdown.includes("<") &&
         !isMarkdownBlockArtText(stableMarkdown) &&
         !previous.html.includes('class="markdown-block-art"') &&
+        !hasUnpairedMarkdownMath(previous.markdown) &&
+        !hasUnpairedMarkdownMath(stableAppendSource) &&
         (renderOptions.mode === "document" || boundary <= MARKDOWN_PARSE_LIMIT)));
   let stableHtml = incremental ? previous.html : "";
   const stableAppend = stableMarkdown.slice(incremental ? previous.markdown.length : 0);

@@ -184,6 +184,7 @@ export function createUiBrowserVitestConfig(env = process.env): ViteUserConfig {
         "highlight.js/lib/languages/{bash,cpp,css,diff,java,javascript,json,markdown,python,rust,typescript,xml,yaml}",
         "ipaddr.js",
         "json5",
+        "katex",
         "lit/async-directive.js",
         "lit/directive.js",
         "lit/directives/guard.js",
