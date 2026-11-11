@@ -536,6 +536,21 @@ export function sample${index}(value: number): number {
     expect(stable + tail).toBe(toSanitizedMarkdownHtml(complete));
   });
 
+  it("promotes a streamed implicit-product formula once its closer arrives", () => {
+    const key = "math-implicit-product";
+    const opening = "The area is $2x";
+    const [, openingTail] = toStreamingMarkdownParts(opening, {}, key);
+    expect(htmlFragment(openingTail).querySelector(".markdown-math")).toBeNull();
+
+    const complete = `${opening}$$ square units.\n\n`;
+    const [stable, tail] = toStreamingMarkdownParts(complete, {}, key);
+    const fragment = htmlFragment(stable + tail);
+    const spans = fragment.querySelectorAll(".markdown-math");
+    expect(spans).toHaveLength(1);
+    expect(spans[0]?.textContent).toBe("$2x$");
+    expect(stable + tail).toBe(toSanitizedMarkdownHtml(complete));
+  });
+
   it("keeps currency plain while a streamed reply grows", () => {
     const key = "math-currency-stream";
     toStreamingMarkdownParts("The fee is $5\n\n", {}, key);

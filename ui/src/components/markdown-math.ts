@@ -31,9 +31,14 @@ type MarkdownMathMatch = {
 // Cheap probe before the delimiter scan; ordinary prose exits here.
 const MARKDOWN_MATH_CANDIDATE_RE = /[$]|\\[()[\]]/u;
 const MARKDOWN_MATH_NEWLINE_RE = /\n/u;
-// A digit-leading `$…$` span needs an operator or TeX command. Amounts such as
-// `$5` or `$1.50` stay currency without rejecting real formulas like `$2+2=4$`.
+// A digit-leading `$…$` span needs an operator, a TeX command, or an implicit
+// factor such as `2x`, `2(x)`, or `2!`. Amounts such as `$5` or `$1.50` stay
+// currency without rejecting real formulas like `$2+2=4$`.
 const MARKDOWN_MATH_NUMERIC_HINT_RE = /[=+\-*/^_{}<>|\\]/u;
+const MARKDOWN_MATH_NUMERIC_PREFIX_RE = /^\d+(?:[.,]\d+)*/u;
+const MARKDOWN_MATH_FACTORIAL_RE = /[!'\u2019]/u;
+const MARKDOWN_MATH_LETTER_RE = /^\p{L}+/u;
+const MARKDOWN_MATH_TEX_COMMAND_RE = /^\\[a-zA-Z]+/u;
 
 function isEscaped(source: string, index: number): boolean {
   let backslashes = 0;
@@ -72,10 +77,66 @@ function bracketMathAt(
   };
 }
 
-function isNumericLeadingMarkdownMath(content: string): boolean {
-  if (!MARKDOWN_MATH_NUMERIC_HINT_RE.test(content)) {
+/** End offset of one implicit factor at `start`, or -1 when none starts there. */
+function markdownMathFactorEnd(content: string, start: number): number {
+  const character = content.charAt(start);
+  if (character === "(") {
+    let depth = 0;
+    for (let index = start; index < content.length; index++) {
+      const current = content.charAt(index);
+      if (current === "$") {
+        return -1;
+      }
+      if (current === "(") {
+        depth += 1;
+      } else if (current === ")") {
+        depth -= 1;
+        if (depth === 0) {
+          return index + 1;
+        }
+      }
+    }
+    return -1;
+  }
+  if (character === "\\") {
+    const command = MARKDOWN_MATH_TEX_COMMAND_RE.exec(content.slice(start));
+    return command ? start + command[0].length : -1;
+  }
+  const letters = MARKDOWN_MATH_LETTER_RE.exec(content.slice(start));
+  return letters ? start + letters[0].length : -1;
+}
+
+/**
+ * Implicit multiplication and factorials bind directly to the numeric prefix:
+ * `2x`, `2xy`, `2(x)`, `2.5x`, `2!`. A space ends the check, so prose that
+ * merely starts with a number (`2x marks the spot`) is never classified.
+ */
+function isImplicitNumericMarkdownMath(content: string): boolean {
+  const prefix = MARKDOWN_MATH_NUMERIC_PREFIX_RE.exec(content)?.[0];
+  if (!prefix) {
     return false;
   }
+  let index = prefix.length;
+  let factors = 0;
+  while (index < content.length) {
+    if (MARKDOWN_MATH_FACTORIAL_RE.test(content.charAt(index))) {
+      while (index < content.length && MARKDOWN_MATH_FACTORIAL_RE.test(content.charAt(index))) {
+        index += 1;
+      }
+      factors += 1;
+      continue;
+    }
+    const factorEnd = markdownMathFactorEnd(content, index);
+    if (factorEnd === -1) {
+      return false;
+    }
+    index = factorEnd;
+    factors += 1;
+  }
+  return factors > 0;
+}
+
+function isNumericLeadingMarkdownMath(content: string): boolean {
   // A stray `$` means the candidate closer belongs to a later span, so prose
   // between two amounts (`$5 today. Then $x$`) never pairs into math.
   for (let index = content.indexOf("$"); index !== -1; index = content.indexOf("$", index + 1)) {
@@ -83,7 +144,7 @@ function isNumericLeadingMarkdownMath(content: string): boolean {
       return false;
     }
   }
-  return true;
+  return MARKDOWN_MATH_NUMERIC_HINT_RE.test(content) || isImplicitNumericMarkdownMath(content);
 }
 
 function dollarMathAt(
@@ -120,7 +181,13 @@ function dollarMathAt(
     return null;
   }
   const numericLeading = /[0-9]/u.test(first);
+  // The scan budget precedes closer validity, so repeated amounts cannot walk
+  // the remaining suffix; every closer inside the budget is still examined.
+  const scanLimit = contentStart + MARKDOWN_MATH_INLINE_LIMIT;
   for (let cursor = contentStart + 1; cursor < source.length; cursor++) {
+    if (cursor > scanLimit) {
+      return null;
+    }
     const character = source.charAt(cursor);
     if (character === "\n" && !allowNewlines) {
       return null;
@@ -136,9 +203,6 @@ function dollarMathAt(
     const after = source.charAt(cursor + 1);
     if (after && /[0-9]/u.test(after)) {
       continue;
-    }
-    if (cursor - contentStart > MARKDOWN_MATH_INLINE_LIMIT) {
-      return null;
     }
     if (numericLeading && !isNumericLeadingMarkdownMath(source.slice(contentStart, cursor))) {
       continue;

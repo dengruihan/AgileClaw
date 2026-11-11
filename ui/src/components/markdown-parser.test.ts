@@ -97,6 +97,29 @@ describe("markdown math parsing", () => {
     expect(render("$2+2=4$")).toBe('<p><span class="markdown-math">$2+2=4$</span></p>\n');
   });
 
+  it("tokenizes implicit multiplication and factorials after a number", () => {
+    expect(mathSpans("$2x$")).toEqual(["$2x$"]);
+    expect(mathSpans("$2xy$")).toEqual(["$2xy$"]);
+    expect(mathSpans("$2(x)$")).toEqual(["$2(x)$"]);
+    expect(mathSpans("$2!$")).toEqual(["$2!$"]);
+    expect(mathSpans("$2.5x$")).toEqual(["$2.5x$"]);
+    expect(mathSpans("The area is $2xy$ square units.")).toEqual(["$2xy$"]);
+    expect(render("$2(x)$")).toBe('<p><span class="markdown-math">$2(x)$</span></p>\n');
+  });
+
+  it("still finds a closer after repeated currency amounts", () => {
+    // The bounded scan must not skip a valid closer inside the budget.
+    const amounts = "$5 and $10, ".repeat(20);
+    expect(mathSpans(`${amounts}$x+1$`)).toEqual(["$x+1$"]);
+    expect(mathSpans(`${amounts}$2x$`)).toEqual(["$2x$"]);
+  });
+
+  it("keeps prose that merely starts with a number literal", () => {
+    expect(mathSpans("$2x marks the spot$")).toEqual([]);
+    expect(mathSpans("Fees grew $5 and $10 today.")).toEqual([]);
+    expect(mathSpans("It costs $5$ per seat.")).toEqual([]);
+  });
+
   it("keeps amounts literal next to a later formula", () => {
     expect(mathSpans("The fee is $5 today. Then $x$ costs more.")).toEqual(["$x$"]);
     expect(mathSpans("$5 and $10, plus $1.50, and $5$10.")).toEqual([]);
