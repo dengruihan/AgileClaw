@@ -212,10 +212,10 @@ suite.define(() => {
   });
 
   it("keeps the recessed well material stable on neutral focus in dark and light themes", async () => {
-    const artifactDir =
-      process.env.OPENCLAW_CAPTURE_UI_PROOF === "1"
-        ? createControlUiE2eArtifactDir("chat-composer-focus")
-        : undefined;
+    const artifactRoot = process.env.OPENCLAW_UI_E2E_ARTIFACT_DIR?.trim();
+    const artifactDir = artifactRoot
+      ? createControlUiE2eArtifactDir("chat-composer-focus", artifactRoot)
+      : undefined;
     await suite.withPage({ viewport: { width: 1440, height: 900 } }, async ({ page }) => {
       const gateway = await installMockGateway(page);
 
