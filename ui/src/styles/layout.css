@@ -1184,11 +1184,35 @@ openclaw-settings-save-indicator:empty {
   --sidebar-pad-x: 10px;
   --sidebar-session-link-padding-block: 4px;
   --sidebar-session-row-floor: 30px;
-  /* Bounded-region floors for the joint short-height allocation: expanded
-     Online keeps its header plus one full person row, and the session well
-     keeps its toolbar plus one full session row. */
+  /* Two independent column regions share the Body: the Pages rail and the
+     session region. Each region owns its own floor and its own scroll, so one
+     region's reservation can never clip the other's last control. Expanded
+     Online keeps its header plus one full person row; the session well keeps
+     its own block padding plus one full session row. The well's toolbar is
+     deliberately not part of that floor: it rides on the slack above it and
+     yields inside the well's short band (the size query below), so the rail
+     keeps its last key whole before the well loses a readable row. */
   --sidebar-online-floor: 4.5rem;
-  --sidebar-session-well-floor: calc(var(--sidebar-session-row-min-height) + 2.5rem);
+  --sidebar-session-well-floor: calc(var(--sidebar-session-row-min-height) + 8px);
+  /* The well's own parts. The toolbar is the scroller's first child, so its
+     24px and the scroller's 8px flex gap sit above the well floor; the
+     crossover queries below derive from exactly this sum: toolbar + gap + one
+     row. Thresholds stay literals because container queries cannot read
+     custom properties. */
+  --sidebar-session-toolbar-height: 24px;
+  --sidebar-session-well-gap: 8px;
+  /* The session frame's clearances: one key gap from the rail above it (the
+     same 6px rhythm the nav keys keep) and the 8px shelf gap before the footer
+     divider. Their sum is the frame's block allocation inside the region. */
+  --sidebar-session-rail-gap: 6px;
+  --sidebar-session-footer-gap: 8px;
+  --sidebar-session-block-gap: calc(
+    var(--sidebar-session-rail-gap) + var(--sidebar-session-footer-gap)
+  );
+  /* Online's own vertical margins, owned here so the duo region floor and the
+     section rule read one value instead of a second literal. */
+  --sidebar-online-margin-top: 12px;
+  --sidebar-online-margin-bottom: 10px;
   --sidebar-title-line-height: calc(18px * var(--control-ui-text-scale));
   --sidebar-session-row-min-height: max(
     var(--sidebar-session-row-floor),
@@ -1462,22 +1486,15 @@ openclaw-settings-save-indicator:empty {
 
 .sidebar-nav {
   position: relative;
-  /* Bounded rail: the rail keeps its intrinsic size without scrolling unless
-     the space below it is needed. With a mounted Online roster the 60% cap
-     reserves generous room beside the rail; solo presence allocates for the
-     session well's floor only, so the rail may use everything above that
-     floor instead of being fractionally clipped when its intrinsic size
-     crosses 60% (the joint floors live on .sidebar-session-content). Inside
-     the compact-height band the solo cap compresses to the band floor. */
+  /* The Pages rail is its own column region: it takes the height its keys
+     need and scrolls internally when the Body cannot afford that. It has no
+     cap derived from the session region, so the session's reservation can
+     never clip the rail's last key; the session region below owns its own
+     floor and absorbs the remaining height instead. */
   flex: 0 1 auto;
   min-height: 2rem;
-  max-height: calc(100% - var(--sidebar-session-well-floor) - 1.75rem);
   overflow-y: auto;
   padding: 0;
-}
-
-.sidebar:where(:not(.sidebar--solo-presence)) .sidebar-nav {
-  max-height: 60%;
 }
 
 /* Inset highlight surfaces without narrowing the header or agent roster. */
@@ -1489,16 +1506,18 @@ openclaw-settings-save-indicator:empty {
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
-  /* Joint allocation floor: bounded Online plus the bounded session well
-     (toolbar + one session row) plus their margins. Communicating this floor
-     to the outer flex makes the nav rail yield height before either list is
-     clipped; the well's scroller keeps an explicit zero minimum, so this no
-     longer drags in the whole session list. Solo presence renders no Online
-     section; reserving its floor anyway handed the unused space to the well
-     and squeezed the nav rail until the lowest Pages row (Automations in a
-     reordered pin set) clipped against the well's top edge, so the solo
-     state drops the Online share below. */
-  min-height: calc(var(--sidebar-online-floor) + var(--sidebar-session-well-floor) + 1.75rem);
+  /* The session region's floor covers everything its flex column carries:
+     Online's bounded share plus its own vertical margins, the bounded session
+     well (block padding + one session row) and the frame's clearances. The
+     well's scroller keeps an explicit zero minimum, so this never drags in the
+     whole session list. The well's toolbar is not part of the floor, so a
+     column that cannot afford it yields the toolbar before the region loses a
+     readable row. */
+  min-height: calc(
+    var(--sidebar-online-floor) + var(--sidebar-online-margin-top) +
+      var(--sidebar-online-margin-bottom) + var(--sidebar-session-well-floor) +
+      var(--sidebar-session-block-gap)
+  );
 }
 
 .sidebar-session-content > openclaw-sidebar-agent-roster {
@@ -1507,25 +1526,28 @@ openclaw-settings-save-indicator:empty {
   flex-direction: column;
   /* Roster mode shares the session content allocation floor, so the bounded
      well inside it propagates the same way. */
-  min-height: calc(var(--sidebar-online-floor) + var(--sidebar-session-well-floor) + 1.75rem);
+  min-height: calc(
+    var(--sidebar-online-floor) + var(--sidebar-online-margin-top) +
+      var(--sidebar-online-margin-bottom) + var(--sidebar-session-well-floor) +
+      var(--sidebar-session-block-gap)
+  );
 }
 
-/* Solo presence releases the Online share of the joint floor (renderAppSidebarOnline
-   renders no section until a second identity is online). Class-scoped by the
-   sidebar render owner. The compact-height band below restates these same
-   solo selectors so its narrower floors stay authoritative there. */
+/* Solo presence renders no Online section (renderAppSidebarOnline returns
+   nothing until a second identity is online), so the region's floor drops to
+   the well and its clearances and the rail keeps every key it renders. The
+   compact-height band below restates these same solo selectors so its narrower
+   floors stay authoritative there. */
 .sidebar--solo-presence .sidebar-session-content,
 .sidebar--solo-presence .sidebar-session-content > openclaw-sidebar-agent-roster {
-  min-height: calc(var(--sidebar-session-well-floor) + 1.75rem);
+  min-height: calc(var(--sidebar-session-well-floor) + var(--sidebar-session-block-gap));
 }
 
 .sidebar-sessions,
 .sidebar-online {
   display: flex;
   flex-direction: column;
-  gap: 8px;
   padding: 0 8px;
-  margin-top: var(--sidebar-group-gap);
   border-radius: var(--radius-md);
   transition:
     background var(--duration-fast) ease,
@@ -1543,19 +1565,31 @@ openclaw-settings-save-indicator:empty {
 
 .sidebar-sessions {
   flex: 1 1 0;
-  /* Toolbar + one full session row + the well padding, so the session list is
-     never squeezed below a whole readable row. */
-  min-height: calc(var(--sidebar-session-row-min-height) + 2.5rem);
+  /* Block padding plus one full session row: the session list is never
+     squeezed below a whole readable row. The toolbar is not part of the floor;
+     it rides on the slack above it and yields in the well's short band. */
+  min-height: var(--sidebar-session-well-floor);
+  /* The session frame clears the rail by one key gap — the same 6px rhythm the
+     nav keys keep — and leaves an 8px shelf gap before the footer divider. The
+     old 16px top gap reserved height the rail's last key needed. */
+  margin-top: var(--sidebar-session-rail-gap);
   overflow: hidden;
-  /* Match the top group gap so the well frame sits off the footer divider. */
-  margin-bottom: var(--sidebar-group-gap);
+  margin-bottom: var(--sidebar-session-footer-gap);
+  /* Height-query container for the well's own concession (the toolbar yields
+     when this frame cannot afford it plus one whole row). Its height is owned
+     by the flex chain above, never by content. */
+  container-name: sidebar-session-well;
+  container-type: size;
 }
 
 .sidebar-sessions__scroll {
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
-  gap: 8px;
+  /* The scroller is the flex owner of the toolbar/first-group gap, so the
+     crossover token lives here; the toolbar and the session body are its
+     children. */
+  gap: var(--sidebar-session-well-gap);
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -1596,7 +1630,8 @@ openclaw-settings-save-indicator:empty {
   display: flex;
   align-items: center;
   gap: 2px;
-  min-height: 24px;
+  /* Part of the well's toolbar crossover: toolbar + well gap + one row. */
+  min-height: var(--sidebar-session-toolbar-height);
   margin-inline: -8px 0;
   padding: 0 10px 0 var(--sidebar-text-offset);
 }
@@ -2443,7 +2478,7 @@ openclaw-settings-save-indicator:empty {
   gap: 4px;
   padding-top: 12px;
   padding-inline-start: 0;
-  margin: 12px 0 10px;
+  margin: var(--sidebar-online-margin-top) 0 var(--sidebar-online-margin-bottom);
   border-top: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
   border-radius: 0;
 }
@@ -2657,13 +2692,12 @@ openclaw-settings-save-indicator:empty {
   }
 }
 
-/* Joint short-height allocation for the sidebar column. At or below 500px
-   viewport height the whole Online section (header and expanded toggle
-   included) yields its space to the session well in both the default and the
-   agent-roster mode — both content owners drop to a well-only floor, the
-   nav rail may shrink into a bounded scrollable strip, and the session well
-   keeps one full session row. No region is ever clipped to a partial row and
-   the hidden body never scrolls. */
+/* Short-height allocation for the sidebar column. At or below 500px viewport
+   height the whole Online section (header and expanded toggle included) yields
+   its space to the session well in both the default and the agent-roster mode —
+   both content owners drop to a well-only floor, the nav rail keeps its own
+   scrollable strip, and the session well keeps one full session row. No region
+   is ever clipped to a partial row and the hidden body never scrolls. */
 @media (max-height: 500px) {
   /* The whole Online section is hidden, and the in-section session toolbar
      is removed with it (new-session stays in the brand; filter/sort return
@@ -2686,12 +2720,6 @@ openclaw-settings-save-indicator:empty {
     min-height: calc(var(--sidebar-session-row-min-height) + 12px + 1rem);
   }
 
-  /* Solo releases the rail's 60% cap for the ordinary allocation; inside the
-     band the rail must instead yield everything above the compressed floor. */
-  .sidebar--solo-presence .sidebar-nav {
-    max-height: calc(100% - var(--sidebar-session-row-min-height) - 12px - 1rem);
-  }
-
   .sidebar-sessions {
     margin-top: 8px;
     margin-bottom: 8px;
@@ -2704,7 +2732,7 @@ openclaw-settings-save-indicator:empty {
    one whole session row clips that first row mid-label at rest. The
    compact-height band above removes the header for everyone; this extends
    the same concession to taller columns that reach the same squeeze — the
-   solo floor release plus a fuller rail of 6px-separated seated keys leaves
+   independent rail takes its keys' height first, leaving a short column's well
    less than header + row above 500px. The scroller container keeps it exact
    per column: roomy columns keep the header, tight ones lose it, and no
    viewport rung is added. 80px is the 48px header plus one rendered session
@@ -2715,6 +2743,56 @@ openclaw-settings-save-indicator:empty {
      loads after this sheet. */
   .sidebar-sessions .sidebar-agent-roster__header {
     display: none;
+  }
+}
+
+/* The well's toolbar is the scroller's first child and rides above the
+   allocation floor together with the scroller's 8px flex gap, so a column that
+   needs the rail's height back must be able to yield both. Inside the well's
+   own short band the frame cannot afford the toolbar, the gap, and one whole
+   session row: the toolbar yields as a whole and the scroller keeps the row.
+   This is the compact-height band's concession driven by the well's measured
+   height, so an ordinary column keeps its filter/sort controls while a tight
+   one trades them for the rail's last key and a readable row; no viewport rung
+   is added.
+
+   Each crossover is the well's content box (the scroller's height) just under
+   the tokens above: --sidebar-session-toolbar-height (24px) +
+   --sidebar-session-well-gap (8px) + --sidebar-session-row-min-height. The row
+   token is max(30px, 18px * text scale + 8px) at the supported 90/100/110/125/
+   140% stops, and a coarse pointer raises its floor to 44px:
+   - 90/100/110%: row 30px   -> need 24 + 8 + 30   = 62px   -> 61.5px
+   - 125%:        row 30.5px -> need 24 + 8 + 30.5 = 62.5px -> 62.5px
+   - 140%:        row 33.2px -> need 24 + 8 + 33.2 = 65.2px -> 65.5px
+   - coarse:      row 44px   -> need 24 + 8 + 44   = 76px   -> 75.5px
+   The crossover is ceil(need) - 0.5, the half pixel below the first whole pixel
+   that seats the block: the rail and chrome keep the well content on whole
+   pixels, so this hides exactly when the content cannot seat the row (a 140%
+   column at 65px content stays hidden instead of clipping the row by 0.2px)
+   and never hides a content height that fits. */
+@container sidebar-session-well (max-height: 61.5px) {
+  .sidebar-sessions .sidebar-session-toolbar {
+    display: none;
+  }
+}
+
+@container sidebar-session-well style(--control-ui-text-scale: 1.25) and (max-height: 62.5px) {
+  .sidebar-sessions .sidebar-session-toolbar {
+    display: none;
+  }
+}
+
+@container sidebar-session-well style(--control-ui-text-scale: 1.4) and (max-height: 65.5px) {
+  .sidebar-sessions .sidebar-session-toolbar {
+    display: none;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  @container sidebar-session-well (max-height: 75.5px) {
+    .sidebar-sessions .sidebar-session-toolbar {
+      display: none;
+    }
   }
 }
 

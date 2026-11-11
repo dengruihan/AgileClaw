@@ -957,6 +957,17 @@
   --session-well-shadow:
     inset 1px 1px 2px color-mix(in srgb, var(--neu-dark) 85%, transparent),
     inset -1px -1px 0 color-mix(in srgb, var(--mat-bevel) 58%, transparent);
+  /* Short-well fade stops shared by the height queries below; the default
+     32px gradients stay on the scroll-state rules. */
+  --sidebar-fade-compact-top: linear-gradient(to bottom, black calc(100% - 12px), transparent);
+  --sidebar-fade-compact-middle: linear-gradient(
+    to bottom,
+    transparent,
+    black 12px,
+    black calc(100% - 12px),
+    transparent
+  );
+  --sidebar-fade-compact-bottom: linear-gradient(to bottom, transparent, black 12px);
 
   margin-inline: 0;
   padding: 4px 8px;
@@ -1042,29 +1053,86 @@
 
 /* Short-height band: the session toolbar is removed as a whole — a
    zero-height clipped control with an orphaned flex gap is not an acceptable
-   compact state — and the edge fade compresses to 12px stops so it cannot
-   cover a whole row inside the small well window (floors in layout.css). */
+   compact state (floors in layout.css). The edge fade's short-well stops are
+   owned by the well's height query below, not by this viewport band, so the
+   same compact mask also applies to a short well above 500px. */
 @media (max-height: 500px) {
   .sidebar-sessions .sidebar-session-toolbar {
     display: none;
   }
+}
 
+/* Short wells fade in 12px stops instead of the ordinary 32px: a 30-60px
+   scroller cannot seat a whole row above a 32px edge fade, so the row would
+   read washed out (the 540px single-row column this layout can produce). The
+   well's measured height drives it, including the toolbar and flex gap, so the
+   compact stops follow the slot rather than another viewport rung.
+
+   Each cutoff is the well content below which a whole row plus the 32px fade
+   no longer fit: toolbar 24 + scroller gap 8 + row + fade 32. The row token is
+   max(30px, 18px * text scale + 8px) at the supported 90/100/110/125/140%
+   stops, and a coarse pointer raises its floor to 44px. The cutoff is
+   ceil(need) - 0.5, the half pixel below the first whole pixel that seats the
+   row above the fade:
+   - 90/100/110%: row 30px   -> need 94px   -> 93.5px
+   - 125%:        row 30.5px -> need 94.5px -> 94.5px
+   - 140%:        row 33.2px -> need 97.2px -> 97.5px
+   - coarse:      row 44px   -> need 108px  -> 107.5px */
+@container sidebar-session-well (max-height: 93.5px) {
   .sidebar-sessions--scroll-top {
-    --sidebar-body-mask: linear-gradient(to bottom, black calc(100% - 12px), transparent);
+    --sidebar-body-mask: var(--sidebar-fade-compact-top);
   }
 
   .sidebar-sessions--scroll-middle {
-    --sidebar-body-mask: linear-gradient(
-      to bottom,
-      transparent,
-      black 12px,
-      black calc(100% - 12px),
-      transparent
-    );
+    --sidebar-body-mask: var(--sidebar-fade-compact-middle);
   }
 
   .sidebar-sessions--scroll-bottom {
-    --sidebar-body-mask: linear-gradient(to bottom, transparent, black 12px);
+    --sidebar-body-mask: var(--sidebar-fade-compact-bottom);
+  }
+}
+
+@container sidebar-session-well style(--control-ui-text-scale: 1.25) and (max-height: 94.5px) {
+  .sidebar-sessions--scroll-top {
+    --sidebar-body-mask: var(--sidebar-fade-compact-top);
+  }
+
+  .sidebar-sessions--scroll-middle {
+    --sidebar-body-mask: var(--sidebar-fade-compact-middle);
+  }
+
+  .sidebar-sessions--scroll-bottom {
+    --sidebar-body-mask: var(--sidebar-fade-compact-bottom);
+  }
+}
+
+@container sidebar-session-well style(--control-ui-text-scale: 1.4) and (max-height: 97.5px) {
+  .sidebar-sessions--scroll-top {
+    --sidebar-body-mask: var(--sidebar-fade-compact-top);
+  }
+
+  .sidebar-sessions--scroll-middle {
+    --sidebar-body-mask: var(--sidebar-fade-compact-middle);
+  }
+
+  .sidebar-sessions--scroll-bottom {
+    --sidebar-body-mask: var(--sidebar-fade-compact-bottom);
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  @container sidebar-session-well (max-height: 107.5px) {
+    .sidebar-sessions--scroll-top {
+      --sidebar-body-mask: var(--sidebar-fade-compact-top);
+    }
+
+    .sidebar-sessions--scroll-middle {
+      --sidebar-body-mask: var(--sidebar-fade-compact-middle);
+    }
+
+    .sidebar-sessions--scroll-bottom {
+      --sidebar-body-mask: var(--sidebar-fade-compact-bottom);
+    }
   }
 }
 
