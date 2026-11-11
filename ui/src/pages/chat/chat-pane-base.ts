@@ -65,6 +65,7 @@ import { requestChatPageUpdate } from "./chat-state-render.ts";
 import { resolveChatAgentId } from "./chat-state-route.ts";
 import type { ChatTypingActorState } from "./chat-typing-presence.ts";
 import { getChatComposerState } from "./components/chat-composer-state.ts";
+import { cancelChatReveal } from "./components/chat-message-reveal-buffer.ts";
 import { installChatComposerPickerDismissal } from "./components/chat-picker-overlay.ts";
 import type { ChatSessionSharingState } from "./components/chat-session-sharing.ts";
 import { getTranscriptState } from "./components/chat-thread-interactions.ts";
@@ -186,6 +187,10 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
     }
     const wasConversationPresented = this.conversationPresented;
     this.visuallyPresentedValue = value;
+    // An unpresented pane must not keep painting reveal frames offscreen.
+    if (!value) {
+      cancelChatReveal(this.paneId);
+    }
     this.dispatchEvent(new Event(PRESENTATION_CHANGED_EVENT));
     this.requestUpdate("visuallyPresented", previous);
     this.notifyConversationPresentation(wasConversationPresented);
@@ -197,6 +202,9 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
   protected setConversationVisible(visible: boolean): void {
     const wasConversationPresented = this.conversationPresented;
     this.conversationVisible = visible;
+    if (!visible) {
+      cancelChatReveal(this.paneId);
+    }
     this.notifyConversationPresentation(wasConversationPresented);
   }
   private notifyConversationPresentation(wasPresented: boolean): void {
@@ -220,6 +228,9 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
     const wasConversationPresented = this.conversationPresented;
     this.headerPresentationGeneration += 1;
     this.presentedValue = value;
+    if (!value) {
+      cancelChatReveal(this.paneId);
+    }
     if (value) {
       this.hiddenUpdateResume?.();
       this.hiddenUpdateResume = undefined;

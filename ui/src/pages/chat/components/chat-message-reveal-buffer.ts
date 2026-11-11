@@ -190,6 +190,15 @@ function codePointBefore(text: string, index: number): number | null {
   return trailing;
 }
 
+/** Extend a cut to the end of the grapheme cluster it lands in. */
+function graphemeCeil(text: string, index: number): number {
+  if (!graphemeSegmenter || index <= 0 || index >= text.length) {
+    return index;
+  }
+  const cluster = containingSegment(graphemeSegmenter.segment(text), text, index);
+  return cluster && cluster.index < index ? cluster.index + cluster.segment.length : index;
+}
+
 /** Largest whole-grapheme cut at or below the index, for retraction clamps. */
 function graphemeFloor(text: string, index: number): number {
   if (!graphemeSegmenter || index <= 0 || index >= text.length) {
@@ -210,19 +219,15 @@ export function snapRevealIndex(text: string, index: number): number {
     return 0;
   }
   let cut = Math.min(index, text.length);
-  if (graphemeSegmenter && cut < text.length) {
-    const cluster = containingSegment(graphemeSegmenter.segment(text), text, cut);
-    if (cluster && cluster.index < cut) {
-      cut = cluster.index + cluster.segment.length;
-    }
-  } else if (!graphemeSegmenter && cut < text.length) {
+  if (!graphemeSegmenter && cut < text.length) {
     // Without a segmenter only surrogate safety is available.
     const trailing = text.charCodeAt(cut);
     if (trailing >= 0xdc00 && trailing <= 0xdfff) {
       cut += 1;
     }
   }
-  // An escape marker owns the character it escapes.
+  cut = graphemeCeil(text, cut);
+  // An escape marker owns the grapheme it escapes.
   const marker = codePointBefore(text, cut);
   if (marker !== null && MARKDOWN_MARKER_CODEPOINTS.has(marker)) {
     while (cut < text.length && text.charCodeAt(cut) === marker) {
@@ -232,7 +237,9 @@ export function snapRevealIndex(text: string, index: number): number {
       cut += text.codePointAt(cut)! > 0xffff ? 2 : 1;
     }
   }
-  return cut;
+  // Escape/backslash extension may land inside the escaped cluster; the shared
+  // grapheme owner has the final say so the following grapheme stays whole.
+  return graphemeCeil(text, cut);
 }
 
 function commonPrefixLength(a: string, b: string): number {
@@ -245,6 +252,10 @@ function commonPrefixLength(a: string, b: string): number {
 }
 
 /** First visible glyph offset, so a reveal start never paints a blank row. */
+function entryKeyFor(runKey: string, rowKey: string): string {
+  return `${runKey}\u0000${rowKey}`;
+}
+
 function revealStartIndex(text: string): number {
   const start = skipWhitespaceGraphemes(text);
   if (start >= text.length) {
@@ -282,7 +293,11 @@ export class ChatRevealBuffer {
   private connectionEpoch: number | undefined;
   /** Run that owns reveal state; superseded runs are retired on identity change. */
   private activeRunId: string | null = null;
-  /** Newest streaming entry; the only row a settled final may continue from. */
+  /** Live stream row per run, noted by the projection while it streams. */
+  private readonly liveStreamKeys = new Map<string, string>();
+  /** The one stream entry a settled final may continue from (identity, not recency). */
+  private successor: { runKey: string; entryKey: string } | null = null;
+  /** Newest streaming entry, retained for rendering diagnostics of the live row. */
   private activeStreamEntryKey: string | null = null;
   private liveRunId: string | null = null;
   private scheduleUpdate: () => void = () => {};
@@ -373,19 +388,37 @@ export class ChatRevealBuffer {
   }
 
   /**
+   * The projection notes the live stream row of a run while it streams; the
+   * settled final can only continue from this exact entry, never from whichever
+   * same-run row rendered most recently.
+   */
+  noteLiveStream(runId: string | null | undefined, key: string | null | undefined): void {
+    const runKey = this.resolveRunKey(runId);
+    if (runKey && key) {
+      this.liveStreamKeys.set(runKey, key);
+    }
+  }
+
+  /**
    * The pane's settled final answer is the only identity-less row that may
    * animate; returns its key so the caller can keep one owner for both facts.
+   * The tail's originating stream entry is bound by run identity here.
    */
-  focusTail(owner: ChatRevealTailOwner | null): string | null {
+  focusTail(owner: ChatRevealTailOwner | null, runId?: string | null): string | null {
     // A null owner keeps the previous tail: an answer that is still revealing
     // must not jump while the next run is starting. New tails replace the set.
     if (owner) {
+      const tailRunKey = this.resolveRunKey(runId ?? this.activeRunId);
       this.tailRunIds.clear();
       for (const key of revealOwnerTailKeys(owner)) {
         // The tail belongs to the run that owned the pane when it settled; a
         // later run must not animate a stale identity-less row.
-        this.tailRunIds.set(key, this.activeRunId);
+        this.tailRunIds.set(key, tailRunKey || this.activeRunId);
       }
+      const liveKey = tailRunKey ? this.liveStreamKeys.get(tailRunKey) : undefined;
+      this.successor = liveKey
+        ? { runKey: tailRunKey, entryKey: entryKeyFor(tailRunKey, liveKey) }
+        : null;
     }
     return owner?.key ?? null;
   }
@@ -407,7 +440,7 @@ export class ChatRevealBuffer {
     if (!observation) {
       return { text, revealing: false };
     }
-    const entryKey = `${runKey}\u0000${request.key}`;
+    const entryKey = entryKeyFor(runKey, request.key);
     const existing = this.entries.get(entryKey);
     if (request.instant === true || this.reducedMotion()) {
       this.complete(entryKey);
@@ -419,11 +452,16 @@ export class ChatRevealBuffer {
     if (this.completed.has(entryKey)) {
       return { text, revealing: false };
     }
-    const inherited = request.liveTail === true ? this.handoff(runKey, text) : null;
-    if (inherited !== null) {
+    const settledTail = request.liveTail === true && request.streaming !== true;
+    const inherited = settledTail ? this.handoff(runKey, text) : null;
+    if (inherited === "settled") {
+      this.complete(entryKey);
+      return { text, revealing: false };
+    }
+    if (typeof inherited === "number") {
       return this.startEntry(runKey, entryKey, request, inherited);
     }
-    if (request.liveTail === true && this.runHasEntries(runKey)) {
+    if (settledTail && this.runHasEntries(runKey)) {
       // The run already painted output this settled row cannot continue from.
       // Painting it settled avoids retracting or restarting text the reader
       // already saw, and keeps sibling rows independent.
@@ -438,9 +476,15 @@ export class ChatRevealBuffer {
     return this.startEntry(runKey, entryKey, request, 0);
   }
 
+  /** Cancel in-flight work while keeping the pane registration (disconnect/hide). */
+  cancel(): void {
+    this.reset();
+  }
+
   dispose(): void {
     this.reset();
     this.sessionKey = null;
+    this.connectionEpoch = undefined;
   }
 
   private motionQueryMatches(): boolean {
@@ -541,25 +585,26 @@ export class ChatRevealBuffer {
   }
 
   /**
-   * Continue a settled final from the one active stream successor. Ownership is
-   * explicit: the newest streaming entry claims the handoff once, its painted
-   * text must still be a prefix of the final text, and the source entry keeps
-   * its own reveal (never completed or retracted by another row).
+   * Continue a settled final from the stream entry the projection bound to this
+   * run. Ownership is identity, not recency or prefix similarity: without that
+   * exact predecessor the settled row paints settled (never another row's
+   * position, never a restart). The source keeps its own reveal.
    */
-  private handoff(runKey: string, text: string): number | null {
-    const sourceKey = this.activeStreamEntryKey;
-    if (!sourceKey) {
+  private handoff(runKey: string, text: string): "settled" | number | null {
+    const successor = this.successor;
+    if (!successor || successor.runKey !== runKey) {
       return null;
     }
-    const source = this.entries.get(sourceKey);
-    if (!source || source.runKey !== runKey || !source.streaming) {
-      return null;
+    // One-to-one: the first settled final consumes the live stream binding.
+    this.successor = null;
+    const source = this.entries.get(successor.entryKey);
+    if (!source) {
+      return "settled";
     }
     const painted = source.text.slice(0, source.revealed);
     if (!painted || !text.startsWith(painted)) {
-      return null;
+      return "settled";
     }
-    // One-to-one: only the first settled successor may continue this stream.
     source.handedOff = true;
     if (this.activeStreamEntryKey === source.entryKey) {
       this.activeStreamEntryKey = null;
@@ -680,6 +725,10 @@ export class ChatRevealBuffer {
       }
     }
     this.runs.delete(runKey);
+    this.liveStreamKeys.delete(runKey);
+    if (this.successor?.runKey === runKey) {
+      this.successor = null;
+    }
     this.activeStreamEntryKey = null;
     if (!this.hasRemaining()) {
       this.stopFrames();
@@ -699,6 +748,8 @@ export class ChatRevealBuffer {
     this.completed.clear();
     this.runs.clear();
     this.tailRunIds.clear();
+    this.liveStreamKeys.clear();
+    this.successor = null;
     this.activeStreamEntryKey = null;
     this.activeRunId = null;
     this.liveRunId = null;
@@ -724,6 +775,48 @@ export function chatRevealBufferForPane(paneId: string): ChatRevealBuffer {
   paneBuffers.delete(paneId);
   paneBuffers.set(paneId, buffer);
   return buffer;
+}
+
+/**
+ * Pane disconnect/hide owner: cancel pending frames and reveal state without
+ * waiting for another projection, while keeping the pane registration.
+ */
+export function cancelChatReveal(paneId: string): void {
+  paneBuffers.get(paneId)?.cancel();
+}
+
+export type ChatRevealLiveRow = {
+  readonly kind?: string;
+  readonly key?: string;
+  readonly isStreaming?: boolean;
+  readonly runId?: string;
+};
+
+/**
+ * Projection helper: bind the run's live stream row while it streams. The
+ * settled final can only continue from this identity, never by recency.
+ */
+export function trackRevealLiveStream(
+  reveal: ChatRevealBuffer,
+  runId: string | null | undefined,
+  stream: string | null | undefined,
+  items: readonly ChatRevealLiveRow[],
+): void {
+  if ((stream ?? null) === null) {
+    return;
+  }
+  const live = items.findLast(
+    (item) =>
+      item.kind === "stream" && item.isStreaming && (!runId || !item.runId || item.runId === runId),
+  );
+  reveal.noteLiveStream(runId ?? live?.runId, live?.key);
+}
+
+/** Pane teardown owner: drop all reveal work and the pane's buffer entry. */
+export function disposeChatReveal(paneId: string): void {
+  const buffer = paneBuffers.get(paneId);
+  buffer?.dispose();
+  paneBuffers.delete(paneId);
 }
 
 /** Transcript-projection entry: scope the pane's reveal to its session and run. */

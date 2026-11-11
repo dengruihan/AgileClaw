@@ -26,7 +26,7 @@ import { renderAgentRunFrame } from "./chat-agent-run-frame.ts";
 import { buildChatArchiveNotice, renderChatDivider, renderChatNotice } from "./chat-divider.ts";
 import { renderActivityGroup, renderMessageGroup } from "./chat-message-group.ts";
 import { assistantMediaPolicyKey, getChatMediaRenderVersion } from "./chat-message-media.ts";
-import { beginChatReveal } from "./chat-message-reveal-buffer.ts";
+import { beginChatReveal, trackRevealLiveStream } from "./chat-message-reveal-buffer.ts";
 import {
   renderStreamGroup,
   renderWorkGroupSummary,
@@ -153,6 +153,9 @@ export function projectChatTranscript(
         : undefined,
   } satisfies Parameters<typeof buildCachedChatItems>[0];
   const chatItems = buildCachedChatItems(chatItemsInput);
+  // Ownership is identity: bind the final to this run's live stream row, never
+  // to whichever same-run row rendered most recently.
+  trackRevealLiveStream(reveal, props.runId, props.stream, chatItems);
   const { workingIndicator, activityRunId, activityGroupKey, runOutputTokens } =
     projectTranscriptActivity(chatItems, props);
   const latestBrowserTabs = props.latestBrowserTabs;
@@ -496,14 +499,12 @@ export function projectChatTranscript(
     resolvedRecap && (!tailStatusOwner?.runId || tailStatusOwner.runId === resolvedRecap.runId)
       ? resolvedRecap
       : null;
-  const settledView = !props.runActive && !props.runWorking && !searchFiltering;
-  latestAssistantItemKey = reveal.focusTail(
-    settledView &&
-      tailStatusOwner &&
-      !(tailStatusOwner.kind === "group" && tailStatusOwner.isStreaming)
-      ? tailStatusOwner
-      : null,
-  );
+  const streamingGroupTail = tailStatusOwner?.kind === "group" && tailStatusOwner.isStreaming;
+  const tailOwner =
+    !props.runActive && !props.runWorking && !searchFiltering && !streamingGroupTail
+      ? (tailStatusOwner ?? null)
+      : null;
+  latestAssistantItemKey = reveal.focusTail(tailOwner, tailOwner?.runId ?? props.runId ?? null);
   transcript.entryAnimations.project(chatItems);
   transcript.syncMessageRows(messageRowKeysById, transcriptMessageKeys);
   if (turnRecap !== null && tailStatusOwner?.runId === turnRecap.runId) {

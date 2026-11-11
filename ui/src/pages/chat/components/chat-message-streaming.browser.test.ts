@@ -637,6 +637,7 @@ describe("smooth assistant reveal", () => {
   it("keeps the stream's reveal position when the settled final message replaces the row", async () => {
     const harness = createRevealHarness();
     const streamed = "A considered answer that keeps arriving across several frames.";
+    harness.buffer.noteLiveStream("reveal-run", "reveal-stream");
     drawStreamPart(harness.buffer, streamed, (draw) => harness.adopt(draw));
     await Promise.resolve();
     await harness.frame();
@@ -755,7 +756,7 @@ describe("smooth assistant reveal", () => {
 
   it("keeps same-run rows with a shared opening independent at the stream/group boundary", async () => {
     const harness = createRevealHarness();
-    const rowA = `Shared prefix: alpha ${"keeps growing with readable pacing. ".repeat(3)}`;
+    const rowA = `Shared prefix: alpha ${"keeps growing with readable pacing. ".repeat(12)}`;
     const rowB = `Shared prefix: beta ${"is a separate same-run row. ".repeat(3)}`;
     const containerA = document.body.appendChild(document.createElement("div"));
     const containerB = document.body.appendChild(document.createElement("div"));
@@ -779,12 +780,17 @@ describe("smooth assistant reveal", () => {
         target,
       );
     try {
+      // The projection notes the run's live stream row while it streams.
+      harness.buffer.noteLiveStream("reveal-run", "stream-a");
       drawStream(containerA, "stream-a", rowA)();
       await Promise.resolve();
       for (let frame = 0; frame < 2; frame += 1) {
         await harness.frame();
         drawStream(containerA, "stream-a", rowA)();
       }
+      const paintedA = (containerA.querySelector(".chat-text")?.textContent ?? "").trim();
+      expect(paintedA.length).toBeGreaterThan(10);
+      expect(paintedA.length).toBeLessThan(rowA.length);
       drawStream(containerB, "stream-b", rowB)();
       await Promise.resolve();
       for (let frame = 0; frame < 2; frame += 1) {
@@ -794,6 +800,11 @@ describe("smooth assistant reveal", () => {
       const paintedB = (containerB.querySelector(".chat-text")?.textContent ?? "").trim();
       expect(paintedB.length).toBeGreaterThan(0);
       expect(paintedB.length).toBeLessThan(rowB.length);
+      // Capture A's current paint immediately before the final replaces it.
+      drawStream(containerA, "stream-a", rowA)();
+      await Promise.resolve();
+      const paintedAAtHandoff = (containerA.querySelector(".chat-text")?.textContent ?? "").trim();
+      expect(paintedAAtHandoff.length).toBeGreaterThan(paintedA.length);
 
       const finalText = `${rowA} and finishes.`;
       const [finalGroup] = groupMessages([
@@ -807,7 +818,7 @@ describe("smooth assistant reveal", () => {
           },
         },
       ]) as MessageGroup[];
-      harness.buffer.focusTail(finalGroup!);
+      harness.buffer.focusTail(finalGroup!, "reveal-run");
       const drawFinal = () =>
         render(
           html`<section ${markdownBlocks()}>
@@ -824,6 +835,11 @@ describe("smooth assistant reveal", () => {
       await Promise.resolve();
       await Promise.resolve();
 
+      // Exact A-before/A-after continuity: the final continues the bound live
+      // stream row, never the newer same-prefix row.
+      expect((containerA.querySelector(".chat-text")?.textContent ?? "").trim()).toBe(
+        paintedAAtHandoff,
+      );
       // B keeps its own reveal: not retracted and not completed by A's final.
       drawStream(containerB, "stream-b", rowB)();
       await Promise.resolve();

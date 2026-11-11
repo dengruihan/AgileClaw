@@ -124,6 +124,7 @@ describe("chat reveal buffer", () => {
   it("keeps the final message on the stream's reveal position instead of restarting", () => {
     const { buffer, frames } = createBuffer();
     const streamText = "A considered answer that keeps arriving";
+    buffer.noteLiveStream("run-1", "stream-row");
     buffer.visibleText({ key: "stream-row", runId: "run-1", text: streamText, streaming: true });
     frames.advance(2);
     const painted = buffer.visibleText({
@@ -135,6 +136,10 @@ describe("chat reveal buffer", () => {
     expect(painted.revealing).toBe(true);
 
     const finalText = `${streamText} until it is complete.`;
+    buffer.focusTail(
+      { kind: "group", key: "group:assistant:message-row", role: "assistant", messages: [] },
+      "run-1",
+    );
     const handedOff = buffer.visibleText({
       key: "message-row",
       runId: "run-1",
@@ -455,10 +460,12 @@ const LONG_REPLY = `Shared prefix: alpha ${"keeps growing with readable pacing. 
 const OTHER_REPLY = `Shared prefix: beta ${"is a separate same-run row. ".repeat(4)}`;
 
 describe("chat reveal ownership regressions", () => {
-  it("hands off only to the focused successor and never retracts or completes another same-run row", () => {
+  it("continues from the bound live-stream entry even when a newer same-run row shares the opening", () => {
     const { buffer, frames } = createLifecycleBuffer();
+    // The projection notes the run's live stream row while it streams.
+    buffer.noteLiveStream("run-1", "stream-a");
     buffer.visibleText({ key: "stream-a", runId: "run-1", text: LONG_REPLY, streaming: true });
-    frames.advance(2);
+    frames.advance(3);
     const paintedA = buffer.visibleText({
       key: "stream-a",
       runId: "run-1",
@@ -466,7 +473,8 @@ describe("chat reveal ownership regressions", () => {
       streaming: true,
     });
     expect(paintedA.revealing).toBe(true);
-    // A second same-run streaming row shares the opening and becomes the newest entry.
+    expect(paintedA.text.length).toBeGreaterThan(10);
+    // A newer same-run row renders later and shares only the opening.
     const paintedB = buffer.visibleText({
       key: "stream-b",
       runId: "run-1",
@@ -474,6 +482,12 @@ describe("chat reveal ownership regressions", () => {
       streaming: true,
     });
     expect(paintedB.revealing).toBe(true);
+    expect(paintedB.text.length).toBeLessThan(paintedA.text.length);
+
+    buffer.focusTail(
+      { kind: "group", key: "group:assistant:final-a", role: "assistant", messages: [] },
+      "run-1",
+    );
     const finalText = `${LONG_REPLY} and finishes.`;
     const finalA = buffer.visibleText({
       key: "final-a",
@@ -482,9 +496,8 @@ describe("chat reveal ownership regressions", () => {
       streaming: false,
       liveTail: true,
     });
-    // The final cannot continue A's painted text (the active successor is B and
-    // its opening diverges), so it must not adopt B's position.
-    expect(finalA.text.length).toBeLessThan(paintedA.text.length + 1);
+    // Exact A-before/A-after continuity: no retraction to B's short prefix.
+    expect(finalA.text).toBe(paintedA.text);
     // B keeps its own reveal: not retracted, not completed by A's final.
     expect(
       buffer.visibleText({
@@ -494,7 +507,30 @@ describe("chat reveal ownership regressions", () => {
         streaming: true,
       }),
     ).toEqual({ text: paintedB.text, revealing: true });
-    expect(buffer.versionForRun("run-1")).toBeGreaterThan(0);
+    frames.advance(400);
+    expect(
+      buffer.visibleText({ key: "final-a", runId: "run-1", text: finalText, streaming: false }),
+    ).toEqual({ text: finalText, revealing: false });
+  });
+
+  it("paints settled instead of adopting or restarting when no bound predecessor exists", () => {
+    const { buffer, frames } = createLifecycleBuffer();
+    buffer.visibleText({ key: "stream-a", runId: "run-1", text: LONG_REPLY, streaming: true });
+    frames.advance(2);
+    // The tail is focused without a live-stream binding (e.g. restored state).
+    buffer.focusTail(
+      { kind: "group", key: "group:assistant:final-a", role: "assistant", messages: [] },
+      "run-1",
+    );
+    expect(
+      buffer.visibleText({
+        key: "final-a",
+        runId: "run-1",
+        text: `${LONG_REPLY} and finishes.`,
+        streaming: false,
+        liveTail: true,
+      }),
+    ).toEqual({ text: `${LONG_REPLY} and finishes.`, revealing: false });
   });
 
   it("focuses only the action owner's rendered group, not every group in the tail frame", () => {
@@ -608,6 +644,7 @@ describe("chat reveal ownership regressions", () => {
 
   it("keeps an intentional settled-final drain alive across idle passes", () => {
     const { buffer, frames, scheduleUpdate } = createLifecycleBuffer();
+    buffer.noteLiveStream("run-1", "stream-a");
     buffer.visibleText({ key: "stream-a", runId: "run-1", text: LONG_REPLY, streaming: true });
     const painted = buffer.visibleText({
       key: "stream-a",
@@ -617,6 +654,10 @@ describe("chat reveal ownership regressions", () => {
     });
     // The run settles; the final action owner continues from the painted text.
     const finalText = `${LONG_REPLY} and finishes.`;
+    buffer.focusTail(
+      { kind: "group", key: "group:assistant:final-a", role: "assistant", messages: [] },
+      "run-1",
+    );
     buffer.beginPass({
       sessionKey: "agent:main:main",
       connectionEpoch: 1,
@@ -690,6 +731,66 @@ describe("chat reveal ownership regressions", () => {
       });
     }
     expect(painted.text).toBe(text);
+  });
+
+  const segmenterBoundaries = (text: string): Set<number> => {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    const boundaries = new Set<number>();
+    for (const segment of segmenter.segment(text)) {
+      boundaries.add(segment.index);
+      boundaries.add(segment.index + segment.segment.length);
+    }
+    return boundaries;
+  };
+
+  it.each([
+    { label: "flag", text: "a\\🇨🇳 tail" },
+    { label: "ZWJ family", text: "a\\👨‍👩‍👧‍👦 tail" },
+    { label: "keycap", text: "a\\1️⃣ tail" },
+    { label: "combining marks", text: "a\\e\u0301 tail" },
+    { label: "emoji modifier", text: "a\\👍🏽 tail" },
+  ])("keeps an escaped grapheme whole through the frame scheduler: $label", ({ text }) => {
+    const boundaries = segmenterBoundaries(text);
+    const { buffer, frames } = createLifecycleBuffer();
+    const painted: string[] = [];
+    let frame = buffer.visibleText({ key: "escaped", runId: "run-1", text, streaming: true });
+    for (let step = 0; step < 200 && frame.revealing; step += 1) {
+      expect(boundaries.has(frame.text.length)).toBe(true);
+      expect(text.startsWith(frame.text)).toBe(true);
+      painted.push(frame.text);
+      frames.advance();
+      frame = buffer.visibleText({ key: "escaped", runId: "run-1", text, streaming: true });
+    }
+    expect(frame.text).toBe(text);
+    // The escaped cluster is painted whole, never split by the backslash step.
+    const escaped = text.slice(2);
+    const firstWithEscapedChar = painted.find((value) => value.length >= 2);
+    expect(firstWithEscapedChar).toBeDefined();
+    const clusters = new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(escaped);
+    const firstCluster = clusters[Symbol.iterator]().next().value as Intl.SegmentData;
+    expect(painted.some((value) => value === `a\\${firstCluster.segment}`)).toBe(true);
+  });
+
+  it.each([
+    { label: "bold emphasis", text: "**bold** and 🇨🇳 flag" },
+    { label: "heading", text: "# Heading with 👨‍👩‍👧‍👦" },
+    { label: "list with escape", text: "- item one\\* escaped 1️⃣" },
+    { label: "quote", text: "> quote with e\u0301clair" },
+    { label: "code fence", text: "```ts\nconst x = 1;\n```" },
+  ])("keeps the initial Markdown prefix reveal grapheme-safe: $label", ({ text }) => {
+    const boundaries = segmenterBoundaries(text);
+    const { buffer, frames } = createLifecycleBuffer();
+    let frame = buffer.visibleText({ key: `md-${text}`, runId: "run-1", text, streaming: true });
+    const lengths: number[] = [];
+    for (let step = 0; step < 300 && frame.revealing; step += 1) {
+      expect(boundaries.has(frame.text.length)).toBe(true);
+      lengths.push(frame.text.length);
+      frames.advance();
+      frame = buffer.visibleText({ key: `md-${text}`, runId: "run-1", text, streaming: true });
+    }
+    expect(frame.text).toBe(text);
+    expect(lengths[0]).toBeGreaterThan(0);
+    expect(lengths.toSorted((a, b) => a - b)).toEqual(lengths);
   });
 
   it("includes the whole first grapheme cluster on the first frame", () => {
