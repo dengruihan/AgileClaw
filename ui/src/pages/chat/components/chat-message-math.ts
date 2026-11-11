@@ -29,6 +29,12 @@ class OpenClawChatMath extends OpenClawLightDomElement {
   override connectedCallback() {
     super.connectedCallback();
     this.classList.add("openclaw-chat-math");
+    if (!this.source) {
+      // A table-expand clone copies rendered markup and attributes, not live
+      // properties; adopt the cloned presentation instead of re-typesetting.
+      this.display = this.classList.contains("openclaw-chat-math--display");
+      this.started = true;
+    }
   }
 
   override disconnectedCallback() {
@@ -46,18 +52,19 @@ class OpenClawChatMath extends OpenClawLightDomElement {
     if (!this.started || sourceChanged) {
       void this.typeset();
     }
-    if (this.getAttribute("data-math-state") !== this.renderState) {
+    if (this.source && this.getAttribute("data-math-state") !== this.renderState) {
       this.setAttribute("data-math-state", this.renderState);
     }
   }
 
   private async typeset() {
     this.started = true;
-    const generation = ++this.generation;
     const body = this.body;
-    if (!body) {
+    // Cloned markup owns its box; there is no source to typeset over it.
+    if (!body || !this.source.trim()) {
       return;
     }
+    const generation = ++this.generation;
     // A new source owns the box immediately; stale markup must not stand in.
     body.replaceChildren();
     const result = await renderMarkdownMathInto(body, this.source, this.display);
@@ -71,6 +78,10 @@ class OpenClawChatMath extends OpenClawLightDomElement {
   }
 
   override render() {
+    if (!this.source) {
+      // Cloned table markup already owns these children.
+      return nothing;
+    }
     return html`<span
         class="openclaw-chat-math__body"
         ${ref((element) => {

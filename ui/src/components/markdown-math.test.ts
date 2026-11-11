@@ -50,6 +50,23 @@ describe("markdown math delimiters", () => {
     expect(markdownMathAt(String.raw`\(\)`, 0)).toBeNull();
   });
 
+  it("matches numeric-leading formulas while keeping currency literal", () => {
+    for (const expression of ["$2+2=4$", "$5-3=2$", "$2^8$", "$1/2$", String.raw`$100\%$`]) {
+      const match = markdownMathAt(expression, 0);
+      expect(match, expression).not.toBeNull();
+      expect(expression.slice(match!.contentStart, match!.contentEnd)).toBe(
+        expression.slice(1, -1),
+      );
+    }
+    // Amounts and prose that merely start with a digit stay plain text, and a
+    // later amount never pairs into a span that swallows the prose between.
+    expect(markdownMathAt("$5 and $10", 0)).toBeNull();
+    expect(markdownMathAt("$1.50", 0)).toBeNull();
+    expect(markdownMathAt("$5$10", 0)).toBeNull();
+    expect(markdownMathAt("$5$", 0)).toBeNull();
+    expect(markdownMathAt("$5 today. Then $x$", 0)).toBeNull();
+  });
+
   it("rejects one-line inline math but allows display math to span lines", () => {
     expect(markdownMathAt("$a\nb$", 0, { allowNewlines: false })).toBeNull();
     expect(markdownMathAt("$a\nb$", 0)).not.toBeNull();
@@ -83,10 +100,10 @@ describe("markdown math placeholders", () => {
   it("round-trips inline and display source out of placeholder markup", () => {
     expect(
       readMarkdownMathPlaceholder(placeholder(markdownMathPlaceholderHtml("$x^2$", false))),
-    ).toEqual({ source: "x^2", display: false });
+    ).toEqual({ source: "x^2", display: false, delimitedSource: "$x^2$" });
     expect(
       readMarkdownMathPlaceholder(placeholder(markdownMathPlaceholderHtml("$$\na\nb\n$$", true))),
-    ).toEqual({ source: "\na\nb\n", display: true });
+    ).toEqual({ source: "\na\nb\n", display: true, delimitedSource: "$$\na\nb\n$$" });
   });
 
   it("escapes authored markup inside the readable fallback", () => {

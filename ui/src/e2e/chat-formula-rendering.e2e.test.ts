@@ -240,6 +240,14 @@ suite.define(() => {
         );
         captures.set("desktop-light", "desktop-light.png");
 
+        // The table toolbar copies the delimited source, not MathML plus the
+        // TeX annotation plus the visual tree.
+        await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+        await table.locator(".markdown-table__copy").click();
+        await expect
+          .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+          .toBe("Quantity\tFormula\narea\t$\\pi r^2$\nperiod\t\\(2\\pi\\sqrt{\\ell/g}\\)");
+
         const displaySurface = messageText(page, "Example display");
         await page.evaluate(() => {
           document.documentElement.dataset.themeMode = "dark";

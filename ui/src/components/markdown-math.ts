@@ -31,6 +31,9 @@ type MarkdownMathMatch = {
 // Cheap probe before the delimiter scan; ordinary prose exits here.
 const MARKDOWN_MATH_CANDIDATE_RE = /[$]|\\[()[\]]/u;
 const MARKDOWN_MATH_NEWLINE_RE = /\n/u;
+// A digit-leading `$…$` span needs an operator or TeX command. Amounts such as
+// `$5` or `$1.50` stay currency without rejecting real formulas like `$2+2=4$`.
+const MARKDOWN_MATH_NUMERIC_HINT_RE = /[=+\-*/^_{}<>|\\]/u;
 
 function isEscaped(source: string, index: number): boolean {
   let backslashes = 0;
@@ -69,6 +72,20 @@ function bracketMathAt(
   };
 }
 
+function isNumericLeadingMarkdownMath(content: string): boolean {
+  if (!MARKDOWN_MATH_NUMERIC_HINT_RE.test(content)) {
+    return false;
+  }
+  // A stray `$` means the candidate closer belongs to a later span, so prose
+  // between two amounts (`$5 today. Then $x$`) never pairs into math.
+  for (let index = content.indexOf("$"); index !== -1; index = content.indexOf("$", index + 1)) {
+    if (!isEscaped(content, index)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function dollarMathAt(
   source: string,
   start: number,
@@ -98,10 +115,11 @@ function dollarMathAt(
     };
   }
   const first = source.charAt(contentStart);
-  // An opening `$` binds to its content: `$ 5` and `$5` stay currency.
-  if (!first || /\s/u.test(first) || /[0-9$]/u.test(first)) {
+  // An opening `$` binds to its content: `$ 5` stays currency.
+  if (!first || /\s/u.test(first)) {
     return null;
   }
+  const numericLeading = /[0-9]/u.test(first);
   for (let cursor = contentStart + 1; cursor < source.length; cursor++) {
     const character = source.charAt(cursor);
     if (character === "\n" && !allowNewlines) {
@@ -121,6 +139,9 @@ function dollarMathAt(
     }
     if (cursor - contentStart > MARKDOWN_MATH_INLINE_LIMIT) {
       return null;
+    }
+    if (numericLeading && !isNumericLeadingMarkdownMath(source.slice(contentStart, cursor))) {
+      continue;
     }
     return {
       start,
@@ -213,10 +234,13 @@ function isMarkdownMathSourceWithinLimit(source: string, display: boolean): bool
   return source.length <= (display ? MARKDOWN_MATH_DISPLAY_LIMIT : MARKDOWN_MATH_INLINE_LIMIT);
 }
 
-/** Reads the TeX source back out of a parser placeholder element. */
-export function readMarkdownMathPlaceholder(
-  node: Element,
-): { source: string; display: boolean } | null {
+/** Reads the TeX and delimited source back out of a parser placeholder. */
+export function readMarkdownMathPlaceholder(node: Element): {
+  source: string;
+  display: boolean;
+  /** Delimited text the model wrote, retained for copy consumers. */
+  delimitedSource: string;
+} | null {
   if (!node.classList.contains(MARKDOWN_MATH_CLASS)) {
     return null;
   }
@@ -226,6 +250,7 @@ export function readMarkdownMathPlaceholder(
   return {
     source: match ? fallback.slice(match.contentStart, match.contentEnd) : fallback,
     display: display || Boolean(match?.display),
+    delimitedSource: fallback,
   };
 }
 

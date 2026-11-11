@@ -521,6 +521,21 @@ export function sample${index}(value: number): number {
     expect(stable + tail).toBe(toSanitizedMarkdownHtml(complete));
   });
 
+  it("typesets a streamed numeric formula whose closer arrives later", () => {
+    const key = "math-numeric-promotion";
+    const opening = "The sum is $2+2";
+    const [, openingTail] = toStreamingMarkdownParts(opening, {}, key);
+    expect(htmlFragment(openingTail).querySelector(".markdown-math")).toBeNull();
+
+    const complete = `${opening}=4$ exactly.\n\n`;
+    const [stable, tail] = toStreamingMarkdownParts(complete, {}, key);
+    const fragment = htmlFragment(stable + tail);
+    const spans = fragment.querySelectorAll(".markdown-math");
+    expect(spans).toHaveLength(1);
+    expect(spans[0]?.textContent).toBe("$2+2=4$");
+    expect(stable + tail).toBe(toSanitizedMarkdownHtml(complete));
+  });
+
   it("keeps currency plain while a streamed reply grows", () => {
     const key = "math-currency-stream";
     toStreamingMarkdownParts("The fee is $5\n\n", {}, key);

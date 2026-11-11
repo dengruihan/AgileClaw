@@ -43,9 +43,33 @@ export function installMarkdownTables(markdownParser: MarkdownIt): void {
   };
 }
 
+/**
+ * Typeset math replaces its fallback text, so a rendered cell's `textContent`
+ * concatenates MathML, the TeX annotation, and the visual HTML. Transcript math
+ * keeps the delimited source on this attribute, which also survives the
+ * expanded-table clone. Owner: `ui/src/components/markdown-math.ts`.
+ */
+const MATH_SOURCE_ATTRIBUTE = "data-math-source";
+
+function tableCellCopyText(node: Node): string {
+  let text = "";
+  for (const child of node.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      text += child.textContent ?? "";
+      continue;
+    }
+    if (!(child instanceof Element)) {
+      continue;
+    }
+    const mathSource = child.getAttribute(MATH_SOURCE_ATTRIBUTE);
+    text += mathSource ?? tableCellCopyText(child);
+  }
+  return text;
+}
+
 export function markdownTableCopyText(table: HTMLTableElement): string {
   return [...table.rows]
-    .map((row) => [...row.cells].map((cell) => cell.textContent?.trim() ?? "").join("\t"))
+    .map((row) => [...row.cells].map((cell) => tableCellCopyText(cell).trim()).join("\t"))
     .join("\n");
 }
 

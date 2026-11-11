@@ -139,10 +139,12 @@ class MarkdownNodeDirective extends Directive {
     const math = readMarkdownMathPlaceholder(node);
     if (math) {
       // Transcripts own the lazy renderer; other Markdown surfaces keep the
-      // readable TeX source and never fetch KaTeX.
+      // readable TeX source and never fetch KaTeX. The delimited source rides on
+      // an attribute so table clones and copy readers keep the model's text.
       return html`<openclaw-chat-math
         .source=${math.source}
         .display=${math.display}
+        data-math-source=${math.delimitedSource}
       ></openclaw-chat-math>`;
     }
     // Completed subtrees need no per-node bindings. Mermaid and custom elements

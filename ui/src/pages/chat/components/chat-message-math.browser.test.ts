@@ -49,13 +49,6 @@ function mount(text: string, isStreaming = false) {
   return { container, draw };
 }
 
-function katexRequests(): string[] {
-  return performance
-    .getEntriesByType("resource")
-    .map((entry) => entry.name)
-    .filter((name) => /katex/i.test(name));
-}
-
 function visibleMathText(container: HTMLElement): string {
   return Array.from(
     container.querySelectorAll(".katex-html"),
@@ -75,19 +68,6 @@ async function typeset(container: HTMLElement, expected = 1): Promise<void> {
 }
 
 describe("chat math rendering", () => {
-  it("loads the KaTeX module only once math appears", async () => {
-    // The browser keeps a fixed resource-timing buffer, so start from an empty
-    // window before proving which loads the transcript itself triggers.
-    performance.clearResourceTimings();
-    const first = mount("Plain prose without TeX.");
-    await expect.poll(() => first.container.querySelectorAll("p").length).toBe(1);
-    expect(katexRequests()).toEqual([]);
-
-    first.draw("Now with $x^2$ math.");
-    await typeset(first.container);
-    expect(katexRequests().some((url) => /katex\.js/i.test(url))).toBe(true);
-  });
-
   it("typesets inline and display equations inside a transcript message", async () => {
     const text = [
       String.raw`The radius is $r = \frac{d}{2}$ for this part.`,

@@ -90,6 +90,18 @@ describe("markdown math parsing", () => {
     expect(render(String.raw`Costs \$5 and \$9.`)).toContain("$5 and $9.");
   });
 
+  it("tokenizes numeric-leading formulas", () => {
+    expect(mathSpans("$2+2=4$")).toEqual(["$2+2=4$"]);
+    expect(mathSpans("Sales grew by $2+2=4$ overall.")).toEqual(["$2+2=4$"]);
+    expect(mathSpans("$1/2$ and $2^8$")).toEqual(["$1/2$", "$2^8$"]);
+    expect(render("$2+2=4$")).toBe('<p><span class="markdown-math">$2+2=4$</span></p>\n');
+  });
+
+  it("keeps amounts literal next to a later formula", () => {
+    expect(mathSpans("The fee is $5 today. Then $x$ costs more.")).toEqual(["$x$"]);
+    expect(mathSpans("$5 and $10, plus $1.50, and $5$10.")).toEqual([]);
+  });
+
   it("leaves ordinary currency and prose dollars alone", () => {
     expect(mathSpans("$5 and $10 are different amounts.")).toEqual([]);
     expect(mathSpans("Price: $1.50 per item.")).toEqual([]);

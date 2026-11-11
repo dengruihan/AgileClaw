@@ -1,7 +1,9 @@
 /* @vitest-environment jsdom */
+import { render } from "lit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toSanitizedMarkdownHtml } from "../../../components/markdown.ts";
 import { prepareChatMessageRender, resolveMessageActionDetails } from "./chat-message-markdown.ts";
+import { renderMessageMarkdown } from "./chat-message-text.ts";
 import {
   handleTranscriptContextMenu,
   resetThreadPresentation,
@@ -60,6 +62,35 @@ describe("chat content context copy", () => {
     );
     open(owner.querySelector("td strong")!);
     await copy("Copy table", "Name\tCount\nAlpha\t2");
+  });
+
+  it("copies table math as its delimited source instead of rendered parts", async () => {
+    // A non-chat placeholder keeps its source as text.
+    owner.innerHTML = toSanitizedMarkdownHtml(
+      "| Quantity | Formula |\n| --- | --- |\n| area | $\\pi r^2$ |",
+      { tableInteractions: "enabled" },
+    );
+    open(owner.querySelector("td:nth-child(2)")!);
+    await copy("Copy table", "Quantity\tFormula\narea\t$\\pi r^2$");
+
+    // The transcript mount replaces that text with MathML, the TeX annotation,
+    // and the visual tree; the source attribute keeps one canonical payload.
+    owner.innerHTML = "";
+    render(
+      renderMessageMarkdown(
+        "| Quantity | Formula |\n| --- | --- |\n| area | $\\pi r^2$ |",
+        "math-table",
+        { role: "assistant", isStreaming: false },
+        { tableInteractions: "enabled" },
+      ),
+      owner,
+    );
+    const cell = owner.querySelector("td:nth-child(2)")!;
+    await vi.waitFor(() =>
+      expect(cell.querySelector('openclaw-chat-math[data-math-state="rendered"]')).not.toBeNull(),
+    );
+    open(cell);
+    await copy("Copy table", "Quantity\tFormula\narea\t$\\pi r^2$");
   });
 
   it("copies source without a footer or reply callback", async () => {
