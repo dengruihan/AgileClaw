@@ -300,7 +300,10 @@
      it, and pressing swaps that rim for inset shade while the face travels
      --press-shift down; releasing settles on --ease-spring. These are the only
      hue inputs for control chrome — controls compose them instead of rolling
-     per-feature bevels, so one light model covers every theme. */
+     per-feature bevels, so one light model covers every theme. Hover carries no
+     material of its own: a hovered key keeps its resting rim and contact and
+     only retints face and contour, because a thicker rim or deeper contact
+     under the pointer reads as the key growing rather than as feedback. */
   --mat-bevel: rgba(198, 246, 209, 0.12);
   --mat-face-hi: rgba(220, 255, 230, 0.05);
   --mat-face-lo: rgba(0, 8, 3, 0.18);
@@ -312,10 +315,6 @@
     inset 0 1px 0 var(--mat-bevel),
     inset 0 -1px 0 color-mix(in srgb, var(--mat-rim) 42%, transparent), 0 2px 0 var(--mat-rim),
     2px 4px 9px var(--neu-dark);
-  --raise-shadow-hover:
-    inset 0 1px 0 var(--mat-bevel),
-    inset 0 -1px 0 color-mix(in srgb, var(--mat-rim) 42%, transparent), 0 3px 0 var(--mat-rim),
-    3px 6px 12px var(--neu-dark);
   --press-shadow:
     inset 0 2px 4px var(--neu-dark), inset 0 -1px 0 var(--mat-rim-hi),
     0 1px 0 color-mix(in srgb, var(--mat-rim) 62%, transparent);
@@ -326,9 +325,6 @@
   --key-shadow:
     inset 0 1px 0 var(--mat-bevel), 0 1px 0 color-mix(in srgb, var(--mat-rim) 62%, transparent),
     1px 2px 4px color-mix(in srgb, var(--neu-dark) 64%, transparent);
-  --key-shadow-hover:
-    inset 0 1px 0 var(--mat-bevel), 0 2px 0 color-mix(in srgb, var(--mat-rim) 74%, transparent),
-    1px 3px 6px color-mix(in srgb, var(--neu-dark) 72%, transparent);
   /* Recessed fields: the floor sits darker where the top wall occludes the
      light and catches a faint bevel on the inner bottom lip. */
   --well-face: linear-gradient(

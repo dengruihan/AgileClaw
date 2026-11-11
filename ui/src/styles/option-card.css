@@ -60,7 +60,6 @@
 .option-card__choice:hover:not(:disabled) {
   border-color: var(--border-strong);
   background-color: var(--bg-hover);
-  box-shadow: var(--raise-shadow-hover);
 }
 
 .option-card__choice:active:not(:disabled) {

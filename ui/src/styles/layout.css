@@ -1405,10 +1405,12 @@ openclaw-settings-save-indicator:empty {
     transform var(--duration-release) var(--ease-spring);
 }
 
-/* Shared rail-key hover seat: a thicker rim and deeper contact without moving
-   the key. The build's hover guard media-wraps this rule, so only true hover
-   lands here; expanded triggers latch into the pressed seat through their own
-   later rules. */
+/* Shared rail-key hover seat: contour and face retint under the pointer while
+   the key keeps its resting rim and contact — hover never extrudes further, so
+   a rail key still reads quieter than the new-session key above it. The
+   build's hover guard media-wraps this rule, so only true hover lands here;
+   expanded triggers latch into the pressed seat through their own later
+   rules. */
 .nav-item:hover,
 .sidebar-issues-button:is(:hover, [aria-expanded="true"]),
 .sidebar-identity-card:is(:hover, :focus-visible, [aria-expanded="true"]),
@@ -1416,7 +1418,6 @@ openclaw-settings-save-indicator:empty {
   border-color: color-mix(in srgb, var(--border-hover) 60%, var(--sidebar-bg, var(--bg)));
   background-color: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
   color: var(--text);
-  box-shadow: var(--key-shadow-hover);
 }
 
 .sidebar-brand__icon:active:not(:disabled, [aria-disabled="true"]) {

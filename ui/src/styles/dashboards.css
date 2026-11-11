@@ -570,10 +570,12 @@
   transition: var(--dashboards-press-motion);
 }
 
+/* Hover retints the glyph and contour only: the resting extrusion is the
+   button's material, and a hover-grown rim or contact reads as the control
+   inflating under the pointer. */
 .dashboards-monitoring__refresh:hover:not(:disabled) {
   color: var(--text-strong);
   border-color: var(--border-hover);
-  box-shadow: var(--surface-raised-strong);
 }
 
 .dashboards-monitoring__refresh:active:not(:disabled) {
