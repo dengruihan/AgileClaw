@@ -4623,4 +4623,12 @@ export const en: TranslationMap & {
     title: "Link reader",
     urlPlaceholder: "Supported link URL",
   },
+
+  // Whole-document viewport controls shared by the shell toolbars.
+  shell: {
+    enterFullscreen: "Enter fullscreen",
+    exitFullscreen: "Exit fullscreen",
+    fullscreenUnavailable: "Fullscreen is unavailable in this browser",
+    fullscreenFailed: "Could not change fullscreen mode: {error}",
+  },
 };

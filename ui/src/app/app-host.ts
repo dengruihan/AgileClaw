@@ -12,6 +12,7 @@ import "../components/modal-dialog.ts";
 import { isSessionRouteId } from "../app-route-paths.ts";
 import "../components/resizable-divider.ts";
 import type { RouteId } from "../app-routes.ts";
+import { ShellFullscreen } from "../components/shell-fullscreen.ts";
 import type { ThemeModeChangeDetail } from "../components/theme-mode-toggle.ts";
 import { i18n, t } from "../i18n/index.ts";
 import { normalizeAgentLabel } from "../lib/agents/display.ts";
@@ -210,6 +211,8 @@ class OpenClawShell
   }
   private readonly subscriptions = new SubscriptionsController(this);
   private readonly shellNavigation = new ShellNavigationOwner(this);
+  // The shell renders both toolbars from this one owner's document state.
+  readonly shellFullscreen = new ShellFullscreen(this, (message) => showToast({ message }));
   private readonly shellChrome = new ShellChromeOwner(this);
   private readonly shellGateway = new ShellGatewayOwner(this);
   readonly viewCallbacks = createShellViewCallbacks(this);

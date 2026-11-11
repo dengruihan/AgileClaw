@@ -2,6 +2,7 @@ import { html, nothing, type TemplateResult } from "lit";
 import { isIncognitoSessionKey } from "../../../../src/shared/incognito-session-key.js";
 import type { GatewaySessionRow, SessionVisibility } from "../../api/types.ts";
 import { isNativeLocalGateway } from "../../app/native-editor-locality.runtime.ts";
+import { isNativeEmbedHost } from "../../app/native-web-chrome.ts";
 import { isDesktopPanelAvailable } from "../../app/panel-availability.ts";
 import type { ApplicationPlacementStartupStatus } from "../../app/session-placement-startup.ts";
 import type { UiSettings } from "../../app/settings.ts";
@@ -9,6 +10,12 @@ import type { BoardWidgetPageMenu } from "../../components/board/board-widget-ce
 import { icons } from "../../components/icons.ts";
 import { personActivityRouting } from "../../components/person-activity-link.ts";
 import { sessionMenuReasons } from "../../components/session-menu-access.ts";
+import {
+  SHELL_FULLSCREEN_TOGGLE_EVENT,
+  shellFullscreenActive,
+  shellFullscreenSupported,
+  type ShellFullscreenToggleDetail,
+} from "../../components/shell-fullscreen.ts";
 import { i18n, t } from "../../i18n/index.ts";
 import { isGatewayMethodAdvertised } from "../../lib/gateway-methods.ts";
 import {
@@ -115,6 +122,26 @@ export abstract class ChatPaneHeader extends ChatPaneDiscussion {
   private readonly onHeaderSplitDown = () => this.onSplitDown?.(this.paneId);
   private readonly onHeaderSplitRight = () => this.onSplitRight?.(this.paneId);
   private readonly onHeaderBoardSelect = (value: string) => this.headerBoardMenu?.onSelect(value);
+  private readonly handleShellFullscreenChange = () => this.requestUpdate();
+  private readonly toggleShellFullscreen = (trigger: HTMLElement): void => {
+    window.dispatchEvent(
+      new CustomEvent<ShellFullscreenToggleDetail>(SHELL_FULLSCREEN_TOGGLE_EVENT, {
+        detail: { trigger },
+      }),
+    );
+  };
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // The toolbar renders outside the shell's template tree, so it re-renders from
+    // the browser's fullscreen fact; the shell alone owns the API and the toggle.
+    document.addEventListener("fullscreenchange", this.handleShellFullscreenChange);
+  }
+
+  override disconnectedCallback(): void {
+    document.removeEventListener("fullscreenchange", this.handleShellFullscreenChange);
+    super.disconnectedCallback();
+  }
 
   protected renderPaneHeader(
     sessionWorkspace: ReturnType<typeof createChatPaneRails>["sessionWorkspace"],
@@ -544,6 +571,14 @@ export abstract class ChatPaneHeader extends ChatPaneDiscussion {
       onSplitDown: this.onSplitDown,
       onSplitRight: this.onSplitRight,
       onClosePane: this.onClosePane,
+      // The native app owns its window chrome; in-page fullscreen stays browser-only.
+      fullscreen: isNativeEmbedHost()
+        ? null
+        : {
+            active: shellFullscreenActive(),
+            supported: shellFullscreenSupported(),
+            onToggle: this.toggleShellFullscreen,
+          },
     });
     const continueCommand = this.currentContinueInTerminalCommand(row);
     return html`${header}${
