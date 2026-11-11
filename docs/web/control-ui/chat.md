@@ -4,7 +4,7 @@ summary: "Composer controls, transcript rendering, side chat, and hosted embeds"
 read_when:
   - Using the composer, tool cards, or the session rail
   - Finding and installing capabilities from chat
-  - Rendering tables, Mermaid diagrams, or hosted embeds
+  - Rendering formulas, tables, Mermaid diagrams, or hosted embeds
   - Adjusting transcript layout or message width
   - Watching assistant replies stream into the transcript
 title: "Chat"
@@ -77,6 +77,57 @@ reveal. Opening saved history, searching the transcript, expanding a full-messag
 disclosure, and media content also paint settled text. Switching sessions,
 reconnecting, hiding the pane, or leaving the chat cancels any pending reveal;
 text that already arrived paints in full.
+
+## Math formulas
+
+Chat transcripts typeset TeX-style formulas between math delimiters. Inline
+formulas use `$...$` or `\(...\)` and stay on one line. Display formulas use
+`$$...$$` or `\[...\]`, either on one line or as their own block. This is a
+formula renderer, not general LaTeX: only delimited math is typeset, and the
+model's text is never rewritten.
+
+```markdown
+The area is $A = \pi r^2$.
+
+$$
+\int_0^1 x^2\,dx = \frac{1}{3}
+$$
+```
+
+Inline formulas also work in table cells, and display blocks work inside
+blockquotes. A display block sits on its own row; a wide formula scrolls within
+that row instead of widening the transcript.
+
+Only chat transcript rendering typesets formulas. New Session and other Markdown
+surfaces show the delimited source as text and do not load the math renderer.
+In chat, the KaTeX code, stylesheets, and fonts load on demand when a transcript
+first contains a formula, so opening a session without formulas fetches none of
+them. The delimited source stays visible until typesetting finishes.
+
+Ordinary prose and currency stay literal. A formula that starts with a digit
+must look like an expression: it needs an operator or TeX command, or a compact
+implicit factor such as `2x` or `2(x)`. So `$2+2=4$`, `$2x$`, and `$1/2$` are
+formulas, while `$5`, `$1.50`, `$5$`, and `$5 and $10` stay as typed. Prose
+between two amounts is never absorbed into one. Code spans and code fences keep
+their dollars, so `$HOME` in a shell example stays literal, and `\$` writes a
+literal dollar sign.
+
+Unmatched or oversized delimiters stay readable as source instead of producing
+half an equation. An unfinished `$$` block, inline content beyond 1,000
+characters, and display content beyond 4,000 characters keep the text the model
+wrote. Invalid TeX shows an error marker beside its source rather than failing
+the message.
+
+Formulas are presentation only. While a reply streams, an incomplete delimiter
+stays as its literal source; once the closer arrives, the same phrase becomes
+one typeset equation without duplicating text. The saved transcript and the
+assistant reply reveal keep their existing behavior. **Copy as markdown**
+returns the original delimited TeX, and **Copy table** returns each cell's
+delimited source once instead of the rendered MathML and visual markup.
+
+Formula source is escaped, and KaTeX runs without trust, so model-authored TeX
+cannot add links, images, iframes, styles, or remote requests. Macro expansion
+and rendered size are bounded.
 
 ## Model request errors and retries
 
