@@ -6,6 +6,7 @@ read_when:
   - Finding and installing capabilities from chat
   - Rendering tables, Mermaid diagrams, or hosted embeds
   - Adjusting transcript layout or message width
+  - Watching assistant replies stream into the transcript
 title: "Chat"
 sidebarTitle: "Chat"
 ---
@@ -45,6 +46,37 @@ sidebar; the other panes stay unchanged.
 When the macOS app embeds a single conversation beside its native sidebar, the
 chat header fills the window's titlebar row. Drag an empty area of the header to
 move the window; its buttons keep their normal actions.
+
+## Assistant reply reveal
+
+Live assistant text appears through a short presentation reveal, so a burst of
+output reads line by line instead of jumping into place. This is a Control UI
+presentation behavior; it is the same for every provider and does not change how
+output is streamed or delivered to the client. Canonical model output, the saved
+transcript and history, and tool execution are not delayed: a tool call runs when
+it arrives even while earlier text is still being painted. Copy and reply
+targets use the complete arrived text, not just the visible prefix.
+
+Reveal starts at the first visible glyph and advances at a readable pace. When it
+catches up with the arrived text, the reply holds still; a later chunk resumes
+the reveal from the same position. A long backlog drains progressively instead
+of pasting whole paragraphs into the row. When the run settles, the final answer
+continues from that position and drains all remaining text before the row
+becomes an ordinary saved message; it keeps its streaming presentation until
+the drain finishes.
+
+A settled final can continue the reveal only from the live stream row the pane
+recorded for that run. If more than one row could qualify, or the final text does
+not continue the painted prefix, the row paints as settled text instead of
+adopting another row or restarting. A run that never streamed, such as a provider
+that returns one complete answer, still reveals from the start; earlier tool
+commentary does not suppress that one-shot reveal.
+
+With reduced motion enabled, assistant text appears immediately without the
+reveal. Opening saved history, searching the transcript, expanding a full-message
+disclosure, and media content also paint settled text. Switching sessions,
+reconnecting, hiding the pane, or leaving the chat cancels any pending reveal;
+text that already arrived paints in full.
 
 ## Model request errors and retries
 
