@@ -84,6 +84,11 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
   // Disconnect releases the waiter so reconnect can schedule in its new lifecycle.
   private hiddenUpdateResume: (() => void) | undefined;
   private readonly handleVisibilityChange = () => {
+    // A hidden document must not keep painting reveal frames: cancel before any
+    // draft/stream bookkeeping or early return can delay cleanup.
+    if (document.visibilityState === "hidden") {
+      cancelChatReveal(this.paneId);
+    }
     // Lit parks hidden updates, but progress watches must follow visibility immediately.
     this.progressCard.hostUpdate();
     if (document.visibilityState !== "hidden") {

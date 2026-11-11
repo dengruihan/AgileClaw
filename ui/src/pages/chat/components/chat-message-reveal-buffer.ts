@@ -144,8 +144,6 @@ type RevealEntry = {
   text: string;
   revealed: number;
   streaming: boolean;
-  /** A settled successor already continued this row; never hand off twice. */
-  handedOff: boolean;
   version: number;
 };
 
@@ -297,8 +295,6 @@ export class ChatRevealBuffer {
   private readonly liveStreamKeys = new Map<string, string>();
   /** The one stream entry a settled final may continue from (identity, not recency). */
   private successor: { runKey: string; entryKey: string } | null = null;
-  /** Newest streaming entry, retained for rendering diagnostics of the live row. */
-  private activeStreamEntryKey: string | null = null;
   private liveRunId: string | null = null;
   private scheduleUpdate: () => void = () => {};
   private frame: number | null = null;
@@ -394,8 +390,13 @@ export class ChatRevealBuffer {
    */
   noteLiveStream(runId: string | null | undefined, key: string | null | undefined): void {
     const runKey = this.resolveRunKey(runId);
-    if (runKey && key) {
+    if (!runKey) {
+      return;
+    }
+    if (key) {
       this.liveStreamKeys.set(runKey, key);
+    } else {
+      this.liveStreamKeys.delete(runKey);
     }
   }
 
@@ -532,13 +533,9 @@ export class ChatRevealBuffer {
       text,
       revealed: revealed > 0 ? Math.min(revealed, text.length) : revealStartIndex(text),
       streaming: request.streaming === true,
-      handedOff: false,
       version: ++this.version,
     };
     this.entries.set(entryKey, entry);
-    if (entry.streaming) {
-      this.activeStreamEntryKey = entryKey;
-    }
     const observation = this.runs.get(runKey);
     if (observation) {
       observation.entries += 1;
@@ -553,9 +550,6 @@ export class ChatRevealBuffer {
 
   private advanceTarget(entry: RevealEntry, request: ChatRevealRequest): ChatRevealText {
     entry.streaming = request.streaming === true;
-    if (entry.streaming && !entry.handedOff) {
-      this.activeStreamEntryKey = entry.entryKey;
-    }
     if (entry.text !== request.text) {
       const painted = entry.text.slice(0, entry.revealed);
       entry.text = request.text;
@@ -605,10 +599,6 @@ export class ChatRevealBuffer {
     if (!painted || !text.startsWith(painted)) {
       return "settled";
     }
-    source.handedOff = true;
-    if (this.activeStreamEntryKey === source.entryKey) {
-      this.activeStreamEntryKey = null;
-    }
     return source.revealed;
   }
 
@@ -627,9 +617,6 @@ export class ChatRevealBuffer {
       return;
     }
     this.entries.delete(entryKey);
-    if (this.activeStreamEntryKey === entryKey) {
-      this.activeStreamEntryKey = null;
-    }
     const observation = this.runs.get(entry.runKey);
     if (observation) {
       observation.entries = Math.max(0, observation.entries - 1);
@@ -729,7 +716,6 @@ export class ChatRevealBuffer {
     if (this.successor?.runKey === runKey) {
       this.successor = null;
     }
-    this.activeStreamEntryKey = null;
     if (!this.hasRemaining()) {
       this.stopFrames();
     }
@@ -750,7 +736,6 @@ export class ChatRevealBuffer {
     this.tailRunIds.clear();
     this.liveStreamKeys.clear();
     this.successor = null;
-    this.activeStreamEntryKey = null;
     this.activeRunId = null;
     this.liveRunId = null;
     this.scheduleUpdate = () => {};
@@ -805,11 +790,14 @@ export function trackRevealLiveStream(
   if ((stream ?? null) === null) {
     return;
   }
-  const live = items.findLast(
+  const live = items.filter(
     (item) =>
       item.kind === "stream" && item.isStreaming && (!runId || !item.runId || item.runId === runId),
   );
-  reveal.noteLiveStream(runId ?? live?.runId, live?.key);
+  // One run's output is exactly one live row. More than one candidate means the
+  // originating stream identity is ambiguous, so no handoff is bound and the
+  // settled final paints settled instead of adopting another row.
+  reveal.noteLiveStream(runId ?? live[0]?.runId, live.length === 1 ? live[0]?.key : null);
 }
 
 /** Pane teardown owner: drop all reveal work and the pane's buffer entry. */

@@ -20,7 +20,11 @@ import {
   renderMarkdownMedia,
   type MarkdownMedia,
 } from "./chat-message-media-markdown.ts";
-import { ChatRevealBuffer, type ChatRevealFrameClock } from "./chat-message-reveal-buffer.ts";
+import {
+  ChatRevealBuffer,
+  trackRevealLiveStream,
+  type ChatRevealFrameClock,
+} from "./chat-message-reveal-buffer.ts";
 import { renderStreamGroup } from "./chat-message-stream.ts";
 import { renderMessageMarkdown } from "./chat-message-text.ts";
 
@@ -637,7 +641,9 @@ describe("smooth assistant reveal", () => {
   it("keeps the stream's reveal position when the settled final message replaces the row", async () => {
     const harness = createRevealHarness();
     const streamed = "A considered answer that keeps arriving across several frames.";
-    harness.buffer.noteLiveStream("reveal-run", "reveal-stream");
+    trackRevealLiveStream(harness.buffer, "reveal-run", streamed, [
+      { kind: "stream", key: "reveal-stream", isStreaming: true, runId: "reveal-run" },
+    ]);
     drawStreamPart(harness.buffer, streamed, (draw) => harness.adopt(draw));
     await Promise.resolve();
     await harness.frame();
@@ -754,21 +760,21 @@ describe("smooth assistant reveal", () => {
     expect(container.querySelector(".chat-bubble")?.classList.contains("streaming")).toBe(false);
   });
 
-  it("keeps same-run rows with a shared opening independent at the stream/group boundary", async () => {
+  it("continues exactly from the single live row the production selector binds", async () => {
     const harness = createRevealHarness();
     const rowA = `Shared prefix: alpha ${"keeps growing with readable pacing. ".repeat(12)}`;
-    const rowB = `Shared prefix: beta ${"is a separate same-run row. ".repeat(3)}`;
+    const rowB = `Shared prefix: beta ${"is a settled same-run row. ".repeat(3)}`;
     const containerA = document.body.appendChild(document.createElement("div"));
     const containerB = document.body.appendChild(document.createElement("div"));
-    const drawStream = (target: HTMLElement, key: string, text: string) => () =>
+    const drawStreamA = () =>
       render(
         html`<section ${markdownBlocks()}>
           ${renderStreamGroup(
             [
               {
                 kind: "stream",
-                key,
-                text,
+                key: "stream-a",
+                text: rowA,
                 startedAt: 1_000,
                 isStreaming: true,
                 runId: "reveal-run",
@@ -777,34 +783,55 @@ describe("smooth assistant reveal", () => {
             { sessionKey: "agent:main:main", reveal: harness.buffer },
           )}
         </section>`,
-        target,
+        containerA,
+      );
+    const [settledGroupB] = groupMessages([
+      {
+        kind: "message",
+        key: "assistant:b",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: rowB }],
+          timestamp: 2_000,
+          __openclaw: { runId: "reveal-run" },
+        },
+      },
+    ]) as MessageGroup[];
+    const drawGroupB = () =>
+      render(
+        html`<section ${markdownBlocks()}>
+          ${renderMessageGroup(settledGroupB!, {
+            showReasoning: false,
+            showToolCalls: false,
+            reveal: harness.buffer,
+          })}
+        </section>`,
+        containerB,
       );
     try {
-      // The projection notes the run's live stream row while it streams.
-      harness.buffer.noteLiveStream("reveal-run", "stream-a");
-      drawStream(containerA, "stream-a", rowA)();
+      // The production selector sees the builder's single live row.
+      trackRevealLiveStream(harness.buffer, "reveal-run", rowA, [
+        { kind: "stream", key: "stream-a", isStreaming: true, runId: "reveal-run" },
+      ]);
+      drawStreamA();
       await Promise.resolve();
-      for (let frame = 0; frame < 2; frame += 1) {
+      for (let frame = 0; frame < 3; frame += 1) {
         await harness.frame();
-        drawStream(containerA, "stream-a", rowA)();
+        drawStreamA();
       }
-      const paintedA = (containerA.querySelector(".chat-text")?.textContent ?? "").trim();
-      expect(paintedA.length).toBeGreaterThan(10);
-      expect(paintedA.length).toBeLessThan(rowA.length);
-      drawStream(containerB, "stream-b", rowB)();
+      drawGroupB();
       await Promise.resolve();
       for (let frame = 0; frame < 2; frame += 1) {
         await harness.frame();
-        drawStream(containerB, "stream-b", rowB)();
+        drawGroupB();
       }
       const paintedB = (containerB.querySelector(".chat-text")?.textContent ?? "").trim();
       expect(paintedB.length).toBeGreaterThan(0);
       expect(paintedB.length).toBeLessThan(rowB.length);
-      // Capture A's current paint immediately before the final replaces it.
-      drawStream(containerA, "stream-a", rowA)();
+      drawStreamA();
       await Promise.resolve();
       const paintedAAtHandoff = (containerA.querySelector(".chat-text")?.textContent ?? "").trim();
-      expect(paintedAAtHandoff.length).toBeGreaterThan(paintedA.length);
+      expect(paintedAAtHandoff.length).toBeGreaterThan(10);
 
       const finalText = `${rowA} and finishes.`;
       const [finalGroup] = groupMessages([
@@ -835,22 +862,109 @@ describe("smooth assistant reveal", () => {
       await Promise.resolve();
       await Promise.resolve();
 
-      // Exact A-before/A-after continuity: the final continues the bound live
-      // stream row, never the newer same-prefix row.
+      // Exact A-before/A-after continuity from the selector's single live row.
       expect((containerA.querySelector(".chat-text")?.textContent ?? "").trim()).toBe(
         paintedAAtHandoff,
       );
-      // B keeps its own reveal: not retracted and not completed by A's final.
-      drawStream(containerB, "stream-b", rowB)();
+      // The settled sibling keeps its own reveal and is not completed by A.
+      drawGroupB();
       await Promise.resolve();
       expect((containerB.querySelector(".chat-text")?.textContent ?? "").trim()).toBe(paintedB);
       await harness.frame();
       await harness.frame();
-      drawStream(containerB, "stream-b", rowB)();
+      drawGroupB();
       await Promise.resolve();
       expect(
         (containerB.querySelector(".chat-text")?.textContent ?? "").trim().length,
       ).toBeGreaterThan(paintedB.length);
+    } finally {
+      render(nothing, containerA);
+      render(nothing, containerB);
+      containerA.remove();
+      containerB.remove();
+    }
+  });
+
+  it("paints settled when two live rows make the predecessor ambiguous", async () => {
+    const harness = createRevealHarness();
+    const rowA = `Shared prefix: alpha ${"keeps growing with readable pacing. ".repeat(12)}`;
+    const rowB = `Shared prefix: beta ${"is a second live row. ".repeat(3)}`;
+    const containerA = document.body.appendChild(document.createElement("div"));
+    const containerB = document.body.appendChild(document.createElement("div"));
+    const drawStream = (target: HTMLElement, key: string, text: string) => () =>
+      render(
+        html`<section ${markdownBlocks()}>
+          ${renderStreamGroup(
+            [
+              {
+                kind: "stream",
+                key,
+                text,
+                startedAt: 1_000,
+                isStreaming: true,
+                runId: "reveal-run",
+              },
+            ],
+            { sessionKey: "agent:main:main", reveal: harness.buffer },
+          )}
+        </section>`,
+        target,
+      );
+    try {
+      drawStream(containerA, "stream-a", rowA)();
+      drawStream(containerB, "stream-b", rowB)();
+      await Promise.resolve();
+      await harness.frame();
+      drawStream(containerA, "stream-a", rowA)();
+      drawStream(containerB, "stream-b", rowB)();
+      await harness.frame();
+      // Render the tick's paint before capturing B's mid-reveal text.
+      drawStream(containerB, "stream-b", rowB)();
+      drawStream(containerA, "stream-a", rowA)();
+      await Promise.resolve();
+      const paintedB = (containerB.querySelector(".chat-text")?.textContent ?? "").trim();
+      expect(paintedB.length).toBeGreaterThan(0);
+      // Both rows look live to the selector, so no origin can be proven.
+      trackRevealLiveStream(harness.buffer, "reveal-run", rowA, [
+        { kind: "stream", key: "stream-a", isStreaming: true, runId: "reveal-run" },
+        { kind: "stream", key: "stream-b", isStreaming: true, runId: "reveal-run" },
+      ]);
+      const finalText = `${rowA} and finishes.`;
+      const [finalGroup] = groupMessages([
+        {
+          kind: "message",
+          key: "assistant:final",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: finalText }],
+            timestamp: 3_000,
+          },
+        },
+      ]) as MessageGroup[];
+      harness.buffer.focusTail(finalGroup!, "reveal-run");
+      const drawFinal = () =>
+        render(
+          html`<section ${markdownBlocks()}>
+            ${renderMessageGroup(finalGroup!, {
+              showReasoning: false,
+              showToolCalls: false,
+              reveal: harness.buffer,
+            })}
+          </section>`,
+          containerA,
+        );
+      harness.adopt(drawFinal);
+      drawFinal();
+      await Promise.resolve();
+      await Promise.resolve();
+      // No origin: the final paints settled, never another row's position.
+      expect((containerA.querySelector(".chat-text")?.textContent ?? "").trim()).toBe(finalText);
+      expect(containerA.querySelector(".chat-bubble")?.classList.contains("streaming")).toBe(false);
+      // B is untouched: not retracted and not completed by A's final.
+      drawStream(containerB, "stream-b", rowB)();
+      await Promise.resolve();
+      expect((containerB.querySelector(".chat-text")?.textContent ?? "").trim()).toBe(paintedB);
+      expect(containerB.querySelector(".chat-bubble")?.classList.contains("streaming")).toBe(true);
     } finally {
       render(nothing, containerA);
       render(nothing, containerB);

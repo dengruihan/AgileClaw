@@ -6,6 +6,7 @@ import { groupMessages } from "../chat-thread-grouping.ts";
 import {
   ChatRevealBuffer,
   snapRevealIndex,
+  trackRevealLiveStream,
   type ChatRevealFrameClock,
 } from "./chat-message-reveal-buffer.ts";
 
@@ -124,7 +125,9 @@ describe("chat reveal buffer", () => {
   it("keeps the final message on the stream's reveal position instead of restarting", () => {
     const { buffer, frames } = createBuffer();
     const streamText = "A considered answer that keeps arriving";
-    buffer.noteLiveStream("run-1", "stream-row");
+    trackRevealLiveStream(buffer, "run-1", streamText, [
+      { kind: "stream", key: "stream-row", isStreaming: true, runId: "run-1" },
+    ]);
     buffer.visibleText({ key: "stream-row", runId: "run-1", text: streamText, streaming: true });
     frames.advance(2);
     const painted = buffer.visibleText({
@@ -460,10 +463,8 @@ const LONG_REPLY = `Shared prefix: alpha ${"keeps growing with readable pacing. 
 const OTHER_REPLY = `Shared prefix: beta ${"is a separate same-run row. ".repeat(4)}`;
 
 describe("chat reveal ownership regressions", () => {
-  it("continues from the bound live-stream entry even when a newer same-run row shares the opening", () => {
+  it("continues from the single live row the production selector identifies", () => {
     const { buffer, frames } = createLifecycleBuffer();
-    // The projection notes the run's live stream row while it streams.
-    buffer.noteLiveStream("run-1", "stream-a");
     buffer.visibleText({ key: "stream-a", runId: "run-1", text: LONG_REPLY, streaming: true });
     frames.advance(3);
     const paintedA = buffer.visibleText({
@@ -474,16 +475,10 @@ describe("chat reveal ownership regressions", () => {
     });
     expect(paintedA.revealing).toBe(true);
     expect(paintedA.text.length).toBeGreaterThan(10);
-    // A newer same-run row renders later and shares only the opening.
-    const paintedB = buffer.visibleText({
-      key: "stream-b",
-      runId: "run-1",
-      text: OTHER_REPLY,
-      streaming: true,
-    });
-    expect(paintedB.revealing).toBe(true);
-    expect(paintedB.text.length).toBeLessThan(paintedA.text.length);
-
+    // The builder emits exactly one live row; the selector binds it.
+    trackRevealLiveStream(buffer, "run-1", LONG_REPLY, [
+      { kind: "stream", key: "stream-a", isStreaming: true, runId: "run-1" },
+    ]);
     buffer.focusTail(
       { kind: "group", key: "group:assistant:final-a", role: "assistant", messages: [] },
       "run-1",
@@ -496,8 +491,50 @@ describe("chat reveal ownership regressions", () => {
       streaming: false,
       liveTail: true,
     });
-    // Exact A-before/A-after continuity: no retraction to B's short prefix.
     expect(finalA.text).toBe(paintedA.text);
+    frames.advance(400);
+    expect(
+      buffer.visibleText({ key: "final-a", runId: "run-1", text: finalText, streaming: false }),
+    ).toEqual({ text: finalText, revealing: false });
+  });
+
+  it("paints settled when the production selector finds more than one live candidate", () => {
+    const { buffer, frames } = createLifecycleBuffer();
+    buffer.visibleText({ key: "stream-a", runId: "run-1", text: LONG_REPLY, streaming: true });
+    frames.advance(3);
+    const paintedA = buffer.visibleText({
+      key: "stream-a",
+      runId: "run-1",
+      text: LONG_REPLY,
+      streaming: true,
+    });
+    const paintedB = buffer.visibleText({
+      key: "stream-b",
+      runId: "run-1",
+      text: OTHER_REPLY,
+      streaming: true,
+    });
+    expect(paintedB.text.length).toBeLessThan(paintedA.text.length);
+    // Two live rows in one run is ambiguous: the selector must not bind either.
+    trackRevealLiveStream(buffer, "run-1", LONG_REPLY, [
+      { kind: "stream", key: "stream-a", isStreaming: true, runId: "run-1" },
+      { kind: "stream", key: "stream-b", isStreaming: true, runId: "run-1" },
+    ]);
+    buffer.focusTail(
+      { kind: "group", key: "group:assistant:final-a", role: "assistant", messages: [] },
+      "run-1",
+    );
+    const finalText = `${LONG_REPLY} and finishes.`;
+    // No predecessor: settled, never another row's position and never a restart.
+    expect(
+      buffer.visibleText({
+        key: "final-a",
+        runId: "run-1",
+        text: finalText,
+        streaming: false,
+        liveTail: true,
+      }),
+    ).toEqual({ text: finalText, revealing: false });
     // B keeps its own reveal: not retracted, not completed by A's final.
     expect(
       buffer.visibleText({
@@ -507,10 +544,6 @@ describe("chat reveal ownership regressions", () => {
         streaming: true,
       }),
     ).toEqual({ text: paintedB.text, revealing: true });
-    frames.advance(400);
-    expect(
-      buffer.visibleText({ key: "final-a", runId: "run-1", text: finalText, streaming: false }),
-    ).toEqual({ text: finalText, revealing: false });
   });
 
   it("paints settled instead of adopting or restarting when no bound predecessor exists", () => {
