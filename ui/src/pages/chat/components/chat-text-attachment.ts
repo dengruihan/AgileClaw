@@ -1,24 +1,26 @@
 import { html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { LazyCustomElementRequestController } from "../../../app/lazy-custom-element.ts";
 import { renderCopyButton } from "../../../components/copy-button.ts";
 import { icons } from "../../../components/icons.ts";
-import { markdownBlocks } from "../../../components/markdown-blocks.ts";
-import { toSanitizedMarkdownHtml } from "../../../components/markdown.ts";
 import { t } from "../../../i18n/index.ts";
 import { registerFilePreviewEnglish } from "../../../i18n/locales/en-file-preview.ts";
 import { formatBytes } from "../../../lib/agents/display.ts";
 import type { EmbedSandboxMode } from "../../../lib/chat/tool-display.ts";
-import { detectTextDirection } from "../../../lib/text-direction.ts";
 import { OpenClawLightDomContentsElement } from "../../../lit/openclaw-element.ts";
 import {
   renderAttachmentPreviewSkeleton,
   renderCompactAttachmentCard,
 } from "./chat-attachment-card.ts";
 import { readAttachmentText } from "./chat-attachment-text-reader.ts";
-import { htmlPreviewElement, isHtmlDocument, renderHtmlPreview } from "./chat-html-preview.ts";
+import {
+  htmlPreviewElement,
+  isHtmlDocument,
+  isMarkdownDocument,
+  renderHtmlPreview,
+  renderMarkdownDocument,
+} from "./chat-html-preview.ts";
 
 registerFilePreviewEnglish();
 
@@ -146,12 +148,7 @@ class ChatTextAttachment extends OpenClawLightDomContentsElement {
 
   override render() {
     const htmlDocument = this.htmlDocument;
-    const mimeType = this.mimeType.split(";", 1)[0]?.trim().toLowerCase();
-    const markdown =
-      !this.plainText &&
-      (mimeType === "text/markdown" ||
-        mimeType === "text/x-markdown" ||
-        /\.(?:md|markdown)$/i.test(this.label));
+    const markdown = !this.plainText && isMarkdownDocument(this.mimeType, this.label);
     const reader =
       this.text === null
         ? renderAttachmentPreviewSkeleton()
@@ -171,22 +168,7 @@ class ChatTextAttachment extends OpenClawLightDomContentsElement {
                     >
 ${this.text}</pre>`
                 : markdown && !this.source
-                  ? html`<article
-                      class="sidebar-attachment-preview__markdown sidebar-markdown-reader sidebar-markdown"
-                      dir=${detectTextDirection(this.text)}
-                      aria-label=${this.label}
-                      ${markdownBlocks()}
-                    >
-                      ${unsafeHTML(
-                        toSanitizedMarkdownHtml(this.text, {
-                          // The fetch already bounds document size; do not apply chat-message
-                          // truncation or let an attachment load remote tracking images.
-                          mode: "document",
-                          remoteImages: false,
-                          codeBlockInteraction: "interactive",
-                        }),
-                      )}
-                    </article>`
+                  ? renderMarkdownDocument(this.text, this.label)
                   : html`<pre
                       class="sidebar-attachment-preview__text"
                       tabindex="0"
@@ -217,7 +199,7 @@ ${this.text}</pre>`,
                           this.source = !this.source;
                         }}
                       >
-                        ${this.source ? t("chat.workspaceFiles.preview") : htmlDocument ? t("chat.detailPanel.viewSource") : t("chat.detailPanel.viewRawText")}
+                        ${this.source ? t("chat.workspaceFiles.preview") : t("chat.detailPanel.viewSource")}
                       </button>`
                     : nothing
                 }
