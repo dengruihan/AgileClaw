@@ -444,7 +444,14 @@ describe("chat pane embedded panels", () => {
             filename,
           );
           expect(fetchMetadata).toHaveBeenCalledOnce();
-          expect(mount.querySelector<HTMLAnchorElement>("a[download]")?.download).toBe(filename);
+          // The fallback download is the panel's click-time fresh action, not a
+          // cached-href anchor: ticketed sources reauthorize on click. Its label
+          // must still carry the attachment filename.
+          expect(
+            mount
+              .querySelector<HTMLButtonElement>("button.sidebar-office-preview__download")
+              ?.getAttribute("aria-label"),
+          ).toBe(`Download ${filename}`);
         }
       } finally {
         render(nothing, transcript);
