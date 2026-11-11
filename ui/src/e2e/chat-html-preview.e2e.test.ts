@@ -370,6 +370,13 @@ suite.define(() => {
               });
               for (const height of [1000, 480]) {
                 await page.setViewportSize({ width: 1440, height });
+                // A resize reaches the inner document asynchronously: it propagates
+                // through the outer sandbox iframe and then the content iframe, so
+                // window.innerHeight can lag the outer frame by a frame. Wait for the
+                // nested viewport to stop changing (two consecutive equal samples) and
+                // the frame to fill the panel before asserting; an immediate read
+                // otherwise compares stale geometry, not the settled visual contract.
+                let settledHeight: number | undefined;
                 await expect
                   .poll(async () => {
                     const frame = await outer.boundingBox();
@@ -381,9 +388,15 @@ suite.define(() => {
                           bounds.bottom - Number.parseFloat(getComputedStyle(element).paddingBottom)
                         );
                       });
-                    return Math.abs(frame!.y + frame!.height - available);
+                    const viewport = await attachmentDocument.locator("body").evaluate(() => ({
+                      width: window.innerWidth,
+                      height: window.innerHeight,
+                    }));
+                    const stable = settledHeight === viewport.height;
+                    settledHeight = viewport.height;
+                    return stable && Math.abs(frame!.y + frame!.height - available) <= 1;
                   })
-                  .toBeLessThanOrEqual(1);
+                  .toBe(true);
                 const frame = await outer.boundingBox();
                 const viewport = await attachmentDocument.locator("body").evaluate(() => ({
                   width: window.innerWidth,
