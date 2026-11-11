@@ -13,25 +13,25 @@ import {
   createSidebarCustomizationSuite,
 } from "./sidebar-customization.test-support.ts";
 
-// The solo-presence clearance suite: with renderAppSidebarOnline rendering no
-// section, the column's joint allocation (Pages rail vs session well vs
-// footer) is exercised at every affected height — the released floor must
-// keep the whole Automations entry clear of the well in sessions and roster
-// modes, the compact band must keep its narrower floors, and the compact
-// roster group header must yield exactly when the well scroller cannot
-// afford it plus one whole session row (the layout.css concession).
+// The solo-presence clearance suite: the Body's two regions — the Pages rail
+// and the session column — are exercised at every affected height. The rail
+// must keep its last key whole and clickable above the session well in
+// sessions and roster modes and at tight and ordinary desktop heights, the
+// compact band must keep its narrower floors, and the compact roster group
+// header must yield exactly when the well scroller cannot afford it plus one
+// whole session row (the layout.css concession).
 const suite = createSidebarCustomizationSuite(
   "Control UI sidebar solo clearance mocked Gateway E2E",
 );
 
 suite.define(() => {
-  // Solo presence must release the Online share of the joint allocation
-  // floor: while renderAppSidebarOnline returns nothing, reserving
-  // --sidebar-online-floor anyway squeezed the nav rail until its lowest row
-  // clipped against the session well's top edge. The seeded synced pins put
-  // Automations last — the user-reordered nav where the wasted floor bites —
-  // and a 520px viewport sits inside the affected band: the nav needs more
-  // than the honest well-only floor but less than well + Online floors.
+  // Solo presence drops the session region's floor to the well and its own
+  // clearances: while renderAppSidebarOnline returns nothing, folding
+  // --sidebar-online-floor into the region's floor squeezed the rail until its
+  // lowest row clipped against the session well's top edge. The seeded synced
+  // pins put Automations last — the user-reordered nav where the wasted floor
+  // bites — and a 520px viewport sits inside the affected band: the rail needs
+  // more than the honest well-only region floor but less than well + Online.
   const clearancePinnedRoutes = [
     "route:dashboards",
     "route:sessions",
@@ -107,14 +107,43 @@ suite.define(() => {
           return null;
         }
         const rect = element.getBoundingClientRect();
-        return { top: rect.top, bottom: rect.bottom, height: rect.height };
+        return {
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height,
+        };
       };
       const nav = document.querySelector<HTMLElement>(".sidebar-nav");
+      // The key face is the anchor the pointer actually hits, so clearance and
+      // pointer proof read the link, not its padded wrapper.
+      const automationsLink = document.querySelector<HTMLElement>(
+        '.sidebar-nav [data-sidebar-entry="route:cron"] a',
+      );
+      const automationsLinkRect = automationsLink?.getBoundingClientRect() ?? null;
+      const automationsLinkHit = (() => {
+        if (!automationsLinkRect) {
+          return null;
+        }
+        const hit = document.elementFromPoint(
+          automationsLinkRect.left + automationsLinkRect.width / 2,
+          automationsLinkRect.bottom - 2,
+        );
+        return hit !== null && (hit === automationsLink || automationsLink!.contains(hit));
+      })();
       return {
         nav: box(".sidebar-nav"),
         navScrollable: nav ? nav.scrollHeight - nav.clientHeight > 1 : null,
         automations: box('.sidebar-nav [data-sidebar-entry="route:cron"]'),
+        automationsLink: box('.sidebar-nav [data-sidebar-entry="route:cron"] a'),
+        automationsLinkHit,
         automationsLabel: box('.sidebar-nav [data-sidebar-entry="route:cron"] .nav-item__text'),
+        sessionToolbarDisplay: (() => {
+          const toolbar = document.querySelector(".sidebar-sessions .sidebar-session-toolbar");
+          return toolbar ? getComputedStyle(toolbar).display : "absent";
+        })(),
         rosterHeaderDisplay: (() => {
           const header = document.querySelector(".sidebar-agent-roster__header");
           return header ? getComputedStyle(header).display : "absent";
@@ -218,16 +247,16 @@ suite.define(() => {
       const section = page.locator(".sidebar-online");
       await section.waitFor();
       const duo = await settleSidebarClearance(page, true);
-      // Multi-user baseline: the mounted Online roster owns its floor share
-      // and the Online roster never overlaps the well. (The duo body keeps a
-      // pre-existing ~10px overflow at this height with a six-row nav — a
-      // duo-mode condition outside this fix.)
+      // Multi-user baseline: the mounted Online roster shares the session
+      // region with the well and never overlaps it. (The duo body keeps a
+      // pre-existing overflow at this height with a six-row nav — a duo-mode
+      // condition outside this fix.)
       expect(duo.onlineMounted).toBe(true);
       expect(duo.online!.bottom).toBeLessThanOrEqual(duo.well!.top);
 
-      // The second identity leaves: the section unmounts and its floor share
-      // must be released, so the nav rail keeps the whole Automations entry
-      // clear of the rising well instead of being squeezed under it.
+      // The second identity leaves: the section unmounts and the session
+      // region's floor drops to the well, so the rail keeps every key it
+      // renders instead of yielding height to an absent section's share.
       await gateway.emitGatewayEvent("presence", {
         presence: [{ user: { id: owner.id, identity: owner.identity, name: owner.name } }],
       });
@@ -243,22 +272,22 @@ suite.define(() => {
       expect(
         solo.automations!.bottom,
         "the whole Automations entry sits inside the nav viewport",
-      ).toBeLessThanOrEqual(solo.nav!.bottom + 0.5);
+      ).toBeLessThanOrEqual(solo.nav!.bottom);
       expect(
         solo.automationsLabel!.bottom,
         "the Automations label is not clipped by the nav rail",
-      ).toBeLessThanOrEqual(solo.nav!.bottom + 0.5);
+      ).toBeLessThanOrEqual(solo.nav!.bottom);
       expect(
         solo.well!.top,
         "the session well clears the whole Automations entry",
-      ).toBeGreaterThanOrEqual(solo.automations!.bottom - 0.5);
+      ).toBeGreaterThanOrEqual(solo.automations!.bottom);
       expect(
         solo.well!.bottom,
-        "the released solo floor keeps the whole well above the footer divider",
+        "the session region keeps the whole well above the footer divider",
       ).toBeLessThanOrEqual(solo.footer!.top + 0.5);
       expect(
         solo.nav!.height,
-        "solo presence restores the nav height the Online floor reserved",
+        "solo presence gives the rail back the Online share of the session region's floor",
       ).toBeGreaterThan(duo.nav!.height);
       await captureSidebarUiProof(suite, page, "solo-clearance-second-identity-left.png");
 
@@ -286,8 +315,123 @@ suite.define(() => {
     }
   });
 
+  // The Body's two regions are independent: the Pages rail takes the height its
+  // keys need and scrolls only if the Body itself cannot afford that, while the
+  // session region takes the remainder and owns its own floor. The old joint
+  // cap derived the rail's height from a session reservation, so a full route
+  // rail was clipped and its last key's lower half fell over the session frame —
+  // the user's reordered Automations control. Every route in the persisted zone
+  // (Automations last in the reordered set) must keep its whole face, its real
+  // hit target at the lower edge, and its navigation. 540/560 prove the tight
+  // end (the session region keeps one row and yields its toolbar), 580 proves a
+  // column that still affords the toolbar, and the ordinary desktop columns pin
+  // the static clearance of the session frame's 6px rail gap.
+  const allSidebarRoutes = [
+    "route:dashboards",
+    "route:usage",
+    "route:sessions",
+    "route:activity",
+    "route:meetings",
+    "route:apps",
+    "route:portals",
+    "route:cron",
+  ];
+  const ordinaryClearanceCases = [
+    { height: 540, order: "reordered" as const, toolbar: "none" },
+    { height: 560, order: "reordered" as const, toolbar: "none" },
+    { height: 580, order: "reordered" as const, toolbar: "flex" },
+    { height: 720, order: "default" as const, toolbar: "flex" },
+    { height: 720, order: "reordered" as const, toolbar: "flex" },
+    { height: 800, order: "default" as const, toolbar: "flex" },
+    { height: 800, order: "reordered" as const, toolbar: "flex" },
+    { height: 900, order: "default" as const, toolbar: "flex" },
+  ];
+
+  it.each(ordinaryClearanceCases)(
+    "keeps the last nav key whole and clickable above the well at $height ($order order)",
+    async ({ height, order, toolbar }) => {
+      const baseTime = Date.parse("2026-07-01T16:00:00.000Z");
+      const rows = Array.from({ length: 6 }, (_, index) =>
+        sessionRow(`agent:main:chat-${index}`, `Chat ${index}`, baseTime - index * 60_000),
+      );
+      const config =
+        order === "reordered" ? { ui: { prefs: { sidebarEntries: allSidebarRoutes } } } : {};
+      const context = await suite.newBrowserContext({
+        locale: "en-US",
+        serviceWorkers: "block",
+        viewport: { height, width: 1280 },
+      });
+      const page = await context.newPage();
+      await installMockGateway(page, {
+        methodResponses: {
+          "sessions.list": sessionsListResponse(rows),
+          "config.get": {
+            config,
+            sourceConfig: config,
+            hash: `sidebar-clearance-${order}`,
+            issues: [],
+            raw: JSON.stringify(config),
+            valid: true,
+          },
+        },
+        sessionKey: "agent:main:main",
+        presenceUsers: [{ self: true, id: `clearance-ordinary-${order}`, name: "Riley" }],
+      });
+      try {
+        await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
+        const layout = await settleSidebarClearance(page, false);
+        // Captured before the assertions so a regressed run retains the exact
+        // column it failed on.
+        await captureSidebarUiProof(suite, page, `solo-clearance-ordinary-${order}-${height}.png`);
+        expect(layout.onlineMounted, "solo presence renders no Online section").toBe(false);
+        expect(layout.bodyOverflow, "the solo column keeps zero body overflow").toBeLessThanOrEqual(
+          1,
+        );
+        expect(layout.automationsLink, "the Automations key face still renders").not.toBeNull();
+        expect(
+          layout.wholeSessionRowCount,
+          "one whole session row stays readable",
+        ).toBeGreaterThanOrEqual(1);
+        // No tolerance: the rail viewport ends at the key's own lower edge, and
+        // the Session frame starts below it, so nothing paints over the key.
+        expect(
+          layout.automationsLink!.bottom,
+          "the whole Automations key sits inside the rail viewport",
+        ).toBeLessThanOrEqual(layout.nav!.bottom);
+        expect(
+          layout.well!.top,
+          "the Session frame starts below the whole Automations key",
+        ).toBeGreaterThanOrEqual(layout.automationsLink!.bottom);
+        expect(
+          layout.automationsLinkHit,
+          "the key's lower edge receives the pointer instead of the Session frame",
+        ).toBe(true);
+        expect(
+          layout.sessionToolbarDisplay,
+          toolbar === "none"
+            ? "a column that cannot afford the toolbar yields it instead of a key or a row"
+            : "an ordinary column keeps the session toolbar",
+        ).toBe(toolbar);
+
+        // The lower edge activates the route through its real hit target.
+        const urlBefore = page.url();
+        await page.mouse.click(
+          layout.automationsLink!.left + layout.automationsLink!.width / 2,
+          layout.automationsLink!.bottom - 2,
+        );
+        await waitForControlUiRoute(page, { routeId: "cron" });
+        expect(page.url()).not.toBe(urlBefore);
+      } finally {
+        await suite.closeBrowserContext(context);
+      }
+    },
+  );
+
   it("keeps the Automations entry clear of the well in roster mode under solo presence", async () => {
-    const height = 520;
+    // Just above the compact band, where the independent regions leave the
+    // roster well tight enough that the scroller cannot afford the compact
+    // group header plus one whole row.
+    const height = 505;
     const baseTime = Date.parse("2026-07-01T16:00:00.000Z");
     const rows = Array.from({ length: 6 }, (_, index) =>
       sessionRow(`agent:main:chat-${index}`, `Chat ${index}`, baseTime - index * 60_000),
@@ -324,11 +468,11 @@ suite.define(() => {
       expect(
         layout.automations!.bottom,
         "the whole Automations entry sits inside the nav viewport",
-      ).toBeLessThanOrEqual(layout.nav!.bottom + 0.5);
+      ).toBeLessThanOrEqual(layout.nav!.bottom);
       expect(
         layout.well!.top,
         "the session well clears the whole Automations entry",
-      ).toBeGreaterThanOrEqual(layout.automations!.bottom - 0.5);
+      ).toBeGreaterThanOrEqual(layout.automations!.bottom);
       expect(
         layout.wholeSessionRowCount,
         "a whole session row and its name stay visible in the roster well",
