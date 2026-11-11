@@ -96,13 +96,15 @@ suite.define(() => {
 
           const readSurface = (selector: string) =>
             page.locator(selector).evaluate((element) => {
-              const box = element.getBoundingClientRect();
               const style = getComputedStyle(element);
+              const target = element as HTMLElement;
               return {
-                height: box.height,
-                width: box.width,
-                x: box.x,
-                y: box.y,
+                // Offset geometry is layout, not viewport: hovers that scroll
+                // an inner list must not read as a reflow.
+                height: target.offsetHeight,
+                width: target.offsetWidth,
+                x: target.offsetLeft,
+                y: target.offsetTop,
                 face: style.backgroundColor,
                 border: style.borderTopColor,
               };
