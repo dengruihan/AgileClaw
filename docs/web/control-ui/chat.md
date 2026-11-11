@@ -98,11 +98,12 @@ Inline formulas also work in table cells, and display blocks work inside
 blockquotes. A display block sits on its own row; a wide formula scrolls within
 that row instead of widening the transcript.
 
-Only chat transcript rendering typesets formulas. New Session and other Markdown
+Chat messages typeset formulas through the shared message renderer, and a
+pending submission shown on New Session uses that same renderer. Other Markdown
 surfaces show the delimited source as text and do not load the math renderer.
-In chat, the KaTeX code, stylesheets, and fonts load on demand when a transcript
-first contains a formula, so opening a session without formulas fetches none of
-them. The delimited source stays visible until typesetting finishes.
+KaTeX code, stylesheets, and fonts load on demand only when a rendered message
+contains a formula, so opening New Session, or a chat without formulas, fetches
+none of them. The delimited source stays visible until typesetting finishes.
 
 Ordinary prose and currency stay literal. A formula that starts with a digit
 must look like an expression: it needs an operator or TeX command, or a compact
