@@ -96,6 +96,7 @@ it("routes the oversized PDF fallback through the fresh download action", async 
   expect(panel.querySelector("a[download]")).toBeNull();
   const fresh = panel.querySelector<HTMLButtonElement>("button.sidebar-office-preview__download");
   expect(fresh).toBeTruthy();
+  expect(fresh!.getAttribute("aria-label")).toBe("Download brief.pdf");
   fresh!.click();
   expect(downloadNow).toHaveBeenCalledOnce();
 });
