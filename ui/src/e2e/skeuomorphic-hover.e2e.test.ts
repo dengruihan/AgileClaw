@@ -22,11 +22,17 @@ type HoverCase = {
   label: string;
   /** Reveal a hover-only key by hovering its row first. */
   reveal?: string;
-  /** A latched key keeps its seated accent tint under the pointer. */
-  latchedTint?: boolean;
+  /**
+   * What hover may retint: the face and contour (the default), the contour
+   * alone for keys whose glyph/edge carries the response, or nothing when a
+   * latched key holds its seated tint.
+   */
+  retint?: "face" | "contour" | "none";
   /** Latched keys stay in the pressed seat while hovered. */
   seated?: boolean;
   presses?: boolean;
+  /** A pressed key that reports through the shadow alone keeps its box. */
+  travels?: boolean;
 };
 
 // Every raised family the shared material covers, held to the reference's
@@ -47,12 +53,31 @@ const cases: HoverCase[] = [
     reveal: "#rail-session",
     presses: true,
   },
+  // The expanded parent's disclosure key: `[aria-expanded="true"]` only zeroes
+  // its opacity and pointer-events until the row is hovered. Its material is
+  // the shared seated key, so hover retints and `:active` presses it like every
+  // other rail key.
+  {
+    selector: "#rail-disclosure-expanded",
+    label: "expanded session disclosure key",
+    reveal: "#rail-session-parent",
+    presses: true,
+  },
   { selector: "#choice-plain", label: "option-card choice", presses: true },
   {
     selector: "#choice-selected",
     label: "latched option-card choice",
-    latchedTint: true,
+    retint: "none",
     seated: true,
+  },
+  // The monitoring refresh key answers hover on its glyph and contour; its
+  // pressed state is the inset well alone (no travel).
+  {
+    selector: "#monitor-refresh",
+    label: "monitoring refresh button",
+    retint: "contour",
+    presses: true,
+    travels: false,
   },
 ];
 
@@ -79,13 +104,14 @@ suite.define(() => {
                 x: box.x,
                 y: box.y,
                 face: style.backgroundColor,
+                border: style.borderTopColor,
               };
             });
-          const place = ({ width, height, x, y }: { [key: string]: number }) => [
-            width,
-            height,
-            x,
-            y,
+          const place = (box: { width: number; height: number; x: number; y: number }) => [
+            box.width,
+            box.height,
+            box.x,
+            box.y,
           ];
 
           // Keyboard focus owns the ring and never restyles the material. It
@@ -128,9 +154,32 @@ suite.define(() => {
             await settleFrames(page);
             const rest = await readKeyPhysics(key);
             const restBox = await readSurface(hoverCase.selector);
+            const shot = async (state: string) => {
+              // Padded clip: the element box alone would crop the contact
+              // shadow the claim is about.
+              const box = await key.boundingBox();
+              if (!box) {
+                throw new Error(`no layout box for ${hoverCase.selector}`);
+              }
+              await page.screenshot({
+                path: `${suite.artifactDir}/${hoverCase.selector.slice(1)}-${theme}-${state}.png`,
+                clip: {
+                  x: box.x - 12,
+                  y: box.y - 12,
+                  width: box.width + 24,
+                  height: box.height + 24,
+                },
+              });
+            };
+            if (hoverCase.selector === "#monitor-refresh") {
+              await shot("rest");
+            }
 
             await key.hover();
             await settleFrames(page);
+            if (hoverCase.selector === "#monitor-refresh") {
+              await shot("hover");
+            }
             const hovered = await readKeyPhysics(key);
             const hoveredBox = await readSurface(hoverCase.selector);
             expect(hovered.shadow, `${hoverCase.label} keeps its resting material on hover`).toBe(
@@ -143,9 +192,19 @@ suite.define(() => {
             if (hoverCase.seated) {
               expect(hovered.shadow, `${hoverCase.label} stays seated`).toContain("inset");
             }
-            if (hoverCase.latchedTint) {
+            // Hover has to land somewhere visible; only the latched keys may
+            // hold every surface unchanged.
+            if (hoverCase.retint === "none") {
               expect(hoveredBox.face, `${hoverCase.label} keeps its seated tint`).toBe(
                 restBox.face,
+              );
+              expect(hoveredBox.border, `${hoverCase.label} keeps its seated contour`).toBe(
+                restBox.border,
+              );
+            } else if (hoverCase.retint === "contour") {
+              expect(hoveredBox.face, `${hoverCase.label} keeps its face`).toBe(restBox.face);
+              expect(hoveredBox.border, `${hoverCase.label} retints its contour`).not.toBe(
+                restBox.border,
               );
             } else {
               expect(hoveredBox.face, `${hoverCase.label} still retints`).not.toBe(restBox.face);
@@ -155,16 +214,25 @@ suite.define(() => {
               continue;
             }
             await page.mouse.down();
-            // The press lands in the fast frame and stays down while held.
-            await expect
-              .poll(async () => transformY((await readKeyPhysics(key)).transform), {
-                timeout: 3_000,
-              })
-              .toBeGreaterThanOrEqual(0.9);
+            const travels = hoverCase.travels !== false;
+            if (travels) {
+              // The press lands in the fast frame and stays down while held.
+              await expect
+                .poll(async () => transformY((await readKeyPhysics(key)).transform), {
+                  timeout: 3_000,
+                })
+                .toBeGreaterThanOrEqual(0.9);
+            }
             const pressed = await readKeyPhysics(key);
             expect(pressed.shadow, `${hoverCase.label} presses in`).toContain("inset");
             expect(pressed.shadow).not.toBe(rest.shadow);
-            expect(pressed.transformDuration).toBe("0.04s");
+            if (travels) {
+              expect(pressed.transformDuration).toBe("0.04s");
+            } else {
+              expect(pressed.transform, `${hoverCase.label} keeps its box while pressed`).toBe(
+                "none",
+              );
+            }
             await page.mouse.up();
             await page.mouse.move(0, 0);
             // Releasing springs back to the resting material, untransformed.
@@ -194,7 +262,12 @@ suite.define(() => {
           await page.setContent(fixtureDocument(theme));
           // The retint still lands instantly with every transition dropped, and
           // it still may not touch the material.
-          for (const selector of ["#reference-new-session", "#key-neutral", "#key-primary"]) {
+          for (const selector of [
+            "#reference-new-session",
+            "#key-neutral",
+            "#key-primary",
+            "#monitor-refresh",
+          ]) {
             const key = page.locator(selector);
             const resting = await readKeyPhysics(key);
             await key.hover();

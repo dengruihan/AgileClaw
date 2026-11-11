@@ -26,24 +26,27 @@ Light arrives from above. Three depths cover every shared control:
 Defined in `:root` (dark) and `:root[data-theme-mode="light"]` in
 `ui/src/styles/base.css`:
 
-| Token                  | Role                                                          |
-| ---------------------- | ------------------------------------------------------------- |
-| `--mat-bevel`          | Specular catch on a raised face's top edge                    |
-| `--mat-face-hi/lo`     | Face gradient stops (dome light and shade)                    |
-| `--mat-rim`            | Solid thickness under a raised face                           |
-| `--mat-rim-hi`         | Light caught inside a pressed seat's lower lip                |
-| `--mat-gloss`          | Specular wash that travels down the face while pressed        |
-| `--raise-face`         | Composed raised-face gradient                                 |
-| `--raise-shadow`       | Resting key shadow stack (bevel + rim + contact)              |
-| `--raise-shadow-hover` | Slightly taller rim and contact while hovered                 |
-| `--key-shadow`         | Sidebar rail key stack: same inputs, 1px rim, whisper contact |
-| `--key-shadow-hover`   | Hovered rail key: rim thickens, contact deepens               |
-| `--press-shadow`       | Pushed-in shadow stack (inset shade + shrunken rim)           |
-| `--well-face`          | Groove floor gradient (darker under the top wall)             |
-| `--well-shadow`        | Groove depth (top inner shade + bottom lip catch)             |
-| `--press-shift`        | Whole-control travel on `:active` (1px)                       |
-| `--duration-press`     | Press lands with the finger (40ms)                            |
-| `--duration-release`   | Release settles on `--ease-spring` (260ms)                    |
+| Token                | Role                                                          |
+| -------------------- | ------------------------------------------------------------- |
+| `--mat-bevel`        | Specular catch on a raised face's top edge                    |
+| `--mat-face-hi/lo`   | Face gradient stops (dome light and shade)                    |
+| `--mat-rim`          | Solid thickness under a raised face                           |
+| `--mat-rim-hi`       | Light caught inside a pressed seat's lower lip                |
+| `--mat-gloss`        | Specular wash that travels down the face while pressed        |
+| `--raise-face`       | Composed raised-face gradient                                 |
+| `--raise-shadow`     | Resting key shadow stack (bevel + rim + contact)              |
+| `--key-shadow`       | Sidebar rail key stack: same inputs, 1px rim, whisper contact |
+| `--press-shadow`     | Pushed-in shadow stack (inset shade + shrunken rim)           |
+| `--well-face`        | Groove floor gradient (darker under the top wall)             |
+| `--well-shadow`      | Groove depth (top inner shade + bottom lip catch)             |
+| `--press-shift`      | Whole-control travel on `:active` (1px)                       |
+| `--duration-press`   | Press lands with the finger (40ms)                            |
+| `--duration-release` | Release settles on `--ease-spring` (260ms)                    |
+
+Hover carries no material of its own: a hovered control keeps the resting
+shadow of its family and retints only its face, contour, and label. Growing
+the rim or the contact under the pointer reads as the control inflating, not
+as feedback, so extrusion and travel belong to `:active` alone.
 
 The older `--surface-*` pairs remain for surfaces that have not migrated;
 new work composes the `--mat-*` vocabulary above.
@@ -120,12 +123,15 @@ shadow-DOM switch cap carries its own local guard for the same reason.
   so per-control rules carry only geometry and states: a grouped seated-key
   material rule (`.sidebar-brand__icon`, `.nav-item`, `.sidebar-identity-card`)
   applies the shared contour, graded face, and rim, and a grouped hover rule
-  (same keys plus the Inbox button) applies the shared hover seat; the build's
+  (same keys plus the Inbox button) retints that contour and face while
+  leaving the resting rim and contact untouched — hover adds no depth, so a
+  rail key still reads quieter than the new-session key above it. The build's
   hover guard media-wraps that rule, and the brand's `:focus-visible` rule
-  restates the hover seat outside it so keyboard focus keeps the seat on
-  non-hover devices. The collapsed-expand toggle and the personal-theme Inbox
-  hooks (`--sidebar-issues-border`/`--sidebar-issues-background` still gate
-  the Inbox fallbacks) keep their own inline copies. The roster reset uses
+  restates the same retint outside it so keyboard focus keeps the hover
+  response on non-hover devices while the focus ring owns the outline. The
+  collapsed-expand toggle and the personal-theme Inbox hooks
+  (`--sidebar-issues-border`/`--sidebar-issues-background` still gate the
+  Inbox fallbacks) keep their own inline copies. The roster reset uses
   `background: none`, which clears both the face retint and the gradient in
   one declaration.
 - The sidebar reads as a console rail of seated keys with one deliberate

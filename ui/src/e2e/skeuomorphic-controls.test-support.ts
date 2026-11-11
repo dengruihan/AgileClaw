@@ -17,6 +17,9 @@ export function readUiCss(): string {
     "ui/src/styles/sidebar-agent-roster.css",
     // The option card is a lazy component-owned sheet, like a page import.
     "ui/src/styles/option-card.css",
+    // Dashboards is a page-owned sheet: the route imports it after the core
+    // bundle, so it sits last here too.
+    "ui/src/styles/dashboards.css",
   ]
     .map((file) => readStyleSheet(file))
     .join("\n");
@@ -126,6 +129,7 @@ export function fixtureDocument(theme: "dark" | "light"): string {
       </div>
     </section>
     <a class="sidebar-new-session-action" href="#" id="reference-new-session" onclick="return false"><span>New session</span></a><button class="btn primary" type="button" id="key-primary">Open chat</button><section class="option-card" role="group" aria-label="Delivery lane"><div class="option-card__choices" role="radiogroup"><button class="option-card__choice" type="button" id="choice-plain"><span class="option-card__choice-copy"><strong>Fast lane</strong></span></button><button class="option-card__choice option-card__choice--recommended option-card__choice--selected" type="button" id="choice-selected"><span class="option-card__choice-copy"><strong>Careful lane</strong></span></button></div></section>
+    <div class="dashboards-monitoring"><div class="dashboards-monitoring__actions"><button type="button" class="dashboards-monitoring__refresh" id="monitor-refresh" aria-label="Refresh" title="Refresh"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5"/></svg></button></div></div>
     <span id="accent-foreground-probe" aria-hidden="true" style="position: absolute; color: var(--accent-foreground)"></span>
   </main></body></html>`;
 }
