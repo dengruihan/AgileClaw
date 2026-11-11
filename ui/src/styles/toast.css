@@ -1,0 +1,12 @@
+/* A toast is a passive notification overlay: its own surface (padding, gaps,
+   icon) must not swallow clicks meant for the controls beneath it. Only its
+   interactive content takes pointer events, and only while the toast is active;
+   an exiting toast is already inert. pointer-events inherits, so re-enabling the
+   message also keeps its recovery links clickable and its text scrollable. */
+.app-toast {
+  pointer-events: none;
+}
+
+.app-toast[data-active="true"] :is(.app-toast__message, .app-toast__action, .app-toast__dismiss) {
+  pointer-events: auto;
+}
