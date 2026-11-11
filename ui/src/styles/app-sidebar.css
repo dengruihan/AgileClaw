@@ -159,7 +159,6 @@
   border-color: color-mix(in srgb, var(--border-hover) 55%, var(--sidebar-bg, var(--bg)));
   background-color: color-mix(in srgb, var(--bg-hover) 84%, var(--sidebar-bg, var(--bg)));
   color: var(--text);
-  box-shadow: var(--key-shadow-hover);
 }
 
 .sidebar-child-session-toggle:active:not(:disabled) {
@@ -754,7 +753,6 @@
   border-color: color-mix(in srgb, var(--border-hover) 55%, var(--sidebar-bg, var(--bg)));
   background-color: color-mix(in srgb, var(--bg-hover) 88%, var(--sidebar-bg, var(--bg)));
   color: var(--text);
-  box-shadow: var(--key-shadow-hover);
 }
 
 .session-action:active:not(:disabled) {
