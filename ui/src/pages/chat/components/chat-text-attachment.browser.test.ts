@@ -70,9 +70,9 @@ describe.runIf(browserMode)("Markdown attachment controls", () => {
       await expect.poll(() => panel.querySelector("article")).not.toBeNull();
       const raw = expectDefined(
         [...panel.querySelectorAll("button")].find(
-          (button) => button.textContent?.trim() === "View Raw Text",
+          (button) => button.textContent?.trim() === "Source",
         ),
-        "Raw view action",
+        "Source view action",
       );
       await userEvent.click(raw);
       await expect.poll(() => panel.querySelector("pre")).not.toBeNull();

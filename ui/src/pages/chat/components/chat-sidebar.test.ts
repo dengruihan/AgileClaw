@@ -183,7 +183,7 @@ describe("markdown sidebar", () => {
     panel.content =
       testCase.kind === "markdown"
         ? { kind: "markdown", content: "Rendered summary", rawText: source }
-        : { kind: "file", path: "notes.md", name: "notes.md", language: "md", content: source };
+        : { kind: "file", path: "notes.txt", name: "notes.txt", language: "txt", content: source };
     document.body.append(panel);
     const schedule = vi.spyOn(globalThis, "setTimeout");
     try {
@@ -233,6 +233,75 @@ describe("markdown sidebar", () => {
       }
       schedule.mockRestore();
       editorLoad?.mockRestore();
+      panel.remove();
+    }
+  });
+
+  it("opens a Markdown file rendered and toggles to literal Source", async () => {
+    const descriptors = ["getClientRects", "getBoundingClientRect"].map(
+      (key) => [key, Object.getOwnPropertyDescriptor(Range.prototype, key)] as const,
+    );
+    Object.defineProperty(Range.prototype, "getClientRects", {
+      configurable: true,
+      value: () => [],
+    });
+    Object.defineProperty(Range.prototype, "getBoundingClientRect", {
+      configurable: true,
+      value: () => new DOMRect(),
+    });
+    const source =
+      ["# Heading", "", "```ts", "const x = 1;", "```", "", "**literal after**"].join("\n") + "\n";
+    const panel = document.createElement("openclaw-chat-detail-panel") as DetailPanel;
+    panel.content = { kind: "file", path: "notes.md", name: "notes.md", content: source };
+    document.body.append(panel);
+    try {
+      await panel.updateComplete;
+      const article = panel.querySelector("article.sidebar-markdown-reader");
+      expect(article).not.toBeNull();
+      expect(article?.querySelector("h1")?.textContent).toBe("Heading");
+      expect(article?.querySelector("strong")?.textContent).toBe("literal after");
+      expect(article?.querySelector("pre code")?.textContent).toBe("const x = 1;\n");
+      const toggle = Array.from(panel.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.trim() === "Source",
+      );
+      expect(toggle).toBeDefined();
+      expect(
+        Array.from(panel.querySelectorAll("button")).some(
+          (button) => button.textContent?.trim() === "View Raw Text",
+        ),
+      ).toBe(false);
+
+      toggle!.click();
+      await panel.updateComplete;
+      // Lit update completion does not include the editor's detached module load.
+      await vi.dynamicImportSettled();
+      const content = await vi.waitFor(() =>
+        expectDefined(panel.querySelector<HTMLElement>(".cm-content"), "source editor"),
+      );
+      // Source shows the raw Markdown verbatim: the nested fence and emphasis
+      // stay literal text rather than a rendered interpretation.
+      expect(content.textContent).toContain("```ts");
+      expect(content.textContent).toContain("**literal after**");
+      expect(panel.querySelector(".file-view strong")).toBeNull();
+      expect(panel.querySelector(".chat-html-preview")?.hasAttribute("hidden")).toBe(true);
+      const previewToggle = Array.from(panel.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.trim() === "Preview",
+      );
+      expect(previewToggle?.getAttribute("aria-pressed")).toBe("true");
+
+      previewToggle!.click();
+      await panel.updateComplete;
+      expect(panel.querySelector("article.sidebar-markdown-reader strong")?.textContent).toBe(
+        "literal after",
+      );
+    } finally {
+      for (const [key, descriptor] of descriptors) {
+        if (descriptor) {
+          Object.defineProperty(Range.prototype, key, descriptor);
+        } else {
+          Reflect.deleteProperty(Range.prototype, key);
+        }
+      }
       panel.remove();
     }
   });

@@ -1,10 +1,14 @@
 import { html, nothing, type ReactiveController, type ReactiveControllerHost } from "lit";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { LazyCustomElementRequestController } from "../../../app/lazy-custom-element.ts";
 import { isStaleChunkImportError } from "../../../app/stale-chunk-reload.ts";
 import { renderLazyViewError } from "../../../components/lazy-view-error.ts";
+import { markdownBlocks } from "../../../components/markdown-blocks.ts";
+import { toSanitizedMarkdownHtml } from "../../../components/markdown.ts";
 import { t } from "../../../i18n/index.ts";
 import { registerFilePreviewEnglish } from "../../../i18n/locales/en-file-preview.ts";
 import type { EmbedSandboxMode } from "../../../lib/chat/tool-display.ts";
+import { detectTextDirection } from "../../../lib/text-direction.ts";
 import type {
   SidebarContent,
   AttachmentSidebarRuntime,
@@ -17,6 +21,13 @@ registerFilePreviewEnglish();
 export function isHtmlDocument(mimeType: string, filename: string): boolean {
   return (
     mimeType.split(";", 1)[0]?.trim().toLowerCase() === "text/html" || /\.html?$/i.test(filename)
+  );
+}
+
+export function isMarkdownDocument(mimeType: string, filename: string): boolean {
+  const mime = mimeType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  return (
+    mime === "text/markdown" || mime === "text/x-markdown" || /\.(?:md|markdown)$/i.test(filename)
   );
 }
 
@@ -62,7 +73,27 @@ export function renderHtmlPreview(
   `;
 }
 
-/** Owns file HTML presentation while the detail panel owns its editor and draft. */
+/** Sanitized document reader shared by Markdown attachments and workspace files. */
+export function renderMarkdownDocument(text: string, label: string) {
+  return html`<article
+    class="sidebar-attachment-preview__markdown sidebar-markdown-reader sidebar-markdown"
+    dir=${detectTextDirection(text)}
+    aria-label=${label}
+    ${markdownBlocks()}
+  >
+    ${unsafeHTML(
+      toSanitizedMarkdownHtml(text, {
+        // The read already bounds document size; do not apply chat-message
+        // truncation or let a preview load remote tracking images.
+        mode: "document",
+        remoteImages: false,
+        codeBlockInteraction: "interactive",
+      }),
+    )}
+  </article>`;
+}
+
+/** Owns file HTML and Markdown presentation while the detail panel owns its editor and draft. */
 export class FileHtmlPreviewController implements ReactiveController {
   private source = false;
   private preview: string | null = null;
@@ -79,7 +110,13 @@ export class FileHtmlPreviewController implements ReactiveController {
 
   get file() {
     const file = this.content();
-    return file?.kind === "file" && isHtmlDocument(file.mimeType ?? "", file.name) ? file : null;
+    if (file?.kind !== "file") {
+      return null;
+    }
+    const mimeType = file.mimeType ?? "";
+    return isHtmlDocument(mimeType, file.name) || isMarkdownDocument(mimeType, file.name)
+      ? file
+      : null;
   }
 
   get showing(): boolean {
@@ -135,20 +172,22 @@ export class FileHtmlPreviewController implements ReactiveController {
       presentation:
         this.preview === null
           ? nothing
-          : renderHtmlPreview(
-              this.loader,
-              this.preview,
-              file.draftKey ??
-                [
-                  options.runtime.sessionKey ?? "",
-                  options.runtime.agentId ?? "",
-                  file.root ?? "",
-                  file.path,
-                ].join(String.fromCharCode(0)),
-              file.name,
-              options.mode,
-              file.sessionFileSource,
-            ),
+          : isHtmlDocument(file.mimeType ?? "", file.name)
+            ? renderHtmlPreview(
+                this.loader,
+                this.preview,
+                file.draftKey ??
+                  [
+                    options.runtime.sessionKey ?? "",
+                    options.runtime.agentId ?? "",
+                    file.root ?? "",
+                    file.path,
+                  ].join(String.fromCharCode(0)),
+                file.name,
+                options.mode,
+                file.sessionFileSource,
+              )
+            : renderMarkdownDocument(this.preview, file.name),
       sourceFallback: options.error
         ? html`
             ${renderLazyViewError({ error: options.error, stale: isStaleChunkImportError(options.error), onRetry: options.onRetry })}
