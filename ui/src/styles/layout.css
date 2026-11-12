@@ -1201,13 +1201,14 @@ openclaw-settings-save-indicator:empty {
      custom properties. */
   --sidebar-session-toolbar-height: 24px;
   --sidebar-session-well-gap: 8px;
-  /* The Body owns the base rail gap between its two sibling regions, so the
-     nav and session-content containers themselves stay separated. The region
-     floor reserves only its own footer shelf; the Body's flex gap reserves the
-     rail clearance exactly once. A roomy session region adds the difference
-     between the wide and base gaps inside the well's own slack, never from the
+  /* The base rail clearance is split between the nav's own shadow drawing room
+     and the Body's actual flex gap between its sibling regions. The region
+     floor reserves only its footer shelf, so the combined clearance is still
+     allocated exactly once. A roomy session region adds the difference between
+     the wide and base clearances inside the well's own slack, never from the
      rail's height or the region floor, so the last key is never clipped. */
   --sidebar-session-rail-gap: 12px;
+  --sidebar-session-rail-shadow-room: 6px;
   --sidebar-session-rail-gap-wide: 20px;
   --sidebar-session-footer-gap: 2px;
   /* Online's own vertical margins, owned here so the duo region floor and the
@@ -1470,7 +1471,7 @@ openclaw-settings-save-indicator:empty {
   display: flex;
   flex: 1;
   flex-direction: column;
-  row-gap: var(--sidebar-session-rail-gap);
+  row-gap: calc(var(--sidebar-session-rail-gap) - var(--sidebar-session-rail-shadow-room));
   min-height: 0;
   overflow: hidden;
 }
@@ -1497,7 +1498,11 @@ openclaw-settings-save-indicator:empty {
   flex: 0 1 auto;
   min-height: 2rem;
   overflow-y: auto;
-  padding: 0;
+  /* A scroll container clips the last key at its padding box. Six pixels of
+     the base rail clearance live here as drawing room for the resting contact
+     shadow; the Body keeps the remainder as its actual flex gap. Splitting the
+     existing clearance preserves the rail allocation and toolbar crossover. */
+  padding: 0 0 var(--sidebar-session-rail-shadow-room);
 }
 
 /* Inset highlight surfaces without narrowing the header or agent roster. */
@@ -1579,9 +1584,9 @@ openclaw-settings-save-indicator:empty {
      squeezed below a whole readable row. The toolbar is not part of the floor;
      it rides on the slack above it and yields in the well's short band. */
   min-height: var(--sidebar-session-well-floor);
-  /* The Body's flex gap owns the base rail clearance. The well itself only
-     leaves the footer shelf before the footer divider and, in a roomy region,
-     adds the wide-gap increment from its own slack below. */
+  /* The nav's shadow room and the Body's flex gap own the base rail clearance.
+     The well itself only leaves the footer shelf before the footer divider
+     and, in a roomy region, adds the wide-gap increment from its own slack. */
   margin-top: 0;
   overflow: hidden;
   margin-bottom: var(--sidebar-session-footer-gap);
@@ -1592,8 +1597,8 @@ openclaw-settings-save-indicator:empty {
   container-type: size;
 }
 
-/* A roomy session region adds the wide-gap increment to the Body's base flex
-   gap for a clearly larger separation between the last rail key and the
+/* A roomy session region adds the wide-gap increment to the base rail
+   clearance for a clearly larger separation between the last rail key and the
    session frame. 10rem is the same well minimum the region keeps beside
    Online: once the region reaches it, the well has slack for the toolbar and a
    comfortable list, so the extra shelf comes out of that slack (the well
@@ -2736,8 +2741,9 @@ openclaw-settings-save-indicator:empty {
      session row stays readable at every height in this band. The solo
      selectors restate the class-scoped release above, which otherwise
      out-specificities this band and would keep the ordinary allocation. The
-     Body owns the rail gap; this floor reserves only the well and its 8px
-     footer shelf so the well keeps its whole row above the footer divider. */
+     nav and Body split the rail clearance; this floor reserves only the well
+     and its 8px footer shelf so the well keeps its whole row above the footer
+     divider. */
   .sidebar-session-content,
   .sidebar-session-content > openclaw-sidebar-agent-roster,
   .sidebar--solo-presence .sidebar-session-content,

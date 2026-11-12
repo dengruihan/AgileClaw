@@ -133,7 +133,7 @@ suite.define(() => {
         expect(
           resting.sessionTop - resting.railBottom,
           "the nav rail and session content containers keep their own visible separation",
-        ).toBeGreaterThanOrEqual(11.5);
+        ).toBeGreaterThanOrEqual(5.5);
         for (const [label, entry] of [
           ["Dashboard", "route:dashboards"],
           ["Automations", "route:cron"],

@@ -227,7 +227,13 @@ suite.define(() => {
       .poll(
         async () => {
           const next = await readSidebarClearance(page);
-          const key = JSON.stringify([next.nav, next.well, next.bodyOverflow, next.onlineMounted]);
+          const key = JSON.stringify([
+            next.nav,
+            next.well,
+            next.bodyOverflow,
+            next.onlineMounted,
+            next.automationsLinkShadowOverhang,
+          ]);
           const settled = key === previous && next.onlineMounted === expectOnline;
           previous = key;
           return settled;
@@ -560,12 +566,16 @@ suite.define(() => {
           layout.firstSessionRow!.bottom,
           "the first session row is not clipped by its scroller",
         ).toBeLessThanOrEqual(layout.sessionScroller!.bottom);
-        // No tolerance: the rail viewport ends at the key's own lower edge, and
-        // the Session frame starts below it, so nothing paints over the key.
+        // The rail viewport ends below the key's contact shadow, not just its
+        // border box, so the last key's material is never clipped.
         expect(
           layout.automationsLink!.bottom,
           "the whole Automations key sits inside the rail viewport",
         ).toBeLessThanOrEqual(layout.nav!.bottom);
+        expect(
+          layout.automationsLink!.bottom + layout.automationsLinkShadowOverhang!,
+          "the rail viewport also keeps the key's full downward contact shadow",
+        ).toBeLessThanOrEqual(layout.nav!.bottom + 0.5);
         expect(
           layout.well!.top,
           "the Session frame starts below the whole Automations key",
