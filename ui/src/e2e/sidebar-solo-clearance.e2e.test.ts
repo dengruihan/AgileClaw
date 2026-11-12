@@ -400,7 +400,7 @@ suite.define(() => {
   // hit target at the lower edge, and its navigation. 540/560 prove the tight
   // end (the session region keeps one row and yields its toolbar), 580 proves a
   // column that still affords the toolbar, and the ordinary desktop columns pin
-  // the static clearance of the session frame's 6px rail gap.
+  // the static clearance of the session frame's rail gap.
   const allSidebarRoutes = [
     "route:dashboards",
     "route:usage",
@@ -444,7 +444,7 @@ suite.define(() => {
     { height: 574, order: "reordered", pointer: "mouse", textScale: 140, toolbar: "none" },
     { height: 575, order: "reordered", pointer: "mouse", textScale: 140, toolbar: "none" },
     { height: 576, order: "reordered", pointer: "mouse", textScale: 140, toolbar: "flex" },
-    // Ordinary desktop columns pin the static clearance of the 6px rail gap.
+    // Ordinary desktop columns pin the static clearance of the rail gap.
     { height: 720, order: "default", pointer: "mouse", textScale: 100, toolbar: "flex" },
     { height: 720, order: "reordered", pointer: "mouse", textScale: 100, toolbar: "flex" },
     { height: 800, order: "default", pointer: "mouse", textScale: 100, toolbar: "flex" },
