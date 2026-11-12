@@ -32,6 +32,14 @@ suite.define(() => {
   // pins put Automations last — the user-reordered nav where the wasted floor
   // bites — and a 520px viewport sits inside the affected band: the rail needs
   // more than the honest well-only region floor but less than well + Online.
+  //
+  // The frame must also keep a visible shelf below the last key's seated
+  // contact shadow, not merely sit below its border box. The original suite
+  // only compared DOM boxes (well.top >= link.bottom), which the old 6px rail
+  // gap satisfied even though that gap exactly equals the resting --key-shadow
+  // downward reach — so the frame crowded the key's lower edge with no visible
+  // separation. This is the visible clearance required beyond the shadow extent.
+  const minVisibleRailClearance = 6;
   const clearancePinnedRoutes = [
     "route:dashboards",
     "route:sessions",
@@ -133,12 +141,35 @@ suite.define(() => {
         );
         return hit !== null && (hit === automationsLink || automationsLink!.contains(hit));
       })();
+      // The seated key's contact shadow reaches below its border box, so the
+      // visual clearance the session frame must keep is measured against that
+      // extent, not the DOM box alone. Computed length order per layer is
+      // offsetX offsetY blur spread; inset layers paint inside the key and add
+      // no downward reach.
+      const automationsLinkShadowOverhang = (() => {
+        if (!automationsLink) {
+          return null;
+        }
+        const shadow = getComputedStyle(automationsLink).boxShadow;
+        let overhang = 0;
+        for (const layer of shadow.split(/,(?![^(]*\))/)) {
+          if (layer.includes("inset")) {
+            continue;
+          }
+          const lengths = layer.match(/-?\d+(?:\.\d+)?px/g)?.map(parseFloat) ?? [];
+          if (lengths.length >= 3) {
+            overhang = Math.max(overhang, lengths[1] + lengths[2] + (lengths[3] ?? 0));
+          }
+        }
+        return overhang;
+      })();
       return {
         nav: box(".sidebar-nav"),
         navScrollable: nav ? nav.scrollHeight - nav.clientHeight > 1 : null,
         automations: box('.sidebar-nav [data-sidebar-entry="route:cron"]'),
         automationsLink: box('.sidebar-nav [data-sidebar-entry="route:cron"] a'),
         automationsLinkHit,
+        automationsLinkShadowOverhang,
         automationsLabel: box('.sidebar-nav [data-sidebar-entry="route:cron"] .nav-item__text'),
         sessionToolbarDisplay: (() => {
           const toolbar = document.querySelector(".sidebar-sessions .sidebar-session-toolbar");
@@ -317,6 +348,10 @@ suite.define(() => {
         "the session well clears the whole Automations entry",
       ).toBeGreaterThanOrEqual(solo.automations!.bottom);
       expect(
+        solo.well!.top - solo.automationsLink!.bottom,
+        "the solo session well keeps a visible shelf below the Automations key's contact shadow",
+      ).toBeGreaterThanOrEqual(solo.automationsLinkShadowOverhang! + minVisibleRailClearance - 0.5);
+      expect(
         solo.well!.bottom,
         "the session region keeps the whole well above the footer divider",
       ).toBeLessThanOrEqual(solo.footer!.top + 0.5);
@@ -365,7 +400,7 @@ suite.define(() => {
   // hit target at the lower edge, and its navigation. 540/560 prove the tight
   // end (the session region keeps one row and yields its toolbar), 580 proves a
   // column that still affords the toolbar, and the ordinary desktop columns pin
-  // the static clearance of the session frame's 6px rail gap.
+  // the static clearance of the session frame's rail gap.
   const allSidebarRoutes = [
     "route:dashboards",
     "route:usage",
@@ -409,7 +444,7 @@ suite.define(() => {
     { height: 574, order: "reordered", pointer: "mouse", textScale: 140, toolbar: "none" },
     { height: 575, order: "reordered", pointer: "mouse", textScale: 140, toolbar: "none" },
     { height: 576, order: "reordered", pointer: "mouse", textScale: 140, toolbar: "flex" },
-    // Ordinary desktop columns pin the static clearance of the 6px rail gap.
+    // Ordinary desktop columns pin the static clearance of the rail gap.
     { height: 720, order: "default", pointer: "mouse", textScale: 100, toolbar: "flex" },
     { height: 720, order: "reordered", pointer: "mouse", textScale: 100, toolbar: "flex" },
     { height: 800, order: "default", pointer: "mouse", textScale: 100, toolbar: "flex" },
@@ -480,6 +515,18 @@ suite.define(() => {
           layout.well!.top,
           "the Session frame starts below the whole Automations key",
         ).toBeGreaterThanOrEqual(layout.automationsLink!.bottom);
+        // The DOM-box check above passed even when the rail gap only matched the
+        // key's border box: the seated contact shadow reaches below that box, so
+        // a gap equal to the shadow's reach left the frame crowding the key's
+        // lower edge with no visible shelf. Bound the visual clearance against
+        // the key's actual shadow extent plus a visible shelf (0.5px sub-pixel
+        // tolerance). The old 6px gap fails this; the restored 12px gap passes.
+        expect(
+          layout.well!.top - layout.automationsLink!.bottom,
+          "the Session frame keeps a visible shelf below the Automations key's contact shadow",
+        ).toBeGreaterThanOrEqual(
+          layout.automationsLinkShadowOverhang! + minVisibleRailClearance - 0.5,
+        );
         expect(
           layout.automationsLinkHit,
           "the key's lower edge receives the pointer instead of the Session frame",

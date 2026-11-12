@@ -1201,11 +1201,16 @@ openclaw-settings-save-indicator:empty {
      custom properties. */
   --sidebar-session-toolbar-height: 24px;
   --sidebar-session-well-gap: 8px;
-  /* The session frame's clearances: one key gap from the rail above it (the
-     same 6px rhythm the nav keys keep) and the 8px shelf gap before the footer
-     divider. Their sum is the frame's block allocation inside the region. */
-  --sidebar-session-rail-gap: 6px;
-  --sidebar-session-footer-gap: 8px;
+  /* The session frame's clearances. The rail gap must clear the last key's
+     seated material, not just its border box: --key-shadow carries a 6px
+     downward contact (1px rim + 2px offset/4px blur) and the active
+     --raise-shadow reaches further, so a gap equal to the 6px key rhythm left
+     the frame crowding the key's lower edge. 12px leaves a visible shelf beyond
+     the resting contact. The footer shelf gives back the difference so the
+     frame's block allocation — and the well height and toolbar crossover it
+     feeds — stays unchanged. */
+  --sidebar-session-rail-gap: 12px;
+  --sidebar-session-footer-gap: 2px;
   --sidebar-session-block-gap: calc(
     var(--sidebar-session-rail-gap) + var(--sidebar-session-footer-gap)
   );
@@ -1570,9 +1575,10 @@ openclaw-settings-save-indicator:empty {
      squeezed below a whole readable row. The toolbar is not part of the floor;
      it rides on the slack above it and yields in the well's short band. */
   min-height: var(--sidebar-session-well-floor);
-  /* The session frame clears the rail by one key gap — the same 6px rhythm the
-     nav keys keep — and leaves an 8px shelf gap before the footer divider. The
-     old 16px top gap reserved height the rail's last key needed. */
+  /* The session frame clears the rail by the rail gap (a visible shelf beyond
+     the last key's seated contact shadow) and leaves the footer shelf gap
+     before the footer divider. Their sum is the block allocation the region
+     floor reserves, so the well height and its toolbar crossover stay fixed. */
   margin-top: var(--sidebar-session-rail-gap);
   overflow: hidden;
   margin-bottom: var(--sidebar-session-footer-gap);
