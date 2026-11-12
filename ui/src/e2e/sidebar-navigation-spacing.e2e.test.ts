@@ -131,9 +131,9 @@ suite.define(() => {
           "the Dashboard key never reaches into the Automations key",
         ).toBeLessThanOrEqual(resting.automations!.top);
         expect(
-          resting.railBottom,
-          "the nav rail never reaches into the session column",
-        ).toBeLessThanOrEqual(resting.sessionTop + 0.5);
+          resting.sessionTop - resting.railBottom,
+          "the nav rail and session content containers keep their own visible separation",
+        ).toBeGreaterThanOrEqual(11.5);
         for (const [label, entry] of [
           ["Dashboard", "route:dashboards"],
           ["Automations", "route:cron"],

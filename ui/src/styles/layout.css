@@ -1201,24 +1201,15 @@ openclaw-settings-save-indicator:empty {
      custom properties. */
   --sidebar-session-toolbar-height: 24px;
   --sidebar-session-well-gap: 8px;
-  /* The session frame's clearances. The rail gap must clear the last key's
-     seated material, not just its border box: --key-shadow carries a 6px
-     downward contact (1px rim + 2px offset/4px blur) and the active
-     --raise-shadow reaches further, so a gap equal to the 6px key rhythm left
-     the frame crowding the key's lower edge. The base 12px rail gap leaves a
-     visible shelf beyond the resting contact and, with the 2px footer shelf,
-     fixes the block allocation the region floor reserves — so a tight column
-     keeps its last key whole and its toolbar crossover unchanged. A roomy
-     session region widens the rail gap to --sidebar-session-rail-gap-wide via
-     the region-height query below for a clearly larger separation; the well
-     absorbs that extra shelf from its own slack, never from the rail's height
-     or the region floor, so the last key is never clipped to buy the gap. */
+  /* The Body owns the base rail gap between its two sibling regions, so the
+     nav and session-content containers themselves stay separated. The region
+     floor reserves only its own footer shelf; the Body's flex gap reserves the
+     rail clearance exactly once. A roomy session region adds the difference
+     between the wide and base gaps inside the well's own slack, never from the
+     rail's height or the region floor, so the last key is never clipped. */
   --sidebar-session-rail-gap: 12px;
   --sidebar-session-rail-gap-wide: 20px;
   --sidebar-session-footer-gap: 2px;
-  --sidebar-session-block-gap: calc(
-    var(--sidebar-session-rail-gap) + var(--sidebar-session-footer-gap)
-  );
   /* Online's own vertical margins, owned here so the duo region floor and the
      section rule read one value instead of a second literal. */
   --sidebar-online-margin-top: 12px;
@@ -1479,6 +1470,7 @@ openclaw-settings-save-indicator:empty {
   display: flex;
   flex: 1;
   flex-direction: column;
+  row-gap: var(--sidebar-session-rail-gap);
   min-height: 0;
   overflow: hidden;
 }
@@ -1526,15 +1518,15 @@ openclaw-settings-save-indicator:empty {
   container-type: size;
   /* The session region's floor covers everything its flex column carries:
      Online's bounded share plus its own vertical margins, the bounded session
-     well (block padding + one session row) and the frame's clearances. The
-     well's scroller keeps an explicit zero minimum, so this never drags in the
-     whole session list. The well's toolbar is not part of the floor, so a
-     column that cannot afford it yields the toolbar before the region loses a
-     readable row. */
+     well (block padding + one session row) and its footer shelf. The Body
+     separately reserves the sibling rail gap. The well's scroller keeps an
+     explicit zero minimum, so this never drags in the whole session list. The
+     well's toolbar is not part of the floor, so a column that cannot afford it
+     yields the toolbar before the region loses a readable row. */
   min-height: calc(
     var(--sidebar-online-floor) + var(--sidebar-online-margin-top) +
       var(--sidebar-online-margin-bottom) + var(--sidebar-session-well-floor) +
-      var(--sidebar-session-block-gap)
+      var(--sidebar-session-footer-gap)
   );
 }
 
@@ -1547,18 +1539,18 @@ openclaw-settings-save-indicator:empty {
   min-height: calc(
     var(--sidebar-online-floor) + var(--sidebar-online-margin-top) +
       var(--sidebar-online-margin-bottom) + var(--sidebar-session-well-floor) +
-      var(--sidebar-session-block-gap)
+      var(--sidebar-session-footer-gap)
   );
 }
 
 /* Solo presence renders no Online section (renderAppSidebarOnline returns
    nothing until a second identity is online), so the region's floor drops to
-   the well and its clearances and the rail keeps every key it renders. The
+   the well and its footer shelf and the rail keeps every key it renders. The
    compact-height band below restates these same solo selectors so its narrower
    floors stay authoritative there. */
 .sidebar--solo-presence .sidebar-session-content,
 .sidebar--solo-presence .sidebar-session-content > openclaw-sidebar-agent-roster {
-  min-height: calc(var(--sidebar-session-well-floor) + var(--sidebar-session-block-gap));
+  min-height: calc(var(--sidebar-session-well-floor) + var(--sidebar-session-footer-gap));
 }
 
 .sidebar-sessions,
@@ -1587,11 +1579,10 @@ openclaw-settings-save-indicator:empty {
      squeezed below a whole readable row. The toolbar is not part of the floor;
      it rides on the slack above it and yields in the well's short band. */
   min-height: var(--sidebar-session-well-floor);
-  /* The session frame clears the rail by the rail gap (a visible shelf beyond
-     the last key's seated contact shadow) and leaves the footer shelf gap
-     before the footer divider. Their sum is the block allocation the region
-     floor reserves, so the well height and its toolbar crossover stay fixed. */
-  margin-top: var(--sidebar-session-rail-gap);
+  /* The Body's flex gap owns the base rail clearance. The well itself only
+     leaves the footer shelf before the footer divider and, in a roomy region,
+     adds the wide-gap increment from its own slack below. */
+  margin-top: 0;
   overflow: hidden;
   margin-bottom: var(--sidebar-session-footer-gap);
   /* Height-query container for the well's own concession (the toolbar yields
@@ -1601,18 +1592,16 @@ openclaw-settings-save-indicator:empty {
   container-type: size;
 }
 
-/* A roomy session region widens the rail gap for a clearly larger separation
-   between the last rail key and the session frame. 10rem is the same well
-   minimum the region keeps beside Online: once the region reaches it, the well
-   has slack for the toolbar and a comfortable list, so the wider shelf comes
-   out of that slack (the well shrinks by the difference) rather than the rail's
-   height or the region floor. Tight columns stay under the threshold and keep
-   the base rail gap, so their last key stays whole and their toolbar crossover
-   is unchanged. The compact-height band below restates the base gap and wins
-   the cascade there. */
+/* A roomy session region adds the wide-gap increment to the Body's base flex
+   gap for a clearly larger separation between the last rail key and the
+   session frame. 10rem is the same well minimum the region keeps beside
+   Online: once the region reaches it, the well has slack for the toolbar and a
+   comfortable list, so the extra shelf comes out of that slack (the well
+   shrinks by the difference) rather than the rail's height or the region
+   floor. Tight and compact columns keep only the Body's base gap. */
 @container sidebar-session-region (min-height: 10rem) {
   .sidebar-sessions {
-    margin-top: var(--sidebar-session-rail-gap-wide);
+    margin-top: calc(var(--sidebar-session-rail-gap-wide) - var(--sidebar-session-rail-gap));
   }
 }
 
@@ -2747,22 +2736,19 @@ openclaw-settings-save-indicator:empty {
      session row stays readable at every height in this band. The solo
      selectors restate the class-scoped release above, which otherwise
      out-specificities this band and would keep the ordinary allocation. The
-     rail gap now matches the ordinary base shelf (the band previously kept the
-     older, tighter 8px); the floor reserves that rail gap plus the 8px footer
-     shelf so the well keeps its whole row above the footer divider. */
+     Body owns the rail gap; this floor reserves only the well and its 8px
+     footer shelf so the well keeps its whole row above the footer divider. */
   .sidebar-session-content,
   .sidebar-session-content > openclaw-sidebar-agent-roster,
   .sidebar--solo-presence .sidebar-session-content,
   .sidebar--solo-presence .sidebar-session-content > openclaw-sidebar-agent-roster {
-    min-height: calc(
-      var(--sidebar-session-row-min-height) + 12px + var(--sidebar-session-rail-gap) + 8px
-    );
+    min-height: calc(var(--sidebar-session-row-min-height) + 12px + 8px);
   }
 
-  /* Restate the base rail gap so the roomy-region widening above cannot widen
-     a compact column's shelf; the compact footer keeps its own 8px. */
+  /* Compact columns keep only the Body's base gap, without the roomy-region
+     increment; the compact footer keeps its own 8px. */
   .sidebar-sessions {
-    margin-top: var(--sidebar-session-rail-gap);
+    margin-top: 0;
     margin-bottom: 8px;
     min-height: calc(var(--sidebar-session-row-min-height) + 12px);
   }
