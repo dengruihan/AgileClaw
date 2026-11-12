@@ -40,6 +40,15 @@ suite.define(() => {
   // downward reach — so the frame crowded the key's lower edge with no visible
   // separation. This is the visible clearance required beyond the shadow extent.
   const minVisibleRailClearance = 6;
+  // A roomy desktop column owes a clearly larger separation than the tight
+  // floor: the user rejected the 12px rail gap (a 6px shelf) as still too
+  // crowded, so the layout widens the rail gap to 20px once the session region
+  // reaches 10rem. The wide shelf is the visible clearance beyond the shadow
+  // that a roomy column must keep — the deployed 12px gap fails it. Tight and
+  // compact columns keep the base shelf above (their region cannot afford the
+  // wider gap without clipping the rail's last key), so this floor applies only
+  // to the roomy ordinary cases flagged wideRailGap below.
+  const minVisibleWideRailClearance = 12;
   const clearancePinnedRoutes = [
     "route:dashboards",
     "route:sessions",
@@ -411,7 +420,16 @@ suite.define(() => {
     "route:portals",
     "route:cron",
   ];
-  const ordinaryClearanceCases = [
+  const ordinaryClearanceCases: {
+    height: number;
+    order: "default" | "reordered";
+    pointer: "mouse" | "touch";
+    textScale: number;
+    toolbar: "none" | "flex";
+    // Only the roomy desktop cases widen the rail gap; the tight cases keep the
+    // base shelf, so the flag is optional and defaults to false below.
+    wideRailGap?: boolean;
+  }[] = [
     // Tight columns: the session region keeps one whole row and the toolbar
     // yields. 564/568/571 straddle the toolbar crossover — the well content
     // there is 54/58/61px, just under the 62px the toolbar, its flex gap and a
@@ -444,17 +462,54 @@ suite.define(() => {
     { height: 574, order: "reordered", pointer: "mouse", textScale: 140, toolbar: "none" },
     { height: 575, order: "reordered", pointer: "mouse", textScale: 140, toolbar: "none" },
     { height: 576, order: "reordered", pointer: "mouse", textScale: 140, toolbar: "flex" },
-    // Ordinary desktop columns pin the static clearance of the rail gap.
-    { height: 720, order: "default", pointer: "mouse", textScale: 100, toolbar: "flex" },
-    { height: 720, order: "reordered", pointer: "mouse", textScale: 100, toolbar: "flex" },
-    { height: 800, order: "default", pointer: "mouse", textScale: 100, toolbar: "flex" },
-    { height: 800, order: "reordered", pointer: "mouse", textScale: 100, toolbar: "flex" },
-    { height: 900, order: "default", pointer: "mouse", textScale: 100, toolbar: "flex" },
+    // Roomy desktop columns pin the widened rail gap: their session region
+    // reaches 10rem, so the frame must keep the wide visible shelf, not merely
+    // the tight floor. The deployed 12px gap fails this; the 20px gap passes.
+    {
+      height: 720,
+      order: "default",
+      pointer: "mouse",
+      textScale: 100,
+      toolbar: "flex",
+      wideRailGap: true,
+    },
+    {
+      height: 720,
+      order: "reordered",
+      pointer: "mouse",
+      textScale: 100,
+      toolbar: "flex",
+      wideRailGap: true,
+    },
+    {
+      height: 800,
+      order: "default",
+      pointer: "mouse",
+      textScale: 100,
+      toolbar: "flex",
+      wideRailGap: true,
+    },
+    {
+      height: 800,
+      order: "reordered",
+      pointer: "mouse",
+      textScale: 100,
+      toolbar: "flex",
+      wideRailGap: true,
+    },
+    {
+      height: 900,
+      order: "default",
+      pointer: "mouse",
+      textScale: 100,
+      toolbar: "flex",
+      wideRailGap: true,
+    },
   ];
 
   it.each(ordinaryClearanceCases)(
     "keeps the last nav key whole and clickable above the well at $height ($order order, $pointer, $textScale%)",
-    async ({ height, order, pointer, textScale, toolbar }) => {
+    async ({ height, order, pointer, textScale, toolbar, wideRailGap = false }) => {
       const baseTime = Date.parse("2026-07-01T16:00:00.000Z");
       const rows = Array.from({ length: 6 }, (_, index) =>
         sessionRow(`agent:main:chat-${index}`, `Chat ${index}`, baseTime - index * 60_000),
@@ -520,12 +575,18 @@ suite.define(() => {
         // a gap equal to the shadow's reach left the frame crowding the key's
         // lower edge with no visible shelf. Bound the visual clearance against
         // the key's actual shadow extent plus a visible shelf (0.5px sub-pixel
-        // tolerance). The old 6px gap fails this; the restored 12px gap passes.
+        // tolerance). Tight columns keep the base shelf (the 12px gap); a roomy
+        // column must keep the wide shelf the user asked for — the deployed
+        // 12px gap fails that, the widened 20px gap passes.
         expect(
           layout.well!.top - layout.automationsLink!.bottom,
-          "the Session frame keeps a visible shelf below the Automations key's contact shadow",
+          wideRailGap
+            ? "the roomy Session frame keeps the wide visible shelf below the Automations key's contact shadow"
+            : "the Session frame keeps a visible shelf below the Automations key's contact shadow",
         ).toBeGreaterThanOrEqual(
-          layout.automationsLinkShadowOverhang! + minVisibleRailClearance - 0.5,
+          layout.automationsLinkShadowOverhang! +
+            (wideRailGap ? minVisibleWideRailClearance : minVisibleRailClearance) -
+            0.5,
         );
         expect(
           layout.automationsLinkHit,
@@ -714,6 +775,53 @@ suite.define(() => {
           layout.wholeSessionRowCount,
           "a whole session row and its name stay visible",
         ).toBeGreaterThanOrEqual(1);
+
+        // The compact rail is a scrollable strip, so seat its last key at the
+        // rail's lower edge before measuring the button-to-frame separation:
+        // the rail gap is the shelf the session frame keeps below the seated
+        // key, exactly as in the ordinary column. The deployed 8px compact gap
+        // left only a 2px shelf below the resting contact shadow; the synced
+        // 12px gap keeps the base visible shelf without overflowing the column.
+        await page.evaluate(() => {
+          const nav = document.querySelector<HTMLElement>(".sidebar-nav");
+          if (nav) {
+            nav.scrollTop = nav.scrollHeight;
+          }
+        });
+        await expect
+          .poll(
+            async () => {
+              const seated = await readSidebarClearance(page);
+              return seated.automationsLink!.bottom <= seated.nav!.bottom + 0.5;
+            },
+            { timeout: 15_000 },
+          )
+          .toBe(true);
+        const seated = await readSidebarClearance(page);
+        await captureSidebarUiProof(suite, page, `solo-compact-${mode}-${height}-seated.png`);
+        expect(
+          seated.automationsLink!.bottom,
+          "the seated Automations key stays inside the compact rail viewport",
+        ).toBeLessThanOrEqual(seated.nav!.bottom + 0.5);
+        expect(
+          seated.well!.top - seated.automationsLink!.bottom,
+          "the compact Session frame keeps a visible shelf below the seated Automations key's contact shadow",
+        ).toBeGreaterThanOrEqual(
+          seated.automationsLinkShadowOverhang! + minVisibleRailClearance - 0.5,
+        );
+        expect(
+          seated.automationsLinkHit,
+          "the seated key's lower edge receives the pointer instead of the Session frame",
+        ).toBe(true);
+
+        // The lower edge activates the route through its real hit target.
+        const urlBefore = page.url();
+        await page.mouse.click(
+          seated.automationsLink!.left + seated.automationsLink!.width / 2,
+          seated.automationsLink!.bottom - 2,
+        );
+        await waitForControlUiRoute(page, { routeId: "cron" });
+        expect(page.url()).not.toBe(urlBefore);
       } finally {
         await suite.closeBrowserContext(context);
       }
