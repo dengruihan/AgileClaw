@@ -55,7 +55,6 @@ import {
   frozenRealGatewayFiles,
 } from "./ci-ui-e2e-ownership.test-support.js";
 import {
-  CACHE_SAVE_V5,
   CACHE_V5,
   CHECKOUT_V6,
   DOWNLOAD_ARTIFACT_V8,
@@ -69,7 +68,6 @@ import {
   readBuildArtifactsTestboxWorkflow,
   readCiWorkflow,
   readMaturityScorecardWorkflow,
-  readReleaseChecksWorkflow,
   readTrackedText,
   readWorkflow,
   readWorkflowOutputs,
@@ -89,7 +87,6 @@ const manifestSource = readFileSync(
 const parser = createNativeTypeScriptParser();
 afterAll(() => parser.close());
 
-const SETUP_GRADLE_V6 = "gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb";
 const CREATE_GITHUB_APP_TOKEN_V3 =
   "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1";
 const OPENGREP_PR_DIFF_WORKFLOW = ".github/workflows/opengrep-precise.yml";
@@ -208,10 +205,6 @@ fi
   };
 }
 
-function readAndroidReleaseWorkflow() {
-  return parse(readFileSync(".github/workflows/android-release.yml", "utf8"));
-}
-
 function readWorkflowSanityWorkflow() {
   return parse(readFileSync(".github/workflows/workflow-sanity.yml", "utf8"));
 }
@@ -222,14 +215,6 @@ function readRealBehaviorProofWorkflow() {
 
 function readCriticalQualityWorkflow() {
   return readFileSync(".github/workflows/codeql-critical-quality.yml", "utf8");
-}
-
-function readAndroidCompileSdk(relativePath: string): number {
-  const match = readTrackedText(relativePath).match(/^\s*compileSdk\s*=\s*(\d+)\s*$/mu);
-  if (!match) {
-    throw new Error(`Missing compileSdk in ${relativePath}`);
-  }
-  return Number(match[1]);
 }
 
 function findYamlFiles(directory: string): string[] {
@@ -262,245 +247,6 @@ function findUnpinnedExternalActions(): string[] {
   return violations;
 }
 
-function runReleaseFallbackHistoryFixture(options: {
-  route: "branch" | "tag" | "orphan" | "non-release-tag";
-  many?: boolean;
-  failure?: "fetch-branches" | "fetch-tags" | "branch-producer" | "tag-producer";
-}) {
-  const ownedDirs = createTempDirTracker();
-  const root = ownedDirs.make("openclaw-release-fallback-");
-  const origin = path.join(root, "origin.git");
-  const checkout = path.join(root, "checkout");
-  const bin = path.join(root, "bin");
-  const home = path.join(root, "home");
-  const hooks = path.join(root, "hooks");
-  const records = path.join(root, "git-results.jsonl");
-  const fixtureEnv: NodeJS.ProcessEnv = {
-    PATH: [path.dirname(testNodeExecPath), "/usr/local/bin", "/usr/bin", "/bin"].join(
-      path.delimiter,
-    ),
-    HOME: home,
-    XDG_CONFIG_HOME: home,
-    LC_ALL: "C",
-    GIT_CONFIG_NOSYSTEM: "1",
-    GIT_CONFIG_GLOBAL: devNull,
-    GIT_ALLOW_PROTOCOL: "file",
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_CONFIG_COUNT: "6",
-    GIT_CONFIG_KEY_0: "credential.helper",
-    GIT_CONFIG_VALUE_0: "",
-    GIT_CONFIG_KEY_1: "core.hooksPath",
-    GIT_CONFIG_VALUE_1: hooks,
-    GIT_CONFIG_KEY_2: "gc.auto",
-    GIT_CONFIG_VALUE_2: "0",
-    GIT_CONFIG_KEY_3: "maintenance.auto",
-    GIT_CONFIG_VALUE_3: "false",
-    GIT_CONFIG_KEY_4: "commit.gpgsign",
-    GIT_CONFIG_VALUE_4: "false",
-    GIT_CONFIG_KEY_5: "protocol.file.allow",
-    GIT_CONFIG_VALUE_5: "always",
-    GIT_AUTHOR_NAME: "Release Fixture",
-    GIT_AUTHOR_EMAIL: "release-fixture@example.com",
-    GIT_COMMITTER_NAME: "Release Fixture",
-    GIT_COMMITTER_EMAIL: "release-fixture@example.com",
-    GITHUB_TOKEN: "synthetic-fixture-token",
-  };
-  try {
-    for (const dir of [checkout, bin, home, hooks]) {
-      mkdirSync(dir);
-    }
-    const realGit = execFileSync("bash", ["--noprofile", "--norc", "-c", "command -v git"], {
-      env: fixtureEnv,
-      encoding: "utf8",
-    }).trim();
-    const git = (cwd: string, args: string[], input?: string) =>
-      execFileSync(realGit, args, {
-        cwd,
-        env: fixtureEnv,
-        input,
-        encoding: "utf8",
-        stdio: ["pipe", "pipe", "pipe"],
-        timeout: 20_000,
-      }).trim();
-    git(root, ["init", "--bare", "-q", origin]);
-    const tree = git(origin, ["mktree"], "");
-    const selected = git(origin, ["commit-tree", tree, "-m", "selected"]);
-    const unrelated = git(origin, ["commit-tree", tree, "-m", "unrelated"]);
-    const count = options.many ? 4096 : 1;
-    const refs = Array.from({ length: count }, (_, index) => {
-      const suffix = options.many
-        ? `${String(index).padStart(4, "0")}-${"a".repeat(192)}/${"b".repeat(192)}`
-        : "small";
-      return options.route === "branch"
-        ? `refs/heads/fixture/${suffix}`
-        : `refs/tags/${options.route === "non-release-tag" ? "fixture" : "vfixture"}/${suffix}`;
-    });
-    git(
-      origin,
-      ["update-ref", "--stdin"],
-      [
-        `create refs/heads/setup-target ${selected}`,
-        `create refs/heads/unrelated ${unrelated}`,
-        ...(options.route === "orphan" ? [] : refs.map((ref) => `create ${ref} ${selected}`)),
-        "",
-      ].join("\n"),
-    );
-    git(origin, ["pack-refs", "--all"]);
-    git(checkout, ["init", "-q"]);
-    git(checkout, ["remote", "add", "origin", pathToFileURL(origin).href]);
-    git(checkout, ["fetch", "--no-tags", "origin", "refs/heads/setup-target"]);
-    git(checkout, ["checkout", "-q", "--detach", "FETCH_HEAD"]);
-    git(origin, ["update-ref", "-d", "refs/heads/setup-target"]);
-    git(checkout, ["update-ref", "-d", "refs/remotes/origin/setup-target"]);
-    expect(
-      git(checkout, [
-        "for-each-ref",
-        "--format=%(objectname)",
-        "--contains",
-        selected,
-        "refs/remotes",
-      ]),
-    ).toBe("");
-    expect(git(checkout, ["tag", "--points-at", selected])).toBe("");
-    if (options.route === "tag") {
-      git(checkout, [
-        "config",
-        "http.https://github.com/.extraheader",
-        "AUTHORIZATION: basic Zml4dHVyZQ==",
-      ]);
-    }
-    const enumerationBytes = Buffer.byteLength(
-      refs
-        .map((ref) => ref.replace(/^refs\/heads\//u, "origin/").replace(/^refs\/tags\//u, ""))
-        .join("\n") + "\n",
-    );
-    if (options.many && existsSync("/proc/sys/fs/pipe-max-size")) {
-      expect(enumerationBytes).toBeGreaterThan(
-        Number(readFileSync("/proc/sys/fs/pipe-max-size", "utf8").trim()),
-      );
-    }
-
-    // Enumeration inherits the real pipeline. Only verbose fetch stderr uses a regular file.
-    const launcher = path.join(root, "git-launcher.mjs");
-    writeFileSync(
-      launcher,
-      [
-        'import { spawnSync } from "node:child_process";',
-        'import { createHash } from "node:crypto";',
-        'import { appendFileSync, closeSync, openSync, readFileSync, statSync } from "node:fs";',
-        'import { constants } from "node:os";',
-        `const git = ${JSON.stringify(realGit)};`,
-        `const records = ${JSON.stringify(records)};`,
-        `const failure = ${JSON.stringify(options.failure ?? null)};`,
-        "let args = process.argv.slice(2);",
-        'const op = args.includes("fetch") ? (args.includes("--no-tags") ? "fetch-branches" : "fetch-tags")',
-        '  : args[0] === "tag" ? "tag-producer" : args[0] === "for-each-ref" ? "branch-producer" : args[0];',
-        'if (op.startsWith("fetch-") && op === failure) {',
-        `  args = args.map(arg => arg === "origin" ? ${JSON.stringify(pathToFileURL(path.join(root, "missing.git")).href)} : arg);`,
-        "}",
-        `const fetchPath = ${JSON.stringify(path.join(root, "fetch-"))} + op + ".stderr";`,
-        'const fd = op.startsWith("fetch-") ? openSync(fetchPath, "w", 0o600) : null;',
-        'const result = spawnSync(git, args, { stdio: ["inherit", "inherit", fd ?? "inherit"], timeout: 20_000 });',
-        "if (fd !== null) closeSync(fd);",
-        "const exitCode = result.signal ? 128 + constants.signals[result.signal] : result.status ?? 1;",
-        "const entry = { op, status: result.status, signal: result.signal, exitCode, error: result.error?.code };",
-        "if (fd !== null) {",
-        "  const size = statSync(fetchPath).size;",
-        '  if (size > 8 * 1024 * 1024) throw new Error("fixture fetch capture exceeded 8 MiB");',
-        "  const bytes = readFileSync(fetchPath);",
-        '  entry.stderr = { bytes: size, sha256: createHash("sha256").update(bytes).digest("hex") };',
-        "  process.stderr.write(bytes.subarray(Math.max(0, bytes.length - 1024)));",
-        "}",
-        'appendFileSync(records, JSON.stringify(entry) + "\\n");',
-        "if (op === failure && fd === null && result.status === 0) {",
-        '  const failed = spawnSync(git, ["rev-parse", "--verify", "refs/heads/fixture-missing"], { stdio: ["ignore", "ignore", "inherit"] });',
-        '  appendFileSync(records, JSON.stringify({ op: "post-output-failure", status: failed.status, signal: failed.signal }) + "\\n");',
-        "  process.exit(failed.status ?? 1);",
-        "}",
-        "process.exit(exitCode);",
-        "",
-      ].join("\n"),
-    );
-    writeExecutable(path.join(bin, "git"), [
-      "#!/bin/bash",
-      `exec ${quoteShell(testNodeExecPath)} ${quoteShell(launcher)} "$@"`,
-    ]);
-    const allocatedBytes = () =>
-      Number(
-        execFileSync("du", ["-sk", root], { env: fixtureEnv, encoding: "utf8" })
-          .trim()
-          .split(/\s/u)[0],
-      ) * 1024;
-    const beforeBytes = allocatedBytes();
-    expect(beforeBytes).toBeLessThan(256 * 1024 * 1024);
-    console.info(
-      "fallback-fixture-before",
-      JSON.stringify({ ...options, refs: count, enumerationBytes, allocatedBytes: beforeBytes }),
-    );
-    const step = expectDefined(
-      readReleaseChecksWorkflow().jobs.resolve_target.steps.find(
-        (candidate: WorkflowStep) =>
-          candidate.name === "Validate selected ref belongs to this repository",
-      ) as WorkflowStep | undefined,
-      "fallback history validation",
-    );
-    const result = runWorkflowShellScript(expectDefined(step.run, "fallback validation body"), {
-      cwd: checkout,
-      env: {
-        ...fixtureEnv,
-        PATH: `${bin}${path.delimiter}${fixtureEnv.PATH}`,
-        RELEASE_REF: selected,
-      },
-    });
-    const events = readFileSync(records, "utf8")
-      .trim()
-      .split("\n")
-      .map(
-        (line) =>
-          JSON.parse(line) as {
-            op: string;
-            status: number | null;
-            signal: string | null;
-            error?: string;
-          },
-      );
-    const containingBranches = git(checkout, [
-      "for-each-ref",
-      "--format=%(objectname)",
-      "--contains",
-      selected,
-      "refs/remotes",
-    ])
-      .split(/\s/u)
-      .filter(Boolean).length;
-    if (!options.failure?.startsWith("fetch-")) {
-      expect(containingBranches).toBe(options.route === "branch" ? count : 0);
-    }
-    const afterBytes = allocatedBytes();
-    expect(afterBytes).toBeLessThan(256 * 1024 * 1024);
-    console.info(
-      "fallback-fixture-result",
-      JSON.stringify({
-        ...options,
-        status: result.status,
-        signal: result.signal,
-        error: result.error?.message,
-        enumerationBytes,
-        containingBranches,
-        allocatedBytes: afterBytes,
-        events,
-        rejection: result.stderr.includes("but that commit is not reachable"),
-      }),
-    );
-    expect(result.error).toBeUndefined();
-    expect(events.every((event) => event.error === undefined)).toBe(true);
-    return { result, events };
-  } finally {
-    ownedDirs.cleanup();
-    expect(existsSync(root)).toBe(false);
-    console.info("fallback-fixture-cleanup", JSON.stringify({ ...options, remaining: 0 }));
-  }
-}
 describe("release fast lane label", () => {
   it("declines fork heads before any reduced check can reach the aggregate gate", () => {
     const workflow = readCiWorkflow();
