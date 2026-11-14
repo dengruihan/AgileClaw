@@ -33,6 +33,11 @@
   );
   --shell-focus-duration: 200ms;
   --shell-focus-ease: var(--ease-out);
+  /* The nav slide and its visibility handoff share one duration so the rail
+     hides exactly when the transform settles. Same motion family as the
+     mobile drawer (layout.mobile.css). */
+  --shell-nav-slide-duration: 200ms;
+  --shell-nav-slide-ease: cubic-bezier(0.32, 0.72, 0, 1);
   /* One rounded base plate: the whole application — navigation, the settings
      rail, and the main content — floats on the window canvas, which stays
      exposed around the plate on every side. The plate keeps the app artwork as
@@ -75,8 +80,9 @@
     "nav content";
   gap: 0;
   /* The nav column snaps on toggle: easing the grid track relayouts the whole
-     shell every frame (measured jank with a populated sidebar and transcript),
-     so only the row track keeps an ease. */
+     shell every frame (measured jank with a populated sidebar and transcript).
+     The rail itself slides on the compositor instead (.shell-nav transform
+     below); only the row track keeps an ease here. */
   transition: grid-template-rows var(--shell-focus-duration) var(--shell-focus-ease);
   overflow: hidden;
 }
@@ -157,9 +163,30 @@
   --shell-chrome-safe-area-left: calc(var(--shell-chrome-control-size) + 18px);
 }
 
-/* Drawer shells keep the nav mounted offscreen; desktop collapse removes it. */
+/* Desktop collapse snaps the grid track once, then slides the rail out on the
+   compositor over the already-widened content. The rail keeps its final
+   expanded width for the whole motion, so session titles and hover-marquee
+   measurements never change at intermediate frames; visibility flips only
+   after the transform settles (the drawer's visibility idiom). The view marks
+   the rail inert immediately, so the departing surface is non-interactive
+   from the first frame. Drawer shells keep their own offscreen handling
+   (layout.mobile.css). */
 .shell--nav-collapsed:not(.shell--mobile-nav) .shell-nav {
-  display: none;
+  width: var(--shell-nav-expanded-width);
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition:
+    transform var(--shell-nav-slide-duration) var(--shell-nav-slide-ease),
+    visibility 0s linear var(--shell-nav-slide-duration);
+}
+
+/* The global reduced-motion reset zeroes durations but not the visibility
+   delay; drop the whole slide so collapse hides the rail immediately. Drawer
+   shells keep their own reduced-motion transition in layout.mobile.css. */
+@media (prefers-reduced-motion: reduce) {
+  .shell:not(.shell--mobile-nav) .shell-nav {
+    transition: none;
+  }
 }
 
 /* The collapsed sidebar restores its expand toggle over the content header.
@@ -1130,6 +1157,12 @@ openclaw-settings-save-indicator:empty {
   min-height: 100%;
   overflow: visible;
   border-inline-end: var(--resize-handle-line-size) solid var(--resize-handle-rest-color);
+  /* Expand slides the rail back over the already-snapped grid; visibility
+     restores on the first frame (zero delay), the transform eases home. The
+     mobile drawer overrides this whole transition in layout.mobile.css. */
+  transition:
+    transform var(--shell-nav-slide-duration) var(--shell-nav-slide-ease),
+    visibility 0s;
 }
 
 .shell-nav-backdrop {
