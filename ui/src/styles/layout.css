@@ -180,6 +180,20 @@
     visibility 0s linear var(--shell-nav-slide-duration);
 }
 
+/* The immediate inert on collapse clears any hovered row's :hover, which would
+   otherwise start the rows' non-composited hover-feedback transitions (row
+   color, link background, action opacity) and restyle the row subtree every
+   frame of the exit slide. The snap baseline never paid these because
+   display:none removed the rows outright. The departing rail is inert and
+   leaving, so its rows' hover feedback snaps instead of animating; the rail's
+   own transform/visibility slide above is unaffected. Expand removes the class
+   and restores the transitions, with the pointer on the chrome toggle rather
+   than a session row. */
+.shell--nav-collapsed:not(.shell--mobile-nav) .sidebar-recent-session,
+.shell--nav-collapsed:not(.shell--mobile-nav) .sidebar-recent-session :is(a, button) {
+  transition: none;
+}
+
 /* The global reduced-motion reset zeroes durations but not the visibility
    delay; drop the whole slide so collapse hides the rail immediately. Drawer
    shells keep their own reduced-motion transition in layout.mobile.css. */
