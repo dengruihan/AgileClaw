@@ -49,6 +49,26 @@ async function readFocusOutline(locator: Locator) {
   });
 }
 
+async function readShellNavGeometry(page: Page) {
+  return page.evaluate(() => {
+    const shell = document.querySelector<HTMLElement>(".shell");
+    const nav = document.querySelector<HTMLElement>(".shell-nav");
+    const content = document.querySelector<HTMLElement>("#control-ui-main");
+    if (!shell || !content) {
+      throw new Error("Missing shell navigation surface");
+    }
+    const styles = getComputedStyle(shell);
+    return {
+      gridTemplateColumns: styles.gridTemplateColumns,
+      transitionProperties: styles.transitionProperty.split(",").map((value) => value.trim()),
+      expandedWidth: styles.getPropertyValue("--shell-nav-expanded-width").trim(),
+      navDisplay: nav ? getComputedStyle(nav).display : "absent",
+      contentWidth: content.offsetWidth,
+      shellWidth: shell.clientWidth,
+    };
+  });
+}
+
 async function captureUiProof(page: Page, fileName: string) {
   if (!captureUiProofEnabled) {
     return;
@@ -60,7 +80,7 @@ async function captureUiProof(page: Page, fileName: string) {
 }
 
 suite.define(() => {
-  it("slims collapsed navigation to the expand toggle and restores entries on expand", async () => {
+  it("slims collapsed navigation to the expand toggle and restores entries on expand without animating the grid track", async () => {
     await suite.withPage(
       {
         locale: "en-US",
@@ -96,6 +116,17 @@ suite.define(() => {
           );
         expect(Math.abs(incognitoCenter - identityCenter)).toBeLessThanOrEqual(2);
 
+        // The nav toggle snaps the grid track: easing grid-template-columns
+        // relayouts the whole shell every frame and janks a populated sidebar
+        // and transcript. The unrelated row-track and dock-panel plate eases
+        // stay, so the snap must not come from dropping the transition block.
+        const expanded = await readShellNavGeometry(page);
+        expect(expanded.transitionProperties).not.toContain("grid-template-columns");
+        expect(expanded.transitionProperties).toEqual(
+          expect.arrayContaining(["grid-template-rows", "height", "margin-bottom", "margin-right"]),
+        );
+        expect(expanded.gridTemplateColumns.split(" ")[0]).toBe(expanded.expandedWidth);
+
         await page.locator(".sidebar-brand__collapse").click();
         await page.locator(".shell--nav-collapsed").waitFor();
         const toggle = page.locator(".shell-chrome-controls__nav-toggle");
@@ -107,6 +138,13 @@ suite.define(() => {
         expect(await page.locator(".sidebar-attention--floating").count()).toBe(0);
         await expect.poll(() => newSessionAction.isVisible()).toBe(false);
         await expect.poll(() => inboxButton.isVisible()).toBe(false);
+        // Final collapsed geometry settles immediately: zero nav track, nav
+        // removed, content filling the plate — no intermediate widths.
+        const collapsed = await readShellNavGeometry(page);
+        expect(collapsed.transitionProperties).not.toContain("grid-template-columns");
+        expect(collapsed.gridTemplateColumns.split(" ")[0]).toBe("0px");
+        expect(collapsed.navDisplay).toBe("none");
+        expect(collapsed.contentWidth).toBe(collapsed.shellWidth);
         await captureUiProof(page, "collapsed-toggle-only.png");
 
         // Expanding restores the original entries without a reload.
@@ -114,7 +152,29 @@ suite.define(() => {
         await newSessionAction.waitFor({ state: "visible" });
         await inboxButton.waitFor({ state: "visible" });
         expect(await page.locator(".shell--nav-collapsed").count()).toBe(0);
+        const reexpanded = await readShellNavGeometry(page);
+        expect(reexpanded.gridTemplateColumns.split(" ")[0]).toBe(reexpanded.expandedWidth);
+        expect(reexpanded.navDisplay).toBe("flex");
+        expect(reexpanded.contentWidth).toBe(
+          reexpanded.shellWidth - Number.parseFloat(reexpanded.expandedWidth),
+        );
         await captureUiProof(page, "expanded-entries-restored.png");
+
+        // The keyboard shortcut drives the same snap toggle in both directions.
+        await page.keyboard.press("ControlOrMeta+b");
+        await page.locator(".shell--nav-collapsed").waitFor();
+        const keyboardCollapsed = await readShellNavGeometry(page);
+        expect(keyboardCollapsed.gridTemplateColumns.split(" ")[0]).toBe("0px");
+        expect(keyboardCollapsed.navDisplay).toBe("none");
+        await page.keyboard.press("ControlOrMeta+b");
+        await newSessionAction.waitFor({ state: "visible" });
+        expect(await page.locator(".shell--nav-collapsed").count()).toBe(0);
+        const finalGeometry = await readShellNavGeometry(page);
+        expect(finalGeometry.gridTemplateColumns.split(" ")[0]).toBe(finalGeometry.expandedWidth);
+        expect(finalGeometry.contentWidth).toBe(
+          finalGeometry.shellWidth - Number.parseFloat(finalGeometry.expandedWidth),
+        );
+        await captureUiProof(page, "keyboard-toggle-final-expanded.png");
       },
     );
   });
