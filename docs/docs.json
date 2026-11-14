@@ -427,10 +427,6 @@
       "destination": "/reference/AGENTS.default"
     },
     {
-      "source": "/RELEASING",
-      "destination": "/reference/RELEASING"
-    },
-    {
       "source": "/agent",
       "destination": "/concepts/agent"
     },
@@ -709,10 +705,6 @@
     {
       "source": "/mac/permissions",
       "destination": "/platforms/mac/permissions"
-    },
-    {
-      "source": "/mac/release",
-      "destination": "/reference/RELEASING"
     },
     {
       "source": "/mac/remote",
@@ -1233,30 +1225,6 @@
     {
       "source": "/ci/openclaw-performance",
       "destination": "/ci/scheduled-workflows#openclaw-performance"
-    },
-    {
-      "source": "/ci/full-release-validation",
-      "destination": "/ci/release-validation#full-release-validation"
-    },
-    {
-      "source": "/ci/live-and-e2e-shards",
-      "destination": "/ci/release-validation#live-and-e2e-shards"
-    },
-    {
-      "source": "/ci/package-acceptance",
-      "destination": "/ci/release-validation#package-acceptance"
-    },
-    {
-      "source": "/ci/install-smoke",
-      "destination": "/ci/release-validation#install-smoke"
-    },
-    {
-      "source": "/ci/local-docker-e2e",
-      "destination": "/ci/release-validation#local-docker-e2e"
-    },
-    {
-      "source": "/ci/plugin-prerelease",
-      "destination": "/ci/release-validation#plugin-prerelease"
     },
     {
       "source": "/ci/qa-lab",
@@ -3180,23 +3148,8 @@
                 ]
               },
               {
-                "group": "Release process",
+                "group": "Supply chain",
                 "pages": [
-                  "reference/RELEASING",
-                  "reference/full-release-validation",
-                  {
-                    "group": "Full release validation",
-                    "pages": [
-                      "reference/full-release-validation/dispatch",
-                      "reference/full-release-validation/continuation",
-                      "reference/full-release-validation/extended-stable",
-                      "reference/full-release-validation/stages",
-                      "reference/full-release-validation/release-checks",
-                      "reference/full-release-validation/profiles",
-                      "reference/full-release-validation/evidence"
-                    ]
-                  },
-                  "reference/release-performance-sweep",
                   "gateway/security/dependency-locking"
                 ]
               }
@@ -3246,17 +3199,6 @@
                       },
                       "ci/runners",
                       "ci/capacity",
-                      "ci/release-validation",
-                      {
-                        "group": "Release validation",
-                        "pages": [
-                          "ci/release-validation/full-release-validation",
-                          "ci/release-validation/live-and-e2e-shards",
-                          "ci/release-validation/package-acceptance",
-                          "ci/release-validation/install-smoke-and-docker-e2e",
-                          "ci/release-validation/plugin-prerelease"
-                        ]
-                      },
                       "ci/scheduled-workflows",
                       "ci/local-proof"
                     ]

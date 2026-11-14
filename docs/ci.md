@@ -1,16 +1,11 @@
 ---
-summary: "CI job graph, scope gates, release umbrellas, and local command equivalents"
+summary: "CI job graph, scope gates, and local command equivalents"
 title: "CI pipeline"
 read_when:
   - You need to understand why a CI job did or did not run
   - You are debugging a failing GitHub Actions check
-  - You are coordinating a release validation run or rerun
   - You are changing ClawSweeper dispatch or GitHub activity forwarding
 ---
-
-CI continues during Full Release Validation; the legacy release-priority variable
-does not pause workflow admission. See [deferred CI recovery](https://github.com/openclaw/openclaw/blob/main/.agents/skills/release-openclaw-ci/SKILL.md#deferred-ci-recovery)
-for runs already deferred by older workflow revisions.
 
 Native video smoke coverage uses four shards of four providers. Each provider has a ten-minute operation timeout plus 30 seconds of test overhead; each shard has a 50-minute job budget, leaving eight minutes for setup. These shards keep full-mode video testing disabled.
 
@@ -45,14 +40,13 @@ most two concurrently. It allows 210 minutes for three waves of six source versi
 the survivor, and setup.
 Authenticated update restart uses a 2,280-second container budget, a 43-minute lane
 budget, and a lane-specific 1,500-second command timeout. Its OpenAI/recovery chunk
-allows 160 minutes for the npm-serialized lanes plus setup; see
-[release-path chunks](/ci/release-validation/install-smoke-and-docker-e2e#release-path-chunks).
+allows 160 minutes for the npm-serialized lanes plus setup.
 
-For the published-upgrade regression gate, see [selection and routing](/ci/scope-and-routing#scope-and-routing), [runner budgets](/ci/capacity#runner-registration-budget), and [Package Acceptance baselines](/ci/release-validation#suite-profiles). Weekly validation is listed under [Update Migration](/ci/scheduled-workflows#update-migration).
+For the published-upgrade regression gate, see [selection and routing](/ci/scope-and-routing#scope-and-routing) and [runner budgets](/ci/capacity#runner-registration-budget).
 
 Updater, state-lease, SQLite identity, native-plugin, startup-trace, and updater-tooling PRs also require the [published-driver update cell](/ci/scope-and-routing/selection#published-driver-update-cell). One GitHub-hosted Linux job runs the latest stable npm updater against the candidate package with two synthetic agents. Its twenty-minute budget and result are included in `openclaw/ci-gate`; the broader main/release Docker survivor remains separate.
 
-Full `main` CI and cache warming are [hourly by default](/ci/scheduled-workflows#hourly-main-ci); `OPENCLAW_CI_ON_PUSH=true` restores their existing per-push admission. CodeQL, Workflow Sanity, and CI's `security-fast` keep their existing main-push scopes. Docs-only `main` pushes still skip the CI workflow and push-triggered cache warming. The cache warmer publishes dependencies independently of long builds and maintains a bounded hosted seed in hybrid mode. Every admitted canonical `main` run exercises one published-driver × candidate Docker upgrade; ordinary manual/release validation adds the other five Docker seed lanes. QA Smoke, real-Gateway browser checks, and named process proofs retain their selected `main` coverage and manual/release validation. Pull requests and exact-head PR fallback dispatches run static correctness gates, owner-bounded tests, transitive import consumers, protected regressions, and a six-file runtime smoke set. Node rows target at most 150 estimated test seconds. Single files and indivisible canonical groups can exceed that target; setup, builds, and queues are separate from test time. Node shards selecting sandbox container E2E cases prepare the Docker sandbox image when the runner does not already have it. Missing or unbounded runtime selection fails preflight instead of falling back to every test. Windows, browser, Docker, QA Smoke, packaging, contract, and extension families opt in through their existing owners; individual built-process proofs have independent owner flags. Full static fallback does not widen them. The [PR-exempt integration tier](/ci/scope-and-routing/node-test-lanes) retains measured slow tests in hourly `main` and Full Release Validation, with PR opt-in when their tests or subjects change. The existing Plugin Prerelease workflow owns complete extension runtime coverage hourly and in Full Release Validation; normal CI selects affected extension owners on PRs. Windows retains its complete inventory across five measured file shards on hourly main and ordinary manual/release validation; Windows-owner PRs retain that complete inventory.
+Full `main` CI and cache warming are [hourly by default](/ci/scheduled-workflows#hourly-main-ci); `OPENCLAW_CI_ON_PUSH=true` restores their existing per-push admission. CodeQL, Workflow Sanity, and CI's `security-fast` keep their existing main-push scopes. Docs-only `main` pushes still skip the CI workflow and push-triggered cache warming. The cache warmer publishes dependencies independently of long builds and maintains a bounded hosted seed in hybrid mode. Every admitted canonical `main` run exercises one published-driver × candidate Docker upgrade; ordinary manual/release validation adds the other five Docker seed lanes. QA Smoke, real-Gateway browser checks, and named process proofs retain their selected `main` coverage and manual/release validation. Pull requests and exact-head PR fallback dispatches run static correctness gates, owner-bounded tests, transitive import consumers, protected regressions, and a six-file runtime smoke set. Node rows target at most 150 estimated test seconds. Single files and indivisible canonical groups can exceed that target; setup, builds, and queues are separate from test time. Node shards selecting sandbox container E2E cases prepare the Docker sandbox image when the runner does not already have it. Missing or unbounded runtime selection fails preflight instead of falling back to every test. Windows, browser, Docker, QA Smoke, packaging, contract, and extension families opt in through their existing owners; individual built-process proofs have independent owner flags. Full static fallback does not widen them. The [PR-exempt integration tier](/ci/scope-and-routing/node-test-lanes) retains measured slow tests in hourly `main` and broad manual validation, with PR opt-in when their tests or subjects change. Normal CI selects affected extension owners on PRs, while the complete extension runtime inventory remains in hourly `main` coverage. Windows retains its complete inventory across five measured file shards on hourly main and ordinary manual/release validation; Windows-owner PRs retain that complete inventory.
 
 Hourly iOS retains `ios-build (tests)` with Rust, voice, native Access, and focused lifecycle coverage. Debug builds select their simulator before compiling, overlap its boot and SimSlim preparation with compilation, and join preparation before either focused simulator test group. Preparation failures or a timed-out join fail the job with its log; test selection and build settings stay unchanged. Current smoke builds prepare testing products once with `build-for-testing`; the voice cleanup and lifecycle groups separately reuse those products with `test-without-building`. Historical targets and other phases retain their existing build actions. Managed attachment UI/export, Watch operation, and Watch delivery UI suites retain every assertion in full manual/release validation. Main-tier simulator builds use the native architecture without indexing or verbose test diagnostics; logs and xcresult bundles remain available. A coalesced scheduled iOS cancellation can leave `openclaw/ci-gate` green with a notice delegating iOS proof to a later scheduled job; it does not validate the canceled revision, and the workflow can still be canceled. Genuine failures remain red. Screenshot capture runs for its own changed inputs and full manual/release validation. See [scope selection](/ci/scope-and-routing/selection) and [capacity](/ci/capacity#owner-path-and-release-coverage) for the coverage trade-off.
 
@@ -60,7 +54,7 @@ Current iOS builds restore three independent input caches: verified Mermaid asse
 
 Current iOS Debug builds log CPU count, memory, machine model, booted simulators, and timestamps immediately around Xcode execution. The read-only hardware and simulator probes each have a five-second limit; unavailable diagnostics do not block the build. These markers distinguish simulator-query delays from Xcode startup, package resolution, and compilation.
 
-iOS screenshot shards, release qualification, Store Release, and its screenshot-only operation use [larger hosted capacity](/ci/runners). Screenshot capture uses stock simulators and creates and cleans up one at a time; the screenshot-only operation can validate a selected branch without signing or uploading a release. The pairing, chat, and native Overview tests retain their existing assertions and deadlines.
+iOS screenshot shards and screenshot-only validation use [larger hosted capacity](/ci/runners). Screenshot capture uses stock simulators and creates and cleans up one at a time; the screenshot-only operation can validate a selected branch without signing or uploading a release. The pairing, chat, and native Overview tests retain their existing assertions and deadlines.
 
 Android screenshot-input PRs and ordinary full manual CI run the existing phone
 and Wear store capture script in one hosted Ubuntu job. The final CI gate requires
@@ -199,29 +193,6 @@ Complete split generations keep subsequent plans from recombining expensive work
 An indivisible over-budget test fails planning with its owner named; unmeasured
 rows still need native timing evidence before claiming the 20-minute objective.
 
-Full Release Validation's exact-target UI job retains the current three native
-shards for both runtimes. Historical compatibility targets keep their original
-unsharded package command; see [UI job budgets](/ci/scope-and-routing/job-budgets).
-
-Set the repository variable `OPENCLAW_RELEASE_RUNNER_GROUP` to reserve a runner
-group for Full Release Validation and its artifact, validation, and reusable
-worker jobs. The Release Publish parent and its dispatched publish children read
-the same variable. It selects the group; it does not provision runners or increase
-concurrency limits. Missing group capacity queues jobs. Shared workflows receive
-an optional `runner_group` from their release caller, including `docker-release.yml`
-and `vercel-container-registry-publish.yml` from Release Publish; `docker-image-refresh.yml`,
-ordinary CI, scheduled performance, and unrelated reusable callers retain their routing.
-Approval and credentialed publish jobs (npm trusted publishing, ClawHub, Docker)
-keep their default GitHub-hosted labels, and the hourly plugin npm preview routes
-only when Release Publish dispatches it.
-The runner count, matrix caps, and default labels do not change.
-
-To reserve capacity outside ordinary PR/main pools:
-
-1. Create an org runner group with Linux runners labelled `ubuntu-latest`/`ubuntu-24.04`, plus the Windows/macOS labels used by validation.
-2. Grant `openclaw/openclaw` access to the group.
-3. Set `OPENCLAW_RELEASE_RUNNER_GROUP` to the group name; unset it to release the reservation and restore ordinary routing.
-
 Linux runners for jobs that set `semantic-checks: true` also require:
 
 - systemd as PID 1 and an active `systemd-logind` service.
@@ -236,20 +207,6 @@ runners fail setup; provision these capabilities before assigning the validation
 labels, or unset the release-group override to restore ordinary routing. Setup
 qualifies the backend; it does not itself limit later lint or compiler commands.
 
-Full Release Validation starts source-only children alongside artifact producers
-after admission and reuse selection. Candidate consumers start as soon as the
-candidate is verified, while npm qualification and independent validation can
-continue; see the [release procedure](https://github.com/openclaw/openclaw/blob/main/.agents/skills/release-openclaw-maintainer/references/regular-release.md).
-
-Release-dispatched validation children add one best-effort hosted receipt job
-each, up to seven per full campaign and none for ordinary PR/main CI. It retains
-job results independently of parent completion. With `reuse_evidence=true`, each
-dispatch checks bounded prior receipts for its exact target and inputs, including
-candidate bytes, and adopts only verified successful children. Other roles still
-dispatch. Failed, cancelled, and active parents can supply green children; the
-current parent seals and revalidates each immutable selection. Discovery adds no
-jobs or Blacksmith registrations and falls back to fresh work on a miss.
-
 Auto-reply reply tests run files in parallel with two workers per compact group. Their planner uses separate parallel timing identities; until those have measurements, serial group costs are divided by the effective worker count, with single-file groups retaining their full cost.
 
 The Gateway isolated/database-worker cohort keeps its two-worker budget, including
@@ -262,17 +219,16 @@ repair and recovery coverage; see [shard weights](/ci/capacity#measured-shard-we
 
 The complete [startup corpus](/ci/pipeline) uses eight state test files so existing workers can share its release/config matrix. Its explicit fallback prepares the runtime once and uses up to four workers, capped by available CPU parallelism; historical frozen targets retain their legacy process layout with CPU-bounded admission.
 
-| Page                                                           | Read it when                                                                                                        |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| [CI pipeline jobs](/ci/pipeline)                               | The job table, the fail-fast order, and the Control UI size budgets.                                                |
-| [Watch a CI run](/ci/watching-runs)                            | Wait on one pull request head, recover a stuck run, and pass the evidence gate.                                     |
-| [CI checkout ownership](/ci/checkout)                          | Shared checkout anchors, fetch retry budgets, and trusted action policy.                                            |
-| [CI scope and routing](/ci/scope-and-routing)                  | Why a job did or did not run: changed-scope detection and manual dispatch.                                          |
-| [CI runner classes](/ci/runners)                               | Trust-based runner routing, preflight and ratchet admission, Blacksmith classes, and runner backend modes.          |
-| [CI capacity and shard weights](/ci/capacity)                  | Runner registration, bounded PR concurrency, and measured shard packing.                                            |
-| [Release validation workflows](/ci/release-validation)         | Full Release Validation, live and E2E shards, Package Acceptance, install smoke, Docker E2E, and Plugin Prerelease. |
-| [Scheduled and maintenance workflows](/ci/scheduled-workflows) | OpenClaw Performance, QA Lab, CodeQL, the maintenance jobs, and ClawSweeper activity forwarding.                    |
-| [Local checks and Testbox](/ci/local-proof)                    | Reproduce a lane locally, keep the shrink-only ratchets, and run Crabbox or Testbox proof.                          |
+| Page                                                           | Read it when                                                                                               |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| [CI pipeline jobs](/ci/pipeline)                               | The job table, the fail-fast order, and the Control UI size budgets.                                       |
+| [Watch a CI run](/ci/watching-runs)                            | Wait on one pull request head, recover a stuck run, and pass the evidence gate.                            |
+| [CI checkout ownership](/ci/checkout)                          | Shared checkout anchors, fetch retry budgets, and trusted action policy.                                   |
+| [CI scope and routing](/ci/scope-and-routing)                  | Why a job did or did not run: changed-scope detection and manual dispatch.                                 |
+| [CI runner classes](/ci/runners)                               | Trust-based runner routing, preflight and ratchet admission, Blacksmith classes, and runner backend modes. |
+| [CI capacity and shard weights](/ci/capacity)                  | Runner registration, bounded PR concurrency, and measured shard packing.                                   |
+| [Scheduled and maintenance workflows](/ci/scheduled-workflows) | OpenClaw Performance, QA Lab, CodeQL, the maintenance jobs, and ClawSweeper activity forwarding.           |
+| [Local checks and Testbox](/ci/local-proof)                    | Reproduce a lane locally, keep the shrink-only ratchets, and run Crabbox or Testbox proof.                 |
 
 ## Where each section moved
 
@@ -298,20 +254,6 @@ Every section heading from the previous single-page version keeps its anchor her
 - <a id="local-equivalents" />[Local equivalents](/ci/local-proof#local-equivalents)
 - <a id="openclaw-performance" />[OpenClaw Performance](/ci/scheduled-workflows#openclaw-performance)
 - <a id="vitest-paired-benchmark" />[Vitest paired benchmark](/ci/scheduled-workflows#vitest-paired-benchmark)
-- <a id="full-release-validation" />[Full Release Validation](/ci/release-validation#full-release-validation)
-- <a id="live-and-e2e-shards" />[Live and E2E shards](/ci/release-validation#live-and-e2e-shards)
-- <a id="package-acceptance" />[Package Acceptance](/ci/release-validation#package-acceptance)
-- <a id="jobs" />[Jobs](/ci/release-validation#jobs)
-- <a id="candidate-sources" />[Candidate sources](/ci/release-validation#candidate-sources)
-- <a id="suite-profiles" />[Suite profiles](/ci/release-validation#suite-profiles)
-- <a id="legacy-compatibility-windows" />[Legacy compatibility windows](/ci/release-validation#legacy-compatibility-windows)
-- <a id="examples" />[Examples](/ci/release-validation#examples)
-- <a id="install-smoke" />[Install smoke](/ci/release-validation#install-smoke)
-- <a id="local-docker-e2e" />[Local Docker E2E](/ci/release-validation#local-docker-e2e)
-- <a id="tunables" />[Tunables](/ci/release-validation#tunables)
-- <a id="reusable-livee2e-workflow" />[Reusable live/E2E workflow](/ci/release-validation#reusable-live/e2e-workflow)
-- <a id="release-path-chunks" />[Release-path chunks](/ci/release-validation#release-path-chunks)
-- <a id="plugin-prerelease" />[Plugin Prerelease](/ci/release-validation#plugin-prerelease)
 - <a id="qa-lab" />[QA Lab](/ci/scheduled-workflows#qa-lab)
 - <a id="codeql" />[CodeQL](/ci/scheduled-workflows#codeql)
 - <a id="security-categories" />[Security categories](/ci/scheduled-workflows#security-categories)

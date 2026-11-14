@@ -5,7 +5,7 @@ type PackageSourcePreflightOptions = {
 export function validatePackageSource(params: {
   aiManifestContent: string | null;
   allowUnreleasedChangelog?: boolean;
-  changelogContent: string;
+  changelogContent: string | null;
   rootManifestContent: string;
 }): string;
 export function validatePackageSourceRef(

@@ -3482,7 +3482,7 @@ A surface is a product area such as Gateway runtime, Discord, or the macOS app. 
         <div><span className="maturity-score maturity-score-beta"><span className="maturity-score-label"><span className="maturity-level-pill maturity-level-beta">Beta</span><span>72%</span></span><span className="maturity-meter" aria-hidden="true"><span style={{ width: "72%" }} /></span></span></div>
         <div className="maturity-category-docs">
 
-    [Docker](/install/docker), [Docker Vm Runtime](/install/docker-vm-runtime), [Full Release Validation](/reference/full-release-validation), [Warm Images](/gateway/cloud-workers/warm-images)
+    [Docker](/install/docker), [Docker Vm Runtime](/install/docker-vm-runtime), [Warm Images](/gateway/cloud-workers/warm-images)
 
     </div>
       </div>

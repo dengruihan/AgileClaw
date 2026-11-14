@@ -1,9 +1,7 @@
 # Package And Docker Proof
 
 Read for installable-package behavior, plugin package trust, targeted Docker or
-live lanes, and failed-lane reruns. Release decisions and full-validation
-recovery belong to `$release-openclaw-ci`; plugin release coverage belongs to
-`$release-openclaw-plugin-testing`. Apply the entrypoint's source-trust and
+live lanes, and failed-lane reruns. Apply the entrypoint's source-trust and
 operator-state boundaries before any execution.
 
 ## Candidate Identity

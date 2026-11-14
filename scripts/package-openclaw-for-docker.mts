@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Builds the canonical OpenClaw package artifact used by Docker E2E.
 import { spawn } from "node:child_process";
-import { closeSync, openSync } from "node:fs";
+import { closeSync, existsSync, openSync } from "node:fs";
 import fs from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -946,7 +946,9 @@ export async function packOpenClawPackageForDocker(
     await writePackageInventoryForDocker(sourcePath, packageOptions.runImpl ?? run);
 
     await prepareManifest(sourcePath);
-    await prepareChangelog(sourcePath);
+    if (existsSync(path.join(sourcePath, "CHANGELOG.md"))) {
+      await prepareChangelog(sourcePath);
+    }
   } catch (error) {
     try {
       await restorePackageSourceArtifacts(

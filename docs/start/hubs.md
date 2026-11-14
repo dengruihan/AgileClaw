@@ -192,7 +192,6 @@ Use these hubs to discover more of the documentation, including deep dives and r
 ## Testing + release
 
 - [Testing](/reference/test)
-- [Release policy](/reference/RELEASING)
 - [Device models](/reference/device-models)
 
 ## Related

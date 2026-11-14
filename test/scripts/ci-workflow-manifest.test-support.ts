@@ -430,7 +430,7 @@ export function runCiManifestFixture(options: {
               shardName: "changed-runson-cron",
             }];
             if (changedPaths.includes("src/focused.ts") ||
-                changedPaths.includes("scripts/openclaw-release-ready.mjs") ||
+                changedPaths.includes("scripts/check.mts") ||
                 changedPaths.includes("test/scripts/sqlite-sessions-transcripts-flip-proof.built-cli.e2e.test.ts")) {
               return [{
                 checkName: "changed-node-plan",
@@ -440,8 +440,8 @@ export function runCiManifestFixture(options: {
                 shardName: "changed-node-plan",
                 targets: changedPaths.includes("src/focused.ts")
                   ? ["src/focused.test.ts"]
-                  : changedPaths.includes("scripts/openclaw-release-ready.mjs")
-                    ? ["test/scripts/openclaw-release-ready.test.ts"]
+                  : changedPaths.includes("scripts/check.mts")
+                    ? ["test/scripts/check.test.ts"]
                     : ["test/scripts/sqlite-sessions-transcripts-flip-proof.built-cli.e2e.test.ts"],
               }];
             }

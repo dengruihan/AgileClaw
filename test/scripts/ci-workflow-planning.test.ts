@@ -934,7 +934,7 @@ describe("release fast lane", () => {
     bundledPlanner: true,
     releaseFastLaneSelection: true,
     eventName: "pull_request" as const,
-    changedPaths: ["scripts/openclaw-release-ready.mjs"],
+    changedPaths: ["scripts/check.mts"],
     scopeEnv,
   };
   function expectNonNodeLanesSkipped(outputs: Record<string, string>) {
@@ -1007,7 +1007,7 @@ describe("release fast lane", () => {
         expect.objectContaining({
           check_name: "changed-node-plan",
           requires_dist: false,
-          targets: ["test/scripts/openclaw-release-ready.test.ts"],
+          targets: ["test/scripts/check.test.ts"],
         }),
       ]);
       expect(result.output).toContain("changed-node-plan-options:");
@@ -1068,7 +1068,7 @@ describe("release fast lane", () => {
   }>([
     {
       name: "out-of-scope paths",
-      options: { changedPaths: ["scripts/openclaw-release-ready.mjs", "src/focused.ts"] },
+      options: { changedPaths: ["scripts/check.mts", "src/focused.ts"] },
       reason: "outside the release tooling scope: src/focused.ts",
     },
     {
@@ -10665,9 +10665,6 @@ describe("ci workflow guards", () => {
       "${{ needs.preflight.outputs.strict_control_ui_i18n != 'true' }}",
     );
     expect(localeStep.run).toBe("pnpm ui:i18n:check");
-    expect(readFileSync(".github/workflows/full-release-validation.yml", "utf8")).toContain(
-      'dispatch_child ci.yml "$dispatch_run_name"',
-    );
   });
 
   it.each([
@@ -11512,7 +11509,6 @@ describe("ci workflow guards", () => {
       "macos-node",
       "macos-swift",
       "ios-build",
-      "ios-release-e2e",
       "ios-screenshot-shard",
       "ios-screenshot-evidence",
       "android",
@@ -11526,10 +11522,10 @@ describe("ci workflow guards", () => {
     expect(workflow.on.pull_request).not.toHaveProperty("paths-ignore");
     expect(gate.name).toBe("openclaw/ci-gate");
     expect(gate.needs).toEqual([...requiredJobs, ...selectedJobs]);
-    // Every workload is gated; the release-only receipt sealer runs after this gate.
+    // Every workload is gated.
     expect(gate.needs.toSorted()).toEqual(
       Object.keys(workflow.jobs)
-        .filter((job) => job !== "ci-gate" && job !== "seal_release_child_evidence")
+        .filter((job) => job !== "ci-gate")
         .toSorted(),
     );
     expect(gate.permissions).toEqual({ contents: "read" });
@@ -11944,10 +11940,6 @@ describe("ci workflow guards", () => {
   it("keeps minimum-Node qualification in full manual CI", () => {
     const workflow = readCiWorkflow();
     const compatibilityJob = workflow.jobs["checks-node-compat"];
-    const fullReleaseWorkflow = readWorkflow(".github/workflows/full-release-validation.yml");
-    const fullReleaseDispatch = fullReleaseWorkflow.jobs.normal_ci.steps.find(
-      (step: WorkflowStep) => step.name === "Dispatch CI",
-    );
 
     expect(compatibilityJob.name).toBe("checks-node-compat-node24");
     for (const eventName of ["push", "pull_request"] as const) {
@@ -11960,9 +11952,6 @@ describe("ci workflow guards", () => {
         }),
       ).toBe(false);
     }
-    expect(fullReleaseDispatch.env.CHILD_WORKFLOW_KIND).toBe("ci");
-    expect(fullReleaseDispatch.run).toContain('dispatch_child ci.yml "$dispatch_run_name"');
-    expect(fullReleaseDispatch.run).toContain('-f target_ref="$TARGET_SHA"');
     expect(compatibilityJob.steps.at(-1)?.run).toContain(
       "src/config/sessions/session-accessor.test.ts",
     );

@@ -68,7 +68,7 @@ For a targeted test run:
 pnpm test <path/to/test.ts> --maxWorkers=1
 ```
 
-The full suite is large; prefer focused tests while iterating. See `CONTRIBUTING.md` for contribution rules and `AGENTS.md` for agent instructions.
+The full suite is large; prefer focused tests while iterating. See `AGENTS.md` for agent instructions.
 
 ## Documentation
 

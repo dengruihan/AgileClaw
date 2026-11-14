@@ -143,7 +143,6 @@ describe("CI changed Node test plan", () => {
       });
       expect(mixed).not.toBeNull();
       expect(selectedFiles(mixed)).toContain(node);
-      expect(selectedFiles(mixed)).not.toContain("test/scripts/mobile-release-ci.test.ts");
     }
   });
   it("keeps plugin-owned package metadata on its package and concrete readers", () => {
@@ -297,13 +296,6 @@ describe("CI changed Node test plan", () => {
   });
 
   it.each([
-    {
-      source: "test/scripts/openclaw-npm-plugin-recovery-workflow.test.ts",
-      targets: [
-        "test/scripts/openclaw-npm-plugin-recovery-workflow.test.ts",
-        "test/scripts/test-projects.test.ts",
-      ],
-    },
     ...[
       "extensions/codex/src/app-server/run-attempt.native-config.test.ts",
       "extensions/codex/src/app-server/run-attempt.subscription.test.ts",
@@ -1034,10 +1026,7 @@ describe("CI changed Node test plan", () => {
     },
     {
       changedPath: "scripts/e2e/lib/upgrade-survivor/run.sh",
-      expected: [
-        "test/scripts/package-acceptance-workflow.test.ts",
-        "test/scripts/upgrade-survivor-missing-load-path.test.ts",
-      ],
+      expected: ["test/scripts/upgrade-survivor-missing-load-path.test.ts"],
     },
   ])(
     "retains explicit policy guards for $changedPath in automatic CI",
@@ -1073,7 +1062,6 @@ describe("CI changed Node test plan", () => {
         );
         expect(files).toContain(importer);
         expect(files).toContain(deferred);
-        expect(files).not.toContain("test/scripts/mobile-release-ci.test.ts");
         expect(files.some(isCiProofTestFile)).toBe(false);
       } finally {
         vi.restoreAllMocks();
@@ -1143,7 +1131,6 @@ describe("CI changed Node test plan", () => {
     expect(selectedFiles(mixed)).toEqual(
       expect.arrayContaining(["src/agents/live-model-filter.test.ts", gatewayCallsitesGuard]),
     );
-    expect(selectedFiles(mixed)).not.toContain("test/scripts/mobile-release-ci.test.ts");
     expect(selectedFiles(mixed)).not.toContain(deleted);
   });
 
@@ -1198,6 +1185,5 @@ describe("CI changed Node test plan", () => {
           plan.config === "ui/vitest.config.ts" || plan.config.startsWith("test/vitest/vitest.ui"),
       ),
     ).toBe(true);
-    expect(selectedFiles(shards)).not.toContain("test/scripts/mobile-release-ci.test.ts");
   });
 });

@@ -35,11 +35,6 @@ For specialized proof, load only the selected route:
   OpenClaw bootstrap binding below.
 - Package installation, plugin package trust, Docker/live lane selection or
   reruns: [Package And Docker Proof](references/package-and-docker.md).
-- Release candidates, full-validation dispatch, evidence identity or recovery:
-  [`$release-openclaw-ci`](../release-openclaw-ci/SKILL.md). A narrow green rerun
-  does not itself authorize publication. Do not substitute moving `main` for
-  the recorded candidate or Tooling SHA.
-- Plugin release matrix: [`$release-openclaw-plugin-testing`](../release-openclaw-plugin-testing/SKILL.md).
 - New or changed Docker lanes: [`$openclaw-docker-e2e-authoring`](../openclaw-docker-e2e-authoring/SKILL.md).
 - Channel/UI behavior: the relevant channel proof skill or
   [`$control-ui-e2e`](../control-ui-e2e/SKILL.md); mock-Gateway boundary proof is

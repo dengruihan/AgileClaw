@@ -56,7 +56,6 @@ describe("CI changed Node test plan", () => {
         ).toBe(true);
         expect(selectedFiles(shards)).not.toContain("src/infra/device-bootstrap.test.ts");
         if (changedPath.endsWith(".test.ts")) {
-          expect(selectedFiles(shards)).not.toContain("test/scripts/mobile-release-ci.test.ts");
         } else {
           expectProtectedOwnerExpansion(
             shards,

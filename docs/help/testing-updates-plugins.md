@@ -61,20 +61,16 @@ For plugin install, uninstall, dependency, or package-inventory changes, also
 run the focused tests that cover the edited seam:
 
 ```bash
-pnpm test src/plugins/uninstall.test.ts src/infra/package-dist-inventory.test.ts test/scripts/package-acceptance-workflow.test.ts
+pnpm test src/plugins/uninstall.test.ts src/infra/package-dist-inventory.test.ts
 ```
 
 Before any package Docker lane consumes a tarball, prove the package artifact:
 
 ```bash
-pnpm release:check
+pnpm build:package
 ```
 
-`release:check` runs generated config/docs and plugin checks (config schema,
-config docs baseline, plugin SDK exports and surface budget, plugin
-versions/inventory), writes the package dist inventory, runs
-`npm pack --dry-run`, rejects forbidden packed files, installs the tarball into
-a temp prefix, runs postinstall, and smokes bundled channel entrypoints.
+This builds the package artifacts used by the focused install and Docker checks.
 
 For a Plugin SDK change, compare the exact commits separately:
 
@@ -524,8 +520,7 @@ separate npm overrides retain the candidate-relative predecessor and previous
 scenario set. Published qualification does not prepare the registry required
 by the new operator-state scenario. Historical soak keeps every preexisting reported-issue
 fixture; it does not automatically enable frozen-target scenario omissions.
-See [release qualification](/ci/release-validation#suite-profiles) for the exact
-boundary. The candidate remains the selected package-under-test tarball. The per-PR
+The candidate remains the selected package-under-test tarball. The per-PR
 `docker-seed-e2e` tripwire stays limited to `latest` and `legacy-operator-state`
 and also runs on every canonical `main` push that runs CI. Docs-only pushes
 matching `**/*.md` and `docs/**` skip CI; mixed docs and code pushes still run it.
@@ -547,48 +542,18 @@ baseline shard still runs the selected scenario set, but logs and artifacts stay
 per-baseline and wall time is bounded by the slowest shard instead of one large
 serial job.
 
-Run a package profile manually when validating a candidate before release:
+## Package and update proof
 
-```bash
-gh workflow run package-acceptance.yml \
-  --ref main \
-  -f workflow_ref=main \
-  -f source=npm \
-  -f package_spec=openclaw@beta \
-  -f suite_profile=package \
-  -f published_upgrade_survivor_scenarios=reported-issues \
-  -f telegram_mode=mock-openai
-```
-
-For a published extended-stable canary, set
-`package_spec=openclaw@extended-stable`. Package Acceptance resolves that
-selector into an exact tarball before the Docker lanes run.
-
-Use `suite_profile=product` when the release question includes MCP channels,
-cron/subagent cleanup, OpenAI web search, or OpenWebUI. Use `suite_profile=full`
-only when you need full Docker release-path coverage.
-
-## Release default
-
-For release candidates, the default proof stack is:
+For package or update changes, the default proof stack is:
 
 1. `pnpm check:changed` and `pnpm test:changed` for source-level regressions.
-2. `pnpm release:check` for package artifact integrity.
-3. Package Acceptance `package` profile or the release-check custom package
-   lanes for install/update/restart/plugin contracts.
-4. Cross-OS release checks for OS-specific installer, onboarding, and platform
-   behavior.
-5. Live suites only when the changed surface touches provider or hosted-service
-   behavior.
+2. `pnpm build:package` plus the focused install/update/restart Docker lanes for package integrity.
+3. Live suites only when the changed surface touches provider or hosted-service behavior.
 
 On maintainer machines, broad gates and Docker/package product proof should run
 in Testbox unless explicitly doing local proof.
 
 ## Legacy compatibility
-
-Package Acceptance applies current metadata and persistence contracts without
-the retired pre-June 2026 warning or skip paths. Reproducing acceptance of those
-historical candidates requires their historical `workflow_ref` tooling.
 
 For retained upgrade contracts, keep migrations in Doctor and prove changes with
 `upgrade-survivor`, `published-upgrade-survivor`, or `update-restart-auth` when the
@@ -621,8 +586,6 @@ fake packages unless the point of the test is live registry behavior.
 
 Start with the artifact identity:
 
-- Package Acceptance `resolve_package` summary: source, version, SHA-256, and
-  artifact name.
 - Docker artifacts: `.artifacts/docker-tests/**/summary.json`,
   `failures.json`, lane logs, and rerun commands.
 - Upgrade survivor summary: `.artifacts/upgrade-survivor/summary.json`,
@@ -653,4 +616,3 @@ rerunning the whole release umbrella.
 
 - [Tests](/reference/test) - index of the testing reference, one page per reader job
 - [Testing](/help/testing) - the full testing kit: suites, live lanes, and Docker runners
-- [Release policy](/reference/RELEASING) - the release process this checklist gates

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -68,9 +68,11 @@ export function validatePackageSource({
   if (typeof rootManifest.version !== "string") {
     throw new Error(`${ROOT_MANIFEST_PATH} version must be a string.`);
   }
-  extractCurrentPackageChangelog(changelogContent, rootManifest.version, {
-    allowUnreleased: allowUnreleasedChangelog,
-  });
+  if (changelogContent !== null) {
+    extractCurrentPackageChangelog(changelogContent, rootManifest.version, {
+      allowUnreleased: allowUnreleasedChangelog,
+    });
+  }
 
   const rootDependencies = rootManifest.dependencies ?? {};
   const aiDependency = rootDependencies["@openclaw/ai"];
@@ -119,14 +121,18 @@ function readGitFile(ref, file, { optional = false } = {}) {
 
 export function validatePackageSourceRef(ref, options = {}) {
   const rootManifestContent = readGitFile(ref, ROOT_MANIFEST_PATH);
+  const changelogContent =
+    readGitFile(ref, "CHANGELOG.md", { optional: true }) === null
+      ? null
+      : readCurrentPackageChangelog(
+          process.cwd(),
+          parseManifest(rootManifestContent, ROOT_MANIFEST_PATH).version,
+          { ref, allowUnreleased: options.allowUnreleasedChangelog },
+        );
   return validatePackageSource({
     aiManifestContent: readGitFile(ref, AI_MANIFEST_PATH, { optional: true }),
     allowUnreleasedChangelog: options.allowUnreleasedChangelog,
-    changelogContent: readCurrentPackageChangelog(
-      process.cwd(),
-      parseManifest(rootManifestContent, ROOT_MANIFEST_PATH).version,
-      { ref, allowUnreleased: options.allowUnreleasedChangelog },
-    ),
+    changelogContent,
     rootManifestContent,
   });
 }
@@ -145,14 +151,17 @@ function readSourceFile(sourceDir, file, { optional = false } = {}) {
 export function validatePackageSourceDir(sourceDir, options = {}) {
   const resolvedSourceDir = path.resolve(sourceDir);
   const rootManifestContent = readSourceFile(resolvedSourceDir, ROOT_MANIFEST_PATH);
+  const changelogContent = existsSync(path.join(resolvedSourceDir, "CHANGELOG.md"))
+    ? readCurrentPackageChangelog(
+        resolvedSourceDir,
+        parseManifest(rootManifestContent, ROOT_MANIFEST_PATH).version,
+        { allowUnreleased: options.allowUnreleasedChangelog },
+      )
+    : null;
   return validatePackageSource({
     aiManifestContent: readSourceFile(resolvedSourceDir, AI_MANIFEST_PATH, { optional: true }),
     allowUnreleasedChangelog: options.allowUnreleasedChangelog,
-    changelogContent: readCurrentPackageChangelog(
-      resolvedSourceDir,
-      parseManifest(rootManifestContent, ROOT_MANIFEST_PATH).version,
-      { allowUnreleased: options.allowUnreleasedChangelog },
-    ),
+    changelogContent,
     rootManifestContent,
   });
 }

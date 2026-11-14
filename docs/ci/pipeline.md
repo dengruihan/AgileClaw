@@ -29,11 +29,7 @@ the full graph for release candidates and broad validation. Exact-head
 `release_gate` fallbacks retain the pull request's macOS, iOS smoke, and native
 generated-locale scope instead of forcing unrelated Apple lanes or locale
 parity. Native source verification still runs. Android lanes stay opt-in through
-`include_android` (or the `release_gate` input). Release-only
-plugin coverage lives in the separate
-[`Plugin Prerelease`](/ci/release-validation#plugin-prerelease) workflow and only runs from
-[`Full Release Validation`](/ci/release-validation#full-release-validation) or an explicit manual
-dispatch.
+`include_android` (or the `release_gate` input).
 
 The full named Node plan retains the complete maintainer-tooling family through
 `RELEASE_ONLY_TOOLING_SHARDS` and the matching maintainer leaves in mixed fast
@@ -403,8 +399,7 @@ dispatch. Current packaged fresh-install and upgrade checks run on both
 Node 24.21.0 and Node 26.1.0, with Windows Node 24 fresh-install proof on 24.16.0.
 Both runtime variants use the same candidate package. These support cells stay
 independent of changes to the ordinary execution pin; source/build smoke alone
-does not prove an installed upgrade. See the
-[package validation matrix](/ci/release-validation/package-acceptance).
+does not prove an installed upgrade.
 
 Select a supported Node runtime before project commands, including lightweight
 workflow checks and release orchestration. Hosted images can default to Node 22;

@@ -8,7 +8,6 @@ on:
       - "scripts/stage-openclaw-bun.sh"
       - "test/scripts/stage-openclaw-bun.test.ts"
       - ".github/workflows/linux-app.yml"
-      - ".github/workflows/linux-app-release.yml"
   workflow_dispatch:
 
 concurrency:
@@ -292,8 +291,7 @@ jobs:
           NO_STRIP: "true"
           XDG_CACHE_HOME: ${{ runner.temp }}/openclaw-tauri-cache
         # Validation builds have no TAURI_SIGNING_PRIVATE_KEY, and the configured updater
-        # pubkey makes the bundler hard-require it. Skip updater artifacts here;
-        # linux-app-release.yml builds the signed updater bundles.
+        # pubkey makes the bundler hard-require it. Skip updater artifacts here.
         run: pnpm dlx @tauri-apps/cli@2.11.4 build --bundles deb,appimage --config '{"bundle":{"createUpdaterArtifacts":false,"useLocalToolsDir":false}}'
 
       - name: Finalize AppImage
@@ -366,11 +364,8 @@ jobs:
 
   test-macos:
     name: Test macOS companion
-    # This app also ships macOS desktop-test bundles, but the only job that
-    # compiles them (linux-app-release.yml build_macos) runs behind a manual
-    # dispatch input. Without a per-PR check, a macOS-gated Tauri API can break
-    # the macOS target for weeks unnoticed - `WebviewWindowBuilder::transparent`
-    # did exactly that.
+    # Keep a per-PR check for the macOS desktop-test bundle so a macOS-gated
+    # Tauri API cannot break unnoticed.
     #
     # macos-15, not macos-14: tauri-plugin-notifications' Swift sources use
     # typed throws (`throws(FFIResult)`), which needs Swift 6. The macos-14

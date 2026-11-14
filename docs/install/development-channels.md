@@ -203,4 +203,3 @@ Beta and dev builds may **not** include a macOS app release. That is fine:
 
 - [Updating](/install/updating)
 - [Installer internals](/install/installer)
-- [Release policy](/reference/RELEASING) - how releases are cut and published into these channels

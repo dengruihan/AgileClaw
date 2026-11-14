@@ -126,8 +126,7 @@ Read matching guides in full; commands and details stay with them.
 - **Audit/identity:** [audit doctrine](docs/gateway/audit.md); provenance is opt-in, never authorization; changes to collection, reader scope, retained fields, bounds, or contracts need approval.
 - **Codex-backed behavior:** personally inspect and cite the exact sibling `../codex` source first; other agents' reports don't substitute. Routes use `openai` (`openai-codex` only in migration); refresh [the harness guide](docs/plugins/codex-harness.md) from `model/list` on upgrades.
 - **Validation:** [test suites](docs/help/testing/suites.md) lists commands; [writing tests](docs/help/testing/writing-tests.md) for authoring.
-- **GitHub:** [contribution rules](CONTRIBUTING.md), the PR template, [review feedback](docs/reference/pull-request-review-flow.md); `scripts/pr` follows the [scripts guide](scripts/AGENTS.md).
-- **Docs:** [docs guide](docs/AGENTS.md); update docs with behavior; fix notes go in PRs (`CHANGELOG.md` is release-owned).
-- **Releases:** the release workflow and [release contract](docs/reference/RELEASING.md); preserve the selected cut and identity through publication and verification. npm-format lock mirrors are verified against `pnpm-lock.yaml`, published in dependency evidence, and kept out of npm tarballs.
+- **GitHub:** the PR template, [review feedback](docs/reference/pull-request-review-flow.md); `scripts/pr` follows the [scripts guide](scripts/AGENTS.md).
+- **Docs:** [docs guide](docs/AGENTS.md); update docs with behavior; fix notes go in PRs.
 - **Secrets/advisories:** [secrets](docs/gateway/secrets.md), [auth](docs/auth-credential-semantics.md), [security reporting](SECURITY.md).
 - **Live channels/native apps:** the scoped guide; Telegram claims need Test Server userbot proof (Convex-leased credentials), platform claims real device evidence, Mac permission proof a stable, [signed](docs/platforms/mac/signing.md) app.

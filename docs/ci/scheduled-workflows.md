@@ -138,21 +138,7 @@ PR required-check names and security-review enforcement are unchanged.
 Publishing and its prerequisite checks stay event-driven: docs mirror and
 website installer synchronization, runner-image publication, locale-generation
 PRs, and ClawSweeper activity forwarding retain their existing admission.
-Stable main closeout runs when release inputs change. The existing
-`pnpm release:stable` closeout phase waits for successful publication, verifies
-main, and dispatches closeout. With saved orchestrator state, resume it with
-`pnpm release:stable YYYY.M.PATCH --from closeout`.
 
-If you publish directly from the Actions UI after the main forward-port,
-dispatch closeout after Release Publish succeeds and main carries the shipped
-version and changelog:
-
-```bash
-gh workflow run openclaw-stable-main-closeout.yml --ref main -f tag=vYYYY.M.PATCH
-```
-
-Unrelated source pushes no longer poll for release completion. Manual recovery
-retains its existing evidence checks.
 Docs Agent verifies the exact successful full-tier CI attempt before admitting
 its automatic write job. Opted-in full main pushes qualify; hourly main-tier
 runs and security-only pushes do not. With `OPENCLAW_CI_ON_PUSH` unset,
@@ -176,44 +162,6 @@ runner time; per-run worker limits do not bound concurrent hourly runs together.
 The slot does not cover manual/PR iOS jobs or runs admitted by an older workflow.
 This removes workflow admission blocking, not runner-capacity waits. No measured
 cost savings or strict completion interval is claimed.
-
-## Nightly Full Release Validation
-
-`Full Release Validation Nightly` (`full-release-validation-nightly.yml`) runs
-every 3 hours at minute 7 UTC (`7 */3 * * *`) so release readiness stays current
-as commits land, with the `stable` profile, soak and blocking performance,
-`reuse_evidence=true`, `rerun_group=all`, and `main-qualification` purpose.
-It checks out the scheduler's exact main SHA and runs the SHA-pinned helper
-(`pnpm ci:full-release --sha <sha> --workflow-sha <sha>`), which uses that SHA as
-both Validation and Tooling SHA and dispatches from an immutable
-`release-ci/<sha12>-<id>` transport ref. A raw dispatch from `main` fails once
-`main` moves, because the parent refuses to dispatch children from a moved
-workflow ref. A still-active parent for the same SHA shares the SHA-specific
-Full Release Validation concurrency group and queues this dispatch; a completed
-one is validated again and adopts its own exact-target evidence through reuse.
-The parent automatically uses `OPENCLAW_RELEASE_RUNNER_GROUP` when configured.
-The scheduled job runs on the same runner selection and 720-minute budget as the
-parent's `release_decision` waiter, matching the helper's 720-minute watch.
-
-The job watches the parent through its Release Decision and evidence
-verification, so its conclusion is the validation result. One concurrency group
-covers scheduled and manual runs without cancellation: while a job still watches
-its parent, the next trigger waits, and GitHub keeps only the newest pending run,
-so runs never overlap and the latest waiting trigger's SHA runs next.
-Child reuse is exact-target: when `main` has not moved since the previous run,
-`reuse_evidence=true` lets each child adopt that run's receipt instead of running
-again, while a new SHA dispatches fresh children. The job log prints the
-parent run URL; the uploaded `full-release-validation-nightly-request` artifact
-holds the helper's request record for
-`node scripts/full-release-validation-at-sha.mjs --reconcile-request <path>`.
-After a failure the helper keeps both transport refs for reruns and diagnosis.
-To list nightly parents, filter on the transport branch:
-
-```bash
-gh run list --workflow full-release-validation.yml --event workflow_dispatch \
-  --json databaseId,headBranch,headSha,status,conclusion \
-  --jq '.[] | select(.headBranch | startswith("release-ci/"))'
-```
 
 ## OpenClaw Performance
 
@@ -582,18 +530,6 @@ gh workflow run duplicate-after-merge.yml \
   -f duplicate_prs='70530,70592' \
   -f apply=true
 ```
-
-### Update Migration
-
-`Update Migration` runs the expanded published-upgrade baseline set weekly on
-Sunday at 03:17 UTC and on manual dispatch. It keeps both `plugin-deps-cleanup`
-and `legacy-operator-state`, with no provider secrets. Its separate
-non-canceling schedule group coalesces pending runs and cannot cancel manual
-validation. See [Package Acceptance suite profiles](/ci/release-validation#suite-profiles)
-for runtime baseline resolution, per-baseline grouping, the 78–90
-runner-minute weekly planning allowance, and the successful-upgrade requirements.
-[Runner registration budgets](/ci/capacity#runner-registration-budget) account
-for the weekly burst separately from PR and main admission.
 
 ## ClawSweeper activity forwarding
 

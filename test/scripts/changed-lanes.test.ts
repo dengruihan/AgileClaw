@@ -1329,9 +1329,6 @@ describe("scripts/changed-lanes", () => {
     expect(
       staged.commands.find((command) => command.name === "release metadata guard")?.args,
     ).toEqual(["release-metadata:check", "--staged", "--base", "main"]);
-    expect(plan.commands.find((command) => command.args[0] === "changelog:check")?.args).toEqual([
-      "changelog:check",
-    ]);
   });
 
   it("runs the npm package-lock guard for dependency package surfaces", () => {
@@ -1678,7 +1675,6 @@ describe("scripts/changed-lanes", () => {
     expectLanes(result.lanes, { docs: true });
     expect(commands).toEqual([
       "check:no-conflict-markers",
-      "check:changelog-attributions",
       "check:doctor-deprecation-registry",
       "lint:extensions:no-guarded-wildcard-reexports",
       "lint:extensions:no-plugin-sdk-wildcard-reexports",

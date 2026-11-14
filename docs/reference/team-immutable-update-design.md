@@ -171,11 +171,9 @@ The CLI entry is `src/cli/update-cli.ts` and `src/cli/update-cli/*`, rather than
 | Readiness and status           | `src/gateway/server-methods/update-status.ts`, `update-control-plane-sentinel.ts`, and `restart-sentinel.ts` expose durable runs, sentinel outcomes, and verified Git install receipts.                                                                                                                                                                           | Add generation identity to these existing results. `update.status`'s optional manager branch is not native immutable support. A handoff acknowledgement or pending restart is not success. |
 | Retention                      | Native transactions retain failed/unverified package/runtime backups and retire verified material through their owners. `update cleanup` has a separate, explicit migration-originals contract.                                                                                                                                                                   | Permanent release-generation collection needs an owner-bound reference inventory. Do not repurpose migration cleanup as release-directory deletion.                                        |
 
-`docs/reference/RELEASING.md` already links an **unshipped** immutable-runtime
-proposal in
-`.agents/skills/release-openclaw-maintainer/references/validation.md`. Its key
-requirement applies here: resolve the generation before starting Node so lazy
-imports stay in that generation, and keep it until its processes exit.
+The immutable-runtime proposal carries one key requirement here: resolve the
+generation before starting Node so lazy imports stay in that generation, and
+keep it until its processes exit.
 
 ### Controller disposition
 
@@ -490,7 +488,7 @@ automatic rollback of every migrated store.
 Existing published-driver coverage is in
 `scripts/e2e/published-driver-update-docker.sh` and
 `scripts/e2e/lib/upgrade-survivor/published-driver.mjs`, with release requirements
-in [Releasing](/reference/RELEASING). It invokes the installed published updater
+in the update design. It invokes the installed published updater
 against a pinned candidate and verifies durable outcome, candidate identity,
 service replacement, and readiness. That fixture uses a systemctl shim; it does
 not prove native systemd or btrfs. Its 1,125-second total cell budget is not a

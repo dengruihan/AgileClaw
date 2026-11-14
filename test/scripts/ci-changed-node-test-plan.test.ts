@@ -51,8 +51,6 @@ const gitToolingTargets = [
   "ci-platform-checkout",
   "openclaw-performance-workflow",
   "openclaw-performance-git-lifecycle",
-  "plugin-release-git-lifecycle",
-  "release-workflow-git-lifecycle",
   "ci-workflow-guards",
 ].map((name) => `test/scripts/${name}.test.ts`);
 
@@ -375,8 +373,6 @@ describe("CI changed Node test plan", () => {
         "src/state/openclaw-database-preflight.lifecycle.test.ts",
         "src/config/state-startup-corpus.part-2.test.ts",
         "test/scripts/ci-linux-git.test.ts",
-        "test/scripts/full-release-validation-at-sha.test.ts",
-        "test/scripts/package-acceptance-workflow.test.ts",
         "test/scripts/pr-merge-admission.test.ts",
         "test/scripts/pr-merge-outcome.test.ts",
         "test/scripts/pr-merge-receipt.test.ts",

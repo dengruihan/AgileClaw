@@ -218,14 +218,11 @@ describe("package scripts", () => {
     expect(assets).toBeLessThan(postbuild);
   });
 
-  it("cleans package builds before validating release contents", () => {
+  it("cleans package builds before validating package contents", () => {
     const scripts = readPackageJson().scripts;
 
     expect(scripts["build:package"]).toBe(
       "node --import ./scripts/tsx.mjs scripts/build-all.mts package",
-    );
-    expect(scripts["release:check"]).toBe(
-      "pnpm build:package && pnpm release:generated:check && node --import ./scripts/tsx.mjs scripts/release-check.ts",
     );
   });
 

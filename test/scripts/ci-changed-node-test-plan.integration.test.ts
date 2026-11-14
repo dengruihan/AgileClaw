@@ -229,7 +229,6 @@ it("keeps UI and core changes with exact owners and direct consumers", () => {
     "src/auto-reply/reply/commands-export-session.test.ts",
     "src/gateway/server-methods/session-change-event.fallback.test.ts",
     "test/scripts/pr-merge-recovery.test.ts",
-    "test/scripts/mobile-release-ci.test.ts",
   ]) {
     expect(targets, unrelated).not.toContain(unrelated);
   }

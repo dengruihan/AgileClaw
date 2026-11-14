@@ -27,7 +27,7 @@ import { resolveRedirects } from "./lib/docs-redirects.mjs";
 const ROOT = process.cwd();
 const DOCS_DIR = path.join(ROOT, "docs");
 const DOCS_JSON_PATH = path.join(DOCS_DIR, "docs.json");
-const ROOT_MARKDOWN_FILES = ["README.md", "CONTRIBUTING.md", "SECURITY.md"];
+const ROOT_MARKDOWN_FILES = ["README.md", "SECURITY.md"];
 const MDX_PROCESSOR = createProcessor({ format: "mdx" });
 const MARKDOWN_PARSER = new MarkdownIt({ html: false });
 const HTML_MARKDOWN_PARSER = new MarkdownIt({ html: true });

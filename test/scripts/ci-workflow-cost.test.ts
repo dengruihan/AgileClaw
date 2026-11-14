@@ -263,33 +263,6 @@ describe("workflow cost admission", () => {
     },
   );
 
-  it("keeps closeout on release-input pushes and the existing manual completion route", () => {
-    const workflow = readWorkflow(".github/workflows/openclaw-stable-main-closeout.yml");
-    expect(workflow.on.workflow_run).toBeUndefined();
-    expect(workflow.on.workflow_dispatch.inputs.tag).toBeDefined();
-    expect(workflow.jobs.resolve.if).toBeUndefined();
-    for (const filename of [
-      "package.json",
-      "CHANGELOG/2026.9.1.md",
-      "appcast-arm64.xml",
-      "scripts/linux-updater-manifest.mjs",
-    ]) {
-      expect(workflow.on.push.paths.some((pattern: string) => matchesGlob(filename, pattern))).toBe(
-        true,
-      );
-    }
-    expect(
-      workflow.on.push.paths.some((pattern: string) =>
-        matchesGlob("src/agents/example.ts", pattern),
-      ),
-    ).toBe(false);
-    const resolver = workflow.jobs.resolve.steps.find(
-      (step: { id?: string }) => step.id === "inputs",
-    );
-    expect(resolver.env.EVENT_NAME).toBe("${{ github.event_name }}");
-    expect(resolver.run).not.toContain("sleep 45");
-  });
-
   it("keeps hourly docs in CI for both ordinary and RunsOn routing", () => {
     const docs = readWorkflow(".github/workflows/docs.yml");
     expect(docs.on.schedule).toBeUndefined();

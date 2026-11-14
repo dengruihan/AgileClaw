@@ -51,8 +51,6 @@ const policyTestWatches: readonly PolicyTestWatch[] = [
     testFile: "test/vitest-pr-exempt-retention.test.ts",
     watchGlobs: [
       ".github/workflows/ci.yml",
-      ".github/workflows/full-release-validation.yml",
-      ".github/workflows/plugin-prerelease.yml",
       "scripts/ci-*.{mjs,mts}",
       "scripts/lib/ci-*.{mjs,mts}",
       "scripts/lib/extension-test-plan.mts",
@@ -1403,15 +1401,6 @@ const policyTestWatches: readonly PolicyTestWatch[] = [
     ],
   },
   {
-    testFile: "test/scripts/full-release-publication-admission.test.ts",
-    watchGlobs: [
-      "scripts/full-release-validation-state.mjs",
-      "scripts/lib/plugin-npm-release.ts",
-      "scripts/lib/release-publish-children.sh",
-      "scripts/release-plan-producer.mts",
-    ],
-  },
-  {
     testFile: "test/scripts/managed-child-process.test.ts",
     watchGlobs: ["scripts/lib/bounded-command.mts"],
   },
@@ -1880,10 +1869,6 @@ const policyTestWatches: readonly PolicyTestWatch[] = [
     watchGlobs: ["scripts/pr-lib/gates.sh"],
   },
   {
-    testFile: "test/scripts/validate-release-publish-approval.test.ts",
-    watchGlobs: ["scripts/lib/release-publish-children.sh"],
-  },
-  {
     testFile: "test/vitest-ui-e2e-config.test.ts",
     watchGlobs: [
       "test/vitest/vitest.ui-e2e-prebuilt.config.ts",
@@ -1897,14 +1882,12 @@ const policyTestWatches: readonly PolicyTestWatch[] = [
       "scripts/e2e/lib/upgrade-survivor/run.sh",
     ],
   },
-  ...[
-    "test/scripts/release-workflow-git-lifecycle.test.ts",
-    "test/scripts/openclaw-performance-git-lifecycle.test.ts",
-    "test/scripts/plugin-release-git-lifecycle.test.ts",
-  ].map((testFile): PolicyTestWatch => ({
-    testFile,
-    watchGlobs: [".github/actions/git-owner/owner.py"],
-  })),
+  ...["test/scripts/openclaw-performance-git-lifecycle.test.ts"].map(
+    (testFile): PolicyTestWatch => ({
+      testFile,
+      watchGlobs: [".github/actions/git-owner/owner.py"],
+    }),
+  ),
   {
     testFile: "test/scripts/pr-worktree-evidence.test.ts",
     watchGlobs: [
@@ -1966,13 +1949,12 @@ const policyTestWatches: readonly PolicyTestWatch[] = [
     testFile: "src/gateway/client-callsites.guard.test.ts",
     watchGlobs: ["{src,extensions}/**/!(*.test|*.test-support|*.e2e|*.e2e.test|*.live.test).ts"],
   },
-  ...[
-    "test/scripts/package-acceptance-workflow.test.ts",
-    "test/scripts/upgrade-survivor-missing-load-path.test.ts",
-  ].map((testFile): PolicyTestWatch => ({
-    testFile,
-    watchGlobs: ["scripts/e2e/lib/upgrade-survivor/**"],
-  })),
+  ...["test/scripts/upgrade-survivor-missing-load-path.test.ts"].map(
+    (testFile): PolicyTestWatch => ({
+      testFile,
+      watchGlobs: ["scripts/e2e/lib/upgrade-survivor/**"],
+    }),
+  ),
   ...["test/scripts/android-app-i18n.test.ts", "test/scripts/apple-app-i18n.test.ts"].map(
     (testFile): PolicyTestWatch => ({
       // Both suites read this inventory by filename, not through the import graph.

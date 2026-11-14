@@ -97,9 +97,8 @@ barrels, package-boundary tests, or extension suites.
    can run locally with comparable machine/load conditions. Use `$crabbox` when
    clean packaging, Linux/platform behavior, isolation, or an explicit remote
    request is part of the proof; reuse and clean up only the owned lease.
-5. If plugin performance is package-artifact sensitive, switch to
-   `release-openclaw-plugin-testing` and Package Acceptance rather than
-   trusting source-only timing.
+5. If plugin performance is package-artifact sensitive, use an installable-package
+   proof rather than trusting source-only timing.
 
 ## Metric Collection
 

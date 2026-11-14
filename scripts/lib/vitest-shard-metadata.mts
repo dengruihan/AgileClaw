@@ -198,7 +198,6 @@ const STRIPE_FILE_SECONDS_HINTS = new Map<string, number>([
   // Serial file-boundary intervals from run 33364935118, including import/setup.
   // Runtime prerequisites are charged once per batch, separately from test work.
   ["test/e2e/qa-lab/runtime/gateway-support-export-runtime.test.ts", 6],
-  ["test/scripts/plugin-release-git-lifecycle.test.ts", 35],
   ["test/scripts/pr-main-refresh.test.ts", 30],
   ["test/plugin-npm-package-manifest.test.ts", 26],
   ["test/scripts/ci-node-test-plan.test.ts", 24],
@@ -341,7 +340,6 @@ const STRIPE_FILE_SECONDS_HINTS = new Map<string, number>([
   ["test/scripts/write-plugin-sdk-entry-dts.test.ts", 74],
   ["test/scripts/ci-workflow-guards.test.ts", 38],
   ["test/scripts/crabbox-wrapper.test.ts", 19],
-  ["test/scripts/find-reusable-release-validation.test.ts", 8],
   ["test/scripts/install-sh.test.ts", 6],
   ["test/scripts/kitchen-sink-rpc-walk.test.ts", 5],
   ["test/scripts/managed-child-process.test.ts", 42],

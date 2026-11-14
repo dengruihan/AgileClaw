@@ -10,7 +10,6 @@ const tempDirs = useAutoCleanupTempDirTracker(afterEach);
 
 const INSTALL_SMOKE = ".github/workflows/install-smoke.yml";
 const INSTALL_SMOKE_REUSABLE = ".github/workflows/install-smoke-reusable.yml";
-const RELEASE_CHECKS = ".github/workflows/openclaw-release-checks.yml";
 
 type WorkflowStep = {
   env?: Record<string, string>;
@@ -582,14 +581,6 @@ describe("install smoke no-push root image transport", () => {
     },
   );
 
-  it("forwards frozen-target omission authority from the release coordinator", () => {
-    const workflow = readWorkflow(RELEASE_CHECKS);
-    expect(job(workflow, "install_smoke_release_checks").with).toMatchObject({
-      allow_frozen_target_scenario_omissions:
-        "${{ inputs.allow_frozen_target_scenario_omissions }}",
-    });
-  });
-
   it("binds independent installer producer-consumer pairs to immutable artifact tuples", () => {
     const workflow = readWorkflow(INSTALL_SMOKE_REUSABLE);
     const pairs = [
@@ -972,24 +963,6 @@ describe("install smoke no-push root image transport", () => {
     ]) {
       expect(verify.run).toContain(`"$${result}"`);
     }
-  });
-
-  it("selects the read-only reusable core from release checks", () => {
-    const release = readWorkflow(RELEASE_CHECKS);
-    const caller = job(release, "install_smoke_release_checks");
-    expect(caller.uses).toBe("./.github/workflows/install-smoke-reusable.yml");
-    expect(caller.permissions).toEqual({
-      actions: "read",
-      contents: "read",
-      packages: "read",
-    });
-    expect(caller.with).toMatchObject({
-      allow_unreleased_changelog:
-        "${{ needs.resolve_target.outputs.allow_unreleased_changelog == 'true' }}",
-      ref: "${{ needs.resolve_target.outputs.revision }}",
-      run_bun_global_install_smoke: true,
-      run_bun_only_runtime_smoke: true,
-    });
   });
 
   it("passes package changelog intent only to the candidate packager", () => {

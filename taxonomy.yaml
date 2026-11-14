@@ -7402,7 +7402,6 @@ surfaces:
         docs:
           - docs/install/docker.md
           - docs/install/docker-vm-runtime.md
-          - docs/reference/full-release-validation.md
           - docs/gateway/cloud-workers/warm-images.md
         search_anchors:
           - docker / podman hosting image build, release packaging, and attestations

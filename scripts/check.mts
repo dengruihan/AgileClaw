@@ -16,7 +16,6 @@ export const PREFLIGHT_CHECKS: CheckCommand[] = [
   { name: "assertion SAFETY comment ratchet", args: ["check:assertion-safety"], usesBase: true },
   { name: "test timeout race ratchet", args: ["check:test-timeout-race-ratchet"], usesBase: true },
   { name: "first-party mock export ratchet", args: ["check:test-mock-exports"], usesBase: true },
-  { name: "changelog attributions", args: ["check:changelog-attributions"] },
   { name: "database-first legacy-store guard", args: ["check:database-first-legacy-stores"] },
   { name: "doctor deprecation registry", args: ["check:doctor-deprecation-registry"] },
   {

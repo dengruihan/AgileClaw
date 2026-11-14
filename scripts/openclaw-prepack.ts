@@ -277,9 +277,11 @@ export async function preparePrepackArtifacts(env: NodeJS.ProcessEnv = process.e
     await preparePackagedWorkerBundle(process.cwd());
     await writePackageDistInventoryForPublish(process.cwd());
     await preparePackageManifest(process.cwd());
-    await preparePackageChangelog(process.cwd(), {
-      allowUnreleased: resolvePrepackAllowUnreleasedChangelog(env),
-    });
+    if (existsSync(join(process.cwd(), "CHANGELOG.md"))) {
+      await preparePackageChangelog(process.cwd(), {
+        allowUnreleased: resolvePrepackAllowUnreleasedChangelog(env),
+      });
+    }
   } catch (error) {
     try {
       await restorePrepackArtifacts(process.cwd());

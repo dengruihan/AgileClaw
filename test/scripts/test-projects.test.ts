@@ -502,13 +502,6 @@ describe("scripts/test-projects changed-target routing", () => {
 
   it.each([
     {
-      changedPath: ".github/workflows/plugin-npm-release.yml",
-      exactTargets: [
-        "test/scripts/plugin-npm-extended-stable-workflow.test.ts",
-        "test/scripts/plugin-release-git-lifecycle.test.ts",
-      ],
-    },
-    {
       changedPath: ".github/actions/setup-node-env/action.yml",
       exactTargets: [
         "test/scripts/setup-node-env-bun.test.ts",
@@ -1946,7 +1939,6 @@ describe("scripts/test-projects changed-target routing", () => {
     expect(findUnmatchedExplicitTestTargets(targets)).toEqual([]);
     expect(buildVitestRunPlans(targets)).toEqual([
       runPlan("tooling-docker", ["test/scripts/docker-build-helper.test.ts"]),
-      runPlan("tooling", ["test/scripts/plugin-prerelease-test-plan.test.ts"]),
     ]);
   });
 
@@ -1993,7 +1985,6 @@ describe("scripts/test-projects changed-target routing", () => {
       "test/scripts/docker-build-helper.test.ts",
       "test/scripts/docker-e2e-observability.test.ts",
       "test/scripts/docker-e2e-plan.test.ts",
-      "test/scripts/plugin-prerelease-test-plan.test.ts",
       "test/e2e/qa-lab/runtime/mcp-gateway-transport.e2e.test.ts",
       "test/scripts/cron-mcp-cleanup-docker-client.test.ts",
       "test/scripts/mcp-code-mode-gateway-client.test.ts",
@@ -2038,7 +2029,6 @@ describe("scripts/test-projects changed-target routing", () => {
       "test/scripts/docker-build-helper.test.ts",
       "test/scripts/docker-e2e-plan.test.ts",
       "test/scripts/codex-media-path-client.test.ts",
-      "test/scripts/package-acceptance-workflow.test.ts",
       "test/scripts/live-plugin-tool-assertions.test.ts",
       "test/scripts/plugin-binding-command-escape-docker.test.ts",
     ]);
@@ -2780,7 +2770,9 @@ describe("scripts/test-projects changed-target routing", () => {
       mode: "targets",
       skippedBroadFallbackPaths: ["src/gateway/server.impl.ts"],
       targets: [
-        "test/scripts/package-acceptance-workflow.test.ts",
+        "src/scripts/ci-changed-scope.test.ts",
+        "test/scripts/changed-path-facts.test.ts",
+        "test/scripts/crabbox-wrapper.test.ts",
         "test/scripts/check.test.ts",
         "test/scripts/pr-gate-base.test.ts",
       ],

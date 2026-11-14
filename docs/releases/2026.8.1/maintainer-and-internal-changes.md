@@ -3,7 +3,7 @@ title: "v2026.8.1: Maintainer and Internal Changes"
 description: "The 6,364 changes that primarily affect the people who build and maintain OpenClaw: release and CI work, tests, internal refactors, and documentation maintenance."
 ---
 
-Another 6,364 changes in this release primarily affect the people who build and maintain OpenClaw. They cover [release and CI work](/reference/RELEASING), tests, internal refactors, documentation maintenance, and narrow fixes that sit outside the user-facing product areas of this release.
+Another 6,364 changes in this release primarily affect the people who build and maintain OpenClaw. They cover release and CI work, tests, internal refactors, documentation maintenance, and narrow fixes that sit outside the user-facing product areas of this release.
 
 <AccordionGroup>
 

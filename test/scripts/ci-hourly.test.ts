@@ -1,4 +1,3 @@
-import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import {
   evaluateWorkflowExpression,
@@ -11,7 +10,6 @@ const auxiliaryNames = [
   "plugin-init-scaffold-validation",
   "sandbox-common-smoke",
   "vitest-cache-warm",
-  "plugin-npm-release",
 ];
 const ci = readCiWorkflow();
 const base = { repository: "openclaw/openclaw", runAttempt: 1, releasePriorityRun: "123" } as const;
@@ -311,45 +309,6 @@ describe("hourly main CI admission", () => {
     expect(evaluate(guards.if, { ...context, eventName: "workflow_dispatch" })).toBe(false);
     expect(evaluate(guards.if, { ...context, eventName: "schedule" })).toBe(false);
     expect(evaluate(guards.if, { ...context, ciOnPush: "true" })).toBe(false);
-  });
-
-  it("schedules only nonpublishing plugin previews with no last-commit path filter", () => {
-    const workflow = readWorkflow(".github/workflows/plugin-npm-release.yml");
-    const context = { ...base, eventName: "schedule" } as const;
-    const preview = workflow.jobs.preview_plugins_npm;
-    for (const name of ["Validate publishable plugin metadata", "Resolve plugin release plan"]) {
-      const step = preview.steps.find((candidate: { name?: string }) => candidate.name === name);
-      expect(evaluate(step.env.BASE_REF, context)).toBe("");
-      expect(evaluate(step.env.PUBLISH_SCOPE, context)).toBe("");
-    }
-    const inputs = Object.fromEntries(
-      Object.entries(workflow.on.workflow_dispatch.inputs).map(([key, input]) => [
-        key,
-        (input as { default?: unknown }).default ?? "",
-      ]),
-    );
-    const eligible: string[] = [];
-    for (const [name, job] of Object.entries(workflow.jobs)) {
-      const expression = (job as { if: string }).if.replace(/^\$\{\{\s*|\s*\}\}$/gu, "");
-      if (
-        runInNewContext(expression, {
-          github: { event_name: "schedule", repository: base.repository, ref: "refs/heads/main" },
-          inputs,
-          vars: {},
-          always: () => true,
-          cancelled: () => false,
-          needs: {
-            preview_plugins_npm: {
-              result: "success",
-              outputs: { has_candidates: "true", has_selection: "true" },
-            },
-          },
-        })
-      ) {
-        eligible.push(name);
-      }
-    }
-    expect(eligible).toEqual(["preview_plugins_npm", "preview_plugin_pack"]);
   });
 
   it("retains real per-push CodeQL and workflow security checks", () => {
