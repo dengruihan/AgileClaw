@@ -57,6 +57,9 @@ Think of the suites as "increasing realism" (and increasing flakiness/cost).
   - Runs in CI
   - No real keys required
   - Should be fast and stable
+  - Frozen-source contract suites read pinned commits with `GIT_NO_LAZY_FETCH=1`
+    and need Git 2.45 or newer on `PATH`; see
+    [Frozen-source contract suites](/help/testing/suites#frozen-source-contract-suites).
   - Resolver and public-surface loader tests must prove broad `api.js` and
     `runtime-api.js` fallback behavior with generated tiny plugin fixtures,
     not real bundled plugin source APIs. Real plugin API loads belong in
@@ -243,6 +246,45 @@ Native dependency policy:
 
   </Accordion>
 </AccordionGroup>
+
+### Frozen-source contract suites
+
+Suites that read a pinned commit through `scripts/lib/frozen-target-source.mjs`
+require Git 2.45 or newer on `PATH`: `preflight-frozen-target-contracts`,
+`docker-e2e-plan`, `live-docker-stage`, `crabbox-staging-witness`,
+`upgrade-survivor-membership-compat`, `upgrade-survivor-frozen-recipe`,
+`upgrade-survivor-assertions`, and `install-smoke-no-push-workflow` under
+`test/scripts/`. The reader sets `GIT_NO_LAZY_FETCH=1` so object reads stay
+local-only; Git first supports that variable and the matching `--no-lazy-fetch`
+switch in 2.45. Older Git silently ignores the variable and can hydrate missing
+objects implicitly, so the reader fails closed with `frozen source reads
+require Git 2.45 or newer (no lazy fetch)` rather than weakening the guarantee.
+CI runners already ship a newer Git; the requirement only bites on hosts whose
+package manager offers an older one (for example Ubuntu 24.04 ships Git 2.43).
+
+When the system Git is too old and sudo or system package changes are not an
+option, install a persistent user-local Git. With conda already available:
+
+```bash
+conda create -y -p ~/tools/git-user-local -c conda-forge "git>=2.45"
+mkdir -p ~/.local/bin
+ln -s ~/tools/git-user-local/bin/git ~/.local/bin/git
+```
+
+`~/.local/bin` must come before `/usr/bin` on `PATH`; when it already does, no
+shell startup edits are needed. The binary resolves its helper programs from
+its install prefix, so the conda environment needs no activation.
+
+Verify through the real entry points before rerunning the suites:
+
+```bash
+git --version # 2.45 or newer
+git --no-lazy-fetch rev-parse HEAD
+node scripts/lib/frozen-target-source.mjs validate "$PWD" "$(git rev-parse HEAD)"
+```
+
+Keep the version gate and `GIT_NO_LAZY_FETCH=1` intact; do not bypass the
+reader or strip the variable to make an older Git pass.
 
 ### Stability (gateway)
 
