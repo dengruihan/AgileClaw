@@ -22,7 +22,7 @@ keys and network-touching suites, see [Testing live](/help/testing-live).
 - [Headless node auto-update proof](#headless-node-auto-update-proof) - installed-node activation and shared-Gateway safeguards.
 - [Docker lanes](#docker-lanes) - lane reference: what each lane runs and when.
 - [Package Acceptance](#package-acceptance) - lane reference: the acceptance matrix and its gates.
-- [Release default](#release-default) - which lanes a release candidate must clear.
+- [Package and update proof](#package-and-update-proof) - the default proof stack for package or update changes.
 - [Legacy compatibility](#legacy-compatibility) - older package and plugin states still covered.
 - [Adding coverage](#adding-coverage) - where a new regression belongs.
 - [Failure triage](#failure-triage) - what to do when a lane goes red.
