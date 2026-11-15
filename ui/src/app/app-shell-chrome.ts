@@ -34,6 +34,7 @@ import {
   type DebugOverlayElement,
   type DebugOverlayMode,
 } from "../pages/debug/debug-overlay-frame.ts";
+import { ShellNavMotionOwner } from "./app-shell-nav-motion.ts";
 import { openShellNewSession, type ShellNewSessionHost } from "./app-shell-new-session.ts";
 import { ShellPanelOwner, type ShellPanelHost } from "./app-shell-panels.ts";
 import { resolveControlUiDocumentMode } from "./approval-deep-link.ts";
@@ -109,11 +110,13 @@ export class ShellChromeOwner {
   private pendingLazyAction = readLazyShellAction();
   private listeners: AbortController | undefined;
   private readonly navDrawerSwipe: NavDrawerSwipeLoader;
+  private readonly navMotion: ShellNavMotionOwner;
   constructor(private readonly host: ShellChromeHost) {
     this.panels = new ShellPanelOwner(host, (element, event) =>
       this.requestLazyElement(element, event),
     );
     this.navDrawerSwipe = new NavDrawerSwipeLoader(host, () => this.toggleNavigationSurface());
+    this.navMotion = new ShellNavMotionOwner(host);
   }
 
   connect(): void {
@@ -173,6 +176,7 @@ export class ShellChromeOwner {
     const listenerOwner = this.listeners;
     this.listeners?.abort();
     this.listeners = undefined;
+    this.navMotion.cancel();
     this.navDrawerSwipe.disconnect();
     if (listenerOwner && nativeCommandsOwner === listenerOwner) {
       nativeCommandsOwner = undefined;
@@ -206,21 +210,13 @@ export class ShellChromeOwner {
       }
       return;
     }
-    // A responsive handoff expands this shell without overwriting the desktop preference.
-    const nextNavCollapsed =
-      host.navDrawerOpen ||
-      !(context.navigation.snapshot.navCollapsed && !host.desktopNavigationExpanded);
-    host.desktopNavigationExpanded = false;
-    if (nextNavCollapsed) {
-      this.dismissSidebarTransientMenus();
-    }
-    host.closeNavDrawer();
-    context.navigation.update({ navCollapsed: nextNavCollapsed });
-    if (nextNavCollapsed) {
-      void host.updateComplete.then(() => {
-        this.restoreFocusTo(host.querySelector<HTMLElement>(".shell-chrome-controls__nav-toggle"));
-      });
-    }
+    // A responsive handoff expands this shell without overwriting the desktop
+    // preference; the motion owner owns the pending intent and the handoff.
+    this.navMotion.runDesktopToggle({
+      dismissTransientMenus: () => this.dismissSidebarTransientMenus(),
+      restoreFocus: () =>
+        this.restoreFocusTo(host.querySelector<HTMLElement>(".shell-chrome-controls__nav-toggle")),
+    });
   };
 
   /** Native Mac chrome hides in-page toggles, so restoration falls back to content. */
@@ -296,6 +292,10 @@ export class ShellChromeOwner {
       return;
     }
     event.preventDefault();
+    // A native navigation command is a real SPA route change known before the
+    // routed surface swaps; drop any in-flight nav fade so it cannot paint the
+    // destination through the old route's opacity/translate.
+    this.navMotion.settleRouteChange();
     this.host.navigate(destination.routeId, destination.options);
   };
 

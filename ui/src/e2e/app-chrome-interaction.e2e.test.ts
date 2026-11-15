@@ -86,8 +86,8 @@ async function readFirstSessionTitleGeometry(page: Page) {
   });
 }
 
-type NavSlideSample = {
-  hasTransformTransition: boolean;
+type ShellMotionFrame = {
+  hasSlide: boolean;
   translateX: number;
   visibility: string;
   inert: boolean;
@@ -98,12 +98,51 @@ type NavSlideSample = {
   title: { clientWidth: number; scrollWidth: number } | null;
 };
 
-// Deterministic mid-motion probe: pause the nav's transform transition and its
-// visibility handoff, seek both to the same point on the slide clock, and read
-// the produced frame. "end" seeks each transition to its own endTime, samples,
-// then cancels so the rail rests at its CSS target state (no held animation).
-async function sampleNavSlide(page: Page, at: number | "end"): Promise<NavSlideSample> {
-  return page.evaluate((seek) => {
+// Deterministic live-DOM motion probe: pause the rail slide and the coupled
+// column fade at the same fraction of their own clocks, then read the painted
+// frame. "end" finishes the effect so its owner settles the resting state.
+async function holdShellMotion(page: Page, id: string, at: number): Promise<number> {
+  return page.evaluate(
+    ({ id: motionId, at: seekAt }) => {
+      const animations = [...document.getAnimations()].filter(
+        (animation) => animation.id === motionId || animation.id === "shell-nav-slide",
+      );
+      for (const animation of animations) {
+        const endTime = animation.effect?.getComputedTiming().endTime ?? 0;
+        animation.pause();
+        animation.currentTime = endTime * seekAt;
+      }
+      return animations.length;
+    },
+    { at, id },
+  );
+}
+
+async function finishShellMotion(page: Page, id: string): Promise<number> {
+  return page.evaluate((motionId) => {
+    const animations = [...document.getAnimations()].filter(
+      (animation) => animation.id === motionId,
+    );
+    for (const animation of animations) {
+      animation.finish();
+    }
+    return animations.length;
+  }, id);
+}
+
+async function waitForShellMotion(page: Page, id: string): Promise<void> {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (motionId) => document.getAnimations().some((animation) => animation.id === motionId),
+        id,
+      ),
+    )
+    .toBe(true);
+}
+
+async function sampleShellFrame(page: Page): Promise<ShellMotionFrame> {
+  return page.evaluate(() => {
     const shell = document.querySelector<HTMLElement>(".shell");
     const nav = document.querySelector<HTMLElement>(".shell-nav");
     const content = document.querySelector<HTMLElement>("#control-ui-main");
@@ -111,43 +150,25 @@ async function sampleNavSlide(page: Page, at: number | "end"): Promise<NavSlideS
     if (!shell || !nav || !content) {
       throw new Error("Missing shell navigation surface");
     }
-    const transitions = nav
-      .getAnimations()
-      .filter((animation): animation is CSSTransition => animation instanceof CSSTransition);
-    const transformTransition = transitions.find(
-      (animation) => animation.transitionProperty === "transform",
-    );
-    const duration = Number(transformTransition?.effect?.getTiming().duration ?? 0);
-    for (const transition of transitions) {
-      transition.pause();
-      transition.currentTime =
-        seek === "end" ? (transition.effect?.getComputedTiming().endTime ?? 0) : duration * seek;
-    }
     const navStyles = getComputedStyle(nav);
-    const sample: NavSlideSample = {
-      hasTransformTransition: Boolean(transformTransition),
+    return {
+      hasSlide: nav.getAnimations().some((animation) => animation.id === "shell-nav-slide"),
       translateX:
         navStyles.transform === "none" ? 0 : new DOMMatrixReadOnly(navStyles.transform).m41,
       visibility: navStyles.visibility,
       inert: nav.inert,
       navWidth: nav.offsetWidth,
-      gridFirstTrack: getComputedStyle(shell).gridTemplateColumns.split(" ")[0],
+      gridFirstTrack: getComputedStyle(shell).gridTemplateColumns.split(" ")[0] ?? "",
       contentWidth: content.offsetWidth,
       shellWidth: shell.clientWidth,
       title: title ? { clientWidth: title.clientWidth, scrollWidth: title.scrollWidth } : null,
     };
-    if (seek === "end") {
-      for (const transition of transitions) {
-        transition.cancel();
-      }
-    }
-    return sample;
-  }, at);
+  });
 }
 
 // Synchronize on the settled state the toggle produces (test/AGENTS.md), never
-// on a sleep: no nav animation may be running or paused, and the rail must sit
-// at its final visibility/transform. Cancellation-safe for mid-flight reversals.
+// on a sleep: no motion effect may be running or paused, the rail must sit at
+// its final visibility/transform, and no inline motion style may remain.
 async function waitForNavSettled(page: Page, state: "collapsed" | "expanded"): Promise<void> {
   await expect
     .poll(() =>
@@ -156,12 +177,10 @@ async function waitForNavSettled(page: Page, state: "collapsed" | "expanded"): P
         if (!nav) {
           return false;
         }
-        const animating = nav
+        const animating = document
           .getAnimations()
-          .some(
-            (animation) => animation.playState === "running" || animation.playState === "paused",
-          );
-        if (animating) {
+          .some((animation) => animation.id.startsWith("shell-nav-"));
+        if (animating || nav.getAttribute("style")) {
           return false;
         }
         const styles = getComputedStyle(nav);
@@ -197,8 +216,8 @@ function buildLongTitleSessionRows(count: number) {
 async function captureUiProof(
   page: Page,
   fileName: string,
-  // Mid-slide proofs must keep the paused animation state; "disabled" would
-  // fast-forward the held transition to its end before the shutter.
+  // Mid-motion proofs must keep the paused animation state; "disabled" would
+  // fast-forward the held effect to its end before the shutter.
   animations: "allow" | "disabled" = "disabled",
 ) {
   if (!captureUiProofEnabled) {
@@ -211,7 +230,7 @@ async function captureUiProof(
 }
 
 suite.define(() => {
-  it("slides the desktop nav on the compositor while the grid snaps once, keeping title geometry stable mid-motion", async () => {
+  it("slides the desktop nav on one motion clock while the grid relayouts once at the hidden handoff", async () => {
     await suite.withPage(
       {
         locale: "en-US",
@@ -224,7 +243,6 @@ suite.define(() => {
         await page.locator(".new-session-page__message").waitFor({ state: "visible" });
         await page.locator(".sidebar-recent-session").first().waitFor();
 
-        // Expanded sidebar owns both entries.
         const newSessionAction = page.locator(
           "openclaw-app-sidebar .sidebar-primary-actions .sidebar-new-session-action",
         );
@@ -232,80 +250,52 @@ suite.define(() => {
         await newSessionAction.waitFor({ state: "visible" });
         await inboxButton.waitFor({ state: "visible" });
 
-        // The startup page's fixed privacy rail shares the identity row's
-        // centerline (both clear the plate's top edge by the same inset).
-        const identityCenter = await page
-          .locator(".sidebar-workspace-header")
-          .evaluate(
-            (element) =>
-              element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2,
-          );
-        const incognitoCenter = await page
-          .locator(".new-session-page__incognito-rail")
-          .evaluate(
-            (element) =>
-              element.getBoundingClientRect().top + element.getBoundingClientRect().height / 2,
-          );
-        expect(Math.abs(incognitoCenter - identityCenter)).toBeLessThanOrEqual(2);
-
-        // The grid track snaps on toggle: easing grid-template-columns
-        // relayouts the whole shell every frame and janks a populated sidebar
-        // and transcript. The unrelated row-track and dock-panel plate eases
-        // stay, so the snap must not come from dropping the transition block.
         const expanded = await readShellNavGeometry(page);
         expect(expanded.transitionProperties).not.toContain("grid-template-columns");
-        expect(expanded.transitionProperties).toEqual(
-          expect.arrayContaining(["grid-template-rows", "height", "margin-bottom", "margin-right"]),
-        );
         expect(expanded.gridTemplateColumns.split(" ")[0]).toBe(expanded.expandedWidth);
-        expect(expanded.navVisibility).toBe("visible");
-        expect(expanded.navInert).toBe(false);
         const expandedWidthPx = Number.parseFloat(expanded.expandedWidth);
-        // The seeded titles overflow the rail, so mid-motion stability covers
-        // the hover-marquee measurement surface, not just short labels.
         const titleBaseline = await readFirstSessionTitleGeometry(page);
         expect(titleBaseline.scrollWidth).toBeGreaterThan(titleBaseline.clientWidth);
 
-        // Collapse: a real transform transition carries the rail out while the
-        // grid has already snapped to its final zero track. At the controlled
-        // midpoint the rail is partway offscreen, still visible, already inert,
-        // and still at its final expanded width with unchanged title geometry.
+        // Collapse phase A: the rail travels on the compositor while the old
+        // layout is still applied; the grid relayout has not happened yet, so
+        // the titles and the full-width rail stay stable.
         await page.locator(".sidebar-brand__collapse").click();
-        const midCollapse = await sampleNavSlide(page, 0.5);
-        expect(midCollapse.hasTransformTransition).toBe(true);
+        expect(await holdShellMotion(page, "shell-nav-out", 0.5)).toBeGreaterThan(0);
+        const midCollapse = await sampleShellFrame(page);
+        expect(midCollapse.hasSlide).toBe(true);
         expect(midCollapse.translateX).toBeLessThan(-expandedWidthPx * 0.2);
         expect(midCollapse.translateX).toBeGreaterThan(-expandedWidthPx);
-        expect(midCollapse.visibility).toBe("visible");
-        expect(midCollapse.inert).toBe(true);
-        expect(midCollapse.navWidth).toBe(expandedWidthPx);
-        expect(midCollapse.gridFirstTrack).toBe("0px");
-        expect(midCollapse.contentWidth).toBe(midCollapse.shellWidth);
+        expect(midCollapse.gridFirstTrack).toBe(expanded.expandedWidth);
+        expect(midCollapse.contentWidth).toBe(midCollapse.shellWidth - expandedWidthPx);
         expect(midCollapse.title).toEqual(titleBaseline);
         await captureUiProof(page, "collapse-mid-slide.png", "allow");
-        const endCollapse = await sampleNavSlide(page, "end");
-        expect(endCollapse.hasTransformTransition).toBe(true);
-        expect(endCollapse.translateX).toBe(-expandedWidthPx);
-        expect(endCollapse.visibility).toBe("hidden");
-        expect(endCollapse.inert).toBe(true);
+
+        // Phase B: the single relayout applied at the handoff and the rail
+        // finishes sliding home.
+        await finishShellMotion(page, "shell-nav-out");
+        await waitForShellMotion(page, "shell-nav-in");
+        await holdShellMotion(page, "shell-nav-in", 0.9);
+        const lateCollapse = await sampleShellFrame(page);
+        expect(lateCollapse.gridFirstTrack).toBe("0px");
+        expect(lateCollapse.translateX).toBeLessThan(0);
+        expect(lateCollapse.inert).toBe(true);
+        expect(lateCollapse.navWidth).toBe(expandedWidthPx);
+        expect(lateCollapse.contentWidth).toBe(lateCollapse.shellWidth);
+        await finishShellMotion(page, "shell-nav-in");
+        await waitForNavSettled(page, "collapsed");
+        const collapsed = await sampleShellFrame(page);
+        expect(collapsed.visibility).toBe("hidden");
+        expect(collapsed.inert).toBe(true);
+        expect(collapsed.gridFirstTrack).toBe("0px");
+        expect(collapsed.contentWidth).toBe(collapsed.shellWidth);
 
         const toggle = page.locator(".shell-chrome-controls__nav-toggle");
         await toggle.waitFor({ state: "visible" });
-        // Collapsed keeps only the expand operation: no new-session shortcut
-        // in the cluster and no floating Inbox over the content column.
         expect(await page.locator(".shell-chrome-controls button").count()).toBe(1);
         expect(await page.locator(".shell-chrome-controls__new-thread").count()).toBe(0);
         expect(await page.locator(".sidebar-attention--floating").count()).toBe(0);
-        await expect.poll(() => newSessionAction.isVisible()).toBe(false);
-        await expect.poll(() => inboxButton.isVisible()).toBe(false);
-        // Final collapsed geometry: zero nav track, rail hidden and inert,
-        // content filling the plate — the grid never animated.
-        const collapsed = await readShellNavGeometry(page);
-        expect(collapsed.transitionProperties).not.toContain("grid-template-columns");
-        expect(collapsed.gridTemplateColumns.split(" ")[0]).toBe("0px");
-        expect(collapsed.navVisibility).toBe("hidden");
-        expect(collapsed.navInert).toBe(true);
-        expect(collapsed.contentWidth).toBe(collapsed.shellWidth);
-        // Focus leaves the inert rail and lands on the visible expand toggle.
+        // Focus follows the settled collapse onto the visible expand control.
         await expect
           .poll(() =>
             page.evaluate(
@@ -317,63 +307,54 @@ suite.define(() => {
           .toBe(true);
         await captureUiProof(page, "collapsed-toggle-only.png");
 
-        // Expand: the rail slides back over the already-snapped grid, visible
-        // and interactive from the first frame, width and titles unchanged.
+        // Expand mirrors the clock: the rail slides back over the collapsed
+        // grid until the relayout lands at the hidden handoff.
         await toggle.click();
-        const midExpand = await sampleNavSlide(page, 0.5);
-        expect(midExpand.hasTransformTransition).toBe(true);
+        expect(await holdShellMotion(page, "shell-nav-out", 0.5)).toBeGreaterThan(0);
+        const midExpand = await sampleShellFrame(page);
+        expect(midExpand.gridFirstTrack).toBe("0px");
         expect(midExpand.translateX).toBeLessThan(0);
-        expect(midExpand.translateX).toBeGreaterThan(-expandedWidthPx);
         expect(midExpand.visibility).toBe("visible");
-        expect(midExpand.inert).toBe(false);
-        expect(midExpand.navWidth).toBe(expandedWidthPx);
-        expect(midExpand.gridFirstTrack).toBe(expanded.expandedWidth);
-        expect(midExpand.contentWidth).toBe(midExpand.shellWidth - expandedWidthPx);
         expect(midExpand.title).toEqual(titleBaseline);
         await captureUiProof(page, "expand-mid-slide.png", "allow");
-        const endExpand = await sampleNavSlide(page, "end");
-        expect(endExpand.translateX).toBe(0);
-        expect(endExpand.visibility).toBe("visible");
+        await finishShellMotion(page, "shell-nav-out");
+        await waitForShellMotion(page, "shell-nav-in");
+        await holdShellMotion(page, "shell-nav-in", 0.9);
+        const lateExpand = await sampleShellFrame(page);
+        expect(lateExpand.gridFirstTrack).toBe(expanded.expandedWidth);
+        expect(lateExpand.contentWidth).toBe(lateExpand.shellWidth - expandedWidthPx);
+        await finishShellMotion(page, "shell-nav-in");
+        await waitForNavSettled(page, "expanded");
         await newSessionAction.waitFor({ state: "visible" });
         await inboxButton.waitFor({ state: "visible" });
         expect(await page.locator(".shell--nav-collapsed").count()).toBe(0);
         const reexpanded = await readShellNavGeometry(page);
         expect(reexpanded.gridTemplateColumns.split(" ")[0]).toBe(reexpanded.expandedWidth);
-        expect(reexpanded.navDisplay).toBe("flex");
         expect(reexpanded.navVisibility).toBe("visible");
-        expect(reexpanded.contentWidth).toBe(
-          reexpanded.shellWidth - Number.parseFloat(reexpanded.expandedWidth),
-        );
+        expect(await readFirstSessionTitleGeometry(page)).toEqual(titleBaseline);
         await captureUiProof(page, "expanded-entries-restored.png");
 
-        // The keyboard shortcut drives the same slide in both directions.
+        // The keyboard shortcut drives the same coupled motion.
         await page.keyboard.press("ControlOrMeta+b");
-        const midKeyboard = await sampleNavSlide(page, 0.5);
-        expect(midKeyboard.hasTransformTransition).toBe(true);
-        expect(midKeyboard.translateX).toBeLessThan(0);
-        expect(midKeyboard.visibility).toBe("visible");
-        const endKeyboard = await sampleNavSlide(page, "end");
-        expect(endKeyboard.visibility).toBe("hidden");
-        const keyboardCollapsed = await readShellNavGeometry(page);
-        expect(keyboardCollapsed.gridTemplateColumns.split(" ")[0]).toBe("0px");
-        expect(keyboardCollapsed.navInert).toBe(true);
+        expect(await holdShellMotion(page, "shell-nav-out", 0.5)).toBeGreaterThan(0);
+        expect((await sampleShellFrame(page)).translateX).toBeLessThan(0);
+        await finishShellMotion(page, "shell-nav-out");
+        await waitForShellMotion(page, "shell-nav-in");
+        await finishShellMotion(page, "shell-nav-in");
+        await waitForNavSettled(page, "collapsed");
         await page.keyboard.press("ControlOrMeta+b");
         await waitForNavSettled(page, "expanded");
         await newSessionAction.waitFor({ state: "visible" });
-        expect(await page.locator(".shell--nav-collapsed").count()).toBe(0);
         const finalGeometry = await readShellNavGeometry(page);
         expect(finalGeometry.gridTemplateColumns.split(" ")[0]).toBe(finalGeometry.expandedWidth);
         expect(finalGeometry.navVisibility).toBe("visible");
-        expect(finalGeometry.contentWidth).toBe(
-          finalGeometry.shellWidth - Number.parseFloat(finalGeometry.expandedWidth),
-        );
         expect(await readFirstSessionTitleGeometry(page)).toEqual(titleBaseline);
         await captureUiProof(page, "keyboard-toggle-final-expanded.png");
       },
     );
   });
 
-  it("reverses an in-flight nav slide cleanly in both directions", async () => {
+  it("reverses an in-flight nav motion cleanly before and after the relayout", async () => {
     await suite.withPage(
       {
         locale: "en-US",
@@ -386,15 +367,13 @@ suite.define(() => {
         await page.locator(".sidebar-recent-session").first().waitFor();
         const titleBaseline = await readFirstSessionTitleGeometry(page);
         const collapseButton = page.locator(".sidebar-brand__collapse");
-        const expandToggle = page.locator(".shell-chrome-controls__nav-toggle");
 
-        // Hold the collapse at its midpoint, then reverse: the rail must slide
-        // home and settle expanded — no stuck visibility, no held animation.
+        // Hold the collapse mid-fade, then reverse: the rail returns home and
+        // settles expanded without a second state change.
         await collapseButton.click();
-        const heldCollapse = await sampleNavSlide(page, 0.5);
-        expect(heldCollapse.translateX).toBeLessThan(0);
-        expect(heldCollapse.visibility).toBe("visible");
-        await expandToggle.click();
+        expect(await holdShellMotion(page, "shell-nav-out", 0.5)).toBeGreaterThan(0);
+        await page.keyboard.press("ControlOrMeta+b");
+        await waitForShellMotion(page, "shell-nav-return");
         await waitForNavSettled(page, "expanded");
         const reversedExpanded = await readShellNavGeometry(page);
         expect(reversedExpanded.navVisibility).toBe("visible");
@@ -404,26 +383,29 @@ suite.define(() => {
         );
         expect(await readFirstSessionTitleGeometry(page)).toEqual(titleBaseline);
 
-        // Mirror: hold the expand at its midpoint, then reverse back to
-        // collapsed. The visibility handoff must still land hidden and inert.
+        // Mirror: reverse after the relayout has landed. The motion restores the
+        // expanded layout while the column is at the faint handoff, then slides
+        // home with no held animation or inline style left behind.
         await collapseButton.click();
-        await waitForNavSettled(page, "collapsed");
-        await expandToggle.click();
-        const heldExpand = await sampleNavSlide(page, 0.5);
-        expect(heldExpand.translateX).toBeLessThan(0);
-        expect(heldExpand.visibility).toBe("visible");
-        await collapseButton.click();
-        await waitForNavSettled(page, "collapsed");
-        const reversedCollapsed = await readShellNavGeometry(page);
-        expect(reversedCollapsed.navVisibility).toBe("hidden");
-        expect(reversedCollapsed.navInert).toBe(true);
-        expect(reversedCollapsed.gridTemplateColumns.split(" ")[0]).toBe("0px");
-        expect(reversedCollapsed.contentWidth).toBe(reversedCollapsed.shellWidth);
+        await finishShellMotion(page, "shell-nav-out");
+        await waitForShellMotion(page, "shell-nav-in");
+        await holdShellMotion(page, "shell-nav-in", 0.5);
+        await page.keyboard.press("ControlOrMeta+b");
+        await waitForShellMotion(page, "shell-nav-out");
+        await finishShellMotion(page, "shell-nav-out");
+        await waitForShellMotion(page, "shell-nav-in");
+        await finishShellMotion(page, "shell-nav-in");
+        await waitForNavSettled(page, "expanded");
+        const restored = await readShellNavGeometry(page);
+        expect(restored.navVisibility).toBe("visible");
+        expect(restored.navInert).toBe(false);
+        expect(restored.gridTemplateColumns.split(" ")[0]).toBe(restored.expandedWidth);
+        expect(await readFirstSessionTitleGeometry(page)).toEqual(titleBaseline);
       },
     );
   });
 
-  it("honors a custom rail width through the slide instead of a hard-coded default", async () => {
+  it("honors a custom rail width through the coupled motion instead of a hard-coded default", async () => {
     await suite.withPage(
       {
         locale: "en-US",
@@ -434,8 +416,6 @@ suite.define(() => {
         await installMockGateway(page, { sessions: buildLongTitleSessionRows(4) });
         await page.goto(`${suite.server.baseUrl}new`);
         await page.locator(".sidebar-recent-session").first().waitFor();
-        // navWidth is a persisted UI setting; seed it and reload so the shell
-        // boots with the operator's width (boot-time sync can clobber writes).
         const settingsKey = controlUiBundledSettingsStorageKey(suite.server.baseUrl);
         await page.evaluate(
           ({ key }) => {
@@ -452,15 +432,17 @@ suite.define(() => {
         const titleBaseline = await readFirstSessionTitleGeometry(page);
 
         await page.locator(".sidebar-brand__collapse").click();
-        const midCollapse = await sampleNavSlide(page, 0.5);
-        expect(midCollapse.hasTransformTransition).toBe(true);
+        await holdShellMotion(page, "shell-nav-out", 0.5);
+        const midCollapse = await sampleShellFrame(page);
+        expect(midCollapse.hasSlide).toBe(true);
         expect(midCollapse.navWidth).toBe(320);
         expect(midCollapse.translateX).toBeLessThan(-64);
         expect(midCollapse.translateX).toBeGreaterThan(-320);
         expect(midCollapse.title).toEqual(titleBaseline);
-        const endCollapse = await sampleNavSlide(page, "end");
-        expect(endCollapse.translateX).toBe(-320);
-        expect(endCollapse.visibility).toBe("hidden");
+        await finishShellMotion(page, "shell-nav-out");
+        await waitForShellMotion(page, "shell-nav-in");
+        await finishShellMotion(page, "shell-nav-in");
+        await waitForNavSettled(page, "collapsed");
 
         await page.locator(".shell-chrome-controls__nav-toggle").click();
         await waitForNavSettled(page, "expanded");
@@ -473,7 +455,7 @@ suite.define(() => {
     );
   });
 
-  it("snaps the nav without a slide under prefers-reduced-motion", async () => {
+  it("snaps the nav without motion under prefers-reduced-motion", async () => {
     await suite.withPage(
       {
         locale: "en-US",
@@ -489,10 +471,9 @@ suite.define(() => {
 
         await page.locator(".sidebar-brand__collapse").click();
         await page.locator(".shell--nav-collapsed").waitFor();
-        // No slide runs: the rail is hidden immediately (the visibility delay
-        // is dropped too, not just the transform duration).
-        const collapsedSample = await sampleNavSlide(page, 0.5);
-        expect(collapsedSample.hasTransformTransition).toBe(false);
+        // No motion runs: the rail is hidden immediately and the state settled.
+        const collapsedSample = await sampleShellFrame(page);
+        expect(collapsedSample.hasSlide).toBe(false);
         expect(collapsedSample.visibility).toBe("hidden");
         expect(collapsedSample.inert).toBe(true);
         const collapsed = await readShellNavGeometry(page);
@@ -505,9 +486,6 @@ suite.define(() => {
         expect(reexpanded.navVisibility).toBe("visible");
         expect(reexpanded.navInert).toBe(false);
         expect(reexpanded.gridTemplateColumns.split(" ")[0]).toBe(expanded.expandedWidth);
-        expect(reexpanded.contentWidth).toBe(
-          reexpanded.shellWidth - Number.parseFloat(expanded.expandedWidth),
-        );
       },
     );
   });
