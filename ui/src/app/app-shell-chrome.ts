@@ -292,6 +292,10 @@ export class ShellChromeOwner {
       return;
     }
     event.preventDefault();
+    // A native navigation command is a real SPA route change known before the
+    // routed surface swaps; drop any in-flight nav fade so it cannot paint the
+    // destination through the old route's opacity/translate.
+    this.navMotion.settleRouteChange();
     this.host.navigate(destination.routeId, destination.options);
   };
 

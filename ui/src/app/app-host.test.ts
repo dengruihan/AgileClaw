@@ -1035,15 +1035,16 @@ describe("AgileClaw shell nav motion", () => {
     shell.append(nav, content);
     document.body.append(shell);
     onTestFinished(() => shell.remove());
-    const surfaces: Record<string, Element> = {
-      ".shell": shell,
-      ".shell-nav": nav,
-      "#control-ui-main": content,
-    };
+    const surfaces = new Map<string, Element>([
+      [".shell", shell],
+      [".shell-nav", nav],
+      ["#control-ui-main", content],
+    ]);
     const host: ShellNavMotionHost = {
       isConnected: true,
-      querySelector: (selector) => surfaces[selector] ?? null,
+      querySelector: (selector) => surfaces.get(selector) ?? null,
       routeState: {},
+      updateComplete: Promise.resolve(true),
     };
     return { host, nav, shell };
   }
@@ -1054,8 +1055,6 @@ describe("AgileClaw shell nav motion", () => {
     const apply = vi.fn();
     const settle = vi.fn();
     const owner = new ShellNavMotionOwner(host);
-    onTestFinished(() => owner.cancel());
-
     owner.toggle({ collapsed: true, apply, settle });
     expect(animations.map((animation) => animation.id)).toEqual([
       "shell-nav-slide",
@@ -1088,8 +1087,6 @@ describe("AgileClaw shell nav motion", () => {
     });
     const settle = vi.fn();
     const owner = new ShellNavMotionOwner(host);
-    onTestFinished(() => owner.cancel());
-
     owner.toggle({ collapsed: true, apply, settle });
     for (const animation of animations.filter((entry) => entry.id === "shell-nav-out")) {
       animation.finish();

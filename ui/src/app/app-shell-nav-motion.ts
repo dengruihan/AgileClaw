@@ -1,8 +1,28 @@
 import { isMobileNavLayout } from "./mobile-nav-layout.ts";
 
+type RouteStateSignal = {
+  readonly location?: {
+    readonly pathname?: string;
+    readonly search?: string;
+    readonly hash?: string;
+  };
+};
+
+/** The router facts a motion needs to notice a real SPA navigation. */
+type RouterRouteSignal = {
+  getState(): RouteStateSignal;
+  subscribeSelector(
+    selector: (state: RouteStateSignal) => string,
+    listener: (next: string) => void,
+    equal?: (previous: string, next: string) => boolean,
+  ): () => boolean;
+};
+
 export interface ShellNavMotionHost {
   readonly isConnected: boolean;
+  readonly updateComplete: Promise<boolean>;
   readonly routeState: { readonly routeId?: string };
+  readonly runtime?: { readonly router?: RouterRouteSignal };
   readonly navDrawerOpen?: boolean;
   desktopNavigationExpanded?: boolean;
   readonly context?: {
@@ -72,6 +92,7 @@ type ActiveMotion = {
   readonly finalCollapsed: boolean;
   animations: readonly Animation[];
   readonly slide: Animation;
+  routeUnsubscribe?: () => boolean;
 };
 
 /**
@@ -155,6 +176,19 @@ export class ShellNavMotionOwner {
     });
   }
 
+  /**
+   * SPA navigation owns the next surface. Commit the pending navigation state
+   * and drop every motion effect before that surface paints, in either phase.
+   */
+  settleRouteChange(): void {
+    const motion = this.active;
+    if (!motion) {
+      return;
+    }
+    motion.intent.apply(motion.finalCollapsed);
+    this.finish(this.generation);
+  }
+
   /** Runs a desktop toggle: applies state at the hidden point, or snaps. */
   toggle(intent: ShellNavMotionIntent): void {
     const shell = this.element(SHELL_SELECTOR);
@@ -195,6 +229,7 @@ export class ShellNavMotionOwner {
       slide,
     };
     this.active = motion;
+    this.watchRouteChanges(motion);
     if (moved === 0) {
       // No relayout left to hide: the surfaces simply settle back to rest.
       const returning = this.animateSurfaces(
@@ -235,14 +270,47 @@ export class ShellNavMotionOwner {
     this.generation += 1;
     const motion = this.active;
     this.active = undefined;
+    motion?.routeUnsubscribe?.();
     this.cancelAll(motion ? [...motion.animations, motion.slide] : []);
     this.releaseNavStyles();
   }
 
+  /**
+   * A router location change is a real SPA navigation. Subscribing for the
+   * motion's lifetime (no polling) lets the owner settle the pending nav state
+   * and clear every effect before the destination surface paints.
+   */
+  private watchRouteChanges(motion: ActiveMotion): void {
+    const router = this.host.runtime?.router;
+    if (!router) {
+      return;
+    }
+    const current = routeSignal(router.getState());
+    motion.routeUnsubscribe = router.subscribeSelector(
+      routeSignal,
+      (next) => {
+        if (next === current || this.active !== motion) {
+          return;
+        }
+        motion.intent.apply(motion.finalCollapsed);
+        this.finish(this.generation);
+      },
+      (previous, next) => previous === next,
+    );
+  }
+
   private snap(intent: ShellNavMotionIntent): void {
     this.cancel();
+    const generation = this.generation;
     intent.apply(intent.collapsed);
-    intent.settle?.(intent.collapsed);
+    // The instant path still needs the host's update to commit before the
+    // collapsed chrome exists; restoring focus any earlier falls back to the
+    // content column. A later toggle/cancel invalidates this settle.
+    void this.host.updateComplete.then(() => {
+      if (generation === this.generation) {
+        intent.settle?.(intent.collapsed);
+      }
+    });
   }
 
   private applyState(
@@ -283,6 +351,7 @@ export class ShellNavMotionOwner {
       return;
     }
     this.active = undefined;
+    motion.routeUnsubscribe?.();
     this.cancelAll(motion.animations);
     motion.slide.cancel();
     this.releaseNavStyles();
@@ -428,6 +497,11 @@ function settled(animations: readonly Animation[]): Promise<void> {
   return Promise.allSettled(animations.map((animation) => animation.finished)).then(
     () => undefined,
   );
+}
+
+function routeSignal(state: RouteStateSignal): string {
+  const location = state.location;
+  return `${location?.pathname ?? ""}${location?.search ?? ""}${location?.hash ?? ""}`;
 }
 
 function followsNavigation(element: HTMLElement): boolean {

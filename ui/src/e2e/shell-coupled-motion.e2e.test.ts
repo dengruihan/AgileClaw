@@ -257,6 +257,72 @@ async function expandNav(page: Page): Promise<void> {
   await page.keyboard.press("ControlOrMeta+b");
 }
 
+type ContentPaint = {
+  opacity: number;
+  translateX: number;
+  animations: string[];
+  navInlineStyle: string;
+  collapsed: boolean;
+  pathname: string;
+};
+
+async function readContentPaint(page: Page): Promise<ContentPaint> {
+  return page.evaluate(() => {
+    const content = document.querySelector<HTMLElement>("#control-ui-main");
+    const nav = document.querySelector<HTMLElement>(".shell-nav");
+    if (!content || !nav) {
+      throw new Error("Missing shell motion surface");
+    }
+    const transform = getComputedStyle(content).transform;
+    return {
+      opacity: Number.parseFloat(getComputedStyle(content).opacity),
+      translateX: transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m41,
+      animations: [...document.getAnimations()]
+        .map((animation) => animation.id)
+        .filter((id) => id.startsWith("shell-nav-")),
+      navInlineStyle: nav.getAttribute("style") ?? "",
+      collapsed:
+        document.querySelector(".shell")?.classList.contains("shell--nav-collapsed") ?? false,
+      pathname: location.pathname,
+    };
+  });
+}
+
+/** Holds the column fade while leaving the rail at its resting position. */
+async function holdColumnFade(page: Page, id: string, fraction: number): Promise<void> {
+  await page.evaluate(
+    ({ id: motionId, fraction: seekAt }) => {
+      const content = document.querySelector<HTMLElement>("#control-ui-main");
+      const terminal = document
+        .querySelector("openclaw-terminal-panel")
+        ?.shadowRoot?.querySelector<HTMLElement>(".tp");
+      for (const element of [content, terminal]) {
+        for (const animation of element?.getAnimations() ?? []) {
+          if (animation.id !== motionId) {
+            continue;
+          }
+          const endTime = animation.effect?.getComputedTiming().endTime ?? 0;
+          animation.pause();
+          animation.currentTime = endTime * seekAt;
+        }
+      }
+      for (const animation of document.querySelector(".shell-nav")?.getAnimations() ?? []) {
+        if (animation.id === "shell-nav-slide") {
+          animation.pause();
+          animation.currentTime = 0;
+        }
+      }
+    },
+    { fraction, id },
+  );
+}
+
+async function navigateNative(page: Page, target: string): Promise<void> {
+  await page.evaluate((path) => {
+    window.dispatchEvent(new CustomEvent("openclaw:native-navigate", { detail: { path } }));
+  }, target);
+}
+
 async function dragSelectTranscript(page: Page): Promise<string> {
   const target = page.locator(".chat-group").last();
   await target.scrollIntoViewIfNeeded();
@@ -483,6 +549,64 @@ suite.define(() => {
     );
   });
 
+  it("drops a held fade-out before an in-app SPA navigation paints the new route", async () => {
+    await suite.withPage(
+      { locale: "en-US", serviceWorkers: "block", viewport: { height: 900, width: 1440 } },
+      async ({ page }) => {
+        await openMockedChat(page);
+        await page.locator(COLLAPSE_BUTTON).click();
+        // Hold the outgoing column at 50% while the rail stays home, so the
+        // sidebar link is a real click target at its resting position.
+        await holdColumnFade(page, "shell-nav-out", 0.5);
+        expect((await readContentPaint(page)).opacity).toBeLessThan(1);
+
+        await page.locator('openclaw-app-sidebar a[href*="dashboards"]').first().click();
+        await expect.poll(() => page.evaluate(() => location.pathname)).toBe("/dashboards");
+        const paint = await readContentPaint(page);
+        // The routed surface swapped while the fade was held: the pending
+        // navigation state settles and the new route paints at rest.
+        expect(paint.animations).toEqual([]);
+        expect(paint.opacity).toBe(1);
+        expect(paint.translateX).toBe(0);
+        expect(paint.navInlineStyle).toBe("");
+        expect(paint.collapsed).toBe(true);
+        expect(
+          await page.evaluate(
+            () => (document.querySelector("#control-ui-main")?.textContent ?? "").trim().length > 0,
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
+  it("drops a held reveal before a native SPA navigation paints the new route", async () => {
+    await suite.withPage(
+      { locale: "en-US", serviceWorkers: "block", viewport: { height: 900, width: 1440 } },
+      async ({ page }) => {
+        await openMockedChat(page);
+        await page.locator(COLLAPSE_BUTTON).click();
+        await finishMotionEffect(page, "shell-nav-out");
+        await waitForMotionEffect(page, "shell-nav-in");
+        await holdColumnFade(page, "shell-nav-in", 0.5);
+        expect((await readContentPaint(page)).opacity).toBeLessThan(1);
+
+        await navigateNative(page, "/activity");
+        await expect.poll(() => page.evaluate(() => location.pathname)).toBe("/activity");
+        const paint = await readContentPaint(page);
+        expect(paint.animations).toEqual([]);
+        expect(paint.opacity).toBe(1);
+        expect(paint.translateX).toBe(0);
+        expect(paint.navInlineStyle).toBe("");
+        expect(paint.collapsed).toBe(true);
+        expect(
+          await page.evaluate(
+            () => (document.querySelector("#control-ui-main")?.textContent ?? "").trim().length > 0,
+          ),
+        ).toBe(true);
+      },
+    );
+  });
+
   it("snaps without motion under reduced motion and honors a custom rail width", async () => {
     await suite.withPage(
       {
@@ -495,6 +619,17 @@ suite.define(() => {
         await openMockedChat(page);
         await page.locator(COLLAPSE_BUTTON).click();
         await page.locator(".shell--nav-collapsed").waitFor();
+        // The instant path restores focus only after the collapsed chrome has
+        // rendered; it must land on the expand button, not the content fallback.
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () =>
+                document.activeElement?.classList.contains("shell-chrome-controls__nav-toggle") ??
+                false,
+            ),
+          )
+          .toBe(true);
         const collapsed = await readShellMotion(page);
         expect(collapsed.animations).toEqual([]);
         expect(collapsed.contentOpacity).toBe(1);
@@ -528,6 +663,54 @@ suite.define(() => {
         await finishMotionEffect(page, "shell-nav-in");
         await waitForMotionSettled(page);
         expect((await readShellMotion(page)).contentTranslateX).toBe(0);
+      },
+    );
+  });
+
+  it("keeps the page caret and restores the expand control when the engine cannot animate", async () => {
+    await suite.withPage(
+      { locale: "en-US", serviceWorkers: "block", viewport: { height: 900, width: 1440 } },
+      async ({ page }) => {
+        await page.addInitScript(() => {
+          Object.defineProperty(Element.prototype, "animate", {
+            configurable: true,
+            value: undefined,
+          });
+        });
+        await openMockedChat(page);
+        const composer = page.locator(".agent-chat__input textarea");
+        await composer.click();
+        await page.keyboard.type("caret during the instant snap");
+        await page.keyboard.press("ControlOrMeta+b");
+        await expect.poll(() => page.locator(".shell--nav-collapsed").count()).toBe(1);
+        // A caret already in the page wins over the focus rescue.
+        await expect
+          .poll(() => page.evaluate(() => document.activeElement?.tagName ?? ""))
+          .toBe("TEXTAREA");
+        expect(await composer.inputValue()).toBe("caret during the instant snap");
+        expect(
+          await page.evaluate(() =>
+            [...document.getAnimations()].some((animation) =>
+              animation.id.startsWith("shell-nav-"),
+            ),
+          ),
+        ).toBe(false);
+
+        // Expand and collapse from the rail: focus follows onto the expand
+        // button once the collapsed chrome has rendered.
+        await page.keyboard.press("ControlOrMeta+b");
+        await expect.poll(() => page.locator(".shell--nav-collapsed").count()).toBe(0);
+        await page.locator(COLLAPSE_BUTTON).click();
+        await expect.poll(() => page.locator(".shell--nav-collapsed").count()).toBe(1);
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () =>
+                document.activeElement?.classList.contains("shell-chrome-controls__nav-toggle") ??
+                false,
+            ),
+          )
+          .toBe(true);
       },
     );
   });
