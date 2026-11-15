@@ -33,9 +33,13 @@
   );
   --shell-focus-duration: 200ms;
   --shell-focus-ease: var(--ease-out);
-  /* The nav slide and its visibility handoff share one duration so the rail
-     hides exactly when the transform settles. Same motion family as the
-     mobile drawer (layout.mobile.css). */
+  /* One clock for a desktop nav toggle. The rail slides on it, and
+     app-shell-nav-motion.ts fades the content column and the moving dock
+     surfaces through the single grid relayout on the same duration/ease: the
+     outgoing surfaces fade out while translating, the navigation state applies
+     while they are transparent, and the new layout fades back in as it finishes
+     the translation. Same motion family as the mobile drawer
+     (layout.mobile.css). */
   --shell-nav-slide-duration: 200ms;
   --shell-nav-slide-ease: cubic-bezier(0.32, 0.72, 0, 1);
   /* One rounded base plate: the whole application — navigation, the settings
@@ -81,8 +85,11 @@
   gap: 0;
   /* The nav column snaps on toggle: easing the grid track relayouts the whole
      shell every frame (measured jank with a populated sidebar and transcript).
-     The rail itself slides on the compositor instead (.shell-nav transform
-     below); only the row track keeps an ease here. */
+     The shell-chrome motion owner hides that single relayout under one brief
+     fade-through of the content column and the moving dock surfaces
+     (app-shell-nav-motion.ts), so the chat components and docks travel with the
+     rail instead of cutting to their new geometry. Only the row track keeps an
+     ease here. */
   transition: grid-template-rows var(--shell-focus-duration) var(--shell-focus-ease);
   overflow: hidden;
 }
@@ -170,7 +177,13 @@
    after the transform settles (the drawer's visibility idiom). The view marks
    the rail inert immediately, so the departing surface is non-interactive
    from the first frame. Drawer shells keep their own offscreen handling
-   (layout.mobile.css). */
+   (layout.mobile.css).
+
+   These declarations also define the resting state for the coupled toggle in
+   app-shell-nav-motion.ts: while the fade-through runs, the owner drives the
+   rail transform with one WAAPI animation, suppresses this transition inline,
+   and holds visibility visible; restoring the declaration here replays no
+   second slide. */
 .shell--nav-collapsed:not(.shell--mobile-nav) .shell-nav {
   width: var(--shell-nav-expanded-width);
   transform: translateX(-100%);

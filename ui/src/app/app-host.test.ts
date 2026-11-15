@@ -24,6 +24,7 @@ import {
   type TestOptionalCustomElement,
 } from "./app-host.test-support.ts";
 import { ShellGatewayOwner, type ShellGatewayHost } from "./app-shell-gateway.ts";
+import { ShellNavMotionOwner, type ShellNavMotionHost } from "./app-shell-nav-motion.ts";
 import { createApplicationNavigationPreferences } from "./bootstrap-navigation-preferences.ts";
 import { createApplicationTheme } from "./bootstrap-theme.ts";
 import { createChatSubmissions } from "./chat-submissions.ts";
@@ -973,5 +974,156 @@ describe("AgileClaw shell keyboard shortcuts", () => {
     await vi.advanceTimersByTimeAsync(1);
 
     expect(harness.refreshList).toHaveBeenCalledOnce();
+  });
+});
+
+describe("AgileClaw shell nav motion", () => {
+  type FakeAnimation = {
+    id: string;
+    playState: string;
+    finished: Promise<Animation>;
+    cancel: () => void;
+    finish: () => void;
+  };
+
+  // The browser suite proves the painted frames; jsdom owns the ordering the
+  // browser cannot pause at microtask granularity (state apply at the handoff,
+  // reveal creation, cancel cleanup).
+  function stubSurfaceAnimations(): FakeAnimation[] {
+    const animations: FakeAnimation[] = [];
+    const original = HTMLElement.prototype.animate;
+    HTMLElement.prototype.animate = function (
+      _keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+      options?: number | KeyframeAnimationOptions,
+    ) {
+      let settle: (value: Animation) => void = () => {};
+      const finished = new Promise<Animation>((resolve) => {
+        settle = resolve;
+      });
+      const animation: FakeAnimation = {
+        id: typeof options === "object" && options?.id ? options.id : "",
+        playState: "running",
+        finished,
+        cancel: () => {
+          animation.playState = "idle";
+          settle(animation as unknown as Animation);
+        },
+        finish: () => {
+          animation.playState = "finished";
+          settle(animation as unknown as Animation);
+        },
+      };
+      animations.push(animation);
+      return animation as unknown as Animation;
+    } as typeof HTMLElement.prototype.animate;
+    onTestFinished(() => {
+      HTMLElement.prototype.animate = original;
+    });
+    return animations;
+  }
+
+  function createMotionHost() {
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    const shell = document.createElement("section");
+    shell.className = "shell";
+    shell.style.setProperty("--shell-nav-expanded-width", "258px");
+    shell.style.setProperty("--shell-nav-slide-duration", "200ms");
+    const nav = document.createElement("div");
+    nav.className = "shell-nav";
+    const content = document.createElement("main");
+    content.id = "control-ui-main";
+    shell.append(nav, content);
+    document.body.append(shell);
+    onTestFinished(() => shell.remove());
+    const surfaces: Record<string, Element> = {
+      ".shell": shell,
+      ".shell-nav": nav,
+      "#control-ui-main": content,
+    };
+    const host: ShellNavMotionHost = {
+      isConnected: true,
+      querySelector: (selector) => surfaces[selector] ?? null,
+      routeState: {},
+    };
+    return { host, nav, shell };
+  }
+
+  it("applies the navigation state at the hidden handoff, not on the click", async () => {
+    const animations = stubSurfaceAnimations();
+    const { host, nav } = createMotionHost();
+    const apply = vi.fn();
+    const settle = vi.fn();
+    const owner = new ShellNavMotionOwner(host);
+    onTestFinished(() => owner.cancel());
+
+    owner.toggle({ collapsed: true, apply, settle });
+    expect(animations.map((animation) => animation.id)).toEqual([
+      "shell-nav-slide",
+      "shell-nav-out",
+      "shell-nav-out",
+    ]);
+    expect(apply).not.toHaveBeenCalled();
+    expect(nav.style.transition).toBe("none");
+    expect(nav.style.visibility).toBe("visible");
+
+    for (const animation of animations.filter((entry) => entry.id === "shell-nav-out")) {
+      animation.finish();
+    }
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledExactlyOnceWith(true));
+    expect(animations.filter((animation) => animation.id === "shell-nav-in")).toHaveLength(2);
+
+    for (const animation of animations.filter((entry) => entry.id === "shell-nav-in")) {
+      animation.finish();
+    }
+    await vi.waitFor(() => expect(settle).toHaveBeenCalledExactlyOnceWith(true));
+    expect(nav.style.length).toBe(0);
+  });
+
+  it("retargets a toggle that arrives after the relayout without losing the final state", async () => {
+    const animations = stubSurfaceAnimations();
+    const { host, nav, shell } = createMotionHost();
+    // The real apply publishes the state and the shell class renders it.
+    const apply = vi.fn((collapsed: boolean) => {
+      shell.classList.toggle("shell--nav-collapsed", collapsed);
+    });
+    const settle = vi.fn();
+    const owner = new ShellNavMotionOwner(host);
+    onTestFinished(() => owner.cancel());
+
+    owner.toggle({ collapsed: true, apply, settle });
+    for (const animation of animations.filter((entry) => entry.id === "shell-nav-out")) {
+      animation.finish();
+    }
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(true));
+
+    // Reverse while the incoming surface is still fading: the owner fades the
+    // current frame out, restores the other layout, then reveals it.
+    owner.toggle({ collapsed: false, apply, settle });
+    const reverseOut = animations.filter((entry) => entry.id === "shell-nav-out");
+    expect(reverseOut.length).toBeGreaterThan(2);
+    for (const animation of reverseOut.slice(2)) {
+      animation.finish();
+    }
+    await vi.waitFor(() => expect(apply).toHaveBeenLastCalledWith(false));
+
+    for (const animation of animations.filter((entry) => entry.id === "shell-nav-in")) {
+      animation.finish();
+    }
+    await vi.waitFor(() => expect(settle).toHaveBeenCalledWith(false));
+    expect(nav.style.length).toBe(0);
+  });
+
+  it("cancels an in-flight toggle on disconnect without applying or leaving styles", () => {
+    const animations = stubSurfaceAnimations();
+    const { host, nav } = createMotionHost();
+    const apply = vi.fn();
+    const owner = new ShellNavMotionOwner(host);
+
+    owner.toggle({ collapsed: true, apply });
+    owner.cancel();
+
+    expect(apply).not.toHaveBeenCalled();
+    expect(animations.every((animation) => animation.playState === "idle")).toBe(true);
+    expect(nav.style.length).toBe(0);
   });
 });
