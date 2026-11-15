@@ -207,6 +207,12 @@ export class ShellNavMotionOwner {
       this.snap(intent);
       return;
     }
+    // A superseded motion is replaced, not settled: its animation callbacks are
+    // generation-guarded, so nothing else would release its route listener.
+    previous?.routeUnsubscribe?.();
+    if (previous) {
+      previous.routeUnsubscribe = undefined;
+    }
     const duration = readDuration(shellStyles);
     const ease = readEase(shellStyles);
     const inDuration = duration - Math.round(duration * OUTGOING_TRAVEL);

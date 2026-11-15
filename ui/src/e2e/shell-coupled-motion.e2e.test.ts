@@ -323,6 +323,50 @@ async function navigateNative(page: Page, target: string): Promise<void> {
   }, target);
 }
 
+type MotionSubscriptionCounts = { created: number; removed: number; active: number };
+
+/** Counts real router subscriptions created and released by the motion owner. */
+async function instrumentMotionSubscriptions(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const shell = document.querySelector("openclaw-app-shell") as
+      | (HTMLElement & {
+          runtime?: {
+            router?: { subscribeSelector: (...args: never[]) => () => boolean };
+          };
+        })
+      | null;
+    const router = shell?.runtime?.router;
+    if (!router) {
+      throw new Error("App router unavailable");
+    }
+    const original = router.subscribeSelector.bind(router);
+    const counts = { created: 0, removed: 0, active: 0 };
+    Reflect.set(window, "motionSubscriptionsProbe", () => ({ ...counts }));
+    router.subscribeSelector = (...args: never[]) => {
+      counts.created += 1;
+      counts.active += 1;
+      const unsubscribe = original(...args);
+      let released = false;
+      return () => {
+        if (!released) {
+          released = true;
+          counts.removed += 1;
+          counts.active -= 1;
+        }
+        return unsubscribe();
+      };
+    };
+  });
+}
+
+async function readMotionSubscriptions(page: Page): Promise<MotionSubscriptionCounts> {
+  return page.evaluate(() =>
+    (
+      window as unknown as { motionSubscriptionsProbe: () => MotionSubscriptionCounts }
+    ).motionSubscriptionsProbe(),
+  );
+}
+
 async function dragSelectTranscript(page: Page): Promise<string> {
   const target = page.locator(".chat-group").last();
   await target.scrollIntoViewIfNeeded();
@@ -603,6 +647,62 @@ suite.define(() => {
             () => (document.querySelector("#control-ui-main")?.textContent ?? "").trim().length > 0,
           ),
         ).toBe(true);
+      },
+    );
+  });
+
+  it("releases every route subscription after reversals, finishes, navigation and disconnect", async () => {
+    await suite.withPage(
+      { locale: "en-US", serviceWorkers: "block", viewport: { height: 900, width: 1440 } },
+      async ({ page }) => {
+        await openMockedChat(page);
+        await instrumentMotionSubscriptions(page);
+        expect(await readMotionSubscriptions(page)).toEqual({ created: 0, removed: 0, active: 0 });
+
+        // Natural finish in both directions.
+        await page.locator(COLLAPSE_BUTTON).click();
+        expect((await readMotionSubscriptions(page)).active).toBe(1);
+        await waitForMotionSettled(page);
+        expect((await readMotionSubscriptions(page)).active).toBe(0);
+        await page.locator(EXPAND_BUTTON).click();
+        await waitForMotionSettled(page);
+        expect((await readMotionSubscriptions(page)).active).toBe(0);
+
+        // Phase-A reversal: the superseded motion must not keep its listener.
+        await page.locator(COLLAPSE_BUTTON).click();
+        await holdColumnFade(page, "shell-nav-out", 0.4);
+        await page.keyboard.press("ControlOrMeta+b");
+        await waitForMotionSettled(page);
+        expect((await readMotionSubscriptions(page)).active).toBe(0);
+
+        // Phase-B reversal supersedes the running reveal.
+        await page.locator(COLLAPSE_BUTTON).click();
+        await finishMotionEffect(page, "shell-nav-out");
+        await waitForMotionEffect(page, "shell-nav-in");
+        await holdColumnFade(page, "shell-nav-in", 0.5);
+        await page.keyboard.press("ControlOrMeta+b");
+        await waitForMotionEffect(page, "shell-nav-out");
+        await finishMotionEffect(page, "shell-nav-out");
+        await waitForMotionEffect(page, "shell-nav-in");
+        await finishMotionEffect(page, "shell-nav-in");
+        await waitForMotionSettled(page);
+        expect((await readMotionSubscriptions(page)).active).toBe(0);
+
+        // Route settlement releases the subscription before the next paint.
+        await page.locator(COLLAPSE_BUTTON).click();
+        await holdColumnFade(page, "shell-nav-out", 0.5);
+        await navigateNative(page, "/activity");
+        await expect.poll(() => page.evaluate(() => location.pathname)).toBe("/activity");
+        expect((await readMotionSubscriptions(page)).active).toBe(0);
+
+        // Shell disconnect cancels an in-flight motion and its subscription.
+        await page.locator(EXPAND_BUTTON).click();
+        expect((await readMotionSubscriptions(page)).active).toBe(1);
+        await page.evaluate(() => document.querySelector("openclaw-app-shell")?.remove());
+        await expect.poll(() => readMotionSubscriptions(page)).toMatchObject({ active: 0 });
+        const final = await readMotionSubscriptions(page);
+        expect(final.created).toBe(final.removed);
+        expect(final.created).toBeGreaterThan(4);
       },
     );
   });
