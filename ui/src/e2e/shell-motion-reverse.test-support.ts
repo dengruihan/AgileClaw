@@ -126,7 +126,11 @@ type SiblingFrame = {
 export async function runSiblingReverse(
   page: Page,
   mode: "moving" | "stationary",
-): Promise<{ afterDispatch: SiblingFrame; samples: SiblingFrame[] }> {
+): Promise<{
+  afterDispatch: SiblingFrame;
+  samples: SiblingFrame[];
+  stationary: { width: number; target: number; contentPin: string } | null;
+}> {
   return page.evaluate(async (kind) => {
     const shell = document.querySelector<HTMLElement>(".shell");
     if (!shell) {
@@ -225,6 +229,7 @@ export async function runSiblingReverse(
       return false;
     };
     const origin = performance.now();
+    let stationary: { width: number; target: number; contentPin: string } | null = null;
     if (kind === "moving") {
       // Start the browser moving first, then close the terminal and reverse
       // it while both are still in flight.
@@ -266,18 +271,39 @@ export async function runSiblingReverse(
       // A settled browser is the stationary sibling; reverse the terminal
       // while it closes.
       browserToggle();
-      for (let index = 0; index < 40; index += 1) {
+      let settled = false;
+      for (let index = 0; index < 60; index += 1) {
         await frame();
         const browserElement = browser();
+        if (!browserElement) {
+          continue;
+        }
+        const browserTarget = Number.parseFloat(
+          document.documentElement.style.getPropertyValue("--oc-browser-reserve-right"),
+        );
+        const browserSettling = document.documentElement
+          .getAnimations()
+          .some(
+            (entry) =>
+              entry instanceof CSSTransition &&
+              entry.transitionProperty === "--oc-browser-reserve-right",
+          );
+        const width = browserElement.getBoundingClientRect().width;
+        const contentPin = browserElement.style.getPropertyValue("--oc-dock-content-width");
         if (
-          browserElement &&
-          browserElement.getBoundingClientRect().width > 1 &&
-          !browserElement
-            .getAnimations()
-            .some((entry) => entry instanceof CSSTransition && entry.transitionProperty === "width")
+          width > 1 &&
+          Number.isFinite(browserTarget) &&
+          Math.abs(width - browserTarget) < 0.5 &&
+          !browserSettling &&
+          contentPin === ""
         ) {
+          stationary = { width, target: browserTarget, contentPin };
+          settled = true;
           break;
         }
+      }
+      if (!settled) {
+        throw new Error("Stationary browser did not reach its pinned-free target");
       }
       terminalToggle(false);
       if (!(await waitForTerminalMid())) {
@@ -293,6 +319,163 @@ export async function runSiblingReverse(
       await frame();
       samples.push(sample(origin));
     }
-    return { afterDispatch, samples };
+    return { afterDispatch, samples, stationary };
   }, mode);
+}
+
+export type TerminalResizeFrame = {
+  atMs: number;
+  width: number;
+  contentWidth: number;
+  contentPin: string;
+  target: string;
+  shellMarginRight: number;
+  widthRunning: boolean;
+};
+
+export async function startTerminalOpenForResize(page: Page): Promise<TerminalResizeFrame> {
+  return page.evaluate(async () => {
+    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    window.dispatchEvent(new CustomEvent("openclaw:terminal-toggle", { detail: { open: true } }));
+    for (let index = 0; index < 6; index += 1) {
+      await frame();
+    }
+    const panel = document
+      .querySelector("openclaw-terminal-panel")
+      ?.shadowRoot?.querySelector<HTMLElement>(".tp");
+    const shell = document.querySelector<HTMLElement>(".shell");
+    if (!panel || !shell) {
+      throw new Error("Missing terminal panel");
+    }
+    const content = panel.querySelector<HTMLElement>(".dock-panel-content");
+    return {
+      atMs: 0,
+      width: panel.getBoundingClientRect().width,
+      contentWidth: content?.getBoundingClientRect().width ?? 0,
+      contentPin: panel.style.getPropertyValue("--oc-dock-content-width"),
+      target: document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
+      shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
+      widthRunning: document.documentElement
+        .getAnimations()
+        .some(
+          (animation) =>
+            animation instanceof CSSTransition &&
+            animation.transitionProperty === "--oc-terminal-reserve-right",
+        ),
+    };
+  });
+}
+
+export async function sampleTerminalOpenForResize(
+  page: Page,
+  count: number,
+): Promise<TerminalResizeFrame[]> {
+  return page.evaluate(async (frames) => {
+    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const origin = performance.now();
+    const samples: TerminalResizeFrame[] = [];
+    for (let index = 0; index < frames; index += 1) {
+      await frame();
+      const panel = document
+        .querySelector("openclaw-terminal-panel")
+        ?.shadowRoot?.querySelector<HTMLElement>(".tp");
+      const shell = document.querySelector<HTMLElement>(".shell");
+      if (!panel || !shell) {
+        throw new Error("Missing terminal panel");
+      }
+      const content = panel.querySelector<HTMLElement>(".dock-panel-content");
+      samples.push({
+        atMs: performance.now() - origin,
+        width: panel.getBoundingClientRect().width,
+        contentWidth: content?.getBoundingClientRect().width ?? 0,
+        contentPin: panel.style.getPropertyValue("--oc-dock-content-width"),
+        target: document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
+        shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
+        widthRunning: document.documentElement
+          .getAnimations()
+          .some(
+            (animation) =>
+              animation instanceof CSSTransition &&
+              animation.transitionProperty === "--oc-terminal-reserve-right",
+          ),
+      });
+    }
+    return samples;
+  }, count);
+}
+
+export async function readTerminalResizeSettle(page: Page) {
+  return page.evaluate(() => {
+    const panel = document
+      .querySelector("openclaw-terminal-panel")
+      ?.shadowRoot?.querySelector<HTMLElement>(".tp");
+    const shell = document.querySelector<HTMLElement>(".shell");
+    if (!panel || !shell) {
+      throw new Error("Missing terminal panel");
+    }
+    const content = panel.querySelector<HTMLElement>(".dock-panel-content");
+    return {
+      width: panel.getBoundingClientRect().width,
+      contentWidth: content?.getBoundingClientRect().width ?? 0,
+      contentPin: panel.style.getPropertyValue("--oc-dock-content-width"),
+      target: document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
+      shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
+      widthRunning: document.documentElement
+        .getAnimations()
+        .some(
+          (animation) =>
+            animation instanceof CSSTransition &&
+            animation.transitionProperty === "--oc-terminal-reserve-right",
+        ),
+    };
+  });
+}
+
+export async function readSiblingSettle(page: Page) {
+  return page.evaluate(() => {
+    const terminal = document
+      .querySelector("openclaw-terminal-panel")
+      ?.shadowRoot?.querySelector<HTMLElement>(".tp");
+    const browser = document
+      .querySelector("openclaw-browser-panel")
+      ?.shadowRoot?.querySelector<HTMLElement>(".bp");
+    const shell = document.querySelector<HTMLElement>(".shell");
+    if (!terminal || !browser || !shell) {
+      throw new Error("Missing sibling dock");
+    }
+    const terminalRect = terminal.getBoundingClientRect();
+    const browserRect = browser.getBoundingClientRect();
+    const root = document.documentElement;
+    const running = root
+      .getAnimations()
+      .filter(
+        (animation): animation is CSSTransition =>
+          animation instanceof CSSTransition &&
+          (animation.transitionProperty === "--oc-terminal-reserve-right" ||
+            animation.transitionProperty === "--oc-browser-reserve-right") &&
+          animation.playState !== "finished" &&
+          animation.playState !== "idle",
+      )
+      .map((animation) => animation.transitionProperty);
+    const contentWidth = (element: HTMLElement) =>
+      element.querySelector<HTMLElement>(".dock-panel-content")?.getBoundingClientRect().width ?? 0;
+    return {
+      terminalWidth: terminalRect.width,
+      terminalLeft: terminalRect.left,
+      terminalContentWidth: contentWidth(terminal),
+      terminalContentPin: terminal.style.getPropertyValue("--oc-dock-content-width"),
+      browserWidth: browserRect.width,
+      browserLeft: browserRect.left,
+      browserRight: browserRect.right,
+      browserContentWidth: contentWidth(browser),
+      browserContentPin: browser.style.getPropertyValue("--oc-dock-content-width"),
+      shellRight: shell.getBoundingClientRect().right,
+      shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
+      terminalTarget:
+        Number.parseFloat(root.style.getPropertyValue("--oc-terminal-reserve-right")) || 0,
+      browserTarget:
+        Number.parseFloat(root.style.getPropertyValue("--oc-browser-reserve-right")) || 0,
+      running,
+    };
+  });
 }

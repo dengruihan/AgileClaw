@@ -8,7 +8,14 @@ import {
 } from "../test-helpers/control-ui-e2e-readiness.ts";
 import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
-import { runSiblingReverse, runTerminalReverse } from "./shell-motion-reverse.test-support.ts";
+import {
+  readSiblingSettle,
+  readTerminalResizeSettle,
+  runSiblingReverse,
+  runTerminalReverse,
+  sampleTerminalOpenForResize,
+  startTerminalOpenForResize,
+} from "./shell-motion-reverse.test-support.ts";
 
 // ZCode desktop shell motion contract (zai-org/ZCode fec975905a2):
 // - left navigation: width + opacity, 200ms ease-out, the main column follows
@@ -81,13 +88,20 @@ async function openMockedChat(page: Page): Promise<void> {
   await waitForShellLayout(page);
 }
 
-async function openMockedActivity(page: Page, terminalOpen = true): Promise<void> {
-  await page.addInitScript((open) => {
-    localStorage.setItem(
-      "openclaw.terminal.panel.v1",
-      JSON.stringify({ open, dock: "right", height: 240, width: 600 }),
-    );
-  }, terminalOpen);
+async function openMockedActivity(
+  page: Page,
+  terminalOpen = true,
+  terminalWidth = 600,
+): Promise<void> {
+  await page.addInitScript(
+    ({ open, width }) => {
+      localStorage.setItem(
+        "openclaw.terminal.panel.v1",
+        JSON.stringify({ open, dock: "right", height: 240, width }),
+      );
+    },
+    { open: terminalOpen, width: terminalWidth },
+  );
   await installMockGateway(page, {
     featureMethods: ["terminal.open", "browser.request"],
     methodResponses: {
@@ -720,8 +734,13 @@ suite.define(() => {
         },
         async ({ page }) => {
           await openMockedActivity(page);
-          const { afterDispatch, samples } = await runSiblingReverse(page, mode);
+          const { afterDispatch, samples, stationary } = await runSiblingReverse(page, mode);
           await capture(page, `sibling-${mode}-reverse-mid`);
+          if (mode === "stationary") {
+            expect(stationary).not.toBeNull();
+            expect(Math.abs(stationary!.width - stationary!.target)).toBeLessThan(0.5);
+            expect(stationary!.contentPin).toBe("");
+          }
           for (const frame of [afterDispatch, ...samples]) {
             expect(
               Math.abs(frame.browserLeft - frame.shellRight - 8),
@@ -745,10 +764,76 @@ suite.define(() => {
               ),
             ).toBeLessThan(25);
           }
+          await expect
+            .poll(async () => {
+              const settled = await readSiblingSettle(page);
+              return (
+                settled.running.length === 0 &&
+                settled.terminalContentPin === "" &&
+                settled.browserContentPin === ""
+              );
+            })
+            .toBe(true);
+          const settled = await readSiblingSettle(page);
+          expect(settled.terminalContentPin).toBe("");
+          expect(settled.browserContentPin).toBe("");
+          expect(settled.terminalWidth).toBeCloseTo(settled.terminalTarget, 1);
+          expect(settled.browserWidth).toBeCloseTo(settled.browserTarget, 1);
+          expect(settled.terminalContentWidth).toBeCloseTo(settled.terminalTarget, 1);
+          expect(settled.browserContentWidth).toBeCloseTo(settled.browserWidth, 1);
+          expect(Math.abs(settled.terminalLeft - settled.browserRight)).toBeLessThan(1.5);
+          expect(Math.abs(settled.browserLeft - settled.shellRight - 8)).toBeLessThan(1.5);
+          expect(
+            Math.abs(settled.shellMarginRight - settled.terminalWidth - settled.browserWidth - 8),
+          ).toBeLessThan(1.5);
         },
       );
     },
   );
+
+  it("clamps a moving right dock immediately when the viewport shrinks", async () => {
+    await suite.withPage(
+      {
+        locale: "en-US",
+        recordVideo: proofVideo(),
+        serviceWorkers: "block",
+        viewport: { height: 900, width: 1440 },
+      },
+      async ({ page }) => {
+        await openMockedActivity(page, false, 1000);
+        const beforeResize = await startTerminalOpenForResize(page);
+        expect(beforeResize.width).toBeGreaterThan(1);
+        expect(beforeResize.width).toBeLessThan(1000);
+        expect(beforeResize.target).toBe("1000px");
+        expect(beforeResize.widthRunning).toBe(true);
+
+        await page.setViewportSize({ width: 1000, height: 900 });
+        const frames = await sampleTerminalOpenForResize(page, 10);
+        // The clamped 800px target must take effect at once; the old 1000px
+        // goal may not keep occupying the frame until motion settlement.
+        for (const frame of frames) {
+          expect(
+            Math.abs(frame.width - 800),
+            `clamped width at ${frame.atMs.toFixed(0)}ms`,
+          ).toBeLessThan(1.5);
+          expect(frame.target).toBe("800px");
+          expect(Math.abs(frame.contentWidth - 800)).toBeLessThan(1.5);
+          expect(Math.abs(frame.shellMarginRight - 808)).toBeLessThan(1.5);
+        }
+        await expect
+          .poll(async () => {
+            const settled = await readTerminalResizeSettle(page);
+            return !settled.widthRunning && settled.contentPin === "";
+          })
+          .toBe(true);
+        const settled = await readTerminalResizeSettle(page);
+        expect(settled.width).toBeCloseTo(800, 1);
+        expect(settled.contentPin).toBe("");
+        expect(Math.abs(settled.shellMarginRight - 808)).toBeLessThan(1.5);
+        await capture(page, "resize-open-clamped");
+      },
+    );
+  });
 
   it("snaps both columns without transitions under reduced motion", async () => {
     await suite.withPage(

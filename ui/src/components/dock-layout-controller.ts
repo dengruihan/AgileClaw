@@ -47,9 +47,25 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
     if (height === this.height && width === this.width) {
       return;
     }
+    const widthChanged = width !== this.width;
     this.height = height;
     this.width = width;
-    this.syncReservation();
+    if (widthChanged && this.motionDirection) {
+      // Native window resize never animates. Move the shared target and the
+      // temporary content width to the clamped size at once and restart the
+      // motion watch on the surviving opacity transition.
+      this.motionContentWidthPx = width;
+      setRightDockWidth(
+        this.options.reservationPrefix,
+        this.motionDirection === "opening" ? width : 0,
+        false,
+      );
+      const generation = ++this.motionGeneration;
+      this.host.requestUpdate();
+      void this.host.updateComplete.then(() => this.watchMotion(generation));
+    } else {
+      this.syncReservation();
+    }
     this.options.onResize?.();
     this.host.requestUpdate();
   };
