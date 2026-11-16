@@ -254,7 +254,7 @@
   width: 36px;
   height: 36px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--panel-strong);
   display: grid;
   place-items: center;

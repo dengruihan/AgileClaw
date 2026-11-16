@@ -292,7 +292,7 @@
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--ok);
 }
 

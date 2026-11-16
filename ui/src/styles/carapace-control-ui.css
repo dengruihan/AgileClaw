@@ -474,7 +474,7 @@ html[data-theme-resolved="light"] .oc-action-secondary:hover {
   height: 0.5rem;
   flex: 0 0 auto;
   border-radius: var(--oc-radius-round);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--oc-text-muted);
   box-shadow: 0 0 0 2px var(--oc-bg-surface);
 }

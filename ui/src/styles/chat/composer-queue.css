@@ -278,7 +278,7 @@
 .chat-queue__badge {
   padding: 1px 5px;
   border-radius: 999px;
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--muted);
   font-size: 10px;
@@ -421,7 +421,7 @@
 
 .chat-queue__steer {
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
 }
 
 .chat-queue__steer:hover:not(:disabled) {

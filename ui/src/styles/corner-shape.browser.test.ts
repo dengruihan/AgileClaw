@@ -102,36 +102,52 @@ const CASES: readonly CornerCase[] = [
     superelliptical: corners("12px"),
   },
   {
-    // Nested card that carries its own step next to the thread surface.
-    circular: corners("14px"),
+    // The shaped design gives this card the larger step; engines without
+    // corner-shape keep the pre-change main rule's plain radius.
+    circular: corners("10px"),
     markup: '<div class="code-block-wrapper"><pre><code>x</code></pre></div>',
     selector: ".code-block-wrapper",
     shape: "superellipse",
     superelliptical: corners("17.5px"),
   },
   {
-    circular: corners("14px"),
+    // Pre-change main fallback: the attachment card used the control step.
+    circular: corners("10px"),
     markup: '<div class="chat-assistant-attachment-card">Attachment</div>',
     selector: ".chat-assistant-attachment-card",
     shape: "superellipse",
     superelliptical: corners("17.5px"),
   },
   {
-    circular: corners("14px"),
+    // Pre-change main fallback: the user bubble inherited the base thread step.
+    circular: corners("10px"),
     markup: '<div class="chat-group user"><div class="chat-bubble">Hello</div></div>',
     selector: ".chat-group.user .chat-bubble",
     shape: "superellipse",
     superelliptical: corners("17.5px"),
   },
   {
+    // Pre-change main fallback: the image caption used the base thread step.
     circular: corners("10px"),
+    markup:
+      '<div class="chat-group user"><div class="chat-bubble chat-bubble--with-images">' +
+      '<div class="chat-message-avatar-anchor"><div class="chat-text">Caption</div></div>' +
+      "</div></div>",
+    selector: ".chat-text",
+    shape: "superellipse",
+    superelliptical: corners("17.5px"),
+  },
+  {
+    // Pre-change main fallback: the nested preview used the card step.
+    circular: corners("14px"),
     markup: '<div class="chat-tool-card__preview">Preview</div>',
     selector: ".chat-tool-card__preview",
     shape: "superellipse",
     superelliptical: corners("12.5px"),
   },
   {
-    circular: corners("10px"),
+    // The pre-change main rule gave this row no radius at all.
+    circular: corners("0px"),
     markup: '<div class="sidebar-recent-session">Session</div>',
     selector: ".sidebar-recent-session",
     shape: "superellipse",
@@ -213,10 +229,42 @@ const CASES: readonly CornerCase[] = [
     shape: "superellipse",
     superelliptical: corners("0px"),
   },
+  {
+    // The full-round control stays circular, while an ordinary menu row nested
+    // inside it must keep the continuous curvature (no inherited exception).
+    circular: corners("9999px"),
+    markup:
+      '<div class="agent-chat__input"><span class="chat-talk-control">' +
+      '<wa-dropdown class="chat-talk-input-picker">' +
+      '<wa-dropdown-item class="chat-talk-input-picker__item">Voice</wa-dropdown-item>' +
+      "</wa-dropdown></span></div>",
+    selector: ".chat-talk-control",
+    shape: "circular",
+    superelliptical: corners("9999px"),
+  },
+  {
+    circular: corners("10px"),
+    markup: "",
+    selector: ".chat-talk-input-picker__item",
+    shape: "superellipse",
+    superelliptical: corners("12.5px"),
+  },
+  {
+    // Inline-styled avatars carry their own radius and the shared circular
+    // exception class, exactly like the Nostr profile pictures.
+    circular: corners("50%"),
+    markup:
+      '<img class="nostr-profile-picture" alt="" ' +
+      'style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover" />',
+    selector: ".nostr-profile-picture",
+    shape: "circular",
+    superelliptical: corners("50%"),
+  },
 ];
 
 const READ_STYLESHEETS = [
   "ui/src/styles/base.css",
+  "ui/src/styles/continuous-corners.css",
   "ui/src/styles/components.css",
   "ui/src/styles/layout.css",
   "ui/src/styles/app-sidebar.css",
@@ -225,6 +273,7 @@ const READ_STYLESHEETS = [
   "ui/src/styles/option-card.css",
   "ui/src/styles/settings.css",
   "ui/src/styles/settings-controls.css",
+  "ui/src/styles/channels.css",
   "ui/src/styles/chat/startup-layout.css",
   "ui/src/styles/chat/layout.css",
   "ui/src/styles/chat/message-layout.css",

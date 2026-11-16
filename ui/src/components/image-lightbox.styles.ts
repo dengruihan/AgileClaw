@@ -52,7 +52,7 @@ export const imageLightboxStyles = css`
 
   .actions .action {
     border-radius: 999px;
-    --corner-shape: round;
+    corner-shape: round;
     transition: background-color 180ms ease;
   }
 
@@ -154,7 +154,7 @@ export const imageLightboxStyles = css`
     height: 44px;
     padding: 0;
     border-radius: 50%;
-    --corner-shape: round;
+    corner-shape: round;
     transform: translateY(-50%);
     color: var(--media-foreground);
     background: var(--image-lightbox-control-background);
@@ -192,7 +192,7 @@ export const imageLightboxStyles = css`
     margin: 0;
     padding: 6px 12px;
     border-radius: 999px;
-    --corner-shape: round;
+    corner-shape: round;
     color: var(--media-foreground);
     background: var(--image-lightbox-control-background);
     font-size: 12px;

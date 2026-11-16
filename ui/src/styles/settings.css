@@ -633,7 +633,7 @@ textarea.settings-input {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--muted);
   flex-shrink: 0;
 }
@@ -856,7 +856,7 @@ textarea.settings-input {
   width: 20px;
   height: 20px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   flex: none;
 }
 

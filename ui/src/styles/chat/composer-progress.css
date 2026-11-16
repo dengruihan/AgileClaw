@@ -294,7 +294,7 @@
     background: color-mix(in srgb, var(--text) 7%, transparent);
     border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
     border-radius: var(--radius-full);
-    --corner-shape: round;
+    corner-shape: round;
   }
 
   .agent-chat__goal[data-expanded="true"] .agent-chat__goal-action-label {
@@ -512,7 +512,7 @@
   width: 24px;
   height: 3px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--muted) 36%, transparent);
   content: "";
 }

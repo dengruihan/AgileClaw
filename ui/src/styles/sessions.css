@@ -541,7 +541,7 @@
   background: var(--ok);
   border: 2px solid var(--card);
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
 }
 
 .session-key-cell__text {
@@ -644,7 +644,7 @@
   height: 12px;
   background: var(--bg-hover);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   animation: session-skeleton-pulse 1.4s ease-in-out infinite;
 }
 

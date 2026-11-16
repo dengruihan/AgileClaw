@@ -111,7 +111,7 @@ openclaw-multi-select {
   margin: 0;
   border: none;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: transparent;
   color: var(--muted);
   line-height: 1;

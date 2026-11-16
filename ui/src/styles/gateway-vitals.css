@@ -199,7 +199,7 @@
   height: 5px;
   background: currentColor;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   transform: translate(-50%, -50%);
   pointer-events: none;
 }

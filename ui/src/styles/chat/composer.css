@@ -342,7 +342,7 @@
   display: inline-flex;
   align-items: center;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--muted);
   font-size: 10px;
@@ -504,7 +504,7 @@
 .agent-chat__composer-error .callout__dismiss {
   margin: -4px -4px -4px 0;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   opacity: 0.72;
 }
 
@@ -533,7 +533,7 @@
   height: 18px;
   flex: 0 0 3px;
   border-radius: 999px;
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--accent) 88%, var(--text));
   box-shadow: 0 0 5px color-mix(in srgb, var(--accent) 30%, transparent);
   opacity: 0.9;
@@ -688,7 +688,7 @@
   gap: 0;
   flex: 0 0 auto;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: transparent;
   transition: background var(--duration-fast) ease;
 }
@@ -752,7 +752,7 @@
   padding: 0;
   border: 0;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: transparent;
   color: var(--chat-composer-secondary, var(--muted));
   opacity: 0;
@@ -1087,7 +1087,7 @@
   inset: -3px;
   padding: 2px;
   border-radius: inherit;
-  --corner-shape: inherit;
+  corner-shape: inherit;
   background: conic-gradient(
     from -90deg,
     var(--accent) 0deg var(--chat-dictation-hold-angle),
@@ -1155,7 +1155,7 @@
   padding: 7px;
   border: 1px solid color-mix(in srgb, white 28%, transparent);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--media-bg) 68%, transparent);
   color: white;
   cursor: var(--cursor-action);
@@ -1553,7 +1553,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   height: 100%;
   place-items: center;
   border-radius: inherit;
-  --corner-shape: inherit;
+  corner-shape: inherit;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1780,7 +1780,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--popover);
   color: var(--text-strong);
 }
@@ -1938,7 +1938,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
 
 .agent-chat__input .chat-controls__inline-select-trigger {
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
 }
 
 .chat-controls__inline-select-trigger:hover,
@@ -2001,7 +2001,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   width: 100%;
   height: 0.78em;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
 }
 
 /* The loading label occupies the same explicit text metric as the skeleton.
@@ -2165,7 +2165,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   overflow: hidden;
   padding: 1px 8px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--muted);
   font-size: 10px;
@@ -2372,7 +2372,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   padding: 2px 6px;
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   color: var(--muted);
   font-size: 10px;
   font-weight: 650;
@@ -2631,7 +2631,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   overflow: hidden;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--text) 7%, transparent);
   pointer-events: none;
 }
@@ -2687,7 +2687,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   margin-left: calc(var(--chat-effort-knob-width) / -2);
   transform: translateY(-50%);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--text-strong);
   box-shadow: var(--shadow-sm);
   pointer-events: none;
@@ -2708,7 +2708,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   width: 4px;
   height: 4px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--text) 28%, transparent);
 }
 
@@ -2733,7 +2733,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   width: 5px;
   height: 5px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--accent) 35%, white);
   box-shadow:
     0 0 3px color-mix(in srgb, var(--accent) 90%, transparent),
@@ -2792,7 +2792,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   margin: 0;
   padding: 0;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: transparent;
   cursor: pointer;
 }
@@ -3038,7 +3038,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--border) 92%, var(--text));
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--text) 12%, var(--card));
 }
 
@@ -3073,7 +3073,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   width: 14px;
   height: 14px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--text-strong);
   box-shadow: var(--shadow-sm);
   transition: transform var(--duration-fast) var(--ease-out);
@@ -3170,7 +3170,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
     position: absolute;
     inset: 0;
     border-radius: var(--radius-full);
-    --corner-shape: round;
+    corner-shape: round;
     background: transparent;
     content: "";
   }
@@ -3296,7 +3296,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   width: 96px;
   height: 96px;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   object-fit: cover;
 }
 

@@ -507,7 +507,7 @@
   height: var(--chat-composer-control-size);
   padding: 0;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   color: var(--chat-composer-secondary);
 }
 
@@ -567,7 +567,7 @@
   height: 5px;
   border: 1px solid var(--chat-composer-surface);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--danger);
   content: "";
   pointer-events: none;
@@ -628,7 +628,7 @@
   width: 36px;
   height: 36px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   border: none;
   background: var(--primary);
   color: var(--primary-foreground);
@@ -813,7 +813,7 @@
   height: var(--chat-composer-send-size);
   padding: 5px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   color: var(--text-strong);
   background: color-mix(in srgb, var(--text) 10%, transparent);
   box-shadow: none;
@@ -842,7 +842,7 @@
   min-width: 64px;
   padding: 0 14px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: transparent;
   color: var(--accent);
   box-shadow: none;
@@ -1158,7 +1158,7 @@
     min-width: var(--chat-composer-control-size);
     height: var(--chat-mobile-row-target-size);
     border-radius: var(--radius-full);
-    --corner-shape: round;
+    corner-shape: round;
   }
 
   /* Mobile icon controls own a real 32px target; Plus uses its explicit 36px

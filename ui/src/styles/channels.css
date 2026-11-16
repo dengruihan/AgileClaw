@@ -427,3 +427,10 @@
   outline: none;
   box-shadow: var(--focus-ring);
 }
+
+/* Inline-styled profile pictures are true circles: the template keeps the size
+   and 50% radius inline, and this one shared class carries the shape exception
+   the universal corner contract cannot infer from an inline value. */
+.nostr-profile-picture {
+  corner-shape: round;
+}

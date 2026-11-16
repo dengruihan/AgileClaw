@@ -635,7 +635,7 @@ export const panelTabStripStyles = css`
   .tabstrip-tab__badge {
     border: 1px solid color-mix(in srgb, var(--accent, #ff5c5c) 45%, transparent);
     border-radius: 999px;
-    --corner-shape: round;
+    corner-shape: round;
     color: var(--accent, #ff5c5c);
     font-size: 9px;
     line-height: 14px;

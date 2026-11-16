@@ -77,7 +77,7 @@ wa-tab.hub-tab[disabled]::part(base) {
   min-height: 16px;
   padding: 0 5px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--bg-hover);
   color: var(--muted);
   font-size: 10px;

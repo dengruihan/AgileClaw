@@ -107,7 +107,7 @@ export const terminalPanelUploadStyles = css`
     margin-top: 8px;
     overflow: hidden;
     border-radius: 999px;
-    --corner-shape: round;
+    corner-shape: round;
     background: color-mix(in srgb, var(--border, #262b34) 72%, transparent);
   }
   .tp-upload-progress__fill,
@@ -116,7 +116,7 @@ export const terminalPanelUploadStyles = css`
     inset-block: 0;
     left: 0;
     border-radius: inherit;
-    --corner-shape: inherit;
+    corner-shape: inherit;
     background: var(--accent, #ff5c5c);
   }
   .tp-upload-progress__fill {

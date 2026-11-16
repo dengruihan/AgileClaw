@@ -89,7 +89,7 @@
   width: 32px;
   height: 32px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
 }
 
 .loading-skeleton__title {
@@ -153,7 +153,7 @@ openclaw-session-owner-chip {
   height: 20px;
   border: 1px solid hsl(var(--owner-hue) 52% 18% / 0.9);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: hsl(var(--owner-hue) 58% 26%);
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.24);
   color: white;
@@ -219,7 +219,7 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   width: 20px;
   height: 20px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   object-fit: cover;
 }
 
@@ -253,7 +253,7 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   border: 1.5px solid color-mix(in srgb, var(--accent) 28%, transparent);
   border-top-color: var(--accent);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   pointer-events: none;
 }
 
@@ -302,7 +302,7 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   width: 7px;
   height: 7px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: currentColor;
   box-shadow: 0 0 0 1.5px var(--bg);
 }
@@ -399,7 +399,7 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   color: var(--login-gate-tone, var(--accent));
   background: color-mix(in srgb, var(--login-gate-tone, var(--accent)) 12%, transparent);
 }
@@ -831,7 +831,7 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   color: var(--warn);
   background: color-mix(in srgb, var(--warn) 12%, transparent);
 }
@@ -1018,7 +1018,7 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   border: 1px solid var(--border);
   padding: 5px 11px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--secondary);
   font-size: 12px;
   font-weight: 500;
@@ -1039,7 +1039,7 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   width: 8px;
   height: 8px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--danger);
   box-shadow: 0 0 8px color-mix(in srgb, var(--danger) 50%, transparent);
   animation: pulse-subtle 2s ease-in-out infinite;
@@ -1073,7 +1073,7 @@ openclaw-session-owner-chip .viewer-avatar__initials {
   border: 2px solid color-mix(in srgb, currentColor 35%, transparent);
   border-top-color: currentColor;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   animation: btn-spinner-spin 0.7s linear infinite;
 }
 
@@ -1597,7 +1597,7 @@ openclaw-session-progress-hovercard-provider {
   width: 6px;
   height: 6px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--ok);
 }
 
@@ -2087,7 +2087,7 @@ input.input[type="radio"] {
 .field input[type="radio"],
 input.input[type="radio"] {
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
 }
 
 .field input[type="checkbox"]:active:not(:disabled),
@@ -2554,7 +2554,7 @@ input.input[type="radio"]:focus-visible {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--danger-subtle);
   color: var(--danger);
   margin-bottom: 4px;
@@ -2732,8 +2732,16 @@ input.input[type="radio"]:focus-visible {
   margin-block: 1em;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: transparent;
+}
+
+/* The shaped design gives code blocks the card step; the plain fallback keeps
+   the pre-change thread step. */
+@supports (corner-shape: superellipse(1.5)) {
+  .code-block-wrapper {
+    border-radius: var(--radius-lg);
+  }
 }
 
 .code-block-wrapper pre {
@@ -2982,7 +2990,7 @@ input.input[type="radio"]:focus-visible {
   font-weight: 500;
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   padding: 5px 12px;
   color: var(--muted);
   background: var(--secondary);
@@ -3347,7 +3355,7 @@ td.data-table-key-col {
   color: var(--muted);
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   padding: 4px 10px;
 }
 
@@ -3662,7 +3670,7 @@ td.data-table-key-col {
   min-height: 34px;
   border-color: var(--border);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--bg-elevated);
   font-size: 12px;
   font-weight: 600;
@@ -3772,7 +3780,7 @@ td.data-table-key-col {
   padding: 0 10px;
   border: 0;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: transparent;
   color: var(--muted);
   font-size: 12px;
@@ -3811,7 +3819,7 @@ td.data-table-key-col {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   flex: 0 0 auto;
   object-fit: cover;
 }
@@ -3828,7 +3836,7 @@ td.data-table-key-col {
   padding: 1px 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   color: var(--muted);
   font-size: 10px;
   font-weight: 600;
@@ -3979,7 +3987,7 @@ td.data-table-key-col {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -4268,7 +4276,7 @@ td.data-table-key-col {
   min-height: 32px;
   padding: 6px 12px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   border: 1px solid color-mix(in srgb, var(--border) 78%, white 10%);
   background: color-mix(in srgb, var(--secondary) 72%, transparent);
   color: var(--muted);
@@ -4671,7 +4679,7 @@ td.data-table-key-col {
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--card) 86%, transparent);
   color: inherit;
   transition:
@@ -4791,7 +4799,7 @@ td.data-table-key-col {
   padding: 2px 6px;
   border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--card) 70%, transparent);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5337,7 +5345,7 @@ td.data-table-key-col {
   border: 2px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   animation: device-pair-setup-spin 0.8s linear infinite;
 }
 
@@ -5436,7 +5444,7 @@ td.data-table-key-col {
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--accent-subtle);
   color: var(--accent);
   font-size: 12px;
@@ -5729,7 +5737,7 @@ td.data-table-key-col {
   height: 7px;
   flex: 0 0 auto;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
 }
@@ -5743,7 +5751,7 @@ td.data-table-key-col {
   border: 1.5px solid color-mix(in srgb, var(--accent) 28%, transparent);
   border-top-color: var(--accent);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
 }
 
 .session-run-spinner,

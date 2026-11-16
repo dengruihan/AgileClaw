@@ -55,7 +55,6 @@
   --sidebar-child-session-toggle-width: max(34px, calc(36px * var(--control-ui-text-scale)));
   --session-row-face: var(--sidebar-bg, var(--bg));
 
-  border-radius: var(--radius-md);
   position: relative;
   display: flex;
   align-items: center;
@@ -65,6 +64,14 @@
   color: var(--muted);
   cursor: var(--cursor-action);
   transition: color var(--duration-fast) ease;
+}
+
+/* The shaped design rounds the row's hit box; the plain fallback has no row
+   radius, matching the session link's square box. */
+@supports (corner-shape: superellipse(1.5)) {
+  .sidebar-recent-session {
+    border-radius: var(--radius-md);
+  }
 }
 
 .sidebar-recent-session:hover {
@@ -485,7 +492,7 @@
   height: 18px;
   border: 1px solid var(--sidebar-bg, var(--bg));
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   font-size: 9px;
 }
 
@@ -528,7 +535,7 @@
   width: 18px;
   border: 1px solid var(--session-row-face);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--session-row-face);
   mask:
     linear-gradient(white 0 0) padding-box,
@@ -599,7 +606,7 @@
   place-items: center;
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--bg-elevated) 72%, transparent);
   font-size: 12px;
 }

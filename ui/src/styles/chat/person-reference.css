@@ -39,7 +39,7 @@
   margin-inline-end: 0.25em;
   overflow: hidden;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--secondary);
   /* A clipped inline block has a stable bottom baseline across image outcomes.
      Center it on the capitals, not the lower x-height used by vertical-align: middle. */
@@ -55,7 +55,7 @@
   height: 100%;
   margin: 0;
   border-radius: inherit;
-  --corner-shape: inherit;
+  corner-shape: inherit;
   object-fit: cover;
 }
 

@@ -244,7 +244,7 @@ openclaw-chat-question-panel {
 
 .chat-question-panel__option[role="radio"] .chat-question-panel__option-marker {
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
 }
 
 .chat-question-panel__option--selected .chat-question-panel__option-marker {

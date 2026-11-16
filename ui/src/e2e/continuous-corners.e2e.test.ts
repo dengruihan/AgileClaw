@@ -37,6 +37,36 @@ async function readCorner(page: Page, selector: string): Promise<Corner> {
     });
 }
 
+/**
+ * Web Awesome parts inside one or more OpenClaw shadow roots: document
+ * `::part()` cannot cross those boundaries, so this proves the shared sheet
+ * reaches the nested WA shadow tree too.
+ */
+async function readNestedWaPart(
+  page: Page,
+  hostChain: readonly string[],
+  partSelector: string,
+): Promise<Corner> {
+  return await page.evaluate(
+    ({ hostChain: chain, partSelector: selector }) => {
+      let node: Element | null = document.querySelector(chain[0] ?? "");
+      for (const hostSelector of chain.slice(1)) {
+        node = node?.shadowRoot?.querySelector(hostSelector) ?? null;
+      }
+      const part = node?.shadowRoot?.querySelector(selector);
+      if (!part) {
+        throw new Error(`Missing ${selector} under ${chain.join(" > ")}`);
+      }
+      const style = getComputedStyle(part);
+      return {
+        radius: style.borderTopLeftRadius,
+        shape: style.getPropertyValue("corner-shape"),
+      };
+    },
+    { hostChain, partSelector },
+  );
+}
+
 /** Shadow-internal probe: the shared Lit rule is the only thing that can reach it. */
 async function readShadowCorner(page: Page, host: string, selector: string): Promise<Corner> {
   return await page.evaluate(
@@ -156,6 +186,15 @@ suite.define(() => {
           dialog: { radius: "14px", shape: "superellipse(1.5)" },
           close: { radius: "6px", shape: "superellipse(1.5)" },
         });
+        // The visible WA dialog part lives two OpenClaw shadow roots deep, so
+        // this asserts the nested Web Awesome boundary, not just the document.
+        expect(
+          await readNestedWaPart(
+            page,
+            ["openclaw-keyboard-shortcuts-dialog", "openclaw-modal-dialog", "wa-dialog"],
+            '[part="dialog"]',
+          ),
+        ).toMatchObject({ shape: "superellipse(1.5)" });
         await captureProof(page, "desktop-dark-shortcuts.png");
         await page.keyboard.press("Control+/");
         await expect
@@ -183,6 +222,41 @@ suite.define(() => {
           shape: "superellipse(1.5)",
         });
         await captureProof(page, "desktop-dark-attach-menu.png");
+
+        // A tooltip body is a WA part inside `openclaw-tooltip`'s shadow root.
+        // The tooltip materializes on first hover, so open a real trigger.
+        await page.getByRole("button", { name: "Enter fullscreen" }).first().hover();
+        await expect
+          .poll(() =>
+            page.evaluate(() => {
+              for (const host of document.querySelectorAll("openclaw-tooltip")) {
+                const body = host.shadowRoot
+                  ?.querySelector("wa-tooltip")
+                  ?.shadowRoot?.querySelector('[part="body"]');
+                if (body) {
+                  return getComputedStyle(body).getPropertyValue("corner-shape");
+                }
+              }
+              return "";
+            }),
+          )
+          .toBe("superellipse(1.5)");
+        const tooltipBody = await page.evaluate(() => {
+          for (const host of document.querySelectorAll("openclaw-tooltip")) {
+            const body = host.shadowRoot
+              ?.querySelector("wa-tooltip")
+              ?.shadowRoot?.querySelector('[part="body"]');
+            if (body) {
+              const style = getComputedStyle(body);
+              return {
+                radius: style.borderTopLeftRadius,
+                shape: style.getPropertyValue("corner-shape"),
+              };
+            }
+          }
+          return null;
+        });
+        expect(tooltipBody).toMatchObject({ radius: "12.5px", shape: "superellipse(1.5)" });
 
         expect(await probeCornerHit(page)).toEqual({
           circularCornerHit: false,

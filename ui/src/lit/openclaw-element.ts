@@ -1,23 +1,16 @@
-import { LitElement, css } from "lit";
+import { LitElement } from "lit";
 import { I18nController } from "../i18n/lib/lit-controller.ts";
+import continuousCornerCss from "../styles/continuous-corners.css?inline";
 
 /** Continuous corner curvature for shadow trees.
  *
- * The light-DOM rule in `styles/base.css` cannot cross a shadow boundary, so
- * every OpenClaw shadow root adopts the same declaration here instead of
- * repeating it per component. `--corner-shape` is an inherited custom property,
- * so a host or an internal surface still opts out (or into a different shape)
- * exactly like a light-DOM rule does. Component styles are adopted after this
- * sheet, so a component's own shape declaration keeps winning.
+ * `styles/continuous-corners.css` is the single shape source: the document
+ * loads it through `styles.css`, and every OpenClaw shadow root adopts the same
+ * text here. That covers Lit component internals and the Web Awesome parts one
+ * shadow root inside that tree, which a document `::part()` rule can never
+ * reach. The sheet is adopted before component styles so a component's own
+ * shape declaration still wins.
  */
-const continuousCornerStyles = css`
-  *,
-  *::before,
-  *::after {
-    corner-shape: var(--corner-shape, superellipse(1.5));
-  }
-`;
-
 let continuousCornerSheet: CSSStyleSheet | undefined;
 
 function adoptContinuousCornerStyles(root: ShadowRoot) {
@@ -28,14 +21,14 @@ function adoptContinuousCornerStyles(root: ShadowRoot) {
   if (canAdopt) {
     continuousCornerSheet ??= new CSSStyleSheet();
     if (continuousCornerSheet.cssRules.length === 0) {
-      continuousCornerSheet.replaceSync(continuousCornerStyles.cssText);
+      continuousCornerSheet.replaceSync(continuousCornerCss);
     }
-    root.adoptedStyleSheets = [...root.adoptedStyleSheets, continuousCornerSheet];
+    root.adoptedStyleSheets = [continuousCornerSheet, ...root.adoptedStyleSheets];
     return;
   }
   const style = document.createElement("style");
-  style.textContent = continuousCornerStyles.cssText;
-  root.append(style);
+  style.textContent = continuousCornerCss;
+  root.prepend(style);
 }
 
 /** Lit base that refreshes the element when the active locale changes. */

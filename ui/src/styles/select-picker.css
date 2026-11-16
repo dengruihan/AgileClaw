@@ -357,7 +357,7 @@ openclaw-select-picker {
   padding: 0;
   border: 0;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: transparent;
   color: inherit;
 }

@@ -329,7 +329,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  --corner-shape: inherit;
+  corner-shape: inherit;
   pointer-events: none;
 }
 
@@ -475,7 +475,7 @@
   height: 44px;
   margin: auto;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   color: var(--media-foreground);
   background: color-mix(in srgb, var(--media-bg) 55%, transparent);
   pointer-events: none;
@@ -639,9 +639,17 @@
   box-sizing: border-box;
   overflow: hidden;
   border: 1px solid var(--chat-attachment-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: transparent;
   transition: background-color 120ms ease;
+}
+
+/* The shaped design gives the attachment card the card step; the plain
+   fallback keeps the pre-change control step. */
+@supports (corner-shape: superellipse(1.5)) {
+  .chat-assistant-attachment-card {
+    border-radius: var(--radius-lg);
+  }
 }
 
 .chat-assistant-attachment-card:hover {
@@ -871,7 +879,7 @@
   padding: 0;
   border: 0;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   color: var(--text);
   background: transparent;
   font: inherit;
@@ -936,7 +944,7 @@
   width: calc(100% - 38px);
   height: var(--chat-attachment-action-size);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
 }
 
 .chat-assistant-attachment-card__actions--loading {
@@ -1061,7 +1069,7 @@
   width: fit-content;
   max-width: 100%;
   border-radius: 999px;
-  --corner-shape: round;
+  corner-shape: round;
   font-size: 12px;
   padding: 3px 8px;
   background: color-mix(in srgb, var(--accent) 14%, transparent);

@@ -283,7 +283,7 @@
   border: 2.5px solid var(--border);
   border-top-color: var(--accent);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   animation: spin 0.7s linear infinite;
 }
 

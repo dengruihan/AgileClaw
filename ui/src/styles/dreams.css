@@ -41,7 +41,7 @@
 .dreams__star {
   position: absolute;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   animation: dreams-twinkle 3s ease-in-out infinite alternate;
 }
 
@@ -97,7 +97,7 @@
 .dreams__bubble-dot {
   position: absolute;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--accent-subtle);
   border: 1px solid color-mix(in srgb, var(--accent) 10%, transparent);
   animation: dreams-bubble-float 6s ease-in-out infinite;
@@ -110,7 +110,7 @@
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   background: radial-gradient(circle at 35% 35%, var(--moon-highlight), var(--moon-base));
   box-shadow:
     0 0 40px rgba(251, 191, 36, 0.2),
@@ -142,7 +142,7 @@
   width: 240px;
   height: 100px;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   background: radial-gradient(ellipse, rgba(255, 77, 77, 0.08) 0%, transparent 70%);
   pointer-events: none;
   animation: dreams-glow-pulse 4s ease-in-out infinite;
@@ -185,7 +185,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--muted);
   opacity: 0.4;
 }
@@ -217,7 +217,7 @@
   gap: 8px;
   padding: 6px 14px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   border: 1px solid var(--border);
   background: color-mix(in oklab, var(--panel) 70%, transparent);
   color: var(--muted);
@@ -283,7 +283,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--ok);
   animation: dreams-dot-pulse 2s ease-in-out infinite;
 }
@@ -423,7 +423,7 @@
   height: 26px;
   padding: 0 8px;
   border-radius: 999px;
-  --corner-shape: round;
+  corner-shape: round;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -440,7 +440,7 @@
   gap: 6px;
   padding: 3px;
   border-radius: 999px;
-  --corner-shape: round;
+  corner-shape: round;
   border: 1px solid color-mix(in oklab, var(--border) 62%, transparent);
   background: color-mix(in oklab, var(--panel) 92%, transparent);
 }
@@ -451,7 +451,7 @@
   color: var(--muted);
   padding: 6px 10px;
   border-radius: 999px;
-  --corner-shape: round;
+  corner-shape: round;
   font-size: 12px;
   line-height: 1;
   transition:
@@ -484,7 +484,7 @@
   margin-bottom: 10px;
   padding: 4px 8px;
   border-radius: 999px;
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in oklab, var(--accent-subtle) 72%, transparent);
   color: var(--accent);
   font-size: 12px;
@@ -661,7 +661,7 @@
 .dreams-diary__day-chip {
   padding: 4px 12px;
   border-radius: 999px;
-  --corner-shape: round;
+  corner-shape: round;
   border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
   background: color-mix(in oklab, var(--panel) 84%, transparent);
   color: var(--muted);
@@ -743,7 +743,7 @@
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  --corner-shape: round;
+  corner-shape: round;
   padding: 3px 8px;
   font-size: 12px;
   text-transform: uppercase;
@@ -808,7 +808,7 @@
   align-items: center;
   padding: 4px 8px;
   border-radius: 999px;
-  --corner-shape: round;
+  corner-shape: round;
   font-size: 12px;
   color: var(--text);
   background: color-mix(in oklab, var(--accent-subtle) 84%, transparent);

@@ -906,7 +906,7 @@
   margin: 0;
   border: 0;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   box-shadow: none;
 }
 
@@ -1324,7 +1324,7 @@
   inset-inline-start: 0;
   width: 3px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--border-strong);
 }
 

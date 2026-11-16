@@ -388,7 +388,7 @@ export const filePreviewModalStyles = css`
     align-items: center;
     padding: 3px 10px;
     border-radius: 999px;
-    --corner-shape: round;
+    corner-shape: round;
     font-size: 11.5px;
     background: var(--bg-elevated);
     border: 1px solid var(--border);

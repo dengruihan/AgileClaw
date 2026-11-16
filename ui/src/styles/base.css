@@ -449,46 +449,29 @@
   }
 }
 
-/* Continuous corner curvature. One owner for every rounded surface in the
-   Control UI: ordinary DOM, hardcoded radii, Lit light-DOM components, Lit
-   shadow roots, and styleable Web Awesome parts all consume the same
-   superellipse and the same 1.25 radius compensation.
-   Where the engine can draw a superellipse the corner keeps curving into the
-   edge instead of stopping on a tangent, which reads as a shorter arc than a
-   circular corner of the same radius — the 1.25 scale gives that back. Border,
-   shadow, outline and overflow clipping all follow the drawn shape, so this
-   stays a paint-level refinement. The whole mechanism is gated: engines
-   without corner-shape draw the same plain circular arcs at the same authored
-   radius steps (surfaces whose shaped design used a larger step carry it in
-   their home rule now, so the fallback matches the shaped layout).
+/* Continuous corner curvature: canonical tokens and the 1.25 compensation.
+   `styles/continuous-corners.css` is the single shape source (it is also
+   inlined into every OpenClaw shadow root); this block owns the token chain the
+   shape consumes. Where the engine can draw a superellipse the corner keeps
+   curving into the edge instead of stopping on a tangent, which reads as a
+   shorter arc than a circular corner of the same radius — the 1.25 scale gives
+   that back. Border, shadow, outline and overflow clipping all follow the drawn
+   shape, so this stays a paint-level refinement. The whole mechanism is gated:
+   engines without corner-shape draw plain circular arcs at the authored home
+   steps (surfaces whose shaped design uses a different step gate that step in
+   their own file, so the fallback keeps the pre-change radius).
 
-   Coverage:
-   - `:where(body) *` (and its generated ::before/::after) draws the
-     superellipse. The zero-specificity subject lets any state rule, local
-     shape override, or component style win without !important.
-   - `corner-shape` does not inherit, so an element states a different shape
-     through `--corner-shape`, which does inherit: pseudo-elements and
-     `border-radius: inherit` children follow their owner.
-   - True circles, avatars, status dots, pills and intentional concave/disguised
-     round cuts are not squircles. A surface that is fully rounded marks itself
-     `--corner-shape: round` next to the radius that makes it fully rounded; a
-     zero radius (border-radius: 0) draws no corner, so it needs no marker.
-     Asymmetric/partial radii keep the shape on the corners they actually
-     round; the zero corners stay square.
-   - Canonical --radius-* tokens stay canonical at :root: MCP apps
-     (mcp-app-theme.ts) and widget iframes (widget-theme.ts) snapshot :root by
-     element and must keep the unscaled contract. The app consumes the same
-     chain redeclared on `body` with the 1.25 compensation, so a token-derived
-     radius scales exactly once and derived tokens (--menu-*, --oc-radius-*,
-     --wa-border-radius-*) are restated at the same scope because custom
-     properties resolve where they are declared, not where they are used.
-   - Author-tuned pixel radii below the token ladder (2-9px optical offsets,
-     the 11-22px feature steps) keep their authored value: they still gain the
-     continuous curvature, and the off-ladder feature steps that already
-     multiply --openclaw-corner-radius-scale keep doing so.
-   - Web Awesome parts are the only document-side reach into its shadow DOM.
-     Their panel surfaces are opting in below; switch tracks/thumbs, badges and
-     avatars stay circular (the initial `round` shape) by omission. */
+   Canonical --radius-* tokens stay canonical at :root: MCP apps
+   (mcp-app-theme.ts) and widget iframes (widget-theme.ts) snapshot :root by
+   element and must keep the unscaled contract. The app consumes the same chain
+   redeclared on `body` with the 1.25 compensation, so a token-derived radius
+   scales exactly once. Derived tokens (--menu-*, --oc-radius-*,
+   --wa-border-radius-*) are restated at the same scope because custom
+   properties resolve where they are declared, not where they are used.
+   Author-tuned pixel radii below the token ladder (2-9px optical offsets, the
+   11-22px feature steps) keep their authored value: they still gain the
+   continuous curvature, and the off-ladder feature steps that already multiply
+   --openclaw-corner-radius-scale keep doing so. */
 
 @supports (corner-shape: superellipse(1.5)) {
   :root {
@@ -522,35 +505,6 @@
     --wa-form-control-border-radius: var(--wa-border-radius-m);
     --wa-panel-border-radius: var(--wa-border-radius-l);
     --wa-tooltip-border-radius: var(--wa-border-radius-s);
-  }
-
-  :where(body) *,
-  :where(body) *::before,
-  :where(body) *::after {
-    corner-shape: var(--corner-shape, superellipse(1.5));
-  }
-
-  /* Web Awesome owns these popup panels in shadow DOM; each is a rounded
-     surface the product shows, so it opts into the same curvature. The menu
-     surfaces read the app's own menu radius instead of Web Awesome's smaller
-     default; feature rules that name their panel (composer popovers, feature
-     menus) still outrank this bare type selector, so their own step wins
-     without !important. */
-  wa-dropdown::part(menu),
-  wa-popover::part(body),
-  wa-select::part(listbox) {
-    border-radius: var(--menu-radius);
-    corner-shape: superellipse(1.5);
-  }
-
-  wa-select::part(combobox) {
-    border-radius: var(--radius-md);
-    corner-shape: superellipse(1.5);
-  }
-
-  wa-dropdown-item::part(submenu),
-  wa-tab::part(base) {
-    corner-shape: superellipse(1.5);
   }
 }
 

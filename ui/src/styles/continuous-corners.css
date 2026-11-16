@@ -1,0 +1,52 @@
+/* Continuous corner curvature — the single shape source.
+   Loaded in the document by `styles.css` and inlined (`?inline`) into every
+   OpenClaw Lit shadow root by `lit/openclaw-element.ts`, so light DOM, Lit
+   shadow DOM, and Web Awesome parts one shadow root in all consume the same
+   declaration. A document `::part()` rule cannot cross a shadow boundary, so
+   the Web Awesome surfaces below must exist in this shared source rather than
+   only in the document stylesheet.
+   The 1.25 radius compensation and the `@supports` capability signal stay in
+   `base.css`, which owns the token chain.
+   `corner-shape` is not inherited. A full-round surface states
+   `corner-shape: round` directly next to its radius (the same declaration wins
+   by specificity/order over the universal rule below), so ordinary descendants
+   keep the continuous curvature instead of inheriting the exception. Surfaces
+   that genuinely share their owner's box (`border-radius: inherit` overlays and
+   pseudo-elements) say `corner-shape: inherit`.
+   Engines without `corner-shape` keep the plain circular fallback; surfaces
+   whose shaped design uses a different radius step carry it in an `@supports`
+   rule next to their home rule. */
+@supports (corner-shape: superellipse(1.5)) {
+  *,
+  *::before,
+  *::after {
+    corner-shape: superellipse(1.5);
+  }
+
+  /* Web Awesome owns these panels in its own shadow DOM; each is a rounded
+     surface the product shows, so it opts into the same curvature. The menu
+     surfaces read the app's own menu radius instead of Web Awesome's smaller
+     default; feature rules that name their panel (composer popovers, feature
+     menus) still outrank this bare type selector, so their own step wins
+     without !important. */
+  wa-dropdown::part(menu),
+  wa-popover::part(body),
+  wa-select::part(listbox) {
+    border-radius: var(--menu-radius);
+    corner-shape: superellipse(1.5);
+  }
+
+  wa-select::part(combobox) {
+    border-radius: var(--radius-md);
+    corner-shape: superellipse(1.5);
+  }
+
+  /* Panels whose radius stays with their owner (WA panel tokens, the component
+     tooltip radius) only need the curvature. */
+  wa-dialog::part(dialog),
+  wa-dropdown-item::part(submenu),
+  wa-tab::part(base),
+  wa-tooltip::part(body) {
+    corner-shape: superellipse(1.5);
+  }
+}

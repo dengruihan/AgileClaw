@@ -383,7 +383,7 @@ select.settings-select:focus-visible {
   align-items: center;
   padding: 1px 7px;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--bg-elevated) 80%, var(--border) 20%);
   color: var(--muted);
   font-size: var(--control-ui-text-xs);

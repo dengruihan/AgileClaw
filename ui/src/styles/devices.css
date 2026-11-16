@@ -54,7 +54,7 @@
   display: inline-flex;
   padding: 1px var(--space-2);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--bg-hover);
 }
 

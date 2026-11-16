@@ -110,7 +110,7 @@
   padding: 4px 10px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   color: var(--muted-strong);
   font-family: var(--mono);
   font-size: var(--control-ui-text-xs);
@@ -121,7 +121,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--muted);
 }
 
@@ -181,7 +181,7 @@
   padding: 2px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   color: var(--muted);
   font-size: var(--control-ui-text-xs);
   font-weight: 500;
@@ -382,7 +382,7 @@
   border: 2px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   animation: approval-page-spin 800ms linear infinite;
 }
 
@@ -394,7 +394,7 @@
   margin-bottom: 20px;
   border: 1px solid color-mix(in srgb, var(--danger) 50%, var(--border));
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   color: var(--danger);
   font-family: var(--mono);
   font-weight: 800;

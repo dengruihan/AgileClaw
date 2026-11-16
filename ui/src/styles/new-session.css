@@ -239,7 +239,7 @@ html:is(.openclaw-native-macos, .openclaw-native-desktop) .new-session-page__inc
   padding-inline: var(--chat-composer-chip-padding-inline, 8px);
   border: 0;
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: transparent;
   color: var(--chat-composer-secondary, var(--muted));
   font: inherit;
@@ -344,7 +344,7 @@ html:is(.openclaw-native-macos, .openclaw-native-desktop) .new-session-page__inc
   user-select: none;
   border: 0;
   border-radius: 999px;
-  --corner-shape: round;
+  corner-shape: round;
   background: transparent;
   font-family: inherit;
 }
@@ -769,7 +769,7 @@ wa-popover.new-session-page__picker-popover
   padding: 1px 5px;
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   border-radius: var(--radius-full);
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--bg-hover) 62%, transparent);
   color: var(--muted);
   font-size: 10px;
@@ -994,7 +994,7 @@ wa-popover.new-session-page__where-popover::part(body) {
   z-index: 1;
   pointer-events: none;
   border-radius: inherit;
-  --corner-shape: inherit;
+  corner-shape: inherit;
   background: var(--accent);
   opacity: 0;
   transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -1168,7 +1168,7 @@ wa-popover.new-session-page__where-popover::part(body) {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   background: color-mix(in srgb, var(--danger) 14%, transparent);
   color: var(--danger);
 }
@@ -1615,7 +1615,7 @@ wa-popover.new-session-page__where-popover::part(body) {
   padding: 2px;
   border: 0;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   color: inherit;
   background: transparent;
   opacity: 0.6;

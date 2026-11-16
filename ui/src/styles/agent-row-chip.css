@@ -21,7 +21,7 @@ openclaw-agent-row-chip {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  --corner-shape: round;
+  corner-shape: round;
   background: var(--bg-elevated);
   object-fit: cover;
 }
