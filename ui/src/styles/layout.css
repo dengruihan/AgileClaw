@@ -10,12 +10,15 @@
    follow the same right-dock widths. Tailwind's `ease-out` utility computes to
    cubic-bezier(0, 0, 0.2, 1).
 
-   The `--oc-*-reserve-right` widths on html are STATIC shared targets set by
-   right-dock-motion.ts. Motion runs as local transitions on the actual
-   consumers — panel width, sibling right offsets, and the shell margin-right
-   below — which all read the same targets and the same static clock signal,
-   so they start in one frame and stay synchronized without an inherited
-   animated property restyling the whole tree every frame. */
+   The `--oc-*-reserve-right` widths are STATIC shared targets owned by
+   right-dock-motion.ts. Each target is written on the elements that read it —
+   every dock panel and this plate — as a non-inherited custom property, so a
+   target change restyles those consumers instead of the whole document. Motion
+   runs as local transitions on the same consumers — panel width, sibling right
+   offsets, and the shell margin-right below — which all read the same targets
+   and the same static clock signal, so they start in one frame and stay
+   synchronized without an inherited animated property restyling the whole tree
+   every frame. */
 :root {
   --shell-motion-duration: 200ms;
   --shell-motion-ease: cubic-bezier(0, 0, 0.2, 1);

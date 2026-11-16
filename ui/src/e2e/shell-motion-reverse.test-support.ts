@@ -183,10 +183,14 @@ export async function runSiblingReverse(
       const terminalTiming = timing("terminal");
       const browserTiming = timing("browser");
       const terminalTarget = Number.parseFloat(
-        document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
+        document
+          .querySelector<HTMLElement>(".shell")
+          ?.style.getPropertyValue("--oc-terminal-reserve-right") ?? "",
       );
       const browserTarget = Number.parseFloat(
-        document.documentElement.style.getPropertyValue("--oc-browser-reserve-right"),
+        document
+          .querySelector<HTMLElement>(".shell")
+          ?.style.getPropertyValue("--oc-browser-reserve-right") ?? "",
       );
       const contentWidth = (element: HTMLElement) =>
         element.querySelector<HTMLElement>(".dock-panel-content")?.getBoundingClientRect().width ??
@@ -220,7 +224,9 @@ export async function runSiblingReverse(
       );
     const terminalTarget =
       Number.parseFloat(
-        document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
+        document
+          .querySelector<HTMLElement>(".shell")
+          ?.style.getPropertyValue("--oc-terminal-reserve-right") ?? "",
       ) || 600;
     const waitForTerminalMid = async (): Promise<boolean> => {
       for (let index = 0; index < 20; index += 1) {
@@ -247,7 +253,9 @@ export async function runSiblingReverse(
         await frame();
         const browserElement = browser();
         const browserTarget = Number.parseFloat(
-          document.documentElement.style.getPropertyValue("--oc-browser-reserve-right"),
+          document
+            .querySelector<HTMLElement>(".shell")
+            ?.style.getPropertyValue("--oc-browser-reserve-right") ?? "",
         );
         if (
           browserElement &&
@@ -264,9 +272,10 @@ export async function runSiblingReverse(
           JSON.stringify({
             stage: "moving-sibling-browser",
             browser: browser()?.getBoundingClientRect().width ?? null,
-            browserTarget: document.documentElement.style.getPropertyValue(
-              "--oc-browser-reserve-right",
-            ),
+            browserTarget:
+              document
+                .querySelector<HTMLElement>(".shell")
+                ?.style.getPropertyValue("--oc-browser-reserve-right") ?? "",
           }),
         );
       }
@@ -287,7 +296,9 @@ export async function runSiblingReverse(
           continue;
         }
         const browserTarget = Number.parseFloat(
-          document.documentElement.style.getPropertyValue("--oc-browser-reserve-right"),
+          document
+            .querySelector<HTMLElement>(".shell")
+            ?.style.getPropertyValue("--oc-browser-reserve-right") ?? "",
         );
         const browserSettling =
           browserElement
@@ -367,7 +378,10 @@ export async function startTerminalOpenForResize(page: Page): Promise<TerminalRe
       width: panel.getBoundingClientRect().width,
       contentWidth: content?.getBoundingClientRect().width ?? 0,
       contentPin: panel.style.getPropertyValue("--oc-dock-content-width"),
-      target: document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
+      target:
+        document
+          .querySelector<HTMLElement>(".shell")
+          ?.style.getPropertyValue("--oc-terminal-reserve-right") ?? "",
       shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
       widthRunning:
         panel
@@ -408,7 +422,10 @@ export async function sampleTerminalOpenForResize(
         width: panel.getBoundingClientRect().width,
         contentWidth: content?.getBoundingClientRect().width ?? 0,
         contentPin: panel.style.getPropertyValue("--oc-dock-content-width"),
-        target: document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
+        target:
+          document
+            .querySelector<HTMLElement>(".shell")
+            ?.style.getPropertyValue("--oc-terminal-reserve-right") ?? "",
         shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
         widthRunning:
           panel
@@ -439,7 +456,10 @@ export async function readTerminalResizeSettle(page: Page) {
       width: panel.getBoundingClientRect().width,
       contentWidth: content?.getBoundingClientRect().width ?? 0,
       contentPin: panel.style.getPropertyValue("--oc-dock-content-width"),
-      target: document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
+      target:
+        document
+          .querySelector<HTMLElement>(".shell")
+          ?.style.getPropertyValue("--oc-terminal-reserve-right") ?? "",
       shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
       widthRunning:
         panel
@@ -468,7 +488,6 @@ export async function readSiblingSettle(page: Page) {
     }
     const terminalRect = terminal.getBoundingClientRect();
     const browserRect = browser.getBoundingClientRect();
-    const root = document.documentElement;
     const running = [terminal, browser]
       .flatMap((element) => element?.getAnimations() ?? [])
       .filter(
@@ -494,9 +513,17 @@ export async function readSiblingSettle(page: Page) {
       shellRight: shell.getBoundingClientRect().right,
       shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
       terminalTarget:
-        Number.parseFloat(root.style.getPropertyValue("--oc-terminal-reserve-right")) || 0,
+        Number.parseFloat(
+          document
+            .querySelector<HTMLElement>(".shell")
+            ?.style.getPropertyValue("--oc-terminal-reserve-right") ?? "",
+        ) || 0,
       browserTarget:
-        Number.parseFloat(root.style.getPropertyValue("--oc-browser-reserve-right")) || 0,
+        Number.parseFloat(
+          document
+            .querySelector<HTMLElement>(".shell")
+            ?.style.getPropertyValue("--oc-browser-reserve-right") ?? "",
+        ) || 0,
       running,
     };
   });

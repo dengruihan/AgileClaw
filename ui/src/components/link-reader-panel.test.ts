@@ -101,9 +101,18 @@ async function expectTitle(panel: Panel, title: string) {
   );
 }
 
+/** The plate carries every dock reservation target; panels carry their own copy. */
+function shellReservation(): string {
+  const plate = document.querySelector<HTMLElement>(".shell");
+  return plate?.style.getPropertyValue("--oc-link-reader-reserve-right") ?? "";
+}
+
 describe("Plugin link reader panel", () => {
   beforeEach(() => {
     vi.stubGlobal("localStorage", createStorageMock());
+    const plate = document.createElement("div");
+    plate.className = "shell";
+    document.body.append(plate);
   });
   afterEach(() => {
     document.body.replaceChildren();
@@ -367,9 +376,7 @@ describe("Plugin link reader panel", () => {
     first.requestUpdate();
     await first.updateComplete;
     second.remove();
-    expect(document.documentElement.style.getPropertyValue("--oc-link-reader-reserve-right")).toBe(
-      "560px",
-    );
+    expect(shellReservation()).toBe("560px");
   });
 
   it("retains embedded tab history while hidden, and fences work from a previous session", async () => {
@@ -517,9 +524,7 @@ describe("Plugin link reader panel", () => {
     panel.renderRoot.querySelector<HTMLButtonElement>(".tabstrip-tab__close")?.click();
     await panel.updateComplete;
     expect(panel.renderRoot.querySelector(".link-reader-panel")).toBeNull();
-    expect(document.documentElement.style.getPropertyValue("--oc-link-reader-reserve-right")).toBe(
-      "0px",
-    );
+    expect(shellReservation()).toBe("0px");
   });
 
   it("keeps history inside each tab and leaves the selected tab intact at the tab limit", async () => {
@@ -632,17 +637,13 @@ describe("Plugin link reader panel", () => {
     const panel = await mount(request);
     open(panel, itemUrl(1), trigger);
     await waitForFast(() => expect(request).toHaveBeenCalledTimes(1));
-    expect(document.documentElement.style.getPropertyValue("--oc-link-reader-reserve-right")).toBe(
-      "560px",
-    );
+    expect(shellReservation()).toBe("560px");
     panel.renderRoot
       .querySelector(".lr-content")
       ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await panel.updateComplete;
     expect(document.activeElement).toBe(trigger);
-    expect(document.documentElement.style.getPropertyValue("--oc-link-reader-reserve-right")).toBe(
-      "0px",
-    );
+    expect(shellReservation()).toBe("0px");
     expect(request.mock.calls[0]?.[2]?.signal?.aborted).toBe(true);
     pending.resolve(item());
     panel.available = false;
@@ -672,9 +673,7 @@ describe("Plugin link reader panel", () => {
     await panel.updateComplete;
     expect(request.mock.calls[0]?.[2]?.signal?.aborted).toBe(true);
     expect(panel.renderRoot.querySelector(".bp")).toBeNull();
-    expect(document.documentElement.style.getPropertyValue("--oc-link-reader-reserve-right")).toBe(
-      "0px",
-    );
+    expect(shellReservation()).toBe("0px");
     pending.resolve({ ...item(), title: "Hidden response" });
     open(panel, itemUrl(2));
     await panel.updateComplete;
@@ -683,9 +682,7 @@ describe("Plugin link reader panel", () => {
     await expectTitle(panel, "Item 1");
     expect(request).toHaveBeenCalledTimes(2);
     panel.remove();
-    expect(document.documentElement.style.getPropertyValue("--oc-link-reader-reserve-right")).toBe(
-      "0px",
-    );
+    expect(shellReservation()).toBe("0px");
     window.dispatchEvent(
       new CustomEvent(LINK_READER_PANEL_TOGGLE_EVENT, { detail: { url: itemUrl(2) } }),
     );
@@ -767,9 +764,7 @@ describe("Plugin link reader panel", () => {
     });
     panel.handleToggleRequest(event);
     expect(event.defaultPrevented).toBe(false);
-    expect(document.documentElement.style.getPropertyValue("--oc-link-reader-reserve-right")).toBe(
-      "0px",
-    );
+    expect(shellReservation()).toBe("0px");
   });
 
   it("uses each plugin method and label, and invalidates cached data when its descriptor is replaced", async () => {

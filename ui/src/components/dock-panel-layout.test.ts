@@ -29,8 +29,17 @@ function createLayout(defaultDock: Exclude<DockPanelPlacement, "main">) {
   });
 }
 
+/** The plate carries every dock reservation target; panels carry their own copy. */
+function shellReservation(prefix: string): string {
+  const plate = document.querySelector<HTMLElement>(".shell");
+  return plate?.style.getPropertyValue(`--oc-${prefix}-reserve-right`) ?? "";
+}
+
 beforeEach(() => {
   vi.stubGlobal("localStorage", createStorageMock());
+  const plate = document.createElement("div");
+  plate.className = "shell";
+  document.body.append(plate);
 });
 
 afterEach(() => {
@@ -173,7 +182,7 @@ describe("DockLayoutController inline columns", () => {
       const embedded = new DockLayoutController(embeddedHost, options);
       const reservation = () => ({
         bottom: document.documentElement.style.getPropertyValue("--oc-test-shared-reserve-bottom"),
-        right: document.documentElement.style.getPropertyValue("--oc-test-shared-reserve-right"),
+        right: shellReservation("test-shared"),
       });
       const cleared = { bottom: "0px", right: "0px" };
 
@@ -206,8 +215,9 @@ describe("DockLayoutController inline columns", () => {
       defaultHeight: 320,
       defaultWidth: 280,
     });
-    const reservation = "--oc-test-inline-reserve-right";
-    document.documentElement.style.setProperty(reservation, "17px");
+    document
+      .querySelector<HTMLElement>(".shell")!
+      .style.setProperty("--oc-test-inline-reserve-right", "17px");
     const host = createControllerHost();
     const controller = new DockLayoutController(host, {
       layout,
@@ -238,7 +248,7 @@ describe("DockLayoutController inline columns", () => {
     expect(JSON.parse(localStorage.getItem("test.dock-panel.inline") ?? "{}")).toMatchObject({
       width: 380,
     });
-    expect(document.documentElement.style.getPropertyValue(reservation)).toBe("17px");
+    expect(shellReservation("test-inline")).toBe("17px");
 
     const restored = new DockLayoutController(createControllerHost(), {
       layout,
@@ -252,7 +262,9 @@ describe("DockLayoutController inline columns", () => {
     restored.hostDisconnected();
     controller.hostDisconnected();
     container.remove();
-    document.documentElement.style.removeProperty(reservation);
+    document
+      .querySelector<HTMLElement>(".shell")!
+      .style.removeProperty("--oc-test-inline-reserve-right");
   });
 
   it("exposes keyboard-operable separator semantics for right and bottom docks", async () => {

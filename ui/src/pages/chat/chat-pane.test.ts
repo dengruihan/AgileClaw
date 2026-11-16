@@ -21,6 +21,7 @@ import {
 import { isExpiredIncognitoSession } from "./chat-history-state.ts";
 import { loadChatHistory } from "./chat-history.ts";
 import { ChatPaneBase } from "./chat-pane-base.ts";
+import { createMountedPanes, refreshPane } from "./chat-pane-mounted.test-support.ts";
 import { consumePaneSessionHandoff } from "./chat-pane-shared.ts";
 import { subscribeChatPaneSnapshotInvalidation } from "./chat-pane-startup-subscriptions.ts";
 import {
@@ -863,5 +864,65 @@ describe("chat pane history pagination intent", () => {
 
     expect(pane.loadOlderMessages).toHaveBeenCalledOnce();
     expect(pane.historyAutoLoadBlocked).toBe(false);
+  });
+});
+
+describe("chat pane staged conversation mount", () => {
+  function controlledFrames() {
+    let nextFrame = 0;
+    const frames = new Map<number, FrameRequestCallback>();
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.set(++nextFrame, callback);
+      return nextFrame;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (frame: number) => frames.delete(frame));
+    return {
+      pending: () => frames.size,
+      flush() {
+        const batch = [...frames.values()];
+        frames.clear();
+        for (const callback of batch) {
+          callback(0);
+        }
+      },
+    };
+  }
+
+  async function mountStagedPane() {
+    const fixture = createMountedPanes([
+      { key: "agent:main:current", kind: "direct", updatedAt: 1 } as GatewaySessionRow,
+    ]);
+    const pane = fixture.mount("agent:main:current");
+    pane.stagedConversation = true;
+    await refreshPane(pane);
+    await pane.updateComplete;
+    return pane;
+  }
+
+  it("stages the dock pane conversation and cancels a pending stage on disconnect", async () => {
+    const clock = controlledFrames();
+    const pane = await mountStagedPane();
+    // The pane frame is committed in this task; the conversation mount is
+    // queued for the next animation frame, so it cannot share this commit.
+    expect(pane.querySelector(".chat-pane-primary-column")).not.toBeNull();
+    expect(pane.querySelector(".chat-thread")).toBeNull();
+    expect(pane.querySelector(".agent-chat__composer-combobox")).toBeNull();
+
+    // A disconnect cancels the queued stage: running the frame queue must not
+    // mount a conversation into a detached pane.
+    pane.disconnectedCallback();
+    clock.flush();
+    await pane.updateComplete;
+    expect(pane.querySelector(".chat-thread")).toBeNull();
+
+    // Remounting stages again and lands the conversation after its frame.
+    pane.connectedCallback();
+    pane.requestUpdate();
+    await pane.updateComplete;
+    expect(pane.querySelector(".chat-thread")).toBeNull();
+    clock.flush();
+    await pane.updateComplete;
+    expect(pane.querySelector(".chat-thread")).not.toBeNull();
+    expect(pane.querySelector(".agent-chat__composer-combobox")).not.toBeNull();
   });
 });

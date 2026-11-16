@@ -3,13 +3,14 @@ const applied = new Map<string, number>();
 let readyScheduled = false;
 
 /**
- * Right dock geometry is one shared set of STATIC reservation widths on html:
- * each dock's panel width, the following dock's right offset, and the shell
- * margin all read `--oc-<prefix>-reserve-right`. Motion runs as local
- * transitions on those consumers (panel width/right, shell margin-right),
- * gated by the inherited static `--oc-dock-motion-duration` clock, so every
- * consumer starts in the same frame and stays synchronized without an
- * inherited animated property restyling the whole tree each frame.
+ * Right dock geometry is one shared set of STATIC reservation targets per
+ * prefix (`--oc-<prefix>-reserve-right`). Each target is written on the
+ * elements that read it — every registered dock panel and the plate — as a
+ * registered NON-inherited custom property, so one target change restyles those
+ * consumers instead of the whole document. Motion runs as local transitions on
+ * the same consumers (panel width/right, shell margin-right), gated by the
+ * inherited static `--oc-dock-motion-duration` clock, so they start in one frame
+ * and stay synchronized without an inherited animated property.
  * Transitions stay off until the first painted frame so restored docks do not
  * animate on boot.
  */
@@ -36,6 +37,59 @@ const DOCK_ORDER: readonly string[] = [
 const panelGetters = new Map<string, Set<() => Element | null>>();
 
 /**
+ * Static reservation targets are NON-INHERITED registered properties written on
+ * the consumers that read them (each dock panel and the shell). Declaring them
+ * on `html` would make every target change restyle the whole document, which is
+ * exactly the per-toggle cost this owner must not pay.
+ */
+function registerReservationProperties(): void {
+  if (typeof CSS === "undefined" || typeof CSS.registerProperty !== "function") {
+    return;
+  }
+  for (const prefix of DOCK_ORDER) {
+    try {
+      // Universal syntax without an initial value keeps the CSS `var(..., x)`
+      // fallbacks meaningful for a consumer that has not been written yet,
+      // while `inherits: false` keeps a target change off the document tree.
+      CSS.registerProperty({ name: widthVar(prefix), syntax: "*", inherits: false });
+    } catch {
+      // Already registered (a second module instance or a page-level rule).
+    }
+  }
+}
+
+/** The targets currently written for `prefix` (drawn value while a motion retargets). */
+function assignedWidth(prefix: string): number {
+  return applied.get(prefix) ?? targets.get(prefix) ?? 0;
+}
+
+/**
+ * Writes every known reservation target where it is read: the shell (plate
+ * margin) and each registered dock panel (own width/right offsets). Values are
+ * unchanged most of the time, so this is idempotent and does not invalidate.
+ */
+export function applyRightDockReservations(): void {
+  if (typeof document === "undefined" || targets.size === 0) {
+    return;
+  }
+  const prefixes = [...targets.keys()];
+  const write = (element: Element | null) => {
+    if (!(element instanceof HTMLElement)) {
+      return;
+    }
+    for (const prefix of prefixes) {
+      element.style.setProperty(widthVar(prefix), `${assignedWidth(prefix)}px`);
+    }
+  };
+  write(document.querySelector(".shell"));
+  for (const getters of panelGetters.values()) {
+    for (const getter of getters) {
+      write(getter());
+    }
+  }
+}
+
+/**
  * Registers a dock's outer panel getter so the shared owner can read drawn
  * geometry on reversals. Embedded/fullscreen/bottom panels never carry the
  * var-driven inline width and are ignored by the drawn reader. Returns an
@@ -48,6 +102,7 @@ export function registerRightDockPanel(prefix: string, getter: () => Element | n
     panelGetters.set(prefix, getters);
   }
   getters.add(getter);
+  applyRightDockReservations();
   return () => {
     getters.delete(getter);
     if (getters.size === 0) {
@@ -108,6 +163,54 @@ function widthVar(prefix: string): string {
   return `--oc-${prefix}-reserve-right`;
 }
 
+/** Properties whose transitions carry a consumer's drawn dock geometry. */
+const GEOMETRY_TRANSITION_PROPERTIES: ReadonlySet<string> = new Set([
+  "width",
+  "right",
+  "left",
+  "margin-right",
+]);
+
+function isEasingGeometry(element: Element | null): boolean {
+  if (
+    !element ||
+    typeof element.getAnimations !== "function" ||
+    typeof CSSTransition === "undefined"
+  ) {
+    return false;
+  }
+  return element
+    .getAnimations()
+    .some(
+      (animation) =>
+        animation instanceof CSSTransition &&
+        animation.playState === "running" &&
+        GEOMETRY_TRANSITION_PROPERTIES.has(animation.transitionProperty),
+    );
+}
+
+/**
+ * True when every dock consumer already rests at its target: no dock is
+ * mid-motion in this owner, and no panel or plate is still easing a geometry
+ * property. A fresh motion can then start from the static targets directly,
+ * because the interpolation start is each consumer's drawn value either way.
+ * The active-motion map alone is not enough: a cancelled or completed motion
+ * can leave a real local transition running for part of a frame.
+ */
+function dockGeometryIsSettled(): boolean {
+  if (activeMotions.size > 0) {
+    return false;
+  }
+  for (const getters of panelGetters.values()) {
+    for (const getter of getters) {
+      if (isEasingGeometry(getter())) {
+        return false;
+      }
+    }
+  }
+  return !isEasingGeometry(document.querySelector(".shell"));
+}
+
 /**
  * Sets one dock's static target width. `animate` is false for boot/restore/
  * resize: the shared clock is suppressed for one flush so every consumer
@@ -123,17 +226,26 @@ export function setRightDockWidth(prefix: string, widthPx: number, animate: bool
     return;
   }
   if (animate) {
-    // A target change restarts EVERY consumer from its drawn geometry on one
-    // fresh clock. Local transitions interpolate each consumer independently,
-    // so leaving a moving sibling on its older clock would let the margin's
-    // interpolated sum drift from the sum of the drawn panel widths.
-    retargetRightDockMotion();
+    // A target change while a consumer is still drawing restarts EVERY consumer
+    // from its drawn geometry on one fresh clock. Local transitions interpolate
+    // each consumer independently, so leaving a moving sibling on its older
+    // clock would let the margin's interpolated sum drift from the sum of the
+    // drawn panel widths.
+    if (!dockGeometryIsSettled()) {
+      retargetRightDockMotion();
+      return;
+    }
+    // Fresh open/close: every consumer already rests at its target, so the same
+    // static write starts panel width, sibling offsets, and the plate margin on
+    // one clock without an inherited-clock freeze that restyles the whole tree.
+    applied.set(prefix, widthPx);
+    applyRightDockReservations();
     return;
   }
   const root = document.documentElement;
   root.classList.add("dock-motion-retarget");
-  root.style.setProperty(widthVar(prefix), `${widthPx}px`);
   applied.set(prefix, widthPx);
+  applyRightDockReservations();
   // Commit the new value while the consumer transitions are suppressed.
   void root.getBoundingClientRect();
   root.classList.remove("dock-motion-retarget");
@@ -236,13 +348,15 @@ export function retargetRightDockMotion(): void {
   const drawn = readDrawnWidths();
   root.classList.add("dock-motion-retarget");
   for (const [prefix, value] of drawn) {
-    root.style.setProperty(widthVar(prefix), `${value}px`);
-    applied.delete(prefix);
+    applied.set(prefix, value);
   }
+  applyRightDockReservations();
   void root.getBoundingClientRect();
   root.classList.remove("dock-motion-retarget");
   for (const [prefix, target] of targets) {
-    root.style.setProperty(widthVar(prefix), `${target}px`);
     applied.set(prefix, target);
   }
+  applyRightDockReservations();
 }
+
+registerReservationProperties();

@@ -7,6 +7,7 @@ import { SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD } from "../lib/session-pull-requ
 import { CHAT_TRANSCRIPT_END_THRESHOLD_PX } from "../pages/chat/scroll.ts";
 import { createControlUiE2eArtifactDir } from "../test-helpers/control-ui-e2e-artifacts.ts";
 import { controlUiSessionUrl } from "../test-helpers/control-ui-e2e.ts";
+import { openAssistantDock } from "./assistant-dock.test-support.ts";
 import {
   captureUiProofEnabled,
   chatThreadDistanceFromBottom,
@@ -610,6 +611,65 @@ suite.define(() => {
       if (proofDir) {
         writeFileSync(path.join(proofDir, "geometry.json"), JSON.stringify(report, null, 2));
       }
+      await suite.closeBrowserContext(context);
+    }
+  });
+
+  it("lands a following reader on the end after an assistant dock open and close", async () => {
+    const context = await suite.newBrowserContext(createControlUiE2eContextOptions());
+    const page = await context.newPage();
+    const baseTs = Date.now() - 100_000;
+    const historyMessages = Array.from({ length: 40 }, (_, index) => ({
+      content: [
+        {
+          text: `Dock follow history ${index}\n${"wrapping transcript line\n".repeat(3)}`,
+          type: "text",
+        },
+      ],
+      role: index % 2 === 0 ? "assistant" : "user",
+      timestamp: baseTs + index,
+    }));
+    await installMockGateway(page, {
+      featureMethods: ["chat.metadata", "chat.startup"],
+      historyMessages,
+    });
+    const settleDockMotion = async () => {
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const panel = document.querySelector<HTMLElement>(
+              "openclaw-assistant-panel .assistant-panel",
+            );
+            return panel ? panel.getAnimations().length : -1;
+          }),
+        )
+        .toBe(0);
+      await waitForChatScrollIdle(page);
+    };
+    try {
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
+      await page.getByText("Dock follow history 39").waitFor({ timeout: 10_000 });
+      await waitForChatScrollIdle(page);
+      expect(await chatThreadDistanceFromBottom(page)).toBeLessThanOrEqual(2);
+
+      await openAssistantDock(page, {
+        sessionKey: "agent:main:dock",
+        agentId: "main",
+        label: "Dock",
+      });
+      await page.locator("openclaw-assistant-panel openclaw-assistant-session").waitFor();
+      await settleDockMotion();
+      // A following reader settles back on the end after one reconcile; the
+      // intermediate eased widths never own a follow correction.
+      expect(await chatThreadDistanceFromBottom(page)).toBeLessThanOrEqual(2);
+
+      await page
+        .locator("openclaw-assistant-panel")
+        .getByRole("button", { name: "Close assistant sidebar" })
+        .click();
+      await settleDockMotion();
+      expect(await chatThreadDistanceFromBottom(page)).toBeLessThanOrEqual(2);
+    } finally {
       await suite.closeBrowserContext(context);
     }
   });

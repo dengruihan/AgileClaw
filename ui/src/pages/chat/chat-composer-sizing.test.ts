@@ -228,6 +228,15 @@ describe("chat composer sizing", () => {
       scrollHeight: { configurable: true, get: () => scrollHeight },
       clientHeight: { configurable: true, get: () => clientHeight },
     });
+    // The popover anchor defers its mount measurement out of the composer insert
+    // task, so one real frame is already queued here. Run that initial work and
+    // make the drained mock state the zero point for the width contract below.
+    expect(requestAnimationFrameMock).toHaveBeenCalledOnce();
+    animationFrameCallback?.(0);
+    animationFrameCallback = undefined;
+    requestAnimationFrameMock.mockClear();
+    cancelAnimationFrameMock.mockClear();
+    nextAnimationFrameId = 0;
     textarea.dispatchEvent(new InputEvent("input", { bubbles: true }));
     expect(textarea.style.height).toBe("42px");
     expect(textarea.style.overflowY).toBe("hidden");

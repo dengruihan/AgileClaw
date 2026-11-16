@@ -134,6 +134,10 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
   }
 
   override disconnectedCallback() {
+    if (this.conversationStageFrame !== null) {
+      cancelAnimationFrame(this.conversationStageFrame);
+      this.conversationStageFrame = null;
+    }
     this.removeEventListener(
       CHAT_TRANSCRIPT_LOADING_CHANGED_EVENT,
       this.synchronizeForegroundTranscript,
@@ -178,6 +182,30 @@ export abstract class ChatPaneBase extends OpenClawLightDomElement {
   @property({ attribute: false }) compact = false;
   @property({ attribute: false }) onBackToSubagents?: () => void;
   @property({ attribute: false }) workContext?: ChatWorkContext;
+  // A pane mounted inside a dock stages its conversation one frame behind its
+  // own frame: the pane frame commits first, the conversation follows, so the
+  // second live chat surface never lands in one commit. The pending frame is
+  // cancelled with the pane.
+  @property({ attribute: false }) stagedConversation = false;
+  private conversationStageMounted = false;
+  private conversationStageFrame: number | null = null;
+  /** Whether the pane frame should also render its conversation this update. */
+  protected conversationStageReady(): boolean {
+    if (!this.stagedConversation || this.conversationStageMounted) {
+      return true;
+    }
+    if (this.conversationStageFrame === null && typeof requestAnimationFrame === "function") {
+      this.conversationStageFrame = requestAnimationFrame(() => {
+        this.conversationStageFrame = null;
+        if (!this.isConnected) {
+          return;
+        }
+        this.conversationStageMounted = true;
+        this.requestUpdate();
+      });
+    }
+    return this.conversationStageMounted;
+  }
   // Route ownership settles after retained-pane preview; dashboard activity follows
   // the pane the user can already see so its warmed runtime paints immediately.
   private visuallyPresentedValue = true;

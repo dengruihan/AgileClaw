@@ -1,6 +1,7 @@
 import { measureElement, type Virtualizer } from "@tanstack/virtual-core";
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { captureChatSessionScrollPosition, type ChatSessionScrollPosition } from "../scroll.ts";
+import { isShellGeometryMotionActive } from "./chat-transcript-motion.ts";
 import type { TranscriptViewportMeasurement } from "./chat-transcript-scroll-events.ts";
 
 export const POSITION_RAIL_MARKER_HEIGHT = 12;
@@ -166,24 +167,28 @@ export function measureTranscriptRow(
   if (!entry && virtualizer.targetWindow?.ResizeObserver) {
     // Registration happens during Lit commit; the observer supplies real sizes
     // after layout, including the first measurement of a newly mounted row.
-    const index = virtualizer.indexFromElement(element);
-    return (
-      virtualizer.itemSizeCache.get(virtualizer.options.getItemKey(index)) ??
-      virtualizer.options.estimateSize(index)
-    );
+    return retainedTranscriptRowSize(element, virtualizer);
   }
   // Rounded row heights accumulate when skipped overscan uses those measurements.
   const size = entry?.borderBoxSize?.[0]?.blockSize ?? measureElement(element, entry, virtualizer);
   if (size === 0 && virtualizer.scrollElement?.clientHeight === 0) {
     // A hidden panel has no row geometry. Retain the last measurement instead
     // of replacing it with zero and moving the restored viewport.
-    const index = virtualizer.indexFromElement(element);
-    return (
-      virtualizer.itemSizeCache.get(virtualizer.options.getItemKey(index)) ??
-      virtualizer.options.estimateSize(index)
-    );
+    return retainedTranscriptRowSize(element, virtualizer);
   }
   return size;
+}
+
+/** The last committed row size, for geometry that must not be measured now. */
+export function retainedTranscriptRowSize(
+  element: HTMLElement,
+  virtualizer: Virtualizer<HTMLDivElement, HTMLElement>,
+): number {
+  const index = virtualizer.indexFromElement(element);
+  return (
+    virtualizer.itemSizeCache.get(virtualizer.options.getItemKey(index)) ??
+    virtualizer.options.estimateSize(index)
+  );
 }
 
 export function maxTranscriptScrollOffset(element: HTMLElement | null): number | null {
@@ -218,6 +223,7 @@ export class PositionRailGutterController implements ReactiveController {
   private viewport: HTMLDivElement | null = null;
   private innerElement: HTMLDivElement | null = null;
   private region: HTMLElement | null = null;
+  private syncFrame: number | null = null;
 
   constructor(
     private readonly host: ReactiveControllerHost & {
@@ -274,6 +280,7 @@ export class PositionRailGutterController implements ReactiveController {
     this.viewport = null;
     this.innerElement = null;
     this.region = null;
+    this.cancel();
   }
 
   read() {
@@ -291,7 +298,37 @@ export class PositionRailGutterController implements ReactiveController {
     return { viewport, gutter, columnWidth, regionHeight: region.clientHeight };
   }
 
-  sync(geometry = this.read()): void {
+  /**
+   * The inherited rail width restyles the transcript subtree, so every source of
+   * rail geometry — a normal viewport delivery, a settle, and this controller's
+   * own ResizeObserver — coalesces into one latest-wins frame instead of writing
+   * inside that source's task. The frame re-reads the DOM when it runs, so a
+   * newer fact always wins; a shell motion discards it instead of publishing
+   * intermediate geometry.
+   */
+  sync(): void {
+    if (this.syncFrame !== null || isShellGeometryMotionActive()) {
+      return;
+    }
+    this.syncFrame = requestAnimationFrame(() => {
+      this.syncFrame = null;
+      if (isShellGeometryMotionActive()) {
+        return;
+      }
+      this.write();
+    });
+  }
+
+  /** Drops a queued write whose geometry a new motion has already invalidated. */
+  cancel(): void {
+    if (this.syncFrame !== null) {
+      cancelAnimationFrame(this.syncFrame);
+      this.syncFrame = null;
+    }
+  }
+
+  private write(): void {
+    const geometry = this.read();
     if (!geometry) {
       return;
     }

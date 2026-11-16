@@ -3,10 +3,12 @@ import { html } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ApplicationContext } from "../../../app/context.ts";
 import "../../../styles.css";
+import { beginRightDockMotion, endRightDockMotion } from "../../../components/right-dock-motion.ts";
 import "../../../styles/chat.ts";
 import { createMountedPanes } from "../chat-pane-mounted.test-support.ts";
 import { ChatPane } from "../chat-pane-render.ts";
 import { saveChatSessionScrollPosition } from "../scroll.ts";
+import { SIDEBAR_GEOMETRY_COMMIT_EVENT } from "../sidebar-layout.ts";
 import type { TranscriptRow } from "./chat-transcript-layout.ts";
 import { subscribeTranscriptScroll } from "./chat-transcript-scroll-events.ts";
 import { ChatSessionVirtualizerHost } from "./chat-transcript-virtualizer-host.ts";
@@ -14,11 +16,16 @@ import { ChatSessionVirtualizerHost } from "./chat-transcript-virtualizer-host.t
 class GeometryPane extends ChatPane {
   session: ChatSessionVirtualizerHost | undefined;
   readonly renderedRects: Array<{ width: number; height: number } | null> = [];
-  private readonly rows: TranscriptRow[] = Array.from({ length: 100 }, (_, index) => ({
-    kind: "content",
-    key: `row-${index}`,
-    content: html`<div style="height: 120px">Row ${index}</div>`,
-  }));
+  rowText = "";
+  private get rows(): TranscriptRow[] {
+    return Array.from({ length: 100 }, (_, index) => ({
+      kind: "content",
+      key: `row-${index}`,
+      content: this.rowText
+        ? html`<p style="margin: 0 0 8px">${index}. ${this.rowText}</p>`
+        : html`<div style="height: 120px">Row ${index}</div>`,
+    }));
+  }
 
   initialize(context: ApplicationContext) {
     this.context = context;
@@ -57,6 +64,7 @@ customElements.define("test-transcript-geometry-pane", GeometryPane);
 
 let pane: GeometryPane | undefined;
 afterEach(() => {
+  endRightDockMotion("assistant");
   pane?.remove();
   pane = undefined;
   vi.restoreAllMocks();
@@ -65,14 +73,18 @@ afterEach(() => {
 // Let real ResizeObservers and their resulting Lit commits finish between widths.
 async function settleLayout() {
   for (let frame = 0; frame < 4; frame++) {
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => resolve());
-    });
+    await nextFrame();
     await pane?.updateComplete;
   }
 }
 
-async function mountPane() {
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+async function mountPane({ rowText = "" }: { rowText?: string } = {}) {
   const fixture = createMountedPanes([
     { key: "agent:main:geometry-render", kind: "direct", updatedAt: 1 },
   ]);
@@ -82,6 +94,7 @@ async function mountPane() {
     client: null,
   });
   pane = new GeometryPane();
+  pane.rowText = rowText;
   pane.initialize(fixture.context);
   pane.style.cssText = "display: block; width: 800px";
   document.body.append(pane);
@@ -249,4 +262,173 @@ it("retains measured viewport geometry while its slot is hidden", async () => {
   slot.style.display = "";
   session.syncViewportGeometry();
   expect(session["virtualizer"].scrollRect).toEqual({ width: 620, height: 500 });
+});
+
+it("holds row measurement for a shell gesture and reconciles the settled width once", async () => {
+  const { host, session, viewport } = await mountPane({
+    rowText:
+      "A sentence long enough to wrap differently at every column width, so each measured row height carries the width it was measured at. ".repeat(
+        4,
+      ),
+  });
+  const thread = expectDefined(session.scrollElement, "transcript viewport");
+  const slot = expectDefined(viewport.parentElement, "viewport slot");
+  const totalSize = () => Number(host.querySelector("output")?.textContent);
+  const settledTotal = totalSize();
+  expect(settledTotal).toBeGreaterThan(0);
+
+  // The dock owner's one bounded notification per motion; the eased intermediate
+  // widths must not drive a row re-measure or a virtualizer rect commit.
+  beginRightDockMotion("assistant", "opening");
+  try {
+    host.renderedRects.length = 0;
+    slot.style.width = "600px";
+    await settleLayout();
+    expect(host.renderedRects.every((rect) => rect?.width !== 600)).toBe(true);
+    expect(totalSize()).toBe(settledTotal);
+  } finally {
+    endRightDockMotion("assistant");
+  }
+  await settleLayout();
+  expect(host.renderedRects[0]).toEqual({ width: 600, height: 400 });
+  // One settle reconcile re-measures the rewrapped rows at the final width.
+  await expect.poll(totalSize).not.toBe(settledTotal);
+  expect(thread.scrollWidth).toBeLessThanOrEqual(thread.clientWidth + 1);
+});
+
+it("merges a normal delivery and its rail observer into one latest-wins frame", async () => {
+  const { host, session, viewport } = await mountPane();
+  const thread = expectDefined(session.scrollElement, "transcript viewport");
+  const inner = expectDefined(
+    thread.querySelector<HTMLElement>(".chat-thread-inner"),
+    "transcript range element",
+  );
+  const column = expectDefined(
+    inner.querySelector<HTMLElement>(":scope > .chat-virtual-sizer") ?? inner,
+    "rail column",
+  );
+  const slot = expectDefined(viewport.parentElement, "viewport slot");
+  await settleLayout();
+  const writes: string[] = [];
+  const original = viewport.style.setProperty.bind(viewport.style);
+  viewport.style.setProperty = (property: string, value: string | null, priority?: string) => {
+    if (property === "--chat-transcript-column-width") {
+      writes.push(value ?? "");
+    }
+    original(property, value ?? "", priority);
+  };
+  // Registered after the production observers, so its delivery proves their
+  // stacks have already run in this frame without writing the rail.
+  const writesAtDelivery: number[] = [];
+  const probe = new ResizeObserver(() => writesAtDelivery.push(writes.length));
+  probe.observe(column, { box: "border-box" });
+  try {
+    slot.style.width = "600px";
+    await nextFrame();
+    // The frame's deliveries queued one write; nothing wrote in their stacks.
+    expect(writes).toEqual([]);
+    await nextFrame();
+    expect(writesAtDelivery).toEqual([0]);
+    expect(writes).toEqual([`${inner.clientWidth}px`]);
+    // The queued frame reads at execution: a delivery queues it, the column
+    // changes again before the frame runs, and the same frame writes the newer
+    // width without a synchronous write in that delivery's stack.
+    slot.style.width = "700px";
+    void inner.clientWidth;
+    host.dispatchEvent(
+      new CustomEvent(SIDEBAR_GEOMETRY_COMMIT_EVENT, { detail: { widthChanged: true } }),
+    );
+    expect(writes).toHaveLength(1);
+    slot.style.width = "500px";
+    void inner.clientWidth;
+    await nextFrame();
+    expect(writes.at(-1)).toBe(`${inner.clientWidth}px`);
+    expect(inner.clientWidth).toBeLessThan(600);
+  } finally {
+    probe.disconnect();
+    viewport.style.setProperty = original;
+  }
+});
+
+it("writes no rail during a replacement motion and settles on the drawn column", async () => {
+  const { session, viewport } = await mountPane();
+  const thread = expectDefined(session.scrollElement, "transcript viewport");
+  const inner = expectDefined(
+    thread.querySelector<HTMLElement>(".chat-thread-inner"),
+    "transcript range element",
+  );
+  const slot = expectDefined(viewport.parentElement, "viewport slot");
+  const column = () => viewport.style.getPropertyValue("--chat-transcript-column-width");
+  await settleLayout();
+  const atRest = column();
+  expect(atRest).not.toBe("");
+  const writes: string[] = [];
+  const original = viewport.style.setProperty.bind(viewport.style);
+  viewport.style.setProperty = (property: string, value: string | null, priority?: string) => {
+    if (property === "--chat-transcript-column-width") {
+      writes.push(value ?? "");
+    }
+    original(property, value ?? "", priority);
+  };
+  try {
+    beginRightDockMotion("assistant", "opening");
+    try {
+      slot.style.width = "600px";
+      await settleLayout();
+    } finally {
+      endRightDockMotion("assistant");
+    }
+    // The settle delivery runs in this frame and queues the rail write; start
+    // the replacement before that write gets a frame of its own.
+    await nextFrame();
+    expect(column()).toBe(atRest);
+    expect(writes).toEqual([]);
+
+    beginRightDockMotion("assistant", "closing");
+    try {
+      slot.style.width = "450px";
+      await settleLayout();
+      expect(writes).toEqual([]);
+      expect(column()).toBe(atRest);
+    } finally {
+      endRightDockMotion("assistant");
+    }
+    await expect.poll(column).not.toBe(atRest);
+    expect(column()).toBe(`${inner.clientWidth}px`);
+    expect(writes.at(-1)).toBe(`${inner.clientWidth}px`);
+  } finally {
+    viewport.style.setProperty = original;
+  }
+});
+
+it("writes the settled rail geometry one frame after the settle delivery", async () => {
+  const { session, viewport } = await mountPane();
+  const thread = expectDefined(session.scrollElement, "transcript viewport");
+  const slot = expectDefined(viewport.parentElement, "viewport slot");
+  const inner = expectDefined(
+    thread.querySelector<HTMLElement>(".chat-thread-inner"),
+    "transcript range element",
+  );
+  const column = () => viewport.style.getPropertyValue("--chat-transcript-column-width");
+  await settleLayout();
+  const settledColumn = column();
+  expect(settledColumn).not.toBe("");
+
+  beginRightDockMotion("assistant", "opening");
+  try {
+    slot.style.width = "600px";
+    await settleLayout();
+    expect(column()).toBe(settledColumn);
+  } finally {
+    endRightDockMotion("assistant");
+  }
+  // The settle delivery (rect commit + queued row scan) owns the first frame
+  // and only queues the rail write; the rail owner's own frame follows, so the
+  // pane/conversation commit is not restyled by the inherited rail width.
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+  expect(column()).toBe(settledColumn);
+  await expect.poll(column).not.toBe(settledColumn);
+  expect(column()).toBe(`${inner.clientWidth}px`);
 });

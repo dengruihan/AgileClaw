@@ -174,20 +174,22 @@ export abstract class ChatPaneLayoutRender extends ChatPaneBrowserAnnotationRend
       isPresented: () =>
         this.presented && this.visuallyPresented && isSidebarSlotVisible(sidebarLayout, slot),
     });
-    const chat = renderChat({
-      ...chatProps,
-      composerRecovery: recovery,
-      pluginToolIcons: this.toolIcons.icons,
-      presented: {
-        owner: this,
-        isPresented: () => (this.active || Boolean(this.onBackToSubagents)) && this.presented,
-      },
-      progressCardVisibility: panePresentation,
-      transcriptVisible: slotPresentation("conversation"),
-      latestBrowserTabs: this.active && this.presented ? latestBrowserTabs : undefined,
-      historyState: catalog ? undefined : state,
-      leaseHeld: resolveChatSessionDeviceScope(state)?.leaseHeld === true,
-    });
+    const chat = this.conversationStageReady()
+      ? renderChat({
+          ...chatProps,
+          composerRecovery: recovery,
+          pluginToolIcons: this.toolIcons.icons,
+          presented: {
+            owner: this,
+            isPresented: () => (this.active || Boolean(this.onBackToSubagents)) && this.presented,
+          },
+          progressCardVisibility: panePresentation,
+          transcriptVisible: slotPresentation("conversation"),
+          latestBrowserTabs: this.active && this.presented ? latestBrowserTabs : undefined,
+          historyState: catalog ? undefined : state,
+          leaseHeld: resolveChatSessionDeviceScope(state)?.leaseHeld === true,
+        })
+      : nothing;
     const primary = html`<div class="chat-pane-primary-column">${chat}</div>`;
     const subagentStop =
       chatProps.disabledBanner?.presentation &&

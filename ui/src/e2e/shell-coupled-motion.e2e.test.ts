@@ -7,6 +7,7 @@ import {
   waitForControlUiTerminalReady,
 } from "../test-helpers/control-ui-e2e-readiness.ts";
 import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
+import { openAssistantDock } from "./assistant-dock.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 import {
   readSiblingSettle,
@@ -29,6 +30,13 @@ import {
 //   every frame.
 // Both use cubic-bezier(0, 0, 0.2, 1), Tailwind's `ease-out`, which is what the
 // upstream `duration-200 ease-out` utilities compute to.
+declare global {
+  interface Window {
+    openclawDockMountFrame?: number;
+    openclawDockMountFrames?: Array<{ mounted: boolean; width: number }>;
+  }
+}
+
 const suite = createControlUiE2eSuite({
   name: "Control UI shell motion",
   startServerBeforeBrowser: true,
@@ -377,12 +385,16 @@ async function readRightDockWidth(page: Page): Promise<number> {
 /** Transition start times resolve at the first rendering update after the
  * transitions are created; reading them in the creating task sees null. */
 async function settleTransitionStartTimes(page: Page): Promise<void> {
-  await page.evaluate(
-    () =>
-      new Promise((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(resolve));
-      }),
-  );
+  // Start times resolve at the first rendering update after the transitions are
+  // created, so wait for the live clocks instead of a fixed frame count.
+  await expect
+    .poll(async () => {
+      const clocks = await readRightDock(page);
+      return (
+        clocks.widthTransition.startTime !== null && clocks.marginTransition.startTime !== null
+      );
+    })
+    .toBe(true);
 }
 
 async function waitForDockTransition(page: Page): Promise<void> {
@@ -682,8 +694,11 @@ suite.define(() => {
           )
           .toBe(true);
         expect(
-          await page.evaluate(() =>
-            document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
+          await page.evaluate(
+            () =>
+              document
+                .querySelector<HTMLElement>(".shell")
+                ?.style.getPropertyValue("--oc-terminal-reserve-right") ?? "",
           ),
         ).toBe("0px");
 
@@ -715,6 +730,63 @@ suite.define(() => {
         expect(restored.opacity).toBe(1);
         expect(restored.contentVariable).toBe("");
         expect(restored.motionClasses).toEqual([]);
+      },
+    );
+  });
+
+  it("keeps the second transcript out of the dock's 200ms open window", async () => {
+    await suite.withPage(
+      {
+        locale: "en-US",
+        recordVideo: proofVideo(),
+        serviceWorkers: "block",
+        viewport: { height: 900, width: 1440 },
+      },
+      async ({ page }) => {
+        await openMockedChat(page);
+        await page.evaluate(() => {
+          const panel = document.querySelector<HTMLElement>(
+            "openclaw-assistant-panel .assistant-panel",
+          )!;
+          const frames: Array<{ mounted: boolean; width: number }> = [];
+          window.openclawDockMountFrames = frames;
+          const sample = () => {
+            frames.push({
+              mounted: panel.querySelector("openclaw-assistant-panel-content") !== null,
+              width: panel.getBoundingClientRect().width,
+            });
+            window.openclawDockMountFrame = requestAnimationFrame(sample);
+          };
+          sample();
+        });
+        await openAssistantDock(page, {
+          sessionKey: "agent:main:dock",
+          agentId: "main",
+          label: "Dock",
+        });
+        await page.locator("openclaw-assistant-panel openclaw-assistant-session").waitFor();
+        const frames = await page.evaluate(() => {
+          cancelAnimationFrame(window.openclawDockMountFrame!);
+          const panel = document.querySelector<HTMLElement>(
+            "openclaw-assistant-panel .assistant-panel",
+          )!;
+          // The settled state after the motion, sampled once the content exists.
+          window.openclawDockMountFrames!.push({
+            mounted: panel.querySelector("openclaw-assistant-panel-content") !== null,
+            width: panel.getBoundingClientRect().width,
+          });
+          return window.openclawDockMountFrames!;
+        });
+        const target = Math.max(...frames.map((frame) => frame.width));
+        const moving = frames.filter((frame) => frame.width > 1 && frame.width < target - 1);
+        // The window must have been sampled while the panel was easing open;
+        // mounting the second live transcript there starves every frame.
+        expect(moving.length).toBeGreaterThan(1);
+        expect(moving.some((frame) => frame.mounted)).toBe(false);
+        const settled = frames.at(-1)!;
+        expect(settled.width).toBeCloseTo(target, 0.5);
+        expect(settled.mounted).toBe(true);
+        await capture(page, "assistant-open-settled");
       },
     );
   });
@@ -1000,8 +1072,11 @@ suite.define(() => {
           )
           .toBe(true);
         expect(
-          await page.evaluate(() =>
-            document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
+          await page.evaluate(
+            () =>
+              document
+                .querySelector<HTMLElement>(".shell")
+                ?.style.getPropertyValue("--oc-terminal-reserve-right") ?? "",
           ),
         ).toBe("0px");
 

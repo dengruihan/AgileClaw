@@ -22,6 +22,12 @@ export class OpenClawAssistantSession extends OpenClawLightDomElement {
   @property({ attribute: false }) agentId = "";
   @property({ attribute: false }) workContext: ChatWorkContext = { page: "chat" };
   @state() private includeContext = true;
+  // The dock mounts this session once its open motion has settled. Mounting the
+  // second live chat pane in that same task stacks its DOM, layout, and
+  // observers into one frame; the pane is staged one frame later so each frame
+  // stays bounded.
+  @state() private paneMounted = false;
+  private paneFrame: number | null = null;
   @state() private selection = "";
   @state() private selectionAvailable = false;
   private selectionScope = "";
@@ -39,9 +45,21 @@ export class OpenClawAssistantSession extends OpenClawLightDomElement {
     super.connectedCallback();
     document.addEventListener("selectionchange", this.updateSelectionAvailability);
     this.updateSelectionAvailability();
+    if (typeof requestAnimationFrame === "function") {
+      this.paneFrame = requestAnimationFrame(() => {
+        this.paneFrame = null;
+        this.paneMounted = true;
+      });
+    } else {
+      this.paneMounted = true;
+    }
   }
 
   override disconnectedCallback(): void {
+    if (this.paneFrame !== null) {
+      cancelAnimationFrame(this.paneFrame);
+      this.paneFrame = null;
+    }
     document.removeEventListener("selectionchange", this.updateSelectionAvailability);
     super.disconnectedCallback();
   }
@@ -150,20 +168,25 @@ export class OpenClawAssistantSession extends OpenClawLightDomElement {
             : nothing
         }
       </div>
-      ${keyed(
-        owner,
-        html`<openclaw-chat-pane
-          .paneId=${`home-dock:${owner}`}
-          .presentationId=${`home-dock:${owner}`}
-          .sessionKey=${this.sessionKey}
-          .agentId=${this.agentId}
-          .inputRegion=${"dock"}
-          .active=${true}
-          .compact=${true}
-          .narrow=${true}
-          .workContext=${this.includeContext ? context : undefined}
-        ></openclaw-chat-pane>`,
-      )}
+      ${
+        this.paneMounted
+          ? keyed(
+              owner,
+              html`<openclaw-chat-pane
+                .paneId=${`home-dock:${owner}`}
+                .presentationId=${`home-dock:${owner}`}
+                .sessionKey=${this.sessionKey}
+                .agentId=${this.agentId}
+                .inputRegion=${"dock"}
+                .active=${true}
+                .compact=${true}
+                .narrow=${true}
+                .workContext=${this.includeContext ? context : undefined}
+                .stagedConversation=${true}
+              ></openclaw-chat-pane>`,
+            )
+          : html`<div class="assistant-panel-context-pending" aria-busy="true"></div>`
+      }
     `;
   }
 }
