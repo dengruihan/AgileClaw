@@ -4,7 +4,6 @@ import { en } from "./en.ts";
 const enMcpApp = {
   mcpApp: {
     title: "MCP App",
-    catalogTitle: "Plugin apps",
     catalogDescription: "Open an app directly, without sending a message to your agent.",
     open: "Open app",
     threadApps: "Conversation apps",

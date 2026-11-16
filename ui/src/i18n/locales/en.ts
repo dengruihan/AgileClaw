@@ -1741,7 +1741,7 @@ export const en: TranslationMap & {
     agents: "Agents",
     activity: "Activity",
     meetings: "Meetings",
-    apps: "Apps",
+    apps: "Plugin apps",
     portals: "Portals",
     approvals: "Approvals",
     workboard: "Workboard",
@@ -1787,7 +1787,7 @@ export const en: TranslationMap & {
     agents: "Workspaces, tools, identities.",
     activity: "Recent sessions across people using this gateway.",
     meetings: "Meeting notes and transcripts across this gateway.",
-    apps: "Companion apps for phone, watch, desktop, and browser.",
+    apps: "Apps published by your MCP servers.",
     portals: "Live previews from agent-run applications.",
     approvals: "Recent exec, plugin, and system-agent approvals.",
     workboard: "Agent work queue and session handoff.",
@@ -2101,7 +2101,6 @@ export const en: TranslationMap & {
     gatewayVersionHint:
       "Reported by the active Gateway connection; separate from this Control UI build.",
   },
-  appsPage: {},
   presence: {
     sharedOwner: {
       name: "Shared owner",

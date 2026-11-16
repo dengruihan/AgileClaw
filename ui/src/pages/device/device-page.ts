@@ -22,14 +22,12 @@ import {
 } from "../../components/settings-ui.ts";
 import { renderSettingsWorkspace } from "../../components/settings-workspace.ts";
 import { t } from "../../i18n/index.ts";
-import { registerAppsEnglish } from "../../i18n/locales/en-apps.ts";
 import { registerSettingsEnglish } from "../../i18n/locales/en-settings.ts";
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
 import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
 import "../../components/native-chrome-setup.ts";
 import "./device.css";
 
-registerAppsEnglish();
 registerSettingsEnglish();
 
 type CookieSyncEdits = {
@@ -219,12 +217,6 @@ class DevicePage extends OpenClawLightDomElement {
             <div class="device-extension-setup">
               <openclaw-native-chrome-setup auto-inspect></openclaw-native-chrome-setup>
               <div class="device-extension-setup__actions">
-                <a
-                  href="https://chromewebstore.google.com/detail/openclaw/kcdjddhmeafeomebliikmbpblkmkfoig"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  >${t("appsPage.ctaChromeWebStore")}</a
-                >
                 ${renderLearnMoreLink("https://docs.openclaw.ai/tools/chrome-extension")}
               </div>
             </div>

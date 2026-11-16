@@ -175,9 +175,6 @@ export function renderSidebarIdentityMenu(params: SidebarIdentityMenuParams) {
           case `${COMMAND_VALUE_PREFIX}pair-mobile`:
             params.onPairMobile();
             break;
-          case `${COMMAND_VALUE_PREFIX}apps`:
-            params.onNavigate("apps");
-            break;
           case `${COMMAND_VALUE_PREFIX}debug-overlay`:
             requestDebugOverlayToggle();
             break;
@@ -232,7 +229,6 @@ export function renderSidebarIdentityMenu(params: SidebarIdentityMenuParams) {
         disabled: !params.canPairDevice,
         title: params.canPairDevice ? undefined : t("devices.pairing.adminRequired"),
       })}
-      ${renderSidebarMenuAction("command:apps", t("agentChip.getApps"), "layoutGrid")}
       ${renderSidebarMenuAction("command:debug-overlay", t("debug.overlay.title"), "activity", {
         details: renderKeyboardShortcut(KEYBOARD_SHORTCUT_COMBOS.debugOverlay, {
           slot: "details",

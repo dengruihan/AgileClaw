@@ -1,25 +1,21 @@
 // Shared guided presentation for the device pairing setup dialog. The Devices
 // dialog and the New Session "Connect a machine" dialog both render this body;
 // each host owns only its outer chrome. Node handoffs are guided through
-// download → transfer → observe with no terminal command anywhere: the join URL
-// and the bare setup code are both reveal-once secrets.
+// transfer → observe and redeem their join URL or bare setup code with the
+// `openclaw connect` CLI on the target machine; both secrets are reveal-once.
 import { html, nothing } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { handleCopyButton, renderCopyButton } from "../../components/copy-button.ts";
 import { icons } from "../../components/icons.ts";
 import { t } from "../../i18n/index.ts";
-import { registerAppsEnglish } from "../../i18n/locales/en-apps.ts";
 import { registerDevicesEnglish } from "../../i18n/locales/en-devices.ts";
 import type {
   DevicePairSetupAccess,
   DevicePairSetupLifecycle,
 } from "../../lib/device-pair-setup.ts";
-import { buildExternalLinkRel, EXTERNAL_LINK_TARGET } from "../../lib/external-link.ts";
 import { formatCountdown } from "../../lib/format.ts";
-import { APP_DOWNLOAD_LINKS } from "../apps/download-links.ts";
 
 registerDevicesEnglish();
-registerAppsEnglish();
 
 const PAIRING_ACCESS_OPTIONS = [
   ["full", "devices.pairing.fullAccess", "devices.pairing.fullAccessHint"],
@@ -108,27 +104,6 @@ function renderNodeHandoffSteps(props: DevicePairSetupBodyProps) {
       });
   return html`
     <ol class="device-pair-setup__steps">
-      <li class="device-pair-setup__step">
-        <h3>${t("devices.pairing.stepDownloadTitle")}</h3>
-        <p>${t("devices.pairing.stepDownloadHint")}</p>
-        <div class="device-pair-setup__downloads">
-          ${APP_DOWNLOAD_LINKS.map(
-            (link) => html`<a
-              href=${link.href}
-              target=${EXTERNAL_LINK_TARGET}
-              rel=${buildExternalLinkRel()}
-              aria-label=${t("devices.pairing.downloadPlatform", {
-                platform: t(`appsPage.cards.${link.id}.title`),
-              })}
-            >
-              ${t(`appsPage.cards.${link.id}.title`)}
-              <span class="device-pair-setup__external-icon" aria-hidden="true"
-                >${icons.externalLink}</span
-              >
-            </a>`,
-          )}
-        </div>
-      </li>
       <li class="device-pair-setup__step">
         <h3>
           ${t(

@@ -32,8 +32,6 @@ describe("controlUiPublicAssetPath", () => {
         "file-icons/compact/dark/pdf.svg",
         "file-icons/large/shell-dark.svg",
         "file-icons/overlays/pdf.svg",
-        "app-art/example.webp",
-        "community-art/example.webp",
       ] as const) {
         expect(controlUiPublicAssetPath(asset, "")).toBe(`/${asset}?v=build-a`);
         expect(controlUiPublicAssetPath(asset, "/control/")).toBe(`/control/${asset}?v=build-a`);

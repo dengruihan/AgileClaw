@@ -580,10 +580,6 @@ export function renderApplicationShell(host: ShellViewHost) {
           context.overlays.closeDevicePairSetup();
           host.navigate("connection");
         },
-        onGetApps: () => {
-          context.overlays.closeDevicePairSetup();
-          host.navigate("apps");
-        },
       })}
       <openclaw-toast-host></openclaw-toast-host>
     </div>

@@ -209,8 +209,6 @@ const enDevices = {
     },
     pairing: {
       subtitle: "Create a secure setup for a mobile app or node host.",
-      noApp: "Don't have the app yet?",
-      getApps: "Get the apps",
       generating: "Creating a secure setup code…",
       accessTitle: "Setup type",
       fullAccess: "Full access (recommended)",
@@ -237,16 +235,12 @@ const enDevices = {
       joinExpired: "This pairing link has expired. Create a new one.",
       setupCodeExpiresIn: "This setup code expires in {time}.",
       setupCodeExpired: "This setup code has expired. Create a new one.",
-      stepDownloadTitle: "Install the app on that machine",
-      stepDownloadHint:
-        "Download OpenClaw for the machine's system. The app includes everything it needs to pair.",
-      downloadPlatform: "{platform} download",
       stepTransferTitle: "Send the one-time pairing link",
       stepTransferHint:
-        "On that machine, open OpenClaw and paste this link where it asks to connect to a Gateway.",
+        "On that machine, run npx openclaw connect and paste this link. The command redeems the one-time credential and starts the node host.",
       stepTransferFallbackTitle: "Share the setup code instead",
       stepTransferFallbackHint:
-        "This Gateway address is not encrypted, so one-time links are unavailable. Share the code only over your private network.",
+        "This Gateway address is not encrypted, so one-time links are unavailable. On that machine, run npx openclaw connect with this setup code; share it only over your private network.",
       setupCodeFallbackHint:
         "The setup code carries the same credential. Use it when that machine cannot open links.",
       stepObserveTitle: "Wait for the machine",
@@ -258,7 +252,7 @@ const enDevices = {
       showSetupCode: "Show setup code",
       pending: "Device requests waiting for review: {count}",
       review: "Review",
-      waiting: "Official AgileClaw mobile apps connect automatically after scanning.",
+      waiting: "The device connects automatically after scanning.",
       pairedTitle: "Device paired",
       deliveryUncertainTitle: "Pairing delivery could not be confirmed",
       deliveryUncertainHint:

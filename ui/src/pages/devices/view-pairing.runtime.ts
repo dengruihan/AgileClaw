@@ -18,7 +18,6 @@ const NODE_PAIRING_DOCS_URL = "https://docs.openclaw.ai/gateway/pairing#one-past
 
 export type DevicePairSetupProps = DevicePairSetupBodyProps & {
   open: boolean;
-  onGetApps: () => void;
 };
 
 export function renderDevicePairSetup(props: DevicePairSetupProps) {
@@ -50,16 +49,6 @@ export function renderDevicePairSetup(props: DevicePairSetupProps) {
           <div>
             <h2>${title}</h2>
             <p>${description}</p>
-            ${
-              lifecycle.phase !== "success" && !isNodeSetup
-                ? html`<p class="device-pair-setup__get-apps">
-                    ${t("devices.pairing.noApp")}
-                    <button type="button" @click=${props.onGetApps}>
-                      ${t("devices.pairing.getApps")}
-                    </button>
-                  </p>`
-                : nothing
-            }
           </div>
           <button
             class="btn btn--icon btn--ghost device-pair-setup__close"

@@ -267,6 +267,7 @@ describe("native device settings pages", () => {
     const page = await mount("openclaw-device-page", capability);
     const setup = page.querySelector<DevicePageElement>("openclaw-native-chrome-setup")!;
     await setup.updateComplete;
+    expect(page.querySelector("a[href*='chromewebstore.google.com']")).toBeNull();
     await vi.waitFor(() => expect(setup.textContent).toContain("Setup required on this device"));
     expect(capability.setupChromeExtension).toHaveBeenCalledExactlyOnceWith("inspect");
     window.dispatchEvent(new Event("focus"));
