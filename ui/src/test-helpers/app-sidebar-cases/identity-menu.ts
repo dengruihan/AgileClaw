@@ -169,7 +169,6 @@ describe("AppSidebar footer identity menu", () => {
       "command:settings",
       "command:usage",
       "command:pair-mobile",
-      "command:apps",
       "command:debug-overlay",
       "command:help",
     ]);

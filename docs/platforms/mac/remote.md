@@ -93,12 +93,9 @@ also allows a new request.
 
 ### Open the Mac app from a website
 
-In the browser dashboard, open **Get the apps** from the account menu, then
-choose **Open in Mac app** on the macOS card. The link uses the connected
-Gateway's HTTPS address. OpenClaw shows **Add Gateway** with that address filled
-in; review it and click **Connect** to complete the same sign-in flow.
-
-Websites can launch this editor with the registered `openclaw` URL scheme:
+Websites can launch this editor with the registered `openclaw` URL scheme.
+The app shows **Add Gateway** with the supplied address filled in; review it and
+click **Connect** to complete the same sign-in flow.
 
 ```text
 openclaw://gateway/add?url=https%3A%2F%2Fgateway.example.com%2Foperator%2F&name=Research

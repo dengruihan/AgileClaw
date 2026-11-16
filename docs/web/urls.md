@@ -459,7 +459,7 @@ that cannot create a session land on `/sessions` instead.
 | New session         | `/new`                                         | -                         | `?agent=<agentId>`, `?catalog=<catalogId>`                                        |
 | Activity            | `/activity`                                    | -                         | `?view=run&run=<run-id>`, `?view=run&execution=<execution-id>`                    |
 | Person activity     | `/activity/<name>-<profile-id>`                | -                         | Optional name slug and 8-32 lowercase hexadecimal id characters                   |
-| Apps                | `/apps`                                        | -                         | -                                                                                 |
+| Plugin apps         | `/apps`                                        | -                         | -                                                                                 |
 | Portals             | `/portals`                                     | -                         | -                                                                                 |
 | Agents              | `/settings/agents`                             | `/agents`                 | `/settings/agents/<agentId>[/<panel>]`                                            |
 | Channels            | `/settings/channels`                           | `/channels`               | Shared settings parameters below                                                  |

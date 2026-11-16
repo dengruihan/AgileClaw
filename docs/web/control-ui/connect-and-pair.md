@@ -68,10 +68,10 @@ An already paired administrator can create the iOS/Android connection QR without
     Select **Devices**, then click **Pair device** in the **Devices** card.
   </Step>
   <Step title="Connect the phone">
-    In the OpenClaw mobile app, open **Settings** → **Gateway** and scan the QR code. You can copy and paste the setup code instead.
+    In the mobile app, open **Settings** → **Gateway** and scan the QR code. You can copy and paste the setup code instead.
   </Step>
   <Step title="Confirm the connection">
-    The official iOS/Android app connects automatically. If **Pending approval** shows a request, review its role and scopes before approving it.
+    The device connects automatically. If **Pending approval** shows a request, review its role and scopes before approving it.
   </Step>
 </Steps>
 
@@ -79,11 +79,12 @@ Creating a setup code requires `operator.admin`; the button is disabled for sess
 
 ## Pair a machine (node host)
 
-An administrator can connect a computer as a command and capability host without opening a terminal. The same **Pair device** dialog offers **Node host** setup type and walks through three steps:
+An administrator can connect a computer as a command and capability host from the same **Pair device** dialog by choosing the **Node host** setup type:
 
-1. **Download** — pick the machine's system to open the matching OpenClaw desktop download (macOS, Windows, or Linux).
-2. **Transfer** — copy the single-use pairing link and paste it into the OpenClaw app on that machine. The link is shown masked until you reveal it, and it retires when it expires or is redeemed; the countdown warns you before that. On a plaintext `ws://` Gateway address the dialog shares the bare setup code instead, with a warning to keep it on the private network.
-3. **Observe** — wait for the machine to connect, then review and approve it from the pending requests in **Devices**.
+1. **Transfer** — copy the single-use pairing link and redeem it on that machine with `npx openclaw connect <link>`, which starts the node host. The link is shown masked until you reveal it, and it retires when it expires or is redeemed; the countdown warns you before that. On a plaintext `ws://` Gateway address the dialog shares the bare setup code instead, with a warning to keep it on the private network.
+2. **Observe** — wait for the machine to connect, then review and approve it from the pending requests in **Devices**.
+
+The dialog does not link an app installer, so the machine needs an existing Node.js runtime for `npx openclaw connect` or an installed `openclaw node run` process.
 
 When the machine redeems its link or code, the dialog settles into **Device paired** and links to the device inventory. If the machine never connects before expiry, the dialog reconciles the Gateway's recorded outcome: a redeemed setup still lands on the paired state, and a link that was minted but never received by the client surfaces a recoverable **Pairing delivery could not be confirmed** state instead of a silent dead end.
 

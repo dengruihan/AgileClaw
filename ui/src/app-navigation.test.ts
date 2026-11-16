@@ -6,6 +6,8 @@ import {
   formatDocumentTitle,
   isPluginsHubRoute,
   navigationIconForRoute,
+  normalizeSidebarEntries,
+  parseSidebarEntry,
   settingsSearchTextMatches,
   subtitleForRoute,
   titleForRoute,
@@ -456,6 +458,15 @@ describe("SIDEBAR_NAV_ROUTES", () => {
       "meetings",
       "apps",
       "portals",
+    ]);
+  });
+
+  it("keeps persisted route:apps sidebar customizations", () => {
+    // The Plugin apps retitle keeps the route id, so saved sidebar entries stay valid.
+    expect(parseSidebarEntry("route:apps")).toEqual({ type: "route", route: "apps" });
+    expect(normalizeSidebarEntries(["route:apps", "route:cron"])).toEqual([
+      "route:apps",
+      "route:cron",
     ]);
   });
 

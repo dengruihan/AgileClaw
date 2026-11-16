@@ -5208,32 +5208,6 @@ td.data-table-key-col {
   line-height: 1.5;
 }
 
-.device-pair-setup__header p.device-pair-setup__get-apps {
-  margin-top: 2px;
-  font-size: 13px;
-}
-
-.device-pair-setup__get-apps button {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  cursor: var(--cursor-action);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.device-pair-setup__get-apps button:hover {
-  color: var(--text-strong);
-}
-
-.device-pair-setup__get-apps button:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-  border-radius: 4px;
-}
-
 .device-pair-setup__phone {
   display: grid;
   width: 44px;
@@ -5464,37 +5438,6 @@ td.data-table-key-col {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.45;
-}
-
-.device-pair-setup__downloads {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 2px;
-}
-
-.device-pair-setup__downloads a {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
-  color: var(--text);
-  font-size: 13px;
-  cursor: var(--cursor-action);
-  text-decoration: none;
-}
-
-.device-pair-setup__downloads a:hover {
-  border-color: var(--accent);
-  color: var(--text-strong);
-}
-
-.device-pair-setup__downloads a:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
 }
 
 .device-pair-setup__secret {

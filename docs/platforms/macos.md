@@ -84,8 +84,7 @@ For permission recovery, use [macOS permissions](/platforms/mac/permissions).
 To add another Gateway for dashboard and chat access, open
 **Connection… → Gateways → Add Gateway** and enter its hostname or HTTPS address.
 Cloudflare Access Gateways let you sign in with your personal account in the
-default browser. You can also start from **Get the apps → Open in Mac app** on
-the Gateway's website. See [browser sign-in](/platforms/mac/remote#connect-with-your-browser).
+default browser. See [browser sign-in](/platforms/mac/remote#connect-with-your-browser).
 
 Choose **Settings…** from the menu bar or press Cmd-, to open Dashboard settings.
 **This Mac** contains app preferences, local capabilities, browser login import,

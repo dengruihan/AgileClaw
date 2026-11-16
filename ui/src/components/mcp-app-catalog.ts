@@ -166,8 +166,7 @@ export class McpAppCatalog extends OpenClawLightDomElement {
               ${icons.puzzle}
               ${t(this.surface === "file" ? "mcpApp.openWith" : "mcpApp.threadApps")}
             </button>`
-          : html`<h2>${t("mcpApp.catalogTitle")}</h2>
-              <p class="muted">${t("mcpApp.catalogDescription")}</p>`
+          : html`<p class="muted">${t("mcpApp.catalogDescription")}</p>`
       }
       ${
         !compact || this.expanded

@@ -19,7 +19,6 @@ function pairingProps(
     onClose: vi.fn(),
     onManageDevices: vi.fn(),
     onOpenConnectionSettings: vi.fn(),
-    onGetApps: vi.fn(),
     ...overrides,
   };
 }
@@ -54,7 +53,19 @@ describe("device pairing dialog", () => {
     container.remove();
   });
 
-  it("renders the node handoff as guided steps without any terminal command", () => {
+  it("offers no official app promotion in the mobile setup dialog", () => {
+    const container = renderDialog(
+      pairingProps({ lifecycle: { phase: "selection", access: "full" } }),
+    );
+
+    const rendered = container.textContent ?? "";
+    expect(rendered).not.toContain("Get the apps");
+    expect(rendered).not.toContain("Don't have the app yet?");
+    expect(container.querySelector(".device-pair-setup__get-apps")).toBeNull();
+    container.remove();
+  });
+
+  it("renders the node handoff as CLI steps without official app downloads", () => {
     const joinUrl = "https://gateway.example.com/j/fresh-code";
     const container = renderDialog(
       pairingProps({
@@ -77,9 +88,16 @@ describe("device pairing dialog", () => {
     );
 
     const rendered = container.textContent ?? "";
-    expect(container.querySelectorAll(".device-pair-setup__step")).toHaveLength(3);
-    expect(rendered).not.toContain("openclaw node run");
-    expect(rendered).not.toContain("npx openclaw");
+    expect(container.querySelectorAll(".device-pair-setup__step")).toHaveLength(2);
+    expect(container.querySelector(".device-pair-setup__downloads")).toBeNull();
+    expect(container.querySelectorAll("a[target='_blank']")).toHaveLength(1);
+    // src/cli/connect-cli.ts requires a target argument and has no interactive
+    // paste prompt, so the copy must show the parameterized command.
+    expect(rendered).toContain("npx openclaw connect <link>");
+    expect(rendered).toContain("as the command's target");
+    expect(rendered).not.toContain("npx openclaw connect and");
+    expect(rendered).not.toContain("Download");
+    expect(rendered).not.toContain("App Store");
     expect(rendered).not.toContain(joinUrl);
     // Masked by default; the reveal toggle owns the only path to the plaintext URL.
     expect(container.querySelector(".device-pair-setup__secret code")?.textContent).not.toContain(
@@ -91,15 +109,6 @@ describe("device pairing dialog", () => {
     );
     const fallback = container.querySelector<HTMLDetailsElement>(".device-pair-setup__fallback");
     expect(fallback?.querySelector("code")?.textContent).toBe("AbC_123");
-    const downloadLinks = [
-      ...container.querySelectorAll<HTMLAnchorElement>(".device-pair-setup__downloads a"),
-    ];
-    expect(downloadLinks.map((link) => link.textContent?.trim())).toEqual([
-      "macOS",
-      "Windows",
-      "Linux",
-    ]);
-    expect(downloadLinks.every((link) => link.target === "_blank")).toBe(true);
     container.remove();
   });
 
@@ -158,6 +167,7 @@ describe("device pairing dialog", () => {
     expect(rendered).toContain(
       "This Gateway address is not encrypted, so one-time links are unavailable.",
     );
+    expect(rendered).toContain("npx openclaw connect <setup-code>");
     expect(container.querySelector(".device-pair-setup__secret code")?.textContent).not.toContain(
       "PLAIN_CODE",
     );

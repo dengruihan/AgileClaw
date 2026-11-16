@@ -1,14 +1,10 @@
 import { consume } from "@lit/context";
-import { asOptionalRecord } from "@openclaw/normalization-core/record-coerce";
-import { html, nothing } from "lit";
+import { html } from "lit";
 import { property } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { titleForRoute } from "../../app-navigation.ts";
-import type { RouteId } from "../../app-route-paths.ts";
 import { applicationContext, type ApplicationContext } from "../../app/context.ts";
 import { ensureCustomElementDefined } from "../../app/lazy-custom-element.ts";
-import { isNativeWebChromeHost } from "../../app/native-web-chrome.ts";
-import { hasOperatorAdminAccess } from "../../app/operator-access.ts";
 import { shellLayoutTraits } from "../../app/shell-layout-traits.ts";
 import type { McpAppOpenDetail } from "../../components/mcp-app-launch.ts";
 import { renderSettingsWorkspace } from "../../components/settings-workspace.ts";
@@ -20,8 +16,6 @@ import { mcpAppRouteFromSearch, resolveMcpAppRouteServer } from "../../lib/mcp-a
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
 import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
 import "../../components/mcp-app-catalog.ts";
-import { buildMacGatewayLaunchUrl } from "./gateway-launch.ts";
-import { renderApps } from "./view.ts";
 
 registerMcpAppEnglish();
 
@@ -135,26 +129,7 @@ class AppsPage extends OpenClawLightDomElement {
   }
 
   override render() {
-    const gatewaySnapshot = this.context.gateway.snapshot;
-    const canPairDevice =
-      gatewaySnapshot.phase === "connected" &&
-      hasOperatorAdminAccess(gatewaySnapshot.hello?.auth ?? null);
     const appRoute = mcpAppRouteFromSearch(this.appSearch);
-    const body = appRoute
-      ? nothing
-      : renderApps({
-          onNavigate: (routeId: RouteId) => this.context.navigate(routeId),
-          macGatewayLaunchUrl:
-            gatewaySnapshot.phase === "connected" && !isNativeWebChromeHost()
-              ? buildMacGatewayLaunchUrl(
-                  this.context.gateway.connection.gatewayUrl,
-                  asOptionalRecord(gatewaySnapshot.hello?.snapshot)?.controlUiIdentityUrl,
-                )
-              : null,
-          onPairDevice: canPairDevice
-            ? () => void this.context.overlays.openDevicePairSetup()
-            : undefined,
-        });
     return html`<section class="content-header" ${shellLayoutTraits({ toolbarHeader: true })}>
         <div><div class="page-title">${titleForRoute("apps")}</div></div>
       </section>
@@ -162,7 +137,7 @@ class AppsPage extends OpenClawLightDomElement {
         appRoute
           ? this.renderAppConversation(appRoute)
           : renderSettingsWorkspace(
-              html`<openclaw-mcp-app-catalog surface="global"></openclaw-mcp-app-catalog>${body}`,
+              html`<openclaw-mcp-app-catalog surface="global"></openclaw-mcp-app-catalog>`,
             )
       }`;
   }

@@ -41,7 +41,7 @@ async function expectPairingLayout(page: Page, mode: "node" | "qr") {
     const setup = document.querySelector<HTMLElement>(".device-pair-setup")!;
     const setupBounds = setup.getBoundingClientRect();
     const elements = document.querySelectorAll<HTMLElement>(
-      `.device-pair-setup, .device-pair-setup__body, .device-pair-setup__access label, .device-pair-setup__steps, .device-pair-setup__step, .device-pair-setup__secret, .device-pair-setup__secret .login-gate__command, .device-pair-setup__downloads a, .device-pair-setup__meta, .device-pair-setup__fallback, .device-pair-setup__footer, ${
+      `.device-pair-setup, .device-pair-setup__body, .device-pair-setup__access label, .device-pair-setup__steps, .device-pair-setup__step, .device-pair-setup__secret, .device-pair-setup__secret .login-gate__command, .device-pair-setup__meta, .device-pair-setup__fallback, .device-pair-setup__footer, ${
         currentMode === "node"
           ? ".device-pair-setup__secret code, .device-pair-setup__secret .chat-copy-btn"
           : ".device-pair-setup__qr-frame, .device-pair-setup__qr"
@@ -488,12 +488,13 @@ suite.define(() => {
           await dialog.waitFor();
           await page.locator('input[name="device-pair-access"]').nth(2).check();
           await page.getByRole("button", { name: "Create setup code" }).click();
-          await page.getByText("Install the app on that machine", { exact: true }).waitFor();
+          await page.getByText("Send the one-time pairing link", { exact: true }).waitFor();
           await captureUiProof(page, `11-node-${viewport.width}.png`);
           const guidedText = (await setup.textContent()) ?? "";
-          expect(guidedText).not.toContain("openclaw node run");
-          expect(guidedText).not.toContain("npx openclaw");
+          expect(guidedText).toContain("npx openclaw connect <link>");
+          expect(guidedText).toContain("as the command's target");
           expect(guidedText).not.toContain(nodeJoinUrl);
+          expect(await setup.locator(".device-pair-setup__downloads a").count()).toBe(0);
           await expectPairingLayout(page, "node");
           const reveal = setup.locator('.device-pair-setup__secret button[aria-pressed="false"]');
           await reveal.click();

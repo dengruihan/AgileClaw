@@ -59,7 +59,7 @@ async function openConnectMachine(page: Page) {
 }
 
 suite.define(() => {
-  it("lets admins transfer a guided one-paste machine pairing without a terminal command", async () => {
+  it("lets admins transfer a one-paste machine pairing with the connect CLI", async () => {
     const context = await suite.browser.newContext({
       locale: "en-US",
       permissions: ["clipboard-read", "clipboard-write"],
@@ -108,15 +108,15 @@ suite.define(() => {
       const steps = dialog.locator(".device-pair-setup__steps");
       await steps.waitFor();
       const guidedText = (await dialog.textContent()) ?? "";
-      expect(guidedText).not.toContain("npx openclaw");
-      expect(guidedText).not.toContain("openclaw node run");
       expect(guidedText).not.toContain(firstJoinUrl);
-      expect(guidedText).toContain("Install the app on that machine");
       expect(guidedText).toContain("Send the one-time pairing link");
+      // The connect CLI needs the link as its target argument; there is no
+      // interactive paste prompt, so the guidance must show the parameter.
+      expect(guidedText).toContain("npx openclaw connect <link>");
+      expect(guidedText).toContain("as the command's target");
+      expect(guidedText).not.toContain("Install the app on that machine");
       await dialog.getByText(/This link is single-use and expires in/u).waitFor();
-      const downloadLinks = dialog.locator(".device-pair-setup__downloads a");
-      expect(await downloadLinks.count()).toBe(3);
-      expect(await downloadLinks.first().getAttribute("target")).toBe("_blank");
+      expect(await dialog.locator(".device-pair-setup__downloads a").count()).toBe(0);
 
       const copy = dialog.locator(".device-pair-setup__secret .chat-copy-btn");
       await copy.click();

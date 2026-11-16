@@ -1,14 +1,14 @@
 /* @vitest-environment jsdom */
-import { render } from "lit";
+import { html, render } from "lit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createDeferred } from "../../../../test/helpers/promise.js";
-import type { ApplicationContext } from "../../app/context.ts";
-import { createNativeDeviceSettingsCapability } from "../../app/native-device-settings.ts";
-import { i18n } from "../../i18n/index.ts";
-import { createApplicationContextProvider } from "../../test-helpers/application-context.ts";
-import { createChromeExtensionSetupResult } from "../../test-helpers/chrome-extension-setup.ts";
-import { createNativeDeviceSettingsSnapshot } from "../../test-helpers/native-device-settings.ts";
-import { renderApps } from "./view.ts";
+import { createDeferred } from "../../../test/helpers/promise.js";
+import type { ApplicationContext } from "../app/context.ts";
+import { createNativeDeviceSettingsCapability } from "../app/native-device-settings.ts";
+import { i18n } from "../i18n/index.ts";
+import { createApplicationContextProvider } from "../test-helpers/application-context.ts";
+import { createChromeExtensionSetupResult } from "../test-helpers/chrome-extension-setup.ts";
+import { createNativeDeviceSettingsSnapshot } from "../test-helpers/native-device-settings.ts";
+import "./native-chrome-setup.ts";
 
 type SetupElement = HTMLElement & { updateComplete: Promise<boolean> };
 const result = createChromeExtensionSetupResult;
@@ -37,11 +37,11 @@ async function mount(
   nativeDeviceSettings: ApplicationContext["nativeDeviceSettings"] = defaultCapability,
 ) {
   const host = createApplicationContextProvider({ nativeDeviceSettings } as ApplicationContext);
-  render(renderApps({ onNavigate: vi.fn() }), host);
+  render(html`<openclaw-native-chrome-setup></openclaw-native-chrome-setup>`, host);
   document.body.append(host);
   const setup = host.querySelector<SetupElement>("openclaw-native-chrome-setup")!;
   await setup.updateComplete;
-  return { host, setup, card: setup.closest(".apps-card")! };
+  return { host, setup };
 }
 function click(setup: HTMLElement, label: string) {
   const button = [...setup.querySelectorAll("button")].find(
@@ -65,7 +65,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("Apps local Chrome setup", () => {
+describe("Native Chrome setup", () => {
   it("uses explicit native actions through the device-settings context", async () => {
     const post = vi.fn(async ({ action }: { action: string }) =>
       result({
@@ -83,10 +83,10 @@ describe("Apps local Chrome setup", () => {
       }),
     );
     bridge(post);
-    const { setup, card } = await mount();
+    const { setup } = await mount();
     window.dispatchEvent(new Event("focus"));
     expect(post).not.toHaveBeenCalled();
-    expect(card.textContent).toContain("This does not install on a remote Gateway");
+    expect(setup.textContent).toContain("This does not install on a remote Gateway");
     click(setup, "Refresh setup status");
     await vi.waitFor(() => expect(setup.textContent).toContain("Setup required on this device."));
     expect(post.mock.calls).toEqual([[{ action: "inspect" }]]);
@@ -103,13 +103,10 @@ describe("Apps local Chrome setup", () => {
     expect(setup.textContent).toContain("does not mean eligible tabs");
     expect(post.mock.calls).toEqual(["inspect", "install", "verify"].map((action) => [{ action }]));
   });
-  it("keeps only Store and docs in an ordinary browser", async () => {
-    const { card, setup } = await mount();
+  it("offers no actions or store links in an ordinary browser", async () => {
+    const { setup } = await mount();
     expect(setup.querySelector("button")).toBeNull();
-    expect([...card.querySelectorAll("a")].map((a) => a.href)).toEqual([
-      "https://chromewebstore.google.com/detail/openclaw/kcdjddhmeafeomebliikmbpblkmkfoig",
-      "https://docs.openclaw.ai/tools/chrome-extension",
-    ]);
+    expect(setup.querySelectorAll("a")).toHaveLength(0);
   });
   it.each([0, 1])("recognizes an installed extension with %i enabled profiles", async (enabled) => {
     bridge(async () =>

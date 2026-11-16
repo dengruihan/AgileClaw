@@ -159,7 +159,8 @@ const enDevices = {
       subtitlePrefix: "Allowlist and approval policy for",
       loadHint: "Load exec approvals to edit allowlists.",
       hostNativePolicy: "Host-native policy",
-      hostNativeHint: "Read-only here. Edit from the companion app or CLI.",
+      hostNativeHint:
+        "Read-only here. Edit on the Gateway host with openclaw approvals set --node <id|name|ip>.",
       native: "Native",
       defaultAction: "Default action",
       rule: "{count} rule",
@@ -209,8 +210,6 @@ const enDevices = {
     },
     pairing: {
       subtitle: "Create a secure setup for a mobile app or node host.",
-      noApp: "Don't have the app yet?",
-      getApps: "Get the apps",
       generating: "Creating a secure setup code…",
       accessTitle: "Setup type",
       fullAccess: "Full access (recommended)",
@@ -237,18 +236,14 @@ const enDevices = {
       joinExpired: "This pairing link has expired. Create a new one.",
       setupCodeExpiresIn: "This setup code expires in {time}.",
       setupCodeExpired: "This setup code has expired. Create a new one.",
-      stepDownloadTitle: "Install the app on that machine",
-      stepDownloadHint:
-        "Download OpenClaw for the machine's system. The app includes everything it needs to pair.",
-      downloadPlatform: "{platform} download",
       stepTransferTitle: "Send the one-time pairing link",
       stepTransferHint:
-        "On that machine, open OpenClaw and paste this link where it asks to connect to a Gateway.",
+        "On that machine, run npx openclaw connect <link> and pass this link as the command's target. It redeems the one-time credential and starts the node host.",
       stepTransferFallbackTitle: "Share the setup code instead",
       stepTransferFallbackHint:
-        "This Gateway address is not encrypted, so one-time links are unavailable. Share the code only over your private network.",
+        "This Gateway address is not encrypted, so one-time links are unavailable. On that machine, run npx openclaw connect <setup-code> and pass this code as the target; share it only over your private network.",
       setupCodeFallbackHint:
-        "The setup code carries the same credential. Use it when that machine cannot open links.",
+        "The setup code carries the same credential. Pass it to npx openclaw connect as the target when that machine cannot open links.",
       stepObserveTitle: "Wait for the machine",
       stepObserveHint:
         "The machine appears in Devices as soon as it connects using this setup, ready to approve.",
@@ -258,7 +253,7 @@ const enDevices = {
       showSetupCode: "Show setup code",
       pending: "Device requests waiting for review: {count}",
       review: "Review",
-      waiting: "Official AgileClaw mobile apps connect automatically after scanning.",
+      waiting: "The device connects automatically after scanning.",
       pairedTitle: "Device paired",
       deliveryUncertainTitle: "Pairing delivery could not be confirmed",
       deliveryUncertainHint:
