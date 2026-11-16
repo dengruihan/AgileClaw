@@ -29,7 +29,8 @@
   --shell-topbar-height: 0px;
   --shell-dock-reserve-bottom: calc(
     var(--oc-terminal-reserve-bottom, 0px) + var(--oc-browser-reserve-bottom, 0px) +
-      var(--oc-link-reader-reserve-bottom, 0px) + var(--oc-assistant-reserve-bottom, 0px)
+      var(--oc-desktop-reserve-bottom, 0px) + var(--oc-link-reader-reserve-bottom, 0px) +
+      var(--oc-assistant-reserve-bottom, 0px)
   );
   --shell-focus-duration: 200ms;
   --shell-focus-ease: var(--ease-out);
@@ -61,8 +62,8 @@
   margin: var(--shell-plate-inset)
     calc(
       var(--oc-terminal-reserve-right, 0px) + var(--oc-browser-reserve-right, 0px) +
-        var(--oc-link-reader-reserve-right, 0px) + var(--oc-assistant-reserve-right, 0px) +
-        var(--shell-plate-inset)
+        var(--oc-desktop-reserve-right, 0px) + var(--oc-link-reader-reserve-right, 0px) +
+        var(--oc-assistant-reserve-right, 0px) + var(--shell-plate-inset)
     )
     calc(var(--shell-dock-reserve-bottom) + var(--shell-plate-inset)) var(--shell-plate-inset);
   border: 1px solid var(--shell-plate-border);

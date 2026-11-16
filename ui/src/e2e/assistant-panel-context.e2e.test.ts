@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { Locator } from "playwright";
 import { expect, it } from "vitest";
 import type { GatewaySessionRow, SessionsListResult } from "../api/types.ts";
 import {
@@ -9,6 +10,30 @@ import {
 } from "../test-helpers/control-ui-e2e.ts";
 import { openAssistantDock } from "./assistant-dock.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
+
+async function readAssistantDockGeometry(panel: Locator) {
+  return panel.evaluate((host) => {
+    const rect = (selector: string) =>
+      host.querySelector<HTMLElement>(selector)?.getBoundingClientRect() ?? null;
+    const section = rect(".assistant-panel");
+    const content = rect(".dock-panel-content");
+    const assistantContent = rect("openclaw-assistant-panel-content");
+    const chatPane = rect("openclaw-chat-pane");
+    const composer = rect(".agent-chat__composer-shell");
+    if (!section || !content || !assistantContent || !chatPane || !composer) {
+      throw new Error("Missing assistant dock content geometry");
+    }
+    return {
+      panelHeight: section.height,
+      panelWidth: section.width,
+      contentHeight: content.height,
+      contentWidth: content.width,
+      assistantContentHeight: assistantContent.height,
+      chatPaneHeight: chatPane.height,
+      composerBottomGap: section.bottom - composer.bottom,
+    };
+  });
+}
 
 const captureUiProof = process.env.OPENCLAW_CAPTURE_UI_PROOF === "1";
 const suite = createControlUiE2eSuite({ name: "Control UI Home context updates" });
@@ -86,6 +111,19 @@ suite.define(() => {
           const panel = page.locator("openclaw-assistant-panel");
           await panel.locator("openclaw-chat-pane").waitFor();
           await gateway.waitForRequest("chat.startup", { after: 1 });
+          // The dock's own content must fill the panel; a visible-but-zero
+          // chat pane leaves the composer stranded at the top.
+          await expect
+            .poll(async () => (await readAssistantDockGeometry(panel)).chatPaneHeight)
+            .toBeGreaterThan(400);
+          const dockGeometry = await readAssistantDockGeometry(panel);
+          expect(dockGeometry.panelHeight).toBeGreaterThan(700);
+          expect(dockGeometry.contentHeight).toBeGreaterThan(dockGeometry.panelHeight - 100);
+          expect(dockGeometry.assistantContentHeight).toBeGreaterThan(
+            dockGeometry.panelHeight - 150,
+          );
+          expect(Math.abs(dockGeometry.contentWidth - dockGeometry.panelWidth)).toBeLessThan(2);
+          expect(dockGeometry.composerBottomGap).toBeLessThan(200);
           await page.screenshot({ path: path.join(artifactDir, "home-open.png") });
           const composer = panel.locator(".agent-chat__composer-combobox textarea");
           await expect.poll(() => composer.isVisible()).toBe(true);

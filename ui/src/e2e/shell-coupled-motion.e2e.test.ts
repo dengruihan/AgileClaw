@@ -88,8 +88,11 @@ async function openMockedActivity(page: Page): Promise<void> {
     );
   });
   await installMockGateway(page, {
-    featureMethods: ["terminal.open"],
+    featureMethods: ["terminal.open", "browser.request"],
     methodResponses: {
+      "browser.request": {
+        cases: [{ match: { method: "GET", path: "/tabs" }, response: { running: true, tabs: [] } }],
+      },
       "terminal.list": { sessions: [] },
       "terminal.open": {
         agentId: "main",
@@ -710,6 +713,72 @@ suite.define(() => {
         expect(motionless.shellTransition.split(",").map((value) => value.trim())).not.toContain(
           "margin-right",
         );
+
+        // A dock offset must not animate either: open a browser beside the
+        // terminal, then close the terminal through the real follow path.
+        await page.evaluate(() => {
+          window.dispatchEvent(
+            new CustomEvent("openclaw:browser-toggle", {
+              detail: { open: true, dock: "right" },
+            }),
+          );
+        });
+        await page.locator("openclaw-browser-panel .bp--right").waitFor({ state: "visible" });
+        const dockTransitions = await page.evaluate(() => {
+          const terminal = document
+            .querySelector("openclaw-terminal-panel")
+            ?.shadowRoot?.querySelector<HTMLElement>(".tp--right");
+          const browser = document
+            .querySelector("openclaw-browser-panel")
+            ?.shadowRoot?.querySelector<HTMLElement>(".bp--right");
+          if (!terminal || !browser) {
+            throw new Error("Missing right dock");
+          }
+          return {
+            terminal: getComputedStyle(terminal).transitionProperty,
+            browser: getComputedStyle(browser).transitionProperty,
+          };
+        });
+        expect(dockTransitions.terminal).toBe("none");
+        expect(dockTransitions.browser).toBe("none");
+
+        await dispatchTerminalToggle(page, { open: false });
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () =>
+                document
+                  .querySelector("openclaw-terminal-panel")
+                  ?.shadowRoot?.querySelector(".tp") === null,
+            ),
+          )
+          .toBe(true);
+        const followed = await page.evaluate(() => {
+          const shell = document.querySelector<HTMLElement>(".shell");
+          const browser = document
+            .querySelector("openclaw-browser-panel")
+            ?.shadowRoot?.querySelector<HTMLElement>(".bp--right");
+          if (!shell || !browser) {
+            throw new Error("Missing browser dock");
+          }
+          const running = [shell, browser]
+            .flatMap((element) => element.getAnimations())
+            .filter(
+              (animation) =>
+                animation instanceof CSSTransition &&
+                ["right", "left", "margin-right", "opacity"].includes(animation.transitionProperty),
+            )
+            .map((animation) => (animation as CSSTransition).transitionProperty);
+          return {
+            browserRight: getComputedStyle(browser).right,
+            browserWidth: browser.getBoundingClientRect().width,
+            shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
+            running,
+          };
+        });
+        expect(followed.running).toEqual([]);
+        expect(followed.browserRight).toBe("0px");
+        expect(followed.shellMarginRight).toBeCloseTo(followed.browserWidth + 8, 1);
 
         await page.locator(COLLAPSE_BUTTON).click();
         await waitForNavSettled(page, true);

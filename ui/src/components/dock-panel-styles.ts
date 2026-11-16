@@ -45,6 +45,19 @@ export const dockPanelStyles = css`
     min-height: 0;
     flex-direction: column;
   }
+  /* One offset clock for every dock: panels track the reserved edges on the
+     same 200ms ease-out as the panel frame. :where keeps this at the base
+     specificity so the reduced-motion reset below actually wins. */
+  :where(.bp, .tp):is(.bp--right, .tp--right) {
+    transition:
+      right var(--shell-motion-duration) var(--shell-motion-ease),
+      opacity var(--shell-motion-duration) var(--shell-motion-ease);
+  }
+  :where(.bp, .tp):is(.bp--bottom, .tp--bottom, .tp--main) {
+    transition:
+      left var(--shell-motion-duration) var(--shell-motion-ease),
+      opacity var(--shell-motion-duration) var(--shell-motion-ease);
+  }
   @media (prefers-reduced-motion: reduce) {
     :is(.bp, .tp) {
       transition: none;

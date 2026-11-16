@@ -189,7 +189,10 @@ suite.define(() => {
           .toBeGreaterThan(319.5);
         await newSessionAction.waitFor({ state: "visible" });
         const reexpanded = await readShellNavGeometry(page);
-        expect(reexpanded.navWidth).toBe(320);
+        // The expand transition ends on the persisted 320px rail; allow
+        // subpixel sampling if the poll caught the final frame.
+        expect(reexpanded.navWidth).toBeGreaterThan(319.5);
+        expect(reexpanded.navWidth).toBeLessThan(320.5);
         expect(reexpanded.navInert).toBe(false);
         expect(await readFirstSessionTitleGeometry(page)).toEqual(customBaseline);
       },
