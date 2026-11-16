@@ -162,7 +162,7 @@ suite.define(() => {
         await page.goto(`${suite.server.baseUrl}new?agent=${requestedAgent}#keep-exact-fragment`);
         const composer = page.locator(".new-session-page__message");
         await composer.fill("  preserve my full draft  ");
-        await page.locator(".agent-chat__photo-input").setInputFiles({
+        await page.locator(".agent-chat__file-input").setInputFiles({
           name: "synthetic-pixel.png",
           mimeType: "image/png",
           buffer: Buffer.from(ONE_PIXEL_PNG_B64, "base64"),
@@ -496,7 +496,7 @@ suite.define(() => {
         });
         await page.goto(`${suite.server.baseUrl}new?agent=main`);
         await page.locator(".new-session-page__message").fill("retry this first turn");
-        await page.locator(".agent-chat__photo-input").setInputFiles({
+        await page.locator(".agent-chat__file-input").setInputFiles({
           name: "synthetic-pixel.png",
           mimeType: "image/png",
           buffer: Buffer.from(ONE_PIXEL_PNG_B64, "base64"),

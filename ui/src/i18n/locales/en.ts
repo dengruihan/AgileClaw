@@ -3731,9 +3731,7 @@ export const en: TranslationMap & {
       removeNamedAttachment: "Remove {name}",
       removeBrowserAnnotation: "Remove browser annotation: {name}",
       addAttachment: "Add attachment",
-      attach: "Attach…",
-      attachPhoto: "Photo",
-      attachFileOption: "File",
+      attach: "Attachment",
       menu: {
         back: "Back",
         skills: "Skills",
@@ -3802,7 +3800,6 @@ export const en: TranslationMap & {
         messages: "Messages",
         estimateNote: "Categories are estimated from the last run",
       },
-      takePhoto: "Take photo",
       cameraAccessFailed: "Unable to access the camera.",
       cameraBusy: "The camera is busy or unavailable to the browser.",
       cameraFallback: "Camera {number}",

@@ -275,7 +275,7 @@ suite.define(() => {
       await page.goto(`${suite.server.baseUrl}new`);
 
       await page
-        .locator(".agent-chat__photo-input")
+        .locator(".agent-chat__file-input")
         .setInputFiles(path.join(process.cwd(), "ui/public/favicon-32.png"));
 
       const attachment = page.locator(".chat-attachment-thumb");
@@ -310,7 +310,7 @@ suite.define(() => {
       await installMockGateway(page);
       await page.goto(`${suite.server.baseUrl}new`);
 
-      await page.locator(".agent-chat__photo-input").setInputFiles({
+      await page.locator(".agent-chat__file-input").setInputFiles({
         name: "untrusted.svg",
         mimeType: "image/svg+xml",
         buffer: Buffer.from(

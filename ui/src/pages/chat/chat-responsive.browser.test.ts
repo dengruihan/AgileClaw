@@ -737,9 +737,7 @@ function chatHtml(opts: ChatFixtureOptions = {}, mobileNavLayout = false) {
                       <details class="agent-chat__attach-menu">
                         <summary class="agent-chat__input-btn agent-chat__input-btn--attach" aria-label="Add attachment">${iconSvg()}</summary>
                         <div class="agent-chat__attach-menu-popover" role="menu">
-                          <button class="agent-chat__attach-menu-option" role="menuitem">${iconSvg()}<span>Camera</span></button>
-                          <button class="agent-chat__attach-menu-option" role="menuitem">${iconSvg()}<span>Photo</span></button>
-                          <button class="agent-chat__attach-menu-option" role="menuitem">${iconSvg()}<span>File</span></button>
+                          <button class="agent-chat__attach-menu-option" role="menuitem">${iconSvg()}<span>Attachment</span></button>
                         </div>
                       </details>
                     </div>

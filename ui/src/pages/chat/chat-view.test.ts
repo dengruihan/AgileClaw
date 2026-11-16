@@ -3549,46 +3549,22 @@ describe("chat attachment picker", () => {
     expect(getChatAttachmentDataUrl(attachment)).toBeNull();
   });
 
-  it("opens the scoped file input from the attachment menu", () => {
+  it("opens the scoped file input from the single Attachment menu option", () => {
     const container = renderChatView();
     const input = requireAttachmentInput(
       container,
       ".agent-chat__file-input",
       "attachment file input",
     );
-    const attachButton = getAttachmentMenuOption(container, t("chat.composer.attachFileOption"));
+    const attachButton = getAttachmentMenuOption(container, t("chat.composer.attach"));
     const clickInput = vi.spyOn(input, "click").mockImplementation(() => undefined);
 
     expect(attachButton).toBeInstanceOf(HTMLElement);
+    expect(container.querySelectorAll(".agent-chat__attach-menu-option")).toHaveLength(1);
+    expect(container.querySelector("openclaw-chat-camera-capture")).toBeNull();
     selectAttachmentMenuOption(attachButton);
 
     expect(clickInput).toHaveBeenCalledTimes(1);
-  });
-
-  it("opens the scoped camera dialog instead of a file picker and attaches its photo", async () => {
-    const onAttachmentsChange = vi.fn();
-    const container = renderChatView({ onAttachmentsChange });
-    const camera = container.querySelector("openclaw-chat-camera-capture");
-    if (!camera) {
-      throw new Error("Missing camera capture dialog");
-    }
-    const cameraButton = getAttachmentMenuOption(container, t("chat.composer.takePhoto"));
-    const show = vi.spyOn(camera, "show").mockImplementation(() => undefined);
-    const fileClick = vi.spyOn(HTMLInputElement.prototype, "click");
-    expect(container.querySelector(".agent-chat__camera-input")).not.toBeNull();
-    selectAttachmentMenuOption(cameraButton);
-    expect(show).toHaveBeenCalledOnce();
-    expect(fileClick).not.toHaveBeenCalled();
-
-    const photo = new File(["photo"], "camera.jpg", { type: "image/jpeg" });
-    camera.onCapture?.(photo);
-
-    await waitForFast(() => {
-      const attachments = requireFirstAttachmentsChange(onAttachmentsChange);
-      expect(attachments).toHaveLength(1);
-      expect(attachments[0]?.fileName).toBe("camera.jpg");
-      expect(attachments[0]?.mimeType).toBe("image/jpeg");
-    });
   });
 
   it("infers video preview glyphs from filenames when MIME is absent", async () => {

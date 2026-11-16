@@ -36,7 +36,7 @@ suite.define(() => {
       const composer = page.locator(".new-session-page__message");
       await composer.fill(message);
       await page
-        .locator(".agent-chat__photo-input")
+        .locator(".agent-chat__file-input")
         .setInputFiles(path.join(process.cwd(), "ui/public/favicon-32.png"));
       await waitForCommittedNewSessionDraft(page, message, ["favicon-32.png"]);
       await composer.press("Enter");
@@ -112,7 +112,7 @@ suite.define(() => {
       const messageA = newSessionA.locator(".new-session-page__message");
       await messageA.fill(staleText);
       await newSessionA
-        .locator(".agent-chat__photo-input")
+        .locator(".agent-chat__file-input")
         .setInputFiles(path.join(process.cwd(), "ui/public/favicon-32.png"));
       await newSessionA.getByRole("button", { name: `Open image ${staleFileName}` }).waitFor();
       await captureUiProof(suite, pageA, "new-session-draft-before-navigation.png");
@@ -131,7 +131,7 @@ suite.define(() => {
       await messageB.fill(durableText);
       await newSessionB.getByRole("button", { name: `Remove ${staleFileName}` }).click();
       await newSessionB
-        .locator(".agent-chat__photo-input")
+        .locator(".agent-chat__file-input")
         .setInputFiles(path.join(process.cwd(), "ui/public/apple-touch-icon.png"));
       await newSessionB.getByRole("button", { name: `Open image ${durableFileName}` }).waitFor();
       await waitForCommittedNewSessionDraft(pageB, durableText, [durableFileName]);

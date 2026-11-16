@@ -11,7 +11,6 @@ export type AttachmentBrowserFixture = {
   userAgent: string;
   platform: string;
   touch: number;
-  single?: boolean;
   embed?: "ios" | "android";
   webChrome?: boolean;
 };
@@ -23,14 +22,12 @@ export const attachmentBrowserFixtures: AttachmentBrowserFixture[] = [
     userAgent: `${iphone} ${webkit} ${safari}`,
     platform: "iPhone",
     touch: 5,
-    single: true,
   },
   {
     name: "iPad desktop Safari",
     userAgent: `${mac} ${webkit} Version/18.0 Safari/605.1.15`,
     platform: "MacIntel",
     touch: 5,
-    single: true,
   },
   {
     name: "Android Chrome",

@@ -596,7 +596,7 @@ suite.define(() => {
       await permission.click();
       await page.locator('[data-chat-permission-option="read-only"]').click();
       await page.locator(".new-session-page__message").fill(message);
-      await page.locator(".agent-chat__photo-input").setInputFiles({
+      await page.locator(".agent-chat__file-input").setInputFiles({
         name: "synthetic.png",
         mimeType: "image/png",
         buffer: Buffer.from(ONE_PIXEL_PNG_B64, "base64"),

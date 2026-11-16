@@ -210,7 +210,7 @@ suite.define(() => {
         .toBe(true);
 
       await firstPage
-        .locator(".agent-chat__photo-input")
+        .locator(".agent-chat__file-input")
         .setInputFiles(path.join(process.cwd(), "ui/public/favicon-32.png"));
       await firstPage.getByRole("button", { name: `Open image ${fileName}` }).waitFor();
       await firstPage.evaluate(() => {

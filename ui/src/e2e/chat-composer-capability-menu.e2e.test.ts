@@ -246,9 +246,7 @@ suite.define(() => {
         .poll(() => dropdown.getByRole("menuitem").allTextContents())
         .toEqual(
           expect.arrayContaining([
-            expect.stringContaining("Take photo"),
-            expect.stringContaining("Photo"),
-            expect.stringContaining("File"),
+            expect.stringContaining("Attachment"),
             expect.stringContaining("Skills"),
             expect.stringContaining("Connectors"),
             expect.stringContaining("Manage plugins"),
@@ -269,7 +267,7 @@ suite.define(() => {
       await expect.poll(() => dropdown.getAttribute("data-view")).toBe("root");
       await expect
         .poll(() => dropdown.locator("wa-dropdown-item:focus").textContent())
-        .toContain("Take photo");
+        .toContain("Attachment");
       await page.evaluate(() => {
         const input = document.querySelector<HTMLInputElement>(".agent-chat__file-input");
         if (!input) {
@@ -279,7 +277,7 @@ suite.define(() => {
           input.dataset.proxied = "true";
         };
       });
-      await dropdown.getByRole("menuitem", { name: "File", exact: true }).click();
+      await dropdown.getByRole("menuitem", { name: "Attachment", exact: true }).click();
       await expect
         .poll(() => page.locator(".agent-chat__file-input").getAttribute("data-proxied"))
         .toBe("true");

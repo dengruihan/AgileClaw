@@ -1875,9 +1875,7 @@ html[dir="rtl"] .chat-attachment-loading > span {
   color: var(--text);
 }
 
-.agent-chat__file-input,
-.agent-chat__photo-input,
-.agent-chat__camera-input {
+.agent-chat__file-input {
   display: none;
 }
 

@@ -483,7 +483,6 @@ export function renderChatComposerView(context: ChatComposerViewContext) {
                 ${renderChatAttachmentInputs({
                   ...props,
                   disabled: !canCompose,
-                  cameraActive: showComposer && props.cameraActive !== false,
                 })}
                 ${
                   props.realtimeTalkVideoStream
