@@ -53,6 +53,11 @@ function flushMarquees(): void {
   // reserve their space before the title's viewport is measured.
   marqueeFrame = requestAnimationFrame(() => {
     marqueeFrame = undefined;
+    if (shellMotionActive) {
+      // A replacement run kept the window open after this frame was queued:
+      // measuring now would read the eased geometry. The settle flushes it.
+      return;
+    }
     const batch = [...pendingMarquees];
     pendingMarquees.clear();
     // A sidebar can invalidate hundreds of titles together. Finish every

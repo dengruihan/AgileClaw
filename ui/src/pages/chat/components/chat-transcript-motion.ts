@@ -31,6 +31,8 @@ const WATCHDOG_FALLBACK_MS = 400;
 const listeners = new Set<(active: boolean) => void>();
 const activeDocks = new Set<string>();
 const activeGridTransitions = new Map<Element, Set<string>>();
+/** Cancel → replacement confirmations, one bounded frame per element+property. */
+const cancelConfirmations = new Map<Element, Map<string, number>>();
 const watchdogs = new Map<Element, Map<string, number>>();
 let installed = false;
 let notifiedActive = false;
@@ -111,6 +113,9 @@ function handleTransitionStart(event: Event): void {
     return;
   }
   const target = event.target;
+  // A replacement transition after a cancel is the same gesture: keep the
+  // window open instead of publishing a false settle between the two runs.
+  cancelPendingCancelConfirmation(target, property);
   let properties = activeGridTransitions.get(target);
   if (properties?.has(property)) {
     // A reversal or retarget restarts the clock but keeps the window open.
@@ -127,7 +132,64 @@ function handleTransitionStart(event: Event): void {
 }
 
 function handleTransitionEnd(event: Event): void {
-  endGridTransition(event.target, transitionProperty(event));
+  const target = event.target;
+  const property = transitionProperty(event);
+  if (event.type === "transitioncancel") {
+    // A cancelled transition is usually replaced by a new run of the same
+    // property in the next task (a reversal). Hold the window open for one
+    // frame and settle only when no replacement arrived.
+    scheduleCancelConfirmation(target, property);
+    return;
+  }
+  endGridTransition(target, property);
+}
+
+function confirmCancelKey(target: Element): Map<string, number> {
+  let frames = cancelConfirmations.get(target);
+  if (!frames) {
+    frames = new Map();
+    cancelConfirmations.set(target, frames);
+  }
+  return frames;
+}
+
+function scheduleCancelConfirmation(target: EventTarget | null, property: string): void {
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const properties = activeGridTransitions.get(target);
+  if (!properties?.has(property)) {
+    return;
+  }
+  const frames = confirmCancelKey(target);
+  if (frames.has(property)) {
+    return;
+  }
+  // One bounded confirmation step, never a per-frame loop: the replacement run
+  // clears it, otherwise the next frame is the real settle.
+  frames.set(
+    property,
+    requestAnimationFrame(() => {
+      frames.delete(property);
+      if (frames.size === 0) {
+        cancelConfirmations.delete(target);
+      }
+      endGridTransition(target, property);
+    }),
+  );
+}
+
+function cancelPendingCancelConfirmation(target: Element, property: string): void {
+  const frames = cancelConfirmations.get(target);
+  const frame = frames?.get(property);
+  if (frame === undefined) {
+    return;
+  }
+  cancelAnimationFrame(frame);
+  frames?.delete(property);
+  if (frames?.size === 0) {
+    cancelConfirmations.delete(target);
+  }
 }
 
 function endGridTransition(target: EventTarget | null, property: string): void {

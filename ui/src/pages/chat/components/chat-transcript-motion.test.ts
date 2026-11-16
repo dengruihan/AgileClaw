@@ -7,10 +7,30 @@ import {
   subscribeShellGeometryMotion,
 } from "./chat-transcript-motion.ts";
 
-function transition(type: "transitionend" | "transitionrun" | "transitionstart", property: string) {
+function transition(
+  type: "transitioncancel" | "transitionend" | "transitionrun" | "transitionstart",
+  property: string,
+) {
   const event = new Event(type, { bubbles: true });
   Object.defineProperty(event, "propertyName", { value: property });
   return event;
+}
+
+function frameClock() {
+  let nextFrame = 0;
+  const frames = new Map<number, FrameRequestCallback>();
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    frames.set(++nextFrame, callback);
+    return nextFrame;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (frame: number) => frames.delete(frame));
+  return {
+    flush() {
+      const batch = [...frames.values()];
+      frames.clear();
+      batch.forEach((callback) => callback(0));
+    },
+  };
 }
 
 function mountGrid(selector: "shell-nav" | "sidebar-region"): HTMLElement {
@@ -25,6 +45,7 @@ afterEach(() => {
   endRightDockMotion("terminal");
   document.body.replaceChildren();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe("shell geometry motion window", () => {
@@ -107,6 +128,67 @@ describe("shell geometry motion window", () => {
       unsubscribe();
     },
   );
+
+  it("keeps one window across a cancel and its same-property replacement", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (frame: number) => {
+      frames[frame - 1] = () => undefined;
+    });
+    const events: boolean[] = [];
+    const unsubscribe = subscribeShellGeometryMotion((active) => events.push(active));
+    const nav = mountGrid("shell-nav");
+    try {
+      nav.dispatchEvent(transition("transitionrun", "width"));
+      expect(events).toEqual([true]);
+
+      // A reversal cancels the old run and starts its replacement in the next
+      // task: consumers must not see a settle between the two.
+      nav.dispatchEvent(transition("transitioncancel", "width"));
+      nav.dispatchEvent(transition("transitionrun", "width"));
+      frames.splice(0).forEach((callback) => callback(0));
+      expect(events).toEqual([true]);
+      expect(isShellGeometryMotionActive()).toBe(true);
+
+      // The replacement is the authority for the only settle.
+      nav.dispatchEvent(transition("transitionend", "width"));
+      expect(events).toEqual([true, false]);
+      expect(isShellGeometryMotionActive()).toBe(false);
+    } finally {
+      // A failed expectation must not leave a window open for later tests.
+      nav.dispatchEvent(transition("transitionend", "width"));
+      unsubscribe();
+    }
+  });
+
+  it("settles a cancelled gesture with no replacement on one bounded frame", () => {
+    const clock = frameClock();
+    const events: boolean[] = [];
+    const unsubscribe = subscribeShellGeometryMotion((active) => events.push(active));
+    const nav = mountGrid("shell-nav");
+    try {
+      nav.dispatchEvent(transition("transitionrun", "width"));
+      nav.dispatchEvent(transition("transitioncancel", "width"));
+      // Still open: the confirmation frame has not run yet.
+      expect(events).toEqual([true]);
+      expect(isShellGeometryMotionActive()).toBe(true);
+      clock.flush();
+      expect(events).toEqual([true, false]);
+      expect(isShellGeometryMotionActive()).toBe(false);
+
+      // A later independent gesture opens a fresh window.
+      nav.dispatchEvent(transition("transitionrun", "width"));
+      expect(events).toEqual([true, false, true]);
+      nav.dispatchEvent(transition("transitionend", "width"));
+      expect(events).toEqual([true, false, true, false]);
+    } finally {
+      nav.dispatchEvent(transition("transitionend", "width"));
+      unsubscribe();
+    }
+  });
 
   it("bounds a gesture whose transitionend never arrives", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });

@@ -17,6 +17,8 @@ type ViewportRectOwner = {
   requestUpdate(): void;
 };
 
+type RailGeometry = NonNullable<ReturnType<PositionRailGutterController["read"]>>;
+
 type ViewportObserver = {
   instance: Virtualizer<HTMLDivElement, HTMLElement>;
   callback: (rect: Rect) => void;
@@ -35,6 +37,8 @@ export class TranscriptViewportRect {
   private observer: ViewportObserver | null = null;
   private motionActive = false;
   private pendingMotionRect: { rect: Rect; scrollMargin: number } | null = null;
+  private stagedRail: RailGeometry | null = null;
+  private railFrame: number | null = null;
 
   constructor(private readonly owner: ViewportRectOwner) {}
 
@@ -115,6 +119,7 @@ export class TranscriptViewportRect {
       if (this.observer === observer) {
         this.observer = null;
       }
+      this.cancelStagedRail();
     };
   };
 
@@ -159,10 +164,45 @@ export class TranscriptViewportRect {
       this.owner.measureConnectedRows();
       this.owner.queueRowMeasure();
     }
-    this.owner.positionRail.sync(railGeometry);
+    if (settled) {
+      if (railGeometry) {
+        this.stagePositionRail(railGeometry);
+      }
+    } else {
+      this.owner.positionRail.sync(railGeometry);
+    }
     if (widthChanged || heightChanged) {
       this.owner.onViewportResize();
       this.owner.requestUpdate();
     }
+  }
+
+  /**
+   * The settled rail write is its own frame: the settle delivery already shares
+   * a task with the pane/conversation commit, and writing the inherited rail
+   * width there restyles the transcript subtree in that same commit. The
+   * captured geometry is final, so no read follows the write.
+   */
+  private stagePositionRail(geometry: RailGeometry): void {
+    this.stagedRail = geometry;
+    if (this.railFrame !== null) {
+      return;
+    }
+    this.railFrame = requestAnimationFrame(() => {
+      this.railFrame = null;
+      const pending = this.stagedRail;
+      this.stagedRail = null;
+      if (pending) {
+        this.owner.positionRail.sync(pending, { force: true });
+      }
+    });
+  }
+
+  private cancelStagedRail(): void {
+    if (this.railFrame !== null) {
+      cancelAnimationFrame(this.railFrame);
+      this.railFrame = null;
+    }
+    this.stagedRail = null;
   }
 }

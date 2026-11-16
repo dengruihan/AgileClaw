@@ -388,10 +388,13 @@ describe("GitHub side panel", () => {
       await panelHeader.locator(".side-panel__minimize").click();
       await expect.poll(() => panel.locator(".link-reader-panel").isVisible()).toBe(false);
       expect(
-        await page.evaluate(() =>
-          document.documentElement.style.getPropertyValue("--oc-link-reader-reserve-right"),
+        await page.evaluate(
+          () =>
+            document
+              .querySelector<HTMLElement>(".shell")
+              ?.style.getPropertyValue("--oc-link-reader-reserve-right") ?? null,
         ),
-      ).toBe(""); // Embedded readers leave global dock reservations untouched.
+      ).toBe(""); // Embedded readers leave the standalone dock reservation untouched.
 
       await page.setViewportSize({ width: 390, height: 844 });
       await issueLink.click();

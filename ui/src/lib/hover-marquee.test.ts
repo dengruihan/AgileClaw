@@ -152,6 +152,30 @@ describe("hover marquee measurement budget", () => {
     expect(clock.observesSize(labels[1]!)).toBe(true);
   });
 
+  it("defers an already queued batch when a replacement run reopens the window", () => {
+    const clock = measurementClock();
+    const { labels, operations } = denseTitles(2);
+    clock.flush();
+    clock.visible(true);
+    clock.flush();
+    expect(operations.filter((operation) => operation === "read")).toHaveLength(labels.length);
+
+    // A resize queues the batch, then a reversal keeps the window open before
+    // the frame runs; that frame must not measure the eased geometry.
+    operations.length = 0;
+    for (const label of labels) {
+      clock.resize(label);
+    }
+    beginRightDockMotion("assistant", "opening");
+    clock.flush();
+    expect(operations).toEqual([]);
+
+    // The replacement ends: one settle batch measures both titles once.
+    endRightDockMotion("assistant");
+    clock.flush();
+    expect(operations.filter((operation) => operation === "read")).toHaveLength(labels.length);
+  });
+
   it("holds marquee measurement while a shell gesture resizes the rail", () => {
     const clock = measurementClock();
     const { labels, operations } = denseTitles(3);

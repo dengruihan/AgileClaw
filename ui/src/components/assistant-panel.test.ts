@@ -105,8 +105,9 @@ describe("assistant panel", () => {
 
   afterEach(() => {
     document.body.replaceChildren();
+    // The bottom reservation still lives on the root; the right one is written
+    // on its consumers (plate/panel) and needs no cleanup here.
     document.documentElement.style.removeProperty("--oc-assistant-reserve-bottom");
-    document.documentElement.style.removeProperty("--oc-assistant-reserve-right");
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });

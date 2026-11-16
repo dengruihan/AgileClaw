@@ -290,3 +290,35 @@ it("holds row measurement for a shell gesture and reconciles the settled width o
   await expect.poll(totalSize).not.toBe(settledTotal);
   expect(thread.scrollWidth).toBeLessThanOrEqual(thread.clientWidth + 1);
 });
+
+it("writes the settled rail geometry one frame after the settle delivery", async () => {
+  const { session, viewport } = await mountPane();
+  const thread = expectDefined(session.scrollElement, "transcript viewport");
+  const slot = expectDefined(viewport.parentElement, "viewport slot");
+  const inner = expectDefined(
+    thread.querySelector<HTMLElement>(".chat-thread-inner"),
+    "transcript range element",
+  );
+  const column = () => viewport.style.getPropertyValue("--chat-transcript-column-width");
+  await settleLayout();
+  const settledColumn = column();
+  expect(settledColumn).not.toBe("");
+
+  beginRightDockMotion("assistant", "opening");
+  try {
+    slot.style.width = "600px";
+    await settleLayout();
+    expect(column()).toBe(settledColumn);
+  } finally {
+    endRightDockMotion("assistant");
+  }
+  // The settle delivery (rect commit + queued row scan) owns the first frame;
+  // the rail write is staged into the frame after it so the pane/conversation
+  // commit is not restyled by the inherited rail width in the same task.
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+  expect(column()).toBe(settledColumn);
+  await expect.poll(column).not.toBe(settledColumn);
+  expect(column()).toBe(`${inner.clientWidth}px`);
+});

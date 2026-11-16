@@ -296,11 +296,12 @@ export class PositionRailGutterController implements ReactiveController {
     return { viewport, gutter, columnWidth, regionHeight: region.clientHeight };
   }
 
-  sync(geometry = this.read()): void {
+  sync(geometry = this.read(), options: { force?: boolean } = {}): void {
     // The rail's own columns are measured by its ResizeObserver on every eased
     // frame; writing the inherited width var there restyles the whole transcript
-    // subtree. The settle delivery reconciles the rail once.
-    if (isShellGeometryMotionActive()) {
+    // subtree. The settle delivery stages one write, which passes `force`
+    // because it may land while a replacement gesture has already started.
+    if (!options.force && isShellGeometryMotionActive()) {
       return;
     }
     if (!geometry) {
