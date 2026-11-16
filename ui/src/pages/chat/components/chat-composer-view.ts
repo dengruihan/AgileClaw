@@ -273,10 +273,6 @@ export function renderChatComposerView(context: ChatComposerViewContext) {
         }
       `
     : nothing;
-  const offlineText =
-    props.offline && props.queuedOutboxCount
-      ? t("chat.composer.offlineQueuedHint", { count: String(props.queuedOutboxCount) })
-      : null;
   const primaryComposerStatus = props.disabledReason
     ? {
         text: props.disabledReason,
@@ -291,9 +287,7 @@ export function renderChatComposerView(context: ChatComposerViewContext) {
       ? { text: mentionError, tone: "danger" as const, icon: icons.alertTriangle }
       : state.dictationError
         ? { text: state.dictationError, tone: "danger" as const, icon: icons.alertTriangle }
-        : offlineText
-          ? { text: offlineText, tone: "info" as const, icon: icons.inbox }
-          : null;
+        : null;
   const composerStatus =
     showComposerInput && primaryComposerStatus
       ? html`<div class="agent-chat__composer-status" data-tone=${primaryComposerStatus.tone}>
