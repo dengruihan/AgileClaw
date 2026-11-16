@@ -51,8 +51,17 @@ function attachAnnotationOverlay(panel: {
   return { capturedPointers, dispatchPointer };
 }
 
+/** The plate carries every dock reservation target; panels carry their own copy. */
+function shellReservation(prefix: string): string {
+  const plate = document.querySelector<HTMLElement>(".shell");
+  return plate?.style.getPropertyValue(`--oc-${prefix}-reserve-right`) ?? "";
+}
+
 describe("normalizeBrowserUrlDraft", () => {
   beforeEach(() => {
+    const plate = document.createElement("div");
+    plate.className = "shell";
+    document.body.append(plate);
     vi.stubGlobal("localStorage", createStorageMock());
     vi.stubGlobal(
       "ResizeObserver",
@@ -227,9 +236,7 @@ describe("normalizeBrowserUrlDraft", () => {
     panel.suppressed = true;
     await waitForFast(() => expect(panel.renderRoot.querySelector(".bp")).toBeNull());
 
-    expect(document.documentElement.style.getPropertyValue("--oc-browser-reserve-right")).toBe(
-      "0px",
-    );
+    expect(shellReservation("browser")).toBe("0px");
     expect(JSON.parse(localStorage.getItem("openclaw.browser.panel.v1") ?? "{}")).toMatchObject({
       open: true,
     });
@@ -258,8 +265,7 @@ describe("normalizeBrowserUrlDraft", () => {
     dock.available = embedded.available = true;
     document.body.append(dock, embedded);
     await Promise.all([dock.updateComplete, embedded.updateComplete]);
-    const reservation = () =>
-      document.documentElement.style.getPropertyValue("--oc-browser-reserve-right");
+    const reservation = () => shellReservation("browser");
     expect(reservation()).toBe("560px");
 
     embedded.presented = true;

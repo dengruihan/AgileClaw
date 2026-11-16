@@ -182,6 +182,7 @@ export class OpenClawAssistantSession extends OpenClawLightDomElement {
                 .compact=${true}
                 .narrow=${true}
                 .workContext=${this.includeContext ? context : undefined}
+                .stagedConversation=${true}
               ></openclaw-chat-pane>`,
             )
           : html`<div class="assistant-panel-context-pending" aria-busy="true"></div>`

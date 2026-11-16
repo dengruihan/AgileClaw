@@ -66,6 +66,10 @@ describe("OpenClawTerminalPanel", () => {
   beforeEach(async () => {
     vi.stubGlobal("localStorage", createStorageMock());
     vi.stubGlobal("sessionStorage", createStorageMock());
+    // The plate carries the dock reservation targets off the document root.
+    const plate = document.createElement("div");
+    plate.className = "shell";
+    document.body.append(plate);
     await i18n.setLocale("en");
   });
 
@@ -1025,9 +1029,8 @@ describe("OpenClawTerminalPanel", () => {
     expect(document.documentElement.style.getPropertyValue("--oc-terminal-reserve-bottom")).toBe(
       "0px",
     );
-    expect(document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right")).toBe(
-      "0px",
-    );
+    const plate = document.querySelector<HTMLElement>(".shell");
+    expect(plate?.style.getPropertyValue("--oc-terminal-reserve-right")).toBe("0px");
   });
 
   it("retranslates cached exit state when the locale changes", async () => {

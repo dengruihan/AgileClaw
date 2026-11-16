@@ -79,6 +79,35 @@ describe("shell geometry motion window", () => {
     unsubscribe();
   });
 
+  it.each([
+    { delay: "0s", duration: "0.2s", expected: 350 },
+    { delay: "0s", duration: "200ms", expected: 350 },
+    { delay: "50ms", duration: "0.2s", expected: 400 },
+  ])(
+    "bounds a lost transitionend by the browser clock ($duration + $delay)",
+    ({ delay, duration, expected }) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      vi.stubGlobal("getComputedStyle", () => ({
+        transitionDelay: delay,
+        transitionDuration: duration,
+        transitionProperty: "width",
+      }));
+      const events: boolean[] = [];
+      const unsubscribe = subscribeShellGeometryMotion((active) => events.push(active));
+      mountGrid("shell-nav").dispatchEvent(transition("transitionrun", "width"));
+      expect(events).toEqual([true]);
+      // The grace window alone must not settle a phone-width rail gesture.
+      vi.advanceTimersByTime(150);
+      expect(events).toEqual([true]);
+      vi.advanceTimersByTime(expected - 150 - 1);
+      expect(events).toEqual([true]);
+      vi.advanceTimersByTime(2);
+      expect(events).toEqual([true, false]);
+      expect(isShellGeometryMotionActive()).toBe(false);
+      unsubscribe();
+    },
+  );
+
   it("bounds a gesture whose transitionend never arrives", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const events: boolean[] = [];

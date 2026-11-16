@@ -174,6 +174,16 @@ function clearWatchdog(target: Element, property: string): void {
   }
 }
 
+/** A computed CSS time token (`200ms`, `0.2s`) in milliseconds. */
+function cssTimeMs(token: string | undefined): number {
+  const raw = token?.trim() ?? "";
+  const value = Number.parseFloat(raw);
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return raw.endsWith("ms") ? value : value * 1000;
+}
+
 /** The transition clock the browser will take for this property, in ms. */
 function transitionWindowMs(target: Element, property: string): number {
   if (typeof getComputedStyle !== "function") {
@@ -185,10 +195,12 @@ function transitionWindowMs(target: Element, property: string): number {
   if (index < 0) {
     return WATCHDOG_FALLBACK_MS;
   }
-  const value = (list: string) => Number.parseFloat(list.split(",")[index] ?? "") || 0;
-  const duration = value(style.transitionDuration);
-  const delay = value(style.transitionDelay);
-  return Math.max(0, duration + delay);
+  const token = (list: string) => list.split(",")[index]?.trim();
+  // Computed transition times are CSS time tokens: `200ms` or `0.2s`.
+  const duration = cssTimeMs(token(style.transitionDuration));
+  const delay = cssTimeMs(token(style.transitionDelay));
+  const window = duration + delay;
+  return window > 0 ? window : WATCHDOG_FALLBACK_MS;
 }
 
 type TranscriptMotionQuiesceOwner = {

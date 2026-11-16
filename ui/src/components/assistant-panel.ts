@@ -102,12 +102,15 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
   }
 
   /**
-   * An opening dock reaches its full width in 200ms; mounting a second live
-   * transcript in that window starves every frame (M186/M189). Already-mounted
-   * content keeps rendering so the close motion has something to animate out.
+   * A dock motion owns its 200ms window; mounting a second live transcript
+   * there starves every frame (M186/M189). The window is not the same as
+   * `open`: a close or a reversal keeps the motion active while `open` is
+   * already false and `renderVisible` still presents the panel. Content that
+   * mounted before the window keeps rendering so close has something to animate
+   * out; anything unmounted waits for the settle.
    */
   private get defersContentMount(): boolean {
-    return this.dockLayout.open && this.dockMotionActive && !this.mountedContent;
+    return this.dockMotionActive && !this.mountedContent;
   }
 
   override willUpdate(): void {

@@ -3,13 +3,14 @@ const applied = new Map<string, number>();
 let readyScheduled = false;
 
 /**
- * Right dock geometry is one shared set of STATIC reservation widths on html:
- * each dock's panel width, the following dock's right offset, and the shell
- * margin all read `--oc-<prefix>-reserve-right`. Motion runs as local
- * transitions on those consumers (panel width/right, shell margin-right),
- * gated by the inherited static `--oc-dock-motion-duration` clock, so every
- * consumer starts in the same frame and stays synchronized without an
- * inherited animated property restyling the whole tree each frame.
+ * Right dock geometry is one shared set of STATIC reservation targets per
+ * prefix (`--oc-<prefix>-reserve-right`). Each target is written on the
+ * elements that read it — every registered dock panel and the plate — as a
+ * registered NON-inherited custom property, so one target change restyles those
+ * consumers instead of the whole document. Motion runs as local transitions on
+ * the same consumers (panel width/right, shell margin-right), gated by the
+ * inherited static `--oc-dock-motion-duration` clock, so they start in one frame
+ * and stay synchronized without an inherited animated property.
  * Transitions stay off until the first painted frame so restored docks do not
  * animate on boot.
  */
