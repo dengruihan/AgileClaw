@@ -1231,6 +1231,7 @@ wa-popover::part(body)::-webkit-scrollbar-thumb:hover {
   height: 8px;
   margin-inline-end: 6px;
   border-radius: var(--radius-full);
+  corner-shape: round;
   background: var(--session-color);
   vertical-align: middle;
 }

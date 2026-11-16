@@ -220,6 +220,17 @@ const CASES: readonly CornerCase[] = [
     superelliptical: corners("50%"),
   },
   {
+    // Production status dot from renderSessionColorDot(): an 8x8 full-round
+    // marker that must stay a true circle, not a squircle.
+    circular: corners("9999px"),
+    markup:
+      '<span class="session-color-dot" role="img" aria-label="Blue" ' +
+      'style="--session-color: var(--session-color-blue)"></span>',
+    selector: ".session-color-dot",
+    shape: "circular",
+    superelliptical: corners("9999px"),
+  },
+  {
     // A zero radius draws no corner, so the state stays square even though the
     // element itself is matched by the universal rule.
     circular: corners("0px"),
