@@ -39,6 +39,7 @@ import {
   type SidebarSlotId,
 } from "../sidebar-layout.ts";
 import { renderChatResizableDivider } from "./chat-resizable-divider.ts";
+import type { SidebarRegionMotion } from "./chat-sidebar-region-motion.ts";
 import type {
   SidebarPanelDefinition,
   SidebarPanelTemplates,
@@ -94,6 +95,8 @@ class ChatSidebarRegion extends OpenClawLightDomElement {
   @property({ attribute: false }) callbacks: SidebarRegionCallbacks | null = null;
   @property({ type: Boolean }) narrow = false;
   @property({ type: Number }) availableWidth = 0;
+  @property({ attribute: false }) motion?: SidebarRegionMotion;
+  @property({ attribute: false }) layoutScope = "";
   private previousGeometry = "";
   private geometryFrame: number | null = null;
   private contentMounted = false;
@@ -119,11 +122,18 @@ class ChatSidebarRegion extends OpenClawLightDomElement {
     this.nativeCloseListeners?.abort();
     this.nativeCloseListeners = undefined;
     this.focusedSurface = null;
+    this.motion?.dispose();
     if (this.geometryFrame !== null) {
       cancelAnimationFrame(this.geometryFrame);
       this.geometryFrame = null;
     }
     super.disconnectedCallback();
+  }
+
+  // Closing motion holds the last open presentation so panel content stays
+  // visible and mounted until the tracks finish easing to zero.
+  private get presentationLayout(): SidebarLayout {
+    return this.motion?.presentationLayout ?? this.layout;
   }
 
   private readonly refreshHostedTabs = (): void => this.requestUpdate();
@@ -229,7 +239,9 @@ class ChatSidebarRegion extends OpenClawLightDomElement {
   }
 
   private renderTypeMenu() {
-    const openSlots = new Set((this.layout.columns[0]?.panels ?? []).map((panel) => panel.slot));
+    const openSlots = new Set(
+      (this.presentationLayout.columns[0]?.panels ?? []).map((panel) => panel.slot),
+    );
     return html`
       <wa-dropdown
         class="side-panel-type-menu"
@@ -294,7 +306,7 @@ class ChatSidebarRegion extends OpenClawLightDomElement {
   }
 
   private renderHeader(column: SidebarColumn) {
-    const sidePanels = sidebarSidePanels(this.layout);
+    const sidePanels = sidebarSidePanels(this.presentationLayout);
     const hostedPanels = sidePanels.flatMap((panel) => {
       const element = this.hostedTabsElement(panel);
       return element ? [{ panel, element, tabs: element.hostedTabs }] : [];
@@ -345,8 +357,8 @@ class ChatSidebarRegion extends OpenClawLightDomElement {
           labelTooltip:
             panel.slot === "dashboard"
               ? t(
-                  this.layout.expanded &&
-                    this.layout.expandedSide &&
+                  this.presentationLayout.expanded &&
+                    this.presentationLayout.expandedSide &&
                     column.activePanelId === panel.id
                     ? "chat.sidePanel.restore"
                     : "chat.sidePanel.expandPanel",
@@ -362,7 +374,7 @@ class ChatSidebarRegion extends OpenClawLightDomElement {
         },
       ];
     });
-    const active = sidebarActivePanel(this.layout);
+    const active = sidebarActivePanel(this.presentationLayout);
     const activeHosted = hostedPanels.find((entry) => entry.panel.id === active?.id);
     const activeId = activeHosted?.tabs.some(
       (tab) => tab.id === activeHosted.element.activeHostedTabId,
@@ -377,43 +389,45 @@ class ChatSidebarRegion extends OpenClawLightDomElement {
         data-region-header="side"
         @mousedown=${beginNativeWindowDrag}
       >
-        <div class="side-panel__header-tabs">
-          ${renderPanelTabStrip({
-            tabs,
-            activeId,
-            ariaControls: (tab) => tab.contentId,
-            onSelect: (panelId) => {
-              const hosted = resolveHostedTab(panelId);
-              if (hosted) {
-                if (column.activePanelId !== hosted.panel.id) {
-                  this.callbacks?.activatePanel(hosted.panel.id);
+        <div class="side-panel__header-inner">
+          <div class="side-panel__header-tabs">
+            ${renderPanelTabStrip({
+              tabs,
+              activeId,
+              ariaControls: (tab) => tab.contentId,
+              onSelect: (panelId) => {
+                const hosted = resolveHostedTab(panelId);
+                if (hosted) {
+                  if (column.activePanelId !== hosted.panel.id) {
+                    this.callbacks?.activatePanel(hosted.panel.id);
+                  }
+                  hosted.element.selectHostedTab(hosted.tabId);
+                } else {
+                  this.callbacks?.activatePanel(panelId);
                 }
-                hosted.element.selectHostedTab(hosted.tabId);
-              } else {
-                this.callbacks?.activatePanel(panelId);
-              }
-            },
-            onClose: async (panelId) => {
-              const hosted = resolveHostedTab(panelId);
-              if (hosted) {
-                await hosted.element.closeHostedTab(hosted.tabId);
-                return;
-              }
-              const panel = column.panels.find((entry) => entry.id === panelId);
-              if (panel) {
-                this.callbacks?.closeSlot(panel.slot);
-              }
-            },
-            onNew: () => undefined,
-            newLabel: t("chat.sidePanel.addTab"),
-            newControl: nothing,
-            separateTabs: true,
-            onReorder: (panelId, targetPanelId, placement) =>
-              this.callbacks?.reorderPanel(panelId, targetPanelId, placement),
-          })}
-          ${this.renderTypeMenu()}
+              },
+              onClose: async (panelId) => {
+                const hosted = resolveHostedTab(panelId);
+                if (hosted) {
+                  await hosted.element.closeHostedTab(hosted.tabId);
+                  return;
+                }
+                const panel = column.panels.find((entry) => entry.id === panelId);
+                if (panel) {
+                  this.callbacks?.closeSlot(panel.slot);
+                }
+              },
+              onNew: () => undefined,
+              newLabel: t("chat.sidePanel.addTab"),
+              newControl: nothing,
+              separateTabs: true,
+              onReorder: (panelId, targetPanelId, placement) =>
+                this.callbacks?.reorderPanel(panelId, targetPanelId, placement),
+            })}
+            ${this.renderTypeMenu()}
+          </div>
+          ${this.renderHeaderActions(activeActions, activeHosted?.element.hostedActions ?? nothing)}
         </div>
-        ${this.renderHeaderActions(activeActions, activeHosted?.element.hostedActions ?? nothing)}
       </header>
     `;
   }
@@ -422,8 +436,9 @@ class ChatSidebarRegion extends OpenClawLightDomElement {
     panelActions: TemplateResult | typeof nothing | null,
     hostedActions: TemplateResult | typeof nothing,
   ) {
-    const active = sidebarActivePanel(this.layout);
-    const expanded = this.layout.expanded === true && this.layout.expandedSide === true;
+    const active = sidebarActivePanel(this.presentationLayout);
+    const expanded =
+      this.presentationLayout.expanded === true && this.presentationLayout.expandedSide === true;
     const expandLabel = expanded
       ? t("chat.sidePanel.restore")
       : t("chat.sidePanel.expandPanel", {
@@ -510,14 +525,14 @@ class ChatSidebarRegion extends OpenClawLightDomElement {
           role="region"
           aria-label=${panelType(this.panelDefinitions, panel.slot).label}
           data-panel-slot=${panel.slot}
-          data-region=${panel.id === this.layout.mainPanelId ? "main" : "side"}
-          ?hidden=${!isSidebarSlotVisible(this.layout, panel.slot)}
+          data-region=${panel.id === this.presentationLayout.mainPanelId ? "main" : "side"}
+          ?hidden=${!isSidebarSlotVisible(this.presentationLayout, panel.slot)}
         >
           ${this.panelTemplates[panel.slot] ?? this.renderEmpty(panel)}
         </div>`,
       )}
       ${
-        sidebarSidePanels(this.layout).length === 0
+        sidebarSidePanels(this.presentationLayout).length === 0
           ? html`<div class="side-panel__empty-body" data-region="side">${this.renderEmpty()}</div>`
           : nothing
       }
@@ -525,7 +540,7 @@ class ChatSidebarRegion extends OpenClawLightDomElement {
   }
 
   private renderDivider(column: SidebarColumn) {
-    const dock = sidebarDock(this.layout);
+    const dock = sidebarDock(this.presentationLayout);
     const measure = () => {
       const shell = this.parentElement;
       const primary = shell?.querySelector<HTMLElement>('[data-region="main"]');
@@ -577,33 +592,49 @@ class ChatSidebarRegion extends OpenClawLightDomElement {
   }
 
   private renderPanel() {
-    const column = this.layout.columns[0];
+    const column = this.presentationLayout.columns[0];
     if (!column) {
       this.contentMounted = false;
       return nothing;
     }
     // Saved closed panels stay dormant until first shown. Once mounted, their
     // content survives hiding; closing tabs or this region releases it.
+    const presentation = this.presentationLayout;
     this.contentMounted ||=
-      (this.layout.open === true && (!this.layout.expanded || this.layout.expandedSide === true)) ||
-      (sidebarMainPanel(this.layout)?.slot ?? "conversation") !== "conversation";
+      (presentation.open === true &&
+        (!presentation.expanded || presentation.expandedSide === true)) ||
+      (sidebarMainPanel(presentation)?.slot ?? "conversation") !== "conversation";
     return html`${
-        !this.narrow && this.layout.open && !this.layout.expanded
+        !this.narrow && presentation.open && !presentation.expanded
           ? this.renderDivider(column)
           : nothing
       }
       <div class="side-panel">
-        ${sidebarSidePanels(this.layout).length > 0 ? this.renderHeader(column) : nothing}
+        ${sidebarSidePanels(presentation).length > 0 ? this.renderHeader(column) : nothing}
         ${this.contentMounted ? this.renderBody(column) : nothing}
       </div>`;
   }
 
   protected override updated() {
     const root = this.parentElement?.querySelector<HTMLElement>(".sidebar-region__right-runtime");
-    if (root) {
-      renderTemplate(this.renderPanel(), root);
-      this.scheduleGeometryCommit();
+    if (!root) {
+      return;
     }
+    this.motion?.reconcile({
+      region: this.parentElement,
+      layout: this.layout,
+      narrow: this.narrow,
+      availableWidth: this.availableWidth,
+      scope: this.layoutScope,
+      onSettle: () => this.scheduleGeometryCommit(),
+    });
+    renderTemplate(this.renderPanel(), root);
+    if (this.motion?.motionActive) {
+      // Intermediate eased widths must not drive transcript row re-measurement;
+      // the settle commit measures the final geometry once.
+      return;
+    }
+    this.scheduleGeometryCommit();
   }
 
   private scheduleGeometryCommit() {

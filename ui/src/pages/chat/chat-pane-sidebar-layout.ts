@@ -18,6 +18,7 @@ import type { ResolvedBoardView } from "./chat-pane-shared.ts";
 import type { ChatPageHost } from "./chat-state-host.ts";
 import { resolveChatAgentId, selectedChatSessionRow } from "./chat-state-route.ts";
 import type { SidebarFullMessageLoader } from "./components/chat-sidebar-content-types.ts";
+import type { SidebarRegionMotion } from "./components/chat-sidebar-region-motion.ts";
 import type {
   SidebarPanelDefinition,
   SidebarPanelTemplates,
@@ -180,6 +181,8 @@ export function renderSidebarRegion(params: {
   callbacks: SidebarRegionCallbacks;
   availableSlots: SidebarSlotId[];
   layout: SidebarLayout;
+  layoutScope?: string;
+  motion?: SidebarRegionMotion;
   narrow: boolean;
   panelDefinitions?: SidebarPanelDefinition[];
   panelActions: SidebarPanelTemplates;
@@ -217,10 +220,17 @@ export function renderSidebarRegion(params: {
   const regionLoading = panelDefinitions.find(
     (definition) => definition.slot === activePanelSlot,
   )?.loading;
+  // Motion classes land in the same commit as the layout flip so no
+  // intermediate style recalc can swallow the transition start.
+  const openClasses = params.motion
+    ? params.motion.regionClasses(params.layout, collapsed)
+    : panelOpen
+      ? "sidebar-region--open"
+      : "";
   return html`<div
     class="sidebar-region ${collapsed ? "sidebar-region--narrow" : ""} ${
       params.layout.expanded ? "sidebar-region--expanded" : ""
-    } ${params.layout.expanded && params.layout.expandedSide ? "sidebar-region--expanded-side" : ""} sidebar-region--${sidebarDock(params.layout)} ${panelOpen ? "sidebar-region--open" : ""}"
+    } ${params.layout.expanded && params.layout.expandedSide ? "sidebar-region--expanded-side" : ""} sidebar-region--${sidebarDock(params.layout)} ${openClasses}"
     style=${styleMap({
       "--side-panel-width": `${column?.width ?? 480}px`,
       "--side-panel-height": `${column?.height ?? 360}px`,
@@ -244,6 +254,8 @@ export function renderSidebarRegion(params: {
             .callbacks=${params.callbacks}
             .narrow=${params.narrow}
             .availableWidth=${params.availableWidth}
+            .motion=${params.motion}
+            .layoutScope=${params.layoutScope ?? ""}
           ></openclaw-chat-sidebar-region>`
     }
     <div

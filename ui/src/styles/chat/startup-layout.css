@@ -529,6 +529,121 @@ openclaw-chat-sidebar-region,
   grid-template-areas: "main-header" "main" "divider" "side-header" "side";
 }
 
+/* ZCode right-dock motion for the chat grid (zai-org/ZCode fec975905a2,
+   Apache-2.0): the right desktop split eases width + opacity for 200ms on the
+   shared shell clock. Both projections keep one three-track list so the track
+   sizes interpolate continuously instead of flipping between one and three
+   tracks; the closed side tracks are zero-width, so rest geometry is unchanged.
+   The pane template emits the motion classes from the region's motion
+   lifecycle: --motion enables the local transitions (never an inherited
+   animated carrier — M186 measured whole-tree recalc from those), and
+   --closing holds the open presentation while the tracks ease back to zero.
+   Left, bottom, narrow, and expanded keep the instant projections above. */
+.sidebar-region--right:not(.sidebar-region--narrow):not(.sidebar-region--expanded) {
+  grid-template-columns: minmax(0, 1fr) 0px minmax(0px, 0px);
+  grid-template-areas: "main-header divider side-header" "main divider side";
+}
+
+.sidebar-region--right.sidebar-region--open:not(.sidebar-region--narrow):not(
+    .sidebar-region--expanded
+  ) {
+  grid-template-columns: minmax(0, 1fr) var(--resize-handle-size, 6px) minmax(
+      0px,
+      var(--side-panel-width)
+    );
+}
+
+.sidebar-region--right.sidebar-region--closing:not(.sidebar-region--narrow):not(
+    .sidebar-region--expanded
+  ) {
+  grid-template-columns: minmax(0, 1fr) 0px minmax(0px, 0px);
+}
+
+.sidebar-region--motion {
+  transition: grid-template-columns var(--shell-motion-duration) var(--shell-motion-ease);
+}
+
+/* The side surfaces fade on the same clock. @starting-style starts the fade at
+   zero when a closed (display: none) surface first renders; a reversal retargets
+   from the drawn opacity without it. */
+.sidebar-region--motion [data-region-header="side"],
+.sidebar-region--motion .side-panel__panel[data-region="side"],
+.sidebar-region--motion .side-panel__empty-body,
+.sidebar-region--motion .sidebar-region__primary[data-region="side"] {
+  opacity: 1;
+  transition: opacity var(--shell-motion-duration) var(--shell-motion-ease);
+}
+
+.sidebar-region--motion.sidebar-region--closing [data-region-header="side"],
+.sidebar-region--motion.sidebar-region--closing .side-panel__panel[data-region="side"],
+.sidebar-region--motion.sidebar-region--closing .side-panel__empty-body,
+.sidebar-region--motion.sidebar-region--closing .sidebar-region__primary[data-region="side"] {
+  opacity: 0;
+}
+
+@starting-style {
+  .sidebar-region--motion [data-region-header="side"],
+  .sidebar-region--motion .side-panel__panel[data-region="side"],
+  .sidebar-region--motion .side-panel__empty-body,
+  .sidebar-region--motion .sidebar-region__primary[data-region="side"] {
+    opacity: 0;
+  }
+}
+
+/* Motion-time content pinning: the track-sized boxes clip while their content
+   keeps the target width at the inline-end edge, so panel text never reflows
+   mid-animation. The header inner wrapper is display: contents at rest; the
+   panel, empty selector, and promoted primary each render one content root. */
+.side-panel__header-inner {
+  display: contents;
+}
+
+.sidebar-region--motion [data-region-header="side"] {
+  overflow: hidden;
+  justify-content: flex-end;
+  padding: 0;
+}
+
+.sidebar-region--motion .side-panel__header-inner {
+  display: flex;
+  width: var(--side-panel-width);
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 var(--rail-header-padding-end) 0 0;
+}
+
+.sidebar-region--motion .side-panel__panel[data-region="side"],
+.sidebar-region--motion .side-panel__empty-body,
+.sidebar-region--motion .sidebar-region__primary[data-region="side"] {
+  justify-content: flex-end;
+}
+
+.sidebar-region--motion .side-panel__panel[data-region="side"] > *,
+.sidebar-region--motion .side-panel__empty-body > *,
+.sidebar-region--motion .sidebar-region__primary[data-region="side"] > * {
+  width: var(--side-panel-width);
+  flex: 0 0 auto;
+}
+
+/* The divider fills its animating track instead of overflowing a fixed 6px
+   host width into the neighboring track. */
+.sidebar-region--motion .sidebar-column__divider {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-region--motion,
+  .sidebar-region--motion [data-region-header="side"],
+  .sidebar-region--motion .side-panel__panel[data-region="side"],
+  .sidebar-region--motion .side-panel__empty-body,
+  .sidebar-region--motion .sidebar-region__primary[data-region="side"] {
+    transition: none;
+  }
+}
+
 .sidebar-region [data-region="main"] {
   grid-area: main;
 }

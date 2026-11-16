@@ -10,7 +10,16 @@ import {
   controlUiSessionUrl,
   installMockGateway,
 } from "../test-helpers/control-ui-e2e.ts";
-import { openChatSidePanelType } from "./chat-side-panel.test-support.ts";
+import {
+  dockChatSidePanel,
+  midSidebarRegionSamples,
+  openChatSidePanelType,
+  readSidebarRegionAnimations,
+  sampleSidebarRegionMotion,
+  type SidebarRegionMotionSample,
+  waitForSidebarRegionSettled,
+  waitForSidebarSideWidth,
+} from "./chat-side-panel.test-support.ts";
 import { controlUiE2eBuiltModuleRequest } from "./control-ui-built-module.test-support.ts";
 import {
   createControlUiE2eSuite,
@@ -1041,5 +1050,416 @@ suite.define(() => {
     }
 
     expect(observedActionlessEmptyStates).toEqual([...actionlessEmptyStateAllowlist]);
+  });
+
+  // Right-dock motion contract (M188): the chat grid eases width + opacity on
+  // the shared 200ms shell clock; every other projection stays instant.
+  const MOTION_VIEWPORT = { width: 1440, height: 900 };
+  const EASE_OUT = "cubic-bezier(0, 0, 0.2, 1)";
+
+  async function openMotionChat(page: Page) {
+    const gateway = await installMockGateway(page, coldOpenScenario());
+    await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
+    await waitForControlUiGatewayReady(page);
+    await page.locator(".agent-chat__composer-combobox textarea").waitFor();
+    return gateway;
+  }
+
+  function expectMonotonicWidths(samples: SidebarRegionMotionSample[], direction: "up" | "down") {
+    for (let index = 1; index < samples.length; index += 1) {
+      const previous = samples[index - 1]!.sideWidth;
+      const current = samples[index]!.sideWidth;
+      if (direction === "up") {
+        expect(current, "open ramp monotonic").toBeGreaterThanOrEqual(previous - 0.5);
+      } else {
+        expect(current, "close ramp monotonic").toBeLessThanOrEqual(previous + 0.5);
+      }
+    }
+  }
+
+  async function seedOpenProcessesSlot(page: Page) {
+    const settingsKey = controlUiBundledSettingsStorageKey(suite.server.baseUrl);
+    await page.addInitScript(
+      ({ key, sessionKey }) => {
+        localStorage.setItem(
+          key,
+          JSON.stringify({
+            sessionKey,
+            sidebarSessionLayouts: {
+              [sessionKey]: {
+                columns: [
+                  {
+                    id: "side-panel-column",
+                    side: "right",
+                    panels: [{ id: "processes", slot: "processes" }],
+                    activePanelId: "processes",
+                    height: 360,
+                    width: 480,
+                  },
+                ],
+                dock: "right",
+                open: true,
+                expanded: false,
+              },
+            },
+          }),
+        );
+      },
+      { key: settingsKey, sessionKey: "agent:main:main" },
+    );
+  }
+
+  it("eases the right side panel open and closed on the shared 200ms clock", async () => {
+    await suite.withPage(
+      { serviceWorkers: "block", viewport: MOTION_VIEWPORT },
+      async ({ page }) => {
+        await openMotionChat(page);
+        const toggle = page.locator(".chat-side-panel-toggle");
+        await expect.poll(() => toggle.getAttribute("aria-expanded")).toBe("false");
+        const closedMainWidth = await page
+          .locator('.sidebar-region [data-region="main"]')
+          .evaluate((element) => element.getBoundingClientRect().width);
+
+        const opening = sampleSidebarRegionMotion(page, 600);
+        await toggle.click();
+        const openSamples = await opening;
+        const target = await waitForSidebarRegionSettled(page);
+        expect(target).toBeGreaterThan(260);
+        const openMid = midSidebarRegionSamples(openSamples, target);
+        expect(openMid.length, "drawn intermediate open widths").toBeGreaterThanOrEqual(2);
+        expectMonotonicWidths(openMid, "up");
+        expect(
+          openSamples.some((sample) => sample.sideOpacity > 0.02 && sample.sideOpacity < 0.98),
+          "open opacity ramp",
+        ).toBe(true);
+        expect(openSamples.find((sample) => sample.gridTransition)?.gridTransition).toEqual({
+          durationMs: 200,
+          easing: EASE_OUT,
+        });
+        for (const sample of openSamples.filter((entry) => entry.sideVisible)) {
+          expect(sample.contentWidth, "pinned open content width").toBeCloseTo(target, 0);
+          expect(sample.regionWidth).toBeCloseTo(openSamples[0]!.regionWidth, 0);
+        }
+        expect(openSamples.at(-1)!.sideWidth).toBeCloseTo(target, 0);
+        expect(openSamples.at(-1)!.regionAnimations).toBe(0);
+        expect(openSamples.at(-1)!.dividerWidth).toBeCloseTo(6, 0);
+        expect(openSamples.at(-1)!.mainWidth).toBeLessThan(closedMainWidth);
+
+        const closing = sampleSidebarRegionMotion(page, 600);
+        await toggle.click();
+        const closeSamples = await closing;
+        const closeMid = midSidebarRegionSamples(closeSamples, target);
+        expect(closeMid.length, "drawn intermediate close widths").toBeGreaterThanOrEqual(2);
+        expectMonotonicWidths(closeMid, "down");
+        expect(
+          closeSamples.some((sample) => sample.sideOpacity > 0.02 && sample.sideOpacity < 0.98),
+          "close opacity ramp",
+        ).toBe(true);
+        for (const sample of closeMid) {
+          expect(sample.sideVisible, "closing content stays visible").toBe(true);
+          expect(sample.sideConnected, "closing content stays mounted").toBe(true);
+          expect(sample.contentWidth, "pinned close content width").toBeCloseTo(target, 0);
+        }
+        expect(await waitForSidebarRegionSettled(page)).toBe(0);
+        expect(closeSamples.at(-1)!.regionAnimations).toBe(0);
+        expect(closeSamples.at(-1)!.mainWidth).toBeCloseTo(closedMainWidth, 0);
+        await expect.poll(() => toggle.getAttribute("aria-expanded")).toBe("false");
+      },
+    );
+  });
+
+  it("retargets a closing side panel from its drawn frame when reopened mid-motion", async () => {
+    await suite.withPage(
+      { serviceWorkers: "block", viewport: MOTION_VIEWPORT },
+      async ({ page }) => {
+        await openMotionChat(page);
+        const toggle = page.locator(".chat-side-panel-toggle");
+        await toggle.click();
+        const target = await waitForSidebarRegionSettled(page);
+        expect(target).toBeGreaterThan(260);
+
+        const sampling = sampleSidebarRegionMotion(page, 900);
+        await toggle.click();
+        await waitForSidebarSideWidth(page, { above: 0, below: target * 0.75 });
+        // The toggle rides the moving main header mid-motion; a pointer click
+        // would wait for stability until settle. Keyboard activation is the
+        // real user path that lands on the drawn frame.
+        await toggle.focus();
+        await page.keyboard.press("Enter");
+        const samples = await sampling;
+        expect(await waitForSidebarRegionSettled(page)).toBeCloseTo(target, 0);
+        const dipped = samples.findIndex((sample) => sample.sideWidth < target * 0.9);
+        expect(dipped, "close must start before the reversal").toBeGreaterThan(0);
+        const afterDip = samples.slice(dipped);
+        expect(
+          Math.min(...afterDip.map((sample) => sample.sideWidth)),
+          "reversal never completes the close",
+        ).toBeGreaterThan(0);
+        let maxJump = 0;
+        for (let index = 1; index < samples.length; index += 1) {
+          maxJump = Math.max(
+            maxJump,
+            Math.abs(samples[index]!.sideWidth - samples[index - 1]!.sideWidth),
+          );
+        }
+        expect(maxJump, "no snap on reversal").toBeLessThan(target * 0.6);
+        expect(samples.at(-1)!.regionAnimations).toBe(0);
+      },
+    );
+  });
+
+  it("keeps a closing last tab mounted through the ease and adds slots without spurious motion", async () => {
+    await suite.withPage(
+      { serviceWorkers: "block", viewport: MOTION_VIEWPORT },
+      async ({ page }) => {
+        const gateway = await openMotionChat(page);
+        await openChatSidePanelType(page, "Processes");
+        const target = await waitForSidebarRegionSettled(page);
+        expect(target).toBeGreaterThan(260);
+        const panel = page.locator('[data-panel-slot="processes"]');
+        await panel.locator("openclaw-chat-processes-panel").waitFor();
+
+        const adding = sampleSidebarRegionMotion(page, 350);
+        await openChatSidePanelType(page, "Subagents");
+        const addSamples = await adding;
+        await waitForSidebarRegionSettled(page);
+        expect(
+          addSamples.every((sample) => sample.gridTransition === null),
+          "slot add while open must not animate the grid",
+        ).toBe(true);
+        expect(await page.locator('[data-panel-slot="processes"]').count()).toBe(1);
+
+        const switching = sampleSidebarRegionMotion(page, 350);
+        await page.getByRole("button", { name: "Close Subagents", exact: true }).click();
+        const switchSamples = await switching;
+        await waitForSidebarRegionSettled(page);
+        expect(
+          switchSamples.every((sample) => sample.gridTransition === null),
+          "closing one of two tabs keeps the region open without motion",
+        ).toBe(true);
+        expect(await page.locator('[data-panel-slot="subagents"]').count()).toBe(0);
+
+        const root = await panel.locator("openclaw-chat-processes-panel").elementHandle();
+        const closing = sampleSidebarRegionMotion(page, 600);
+        await page.getByRole("button", { name: "Close Processes", exact: true }).click();
+        const closeSamples = await closing;
+        const closeMid = midSidebarRegionSamples(closeSamples, target);
+        expect(closeMid.length, "last-tab close eases").toBeGreaterThanOrEqual(2);
+        for (const sample of closeMid) {
+          expect(sample.sideVisible, "closing tab content stays visible").toBe(true);
+          expect(sample.sideConnected, "closing tab content stays mounted").toBe(true);
+          expect(sample.contentWidth).toBeCloseTo(target, 0);
+        }
+        expect(
+          closeSamples.some((sample) => sample.headerOpacity > 0.02 && sample.headerOpacity < 0.98),
+          "header fades with the panel",
+        ).toBe(true);
+        expect(await waitForSidebarRegionSettled(page)).toBe(0);
+        expect(await page.locator('[data-panel-slot="processes"]').count()).toBe(0);
+        expect(await root!.evaluate((element) => element.isConnected)).toBe(false);
+        expect((await gateway.getRequests("sessions.processes.list")).length).toBeGreaterThan(0);
+      },
+    );
+  });
+
+  it("keeps the embedded terminal root connected across animated minimize and restore", async () => {
+    await suite.withPage(
+      { serviceWorkers: "block", viewport: MOTION_VIEWPORT },
+      async ({ page }) => {
+        const gateway = await openMotionChat(page);
+        await openChatSidePanelType(page, "Terminal");
+        const terminal = page.locator('[data-panel-slot="terminal"] openclaw-terminal-panel');
+        await terminal.locator(".tp-host canvas").waitFor();
+        const target = await waitForSidebarRegionSettled(page);
+        await terminal.evaluate((element) => element.setAttribute("data-motion-identity", "kept"));
+        const openRequests = (await gateway.getRequests("terminal.open")).length;
+        expect(openRequests).toBe(1);
+
+        const closing = sampleSidebarRegionMotion(page, 600);
+        await page.locator(".chat-side-panel-toggle").click();
+        const closeSamples = await closing;
+        const closeMid = midSidebarRegionSamples(closeSamples, target);
+        expect(closeMid.length).toBeGreaterThanOrEqual(2);
+        expect(closeMid.every((sample) => sample.sideConnected)).toBe(true);
+        expect(await waitForSidebarRegionSettled(page)).toBe(0);
+        expect(await terminal.evaluate((element) => element.isConnected)).toBe(true);
+        expect(await terminal.getAttribute("data-motion-identity")).toBe("kept");
+
+        const restoring = sampleSidebarRegionMotion(page, 600);
+        await page.locator(".chat-side-panel-toggle").click();
+        await page.waitForFunction(
+          () => (document.querySelector(".sidebar-region")?.getAnimations().length ?? 0) > 0,
+          undefined,
+          { polling: "raf", timeout: 3_000 },
+        );
+        const animations = await readSidebarRegionAnimations(page);
+        const restoreSamples = await restoring;
+        expect(
+          animations.some(
+            (animation) =>
+              animation.root === "region" &&
+              animation.property === "grid-template-columns" &&
+              animation.durationMs === 200 &&
+              animation.easing === EASE_OUT,
+          ),
+          "grid transition lives on the region root",
+        ).toBe(true);
+        expect(
+          animations.some(
+            (animation) => animation.root === "side" && animation.property === "opacity",
+          ),
+        ).toBe(true);
+        expect(
+          animations.some(
+            (animation) => animation.root === "header" && animation.property === "opacity",
+          ),
+        ).toBe(true);
+        expect(
+          animations
+            .filter((animation) => animation.root.startsWith("shadow:"))
+            .every((animation) => animation.property !== "grid-template-columns"),
+          "panel shadow roots do not own the grid motion",
+        ).toBe(true);
+        expect(midSidebarRegionSamples(restoreSamples, target).length).toBeGreaterThanOrEqual(2);
+        expect(
+          restoreSamples.some(
+            (sample) => sample.headerOpacity > 0.02 && sample.headerOpacity < 0.98,
+          ),
+        ).toBe(true);
+        expect(await waitForSidebarRegionSettled(page)).toBeCloseTo(target, 0);
+        expect(await terminal.getAttribute("data-motion-identity")).toBe("kept");
+        expect(await terminal.locator(".tp-host canvas").count()).toBe(1);
+        expect((await gateway.getRequests("terminal.open")).length).toBe(openRequests);
+        expect((await gateway.getRequests("terminal.close")).length).toBe(0);
+      },
+    );
+  });
+
+  it("snaps bottom, expanded, and narrow projections without grid motion", async () => {
+    await suite.withPage(
+      { serviceWorkers: "block", viewport: MOTION_VIEWPORT },
+      async ({ page }) => {
+        await openMotionChat(page);
+        await openChatSidePanelType(page, "Processes");
+        await waitForSidebarRegionSettled(page);
+        const toggle = page.locator(".chat-side-panel-toggle");
+        const expectSnapToggle = async (label: string) => {
+          const openWidth = await waitForSidebarRegionSettled(page);
+          expect(openWidth).toBeGreaterThan(0);
+          const closing = sampleSidebarRegionMotion(page, 300);
+          await toggle.click();
+          const closeSamples = await closing;
+          expect(
+            closeSamples.every(
+              (sample) => sample.gridTransition === null && sample.regionAnimations === 0,
+            ),
+            `${label} close must not animate`,
+          ).toBe(true);
+          expect(midSidebarRegionSamples(closeSamples, openWidth).length).toBe(0);
+          expect(await waitForSidebarRegionSettled(page)).toBe(0);
+          const opening = sampleSidebarRegionMotion(page, 300);
+          await toggle.click();
+          const openSamples = await opening;
+          expect(
+            openSamples.every(
+              (sample) => sample.gridTransition === null && sample.regionAnimations === 0,
+            ),
+            `${label} open must not animate`,
+          ).toBe(true);
+          expect(midSidebarRegionSamples(openSamples, openWidth).length).toBe(0);
+          expect(await waitForSidebarRegionSettled(page)).toBeCloseTo(openWidth, 0);
+        };
+
+        await dockChatSidePanel(page, "bottom");
+        await expectSnapToggle("bottom");
+        await dockChatSidePanel(page, "right");
+        await waitForSidebarRegionSettled(page);
+
+        const expanding = sampleSidebarRegionMotion(page, 350);
+        await page.locator(".side-panel__expand").click();
+        const expandSamples = await expanding;
+        await page.getByRole("button", { name: "Restore split", exact: true }).waitFor();
+        expect(
+          expandSamples.every((sample) => sample.gridTransition === null),
+          "expanded projection snaps",
+        ).toBe(true);
+        await waitForSidebarRegionSettled(page);
+        const restoring = sampleSidebarRegionMotion(page, 350);
+        await page.getByRole("button", { name: "Restore split", exact: true }).click();
+        const restoreSamples = await restoring;
+        await waitForSidebarRegionSettled(page);
+        expect(
+          restoreSamples.every((sample) => sample.gridTransition === null),
+          "restore split snaps",
+        ).toBe(true);
+
+        await page.setViewportSize({ width: 400, height: 900 });
+        await page.locator(".sidebar-region--narrow").waitFor();
+        await expectSnapToggle("narrow");
+      },
+    );
+  });
+
+  it("snaps open and closed under prefers-reduced-motion", async () => {
+    await suite.withPage(
+      { serviceWorkers: "block", reducedMotion: "reduce", viewport: MOTION_VIEWPORT },
+      async ({ page }) => {
+        await openMotionChat(page);
+        const toggle = page.locator(".chat-side-panel-toggle");
+        const opening = sampleSidebarRegionMotion(page, 350);
+        await toggle.click();
+        const openSamples = await opening;
+        const target = await waitForSidebarRegionSettled(page);
+        expect(target).toBeGreaterThan(260);
+        expect(
+          openSamples.every(
+            (sample) => sample.gridTransition === null && sample.regionAnimations === 0,
+          ),
+        ).toBe(true);
+        expect(midSidebarRegionSamples(openSamples, target).length).toBe(0);
+        const closing = sampleSidebarRegionMotion(page, 350);
+        await toggle.click();
+        const closeSamples = await closing;
+        expect(
+          closeSamples.every(
+            (sample) => sample.gridTransition === null && sample.regionAnimations === 0,
+          ),
+        ).toBe(true);
+        expect(midSidebarRegionSamples(closeSamples, target).length).toBe(0);
+        const firstChanged = closeSamples.find((sample) => sample.sideWidth < target - 1);
+        expect(firstChanged?.sideWidth ?? 0, "reduced motion hides content immediately").toBe(0);
+        expect(await waitForSidebarRegionSettled(page)).toBe(0);
+      },
+    );
+  });
+
+  it("restores a persisted open panel without boot motion and animates the next user close", async () => {
+    await suite.withPage(
+      { serviceWorkers: "block", viewport: MOTION_VIEWPORT },
+      async ({ page }) => {
+        await seedOpenProcessesSlot(page);
+        await openMotionChat(page);
+        const bootAnimations = await page.evaluate(async () => {
+          let max = 0;
+          const start = performance.now();
+          while (performance.now() - start < 400) {
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+            max = Math.max(
+              max,
+              document.querySelector(".sidebar-region")?.getAnimations().length ?? 0,
+            );
+          }
+          return max;
+        });
+        expect(bootAnimations, "boot restore must not animate").toBe(0);
+        const target = await waitForSidebarRegionSettled(page);
+        expect(target).toBeGreaterThan(260);
+        const closing = sampleSidebarRegionMotion(page, 600);
+        await page.locator(".chat-side-panel-toggle").click();
+        const closeSamples = await closing;
+        expect(midSidebarRegionSamples(closeSamples, target).length).toBeGreaterThanOrEqual(2);
+        expect(await waitForSidebarRegionSettled(page)).toBe(0);
+      },
+    );
   });
 });
