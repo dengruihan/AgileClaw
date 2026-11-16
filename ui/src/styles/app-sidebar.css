@@ -55,6 +55,7 @@
   --sidebar-child-session-toggle-width: max(34px, calc(36px * var(--control-ui-text-scale)));
   --session-row-face: var(--sidebar-bg, var(--bg));
 
+  border-radius: var(--radius-md);
   position: relative;
   display: flex;
   align-items: center;
@@ -484,6 +485,7 @@
   height: 18px;
   border: 1px solid var(--sidebar-bg, var(--bg));
   border-radius: var(--radius-full);
+  --corner-shape: round;
   font-size: 9px;
 }
 
@@ -526,6 +528,7 @@
   width: 18px;
   border: 1px solid var(--session-row-face);
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: var(--session-row-face);
   mask:
     linear-gradient(white 0 0) padding-box,
@@ -596,6 +599,7 @@
   place-items: center;
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: color-mix(in srgb, var(--bg-elevated) 72%, transparent);
   font-size: 12px;
 }

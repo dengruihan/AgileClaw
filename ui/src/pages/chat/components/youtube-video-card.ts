@@ -74,6 +74,7 @@ class YouTubeVideoCard extends OpenClawLitElement {
       transform: translate(-50%, -50%);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-full);
+      --corner-shape: round;
       background: color-mix(in srgb, var(--card) 92%, transparent);
       box-shadow: var(--shadow-md);
     }

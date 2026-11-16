@@ -248,6 +248,7 @@ a.activity-current-work__row:hover {
   height: 7px;
   border: 1.5px solid var(--bg-elevated);
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: var(--ok);
 }
 
@@ -393,6 +394,7 @@ a.activity-current-work__row:hover {
   height: 7px;
   margin-right: var(--space-1);
   border-radius: 50%;
+  --corner-shape: round;
   background: var(--ok);
 }
 
@@ -516,6 +518,7 @@ a.activity-current-work__row:hover {
   width: 26px;
   height: 26px;
   border-radius: 50%;
+  --corner-shape: round;
 }
 
 .activity-feed__loading-meta {

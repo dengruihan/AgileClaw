@@ -327,7 +327,6 @@ openclaw-pending-session-create {
    carry tone while the card keeps the composer's own surface and geometry. */
 :is(.chat-composer-neighbor-card, .session-suggestion, .chat-pr.chat-pr) {
   border-radius: calc(16px * var(--openclaw-corner-radius-scale));
-  corner-shape: superellipse(1.5);
 }
 
 :is(.chat-composer-neighbor-card, .session-suggestion) {
@@ -456,6 +455,7 @@ openclaw-pending-session-create {
   padding: 4px 8px;
   gap: 6px;
   border-radius: var(--radius-full);
+  --corner-shape: round;
   box-shadow: var(--shadow-sm);
 }
 
@@ -825,6 +825,7 @@ openclaw-pending-session-create {
   background: var(--panel-strong);
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
+  --corner-shape: round;
   box-shadow: var(--shadow-sm);
   cursor: var(--cursor-action);
   pointer-events: none;
@@ -920,6 +921,7 @@ openclaw-pending-session-create {
   height: 24px;
   padding: 0;
   border-radius: var(--radius-full);
+  --corner-shape: round;
   color: inherit;
   list-style: none;
   user-select: none;
@@ -1030,6 +1032,7 @@ openclaw-pending-session-create {
   height: 7px;
   flex-shrink: 0;
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: color-mix(in srgb, var(--ctx-color, var(--accent)) 30%, transparent);
 }
 
@@ -1115,6 +1118,7 @@ openclaw-pending-session-create {
   margin: 8px 0 10px;
   overflow: hidden;
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: color-mix(in srgb, var(--muted) 22%, transparent);
 }
 
@@ -1122,6 +1126,7 @@ openclaw-pending-session-create {
   display: block;
   height: 100%;
   border-radius: inherit;
+  --corner-shape: inherit;
   background: var(--ctx-color, var(--accent));
   box-shadow: 0 0 12px color-mix(in srgb, var(--ctx-color, var(--accent)) 46%, transparent);
 }
@@ -1217,6 +1222,7 @@ openclaw-pending-session-create {
   margin-top: 6px;
   overflow: hidden;
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: color-mix(in srgb, var(--muted) 20%, transparent);
 }
 
@@ -1224,6 +1230,7 @@ openclaw-pending-session-create {
   display: block;
   height: 100%;
   border-radius: inherit;
+  --corner-shape: inherit;
   background: var(--accent);
 }
 
@@ -1339,6 +1346,7 @@ openclaw-chat-video-player {
   padding: 0;
   border: 0;
   border-radius: 999px;
+  --corner-shape: round;
   cursor: var(--cursor-action);
 }
 
@@ -1379,6 +1387,7 @@ openclaw-chat-video-player {
   height: 4px;
   margin: 0;
   border-radius: 999px;
+  --corner-shape: round;
   appearance: none;
   background: linear-gradient(
     to right,
@@ -1519,6 +1528,7 @@ openclaw-chat-video-player {
   z-index: -1;
   inset: 0;
   border-radius: inherit;
+  --corner-shape: inherit;
   background: var(--bg-hover);
   opacity: 0;
   pointer-events: none;
@@ -1670,6 +1680,7 @@ openclaw-chat-video-player {
 .session-suggestion__author,
 .session-suggestion__state {
   border-radius: 999px;
+  --corner-shape: round;
   padding: 3px 8px;
   font-size: 11px;
   font-weight: 600;
@@ -2023,7 +2034,6 @@ openclaw-chat-video-player {
   padding: 0 12px;
   border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
   border-radius: var(--task-suggestion-start-radius, 11px);
-  corner-shape: superellipse(1.5);
   background: var(--task-suggestion-action-bg);
   color: var(--task-suggestion-action-fg);
   font-size: 12px;
@@ -2082,7 +2092,6 @@ openclaw-chat-video-player {
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: calc(16px * var(--openclaw-corner-radius-scale));
-  corner-shape: superellipse(1.5);
   background: var(--chat-composer-surface, var(--popover));
   outline: none;
 }
@@ -2150,6 +2159,7 @@ openclaw-chat-video-player {
   height: 9px;
   border: 1px solid var(--muted);
   border-radius: var(--radius-full);
+  --corner-shape: round;
 }
 
 .chat-swarm__marker--running {
@@ -2447,6 +2457,7 @@ button.chat-pr__diff {
   width: 7px;
   height: 7px;
   border-radius: 50%;
+  --corner-shape: round;
   background: currentColor;
 }
 
@@ -2887,6 +2898,7 @@ openclaw-chat-ci-details {
   padding: 1px 10px;
   border: 0;
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: color-mix(in srgb, var(--muted) 10%, transparent);
   color: var(--muted);
   font-size: 12px;
@@ -3204,6 +3216,7 @@ openclaw-chat-ci-details {
   width: 6px;
   height: 6px;
   border-radius: 999px;
+  --corner-shape: round;
   background: var(--accent);
   opacity: 0.7;
 }
@@ -3217,6 +3230,7 @@ openclaw-chat-ci-details {
   padding: 0 8px;
   border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: var(--chat-composer-surface, var(--popover));
   color: var(--muted);
   font-size: 0.72rem;
@@ -3461,6 +3475,7 @@ openclaw-chat-ci-details {
   min-height: 28px;
   padding: 3px 10px;
   border-radius: var(--radius-full);
+  --corner-shape: round;
   font-size: 12px;
   line-height: 20px;
 }

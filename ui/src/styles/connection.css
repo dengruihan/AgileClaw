@@ -94,6 +94,7 @@
 .config-host__meter {
   height: 4px;
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: color-mix(in srgb, var(--border) 55%, transparent);
   overflow: hidden;
 }
@@ -102,6 +103,7 @@
   width: var(--config-host-meter-fill, 0%);
   height: 100%;
   border-radius: inherit;
+  --corner-shape: inherit;
   background: var(--ok);
 }
 

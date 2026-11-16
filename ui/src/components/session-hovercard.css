@@ -110,6 +110,7 @@
   padding: 3px 8px 3px 3px;
   border: 1px solid color-mix(in srgb, var(--border-strong) 58%, transparent);
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: color-mix(in srgb, var(--panel-strong) 72%, transparent);
   color: var(--text);
   font-size: var(--control-ui-text-sm);
@@ -318,6 +319,7 @@ button.session-hovercard__attribution-others:is(:hover, :focus-visible) {
   padding: 0;
   border: 0;
   border-radius: var(--radius-full);
+  --corner-shape: round;
   outline: 0;
   overflow: hidden;
   align-self: center;
@@ -341,6 +343,7 @@ button.session-hovercard__attribution-others:is(:hover, :focus-visible) {
   width: var(--session-hovercard-context-icon-size);
   height: var(--session-hovercard-context-icon-size);
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: color-mix(in srgb, var(--accent-subtle) 70%, var(--panel-strong));
   color: var(--text);
   font-size: 8px;

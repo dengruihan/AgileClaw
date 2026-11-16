@@ -136,6 +136,7 @@ export const linkReaderContentStyles = css`
     width: 32px;
     height: 32px;
     border-radius: 50%;
+    --corner-shape: round;
     color: var(--check-color);
     background: color-mix(in srgb, var(--check-color) 12%, transparent);
   }

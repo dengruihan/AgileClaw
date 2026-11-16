@@ -131,6 +131,7 @@
   padding: 2px 9px;
   border: 1px solid var(--border);
   border-radius: 999px;
+  --corner-shape: round;
   background: color-mix(in srgb, var(--bg-elevated) 55%, var(--card) 45%);
   color: var(--muted);
   font-size: var(--control-ui-text-xs);
@@ -164,6 +165,7 @@
   align-items: center;
   border: 1px solid var(--border);
   border-radius: 999px;
+  --corner-shape: round;
   background: var(--card);
   color: var(--text);
   font-size: var(--control-ui-text-sm);

@@ -8,6 +8,7 @@
   display: inline-grid;
   place-items: center;
   border-radius: inherit;
+  --corner-shape: inherit;
   overflow: hidden;
 }
 
@@ -38,6 +39,7 @@
 :is(.identity-avatar--agent, .viewer-avatar, .chat-author-avatar, .chat-avatar-slot).is-pending {
   background: var(--secondary);
   border-radius: var(--radius-full);
+  --corner-shape: round;
 }
 
 :is(.viewer-avatar, .chat-author-avatar, .chat-avatar-slot).is-pending > * {

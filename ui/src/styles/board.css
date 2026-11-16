@@ -243,6 +243,7 @@ openclaw-board-widget-cell {
 .board-widget__kind {
   border: 1px solid var(--board-line);
   border-radius: 999px;
+  --corner-shape: round;
   color: var(--muted);
   font-size: 8px;
   letter-spacing: 0.08em;
@@ -449,6 +450,7 @@ openclaw-board-widget-cell {
     background: color-mix(in srgb, var(--board-surface) 92%, transparent);
     border: 1px solid var(--board-line);
     border-radius: 999px;
+    --corner-shape: round;
     box-shadow: 0 4px 14px rgb(0 0 0 / 18%);
     height: 30px;
     left: 50%;
@@ -541,6 +543,7 @@ openclaw-board-widget-cell {
   .board-widget__grant-dot {
     background: var(--ok);
     border-radius: 50%;
+    --corner-shape: round;
     display: block;
     height: 6px;
     pointer-events: none;
@@ -725,6 +728,7 @@ openclaw-board-widget-cell {
   background: color-mix(in srgb, var(--ok) 13%, transparent);
   border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent);
   border-radius: 999px;
+  --corner-shape: round;
   color: var(--ok);
   display: inline-flex;
   font-size: 9px;
@@ -739,6 +743,7 @@ openclaw-board-widget-cell {
   background: color-mix(in srgb, var(--warn) 15%, transparent);
   border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent);
   border-radius: 50%;
+  --corner-shape: round;
   color: var(--warn);
   display: flex;
   font-size: 13px;

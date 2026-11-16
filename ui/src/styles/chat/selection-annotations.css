@@ -118,6 +118,7 @@ openclaw-chat-comment-pins {
   box-sizing: border-box;
   padding-inline: 3px;
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: var(--accent-subtle);
   color: var(--accent);
   font-size: 11px;
@@ -211,6 +212,7 @@ openclaw-chat-comment-pins {
   padding: 0;
   border: none;
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: transparent;
   color: var(--text);
   opacity: 0;

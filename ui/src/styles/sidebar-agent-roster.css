@@ -61,6 +61,7 @@ openclaw-sidebar-agent-roster {
   width: 100%;
   height: 100%;
   border-radius: inherit;
+  --corner-shape: inherit;
   object-fit: cover;
 }
 
@@ -262,7 +263,7 @@ openclaw-sidebar-agent-roster {
   align-items: center;
   gap: var(--team-slot-gap);
   margin: 0;
-  margin-inline-end: calc(var(--radius-md) * var(--openclaw-corner-radius-scale));
+  margin-inline-end: var(--radius-md);
 }
 .sidebar-recent-session--team openclaw-viewer-facepile:not(:has(.viewer-facepile)),
 .sidebar-recent-session--team

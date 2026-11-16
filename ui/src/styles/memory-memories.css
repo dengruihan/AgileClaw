@@ -36,6 +36,7 @@
 .memory-memories__source {
   padding: 2px 7px;
   border-radius: 999px;
+  --corner-shape: round;
   background: var(--bg-accent);
   color: var(--muted);
   font-size: var(--control-ui-text-xs);

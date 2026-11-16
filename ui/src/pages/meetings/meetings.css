@@ -138,6 +138,7 @@
   width: 7px;
   height: 7px;
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: var(--muted);
 }
 
@@ -186,6 +187,7 @@
   width: 6px;
   height: 6px;
   border-radius: var(--radius-full);
+  --corner-shape: round;
   background: currentColor;
   animation: meetings-live-pulse 2s ease-in-out infinite;
 }
