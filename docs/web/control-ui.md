@@ -141,27 +141,25 @@ contains different instructions, choose a new workspace for the custom agent.
 Created agents appear in Agents home and
 the agent switcher.
 
-## Take a photo in chat
+<a id="take-a-photo-in-chat" />
 
-Choose **Add attachment → Take photo** in chat or New Session to open a camera
-preview. Allow camera access when your browser asks, then choose **Capture**,
-**Retake**, or **Use photo**. The chosen photo becomes a draft attachment; it does
-not send the message. The preview stays in your browser and does not request
-microphone access.
+## Attach files in chat
 
-The live preview requires HTTPS or localhost and a browser that supports camera
-access. On plain HTTP LAN addresses or browsers without the camera API, choose
-**Use device camera** to open the native capture picker instead. This preserves
-mobile camera capture without silently substituting a picker for the preview;
-your browser decides whether it shows a camera or a file picker. If access is denied,
-allow the site in your browser and operating-system camera settings and retry.
-The explicit **Use device camera** option also remains available after a preview
-request fails, including permission denial; it never opens automatically.
-If no camera is available, choose **Upload photo** instead.
+Choose **Add attachment → Attachment** in chat or New Session to open your
+device's file picker. Select one or more images, audio clips, videos, PDFs, text
+files, Office documents, or archives such as `.zip`; each chosen file becomes a
+draft attachment and does not send the message. Remove a draft attachment with
+its remove button before sending.
 
-The camera stops when you capture a photo, close the dialog, or leave its draft.
-File and photo uploads remain available through their existing pickers, including
-the combined **Attach…** picker on iOS Safari.
+The menu offers the same single **Attachment** entry on every platform; there is
+no separate photo or camera entry and no in-app camera preview. What the picker
+offers next belongs to your browser and operating system: desktop browsers open
+a file dialog, while a phone's system attachment sheet may offer the photo
+library, the camera, or a file manager. Any camera or photo-library access you
+choose there is handled by the system picker, not by OpenClaw.
+
+Attachments stay in your browser until you send the message. When the Gateway's
+upload policy disables uploads, the **Attachment** entry is hidden.
 
 ## Watch a desktop in Picture-in-Picture
 
