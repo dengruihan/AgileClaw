@@ -80,13 +80,13 @@ async function openMockedChat(page: Page): Promise<void> {
   await waitForShellLayout(page);
 }
 
-async function openMockedActivity(page: Page): Promise<void> {
-  await page.addInitScript(() => {
+async function openMockedActivity(page: Page, terminalOpen = true): Promise<void> {
+  await page.addInitScript((open) => {
     localStorage.setItem(
       "openclaw.terminal.panel.v1",
-      JSON.stringify({ open: true, dock: "right", height: 240, width: 600 }),
+      JSON.stringify({ open, dock: "right", height: 240, width: 600 }),
     );
-  });
+  }, terminalOpen);
   await installMockGateway(page, {
     featureMethods: ["terminal.open", "browser.request"],
     methodResponses: {
@@ -106,7 +106,11 @@ async function openMockedActivity(page: Page): Promise<void> {
   });
   await page.goto(`${suite.server.baseUrl}activity`);
   await waitForControlUiGatewayReady(page);
-  await openTerminalPanel(page, "right");
+  if (terminalOpen) {
+    await openTerminalPanel(page, "right");
+  } else {
+    await waitForControlUiTerminalReady(page);
+  }
 }
 
 async function waitForShellLayout(page: Page): Promise<void> {
@@ -261,8 +265,8 @@ async function waitForNavSettled(page: Page, collapsed: boolean): Promise<void> 
           );
         const width = nav.getBoundingClientRect().width;
         const opacity = Number.parseFloat(getComputedStyle(nav).opacity);
-        // The rail keeps its 1px divider border at the collapsed width.
-        return !running && (expected ? width < 1.5 && opacity === 0 : width > 200 && opacity === 1);
+        // The collapsed rail drops its divider border and sits at 0px.
+        return !running && (expected ? width < 0.5 && opacity === 0 : width > 200 && opacity === 1);
       }, collapsed),
     )
     .toBe(true);
@@ -405,6 +409,117 @@ async function openTerminalPanel(page: Page, dock: "bottom" | "right"): Promise<
     .locator(`openclaw-terminal-panel .tp--${dock}`)
     .waitFor({ state: "visible", timeout: 15_000 });
   await waitForShellLayout(page);
+}
+
+type ReverseFrame = {
+  atMs: number;
+  panelPresent: boolean;
+  panelWidth: number;
+  panelLeft: number;
+  shellRight: number;
+  shellMarginRight: number;
+  panelWidthDuration: number | null;
+  panelWidthRemaining: number | null;
+  shellMarginDuration: number | null;
+  shellMarginRemaining: number | null;
+};
+
+async function runTerminalReverse(
+  page: Page,
+  mode: "close-open" | "open-close",
+): Promise<{ afterDispatch: ReverseFrame; samples: ReverseFrame[] }> {
+  return page.evaluate(async (direction) => {
+    const shell = document.querySelector<HTMLElement>(".shell");
+    if (!shell) {
+      throw new Error("Missing shell");
+    }
+    const panel = () =>
+      document
+        .querySelector("openclaw-terminal-panel")
+        ?.shadowRoot?.querySelector<HTMLElement>(".tp");
+    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const timing = (element: Element, property: string) => {
+      const animation = element
+        .getAnimations()
+        .find(
+          (entry): entry is CSSTransition =>
+            entry instanceof CSSTransition && entry.transitionProperty === property,
+        );
+      if (!animation) {
+        return { duration: null, remaining: null };
+      }
+      const computed = animation.effect?.getComputedTiming();
+      const endTime = Number(computed?.endTime ?? 0);
+      const duration = Number(computed?.duration ?? 0);
+      return { duration, remaining: endTime - Number(animation.currentTime ?? 0) };
+    };
+    const sample = (origin: number): ReverseFrame => {
+      const element = panel();
+      if (!element) {
+        return {
+          atMs: performance.now() - origin,
+          panelPresent: false,
+          panelWidth: 0,
+          panelLeft: 0,
+          shellRight: shell.getBoundingClientRect().right,
+          shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
+          panelWidthDuration: null,
+          panelWidthRemaining: null,
+          shellMarginDuration: null,
+          shellMarginRemaining: null,
+        };
+      }
+      const rect = element.getBoundingClientRect();
+      const panelTiming = timing(element, "width");
+      const shellTiming = timing(shell, "margin-right");
+      return {
+        atMs: performance.now() - origin,
+        panelPresent: true,
+        panelWidth: rect.width,
+        panelLeft: rect.left,
+        shellRight: shell.getBoundingClientRect().right,
+        shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
+        panelWidthDuration: panelTiming.duration,
+        panelWidthRemaining: panelTiming.remaining,
+        shellMarginDuration: shellTiming.duration,
+        shellMarginRemaining: shellTiming.remaining,
+      };
+    };
+    const close = () => {
+      window.dispatchEvent(
+        new CustomEvent("openclaw:terminal-toggle", { detail: { open: false } }),
+      );
+    };
+    const open = () => {
+      window.dispatchEvent(new CustomEvent("openclaw:terminal-toggle", { detail: { open: true } }));
+    };
+    const origin = performance.now();
+    if (direction === "open-close") {
+      // Start closed and reverse an opening motion.
+      open();
+      for (let index = 0; index < 7; index += 1) {
+        await frame();
+      }
+      close();
+    } else {
+      close();
+      for (let index = 0; index < 7; index += 1) {
+        await frame();
+      }
+      open();
+    }
+    // Reversal was dispatched through the real event path above; no animation
+    // is paused or seeked.
+    await frame();
+    await frame();
+    const afterDispatch = sample(origin);
+    const samples: ReverseFrame[] = [];
+    for (let index = 0; index < 8; index += 1) {
+      await frame();
+      samples.push(sample(origin));
+    }
+    return { afterDispatch, samples };
+  }, mode);
 }
 
 suite.define(() => {
@@ -637,59 +752,49 @@ suite.define(() => {
     );
   });
 
-  it("retargets an in-flight right dock width from its current geometry", async () => {
-    await suite.withPage(
-      {
-        locale: "en-US",
-        recordVideo: proofVideo(),
-        serviceWorkers: "block",
-        viewport: { height: 900, width: 1440 },
-      },
-      async ({ page }) => {
-        await openMockedActivity(page);
-        await dispatchTerminalToggle(page, { open: false });
-        await waitForDockTransition(page);
-        expect(await holdDockTransitions(page, 100)).toBeGreaterThanOrEqual(2);
-        const held = await readRightDock(page);
-        expect(held.width).toBeGreaterThan(1);
-        expect(held.width).toBeLessThan(TERMINAL_WIDTH - 1);
-
-        await dispatchTerminalToggle(page, { open: true });
-        const resumed = await page.evaluate(async () => {
-          for (const element of [
-            document.querySelector<HTMLElement>(".shell"),
-            document
-              .querySelector("openclaw-terminal-panel")
-              ?.shadowRoot?.querySelector<HTMLElement>(".tp"),
-          ]) {
-            for (const animation of element?.getAnimations() ?? []) {
-              if (animation instanceof CSSTransition && animation.playState === "paused") {
-                animation.play();
-              }
-            }
+  it.each(["close-open", "open-close"] as const)(
+    "retargets panel width and shell reservation on the same clock in a real %s reversal",
+    async (mode) => {
+      await suite.withPage(
+        {
+          locale: "en-US",
+          recordVideo: proofVideo(),
+          serviceWorkers: "block",
+          viewport: { height: 900, width: 1440 },
+        },
+        async ({ page }) => {
+          await openMockedActivity(page, mode === "close-open");
+          const { afterDispatch, samples } = await runTerminalReverse(page, mode);
+          await capture(page, `reverse-${mode}-mid`);
+          const presentFrames = [afterDispatch, ...samples].filter((frame) => frame.panelPresent);
+          // The close-open reversal stays mounted; the open-close reversal
+          // unmounts once the closing transition completes, so only assert the
+          // frames that still show the animated panel.
+          expect(presentFrames.length).toBeGreaterThan(4);
+          for (const frame of presentFrames) {
+            expect(
+              Math.abs(frame.panelLeft - frame.shellRight - 8),
+              `dock/plate gap at ${frame.atMs.toFixed(0)}ms`,
+            ).toBeLessThan(1.5);
+            expect(
+              Math.abs(frame.shellMarginRight - frame.panelWidth - 8),
+              `reserved margin at ${frame.atMs.toFixed(0)}ms`,
+            ).toBeLessThan(1.5);
           }
-          const panel = document
-            .querySelector("openclaw-terminal-panel")
-            ?.shadowRoot?.querySelector<HTMLElement>(".tp");
-          await new Promise((resolve) =>
-            requestAnimationFrame(() => requestAnimationFrame(resolve)),
-          );
-          return {
-            width: panel?.getBoundingClientRect().width ?? 0,
-            opacity: panel ? Number.parseFloat(getComputedStyle(panel).opacity) : 0,
-          };
-        });
-        // A reversal continues from the held frame instead of snapping to
-        // either endpoint (zero width or the settled width).
-        await capture(page, "dock-reverse-mid");
-        expect(resumed.width).toBeGreaterThanOrEqual(held.width - 0.5);
-        expect(resumed.width).toBeLessThan(TERMINAL_WIDTH);
-        expect(resumed.opacity).toBeGreaterThanOrEqual(held.opacity - 0.01);
-        await finishDockTransitions(page);
-        await expect.poll(() => readRightDockWidth(page)).toBe(TERMINAL_WIDTH);
-      },
-    );
-  });
+          // Both transitions restart from the current geometry on the same
+          // fresh 200ms ease-out clock; a shorter inherited margin transition
+          // would leave the recorded remaining times out of sync.
+          expect(afterDispatch.panelWidthDuration).toBeCloseTo(200, 0);
+          expect(afterDispatch.shellMarginDuration).toBeCloseTo(200, 0);
+          expect(
+            Math.abs(
+              (afterDispatch.panelWidthRemaining ?? 0) - (afterDispatch.shellMarginRemaining ?? 0),
+            ),
+          ).toBeLessThan(25);
+        },
+      );
+    },
+  );
 
   it("snaps both columns without transitions under reduced motion", async () => {
     await suite.withPage(

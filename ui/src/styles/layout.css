@@ -101,6 +101,13 @@
     margin-right var(--shell-motion-duration) var(--shell-motion-ease);
 }
 
+/* A rapid dock reversal freezes the plate at its drawn margin for one style
+   flush, then restarts the reservation transition from that same frame. Only
+   the reservation easing is removed for the flush. */
+.shell.shell--dock-retarget {
+  transition-property: grid-template-rows, height, margin-bottom;
+}
+
 .control-ui-environment-stripe {
   position: fixed;
   z-index: 260;

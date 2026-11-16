@@ -277,8 +277,12 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
     this.cancelMotionFrame();
     const generation = ++this.motionGeneration;
     const width = this.width;
-    // A reversal continues from the panel's current rendered width; only a
-    // fresh mount starts at zero.
+    if (this.motionDirection) {
+      this.retargetMotion(opening, generation, width);
+      return;
+    }
+    // Closing a settled panel starts from its rendered width; only a fresh
+    // mount starts at zero.
     const currentWidth = hadPanel
       ? this.options.panelElement?.()?.getBoundingClientRect().width
       : undefined;
@@ -308,6 +312,57 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
         void this.host.updateComplete.then(() => this.watchMotion(generation));
       });
     });
+  }
+
+  /**
+   * A reversal must retarget the panel width and the shell reservation from the
+   * same current geometry, to the same target, on a fresh shared 200ms clock.
+   * Freezing both frames with the reservation transition disabled for one
+   * forced style flush lets each CSS transition restart from the drawn frame
+   * instead of leaving the shorter inherited margin transition behind.
+   */
+  private retargetMotion(opening: boolean, generation: number, width: number): void {
+    const panel = (this.options.panelElement?.() ?? null) as HTMLElement | null;
+    const shell = document.querySelector<HTMLElement>(".shell");
+    this.motionDirection = opening ? "opening" : "closing";
+    this.motionContentWidthPx = width;
+    this.motionReservationDeferred = false;
+    if (!panel || !shell || this.dock !== "right") {
+      this.motionWidthPx = opening ? width : 0;
+      this.motionHidden = !opening;
+      this.syncReservation();
+      this.host.requestUpdate();
+      void this.host.updateComplete.then(() => this.watchMotion(generation));
+      return;
+    }
+    const currentWidth = panel.getBoundingClientRect().width;
+    const targetWidth = opening ? width : 0;
+    const panelTransition = panel.style.transition;
+    // Freeze both sides at the frame the user actually saw.
+    panel.style.transition = "none";
+    panel.style.width = `${currentWidth}px`;
+    shell.classList.add("shell--dock-retarget");
+    this.applyRightReservation(currentWidth);
+    void panel.getBoundingClientRect();
+    void shell.getBoundingClientRect();
+    // Restart both transitions from that same frame and target.
+    panel.style.transition = panelTransition;
+    shell.classList.remove("shell--dock-retarget");
+    panel.style.width = `${targetWidth}px`;
+    this.motionWidthPx = targetWidth;
+    this.motionHidden = !opening;
+    this.syncReservation();
+    this.host.requestUpdate();
+    void this.host.updateComplete.then(() => this.watchMotion(generation));
+  }
+
+  private applyRightReservation(widthPx: number): void {
+    if (!this.reservesViewport() || this.dock !== "right") {
+      return;
+    }
+    const root = document.documentElement.style;
+    root.setProperty(`--oc-${this.options.reservationPrefix}-reserve-right`, `${widthPx}px`);
+    root.setProperty(`--oc-${this.options.reservationPrefix}-reserve-bottom`, "0px");
   }
 
   private watchMotion(generation: number): void {

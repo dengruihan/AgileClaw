@@ -80,7 +80,7 @@ async function readFirstSessionTitleGeometry(page: Page) {
 }
 
 const LONG_SESSION_TITLE =
-  "Investigate sidebar slide motion where historical session titles keep their final expanded width while the rail translates on the compositor";
+  "Investigate sidebar width motion where historical session titles keep their final expanded width while the rail changes size";
 
 function buildLongTitleSessionRows(count: number) {
   const base = Date.parse("2026-11-14T10:00:00Z");
