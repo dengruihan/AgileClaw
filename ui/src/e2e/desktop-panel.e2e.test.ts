@@ -967,13 +967,12 @@ suite.define(() => {
         expect(expanded.shellMarginRight).toBeCloseTo(expanded.panelWidth + 8, 1);
         expect(Math.abs(expanded.contentRight - expanded.shellRight)).toBeLessThan(2);
         const curve = await readDesktopDockTransition(page);
-        expect(curve.properties).toContain("right");
-        expect(curve.durations).toContain("0.2s");
-        expect(curve.easings).toContain("cubic-bezier(0, 0, 0.2, 1)");
+        expect(curve.durationMs).toBe(200);
+        expect(curve.easing).toBe("cubic-bezier(0, 0, 0.2, 1)");
 
         await panel.getByRole("button", { name: "Hide desktop panel" }).click();
         await expect.poll(() => hasDesktopDockWidthTransition(page)).toBe(true);
-        expect(await holdDesktopDockTransitions(page, 100)).toBeGreaterThanOrEqual(2);
+        expect(await holdDesktopDockTransitions(page, 100)).toBeGreaterThanOrEqual(1);
         const midClose = await readDesktopShellGeometry(page);
         expect(midClose.panelWidth).toBeGreaterThan(1);
         expect(midClose.panelWidth).toBeLessThan(expanded.panelWidth - 1);
@@ -1004,7 +1003,7 @@ suite.define(() => {
         // its first visible frame instead of overlaying it.
         await openDirectDesktop(page, "worker-desktop-1");
         await expect.poll(() => hasDesktopDockWidthTransition(page)).toBe(true);
-        expect(await holdDesktopDockTransitions(page, 100)).toBeGreaterThanOrEqual(2);
+        expect(await holdDesktopDockTransitions(page, 100)).toBeGreaterThanOrEqual(1);
         const midOpen = await readDesktopShellGeometry(page);
         expect(midOpen.panelWidth).toBeGreaterThan(1);
         expect(midOpen.panelWidth).toBeLessThan(expanded.panelWidth - 1);

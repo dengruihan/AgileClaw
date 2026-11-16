@@ -6,6 +6,11 @@ import {
   type TemplateResult,
 } from "lit";
 import type { DockPanelLayoutStore, DockPanelPlacement } from "./dock-panel-layout.ts";
+import {
+  ensureRightDockMotionReady,
+  retargetRightDockMotion,
+  setRightDockWidth,
+} from "./right-dock-motion.ts";
 import "./resizable-divider.ts";
 
 type DockLayoutHost = ReactiveControllerHost & { readonly isConnected: boolean };
@@ -31,12 +36,11 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
   private suppressed = false;
   private persistedOpen = false;
   private motionDirection: "opening" | "closing" | undefined;
-  private motionWidthPx: number | undefined;
   private motionContentWidthPx: number | undefined;
   private motionHidden = false;
   private motionFrame: number | undefined;
   private motionGeneration = 0;
-  private motionReservationDeferred = false;
+  private hasHandledInitialVisibility = false;
   private readonly onViewportResize = () => {
     const height = Math.min(this.height, this.options.layout.maxHeight());
     const width = Math.min(this.width, this.maxWidth());
@@ -68,10 +72,13 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
     const layout = this.options.layout.load();
     this.persistedOpen = layout.open;
     this.open = layout.open && this.options.isAvailable();
+    this.hasHandledInitialVisibility = this.open;
     this.dock = layout.dock;
     this.height = layout.height;
     this.width = Math.min(layout.width, this.maxWidth());
     window.addEventListener("resize", this.onViewportResize);
+    ensureRightDockMotionReady();
+    this.syncReservation();
   }
 
   hostDisconnected(): void {
@@ -89,35 +96,33 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
     return this.open || this.motionDirection === "closing";
   }
 
-  /** Motion presentation harness classes; empty at rest. */
+  /** Motion presentation harness class; empty at rest. */
   get motionClassName(): string {
-    if (!this.motionDirection) {
-      return "";
-    }
-    return this.motionHidden
-      ? "dock-panel--motion dock-panel--motion-hidden"
-      : "dock-panel--motion";
+    return this.motionDirection && this.motionHidden ? "dock-panel--motion-hidden" : "";
   }
 
   /**
-   * The inline size for a right/bottom dock. During the right-dock motion the
-   * width comes from the animation state instead of the settled preference, and
-   * the content width keeps the target size (ZCode's temporary
+   * The inline size for a right/bottom dock. Right widths resolve from the
+   * shared registered reservation width, so the panel frame, following dock
+   * offsets, and shell margin all read the same animated value. During motion
+   * the content keeps the target width (ZCode's temporary
    * `--side-pane-content-width`).
    */
   panelStyle(dock: "bottom" | "right", height: number, width: number): string {
     if (dock === "bottom") {
       return `height:${height}px`;
     }
+    const panelWidth = `var(--oc-${this.options.reservationPrefix}-reserve-right, ${width}px)`;
     if (this.motionDirection) {
-      return `width:${this.motionWidthPx ?? width}px;--oc-dock-content-width:${
-        this.motionContentWidthPx ?? width
-      }px`;
+      return `width:${panelWidth};--oc-dock-content-width:${this.motionContentWidthPx ?? width}px`;
     }
-    return `width:${width}px`;
+    return `width:${panelWidth}`;
   }
 
-  setOpen(open: boolean, persist = true): void {
+  setOpen(open: boolean, persist = true, options: { instant?: boolean } = {}): void {
+    if (open) {
+      this.hasHandledInitialVisibility = true;
+    }
     if (open === this.open && this.motionDirection) {
       // A repeated request for the state the motion is already heading toward
       // must not collapse the temporary frame into the settled size.
@@ -127,11 +132,10 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
       this.host.requestUpdate();
       return;
     }
-    const animate = open !== this.open && this.canAnimateOpenClose();
-    const hadPanel = Boolean(this.options.panelElement?.());
+    const animate = !options.instant && open !== this.open && this.canAnimateOpenClose();
     this.open = open;
     if (animate) {
-      this.beginMotion(open, hadPanel);
+      this.beginMotion(open);
     } else {
       this.cancelMotion();
       this.syncReservation();
@@ -170,7 +174,10 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
     ) {
       return false;
     }
-    this.setOpen(true, false);
+    // The first visible mount (e.g. availability arrives after boot) snaps,
+    // matching ZCode's initial visible mount; later suppression restores ease.
+    const instant = !this.hasHandledInitialVisibility;
+    this.setOpen(true, false, { instant });
     return true;
   }
 
@@ -195,10 +202,7 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
   }
 
   syncReservation(): void {
-    // The motion commits the reservation together with the panel width on its
-    // target frame; incidental updates during the transition must not move the
-    // plate early.
-    if (this.motionReservationDeferred || !this.reservesViewport()) {
+    if (!this.reservesViewport()) {
       return;
     }
     const visible = this.options.isAvailable() && this.open;
@@ -207,10 +211,15 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
       `--oc-${this.options.reservationPrefix}-reserve-bottom`,
       visible && this.dock === "bottom" ? `${this.height}px` : "0px",
     );
-    root.setProperty(
-      `--oc-${this.options.reservationPrefix}-reserve-right`,
-      visible && this.dock === "right" ? `${this.width}px` : "0px",
-    );
+    // A running motion already owns the shared width target; incidental
+    // updates must not snap it.
+    if (!this.motionDirection) {
+      setRightDockWidth(
+        this.options.reservationPrefix,
+        visible && this.dock === "right" ? this.width : 0,
+        false,
+      );
+    }
   }
 
   private resize(event: CustomEvent<{ splitRatio: number }>): void {
@@ -273,41 +282,36 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
     );
   }
 
-  private beginMotion(opening: boolean, hadPanel: boolean): void {
-    this.cancelMotionFrame();
+  private beginMotion(opening: boolean): void {
     const generation = ++this.motionGeneration;
     const width = this.width;
     if (this.motionDirection) {
       this.retargetMotion(opening, generation, width);
       return;
     }
-    // Closing a settled panel starts from its rendered width; only a fresh
-    // mount starts at zero.
-    const currentWidth = hadPanel
-      ? this.options.panelElement?.()?.getBoundingClientRect().width
-      : undefined;
+    this.cancelMotionFrame();
     this.motionDirection = opening ? "opening" : "closing";
-    this.motionWidthPx = currentWidth ?? (opening ? 0 : width);
     this.motionContentWidthPx = width;
-    this.motionHidden = opening;
-    this.motionReservationDeferred = true;
-    // Let the opening frame mount at zero width / zero opacity first; the next
-    // frame commits the target and both transitions run from that frame.
+    this.motionHidden = true;
+    // One registered width drives this dock, its following siblings, and the
+    // shell margin. CSS transitions it on the ZCode clock.
+    setRightDockWidth(this.options.reservationPrefix, opening ? width : 0, true);
+    this.host.requestUpdate();
     void this.host.updateComplete.then(() => {
       if (generation !== this.motionGeneration) {
         return;
       }
+      if (!opening) {
+        this.watchMotion(generation);
+        return;
+      }
+      // A fresh panel mounts with the hidden class so its opacity fades in.
       this.motionFrame = window.requestAnimationFrame(() => {
         this.motionFrame = undefined;
         if (generation !== this.motionGeneration) {
           return;
         }
-        this.motionWidthPx = opening ? width : 0;
-        this.motionHidden = !opening;
-        // The reserved shell area and the panel edge change in the same frame,
-        // so the plate and the dock move on one clock.
-        this.motionReservationDeferred = false;
-        this.syncReservation();
+        this.motionHidden = false;
         this.host.requestUpdate();
         void this.host.updateComplete.then(() => this.watchMotion(generation));
       });
@@ -315,81 +319,70 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
   }
 
   /**
-   * A reversal must retarget the panel width and the shell reservation from the
-   * same current geometry, to the same target, on a fresh shared 200ms clock.
-   * Freezing both frames with the reservation transition disabled for one
-   * forced style flush lets each CSS transition restart from the drawn frame
-   * instead of leaving the shorter inherited margin transition behind.
+   * A reversal updates this dock's target and asks the shared owner to freeze
+   * every registered right-dock width at its drawn value, then restart all of
+   * them to their latest targets in the same frame. Panel widths, sibling
+   * offsets, and the shell margin therefore continue on one clock.
    */
   private retargetMotion(opening: boolean, generation: number, width: number): void {
-    const panel = (this.options.panelElement?.() ?? null) as HTMLElement | null;
-    const shell = document.querySelector<HTMLElement>(".shell");
+    this.cancelMotionFrame();
     this.motionDirection = opening ? "opening" : "closing";
     this.motionContentWidthPx = width;
-    this.motionReservationDeferred = false;
-    if (!panel || !shell || this.dock !== "right") {
-      this.motionWidthPx = opening ? width : 0;
-      this.motionHidden = !opening;
-      this.syncReservation();
-      this.host.requestUpdate();
-      void this.host.updateComplete.then(() => this.watchMotion(generation));
-      return;
-    }
-    const currentWidth = panel.getBoundingClientRect().width;
-    const targetWidth = opening ? width : 0;
-    const panelTransition = panel.style.transition;
-    // Freeze both sides at the frame the user actually saw.
-    panel.style.transition = "none";
-    panel.style.width = `${currentWidth}px`;
-    shell.classList.add("shell--dock-retarget");
-    this.applyRightReservation(currentWidth);
-    void panel.getBoundingClientRect();
-    void shell.getBoundingClientRect();
-    // Restart both transitions from that same frame and target.
-    panel.style.transition = panelTransition;
-    shell.classList.remove("shell--dock-retarget");
-    panel.style.width = `${targetWidth}px`;
-    this.motionWidthPx = targetWidth;
     this.motionHidden = !opening;
-    this.syncReservation();
+    setRightDockWidth(this.options.reservationPrefix, opening ? width : 0, true);
+    retargetRightDockMotion();
     this.host.requestUpdate();
     void this.host.updateComplete.then(() => this.watchMotion(generation));
   }
 
-  private applyRightReservation(widthPx: number): void {
-    if (!this.reservesViewport() || this.dock !== "right") {
-      return;
+  private motionAnimations(): CSSTransition[] {
+    const animations: CSSTransition[] = [];
+    if (typeof CSSTransition === "undefined") {
+      return animations;
     }
-    const root = document.documentElement.style;
-    root.setProperty(`--oc-${this.options.reservationPrefix}-reserve-right`, `${widthPx}px`);
-    root.setProperty(`--oc-${this.options.reservationPrefix}-reserve-bottom`, "0px");
+    const widthProperty = `--oc-${this.options.reservationPrefix}-reserve-right`;
+    for (const animation of document.documentElement.getAnimations()) {
+      if (
+        animation instanceof CSSTransition &&
+        animation.transitionProperty === widthProperty &&
+        animation.playState !== "finished" &&
+        animation.playState !== "idle"
+      ) {
+        animations.push(animation);
+      }
+    }
+    const element = this.options.panelElement?.();
+    for (const animation of element?.getAnimations() ?? []) {
+      if (
+        animation instanceof CSSTransition &&
+        animation.transitionProperty === "opacity" &&
+        animation.playState !== "finished" &&
+        animation.playState !== "idle"
+      ) {
+        animations.push(animation);
+      }
+    }
+    return animations;
   }
 
   private watchMotion(generation: number): void {
     if (generation !== this.motionGeneration) {
       return;
     }
-    const element = this.options.panelElement?.();
-    const animations =
-      element && typeof CSSTransition !== "undefined"
-        ? element
-            .getAnimations()
-            .filter(
-              (animation): animation is CSSTransition =>
-                animation instanceof CSSTransition &&
-                (animation.transitionProperty === "width" ||
-                  animation.transitionProperty === "opacity"),
-            )
-        : [];
+    const animations = this.motionAnimations();
     if (animations.length === 0) {
       this.finishMotion(generation);
       return;
     }
-    // Completion and cancellation both settle through the real transitions;
-    // no timer guesses the end.
-    void Promise.allSettled(animations.map((animation) => animation.finished)).then(() =>
-      this.finishMotion(generation),
-    );
+    // Completion and cancellation both settle through the real transitions.
+    // A shared-owner reversal can restart a sibling's width transition, so
+    // re-check for its replacement instead of settling the sibling early.
+    void Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
+      if (generation !== this.motionGeneration) {
+        return;
+      }
+      this.watchMotion(generation);
+    });
   }
 
   private finishMotion(generation: number): void {
@@ -415,9 +408,7 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
   }
 
   private clearMotionState(): void {
-    this.motionReservationDeferred = false;
     this.motionDirection = undefined;
-    this.motionWidthPx = undefined;
     this.motionContentWidthPx = undefined;
     this.motionHidden = false;
   }
@@ -426,6 +417,7 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
     if (!this.reservesViewport()) {
       return;
     }
+    setRightDockWidth(this.options.reservationPrefix, 0, false);
     const root = document.documentElement.style;
     root.setProperty(`--oc-${this.options.reservationPrefix}-reserve-bottom`, "0px");
     root.setProperty(`--oc-${this.options.reservationPrefix}-reserve-right`, "0px");

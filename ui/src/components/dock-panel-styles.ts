@@ -22,14 +22,9 @@ export const dockPanelStyles = css`
     flex-direction: column;
     background: var(--bg, #0e1015);
     overflow: hidden;
-    /* ZCode side pane: opacity always eases on the 200ms ease-out clock; the
-       explicit open/close motion class adds the width transition. */
+    /* ZCode side pane opacity. Width, sibling offsets, and the plate margin are
+       derived from the shared registered reservation widths. */
     transition: opacity var(--shell-motion-duration) var(--shell-motion-ease);
-  }
-  :is(.bp, .tp).dock-panel--motion {
-    transition-property: width, opacity;
-    transition-duration: var(--shell-motion-duration);
-    transition-timing-function: var(--shell-motion-ease);
   }
   :is(.bp, .tp).dock-panel--motion-hidden {
     opacity: 0;
@@ -45,14 +40,8 @@ export const dockPanelStyles = css`
     min-height: 0;
     flex-direction: column;
   }
-  /* One offset clock for every dock: panels track the reserved edges on the
-     same 200ms ease-out as the panel frame. :where keeps this at the base
-     specificity so the reduced-motion reset below actually wins. */
-  :where(.bp, .tp):is(.bp--right, .tp--right) {
-    transition:
-      right var(--shell-motion-duration) var(--shell-motion-ease),
-      opacity var(--shell-motion-duration) var(--shell-motion-ease);
-  }
+  /* Bottom and main docks follow the navigation width on the shell clock.
+     Right-dock offsets follow the shared registered widths instead. */
   :where(.bp, .tp):is(.bp--bottom, .tp--bottom, .tp--main) {
     transition:
       left var(--shell-motion-duration) var(--shell-motion-ease),

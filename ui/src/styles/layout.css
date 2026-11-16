@@ -4,6 +4,66 @@
    Shell Layout
    =========================================== */
 
+/* ZCode desktop shell motion (zai-org/ZCode fec975905a2, Apache-2.0):
+   the left navigation and every right dock ease width + opacity for 200ms
+   `ease-out`; the main column, sibling dock offsets, and the plate margin are
+   all derived from the same animated right-dock widths. Tailwind's `ease-out`
+   utility computes to cubic-bezier(0, 0, 0.2, 1). */
+@property --oc-terminal-reserve-right {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --oc-browser-reserve-right {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --oc-desktop-reserve-right {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --oc-link-reader-reserve-right {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --oc-assistant-reserve-right {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+:root {
+  --shell-motion-duration: 200ms;
+  --shell-motion-ease: cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* Shared right-dock clock: one transition per dock width; panel width, sibling
+   offsets, and the shell margin all read the animated value. Enabled after the
+   first painted frame so restored docks do not animate on boot. */
+html.dock-motion-ready {
+  transition:
+    --oc-terminal-reserve-right var(--shell-motion-duration) var(--shell-motion-ease),
+    --oc-browser-reserve-right var(--shell-motion-duration) var(--shell-motion-ease),
+    --oc-desktop-reserve-right var(--shell-motion-duration) var(--shell-motion-ease),
+    --oc-link-reader-reserve-right var(--shell-motion-duration) var(--shell-motion-ease),
+    --oc-assistant-reserve-right var(--shell-motion-duration) var(--shell-motion-ease);
+}
+
+/* One flush with dock transitions off; a reversal restarts every registered
+   width from the drawn frame in the shared owner. */
+html.dock-motion-retarget {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.dock-motion-ready {
+    transition: none;
+  }
+}
+
 .shell {
   /* One fixed canvas shared by routes; panels keep their own reading surfaces. */
   background-color: var(--bg-content, var(--bg));
@@ -34,14 +94,6 @@
   );
   --shell-focus-duration: 200ms;
   --shell-focus-ease: var(--ease-out);
-  /* ZCode desktop shell motion (zai-org/ZCode fec975905a2, Apache-2.0):
-     the left navigation and the right dock both ease width + opacity for 200ms
-     `ease-out`; the main column follows through the shared layout instead of
-     receiving its own transform/opacity effect. Tailwind's `ease-out` utility
-     computes to cubic-bezier(0, 0, 0.2, 1). Same motion family as the mobile
-     drawer (layout.mobile.css). */
-  --shell-motion-duration: 200ms;
-  --shell-motion-ease: cubic-bezier(0, 0, 0.2, 1);
   /* One rounded base plate: the whole application — navigation, the settings
      rail, and the main content — floats on the window canvas, which stays
      exposed around the plate on every side. The plate keeps the app artwork as
@@ -97,15 +149,7 @@
   transition:
     grid-template-rows var(--shell-focus-duration) var(--shell-focus-ease),
     height 0.16s ease,
-    margin-bottom 0.16s ease,
-    margin-right var(--shell-motion-duration) var(--shell-motion-ease);
-}
-
-/* A rapid dock reversal freezes the plate at its drawn margin for one style
-   flush, then restarts the reservation transition from that same frame. Only
-   the reservation easing is removed for the flush. */
-.shell.shell--dock-retarget {
-  transition-property: grid-template-rows, height, margin-bottom;
+    margin-bottom 0.16s ease;
 }
 
 .control-ui-environment-stripe {

@@ -33,61 +33,51 @@ export async function readDesktopShellGeometry(page: Page) {
 
 export async function readDesktopDockTransition(page: Page) {
   return page.evaluate(() => {
-    const panel = document
-      .querySelector("openclaw-desktop-panel")
-      ?.shadowRoot?.querySelector<HTMLElement>(".bp");
-    if (!panel) {
-      throw new Error("Missing desktop panel");
-    }
-    const style = getComputedStyle(panel);
-    const split = (value: string) =>
-      value
-        .split(",")
-        .map((entry) => entry.trim())
-        .filter(Boolean);
-    const easingValues = (value: string) =>
-      value.match(/cubic-bezier\([^)]*\)|steps\([^)]*\)|[a-z-]+/g) ?? [];
+    const style = getComputedStyle(document.documentElement);
+    const properties = style.transitionProperty.split(",").map((value) => value.trim());
+    const durations = style.transitionDuration.split(",").map((value) => value.trim());
+    const easings =
+      style.transitionTimingFunction.match(/cubic-bezier\([^)]*\)|steps\([^)]*\)|[a-z-]+/g) ?? [];
+    const index = properties.indexOf("--oc-desktop-reserve-right");
+    const duration = index >= 0 ? Number.parseFloat(durations[index] ?? "") : Number.NaN;
     return {
-      properties: split(style.transitionProperty),
-      durations: split(style.transitionDuration),
-      easings: easingValues(style.transitionTimingFunction),
+      durationMs: Number.isFinite(duration) ? duration * 1000 : null,
+      easing: index >= 0 ? (easings[index] ?? "") : "",
     };
   });
 }
 
 export async function hasDesktopDockWidthTransition(page: Page) {
-  return page.evaluate(
-    () =>
-      document
-        .querySelector("openclaw-desktop-panel")
-        ?.shadowRoot?.querySelector<HTMLElement>(".bp")
-        ?.getAnimations()
-        .some(
-          (animation) =>
-            animation instanceof CSSTransition && animation.transitionProperty === "width",
-        ) ?? false,
+  return page.evaluate(() =>
+    document.documentElement
+      .getAnimations()
+      .some(
+        (animation) =>
+          animation instanceof CSSTransition &&
+          animation.transitionProperty === "--oc-desktop-reserve-right",
+      ),
   );
 }
 
 export async function holdDesktopDockTransitions(page: Page, atMs: number): Promise<number> {
   return page.evaluate((time) => {
-    const shell = document.querySelector<HTMLElement>(".shell");
+    const root = document.documentElement;
     const panel = document
       .querySelector("openclaw-desktop-panel")
       ?.shadowRoot?.querySelector<HTMLElement>(".bp");
     let held = 0;
-    for (const animation of panel?.getAnimations() ?? []) {
+    for (const animation of root.getAnimations()) {
       if (
         animation instanceof CSSTransition &&
-        (animation.transitionProperty === "width" || animation.transitionProperty === "opacity")
+        animation.transitionProperty === "--oc-desktop-reserve-right"
       ) {
         animation.pause();
         animation.currentTime = time;
         held += 1;
       }
     }
-    for (const animation of shell?.getAnimations() ?? []) {
-      if (animation instanceof CSSTransition && animation.transitionProperty === "margin-right") {
+    for (const animation of panel?.getAnimations() ?? []) {
+      if (animation instanceof CSSTransition && animation.transitionProperty === "opacity") {
         animation.pause();
         animation.currentTime = time;
         held += 1;
@@ -99,15 +89,21 @@ export async function holdDesktopDockTransitions(page: Page, atMs: number): Prom
 
 export async function finishDesktopDockTransitions(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const shell = document.querySelector<HTMLElement>(".shell");
+    const root = document.documentElement;
     const panel = document
       .querySelector("openclaw-desktop-panel")
       ?.shadowRoot?.querySelector<HTMLElement>(".bp");
-    for (const element of [shell, panel]) {
-      for (const animation of element?.getAnimations() ?? []) {
-        if (animation instanceof CSSTransition) {
-          animation.finish();
-        }
+    for (const animation of root.getAnimations()) {
+      if (
+        animation instanceof CSSTransition &&
+        animation.transitionProperty === "--oc-desktop-reserve-right"
+      ) {
+        animation.finish();
+      }
+    }
+    for (const animation of panel?.getAnimations() ?? []) {
+      if (animation instanceof CSSTransition && animation.transitionProperty === "opacity") {
+        animation.finish();
       }
     }
   });
