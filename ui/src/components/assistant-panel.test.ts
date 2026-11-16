@@ -13,7 +13,10 @@ import {
 import { createStorageMock } from "../test-helpers/storage.ts";
 import "./assistant-panel.ts";
 import "./assistant-panel-content.ts";
+import { beginRightDockMotion, endRightDockMotion } from "./right-dock-motion.ts";
 
+// mock-isolation: this file owns the dock's lazy load/mount timing, not the
+// session runtime; a stub element keeps the jsdom graph out of it.
 vi.mock("./assistant-session.runtime.ts", () => {
   if (!customElements.get("openclaw-assistant-session")) {
     customElements.define("openclaw-assistant-session", class extends HTMLElement {});
@@ -30,7 +33,7 @@ type TestAssistantPanel = HTMLElement & {
 };
 
 function buildContext() {
-  const { gateway, publish } = createApplicationGateway({
+  const { gateway } = createApplicationGateway({
     client: { request: vi.fn().mockResolvedValue(null) } as never,
     phase: "connected",
     hello: {
@@ -59,7 +62,7 @@ function buildContext() {
     basePath: "",
     navigate: vi.fn(),
   } as never;
-  return { context, publish, agents };
+  return { context, agents };
 }
 
 async function mountPanel() {
@@ -210,5 +213,53 @@ describe("assistant panel", () => {
     expect(panel.assistantPanelOpen).toBe(true);
     (context as { assistantDock: AssistantDock }).assistantDock.close(activation);
     expect(panel.assistantPanelOpen).toBe(false);
+  });
+
+  it("mounts the second transcript only once the dock motion has settled", async () => {
+    const { context, panel } = await mountPanel();
+    // The owner notifies one start per dock motion; the 200ms window must not
+    // pay a second transcript's load and mount.
+    beginRightDockMotion("assistant", "opening");
+    try {
+      openDock(context, {
+        sessionKey: "agent:research:task",
+        agentId: "research",
+        label: "Research",
+      });
+      await vi.dynamicImportSettled();
+      await panel.updateComplete;
+      expect(panel.assistantPanelOpen).toBe(true);
+      expect(panel.querySelector("openclaw-assistant-panel-content")).toBeNull();
+      expect(dockSession(panel)).toBeNull();
+
+      endRightDockMotion("assistant");
+      await vi.dynamicImportSettled();
+      await panel.updateComplete;
+      expect(dockSession(panel)).toMatchObject({
+        sessionKey: "agent:research:task",
+        agentId: "research",
+      });
+    } finally {
+      endRightDockMotion("assistant");
+    }
+  });
+
+  it("never mounts a second transcript for a close inside the opening window", async () => {
+    const { context, panel } = await mountPanel();
+    beginRightDockMotion("assistant", "opening");
+    try {
+      openDock(context, { sessionKey: "agent:main:task", agentId: "main", label: "Task" });
+      await vi.dynamicImportSettled();
+      await panel.updateComplete;
+      (context as { assistantDock: AssistantDock }).assistantDock.close();
+      await panel.updateComplete;
+      expect(panel.assistantPanelOpen).toBe(false);
+    } finally {
+      endRightDockMotion("assistant");
+    }
+    await vi.dynamicImportSettled();
+    await panel.updateComplete;
+    expect(panel.assistantPanelOpen).toBe(false);
+    expect(dockSession(panel)).toBeNull();
   });
 });

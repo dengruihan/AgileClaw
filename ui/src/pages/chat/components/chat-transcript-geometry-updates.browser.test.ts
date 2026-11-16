@@ -3,6 +3,7 @@ import { html } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ApplicationContext } from "../../../app/context.ts";
 import "../../../styles.css";
+import { beginRightDockMotion, endRightDockMotion } from "../../../components/right-dock-motion.ts";
 import "../../../styles/chat.ts";
 import { createMountedPanes } from "../chat-pane-mounted.test-support.ts";
 import { ChatPane } from "../chat-pane-render.ts";
@@ -14,11 +15,16 @@ import { ChatSessionVirtualizerHost } from "./chat-transcript-virtualizer-host.t
 class GeometryPane extends ChatPane {
   session: ChatSessionVirtualizerHost | undefined;
   readonly renderedRects: Array<{ width: number; height: number } | null> = [];
-  private readonly rows: TranscriptRow[] = Array.from({ length: 100 }, (_, index) => ({
-    kind: "content",
-    key: `row-${index}`,
-    content: html`<div style="height: 120px">Row ${index}</div>`,
-  }));
+  rowText = "";
+  private get rows(): TranscriptRow[] {
+    return Array.from({ length: 100 }, (_, index) => ({
+      kind: "content",
+      key: `row-${index}`,
+      content: this.rowText
+        ? html`<p style="margin: 0 0 8px">${index}. ${this.rowText}</p>`
+        : html`<div style="height: 120px">Row ${index}</div>`,
+    }));
+  }
 
   initialize(context: ApplicationContext) {
     this.context = context;
@@ -57,6 +63,7 @@ customElements.define("test-transcript-geometry-pane", GeometryPane);
 
 let pane: GeometryPane | undefined;
 afterEach(() => {
+  endRightDockMotion("assistant");
   pane?.remove();
   pane = undefined;
   vi.restoreAllMocks();
@@ -72,7 +79,7 @@ async function settleLayout() {
   }
 }
 
-async function mountPane() {
+async function mountPane({ rowText = "" }: { rowText?: string } = {}) {
   const fixture = createMountedPanes([
     { key: "agent:main:geometry-render", kind: "direct", updatedAt: 1 },
   ]);
@@ -82,6 +89,7 @@ async function mountPane() {
     client: null,
   });
   pane = new GeometryPane();
+  pane.rowText = rowText;
   pane.initialize(fixture.context);
   pane.style.cssText = "display: block; width: 800px";
   document.body.append(pane);
@@ -249,4 +257,36 @@ it("retains measured viewport geometry while its slot is hidden", async () => {
   slot.style.display = "";
   session.syncViewportGeometry();
   expect(session["virtualizer"].scrollRect).toEqual({ width: 620, height: 500 });
+});
+
+it("holds row measurement for a shell gesture and reconciles the settled width once", async () => {
+  const { host, session, viewport } = await mountPane({
+    rowText:
+      "A sentence long enough to wrap differently at every column width, so each measured row height carries the width it was measured at. ".repeat(
+        4,
+      ),
+  });
+  const thread = expectDefined(session.scrollElement, "transcript viewport");
+  const slot = expectDefined(viewport.parentElement, "viewport slot");
+  const totalSize = () => Number(host.querySelector("output")?.textContent);
+  const settledTotal = totalSize();
+  expect(settledTotal).toBeGreaterThan(0);
+
+  // The dock owner's one bounded notification per motion; the eased intermediate
+  // widths must not drive a row re-measure or a virtualizer rect commit.
+  beginRightDockMotion("assistant", "opening");
+  try {
+    host.renderedRects.length = 0;
+    slot.style.width = "600px";
+    await settleLayout();
+    expect(host.renderedRects.every((rect) => rect?.width !== 600)).toBe(true);
+    expect(totalSize()).toBe(settledTotal);
+  } finally {
+    endRightDockMotion("assistant");
+  }
+  await settleLayout();
+  expect(host.renderedRects[0]).toEqual({ width: 600, height: 400 });
+  // One settle reconcile re-measures the rewrapped rows at the final width.
+  await expect.poll(totalSize).not.toBe(settledTotal);
+  expect(thread.scrollWidth).toBeLessThanOrEqual(thread.clientWidth + 1);
 });

@@ -2,6 +2,7 @@
 
 import { html, nothing, render } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { beginRightDockMotion, endRightDockMotion } from "../components/right-dock-motion.ts";
 import { renderHoverMarquee } from "./hover-marquee.ts";
 
 function measurementClock() {
@@ -80,6 +81,7 @@ afterEach(() => {
   }
   document.body.replaceChildren();
   document.documentElement.removeAttribute("dir");
+  endRightDockMotion("assistant");
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -148,6 +150,28 @@ describe("hover marquee measurement budget", () => {
     clock.flush();
     expect(labels[1]!.classList.contains("hover-marquee--overflowing")).toBe(true);
     expect(clock.observesSize(labels[1]!)).toBe(true);
+  });
+
+  it("holds marquee measurement while a shell gesture resizes the rail", () => {
+    const clock = measurementClock();
+    const { labels, operations } = denseTitles(3);
+    clock.flush();
+    clock.visible(true);
+    clock.flush();
+    expect(operations.filter((operation) => operation === "read")).toHaveLength(labels.length);
+
+    beginRightDockMotion("assistant", "opening");
+    operations.length = 0;
+    for (const label of labels) {
+      clock.resize(label);
+    }
+    clock.flush();
+    // Every eased width would otherwise force a fresh layout read per title.
+    expect(operations).toEqual([]);
+
+    endRightDockMotion("assistant");
+    clock.flush();
+    expect(operations.filter((operation) => operation === "read")).toHaveLength(labels.length);
   });
 
   it("reads a dense title batch before writing overflow styles", () => {

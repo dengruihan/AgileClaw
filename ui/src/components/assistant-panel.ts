@@ -19,6 +19,7 @@ import { DockLayoutController } from "./dock-layout-controller.ts";
 import { assistantPanelLayout } from "./dock-panel-layout.ts";
 import { icons } from "./icons.ts";
 import { renderLazyElementState } from "./lazy-view-error.ts";
+import { subscribeRightDockMotion } from "./right-dock-motion.ts";
 import "../styles/rail-header.css";
 import "../styles/assistant-panel.css";
 
@@ -45,6 +46,9 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
   @state() private destination: AssistantSessionDestination | null = null;
   private publishedSessionKey: string | null = null;
   private clearDestinationAfterClose = false;
+  private dockMotionActive = false;
+  private detachDockMotion: (() => void) | null = null;
+  private mountedContent = false;
   private readonly contentLoader = new LazyCustomElementRequestController(this);
 
   private readonly dockLayout = new DockLayoutController(this, {
@@ -66,11 +70,44 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
       .watchStore(() => this.context?.gateway);
   }
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // One notification per motion start/end (never per frame). The second
+    // transcript's load and mount must not land inside the 200ms window.
+    this.detachDockMotion = subscribeRightDockMotion((event) => {
+      if (event.prefix !== "assistant") {
+        return;
+      }
+      const active = event.phase === "start";
+      if (active === this.dockMotionActive) {
+        return;
+      }
+      this.dockMotionActive = active;
+      this.requestUpdate();
+    });
+  }
+
+  override updated(): void {
+    this.mountedContent = this.querySelector("openclaw-assistant-panel-content") !== null;
+  }
+
   override disconnectedCallback(): void {
+    this.detachDockMotion?.();
+    this.detachDockMotion = null;
+    this.dockMotionActive = false;
     // The destination belongs to the dock owner: a shell remount must not drop
     // the explicit session a page or plugin opened.
     this.claimInput("page");
     super.disconnectedCallback();
+  }
+
+  /**
+   * An opening dock reaches its full width in 200ms; mounting a second live
+   * transcript in that window starves every frame (M186/M189). Already-mounted
+   * content keeps rendering so the close motion has something to animate out.
+   */
+  private get defersContentMount(): boolean {
+    return this.dockLayout.open && this.dockMotionActive && !this.mountedContent;
   }
 
   override willUpdate(): void {
@@ -86,7 +123,7 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
     }
     this.contentLoader.requestWhileActive(
       ASSISTANT_CONTENT_ELEMENT,
-      this.dockLayout.open && this.destination !== null,
+      this.dockLayout.open && this.destination !== null && !this.defersContentMount,
     );
     if (
       this.clearDestinationAfterClose &&
@@ -190,6 +227,8 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
     const dock = this.dockLayout.dock;
     const session = destination?.params;
     const contentState = this.contentLoader.visibleState;
+    const contentDefined = isOptionalElementDefined(ASSISTANT_CONTENT_ELEMENT);
+    const mountContent = visible && session !== undefined && !this.defersContentMount;
     const style = this.dockLayout.panelStyle(dock, this.dockLayout.height, this.dockLayout.width);
     return html`
       <section
@@ -240,7 +279,7 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
             </div>
           </header>
           ${
-            session && visible && isOptionalElementDefined(ASSISTANT_CONTENT_ELEMENT)
+            mountContent && contentDefined
               ? html`<openclaw-assistant-panel-content
                   ?hidden=${!visible}
                   .active=${visible}
@@ -255,7 +294,7 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
               : nothing
           }
           ${
-            visible && !isOptionalElementDefined(ASSISTANT_CONTENT_ELEMENT)
+            visible && !(mountContent && contentDefined)
               ? contentState?.status === "error"
                 ? renderLazyElementState(
                     contentState,

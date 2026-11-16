@@ -1,6 +1,10 @@
 import { html, nothing } from "lit";
 import { AsyncDirective } from "lit/async-directive.js";
 import { directive, type ElementPart } from "lit/directive.js";
+import {
+  isShellGeometryMotionActive,
+  subscribeShellGeometryMotion,
+} from "../pages/chat/components/chat-transcript-motion.ts";
 
 const MARQUEE_SPEED_PX_PER_SEC = 40;
 const MARQUEE_HOVER_DELAY_MS = 500;
@@ -10,6 +14,54 @@ type MarqueeOptions = { delay?: number; speed?: number; loop?: boolean };
 
 const pendingMarquees = new Set<() => (() => void) | undefined>();
 let marqueeFrame: number | undefined;
+let shellMotionActive = false;
+let detachShellMotion: (() => void) | null = null;
+
+/**
+ * A shell gesture (navigation rail width, chat grid tracks, right dock) resizes
+ * every title's viewport for ~200ms. Measuring on each of those frames is a
+ * forced layout per title per frame, so the pending batch waits for the gesture
+ * to settle and then measures once.
+ */
+function watchShellMotion(): void {
+  if (detachShellMotion) {
+    return;
+  }
+  shellMotionActive = isShellGeometryMotionActive();
+  detachShellMotion = subscribeShellGeometryMotion((active) => {
+    shellMotionActive = active;
+    if (!active) {
+      flushMarquees();
+      releaseShellMotionWatchWhenIdle();
+    }
+  });
+}
+
+function releaseShellMotionWatchWhenIdle(): void {
+  if (shellMotionActive || pendingMarquees.size > 0 || marqueeFrame !== undefined) {
+    return;
+  }
+  detachShellMotion?.();
+  detachShellMotion = null;
+}
+
+function flushMarquees(): void {
+  if (marqueeFrame !== undefined || pendingMarquees.size === 0) {
+    return;
+  }
+  // Lit commits children after the directive; hover controls also need to
+  // reserve their space before the title's viewport is measured.
+  marqueeFrame = requestAnimationFrame(() => {
+    marqueeFrame = undefined;
+    const batch = [...pendingMarquees];
+    pendingMarquees.clear();
+    // A sidebar can invalidate hundreds of titles together. Finish every
+    // geometry read before applying any title's overflow or animation styles.
+    const updates = batch.map((measure) => measure());
+    updates.forEach((update) => update?.());
+    releaseShellMotionWatchWhenIdle();
+  });
+}
 
 class HoverMarqueeDirective extends AsyncDirective {
   private label?: HTMLElement;
@@ -56,6 +108,7 @@ class HoverMarqueeDirective extends AsyncDirective {
       cancelAnimationFrame(marqueeFrame);
       marqueeFrame = undefined;
     }
+    releaseShellMotionWatchWhenIdle();
     this.stop();
     this.observer?.disconnect();
     this.observer = undefined;
@@ -76,20 +129,11 @@ class HoverMarqueeDirective extends AsyncDirective {
       return;
     }
     pendingMarquees.add(this.measure);
-    if (marqueeFrame !== undefined) {
+    watchShellMotion();
+    if (shellMotionActive) {
       return;
     }
-    // Lit commits children after this directive; hover controls also need to
-    // reserve their space before the title's viewport is measured.
-    marqueeFrame = requestAnimationFrame(() => {
-      marqueeFrame = undefined;
-      const batch = [...pendingMarquees];
-      pendingMarquees.clear();
-      // A sidebar can invalidate hundreds of titles together. Finish every
-      // geometry read before applying any title's overflow or animation styles.
-      const updates = batch.map((measure) => measure());
-      updates.forEach((update) => update?.());
-    });
+    flushMarquees();
   };
 
   private readonly measure = () => {

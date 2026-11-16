@@ -166,24 +166,28 @@ export function measureTranscriptRow(
   if (!entry && virtualizer.targetWindow?.ResizeObserver) {
     // Registration happens during Lit commit; the observer supplies real sizes
     // after layout, including the first measurement of a newly mounted row.
-    const index = virtualizer.indexFromElement(element);
-    return (
-      virtualizer.itemSizeCache.get(virtualizer.options.getItemKey(index)) ??
-      virtualizer.options.estimateSize(index)
-    );
+    return retainedTranscriptRowSize(element, virtualizer);
   }
   // Rounded row heights accumulate when skipped overscan uses those measurements.
   const size = entry?.borderBoxSize?.[0]?.blockSize ?? measureElement(element, entry, virtualizer);
   if (size === 0 && virtualizer.scrollElement?.clientHeight === 0) {
     // A hidden panel has no row geometry. Retain the last measurement instead
     // of replacing it with zero and moving the restored viewport.
-    const index = virtualizer.indexFromElement(element);
-    return (
-      virtualizer.itemSizeCache.get(virtualizer.options.getItemKey(index)) ??
-      virtualizer.options.estimateSize(index)
-    );
+    return retainedTranscriptRowSize(element, virtualizer);
   }
   return size;
+}
+
+/** The last committed row size, for geometry that must not be measured now. */
+export function retainedTranscriptRowSize(
+  element: HTMLElement,
+  virtualizer: Virtualizer<HTMLDivElement, HTMLElement>,
+): number {
+  const index = virtualizer.indexFromElement(element);
+  return (
+    virtualizer.itemSizeCache.get(virtualizer.options.getItemKey(index)) ??
+    virtualizer.options.estimateSize(index)
+  );
 }
 
 export function maxTranscriptScrollOffset(element: HTMLElement | null): number | null {

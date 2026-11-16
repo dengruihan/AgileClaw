@@ -22,7 +22,6 @@ import { TranscriptEndAnchor } from "./chat-transcript-end-anchor.ts";
 import {
   initialTranscriptRect,
   measureConnectedTranscriptRows,
-  measureTranscriptRow,
   reconcileInitialTranscriptOffset,
   resolveTranscriptScrollMargin,
   PositionRailGutterController,
@@ -34,6 +33,7 @@ import {
 } from "./chat-transcript-interaction-anchor.ts";
 import { TranscriptLayoutOwner } from "./chat-transcript-layout-owner.ts";
 import { renderChatTranscriptLayout, type TranscriptRow } from "./chat-transcript-layout.ts";
+import { TranscriptMotionQuiesce } from "./chat-transcript-motion.ts";
 import {
   createTranscriptOffsetState,
   isTranscriptMaintenanceScroll,
@@ -81,6 +81,7 @@ export class ChatSessionVirtualizerHost implements ReactiveControllerHost, ChatT
   private appliedHeaderHeight = 0;
   private implicitEndAnchorPending: boolean;
   private readonly endAnchor = new TranscriptEndAnchor();
+  private readonly motion: TranscriptMotionQuiesce;
   readonly layout = new TranscriptLayoutOwner((before, after) =>
     this.endAnchor.recordLayoutCorrection(before, after),
   );
@@ -184,6 +185,7 @@ export class ChatSessionVirtualizerHost implements ReactiveControllerHost, ChatT
       onViewportResize: () => this.callbacks.onViewportResize?.(),
       requestUpdate: () => this.host.requestUpdate(),
     });
+    this.motion = new TranscriptMotionQuiesce(this.endAnchor, this.layout, this.viewportRect, this);
     this.implicitEndAnchorPending = initialOffset === null;
     this.virtualizer = new Virtualizer({
       // Every geometry notification must commit before paint, including non-sync measurements.
@@ -221,7 +223,10 @@ export class ChatSessionVirtualizerHost implements ReactiveControllerHost, ChatT
           callback,
         ),
       measureElement: (element, entry, instance) => {
-        const size = measureTranscriptRow(element, entry, instance);
+        // A shell gesture eases the column width; committing every row's new
+        // height each frame re-renders the pane per frame. Keep the committed
+        // sizes and measure the settled widths in the one settle pass.
+        const size = this.motion.measureRow(element, entry, instance);
         if (
           element.dataset.virtualRowKey === "presence:typing" &&
           instance.itemSizeCache.get("presence:typing") !== size
@@ -315,6 +320,7 @@ export class ChatSessionVirtualizerHost implements ReactiveControllerHost, ChatT
     if (this.host instanceof HTMLElement) {
       this.host.addEventListener(SIDEBAR_GEOMETRY_COMMIT_EVENT, this.handleGeometryCommit);
     }
+    this.motion.connect();
     for (const controller of this.controllers) {
       controller.hostConnected?.();
     }
@@ -382,6 +388,7 @@ export class ChatSessionVirtualizerHost implements ReactiveControllerHost, ChatT
   }
 
   disconnect(): void {
+    this.motion.disconnect();
     this.layout.disconnect();
     this.endAnchor.disconnect();
     this.entryAnimations.disconnect();

@@ -1,5 +1,6 @@
 import { nothing } from "lit";
 import { Directive, directive, type ElementPart } from "lit/directive.js";
+import { isShellGeometryMotionActive } from "./chat-transcript-motion.ts";
 import {
   publishTranscriptScroll,
   readTranscriptViewport,
@@ -33,6 +34,7 @@ export class TranscriptLayoutOwner {
   private viewport: HTMLDivElement | null = null;
   private observers: ResizeObserver[] = [];
   private readonly rangeHeights = new WeakMap<HTMLElement, number>();
+  private publishOwed = false;
 
   constructor(private readonly onClamp: (before: number, after: number) => void) {}
 
@@ -129,6 +131,14 @@ export class TranscriptLayoutOwner {
     if (!viewport) {
       return;
     }
+    // A shell geometry motion owns the intermediate boxes: they are still
+    // written so the transcript follows the animation, but the resize
+    // notification waits for the single settle publish.
+    if (isShellGeometryMotionActive()) {
+      this.publishOwed = true;
+      return;
+    }
+    this.publishOwed = false;
     // Publish the native clamp before another measurement can move the anchor.
     const measuredViewport = readTranscriptViewport(viewport);
     const after = measuredViewport.scrollTop;
@@ -140,6 +150,15 @@ export class TranscriptLayoutOwner {
       viewport: measuredViewport,
       ...(before !== after ? { scrollCorrection: { before, after } } : {}),
     });
+  }
+
+  /** Publishes the resize a paused motion owed, once the settled box is written. */
+  flushPublish(): void {
+    const viewport = this.viewport;
+    if (!this.publishOwed || !viewport) {
+      return;
+    }
+    this.publishResize(viewport.scrollTop);
   }
 
   disconnect(): void {
