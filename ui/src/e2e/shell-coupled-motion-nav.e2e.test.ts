@@ -147,19 +147,18 @@ suite.define(() => {
             await nextFrame();
             sample();
             midWidth = Math.min(midWidth, nav.getBoundingClientRect().width);
-            // Reverse once the rail is visibly mid-collapse, the RO has delivered
-            // the intermediate geometry, and the expand control exists.
+            // Reverse only once the rail is visibly mid-collapse, the expand
+            // control exists, and a running width transition has been sampled:
+            // the quiesce assertions below must not pass on a still rail.
             if (
               midWidth < startWidth - 1 &&
               expandControl() &&
-              samples.some((entry) => entry.animating && entry.rail !== startRail)
+              samples.some((entry) => entry.animating)
             ) {
               break;
             }
-            if (midWidth < startWidth - 1 && expandControl() && frame >= 3) {
-              break;
-            }
           }
+          const sampledAnimating = samples.some((entry) => entry.animating);
           const expandFound = Boolean(expandControl());
           expandControl()?.click();
           for (let pass = 0; pass < 12 && railAnimating(); pass += 1) {
@@ -189,6 +188,7 @@ suite.define(() => {
             midWidth,
             railWrites,
             samples,
+            sampledAnimating,
             startAnchor,
             startRail,
             startWidth,
@@ -196,6 +196,9 @@ suite.define(() => {
         });
         // The gesture really reversed mid-flight and returned to its start.
         expect(result.expandFound).toBe(true);
+        // A running width transition was sampled before the reversal: the
+        // "no read/write while animating" assertions are exercised, not vacuous.
+        expect(result.sampledAnimating, JSON.stringify(result.samples)).toBe(true);
         expect(result.midWidth).toBeLessThan(result.startWidth - 1);
         expect(result.endWidth).toBeCloseTo(result.startWidth, 0);
         // No maintenance read of the composer anchor landed while the rail was

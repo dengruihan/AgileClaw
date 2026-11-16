@@ -27,6 +27,9 @@ type ComposerTextareaResizeObserverState = {
   nativeInputPending: boolean;
   hasScrollbarGutter: boolean;
   editing: boolean;
+  /** A gesture held a maintenance read; one reconcile is owed at settle. */
+  owedAfterGesture: boolean;
+  detachMotion: (() => void) | null;
   events: AbortController;
 };
 
@@ -135,10 +138,13 @@ function observeComposerPopoverAnchor(el: HTMLElement) {
   viewport?.addEventListener("resize", state.scheduleUpdate);
   viewport?.addEventListener("scroll", state.scheduleUpdate);
   state.detachMotion = subscribeShellGeometryMotion((active) => {
-    if (active || !state.owedAfterGesture) {
+    if (composerPopoverAnchorObservers.get(el) !== state) {
       return;
     }
-    if (composerPopoverAnchorObservers.get(el) !== state) {
+    // Every gesture owes one measurement of the settled box: the box moves with
+    // the eased column, and a same-size move emits no ResizeObserver delivery.
+    state.owedAfterGesture = true;
+    if (active) {
       return;
     }
     // One delivery per gesture: reuse the frame a resize already queued, or
@@ -387,27 +393,48 @@ export function observeTextareaOverflow(el: HTMLTextAreaElement) {
     nativeInputPending: false,
     hasScrollbarGutter: false,
     editing: false,
+    owedAfterGesture: false,
+    detachMotion: null,
     events: new AbortController(),
   };
   let width = el.getBoundingClientRect().width;
+  // One maintenance reconcile per frame. A gesture holds it: the callback and
+  // the queued frame never read the eased box, and the settle frame measures the
+  // final width once.
+  const scheduleMaintenanceAdjustment = (readWidth: boolean) => {
+    if (state.adjustmentFrame !== null) {
+      return;
+    }
+    state.adjustmentFrame = requestAnimationFrame(() => {
+      state.adjustmentFrame = null;
+      if (composerTextareaResizeObservers.get(el) !== state) {
+        return;
+      }
+      if (isShellGeometryMotionActive()) {
+        state.owedAfterGesture = true;
+        return;
+      }
+      if (readWidth) {
+        width = el.getBoundingClientRect().width;
+      }
+      state.owedAfterGesture = false;
+      adjustTextareaHeight(el);
+    });
+  };
   const onScroll = () => updateTextareaOverflow(el, false);
   state.observer =
     typeof ResizeObserver === "function"
       ? new ResizeObserver(() => {
+          // Intermediate eased widths must not drive a per-frame read: the
+          // settle reconcile measures the final box instead.
+          if (isShellGeometryMotionActive()) {
+            state.owedAfterGesture = true;
+            return;
+          }
           const nextWidth = el.getBoundingClientRect().width;
           if (nextWidth !== width) {
             width = nextWidth;
-            if (
-              composerTextareaResizeObservers.get(el) === state &&
-              state.adjustmentFrame === null
-            ) {
-              state.adjustmentFrame = requestAnimationFrame(() => {
-                state.adjustmentFrame = null;
-                if (composerTextareaResizeObservers.get(el) === state) {
-                  adjustTextareaHeight(el);
-                }
-              });
-            }
+            scheduleMaintenanceAdjustment(false);
             return;
           }
           updateTextareaOverflow(el, false);
@@ -445,6 +472,23 @@ export function observeTextareaOverflow(el: HTMLTextAreaElement) {
     el.addEventListener(type, onInteraction, eventOptions);
   }
   el.addEventListener("scroll", onScroll, eventOptions);
+  state.detachMotion = subscribeShellGeometryMotion((active) => {
+    if (composerTextareaResizeObservers.get(el) !== state) {
+      return;
+    }
+    // The textarea box eases with the column; measuring it mid-gesture forces a
+    // layout per frame. One reconcile is owed for the settled width.
+    state.owedAfterGesture = true;
+    if (active) {
+      // A maintenance frame queued before the gesture would read the eased box.
+      if (state.adjustmentFrame !== null) {
+        cancelAnimationFrame(state.adjustmentFrame);
+        state.adjustmentFrame = null;
+      }
+      return;
+    }
+    scheduleMaintenanceAdjustment(true);
+  });
   composerTextareaResizeObservers.set(el, state);
   state.observer?.observe(el);
   updateTextareaOverflow(el);
@@ -457,12 +501,16 @@ export function disconnectTextareaOverflowObserver(el: HTMLTextAreaElement) {
     return;
   }
   state.observer?.disconnect();
+  state.detachMotion?.();
+  state.detachMotion = null;
   state.events.abort();
   if (state.adjustmentFrame !== null) {
     cancelAnimationFrame(state.adjustmentFrame);
+    state.adjustmentFrame = null;
   }
   if (state.overflowFrame !== null) {
     cancelAnimationFrame(state.overflowFrame);
+    state.overflowFrame = null;
   }
 }
 
