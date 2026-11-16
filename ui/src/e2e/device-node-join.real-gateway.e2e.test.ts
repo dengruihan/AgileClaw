@@ -306,14 +306,13 @@ suite.define(() => {
           .getByText(/This link is single-use and expires in/u)
           .waitFor({ timeout: 45_000 });
 
-        // Download-to-pair guidance: both transfer steps render real app links.
-        for (const platform of ["macOS", "Windows", "Linux"]) {
-          await dialog
-            .getByRole("link", { name: `${platform} download` })
-            .first()
-            .waitFor();
-        }
-        await dialog.getByRole("heading", { name: "Install the app on that machine" }).waitFor();
+        // Node pairing transfers the single-use link and redeems it with the CLI.
+        await dialog.getByRole("heading", { name: "Send the one-time pairing link" }).waitFor();
+        const guidedText = (await dialog.textContent()) ?? "";
+        expect(guidedText).toContain("npx openclaw connect <link>");
+        expect(guidedText).toContain("as the command's target");
+        expect(guidedText).not.toContain("Install the app on that machine");
+        expect(await dialog.locator(".device-pair-setup__downloads a").count()).toBe(0);
         await capture(page, "01-join-guidance.png");
 
         const joinUrl = await revealSecret(dialog);

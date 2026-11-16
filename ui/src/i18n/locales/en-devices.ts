@@ -159,7 +159,8 @@ const enDevices = {
       subtitlePrefix: "Allowlist and approval policy for",
       loadHint: "Load exec approvals to edit allowlists.",
       hostNativePolicy: "Host-native policy",
-      hostNativeHint: "Read-only here. Edit from the companion app or CLI.",
+      hostNativeHint:
+        "Read-only here. Edit on the Gateway host with openclaw approvals set --node <id|name|ip>.",
       native: "Native",
       defaultAction: "Default action",
       rule: "{count} rule",
@@ -237,12 +238,12 @@ const enDevices = {
       setupCodeExpired: "This setup code has expired. Create a new one.",
       stepTransferTitle: "Send the one-time pairing link",
       stepTransferHint:
-        "On that machine, run npx openclaw connect and paste this link. The command redeems the one-time credential and starts the node host.",
+        "On that machine, run npx openclaw connect <link> and pass this link as the command's target. It redeems the one-time credential and starts the node host.",
       stepTransferFallbackTitle: "Share the setup code instead",
       stepTransferFallbackHint:
-        "This Gateway address is not encrypted, so one-time links are unavailable. On that machine, run npx openclaw connect with this setup code; share it only over your private network.",
+        "This Gateway address is not encrypted, so one-time links are unavailable. On that machine, run npx openclaw connect <setup-code> and pass this code as the target; share it only over your private network.",
       setupCodeFallbackHint:
-        "The setup code carries the same credential. Use it when that machine cannot open links.",
+        "The setup code carries the same credential. Pass it to npx openclaw connect as the target when that machine cannot open links.",
       stepObserveTitle: "Wait for the machine",
       stepObserveHint:
         "The machine appears in Devices as soon as it connects using this setup, ready to approve.",

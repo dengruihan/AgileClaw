@@ -91,7 +91,11 @@ describe("device pairing dialog", () => {
     expect(container.querySelectorAll(".device-pair-setup__step")).toHaveLength(2);
     expect(container.querySelector(".device-pair-setup__downloads")).toBeNull();
     expect(container.querySelectorAll("a[target='_blank']")).toHaveLength(1);
-    expect(rendered).toContain("npx openclaw connect");
+    // src/cli/connect-cli.ts requires a target argument and has no interactive
+    // paste prompt, so the copy must show the parameterized command.
+    expect(rendered).toContain("npx openclaw connect <link>");
+    expect(rendered).toContain("as the command's target");
+    expect(rendered).not.toContain("npx openclaw connect and");
     expect(rendered).not.toContain("Download");
     expect(rendered).not.toContain("App Store");
     expect(rendered).not.toContain(joinUrl);
@@ -163,6 +167,7 @@ describe("device pairing dialog", () => {
     expect(rendered).toContain(
       "This Gateway address is not encrypted, so one-time links are unavailable.",
     );
+    expect(rendered).toContain("npx openclaw connect <setup-code>");
     expect(container.querySelector(".device-pair-setup__secret code")?.textContent).not.toContain(
       "PLAIN_CODE",
     );

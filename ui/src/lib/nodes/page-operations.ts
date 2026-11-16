@@ -610,7 +610,7 @@ export async function saveExecApprovals(
   try {
     if (isNativeExecApprovalsSnapshot(state.execApprovalsSnapshot)) {
       state.lastError =
-        "Host-native node approvals are read-only here; use the companion app or approvals set --node.";
+        "Host-native node approvals are read-only here; edit them on the Gateway host with approvals set --node <id|name|ip>.";
       return;
     }
     const baseHash = state.execApprovalsSnapshot?.hash;
