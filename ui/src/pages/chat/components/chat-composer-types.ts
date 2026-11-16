@@ -79,7 +79,6 @@ export type ChatComposerProps = ChatAttachmentControlsProps & {
   currentAgentId: string;
   connected: boolean;
   offline?: boolean;
-  queuedOutboxCount?: number;
   canSend: boolean;
   canCompose?: boolean;
   modelRequiredReason?: string | null;
