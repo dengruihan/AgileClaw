@@ -327,10 +327,10 @@ describe.skipIf(!hasPopoverApi)("platform menu hover", () => {
       );
       const { page } = await import("vitest/browser");
       await page.elementLocator(host.querySelector<HTMLElement>('[slot="trigger"]')!).click();
-      const photo = host.querySelector<HTMLElement>('wa-dropdown-item[value="photo"]')!;
+      const attachment = host.querySelector<HTMLElement>('wa-dropdown-item[value="file"]')!;
       const skills = host.querySelector<HTMLElement>('wa-dropdown-item[value="open-skills"]')!;
-      await hoverBackground(photo, highlight);
-      const attachmentHover = getComputedStyle(photo).backgroundColor;
+      await hoverBackground(attachment, highlight);
+      const attachmentHover = getComputedStyle(attachment).backgroundColor;
       await hoverBackground(skills, attachmentHover);
     },
   );

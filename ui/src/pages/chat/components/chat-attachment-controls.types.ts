@@ -14,8 +14,6 @@ export type ChatAttachmentControlsProps = {
   attachmentReads?: ChatAttachmentReadLifecycle;
   attachments?: ChatAttachment[];
   disabled?: boolean;
-  /** Retained panes may keep drafts mounted without presenting their camera UI. */
-  cameraActive?: boolean;
   imagesOnly?: boolean;
   getAttachments?: () => ChatAttachment[];
   draft?: string;

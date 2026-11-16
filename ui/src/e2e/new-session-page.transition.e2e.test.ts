@@ -697,7 +697,7 @@ suite.define(() => {
           });
 
           await message.fill(submittedMessage);
-          await page.locator(".agent-chat__photo-input").setInputFiles(imageFile);
+          await page.locator(".agent-chat__file-input").setInputFiles(imageFile);
           await expectDecodedThumbnail(draftImage);
           await page.locator(".agent-chat__file-input").setInputFiles({
             name: "notes.txt",

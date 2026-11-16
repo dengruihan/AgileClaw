@@ -1,13 +1,11 @@
-// Shared camera, photo, and file entry points for chat and New Session.
+// Shared attachment entry point for chat and New Session.
 import { html, nothing } from "lit";
 import { icons } from "../../../components/icons.ts";
 import "../../../components/web-awesome.ts";
 import { t } from "../../../i18n/index.ts";
 import { uploadsEnabled } from "../../../lib/uploads.ts";
 import type { ChatAttachmentControlsProps } from "./chat-attachment-controls.types.ts";
-import { useSingleAttachmentPicker } from "./chat-attachment-picker-policy.ts";
 import { appendChatAttachmentFiles } from "./chat-attachments.ts";
-import "./chat-camera-capture.ts";
 
 const CHAT_ATTACHMENT_ACCEPT =
   "image/*,audio/*,video/*,application/pdf,text/*,.csv,.json,.md,.txt,.zip," +
@@ -35,62 +33,30 @@ export function renderChatAttachmentInputs(props: ChatAttachmentControlsProps) {
     return nothing;
   }
   return html`
-    <openclaw-chat-camera-capture
-      .disabled=${Boolean(props.disabled) || props.cameraActive === false}
-      .readSignal=${props.readSignal ?? props.attachmentReads?.readSignal}
-      .onCapture=${(file: File) => {
+    <input
+      type="file"
+      accept=${CHAT_ATTACHMENT_ACCEPT}
+      multiple
+      class="agent-chat__file-input"
+      ?disabled=${props.disabled}
+      @change=${(event: Event) => {
         if (!props.disabled) {
-          appendChatAttachmentFiles([file], props);
+          handleChatAttachmentFileSelect(event, props);
         }
       }}
-      .onNativeCapture=${(source: HTMLElement) => {
-        if (!props.disabled) {
-          clickComposerInput(source, ".agent-chat__camera-input");
-        }
-      }}
-      .onUpload=${(source: HTMLElement) => {
-        if (!props.disabled) {
-          clickComposerInput(source, ".agent-chat__photo-input");
-        }
-      }}
-    ></openclaw-chat-camera-capture>
-    ${(["file", "photo", "camera"] as const).map(
-      (kind) => html`
-        <input
-          type="file"
-          accept=${kind === "file" ? CHAT_ATTACHMENT_ACCEPT : "image/*"}
-          ?multiple=${kind !== "camera"}
-          capture=${kind === "camera" ? "environment" : nothing}
-          class=${`agent-chat__${kind}-input`}
-          ?disabled=${props.disabled}
-          @change=${(event: Event) => {
-            if (!props.disabled) {
-              handleChatAttachmentFileSelect(event, props);
-            }
-          }}
-        />
-      `,
-    )}
+    />
   `;
 }
 
 export function handleChatAttachmentMenuSelection(
   event: CustomEvent<{ item: { value?: string } }>,
 ): boolean {
-  const value = event.detail.item.value;
-  if (value !== "camera" && value !== "photo" && value !== "file") {
+  if (event.detail.item.value !== "file") {
     return false;
   }
   const target = event.currentTarget;
   if (target instanceof HTMLElement) {
-    if (value === "camera") {
-      target
-        .closest(".agent-chat__composer-shell, .new-session-page__composer")
-        ?.querySelector("openclaw-chat-camera-capture")
-        ?.show();
-    } else {
-      clickComposerInput(target, `.agent-chat__${value}-input`);
-    }
+    clickComposerInput(target, ".agent-chat__file-input");
   }
   return true;
 }
@@ -115,22 +81,11 @@ export function renderChatAttachmentMenuTrigger(
   `;
 }
 
-export function renderChatAttachmentMenuOptions(fileIcon = icons.folder) {
-  const options = [
-    { value: "camera", icon: icons.camera, label: t("chat.composer.takePhoto") },
-    ...(useSingleAttachmentPicker()
-      ? [{ value: "file", icon: fileIcon, label: t("chat.composer.attach") }]
-      : [
-          { value: "photo", icon: icons.image, label: t("chat.composer.attachPhoto") },
-          { value: "file", icon: fileIcon, label: t("chat.composer.attachFileOption") },
-        ]),
-  ];
-  return options.map(
-    ({ value, icon, label }) => html`
-      <wa-dropdown-item class="agent-chat__attach-menu-option" value=${value}>
-        <span slot="icon" aria-hidden="true">${icon}</span>
-        <span>${label}</span>
-      </wa-dropdown-item>
-    `,
-  );
+export function renderChatAttachmentMenuOptions() {
+  return html`
+    <wa-dropdown-item class="agent-chat__attach-menu-option" value="file">
+      <span slot="icon" aria-hidden="true">${icons.paperclip}</span>
+      <span>${t("chat.composer.attach")}</span>
+    </wa-dropdown-item>
+  `;
 }

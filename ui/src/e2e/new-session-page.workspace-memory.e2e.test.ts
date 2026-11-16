@@ -125,7 +125,7 @@ suite.define(() => {
       await page.goto(`${suite.server.baseUrl}new`);
       const footer = page.locator(".new-session-page__composer .agent-chat__composer-footer");
       const attach = page.getByRole("button", { name: "Add attachment" });
-      const takePhoto = page.getByRole("menuitem", { name: "Take photo" });
+      const attachment = page.getByRole("menuitem", { name: "Attachment" });
       const draft = page.locator('.new-session-page__draft-toggle[aria-label^="Draft:"]');
       const incognito = page.getByRole("switch", { name: "Incognito" });
       const model = page.locator(".new-session-page__composer .chat-composer-model-control");
@@ -196,7 +196,7 @@ suite.define(() => {
       expect(controlsOverflow).toBe(0);
 
       await attach.click();
-      await expect.poll(() => takePhoto.isVisible()).toBe(true);
+      await expect.poll(() => attachment.isVisible()).toBe(true);
       // The plus becomes a close mark while its menu is up: one glyph rotating,
       // so the button that opened the menu visibly is the one that dismisses it.
       // A CSS rotation matrix is [cos, sin, -sin, cos], so the sine term carries

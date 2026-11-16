@@ -2,109 +2,130 @@
 
 import { html, render } from "lit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { installDialogPolyfill } from "../../../test-helpers/modal-dialog.ts";
+import { createApplicationConfigCapability } from "../../../app/config.ts";
 import type { ChatAttachmentControlsProps } from "./chat-attachment-controls.types.ts";
 import {
   handleChatAttachmentMenuSelection,
   renderChatAttachmentInputs,
+  renderChatAttachmentMenuOptions,
 } from "./chat-attachment-inputs.ts";
+import { ChatAttachmentReadLifecycle } from "./chat-attachment-reads.ts";
+
+const ATTACHMENT_ACCEPT =
+  "image/*,audio/*,video/*,application/pdf,text/*,.csv,.json,.md,.txt,.zip," +
+  ".doc,.docx,.xls,.xlsx,.ppt,.pptx";
 
 let host: HTMLDivElement;
-let restoreDialog: () => void;
+let reads: ChatAttachmentReadLifecycle;
 
 beforeEach(() => {
-  restoreDialog = installDialogPolyfill();
-  vi.stubGlobal("isSecureContext", false);
   host = document.createElement("div");
   document.body.append(host);
+  reads = new ChatAttachmentReadLifecycle(() => {});
 });
 
-afterEach(async () => {
-  const camera = host.querySelector("openclaw-chat-camera-capture");
+afterEach(() => {
+  reads.abortReads();
   host.remove();
-  await camera?.updateComplete;
-  await Promise.resolve();
-  restoreDialog();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
-it("keeps the camera idle across unchanged input renders while retaining reactive disabled and read scopes", async () => {
-  const props: ChatAttachmentControlsProps = {
-    readSignal: new AbortController().signal,
-    onAttachmentsChange: vi.fn(),
-  };
-  render(renderChatAttachmentInputs(props), host);
-  const camera = host.querySelector("openclaw-chat-camera-capture")!;
-  await camera.updateComplete;
-  const updates = vi.spyOn(camera as unknown as { performUpdate(): void }, "performUpdate");
+function selectFiles(input: HTMLInputElement, files: File[]) {
+  Object.defineProperty(input, "files", { configurable: true, value: files });
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
 
-  render(renderChatAttachmentInputs(props), host);
-  await camera.updateComplete;
-  expect(updates).not.toHaveBeenCalled();
+it("renders one multi-file attachment input without camera or photo paths", () => {
+  render(renderChatAttachmentInputs({ onAttachmentsChange: vi.fn() }), host);
 
-  render(renderChatAttachmentInputs({ ...props, draft: "A new draft" }), host);
-  await camera.updateComplete;
-  expect(updates).not.toHaveBeenCalled();
+  const inputs = host.querySelectorAll<HTMLInputElement>('input[type="file"]');
+  expect(inputs).toHaveLength(1);
+  const input = inputs[0]!;
+  expect(input.className).toBe("agent-chat__file-input");
+  expect(input.accept).toBe(ATTACHMENT_ACCEPT);
+  expect(input.multiple).toBe(true);
+  expect(input.hasAttribute("capture")).toBe(false);
+  expect(input.disabled).toBe(false);
+  expect(host.querySelector(".agent-chat__camera-input")).toBeNull();
+  expect(host.querySelector(".agent-chat__photo-input")).toBeNull();
+  expect(host.querySelector("openclaw-chat-camera-capture")).toBeNull();
+});
 
-  render(renderChatAttachmentInputs({ ...props, disabled: true }), host);
-  await camera.updateComplete;
-  expect(updates).toHaveBeenCalledOnce();
-
-  render(
-    renderChatAttachmentInputs({
-      ...props,
-      disabled: true,
-      readSignal: new AbortController().signal,
-    }),
-    host,
+it("renders no attachment input when the Gateway upload policy disables uploads", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ uploadsEnabled: false })),
   );
-  await camera.updateComplete;
-  expect(updates).toHaveBeenCalledTimes(2);
+  const uploadConfig = createApplicationConfigCapability({ resourceBasePath: "" });
+  await uploadConfig.refresh();
+
+  render(renderChatAttachmentInputs({ uploadConfig, onAttachmentsChange: vi.fn() }), host);
+
+  expect(host.querySelector('input[type="file"]')).toBeNull();
+});
+
+it("renders a single Attachment menu option", () => {
+  render(html`${renderChatAttachmentMenuOptions()}`, host);
+
+  const options = host.querySelectorAll(".agent-chat__attach-menu-option");
+  expect(options).toHaveLength(1);
+  expect(options[0]!.getAttribute("value")).toBe("file");
+  expect(options[0]!.textContent?.trim()).toBe("Attachment");
 });
 
 it.each(["agent-chat__composer-shell", "new-session-page__composer"])(
-  "keeps explicit native capture scoped to %s with a single-image input",
-  async (composerClass) => {
-    const initialProps = { onAttachmentsChange: vi.fn(), disabled: false };
-    const draw = (props: ChatAttachmentControlsProps) =>
-      render(
-        html`<div class=${composerClass}>
+  "opens the scoped file input from the attachment menu in %s and retires camera/photo values",
+  (composerClass) => {
+    const props: ChatAttachmentControlsProps = { onAttachmentsChange: vi.fn() };
+    render(
+      html`<details open>
+        <div class=${composerClass}>
           ${renderChatAttachmentInputs(props)}
           <div class="attachment-menu" @wa-select=${handleChatAttachmentMenuSelection}></div>
-        </div>`,
-        host,
-      );
-    draw(initialProps);
-    const camera = host.querySelector("openclaw-chat-camera-capture");
-    const menu = host.querySelector(".attachment-menu");
-    const nativeInput = host.querySelector<HTMLInputElement>(".agent-chat__camera-input");
-    const photoInput = host.querySelector<HTMLInputElement>(".agent-chat__photo-input");
-    if (!camera || !menu || !nativeInput || !photoInput) {
-      throw new Error("Missing attachment controls");
-    }
-    expect(nativeInput.accept).toBe("image/*");
-    expect(nativeInput.getAttribute("capture")).toBe("environment");
-    expect(nativeInput.multiple).toBe(false);
-    expect(photoInput.multiple).toBe(true);
-    expect(photoInput.hasAttribute("capture")).toBe(false);
-    await camera.updateComplete;
-    // A callback retained from the earlier render would now reject this picker.
-    initialProps.disabled = true;
-    draw({ ...initialProps, disabled: false });
-    await camera.updateComplete;
-    const clickNative = vi.spyOn(nativeInput, "click").mockImplementation(() => undefined);
-    menu.dispatchEvent(new CustomEvent("wa-select", { detail: { item: { value: "camera" } } }));
-    await camera.updateComplete;
-    expect(clickNative).not.toHaveBeenCalled();
-    const nativeButton = [...camera.renderRoot.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Use device camera",
+        </div>
+      </details>`,
+      host,
     );
-    if (!nativeButton) {
-      throw new Error("Missing explicit native-camera action");
+    const input = host.querySelector<HTMLInputElement>(".agent-chat__file-input")!;
+    const menu = host.querySelector(".attachment-menu")!;
+    const click = vi.spyOn(input, "click").mockImplementation(() => undefined);
+
+    menu.dispatchEvent(new CustomEvent("wa-select", { detail: { item: { value: "file" } } }));
+    expect(click).toHaveBeenCalledOnce();
+    expect(host.querySelector("details")?.hasAttribute("open")).toBe(false);
+
+    for (const value of ["camera", "photo", "unknown"]) {
+      menu.dispatchEvent(new CustomEvent("wa-select", { detail: { item: { value } } }));
     }
-    nativeButton.click();
-    expect(clickNative).toHaveBeenCalledOnce();
-    await camera.updateComplete;
+    expect(click).toHaveBeenCalledOnce();
   },
 );
+
+it("appends selected files through the change handler and resets the input", async () => {
+  const onAttachmentsChange = vi.fn();
+  render(renderChatAttachmentInputs({ onAttachmentsChange, attachmentReads: reads }), host);
+  const input = host.querySelector<HTMLInputElement>(".agent-chat__file-input")!;
+
+  selectFiles(input, [new File(["notes"], "notes.txt", { type: "text/plain" })]);
+
+  expect(input.value).toBe("");
+  await vi.waitFor(() => expect(onAttachmentsChange).toHaveBeenCalledOnce());
+  const attachments = onAttachmentsChange.mock.calls[0]![0] as Array<{ fileName?: string }>;
+  expect(attachments).toHaveLength(1);
+  expect(attachments[0]?.fileName).toBe("notes.txt");
+});
+
+it("disables the input and ignores selection while the composer is disabled", () => {
+  const onAttachmentsChange = vi.fn();
+  render(
+    renderChatAttachmentInputs({ onAttachmentsChange, attachmentReads: reads, disabled: true }),
+    host,
+  );
+  const input = host.querySelector<HTMLInputElement>(".agent-chat__file-input")!;
+  expect(input.disabled).toBe(true);
+
+  selectFiles(input, [new File(["notes"], "notes.txt", { type: "text/plain" })]);
+
+  expect(onAttachmentsChange).not.toHaveBeenCalled();
+});
