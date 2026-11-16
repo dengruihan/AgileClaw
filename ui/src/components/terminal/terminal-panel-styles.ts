@@ -5,6 +5,7 @@ export const terminalPanelStyles = css`
     left: var(--shell-nav-width, 0);
     right: 0;
     bottom: 0;
+    transition: left var(--shell-motion-duration) var(--shell-motion-ease);
     --tp-session-menu-max-height: calc(var(--tp-panel-height) - 44px);
   }
   .tp--right {
@@ -17,6 +18,7 @@ export const terminalPanelStyles = css`
     /* Main mode owns the content region; later sibling docks may overlay it. */
     top: var(--shell-topbar-height, 0);
     left: var(--shell-nav-width, 0);
+    transition: left var(--shell-motion-duration) var(--shell-motion-ease);
     right: 0;
     bottom: 0;
     --tp-session-menu-max-height: calc(100dvh - var(--shell-topbar-height, 0px) - 44px);

@@ -14,11 +14,13 @@ const desktopPanelStyles = css`
     left: var(--shell-nav-width, 0);
     right: calc(var(--oc-terminal-reserve-right, 0px) + var(--oc-browser-reserve-right, 0px));
     bottom: calc(var(--oc-terminal-reserve-bottom, 0px) + var(--oc-browser-reserve-bottom, 0px));
+    transition: left var(--shell-motion-duration) var(--shell-motion-ease);
   }
   .bp--right {
     top: var(--shell-topbar-height, 0);
     right: calc(var(--oc-terminal-reserve-right, 0px) + var(--oc-browser-reserve-right, 0px));
     bottom: calc(var(--oc-terminal-reserve-bottom, 0px) + var(--oc-browser-reserve-bottom, 0px));
+    transition: right var(--shell-motion-duration) var(--shell-motion-ease);
   }
   .bp-title {
     min-width: 0;

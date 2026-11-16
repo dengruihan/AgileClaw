@@ -13,6 +13,27 @@ openclaw-assistant-panel {
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
+  transition: opacity var(--shell-motion-duration) var(--shell-motion-ease);
+}
+
+.assistant-panel.dock-panel--motion {
+  transition-property: width, opacity;
+  transition-duration: var(--shell-motion-duration);
+  transition-timing-function: var(--shell-motion-ease);
+}
+
+.assistant-panel.dock-panel--motion-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.assistant-panel > .dock-panel-content {
+  display: flex;
+  flex: 1 1 auto;
+  width: var(--oc-dock-content-width, 100%);
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .assistant-panel--bottom,
@@ -29,10 +50,12 @@ openclaw-assistant-panel {
 
 .assistant-panel--bottom {
   left: var(--shell-nav-width, 0);
+  transition: left var(--shell-motion-duration) var(--shell-motion-ease);
 }
 
 .assistant-panel--right {
   top: var(--shell-topbar-height, 0);
+  transition: right var(--shell-motion-duration) var(--shell-motion-ease);
 }
 
 .assistant-panel-resizer {

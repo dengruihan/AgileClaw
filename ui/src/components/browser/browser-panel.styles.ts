@@ -11,11 +11,13 @@ export const browserPanelStyles = css`
     left: var(--shell-nav-width, 0);
     right: var(--oc-terminal-reserve-right, 0px);
     bottom: var(--oc-terminal-reserve-bottom, 0px);
+    transition: left var(--shell-motion-duration) var(--shell-motion-ease);
   }
   .bp--right {
     top: var(--shell-topbar-height, 0);
     right: var(--oc-terminal-reserve-right, 0px);
     bottom: var(--oc-terminal-reserve-bottom, 0px);
+    transition: right var(--shell-motion-duration) var(--shell-motion-ease);
   }
   .bp--embedded {
     position: relative;

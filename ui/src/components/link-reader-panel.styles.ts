@@ -12,6 +12,7 @@ export const linkReaderPanelStyles = css`
         var(--oc-desktop-reserve-bottom, 0px)
     );
     max-width: 100vw;
+    transition: right var(--shell-motion-duration) var(--shell-motion-ease);
   }
   .bp-header {
     flex: none;

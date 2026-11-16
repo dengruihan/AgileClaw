@@ -21,6 +21,7 @@ export function renderDesktopPanelView(options: {
   height: number;
   width: number;
   fullscreen: boolean;
+  motion: { className: string; style: string };
   renderResizer: () => TemplateResult | typeof nothing;
   renderFullscreenControl: () => TemplateResult;
   onClose: () => void;
@@ -44,34 +45,31 @@ export function renderDesktopPanelView(options: {
           >${options.renderFullscreenControl()}`
       : nothing,
   });
-  const style =
-    options.embedded || options.fullscreen
-      ? ""
-      : options.dock === "bottom"
-        ? `height:${options.height}px`
-        : `width:${options.width}px`;
+  const style = options.embedded || options.fullscreen ? "" : options.motion.style;
   return html`
     <section
-      class="bp bp--${options.embedded ? "embedded" : options.dock}"
+      class="bp bp--${options.embedded ? "embedded" : options.dock} ${options.motion.className}"
       style=${style}
       aria-label=${t("desktop.title")}
     >
       ${options.embedded ? nothing : options.renderResizer()}
-      ${
-        options.embedded
-          ? nothing
-          : renderDesktopPanelHeader({
-              dock: options.dock,
-              fullscreenControl: options.renderFullscreenControl(),
-              onDock: options.onDock,
-              onOpenWindow: options.onOpenWindow,
-              onClose: options.onClose,
-            })
-      }
-      ${renderDesktopPanelContent({
-        ...options.content,
-        connection,
-      })}
+      <div class="dock-panel-content">
+        ${
+          options.embedded
+            ? nothing
+            : renderDesktopPanelHeader({
+                dock: options.dock,
+                fullscreenControl: options.renderFullscreenControl(),
+                onDock: options.onDock,
+                onOpenWindow: options.onOpenWindow,
+                onClose: options.onClose,
+              })
+        }
+        ${renderDesktopPanelContent({
+          ...options.content,
+          connection,
+        })}
+      </div>
     </section>
   `;
 }

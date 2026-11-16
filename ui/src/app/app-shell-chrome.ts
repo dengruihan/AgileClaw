@@ -34,7 +34,7 @@ import {
   type DebugOverlayElement,
   type DebugOverlayMode,
 } from "../pages/debug/debug-overlay-frame.ts";
-import { ShellNavMotionOwner } from "./app-shell-nav-motion.ts";
+import { ShellDesktopNavigationToggle } from "./app-shell-navigation-toggle.ts";
 import { openShellNewSession, type ShellNewSessionHost } from "./app-shell-new-session.ts";
 import { ShellPanelOwner, type ShellPanelHost } from "./app-shell-panels.ts";
 import { resolveControlUiDocumentMode } from "./approval-deep-link.ts";
@@ -110,13 +110,13 @@ export class ShellChromeOwner {
   private pendingLazyAction = readLazyShellAction();
   private listeners: AbortController | undefined;
   private readonly navDrawerSwipe: NavDrawerSwipeLoader;
-  private readonly navMotion: ShellNavMotionOwner;
+  private readonly navToggle: ShellDesktopNavigationToggle;
   constructor(private readonly host: ShellChromeHost) {
     this.panels = new ShellPanelOwner(host, (element, event) =>
       this.requestLazyElement(element, event),
     );
     this.navDrawerSwipe = new NavDrawerSwipeLoader(host, () => this.toggleNavigationSurface());
-    this.navMotion = new ShellNavMotionOwner(host);
+    this.navToggle = new ShellDesktopNavigationToggle(host);
   }
 
   connect(): void {
@@ -176,7 +176,7 @@ export class ShellChromeOwner {
     const listenerOwner = this.listeners;
     this.listeners?.abort();
     this.listeners = undefined;
-    this.navMotion.cancel();
+    this.navToggle.cancel();
     this.navDrawerSwipe.disconnect();
     if (listenerOwner && nativeCommandsOwner === listenerOwner) {
       nativeCommandsOwner = undefined;
@@ -210,12 +210,12 @@ export class ShellChromeOwner {
       }
       return;
     }
-    // A responsive handoff expands this shell without overwriting the desktop
-    // preference; the motion owner owns the pending intent and the handoff.
-    this.navMotion.runDesktopToggle({
+    // ZCode shell contract: the navigation state applies on the click, and the
+    // rail's width/opacity transition carries the chat column with it. There is
+    // no second phase or pending state to hand off.
+    this.navToggle.run({
       dismissTransientMenus: () => this.dismissSidebarTransientMenus(),
-      restoreFocus: () =>
-        this.restoreFocusTo(host.querySelector<HTMLElement>(".shell-chrome-controls__nav-toggle")),
+      restoreFocus: (target) => this.restoreFocusTo(target),
     });
   };
 
@@ -292,10 +292,6 @@ export class ShellChromeOwner {
       return;
     }
     event.preventDefault();
-    // A native navigation command is a real SPA route change known before the
-    // routed surface swaps; drop any in-flight nav fade so it cannot paint the
-    // destination through the old route's opacity/translate.
-    this.navMotion.settleRouteChange();
     this.host.navigate(destination.routeId, destination.options);
   };
 

@@ -487,35 +487,40 @@ export function renderBrowserPanelChrome(
   resizer: TemplateResult | typeof nothing,
   embedded = false,
   tabsInHeader = false,
+  motion: { className?: string; style?: string } = {},
 ) {
-  const style = embedded ? nothing : dock === "bottom" ? `height:${height}px` : `width:${width}px`;
+  const style = embedded
+    ? nothing
+    : (motion.style ?? (dock === "bottom" ? `height:${height}px` : `width:${width}px`));
   const rendersTabStrip =
     !controller.host.fixedTab && (!embedded || (!tabsInHeader && controller.tabs.length > 0));
   return html`
     <section
-      class="bp bp--${embedded ? "embedded" : dock}"
+      class="bp bp--${embedded ? "embedded" : dock} ${motion.className ?? ""}"
       style=${style}
       aria-label=${t("browser.title")}
     >
       ${embedded ? nothing : resizer}
-      ${
-        rendersTabStrip
-          ? html`<header class="rail-header bp-header">
-              ${renderTabStrip(controller, embedded)}
-              ${embedded ? nothing : renderHeaderActions(controller, dock, onDockChange, onClose)}
-            </header>`
-          : nothing
-      }
-      ${renderToolbar(controller, embedded)} ${renderHumanControlBar(controller)}
-      ${renderAnnotateBar(controller)}
-      ${
-        controller.errorText
-          ? html`<div class="bp-note bp-note--error" role="alert">${controller.errorText}</div>`
-          : controller.noticeText
-            ? html`<div class="bp-note" role="status">${controller.noticeText}</div>`
+      <div class="dock-panel-content">
+        ${
+          rendersTabStrip
+            ? html`<header class="rail-header bp-header">
+                ${renderTabStrip(controller, embedded)}
+                ${embedded ? nothing : renderHeaderActions(controller, dock, onDockChange, onClose)}
+              </header>`
             : nothing
-      }
-      ${renderViewport(controller, rendersTabStrip)}
+        }
+        ${renderToolbar(controller, embedded)} ${renderHumanControlBar(controller)}
+        ${renderAnnotateBar(controller)}
+        ${
+          controller.errorText
+            ? html`<div class="bp-note bp-note--error" role="alert">${controller.errorText}</div>`
+            : controller.noticeText
+              ? html`<div class="bp-note" role="status">${controller.noticeText}</div>`
+              : nothing
+        }
+        ${renderViewport(controller, rendersTabStrip)}
+      </div>
     </section>
   `;
 }

@@ -33,15 +33,14 @@
   );
   --shell-focus-duration: 200ms;
   --shell-focus-ease: var(--ease-out);
-  /* One clock for a desktop nav toggle. The rail slides on it, and
-     app-shell-nav-motion.ts fades the content column and the moving dock
-     surfaces through the single grid relayout on the same duration/ease: the
-     outgoing surfaces fade out while translating, the navigation state applies
-     while they are transparent, and the new layout fades back in as it finishes
-     the translation. Same motion family as the mobile drawer
-     (layout.mobile.css). */
-  --shell-nav-slide-duration: 200ms;
-  --shell-nav-slide-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  /* ZCode desktop shell motion (zai-org/ZCode fec975905a2, Apache-2.0):
+     the left navigation and the right dock both ease width + opacity for 200ms
+     `ease-out`; the main column follows through the shared layout instead of
+     receiving its own transform/opacity effect. Tailwind's `ease-out` utility
+     computes to cubic-bezier(0, 0, 0.2, 1). Same motion family as the mobile
+     drawer (layout.mobile.css). */
+  --shell-motion-duration: 200ms;
+  --shell-motion-ease: cubic-bezier(0, 0, 0.2, 1);
   /* One rounded base plate: the whole application — navigation, the settings
      rail, and the main content — floats on the window canvas, which stays
      exposed around the plate on every side. The plate keeps the app artwork as
@@ -77,19 +76,15 @@
     -3px -4px 8px var(--neu-light),
     4px 6px 16px var(--neu-dark);
   display: grid;
-  grid-template-columns: var(--shell-nav-width) minmax(0, 1fr);
+  /* The navigation column takes the rail's own width, which transitions on the
+     ZCode clock; the main column is the remaining space and follows that width
+     frame by frame. */
+  grid-template-columns: auto minmax(0, 1fr);
   grid-template-rows: var(--shell-topbar-height) 1fr;
   grid-template-areas:
     "nav topbar"
     "nav content";
   gap: 0;
-  /* The nav column snaps on toggle: easing the grid track relayouts the whole
-     shell every frame (measured jank with a populated sidebar and transcript).
-     The shell-chrome motion owner hides that single relayout under one brief
-     fade-through of the content column and the moving dock surfaces
-     (app-shell-nav-motion.ts), so the chat components and docks travel with the
-     rail instead of cutting to their new geometry. Only the row track keeps an
-     ease here. */
   transition: grid-template-rows var(--shell-focus-duration) var(--shell-focus-ease);
   overflow: hidden;
 }
@@ -102,7 +97,7 @@
     grid-template-rows var(--shell-focus-duration) var(--shell-focus-ease),
     height 0.16s ease,
     margin-bottom 0.16s ease,
-    margin-right 0.16s ease;
+    margin-right var(--shell-motion-duration) var(--shell-motion-ease);
 }
 
 .control-ui-environment-stripe {
@@ -163,54 +158,32 @@
    Keep --shell-nav-width in sync for fixed-position consumers (e.g. the
    docked terminal panel). */
 .shell--nav-collapsed {
-  grid-template-columns: 0 minmax(0, 1fr);
   --shell-nav-width: 0px;
   /* The collapsed strip shows the expand toggle, so unlike the expanded safe
      edge this keeps the complete collapsed width. */
   --shell-chrome-safe-area-left: calc(var(--shell-chrome-control-size) + 18px);
 }
 
-/* Desktop collapse snaps the grid track once, then slides the rail out on the
-   compositor over the already-widened content. The rail keeps its final
-   expanded width for the whole motion, so session titles and hover-marquee
-   measurements never change at intermediate frames; visibility flips only
-   after the transform settles (the drawer's visibility idiom). The view marks
-   the rail inert immediately, so the departing surface is non-interactive
-   from the first frame. Drawer shells keep their own offscreen handling
-   (layout.mobile.css).
-
-   These declarations also define the resting state for the coupled toggle in
-   app-shell-nav-motion.ts: while the fade-through runs, the owner drives the
-   rail transform with one WAAPI animation, suppresses this transition inline,
-   and holds visibility visible; restoring the declaration here replays no
-   second slide. */
+/* ZCode collapse: the rail keeps its place in the layout and eases its own
+   width and opacity down to the collapsed size. The outer column clips the
+   departing content, so session rows narrow with the rail instead of sliding
+   over the chat column. The view already marks the rail inert and the
+   navigation state applies on the click, so there is no separate handoff. */
 .shell--nav-collapsed:not(.shell--mobile-nav) .shell-nav {
-  width: var(--shell-nav-expanded-width);
-  transform: translateX(-100%);
-  visibility: hidden;
-  transition:
-    transform var(--shell-nav-slide-duration) var(--shell-nav-slide-ease),
-    visibility 0s linear var(--shell-nav-slide-duration);
+  opacity: 0;
+  pointer-events: none;
+  /* The divider belongs to the expanded rail; dropping it keeps the collapsed
+     column at exactly zero so the chat column owns the full plate width. */
+  border-inline-end-width: 0;
 }
 
-/* The immediate inert on collapse clears any hovered row's :hover, which would
-   otherwise start the rows' non-composited hover-feedback transitions (row
-   color, link background, action opacity) and restyle the row subtree every
-   frame of the exit slide. The snap baseline never paid these because
-   display:none removed the rows outright. The departing rail is inert and
-   leaving, so its rows' hover feedback snaps instead of animating; the rail's
-   own transform/visibility slide above is unaffected. Expand removes the class
-   and restores the transitions, with the pointer on the chrome toggle rather
-   than a session row. */
-.shell--nav-collapsed:not(.shell--mobile-nav) .sidebar-recent-session,
-.shell--nav-collapsed:not(.shell--mobile-nav) .sidebar-recent-session :is(a, button) {
-  transition: none;
-}
-
-/* The global reduced-motion reset zeroes durations but not the visibility
-   delay; drop the whole slide so collapse hides the rail immediately. Drawer
+/* Reduced motion keeps the same end states and drops the transition. Drawer
    shells keep their own reduced-motion transition in layout.mobile.css. */
 @media (prefers-reduced-motion: reduce) {
+  .shell:not(.shell--mobile-nav) {
+    transition: none;
+  }
+
   .shell:not(.shell--mobile-nav) .shell-nav {
     transition: none;
   }
@@ -1181,15 +1154,27 @@ openclaw-settings-save-indicator:empty {
   position: relative;
   z-index: 10;
   display: flex;
+  width: var(--shell-nav-width);
+  min-width: 0;
   min-height: 100%;
-  overflow: visible;
+  /* ZCode's sidebar panel clips its own content while the width eases, so the
+     departing rail narrows instead of painting over the chat column. */
+  overflow: hidden;
   border-inline-end: var(--resize-handle-line-size) solid var(--resize-handle-rest-color);
-  /* Expand slides the rail back over the already-snapped grid; visibility
-     restores on the first frame (zero delay), the transform eases home. The
-     mobile drawer overrides this whole transition in layout.mobile.css. */
+  /* ZCode desktop nav toggle: width + opacity, 200ms ease-out. The mobile
+     drawer overrides this whole transition in layout.mobile.css, and the
+     settings takeover keeps its own static rail. */
   transition:
-    transform var(--shell-nav-slide-duration) var(--shell-nav-slide-ease),
-    visibility 0s;
+    width var(--shell-motion-duration) var(--shell-motion-ease),
+    opacity var(--shell-motion-duration) var(--shell-motion-ease);
+}
+
+.shell--settings:not(.shell--mobile-nav) .shell-nav {
+  transition: none;
+}
+
+.shell--nav-resizing:not(.shell--mobile-nav) .shell-nav {
+  transition: opacity var(--shell-motion-duration) var(--shell-motion-ease);
 }
 
 .shell-nav-backdrop {
