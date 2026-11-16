@@ -11,7 +11,10 @@ import { t } from "../../i18n/index.ts";
 import { latestBrowserTabCards } from "../../lib/chat/browser-tab-preview.ts";
 import { storedChatOutboxScopeKey } from "../../lib/chat/outbox-store.ts";
 import { scopedAgentParamsForSession } from "../../lib/sessions/index.ts";
-import { resolveUiConversationIdentity } from "../../lib/sessions/session-key.ts";
+import {
+  canonicalUiSessionKeyForPersistence,
+  resolveUiConversationIdentity,
+} from "../../lib/sessions/session-key.ts";
 import { resolveSessionWorkspace } from "../../lib/sessions/workspace.ts";
 import { livePresentation, presentedContent } from "../../lit/presentation-binding.ts";
 import { ChatContextUsageController } from "./chat-context-usage-controller.ts";
@@ -35,6 +38,7 @@ import { hasTerminalRunStatus } from "./components/chat-composer-state.ts";
 import { renderChatDetailSlot } from "./components/chat-detail-slot.ts";
 import { renderChatImageLightbox } from "./components/chat-image-lightbox.ts";
 import { renderSessionWorkspaceRail } from "./components/chat-session-workspace.ts";
+import { SidebarRegionMotion } from "./components/chat-sidebar-region-motion.ts";
 import { resolveAssistantDisplayAvatar } from "./components/chat-welcome.ts";
 import { resolveChatLinkFaviconFetcher } from "./link-favicon-loader.ts";
 import {
@@ -62,6 +66,9 @@ type ChatPaneLayoutRenderParams = {
 };
 
 export abstract class ChatPaneLayoutRender extends ChatPaneBrowserAnnotationRender {
+  // One motion lifecycle per pane grid; the region runtime drives it and the
+  // sidebar template reads its classes in the same commit as the layout flip.
+  private readonly sidebarRegionMotion = new SidebarRegionMotion(() => this.requestUpdate());
   private readonly refreshProcesses = () => {
     void this.querySelector("openclaw-chat-processes-panel")?.refresh();
   };
@@ -391,6 +398,8 @@ export abstract class ChatPaneLayoutRender extends ChatPaneBrowserAnnotationRend
         setPanelOpen: (open) => this.setChatSidePanelOpen(open, sidebarLayout),
       }),
       layout: sidebarLayout,
+      layoutScope: canonicalUiSessionKeyForPersistence(state, state.sessionKey),
+      motion: this.sidebarRegionMotion,
       panelDefinitions,
       panelActions,
       narrow: this.paneWidth < SIDEBAR_NARROW_BREAKPOINT_PX,
