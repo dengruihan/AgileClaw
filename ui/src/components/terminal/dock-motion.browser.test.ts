@@ -261,3 +261,164 @@ it("snaps without motion events for instant toggles and boot restore", async () 
   expect(panelOf(restored)!.getBoundingClientRect().width).toBe(restored.dockLayout.width);
   expect(events).toEqual([]);
 });
+
+/** Records whether the shared inherited-clock freeze ever ran during `run`. */
+async function withRetargetWatch<T>(
+  run: () => Promise<T>,
+): Promise<{ result: T; frozen: boolean }> {
+  const records: MutationRecord[] = [];
+  const observer = new MutationObserver((entries) => records.push(...entries));
+  observer.observe(document.documentElement, {
+    attributeFilter: ["class"],
+    attributeOldValue: true,
+    attributes: true,
+  });
+  try {
+    const result = await run();
+    records.push(...observer.takeRecords());
+    // The freeze adds and removes the class inside one task, so the removal
+    // record's oldValue is the only synchronous trace of it.
+    const frozen = records.some((record) => record.oldValue?.includes("dock-motion-retarget"));
+    return {
+      result,
+      frozen: frozen || document.documentElement.classList.contains("dock-motion-retarget"),
+    };
+  } finally {
+    observer.disconnect();
+  }
+}
+
+function pauseDockMotionAt(docks: readonly MotionTestDock[], time: number): void {
+  const animations = [
+    ...docks.flatMap((dock) => panelOf(dock)?.getAnimations() ?? []),
+    ...shell.getAnimations(),
+  ].filter(
+    (animation, index, all) =>
+      animation instanceof CSSTransition &&
+      (animation.transitionProperty === "width" ||
+        animation.transitionProperty === "right" ||
+        animation.transitionProperty === "margin-right") &&
+      all.indexOf(animation) === index,
+  );
+  for (const animation of animations) {
+    animation.pause();
+    animation.currentTime = time;
+  }
+}
+
+function drawnDockGeometry(docks: readonly MotionTestDock[]): {
+  margin: number;
+  rights: number[];
+  widths: number[];
+} {
+  return {
+    margin: Number.parseFloat(getComputedStyle(shell).marginRight),
+    rights: docks.map((dock) => Number.parseFloat(getComputedStyle(panelOf(dock)!).right)),
+    widths: docks.map((dock) => panelOf(dock)!.getBoundingClientRect().width),
+  };
+}
+
+it("starts a fresh motion from the static targets without freezing the shared clock", async () => {
+  const terminal = new TerminalMotionDock();
+  await mount(terminal);
+  const browser = new BrowserMotionDock();
+  await mount(browser);
+  // A settled sibling must not make the next fresh start look in-flight.
+  terminal.dockLayout.setOpen(true);
+  await expect.poll(() => eventsFor("terminal").length).toBe(2);
+  browser.dockLayout.setOpen(true);
+  await expect.poll(() => eventsFor("browser").length).toBe(2);
+  browser.dockLayout.setOpen(false);
+  await expect.poll(() => eventsFor("browser").length).toBe(4);
+
+  const { frozen } = await withRetargetWatch(async () => {
+    browser.dockLayout.setOpen(true);
+    await expect.poll(() => Boolean(runningTransition(browser, "width"))).toBe(true);
+    return browser;
+  });
+  // A fresh start has no drawn in-flight consumer: freezing the inherited clock
+  // would restyle the whole tree for nothing.
+  expect(frozen).toBe(false);
+
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+  pauseDockMotionAt([terminal, browser], 100);
+  const { margin, rights, widths } = drawnDockGeometry([terminal, browser]);
+  expect(widths[0]).toBeGreaterThan(1);
+  expect(widths[1]).toBeGreaterThan(1);
+  // Sibling offset and plate margin are the same prefix sums the panels draw:
+  // a fresh start keeps sum-of-panels and plate margin equal frame by frame.
+  expect(rights[1]).toBeCloseTo(widths[0], 0);
+  expect(margin).toBeCloseTo(widths[0] + widths[1] + 8, 0);
+  expect(runningTransition(terminal, "width")).toBeUndefined();
+});
+
+it("keeps the joint freeze for reversals and concurrent docks", async () => {
+  const terminal = new TerminalMotionDock();
+  await mount(terminal);
+  terminal.dockLayout.setOpen(true);
+  await expect.poll(() => Boolean(runningTransition(terminal, "width"))).toBe(true);
+
+  // Reversal and a concurrent sibling both retarget consumers that are still
+  // drawing, so the joint freeze/restart must stay.
+  const reversal = await withRetargetWatch(async () => {
+    terminal.dockLayout.setOpen(false);
+    terminal.dockLayout.setOpen(true);
+    await expect.poll(() => eventsFor("terminal").length).toBe(1);
+  });
+  expect(reversal.frozen).toBe(true);
+
+  const browser = new BrowserMotionDock();
+  await mount(browser);
+  const concurrent = await withRetargetWatch(async () => {
+    browser.dockLayout.setOpen(true);
+    await expect.poll(() => Boolean(runningTransition(browser, "width"))).toBe(true);
+  });
+  expect(concurrent.frozen).toBe(true);
+
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+  pauseDockMotionAt([terminal, browser], 100);
+  const { margin, widths } = drawnDockGeometry([terminal, browser]);
+  // A sibling mounted mid-motion has no drawn offset to ease from; the plate
+  // margin is still the sum of the drawn panels plus its inset.
+  expect(margin).toBeCloseTo(widths[0] + widths[1] + 8, 0);
+});
+
+it("starts a local width transition when a settled dock closes", async () => {
+  const dock = new TerminalMotionDock();
+  await mount(dock);
+  dock.dockLayout.setOpen(true);
+  await expect.poll(() => Boolean(runningTransition(dock, "width"))).toBe(true);
+  await new Promise<void>((resolve) => {
+    for (const animation of panelOf(dock)?.getAnimations() ?? []) {
+      animation.finish();
+    }
+    for (const animation of shell.getAnimations()) {
+      animation.finish();
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+  await expect
+    .poll(() => panelOf(dock)?.getBoundingClientRect().width)
+    .toBeCloseTo(dock.dockLayout.width, 0);
+
+  dock.dockLayout.setOpen(false);
+  await expect.poll(() => Boolean(runningTransition(dock, "width"))).toBe(true);
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+  const width = runningTransition(dock, "width");
+  const margin = shell
+    .getAnimations()
+    .find(
+      (animation): animation is CSSTransition =>
+        animation instanceof CSSTransition && animation.transitionProperty === "margin-right",
+    );
+  expect(width, "closing width transition").toBeTruthy();
+  expect(width?.startTime, "closing width start time").not.toBeNull();
+  expect(margin?.startTime, "closing margin start time").not.toBeNull();
+  expect(width?.startTime).toBe(margin?.startTime);
+});

@@ -26,7 +26,10 @@ export async function readDesktopShellGeometry(page: Page) {
       shellRight: shell.getBoundingClientRect().right,
       shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
       contentRight: content.getBoundingClientRect().right,
-      reserveRight: document.documentElement.style.getPropertyValue("--oc-desktop-reserve-right"),
+      reserveRight:
+        document
+          .querySelector<HTMLElement>(".shell")
+          ?.style.getPropertyValue("--oc-desktop-reserve-right") ?? "",
     } satisfies DesktopShellGeometry;
   });
 }

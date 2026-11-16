@@ -149,13 +149,14 @@ export class TranscriptViewportRect {
     // The host supplies only the header height already compensated by its render.
     syncScrollMargin(instance, scrollMargin);
     callback(rect);
-    if (widthChanged) {
+    if (settled) {
+      // The settle frame already carries the unmount/layout of the gesture, so
+      // the rewrapped rows are measured in the queued scan that follows it; a
+      // synchronous scan here stacks another forced layout into that frame.
+      this.owner.queueRowMeasure();
+    } else if (widthChanged) {
       // Preserve offscreen estimates; connected resizeItem measurements own scroll compensation.
       this.owner.measureConnectedRows();
-      this.owner.queueRowMeasure();
-    } else if (settled) {
-      // A pane that mounted mid-motion kept its estimated row sizes; the settled
-      // width gets one deferred scan even when the box matches its last value.
       this.owner.queueRowMeasure();
     }
     this.owner.positionRail.sync(railGeometry);

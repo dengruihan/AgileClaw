@@ -1,6 +1,7 @@
 import { measureElement, type Virtualizer } from "@tanstack/virtual-core";
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { captureChatSessionScrollPosition, type ChatSessionScrollPosition } from "../scroll.ts";
+import { isShellGeometryMotionActive } from "./chat-transcript-motion.ts";
 import type { TranscriptViewportMeasurement } from "./chat-transcript-scroll-events.ts";
 
 export const POSITION_RAIL_MARKER_HEIGHT = 12;
@@ -296,6 +297,12 @@ export class PositionRailGutterController implements ReactiveController {
   }
 
   sync(geometry = this.read()): void {
+    // The rail's own columns are measured by its ResizeObserver on every eased
+    // frame; writing the inherited width var there restyles the whole transcript
+    // subtree. The settle delivery reconciles the rail once.
+    if (isShellGeometryMotionActive()) {
+      return;
+    }
     if (!geometry) {
       return;
     }

@@ -369,9 +369,11 @@ export class ChatSessionVirtualizerHost implements ReactiveControllerHost, ChatT
     }
     applyPendingScrollOffset(this.scrollRestoreHost);
     // Disclosure measurement owns this commit; its sizer lands on the next update.
+    // A shell gesture owns the intermediate widths: the end reconcile would
+    // otherwise re-follow every eased frame and re-enter this update.
     if (interactionResizePending) {
       this.endAnchor.cancelReconcile();
-    } else if (this.connected) {
+    } else if (this.connected && !this.motion.motionActive) {
       this.endAnchor.scheduleReconcile(() => {
         if (this.connected && !this.offsetState.pendingInteractionAnchor) {
           this.commitComposerResize(true);

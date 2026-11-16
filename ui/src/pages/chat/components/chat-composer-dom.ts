@@ -1,4 +1,8 @@
 import { captureChatSessionScrollPosition } from "../scroll.ts";
+import {
+  isShellGeometryMotionActive,
+  subscribeShellGeometryMotion,
+} from "./chat-transcript-motion.ts";
 import { publishTranscriptScroll } from "./chat-transcript-scroll-events.ts";
 
 const COMPOSER_CHROME_INTERACTIVE_SELECTOR = [
@@ -31,6 +35,9 @@ type ComposerPopoverAnchorObserverState = {
   toggleObserver: MutationObserver | null;
   viewport: VisualViewport | null;
   updateFrame: number | null;
+  /** The gesture held a maintenance measurement; one update is owed at settle. */
+  owedAfterGesture: boolean;
+  detachMotion: (() => void) | null;
   scheduleUpdate: () => void;
 };
 
@@ -73,24 +80,41 @@ function observeComposerPopoverAnchor(el: HTMLElement) {
     toggleObserver: null,
     viewport,
     updateFrame: null,
+    owedAfterGesture: false,
+    detachMotion: null,
     scheduleUpdate: () => {
       if (state.updateFrame !== null) {
         return;
       }
       state.updateFrame = requestAnimationFrame(() => {
         state.updateFrame = null;
-        if (composerPopoverAnchorObservers.get(el) === state) {
-          updateComposerPopoverAnchor(el);
+        if (composerPopoverAnchorObservers.get(el) !== state) {
+          return;
         }
+        // The composer box moves with every eased frame of a shell gesture;
+        // measuring it there forces a layout per frame. The update is owed
+        // once, when the gesture settles.
+        if (isShellGeometryMotionActive()) {
+          state.owedAfterGesture = true;
+          return;
+        }
+        updateComposerPopoverAnchor(el);
       });
     },
+  };
+  // A menu the reader opens needs usable geometry in this frame, even while the
+  // column still eases; the settle update corrects it once the box is final.
+  const updateForOpenIntent = () => {
+    updateComposerPopoverAnchor(el);
+    state.owedAfterGesture ||= isShellGeometryMotionActive();
   };
   if (typeof ResizeObserver === "function") {
     state.resizeObserver = new ResizeObserver(state.scheduleUpdate);
     state.resizeObserver.observe(el);
   }
   if (typeof MutationObserver === "function") {
-    state.toggleObserver = new MutationObserver(state.scheduleUpdate);
+    // The menu's own `open` toggle is reader intent, not maintenance geometry.
+    state.toggleObserver = new MutationObserver(updateForOpenIntent);
     state.toggleObserver.observe(el, {
       attributes: true,
       attributeFilter: ["open"],
@@ -100,8 +124,19 @@ function observeComposerPopoverAnchor(el: HTMLElement) {
   window.addEventListener("resize", state.scheduleUpdate);
   viewport?.addEventListener("resize", state.scheduleUpdate);
   viewport?.addEventListener("scroll", state.scheduleUpdate);
+  state.detachMotion = subscribeShellGeometryMotion((active) => {
+    if (active || !state.owedAfterGesture) {
+      return;
+    }
+    state.owedAfterGesture = false;
+    if (composerPopoverAnchorObservers.get(el) === state) {
+      updateComposerPopoverAnchor(el);
+    }
+  });
   composerPopoverAnchorObservers.set(el, state);
-  updateComposerPopoverAnchor(el);
+  // The first measurement stays out of the task that inserts the composer: it
+  // forces a layout of the freshly committed subtree.
+  state.scheduleUpdate();
 }
 
 export function disconnectComposerPopoverAnchorObserver(el: HTMLElement) {
@@ -112,6 +147,9 @@ export function disconnectComposerPopoverAnchorObserver(el: HTMLElement) {
   }
   state.resizeObserver?.disconnect();
   state.toggleObserver?.disconnect();
+  state.detachMotion?.();
+  state.detachMotion = null;
+  state.owedAfterGesture = false;
   window.removeEventListener("resize", state.scheduleUpdate);
   state.viewport?.removeEventListener("resize", state.scheduleUpdate);
   state.viewport?.removeEventListener("scroll", state.scheduleUpdate);

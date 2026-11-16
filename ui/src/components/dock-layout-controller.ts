@@ -7,6 +7,7 @@ import {
 } from "lit";
 import type { DockPanelLayoutStore, DockPanelPlacement } from "./dock-panel-layout.ts";
 import {
+  applyRightDockReservations,
   beginRightDockMotion,
   endRightDockMotion,
   ensureRightDockMotionReady,
@@ -105,6 +106,11 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
     }
     ensureRightDockMotionReady();
     this.syncReservation();
+  }
+
+  hostUpdated(): void {
+    // Covers every path that mounts a panel after its target was written.
+    applyRightDockReservations();
   }
 
   hostDisconnected(): void {
@@ -253,6 +259,9 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
         false,
       );
     }
+    // A panel that mounted after the target was written needs the values on
+    // itself; this owner is where instant/settled reservations land.
+    applyRightDockReservations();
   }
 
   private resize(event: CustomEvent<{ splitRatio: number }>): void {
@@ -347,6 +356,8 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
       // panel, sibling, and shell margin transitions share one start time.
       const panel = this.options.panelElement?.();
       if (panel instanceof HTMLElement) {
+        // The freshly mounted panel reads its reservation from its own style.
+        applyRightDockReservations();
         void panel.getBoundingClientRect();
       }
       this.motionStartWidthPx = undefined;
@@ -448,7 +459,7 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
     setRightDockWidth(this.options.reservationPrefix, 0, false);
     const root = document.documentElement.style;
     root.setProperty(`--oc-${this.options.reservationPrefix}-reserve-bottom`, "0px");
-    root.setProperty(`--oc-${this.options.reservationPrefix}-reserve-right`, "0px");
+    root.removeProperty(`--oc-${this.options.reservationPrefix}-reserve-right`);
   }
 
   // Only a standalone dock owns its panel's viewport reservation. Embedded, fullscreen,

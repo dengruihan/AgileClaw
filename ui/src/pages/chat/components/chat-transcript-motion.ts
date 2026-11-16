@@ -64,7 +64,11 @@ function notifyIfChanged(): void {
   }
 }
 
-/** Tracks gestures for the lifetime of the module: consumers come and go. */
+/**
+ * Tracks gestures for the lifetime of the module: consumers come and go, and a
+ * consumer that only reads the state (a composer anchor update, a layout owner)
+ * must still see a gesture it never subscribed to.
+ */
 function install(): void {
   if (installed || typeof document === "undefined") {
     return;
@@ -291,3 +295,5 @@ export class TranscriptMotionQuiesce {
     });
   }
 }
+
+install();

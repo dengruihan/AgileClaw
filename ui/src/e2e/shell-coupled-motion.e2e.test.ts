@@ -385,12 +385,16 @@ async function readRightDockWidth(page: Page): Promise<number> {
 /** Transition start times resolve at the first rendering update after the
  * transitions are created; reading them in the creating task sees null. */
 async function settleTransitionStartTimes(page: Page): Promise<void> {
-  await page.evaluate(
-    () =>
-      new Promise((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(resolve));
-      }),
-  );
+  // Start times resolve at the first rendering update after the transitions are
+  // created, so wait for the live clocks instead of a fixed frame count.
+  await expect
+    .poll(async () => {
+      const clocks = await readRightDock(page);
+      return (
+        clocks.widthTransition.startTime !== null && clocks.marginTransition.startTime !== null
+      );
+    })
+    .toBe(true);
 }
 
 async function waitForDockTransition(page: Page): Promise<void> {
@@ -690,8 +694,11 @@ suite.define(() => {
           )
           .toBe(true);
         expect(
-          await page.evaluate(() =>
-            document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
+          await page.evaluate(
+            () =>
+              document
+                .querySelector<HTMLElement>(".shell")
+                ?.style.getPropertyValue("--oc-terminal-reserve-right") ?? "",
           ),
         ).toBe("0px");
 
@@ -1065,8 +1072,11 @@ suite.define(() => {
           )
           .toBe(true);
         expect(
-          await page.evaluate(() =>
-            document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
+          await page.evaluate(
+            () =>
+              document
+                .querySelector<HTMLElement>(".shell")
+                ?.style.getPropertyValue("--oc-terminal-reserve-right") ?? "",
           ),
         ).toBe("0px");
 

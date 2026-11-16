@@ -15,8 +15,7 @@ import "./assistant-panel.ts";
 import "./assistant-panel-content.ts";
 import { beginRightDockMotion, endRightDockMotion } from "./right-dock-motion.ts";
 
-// mock-isolation: this file owns the dock's lazy load/mount timing, not the
-// session runtime; a stub element keeps the jsdom graph out of it.
+// mock-isolation: the dock's load/mount timing is this file's subject, not the runtime.
 vi.mock("./assistant-session.runtime.ts", () => {
   if (!customElements.get("openclaw-assistant-session")) {
     customElements.define("openclaw-assistant-session", class extends HTMLElement {});
