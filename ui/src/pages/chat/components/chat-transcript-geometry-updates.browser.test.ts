@@ -8,6 +8,7 @@ import "../../../styles/chat.ts";
 import { createMountedPanes } from "../chat-pane-mounted.test-support.ts";
 import { ChatPane } from "../chat-pane-render.ts";
 import { saveChatSessionScrollPosition } from "../scroll.ts";
+import { SIDEBAR_GEOMETRY_COMMIT_EVENT } from "../sidebar-layout.ts";
 import type { TranscriptRow } from "./chat-transcript-layout.ts";
 import { subscribeTranscriptScroll } from "./chat-transcript-scroll-events.ts";
 import { ChatSessionVirtualizerHost } from "./chat-transcript-virtualizer-host.ts";
@@ -289,6 +290,91 @@ it("holds row measurement for a shell gesture and reconciles the settled width o
   // One settle reconcile re-measures the rewrapped rows at the final width.
   await expect.poll(totalSize).not.toBe(settledTotal);
   expect(thread.scrollWidth).toBeLessThanOrEqual(thread.clientWidth + 1);
+});
+
+it("lets a newer rail fact win over a staged settle write", async () => {
+  const { host, viewport } = await mountPane();
+  const slot = expectDefined(viewport.parentElement, "viewport slot");
+  const column = () => viewport.style.getPropertyValue("--chat-transcript-column-width");
+  await settleLayout();
+  const atRest = column();
+  expect(atRest).not.toBe("");
+
+  beginRightDockMotion("assistant", "opening");
+  try {
+    slot.style.width = "600px";
+    await settleLayout();
+  } finally {
+    endRightDockMotion("assistant");
+  }
+  // The settle delivery runs in this frame and stages the rail write.
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+
+  // A newer geometry fact: the column narrows and the host commits its
+  // geometry, which syncs the rail immediately.
+  slot.style.width = "500px";
+  void host.getBoundingClientRect();
+  host.dispatchEvent(
+    new CustomEvent(SIDEBAR_GEOMETRY_COMMIT_EVENT, { detail: { widthChanged: true } }),
+  );
+  expect(column()).not.toBe(atRest);
+
+  // The staged frame must not publish the older settle geometry over the newer
+  // one: a fresh production sync is the ground truth for the same frame.
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+  const afterStaged = column();
+  host.dispatchEvent(
+    new CustomEvent(SIDEBAR_GEOMETRY_COMMIT_EVENT, { detail: { widthChanged: true } }),
+  );
+  expect(afterStaged).toBe(column());
+});
+
+it("cancels a staged rail write when a replacement motion starts", async () => {
+  const { viewport } = await mountPane();
+  const slot = expectDefined(viewport.parentElement, "viewport slot");
+  const column = () => viewport.style.getPropertyValue("--chat-transcript-column-width");
+  await settleLayout();
+  const atRest = column();
+
+  beginRightDockMotion("assistant", "opening");
+  try {
+    slot.style.width = "600px";
+    await settleLayout();
+  } finally {
+    endRightDockMotion("assistant");
+  }
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+
+  // The replacement owns a fresh window: the staged write is void.
+  beginRightDockMotion("assistant", "closing");
+  try {
+    slot.style.width = "450px";
+    await settleLayout();
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+    expect(column()).toBe(atRest);
+  } finally {
+    endRightDockMotion("assistant");
+  }
+  await expect.poll(column).not.toBe(atRest);
+  const settledColumn = column();
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+  expect(column()).toBe(settledColumn);
 });
 
 it("writes the settled rail geometry one frame after the settle delivery", async () => {

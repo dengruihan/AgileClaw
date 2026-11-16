@@ -67,11 +67,11 @@ suite.define(() => {
             (element) =>
               element.style.getPropertyValue("--chat-composer-popover-max-height") !== "",
           );
-          const anchorReads: Array<{ animating: boolean }> = [];
+          const anchorReads: Array<{ animating: boolean; at: number }> = [];
           const anchorRect = anchorElement?.getBoundingClientRect.bind(anchorElement);
           if (anchorElement && anchorRect) {
             anchorElement.getBoundingClientRect = () => {
-              anchorReads.push({ animating: railAnimating() });
+              anchorReads.push({ animating: railAnimating(), at: Math.round(performance.now()) });
               return anchorRect();
             };
           }
@@ -164,7 +164,11 @@ suite.define(() => {
           JSON.stringify(result.anchorReads),
         ).toEqual([]);
         // The single settle reconciled afterwards and left the rail on drawn geometry.
-        expect(result.anchorReads.length).toBeGreaterThan(0);
+        // The final settle performs exactly one maintenance measurement.
+        expect(
+          result.anchorReads.filter((read) => !read.animating),
+          JSON.stringify(result.anchorReads),
+        ).toHaveLength(1);
         expect(
           Math.abs(Number.parseFloat(result.samples.at(-1)?.rail ?? "") - result.innerWidth),
         ).toBeLessThanOrEqual(1);

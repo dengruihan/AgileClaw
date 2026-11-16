@@ -69,10 +69,13 @@ describe("composer popover anchor during shell motion", () => {
       clock.flush();
       expect(probe.reads()).toBe(0);
 
+      // The settle is one delivery through the queued frame, not a second
+      // synchronous read next to a pending frame.
       endRightDockMotion("assistant");
+      expect(probe.reads()).toBe(0);
+      clock.flush();
       expect(probe.reads()).toBe(1);
       expect(probe.height()).toBe(`${300 - VIEWPORT_INSET_PX}px`);
-      // The settle update is the only one owed; later frames stay idle.
       clock.flush();
       expect(probe.reads()).toBe(1);
     } finally {
@@ -101,9 +104,45 @@ describe("composer popover anchor during shell motion", () => {
       expect(probe.height()).toBe(`${320 - VIEWPORT_INSET_PX}px`);
 
       top = 280;
+      // The intent read cancels the queued maintenance frame; the settle is one
+      // further delivery, so the same gesture measures the final box once.
       endRightDockMotion("assistant");
+      expect(probe.reads()).toBe(1);
+      clock.flush();
       expect(probe.reads()).toBe(2);
       expect(probe.height()).toBe(`${280 - VIEWPORT_INSET_PX}px`);
+      clock.flush();
+      expect(probe.reads()).toBe(2);
+    } finally {
+      replaceComposerPopoverAnchor(anchor);
+    }
+  });
+
+  it("delivers the settle once when a maintenance frame is already queued", () => {
+    const clock = frameClock();
+    let top = 500;
+    const probe = composerAt(() => top);
+    beginRightDockMotion("assistant", "opening");
+    const anchor = replaceComposerPopoverAnchor(null, probe.composer);
+    try {
+      clock.flush();
+      expect(probe.reads()).toBe(0);
+
+      // A resize queues the maintenance frame; the gesture gate holds it and
+      // records the owed measurement.
+      window.dispatchEvent(new Event("resize"));
+      clock.flush();
+      expect(probe.reads()).toBe(0);
+
+      // The settle reuses that frame instead of reading synchronously beside it.
+      top = 300;
+      endRightDockMotion("assistant");
+      expect(probe.reads()).toBe(0);
+      clock.flush();
+      expect(probe.reads()).toBe(1);
+      expect(probe.height()).toBe(`${300 - VIEWPORT_INSET_PX}px`);
+      clock.flush();
+      expect(probe.reads()).toBe(1);
     } finally {
       replaceComposerPopoverAnchor(anchor);
     }

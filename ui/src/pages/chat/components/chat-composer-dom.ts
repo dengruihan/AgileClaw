@@ -37,6 +37,8 @@ type ComposerPopoverAnchorObserverState = {
   updateFrame: number | null;
   /** The gesture held a maintenance measurement; one update is owed at settle. */
   owedAfterGesture: boolean;
+  /** The box the last delivery measured; its own RO notification is not new. */
+  measuredBox: { height: number; width: number } | null;
   detachMotion: (() => void) | null;
   scheduleUpdate: () => void;
 };
@@ -62,12 +64,13 @@ function hasNativeTextareaContentSizing(el: HTMLTextAreaElement) {
   );
 }
 
-function updateComposerPopoverAnchor(el: HTMLElement) {
+function updateComposerPopoverAnchor(el: HTMLElement): { height: number; width: number } {
   const viewport = window.visualViewport;
   const viewportTop = viewport?.offsetTop ?? 0;
-  const composerTop = el.getBoundingClientRect().top;
-  const maxHeight = composerTop - viewportTop - COMPOSER_POPOVER_VIEWPORT_INSET_PX;
+  const rect = el.getBoundingClientRect();
+  const maxHeight = rect.top - viewportTop - COMPOSER_POPOVER_VIEWPORT_INSET_PX;
   el.style.setProperty("--chat-composer-popover-max-height", `${Math.max(0, maxHeight)}px`);
+  return { height: rect.height, width: rect.width };
 }
 
 function observeComposerPopoverAnchor(el: HTMLElement) {
@@ -81,6 +84,7 @@ function observeComposerPopoverAnchor(el: HTMLElement) {
     viewport,
     updateFrame: null,
     owedAfterGesture: false,
+    measuredBox: null,
     detachMotion: null,
     scheduleUpdate: () => {
       if (state.updateFrame !== null) {
@@ -98,18 +102,41 @@ function observeComposerPopoverAnchor(el: HTMLElement) {
           state.owedAfterGesture = true;
           return;
         }
-        updateComposerPopoverAnchor(el);
+        state.owedAfterGesture = false;
+        // ResizeObserver deliveries for this same layout arrive after the frame
+        // callbacks; the box recorded here covers them.
+        state.measuredBox = updateComposerPopoverAnchor(el);
       });
     },
   };
   // A menu the reader opens needs usable geometry in this frame, even while the
   // column still eases; the settle update corrects it once the box is final.
+  // The intent read supersedes a queued maintenance frame instead of letting it
+  // measure the same geometry again a frame later.
   const updateForOpenIntent = () => {
-    updateComposerPopoverAnchor(el);
-    state.owedAfterGesture ||= isShellGeometryMotionActive();
+    state.measuredBox = updateComposerPopoverAnchor(el);
+    state.owedAfterGesture = isShellGeometryMotionActive();
+    if (state.updateFrame !== null) {
+      cancelAnimationFrame(state.updateFrame);
+      state.updateFrame = null;
+    }
   };
   if (typeof ResizeObserver === "function") {
-    state.resizeObserver = new ResizeObserver(state.scheduleUpdate);
+    state.resizeObserver = new ResizeObserver((entries) => {
+      const box = entries.at(-1)?.borderBoxSize?.[0];
+      const measured = state.measuredBox;
+      if (
+        box &&
+        measured &&
+        !state.owedAfterGesture &&
+        Math.abs(box.inlineSize - measured.width) < 0.5 &&
+        Math.abs(box.blockSize - measured.height) < 0.5
+      ) {
+        // The notification belongs to the box the last delivery measured.
+        return;
+      }
+      state.scheduleUpdate();
+    });
     state.resizeObserver.observe(el);
   }
   if (typeof MutationObserver === "function") {
@@ -128,10 +155,12 @@ function observeComposerPopoverAnchor(el: HTMLElement) {
     if (active || !state.owedAfterGesture) {
       return;
     }
-    state.owedAfterGesture = false;
-    if (composerPopoverAnchorObservers.get(el) === state) {
-      updateComposerPopoverAnchor(el);
+    if (composerPopoverAnchorObservers.get(el) !== state) {
+      return;
     }
+    // One delivery per gesture: reuse the frame a resize already queued, or
+    // queue the single settle frame. The frame clears the owed measurement.
+    state.scheduleUpdate();
   });
   composerPopoverAnchorObservers.set(el, state);
   // The first measurement stays out of the task that inserts the composer: it
