@@ -33,12 +33,19 @@ export async function readDesktopShellGeometry(page: Page) {
 
 export async function readDesktopDockTransition(page: Page) {
   return page.evaluate(() => {
-    const style = getComputedStyle(document.documentElement);
+    const panel = document
+      .querySelector("openclaw-desktop-panel")
+      ?.shadowRoot?.querySelector<HTMLElement>(".bp");
+    if (!panel) {
+      return { durationMs: null, easing: "" };
+    }
+    // The desktop width clock is a local transition on the panel element.
+    const style = getComputedStyle(panel);
     const properties = style.transitionProperty.split(",").map((value) => value.trim());
     const durations = style.transitionDuration.split(",").map((value) => value.trim());
     const easings =
       style.transitionTimingFunction.match(/cubic-bezier\([^)]*\)|steps\([^)]*\)|[a-z-]+/g) ?? [];
-    const index = properties.indexOf("--oc-desktop-reserve-right");
+    const index = properties.indexOf("width");
     const duration = index >= 0 ? Number.parseFloat(durations[index] ?? "") : Number.NaN;
     return {
       durationMs: Number.isFinite(duration) ? duration * 1000 : null,
@@ -48,63 +55,63 @@ export async function readDesktopDockTransition(page: Page) {
 }
 
 export async function hasDesktopDockWidthTransition(page: Page) {
-  return page.evaluate(() =>
-    document.documentElement
-      .getAnimations()
-      .some(
-        (animation) =>
-          animation instanceof CSSTransition &&
-          animation.transitionProperty === "--oc-desktop-reserve-right",
-      ),
+  return page.evaluate(
+    () =>
+      document
+        .querySelector("openclaw-desktop-panel")
+        ?.shadowRoot?.querySelector<HTMLElement>(".bp")
+        ?.getAnimations()
+        .some(
+          (animation) =>
+            animation instanceof CSSTransition &&
+            animation.transitionProperty === "width" &&
+            animation.playState === "running",
+        ) ?? false,
   );
 }
 
 export async function holdDesktopDockTransitions(page: Page, atMs: number): Promise<number> {
   return page.evaluate((time) => {
-    const root = document.documentElement;
+    const shell = document.querySelector<HTMLElement>(".shell");
     const panel = document
       .querySelector("openclaw-desktop-panel")
       ?.shadowRoot?.querySelector<HTMLElement>(".bp");
     let held = 0;
-    for (const animation of root.getAnimations()) {
-      if (
-        animation instanceof CSSTransition &&
-        animation.transitionProperty === "--oc-desktop-reserve-right"
-      ) {
-        animation.pause();
-        animation.currentTime = time;
-        held += 1;
+    const hold = (element: Element | null | undefined, properties: string[]) => {
+      for (const animation of element?.getAnimations() ?? []) {
+        if (
+          animation instanceof CSSTransition &&
+          properties.includes(animation.transitionProperty)
+        ) {
+          animation.pause();
+          animation.currentTime = time;
+          held += 1;
+        }
       }
-    }
-    for (const animation of panel?.getAnimations() ?? []) {
-      if (animation instanceof CSSTransition && animation.transitionProperty === "opacity") {
-        animation.pause();
-        animation.currentTime = time;
-        held += 1;
-      }
-    }
+    };
+    hold(panel, ["width", "opacity"]);
+    hold(shell, ["margin-right"]);
     return held;
   }, atMs);
 }
 
 export async function finishDesktopDockTransitions(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const root = document.documentElement;
+    const shell = document.querySelector<HTMLElement>(".shell");
     const panel = document
       .querySelector("openclaw-desktop-panel")
       ?.shadowRoot?.querySelector<HTMLElement>(".bp");
-    for (const animation of root.getAnimations()) {
-      if (
-        animation instanceof CSSTransition &&
-        animation.transitionProperty === "--oc-desktop-reserve-right"
-      ) {
-        animation.finish();
+    const finish = (element: Element | null | undefined, properties: string[]) => {
+      for (const animation of element?.getAnimations() ?? []) {
+        if (
+          animation instanceof CSSTransition &&
+          properties.includes(animation.transitionProperty)
+        ) {
+          animation.finish();
+        }
       }
-    }
-    for (const animation of panel?.getAnimations() ?? []) {
-      if (animation instanceof CSSTransition && animation.transitionProperty === "opacity") {
-        animation.finish();
-      }
-    }
+    };
+    finish(panel, ["width", "opacity"]);
+    finish(shell, ["margin-right"]);
   });
 }

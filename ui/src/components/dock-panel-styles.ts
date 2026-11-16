@@ -22,9 +22,15 @@ export const dockPanelStyles = css`
     flex-direction: column;
     background: var(--bg, #0e1015);
     overflow: hidden;
-    /* ZCode side pane opacity. Width, sibling offsets, and the plate margin are
-       derived from the shared registered reservation widths. */
-    transition: opacity var(--shell-motion-duration) var(--shell-motion-ease);
+    /* ZCode side pane motion: opacity plus local width/right transitions on
+       the shared static dock clock. Every consumer reads the same static
+       reservation targets, so panel width, sibling offsets, and the plate
+       margin ease in one synchronized frame without an inherited animated
+       property. */
+    transition:
+      opacity var(--shell-motion-duration) var(--shell-motion-ease),
+      width var(--oc-dock-motion-duration) var(--shell-motion-ease),
+      right var(--oc-dock-motion-duration) var(--shell-motion-ease);
   }
   :is(.bp, .tp).dock-panel--motion-hidden {
     opacity: 0;
@@ -40,11 +46,12 @@ export const dockPanelStyles = css`
     min-height: 0;
     flex-direction: column;
   }
-  /* Bottom and main docks follow the navigation width on the shell clock.
-     Right-dock offsets follow the shared registered widths instead. */
+  /* Bottom and main docks follow the navigation width on the shell clock and
+     sibling right-dock offsets on the shared dock clock. */
   :where(.bp, .tp):is(.bp--bottom, .tp--bottom, .tp--main) {
     transition:
       left var(--shell-motion-duration) var(--shell-motion-ease),
+      right var(--oc-dock-motion-duration) var(--shell-motion-ease),
       opacity var(--shell-motion-duration) var(--shell-motion-ease);
   }
   @media (prefers-reduced-motion: reduce) {

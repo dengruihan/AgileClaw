@@ -7,8 +7,10 @@ import {
 } from "lit";
 import type { DockPanelLayoutStore, DockPanelPlacement } from "./dock-panel-layout.ts";
 import {
+  beginRightDockMotion,
+  endRightDockMotion,
   ensureRightDockMotionReady,
-  retargetRightDockMotion,
+  registerRightDockPanel,
   setRightDockWidth,
 } from "./right-dock-motion.ts";
 import "./resizable-divider.ts";
@@ -37,10 +39,11 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
   private persistedOpen = false;
   private motionDirection: "opening" | "closing" | undefined;
   private motionContentWidthPx: number | undefined;
+  private motionStartWidthPx: number | undefined;
   private motionHidden = false;
-  private motionFrame: number | undefined;
   private motionGeneration = 0;
   private hasHandledInitialVisibility = false;
+  private unregisterPanel: (() => void) | undefined;
   private readonly onViewportResize = () => {
     const height = Math.min(this.height, this.options.layout.maxHeight());
     const width = Math.min(this.width, this.maxWidth());
@@ -52,8 +55,9 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
     this.width = width;
     if (widthChanged && this.motionDirection) {
       // Native window resize never animates. Move the shared target and the
-      // temporary content width to the clamped size at once and restart the
-      // motion watch on the surviving opacity transition.
+      // temporary content width to the clamped size at once (every consumer
+      // snaps together) and restart the motion watch on the surviving
+      // transitions.
       this.motionContentWidthPx = width;
       setRightDockWidth(
         this.options.reservationPrefix,
@@ -93,12 +97,20 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
     this.height = layout.height;
     this.width = Math.min(layout.width, this.maxWidth());
     window.addEventListener("resize", this.onViewportResize);
+    if (this.options.panelElement) {
+      this.unregisterPanel = registerRightDockPanel(
+        this.options.reservationPrefix,
+        this.options.panelElement,
+      );
+    }
     ensureRightDockMotionReady();
     this.syncReservation();
   }
 
   hostDisconnected(): void {
     window.removeEventListener("resize", this.onViewportResize);
+    this.unregisterPanel?.();
+    this.unregisterPanel = undefined;
     this.cancelMotion();
     this.clearReservation();
   }
@@ -119,14 +131,19 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
 
   /**
    * The inline size for a right/bottom dock. Right widths resolve from the
-   * shared registered reservation width, so the panel frame, following dock
-   * offsets, and shell margin all read the same animated value. During motion
-   * the content keeps the target width (ZCode's temporary
-   * `--side-pane-content-width`).
+   * shared static reservation target; the panel's local width transition,
+   * following dock offsets, and the shell margin all ease toward that same
+   * target on one clock. A freshly opening panel mounts at an explicit start
+   * width for one committed style so its local width transition has a
+   * before-change frame. During motion the content keeps the target width
+   * (ZCode's temporary `--side-pane-content-width`).
    */
   panelStyle(dock: "bottom" | "right", height: number, width: number): string {
     if (dock === "bottom") {
       return `height:${height}px`;
+    }
+    if (this.motionStartWidthPx !== undefined) {
+      return `width:${this.motionStartWidthPx}px;--oc-dock-content-width:${this.motionContentWidthPx ?? width}px`;
     }
     const panelWidth = `var(--oc-${this.options.reservationPrefix}-reserve-right, ${width}px)`;
     if (this.motionDirection) {
@@ -305,13 +322,17 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
       this.retargetMotion(opening, generation, width);
       return;
     }
-    this.cancelMotionFrame();
     this.motionDirection = opening ? "opening" : "closing";
     this.motionContentWidthPx = width;
     this.motionHidden = true;
-    // One registered width drives this dock, its following siblings, and the
-    // shell margin. CSS transitions it on the ZCode clock.
+    // A fresh panel mounts at zero width so its local width transition has a
+    // committed before-change frame; a closing panel is already drawn.
+    this.motionStartWidthPx = opening ? 0 : undefined;
+    // One static target drives this dock's local width transition, its
+    // following siblings' right offsets, and the shell margin — all on the
+    // shared ZCode clock, started in this same style-change frame.
     setRightDockWidth(this.options.reservationPrefix, opening ? width : 0, true);
+    beginRightDockMotion(this.options.reservationPrefix, this.motionDirection);
     this.host.requestUpdate();
     void this.host.updateComplete.then(() => {
       if (generation !== this.motionGeneration) {
@@ -321,32 +342,35 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
         this.watchMotion(generation);
         return;
       }
-      // A fresh panel mounts with the hidden class so its opacity fades in.
-      this.motionFrame = window.requestAnimationFrame(() => {
-        this.motionFrame = undefined;
-        if (generation !== this.motionGeneration) {
-          return;
-        }
-        this.motionHidden = false;
-        this.host.requestUpdate();
-        void this.host.updateComplete.then(() => this.watchMotion(generation));
-      });
+      // Commit the hidden zero-width first style, then release width and
+      // opacity together. Everything happens before the next paint, so the
+      // panel, sibling, and shell margin transitions share one start time.
+      const panel = this.options.panelElement?.();
+      if (panel instanceof HTMLElement) {
+        void panel.getBoundingClientRect();
+      }
+      this.motionStartWidthPx = undefined;
+      this.motionHidden = false;
+      this.host.requestUpdate();
+      void this.host.updateComplete.then(() => this.watchMotion(generation));
     });
   }
 
   /**
    * A reversal updates this dock's target and asks the shared owner to freeze
-   * every registered right-dock width at its drawn value, then restart all of
-   * them to their latest targets in the same frame. Panel widths, sibling
-   * offsets, and the shell margin therefore continue on one clock.
+   * every consumer at its drawn geometry, then restart all of them toward
+   * their latest targets in the same frame. Panel widths, sibling offsets,
+   * and the shell margin therefore continue from the drawn frame on one
+   * fresh clock.
    */
   private retargetMotion(opening: boolean, generation: number, width: number): void {
-    this.cancelMotionFrame();
     this.motionDirection = opening ? "opening" : "closing";
     this.motionContentWidthPx = width;
+    this.motionStartWidthPx = undefined;
     this.motionHidden = !opening;
+    // The animated write restarts every consumer from its drawn geometry on
+    // one fresh shared clock (see setRightDockWidth).
     setRightDockWidth(this.options.reservationPrefix, opening ? width : 0, true);
-    retargetRightDockMotion();
     this.host.requestUpdate();
     void this.host.updateComplete.then(() => this.watchMotion(generation));
   }
@@ -356,22 +380,14 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
     if (typeof CSSTransition === "undefined") {
       return animations;
     }
-    const widthProperty = `--oc-${this.options.reservationPrefix}-reserve-right`;
-    for (const animation of document.documentElement.getAnimations()) {
-      if (
-        animation instanceof CSSTransition &&
-        animation.transitionProperty === widthProperty &&
-        animation.playState !== "finished" &&
-        animation.playState !== "idle"
-      ) {
-        animations.push(animation);
-      }
-    }
+    // The dock's motion lives in its panel's local width and opacity
+    // transitions (inside the shadow root for the operator docks). Sibling
+    // offsets and the shell margin run on the same shared clock.
     const element = this.options.panelElement?.();
     for (const animation of element?.getAnimations() ?? []) {
       if (
         animation instanceof CSSTransition &&
-        animation.transitionProperty === "opacity" &&
+        (animation.transitionProperty === "width" || animation.transitionProperty === "opacity") &&
         animation.playState !== "finished" &&
         animation.playState !== "idle"
       ) {
@@ -412,20 +428,16 @@ export class DockLayoutController<TDock extends DockPanelPlacement> implements R
 
   private cancelMotion(): void {
     this.motionGeneration += 1;
-    this.cancelMotionFrame();
     this.clearMotionState();
   }
 
-  private cancelMotionFrame(): void {
-    if (this.motionFrame !== undefined) {
-      window.cancelAnimationFrame(this.motionFrame);
-      this.motionFrame = undefined;
-    }
-  }
-
   private clearMotionState(): void {
+    if (this.motionDirection) {
+      endRightDockMotion(this.options.reservationPrefix);
+    }
     this.motionDirection = undefined;
     this.motionContentWidthPx = undefined;
+    this.motionStartWidthPx = undefined;
     this.motionHidden = false;
   }
 

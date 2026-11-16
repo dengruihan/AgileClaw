@@ -972,7 +972,8 @@ suite.define(() => {
 
         await panel.getByRole("button", { name: "Hide desktop panel" }).click();
         await expect.poll(() => hasDesktopDockWidthTransition(page)).toBe(true);
-        expect(await holdDesktopDockTransitions(page, 100)).toBeGreaterThanOrEqual(1);
+        // Width, opacity, and the plate margin all hold on one local clock.
+        expect(await holdDesktopDockTransitions(page, 100)).toBeGreaterThanOrEqual(3);
         const midClose = await readDesktopShellGeometry(page);
         expect(midClose.panelWidth).toBeGreaterThan(1);
         expect(midClose.panelWidth).toBeLessThan(expanded.panelWidth - 1);
@@ -1003,7 +1004,8 @@ suite.define(() => {
         // its first visible frame instead of overlaying it.
         await openDirectDesktop(page, "worker-desktop-1");
         await expect.poll(() => hasDesktopDockWidthTransition(page)).toBe(true);
-        expect(await holdDesktopDockTransitions(page, 100)).toBeGreaterThanOrEqual(1);
+        // Width, opacity, and the plate margin all hold on one local clock.
+        expect(await holdDesktopDockTransitions(page, 100)).toBeGreaterThanOrEqual(3);
         const midOpen = await readDesktopShellGeometry(page);
         expect(midOpen.panelWidth).toBeGreaterThan(1);
         expect(midOpen.panelWidth).toBeLessThan(expanded.panelWidth - 1);

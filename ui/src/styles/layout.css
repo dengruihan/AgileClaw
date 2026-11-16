@@ -6,61 +6,39 @@
 
 /* ZCode desktop shell motion (zai-org/ZCode fec975905a2, Apache-2.0):
    the left navigation and every right dock ease width + opacity for 200ms
-   `ease-out`; the main column, sibling dock offsets, and the plate margin are
-   all derived from the same animated right-dock widths. Tailwind's `ease-out`
-   utility computes to cubic-bezier(0, 0, 0.2, 1). */
-@property --oc-terminal-reserve-right {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --oc-browser-reserve-right {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --oc-desktop-reserve-right {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --oc-link-reader-reserve-right {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --oc-assistant-reserve-right {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
+   `ease-out`; the main column, sibling dock offsets, and the plate margin
+   follow the same right-dock widths. Tailwind's `ease-out` utility computes to
+   cubic-bezier(0, 0, 0.2, 1).
 
+   The `--oc-*-reserve-right` widths on html are STATIC shared targets set by
+   right-dock-motion.ts. Motion runs as local transitions on the actual
+   consumers — panel width, sibling right offsets, and the shell margin-right
+   below — which all read the same targets and the same static clock signal,
+   so they start in one frame and stay synchronized without an inherited
+   animated property restyling the whole tree every frame. */
 :root {
   --shell-motion-duration: 200ms;
   --shell-motion-ease: cubic-bezier(0, 0, 0.2, 1);
+  /* Static dock-motion clock consumed by the local width/right/margin
+     transitions: 0s until the first painted frame (restored docks snap on
+     boot), the shell motion duration while motion is live, and 0s for the
+     shared owner's one-flush retarget/snap writes. Never animated itself. */
+  --oc-dock-motion-duration: 0s;
 }
 
-/* Shared right-dock clock: one transition per dock width; panel width, sibling
-   offsets, and the shell margin all read the animated value. Enabled after the
-   first painted frame so restored docks do not animate on boot. */
 html.dock-motion-ready {
-  transition:
-    --oc-terminal-reserve-right var(--shell-motion-duration) var(--shell-motion-ease),
-    --oc-browser-reserve-right var(--shell-motion-duration) var(--shell-motion-ease),
-    --oc-desktop-reserve-right var(--shell-motion-duration) var(--shell-motion-ease),
-    --oc-link-reader-reserve-right var(--shell-motion-duration) var(--shell-motion-ease),
-    --oc-assistant-reserve-right var(--shell-motion-duration) var(--shell-motion-ease);
+  --oc-dock-motion-duration: var(--shell-motion-duration);
 }
 
-/* One flush with dock transitions off; a reversal restarts every registered
-   width from the drawn frame in the shared owner. */
+/* One flush with dock transitions off; a reversal restarts every consumer
+   from its drawn geometry in the shared owner. */
 html.dock-motion-retarget {
-  transition: none;
+  --oc-dock-motion-duration: 0s;
 }
 
 @media (prefers-reduced-motion: reduce) {
   html.dock-motion-ready {
-    transition: none;
+    --oc-dock-motion-duration: 0s;
   }
 }
 
@@ -138,7 +116,12 @@ html.dock-motion-retarget {
     "nav topbar"
     "nav content";
   gap: 0;
-  transition: grid-template-rows var(--shell-focus-duration) var(--shell-focus-ease);
+  /* The plate margin eases on the shared dock clock whenever a right-dock
+     reservation target changes, in the same frame as the panel width and
+     sibling offset transitions that read the same targets. */
+  transition:
+    grid-template-rows var(--shell-focus-duration) var(--shell-focus-ease),
+    margin-right var(--oc-dock-motion-duration) var(--shell-motion-ease);
   overflow: hidden;
 }
 
@@ -148,8 +131,21 @@ html.dock-motion-retarget {
 .shell:not(.shell--mobile-nav, .shell--embed) {
   transition:
     grid-template-rows var(--shell-focus-duration) var(--shell-focus-ease),
+    margin-right var(--oc-dock-motion-duration) var(--shell-motion-ease),
     height 0.16s ease,
     margin-bottom 0.16s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell {
+    transition: grid-template-rows var(--shell-focus-duration) var(--shell-focus-ease);
+  }
+  .shell:not(.shell--mobile-nav, .shell--embed) {
+    transition:
+      grid-template-rows var(--shell-focus-duration) var(--shell-focus-ease),
+      height 0.16s ease,
+      margin-bottom 0.16s ease;
+  }
 }
 
 .control-ui-environment-stripe {
