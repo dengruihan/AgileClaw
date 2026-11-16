@@ -754,6 +754,16 @@ suite.define(() => {
               Math.abs(frame.shellMarginRight - frame.terminalWidth - frame.browserWidth - 8),
               `reserved margin at ${frame.atMs.toFixed(0)}ms`,
             ).toBeLessThan(1.5);
+            expect(frame.terminalTarget).toBeGreaterThan(0);
+            expect(frame.browserTarget).toBeGreaterThan(0);
+            expect(
+              Math.abs(frame.terminalContentWidth - frame.terminalTarget),
+              `terminal content width at ${frame.atMs.toFixed(0)}ms`,
+            ).toBeLessThan(1.5);
+            expect(
+              Math.abs(frame.browserContentWidth - frame.browserTarget),
+              `browser content width at ${frame.atMs.toFixed(0)}ms`,
+            ).toBeLessThan(1.5);
           }
           expect(afterDispatch.terminalDuration).toBeCloseTo(200, 0);
           if (mode === "moving") {
