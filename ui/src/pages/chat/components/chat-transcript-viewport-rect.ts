@@ -9,7 +9,7 @@ import { unscaledBorderBox } from "./chat-transcript-layout-owner.ts";
 type ViewportRectOwner = {
   getScrollElement(): HTMLDivElement | null;
   getHeaderHeight(): number;
-  positionRail: Pick<PositionRailGutterController, "read" | "sync">;
+  positionRail: Pick<PositionRailGutterController, "sync" | "cancel">;
   commitComposerResize(): void;
   measureConnectedRows(): boolean;
   queueRowMeasure(): void;
@@ -35,7 +35,6 @@ export class TranscriptViewportRect {
   private observer: ViewportObserver | null = null;
   private motionActive = false;
   private pendingMotionRect: { rect: Rect; scrollMargin: number } | null = null;
-  private railFrame: number | null = null;
 
   constructor(private readonly owner: ViewportRectOwner) {}
 
@@ -60,9 +59,9 @@ export class TranscriptViewportRect {
   setMotionActive(active: boolean): void {
     this.motionActive = active;
     if (active) {
-      // A new motion (including a replacement) invalidates any staged settle
+      // A new motion (including a replacement) invalidates any queued rail
       // write: the geometry it would publish is already intermediate.
-      this.cancelStagedRail();
+      this.owner.positionRail.cancel();
     }
   }
 
@@ -121,7 +120,7 @@ export class TranscriptViewportRect {
       if (this.observer === observer) {
         this.observer = null;
       }
-      this.cancelStagedRail();
+      this.owner.positionRail.cancel();
     };
   };
 
@@ -145,7 +144,6 @@ export class TranscriptViewportRect {
       return;
     }
     observer.delivered = true;
-    const railGeometry = this.owner.positionRail.read();
     this.owner.commitComposerResize();
     const widthChanged =
       this.observedWidth !== null && !sameDimension(this.observedWidth, rect.width);
@@ -166,44 +164,14 @@ export class TranscriptViewportRect {
       this.owner.measureConnectedRows();
       this.owner.queueRowMeasure();
     }
-    if (settled) {
-      this.stagePositionRail();
-    } else {
-      // A normal delivery is the newest rail fact; it supersedes a staged
-      // settle write rather than being overwritten by it later.
-      this.cancelStagedRail();
-      this.owner.positionRail.sync(railGeometry);
-    }
+    // The rail owner writes in a frame of its own: this delivery shares a task
+    // with the pane/conversation commit, and the inherited rail width would
+    // restyle the transcript subtree there. The queue re-reads the DOM, so any
+    // newer fact supersedes this delivery instead of being overwritten.
+    this.owner.positionRail.sync();
     if (widthChanged || heightChanged) {
       this.owner.onViewportResize();
       this.owner.requestUpdate();
-    }
-  }
-
-  /**
-   * The settled rail write is its own frame: the settle delivery already shares
-   * a task with the pane/conversation commit, and writing the inherited rail
-   * width there restyles the transcript subtree in that same commit. The frame
-   * re-reads the rail at delivery time so a newer observer/normal fact always
-   * wins, and a motion that starts in between cancels the write outright.
-   */
-  private stagePositionRail(): void {
-    if (this.railFrame !== null) {
-      return;
-    }
-    this.railFrame = requestAnimationFrame(() => {
-      this.railFrame = null;
-      if (this.motionActive) {
-        return;
-      }
-      this.owner.positionRail.sync();
-    });
-  }
-
-  private cancelStagedRail(): void {
-    if (this.railFrame !== null) {
-      cancelAnimationFrame(this.railFrame);
-      this.railFrame = null;
     }
   }
 }

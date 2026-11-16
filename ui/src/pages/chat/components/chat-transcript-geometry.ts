@@ -223,6 +223,7 @@ export class PositionRailGutterController implements ReactiveController {
   private viewport: HTMLDivElement | null = null;
   private innerElement: HTMLDivElement | null = null;
   private region: HTMLElement | null = null;
+  private syncFrame: number | null = null;
 
   constructor(
     private readonly host: ReactiveControllerHost & {
@@ -279,6 +280,7 @@ export class PositionRailGutterController implements ReactiveController {
     this.viewport = null;
     this.innerElement = null;
     this.region = null;
+    this.cancel();
   }
 
   read() {
@@ -296,14 +298,37 @@ export class PositionRailGutterController implements ReactiveController {
     return { viewport, gutter, columnWidth, regionHeight: region.clientHeight };
   }
 
-  sync(geometry = this.read()): void {
-    // The rail's own columns are measured by its ResizeObserver on every eased
-    // frame; writing the inherited width var there restyles the whole transcript
-    // subtree. The settle delivery stages one write, and a gesture that starts
-    // in between cancels it instead of forcing intermediate geometry.
-    if (isShellGeometryMotionActive()) {
+  /**
+   * The inherited rail width restyles the transcript subtree, so every source of
+   * rail geometry — a normal viewport delivery, a settle, and this controller's
+   * own ResizeObserver — coalesces into one latest-wins frame instead of writing
+   * inside that source's task. The frame re-reads the DOM when it runs, so a
+   * newer fact always wins; a shell motion discards it instead of publishing
+   * intermediate geometry.
+   */
+  sync(): void {
+    if (this.syncFrame !== null || isShellGeometryMotionActive()) {
       return;
     }
+    this.syncFrame = requestAnimationFrame(() => {
+      this.syncFrame = null;
+      if (isShellGeometryMotionActive()) {
+        return;
+      }
+      this.write();
+    });
+  }
+
+  /** Drops a queued write whose geometry a new motion has already invalidated. */
+  cancel(): void {
+    if (this.syncFrame !== null) {
+      cancelAnimationFrame(this.syncFrame);
+      this.syncFrame = null;
+    }
+  }
+
+  private write(): void {
+    const geometry = this.read();
     if (!geometry) {
       return;
     }

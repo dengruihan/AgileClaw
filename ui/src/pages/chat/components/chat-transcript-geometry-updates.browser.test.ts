@@ -73,11 +73,15 @@ afterEach(() => {
 // Let real ResizeObservers and their resulting Lit commits finish between widths.
 async function settleLayout() {
   for (let frame = 0; frame < 4; frame++) {
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => resolve());
-    });
+    await nextFrame();
     await pane?.updateComplete;
   }
+}
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
 }
 
 async function mountPane({ rowText = "" }: { rowText?: string } = {}) {
@@ -292,89 +296,109 @@ it("holds row measurement for a shell gesture and reconciles the settled width o
   expect(thread.scrollWidth).toBeLessThanOrEqual(thread.clientWidth + 1);
 });
 
-it("lets a newer rail fact win over a staged settle write", async () => {
-  const { host, viewport } = await mountPane();
+it("merges a normal delivery and its rail observer into one latest-wins frame", async () => {
+  const { host, session, viewport } = await mountPane();
+  const thread = expectDefined(session.scrollElement, "transcript viewport");
+  const inner = expectDefined(
+    thread.querySelector<HTMLElement>(".chat-thread-inner"),
+    "transcript range element",
+  );
+  const column = expectDefined(
+    inner.querySelector<HTMLElement>(":scope > .chat-virtual-sizer") ?? inner,
+    "rail column",
+  );
+  const slot = expectDefined(viewport.parentElement, "viewport slot");
+  await settleLayout();
+  const writes: string[] = [];
+  const original = viewport.style.setProperty.bind(viewport.style);
+  viewport.style.setProperty = (property: string, value: string | null, priority?: string) => {
+    if (property === "--chat-transcript-column-width") {
+      writes.push(value ?? "");
+    }
+    original(property, value ?? "", priority);
+  };
+  // Registered after the production observers, so its delivery proves their
+  // stacks have already run in this frame without writing the rail.
+  const writesAtDelivery: number[] = [];
+  const probe = new ResizeObserver(() => writesAtDelivery.push(writes.length));
+  probe.observe(column, { box: "border-box" });
+  try {
+    slot.style.width = "600px";
+    await nextFrame();
+    // The frame's deliveries queued one write; nothing wrote in their stacks.
+    expect(writes).toEqual([]);
+    await nextFrame();
+    expect(writesAtDelivery).toEqual([0]);
+    expect(writes).toEqual([`${inner.clientWidth}px`]);
+    // The queued frame reads at execution: a delivery queues it, the column
+    // changes again before the frame runs, and the same frame writes the newer
+    // width without a synchronous write in that delivery's stack.
+    slot.style.width = "700px";
+    void inner.clientWidth;
+    host.dispatchEvent(
+      new CustomEvent(SIDEBAR_GEOMETRY_COMMIT_EVENT, { detail: { widthChanged: true } }),
+    );
+    expect(writes).toHaveLength(1);
+    slot.style.width = "500px";
+    void inner.clientWidth;
+    await nextFrame();
+    expect(writes.at(-1)).toBe(`${inner.clientWidth}px`);
+    expect(inner.clientWidth).toBeLessThan(600);
+  } finally {
+    probe.disconnect();
+    viewport.style.setProperty = original;
+  }
+});
+
+it("writes no rail during a replacement motion and settles on the drawn column", async () => {
+  const { session, viewport } = await mountPane();
+  const thread = expectDefined(session.scrollElement, "transcript viewport");
+  const inner = expectDefined(
+    thread.querySelector<HTMLElement>(".chat-thread-inner"),
+    "transcript range element",
+  );
   const slot = expectDefined(viewport.parentElement, "viewport slot");
   const column = () => viewport.style.getPropertyValue("--chat-transcript-column-width");
   await settleLayout();
   const atRest = column();
   expect(atRest).not.toBe("");
-
-  beginRightDockMotion("assistant", "opening");
+  const writes: string[] = [];
+  const original = viewport.style.setProperty.bind(viewport.style);
+  viewport.style.setProperty = (property: string, value: string | null, priority?: string) => {
+    if (property === "--chat-transcript-column-width") {
+      writes.push(value ?? "");
+    }
+    original(property, value ?? "", priority);
+  };
   try {
-    slot.style.width = "600px";
-    await settleLayout();
-  } finally {
-    endRightDockMotion("assistant");
-  }
-  // The settle delivery runs in this frame and stages the rail write.
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => resolve());
-  });
-
-  // A newer geometry fact: the column narrows and the host commits its
-  // geometry, which syncs the rail immediately.
-  slot.style.width = "500px";
-  void host.getBoundingClientRect();
-  host.dispatchEvent(
-    new CustomEvent(SIDEBAR_GEOMETRY_COMMIT_EVENT, { detail: { widthChanged: true } }),
-  );
-  expect(column()).not.toBe(atRest);
-
-  // The staged frame must not publish the older settle geometry over the newer
-  // one: a fresh production sync is the ground truth for the same frame.
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => resolve());
-    });
-  });
-  const afterStaged = column();
-  host.dispatchEvent(
-    new CustomEvent(SIDEBAR_GEOMETRY_COMMIT_EVENT, { detail: { widthChanged: true } }),
-  );
-  expect(afterStaged).toBe(column());
-});
-
-it("cancels a staged rail write when a replacement motion starts", async () => {
-  const { viewport } = await mountPane();
-  const slot = expectDefined(viewport.parentElement, "viewport slot");
-  const column = () => viewport.style.getPropertyValue("--chat-transcript-column-width");
-  await settleLayout();
-  const atRest = column();
-
-  beginRightDockMotion("assistant", "opening");
-  try {
-    slot.style.width = "600px";
-    await settleLayout();
-  } finally {
-    endRightDockMotion("assistant");
-  }
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => resolve());
-  });
-
-  // The replacement owns a fresh window: the staged write is void.
-  beginRightDockMotion("assistant", "closing");
-  try {
-    slot.style.width = "450px";
-    await settleLayout();
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => resolve());
-      });
-    });
+    beginRightDockMotion("assistant", "opening");
+    try {
+      slot.style.width = "600px";
+      await settleLayout();
+    } finally {
+      endRightDockMotion("assistant");
+    }
+    // The settle delivery runs in this frame and queues the rail write; start
+    // the replacement before that write gets a frame of its own.
+    await nextFrame();
     expect(column()).toBe(atRest);
+    expect(writes).toEqual([]);
+
+    beginRightDockMotion("assistant", "closing");
+    try {
+      slot.style.width = "450px";
+      await settleLayout();
+      expect(writes).toEqual([]);
+      expect(column()).toBe(atRest);
+    } finally {
+      endRightDockMotion("assistant");
+    }
+    await expect.poll(column).not.toBe(atRest);
+    expect(column()).toBe(`${inner.clientWidth}px`);
+    expect(writes.at(-1)).toBe(`${inner.clientWidth}px`);
   } finally {
-    endRightDockMotion("assistant");
+    viewport.style.setProperty = original;
   }
-  await expect.poll(column).not.toBe(atRest);
-  const settledColumn = column();
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => resolve());
-    });
-  });
-  expect(column()).toBe(settledColumn);
 });
 
 it("writes the settled rail geometry one frame after the settle delivery", async () => {
@@ -398,9 +422,9 @@ it("writes the settled rail geometry one frame after the settle delivery", async
   } finally {
     endRightDockMotion("assistant");
   }
-  // The settle delivery (rect commit + queued row scan) owns the first frame;
-  // the rail write is staged into the frame after it so the pane/conversation
-  // commit is not restyled by the inherited rail width in the same task.
+  // The settle delivery (rect commit + queued row scan) owns the first frame
+  // and only queues the rail write; the rail owner's own frame follows, so the
+  // pane/conversation commit is not restyled by the inherited rail width.
   await new Promise<void>((resolve) => {
     requestAnimationFrame(() => resolve());
   });

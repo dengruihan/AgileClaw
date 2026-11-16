@@ -61,17 +61,52 @@ suite.define(() => {
                   animation.playState === "running",
               );
           const railWidth = () => thread.style.getPropertyValue("--chat-transcript-column-width");
-          // The composer popover anchor owns this var on the composer box; its
+          // Production rail writes carry the drawn column. Sample every write
+          // with the transition state at that instant so a stale intermediate
+          // value can never pass as a settle.
+          const railWrites: Array<{ animating: boolean; at: number; value: string }> = [];
+          const setStyleProperty = thread.style.setProperty.bind(thread.style);
+          thread.style.setProperty = (
+            property: string,
+            value: string | null,
+            priority?: string,
+          ) => {
+            if (property === "--chat-transcript-column-width") {
+              railWrites.push({
+                animating: railAnimating(),
+                at: Math.round(performance.now()),
+                value: value ?? "",
+              });
+            }
+            setStyleProperty(property, value, priority);
+          };
+          // The composer popover anchor owns this var on the composer box; each
           // maintenance update is one box read of that element.
           const anchorElement = Array.from(document.querySelectorAll<HTMLElement>("*")).find(
             (element) =>
               element.style.getPropertyValue("--chat-composer-popover-max-height") !== "",
           );
-          const anchorReads: Array<{ animating: boolean; at: number }> = [];
+          const anchorReads: Array<{ animating: boolean; at: number; frame: number }> = [];
+          // Frame identity: a read in a rendering frame's rAF or RO phase shares
+          // this count, so duplicate reads in one frame are visible.
+          let frameCount = 0;
+          let trackFrames = true;
+          const countFrame = () => {
+            if (!trackFrames) {
+              return;
+            }
+            frameCount += 1;
+            requestAnimationFrame(countFrame);
+          };
+          requestAnimationFrame(countFrame);
           const anchorRect = anchorElement?.getBoundingClientRect.bind(anchorElement);
           if (anchorElement && anchorRect) {
             anchorElement.getBoundingClientRect = () => {
-              anchorReads.push({ animating: railAnimating(), at: Math.round(performance.now()) });
+              anchorReads.push({
+                animating: railAnimating(),
+                at: Math.round(performance.now()),
+                frame: frameCount,
+              });
               return anchorRect();
             };
           }
@@ -138,13 +173,21 @@ suite.define(() => {
           if (anchorElement && anchorRect) {
             anchorElement.getBoundingClientRect = anchorRect;
           }
+          trackFrames = false;
+          const finalRail = railWidth();
+          const finalColumn = inner.clientWidth;
+          const finalColumnRect = inner.getBoundingClientRect().width;
+          thread.style.setProperty = setStyleProperty;
           return {
             anchorFound: Boolean(anchorElement),
             anchorReads,
             endWidth: nav.getBoundingClientRect().width,
             expandFound,
-            innerWidth: inner.clientWidth,
+            finalColumn,
+            finalColumnRect,
+            finalRail,
             midWidth,
+            railWrites,
             samples,
             startAnchor,
             startRail,
@@ -164,14 +207,33 @@ suite.define(() => {
           JSON.stringify(result.anchorReads),
         ).toEqual([]);
         // The single settle reconciled afterwards and left the rail on drawn geometry.
-        // The final settle performs exactly one maintenance measurement.
+        // The settle performs one maintenance measurement in its own frame; the
+        // deferred rail write restyles the subtree in the next frame, and the
+        // composer's real ResizeObserver answers that layout with one further
+        // read in a newer frame. Never two reads in one frame.
+        const settleReads = result.anchorReads.filter((read) => !read.animating);
+        const settleFrames = settleReads.map((read) => read.frame);
+        expect(settleReads.length, JSON.stringify(result.anchorReads)).toBeGreaterThanOrEqual(1);
+        expect(settleReads.length, JSON.stringify(result.anchorReads)).toBeLessThanOrEqual(2);
+        expect(new Set(settleFrames).size, JSON.stringify(result.anchorReads)).toBe(
+          settleReads.length,
+        );
+        for (let index = 1; index < settleFrames.length; index += 1) {
+          expect(settleFrames[index] - settleFrames[index - 1]).toBeGreaterThanOrEqual(1);
+        }
+        // Rail writes are the production evidence: the eased widths must never
+        // publish, and the settle must land exactly on the drawn column.
+        expect(result.railWrites.length).toBeGreaterThan(0);
         expect(
-          result.anchorReads.filter((read) => !read.animating),
-          JSON.stringify(result.anchorReads),
-        ).toHaveLength(1);
-        expect(
-          Math.abs(Number.parseFloat(result.samples.at(-1)?.rail ?? "") - result.innerWidth),
-        ).toBeLessThanOrEqual(1);
+          result.railWrites.filter((write) => write.animating),
+          JSON.stringify(result.railWrites),
+        ).toEqual([]);
+        expect(result.finalRail).toBe(`${result.finalColumn}px`);
+        // The drawn column can be fractional; the published integer width must
+        // still round to it.
+        expect(Math.abs(Number.parseFloat(result.finalRail) - result.finalColumnRect)).toBeLessThan(
+          1,
+        );
       },
     );
   });
