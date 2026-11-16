@@ -178,6 +178,7 @@ class MessageReactionPicker extends OpenClawLitElement {
     :host([compact]) .trigger {
       border: 1px solid var(--border);
       border-radius: var(--radius-full);
+      corner-shape: round;
       background: var(--bg-elevated);
     }
     :host([compact]) .trigger:hover,
@@ -192,6 +193,7 @@ class MessageReactionPicker extends OpenClawLitElement {
       padding: 4px;
       border: 1px solid var(--border);
       border-radius: var(--radius-full);
+      corner-shape: round;
       background: var(--popover);
       color: var(--text);
       box-shadow:
@@ -210,6 +212,7 @@ class MessageReactionPicker extends OpenClawLitElement {
       width: 34px;
       height: 34px;
       border-radius: var(--radius-full);
+      corner-shape: round;
       font-size: 20px;
       line-height: 1;
       transition:
@@ -234,6 +237,7 @@ class MessageReactionPicker extends OpenClawLitElement {
       width: 30px;
       height: 30px;
       border-radius: var(--radius-full);
+      corner-shape: round;
       color: var(--muted);
     }
     .more:hover {
@@ -258,6 +262,7 @@ class MessageReactionPicker extends OpenClawLitElement {
       width: 28px;
       height: 28px;
       border-radius: var(--radius-full);
+      corner-shape: round;
       color: var(--muted);
     }
     .back:hover {

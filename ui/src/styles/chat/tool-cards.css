@@ -537,8 +537,7 @@
   overflow: auto;
   max-height: min(520px, 60vh);
   border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
-  border-radius: calc(14px * var(--openclaw-corner-radius-scale));
-  corner-shape: superellipse(1.5);
+  border-radius: var(--radius-lg);
   background: transparent;
 }
 
@@ -844,6 +843,14 @@
   overflow: hidden;
 }
 
+/* The preview is a nested row inside a tool card on shaped engines; the plain
+   fallback keeps the pre-change preview step. */
+@supports (corner-shape: superellipse(1.5)) {
+  .chat-tool-card__preview {
+    border-radius: var(--radius-md);
+  }
+}
+
 .chat-tool-card__preview[data-has-widget-actions] {
   overflow: visible;
 }
@@ -871,6 +878,7 @@
 .chat-tool-card__preview-panel {
   overflow: hidden;
   border-radius: inherit;
+  corner-shape: inherit;
 }
 
 .chat-tool-card__widget-actions {
@@ -1234,6 +1242,7 @@
   padding: 1px 6px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-full);
+  corner-shape: round;
   color: var(--muted);
   background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
   font-size: 10px;
@@ -1293,6 +1302,7 @@ openclaw-chat-tool-output {
   padding: 0 6px;
   border: 1px solid var(--border);
   border-radius: 999px;
+  corner-shape: round;
   color: var(--muted);
   font-size: 11px;
   white-space: nowrap;

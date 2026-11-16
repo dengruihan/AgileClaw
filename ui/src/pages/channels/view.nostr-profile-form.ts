@@ -126,6 +126,7 @@ export function renderNostrProfileForm(params: {
     return renderSettingsRow({
       title: t("channels.nostr.profilePicturePreview"),
       control: html`<img
+        class="nostr-profile-picture"
         src=${picture}
         alt=${t("channels.nostr.profilePicturePreview")}
         style="max-width: 80px; max-height: 80px; border-radius: 50%; object-fit: cover;"

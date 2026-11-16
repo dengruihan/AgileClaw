@@ -96,6 +96,7 @@ openclaw-plugin-install-action {
   height: 20px;
   box-sizing: border-box;
   border-radius: 50%;
+  corner-shape: round;
 }
 .plugin-install-progress__activity--started .plugin-install-progress__icon {
   border: 1px solid var(--accent);

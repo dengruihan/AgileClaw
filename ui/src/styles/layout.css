@@ -167,6 +167,7 @@ html.dock-motion-retarget {
   align-items: center;
   padding: 2px 6px;
   border-radius: var(--radius-full);
+  corner-shape: round;
   background: color-mix(in srgb, var(--control-ui-environment-color) 16%, transparent);
   color: var(--control-ui-environment-ink);
   font-size: 11px;
@@ -267,6 +268,7 @@ html.dock-motion-retarget {
   width: 24px;
   height: 24px;
   border-radius: var(--radius-full);
+  corner-shape: round;
   background: color-mix(in srgb, var(--accent-subtle) 80%, transparent);
   color: var(--text-strong);
   box-shadow: 0 0 0 2px var(--control-ui-environment-color);
@@ -1000,6 +1002,7 @@ openclaw-settings-save-indicator:empty {
 
 .settings-save-indicator__apply {
   border-radius: 999px;
+  corner-shape: round;
   border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
   background: var(--accent-subtle);
   color: var(--text);
@@ -1120,6 +1123,7 @@ openclaw-settings-save-indicator:empty {
   padding: 0 14px;
   border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
   border-radius: var(--radius-full);
+  corner-shape: round;
   background: color-mix(in srgb, var(--bg-elevated) 84%, transparent);
   color: var(--muted);
   font-size: 13px;
@@ -2114,6 +2118,7 @@ openclaw-settings-save-indicator:empty {
   flex: none;
   margin-left: 4px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--warn);
   box-shadow: 0 0 6px color-mix(in srgb, var(--warn) 48%, transparent);
 }
@@ -2133,6 +2138,7 @@ openclaw-settings-save-indicator:empty {
   width: 6px;
   height: 6px;
   border-radius: var(--radius-full);
+  corner-shape: round;
   background: var(--ok);
   box-shadow: 0 0 0 1.5px var(--sidebar-bg, var(--bg));
 }
@@ -2208,6 +2214,7 @@ openclaw-settings-save-indicator:empty {
   width: 5px;
   height: 5px;
   border-radius: var(--radius-full);
+  corner-shape: round;
   background: var(--accent);
   box-shadow: 0 0 0 1.5px var(--bg);
   content: "";
@@ -2494,6 +2501,7 @@ openclaw-settings-save-indicator:empty {
   overflow: hidden;
   border: 1.5px solid var(--sidebar-bg, var(--bg));
   border-radius: var(--radius-full);
+  corner-shape: round;
   color: white;
   font-size: 7px;
   font-weight: 700;
@@ -2698,6 +2706,7 @@ openclaw-settings-save-indicator:empty {
   height: 6px;
   border: 2px solid var(--bg);
   border-radius: 50%;
+  corner-shape: round;
   background: var(--ok);
   content: "";
 }
@@ -2734,6 +2743,7 @@ openclaw-settings-save-indicator:empty {
   gap: 10px;
   padding: 0 6px;
   border-radius: var(--radius-full);
+  corner-shape: round;
   background: transparent;
   font-size: calc(12px * var(--control-ui-text-scale));
   line-height: calc(24px * var(--control-ui-text-scale));
@@ -3209,6 +3219,7 @@ wa-dropdown.sidebar-session-sort-menu::part(menu) {
   padding: 2px;
   border: 0;
   border-radius: var(--radius-full);
+  corner-shape: round;
   background: transparent;
   cursor: var(--cursor-action);
 }
@@ -3228,6 +3239,7 @@ wa-dropdown.sidebar-session-sort-menu::part(menu) {
   width: 18px;
   height: 18px;
   border-radius: var(--radius-full);
+  corner-shape: round;
   background: var(--muted);
   color: var(--bg);
 }
@@ -3782,6 +3794,7 @@ openclaw-sidebar-attention {
   justify-content: center;
   padding: 0 3px;
   border-radius: var(--radius-full);
+  corner-shape: round;
   background: var(--inbox-attention);
   color: var(--inbox-attention-foreground);
   font-size: calc(9px * var(--control-ui-text-scale));
@@ -3885,6 +3898,7 @@ openclaw-sidebar-attention {
   height: 7px;
   flex: none;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--muted);
 }
 
@@ -4016,6 +4030,7 @@ openclaw-tooltip.sidebar-hover-tooltip {
   height: 6px;
   flex: none;
   border-radius: var(--radius-full);
+  corner-shape: round;
   background: var(--ok);
 }
 

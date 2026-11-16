@@ -18,8 +18,7 @@
   padding-bottom: 0;
   overflow: hidden;
   border: 1px solid var(--chat-composer-hairline);
-  border-radius: calc(20px * var(--openclaw-corner-radius-scale));
-  corner-shape: superellipse(1.5);
+  border-radius: var(--radius-xl);
   background: var(--composer-attached-surface, var(--chat-composer-surface));
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
@@ -279,6 +278,7 @@
 .chat-queue__badge {
   padding: 1px 5px;
   border-radius: 999px;
+  corner-shape: round;
   background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--muted);
   font-size: 10px;
@@ -421,6 +421,7 @@
 
 .chat-queue__steer {
   border-radius: var(--radius-full);
+  corner-shape: round;
 }
 
 .chat-queue__steer:hover:not(:disabled) {

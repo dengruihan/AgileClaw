@@ -141,17 +141,6 @@ wa-dropdown-item.session-menu__item[data-new-tab-action]:not([disabled], [aria-d
   cursor: pointer;
 }
 
-@supports (corner-shape: superellipse(1.5)) {
-  wa-dropdown.session-menu {
-    --menu-radius: calc(10px * var(--openclaw-corner-radius-scale));
-    --menu-item-radius: calc(var(--menu-radius) - var(--menu-padding));
-  }
-
-  wa-dropdown.session-menu::part(menu) {
-    corner-shape: superellipse(1.5);
-  }
-}
-
 /* Keep search available while scrolling the complete directory. */
 .people-menu__search {
   position: sticky;

@@ -88,6 +88,7 @@
   place-items: center;
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
+  corner-shape: round;
   background: color-mix(in srgb, var(--text) 3%, transparent);
   transition: transform 140ms var(--ease-out);
 }

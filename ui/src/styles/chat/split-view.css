@@ -81,6 +81,7 @@
   padding: 3px 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
+  corner-shape: round;
   background: var(--panel);
   color: var(--text);
   font-size: 11px;
@@ -310,6 +311,7 @@
   padding: 2px 7px;
   border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border));
   border-radius: var(--radius-full);
+  corner-shape: round;
   background: color-mix(in srgb, var(--warn) 12%, var(--panel));
   color: var(--warn);
   font-size: 11px;
@@ -337,6 +339,7 @@
   height: 28px;
   border-left: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   border-radius: 0 var(--radius-full) var(--radius-full) 0;
+  corner-shape: round;
   background: color-mix(in srgb, var(--panel-strong) 76%, transparent);
 }
 
@@ -396,6 +399,7 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
+  corner-shape: round;
 }
 
 .chat-pane__sharing-member-skeleton-label {
@@ -541,6 +545,7 @@
   padding: 2px 6px;
   border: 1px solid var(--border);
   border-radius: 999px;
+  corner-shape: round;
   background: transparent;
   color: var(--muted);
   font: inherit;

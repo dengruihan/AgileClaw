@@ -6,6 +6,7 @@
   overflow: hidden;
   background: var(--bg-hover);
   border-radius: var(--radius-full);
+  corner-shape: round;
 }
 
 .session-context-meter__fill {
@@ -13,6 +14,7 @@
   height: 100%;
   background: currentColor;
   border-radius: inherit;
+  corner-shape: inherit;
 }
 
 .session-context-meter--ok {

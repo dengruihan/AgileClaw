@@ -114,6 +114,7 @@ export function renderNostrCard(params: {
                         <dt>${t("channels.nostr.profilePicture")}</dt>
                         <dd>
                           <img
+                            class="nostr-profile-picture"
                             style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover;"
                             src=${picture}
                             alt=${t("channels.nostr.profilePicture")}

@@ -9,6 +9,7 @@
   padding: 6px 14px;
   margin-bottom: 8px;
   border-radius: var(--radius-full);
+  corner-shape: round;
   border: 1px solid var(--border);
   background: var(--panel-strong);
   color: var(--text);

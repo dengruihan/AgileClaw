@@ -379,6 +379,7 @@ wa-dropdown-item.sidebar-session-choice-submenu::part(details) {
   align-self: center;
   margin-block: 8px 2px;
   border-radius: var(--radius-full);
+  corner-shape: round;
   background: var(--border-strong);
 }
 

@@ -62,6 +62,7 @@ class PanelLoadingSkeleton extends OpenClawLitElement {
       border: 2px solid var(--border);
       border-top-color: var(--muted);
       border-radius: 50%;
+      corner-shape: round;
       animation: spin 1s linear infinite;
     }
 
@@ -190,6 +191,7 @@ class PanelLoadingSkeleton extends OpenClawLitElement {
       width: 64px;
       height: 24px;
       border-radius: 999px;
+      corner-shape: round;
     }
 
     .file-heading {

@@ -120,6 +120,7 @@
 .run-inspector__state {
   border: 1px solid var(--border);
   border-radius: 999px;
+  corner-shape: round;
   padding: 1px var(--space-2);
   color: var(--muted);
   font-size: var(--control-ui-text-xs);
@@ -214,6 +215,7 @@
   width: fit-content;
   border: 1px solid var(--border);
   border-radius: 999px;
+  corner-shape: round;
   padding: 1px var(--space-2);
   font-size: var(--control-ui-text-xs);
   font-weight: 600;

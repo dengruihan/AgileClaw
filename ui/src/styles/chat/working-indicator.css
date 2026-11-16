@@ -36,6 +36,7 @@
   width: 4px;
   height: 4px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--accent);
   animation: chatWorkingDotPulse 1.2s ease-in-out infinite;
 }
