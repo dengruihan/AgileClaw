@@ -20,9 +20,13 @@ import {
 // ZCode desktop shell motion contract (zai-org/ZCode fec975905a2):
 // - left navigation: width + opacity, 200ms ease-out, the main column follows
 //   through the shared layout.
-// - right dock: width + opacity, 200ms ease-out, content fixed at the target
-//   width during the transition, temporary styles released by the real
-//   transition completion/cancellation.
+// - right dock: local panel width + opacity transitions, a local shell
+//   margin-right transition, and local sibling right-offset transitions, all
+//   started in the same frame on one 200ms ease-out clock; content fixed at
+//   the target width during the transition, temporary styles released by the
+//   real transition completion/cancellation. The shared reservation vars are
+//   static targets — no inherited animated property may restyle the tree
+//   every frame.
 // Both use cubic-bezier(0, 0, 0.2, 1), Tailwind's `ease-out`, which is what the
 // upstream `duration-200 ease-out` utilities compute to.
 const suite = createControlUiE2eSuite({
@@ -287,6 +291,8 @@ async function waitForNavSettled(page: Page, collapsed: boolean): Promise<void> 
     .toBe(true);
 }
 
+type DockClock = { durationMs: number | null; easing: string; startTime: number | null };
+
 type DockMotion = {
   connected: boolean;
   width: number;
@@ -297,7 +303,8 @@ type DockMotion = {
   left: number;
   shellRight: number;
   transition: TransitionProfile;
-  widthTransition: { durationMs: number | null; easing: string };
+  widthTransition: DockClock;
+  marginTransition: DockClock;
 };
 
 async function readRightDock(page: Page): Promise<DockMotion> {
@@ -318,14 +325,23 @@ async function readRightDock(page: Page): Promise<DockMotion> {
         .filter(Boolean);
     const easingValues = (value: string) =>
       value.match(/cubic-bezier\([^)]*\)|steps\([^)]*\)|[a-z-]+/g) ?? [];
-    const widthAnimation = document.documentElement
-      .getAnimations()
-      .find(
-        (animation): animation is CSSTransition =>
-          animation instanceof CSSTransition &&
-          animation.transitionProperty === "--oc-terminal-reserve-right",
-      );
-    const widthTiming = widthAnimation?.effect?.getTiming();
+    // The width clock lives on the panel element inside its shadow root, and
+    // the plate margin clock on the shell — both local transitions, not an
+    // inherited animated custom property on html.
+    const transitionClock = (element: Element | null | undefined, property: string): DockClock => {
+      const animation = element
+        ?.getAnimations()
+        .find(
+          (entry): entry is CSSTransition =>
+            entry instanceof CSSTransition && entry.transitionProperty === property,
+        );
+      const timing = animation?.effect?.getTiming();
+      return {
+        durationMs: typeof timing?.duration === "number" ? timing.duration : null,
+        easing: timing?.easing ?? "",
+        startTime: animation?.startTime != null ? Number(animation.startTime) : null,
+      };
+    };
     return {
       connected: panel !== null,
       width: panel?.getBoundingClientRect().width ?? 0,
@@ -342,10 +358,8 @@ async function readRightDock(page: Page): Promise<DockMotion> {
         durations: split(style?.transitionDuration ?? ""),
         easings: easingValues(style?.transitionTimingFunction ?? ""),
       },
-      widthTransition: {
-        durationMs: typeof widthTiming?.duration === "number" ? widthTiming.duration : null,
-        easing: widthTiming?.easing ?? "",
-      },
+      widthTransition: transitionClock(panel, "width"),
+      marginTransition: transitionClock(shell, "margin-right"),
     };
   });
 }
@@ -360,6 +374,17 @@ async function readRightDockWidth(page: Page): Promise<number> {
   );
 }
 
+/** Transition start times resolve at the first rendering update after the
+ * transitions are created; reading them in the creating task sees null. */
+async function settleTransitionStartTimes(page: Page): Promise<void> {
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      }),
+  );
+}
+
 async function waitForDockTransition(page: Page): Promise<void> {
   await expect
     .poll(() =>
@@ -367,74 +392,66 @@ async function waitForDockTransition(page: Page): Promise<void> {
         const panel = document
           .querySelector("openclaw-terminal-panel")
           ?.shadowRoot?.querySelector<HTMLElement>(".tp");
-        const widthRunning = document.documentElement
-          .getAnimations()
-          .some(
-            (animation) =>
-              animation instanceof CSSTransition &&
-              animation.transitionProperty === "--oc-terminal-reserve-right",
-          );
-        const opacityRunning =
+        const running = (property: string) =>
           panel
             ?.getAnimations()
             .some(
               (animation) =>
-                animation instanceof CSSTransition && animation.transitionProperty === "opacity",
+                animation instanceof CSSTransition &&
+                animation.transitionProperty === property &&
+                animation.playState === "running",
             ) ?? false;
-        return widthRunning && opacityRunning;
+        return running("width") && running("opacity");
       }),
     )
     .toBe(true);
 }
 
-/** Pauses the dock and plate transitions that make the reserved area move. */
+/** Pauses the local dock width/opacity and plate margin transitions that make
+ * the reserved area move, so one clock moment can be inspected. */
 async function holdDockTransitions(page: Page, atMs: number): Promise<number> {
   return page.evaluate((time) => {
-    const root = document.documentElement;
+    const shell = document.querySelector<HTMLElement>(".shell");
     const panel = document
       .querySelector("openclaw-terminal-panel")
       ?.shadowRoot?.querySelector<HTMLElement>(".tp");
     let held = 0;
-    for (const animation of root.getAnimations()) {
-      if (
-        animation instanceof CSSTransition &&
-        animation.transitionProperty === "--oc-terminal-reserve-right"
-      ) {
-        animation.pause();
-        animation.currentTime = time;
-        held += 1;
+    const hold = (element: Element | null | undefined, properties: string[]) => {
+      for (const animation of element?.getAnimations() ?? []) {
+        if (
+          animation instanceof CSSTransition &&
+          properties.includes(animation.transitionProperty)
+        ) {
+          animation.pause();
+          animation.currentTime = time;
+          held += 1;
+        }
       }
-    }
-    for (const animation of panel?.getAnimations() ?? []) {
-      if (animation instanceof CSSTransition && animation.transitionProperty === "opacity") {
-        animation.pause();
-        animation.currentTime = time;
-        held += 1;
-      }
-    }
+    };
+    hold(panel, ["width", "opacity"]);
+    hold(shell, ["margin-right"]);
     return held;
   }, atMs);
 }
 
 async function finishDockTransitions(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const root = document.documentElement;
+    const shell = document.querySelector<HTMLElement>(".shell");
     const panel = document
       .querySelector("openclaw-terminal-panel")
       ?.shadowRoot?.querySelector<HTMLElement>(".tp");
-    for (const animation of root.getAnimations()) {
-      if (
-        animation instanceof CSSTransition &&
-        animation.transitionProperty === "--oc-terminal-reserve-right"
-      ) {
-        animation.finish();
+    const finish = (element: Element | null | undefined, properties: string[]) => {
+      for (const animation of element?.getAnimations() ?? []) {
+        if (
+          animation instanceof CSSTransition &&
+          properties.includes(animation.transitionProperty)
+        ) {
+          animation.finish();
+        }
       }
-    }
-    for (const animation of panel?.getAnimations() ?? []) {
-      if (animation instanceof CSSTransition && animation.transitionProperty === "opacity") {
-        animation.finish();
-      }
-    }
+    };
+    finish(panel, ["width", "opacity"]);
+    finish(shell, ["margin-right"]);
   });
 }
 
@@ -581,9 +598,9 @@ suite.define(() => {
             }
           }
           const nav = document.querySelector<HTMLElement>(".shell-nav")!;
-          await new Promise((resolve) =>
-            requestAnimationFrame(() => requestAnimationFrame(resolve)),
-          );
+          await new Promise((resolve) => {
+            requestAnimationFrame(() => requestAnimationFrame(resolve));
+          });
           return {
             width: nav.getBoundingClientRect().width,
             opacity: Number.parseFloat(getComputedStyle(nav).opacity),
@@ -623,7 +640,14 @@ suite.define(() => {
           .getByRole("button", { name: "Hide terminal" })
           .click();
         await waitForDockTransition(page);
-        expect(await holdDockTransitions(page, 100)).toBeGreaterThanOrEqual(1);
+        await settleTransitionStartTimes(page);
+        // Panel width and plate margin start on the same drawn frame: their
+        // local transitions share one document-timeline start time.
+        const closeClocks = await readRightDock(page);
+        expect(closeClocks.widthTransition.startTime).not.toBeNull();
+        expect(closeClocks.marginTransition.startTime).not.toBeNull();
+        expect(closeClocks.widthTransition.startTime).toBe(closeClocks.marginTransition.startTime);
+        expect(await holdDockTransitions(page, 100)).toBeGreaterThanOrEqual(3);
         const midClose = await readRightDock(page);
         expect(midClose.connected).toBe(true);
         expect(midClose.width).toBeGreaterThan(1);
@@ -639,6 +663,8 @@ suite.define(() => {
         expect(midClose.transition.easings.every((value) => value === EASE_OUT)).toBe(true);
         expect(midClose.widthTransition.durationMs).toBe(200);
         expect(midClose.widthTransition.easing).toBe(EASE_OUT);
+        expect(midClose.marginTransition.durationMs).toBe(200);
+        expect(midClose.marginTransition.easing).toBe(EASE_OUT);
         // The reserved shell plate and the panel edge travel together (the
         // plate keeps its 8px window inset while the dock width shrinks).
         expect(midClose.left - midClose.shellRight).toBeCloseTo(8, 1);
@@ -663,7 +689,12 @@ suite.define(() => {
 
         await dispatchTerminalToggle(page, { open: true });
         await waitForDockTransition(page);
-        expect(await holdDockTransitions(page, 100)).toBeGreaterThanOrEqual(1);
+        await settleTransitionStartTimes(page);
+        const openClocks = await readRightDock(page);
+        expect(openClocks.widthTransition.startTime).not.toBeNull();
+        expect(openClocks.marginTransition.startTime).not.toBeNull();
+        expect(openClocks.widthTransition.startTime).toBe(openClocks.marginTransition.startTime);
+        expect(await holdDockTransitions(page, 100)).toBeGreaterThanOrEqual(3);
         const midOpen = await readRightDock(page);
         expect(midOpen.connected).toBe(true);
         expect(midOpen.width).toBeGreaterThan(1);
@@ -673,6 +704,10 @@ suite.define(() => {
         expect(midOpen.contentWidth).toBeCloseTo(TERMINAL_WIDTH, 0.5);
         expect(midOpen.contentVariable).toBe(`${TERMINAL_WIDTH}px`);
         expect(midOpen.left - midOpen.shellRight).toBeCloseTo(8, 1);
+        expect(midOpen.widthTransition.durationMs).toBe(200);
+        expect(midOpen.widthTransition.easing).toBe(EASE_OUT);
+        expect(midOpen.marginTransition.durationMs).toBe(200);
+        expect(midOpen.marginTransition.easing).toBe(EASE_OUT);
         await capture(page, "dock-mid-open");
         await finishDockTransitions(page);
         await expect.poll(() => readRightDockWidth(page)).toBe(TERMINAL_WIDTH);

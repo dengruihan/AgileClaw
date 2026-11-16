@@ -24,7 +24,10 @@ export async function runTerminalReverse(
       document
         .querySelector("openclaw-terminal-panel")
         ?.shadowRoot?.querySelector<HTMLElement>(".tp");
-    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const frame = () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(resolve);
+      });
     const timing = (element: Element, property: string) => {
       const animation = element
         .getAnimations()
@@ -55,7 +58,7 @@ export async function runTerminalReverse(
         };
       }
       const rect = element.getBoundingClientRect();
-      const panelTiming = timing(document.documentElement, "--oc-terminal-reserve-right");
+      const panelTiming = timing(element, "width");
       return {
         atMs: performance.now() - origin,
         panelPresent: true,
@@ -144,14 +147,19 @@ export async function runSiblingReverse(
       document
         .querySelector("openclaw-browser-panel")
         ?.shadowRoot?.querySelector<HTMLElement>(".bp");
-    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const frame = () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(resolve);
+      });
+    // Each dock's width clock is a local transition on its own panel element
+    // (inside the shadow root), not an inherited animated root property.
     const timing = (prefix: string) => {
-      const animation = document.documentElement
-        .getAnimations()
+      const element = prefix === "terminal" ? terminal() : browser();
+      const animation = element
+        ?.getAnimations()
         .find(
           (entry): entry is CSSTransition =>
-            entry instanceof CSSTransition &&
-            entry.transitionProperty === `--oc-${prefix}-reserve-right`,
+            entry instanceof CSSTransition && entry.transitionProperty === "width",
         );
       if (!animation) {
         return { duration: null, remaining: null };
@@ -281,13 +289,16 @@ export async function runSiblingReverse(
         const browserTarget = Number.parseFloat(
           document.documentElement.style.getPropertyValue("--oc-browser-reserve-right"),
         );
-        const browserSettling = document.documentElement
-          .getAnimations()
-          .some(
-            (entry) =>
-              entry instanceof CSSTransition &&
-              entry.transitionProperty === "--oc-browser-reserve-right",
-          );
+        const browserSettling =
+          browserElement
+            ?.getAnimations()
+            .some(
+              (entry) =>
+                entry instanceof CSSTransition &&
+                entry.transitionProperty === "width" &&
+                entry.playState !== "finished" &&
+                entry.playState !== "idle",
+            ) ?? false;
         const width = browserElement.getBoundingClientRect().width;
         const contentPin = browserElement.style.getPropertyValue("--oc-dock-content-width");
         if (
@@ -335,7 +346,10 @@ export type TerminalResizeFrame = {
 
 export async function startTerminalOpenForResize(page: Page): Promise<TerminalResizeFrame> {
   return page.evaluate(async () => {
-    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const frame = () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(resolve);
+      });
     window.dispatchEvent(new CustomEvent("openclaw:terminal-toggle", { detail: { open: true } }));
     for (let index = 0; index < 6; index += 1) {
       await frame();
@@ -355,13 +369,15 @@ export async function startTerminalOpenForResize(page: Page): Promise<TerminalRe
       contentPin: panel.style.getPropertyValue("--oc-dock-content-width"),
       target: document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
       shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
-      widthRunning: document.documentElement
-        .getAnimations()
-        .some(
-          (animation) =>
-            animation instanceof CSSTransition &&
-            animation.transitionProperty === "--oc-terminal-reserve-right",
-        ),
+      widthRunning:
+        panel
+          ?.getAnimations()
+          .some(
+            (animation) =>
+              animation instanceof CSSTransition &&
+              animation.transitionProperty === "width" &&
+              animation.playState === "running",
+          ) ?? false,
     };
   });
 }
@@ -371,7 +387,10 @@ export async function sampleTerminalOpenForResize(
   count: number,
 ): Promise<TerminalResizeFrame[]> {
   return page.evaluate(async (frames) => {
-    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const frame = () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(resolve);
+      });
     const origin = performance.now();
     const samples: TerminalResizeFrame[] = [];
     for (let index = 0; index < frames; index += 1) {
@@ -391,13 +410,15 @@ export async function sampleTerminalOpenForResize(
         contentPin: panel.style.getPropertyValue("--oc-dock-content-width"),
         target: document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
         shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
-        widthRunning: document.documentElement
-          .getAnimations()
-          .some(
-            (animation) =>
-              animation instanceof CSSTransition &&
-              animation.transitionProperty === "--oc-terminal-reserve-right",
-          ),
+        widthRunning:
+          panel
+            ?.getAnimations()
+            .some(
+              (animation) =>
+                animation instanceof CSSTransition &&
+                animation.transitionProperty === "width" &&
+                animation.playState === "running",
+            ) ?? false,
       });
     }
     return samples;
@@ -420,13 +441,15 @@ export async function readTerminalResizeSettle(page: Page) {
       contentPin: panel.style.getPropertyValue("--oc-dock-content-width"),
       target: document.documentElement.style.getPropertyValue("--oc-terminal-reserve-right"),
       shellMarginRight: Number.parseFloat(getComputedStyle(shell).marginRight),
-      widthRunning: document.documentElement
-        .getAnimations()
-        .some(
-          (animation) =>
-            animation instanceof CSSTransition &&
-            animation.transitionProperty === "--oc-terminal-reserve-right",
-        ),
+      widthRunning:
+        panel
+          ?.getAnimations()
+          .some(
+            (animation) =>
+              animation instanceof CSSTransition &&
+              animation.transitionProperty === "width" &&
+              animation.playState === "running",
+          ) ?? false,
     };
   });
 }
@@ -446,13 +469,12 @@ export async function readSiblingSettle(page: Page) {
     const terminalRect = terminal.getBoundingClientRect();
     const browserRect = browser.getBoundingClientRect();
     const root = document.documentElement;
-    const running = root
-      .getAnimations()
+    const running = [terminal, browser]
+      .flatMap((element) => element?.getAnimations() ?? [])
       .filter(
         (animation): animation is CSSTransition =>
           animation instanceof CSSTransition &&
-          (animation.transitionProperty === "--oc-terminal-reserve-right" ||
-            animation.transitionProperty === "--oc-browser-reserve-right") &&
+          animation.transitionProperty === "width" &&
           animation.playState !== "finished" &&
           animation.playState !== "idle",
       )

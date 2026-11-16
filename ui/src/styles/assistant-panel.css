@@ -13,7 +13,12 @@ openclaw-assistant-panel {
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
-  transition: opacity var(--shell-motion-duration) var(--shell-motion-ease);
+  /* Local width/right transitions on the shared static dock clock, matching
+     the sibling docks and the shell margin that read the same targets. */
+  transition:
+    opacity var(--shell-motion-duration) var(--shell-motion-ease),
+    width var(--oc-dock-motion-duration) var(--shell-motion-ease),
+    right var(--oc-dock-motion-duration) var(--shell-motion-ease);
 }
 
 .assistant-panel.dock-panel--motion-hidden {
@@ -44,7 +49,9 @@ openclaw-assistant-panel {
 
 .assistant-panel--bottom {
   left: var(--shell-nav-width, 0);
-  transition: left var(--shell-motion-duration) var(--shell-motion-ease);
+  transition:
+    left var(--shell-motion-duration) var(--shell-motion-ease),
+    right var(--oc-dock-motion-duration) var(--shell-motion-ease);
 }
 
 .assistant-panel--right {
