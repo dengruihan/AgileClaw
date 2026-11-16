@@ -101,6 +101,7 @@ class OpenClawLinkReaderPanel extends OpenClawLitElement implements PanelHostedT
     isAvailable: () => this.tabs.length > 0 && !this.suppressed && !this.embedded,
     // Embedded geometry belongs to the region, never the standalone dock store.
     isFullscreen: () => this.embedded,
+    panelElement: () => this.renderRoot.querySelector(".bp"),
   });
   static override styles = linkReaderViewStyles;
 
@@ -543,12 +544,16 @@ class OpenClawLinkReaderPanel extends OpenClawLitElement implements PanelHostedT
   override render() {
     const tab = this.activeTab;
     const target = this.target;
-    if (!tab || this.suppressed || (!this.embedded && !this.dockLayout.open)) {
+    if (!tab || this.suppressed || (!this.embedded && !this.dockLayout.renderVisible)) {
       return nothing;
     }
     return html`<section
-      class="bp bp--${this.embedded ? "embedded" : "right"} link-reader-panel"
-      style=${this.embedded ? nothing : `width:${this.dockLayout.width}px`}
+      class="bp bp--${this.embedded ? "embedded" : "right"} link-reader-panel ${this.dockLayout.motionClassName}"
+      style=${
+        this.embedded
+          ? nothing
+          : this.dockLayout.panelStyle("right", this.dockLayout.height, this.dockLayout.width)
+      }
       aria-label=${t("linkReader.title")}
       @keydown=${(event: KeyboardEvent) => {
         if (event.key === "Escape" && !event.defaultPrevented) {
@@ -559,132 +564,134 @@ class OpenClawLinkReaderPanel extends OpenClawLitElement implements PanelHostedT
       }}
     >
       ${this.embedded ? nothing : this.dockLayout.renderResizer("bp", t("linkReader.resize"))}
-      ${
-        this.embedded && this.tabsInHeader
-          ? nothing
-          : html`<header class="rail-header bp-header lr-tab-header">
-              ${renderPanelTabStrip({
-                tabs: this.hostedTabs.map((item) => ({
-                  ...item,
-                  domId: item.id + "-label",
-                  closeLabel: t("linkReader.closeTab", { title: item.label }),
-                })),
-                activeId: this.activeId,
-                ariaControls: "link-reader-tab-panel",
-                onSelect: (id) => this.selectHostedTab(id),
-                onClose: (id) => this.closeTab(id),
-                onNew: () => this.createTab(),
-                newLabel: t("linkReader.newTab"),
-                newDisabled: this.tabs.length >= TAB_LIMIT,
-              })}
-              ${this.embedded ? nothing : renderReaderButton(t("linkReader.close"), icons.x, () => this.closePanel())}
-            </header>`
-      }
-      <form class="lr-toolbar" @submit=${(event: Event) => this.commitUrl(event)}>
-        ${renderReaderButton(
-          t("linkReader.back"),
-          icons.chevronLeft,
-          () => this.goHistory(-1),
-          tab.index <= 0,
-        )}
-        ${renderReaderButton(
-          t("linkReader.forward"),
-          icons.chevronRight,
-          () => this.goHistory(1),
-          tab.index >= tab.history.length - 1,
-        )}
-        ${renderReaderButton(
-          t("linkReader.refresh"),
-          icons.refresh,
-          () => this.refresh(),
-          !target || !this.available || !this.client || tab.view.status === "loading",
-        )}
-        <input
-          class="lr-url"
-          type="text"
-          spellcheck="false"
-          autocomplete="off"
-          .value=${this.urlDraft}
-          placeholder=${t("linkReader.urlPlaceholder")}
-          aria-label=${t("linkReader.urlPlaceholder")}
-          aria-invalid=${this.invalidUrl}
-          @input=${(event: Event) => {
-            if (!(event.currentTarget instanceof HTMLInputElement)) {
-              return;
-            }
-            this.urlDraft = event.currentTarget.value;
-            this.invalidUrl = false;
-          }}
-          @keydown=${(event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              this.urlDraft = target?.href ?? "";
-              this.invalidUrl = false;
-            }
-          }}
-        />
-        <button
-          class="rail-header__action bp-icon lr-go"
-          type="submit"
-          title=${t("linkReader.openUrl")}
-          aria-label=${t("linkReader.openUrl")}
-        >
-          ${icons.chevronRight}
-        </button>
+      <div class="dock-panel-content">
         ${
-          target
-            ? html`<a
-                class="lr-external"
-                href=${target.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                data-link-reader-external
-                >${icons.externalLink}<span
-                  >${t("linkReader.openExternal", { provider: target.reader.label })}</span
-                ></a
-              >`
+          this.embedded && this.tabsInHeader
+            ? nothing
+            : html`<header class="rail-header bp-header lr-tab-header">
+                ${renderPanelTabStrip({
+                  tabs: this.hostedTabs.map((item) => ({
+                    ...item,
+                    domId: item.id + "-label",
+                    closeLabel: t("linkReader.closeTab", { title: item.label }),
+                  })),
+                  activeId: this.activeId,
+                  ariaControls: "link-reader-tab-panel",
+                  onSelect: (id) => this.selectHostedTab(id),
+                  onClose: (id) => this.closeTab(id),
+                  onNew: () => this.createTab(),
+                  newLabel: t("linkReader.newTab"),
+                  newDisabled: this.tabs.length >= TAB_LIMIT,
+                })}
+                ${this.embedded ? nothing : renderReaderButton(t("linkReader.close"), icons.x, () => this.closePanel())}
+              </header>`
+        }
+        <form class="lr-toolbar" @submit=${(event: Event) => this.commitUrl(event)}>
+          ${renderReaderButton(
+            t("linkReader.back"),
+            icons.chevronLeft,
+            () => this.goHistory(-1),
+            tab.index <= 0,
+          )}
+          ${renderReaderButton(
+            t("linkReader.forward"),
+            icons.chevronRight,
+            () => this.goHistory(1),
+            tab.index >= tab.history.length - 1,
+          )}
+          ${renderReaderButton(
+            t("linkReader.refresh"),
+            icons.refresh,
+            () => this.refresh(),
+            !target || !this.available || !this.client || tab.view.status === "loading",
+          )}
+          <input
+            class="lr-url"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            .value=${this.urlDraft}
+            placeholder=${t("linkReader.urlPlaceholder")}
+            aria-label=${t("linkReader.urlPlaceholder")}
+            aria-invalid=${this.invalidUrl}
+            @input=${(event: Event) => {
+              if (!(event.currentTarget instanceof HTMLInputElement)) {
+                return;
+              }
+              this.urlDraft = event.currentTarget.value;
+              this.invalidUrl = false;
+            }}
+            @keydown=${(event: KeyboardEvent) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                this.urlDraft = target?.href ?? "";
+                this.invalidUrl = false;
+              }
+            }}
+          />
+          <button
+            class="rail-header__action bp-icon lr-go"
+            type="submit"
+            title=${t("linkReader.openUrl")}
+            aria-label=${t("linkReader.openUrl")}
+          >
+            ${icons.chevronRight}
+          </button>
+          ${
+            target
+              ? html`<a
+                  class="lr-external"
+                  href=${target.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-link-reader-external
+                  >${icons.externalLink}<span
+                    >${t("linkReader.openExternal", { provider: target.reader.label })}</span
+                  ></a
+                >`
+              : nothing
+          }
+        </form>
+        ${
+          this.invalidUrl
+            ? html`<p class="lr-note" role="alert">${t("linkReader.invalidUrl")}</p>`
             : nothing
         }
-      </form>
-      ${
-        this.invalidUrl
-          ? html`<p class="lr-note" role="alert">${t("linkReader.invalidUrl")}</p>`
-          : nothing
-      }
-      ${
-        this.tabLimitUrl
-          ? html`<p class="lr-note" role="alert">
-              ${t("linkReader.tabLimit")}
-              <a
-                href=${this.tabLimitUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                data-link-reader-external
-                >${t("linkReader.openOriginal")}</a
+        ${
+          this.tabLimitUrl
+            ? html`<p class="lr-note" role="alert">
+                ${t("linkReader.tabLimit")}
+                <a
+                  href=${this.tabLimitUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-link-reader-external
+                  >${t("linkReader.openOriginal")}</a
+                >
+              </p>`
+            : nothing
+        }
+        <div
+          id="link-reader-tab-panel"
+          class="lr-panels"
+          role="tabpanel"
+          aria-labelledby=${this.embedded && this.tabsInHeader ? nothing : tab.id + "-label"}
+          aria-label=${this.embedded && this.tabsInHeader ? tabLabel(tab) : nothing}
+        >
+          ${repeat(
+            this.tabs,
+            (item) => item.id,
+            (item) =>
+              html`<div
+                class="lr-content"
+                tabindex="-1"
+                ?hidden=${item.id !== this.activeId}
+                aria-busy=${item.view.status === "loading"}
               >
-            </p>`
-          : nothing
-      }
-      <div
-        id="link-reader-tab-panel"
-        class="lr-panels"
-        role="tabpanel"
-        aria-labelledby=${this.embedded && this.tabsInHeader ? nothing : tab.id + "-label"}
-        aria-label=${this.embedded && this.tabsInHeader ? tabLabel(tab) : nothing}
-      >
-        ${repeat(
-          this.tabs,
-          (item) => item.id,
-          (item) =>
-            html`<div
-              class="lr-content"
-              tabindex="-1"
-              ?hidden=${item.id !== this.activeId}
-              aria-busy=${item.view.status === "loading"}
-            >
-              ${renderLinkReaderPanelContent(item, this.available && Boolean(this.client), () => this.refresh())}
-            </div>`,
-        )}
+                ${renderLinkReaderPanelContent(item, this.available && Boolean(this.client), () => this.refresh())}
+              </div>`,
+          )}
+        </div>
       </div>
     </section>`;
   }

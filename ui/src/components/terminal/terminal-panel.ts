@@ -132,6 +132,7 @@ export class OpenClawTerminalPanel extends OpenClawLitElement implements PanelHo
     reservationPrefix: "terminal",
     isAvailable: () => this.isDockLayoutAvailable(),
     isFullscreen: () => this.fullscreen,
+    panelElement: () => this.renderRoot.querySelector(".tp"),
     onResize: () =>
       this.terminalSessions.tabs
         .find((tab) => tab.id === this.terminalSessions.activeId)
@@ -488,7 +489,7 @@ export class OpenClawTerminalPanel extends OpenClawLitElement implements PanelHo
   }
 
   override render() {
-    if (!this.terminalPanelOpen) {
+    if (this.embedded ? !this.terminalPanelOpen : !this.dockLayout.renderVisible) {
       return nothing;
     }
     const mode = this.embedded ? "embedded" : this.fullscreen ? "fullscreen" : this.dockLayout.dock;
@@ -497,7 +498,7 @@ export class OpenClawTerminalPanel extends OpenClawLitElement implements PanelHo
         ? nothing
         : this.dockLayout.dock === "bottom"
           ? `height:${this.dockLayout.height}px;--tp-panel-height:${this.dockLayout.height}px`
-          : `width:${this.dockLayout.width}px`;
+          : this.dockLayout.panelStyle("right", this.dockLayout.height, this.dockLayout.width);
     const activeTab = this.terminalSessions.tabs.find(
       (tab) => tab.id === this.terminalSessions.activeId,
     );
@@ -529,30 +530,36 @@ export class OpenClawTerminalPanel extends OpenClawLitElement implements PanelHo
       onHide: () => this.closeTerminalPanel(),
     });
     return html`
-      <section class="tp tp--${mode}" style=${style} aria-label=${t("terminal.title")}>
+      <section
+        class="tp tp--${mode} ${this.dockLayout.motionClassName}"
+        style=${style}
+        aria-label=${t("terminal.title")}
+      >
         ${this.embedded ? nothing : this.dockLayout.renderResizer("tp", t("terminal.resize"))}
-        ${
-          hosted
-            ? renderTerminalSessionMenu(pickerProps)
-            : html`<header class="rail-header tp-header">
-                ${renderTerminalPanelTabs({
-                  tabs: this.terminalSessions.tabs,
-                  activeId: this.terminalSessions.activeId,
-                  booting: this.terminalSessions.booting,
-                  onSelect: (id) => this.terminalSessions.switchTo(id),
-                  onClose: (id) => this.closeHostedTab(id),
-                  onNew: () => void this.terminalSessions.openSession(),
-                })}
-                ${toolbar}
-              </header>`
-        }
-        ${renderTerminalPanelViewport({
-          activeId: this.terminalSessions.activeId,
-          tabsInHeader: hosted,
-          connecting,
-          error: terminalError,
-          uploadController: this.terminalPanelUploadController,
-        })}
+        <div class="dock-panel-content">
+          ${
+            hosted
+              ? renderTerminalSessionMenu(pickerProps)
+              : html`<header class="rail-header tp-header">
+                  ${renderTerminalPanelTabs({
+                    tabs: this.terminalSessions.tabs,
+                    activeId: this.terminalSessions.activeId,
+                    booting: this.terminalSessions.booting,
+                    onSelect: (id) => this.terminalSessions.switchTo(id),
+                    onClose: (id) => this.closeHostedTab(id),
+                    onNew: () => void this.terminalSessions.openSession(),
+                  })}
+                  ${toolbar}
+                </header>`
+          }
+          ${renderTerminalPanelViewport({
+            activeId: this.terminalSessions.activeId,
+            tabsInHeader: hosted,
+            connecting,
+            error: terminalError,
+            uploadController: this.terminalPanelUploadController,
+          })}
+        </div>
       </section>
     `;
   }

@@ -76,6 +76,7 @@ class OpenClawBrowserPanel
     layout: browserPanelLayout,
     reservationPrefix: "browser",
     isAvailable: () => this.available,
+    panelElement: () => this.renderRoot.querySelector(".bp"),
   });
   private viewportResizeObserver: ResizeObserver | null = null;
   private observedViewportElement: Element | null = null;
@@ -343,7 +344,7 @@ class OpenClawBrowserPanel
   }
 
   override render() {
-    if (!this.available || (!this.embedded && !this.dockLayout.open)) {
+    if (!this.available || (!this.embedded && !this.dockLayout.renderVisible)) {
       return nothing;
     }
     return renderBrowserPanelChrome(
@@ -356,6 +357,14 @@ class OpenClawBrowserPanel
       this.dockLayout.renderResizer("bp", t("browser.resize")),
       this.embedded,
       this.tabsInHeader,
+      {
+        className: this.dockLayout.motionClassName,
+        style: this.dockLayout.panelStyle(
+          this.dockLayout.dock,
+          this.dockLayout.height,
+          this.dockLayout.width,
+        ),
+      },
     );
   }
 }

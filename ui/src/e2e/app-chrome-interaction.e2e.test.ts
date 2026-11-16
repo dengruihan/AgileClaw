@@ -59,18 +59,11 @@ async function readShellNavGeometry(page: Page) {
     if (!shell || !content) {
       throw new Error("Missing shell navigation surface");
     }
-    const styles = getComputedStyle(shell);
-    const navStyles = nav ? getComputedStyle(nav) : null;
     return {
-      gridTemplateColumns: styles.gridTemplateColumns,
-      transitionProperties: styles.transitionProperty.split(",").map((value) => value.trim()),
-      expandedWidth: styles.getPropertyValue("--shell-nav-expanded-width").trim(),
-      navDisplay: navStyles?.display ?? "absent",
-      navVisibility: navStyles?.visibility ?? "absent",
-      navTransform: navStyles?.transform ?? "absent",
+      expandedWidth: getComputedStyle(shell).getPropertyValue("--shell-nav-expanded-width").trim(),
       navInert: nav?.inert ?? false,
-      navWidth: nav?.offsetWidth ?? 0,
-      contentWidth: content.offsetWidth,
+      navWidth: nav?.getBoundingClientRect().width ?? 0,
+      contentWidth: content.getBoundingClientRect().width,
       shellWidth: shell.clientWidth,
     };
   });
@@ -86,118 +79,8 @@ async function readFirstSessionTitleGeometry(page: Page) {
   });
 }
 
-type ShellMotionFrame = {
-  hasSlide: boolean;
-  translateX: number;
-  visibility: string;
-  inert: boolean;
-  navWidth: number;
-  gridFirstTrack: string;
-  contentWidth: number;
-  shellWidth: number;
-  title: { clientWidth: number; scrollWidth: number } | null;
-};
-
-// Deterministic live-DOM motion probe: pause the rail slide and the coupled
-// column fade at the same fraction of their own clocks, then read the painted
-// frame. "end" finishes the effect so its owner settles the resting state.
-async function holdShellMotion(page: Page, id: string, at: number): Promise<number> {
-  return page.evaluate(
-    ({ id: motionId, at: seekAt }) => {
-      const animations = [...document.getAnimations()].filter(
-        (animation) => animation.id === motionId || animation.id === "shell-nav-slide",
-      );
-      for (const animation of animations) {
-        const endTime = animation.effect?.getComputedTiming().endTime ?? 0;
-        animation.pause();
-        animation.currentTime = endTime * seekAt;
-      }
-      return animations.length;
-    },
-    { at, id },
-  );
-}
-
-async function finishShellMotion(page: Page, id: string): Promise<number> {
-  return page.evaluate((motionId) => {
-    const animations = [...document.getAnimations()].filter(
-      (animation) => animation.id === motionId,
-    );
-    for (const animation of animations) {
-      animation.finish();
-    }
-    return animations.length;
-  }, id);
-}
-
-async function waitForShellMotion(page: Page, id: string): Promise<void> {
-  await expect
-    .poll(() =>
-      page.evaluate(
-        (motionId) => document.getAnimations().some((animation) => animation.id === motionId),
-        id,
-      ),
-    )
-    .toBe(true);
-}
-
-async function sampleShellFrame(page: Page): Promise<ShellMotionFrame> {
-  return page.evaluate(() => {
-    const shell = document.querySelector<HTMLElement>(".shell");
-    const nav = document.querySelector<HTMLElement>(".shell-nav");
-    const content = document.querySelector<HTMLElement>("#control-ui-main");
-    const title = document.querySelector<HTMLElement>(".sidebar-recent-session__name");
-    if (!shell || !nav || !content) {
-      throw new Error("Missing shell navigation surface");
-    }
-    const navStyles = getComputedStyle(nav);
-    return {
-      hasSlide: nav.getAnimations().some((animation) => animation.id === "shell-nav-slide"),
-      translateX:
-        navStyles.transform === "none" ? 0 : new DOMMatrixReadOnly(navStyles.transform).m41,
-      visibility: navStyles.visibility,
-      inert: nav.inert,
-      navWidth: nav.offsetWidth,
-      gridFirstTrack: getComputedStyle(shell).gridTemplateColumns.split(" ")[0] ?? "",
-      contentWidth: content.offsetWidth,
-      shellWidth: shell.clientWidth,
-      title: title ? { clientWidth: title.clientWidth, scrollWidth: title.scrollWidth } : null,
-    };
-  });
-}
-
-// Synchronize on the settled state the toggle produces (test/AGENTS.md), never
-// on a sleep: no motion effect may be running or paused, the rail must sit at
-// its final visibility/transform, and no inline motion style may remain.
-async function waitForNavSettled(page: Page, state: "collapsed" | "expanded"): Promise<void> {
-  await expect
-    .poll(() =>
-      page.evaluate((expected) => {
-        const nav = document.querySelector<HTMLElement>(".shell-nav");
-        if (!nav) {
-          return false;
-        }
-        const animating = document
-          .getAnimations()
-          .some((animation) => animation.id.startsWith("shell-nav-"));
-        if (animating || nav.getAttribute("style")) {
-          return false;
-        }
-        const styles = getComputedStyle(nav);
-        if (expected === "collapsed") {
-          return styles.visibility === "hidden";
-        }
-        return (
-          styles.visibility === "visible" &&
-          (styles.transform === "none" || styles.transform === "matrix(1, 0, 0, 1, 0, 0)")
-        );
-      }, state),
-    )
-    .toBe(true);
-}
-
 const LONG_SESSION_TITLE =
-  "Investigate sidebar slide motion where historical session titles keep their final expanded width while the rail translates on the compositor";
+  "Investigate sidebar width motion where historical session titles keep their final expanded width while the rail changes size";
 
 function buildLongTitleSessionRows(count: number) {
   const base = Date.parse("2026-11-14T10:00:00Z");
@@ -230,7 +113,7 @@ async function captureUiProof(
 }
 
 suite.define(() => {
-  it("slides the desktop nav on one motion clock while the grid relayouts once at the hidden handoff", async () => {
+  it("toggles the desktop nav with focus and sidebar entries intact", async () => {
     await suite.withPage(
       {
         locale: "en-US",
@@ -240,62 +123,21 @@ suite.define(() => {
       async ({ page }) => {
         await installMockGateway(page, { sessions: buildLongTitleSessionRows(6) });
         await page.goto(`${suite.server.baseUrl}new`);
-        await page.locator(".new-session-page__message").waitFor({ state: "visible" });
         await page.locator(".sidebar-recent-session").first().waitFor();
 
         const newSessionAction = page.locator(
           "openclaw-app-sidebar .sidebar-primary-actions .sidebar-new-session-action",
         );
-        const inboxButton = page.locator("openclaw-app-sidebar .sidebar-issues-button");
         await newSessionAction.waitFor({ state: "visible" });
-        await inboxButton.waitFor({ state: "visible" });
-
-        const expanded = await readShellNavGeometry(page);
-        expect(expanded.transitionProperties).not.toContain("grid-template-columns");
-        expect(expanded.gridTemplateColumns.split(" ")[0]).toBe(expanded.expandedWidth);
-        const expandedWidthPx = Number.parseFloat(expanded.expandedWidth);
         const titleBaseline = await readFirstSessionTitleGeometry(page);
         expect(titleBaseline.scrollWidth).toBeGreaterThan(titleBaseline.clientWidth);
 
-        // Collapse phase A: the rail travels on the compositor while the old
-        // layout is still applied; the grid relayout has not happened yet, so
-        // the titles and the full-width rail stay stable.
         await page.locator(".sidebar-brand__collapse").click();
-        expect(await holdShellMotion(page, "shell-nav-out", 0.5)).toBeGreaterThan(0);
-        const midCollapse = await sampleShellFrame(page);
-        expect(midCollapse.hasSlide).toBe(true);
-        expect(midCollapse.translateX).toBeLessThan(-expandedWidthPx * 0.2);
-        expect(midCollapse.translateX).toBeGreaterThan(-expandedWidthPx);
-        expect(midCollapse.gridFirstTrack).toBe(expanded.expandedWidth);
-        expect(midCollapse.contentWidth).toBe(midCollapse.shellWidth - expandedWidthPx);
-        expect(midCollapse.title).toEqual(titleBaseline);
-        await captureUiProof(page, "collapse-mid-slide.png", "allow");
-
-        // Phase B: the single relayout applied at the handoff and the rail
-        // finishes sliding home.
-        await finishShellMotion(page, "shell-nav-out");
-        await waitForShellMotion(page, "shell-nav-in");
-        await holdShellMotion(page, "shell-nav-in", 0.9);
-        const lateCollapse = await sampleShellFrame(page);
-        expect(lateCollapse.gridFirstTrack).toBe("0px");
-        expect(lateCollapse.translateX).toBeLessThan(0);
-        expect(lateCollapse.inert).toBe(true);
-        expect(lateCollapse.navWidth).toBe(expandedWidthPx);
-        expect(lateCollapse.contentWidth).toBe(lateCollapse.shellWidth);
-        await finishShellMotion(page, "shell-nav-in");
-        await waitForNavSettled(page, "collapsed");
-        const collapsed = await sampleShellFrame(page);
-        expect(collapsed.visibility).toBe("hidden");
-        expect(collapsed.inert).toBe(true);
-        expect(collapsed.gridFirstTrack).toBe("0px");
-        expect(collapsed.contentWidth).toBe(collapsed.shellWidth);
-
-        const toggle = page.locator(".shell-chrome-controls__nav-toggle");
-        await toggle.waitFor({ state: "visible" });
-        expect(await page.locator(".shell-chrome-controls button").count()).toBe(1);
-        expect(await page.locator(".shell-chrome-controls__new-thread").count()).toBe(0);
-        expect(await page.locator(".sidebar-attention--floating").count()).toBe(0);
-        // Focus follows the settled collapse onto the visible expand control.
+        await expect.poll(() => page.locator(".shell--nav-collapsed").count()).toBe(1);
+        await expect
+          .poll(async () => (await readShellNavGeometry(page)).navWidth)
+          .toBeLessThan(1.5);
+        // Focus follows the settled collapse onto the only visible chrome control.
         await expect
           .poll(() =>
             page.evaluate(
@@ -305,117 +147,24 @@ suite.define(() => {
             ),
           )
           .toBe(true);
+        expect(await page.locator(".shell-chrome-controls button").count()).toBe(1);
+        expect(await page.locator(".shell-chrome-controls__new-thread").count()).toBe(0);
+        expect(await page.locator(".sidebar-attention--floating").count()).toBe(0);
         await captureUiProof(page, "collapsed-toggle-only.png");
 
-        // Expand mirrors the clock: the rail slides back over the collapsed
-        // grid until the relayout lands at the hidden handoff.
-        await toggle.click();
-        expect(await holdShellMotion(page, "shell-nav-out", 0.5)).toBeGreaterThan(0);
-        const midExpand = await sampleShellFrame(page);
-        expect(midExpand.gridFirstTrack).toBe("0px");
-        expect(midExpand.translateX).toBeLessThan(0);
-        expect(midExpand.visibility).toBe("visible");
-        expect(midExpand.title).toEqual(titleBaseline);
-        await captureUiProof(page, "expand-mid-slide.png", "allow");
-        await finishShellMotion(page, "shell-nav-out");
-        await waitForShellMotion(page, "shell-nav-in");
-        await holdShellMotion(page, "shell-nav-in", 0.9);
-        const lateExpand = await sampleShellFrame(page);
-        expect(lateExpand.gridFirstTrack).toBe(expanded.expandedWidth);
-        expect(lateExpand.contentWidth).toBe(lateExpand.shellWidth - expandedWidthPx);
-        await finishShellMotion(page, "shell-nav-in");
-        await waitForNavSettled(page, "expanded");
+        await page.locator(".shell-chrome-controls__nav-toggle").click();
+        await expect.poll(() => page.locator(".shell--nav-collapsed").count()).toBe(0);
+        await expect
+          .poll(async () => (await readShellNavGeometry(page)).navWidth)
+          .toBeGreaterThan(257.5);
         await newSessionAction.waitFor({ state: "visible" });
-        await inboxButton.waitFor({ state: "visible" });
-        expect(await page.locator(".shell--nav-collapsed").count()).toBe(0);
-        const reexpanded = await readShellNavGeometry(page);
-        expect(reexpanded.gridTemplateColumns.split(" ")[0]).toBe(reexpanded.expandedWidth);
-        expect(reexpanded.navVisibility).toBe("visible");
+        // Re-expanding keeps the long-title row geometry and its inert state.
         expect(await readFirstSessionTitleGeometry(page)).toEqual(titleBaseline);
-        await captureUiProof(page, "expanded-entries-restored.png");
+        const expanded = await readShellNavGeometry(page);
+        expect(expanded.navInert).toBe(false);
+        expect(expanded.navWidth).toBe(Number.parseFloat(expanded.expandedWidth));
 
-        // The keyboard shortcut drives the same coupled motion.
-        await page.keyboard.press("ControlOrMeta+b");
-        expect(await holdShellMotion(page, "shell-nav-out", 0.5)).toBeGreaterThan(0);
-        expect((await sampleShellFrame(page)).translateX).toBeLessThan(0);
-        await finishShellMotion(page, "shell-nav-out");
-        await waitForShellMotion(page, "shell-nav-in");
-        await finishShellMotion(page, "shell-nav-in");
-        await waitForNavSettled(page, "collapsed");
-        await page.keyboard.press("ControlOrMeta+b");
-        await waitForNavSettled(page, "expanded");
-        await newSessionAction.waitFor({ state: "visible" });
-        const finalGeometry = await readShellNavGeometry(page);
-        expect(finalGeometry.gridTemplateColumns.split(" ")[0]).toBe(finalGeometry.expandedWidth);
-        expect(finalGeometry.navVisibility).toBe("visible");
-        expect(await readFirstSessionTitleGeometry(page)).toEqual(titleBaseline);
-        await captureUiProof(page, "keyboard-toggle-final-expanded.png");
-      },
-    );
-  });
-
-  it("reverses an in-flight nav motion cleanly before and after the relayout", async () => {
-    await suite.withPage(
-      {
-        locale: "en-US",
-        serviceWorkers: "block",
-        viewport: { height: 900, width: 1440 },
-      },
-      async ({ page }) => {
-        await installMockGateway(page, { sessions: buildLongTitleSessionRows(4) });
-        await page.goto(`${suite.server.baseUrl}new`);
-        await page.locator(".sidebar-recent-session").first().waitFor();
-        const titleBaseline = await readFirstSessionTitleGeometry(page);
-        const collapseButton = page.locator(".sidebar-brand__collapse");
-
-        // Hold the collapse mid-fade, then reverse: the rail returns home and
-        // settles expanded without a second state change.
-        await collapseButton.click();
-        expect(await holdShellMotion(page, "shell-nav-out", 0.5)).toBeGreaterThan(0);
-        await page.keyboard.press("ControlOrMeta+b");
-        await waitForShellMotion(page, "shell-nav-return");
-        await waitForNavSettled(page, "expanded");
-        const reversedExpanded = await readShellNavGeometry(page);
-        expect(reversedExpanded.navVisibility).toBe("visible");
-        expect(reversedExpanded.navInert).toBe(false);
-        expect(reversedExpanded.gridTemplateColumns.split(" ")[0]).toBe(
-          reversedExpanded.expandedWidth,
-        );
-        expect(await readFirstSessionTitleGeometry(page)).toEqual(titleBaseline);
-
-        // Mirror: reverse after the relayout has landed. The motion restores the
-        // expanded layout while the column is at the faint handoff, then slides
-        // home with no held animation or inline style left behind.
-        await collapseButton.click();
-        await finishShellMotion(page, "shell-nav-out");
-        await waitForShellMotion(page, "shell-nav-in");
-        await holdShellMotion(page, "shell-nav-in", 0.5);
-        await page.keyboard.press("ControlOrMeta+b");
-        await waitForShellMotion(page, "shell-nav-out");
-        await finishShellMotion(page, "shell-nav-out");
-        await waitForShellMotion(page, "shell-nav-in");
-        await finishShellMotion(page, "shell-nav-in");
-        await waitForNavSettled(page, "expanded");
-        const restored = await readShellNavGeometry(page);
-        expect(restored.navVisibility).toBe("visible");
-        expect(restored.navInert).toBe(false);
-        expect(restored.gridTemplateColumns.split(" ")[0]).toBe(restored.expandedWidth);
-        expect(await readFirstSessionTitleGeometry(page)).toEqual(titleBaseline);
-      },
-    );
-  });
-
-  it("honors a custom rail width through the coupled motion instead of a hard-coded default", async () => {
-    await suite.withPage(
-      {
-        locale: "en-US",
-        serviceWorkers: "block",
-        viewport: { height: 900, width: 1440 },
-      },
-      async ({ page }) => {
-        await installMockGateway(page, { sessions: buildLongTitleSessionRows(4) });
-        await page.goto(`${suite.server.baseUrl}new`);
-        await page.locator(".sidebar-recent-session").first().waitFor();
+        // A persisted custom rail width drives the same toggle.
         const settingsKey = controlUiBundledSettingsStorageKey(suite.server.baseUrl);
         await page.evaluate(
           ({ key }) => {
@@ -425,67 +174,27 @@ suite.define(() => {
         );
         await page.reload();
         await page.locator(".sidebar-recent-session").first().waitFor();
-
-        const expanded = await readShellNavGeometry(page);
-        expect(expanded.expandedWidth).toBe("320px");
-        expect(expanded.gridTemplateColumns.split(" ")[0]).toBe("320px");
-        const titleBaseline = await readFirstSessionTitleGeometry(page);
+        const customBaseline = await readFirstSessionTitleGeometry(page);
+        expect((await readShellNavGeometry(page)).navWidth).toBe(320);
 
         await page.locator(".sidebar-brand__collapse").click();
-        await holdShellMotion(page, "shell-nav-out", 0.5);
-        const midCollapse = await sampleShellFrame(page);
-        expect(midCollapse.hasSlide).toBe(true);
-        expect(midCollapse.navWidth).toBe(320);
-        expect(midCollapse.translateX).toBeLessThan(-64);
-        expect(midCollapse.translateX).toBeGreaterThan(-320);
-        expect(midCollapse.title).toEqual(titleBaseline);
-        await finishShellMotion(page, "shell-nav-out");
-        await waitForShellMotion(page, "shell-nav-in");
-        await finishShellMotion(page, "shell-nav-in");
-        await waitForNavSettled(page, "collapsed");
-
-        await page.locator(".shell-chrome-controls__nav-toggle").click();
-        await waitForNavSettled(page, "expanded");
-        const reexpanded = await readShellNavGeometry(page);
-        expect(reexpanded.gridTemplateColumns.split(" ")[0]).toBe("320px");
-        expect(reexpanded.navWidth).toBe(320);
-        expect(reexpanded.navVisibility).toBe("visible");
-        expect(await readFirstSessionTitleGeometry(page)).toEqual(titleBaseline);
-      },
-    );
-  });
-
-  it("snaps the nav without motion under prefers-reduced-motion", async () => {
-    await suite.withPage(
-      {
-        locale: "en-US",
-        reducedMotion: "reduce",
-        serviceWorkers: "block",
-        viewport: { height: 900, width: 1440 },
-      },
-      async ({ page }) => {
-        await installMockGateway(page, { sessions: buildLongTitleSessionRows(4) });
-        await page.goto(`${suite.server.baseUrl}new`);
-        await page.locator(".sidebar-recent-session").first().waitFor();
-        const expanded = await readShellNavGeometry(page);
-
-        await page.locator(".sidebar-brand__collapse").click();
-        await page.locator(".shell--nav-collapsed").waitFor();
-        // No motion runs: the rail is hidden immediately and the state settled.
-        const collapsedSample = await sampleShellFrame(page);
-        expect(collapsedSample.hasSlide).toBe(false);
-        expect(collapsedSample.visibility).toBe("hidden");
-        expect(collapsedSample.inert).toBe(true);
-        const collapsed = await readShellNavGeometry(page);
-        expect(collapsed.gridTemplateColumns.split(" ")[0]).toBe("0px");
-        expect(collapsed.contentWidth).toBe(collapsed.shellWidth);
-
+        await expect.poll(() => page.locator(".shell--nav-collapsed").count()).toBe(1);
+        await expect
+          .poll(async () => (await readShellNavGeometry(page)).navWidth)
+          .toBeLessThan(1.5);
         await page.locator(".shell-chrome-controls__nav-toggle").click();
         await expect.poll(() => page.locator(".shell--nav-collapsed").count()).toBe(0);
+        await expect
+          .poll(async () => (await readShellNavGeometry(page)).navWidth)
+          .toBeGreaterThan(319.5);
+        await newSessionAction.waitFor({ state: "visible" });
         const reexpanded = await readShellNavGeometry(page);
-        expect(reexpanded.navVisibility).toBe("visible");
+        // The expand transition ends on the persisted 320px rail; allow
+        // subpixel sampling if the poll caught the final frame.
+        expect(reexpanded.navWidth).toBeGreaterThan(319.5);
+        expect(reexpanded.navWidth).toBeLessThan(320.5);
         expect(reexpanded.navInert).toBe(false);
-        expect(reexpanded.gridTemplateColumns.split(" ")[0]).toBe(expanded.expandedWidth);
+        expect(await readFirstSessionTitleGeometry(page)).toEqual(customBaseline);
       },
     );
   });

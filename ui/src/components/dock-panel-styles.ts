@@ -22,6 +22,35 @@ export const dockPanelStyles = css`
     flex-direction: column;
     background: var(--bg, #0e1015);
     overflow: hidden;
+    /* ZCode side pane opacity. Width, sibling offsets, and the plate margin are
+       derived from the shared registered reservation widths. */
+    transition: opacity var(--shell-motion-duration) var(--shell-motion-ease);
+  }
+  :is(.bp, .tp).dock-panel--motion-hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  /* ZCode keeps the panel content at the target size while the frame eases, so
+     tabs, toolbars, and terminals never reflow mid-transition. */
+  :is(.bp, .tp) > .dock-panel-content {
+    display: flex;
+    flex: 1 1 auto;
+    width: var(--oc-dock-content-width, 100%);
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+  }
+  /* Bottom and main docks follow the navigation width on the shell clock.
+     Right-dock offsets follow the shared registered widths instead. */
+  :where(.bp, .tp):is(.bp--bottom, .tp--bottom, .tp--main) {
+    transition:
+      left var(--shell-motion-duration) var(--shell-motion-ease),
+      opacity var(--shell-motion-duration) var(--shell-motion-ease);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :is(.bp, .tp) {
+      transition: none;
+    }
   }
   :is(.bp-resizer, .tp-resizer) {
     position: absolute;

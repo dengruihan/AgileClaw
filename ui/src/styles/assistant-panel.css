@@ -13,22 +13,38 @@ openclaw-assistant-panel {
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
+  transition: opacity var(--shell-motion-duration) var(--shell-motion-ease);
+}
+
+.assistant-panel.dock-panel--motion-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.assistant-panel > .dock-panel-content {
+  display: flex;
+  flex: 1 1 auto;
+  width: var(--oc-dock-content-width, 100%);
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .assistant-panel--bottom,
 .assistant-panel--right {
   right: calc(
     var(--oc-terminal-reserve-right, 0px) + var(--oc-browser-reserve-right, 0px) +
-      var(--oc-link-reader-reserve-right, 0px)
+      var(--oc-desktop-reserve-right, 0px) + var(--oc-link-reader-reserve-right, 0px)
   );
   bottom: calc(
     var(--oc-terminal-reserve-bottom, 0px) + var(--oc-browser-reserve-bottom, 0px) +
-      var(--oc-link-reader-reserve-bottom, 0px)
+      var(--oc-desktop-reserve-bottom, 0px) + var(--oc-link-reader-reserve-bottom, 0px)
   );
 }
 
 .assistant-panel--bottom {
   left: var(--shell-nav-width, 0);
+  transition: left var(--shell-motion-duration) var(--shell-motion-ease);
 }
 
 .assistant-panel--right {
@@ -168,5 +184,12 @@ openclaw-assistant-panel {
 @media (prefers-reduced-motion: reduce) {
   .assistant-panel-loading__content {
     animation-duration: 0s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-panel,
+  .assistant-panel--bottom {
+    transition: none;
   }
 }

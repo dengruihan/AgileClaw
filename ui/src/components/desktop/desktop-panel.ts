@@ -154,6 +154,7 @@ class OpenClawDesktopPanel extends OpenClawLitElement {
     reservationPrefix: "desktop",
     isAvailable: () => this.available,
     isFullscreen: () => this.fullscreenMode.active,
+    panelElement: () => this.renderRoot.querySelector(".bp"),
   });
   private readonly fullscreenMode = new FullscreenController(this, {
     ...desktopFullscreenOptions,
@@ -634,7 +635,10 @@ class OpenClawDesktopPanel extends OpenClawLitElement {
   }
 
   override render() {
-    if (!this.available || (!this.documentMode && !this.embedded && !this.dockLayout.open)) {
+    if (
+      !this.available ||
+      (!this.documentMode && !this.embedded && !this.dockLayout.renderVisible)
+    ) {
       return nothing;
     }
     const notice = this.pictureInPicture.renderNotice(

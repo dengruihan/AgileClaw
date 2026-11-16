@@ -1,4 +1,4 @@
-.assistant-panel > openclaw-assistant-panel-content {
+.assistant-panel > .dock-panel-content > openclaw-assistant-panel-content {
   display: flex;
   min-width: 0;
   min-height: 0;

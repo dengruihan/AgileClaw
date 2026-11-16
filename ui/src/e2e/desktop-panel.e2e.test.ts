@@ -4,6 +4,13 @@ import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control
 import { activateChatHeaderPanelAction } from "./chat-side-panel.test-support.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 import {
+  finishDesktopDockTransitions,
+  hasDesktopDockWidthTransition,
+  holdDesktopDockTransitions,
+  readDesktopDockTransition,
+  readDesktopShellGeometry,
+} from "./desktop-dock-motion.test-support.ts";
+import {
   openDesktopPanel,
   openDesktopPanelInPlace,
   sessionsList,
@@ -939,5 +946,80 @@ suite.define(() => {
       await panel.getByRole("button", { name: "Terminal", exact: true }).waitFor();
       expect(await panel.getByRole("button", { name: "Browser", exact: true }).count()).toBe(0);
     });
+  });
+  it("pushes the main column beside the desktop dock through open and close", async () => {
+    await suite.withPage(
+      { serviceWorkers: "block", viewport: { width: 1440, height: 900 } },
+      async ({ page }) => {
+        const { panel } = await openScriptedDesktop(page);
+        await expect
+          .poll(async () => {
+            const geometry = await readDesktopShellGeometry(page);
+            return Math.abs(geometry.panelWidth - Number.parseFloat(geometry.reserveRight));
+          })
+          .toBeLessThan(0.5);
+        const expanded = await readDesktopShellGeometry(page);
+        expect(expanded.panelWidth).toBeGreaterThan(300);
+        expect(Number.parseFloat(expanded.reserveRight)).toBeCloseTo(expanded.panelWidth, 1);
+        // The reserved plate edge and the dock edge move together; the plate
+        // keeps its constant 8px window inset.
+        expect(expanded.panelLeft - expanded.shellRight).toBeCloseTo(8, 1);
+        expect(expanded.shellMarginRight).toBeCloseTo(expanded.panelWidth + 8, 1);
+        expect(Math.abs(expanded.contentRight - expanded.shellRight)).toBeLessThan(2);
+        const curve = await readDesktopDockTransition(page);
+        expect(curve.durationMs).toBe(200);
+        expect(curve.easing).toBe("cubic-bezier(0, 0, 0.2, 1)");
+
+        await panel.getByRole("button", { name: "Hide desktop panel" }).click();
+        await expect.poll(() => hasDesktopDockWidthTransition(page)).toBe(true);
+        expect(await holdDesktopDockTransitions(page, 100)).toBeGreaterThanOrEqual(1);
+        const midClose = await readDesktopShellGeometry(page);
+        expect(midClose.panelWidth).toBeGreaterThan(1);
+        expect(midClose.panelWidth).toBeLessThan(expanded.panelWidth - 1);
+        expect(midClose.panelLeft - midClose.shellRight).toBeCloseTo(8, 1);
+        expect(midClose.shellMarginRight).toBeCloseTo(midClose.panelWidth + 8, 1);
+        if (process.env.OPENCLAW_UI_E2E_ARTIFACT_DIR?.trim()) {
+          await page.screenshot({
+            animations: "allow",
+            path: path.join(suite.artifactDir, "desktop-mid-close.png"),
+          });
+        }
+        await finishDesktopDockTransitions(page);
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () =>
+                document
+                  .querySelector("openclaw-desktop-panel")
+                  ?.shadowRoot?.querySelector(".bp") === null,
+            ),
+          )
+          .toBe(true);
+        const closed = await readDesktopShellGeometry(page);
+        expect(closed.reserveRight).toBe("0px");
+        expect(closed.shellMarginRight).toBeCloseTo(8, 1);
+
+        // Reopen and hold the same clock: the dock pushes the main column from
+        // its first visible frame instead of overlaying it.
+        await openDirectDesktop(page, "worker-desktop-1");
+        await expect.poll(() => hasDesktopDockWidthTransition(page)).toBe(true);
+        expect(await holdDesktopDockTransitions(page, 100)).toBeGreaterThanOrEqual(1);
+        const midOpen = await readDesktopShellGeometry(page);
+        expect(midOpen.panelWidth).toBeGreaterThan(1);
+        expect(midOpen.panelWidth).toBeLessThan(expanded.panelWidth - 1);
+        expect(midOpen.panelLeft - midOpen.shellRight).toBeCloseTo(8, 1);
+        expect(midOpen.shellMarginRight).toBeCloseTo(midOpen.panelWidth + 8, 1);
+        if (process.env.OPENCLAW_UI_E2E_ARTIFACT_DIR?.trim()) {
+          await page.screenshot({
+            animations: "allow",
+            path: path.join(suite.artifactDir, "desktop-mid-open.png"),
+          });
+        }
+        await finishDesktopDockTransitions(page);
+        await expect
+          .poll(async () => (await readDesktopShellGeometry(page)).panelWidth)
+          .toBeCloseTo(expanded.panelWidth, 0);
+      },
+    );
   });
 });

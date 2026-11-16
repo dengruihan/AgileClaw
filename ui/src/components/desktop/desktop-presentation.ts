@@ -110,6 +110,14 @@ export function renderDesktopPresentation(view: DesktopPresentation) {
     height: view.dockLayout.height,
     width: view.dockLayout.width,
     fullscreen: view.fullscreenMode.active,
+    motion: {
+      className: view.dockLayout.motionClassName,
+      style: view.dockLayout.panelStyle(
+        view.dockLayout.dock,
+        view.dockLayout.height,
+        view.dockLayout.width,
+      ),
+    },
     renderResizer: () => view.dockLayout.renderResizer("bp", t("desktop.resize")),
     renderFullscreenControl: () => view.fullscreenMode.renderButton(),
     onDock: (dock) => view.dockLayout.setDock(dock),

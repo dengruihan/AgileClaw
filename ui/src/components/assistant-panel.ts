@@ -44,12 +44,14 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
   @property() pageRouteId: RouteId = "chat";
   @state() private destination: AssistantSessionDestination | null = null;
   private publishedSessionKey: string | null = null;
+  private clearDestinationAfterClose = false;
   private readonly contentLoader = new LazyCustomElementRequestController(this);
 
   private readonly dockLayout = new DockLayoutController(this, {
     layout: assistantPanelLayout,
     reservationPrefix: "assistant",
     isAvailable: () => this.available,
+    panelElement: () => this.querySelector(".assistant-panel"),
   });
 
   constructor() {
@@ -86,6 +88,16 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
       ASSISTANT_CONTENT_ELEMENT,
       this.dockLayout.open && this.destination !== null,
     );
+    if (
+      this.clearDestinationAfterClose &&
+      !this.dockLayout.open &&
+      !this.dockLayout.renderVisible
+    ) {
+      // The close motion has released the frame; the next explicit open
+      // supplies a new target.
+      this.clearDestinationAfterClose = false;
+      this.destination = null;
+    }
     this.dockLayout.syncReservation();
     this.publishSessionKey();
   }
@@ -162,10 +174,9 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
   private setOpen(open: boolean): void {
     this.dockLayout.setOpen(open);
     this.claimInput(open ? "dock" : "page");
-    if (!open) {
-      // Closing leaves no dock open; the next explicit open supplies its target.
-      this.destination = null;
-    }
+    // Suppression closes through the controller directly and keeps the
+    // destination so leaving the page can restore it.
+    this.clearDestinationAfterClose = !open;
     this.publishSessionKey();
   }
 
@@ -175,15 +186,14 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
 
   override render() {
     const destination = this.destination;
-    const visible = destination !== null && this.dockLayout.open;
+    const visible = destination !== null && this.dockLayout.renderVisible;
     const dock = this.dockLayout.dock;
     const session = destination?.params;
     const contentState = this.contentLoader.visibleState;
-    const style =
-      dock === "bottom" ? `height:${this.dockLayout.height}px` : `width:${this.dockLayout.width}px`;
+    const style = this.dockLayout.panelStyle(dock, this.dockLayout.height, this.dockLayout.width);
     return html`
       <section
-        class="assistant-panel assistant-panel--${dock}"
+        class="assistant-panel assistant-panel--${dock} ${this.dockLayout.motionClassName}"
         style=${style}
         ?hidden=${!visible}
         aria-label=${t("assistantPanel.title")}
@@ -191,69 +201,71 @@ export class OpenClawAssistantPanel extends OpenClawLightDomElement {
         @focusin=${() => this.claimInput("dock")}
       >
         ${this.dockLayout.renderResizer("assistant-panel", t("assistantPanel.resize"))}
-        <header class="rail-header assistant-panel-header" @mousedown=${beginNativeWindowDrag}>
-          <div class="assistant-panel-title">
-            <openclaw-mascot .size=${16}></openclaw-mascot>
-            ${
-              session
-                ? html`<button
-                    type="button"
-                    class="assistant-panel-tab rail-header__title"
-                    aria-pressed="true"
-                    title=${session.label}
-                  >
-                    ${session.label}
-                  </button>`
-                : nothing
-            }
-          </div>
-          <div class="rail-header__actions assistant-panel-actions">
-            <button
-              class="rail-header__action assistant-panel-icon"
-              type="button"
-              aria-label=${
-                dock === "bottom" ? t("assistantPanel.dockRight") : t("assistantPanel.dockBottom")
+        <div class="dock-panel-content">
+          <header class="rail-header assistant-panel-header" @mousedown=${beginNativeWindowDrag}>
+            <div class="assistant-panel-title">
+              <openclaw-mascot .size=${16}></openclaw-mascot>
+              ${
+                session
+                  ? html`<button
+                      type="button"
+                      class="assistant-panel-tab rail-header__title"
+                      aria-pressed="true"
+                      title=${session.label}
+                    >
+                      ${session.label}
+                    </button>`
+                  : nothing
               }
-              @click=${() => this.dockLayout.setDock(dock === "bottom" ? "right" : "bottom")}
-            >
-              ${dock === "bottom" ? icons.panelRightOpen : icons.panelBottomOpen}
-            </button>
-            <button
-              class="rail-header__action assistant-panel-icon"
-              type="button"
-              aria-label=${t("assistantPanel.close")}
-              @click=${() => this.setOpen(false)}
-            >
-              ${icons.x}
-            </button>
-          </div>
-        </header>
-        ${
-          session && visible && isOptionalElementDefined(ASSISTANT_CONTENT_ELEMENT)
-            ? html`<openclaw-assistant-panel-content
-                ?hidden=${!visible}
-                .active=${visible}
-                .sessionKey=${session.sessionKey}
-                .agentId=${session.agentId}
-                .sessionContext=${session.context}
-                .context=${this.context}
-                .pageRouteId=${this.pageRouteId}
-                .pageSessionKey=${this.pageSessionKey}
-                .pageAgentId=${this.pageAgentId}
-              ></openclaw-assistant-panel-content>`
-            : nothing
-        }
-        ${
-          visible && !isOptionalElementDefined(ASSISTANT_CONTENT_ELEMENT)
-            ? contentState?.status === "error"
-              ? renderLazyElementState(
-                  contentState,
-                  () => this.contentLoader.retry(),
-                  () => this.setOpen(false),
-                )
-              : renderAssistantPanelLoading()
-            : nothing
-        }
+            </div>
+            <div class="rail-header__actions assistant-panel-actions">
+              <button
+                class="rail-header__action assistant-panel-icon"
+                type="button"
+                aria-label=${
+                  dock === "bottom" ? t("assistantPanel.dockRight") : t("assistantPanel.dockBottom")
+                }
+                @click=${() => this.dockLayout.setDock(dock === "bottom" ? "right" : "bottom")}
+              >
+                ${dock === "bottom" ? icons.panelRightOpen : icons.panelBottomOpen}
+              </button>
+              <button
+                class="rail-header__action assistant-panel-icon"
+                type="button"
+                aria-label=${t("assistantPanel.close")}
+                @click=${() => this.setOpen(false)}
+              >
+                ${icons.x}
+              </button>
+            </div>
+          </header>
+          ${
+            session && visible && isOptionalElementDefined(ASSISTANT_CONTENT_ELEMENT)
+              ? html`<openclaw-assistant-panel-content
+                  ?hidden=${!visible}
+                  .active=${visible}
+                  .sessionKey=${session.sessionKey}
+                  .agentId=${session.agentId}
+                  .sessionContext=${session.context}
+                  .context=${this.context}
+                  .pageRouteId=${this.pageRouteId}
+                  .pageSessionKey=${this.pageSessionKey}
+                  .pageAgentId=${this.pageAgentId}
+                ></openclaw-assistant-panel-content>`
+              : nothing
+          }
+          ${
+            visible && !isOptionalElementDefined(ASSISTANT_CONTENT_ELEMENT)
+              ? contentState?.status === "error"
+                ? renderLazyElementState(
+                    contentState,
+                    () => this.contentLoader.retry(),
+                    () => this.setOpen(false),
+                  )
+                : renderAssistantPanelLoading()
+              : nothing
+          }
+        </div>
       </section>
     `;
   }
