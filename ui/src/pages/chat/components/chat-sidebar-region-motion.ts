@@ -49,6 +49,7 @@ export class SidebarRegionMotion {
   private closingLayout: SidebarLayout | null = null;
   private settleTimer: number | null = null;
   private settleListeners: AbortController | null = null;
+  private armedRegion: HTMLElement | null = null;
   private onSettle: (() => void) | null = null;
 
   constructor(private readonly invalidate: () => void) {}
@@ -141,12 +142,19 @@ export class SidebarRegionMotion {
           this.snap(open);
         } else if (this.phase === "closing" && open) {
           this.begin(region, "opening", null);
-        } else if (!this.settleListeners) {
+        } else if (!this.settleListeners || region !== this.armedRegion) {
           this.armSettle(region);
         }
       }
     } else if (eligible && region) {
-      this.begin(region, open ? "opening" : "closing", open ? null : previousPresentation);
+      // Ordinary commits during the closing ease reconcile the same closed
+      // target; re-entering begin() would reset the settle listener and
+      // watchdog, postponing cleanup indefinitely when transitionend is lost.
+      // Only a genuine edge/reversal or a changed region re-arms.
+      const alreadyClosing = this.phase === "closing" && !open && region === this.armedRegion;
+      if (!alreadyClosing) {
+        this.begin(region, open ? "opening" : "closing", open ? null : previousPresentation);
+      }
     } else {
       this.snap(open);
     }
@@ -180,6 +188,7 @@ export class SidebarRegionMotion {
     this.cancelSettle();
     const listeners = new AbortController();
     this.settleListeners = listeners;
+    this.armedRegion = region;
     region.addEventListener(
       "transitionend",
       (event) => {
@@ -217,6 +226,7 @@ export class SidebarRegionMotion {
     }
     this.settleListeners?.abort();
     this.settleListeners = null;
+    this.armedRegion = null;
   }
 
   dispose(): void {
